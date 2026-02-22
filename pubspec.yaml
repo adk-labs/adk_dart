@@ -10,6 +10,9 @@ environment:
 dependencies:
   # path: ^1.9.0
 
+executables:
+  adk: adk
+
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.6

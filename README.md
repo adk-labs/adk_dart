@@ -51,6 +51,30 @@ Future<void> main() async {
 }
 ```
 
+## CLI
+
+`adk_dart` exposes an `adk` executable with `create`, `run`, and `web`.
+
+```bash
+dart pub get
+dart pub global activate --source path .
+adk create my_agent
+adk run my_agent
+adk web --port 8000 my_agent
+```
+
+`adk web --port 8000` starts a development chat UI at `http://127.0.0.1:8000`.
+
+Caution: ADK Web for development only
+
+ADK Web in this repository is intended for development and debugging, not
+production deployments.
+
+## Python Parity Tracking
+
+Current progress against `ref/adk-python` is tracked in
+`python_parity_status.md`.
+
 ## Test
 
 ```bash
