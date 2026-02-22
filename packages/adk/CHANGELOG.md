@@ -2,4 +2,4 @@
 
 ## 0.1.0
 
-- Initial facade package for `adk_dart`.
+- Initial package release for `adk_dart`.

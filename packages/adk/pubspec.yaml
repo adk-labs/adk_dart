@@ -1,5 +1,5 @@
 name: adk
-description: Facade package that re-exports adk_dart under the adk package name.
+description: Package alias that re-exports adk_dart under the adk package name.
 version: 0.1.0
 
 environment:

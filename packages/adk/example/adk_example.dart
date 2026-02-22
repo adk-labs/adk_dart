@@ -9,7 +9,7 @@ class EchoModel extends BaseLlm {
     bool stream = false,
   }) async* {
     yield LlmResponse(
-      content: Content.modelText('hello from adk facade package'),
+      content: Content.modelText('hello from adk package'),
     );
   }
 }
