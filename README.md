@@ -70,6 +70,31 @@ Caution: ADK Web for development only
 ADK Web in this repository is intended for development and debugging, not
 production deployments.
 
+## adk Facade Package
+
+This repository also contains a facade package at `packages/adk`:
+
+- `adk_dart`: source-of-truth implementation package
+- `adk`: re-export package for the shorter import path
+
+Facade import:
+
+```dart
+import 'package:adk/adk.dart';
+```
+
+Sync commands before release:
+
+```bash
+dart run tool/sync_facade_versions.dart
+dart run tool/check_package_sync.dart
+```
+
+Publish order:
+
+1. Publish `adk_dart`.
+2. Publish `packages/adk`.
+
 ## Python Parity Tracking
 
 Current progress against `ref/adk-python` is tracked in

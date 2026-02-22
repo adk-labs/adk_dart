@@ -1,0 +1,20 @@
+name: Package Sync
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Get dependencies
+        run: dart pub get
+      - name: Run tests
+        run: dart test
+      - name: Check facade sync
+        run: dart run tool/check_package_sync.dart
