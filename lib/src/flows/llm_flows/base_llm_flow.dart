@@ -1,0 +1,577 @@
+import 'dart:async';
+
+import '../../agents/base_agent.dart';
+import '../../agents/callback_context.dart';
+import '../../agents/context.dart';
+import '../../agents/invocation_context.dart';
+import '../../agents/llm_agent.dart';
+import '../../agents/readonly_context.dart';
+import '../../agents/run_config.dart';
+import '../../events/event.dart';
+import '../../models/base_llm.dart';
+import '../../models/llm_request.dart';
+import '../../models/llm_response.dart';
+import '../../tools/base_tool.dart';
+import '../../tools/base_toolset.dart';
+import '../../tools/tool_context.dart';
+import '../../tools/transfer_to_agent_tool.dart';
+import '../../types/content.dart';
+import 'functions.dart' as flow_functions;
+
+abstract class BaseLlmRequestProcessor {
+  Stream<Event> runAsync(InvocationContext context, LlmRequest request);
+}
+
+abstract class BaseLlmResponseProcessor {
+  Stream<Event> runAsync(InvocationContext context, LlmResponse response);
+}
+
+class BaseLlmFlow {
+  BaseLlmFlow();
+
+  final List<BaseLlmRequestProcessor> requestProcessors =
+      <BaseLlmRequestProcessor>[];
+  final List<BaseLlmResponseProcessor> responseProcessors =
+      <BaseLlmResponseProcessor>[];
+
+  Stream<Event> runLive(InvocationContext context) async* {
+    throw UnimplementedError(
+      'Live flow is not implemented yet in adk_dart. Use runAsync().',
+    );
+  }
+
+  Stream<Event> runAsync(InvocationContext context) async* {
+    while (true) {
+      Event? lastEvent;
+      await for (final Event event in _runOneStepAsync(context)) {
+        lastEvent = event;
+        yield event;
+      }
+
+      if (lastEvent == null ||
+          lastEvent.isFinalResponse() ||
+          lastEvent.partial == true) {
+        break;
+      }
+    }
+  }
+
+  Stream<Event> _runOneStepAsync(InvocationContext context) async* {
+    final LlmRequest request = LlmRequest();
+
+    await for (final Event event in _preprocessAsync(context, request)) {
+      yield event;
+    }
+
+    if (context.endInvocation) {
+      return;
+    }
+
+    final List<Event> events = context.getEvents(
+      currentInvocation: true,
+      currentBranch: true,
+    );
+
+    if (context.isResumable &&
+        events.isNotEmpty &&
+        context.shouldPauseInvocation(events.last)) {
+      return;
+    }
+
+    if (context.isResumable &&
+        events.isNotEmpty &&
+        events.last.getFunctionCalls().isNotEmpty) {
+      final Event functionCallEvent = events.last;
+      await for (final Event event in _postprocessHandleFunctionCallsAsync(
+        context,
+        functionCallEvent,
+        request,
+      )) {
+        yield event;
+      }
+      return;
+    }
+
+    final Event modelResponseEvent = Event(
+      id: Event.newId(),
+      invocationId: context.invocationId,
+      author: context.agent.name,
+      branch: context.branch,
+    );
+
+    await for (final LlmResponse response in _callLlmAsync(
+      context,
+      request,
+      modelResponseEvent,
+    )) {
+      await for (final Event event in _postprocessAsync(
+        context,
+        request,
+        response,
+        modelResponseEvent,
+      )) {
+        modelResponseEvent.id = Event.newId();
+        modelResponseEvent.timestamp =
+            DateTime.now().millisecondsSinceEpoch / 1000;
+        yield event;
+      }
+    }
+  }
+
+  Stream<Event> _preprocessAsync(
+    InvocationContext context,
+    LlmRequest request,
+  ) async* {
+    for (final BaseLlmRequestProcessor processor in requestProcessors) {
+      await for (final Event event in processor.runAsync(context, request)) {
+        yield event;
+      }
+    }
+
+    if (context.endInvocation) {
+      return;
+    }
+
+    if (request.contents.isEmpty) {
+      for (final Event event in context.session.events) {
+        final Content? content = event.content;
+        if (content != null) {
+          request.contents.add(content.copyWith());
+        }
+      }
+    }
+
+    await _processAgentTools(context, request);
+  }
+
+  Future<void> _processAgentTools(
+    InvocationContext context,
+    LlmRequest request,
+  ) async {
+    final LlmAgent agent = context.agent as LlmAgent;
+    final ToolContext toolContext = Context(context);
+    if (agent.tools.isNotEmpty) {
+      for (final Object toolUnion in agent.tools) {
+        if (toolUnion is BaseToolset) {
+          await toolUnion.processLlmRequest(
+            toolContext: toolContext,
+            llmRequest: request,
+          );
+        }
+      }
+
+      final List<BaseTool> tools = await agent.canonicalTools(
+        ReadonlyContext(context),
+      );
+      for (final BaseTool tool in tools) {
+        await tool.processLlmRequest(
+          toolContext: toolContext,
+          llmRequest: request,
+        );
+      }
+    }
+
+    await _processAgentTransfer(context, request, toolContext);
+  }
+
+  Future<void> _processAgentTransfer(
+    InvocationContext context,
+    LlmRequest request,
+    ToolContext toolContext,
+  ) async {
+    final BaseAgent current = context.agent;
+    if (current is! LlmAgent) {
+      return;
+    }
+
+    final List<BaseAgent> transferTargets = _getTransferTargets(current);
+    if (transferTargets.isEmpty) {
+      return;
+    }
+
+    final TransferToAgentTool transferTool = TransferToAgentTool(
+      agentNames: transferTargets
+          .map((BaseAgent agent) => agent.name)
+          .toList(growable: false),
+    );
+
+    request.appendInstructions(<String>[
+      _buildTransferInstructions(transferTool.name, current, transferTargets),
+    ]);
+
+    await transferTool.processLlmRequest(
+      toolContext: toolContext,
+      llmRequest: request,
+    );
+  }
+
+  List<BaseAgent> _getTransferTargets(LlmAgent agent) {
+    final List<BaseAgent> result = <BaseAgent>[...agent.subAgents];
+    final BaseAgent? parent = agent.parentAgent;
+    if (parent is! LlmAgent) {
+      return result;
+    }
+
+    if (!agent.disallowTransferToParent) {
+      result.add(parent);
+    }
+
+    if (!agent.disallowTransferToPeers) {
+      result.addAll(
+        parent.subAgents.where((BaseAgent peer) => peer.name != agent.name),
+      );
+    }
+
+    final Map<String, BaseAgent> deduped = <String, BaseAgent>{
+      for (final BaseAgent item in result) item.name: item,
+    };
+    return deduped.values.toList(growable: false);
+  }
+
+  String _buildTransferInstructions(
+    String toolName,
+    LlmAgent agent,
+    List<BaseAgent> targetAgents,
+  ) {
+    final List<String> sortedNames =
+        targetAgents.map((BaseAgent target) => target.name).toList()..sort();
+    final String targetNames = sortedNames
+        .map((String name) => '`$name`')
+        .join(', ');
+    final String targetsInfo = targetAgents
+        .map((BaseAgent target) {
+          return 'Agent name: ${target.name}\nAgent description: ${target.description}';
+        })
+        .join('\n\n');
+
+    String instruction =
+        '''
+You have a list of other agents to transfer to:
+
+$targetsInfo
+
+If you are the best to answer the question according to your description,
+you can answer it.
+
+If another agent is better for answering the question according to its
+description, call `$toolName` function to transfer the question to that
+agent. When transferring, do not generate any text other than the function
+call.
+
+NOTE: the only available agents for `$toolName` function are $targetNames.
+''';
+
+    if (agent.parentAgent != null && !agent.disallowTransferToParent) {
+      instruction =
+          '''
+$instruction
+
+If neither you nor the other agents are best for the question, transfer to your parent agent ${agent.parentAgent!.name}.
+''';
+    }
+
+    return instruction.trim();
+  }
+
+  Stream<Event> _postprocessAsync(
+    InvocationContext context,
+    LlmRequest request,
+    LlmResponse response,
+    Event modelResponseEvent,
+  ) async* {
+    await for (final Event event in _postprocessRunProcessorsAsync(
+      context,
+      response,
+    )) {
+      yield event;
+    }
+
+    if (response.content == null &&
+        response.errorCode == null &&
+        response.interrupted != true) {
+      return;
+    }
+
+    final Event finalized = _finalizeModelResponseEvent(
+      request,
+      response,
+      modelResponseEvent,
+    );
+    yield finalized;
+
+    if (finalized.getFunctionCalls().isNotEmpty) {
+      if (finalized.partial == true) {
+        return;
+      }
+
+      await for (final Event event in _postprocessHandleFunctionCallsAsync(
+        context,
+        finalized,
+        request,
+      )) {
+        yield event;
+      }
+    }
+  }
+
+  Stream<Event> _postprocessRunProcessorsAsync(
+    InvocationContext context,
+    LlmResponse response,
+  ) async* {
+    for (final BaseLlmResponseProcessor processor in responseProcessors) {
+      await for (final Event event in processor.runAsync(context, response)) {
+        yield event;
+      }
+    }
+  }
+
+  Stream<Event> _postprocessHandleFunctionCallsAsync(
+    InvocationContext context,
+    Event functionCallEvent,
+    LlmRequest request,
+  ) async* {
+    final Event? functionResponseEvent = await flow_functions
+        .handleFunctionCallsAsync(
+          context,
+          functionCallEvent,
+          request.toolsDict,
+        );
+
+    if (functionResponseEvent == null) {
+      return;
+    }
+
+    final Event? authEvent = flow_functions.generateAuthEvent(
+      context,
+      functionResponseEvent,
+    );
+    if (authEvent != null) {
+      yield authEvent;
+    }
+
+    final Event? confirmationEvent = flow_functions
+        .generateRequestConfirmationEvent(
+          context,
+          functionCallEvent,
+          functionResponseEvent,
+        );
+    if (confirmationEvent != null) {
+      yield confirmationEvent;
+    }
+
+    yield functionResponseEvent;
+
+    final String? transferToAgent =
+        functionResponseEvent.actions.transferToAgent;
+    if (transferToAgent != null && transferToAgent.isNotEmpty) {
+      final BaseAgent agentToRun = _getAgentToRun(context, transferToAgent);
+      await for (final Event event in agentToRun.runAsync(context)) {
+        yield event;
+      }
+    }
+  }
+
+  Stream<LlmResponse> _callLlmAsync(
+    InvocationContext context,
+    LlmRequest request,
+    Event modelResponseEvent,
+  ) async* {
+    final LlmResponse? beforeResponse = await _handleBeforeModelCallback(
+      context,
+      request,
+      modelResponseEvent,
+    );
+    if (beforeResponse != null) {
+      yield beforeResponse;
+      return;
+    }
+
+    request.config.labels['adk_agent_name'] ??= context.agent.name;
+
+    final BaseLlm llm = _getLlm(context);
+    context.incrementLlmCallCount();
+
+    try {
+      await for (LlmResponse response in llm.generateContent(
+        request.sanitizedForModelCall(),
+        stream: context.runConfig?.streamingMode == StreamingMode.sse,
+      )) {
+        final LlmResponse? altered = await _handleAfterModelCallback(
+          context,
+          response,
+          modelResponseEvent,
+        );
+        if (altered != null) {
+          response = altered;
+        }
+        yield response;
+      }
+    } catch (error) {
+      final Exception exception = error is Exception
+          ? error
+          : Exception(error.toString());
+      final LlmResponse? handled = await _handleModelErrorCallbacks(
+        context,
+        request,
+        modelResponseEvent,
+        exception,
+      );
+      if (handled != null) {
+        yield handled;
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<LlmResponse?> _handleBeforeModelCallback(
+    InvocationContext context,
+    LlmRequest request,
+    Event modelResponseEvent,
+  ) async {
+    final LlmAgent agent = context.agent as LlmAgent;
+    final CallbackContext callbackContext = Context(
+      context,
+      eventActions: modelResponseEvent.actions,
+    );
+
+    final LlmResponse? pluginOverride = await context.pluginManager
+        .runBeforeModelCallback(
+          callbackContext: callbackContext,
+          llmRequest: request,
+        );
+    if (pluginOverride != null) {
+      return pluginOverride;
+    }
+
+    for (final BeforeModelCallback callback
+        in agent.canonicalBeforeModelCallbacks) {
+      final LlmResponse? response = await Future<LlmResponse?>.value(
+        callback(callbackContext, request),
+      );
+      if (response != null) {
+        return response;
+      }
+    }
+
+    return null;
+  }
+
+  Future<LlmResponse?> _handleAfterModelCallback(
+    InvocationContext context,
+    LlmResponse response,
+    Event modelResponseEvent,
+  ) async {
+    final LlmAgent agent = context.agent as LlmAgent;
+    final CallbackContext callbackContext = Context(
+      context,
+      eventActions: modelResponseEvent.actions,
+    );
+
+    final LlmResponse? pluginOverride = await context.pluginManager
+        .runAfterModelCallback(
+          callbackContext: callbackContext,
+          llmResponse: response,
+        );
+    if (pluginOverride != null) {
+      return pluginOverride;
+    }
+
+    for (final AfterModelCallback callback
+        in agent.canonicalAfterModelCallbacks) {
+      final LlmResponse? altered = await Future<LlmResponse?>.value(
+        callback(callbackContext, response),
+      );
+      if (altered != null) {
+        return altered;
+      }
+    }
+
+    return null;
+  }
+
+  Future<LlmResponse?> _handleModelErrorCallbacks(
+    InvocationContext context,
+    LlmRequest request,
+    Event modelResponseEvent,
+    Exception error,
+  ) async {
+    final LlmAgent agent = context.agent as LlmAgent;
+    final CallbackContext callbackContext = Context(
+      context,
+      eventActions: modelResponseEvent.actions,
+    );
+
+    final LlmResponse? pluginHandled = await context.pluginManager
+        .runOnModelErrorCallback(
+          callbackContext: callbackContext,
+          llmRequest: request,
+          error: error,
+        );
+    if (pluginHandled != null) {
+      return pluginHandled;
+    }
+
+    for (final OnModelErrorCallback callback
+        in agent.canonicalOnModelErrorCallbacks) {
+      final LlmResponse? handled = await Future<LlmResponse?>.value(
+        callback(callbackContext, request, error),
+      );
+      if (handled != null) {
+        return handled;
+      }
+    }
+
+    return null;
+  }
+
+  Event _finalizeModelResponseEvent(
+    LlmRequest request,
+    LlmResponse response,
+    Event modelResponseEvent,
+  ) {
+    final Event finalized = modelResponseEvent.copyWith(
+      modelVersion: response.modelVersion,
+      content: response.content?.copyWith(),
+      partial: response.partial,
+      turnComplete: response.turnComplete,
+      finishReason: response.finishReason,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+      interrupted: response.interrupted,
+      customMetadata: response.customMetadata,
+      usageMetadata: response.usageMetadata,
+      inputTranscription: response.inputTranscription,
+      outputTranscription: response.outputTranscription,
+      avgLogprobs: response.avgLogprobs,
+      logprobsResult: response.logprobsResult,
+      cacheMetadata: response.cacheMetadata,
+      citationMetadata: response.citationMetadata,
+      interactionId: response.interactionId,
+    );
+
+    if (finalized.content != null) {
+      final List<FunctionCall> calls = finalized.getFunctionCalls();
+      if (calls.isNotEmpty) {
+        flow_functions.populateClientFunctionCallId(finalized);
+        finalized.longRunningToolIds = flow_functions
+            .getLongRunningFunctionCalls(calls, request.toolsDict);
+      }
+    }
+
+    return finalized;
+  }
+
+  BaseLlm _getLlm(InvocationContext context) {
+    final LlmAgent agent = context.agent as LlmAgent;
+    return agent.canonicalModel;
+  }
+
+  BaseAgent _getAgentToRun(InvocationContext context, String agentName) {
+    final BaseAgent? agent = context.agent.rootAgent.findAgent(agentName);
+    if (agent == null) {
+      throw StateError('Agent $agentName not found in the agent tree.');
+    }
+    return agent;
+  }
+}
