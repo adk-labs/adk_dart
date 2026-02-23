@@ -217,6 +217,7 @@ export 'src/tools/mcp_tool/session_context.dart';
 export 'src/tools/preload_memory_tool.dart';
 export 'src/tools/pubsub/pubsub_credentials.dart';
 export 'src/tools/set_model_response_tool.dart';
+export 'src/tools/skill_toolset.dart';
 export 'src/tools/spanner/spanner_credentials.dart';
 export 'src/tools/tool_confirmation.dart';
 export 'src/tools/tool_configs.dart';

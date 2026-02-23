@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 225
+- done: 226
 - partial: 29
-- missing: 232
+- missing: 231
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -461,7 +461,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/retrieval/llama_index_retrieval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/retrieval/vertex_ai_rag_retrieval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/set_model_response_tool.py` | `lib/src/tools/set_model_response_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/skill_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/skill_toolset.py` | `lib/src/tools/skill_toolset.dart` | `done` | Added skill toolset with list/load/load-resource tools, duplicate-name guard, and request-time system instruction + skills XML injection parity. |
 | `ref/adk-python/src/google/adk/tools/spanner/__init__.py` | `lib/src/tools/spanner/(package)` | `done` | Added Spanner credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/spanner/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/spanner/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |

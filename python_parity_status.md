@@ -171,6 +171,15 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Data Agent credential config parity (`DataAgentCredentialsConfig`)
 - [x] parity tests for default scope/token-cache-key assignment and explicit scope override behavior
 
+## Newly Added Skill Toolset Parity (this iteration)
+
+- [x] skill toolset parity (`SkillToolset`) with duplicate-name guard and tool filtering integration
+- [x] `list_skills` parity (available-skill XML formatting)
+- [x] `load_skill` parity (instruction/frontmatter load + error-code responses)
+- [x] `load_skill_resource` parity (references/assets/scripts path handling + error-code responses)
+- [x] request-time default skill instruction + available-skills XML injection parity
+- [x] dedicated parity tests for all skill toolset behaviors
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
