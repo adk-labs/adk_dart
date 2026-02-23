@@ -1,4 +1,5 @@
 import '../agents/readonly_context.dart';
+import '../auth/auth_tool.dart';
 import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
@@ -37,6 +38,12 @@ abstract class BaseToolset {
   }) async {
     // Intentionally empty. Toolsets can override.
   }
+
+  /// Returns auth config for this toolset, if tool listing/calls require auth.
+  ///
+  /// When non-null, the LLM flow resolves credentials before calling
+  /// `getTools*` and can emit `adk_request_credential` interruption events.
+  AuthConfig? getAuthConfig() => null;
 
   Future<void> close() async {}
 
