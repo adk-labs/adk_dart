@@ -47,6 +47,10 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] environment flag helper parity (`utils/env_utils.isEnvEnabled`)
 - [x] model-name utility parity (`extractModelName`, `isGeminiModel`, `isGemini1Model`, `isGemini2OrAbove`)
 - [x] Gemini model-id check flag parity (`isGeminiModelIdCheckDisabled`)
+- [x] context management utility parity (`Aclosing`, `withAclosing`)
+- [x] feature-gate utility parity (`workingInProgress`, `experimental`)
+- [x] YAML utility parity (`loadYamlFile`, `dumpPydanticToYaml`)
+- [x] version constant parity (`adkVersion`)
 - [x] utility regression tests for env/model helpers
 
 ## Newly Added Skills Parity (this iteration)

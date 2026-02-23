@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 200
+- done: 204
 - partial: 29
-- missing: 257
+- missing: 253
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -484,14 +484,14 @@ Summary:
 | `ref/adk-python/src/google/adk/utils/_google_client_headers.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/cache_performance_analyzer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/content_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/utils/context_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/context_utils.py` | `lib/src/utils/context_utils.dart` | `done` | Added async-closing helpers (`Aclosing`, `withAclosing`) for deterministic async resource cleanup parity. |
 | `ref/adk-python/src/google/adk/utils/env_utils.py` | `lib/src/utils/env_utils.dart` | `done` | Added environment-flag utility with Python-equivalent true/1 enable semantics and default fallback behavior. |
-| `ref/adk-python/src/google/adk/utils/feature_decorator.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/feature_decorator.py` | `lib/src/utils/feature_decorator.dart` | `done` | Added feature-gate decorators (`workingInProgress`, `experimental`) with env-based bypass and warning/block behavior parity. |
 | `ref/adk-python/src/google/adk/utils/instructions_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/model_name_utils.py` | `lib/src/utils/model_name_utils.dart` | `done` | Added model-name extraction and Gemini model/version detection helpers with env-flag check parity. |
 | `ref/adk-python/src/google/adk/utils/output_schema_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/streaming_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/variant_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/vertex_ai_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/utils/yaml_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/version.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/yaml_utils.py` | `lib/src/utils/yaml_utils.dart` | `done` | Added YAML/JSON loading and YAML dumping utilities with multiline-string style and exclusion controls parity. |
+| `ref/adk-python/src/google/adk/version.py` | `lib/src/version.dart` | `done` | Added package version constant aligned with Python ADK baseline. |
