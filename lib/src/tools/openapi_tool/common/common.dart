@@ -69,11 +69,39 @@ class ApiParameter {
 
   String get typeHint => TypeHintHelper.getTypeHint(paramSchema);
 
+  Type get typeValue => TypeHintHelper.getTypeValue(paramSchema);
+
   String toArgString() => '$pyName: $pyName';
 
   String toDictProperty() => '"$pyName": $pyName';
 
   String toPydocString() => PydocHelper.generateParamDoc(this);
+
+  ApiParameter copyWith({
+    Object? originalName = _sentinel,
+    Object? paramLocation = _sentinel,
+    Map<String, Object?>? paramSchema,
+    Object? description = _sentinel,
+    Object? pyName = _sentinel,
+    Object? required = _sentinel,
+  }) {
+    return ApiParameter(
+      originalName: identical(originalName, _sentinel)
+          ? this.originalName
+          : originalName as String,
+      paramLocation: identical(paramLocation, _sentinel)
+          ? this.paramLocation
+          : paramLocation as String,
+      paramSchema: paramSchema ?? this.paramSchema,
+      description: identical(description, _sentinel)
+          ? this.description
+          : description as String,
+      pyName: identical(pyName, _sentinel) ? this.pyName : pyName as String,
+      required: identical(required, _sentinel)
+          ? this.required
+          : required as bool,
+    );
+  }
 
   static String _defaultPyNameFor(String originalName, String location) {
     final String normalized = renamePythonKeywords(toSnakeCase(originalName));
@@ -121,6 +149,29 @@ class TypeHintHelper {
     }
     return 'Object?';
   }
+
+  static Type getTypeValue(Map<String, Object?> schema) {
+    final Object? type = schema['type'];
+    if (type == 'integer') {
+      return int;
+    }
+    if (type == 'number') {
+      return double;
+    }
+    if (type == 'boolean') {
+      return bool;
+    }
+    if (type == 'string') {
+      return String;
+    }
+    if (type == 'array') {
+      return List;
+    }
+    if (type == 'object') {
+      return Map;
+    }
+    return Object;
+  }
 }
 
 class PydocHelper {
@@ -164,3 +215,5 @@ Map<String, Object?> _readMap(Object? value) {
   }
   return <String, Object?>{};
 }
+
+const Object _sentinel = Object();

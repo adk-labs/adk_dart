@@ -233,6 +233,15 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] package-barrel parity for openapi auth and credential exchanger modules
 - [x] dedicated parity tests for auth helper conversions and exchanger dispatch behavior
 
+## Newly Added OpenAPI Spec Parser/REST Parity (this iteration)
+
+- [x] OpenAPI spec parser parity (`OpenApiSpecParser`, `ParsedOperation`, `OperationEndpoint`) with reference resolution, schema sanitization, and auth-scheme extraction
+- [x] operation parser parity (`OperationParser`) for operation/path/requestBody/response parsing, duplicate parameter dedupe, pydoc/schema/signature helper generation
+- [x] REST API tool parity (`RestApiTool`) including declaration creation, request parameter/body assembly, auth-parameter injection, and normalized execution-error responses
+- [x] tool auth handler parity (`ToolAuthHandler`, `ToolContextCredentialStore`) with stable credential-keying, auth request/response loop, and credential exchanger integration
+- [x] OpenAPI toolset parity (`OpenAPIToolset`) for dict/json/yaml spec loading, tool filtering/prefixing, SSL propagation, and auth-config exposure
+- [x] dedicated parity tests for parser/toolset/rest/auth-handler behavior
+
 ## Newly Added Skill Toolset Parity (this iteration)
 
 - [x] skill toolset parity (`SkillToolset`) with duplicate-name guard and tool filtering integration

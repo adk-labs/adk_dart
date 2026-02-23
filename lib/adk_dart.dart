@@ -266,6 +266,13 @@ export 'src/tools/google_api_tool/google_api_tool.dart';
 export 'src/tools/google_api_tool/google_api_toolset.dart';
 export 'src/tools/google_api_tool/google_api_toolsets.dart';
 export 'src/tools/google_api_tool/googleapi_to_openapi_converter.dart';
+export 'src/tools/openapi_tool/openapi_tool.dart'
+    hide OAuth2CredentialExchanger, ServiceAccountCredentialExchanger;
+export 'src/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.dart';
+export 'src/tools/openapi_tool/openapi_spec_parser/openapi_toolset.dart';
+export 'src/tools/openapi_tool/openapi_spec_parser/operation_parser.dart';
+export 'src/tools/openapi_tool/openapi_spec_parser/rest_api_tool.dart';
+export 'src/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.dart';
 export 'src/tools/google_tool.dart';
 export 'src/tools/load_artifacts_tool.dart';
 export 'src/tools/load_mcp_resource_tool.dart';

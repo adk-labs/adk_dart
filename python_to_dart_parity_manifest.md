@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 340
+- done: 346
 - partial: 0
-- missing: 146
+- missing: 140
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -432,7 +432,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/mcp_tool/mcp_tool.py` | `lib/src/tools/mcp_tool/mcp_tool.dart` | `done` | Added MCP tool wrapper with confirmation gating, auth-header derivation, and session-manager-backed tool invocation. |
 | `ref/adk-python/src/google/adk/tools/mcp_tool/mcp_toolset.py` | `lib/src/tools/mcp_tool/mcp_toolset.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/mcp_tool/session_context.py` | `lib/src/tools/mcp_tool/session_context.dart` | `done` | Added async session lifecycle context with start/close semantics and timeout handling. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/__init__.py` | `lib/src/tools/openapi_tool/openapi_tool.dart` | `done` | Added openapi tool package barrel surface for auth/common parity modules. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/__init__.py` | `lib/src/tools/openapi_tool/openapi_tool.dart` | `done` | Added openapi tool package barrel surface for auth/common modules plus OpenAPI spec parser/toolset/rest exports. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/auth/__init__.py` | `lib/src/tools/openapi_tool/auth/auth.dart` | `done` | Added auth package barrel exporting helper + exchanger modules. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/auth/auth_helpers.py` | `lib/src/tools/openapi_tool/auth/auth_helpers.dart` | `done` | Added auth helper contracts for API-key/OAuth/OpenID/service-account scheme+credential wiring and credential-to-parameter conversion. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/__init__.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/credential_exchangers.dart` | `done` | Added credential exchanger package barrel exports. |
@@ -442,12 +442,12 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/service_account_exchanger.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/service_account_exchanger.dart` | `done` | Added service-account exchanger with injectable token resolver and explicit missing-credential errors. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/common/__init__.py` | `lib/src/tools/openapi_tool/common/(package)` | `done` | Added openapi common package surface. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/common/common.py` | `lib/src/tools/openapi_tool/common/common.dart` | `done` | Added ApiParameter/type-hint/doc helpers and keyword-safe parameter-name normalization parity. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/operation_parser.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/__init__.py` | `lib/src/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser_package.dart` | `done` | Added package barrel exports for parser/toolset/operation/rest/auth-handler modules. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.py` | `lib/src/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.dart` | `done` | Added OpenAPI parser with `$ref` resolution (circular handling), schema-type sanitization, auth-scheme extraction, and parsed-operation modeling. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py` | `lib/src/tools/openapi_tool/openapi_spec_parser/openapi_toolset.dart` | `done` | Added OpenAPI toolset loading from dict/JSON/YAML, tool filtering/prefixing, SSL/auth propagation, and auth-config exposure. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/operation_parser.py` | `lib/src/tools/openapi_tool/openapi_spec_parser/operation_parser.dart` | `done` | Added operation parser with parameter/body/return extraction, duplicate-name dedupe, JSON-schema/pydoc/signature helpers, and auth-scheme lookup parity. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py` | `lib/src/tools/openapi_tool/openapi_spec_parser/rest_api_tool.dart` | `done` | Added REST API tool declaration/call flow, auth-parameter injection, request assembly for path/query/header/cookie/body mime types, and HTTP error normalization. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.py` | `lib/src/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.dart` | `done` | Added tool auth handler/credential store with stable cache keys, auth response/request lifecycle, optional OAuth refresh hook, and exchanger integration. |
 | `ref/adk-python/src/google/adk/tools/preload_memory_tool.py` | `lib/src/tools/preload_memory_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/pubsub/__init__.py` | `lib/src/tools/pubsub/(package)` | `done` | Added Pub/Sub credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/pubsub/client.py` | `lib/src/tools/pubsub/client.dart` | `done` | Added Pub/Sub client cache/factory layer with TTL reuse, user-agent composition, and cleanup parity surface. |
