@@ -267,6 +267,12 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] error package parity coverage (`errors/__init__`) for `AlreadyExistsError`, `NotFoundError`, and `InputValidationError`
 - [x] `AlreadyExistsError` default/custom message and string-format parity tests
 
+## Newly Added LangGraph Agent Parity (this iteration)
+
+- [x] `LangGraphAgent` parity baseline (`agents/langgraph_agent`) with checkpointer-aware event message extraction and system instruction handling
+- [x] graph invocation callback contract and `thread_id` session binding parity behavior
+- [x] dedicated parity tests for conversation mapping, trailing-user extraction, and final response event emission
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 269
+- done: 270
 - partial: 20
-- missing: 197
+- missing: 196
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -37,7 +37,7 @@ Summary:
 | `ref/adk-python/src/google/adk/agents/context.py` | `lib/src/agents/context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/context_cache_config.py` | `lib/src/agents/context_cache_config.dart` | `done` | Added cache interval/ttl/min-token config with range validation, ttl string helper, and string representation parity. |
 | `ref/adk-python/src/google/adk/agents/invocation_context.py` | `lib/src/agents/invocation_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/agents/langgraph_agent.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/agents/langgraph_agent.py` | `lib/src/agents/langgraph_agent.dart` | `done` | Added LangGraph agent adapter with checkpointer-aware message extraction, optional system-instruction injection, and parity tests for conversation mapping and response emission. |
 | `ref/adk-python/src/google/adk/agents/live_request_queue.py` | `lib/src/agents/live_request_queue.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/llm_agent.py` | `lib/src/agents/llm_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/llm_agent_config.py` | `lib/src/agents/llm_agent_config.dart` | `done` | Added full LLM agent config surface including legacy model-map normalization, source exclusivity checks, tools/callback parsing, and include-contents validation. |

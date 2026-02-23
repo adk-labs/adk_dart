@@ -7,6 +7,7 @@ export 'src/agents/context_cache_config.dart';
 export 'src/agents/context.dart';
 export 'src/agents/config_agent_utils.dart';
 export 'src/agents/invocation_context.dart';
+export 'src/agents/langgraph_agent.dart';
 export 'src/agents/live_request_queue.dart';
 export 'src/agents/llm_agent.dart';
 export 'src/agents/llm_agent_config.dart';
