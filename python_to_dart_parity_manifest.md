@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 331
+- done: 340
 - partial: 0
-- missing: 155
+- missing: 146
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -432,16 +432,16 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/mcp_tool/mcp_tool.py` | `lib/src/tools/mcp_tool/mcp_tool.dart` | `done` | Added MCP tool wrapper with confirmation gating, auth-header derivation, and session-manager-backed tool invocation. |
 | `ref/adk-python/src/google/adk/tools/mcp_tool/mcp_toolset.py` | `lib/src/tools/mcp_tool/mcp_toolset.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/mcp_tool/session_context.py` | `lib/src/tools/mcp_tool/session_context.dart` | `done` | Added async session lifecycle context with start/close semantics and timeout handling. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/auth_helpers.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/auto_auth_credential_exchanger.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/base_credential_exchanger.py` | `lib/src/auth/exchanger/base_credential_exchanger.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/service_account_exchanger.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/common/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/openapi_tool/common/common.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/__init__.py` | `lib/src/tools/openapi_tool/openapi_tool.dart` | `done` | Added openapi tool package barrel surface for auth/common parity modules. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/__init__.py` | `lib/src/tools/openapi_tool/auth/auth.dart` | `done` | Added auth package barrel exporting helper + exchanger modules. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/auth_helpers.py` | `lib/src/tools/openapi_tool/auth/auth_helpers.dart` | `done` | Added auth helper contracts for API-key/OAuth/OpenID/service-account scheme+credential wiring and credential-to-parameter conversion. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/__init__.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/credential_exchangers.dart` | `done` | Added credential exchanger package barrel exports. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/auto_auth_credential_exchanger.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/auto_auth_credential_exchanger.dart` | `done` | Added auth-type based auto exchanger dispatch with custom override support. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/base_credential_exchanger.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/base_credential_exchanger.dart` | `done` | Added openapi credential exchanger base contract and missing-credential error type parity. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger.dart` | `done` | Added OAuth2/OpenID credential exchanger that emits HTTP bearer auth credentials from access tokens. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/auth/credential_exchangers/service_account_exchanger.py` | `lib/src/tools/openapi_tool/auth/credential_exchangers/service_account_exchanger.dart` | `done` | Added service-account exchanger with injectable token resolver and explicit missing-credential errors. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/common/__init__.py` | `lib/src/tools/openapi_tool/common/(package)` | `done` | Added openapi common package surface. |
+| `ref/adk-python/src/google/adk/tools/openapi_tool/common/common.py` | `lib/src/tools/openapi_tool/common/common.dart` | `done` | Added ApiParameter/type-hint/doc helpers and keyword-safe parameter-name normalization parity. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |

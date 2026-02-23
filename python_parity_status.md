@@ -225,6 +225,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] pub/sub toolset parity (`PubSubToolset`) with `GoogleTool` credential/settings bridge and list/predicate filtering
 - [x] dedicated parity tests for client cache lifecycle, message operations, and toolset execution
 
+## Newly Added OpenAPI Auth/Common Parity (this iteration)
+
+- [x] OpenAPI auth helper parity (`auth_helpers`) for token/service-account/OpenID scheme+credential builders
+- [x] OpenAPI credential exchanger parity (`BaseAuthCredentialExchanger`, `AutoAuthCredentialExchanger`, OAuth2/service-account exchangers)
+- [x] OpenAPI common contracts parity (`ApiParameter`, type-hint/doc helpers, keyword-safe parameter names)
+- [x] package-barrel parity for openapi auth and credential exchanger modules
+- [x] dedicated parity tests for auth helper conversions and exchanger dispatch behavior
+
 ## Newly Added Skill Toolset Parity (this iteration)
 
 - [x] skill toolset parity (`SkillToolset`) with duplicate-name guard and tool filtering integration
