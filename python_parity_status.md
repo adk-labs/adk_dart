@@ -241,6 +241,17 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] deterministic local eval backend for `vertexai.Client().evals.evaluate(...)` compatibility path
 - [x] dedicated dependency parity tests for ROUGE scoring and Vertex module helper surfaces
 
+## Newly Added Feature/Platform/Telemetry Parity (this iteration)
+
+- [x] feature registry parity (`features/_feature_registry`) with full feature catalog, override/env/default precedence, warning-once semantics, and temporary override helpers
+- [x] feature decorator parity (`features/_feature_decorator`) for WIP/experimental/stable gates with stage-consistency validation and runtime guard execution
+- [x] platform thread parity (`platform/thread`) with internal delegation hook plus callable args/named-args thread wrapper behavior
+- [x] telemetry setup parity (`telemetry/setup`) with OTel hook aggregation, provider registration, and OTLP env-driven exporter wiring
+- [x] telemetry GCP parity (`telemetry/google_cloud`) with Cloud Trace/Monitoring/Logging hook builders and resource merge helpers
+- [x] sqlite span exporter parity baseline (`telemetry/sqlite_span_exporter`) with persistent span storage and session trace reconstruction API
+- [x] tracing API parity expansion (`telemetry/tracing`) with `tracer` context and tool/LLM/send-data attribute helpers
+- [x] dedicated parity tests for feature/platform/telemetry modules
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

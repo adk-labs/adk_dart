@@ -131,6 +131,8 @@ export 'src/code_executors/agent_engine_sandbox_code_executor.dart';
 export 'src/dependencies/dependency_container.dart';
 export 'src/dependencies/rouge_scorer.dart';
 export 'src/dependencies/vertexai.dart';
+export 'src/features/_feature_decorator.dart' show FeatureDecorator;
+export 'src/features/_feature_registry.dart';
 export 'src/features/feature_flags.dart';
 
 export 'src/flows/llm_flows/auto_flow.dart';
@@ -168,6 +170,7 @@ export 'src/plugins/plugin_manager.dart';
 export 'src/plugins/reflect_retry_tool_plugin.dart';
 export 'src/plugins/save_files_as_artifacts_plugin.dart';
 export 'src/platform/runtime_environment.dart';
+export 'src/platform/thread.dart';
 export 'src/planners/base_planner.dart';
 export 'src/planners/built_in_planner.dart';
 export 'src/planners/plan_re_act_planner.dart';
@@ -191,7 +194,10 @@ export 'src/sessions/state.dart';
 export 'src/sessions/vertex_ai_session_service.dart';
 
 export 'src/telemetry/base_telemetry_service.dart';
+export 'src/telemetry/google_cloud.dart';
 export 'src/telemetry/in_memory_telemetry_service.dart';
+export 'src/telemetry/setup.dart';
+export 'src/telemetry/sqlite_span_exporter.dart';
 export 'src/telemetry/tracing.dart';
 
 export 'src/tools/base_tool.dart';
@@ -253,7 +259,7 @@ export 'src/types/content.dart';
 export 'src/utils/content_utils.dart';
 export 'src/utils/context_utils.dart';
 export 'src/utils/env_utils.dart';
-export 'src/utils/feature_decorator.dart';
+export 'src/utils/feature_decorator.dart' hide FeatureDecorator;
 export 'src/utils/model_name_utils.dart';
 export 'src/utils/output_schema_utils.dart';
 export 'src/utils/variant_utils.dart';

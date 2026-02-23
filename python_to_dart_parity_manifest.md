@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 250
-- partial: 28
-- missing: 208
+- done: 260
+- partial: 24
+- missing: 202
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -248,9 +248,9 @@ Summary:
 | `ref/adk-python/src/google/adk/examples/example.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/examples/example_util.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/examples/vertex_ai_example_store.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/features/__init__.py` | `lib/src/features/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
-| `ref/adk-python/src/google/adk/features/_feature_decorator.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/features/_feature_registry.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/features/__init__.py` | `lib/src/features/features.dart` | `done` | Added feature module export surface with decorator/registry contracts and parity tests for warning/override/decorator behavior. |
+| `ref/adk-python/src/google/adk/features/_feature_decorator.py` | `lib/src/features/_feature_decorator.dart` | `done` | Added feature gate decorators (`workingInProgress`/`experimental`/`stable`) with registration, stage consistency checks, and runtime guard execution parity. |
+| `ref/adk-python/src/google/adk/features/_feature_registry.py` | `lib/src/features/_feature_registry.dart` | `done` | Added feature enum/config registry, override/env/default precedence, one-time non-stable warning emission, and temporary override helpers with parity tests. |
 | `ref/adk-python/src/google/adk/flows/__init__.py` | `lib/src/flows/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/__init__.py` | `lib/src/flows/llm_flows/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/_base_llm_processor.py` | `lib/src/flows/llm_flows/base_llm_flow.dart` | `done` | Counterpart exists and tests reference module/package terms. |
@@ -304,8 +304,8 @@ Summary:
 | `ref/adk-python/src/google/adk/planners/base_planner.py` | `lib/src/planners/base_planner.dart` | `done` | Abstract planner contract matches Python and is exercised by planner flow tests. |
 | `ref/adk-python/src/google/adk/planners/built_in_planner.py` | `lib/src/planners/built_in_planner.dart` | `done` | Thinking-config overwrite semantics and no-op planner callbacks are covered in parity tests. |
 | `ref/adk-python/src/google/adk/planners/plan_re_act_planner.py` | `lib/src/planners/plan_re_act_planner.dart` | `done` | NL planning prompt/tagging and response partitioning behavior is validated in planners parity tests. |
-| `ref/adk-python/src/google/adk/platform/__init__.py` | `lib/src/platform/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
-| `ref/adk-python/src/google/adk/platform/thread.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/platform/__init__.py` | `lib/src/platform/(package)` | `done` | Platform package now includes thread helper parity and dedicated tests for fallback/delegation behavior. |
+| `ref/adk-python/src/google/adk/platform/thread.py` | `lib/src/platform/thread.dart` | `done` | Added `createThread` shim with optional internal creator delegation plus start/join thread wrapper that mirrors Python callable + args behavior. |
 | `ref/adk-python/src/google/adk/plugins/__init__.py` | `lib/src/plugins/(package)` | `done` | Plugin package now exports core baseline plugins (`Base`, `DebugLogging`, `Logging`, `PluginManager`, `ReflectRetry`) with tests. |
 | `ref/adk-python/src/google/adk/plugins/base_plugin.py` | `lib/src/plugins/base_plugin.dart` | `done` | Callback surface matches Python base plugin and is covered by plugin manager callback tests. |
 | `ref/adk-python/src/google/adk/plugins/bigquery_agent_analytics_plugin.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
@@ -341,11 +341,11 @@ Summary:
 | `ref/adk-python/src/google/adk/skills/_utils.py` | `lib/src/skills/_utils.dart` | `done` | Added dedicated utility module export; behavior is implemented and tested via `skill.dart`. |
 | `ref/adk-python/src/google/adk/skills/models.py` | `lib/src/skills/models.dart` | `done` | Added dedicated models module export; frontmatter/resources/skill model tests already cover parity. |
 | `ref/adk-python/src/google/adk/skills/prompt.py` | `lib/src/skills/prompt.dart` | `done` | Added prompt formatting module export with XML formatting parity tests. |
-| `ref/adk-python/src/google/adk/telemetry/__init__.py` | `lib/src/telemetry/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
-| `ref/adk-python/src/google/adk/telemetry/google_cloud.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/telemetry/setup.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/telemetry/sqlite_span_exporter.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/telemetry/tracing.py` | `lib/src/telemetry/tracing.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/telemetry/__init__.py` | `lib/src/telemetry/(package)` | `done` | Telemetry module now exports tracing hooks plus cloud/setup/sqlite utilities and has parity-focused regression tests. |
+| `ref/adk-python/src/google/adk/telemetry/google_cloud.py` | `lib/src/telemetry/google_cloud.dart` | `done` | Added GCP telemetry hook builders (trace/metric/log exporters), auth resolver injection, default log-name env behavior, and resource merge parity tests. |
+| `ref/adk-python/src/google/adk/telemetry/setup.py` | `lib/src/telemetry/setup.dart` | `done` | Added OTel hook aggregation/provider setup, OTLP env-driven exporter wiring, and environment resource detection parity tests. |
+| `ref/adk-python/src/google/adk/telemetry/sqlite_span_exporter.py` | `lib/src/telemetry/sqlite_span_exporter.dart` | `done` | Added local persistent span exporter contract with trace/session indexing behavior (`getAllSpansForSession`) and parity tests. |
+| `ref/adk-python/src/google/adk/telemetry/tracing.py` | `lib/src/telemetry/tracing.dart` | `done` | Expanded tracing surface with `tracer` context, tool/LLM/send-data trace attribute helpers, content serialization controls, and parity tests. |
 | `ref/adk-python/src/google/adk/tools/__init__.py` | `lib/src/tools/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/_automatic_function_calling_util.py` | `lib/src/tools/_automatic_function_calling_util.dart` | `done` | Added declaration builder helpers with ignore-param filtering and schema passthrough support. |
 | `ref/adk-python/src/google/adk/tools/_forwarding_artifact_service.py` | `lib/src/tools/_forwarding_artifact_service.dart` | `done` | Added forwarding artifact service that delegates save/load/list/delete/version calls to tool context. |
