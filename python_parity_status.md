@@ -354,6 +354,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] parity regression tests for evaluation constants/models/tool-extraction/trajectory/registry/retry paths
 - [x] parity tests for evaluation generator / agent evaluator / llm-as-judge baselines
 
+## Newly Added Evaluation Surface Contracts (this iteration)
+
+- [x] `BaseEvalService` request/response stream contract parity tests
+- [x] `EvalCase` legacy compatibility parity (`query/reference` -> conversation/input/expected output) and XOR validation tests
+- [x] `EvalResult` modern/legacy JSON parsing + aggregate scoring parity tests
+- [x] `LocalEvalService` inference/evaluation flow regression test coverage
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)

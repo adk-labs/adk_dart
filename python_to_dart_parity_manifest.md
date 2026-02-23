@@ -3,8 +3,8 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 297
-- partial: 22
+- done: 302
+- partial: 17
 - missing: 167
 
 | python_file | dart_file | status | parity_notes |
@@ -187,21 +187,21 @@ Summary:
 | `ref/adk-python/src/google/adk/errors/already_exists_error.py` | `lib/src/errors/already_exists_error.dart` | `done` | Added parity tests for default/custom message behavior and exception string formatting. |
 | `ref/adk-python/src/google/adk/errors/input_validation_error.py` | `lib/src/errors/input_validation_error.dart` | `done` | Added `InputValidationError` with default/custom message behavior and parity tests for string formatting. |
 | `ref/adk-python/src/google/adk/errors/not_found_error.py` | `lib/src/errors/not_found_error.dart` | `done` | Added `NotFoundError` counterpart and wired into eval managers. |
-| `ref/adk-python/src/google/adk/evaluation/__init__.py` | `lib/src/evaluation/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/evaluation/__init__.py` | `lib/src/evaluation/(package)` | `done` | Evaluation package surface is exported via `adk_dart.dart`; parity contracts are covered by dedicated evaluation surface/local service tests. |
 | `ref/adk-python/src/google/adk/evaluation/_eval_set_results_manager_utils.py` | `lib/src/evaluation/eval_set_results_manager_utils.dart` | `done` | Added create/parse helpers including legacy double-encoded JSON parsing. |
 | `ref/adk-python/src/google/adk/evaluation/_eval_sets_manager_utils.py` | `lib/src/evaluation/eval_sets_manager_utils.dart` | `done` | Added CRUD helper utilities with not-found behavior parity. |
 | `ref/adk-python/src/google/adk/evaluation/_retry_options_utils.py` | `lib/src/evaluation/_retry_options_utils.dart` | `done` | Added default HTTP retry option injection helper and plugin hook parity. |
 | `ref/adk-python/src/google/adk/evaluation/agent_evaluator.py` | `lib/src/evaluation/agent_evaluator.dart` | `partial` | Added eval-set orchestration over generated runs and metric registry; Python module-loading and full legacy dataset migration helpers remain pending. |
 | `ref/adk-python/src/google/adk/evaluation/app_details.py` | `lib/src/evaluation/app_details.dart` | `done` | Added app/agent projection model with instruction and tool lookup helpers. |
-| `ref/adk-python/src/google/adk/evaluation/base_eval_service.py` | `lib/src/evaluation/base_eval_service.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/evaluation/base_eval_service.py` | `lib/src/evaluation/base_eval_service.dart` | `done` | Added stream-contract parity tests for `InferenceRequest`/`EvaluateRequest` and abstract service behavior in `evaluation_surface_contracts_test.dart`. |
 | `ref/adk-python/src/google/adk/evaluation/common.py` | `lib/src/evaluation/common.dart` | `done` | Added shared JSON conversion helpers used across evaluation modules. |
 | `ref/adk-python/src/google/adk/evaluation/constants.py` | `lib/src/evaluation/constants.dart` | `done` | Added eval dependency message constant parity. |
 | `ref/adk-python/src/google/adk/evaluation/conversation_scenarios.py` | `lib/src/evaluation/conversation_scenarios.dart` | `done` | Added scenario container and persona-id to persona resolution parity. |
 | `ref/adk-python/src/google/adk/evaluation/custom_metric_evaluator.py` | `lib/src/evaluation/custom_metric_evaluator.dart` | `done` | Added custom metric function registry and evaluator execution path. |
-| `ref/adk-python/src/google/adk/evaluation/eval_case.py` | `lib/src/evaluation/eval_case.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/evaluation/eval_case.py` | `lib/src/evaluation/eval_case.dart` | `done` | Added parity tests for conversation-scenario XOR validation, legacy `query/reference` parsing, and tool call/response extraction from both intermediate formats. |
 | `ref/adk-python/src/google/adk/evaluation/eval_config.py` | `lib/src/evaluation/eval_config.dart` | `done` | Added EvalConfig loader/defaulting, custom metric validation, and metric mapping tests. |
 | `ref/adk-python/src/google/adk/evaluation/eval_metrics.py` | `lib/src/evaluation/eval_metrics.dart` | `done` | Added criterion/metric info models and result spec types for parity APIs. |
-| `ref/adk-python/src/google/adk/evaluation/eval_result.py` | `lib/src/evaluation/eval_result.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/evaluation/eval_result.py` | `lib/src/evaluation/eval_result.dart` | `done` | Added parity tests for modern/legacy JSON parsing, metric aggregation scoring, and eval-set result serialization contracts. |
 | `ref/adk-python/src/google/adk/evaluation/eval_rubrics.py` | `lib/src/evaluation/eval_rubrics.dart` | `done` | Added rubric content, rubric, and rubric score data models with JSON parity. |
 | `ref/adk-python/src/google/adk/evaluation/eval_set.py` | `lib/src/evaluation/eval_set.dart` | `done` | Added EvalSet model with JSON serialization and manager tests. |
 | `ref/adk-python/src/google/adk/evaluation/eval_set_results_manager.py` | `lib/src/evaluation/eval_set_results_manager.dart` | `done` | Added eval set result manager contract and local persistence implementation. |
@@ -217,7 +217,7 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/in_memory_eval_sets_manager.py` | `lib/src/evaluation/in_memory_eval_sets_manager.dart` | `done` | Added in-memory CRUD manager and parity tests. |
 | `ref/adk-python/src/google/adk/evaluation/llm_as_judge.py` | `lib/src/evaluation/llm_as_judge.dart` | `partial` | Added judge base class with multi-sample aggregation and pluggable auto-rater invoker; direct model-registry-backed judge calls are pending. |
 | `ref/adk-python/src/google/adk/evaluation/llm_as_judge_utils.py` | `lib/src/evaluation/llm_as_judge_utils.dart` | `done` | Added text/status/rubric/tool serialization helpers for judge-style evaluators. |
-| `ref/adk-python/src/google/adk/evaluation/local_eval_service.py` | `lib/src/evaluation/local_eval_service.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/evaluation/local_eval_service.py` | `lib/src/evaluation/local_eval_service.dart` | `done` | Added local evaluation regression coverage for inference/evaluation flow and final-response metric behavior (`local_eval_service_test.dart`). |
 | `ref/adk-python/src/google/adk/evaluation/local_eval_set_results_manager.py` | `lib/src/evaluation/local_eval_set_results_manager.dart` | `done` | Added disk-backed eval result persistence with list/get/save tests. |
 | `ref/adk-python/src/google/adk/evaluation/local_eval_sets_manager.py` | `lib/src/evaluation/local_eval_sets_manager.dart` | `done` | Added disk-backed eval set manager including legacy format conversion support. |
 | `ref/adk-python/src/google/adk/evaluation/metric_evaluator_registry.py` | `lib/src/evaluation/metric_evaluator_registry.dart` | `done` | Added registry with evaluator factory bindings and default prebuilt metric registrations. |

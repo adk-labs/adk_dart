@@ -403,18 +403,33 @@ List<(EvalJsonMap, EvalJsonMap?)> getAllToolCallsWithResponses(
 
 List<Invocation>? _readConversation(EvalJsonMap json) {
   final Object? rawConversation = json['conversation'];
-  if (rawConversation is! List) {
-    return null;
+  if (rawConversation is List) {
+    return rawConversation.map((Object? item) {
+      return Invocation.fromJson(asEvalJson(item));
+    }).toList();
   }
-  return rawConversation.map((Object? item) {
-    return Invocation.fromJson(asEvalJson(item));
-  }).toList();
+
+  // Legacy eval case format uses top-level query/reference.
+  if (json.containsKey('query') || json.containsKey('reference')) {
+    return <Invocation>[
+      Invocation.fromJson(<String, Object?>{
+        'query': asNullableString(json['query']) ?? '',
+        'reference': asNullableString(json['reference']) ?? '',
+      }),
+    ];
+  }
+
+  return null;
 }
 
 String _inferInput(EvalJsonMap json, List<Invocation>? conversation) {
   final String? rawInput = asNullableString(json['input']);
   if (rawInput != null) {
     return rawInput;
+  }
+  final String? legacyQuery = asNullableString(json['query']);
+  if (legacyQuery != null) {
+    return legacyQuery;
   }
   if (conversation != null && conversation.isNotEmpty) {
     final EvalJsonMap userContent = conversation.first.userContent;
@@ -435,6 +450,10 @@ String? _inferExpectedOutput(EvalJsonMap json, List<Invocation>? conversation) {
       asNullableString(json['expected_output']);
   if (raw != null) {
     return raw;
+  }
+  final String? legacyReference = asNullableString(json['reference']);
+  if (legacyReference != null) {
+    return legacyReference;
   }
   if (conversation != null && conversation.isNotEmpty) {
     final EvalJsonMap? finalResponse = conversation.last.finalResponse;
