@@ -38,6 +38,8 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] context cache/transcription contracts (`ContextCacheConfig`, `TranscriptionEntry`)
 - [x] config runtime loader parity (`fromConfig`, `resolveAgentReference`, `resolveCodeReference`, callback resolution)
 - [x] dependency-free YAML decoding path for ADK-style config files
+- [x] streaming helper parity (`ActiveStreamingTool`)
+- [x] MCP instruction provider parity (`McpInstructionProvider`) with prompt-resource interpolation
 - [x] parity regression tests for config normalization/validation/loading/custom-factory hooks
 
 ## Newly Added Utility Parity (this iteration)

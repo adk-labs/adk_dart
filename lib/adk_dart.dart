@@ -1,4 +1,5 @@
 export 'src/agents/agent_state.dart';
+export 'src/agents/active_streaming_tool.dart';
 export 'src/agents/base_agent.dart';
 export 'src/agents/base_agent_config.dart';
 export 'src/agents/callback_context.dart';
@@ -11,6 +12,7 @@ export 'src/agents/llm_agent.dart';
 export 'src/agents/llm_agent_config.dart';
 export 'src/agents/loop_agent.dart';
 export 'src/agents/loop_agent_config.dart';
+export 'src/agents/mcp_instruction_provider.dart';
 export 'src/agents/parallel_agent.dart';
 export 'src/agents/parallel_agent_config.dart';
 export 'src/agents/readonly_context.dart';

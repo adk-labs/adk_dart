@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 198
+- done: 200
 - partial: 29
-- missing: 259
+- missing: 257
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ Summary:
 | `ref/adk-python/src/google/adk/a2a/utils/agent_card_builder.py` | `lib/src/a2a/utils/agent_card_builder.dart` | `done` | Added agent-card generation including tool/planner/code-execution/sub-agent skill extraction. |
 | `ref/adk-python/src/google/adk/a2a/utils/agent_to_a2a.py` | `lib/src/a2a/utils/agent_to_a2a.dart` | `done` | Added agent-to-A2A application wiring with runner bootstrap and card loading/building. |
 | `ref/adk-python/src/google/adk/agents/__init__.py` | `lib/src/agents/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/agents/active_streaming_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/agents/active_streaming_tool.py` | `lib/src/agents/active_streaming_tool.dart` | `done` | Added active streaming tool holder with task + live stream handles for invocation-time streaming parity. |
 | `ref/adk-python/src/google/adk/agents/agent_config.py` | `lib/src/agents/agent_config.dart` | `done` | Added discriminated union parsing with built-in class dispatch and unknown-class fallback parity. |
 | `ref/adk-python/src/google/adk/agents/base_agent.py` | `lib/src/agents/base_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/base_agent_config.py` | `lib/src/agents/base_agent_config.dart` | `done` | Added base config model with extra-field capture/validation and callback/sub-agent decoding parity. |
@@ -43,7 +43,7 @@ Summary:
 | `ref/adk-python/src/google/adk/agents/llm_agent_config.py` | `lib/src/agents/llm_agent_config.dart` | `done` | Added full LLM agent config surface including legacy model-map normalization, source exclusivity checks, tools/callback parsing, and include-contents validation. |
 | `ref/adk-python/src/google/adk/agents/loop_agent.py` | `lib/src/agents/loop_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/loop_agent_config.py` | `lib/src/agents/loop_agent_config.dart` | `done` | Added loop config with strict field validation and max-iterations parsing parity. |
-| `ref/adk-python/src/google/adk/agents/mcp_instruction_provider.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/agents/mcp_instruction_provider.py` | `lib/src/agents/mcp_instruction_provider.dart` | `done` | Added MCP-backed instruction provider that loads prompt resources and applies context-state argument interpolation. |
 | `ref/adk-python/src/google/adk/agents/parallel_agent.py` | `lib/src/agents/parallel_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/parallel_agent_config.py` | `lib/src/agents/parallel_agent_config.dart` | `done` | Added parallel config with strict extra-field rejection parity. |
 | `ref/adk-python/src/google/adk/agents/readonly_context.py` | `lib/src/agents/readonly_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
