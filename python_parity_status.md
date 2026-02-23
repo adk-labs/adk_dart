@@ -62,6 +62,17 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] output-schema compatibility parity (`canUseOutputSchemaWithTools`)
 - [x] utility regression tests for env/model helpers
 
+## Newly Added Utility Module Parity (this iteration)
+
+- [x] client label utilities parity (`utils/client_labels_utils`) with default ADK/runtime labels, scoped context propagation, and eval client label constant
+- [x] Google tracking header utilities parity (`utils/google_client_headers`) with merged header dedup semantics
+- [x] debug event printer parity (`utils/debug_output`) with text coalescing and verbose tool/code/file traces
+- [x] instruction template injection parity (`utils/instructions_utils`) with session-state/artifact placeholder resolution and optional variable handling
+- [x] streaming response aggregation parity (`utils/streaming_utils`) for progressive and non-progressive SSE chunk assembly
+- [x] cache performance analyzer parity (`utils/cache_performance_analyzer`) with cache-hit/utilization/token metrics
+- [x] Vertex AI express-mode API key helper parity (`utils/vertex_ai_utils`) including mutual-exclusion validation
+- [x] dedicated parity regression coverage (`test/utils_missing_parity_test.dart`)
+
 ## Newly Added Skills Parity (this iteration)
 
 - [x] skill frontmatter/resource models (`Frontmatter`, `Resources`, `Script`, `Skill`)

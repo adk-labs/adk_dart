@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 374
+- done: 382
 - partial: 0
-- missing: 112
+- missing: 104
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -478,20 +478,20 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/transfer_to_agent_tool.py` | `lib/src/tools/transfer_to_agent_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/url_context_tool.py` | `lib/src/tools/url_context_tool.dart` | `done` | Added URL context tool model compatibility checks and built-in declaration injection behavior. |
 | `ref/adk-python/src/google/adk/tools/vertex_ai_search_tool.py` | `lib/src/tools/vertex_ai_search_tool.dart` | `done` | Added Vertex AI Search built-in tool with data-store/engine exclusivity validation, dynamic config builder, and Gemini model guard parity. |
-| `ref/adk-python/src/google/adk/utils/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/utils/_client_labels_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/utils/_debug_output.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/utils/_google_client_headers.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/utils/cache_performance_analyzer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/__init__.py` | `lib/src/utils/(package)` | `done` | Added utility package exports and parity tests for core utility modules. |
+| `ref/adk-python/src/google/adk/utils/_client_labels_utils.py` | `lib/src/utils/client_labels_utils.dart` | `done` | Added client-label context propagation, default telemetry labels, and eval label constant parity. |
+| `ref/adk-python/src/google/adk/utils/_debug_output.py` | `lib/src/utils/debug_output.dart` | `done` | Added debug event printer with text buffering, verbose tool/code/file rendering, and truncation parity. |
+| `ref/adk-python/src/google/adk/utils/_google_client_headers.py` | `lib/src/utils/google_client_headers.dart` | `done` | Added tracking-header generation and merge-with-dedup behavior parity. |
+| `ref/adk-python/src/google/adk/utils/cache_performance_analyzer.py` | `lib/src/utils/cache_performance_analyzer.dart` | `done` | Added cache-history analysis (hit/utilization ratios, token accounting, refresh/invocation metrics) parity. |
 | `ref/adk-python/src/google/adk/utils/content_utils.py` | `lib/src/utils/content_utils.dart` | `done` | Added audio-part detection and content audio-filtering helpers with role/part preservation parity. |
 | `ref/adk-python/src/google/adk/utils/context_utils.py` | `lib/src/utils/context_utils.dart` | `done` | Added async-closing helpers (`Aclosing`, `withAclosing`) for deterministic async resource cleanup parity. |
 | `ref/adk-python/src/google/adk/utils/env_utils.py` | `lib/src/utils/env_utils.dart` | `done` | Added environment-flag utility with Python-equivalent true/1 enable semantics and default fallback behavior. |
 | `ref/adk-python/src/google/adk/utils/feature_decorator.py` | `lib/src/utils/feature_decorator.dart` | `done` | Added feature-gate decorators (`workingInProgress`, `experimental`) with env-based bypass and warning/block behavior parity. |
-| `ref/adk-python/src/google/adk/utils/instructions_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/instructions_utils.py` | `lib/src/utils/instructions_utils.dart` | `done` | Added session/artifact template variable injection with optional placeholders and state-name validation parity. |
 | `ref/adk-python/src/google/adk/utils/model_name_utils.py` | `lib/src/utils/model_name_utils.dart` | `done` | Added model-name extraction and Gemini model/version detection helpers with env-flag check parity. |
 | `ref/adk-python/src/google/adk/utils/output_schema_utils.py` | `lib/src/utils/output_schema_utils.dart` | `done` | Added output-schema-with-tools compatibility check using variant and Gemini version gating parity. |
-| `ref/adk-python/src/google/adk/utils/streaming_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/streaming_utils.py` | `lib/src/utils/streaming_utils.dart` | `done` | Added streaming response aggregator parity for progressive and non-progressive modes including partial function-call arg assembly. |
 | `ref/adk-python/src/google/adk/utils/variant_utils.py` | `lib/src/utils/variant_utils.dart` | `done` | Added Google LLM variant enum and environment-driven variant selection parity. |
-| `ref/adk-python/src/google/adk/utils/vertex_ai_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/utils/vertex_ai_utils.py` | `lib/src/utils/vertex_ai_utils.dart` | `done` | Added express-mode API-key selection helper with project/location mutual-exclusion validation parity. |
 | `ref/adk-python/src/google/adk/utils/yaml_utils.py` | `lib/src/utils/yaml_utils.dart` | `done` | Added YAML/JSON loading and YAML dumping utilities with multiline-string style and exclusion controls parity. |
 | `ref/adk-python/src/google/adk/version.py` | `lib/src/version.dart` | `done` | Added package version constant aligned with Python ADK baseline. |
