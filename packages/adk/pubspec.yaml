@@ -4,6 +4,12 @@ version: 0.1.1
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart
 issue_tracker: https://github.com/adk-labs/adk_dart/issues
+topics:
+  - adk
+  - ai
+  - llm
+  - agents
+  - multi-agent
 
 environment:
   sdk: ^3.11.0
