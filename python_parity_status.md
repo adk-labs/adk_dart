@@ -162,6 +162,16 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] session persistence service parity baseline (`DatabaseSessionService`, `SqliteSessionService`, `VertexAiSessionService`)
 - [x] parity tests for eval manager/config/result/session persistence flows
 
+## Newly Added Session Schema/Migration Parity (this iteration)
+
+- [x] shared schema utility parity (`sessions/schemas/shared.dart`) with JSON and precise-timestamp helpers
+- [x] v0 storage schema parity (`sessions/schemas/v0.dart`) for legacy session/event/app/user state modeling and Event roundtrip conversion
+- [x] v1 storage schema parity (`sessions/schemas/v1.dart`) with `StorageMetadata`, `event_data` JSON envelope, and Event roundtrip conversion
+- [x] schema check utility parity (`sessions/migration/schema_check_utils.dart`) including schema-version constants, URL normalization, and metadata/event-shape detection
+- [x] migration utility parity (`sessions/migration/migrate_from_sqlalchemy_pickle.dart`, `migrate_from_sqlalchemy_sqlite.dart`) for v0→v1 payload conversion
+- [x] migration runner parity (`sessions/migration/migration_runner.dart`) with migration-path traversal, temp intermediate outputs, and in-place migration guard
+- [x] dedicated regression coverage (`test/session_migration_parity_test.dart`)
+
 ## Newly Added Tools/MCP Parity (this iteration)
 
 - [x] tool schema/util parity surfaces (`_automatic_function_calling_util`, `_function_parameter_parse_util`, `_function_tool_declarations`, `_gemini_schema_util`)

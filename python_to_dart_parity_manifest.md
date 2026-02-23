@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 382
+- done: 390
 - partial: 0
-- missing: 104
+- missing: 96
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -324,14 +324,14 @@ Summary:
 | `ref/adk-python/src/google/adk/sessions/base_session_service.py` | `lib/src/sessions/base_session_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/sessions/database_session_service.py` | `lib/src/sessions/database_session_service.dart` | `done` | Added database session facade with sqlite/in-memory routing and tests. |
 | `ref/adk-python/src/google/adk/sessions/in_memory_session_service.py` | `lib/src/sessions/in_memory_session_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/sessions/migration/README.md` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/migration/_schema_check_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/migration/migrate_from_sqlalchemy_pickle.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/migration/migrate_from_sqlalchemy_sqlite.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/migration/migration_runner.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/schemas/shared.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/schemas/v0.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/sessions/schemas/v1.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/sessions/migration/README.md` | `lib/src/sessions/migration/README.md` | `done` | Added Dart migration module documentation mirroring Python migration entrypoints and latest schema note. |
+| `ref/adk-python/src/google/adk/sessions/migration/_schema_check_utils.py` | `lib/src/sessions/migration/schema_check_utils.dart` | `done` | Added schema-version constants, async URL normalization, metadata/event-shape based version detection, and DB-path resolution parity. |
+| `ref/adk-python/src/google/adk/sessions/migration/migrate_from_sqlalchemy_pickle.py` | `lib/src/sessions/migration/migrate_from_sqlalchemy_pickle.dart` | `done` | Added v0-to-v1 migration utility that injects schema metadata and normalizes legacy event payloads into `event_data` JSON shape. |
+| `ref/adk-python/src/google/adk/sessions/migration/migrate_from_sqlalchemy_sqlite.py` | `lib/src/sessions/migration/migrate_from_sqlalchemy_sqlite.dart` | `done` | Added SQLite migration entrypoint delegating to the pickle migration pipeline with URL/path normalization parity. |
+| `ref/adk-python/src/google/adk/sessions/migration/migration_runner.py` | `lib/src/sessions/migration/migration_runner.dart` | `done` | Added migration runner with version-path resolution, intermediate temp-file handling, and in-place migration guard parity. |
+| `ref/adk-python/src/google/adk/sessions/schemas/shared.py` | `lib/src/sessions/schemas/shared.dart` | `done` | Added shared schema constants plus JSON/timestamp conversion helpers for schema/migration parity modules. |
+| `ref/adk-python/src/google/adk/sessions/schemas/v0.py` | `lib/src/sessions/schemas/v0.dart` | `done` | Added legacy storage models (session/event/app/user state) with event/content/action serialization and v0 Event roundtrip helpers. |
+| `ref/adk-python/src/google/adk/sessions/schemas/v1.py` | `lib/src/sessions/schemas/v1.dart` | `done` | Added v1 storage metadata/session/event models with `event_data` JSON encoding/decoding and v1 Event roundtrip helpers. |
 | `ref/adk-python/src/google/adk/sessions/session.py` | `lib/src/sessions/session.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/sessions/sqlite_session_service.py` | `lib/src/sessions/sqlite_session_service.dart` | `done` | Added persistent local session service with state merge and append parity behavior tests. |
 | `ref/adk-python/src/google/adk/sessions/state.py` | `lib/src/sessions/state.dart` | `done` | Counterpart exists and tests reference module/package terms. |
