@@ -332,6 +332,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] A2A logging/util parity (`logs/log_utils`, `utils/agent_card_builder`, `utils/agent_to_a2a`, `experimental`)
 - [x] code execution utility parity (`code_execution_utils`) for executable/result part conversion and code extraction/truncation
 - [x] code executor persistent context parity (`code_executor_context`) for execution-id/input files/error counters/result history
+- [x] base/built-in executor contract parity (`BaseCodeExecutor`, `BuiltInCodeExecutor`, `UnsafeLocalCodeExecutor`) with surface-level guardrail/delegation tests
 - [x] executor surface expansion (`ContainerCodeExecutor`, `GkeCodeExecutor`, `VertexAiCodeExecutor`, `AgentEngineSandboxCodeExecutor`) with functional local fallback baselines
 - [x] parity tests for A2A converters/executor and code execution utils/context/executor behaviors
 
