@@ -146,6 +146,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] MCP conversion/session/tool parity surfaces (`conversion_utils`, `SessionContext`, `McpTool`)
 - [x] MCP session manager resource/executor capabilities and extended tests
 
+## Newly Added Google Tooling Parity (this iteration)
+
+- [x] Google credential config/manager parity (`_google_credentials`) including external token lookup and OAuth request bridge
+- [x] Google API tool wrapper parity (`GoogleTool`) with credential/settings-aware invocation
+- [x] Google search built-in tool parity (`GoogleSearchTool`) with Gemini model guard behavior
+- [x] Google search sub-agent helper parity (`createGoogleSearchAgent`, `GoogleSearchAgentTool`)
+- [x] regression tests for Google tools and credential flow integration
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 207
+- done: 211
 - partial: 29
-- missing: 250
+- missing: 246
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -352,7 +352,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/_function_parameter_parse_util.py` | `lib/src/tools/_function_parameter_parse_util.dart` | `done` | Added schema/default compatibility helpers and tuple-schema normalization utilities. |
 | `ref/adk-python/src/google/adk/tools/_function_tool_declarations.py` | `lib/src/tools/_function_tool_declarations.dart` | `done` | Added function declaration builders for JSON schema specs with ignored-parameter pruning. |
 | `ref/adk-python/src/google/adk/tools/_gemini_schema_util.py` | `lib/src/tools/_gemini_schema_util.dart` | `done` | Added OpenAPI-to-Gemini schema sanitization utilities (snake_case, dereference, anyOf/type normalization). |
-| `ref/adk-python/src/google/adk/tools/_google_credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/_google_credentials.py` | `lib/src/tools/_google_credentials.dart` | `done` | Added Google credentials config/manager parity with external-token lookup, OAuth request flow bridging, and cached-token handling. |
 | `ref/adk-python/src/google/adk/tools/_memory_entry_utils.py` | `lib/src/tools/_memory_entry_utils.dart` | `done` | Added memory text extraction helper that joins textual parts only. |
 | `ref/adk-python/src/google/adk/tools/agent_simulator/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
@@ -417,9 +417,9 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolsets.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/google_api_tool/googleapi_to_openapi_converter.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/google_maps_grounding_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_search_agent_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_search_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/google_search_agent_tool.py` | `lib/src/tools/google_search_agent_tool.dart` | `done` | Added Google search sub-agent factory and agent-tool wrapper parity surface. |
+| `ref/adk-python/src/google/adk/tools/google_search_tool.py` | `lib/src/tools/google_search_tool.dart` | `done` | Added built-in google_search tool request processor with Gemini model guards and model-override behavior. |
+| `ref/adk-python/src/google/adk/tools/google_tool.py` | `lib/src/tools/google_tool.dart` | `done` | Added Google tool wrapper that resolves credentials and injects credential/settings arguments with fallback invocation behavior. |
 | `ref/adk-python/src/google/adk/tools/langchain_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/load_artifacts_tool.py` | `lib/src/tools/load_artifacts_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/load_mcp_resource_tool.py` | `lib/src/tools/load_mcp_resource_tool.dart` | `done` | Added MCP resource loader tool with resource-list instruction injection and resource-content attachment. |
