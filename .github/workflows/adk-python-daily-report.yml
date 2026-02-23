@@ -1,4 +1,4 @@
-name: ADK Python Daily Report
+name: ADK Upstream Daily Reports
 
 on:
   workflow_dispatch:
@@ -17,21 +17,50 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate ADK Python change report
-        id: generate
-        run: bash tool/generate_adk_python_daily_report.sh
-
-      - name: Commit and push report
+      - name: Generate ADK upstream change reports
         run: |
+          set -euo pipefail
+
+          generate_report() {
+            local repo_name="$1"
+            local slug="$2"
+            local title="$3"
+
+            TARGET_REPO_URL="https://github.com/${repo_name}.git" \
+            TARGET_REPO_NAME="${repo_name}" \
+            TARGET_REPO_WEB_URL="https://github.com/${repo_name}" \
+            REPORT_TITLE="${title}" \
+            STATE_FILE=".github/${slug}-state/last_sha.txt" \
+            REPORT_DIR="reports/${slug}" \
+            bash tool/generate_adk_python_daily_report.sh
+          }
+
+          generate_report "google/adk-python" "adk-python" "ADK Python Daily Change Report"
+          generate_report "google/adk-go" "adk-go" "ADK Go Daily Change Report"
+          generate_report "google/adk-java" "adk-java" "ADK Java Daily Change Report"
+          generate_report "google/adk-js" "adk-js" "ADK JS Daily Change Report"
+
+      - name: Commit and push reports
+        run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add reports/adk-python .github/adk-python-state/last_sha.txt
+          git add \
+            reports/adk-python \
+            reports/adk-go \
+            reports/adk-java \
+            reports/adk-js \
+            .github/adk-python-state/last_sha.txt \
+            .github/adk-go-state/last_sha.txt \
+            .github/adk-java-state/last_sha.txt \
+            .github/adk-js-state/last_sha.txt
 
           if git diff --cached --quiet; then
             echo "No report updates to commit."
             exit 0
           fi
 
-          git commit -m "chore: update ADK Python daily report ($(date -u +%F))"
+          git commit -m "chore: update ADK upstream daily reports ($(date -u +%F))"
           git push

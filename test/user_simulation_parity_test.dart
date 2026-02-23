@@ -149,6 +149,73 @@ void main() {
     });
   });
 
+  group('prebuilt personas parity', () {
+    test(
+      'default registry exposes expert/novice/evaluator persona catalogs',
+      () {
+        final UserPersonaRegistry registry = getDefaultPersonaRegistry();
+        final List<String> personaIds = registry
+            .getRegisteredPersonas()
+            .map((UserPersona persona) => persona.id)
+            .toList();
+
+        expect(
+          personaIds,
+          containsAll(<String>[
+            'EXPERT',
+            'NOVICE',
+            'EVALUATOR',
+            'default_goal_oriented',
+          ]),
+        );
+
+        final UserPersona expert = registry.getPersona('EXPERT');
+        expect(expert.behaviors, hasLength(6));
+        expect(
+          expert.behaviors.map((UserBehavior behavior) => behavior.name),
+          containsAll(<String>[
+            'Advance in the Agent succeeds',
+            'Answer only relevant questions',
+            'Correct the Agent if it makes a mistake',
+            'Troubleshoot once (if necessary)',
+            'End the conversation appropriately',
+            'Professional tone',
+          ]),
+        );
+
+        final UserPersona novice = registry.getPersona('NOVICE');
+        expect(novice.behaviors, hasLength(5));
+        expect(
+          novice.behaviors.map((UserBehavior behavior) => behavior.name),
+          containsAll(<String>[
+            'Advance if the Agent succeeds',
+            'Do not correct the Agent',
+            'Answer all questions',
+            'End the conversation appropriately',
+            'Conversational tone',
+          ]),
+        );
+
+        final UserPersona evaluator = registry.getPersona('EVALUATOR');
+        expect(evaluator.behaviors, hasLength(5));
+        expect(
+          evaluator.behaviors.map((UserBehavior behavior) => behavior.name),
+          contains('Answer only relevant questions'),
+        );
+
+        final UserPersona legacyDefault = registry.getPersona(
+          'default_goal_oriented',
+        );
+        expect(legacyDefault.id, 'default_goal_oriented');
+        expect(legacyDefault.behaviors, hasLength(1));
+        expect(
+          legacyDefault.behaviors.single.name,
+          'Advance if the Agent succeeds',
+        );
+      },
+    );
+  });
+
   group('llm-backed user simulator runtime', () {
     test(
       'first turn uses starting prompt then consumes llm responses',

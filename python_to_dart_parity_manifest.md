@@ -3,8 +3,8 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 302
-- partial: 17
+- done: 303
+- partial: 16
 - missing: 167
 
 | python_file | dart_file | status | parity_notes |
@@ -233,7 +233,7 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/simulation/llm_backed_user_simulator_prompts.py` | `lib/src/evaluation/simulation/llm_backed_user_simulator_prompts.dart` | `done` | Added simulator prompt templates, placeholder validation, persona rendering, and prompt formatting helpers. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/per_turn_user_simulator_quality_prompts.py` | `lib/src/evaluation/simulation/per_turn_user_simulator_quality_prompts.dart` | `done` | Added per-turn evaluator prompt templates and persona criteria rendering helpers for quality-judge inputs. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/per_turn_user_simulator_quality_v1.py` | `lib/src/evaluation/simulation/per_turn_user_simulator_quality_v1.dart` | `partial` | Added per-turn quality evaluator with scenario alignment scoring; full prompt-driven LLM rater is pending. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/pre_built_personas.py` | `lib/src/evaluation/simulation/pre_built_personas.dart` | `partial` | Added default persona registry scaffold; full prebuilt persona catalog remains to be ported. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/pre_built_personas.py` | `lib/src/evaluation/simulation/pre_built_personas.dart` | `done` | Ported full prebuilt behavior/persona catalog (EXPERT/NOVICE/EVALUATOR) and added parity tests for registry membership and behavior composition. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/static_user_simulator.py` | `lib/src/evaluation/simulation/static_user_simulator.dart` | `done` | Added static conversation simulator that streams predefined user invocations and terminates with stop-signal status. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator.py` | `lib/src/evaluation/simulation/user_simulator.dart` | `done` | Added base simulator config/status/message contracts and validated success-only user-message invariant. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator_personas.py` | `lib/src/evaluation/simulation/user_simulator_personas.dart` | `done` | Added user behavior/persona models plus registry and lookup semantics. |

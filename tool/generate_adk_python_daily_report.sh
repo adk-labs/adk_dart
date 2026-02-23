@@ -5,6 +5,7 @@ workspace="${GITHUB_WORKSPACE:-$(pwd)}"
 target_repo_url="${TARGET_REPO_URL:-https://github.com/google/adk-python.git}"
 target_repo_name="${TARGET_REPO_NAME:-google/adk-python}"
 target_repo_web_url="${TARGET_REPO_WEB_URL:-https://github.com/${target_repo_name}}"
+report_title="${REPORT_TITLE:-${target_repo_name} Daily Change Report}"
 state_file="${STATE_FILE:-.github/adk-python-state/last_sha.txt}"
 report_dir="${REPORT_DIR:-reports/adk-python}"
 today_utc="${TODAY_UTC:-$(date -u +%F)}"
@@ -35,7 +36,7 @@ report_file="${workspace}/${report_dir}/${today_utc}.md"
 has_upstream_changes="false"
 
 {
-  echo "# ADK Python Daily Change Report"
+  echo "# ${report_title}"
   echo
   echo "- Date (UTC): ${today_utc}"
   echo "- Source: \`${target_repo_name}\`"

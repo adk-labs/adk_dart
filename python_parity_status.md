@@ -245,6 +245,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] static simulator parity (`StaticUserSimulator`) over predefined invocation conversations
 - [x] LLM-backed simulator parity baseline (`LlmBackedUserSimulatorConfig`, `LlmBackedUserSimulator`) with stop-signal and invocation-limit handling
 - [x] prompt utility parity (`llm_backed_user_simulator_prompts`, `per_turn_user_simulator_quality_prompts`) including placeholder validation + persona rendering
+- [x] prebuilt persona catalog parity (`pre_built_personas`) with full EXPERT/NOVICE/EVALUATOR behavior composition
 - [x] simulator provider parity (`UserSimulatorProvider`) for static-vs-scenario routing and strict conversation contract checks
 - [x] dedicated parity tests for simulator contracts, prompt generation, provider routing, and LLM-backed runtime behavior
 
