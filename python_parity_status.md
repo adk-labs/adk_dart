@@ -160,6 +160,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] plugin/factory parity (`AgentSimulatorPlugin`, `AgentSimulatorFactory`, callback adapter surface)
 - [x] dedicated parity tests for config validation, engine behavior, plugin delegation, strategy state updates, and analyzer parsing
 
+## Newly Added Computer Use Parity (this iteration)
+
+- [x] computer environment and state contracts (`ComputerEnvironment`, `ComputerState`, `BaseComputer`)
+- [x] computer-use tool parity (`ComputerUseTool`) with virtual-to-physical coordinate normalization and screenshot base64 payload conversion
+- [x] computer-use toolset parity (`ComputerUseToolset`) including lazy computer initialization, tool adaptation hook, and request-time tool injection
+- [x] dedicated parity tests for coordinate mapping/clamping, toolset initialization and request wiring, and adapter replacement behavior
+
 ## Newly Added Google Tooling Parity (this iteration)
 
 - [x] Google credential config/manager parity (`_google_credentials`) including external token lookup and OAuth request bridge

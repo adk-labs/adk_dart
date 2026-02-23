@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 281
+- done: 285
 - partial: 20
-- missing: 185
+- missing: 181
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -395,10 +395,10 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/bigtable/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigtable/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigtable/settings.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/computer_use/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/computer_use/base_computer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/computer_use/computer_use_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/computer_use/computer_use_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/computer_use/__init__.py` | `lib/src/tools/computer_use/(package)` | `done` | Added computer-use package surface with base environment, tool wrapper, and toolset exports. |
+| `ref/adk-python/src/google/adk/tools/computer_use/base_computer.py` | `lib/src/tools/computer_use/base_computer.dart` | `done` | Added abstract computer contract, environment enum, and computer state model parity surface. |
+| `ref/adk-python/src/google/adk/tools/computer_use/computer_use_tool.py` | `lib/src/tools/computer_use/computer_use_tool.dart` | `done` | Added coordinate-normalizing computer-use tool wrapper with screenshot base64 encoding behavior. |
+| `ref/adk-python/src/google/adk/tools/computer_use/computer_use_toolset.py` | `lib/src/tools/computer_use/computer_use_toolset.dart` | `done` | Added computer-use toolset with lazy initialization, method-tool wiring, adapter hook, request tool injection, and environment label propagation. |
 | `ref/adk-python/src/google/adk/tools/crewai_tool.py` | `lib/src/tools/crewai_tool.dart` | `done` | Added CrewAI-style wrapper tool with mandatory-argument guard, schema-aware declaration override, and config-driven runner resolution hooks. |
 | `ref/adk-python/src/google/adk/tools/data_agent/__init__.py` | `lib/src/tools/data_agent/(package)` | `done` | Added Data Agent credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/data_agent/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
