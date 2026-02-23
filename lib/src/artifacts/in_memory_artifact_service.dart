@@ -210,6 +210,13 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   String? _detectMimeType(Part artifact) {
+    if (artifact.inlineData != null &&
+        artifact.inlineData!.mimeType.isNotEmpty) {
+      return artifact.inlineData!.mimeType;
+    }
+    if (artifact.fileData != null && artifact.fileData!.mimeType != null) {
+      return artifact.fileData!.mimeType;
+    }
     if (artifact.text != null) {
       return 'text/plain';
     }
@@ -221,6 +228,9 @@ class InMemoryArtifactService extends BaseArtifactService {
     return noText &&
         artifact.functionCall == null &&
         artifact.functionResponse == null &&
+        artifact.inlineData == null &&
+        artifact.fileData == null &&
+        artifact.executableCode == null &&
         artifact.codeExecutionResult == null;
   }
 }
