@@ -1,6 +1,6 @@
 name: adk
 description: Package alias that re-exports adk_dart under the adk package name.
-version: 0.1.0
+version: 0.1.1
 publish_to: none
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart

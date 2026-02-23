@@ -1,6 +1,6 @@
 name: adk_dart
 description: Core Dart port of Agent Development Kit (ADK) runtime primitives.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart
 issue_tracker: https://github.com/adk-labs/adk_dart/issues

@@ -1,3 +1,10 @@
+## 0.1.1
+
+- Expanded Python parity coverage across evaluator workflows and remote code executor paths.
+- Added parity ports for model contracts and toolset stacks, including Google API, Pub/Sub, and OpenAPI integrations.
+- Added Spanner, Bigtable, and BigQuery client/toolset parity layers with vector store and metadata/query support.
+- Added session schema/migration utilities and missing shared utility modules.
+
 ## 0.1.0
 
 - Bootstrap `adk_dart` package as an ADK core runtime port (based on `ref/adk-python`).
