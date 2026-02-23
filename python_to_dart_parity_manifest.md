@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 246
+- done: 248
 - partial: 28
-- missing: 212
+- missing: 210
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -78,8 +78,8 @@ Summary:
 | `ref/adk-python/src/google/adk/auth/exchanger/base_credential_exchanger.py` | `lib/src/auth/exchanger/base_credential_exchanger.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/exchanger/credential_exchanger_registry.py` | `lib/src/auth/exchanger/credential_exchanger_registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/exchanger/oauth2_credential_exchanger.py` | `lib/src/auth/exchanger/oauth2_credential_exchanger.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/auth/oauth2_credential_util.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/auth/oauth2_discovery.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/auth/oauth2_credential_util.py` | `lib/src/auth/oauth2_credential_util.dart` | `done` | Added OAuth2/OpenID session-construction helper and token-to-credential update utility with parity tests. |
+| `ref/adk-python/src/google/adk/auth/oauth2_discovery.py` | `lib/src/auth/oauth2_discovery.dart` | `done` | Added RFC-style OAuth2 discovery manager (auth-server and protected-resource metadata) with endpoint-order and validation tests. |
 | `ref/adk-python/src/google/adk/auth/refresher/__init__.py` | `lib/src/auth/refresher/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/refresher/base_credential_refresher.py` | `lib/src/auth/refresher/base_credential_refresher.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/refresher/credential_refresher_registry.py` | `lib/src/auth/refresher/credential_refresher_registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |

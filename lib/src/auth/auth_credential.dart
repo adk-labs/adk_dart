@@ -31,6 +31,7 @@ class OAuth2Auth {
     this.authCode,
     this.accessToken,
     this.refreshToken,
+    this.idToken,
     this.expiresAt,
     this.expiresIn,
     this.audience,
@@ -46,6 +47,7 @@ class OAuth2Auth {
   String? authCode;
   String? accessToken;
   String? refreshToken;
+  String? idToken;
   int? expiresAt;
   int? expiresIn;
   String? audience;

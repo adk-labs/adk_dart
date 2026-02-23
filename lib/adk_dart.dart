@@ -46,6 +46,8 @@ export 'src/auth/auth_preprocessor.dart';
 export 'src/auth/auth_schemes.dart';
 export 'src/auth/auth_tool.dart';
 export 'src/auth/credential_manager.dart';
+export 'src/auth/oauth2_credential_util.dart';
+export 'src/auth/oauth2_discovery.dart';
 export 'src/auth/credential_service/base_credential_service.dart';
 export 'src/auth/credential_service/in_memory_credential_service.dart';
 export 'src/auth/credential_service/session_state_credential_service.dart';

@@ -226,6 +226,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Vertex AI eval facade parity baseline (`VertexAiEvalFacade`) with credential precondition checks and invoker-injected evaluation path
 - [x] dedicated parity tests for GCS managers and Vertex facade score/status aggregation behavior
 
+## Newly Added OAuth Utility Parity (this iteration)
+
+- [x] oauth2 credential session builder parity (`createOAuth2Session`) for OpenID and OAuth2 authorization-code/client-credentials flows
+- [x] oauth2 token update parity (`updateCredentialWithTokens`) including access/refresh/id token and expiry updates
+- [x] OAuth2 metadata discovery parity (`OAuth2DiscoveryManager`) for auth-server and protected-resource well-known endpoints
+- [x] metadata contract parity (`AuthorizationServerMetadata`, `ProtectedResourceMetadata`)
+- [x] dedicated parity tests for session construction, token update, and discovery endpoint/issuer/resource validation
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
