@@ -234,6 +234,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] metadata contract parity (`AuthorizationServerMetadata`, `ProtectedResourceMetadata`)
 - [x] dedicated parity tests for session construction, token update, and discovery endpoint/issuer/resource validation
 
+## Newly Added Dependency Module Parity (this iteration)
+
+- [x] ROUGE dependency module parity (`dependencies/rouge_scorer`) with scorer object + RougeScore metric output
+- [x] Vertex AI dependency module parity (`dependencies/vertexai`) with client/types/preview namespaces
+- [x] deterministic local eval backend for `vertexai.Client().evals.evaluate(...)` compatibility path
+- [x] dedicated dependency parity tests for ROUGE scoring and Vertex module helper surfaces
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

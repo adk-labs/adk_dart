@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 248
+- done: 250
 - partial: 28
-- missing: 210
+- missing: 208
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -181,8 +181,8 @@ Summary:
 | `ref/adk-python/src/google/adk/code_executors/unsafe_local_code_executor.py` | `lib/src/code_executors/unsafe_local_code_executor.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
 | `ref/adk-python/src/google/adk/code_executors/vertex_ai_code_executor.py` | `lib/src/code_executors/vertex_ai_code_executor.dart` | `partial` | Added code-with-imports path, file handling, and output artifact mapping with functional local-fallback execution; full Vertex Extension API integration remains. |
 | `ref/adk-python/src/google/adk/dependencies/__init__.py` | `lib/src/dependencies/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
-| `ref/adk-python/src/google/adk/dependencies/rouge_scorer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/dependencies/vertexai.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/dependencies/rouge_scorer.py` | `lib/src/dependencies/rouge_scorer.dart` | `done` | Added ROUGE-1 scorer dependency module with precision/recall/f-measure API and parity tests. |
+| `ref/adk-python/src/google/adk/dependencies/vertexai.py` | `lib/src/dependencies/vertexai.dart` | `done` | Added Vertex AI dependency module facade (`client`, `types`, `preview`) with deterministic local eval backend and parity tests. |
 | `ref/adk-python/src/google/adk/errors/__init__.py` | `lib/src/errors/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
 | `ref/adk-python/src/google/adk/errors/already_exists_error.py` | `lib/src/errors/already_exists_error.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
 | `ref/adk-python/src/google/adk/errors/input_validation_error.py` | `lib/src/errors/input_validation_error.dart` | `done` | Added `InputValidationError` with default/custom message behavior and parity tests for string formatting. |

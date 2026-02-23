@@ -129,6 +129,8 @@ export 'src/code_executors/unsafe_local_code_executor.dart';
 export 'src/code_executors/vertex_ai_code_executor.dart';
 export 'src/code_executors/agent_engine_sandbox_code_executor.dart';
 export 'src/dependencies/dependency_container.dart';
+export 'src/dependencies/rouge_scorer.dart';
+export 'src/dependencies/vertexai.dart';
 export 'src/features/feature_flags.dart';
 
 export 'src/flows/llm_flows/auto_flow.dart';
