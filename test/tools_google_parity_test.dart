@@ -222,5 +222,60 @@ void main() {
       );
       expect(result, 'token_from_state');
     });
+
+    test(
+      'GoogleTool falls back to original args when callable does not accept injected credential params',
+      () async {
+        String fn({required String city}) => 'city=$city';
+
+        final GoogleTool tool = GoogleTool(
+          func: fn,
+          name: 'city_tool',
+          credentialsConfig: BaseGoogleCredentialsConfig(
+            externalAccessTokenKey: 'external_token',
+          ),
+        );
+
+        final Object? result = await tool.run(
+          args: <String, dynamic>{'city': 'seoul'},
+          toolContext: _newToolContext(
+            state: <String, Object?>{'external_token': 'token-x'},
+          ),
+        );
+        expect(result, 'city=seoul');
+      },
+    );
+
+    test(
+      'GoogleTool returns callable errors instead of silently retrying without credentials',
+      () async {
+        int callCount = 0;
+
+        String fn({Object? credentials}) {
+          callCount += 1;
+          throw StateError('upstream api failure');
+        }
+
+        final GoogleTool tool = GoogleTool(
+          func: fn,
+          name: 'error_tool',
+          credentialsConfig: BaseGoogleCredentialsConfig(
+            externalAccessTokenKey: 'external_token',
+          ),
+        );
+
+        final Object? result = await tool.run(
+          args: <String, dynamic>{},
+          toolContext: _newToolContext(
+            state: <String, Object?>{'external_token': 'token-x'},
+          ),
+        );
+        expect(result, isA<Map<String, Object?>>());
+        final Map<String, Object?> payload = result! as Map<String, Object?>;
+        expect(payload['status'], 'ERROR');
+        expect('${payload['error_details']}', contains('upstream api failure'));
+        expect(callCount, 1);
+      },
+    );
   });
 }

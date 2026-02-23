@@ -120,7 +120,7 @@ class FunctionTool extends BaseTool {
       InvocationPlan(positional: const <Object?>[]),
     ];
 
-    Object? lastError;
+    Object? lastInvocationError;
     for (final InvocationPlan plan in plans) {
       try {
         final Object? result = Function.apply(
@@ -135,13 +135,18 @@ class FunctionTool extends BaseTool {
           return await result;
         }
         return result;
-      } catch (error) {
-        lastError = error;
+      } catch (error, stackTrace) {
+        if (_isInvocationShapeError(error)) {
+          lastInvocationError = error;
+          continue;
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
     }
 
     throw StateError(
-      'Failed to invoke function tool `$name` with args `$args`: $lastError',
+      'Failed to invoke function tool `$name` with args `$args`: '
+      '$lastInvocationError',
     );
   }
 
@@ -150,6 +155,12 @@ class FunctionTool extends BaseTool {
       for (final MapEntry<String, dynamic> entry in args.entries)
         Symbol(entry.key): entry.value,
     };
+  }
+
+  bool _isInvocationShapeError(Object error) {
+    return error is NoSuchMethodError ||
+        error is ArgumentError ||
+        error is TypeError;
   }
 }
 

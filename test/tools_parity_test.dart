@@ -30,6 +30,37 @@ class _NoopModel extends BaseLlm {
 }
 
 void main() {
+  group('FunctionTool', () {
+    test(
+      'surfaces callable exceptions without masking them as invocation errors',
+      () async {
+        final Context toolContext = await _newToolContext();
+        int callCount = 0;
+
+        String fail({required String city}) {
+          callCount += 1;
+          throw StateError('callable failed for $city');
+        }
+
+        final FunctionTool tool = FunctionTool(func: fail, name: 'fail_tool');
+        await expectLater(
+          () => tool.run(
+            args: <String, dynamic>{'city': 'seoul'},
+            toolContext: toolContext,
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) => '${error.message}',
+              'message',
+              contains('callable failed for seoul'),
+            ),
+          ),
+        );
+        expect(callCount, 1);
+      },
+    );
+  });
+
   group('LongRunningFunctionTool', () {
     test('marks tool as long-running and appends warning in declaration', () {
       String sample(String value) => value;
