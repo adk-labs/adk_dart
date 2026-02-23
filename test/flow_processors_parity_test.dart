@@ -105,6 +105,28 @@ class _AuthRequiredToolset extends BaseToolset {
   }
 }
 
+class _MalformedAuthToolset extends BaseToolset {
+  bool getToolsCalled = false;
+
+  @override
+  Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
+    getToolsCalled = true;
+    return <BaseTool>[];
+  }
+
+  @override
+  AuthConfig? getAuthConfig() {
+    return AuthConfig(
+      authScheme: 'oauth2_authorization_code',
+      rawAuthCredential: AuthCredential(
+        authType: AuthCredentialType.oauth2,
+        oauth2: OAuth2Auth(),
+      ),
+      credentialKey: 'toolset-auth-invalid',
+    );
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) => stream.toList();
 
 void main() {
@@ -341,6 +363,47 @@ void main() {
       expect(
         '${calls.first.args['function_call_id']}',
         startsWith(toolsetAuthCredentialIdPrefix),
+      );
+    },
+  );
+
+  test(
+    'toolset auth resolution skips malformed auth request configs without blocking model execution',
+    () async {
+      final _CaptureModel model = _CaptureModel();
+      final _MalformedAuthToolset toolset = _MalformedAuthToolset();
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[toolset],
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 's_toolset_auth_invalid',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hello'),
+        ),
+      );
+
+      expect(model.callCount, 1);
+      expect(toolset.getToolsCalled, isTrue);
+      final List<FunctionCall> functionCalls = events
+          .expand((Event event) => event.getFunctionCalls())
+          .toList();
+      expect(
+        functionCalls.where(
+          (FunctionCall call) => call.name == requestEucFunctionCallName,
+        ),
+        isEmpty,
       );
     },
   );

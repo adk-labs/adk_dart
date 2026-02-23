@@ -300,24 +300,31 @@ class BaseLlmFlow {
         continue;
       }
 
+      AuthCredential? credential;
       try {
-        final AuthCredential? credential = await CredentialManager(
+        credential = await CredentialManager(
           authConfig: authConfig,
         ).getAuthCredential(callbackContext);
-        if (credential != null) {
-          authConfig.exchangedAuthCredential = credential;
-          continue;
-        }
       } catch (_) {
         // Keep toolset execution tolerant to auth validation errors.
         continue;
       }
 
+      if (credential != null) {
+        authConfig.exchangedAuthCredential = credential;
+        continue;
+      }
+
       final String toolsetCredentialId =
           '$toolsetAuthCredentialIdPrefix${toolUnion.runtimeType}';
-      pendingAuthRequests[toolsetCredentialId] = AuthHandler(
-        authConfig: authConfig,
-      ).generateAuthRequest();
+      try {
+        pendingAuthRequests[toolsetCredentialId] = AuthHandler(
+          authConfig: authConfig,
+        ).generateAuthRequest();
+      } on ArgumentError {
+        // Invalid auth config should not block tools that can still run unauthenticated.
+        continue;
+      }
     }
 
     if (pendingAuthRequests.isEmpty) {

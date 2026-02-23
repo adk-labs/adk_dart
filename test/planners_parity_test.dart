@@ -111,6 +111,26 @@ void main() {
       expect(processed, hasLength(1));
       expect(processed!.first.text, 'plain response');
     });
+
+    test(
+      'preserves consecutive function calls when first part is a function call',
+      () {
+        final PlanReActPlanner planner = PlanReActPlanner();
+        final List<Part>? processed = planner.processPlanningResponse(
+          Context(_newInvocationContext(planner: planner)),
+          <Part>[
+            Part.fromFunctionCall(name: 'tool_a', args: <String, dynamic>{}),
+            Part.fromFunctionCall(name: 'tool_b', args: <String, dynamic>{}),
+            Part.text('done'),
+          ],
+        );
+
+        expect(processed, isNotNull);
+        expect(processed, hasLength(2));
+        expect(processed![0].functionCall?.name, 'tool_a');
+        expect(processed[1].functionCall?.name, 'tool_b');
+      },
+    );
   });
 
   group('NL planning processors', () {
