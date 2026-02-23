@@ -217,6 +217,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] data-agent toolset parity (`DataAgentToolset`) with `GoogleTool` credential + settings bridge and filter support
 - [x] dedicated parity tests for config parsing, tool helpers, and toolset invocation flow
 
+## Newly Added Pub/Sub Tooling Parity (this iteration)
+
+- [x] pub/sub config parity (`PubSubToolConfig`) with project-id option and strict field validation
+- [x] pub/sub client cache parity surface (`getPublisherClient`, `getSubscriberClient`, `cleanupClients`) with TTL and user-agent composition
+- [x] pub/sub message helper parity (`publishMessage`, `pullMessages`, `acknowledgeMessages`) including base64 fallback decode and auto-ack flow
+- [x] pub/sub toolset parity (`PubSubToolset`) with `GoogleTool` credential/settings bridge and list/predicate filtering
+- [x] dedicated parity tests for client cache lifecycle, message operations, and toolset execution
+
 ## Newly Added Skill Toolset Parity (this iteration)
 
 - [x] skill toolset parity (`SkillToolset`) with duplicate-name guard and tool filtering integration

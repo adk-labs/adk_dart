@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 327
+- done: 331
 - partial: 0
-- missing: 159
+- missing: 155
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -450,11 +450,11 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/preload_memory_tool.py` | `lib/src/tools/preload_memory_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/pubsub/__init__.py` | `lib/src/tools/pubsub/(package)` | `done` | Added Pub/Sub credential package surface under tools namespace. |
-| `ref/adk-python/src/google/adk/tools/pubsub/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/pubsub/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/pubsub/message_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/pubsub/client.py` | `lib/src/tools/pubsub/client.dart` | `done` | Added Pub/Sub client cache/factory layer with TTL reuse, user-agent composition, and cleanup parity surface. |
+| `ref/adk-python/src/google/adk/tools/pubsub/config.py` | `lib/src/tools/pubsub/config.dart` | `done` | Added Pub/Sub tool config with optional project-id and strict extra-field validation parity. |
+| `ref/adk-python/src/google/adk/tools/pubsub/message_tool.py` | `lib/src/tools/pubsub/message_tool.dart` | `done` | Added publish/pull/ack message helpers with UTF-8/base64 decode behavior and structured error responses. |
 | `ref/adk-python/src/google/adk/tools/pubsub/pubsub_credentials.py` | `lib/src/tools/pubsub/pubsub_credentials.dart` | `done` | Added Pub/Sub credential config with default scope and token-cache-key parity behavior. |
-| `ref/adk-python/src/google/adk/tools/pubsub/pubsub_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/pubsub/pubsub_toolset.py` | `lib/src/tools/pubsub/pubsub_toolset.dart` | `done` | Added Pub/Sub toolset wiring with `GoogleTool` credential/settings injection, tool filtering, and cache cleanup lifecycle. |
 | `ref/adk-python/src/google/adk/tools/retrieval/__init__.py` | `lib/src/tools/retrieval/(package)` | `done` | Added retrieval tool package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/retrieval/base_retrieval_tool.py` | `lib/src/tools/retrieval/base_retrieval_tool.dart` | `done` | Added base retrieval declaration contract exposing a query parameter schema. |
 | `ref/adk-python/src/google/adk/tools/retrieval/files_retrieval.py` | `lib/src/tools/retrieval/files_retrieval.dart` | `done` | Added local file retrieval tool using an in-memory file index retriever fallback. |
