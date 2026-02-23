@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -185,4 +188,119 @@ void main() {
       expect(result.overallEvalStatus, EvalStatus.passed);
     });
   });
+
+  group('agent evaluator legacy dataset parity', () {
+    test('migrates old eval data into EvalSet schema json', () {
+      final Directory tempDir = Directory.systemTemp.createTempSync(
+        'agent_eval_migrate_',
+      );
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      final File legacyFile = File('${tempDir.path}/legacy.test.json')
+        ..writeAsStringSync(
+          jsonEncode(<Map<String, Object?>>[
+            <String, Object?>{'query': 'hello', 'reference': 'Echo: hello'},
+          ]),
+        );
+      File('${tempDir.path}/test_config.json').writeAsStringSync(
+        jsonEncode(<String, Object?>{
+          'criteria': <String, Object?>{
+            PrebuiltMetricNames.responseMatchScore: 0.8,
+          },
+        }),
+      );
+
+      final String migratedPath = '${tempDir.path}/migrated.evalset.json';
+      AgentEvaluator.migrateEvalDataToNewSchema(
+        oldEvalDataFile: legacyFile.path,
+        newEvalDataFile: migratedPath,
+      );
+
+      final Map<String, Object?> decoded = _asJsonMap(
+        jsonDecode(File(migratedPath).readAsStringSync()) as Map,
+      );
+      final EvalSet evalSet = EvalSet.fromJson(decoded);
+      expect(evalSet.evalCases, hasLength(1));
+      expect(evalSet.evalCases.first.input, 'hello');
+      expect(evalSet.evalCases.first.conversation, isNotNull);
+    });
+
+    test(
+      'evaluate discovers .test.json files in directory and runs eval',
+      () async {
+        final Directory tempDir = Directory.systemTemp.createTempSync(
+          'agent_eval_directory_',
+        );
+        addTearDown(() {
+          if (tempDir.existsSync()) {
+            tempDir.deleteSync(recursive: true);
+          }
+        });
+
+        File('${tempDir.path}/case_a.test.json').writeAsStringSync(
+          jsonEncode(<Map<String, Object?>>[
+            <String, Object?>{'query': 'hello', 'reference': 'Echo: hello'},
+          ]),
+        );
+        File('${tempDir.path}/test_config.json').writeAsStringSync(
+          jsonEncode(<String, Object?>{
+            'criteria': <String, Object?>{
+              PrebuiltMetricNames.responseMatchScore: 0.8,
+            },
+          }),
+        );
+
+        final List<AgentEvalCaseSummary> summaries =
+            await AgentEvaluator.evaluate(
+              rootAgent: _EchoAgent(),
+              evalDatasetFilePathOrDir: tempDir.path,
+              repeatNum: 1,
+              failOnFailure: true,
+            );
+
+        expect(summaries, hasLength(1));
+        expect(summaries.first.passed, isTrue);
+      },
+    );
+
+    test('loadEvalSetFromFile validates criteria keys for legacy format', () {
+      final Directory tempDir = Directory.systemTemp.createTempSync(
+        'agent_eval_validate_',
+      );
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      final File legacyFile = File('${tempDir.path}/invalid.test.json')
+        ..writeAsStringSync(
+          jsonEncode(<Map<String, Object?>>[
+            <String, Object?>{'query': 'hello', 'reference': 'Echo: hello'},
+          ]),
+        );
+      final EvalConfig invalidConfig = EvalConfig(
+        criteria: <String, Object?>{'unknown_metric': 1.0},
+      );
+
+      expect(
+        () => AgentEvaluator.loadEvalSetFromFile(
+          evalSetFile: legacyFile.path,
+          evalConfig: invalidConfig,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+}
+
+Map<String, Object?> _asJsonMap(Map value) {
+  return value.map(
+    (Object? key, Object? item) =>
+        MapEntry<String, Object?>(key.toString(), item),
+  );
 }
