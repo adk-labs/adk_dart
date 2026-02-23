@@ -200,11 +200,13 @@ class A2aTaskArtifactUpdateEvent extends A2aEvent {
     required this.artifact,
     this.contextId,
     this.lastChunk = true,
+    this.append = false,
   });
 
   String? taskId;
   String? contextId;
   bool lastChunk;
+  bool append;
   A2aArtifact artifact;
 }
 

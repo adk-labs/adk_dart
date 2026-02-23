@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 270
+- done: 271
 - partial: 20
-- missing: 196
+- missing: 195
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ Summary:
 | `ref/adk-python/src/google/adk/agents/parallel_agent.py` | `lib/src/agents/parallel_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/parallel_agent_config.py` | `lib/src/agents/parallel_agent_config.dart` | `done` | Added parallel config with strict extra-field rejection parity. |
 | `ref/adk-python/src/google/adk/agents/readonly_context.py` | `lib/src/agents/readonly_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/agents/remote_a2a_agent.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/agents/remote_a2a_agent.py` | `lib/src/agents/remote_a2a_agent.dart` | `done` | Added remote A2A agent with agent-card URL/file resolution, stateful/stateless history handling, request/response metadata propagation, and parity tests for streaming task/message updates + HTTP error surfaces. |
 | `ref/adk-python/src/google/adk/agents/run_config.py` | `lib/src/agents/run_config.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/sequential_agent.py` | `lib/src/agents/sequential_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/sequential_agent_config.py` | `lib/src/agents/sequential_agent_config.dart` | `done` | Added sequential config with strict extra-field rejection parity. |

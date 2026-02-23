@@ -17,6 +17,7 @@ export 'src/agents/mcp_instruction_provider.dart';
 export 'src/agents/parallel_agent.dart';
 export 'src/agents/parallel_agent_config.dart';
 export 'src/agents/readonly_context.dart';
+export 'src/agents/remote_a2a_agent.dart';
 export 'src/agents/run_config.dart';
 export 'src/agents/sequential_agent.dart';
 export 'src/agents/sequential_agent_config.dart';

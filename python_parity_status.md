@@ -14,6 +14,12 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] artifacts (in-memory)
 - [x] dev CLI (`create`, `run`, `web`, `api_server` alias)
 
+## Newly Added A2A Remote Agent Parity (this iteration)
+
+- [x] remote A2A agent parity (`RemoteA2aAgent`) with agent-card resolution from file/URL, function-response task/context carryover, and stateless-history mode control
+- [x] A2A client contracts/errors (`A2aClient`, `A2aClientFactory`, `A2aClientHttpError`, call-context state forwarding)
+- [x] parity tests for streaming task/message updates, request/response metadata propagation, and HTTP error surfaces
+
 ## Newly Added Foundation (this iteration)
 
 - [x] memory base + in-memory service
