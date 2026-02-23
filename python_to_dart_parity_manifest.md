@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 211
+- done: 215
 - partial: 29
-- missing: 246
+- missing: 242
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -405,8 +405,8 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/data_agent/credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/data_agent/data_agent_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/data_agent/data_agent_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/discovery_engine_search_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/enterprise_search_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/discovery_engine_search_tool.py` | `lib/src/tools/discovery_engine_search_tool.dart` | `done` | Added Discovery Engine search tool contract with query validation, serving-config derivation, and injectable request handler for deterministic parity testing. |
+| `ref/adk-python/src/google/adk/tools/enterprise_search_tool.py` | `lib/src/tools/enterprise_search_tool.dart` | `done` | Added enterprise web search built-in tool request processor with Gemini model gating and Gemini 1.x multi-tool guard parity. |
 | `ref/adk-python/src/google/adk/tools/example_tool.py` | `lib/src/tools/example_tool.dart` | `done` | Added example injection tool/config with provider/list support and llm instruction composition. |
 | `ref/adk-python/src/google/adk/tools/exit_loop_tool.py` | `lib/src/tools/exit_loop_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/function_tool.py` | `lib/src/tools/function_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
@@ -416,7 +416,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolsets.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/google_api_tool/googleapi_to_openapi_converter.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_maps_grounding_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/google_maps_grounding_tool.py` | `lib/src/tools/google_maps_grounding_tool.dart` | `done` | Added Google Maps grounding built-in tool request processor with Gemini model compatibility checks and label tagging parity. |
 | `ref/adk-python/src/google/adk/tools/google_search_agent_tool.py` | `lib/src/tools/google_search_agent_tool.dart` | `done` | Added Google search sub-agent factory and agent-tool wrapper parity surface. |
 | `ref/adk-python/src/google/adk/tools/google_search_tool.py` | `lib/src/tools/google_search_tool.dart` | `done` | Added built-in google_search tool request processor with Gemini model guards and model-override behavior. |
 | `ref/adk-python/src/google/adk/tools/google_tool.py` | `lib/src/tools/google_tool.dart` | `done` | Added Google tool wrapper that resolves credentials and injects credential/settings arguments with fallback invocation behavior. |
@@ -477,7 +477,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/toolbox_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/transfer_to_agent_tool.py` | `lib/src/tools/transfer_to_agent_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/url_context_tool.py` | `lib/src/tools/url_context_tool.dart` | `done` | Added URL context tool model compatibility checks and built-in declaration injection behavior. |
-| `ref/adk-python/src/google/adk/tools/vertex_ai_search_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/vertex_ai_search_tool.py` | `lib/src/tools/vertex_ai_search_tool.dart` | `done` | Added Vertex AI Search built-in tool with data-store/engine exclusivity validation, dynamic config builder, and Gemini model guard parity. |
 | `ref/adk-python/src/google/adk/utils/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/_client_labels_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/utils/_debug_output.py` | `-` | `missing` | No Dart counterpart found under lib/src. |

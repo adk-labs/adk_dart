@@ -154,6 +154,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Google search sub-agent helper parity (`createGoogleSearchAgent`, `GoogleSearchAgentTool`)
 - [x] regression tests for Google tools and credential flow integration
 
+## Newly Added Search/Grounding Tool Parity (this iteration)
+
+- [x] enterprise web search built-in tool parity (`EnterpriseWebSearchTool`)
+- [x] Google Maps grounding built-in tool parity (`GoogleMapsGroundingTool`)
+- [x] Vertex AI Search built-in tool parity (`VertexAiSearchTool`) with overridable config builder
+- [x] Discovery Engine Search callable tool parity baseline (`DiscoveryEngineSearchTool`) with request/result contracts
+- [x] parity tests for Gemini model guards, multi-tool constraints, config serialization, and discovery handler integration
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
