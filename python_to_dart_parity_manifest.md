@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 346
+- done: 353
 - partial: 0
-- missing: 140
+- missing: 133
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -462,15 +462,15 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/retrieval/vertex_ai_rag_retrieval.py` | `lib/src/tools/retrieval/vertex_ai_rag_retrieval.dart` | `done` | Added Vertex AI RAG retrieval tool with Gemini 2+ built-in label injection and callable fallback query handling. |
 | `ref/adk-python/src/google/adk/tools/set_model_response_tool.py` | `lib/src/tools/set_model_response_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/skill_toolset.py` | `lib/src/tools/skill_toolset.dart` | `done` | Added skill toolset with list/load/load-resource tools, duplicate-name guard, and request-time system instruction + skills XML injection parity. |
-| `ref/adk-python/src/google/adk/tools/spanner/__init__.py` | `lib/src/tools/spanner/(package)` | `done` | Added Spanner credential package surface under tools namespace. |
-| `ref/adk-python/src/google/adk/tools/spanner/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/search_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/settings.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/spanner/__init__.py` | `lib/src/tools/spanner/spanner.dart` | `done` | Added Spanner package barrel exports aligning client/settings/metadata/query/search/utils/toolset surfaces. |
+| `ref/adk-python/src/google/adk/tools/spanner/client.py` | `lib/src/tools/spanner/client.dart` | `done` | Added Spanner client factory/contracts with ADK user-agent parity and injectable runtime backend. |
+| `ref/adk-python/src/google/adk/tools/spanner/metadata_tool.py` | `lib/src/tools/spanner/metadata_tool.dart` | `done` | Ported table/schema/index/named-schema metadata helpers with PostgreSQL guardrails and status/error envelopes. |
+| `ref/adk-python/src/google/adk/tools/spanner/query_tool.py` | `lib/src/tools/spanner/query_tool.dart` | `done` | Added execute-sql wrapper + query-result-mode helper bridge to shared utility execution path. |
+| `ref/adk-python/src/google/adk/tools/spanner/search_tool.py` | `lib/src/tools/spanner/search_tool.dart` | `done` | Ported vector similarity search SQL generation, embedding-option validation, ANN/kNN routing, and vector-store search wrapper. |
+| `ref/adk-python/src/google/adk/tools/spanner/settings.py` | `lib/src/tools/spanner/settings.dart` | `done` | Added Spanner settings/capabilities/query modes/vector-store configs with validator parity and JSON/object decoding. |
 | `ref/adk-python/src/google/adk/tools/spanner/spanner_credentials.py` | `lib/src/tools/spanner/spanner_credentials.dart` | `done` | Added Spanner credential config with admin/data scopes and token-cache-key parity behavior. |
-| `ref/adk-python/src/google/adk/tools/spanner/spanner_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/spanner/spanner_toolset.py` | `lib/src/tools/spanner/spanner_toolset.dart` | `done` | Added Spanner toolset wiring for metadata/query/search/vector-store tools with capability + filter handling. |
+| `ref/adk-python/src/google/adk/tools/spanner/utils.py` | `lib/src/tools/spanner/utils.dart` | `done` | Ported shared SQL utility execution, pluggable embedding hooks, and SpannerVectorStore DDL/batch-insert orchestration APIs. |
 | `ref/adk-python/src/google/adk/tools/tool_configs.py` | `lib/src/tools/tool_configs.dart` | `done` | Added tool config datatypes (`BaseToolConfig`, `ToolArgsConfig`, `ToolConfig`) with JSON mapping helpers. |
 | `ref/adk-python/src/google/adk/tools/tool_confirmation.py` | `lib/src/tools/tool_confirmation.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/tool_context.py` | `lib/src/tools/tool_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |

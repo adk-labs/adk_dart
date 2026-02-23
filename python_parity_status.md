@@ -415,6 +415,15 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] `LiteLlm` payload/finish-reason/provider mapping + completion parsing parity surfaces
 - [x] dedicated model parity regression suite (`test/models_parity_batch2_test.dart`)
 
+## Newly Added Spanner Tooling Parity (this iteration)
+
+- [x] Spanner client/runtime contracts parity (`client.dart`) with ADK user-agent handling and injectable client factory
+- [x] Spanner settings/config parity (`settings.dart`) including capabilities/query-result modes and vector-store validation rules
+- [x] Spanner metadata/query/search tool parity (`metadata_tool.dart`, `query_tool.dart`, `search_tool.dart`) with status/error envelopes and SQL-generation guardrails
+- [x] Spanner utility/vector-store parity (`utils.dart`) including execute-sql truncation behavior, pluggable embedding hooks, DDL generation, and batched insert orchestration
+- [x] Spanner toolset parity (`spanner_toolset.dart`) with capability-gated tool registration and `GoogleTool` credentials/settings bridge
+- [x] dedicated parity regression coverage (`test/spanner_parity_test.dart`)
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)
