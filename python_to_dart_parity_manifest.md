@@ -3,8 +3,8 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 266
-- partial: 23
+- done: 269
+- partial: 20
 - missing: 197
 
 | python_file | dart_file | status | parity_notes |
@@ -180,11 +180,11 @@ Summary:
 | `ref/adk-python/src/google/adk/code_executors/gke_code_executor.py` | `lib/src/code_executors/gke_code_executor.dart` | `partial` | Added hardened job-manifest/configmap/owner-reference builders and functional local-fallback execution; full Kubernetes API watch/log integration remains. |
 | `ref/adk-python/src/google/adk/code_executors/unsafe_local_code_executor.py` | `lib/src/code_executors/unsafe_local_code_executor.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
 | `ref/adk-python/src/google/adk/code_executors/vertex_ai_code_executor.py` | `lib/src/code_executors/vertex_ai_code_executor.dart` | `partial` | Added code-with-imports path, file handling, and output artifact mapping with functional local-fallback execution; full Vertex Extension API integration remains. |
-| `ref/adk-python/src/google/adk/dependencies/__init__.py` | `lib/src/dependencies/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/dependencies/__init__.py` | `lib/src/dependencies/(package)` | `done` | Dependency module exports are now covered by dedicated ROUGE/Vertex dependency parity tests. |
 | `ref/adk-python/src/google/adk/dependencies/rouge_scorer.py` | `lib/src/dependencies/rouge_scorer.dart` | `done` | Added ROUGE-1 scorer dependency module with precision/recall/f-measure API and parity tests. |
 | `ref/adk-python/src/google/adk/dependencies/vertexai.py` | `lib/src/dependencies/vertexai.dart` | `done` | Added Vertex AI dependency module facade (`client`, `types`, `preview`) with deterministic local eval backend and parity tests. |
-| `ref/adk-python/src/google/adk/errors/__init__.py` | `lib/src/errors/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
-| `ref/adk-python/src/google/adk/errors/already_exists_error.py` | `lib/src/errors/already_exists_error.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/errors/__init__.py` | `lib/src/errors/(package)` | `done` | Error module surfaces (`AlreadyExistsError`, `NotFoundError`, `InputValidationError`) now have parity-focused regression coverage. |
+| `ref/adk-python/src/google/adk/errors/already_exists_error.py` | `lib/src/errors/already_exists_error.dart` | `done` | Added parity tests for default/custom message behavior and exception string formatting. |
 | `ref/adk-python/src/google/adk/errors/input_validation_error.py` | `lib/src/errors/input_validation_error.dart` | `done` | Added `InputValidationError` with default/custom message behavior and parity tests for string formatting. |
 | `ref/adk-python/src/google/adk/errors/not_found_error.py` | `lib/src/errors/not_found_error.dart` | `done` | Added `NotFoundError` counterpart and wired into eval managers. |
 | `ref/adk-python/src/google/adk/evaluation/__init__.py` | `lib/src/evaluation/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |

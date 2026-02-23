@@ -261,6 +261,12 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] GCS artifact service parity (`artifacts/gcs_artifact_service`) with blob-prefix naming, per-version metadata listing, and gs:// canonical URIs
 - [x] dedicated parity tests for apps/artifacts modules
 
+## Newly Added Error/Dependency Coverage Parity (this iteration)
+
+- [x] dependency package export coverage parity (`dependencies/__init__`) via dedicated ROUGE/Vertex dependency tests
+- [x] error package parity coverage (`errors/__init__`) for `AlreadyExistsError`, `NotFoundError`, and `InputValidationError`
+- [x] `AlreadyExistsError` default/custom message and string-format parity tests
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
