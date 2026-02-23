@@ -1,7 +1,29 @@
-import 'base_planner.dart';
+/// Legacy utility planner retained for compatibility with early adk_dart APIs.
+///
+/// For Python parity planners, use `BuiltInPlanner` or `PlanReActPlanner`.
+class PlanningRequest {
+  PlanningRequest({required this.goal, List<String>? context})
+    : context = context ?? <String>[];
 
-class RuleBasedPlanner extends BasePlanner {
-  @override
+  final String goal;
+  final List<String> context;
+}
+
+class PlanningStep {
+  PlanningStep({required this.title, this.reason});
+
+  final String title;
+  final String? reason;
+}
+
+class PlanningResult {
+  PlanningResult({List<PlanningStep>? steps})
+    : steps = steps ?? <PlanningStep>[];
+
+  final List<PlanningStep> steps;
+}
+
+class RuleBasedPlanner {
   PlanningResult plan(PlanningRequest request) {
     final List<PlanningStep> steps = <PlanningStep>[
       PlanningStep(title: 'Understand goal', reason: request.goal),

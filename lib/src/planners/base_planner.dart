@@ -1,25 +1,18 @@
-class PlanningRequest {
-  PlanningRequest({required this.goal, List<String>? context})
-    : context = context ?? <String>[];
-
-  final String goal;
-  final List<String> context;
-}
-
-class PlanningStep {
-  PlanningStep({required this.title, this.reason});
-
-  final String title;
-  final String? reason;
-}
-
-class PlanningResult {
-  PlanningResult({List<PlanningStep>? steps})
-    : steps = steps ?? <PlanningStep>[];
-
-  final List<PlanningStep> steps;
-}
+import '../agents/callback_context.dart';
+import '../agents/readonly_context.dart';
+import '../models/llm_request.dart';
+import '../types/content.dart';
 
 abstract class BasePlanner {
-  PlanningResult plan(PlanningRequest request);
+  /// Builds system instruction appended to LLM request for planning.
+  String? buildPlanningInstruction(
+    ReadonlyContext readonlyContext,
+    LlmRequest llmRequest,
+  );
+
+  /// Post-processes LLM response parts for planning contracts.
+  List<Part>? processPlanningResponse(
+    CallbackContext callbackContext,
+    List<Part> responseParts,
+  );
 }
