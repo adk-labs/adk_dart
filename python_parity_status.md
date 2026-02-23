@@ -184,6 +184,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Google search sub-agent helper parity (`createGoogleSearchAgent`, `GoogleSearchAgentTool`)
 - [x] regression tests for Google tools and credential flow integration
 
+## Newly Added Google API Toolset Parity (this iteration)
+
+- [x] discovery-to-OpenAPI conversion parity (`GoogleApiToOpenApiConverter`) for info/servers/security/schemas/resources/method mappings
+- [x] REST operation wrapper parity (`GoogleApiTool`) with declaration generation and path/query/body request construction
+- [x] OAuth2 and service-account auth wiring parity (`configureAuth`, `configureSaAuth`) for Google API tools
+- [x] dynamic toolset loading parity (`GoogleApiToolset`) with discovery/openapi ingestion and tool filter application
+- [x] prebuilt API family toolsets parity (`BigQueryToolset`, `CalendarToolset`, `GmailToolset`, `YoutubeToolset`, `SlidesToolset`, `SheetsToolset`, `DocsToolset`)
+
 ## Newly Added Search/Grounding Tool Parity (this iteration)
 
 - [x] enterprise web search built-in tool parity (`EnterpriseWebSearchTool`)

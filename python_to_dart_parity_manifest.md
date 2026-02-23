@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 319
+- done: 324
 - partial: 0
-- missing: 167
+- missing: 162
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -411,11 +411,11 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/exit_loop_tool.py` | `lib/src/tools/exit_loop_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/function_tool.py` | `lib/src/tools/function_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/get_user_choice_tool.py` | `lib/src/tools/get_user_choice_tool.dart` | `done` | Added long-running get_user_choice tool helper that marks response as skip-summarization. |
-| `ref/adk-python/src/google/adk/tools/google_api_tool/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolsets.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/google_api_tool/googleapi_to_openapi_converter.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/google_api_tool/__init__.py` | `lib/src/tools/google_api_tool/(package)` | `done` | Added package-level exports through `adk_dart.dart` and parity tests covering converter/tool/toolset flows. |
+| `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_tool.py` | `lib/src/tools/google_api_tool/google_api_tool.dart` | `done` | Added Google API operation wrapper with function declaration generation, path/query/body request mapping, and OAuth/service-account auth configuration parity. |
+| `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolset.py` | `lib/src/tools/google_api_tool/google_api_toolset.dart` | `done` | Added toolset loader from discovery/OpenAPI specs with OpenID auth config projection, operation extraction, filtering, and lifecycle parity. |
+| `ref/adk-python/src/google/adk/tools/google_api_tool/google_api_toolsets.py` | `lib/src/tools/google_api_tool/google_api_toolsets.dart` | `done` | Added prebuilt BigQuery/Calendar/Gmail/YouTube/Slides/Sheets/Docs toolset classes with API name/version parity. |
+| `ref/adk-python/src/google/adk/tools/google_api_tool/googleapi_to_openapi_converter.py` | `lib/src/tools/google_api_tool/googleapi_to_openapi_converter.dart` | `done` | Added discovery-to-OpenAPI converter covering info/servers/security/schemas/resources/methods conversion and serialization parity. |
 | `ref/adk-python/src/google/adk/tools/google_maps_grounding_tool.py` | `lib/src/tools/google_maps_grounding_tool.dart` | `done` | Added Google Maps grounding built-in tool request processor with Gemini model compatibility checks and label tagging parity. |
 | `ref/adk-python/src/google/adk/tools/google_search_agent_tool.py` | `lib/src/tools/google_search_agent_tool.dart` | `done` | Added Google search sub-agent factory and agent-tool wrapper parity surface. |
 | `ref/adk-python/src/google/adk/tools/google_search_tool.py` | `lib/src/tools/google_search_tool.dart` | `done` | Added built-in google_search tool request processor with Gemini model guards and model-override behavior. |
