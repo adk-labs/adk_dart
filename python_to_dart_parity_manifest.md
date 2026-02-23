@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 463
+- done: 486
 - partial: 0
-- missing: 23
+- missing: 0
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -114,29 +114,29 @@ Summary:
 | `ref/adk-python/src/google/adk/cli/browser/main-QQBY56NS.js` | `lib/src/cli/browser/main-QQBY56NS.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
 | `ref/adk-python/src/google/adk/cli/browser/polyfills-5CFQRCPP.js` | `lib/src/cli/browser/polyfills-5CFQRCPP.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
 | `ref/adk-python/src/google/adk/cli/browser/styles-SI5RXIFC.css` | `lib/src/cli/browser/styles-SI5RXIFC.css` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/README.md` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/adk_agent_builder_assistant.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/agent.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/instruction_embedded.template` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/sub_agents/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/sub_agents/google_search_agent.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/sub_agents/url_context_agent.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/cleanup_unused_files.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/delete_files.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/explore_project.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/query_schema.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/read_config_files.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/read_files.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/search_adk_knowledge.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/search_adk_source.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/write_config_files.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/write_files.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/adk_source_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/path_normalizer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/resolve_root_directory.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/README.md` | `lib/src/cli/built_in_agents/README.md` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/__init__.py` | `lib/src/cli/built_in_agents/__init__.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/adk_agent_builder_assistant.py` | `lib/src/cli/built_in_agents/adk_agent_builder_assistant.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/agent.py` | `lib/src/cli/built_in_agents/agent.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/instruction_embedded.template` | `lib/src/cli/built_in_agents/instruction_embedded.template` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/sub_agents/__init__.py` | `lib/src/cli/built_in_agents/sub_agents/__init__.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/sub_agents/google_search_agent.py` | `lib/src/cli/built_in_agents/sub_agents/google_search_agent.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/sub_agents/url_context_agent.py` | `lib/src/cli/built_in_agents/sub_agents/url_context_agent.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/__init__.py` | `lib/src/cli/built_in_agents/tools/__init__.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/cleanup_unused_files.py` | `lib/src/cli/built_in_agents/tools/cleanup_unused_files.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/delete_files.py` | `lib/src/cli/built_in_agents/tools/delete_files.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/explore_project.py` | `lib/src/cli/built_in_agents/tools/explore_project.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/query_schema.py` | `lib/src/cli/built_in_agents/tools/query_schema.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/read_config_files.py` | `lib/src/cli/built_in_agents/tools/read_config_files.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/read_files.py` | `lib/src/cli/built_in_agents/tools/read_files.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/search_adk_knowledge.py` | `lib/src/cli/built_in_agents/tools/search_adk_knowledge.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/search_adk_source.py` | `lib/src/cli/built_in_agents/tools/search_adk_source.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/write_config_files.py` | `lib/src/cli/built_in_agents/tools/write_config_files.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/tools/write_files.py` | `lib/src/cli/built_in_agents/tools/write_files.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/__init__.py` | `lib/src/cli/built_in_agents/utils/__init__.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/adk_source_utils.py` | `lib/src/cli/built_in_agents/utils/adk_source_utils.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/path_normalizer.py` | `lib/src/cli/built_in_agents/utils/path_normalizer.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
+| `ref/adk-python/src/google/adk/cli/built_in_agents/utils/resolve_root_directory.py` | `lib/src/cli/built_in_agents/utils/resolve_root_directory.py` | `done` | Bundled Python built-in-agent/tool/template assets under `lib/src/cli/built_in_agents` for baseline parity and regression coverage. |
 | `ref/adk-python/src/google/adk/cli/cli.py` | `lib/src/dev/cli.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/cli/cli_create.py` | `lib/src/cli/cli_create.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
 | `ref/adk-python/src/google/adk/cli/cli_deploy.py` | `lib/src/cli/cli_deploy.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |

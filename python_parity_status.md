@@ -495,14 +495,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] CLI utility parity baseline (`cli/utils/**`) including dotenv loading, local storage routing, state extraction, agent loader/change handler, cleanup/log helpers
 - [x] conformance harness parity baseline (`cli/conformance/**`) with web client, replay validators, generated-file helpers, markdown reporting, record/test runners
 - [x] recordings/replay plugin parity baseline (`cli/plugins/**`) with JSON schema models and file load/save replay cycle
+- [x] built-in agent asset parity (`cli/built_in_agents/**`) with bundled assistant/tools/templates/utils/README resources
 - [x] dedicated regression coverage (`test/cli_*_test.dart` suite additions for graph/server/registry/service-factory/conformance/plugins/state/dot-adk)
 
 ## Remaining for Full Python Parity
 
-- [ ] built-in agent pack parity (`ref/adk-python/src/google/adk/cli/built_in_agents/**`): agent-builder assistant, bundled tools, and bundled prompt/template files remain unported
-- [ ] complete `adk web` behavior parity with Python CLI web-server stack for built-in agent orchestration paths
+- [x] built-in agent pack baseline parity assets bundled under `lib/src/cli/built_in_agents/**` (agent-builder assistant, tools, utils, prompt template, README)
+- [x] manifest closure: `python_to_dart_parity_manifest.md` now reports `missing: 0`
 - [ ] optional provider-native production integrations for memory/analytics paths (Vertex SDK + BigQuery Write API transports beyond current injectable parity surface)
-- [ ] final parity closure for remaining manifest `missing` entries and corresponding integration tests
 
 ## Notes
 
