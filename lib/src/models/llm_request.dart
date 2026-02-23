@@ -40,6 +40,60 @@ class FunctionDeclaration {
   }
 }
 
+class HttpRetryOptions {
+  HttpRetryOptions({
+    this.attempts,
+    this.initialDelay,
+    this.maxDelay,
+    this.expBase,
+    List<int>? httpStatusCodes,
+  }) : httpStatusCodes = httpStatusCodes ?? <int>[];
+
+  int? attempts;
+  double? initialDelay;
+  double? maxDelay;
+  double? expBase;
+  List<int> httpStatusCodes;
+
+  HttpRetryOptions copyWith({
+    Object? attempts = _sentinel,
+    Object? initialDelay = _sentinel,
+    Object? maxDelay = _sentinel,
+    Object? expBase = _sentinel,
+    List<int>? httpStatusCodes,
+  }) {
+    return HttpRetryOptions(
+      attempts: identical(attempts, _sentinel)
+          ? this.attempts
+          : attempts as int?,
+      initialDelay: identical(initialDelay, _sentinel)
+          ? this.initialDelay
+          : initialDelay as double?,
+      maxDelay: identical(maxDelay, _sentinel)
+          ? this.maxDelay
+          : maxDelay as double?,
+      expBase: identical(expBase, _sentinel)
+          ? this.expBase
+          : expBase as double?,
+      httpStatusCodes: httpStatusCodes ?? List<int>.from(this.httpStatusCodes),
+    );
+  }
+}
+
+class HttpOptions {
+  HttpOptions({this.retryOptions});
+
+  HttpRetryOptions? retryOptions;
+
+  HttpOptions copyWith({Object? retryOptions = _sentinel}) {
+    return HttpOptions(
+      retryOptions: identical(retryOptions, _sentinel)
+          ? this.retryOptions?.copyWith()
+          : retryOptions as HttpRetryOptions?,
+    );
+  }
+}
+
 class ToolDeclaration {
   ToolDeclaration({List<FunctionDeclaration>? functionDeclarations})
     : functionDeclarations = functionDeclarations ?? <FunctionDeclaration>[];
@@ -61,22 +115,28 @@ class GenerateContentConfig {
   GenerateContentConfig({
     this.tools,
     this.systemInstruction,
+    this.thinkingConfig,
     this.responseSchema,
     this.responseMimeType,
+    this.httpOptions,
     Map<String, String>? labels,
   }) : labels = labels ?? <String, String>{};
 
   List<ToolDeclaration>? tools;
   String? systemInstruction;
+  Object? thinkingConfig;
   Object? responseSchema;
   String? responseMimeType;
+  HttpOptions? httpOptions;
   Map<String, String> labels;
 
   GenerateContentConfig copyWith({
     Object? tools = _sentinel,
     Object? systemInstruction = _sentinel,
+    Object? thinkingConfig = _sentinel,
     Object? responseSchema = _sentinel,
     Object? responseMimeType = _sentinel,
+    Object? httpOptions = _sentinel,
     Map<String, String>? labels,
   }) {
     return GenerateContentConfig(
@@ -86,13 +146,87 @@ class GenerateContentConfig {
       systemInstruction: identical(systemInstruction, _sentinel)
           ? this.systemInstruction
           : systemInstruction as String?,
+      thinkingConfig: identical(thinkingConfig, _sentinel)
+          ? this.thinkingConfig
+          : thinkingConfig,
       responseSchema: identical(responseSchema, _sentinel)
           ? this.responseSchema
           : responseSchema,
       responseMimeType: identical(responseMimeType, _sentinel)
           ? this.responseMimeType
           : responseMimeType as String?,
+      httpOptions: identical(httpOptions, _sentinel)
+          ? this.httpOptions?.copyWith()
+          : httpOptions as HttpOptions?,
       labels: labels ?? Map<String, String>.from(this.labels),
+    );
+  }
+}
+
+class LiveConnectConfig {
+  LiveConnectConfig({
+    this.responseModalities,
+    this.speechConfig,
+    this.outputAudioTranscription,
+    this.inputAudioTranscription,
+    this.realtimeInputConfig,
+    this.enableAffectiveDialog,
+    this.proactivity,
+    this.sessionResumption,
+    this.contextWindowCompression,
+  });
+
+  List<String>? responseModalities;
+  Object? speechConfig;
+  Object? outputAudioTranscription;
+  Object? inputAudioTranscription;
+  Object? realtimeInputConfig;
+  bool? enableAffectiveDialog;
+  Object? proactivity;
+  Object? sessionResumption;
+  Object? contextWindowCompression;
+
+  LiveConnectConfig copyWith({
+    List<String>? responseModalities,
+    Object? speechConfig = _sentinel,
+    Object? outputAudioTranscription = _sentinel,
+    Object? inputAudioTranscription = _sentinel,
+    Object? realtimeInputConfig = _sentinel,
+    Object? enableAffectiveDialog = _sentinel,
+    Object? proactivity = _sentinel,
+    Object? sessionResumption = _sentinel,
+    Object? contextWindowCompression = _sentinel,
+  }) {
+    return LiveConnectConfig(
+      responseModalities:
+          responseModalities ??
+          (this.responseModalities == null
+              ? null
+              : List<String>.from(this.responseModalities!)),
+      speechConfig: identical(speechConfig, _sentinel)
+          ? this.speechConfig
+          : speechConfig,
+      outputAudioTranscription: identical(outputAudioTranscription, _sentinel)
+          ? this.outputAudioTranscription
+          : outputAudioTranscription,
+      inputAudioTranscription: identical(inputAudioTranscription, _sentinel)
+          ? this.inputAudioTranscription
+          : inputAudioTranscription,
+      realtimeInputConfig: identical(realtimeInputConfig, _sentinel)
+          ? this.realtimeInputConfig
+          : realtimeInputConfig,
+      enableAffectiveDialog: identical(enableAffectiveDialog, _sentinel)
+          ? this.enableAffectiveDialog
+          : enableAffectiveDialog as bool?,
+      proactivity: identical(proactivity, _sentinel)
+          ? this.proactivity
+          : proactivity,
+      sessionResumption: identical(sessionResumption, _sentinel)
+          ? this.sessionResumption
+          : sessionResumption,
+      contextWindowCompression: identical(contextWindowCompression, _sentinel)
+          ? this.contextWindowCompression
+          : contextWindowCompression,
     );
   }
 }
@@ -102,6 +236,7 @@ class LlmRequest {
     this.model,
     List<Content>? contents,
     GenerateContentConfig? config,
+    LiveConnectConfig? liveConnectConfig,
     Map<String, BaseTool>? toolsDict,
     this.cacheConfig,
     this.cacheMetadata,
@@ -109,11 +244,13 @@ class LlmRequest {
     this.previousInteractionId,
   }) : contents = contents ?? <Content>[],
        config = config ?? GenerateContentConfig(),
+       liveConnectConfig = liveConnectConfig ?? LiveConnectConfig(),
        toolsDict = toolsDict ?? <String, BaseTool>{};
 
   String? model;
   List<Content> contents;
   GenerateContentConfig config;
+  LiveConnectConfig liveConnectConfig;
   Map<String, BaseTool> toolsDict;
 
   Object? cacheConfig;
@@ -223,6 +360,7 @@ class LlmRequest {
       model: model,
       contents: contents.map((content) => content.copyWith()).toList(),
       config: config.copyWith(),
+      liveConnectConfig: liveConnectConfig.copyWith(),
       toolsDict: Map<String, BaseTool>.from(toolsDict),
       cacheConfig: cacheConfig,
       cacheMetadata: cacheMetadata,
