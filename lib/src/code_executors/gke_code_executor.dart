@@ -199,16 +199,22 @@ class GkeCodeExecutor extends BaseCodeExecutor {
         final String ownerUid = _asString(metadata['uid']);
 
         if (ownerUid.isNotEmpty) {
-          await apiClient.patchConfigMap(
-            namespace: namespace,
-            name: configMapName,
-            body: addOwnerReferencePatch(
-              ownerApiVersion: ownerApiVersion,
-              ownerKind: ownerKind,
-              ownerName: ownerName,
-              ownerUid: ownerUid,
-            ),
-          );
+          // Matching Python behavior: owner-reference patch is best-effort and
+          // must not fail the whole execution path.
+          try {
+            await apiClient.patchConfigMap(
+              namespace: namespace,
+              name: configMapName,
+              body: addOwnerReferencePatch(
+                ownerApiVersion: ownerApiVersion,
+                ownerKind: ownerKind,
+                ownerName: ownerName,
+                ownerUid: ownerUid,
+              ),
+            );
+          } catch (_) {
+            // Ignore patch errors and continue with job watch.
+          }
         }
 
         final GkeJobWatchResult watch = await apiClient.watchJob(
@@ -229,6 +235,12 @@ class GkeCodeExecutor extends BaseCodeExecutor {
           stderr:
               watch.errorMessage ??
               'Executor timed out after ${timeoutSeconds}s.',
+          timedOut: true,
+          exitCode: -1,
+        );
+      } on TimeoutException catch (error) {
+        return CodeExecutionResult(
+          stderr: 'Executor timed out: $error',
           timedOut: true,
           exitCode: -1,
         );

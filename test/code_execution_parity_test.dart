@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
@@ -60,6 +62,19 @@ class _FakeContainerRuntimeClient implements ContainerRuntimeClient {
 
   @override
   Future<bool> isAvailable() async => available;
+}
+
+class _RecordedDockerProcessRunner {
+  final List<List<String>> argumentHistory = <List<String>>[];
+  final List<ProcessResult> queuedResults = <ProcessResult>[];
+
+  Future<ProcessResult> run(String executable, List<String> arguments) async {
+    argumentHistory.add(List<String>.from(arguments));
+    if (queuedResults.isNotEmpty) {
+      return queuedResults.removeAt(0);
+    }
+    return ProcessResult(0, 0, '', '');
+  }
 }
 
 class _FakeAgentEngineSandboxClient implements AgentEngineSandboxClient {
@@ -131,9 +146,15 @@ class _FakeVertexClient implements VertexCodeInterpreterClient {
 }
 
 class _FakeGkeApiClient implements GkeApiClient {
-  _FakeGkeApiClient(this.watchResult);
+  _FakeGkeApiClient({
+    this.watchResult,
+    this.failPatchConfigMap = false,
+    this.watchError,
+  });
 
-  final GkeJobWatchResult watchResult;
+  final GkeJobWatchResult? watchResult;
+  final bool failPatchConfigMap;
+  final Object? watchError;
   Map<String, Object?>? createdConfigMap;
   Map<String, Object?>? createdJob;
   Map<String, Object?>? patchedConfigMap;
@@ -166,6 +187,9 @@ class _FakeGkeApiClient implements GkeApiClient {
     required String name,
     required Map<String, Object?> body,
   }) async {
+    if (failPatchConfigMap) {
+      throw StateError('patch failed');
+    }
     patchedConfigMapName = name;
     patchedConfigMap = <String, Object?>{
       'namespace': namespace,
@@ -180,7 +204,11 @@ class _FakeGkeApiClient implements GkeApiClient {
     required String jobName,
     required int timeoutSeconds,
   }) async {
-    return watchResult;
+    final Object? error = watchError;
+    if (error != null) {
+      throw error;
+    }
+    return watchResult ?? GkeJobWatchResult(status: GkeJobStatus.succeeded);
   }
 }
 
@@ -340,6 +368,89 @@ void main() {
       );
     });
 
+    test('process runtime forwards host to docker subcommands', () async {
+      final _RecordedDockerProcessRunner runner = _RecordedDockerProcessRunner()
+        ..queuedResults.addAll(<ProcessResult>[
+          ProcessResult(0, 0, 'Docker version 26', ''), // --version
+          ProcessResult(0, 0, '', ''), // build
+          ProcessResult(0, 0, 'container-id\n', ''), // run
+          ProcessResult(0, 0, 'ok', ''), // exec
+          ProcessResult(0, 0, '', ''), // stop
+        ]);
+      final ProcessContainerRuntimeClient runtime =
+          ProcessContainerRuntimeClient(
+            host: 'tcp://127.0.0.1:2375',
+            processRunner: runner.run,
+          );
+
+      expect(await runtime.isAvailable(), isTrue);
+      await runtime.buildImage(
+        dockerPath: '/tmp/docker',
+        imageTag: 'img:latest',
+      );
+      final String containerId = await runtime.startContainer(
+        imageTag: 'img:latest',
+      );
+      expect(containerId, 'container-id');
+      await runtime.exec(
+        containerId: containerId,
+        command: const <String>['python3', '--version'],
+      );
+      await runtime.stopContainer(containerId: containerId);
+
+      expect(runner.argumentHistory[0], const <String>[
+        '-H',
+        'tcp://127.0.0.1:2375',
+        '--version',
+      ]);
+      expect(runner.argumentHistory[1], const <String>[
+        '-H',
+        'tcp://127.0.0.1:2375',
+        'build',
+        '-t',
+        'img:latest',
+        '/tmp/docker',
+      ]);
+      expect(runner.argumentHistory[2].sublist(0, 6), const <String>[
+        '-H',
+        'tcp://127.0.0.1:2375',
+        'run',
+        '-d',
+        '--rm',
+        '-t',
+      ]);
+      expect(runner.argumentHistory[3].sublist(0, 3), const <String>[
+        '-H',
+        'tcp://127.0.0.1:2375',
+        'exec',
+      ]);
+      expect(runner.argumentHistory[4], const <String>[
+        '-H',
+        'tcp://127.0.0.1:2375',
+        'stop',
+        'container-id',
+      ]);
+    });
+
+    test('container executor fails fast on invalid dockerPath', () async {
+      final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
+      final String missingPath =
+          '${Directory.systemTemp.path}/adk_docker_missing_${DateTime.now().microsecondsSinceEpoch}';
+      final ContainerCodeExecutor executor = ContainerCodeExecutor(
+        image: 'img:latest',
+        dockerPath: missingPath,
+        runtimeClient: runtime,
+      );
+
+      final CodeExecutionResult result = await executor.execute(
+        CodeExecutionRequest(command: 'print(1)'),
+      );
+
+      expect(result.exitCode, -1);
+      expect(result.stderr, contains('Invalid Docker path'));
+      expect(runtime.startCalls, 0);
+    });
+
     test('container executor reuses initialized container runtime', () async {
       final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
       final ContainerCodeExecutor executor = ContainerCodeExecutor(
@@ -370,17 +481,24 @@ void main() {
 
     test('container executor builds image when dockerPath is set', () async {
       final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
+      final Directory dockerDir = await Directory.systemTemp.createTemp(
+        'adk_docker_dir_',
+      );
       final ContainerCodeExecutor executor = ContainerCodeExecutor(
         image: 'built:latest',
-        dockerPath: '/tmp/docker_dir',
+        dockerPath: dockerDir.path,
         runtimeClient: runtime,
       );
 
-      await executor.execute(CodeExecutionRequest(command: 'print(3)'));
+      try {
+        await executor.execute(CodeExecutionRequest(command: 'print(3)'));
 
-      expect(runtime.buildCalls, hasLength(1));
-      expect(runtime.buildCalls.first, '/tmp/docker_dir|built:latest');
-      await executor.closeContainer();
+        expect(runtime.buildCalls, hasLength(1));
+        expect(runtime.buildCalls.first, '${dockerDir.path}|built:latest');
+        await executor.closeContainer();
+      } finally {
+        await dockerDir.delete(recursive: true);
+      }
     });
 
     test('gke manifest contains hardened settings', () async {
@@ -406,7 +524,10 @@ void main() {
       final InvocationContext invocationContext =
           await _buildInvocationContext();
       final _FakeGkeApiClient apiClient = _FakeGkeApiClient(
-        GkeJobWatchResult(status: GkeJobStatus.succeeded, logs: 'job logs'),
+        watchResult: GkeJobWatchResult(
+          status: GkeJobStatus.succeeded,
+          logs: 'job logs',
+        ),
       );
       final GkeCodeExecutor executor = GkeCodeExecutor(apiClient: apiClient);
 
@@ -427,7 +548,10 @@ void main() {
 
       final GkeCodeExecutor failedExecutor = GkeCodeExecutor(
         apiClient: _FakeGkeApiClient(
-          GkeJobWatchResult(status: GkeJobStatus.failed, logs: 'failure logs'),
+          watchResult: GkeJobWatchResult(
+            status: GkeJobStatus.failed,
+            logs: 'failure logs',
+          ),
         ),
       );
       final CodeExecutionResult failed = await failedExecutor.executeCode(
@@ -438,7 +562,7 @@ void main() {
 
       final GkeCodeExecutor timeoutExecutor = GkeCodeExecutor(
         apiClient: _FakeGkeApiClient(
-          GkeJobWatchResult(
+          watchResult: GkeJobWatchResult(
             status: GkeJobStatus.timedOut,
             errorMessage: 'timeout reached',
           ),
@@ -451,6 +575,50 @@ void main() {
       expect(timedOut.timedOut, isTrue);
       expect(timedOut.stderr, contains('timeout reached'));
     });
+
+    test('gke executor ignores owner-reference patch failure', () async {
+      final InvocationContext invocationContext =
+          await _buildInvocationContext();
+      final _FakeGkeApiClient apiClient = _FakeGkeApiClient(
+        watchResult: GkeJobWatchResult(
+          status: GkeJobStatus.succeeded,
+          logs: 'ok',
+        ),
+        failPatchConfigMap: true,
+      );
+      final GkeCodeExecutor executor = GkeCodeExecutor(apiClient: apiClient);
+
+      final CodeExecutionResult result = await executor.executeCode(
+        invocationContext,
+        CodeExecutionInput(code: 'print(42)'),
+      );
+
+      expect(result.stdout, 'ok');
+      expect(result.stderr, isEmpty);
+      expect(apiClient.createdJob, isNotNull);
+    });
+
+    test(
+      'gke executor maps watch timeout exceptions to timedOut result',
+      () async {
+        final InvocationContext invocationContext =
+            await _buildInvocationContext();
+        final GkeCodeExecutor executor = GkeCodeExecutor(
+          apiClient: _FakeGkeApiClient(
+            watchError: TimeoutException('watch timed out'),
+          ),
+        );
+
+        final CodeExecutionResult result = await executor.executeCode(
+          invocationContext,
+          CodeExecutionInput(code: 'print(42)'),
+        );
+
+        expect(result.exitCode, -1);
+        expect(result.timedOut, isTrue);
+        expect(result.stderr, contains('Executor timed out'));
+      },
+    );
 
     test('agent engine sandbox validates resource names', () {
       expect(

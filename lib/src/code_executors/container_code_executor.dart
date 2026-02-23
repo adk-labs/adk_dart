@@ -41,26 +41,48 @@ abstract class ContainerRuntimeClient {
   Future<bool> isAvailable();
 }
 
+typedef DockerProcessRunner =
+    Future<ProcessResult> Function(String executable, List<String> arguments);
+
 class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
-  ProcessContainerRuntimeClient({this.dockerBinary = 'docker'});
+  ProcessContainerRuntimeClient({
+    this.dockerBinary = 'docker',
+    this.host,
+    DockerProcessRunner? processRunner,
+  }) : _processRunner =
+           processRunner ??
+           ((String executable, List<String> arguments) {
+             return Process.run(executable, arguments);
+           });
 
   final String dockerBinary;
+  final String? host;
+  final DockerProcessRunner _processRunner;
+
+  List<String> _withHost(List<String> args) {
+    final String? hostValue = host;
+    if (hostValue == null || hostValue.trim().isEmpty) {
+      return List<String>.from(args);
+    }
+    return <String>['-H', hostValue, ...args];
+  }
 
   @override
   Future<void> buildImage({
     required String dockerPath,
     required String imageTag,
   }) async {
-    final ProcessResult result = await Process.run(dockerBinary, <String>[
+    final List<String> args = _withHost(<String>[
       'build',
       '-t',
       imageTag,
       dockerPath,
     ]);
+    final ProcessResult result = await _processRunner(dockerBinary, args);
     if (result.exitCode != 0) {
       throw ProcessException(
         dockerBinary,
-        <String>['build', '-t', imageTag, dockerPath],
+        args,
         '${result.stderr}'.trim(),
         result.exitCode,
       );
@@ -69,7 +91,7 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
 
   @override
   Future<String> startContainer({required String imageTag}) async {
-    final ProcessResult result = await Process.run(dockerBinary, <String>[
+    final List<String> args = _withHost(<String>[
       'run',
       '-d',
       '--rm',
@@ -79,10 +101,11 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
       '-f',
       '/dev/null',
     ]);
+    final ProcessResult result = await _processRunner(dockerBinary, args);
     if (result.exitCode != 0) {
       throw ProcessException(
         dockerBinary,
-        <String>['run', '-d', '--rm', '-t', imageTag],
+        args,
         '${result.stderr}'.trim(),
         result.exitCode,
       );
@@ -103,7 +126,7 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
     Map<String, String>? environment,
     Duration? timeout,
   }) async {
-    final List<String> args = <String>['exec'];
+    final List<String> args = _withHost(<String>['exec']);
     if (workingDirectory != null && workingDirectory.isNotEmpty) {
       args
         ..add('-w')
@@ -120,7 +143,7 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
       ..add(containerId)
       ..addAll(command);
 
-    final Future<ProcessResult> runFuture = Process.run(dockerBinary, args);
+    final Future<ProcessResult> runFuture = _processRunner(dockerBinary, args);
     final ProcessResult result = timeout == null
         ? await runFuture
         : await runFuture.timeout(timeout);
@@ -134,15 +157,19 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
 
   @override
   Future<void> stopContainer({required String containerId}) async {
-    await Process.run(dockerBinary, <String>['stop', containerId]);
+    await _processRunner(
+      dockerBinary,
+      _withHost(<String>['stop', containerId]),
+    );
   }
 
   @override
   Future<bool> isAvailable() async {
     try {
-      final ProcessResult probe = await Process.run(dockerBinary, <String>[
-        '--version',
-      ]);
+      final ProcessResult probe = await _processRunner(
+        dockerBinary,
+        _withHost(<String>['--version']),
+      );
       return probe.exitCode == 0;
     } catch (_) {
       return false;
@@ -160,7 +187,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     int errorRetryAttempts = 2,
     ContainerRuntimeClient? runtimeClient,
   }) : image = image ?? defaultContainerImageTag,
-       _runtimeClient = runtimeClient ?? ProcessContainerRuntimeClient(),
+       _runtimeClient =
+           runtimeClient ?? ProcessContainerRuntimeClient(host: baseUrl),
        super(
          stateful: stateful,
          optimizeDataFile: optimizeDataFile,
@@ -208,6 +236,13 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     }
 
     if (!_imageBuilt && dockerPath != null && dockerPath!.trim().isNotEmpty) {
+      final Directory dockerDirectory = Directory(dockerPath!);
+      if (!await dockerDirectory.exists()) {
+        throw FileSystemException(
+          'Invalid Docker path: $dockerPath',
+          dockerPath,
+        );
+      }
       await _runtimeClient.buildImage(dockerPath: dockerPath!, imageTag: image);
       _imageBuilt = true;
     }
@@ -261,6 +296,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
         exitCode: -1,
         stderr: 'Docker invocation failed: ${error.message}',
       );
+    } on FileSystemException catch (error) {
+      return CodeExecutionResult(exitCode: -1, stderr: error.message);
     } on StateError catch (error) {
       return CodeExecutionResult(exitCode: -1, stderr: '$error');
     }
