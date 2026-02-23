@@ -162,6 +162,15 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Discovery Engine Search callable tool parity baseline (`DiscoveryEngineSearchTool`) with request/result contracts
 - [x] parity tests for Gemini model guards, multi-tool constraints, config serialization, and discovery handler integration
 
+## Newly Added Google Credential Package Parity (this iteration)
+
+- [x] BigQuery credential config parity (`BigQueryCredentialsConfig`)
+- [x] Bigtable credential config parity (`BigtableCredentialsConfig`)
+- [x] Pub/Sub credential config parity (`PubSubCredentialsConfig`)
+- [x] Spanner credential config parity (`SpannerCredentialsConfig`)
+- [x] Data Agent credential config parity (`DataAgentCredentialsConfig`)
+- [x] parity tests for default scope/token-cache-key assignment and explicit scope override behavior
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

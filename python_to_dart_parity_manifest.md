@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 215
+- done: 225
 - partial: 29
-- missing: 242
+- missing: 232
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -380,16 +380,16 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/base_authenticated_tool.py` | `lib/src/tools/base_authenticated_tool.dart` | `done` | Added base authenticated tool that routes through CredentialManager before executing implementation logic. |
 | `ref/adk-python/src/google/adk/tools/base_tool.py` | `lib/src/tools/base_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/base_toolset.py` | `lib/src/tools/base_toolset.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/bigquery/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigquery/bigquery_credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/bigquery/__init__.py` | `lib/src/tools/bigquery/(package)` | `done` | Added BigQuery credential package surface under tools namespace. |
+| `ref/adk-python/src/google/adk/tools/bigquery/bigquery_credentials.py` | `lib/src/tools/bigquery/bigquery_credentials.dart` | `done` | Added BigQuery credential config with default scope and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/bigquery/bigquery_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/data_insights_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/bigtable_credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/bigtable/__init__.py` | `lib/src/tools/bigtable/(package)` | `done` | Added Bigtable credential package surface under tools namespace. |
+| `ref/adk-python/src/google/adk/tools/bigtable/bigtable_credentials.py` | `lib/src/tools/bigtable/bigtable_credentials.dart` | `done` | Added Bigtable credential config with default scope list and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/bigtable/bigtable_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigtable/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigtable/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
@@ -400,9 +400,9 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/computer_use/computer_use_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/computer_use/computer_use_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/crewai_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/data_agent/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/data_agent/__init__.py` | `lib/src/tools/data_agent/(package)` | `done` | Added Data Agent credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/data_agent/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/data_agent/credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/data_agent/credentials.py` | `lib/src/tools/data_agent/credentials.dart` | `done` | Added Data Agent credential config with default BigQuery scope and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/data_agent/data_agent_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/data_agent/data_agent_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/discovery_engine_search_tool.py` | `lib/src/tools/discovery_engine_search_tool.dart` | `done` | Added Discovery Engine search tool contract with query validation, serving-config derivation, and injectable request handler for deterministic parity testing. |
@@ -449,11 +449,11 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/preload_memory_tool.py` | `lib/src/tools/preload_memory_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/pubsub/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/pubsub/__init__.py` | `lib/src/tools/pubsub/(package)` | `done` | Added Pub/Sub credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/pubsub/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/pubsub/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/pubsub/message_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/pubsub/pubsub_credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/pubsub/pubsub_credentials.py` | `lib/src/tools/pubsub/pubsub_credentials.dart` | `done` | Added Pub/Sub credential config with default scope and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/pubsub/pubsub_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/retrieval/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/retrieval/base_retrieval_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
@@ -462,13 +462,13 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/retrieval/vertex_ai_rag_retrieval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/set_model_response_tool.py` | `lib/src/tools/set_model_response_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/skill_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/spanner/__init__.py` | `lib/src/tools/spanner/(package)` | `done` | Added Spanner credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/spanner/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/spanner/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/spanner/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/spanner/search_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/spanner/settings.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/spanner/spanner_credentials.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/spanner/spanner_credentials.py` | `lib/src/tools/spanner/spanner_credentials.dart` | `done` | Added Spanner credential config with admin/data scopes and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/spanner/spanner_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/spanner/utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/tool_configs.py` | `lib/src/tools/tool_configs.dart` | `done` | Added tool config datatypes (`BaseToolConfig`, `ToolArgsConfig`, `ToolConfig`) with JSON mapping helpers. |
