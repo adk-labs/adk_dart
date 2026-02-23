@@ -51,6 +51,9 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] feature-gate utility parity (`workingInProgress`, `experimental`)
 - [x] YAML utility parity (`loadYamlFile`, `dumpPydanticToYaml`)
 - [x] version constant parity (`adkVersion`)
+- [x] content audio filtering parity (`isAudioPart`, `filterAudioParts`)
+- [x] Google LLM variant parity (`GoogleLLMVariant`, `getGoogleLlmVariant`)
+- [x] output-schema compatibility parity (`canUseOutputSchemaWithTools`)
 - [x] utility regression tests for env/model helpers
 
 ## Newly Added Skills Parity (this iteration)
