@@ -143,6 +143,9 @@ export 'src/features/_feature_registry.dart';
 export 'src/features/feature_flags.dart';
 
 export 'src/flows/llm_flows/auto_flow.dart';
+export 'src/flows/llm_flows/agent_transfer.dart';
+export 'src/flows/llm_flows/audio_cache_manager.dart';
+export 'src/flows/llm_flows/audio_transcriber.dart';
 export 'src/flows/llm_flows/base_llm_flow.dart';
 export 'src/flows/llm_flows/basic.dart';
 export 'src/flows/llm_flows/code_execution.dart';
@@ -155,6 +158,7 @@ export 'src/flows/llm_flows/instructions.dart';
 export 'src/flows/llm_flows/interactions_processor.dart';
 export 'src/flows/llm_flows/request_confirmation.dart';
 export 'src/flows/llm_flows/single_flow.dart';
+export 'src/flows/llm_flows/transcription_manager.dart';
 export 'src/flows/llm_flows/output_schema_processor.dart';
 
 export 'src/models/base_llm.dart';

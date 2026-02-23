@@ -19,8 +19,8 @@ import '../../models/llm_response.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/base_toolset.dart';
 import '../../tools/tool_context.dart';
-import '../../tools/transfer_to_agent_tool.dart';
 import '../../types/content.dart';
+import 'audio_cache_manager.dart';
 import 'functions.dart' as flow_functions;
 import 'output_schema_processor.dart' as output_schema;
 
@@ -39,6 +39,7 @@ class BaseLlmFlow {
       <BaseLlmRequestProcessor>[];
   final List<BaseLlmResponseProcessor> responseProcessors =
       <BaseLlmResponseProcessor>[];
+  final AudioCacheManager audioCacheManager = AudioCacheManager();
 
   Stream<Event> runLive(InvocationContext context) async* {
     final liveQueue = context.liveRequestQueue;
@@ -357,107 +358,6 @@ class BaseLlmFlow {
         );
       }
     }
-
-    await _processAgentTransfer(context, request, toolContext);
-  }
-
-  Future<void> _processAgentTransfer(
-    InvocationContext context,
-    LlmRequest request,
-    ToolContext toolContext,
-  ) async {
-    final BaseAgent current = context.agent;
-    if (current is! LlmAgent) {
-      return;
-    }
-
-    final List<BaseAgent> transferTargets = _getTransferTargets(current);
-    if (transferTargets.isEmpty) {
-      return;
-    }
-
-    final TransferToAgentTool transferTool = TransferToAgentTool(
-      agentNames: transferTargets
-          .map((BaseAgent agent) => agent.name)
-          .toList(growable: false),
-    );
-
-    request.appendInstructions(<String>[
-      _buildTransferInstructions(transferTool.name, current, transferTargets),
-    ]);
-
-    await transferTool.processLlmRequest(
-      toolContext: toolContext,
-      llmRequest: request,
-    );
-  }
-
-  List<BaseAgent> _getTransferTargets(LlmAgent agent) {
-    final List<BaseAgent> result = <BaseAgent>[...agent.subAgents];
-    final BaseAgent? parent = agent.parentAgent;
-    if (parent is! LlmAgent) {
-      return result;
-    }
-
-    if (!agent.disallowTransferToParent) {
-      result.add(parent);
-    }
-
-    if (!agent.disallowTransferToPeers) {
-      result.addAll(
-        parent.subAgents.where((BaseAgent peer) => peer.name != agent.name),
-      );
-    }
-
-    final Map<String, BaseAgent> deduped = <String, BaseAgent>{
-      for (final BaseAgent item in result) item.name: item,
-    };
-    return deduped.values.toList(growable: false);
-  }
-
-  String _buildTransferInstructions(
-    String toolName,
-    LlmAgent agent,
-    List<BaseAgent> targetAgents,
-  ) {
-    final List<String> sortedNames =
-        targetAgents.map((BaseAgent target) => target.name).toList()..sort();
-    final String targetNames = sortedNames
-        .map((String name) => '`$name`')
-        .join(', ');
-    final String targetsInfo = targetAgents
-        .map((BaseAgent target) {
-          return 'Agent name: ${target.name}\nAgent description: ${target.description}';
-        })
-        .join('\n\n');
-
-    String instruction =
-        '''
-You have a list of other agents to transfer to:
-
-$targetsInfo
-
-If you are the best to answer the question according to your description,
-you can answer it.
-
-If another agent is better for answering the question according to its
-description, call `$toolName` function to transfer the question to that
-agent. When transferring, do not generate any text other than the function
-call.
-
-NOTE: the only available agents for `$toolName` function are $targetNames.
-''';
-
-    if (agent.parentAgent != null && !agent.disallowTransferToParent) {
-      instruction =
-          '''
-$instruction
-
-If neither you nor the other agents are best for the question, transfer to your parent agent ${agent.parentAgent!.name}.
-''';
-    }
-
-    return instruction.trim();
   }
 
   Stream<Event> _postprocessAsync(
@@ -754,6 +654,27 @@ If neither you nor the other agents are best for the question, transfer to your 
     }
 
     return finalized;
+  }
+
+  Future<List<Event>> handleControlEventFlush(
+    InvocationContext context,
+    LlmResponse response,
+  ) async {
+    if (response.interrupted == true) {
+      return audioCacheManager.flushCaches(
+        context,
+        flushUserAudio: false,
+        flushModelAudio: true,
+      );
+    }
+    if (response.turnComplete == true) {
+      return audioCacheManager.flushCaches(
+        context,
+        flushUserAudio: true,
+        flushModelAudio: true,
+      );
+    }
+    return const <Event>[];
   }
 
   BaseLlm _getLlm(InvocationContext context) {

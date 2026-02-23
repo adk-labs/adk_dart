@@ -100,6 +100,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] structured output finalization (`set_model_response` function-response -> final model text event)
 - [x] `request_confirmation` request processor (resume confirmed tool calls)
 - [x] toolset pre-flight auth resolution (`BaseToolset.getAuthConfig` + auth interrupt event)
+- [x] `agent_transfer` request processor parity (`AgentTransferLlmRequestProcessor`) with transfer-target discovery and instruction synthesis
 - [x] include-contents mode handling in preprocess (`default`/`current_turn`/`none`)
 - [x] parity tests for flow/auth handler/toolset-auth behaviors
 
@@ -110,6 +111,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] live-mode transcription buffering for tool call/response ordering
 - [x] live run defaults: response modality fallback + transcription config placeholders
 - [x] live flow baseline implementation (queue-driven content/blob/activity handling)
+- [x] live audio cache/transcription utility parity (`AudioCacheManager`, `AudioTranscriber`, `TranscriptionManager`) with parity tests for cache flush, speaker bundling, and transcription event contracts
 - [x] runner/compaction parity tests
 
 ## Newly Added Tools Parity (this iteration)
@@ -350,7 +352,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [ ] full contents parity (async function-response history merging, richer live artifact transcription handling)
 - [ ] full code-execution processor parity (data-file optimization, artifact outputs, retry counters, built-in executor compatibility)
 - [ ] runner live buffering parity for inline audio/file artifact edge cases
-- [ ] full live flow parity (`BaseLlmFlow.runLive`, audio cache manager, transcription manager, artifact-backed media routing)
+- [ ] full live flow parity (`BaseLlmFlow.runLive` end-to-end integration, live connection semantics, artifact-backed media routing edge-cases)
 - [ ] code executors parity
 - [ ] optimization/features parity
 - [ ] telemetry parity with OTEL semconv mapping

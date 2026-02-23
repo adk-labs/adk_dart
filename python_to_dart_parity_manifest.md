@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 285
+- done: 289
 - partial: 20
-- missing: 181
+- missing: 177
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -257,9 +257,9 @@ Summary:
 | `ref/adk-python/src/google/adk/flows/llm_flows/_code_execution.py` | `lib/src/flows/llm_flows/code_execution.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/_nl_planning.py` | `lib/src/flows/llm_flows/nl_planning.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/_output_schema_processor.py` | `lib/src/flows/llm_flows/output_schema_processor.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/flows/llm_flows/agent_transfer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/flows/llm_flows/audio_cache_manager.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/flows/llm_flows/audio_transcriber.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/flows/llm_flows/agent_transfer.py` | `lib/src/flows/llm_flows/agent_transfer.dart` | `done` | Added dedicated transfer request processor and helper instruction builders; wired `AutoFlow` to inject transfer tool/instructions only when transfer targets exist. |
+| `ref/adk-python/src/google/adk/flows/llm_flows/audio_cache_manager.py` | `lib/src/flows/llm_flows/audio_cache_manager.dart` | `done` | Added live audio cache manager/config with cache stats, artifact-backed cache flushing, and input/output role-aware event emission. |
+| `ref/adk-python/src/google/adk/flows/llm_flows/audio_transcriber.py` | `lib/src/flows/llm_flows/audio_transcriber.dart` | `done` | Added transcription bundler that merges consecutive speaker audio segments and transcribes through injectable recognizer callback with cache reset semantics. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/auto_flow.py` | `lib/src/flows/llm_flows/auto_flow.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/base_llm_flow.py` | `lib/src/flows/llm_flows/base_llm_flow.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/basic.py` | `lib/src/flows/llm_flows/basic.dart` | `done` | Counterpart exists and tests reference module/package terms. |
@@ -272,7 +272,7 @@ Summary:
 | `ref/adk-python/src/google/adk/flows/llm_flows/interactions_processor.py` | `lib/src/flows/llm_flows/interactions_processor.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/request_confirmation.py` | `lib/src/flows/llm_flows/request_confirmation.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/flows/llm_flows/single_flow.py` | `lib/src/flows/llm_flows/single_flow.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/flows/llm_flows/transcription_manager.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/flows/llm_flows/transcription_manager.py` | `lib/src/flows/llm_flows/transcription_manager.dart` | `done` | Added transcription manager for input/output transcription event creation and session-level transcription stats aggregation. |
 | `ref/adk-python/src/google/adk/memory/__init__.py` | `lib/src/memory/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/memory/_utils.py` | `lib/src/memory/_utils.dart` | `done` | Added `formatTimestamp` helper with parity-focused timestamp formatting tests. |
 | `ref/adk-python/src/google/adk/memory/base_memory_service.py` | `lib/src/memory/base_memory_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
