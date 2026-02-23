@@ -244,7 +244,13 @@ export 'src/tools/agent_simulator/tool_connection_map.dart';
 export 'src/tools/agent_tool.dart';
 export 'src/tools/api_registry.dart';
 export 'src/tools/bigquery/bigquery_credentials.dart';
+export 'src/tools/bigtable/client.dart';
 export 'src/tools/bigtable/bigtable_credentials.dart';
+export 'src/tools/bigtable/bigtable_toolset.dart';
+export 'src/tools/bigtable/metadata_tool.dart';
+export 'src/tools/bigtable/query_tool.dart'
+    hide executeSql, defaultMaxExecutedQueryResultRows;
+export 'src/tools/bigtable/settings.dart';
 export 'src/tools/crewai_tool.dart';
 export 'src/tools/computer_use/base_computer.dart';
 export 'src/tools/computer_use/computer_use_tool.dart';

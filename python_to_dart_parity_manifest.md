@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 353
+- done: 358
 - partial: 0
-- missing: 133
+- missing: 128
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -388,13 +388,13 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/bigquery/data_insights_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/bigquery/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/__init__.py` | `lib/src/tools/bigtable/(package)` | `done` | Added Bigtable credential package surface under tools namespace. |
+| `ref/adk-python/src/google/adk/tools/bigtable/__init__.py` | `lib/src/tools/bigtable/bigtable.dart` | `done` | Added Bigtable package barrel exports for credentials/client/settings/metadata/query/toolset surfaces. |
 | `ref/adk-python/src/google/adk/tools/bigtable/bigtable_credentials.py` | `lib/src/tools/bigtable/bigtable_credentials.dart` | `done` | Added Bigtable credential config with default scope list and token-cache-key parity behavior. |
-| `ref/adk-python/src/google/adk/tools/bigtable/bigtable_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigtable/settings.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/bigtable/bigtable_toolset.py` | `lib/src/tools/bigtable/bigtable_toolset.dart` | `done` | Added Bigtable toolset wiring with prefix/filter support and GoogleTool credentials/settings injection. |
+| `ref/adk-python/src/google/adk/tools/bigtable/client.py` | `lib/src/tools/bigtable/client.dart` | `done` | Added Bigtable admin/data client contracts with injectable factories and ADK user-agent propagation. |
+| `ref/adk-python/src/google/adk/tools/bigtable/metadata_tool.py` | `lib/src/tools/bigtable/metadata_tool.dart` | `done` | Ported instance/table metadata helpers with SUCCESS/ERROR envelope parity. |
+| `ref/adk-python/src/google/adk/tools/bigtable/query_tool.py` | `lib/src/tools/bigtable/query_tool.dart` | `done` | Ported Bigtable SQL execution helper with max-row truncation signaling and iterator close behavior parity. |
+| `ref/adk-python/src/google/adk/tools/bigtable/settings.py` | `lib/src/tools/bigtable/settings.dart` | `done` | Added Bigtable tool settings contract with feature gate and strict JSON field parsing parity. |
 | `ref/adk-python/src/google/adk/tools/computer_use/__init__.py` | `lib/src/tools/computer_use/(package)` | `done` | Added computer-use package surface with base environment, tool wrapper, and toolset exports. |
 | `ref/adk-python/src/google/adk/tools/computer_use/base_computer.py` | `lib/src/tools/computer_use/base_computer.dart` | `done` | Added abstract computer contract, environment enum, and computer state model parity surface. |
 | `ref/adk-python/src/google/adk/tools/computer_use/computer_use_tool.py` | `lib/src/tools/computer_use/computer_use_tool.dart` | `done` | Added coordinate-normalizing computer-use tool wrapper with screenshot base64 encoding behavior. |

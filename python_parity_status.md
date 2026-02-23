@@ -424,6 +424,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Spanner toolset parity (`spanner_toolset.dart`) with capability-gated tool registration and `GoogleTool` credentials/settings bridge
 - [x] dedicated parity regression coverage (`test/spanner_parity_test.dart`)
 
+## Newly Added Bigtable Tooling Parity (this iteration)
+
+- [x] Bigtable client contracts parity (`client.dart`) with injectable admin/data factories and ADK user-agent propagation
+- [x] Bigtable settings parity (`settings.dart`) with strict JSON parsing and max-query-row validation
+- [x] Bigtable metadata/query tool parity (`metadata_tool.dart`, `query_tool.dart`) including table/instance metadata envelopes and result truncation + iterator close behavior
+- [x] Bigtable toolset parity (`bigtable_toolset.dart`) with prefix/filter handling and `GoogleTool` credential/settings bridge
+- [x] Bigtable package-barrel parity (`bigtable.dart`) and end-to-end regression coverage (`test/bigtable_parity_test.dart`)
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)
