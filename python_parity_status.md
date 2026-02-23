@@ -40,6 +40,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] dependency-free YAML decoding path for ADK-style config files
 - [x] parity regression tests for config normalization/validation/loading/custom-factory hooks
 
+## Newly Added Utility Parity (this iteration)
+
+- [x] environment flag helper parity (`utils/env_utils.isEnvEnabled`)
+- [x] model-name utility parity (`extractModelName`, `isGeminiModel`, `isGemini1Model`, `isGemini2OrAbove`)
+- [x] Gemini model-id check flag parity (`isGeminiModelIdCheckDisabled`)
+- [x] utility regression tests for env/model helpers
+
 ## Newly Added Skills Parity (this iteration)
 
 - [x] skill frontmatter/resource models (`Frontmatter`, `Resources`, `Script`, `Skill`)

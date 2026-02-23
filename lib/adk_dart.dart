@@ -211,3 +211,5 @@ export 'src/tools/transfer_to_agent_tool.dart';
 export 'src/tools/url_context_tool.dart';
 
 export 'src/types/content.dart';
+export 'src/utils/env_utils.dart';
+export 'src/utils/model_name_utils.dart';
