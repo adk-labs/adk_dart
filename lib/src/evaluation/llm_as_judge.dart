@@ -1,5 +1,9 @@
+import '../models/base_llm.dart';
+import '../models/llm_request.dart';
 import '../models/llm_response.dart';
+import '../models/registry.dart';
 import '../types/content.dart';
+import '_retry_options_utils.dart';
 import 'conversation_scenarios.dart';
 import 'eval_case.dart';
 import 'eval_metrics.dart';
@@ -33,6 +37,7 @@ abstract class LlmAsJudge extends Evaluator {
     }
     _criterion = evalMetric.criterion!;
     _judgeModelOptions = _extractJudgeOptions(_criterion);
+    _judgeModel = _setupAutoRater();
   }
 
   final bool expectedInvocationsRequired;
@@ -40,14 +45,41 @@ abstract class LlmAsJudge extends Evaluator {
 
   late final BaseCriterion _criterion;
   late final JudgeModelOptions _judgeModelOptions;
+  late final BaseLlm _judgeModel;
+
+  BaseCriterion get criterion => _criterion;
+  JudgeModelOptions get judgeModelOptions => _judgeModelOptions;
 
   Future<LlmResponse> _invokeAutoRater(String prompt) async {
     final AutoRaterInvoker? invoker = _autoRaterInvoker;
     if (invoker != null) {
       return invoker(prompt: prompt, judgeModelOptions: _judgeModelOptions);
     }
-    // Fallback deterministic path: echo prompt as text response.
+
+    final Object? rawModelConfig = _judgeModelOptions.judgeModelConfig;
+    final GenerateContentConfig config = rawModelConfig is GenerateContentConfig
+        ? rawModelConfig.copyWith()
+        : GenerateContentConfig();
+    final LlmRequest llmRequest = LlmRequest(
+      model: _judgeModelOptions.judgeModel,
+      contents: <Content>[Content.userText(prompt)],
+      config: config,
+    );
+    addDefaultRetryOptionsIfNotPresent(llmRequest);
+
+    await for (final LlmResponse response in _judgeModel.generateContent(
+      llmRequest,
+      stream: false,
+    )) {
+      return response;
+    }
+
+    // Keep deterministic fallback for non-emitting model adapters.
     return LlmResponse(content: Content.modelText(prompt));
+  }
+
+  BaseLlm _setupAutoRater() {
+    return LLMRegistry.newLlm(_judgeModelOptions.judgeModel);
   }
 
   String formatAutoRaterPrompt(
@@ -71,6 +103,9 @@ abstract class LlmAsJudge extends Evaluator {
     List<Invocation>? expectedInvocations,
     ConversationScenario? conversationScenario,
   }) async {
+    if (conversationScenario != null) {
+      // Per-invocation judge metrics currently ignore conversation scenarios.
+    }
     if (expectedInvocationsRequired && expectedInvocations == null) {
       throw ArgumentError('expectedInvocations is needed by this metric.');
     }

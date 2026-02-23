@@ -1,25 +1,46 @@
+import '../../models/base_llm.dart';
+import '../../models/llm_request.dart';
+import '../../models/llm_response.dart';
+import '../../models/registry.dart';
+import '../../types/content.dart';
+import '../_retry_options_utils.dart';
 import '../conversation_scenarios.dart';
 import '../eval_case.dart';
 import '../eval_metrics.dart';
+import '../eval_result.dart';
 import '../evaluator.dart';
+import '../llm_as_judge.dart';
 import '../llm_as_judge_utils.dart';
+import 'per_turn_user_simulator_quality_prompts.dart';
 
 class PerTurnUserSimulatorQualityV1 extends Evaluator {
-  PerTurnUserSimulatorQualityV1(EvalMetricSpec evalMetric)
-    : _evalMetric = evalMetric {
-    if (evalMetric.criterion == null) {
-      _criterion = LlmBackedUserSimulatorCriterion(threshold: 0.5);
-      return;
+  PerTurnUserSimulatorQualityV1(
+    EvalMetricSpec evalMetric, {
+    BaseLlm Function(String model)? llmFactory,
+  }) : _evalMetric = evalMetric,
+       _llmFactory = llmFactory ?? LLMRegistry.newLlm {
+    if (_evalMetric.criterion == null) {
+      throw ArgumentError(
+        '`${_evalMetric.metricName}` metric expects a criterion of type '
+        '`$LlmBackedUserSimulatorCriterion`.',
+      );
     }
-    _criterion = evalMetric.criterion is LlmBackedUserSimulatorCriterion
-        ? evalMetric.criterion! as LlmBackedUserSimulatorCriterion
+    _criterion = _evalMetric.criterion is LlmBackedUserSimulatorCriterion
+        ? _evalMetric.criterion! as LlmBackedUserSimulatorCriterion
         : LlmBackedUserSimulatorCriterion.fromJson(
-            evalMetric.criterion!.toJson(),
+            _evalMetric.criterion!.toJson(),
           );
+    _llmOptions = _criterion.judgeModelOptions;
+    _stopSignal = _criterion.stopSignal;
+    _llm = _llmFactory(_llmOptions.judgeModel);
   }
 
   final EvalMetricSpec _evalMetric;
+  final BaseLlm Function(String model) _llmFactory;
   late final LlmBackedUserSimulatorCriterion _criterion;
+  late final JudgeModelOptions _llmOptions;
+  late final String _stopSignal;
+  late final BaseLlm _llm;
 
   @override
   Type get criterionType => LlmBackedUserSimulatorCriterion;
@@ -30,88 +51,260 @@ class PerTurnUserSimulatorQualityV1 extends Evaluator {
     List<Invocation>? expectedInvocations,
     ConversationScenario? conversationScenario,
   }) async {
+    if (conversationScenario == null) {
+      throw ArgumentError('conversationScenario is needed by this metric.');
+    }
     if (actualInvocations.isEmpty) {
       return EvaluationResult();
     }
 
-    final List<PerInvocationResult> perInvocationResults =
-        <PerInvocationResult>[];
-    double total = 0.0;
-    final double threshold = _evalMetric.threshold ?? _criterion.threshold;
-    for (final Invocation invocation in actualInvocations) {
-      final String userText = getTextFromContent(invocation.userContent) ?? '';
-      final double score = _scoreUserMessage(
-        message: userText,
-        scenario: conversationScenario,
-      );
-      perInvocationResults.add(
-        PerInvocationResult(
-          actualInvocation: invocation,
-          score: score,
-          evalStatus: getEvalStatus(score, threshold),
+    final List<PerInvocationResult> results = <PerInvocationResult>[
+      _evaluateFirstTurn(actualInvocations.first, conversationScenario),
+    ];
+
+    for (int i = 1; i < actualInvocations.length; i += 1) {
+      results.add(
+        await _evaluateIntermediateTurn(
+          invocationAtStep: actualInvocations[i],
+          invocationHistory: actualInvocations.sublist(0, i),
+          conversationScenario: conversationScenario,
         ),
       );
-      total += score;
     }
 
-    final double overall = total / actualInvocations.length;
+    final PerInvocationResult stopSignalEvaluation =
+        await _evaluateStopSignalTurn(
+          invocationHistory: actualInvocations,
+          conversationScenario: conversationScenario,
+        );
+
+    if (stopSignalEvaluation.evalStatus == EvalStatus.failed &&
+        results.isNotEmpty) {
+      results[results.length - 1] = stopSignalEvaluation;
+    }
+
+    return _aggregateConversationResults(results);
+  }
+
+  PerInvocationResult _evaluateFirstTurn(
+    Invocation firstInvocation,
+    ConversationScenario conversationScenario,
+  ) {
+    final String message =
+        (getTextFromContent(firstInvocation.userContent) ?? '').trim();
+    final String expected = conversationScenario.startingPrompt.trim();
+    final double score = message == expected ? 1.0 : 0.0;
+    final double threshold = _evalMetric.threshold ?? _criterion.threshold;
+    return PerInvocationResult(
+      actualInvocation: firstInvocation,
+      score: score,
+      evalStatus: getEvalStatus(score, threshold),
+    );
+  }
+
+  Future<PerInvocationResult> _evaluateIntermediateTurn({
+    required Invocation invocationAtStep,
+    required List<Invocation> invocationHistory,
+    required ConversationScenario conversationScenario,
+  }) async {
+    final String autoRaterPrompt = _formatLlmPrompt(
+      invocation: invocationAtStep,
+      invocationHistory: invocationHistory,
+      conversationScenario: conversationScenario,
+    );
+
+    final Object? rawModelConfig = _llmOptions.judgeModelConfig;
+    final GenerateContentConfig modelConfig =
+        rawModelConfig is GenerateContentConfig
+        ? rawModelConfig.copyWith()
+        : GenerateContentConfig();
+    final LlmRequest llmRequest = LlmRequest(
+      model: _llmOptions.judgeModel,
+      contents: <Content>[Content.userText(autoRaterPrompt)],
+      config: modelConfig,
+    );
+    addDefaultRetryOptionsIfNotPresent(llmRequest);
+
+    final int numSamples = _llmOptions.numSamples < 1
+        ? 1
+        : _llmOptions.numSamples;
+    final List<PerInvocationResult> samples = <PerInvocationResult>[];
+    final double threshold = _evalMetric.threshold ?? _criterion.threshold;
+
+    for (int i = 0; i < numSamples; i += 1) {
+      final AutoRaterScore llmScore = await _sampleLlm(llmRequest);
+      samples.add(
+        PerInvocationResult(
+          actualInvocation: invocationAtStep,
+          score: llmScore.score,
+          evalStatus: getEvalStatus(llmScore.score, threshold),
+        ),
+      );
+    }
+
+    if (samples.isEmpty) {
+      return PerInvocationResult(
+        actualInvocation: invocationAtStep,
+        evalStatus: EvalStatus.notEvaluated,
+      );
+    }
+
+    return _aggregateSamples(samples);
+  }
+
+  Future<PerInvocationResult> _evaluateStopSignalTurn({
+    required List<Invocation> invocationHistory,
+    required ConversationScenario conversationScenario,
+  }) {
+    return _evaluateIntermediateTurn(
+      invocationAtStep: _getStopSignalInvocation(_stopSignal),
+      invocationHistory: invocationHistory,
+      conversationScenario: conversationScenario,
+    );
+  }
+
+  String _formatLlmPrompt({
+    required Invocation invocation,
+    required List<Invocation> invocationHistory,
+    required ConversationScenario conversationScenario,
+  }) {
+    return getPerTurnUserSimulatorQualityPrompt(
+      conversationPlan: conversationScenario.conversationPlan,
+      conversationHistory: _formatConversationHistory(invocationHistory),
+      generatedUserResponse: getTextFromContent(invocation.userContent) ?? '',
+      stopSignal: _stopSignal,
+      userPersona: conversationScenario.userPersona,
+    );
+  }
+
+  Future<AutoRaterScore> _sampleLlm(LlmRequest llmRequest) async {
+    await for (final LlmResponse response in _llm.generateContent(
+      llmRequest,
+      stream: false,
+    )) {
+      return _convertLlmResponseToScore(response);
+    }
+    return AutoRaterScore();
+  }
+
+  AutoRaterScore _convertLlmResponseToScore(LlmResponse llmResponse) {
+    final String responseText =
+        llmResponse.content?.parts
+            .map((Part part) => part.text ?? '')
+            .join('\n') ??
+        '';
+    if (responseText.trim().isEmpty) {
+      return AutoRaterScore();
+    }
+    final Label label = _parseLlmResponse(responseText);
+    if (label == Label.valid) {
+      return AutoRaterScore(score: 1.0);
+    }
+    if (label == Label.invalid) {
+      return AutoRaterScore(score: 0.0);
+    }
+    return AutoRaterScore();
+  }
+
+  PerInvocationResult _aggregateSamples(List<PerInvocationResult> samples) {
+    final List<PerInvocationResult> positive = <PerInvocationResult>[];
+    final List<PerInvocationResult> negative = <PerInvocationResult>[];
+    for (final PerInvocationResult sample in samples) {
+      if (sample.score == 1.0) {
+        positive.add(sample);
+      } else if (sample.score == 0.0) {
+        negative.add(sample);
+      }
+    }
+    if (positive.isEmpty && negative.isEmpty) {
+      return samples.first;
+    }
+    if (positive.length > negative.length) {
+      return positive.first;
+    }
+    return negative.first;
+  }
+
+  EvaluationResult _aggregateConversationResults(
+    List<PerInvocationResult> perInvocationResults,
+  ) {
+    if (perInvocationResults.isEmpty) {
+      return EvaluationResult();
+    }
+
+    double numValid = 0.0;
+    for (final PerInvocationResult result in perInvocationResults) {
+      if (result.evalStatus == EvalStatus.passed && result.score != null) {
+        numValid += result.score!;
+      }
+    }
+
+    final double overall = numValid / perInvocationResults.length;
+    final double threshold = _evalMetric.threshold ?? _criterion.threshold;
     return EvaluationResult(
       overallScore: overall,
       overallEvalStatus: getEvalStatus(overall, threshold),
       perInvocationResults: perInvocationResults,
     );
   }
+}
 
-  double _scoreUserMessage({
-    required String message,
-    required ConversationScenario? scenario,
-  }) {
-    final String normalizedMessage = _normalize(message);
-    if (normalizedMessage.isEmpty) {
-      return 0.0;
+String _formatConversationHistory(List<Invocation> invocations) {
+  final List<String> history = <String>[];
+  for (final Invocation invocation in invocations) {
+    final String? userText = getTextFromContent(invocation.userContent);
+    if (userText != null && userText.isNotEmpty) {
+      history.add('user: $userText');
     }
-
-    if (normalizedMessage.contains(_normalize(_criterion.stopSignal))) {
-      return 1.0;
-    }
-
-    if (scenario == null) {
-      return 1.0;
-    }
-
-    final Set<String> messageTokens = _tokenize(normalizedMessage).toSet();
-    final Set<String> planTokens = _tokenize(
-      '${scenario.startingPrompt} ${scenario.conversationPlan}',
-    ).toSet();
-
-    if (planTokens.isEmpty) {
-      return 1.0;
-    }
-
-    int overlap = 0;
-    for (final String token in messageTokens) {
-      if (planTokens.contains(token)) {
-        overlap += 1;
+    final EvalJsonMap? finalResponse = invocation.finalResponse;
+    if (finalResponse != null) {
+      final String role = (finalResponse['role'] as String?) ?? 'model';
+      final String? responseText = getTextFromContent(finalResponse);
+      if (responseText != null && responseText.isNotEmpty) {
+        history.add('$role: $responseText');
       }
     }
-
-    if (messageTokens.isEmpty) {
-      return 0.0;
-    }
-    return overlap / messageTokens.length;
   }
+  return history.join('\n\n');
 }
 
-String _normalize(String text) {
-  return text
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9\\s</>]'), ' ')
-      .replaceAll(RegExp(r'\\s+'), ' ')
-      .trim();
+Label _parseLlmResponse(String response) {
+  final RegExp matchExpr = RegExp(
+    r'"is_valid"\s*:\s*\[*\s*"?([^"\]]*)"?\s*\]*\s*[,}\n]',
+    caseSensitive: false,
+    multiLine: true,
+  );
+  final RegExpMatch? match = matchExpr.firstMatch(response);
+  if (match == null) {
+    return Label.notFound;
+  }
+
+  final String label = (match.group(1) ?? '')
+      .replaceAll(',', '')
+      .replaceAll('}', '')
+      .trim()
+      .toLowerCase();
+  if (label == Label.valid.value || label == Label.trueLabel.value) {
+    return Label.valid;
+  }
+  if (label == Label.invalid.value ||
+      label == Label.falseLabel.value ||
+      label == Label.almost.value ||
+      label == 'partially' ||
+      label == 'partially_valid') {
+    return Label.invalid;
+  }
+  return Label.notFound;
 }
 
-List<String> _tokenize(String text) {
-  return _normalize(
-    text,
-  ).split(RegExp(r'\\s+')).where((String token) => token.length >= 3).toList();
+Invocation _getStopSignalInvocation(String stopSignal) {
+  return Invocation(
+    invocationId: 'stop_signal_proxy_invocation',
+    userContent: <String, Object?>{
+      'role': 'user',
+      'parts': <Object?>[
+        <String, Object?>{'text': stopSignal},
+      ],
+    },
+  );
 }

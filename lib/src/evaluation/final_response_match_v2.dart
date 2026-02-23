@@ -1,17 +1,40 @@
-import 'conversation_scenarios.dart';
+import '../models/llm_response.dart';
+import '../types/content.dart';
 import 'eval_case.dart';
 import 'eval_metrics.dart';
+import 'eval_result.dart';
 import 'evaluator.dart';
+import 'llm_as_judge.dart';
 import 'llm_as_judge_utils.dart';
+
+const String _finalResponseMatchV2Prompt = '''
+You are an expert rater for an AI agent response.
+Compare the agent response against the reference response for the same user prompt.
+
+User prompt:
+{prompt}
+
+Agent response:
+{response}
+
+Reference response:
+{golden_response}
+
+Return strict JSON only:
+{
+  "reasoning": "...",
+  "is_the_agent_response_valid": "valid|invalid"
+}
+''';
 
 Label parseCritique(String response) {
   final RegExp labelValidExp = RegExp(
-    r'"is_the_agent_response_valid"\s*:\s*\[*\s*"?([^"\\]\\s]+)"?',
+    r'"is_the_agent_response_valid"\s*:\s*\[*\s*"?([^"\]\s,\}]+)"?\s*\]*',
     caseSensitive: false,
     multiLine: true,
   );
   final RegExp labelInvalidExp = RegExp(
-    r'"is_the_agent_response_invalid"\s*:\s*\[*\s*"?([^"\\]\\s]+)"?',
+    r'"is_the_agent_response_invalid"\s*:\s*\[*\s*"?([^"\]\s,\}]+)"?\s*\]*',
     caseSensitive: false,
     multiLine: true,
   );
@@ -19,12 +42,12 @@ Label parseCritique(String response) {
   final RegExpMatch? validMatch = labelValidExp.firstMatch(response);
   if (validMatch != null) {
     final String label = (validMatch.group(1) ?? '').trim().toLowerCase();
-    if (label == 'valid' || label == 'true') {
+    if (label == Label.valid.value || label == Label.trueLabel.value) {
       return Label.valid;
     }
-    if (label == 'invalid' ||
-        label == 'false' ||
-        label == 'almost' ||
+    if (label == Label.invalid.value ||
+        label == Label.falseLabel.value ||
+        label == Label.almost.value ||
         label == 'partially' ||
         label == 'partially_valid') {
       return Label.invalid;
@@ -35,7 +58,7 @@ Label parseCritique(String response) {
   final RegExpMatch? invalidMatch = labelInvalidExp.firstMatch(response);
   if (invalidMatch != null) {
     final String label = (invalidMatch.group(1) ?? '').trim().toLowerCase();
-    return (label == 'true' || label == 'invalid')
+    return (label == Label.trueLabel.value || label == Label.invalid.value)
         ? Label.invalid
         : Label.valid;
   }
@@ -43,100 +66,136 @@ Label parseCritique(String response) {
   return Label.notFound;
 }
 
-class FinalResponseMatchV2Evaluator extends Evaluator {
-  FinalResponseMatchV2Evaluator(this._evalMetric);
+class FinalResponseMatchV2Evaluator extends LlmAsJudge {
+  FinalResponseMatchV2Evaluator(
+    this._evalMetric, {
+    AutoRaterInvoker? autoRaterInvoker,
+    String? autoRaterPromptTemplate,
+  }) : _autoRaterPromptTemplate =
+           autoRaterPromptTemplate ?? _finalResponseMatchV2Prompt,
+       super(
+         evalMetric: _evalMetric,
+         expectedInvocationsRequired: true,
+         autoRaterInvoker: autoRaterInvoker,
+       ) {
+    if (_evalMetric.criterion == null) {
+      throw ArgumentError(
+        '`${_evalMetric.metricName}` metric expects a criterion of type '
+        '`$LlmAsAJudgeCriterion`.',
+      );
+    }
+    _criterion = _evalMetric.criterion is LlmAsAJudgeCriterion
+        ? _evalMetric.criterion! as LlmAsAJudgeCriterion
+        : LlmAsAJudgeCriterion.fromJson(_evalMetric.criterion!.toJson());
+  }
 
   final EvalMetricSpec _evalMetric;
+  final String _autoRaterPromptTemplate;
+  late final LlmAsAJudgeCriterion _criterion;
 
   @override
   Type get criterionType => LlmAsAJudgeCriterion;
 
   @override
-  Future<EvaluationResult> evaluateInvocations({
-    required List<Invocation> actualInvocations,
-    List<Invocation>? expectedInvocations,
-    ConversationScenario? conversationScenario,
-  }) async {
-    if (expectedInvocations == null) {
-      throw ArgumentError('expectedInvocations is required for this metric.');
-    }
-    final int count = actualInvocations.length < expectedInvocations.length
-        ? actualInvocations.length
-        : expectedInvocations.length;
-    if (count == 0) {
-      return EvaluationResult();
+  String formatAutoRaterPrompt(
+    Invocation actualInvocation,
+    Invocation? expectedInvocation,
+  ) {
+    if (expectedInvocation == null) {
+      throw ArgumentError('expectedInvocation is required for this metric.');
     }
 
-    final List<PerInvocationResult> perInvocationResults =
-        <PerInvocationResult>[];
-    double evaluated = 0.0;
-    double valid = 0.0;
-    final double threshold = _evalMetric.threshold ?? 0.5;
+    final String reference =
+        getTextFromContent(expectedInvocation.finalResponse) ?? '';
+    final String response =
+        getTextFromContent(actualInvocation.finalResponse) ?? '';
+    final String userPrompt =
+        getTextFromContent(expectedInvocation.userContent) ?? '';
 
-    for (int i = 0; i < count; i += 1) {
-      final Invocation actual = actualInvocations[i];
-      final Invocation expected = expectedInvocations[i];
-      final double score = _scoreSingle(actual: actual, expected: expected);
-      perInvocationResults.add(
-        PerInvocationResult(
-          actualInvocation: actual,
-          expectedInvocation: expected,
-          score: score,
-          evalStatus: getEvalStatus(score, threshold),
-        ),
-      );
-      evaluated += 1;
-      valid += score;
+    return _autoRaterPromptTemplate
+        .replaceAll('{prompt}', userPrompt)
+        .replaceAll('{response}', response)
+        .replaceAll('{golden_response}', reference);
+  }
+
+  @override
+  AutoRaterScore convertAutoRaterResponseToScore(
+    LlmResponse autoRaterResponse,
+  ) {
+    final String? responseText = getTextFromContent(
+      _contentToEvalJson(autoRaterResponse.content),
+    );
+    if (responseText == null || responseText.isEmpty) {
+      return AutoRaterScore();
+    }
+    final Label label = parseCritique(responseText);
+    if (label == Label.valid) {
+      return AutoRaterScore(score: 1.0);
+    }
+    if (label == Label.invalid) {
+      return AutoRaterScore(score: 0.0);
+    }
+    return AutoRaterScore();
+  }
+
+  @override
+  PerInvocationResult aggregatePerInvocationSamples(
+    List<PerInvocationResult> perInvocationSamples,
+  ) {
+    final List<PerInvocationResult> positive = <PerInvocationResult>[];
+    final List<PerInvocationResult> negative = <PerInvocationResult>[];
+    for (final PerInvocationResult result in perInvocationSamples) {
+      if (result.score == 1.0) {
+        positive.add(result);
+      } else if (result.score == 0.0) {
+        negative.add(result);
+      }
+    }
+    if (positive.isEmpty && negative.isEmpty) {
+      return perInvocationSamples.first;
+    }
+    if (positive.length > negative.length) {
+      return positive.first;
+    }
+    return negative.first;
+  }
+
+  @override
+  EvaluationResult aggregateInvocationResults(
+    List<PerInvocationResult> perInvocationResults,
+  ) {
+    double numValid = 0.0;
+    int numEvaluated = 0;
+    for (final PerInvocationResult result in perInvocationResults) {
+      if (result.score == null ||
+          result.evalStatus == EvalStatus.notEvaluated) {
+        continue;
+      }
+      numEvaluated += 1;
+      numValid += result.score!;
     }
 
-    final double overall = valid / evaluated;
+    if (numEvaluated == 0) {
+      return EvaluationResult(perInvocationResults: perInvocationResults);
+    }
+
+    final double overall = numValid / numEvaluated;
     return EvaluationResult(
       overallScore: overall,
-      overallEvalStatus: getEvalStatus(overall, threshold),
+      overallEvalStatus: getEvalStatus(overall, _criterion.threshold),
       perInvocationResults: perInvocationResults,
     );
   }
 }
 
-double _scoreSingle({
-  required Invocation actual,
-  required Invocation expected,
-}) {
-  final String response = (getTextFromContent(actual.finalResponse) ?? '')
-      .trim();
-  final String reference = (getTextFromContent(expected.finalResponse) ?? '')
-      .trim();
-  if (response.isEmpty || reference.isEmpty) {
-    return 0.0;
+EvalJsonMap? _contentToEvalJson(Content? content) {
+  if (content == null) {
+    return null;
   }
-
-  if (_normalize(response) == _normalize(reference)) {
-    return 1.0;
-  }
-
-  final Set<String> responseTokens = _normalize(
-    response,
-  ).split(RegExp(r'\s+')).where((String token) => token.isNotEmpty).toSet();
-  final List<String> referenceTokens = _normalize(
-    reference,
-  ).split(RegExp(r'\s+')).where((String token) => token.isNotEmpty).toList();
-  if (referenceTokens.isEmpty) {
-    return 0.0;
-  }
-  int overlap = 0;
-  for (final String token in referenceTokens) {
-    if (responseTokens.contains(token)) {
-      overlap += 1;
-    }
-  }
-  final double ratio = overlap / referenceTokens.length;
-  return ratio >= 0.75 ? 1.0 : 0.0;
-}
-
-String _normalize(String text) {
-  return text
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9\\s]'), ' ')
-      .replaceAll(RegExp(r'\\s+'), ' ')
-      .trim();
+  return <String, Object?>{
+    if (content.role != null) 'role': content.role,
+    'parts': content.parts
+        .map((Part part) => <String, Object?>{'text': part.text ?? ''})
+        .toList(),
+  };
 }
