@@ -209,6 +209,15 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] input validation error parity (`InputValidationError` default/custom message behavior)
 - [x] dedicated parity tests for auth scheme serialization and input-validation error formatting
 
+## Newly Added Evaluation Simulation Parity (this iteration)
+
+- [x] simulator base contracts (`BaseUserSimulatorConfig`, `Status`, `NextUserMessage`, `UserSimulator`)
+- [x] static simulator parity (`StaticUserSimulator`) over predefined invocation conversations
+- [x] LLM-backed simulator parity baseline (`LlmBackedUserSimulatorConfig`, `LlmBackedUserSimulator`) with stop-signal and invocation-limit handling
+- [x] prompt utility parity (`llm_backed_user_simulator_prompts`, `per_turn_user_simulator_quality_prompts`) including placeholder validation + persona rendering
+- [x] simulator provider parity (`UserSimulatorProvider`) for static-vs-scenario routing and strict conversation contract checks
+- [x] dedicated parity tests for simulator contracts, prompt generation, provider routing, and LLM-backed runtime behavior
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 236
-- partial: 29
-- missing: 221
+- done: 243
+- partial: 28
+- missing: 215
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -228,16 +228,16 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/rubric_based_final_response_quality_v1.py` | `lib/src/evaluation/rubric_based_final_response_quality_v1.dart` | `done` | Added rubric-based final-response-quality evaluator built on rubric base contract. |
 | `ref/adk-python/src/google/adk/evaluation/rubric_based_tool_use_quality_v1.py` | `lib/src/evaluation/rubric_based_tool_use_quality_v1.dart` | `done` | Added rubric-based tool-use-quality evaluator with tool-call transcript scoring. |
 | `ref/adk-python/src/google/adk/evaluation/safety_evaluator.py` | `lib/src/evaluation/safety_evaluator.dart` | `done` | Added safety evaluator counterpart with per-invocation and overall thresholding. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/__init__.py` | `lib/src/evaluation/simulation/(package)` | `partial` | Simulation package exists but not all Python simulator modules are ported. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/llm_backed_user_simulator.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/llm_backed_user_simulator_prompts.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/per_turn_user_simulator_quality_prompts.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/__init__.py` | `lib/src/evaluation/simulation/(package)` | `done` | Added full simulation package surface exports and parity tests for provider/static/LLM-backed simulator flows. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/llm_backed_user_simulator.py` | `lib/src/evaluation/simulation/llm_backed_user_simulator.dart` | `done` | Added LLM-backed simulator config, conversation summarization, stop/turn-limit handling, and simulation evaluator wiring. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/llm_backed_user_simulator_prompts.py` | `lib/src/evaluation/simulation/llm_backed_user_simulator_prompts.dart` | `done` | Added simulator prompt templates, placeholder validation, persona rendering, and prompt formatting helpers. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/per_turn_user_simulator_quality_prompts.py` | `lib/src/evaluation/simulation/per_turn_user_simulator_quality_prompts.dart` | `done` | Added per-turn evaluator prompt templates and persona criteria rendering helpers for quality-judge inputs. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/per_turn_user_simulator_quality_v1.py` | `lib/src/evaluation/simulation/per_turn_user_simulator_quality_v1.dart` | `partial` | Added per-turn quality evaluator with scenario alignment scoring; full prompt-driven LLM rater is pending. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/pre_built_personas.py` | `lib/src/evaluation/simulation/pre_built_personas.dart` | `partial` | Added default persona registry scaffold; full prebuilt persona catalog remains to be ported. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/static_user_simulator.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/static_user_simulator.py` | `lib/src/evaluation/simulation/static_user_simulator.dart` | `done` | Added static conversation simulator that streams predefined user invocations and terminates with stop-signal status. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator.py` | `lib/src/evaluation/simulation/user_simulator.dart` | `done` | Added base simulator config/status/message contracts and validated success-only user-message invariant. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator_personas.py` | `lib/src/evaluation/simulation/user_simulator_personas.dart` | `done` | Added user behavior/persona models plus registry and lookup semantics. |
-| `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator_provider.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator_provider.py` | `lib/src/evaluation/simulation/user_simulator_provider.dart` | `done` | Added provider that selects static vs LLM-backed simulators and enforces conversation xor conversation-scenario contract. |
 | `ref/adk-python/src/google/adk/evaluation/trajectory_evaluator.py` | `lib/src/evaluation/trajectory_evaluator.dart` | `done` | Added exact/in-order/any-order trajectory matching evaluator with thresholded status. |
 | `ref/adk-python/src/google/adk/evaluation/vertex_ai_eval_facade.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/events/__init__.py` | `lib/src/events/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
