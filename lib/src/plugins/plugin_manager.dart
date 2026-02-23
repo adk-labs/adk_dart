@@ -25,6 +25,26 @@ class PluginManager {
 
   List<BasePlugin> get plugins => List<BasePlugin>.unmodifiable(_plugins);
 
+  Future<T?> _runCallbacks<T>({
+    required String callbackName,
+    required Future<T?> Function(BasePlugin plugin) invoke,
+  }) async {
+    for (final BasePlugin plugin in _plugins) {
+      try {
+        final T? result = await invoke(plugin);
+        if (result != null) {
+          return result;
+        }
+      } catch (error) {
+        throw StateError(
+          "Error in plugin '${plugin.name}' during "
+          "'$callbackName' callback: $error",
+        );
+      }
+    }
+    return null;
+  }
+
   void registerPlugin(BasePlugin plugin) {
     if (_plugins.any((BasePlugin item) => item.name == plugin.name)) {
       throw ArgumentError(
@@ -47,30 +67,26 @@ class PluginManager {
     required Content userMessage,
     required InvocationContext invocationContext,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Content? result = await plugin.onUserMessageCallback(
-        userMessage: userMessage,
-        invocationContext: invocationContext,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Content>(
+      callbackName: 'on_user_message_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.onUserMessageCallback(
+          userMessage: userMessage,
+          invocationContext: invocationContext,
+        );
+      },
+    );
   }
 
   Future<Content?> runBeforeRunCallback({
     required InvocationContext invocationContext,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Content? result = await plugin.beforeRunCallback(
-        invocationContext: invocationContext,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Content>(
+      callbackName: 'before_run_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.beforeRunCallback(invocationContext: invocationContext);
+      },
+    );
   }
 
   Future<void> runAfterRunCallback({
@@ -85,80 +101,75 @@ class PluginManager {
     required InvocationContext invocationContext,
     required Event event,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Event? result = await plugin.onEventCallback(
-        invocationContext: invocationContext,
-        event: event,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Event>(
+      callbackName: 'on_event_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.onEventCallback(
+          invocationContext: invocationContext,
+          event: event,
+        );
+      },
+    );
   }
 
   Future<Content?> runBeforeAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Content? result = await plugin.beforeAgentCallback(
-        agent: agent,
-        callbackContext: callbackContext,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Content>(
+      callbackName: 'before_agent_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.beforeAgentCallback(
+          agent: agent,
+          callbackContext: callbackContext,
+        );
+      },
+    );
   }
 
   Future<Content?> runAfterAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Content? result = await plugin.afterAgentCallback(
-        agent: agent,
-        callbackContext: callbackContext,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Content>(
+      callbackName: 'after_agent_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.afterAgentCallback(
+          agent: agent,
+          callbackContext: callbackContext,
+        );
+      },
+    );
   }
 
   Future<LlmResponse?> runBeforeModelCallback({
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final LlmResponse? result = await plugin.beforeModelCallback(
-        callbackContext: callbackContext,
-        llmRequest: llmRequest,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<LlmResponse>(
+      callbackName: 'before_model_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.beforeModelCallback(
+          callbackContext: callbackContext,
+          llmRequest: llmRequest,
+        );
+      },
+    );
   }
 
   Future<LlmResponse?> runAfterModelCallback({
     required CallbackContext callbackContext,
     required LlmResponse llmResponse,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final LlmResponse? result = await plugin.afterModelCallback(
-        callbackContext: callbackContext,
-        llmResponse: llmResponse,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<LlmResponse>(
+      callbackName: 'after_model_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.afterModelCallback(
+          callbackContext: callbackContext,
+          llmResponse: llmResponse,
+        );
+      },
+    );
   }
 
   Future<LlmResponse?> runOnModelErrorCallback({
@@ -166,17 +177,16 @@ class PluginManager {
     required LlmRequest llmRequest,
     required Exception error,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final LlmResponse? result = await plugin.onModelErrorCallback(
-        callbackContext: callbackContext,
-        llmRequest: llmRequest,
-        error: error,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<LlmResponse>(
+      callbackName: 'on_model_error_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.onModelErrorCallback(
+          callbackContext: callbackContext,
+          llmRequest: llmRequest,
+          error: error,
+        );
+      },
+    );
   }
 
   Future<Map<String, dynamic>?> runBeforeToolCallback({
@@ -184,17 +194,16 @@ class PluginManager {
     required Map<String, dynamic> toolArgs,
     required ToolContext toolContext,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Map<String, dynamic>? result = await plugin.beforeToolCallback(
-        tool: tool,
-        toolArgs: toolArgs,
-        toolContext: toolContext,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Map<String, dynamic>>(
+      callbackName: 'before_tool_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.beforeToolCallback(
+          tool: tool,
+          toolArgs: toolArgs,
+          toolContext: toolContext,
+        );
+      },
+    );
   }
 
   Future<Map<String, dynamic>?> runAfterToolCallback({
@@ -203,18 +212,17 @@ class PluginManager {
     required ToolContext toolContext,
     required Map<String, dynamic> result,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Map<String, dynamic>? altered = await plugin.afterToolCallback(
-        tool: tool,
-        toolArgs: toolArgs,
-        toolContext: toolContext,
-        result: result,
-      );
-      if (altered != null) {
-        return altered;
-      }
-    }
-    return null;
+    return _runCallbacks<Map<String, dynamic>>(
+      callbackName: 'after_tool_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.afterToolCallback(
+          tool: tool,
+          toolArgs: toolArgs,
+          toolContext: toolContext,
+          result: result,
+        );
+      },
+    );
   }
 
   Future<Map<String, dynamic>?> runOnToolErrorCallback({
@@ -223,32 +231,36 @@ class PluginManager {
     required ToolContext toolContext,
     required Exception error,
   }) async {
-    for (final BasePlugin plugin in _plugins) {
-      final Map<String, dynamic>? result = await plugin.onToolErrorCallback(
-        tool: tool,
-        toolArgs: toolArgs,
-        toolContext: toolContext,
-        error: error,
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
+    return _runCallbacks<Map<String, dynamic>>(
+      callbackName: 'on_tool_error_callback',
+      invoke: (BasePlugin plugin) {
+        return plugin.onToolErrorCallback(
+          tool: tool,
+          toolArgs: toolArgs,
+          toolContext: toolContext,
+          error: error,
+        );
+      },
+    );
   }
 
   Future<void> close() async {
-    final List<String> errors = <String>[];
+    final Map<String, Object> errors = <String, Object>{};
     for (final BasePlugin plugin in _plugins) {
       try {
         await plugin.close().timeout(_closeTimeout);
       } catch (error) {
-        errors.add('${plugin.name}: $error');
+        errors[plugin.name] = error;
       }
     }
 
     if (errors.isNotEmpty) {
-      throw StateError('Failed to close plugins: ${errors.join(', ')}');
+      final String summary = errors.entries
+          .map((MapEntry<String, Object> entry) {
+            return "'${entry.key}': ${entry.value.runtimeType}";
+          })
+          .join(', ');
+      throw StateError('Failed to close plugins: $summary');
     }
   }
 }
