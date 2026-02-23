@@ -432,6 +432,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Bigtable toolset parity (`bigtable_toolset.dart`) with prefix/filter handling and `GoogleTool` credential/settings bridge
 - [x] Bigtable package-barrel parity (`bigtable.dart`) and end-to-end regression coverage (`test/bigtable_parity_test.dart`)
 
+## Newly Added BigQuery Tooling Parity (this iteration)
+
+- [x] BigQuery client/runtime contracts parity (`client.dart`) with query-job/config abstractions, ADK user-agent handling, and injectable client factory
+- [x] BigQuery config parity (`config.dart`) including write-mode enum, strict field validation, byte-limit/job-label/application-name guards, and copy/update behavior
+- [x] BigQuery metadata/query/data-insights tool parity (`metadata_tool.dart`, `query_tool.dart`, `data_insights_tool.dart`) with execute_sql session guardrails, dry-run envelopes, AI query builders, and stream parser formatting helpers
+- [x] BigQuery toolset parity (`bigquery_toolset.dart`) with metadata/query/data-insights tool registration, filter support, and `GoogleTool` credentials/settings bridge
+- [x] BigQuery package-barrel parity (`bigquery.dart`) and end-to-end regression coverage (`test/bigquery_parity_test.dart`)
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)

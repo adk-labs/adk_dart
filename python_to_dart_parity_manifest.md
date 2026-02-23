@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 358
+- done: 364
 - partial: 0
-- missing: 128
+- missing: 122
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -380,14 +380,14 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/base_authenticated_tool.py` | `lib/src/tools/base_authenticated_tool.dart` | `done` | Added base authenticated tool that routes through CredentialManager before executing implementation logic. |
 | `ref/adk-python/src/google/adk/tools/base_tool.py` | `lib/src/tools/base_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/base_toolset.py` | `lib/src/tools/base_toolset.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/bigquery/__init__.py` | `lib/src/tools/bigquery/(package)` | `done` | Added BigQuery credential package surface under tools namespace. |
+| `ref/adk-python/src/google/adk/tools/bigquery/__init__.py` | `lib/src/tools/bigquery/bigquery.dart` | `done` | Added BigQuery package barrel exporting credentials/client/config/metadata/query/data-insights/toolset surfaces. |
 | `ref/adk-python/src/google/adk/tools/bigquery/bigquery_credentials.py` | `lib/src/tools/bigquery/bigquery_credentials.dart` | `done` | Added BigQuery credential config with default scope and token-cache-key parity behavior. |
-| `ref/adk-python/src/google/adk/tools/bigquery/bigquery_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigquery/client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigquery/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigquery/data_insights_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigquery/metadata_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/bigquery/query_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/bigquery/bigquery_toolset.py` | `lib/src/tools/bigquery/bigquery_toolset.dart` | `done` | Added BigQuery toolset wiring with metadata/query/data-insights tools, filter support, and GoogleTool credentials/settings injection. |
+| `ref/adk-python/src/google/adk/tools/bigquery/client.py` | `lib/src/tools/bigquery/client.dart` | `done` | Added BigQuery client contracts, query job/config abstractions, user-agent handling, and injectable client factory parity. |
+| `ref/adk-python/src/google/adk/tools/bigquery/config.py` | `lib/src/tools/bigquery/config.dart` | `done` | Added BigQuery tool config/write-mode contract with strict field validation, byte-limit/job-label guards, and copy/update parity behavior. |
+| `ref/adk-python/src/google/adk/tools/bigquery/data_insights_tool.py` | `lib/src/tools/bigquery/data_insights_tool.dart` | `done` | Ported Data Insights stream parser/formatting helpers with token requirement checks and injectable stream provider parity path. |
+| `ref/adk-python/src/google/adk/tools/bigquery/metadata_tool.py` | `lib/src/tools/bigquery/metadata_tool.dart` | `done` | Ported dataset/table/job metadata helpers with list/read APIs and ERROR envelope behavior parity. |
+| `ref/adk-python/src/google/adk/tools/bigquery/query_tool.py` | `lib/src/tools/bigquery/query_tool.dart` | `done` | Ported execute_sql guardrails (blocked/protected session), dry-run reporting, AI forecast/contribution/anomaly query builders, and truncation parity behavior. |
 | `ref/adk-python/src/google/adk/tools/bigtable/__init__.py` | `lib/src/tools/bigtable/bigtable.dart` | `done` | Added Bigtable package barrel exports for credentials/client/settings/metadata/query/toolset surfaces. |
 | `ref/adk-python/src/google/adk/tools/bigtable/bigtable_credentials.py` | `lib/src/tools/bigtable/bigtable_credentials.dart` | `done` | Added Bigtable credential config with default scope list and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/bigtable/bigtable_toolset.py` | `lib/src/tools/bigtable/bigtable_toolset.dart` | `done` | Added Bigtable toolset wiring with prefix/filter support and GoogleTool credentials/settings injection. |

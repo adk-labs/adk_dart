@@ -243,7 +243,14 @@ export 'src/tools/agent_simulator/tool_connection_analyzer.dart';
 export 'src/tools/agent_simulator/tool_connection_map.dart';
 export 'src/tools/agent_tool.dart';
 export 'src/tools/api_registry.dart';
-export 'src/tools/bigquery/bigquery_credentials.dart';
+export 'src/tools/bigquery/bigquery.dart'
+    hide
+        executeSql,
+        getExecuteSql,
+        getTableInfo,
+        BigQueryToolset,
+        ExecuteSqlTool,
+        bigQuerySessionInfoKey;
 export 'src/tools/bigtable/client.dart';
 export 'src/tools/bigtable/bigtable_credentials.dart';
 export 'src/tools/bigtable/bigtable_toolset.dart';
