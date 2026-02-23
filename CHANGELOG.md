@@ -1,3 +1,7 @@
+## 0.1.2
+
+- Added package topics metadata on pub.dev to improve discoverability.
+
 ## 0.1.1
 
 - Expanded Python parity coverage across evaluator workflows and remote code executor paths.
