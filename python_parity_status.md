@@ -194,6 +194,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] adapter config model parity (`LangchainToolConfig`, `CrewaiToolConfig`)
 - [x] dedicated parity tests for adapter execution paths and config loader hooks
 
+## Newly Added Retrieval Tool Parity (this iteration)
+
+- [x] base retrieval declaration parity (`BaseRetrievalTool`)
+- [x] retriever adapter parity (`LlamaIndexRetrieval`, `BaseRetriever`, `RetrievalResult`)
+- [x] local file retrieval parity baseline (`FilesRetrieval`) with directory indexing and ranked text lookup
+- [x] Vertex AI RAG retrieval parity baseline (`VertexAiRagRetrieval`) with Gemini 2+ built-in labeling and callable fallback query path
+- [x] dedicated parity tests for declarations, retrieval execution, file indexing, and RAG built-in/fallback behavior
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

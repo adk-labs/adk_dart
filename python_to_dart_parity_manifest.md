@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 229
+- done: 234
 - partial: 29
-- missing: 228
+- missing: 223
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -455,11 +455,11 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/pubsub/message_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/pubsub/pubsub_credentials.py` | `lib/src/tools/pubsub/pubsub_credentials.dart` | `done` | Added Pub/Sub credential config with default scope and token-cache-key parity behavior. |
 | `ref/adk-python/src/google/adk/tools/pubsub/pubsub_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/retrieval/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/retrieval/base_retrieval_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/retrieval/files_retrieval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/retrieval/llama_index_retrieval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/retrieval/vertex_ai_rag_retrieval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/retrieval/__init__.py` | `lib/src/tools/retrieval/(package)` | `done` | Added retrieval tool package surface under tools namespace. |
+| `ref/adk-python/src/google/adk/tools/retrieval/base_retrieval_tool.py` | `lib/src/tools/retrieval/base_retrieval_tool.dart` | `done` | Added base retrieval declaration contract exposing a query parameter schema. |
+| `ref/adk-python/src/google/adk/tools/retrieval/files_retrieval.py` | `lib/src/tools/retrieval/files_retrieval.dart` | `done` | Added local file retrieval tool using an in-memory file index retriever fallback. |
+| `ref/adk-python/src/google/adk/tools/retrieval/llama_index_retrieval.py` | `lib/src/tools/retrieval/llama_index_retrieval.dart` | `done` | Added generic retriever adapter contract and first-result text return behavior for retrieval tools. |
+| `ref/adk-python/src/google/adk/tools/retrieval/vertex_ai_rag_retrieval.py` | `lib/src/tools/retrieval/vertex_ai_rag_retrieval.dart` | `done` | Added Vertex AI RAG retrieval tool with Gemini 2+ built-in label injection and callable fallback query handling. |
 | `ref/adk-python/src/google/adk/tools/set_model_response_tool.py` | `lib/src/tools/set_model_response_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/skill_toolset.py` | `lib/src/tools/skill_toolset.dart` | `done` | Added skill toolset with list/load/load-resource tools, duplicate-name guard, and request-time system instruction + skills XML injection parity. |
 | `ref/adk-python/src/google/adk/tools/spanner/__init__.py` | `lib/src/tools/spanner/(package)` | `done` | Added Spanner credential package surface under tools namespace. |
