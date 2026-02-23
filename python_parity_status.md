@@ -114,6 +114,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] live audio cache/transcription utility parity (`AudioCacheManager`, `AudioTranscriber`, `TranscriptionManager`) with parity tests for cache flush, speaker bundling, and transcription event contracts
 - [x] runner/compaction parity tests
 
+## Newly Added Models Parity (this iteration)
+
+- [x] default model registry parity (`LLMRegistry`) with lazy built-in registration for Gemini/Gemma/Apigee/Claude/LiteLLM
+- [x] registry precedence parity safeguard (user-registered factories remain higher priority than lazy defaults)
+- [x] manifest remapping for existing model modules (`anthropic_llm`, `apigee_llm`, `base_llm_connection`, `cache_metadata`, `gemini_context_cache_manager`, `gemini_llm_connection`, `gemma_llm`, `google_llm`, `interactions_utils`, `lite_llm`)
+- [x] dedicated parity tests for lazy registration and custom-factory override behavior
+
 ## Newly Added Tools Parity (this iteration)
 
 - [x] `load_memory` tool (`LoadMemoryTool`) + memory query instruction wiring
@@ -353,6 +360,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [ ] full code-execution processor parity (data-file optimization, artifact outputs, retry counters, built-in executor compatibility)
 - [ ] runner live buffering parity for inline audio/file artifact edge cases
 - [ ] full live flow parity (`BaseLlmFlow.runLive` end-to-end integration, live connection semantics, artifact-backed media routing edge-cases)
+- [ ] full model backend parity (google-genai/Anthropic/Apigee/LiteLLM live + streaming API behavior)
 - [ ] code executors parity
 - [ ] optimization/features parity
 - [ ] telemetry parity with OTEL semconv mapping

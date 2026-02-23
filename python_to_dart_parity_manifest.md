@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 289
-- partial: 20
-- missing: 177
+- done: 293
+- partial: 26
+- missing: 167
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -281,17 +281,17 @@ Summary:
 | `ref/adk-python/src/google/adk/memory/vertex_ai_memory_bank_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/memory/vertex_ai_rag_memory_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/models/__init__.py` | `lib/src/models/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/models/anthropic_llm.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/apigee_llm.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/models/anthropic_llm.py` | `lib/src/models/anthropic_llm.dart` | `partial` | Added Anthropic model adapter with supported-model matching, request preparation, and hook-based generation; full Anthropic SDK message/stream conversion parity remains pending. |
+| `ref/adk-python/src/google/adk/models/apigee_llm.py` | `lib/src/models/apigee_llm.dart` | `partial` | Added Apigee model wrapper with model-string normalization and API-type surface; full Apigee proxy/client behavior parity remains pending. |
 | `ref/adk-python/src/google/adk/models/base_llm.py` | `lib/src/models/base_llm.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/models/base_llm_connection.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/cache_metadata.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/gemini_context_cache_manager.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/gemini_llm_connection.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/gemma_llm.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/google_llm.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/interactions_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/models/lite_llm.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/models/base_llm_connection.py` | `lib/src/models/base_llm_connection.dart` | `done` | Added live-connection contract parity (`sendHistory`, `sendContent`, `sendRealtime`, `receive`, `close`) plus realtime blob transport type. |
+| `ref/adk-python/src/google/adk/models/cache_metadata.py` | `lib/src/models/cache_metadata.dart` | `done` | Added immutable cache metadata contract with expiry-window checks and Python-aligned string representation semantics. |
+| `ref/adk-python/src/google/adk/models/gemini_context_cache_manager.py` | `lib/src/models/gemini_context_cache_manager.dart` | `partial` | Added cache fingerprint and metadata lifecycle helpers; full Gemini cached-content create/reuse/cleanup flow parity is still incomplete. |
+| `ref/adk-python/src/google/adk/models/gemini_llm_connection.py` | `lib/src/models/gemini_llm_connection.dart` | `partial` | Added live connection adapter surface over `BaseLlm` with history/content/realtime dispatch; full Gemini Live API message semantics and transcription flush parity remain pending. |
+| `ref/adk-python/src/google/adk/models/gemma_llm.py` | `lib/src/models/gemma_llm.dart` | `done` | Added Gemma wrapper over Gemini backend with supported-model matching and request delegation parity. |
+| `ref/adk-python/src/google/adk/models/google_llm.py` | `lib/src/models/google_llm.dart` | `partial` | Added Gemini model adapter with cache metadata integration, live connection bridge, and hookable generation; full google-genai client/interactions API parity remains pending. |
+| `ref/adk-python/src/google/adk/models/interactions_utils.py` | `lib/src/models/interactions_utils.dart` | `done` | Added interactions-format conversion helpers for parts/contents/tools and invoker-based interactions execution surface. |
+| `ref/adk-python/src/google/adk/models/lite_llm.py` | `lib/src/models/lite_llm.dart` | `partial` | Added LiteLLM model wrapper with supported-model matching and hook-based generation; full external litellm API parity remains pending. |
 | `ref/adk-python/src/google/adk/models/llm_request.py` | `lib/src/models/llm_request.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/models/llm_response.py` | `lib/src/models/llm_response.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/models/registry.py` | `lib/src/models/registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |

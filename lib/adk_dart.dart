@@ -162,6 +162,16 @@ export 'src/flows/llm_flows/transcription_manager.dart';
 export 'src/flows/llm_flows/output_schema_processor.dart';
 
 export 'src/models/base_llm.dart';
+export 'src/models/base_llm_connection.dart';
+export 'src/models/cache_metadata.dart';
+export 'src/models/gemini_context_cache_manager.dart';
+export 'src/models/gemini_llm_connection.dart';
+export 'src/models/google_llm.dart';
+export 'src/models/gemma_llm.dart';
+export 'src/models/apigee_llm.dart';
+export 'src/models/anthropic_llm.dart';
+export 'src/models/lite_llm.dart';
+export 'src/models/interactions_utils.dart';
 export 'src/models/llm_request.dart';
 export 'src/models/llm_response.dart';
 export 'src/models/registry.dart';
