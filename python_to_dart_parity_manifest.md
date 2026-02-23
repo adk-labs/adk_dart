@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 234
+- done: 236
 - partial: 29
-- missing: 223
+- missing: 221
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -67,7 +67,7 @@ Summary:
 | `ref/adk-python/src/google/adk/auth/auth_credential.py` | `lib/src/auth/auth_credential.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/auth_handler.py` | `lib/src/auth/auth_handler.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/auth_preprocessor.py` | `lib/src/auth/auth_preprocessor.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/auth/auth_schemes.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/auth/auth_schemes.py` | `lib/src/auth/auth_schemes.dart` | `done` | Added OpenAPI-compatible auth scheme models (`AuthSchemeType`, `OpenIdConnectWithConfig`, `ExtendedOAuth2`) and OAuth flow→grant-type mapping parity tests. |
 | `ref/adk-python/src/google/adk/auth/auth_tool.py` | `lib/src/auth/auth_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/credential_manager.py` | `lib/src/auth/credential_manager.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/credential_service/__init__.py` | `lib/src/auth/credential_service/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
@@ -185,7 +185,7 @@ Summary:
 | `ref/adk-python/src/google/adk/dependencies/vertexai.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/errors/__init__.py` | `lib/src/errors/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
 | `ref/adk-python/src/google/adk/errors/already_exists_error.py` | `lib/src/errors/already_exists_error.dart` | `partial` | Counterpart exists but parity-focused tests were not detected. |
-| `ref/adk-python/src/google/adk/errors/input_validation_error.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/errors/input_validation_error.py` | `lib/src/errors/input_validation_error.dart` | `done` | Added `InputValidationError` with default/custom message behavior and parity tests for string formatting. |
 | `ref/adk-python/src/google/adk/errors/not_found_error.py` | `lib/src/errors/not_found_error.dart` | `done` | Added `NotFoundError` counterpart and wired into eval managers. |
 | `ref/adk-python/src/google/adk/evaluation/__init__.py` | `lib/src/evaluation/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
 | `ref/adk-python/src/google/adk/evaluation/_eval_set_results_manager_utils.py` | `lib/src/evaluation/eval_set_results_manager_utils.dart` | `done` | Added create/parse helpers including legacy double-encoded JSON parsing. |

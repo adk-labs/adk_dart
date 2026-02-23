@@ -26,7 +26,7 @@ export 'src/agents/transcription_entry.dart';
 export 'src/a2a/a2a_message.dart';
 export 'src/a2a/experimental.dart';
 export 'src/a2a/in_memory_a2a_router.dart';
-export 'src/a2a/protocol.dart';
+export 'src/a2a/protocol.dart' hide SecurityScheme;
 export 'src/a2a/converters/event_converter.dart';
 export 'src/a2a/converters/part_converter.dart';
 export 'src/a2a/converters/request_converter.dart';
@@ -43,6 +43,7 @@ export 'src/artifacts/in_memory_artifact_service.dart';
 export 'src/auth/auth_credential.dart';
 export 'src/auth/auth_handler.dart';
 export 'src/auth/auth_preprocessor.dart';
+export 'src/auth/auth_schemes.dart';
 export 'src/auth/auth_tool.dart';
 export 'src/auth/credential_manager.dart';
 export 'src/auth/credential_service/base_credential_service.dart';
@@ -57,6 +58,7 @@ export 'src/auth/refresher/credential_refresher_registry.dart';
 export 'src/auth/refresher/oauth2_credential_refresher.dart';
 
 export 'src/errors/already_exists_error.dart';
+export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
 
 export 'src/events/event.dart';

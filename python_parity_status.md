@@ -202,6 +202,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Vertex AI RAG retrieval parity baseline (`VertexAiRagRetrieval`) with Gemini 2+ built-in labeling and callable fallback query path
 - [x] dedicated parity tests for declarations, retrieval execution, file indexing, and RAG built-in/fallback behavior
 
+## Newly Added Auth/Error Surface Parity (this iteration)
+
+- [x] auth scheme model parity (`AuthSchemeType`, `SecurityScheme`, `OAuthFlow`, `OAuthFlows`)
+- [x] OpenID/OAuth extension parity (`OpenIdConnectWithConfig`, `ExtendedOAuth2`, `oauthGrantTypeFromFlow`)
+- [x] input validation error parity (`InputValidationError` default/custom message behavior)
+- [x] dedicated parity tests for auth scheme serialization and input-validation error formatting
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
