@@ -363,6 +363,17 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] `EvalResult` modern/legacy JSON parsing + aggregate scoring parity tests
 - [x] `LocalEvalService` inference/evaluation flow regression test coverage
 
+## Newly Added Model/Evaluator Parity (this iteration)
+
+- [x] `AgentEvaluator` module-string parity in Dart via registered/injected module loader entrypoints (`agentModule`, `agentName`)
+- [x] `GeminiContextCacheManager` full lifecycle parity (validate/reuse/cleanup/recreate/apply cached-content)
+- [x] `GeminiLlmConnection` live-session semantics parity (audio-filtered history, tool-response routing, partial/final text, transcription flush)
+- [x] `Gemini` request/live preprocessing parity (Gemini API label/display-name stripping, tracking headers, live config injection)
+- [x] `ApigeeLlm` model-spec parsing + chat-completions payload/response parity with client injection
+- [x] `AnthropicLlm` message/tool conversion + response parsing parity surfaces
+- [x] `LiteLlm` payload/finish-reason/provider mapping + completion parsing parity surfaces
+- [x] dedicated model parity regression suite (`test/models_parity_batch2_test.dart`)
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)
@@ -370,10 +381,9 @@ Reference: `ref/adk-python/src/google/adk`
 - [ ] full code-execution processor parity (data-file optimization, artifact outputs, retry counters, built-in executor compatibility)
 - [ ] runner live buffering parity for inline audio/file artifact edge cases
 - [ ] full live flow parity (`BaseLlmFlow.runLive` end-to-end integration, live connection semantics, artifact-backed media routing edge-cases)
-- [ ] full model backend parity (google-genai/Anthropic/Apigee/LiteLLM live + streaming API behavior)
+- [ ] extended provider SDK edge-case parity (google-genai/Anthropic/Apigee/LiteLLM production transport specifics)
 - [ ] optimization/features parity
 - [ ] telemetry parity with OTEL semconv mapping
-- [ ] full evaluation suite parity (`agent_evaluator` Python-style module-string dynamic loader entrypoints)
 - [ ] A2A protocol parity
 - [ ] full skills framework parity (integration with toolset/runtime wiring)
 - [ ] platform/dependencies/utils parity modules

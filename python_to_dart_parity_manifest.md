@@ -3,8 +3,8 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 312
-- partial: 7
+- done: 319
+- partial: 0
 - missing: 167
 
 | python_file | dart_file | status | parity_notes |
@@ -191,7 +191,7 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/_eval_set_results_manager_utils.py` | `lib/src/evaluation/eval_set_results_manager_utils.dart` | `done` | Added create/parse helpers including legacy double-encoded JSON parsing. |
 | `ref/adk-python/src/google/adk/evaluation/_eval_sets_manager_utils.py` | `lib/src/evaluation/eval_sets_manager_utils.dart` | `done` | Added CRUD helper utilities with not-found behavior parity. |
 | `ref/adk-python/src/google/adk/evaluation/_retry_options_utils.py` | `lib/src/evaluation/_retry_options_utils.dart` | `done` | Added default HTTP retry option injection helper and plugin hook parity. |
-| `ref/adk-python/src/google/adk/evaluation/agent_evaluator.py` | `lib/src/evaluation/agent_evaluator.dart` | `partial` | Added eval-set orchestration, directory/file based evaluate entrypoint, legacy evalset migration/validation helpers, and parity tests; Python-style module-string dynamic loading remains a Dart-incompatible gap. |
+| `ref/adk-python/src/google/adk/evaluation/agent_evaluator.py` | `lib/src/evaluation/agent_evaluator.dart` | `done` | Added module-based root-agent resolution parity via registry/loader injection (`agentModule`, `agentName`), plus eval-set orchestration, legacy migration/validation helpers, and parity tests for registered/injected module paths. |
 | `ref/adk-python/src/google/adk/evaluation/app_details.py` | `lib/src/evaluation/app_details.dart` | `done` | Added app/agent projection model with instruction and tool lookup helpers. |
 | `ref/adk-python/src/google/adk/evaluation/base_eval_service.py` | `lib/src/evaluation/base_eval_service.dart` | `done` | Added stream-contract parity tests for `InferenceRequest`/`EvaluateRequest` and abstract service behavior in `evaluation_surface_contracts_test.dart`. |
 | `ref/adk-python/src/google/adk/evaluation/common.py` | `lib/src/evaluation/common.dart` | `done` | Added shared JSON conversion helpers used across evaluation modules. |
@@ -281,17 +281,17 @@ Summary:
 | `ref/adk-python/src/google/adk/memory/vertex_ai_memory_bank_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/memory/vertex_ai_rag_memory_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/models/__init__.py` | `lib/src/models/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/models/anthropic_llm.py` | `lib/src/models/anthropic_llm.dart` | `partial` | Added Anthropic model adapter with supported-model matching, request preparation, and hook-based generation; full Anthropic SDK message/stream conversion parity remains pending. |
-| `ref/adk-python/src/google/adk/models/apigee_llm.py` | `lib/src/models/apigee_llm.dart` | `partial` | Added Apigee model wrapper with model-string normalization and API-type surface; full Apigee proxy/client behavior parity remains pending. |
+| `ref/adk-python/src/google/adk/models/anthropic_llm.py` | `lib/src/models/anthropic_llm.dart` | `done` | Added Anthropic conversion contracts (role/finish-reason mapping, part/content/tool conversion, response parsing) and invoker-backed request execution surface with dedicated parity tests. |
+| `ref/adk-python/src/google/adk/models/apigee_llm.py` | `lib/src/models/apigee_llm.dart` | `done` | Added Apigee model-spec validation/version/provider parsing, Vertex/Gemini/OpenAI API-type routing, chat-completions payload/response conversion, and completions-client integration tests. |
 | `ref/adk-python/src/google/adk/models/base_llm.py` | `lib/src/models/base_llm.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/models/base_llm_connection.py` | `lib/src/models/base_llm_connection.dart` | `done` | Added live-connection contract parity (`sendHistory`, `sendContent`, `sendRealtime`, `receive`, `close`) plus realtime blob transport type. |
 | `ref/adk-python/src/google/adk/models/cache_metadata.py` | `lib/src/models/cache_metadata.dart` | `done` | Added immutable cache metadata contract with expiry-window checks and Python-aligned string representation semantics. |
-| `ref/adk-python/src/google/adk/models/gemini_context_cache_manager.py` | `lib/src/models/gemini_context_cache_manager.dart` | `partial` | Added cache fingerprint and metadata lifecycle helpers; full Gemini cached-content create/reuse/cleanup flow parity is still incomplete. |
-| `ref/adk-python/src/google/adk/models/gemini_llm_connection.py` | `lib/src/models/gemini_llm_connection.dart` | `partial` | Added live connection adapter surface over `BaseLlm` with history/content/realtime dispatch; full Gemini Live API message semantics and transcription flush parity remain pending. |
+| `ref/adk-python/src/google/adk/models/gemini_context_cache_manager.py` | `lib/src/models/gemini_context_cache_manager.dart` | `done` | Added full cache lifecycle parity (metadata coercion, validity checks, cleanup, recreation, cached-content request mutation, response metadata propagation) via injectable cache client and parity tests. |
+| `ref/adk-python/src/google/adk/models/gemini_llm_connection.py` | `lib/src/models/gemini_llm_connection.dart` | `done` | Added live-session abstraction with history/audio filtering, tool-response routing, partial/final text handling, transcription flush, tool-call event emission, and fallback local dispatch parity tests. |
 | `ref/adk-python/src/google/adk/models/gemma_llm.py` | `lib/src/models/gemma_llm.dart` | `done` | Added Gemma wrapper over Gemini backend with supported-model matching and request delegation parity. |
-| `ref/adk-python/src/google/adk/models/google_llm.py` | `lib/src/models/google_llm.dart` | `partial` | Added Gemini model adapter with cache metadata integration, live connection bridge, and hookable generation; full google-genai client/interactions API parity remains pending. |
+| `ref/adk-python/src/google/adk/models/google_llm.py` | `lib/src/models/google_llm.dart` | `done` | Added backend-aware request preprocessing (Gemini API label/display-name handling), tracking-header propagation, interactions/live-session hooks, cache-manager integration, and connect-time live config injection with parity tests. |
 | `ref/adk-python/src/google/adk/models/interactions_utils.py` | `lib/src/models/interactions_utils.dart` | `done` | Added interactions-format conversion helpers for parts/contents/tools and invoker-based interactions execution surface. |
-| `ref/adk-python/src/google/adk/models/lite_llm.py` | `lib/src/models/lite_llm.dart` | `partial` | Added LiteLLM model wrapper with supported-model matching and hook-based generation; full external litellm API parity remains pending. |
+| `ref/adk-python/src/google/adk/models/lite_llm.py` | `lib/src/models/lite_llm.dart` | `done` | Added LiteLLM-style payload construction, finish-reason/provider mapping, completion response parsing (tool-calls/usage/custom metadata), and invoker-backed execution with parity tests. |
 | `ref/adk-python/src/google/adk/models/llm_request.py` | `lib/src/models/llm_request.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/models/llm_response.py` | `lib/src/models/llm_response.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/models/registry.py` | `lib/src/models/registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |

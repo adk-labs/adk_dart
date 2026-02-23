@@ -81,32 +81,92 @@ class HttpRetryOptions {
 }
 
 class HttpOptions {
-  HttpOptions({this.retryOptions});
+  HttpOptions({
+    this.retryOptions,
+    Map<String, String>? headers,
+    this.apiVersion,
+  }) : headers = headers ?? <String, String>{};
 
   HttpRetryOptions? retryOptions;
+  Map<String, String> headers;
+  String? apiVersion;
 
-  HttpOptions copyWith({Object? retryOptions = _sentinel}) {
+  HttpOptions copyWith({
+    Object? retryOptions = _sentinel,
+    Map<String, String>? headers,
+    Object? apiVersion = _sentinel,
+  }) {
     return HttpOptions(
       retryOptions: identical(retryOptions, _sentinel)
           ? this.retryOptions?.copyWith()
           : retryOptions as HttpRetryOptions?,
+      headers: headers ?? Map<String, String>.from(this.headers),
+      apiVersion: identical(apiVersion, _sentinel)
+          ? this.apiVersion
+          : apiVersion as String?,
     );
   }
 }
 
 class ToolDeclaration {
-  ToolDeclaration({List<FunctionDeclaration>? functionDeclarations})
-    : functionDeclarations = functionDeclarations ?? <FunctionDeclaration>[];
+  ToolDeclaration({
+    List<FunctionDeclaration>? functionDeclarations,
+    this.computerUse,
+  }) : functionDeclarations = functionDeclarations ?? <FunctionDeclaration>[];
 
   List<FunctionDeclaration> functionDeclarations;
+  Object? computerUse;
 
-  ToolDeclaration copyWith({List<FunctionDeclaration>? functionDeclarations}) {
+  ToolDeclaration copyWith({
+    List<FunctionDeclaration>? functionDeclarations,
+    Object? computerUse = _sentinel,
+  }) {
     return ToolDeclaration(
       functionDeclarations:
           functionDeclarations ??
           this.functionDeclarations
               .map((declaration) => declaration.copyWith())
               .toList(),
+      computerUse: identical(computerUse, _sentinel)
+          ? this.computerUse
+          : computerUse,
+    );
+  }
+}
+
+enum FunctionCallingConfigMode { modeUnspecified, auto, any, none }
+
+class FunctionCallingConfig {
+  FunctionCallingConfig({
+    this.mode = FunctionCallingConfigMode.modeUnspecified,
+    List<String>? allowedFunctionNames,
+  }) : allowedFunctionNames = allowedFunctionNames ?? <String>[];
+
+  FunctionCallingConfigMode mode;
+  List<String> allowedFunctionNames;
+
+  FunctionCallingConfig copyWith({
+    FunctionCallingConfigMode? mode,
+    List<String>? allowedFunctionNames,
+  }) {
+    return FunctionCallingConfig(
+      mode: mode ?? this.mode,
+      allowedFunctionNames:
+          allowedFunctionNames ?? List<String>.from(this.allowedFunctionNames),
+    );
+  }
+}
+
+class LlmToolConfig {
+  LlmToolConfig({this.functionCallingConfig});
+
+  FunctionCallingConfig? functionCallingConfig;
+
+  LlmToolConfig copyWith({Object? functionCallingConfig = _sentinel}) {
+    return LlmToolConfig(
+      functionCallingConfig: identical(functionCallingConfig, _sentinel)
+          ? this.functionCallingConfig?.copyWith()
+          : functionCallingConfig as FunctionCallingConfig?,
     );
   }
 }
@@ -115,27 +175,67 @@ class GenerateContentConfig {
   GenerateContentConfig({
     this.tools,
     this.systemInstruction,
+    this.temperature,
+    this.topP,
+    this.maxOutputTokens,
+    List<String>? stopSequences,
+    this.frequencyPenalty,
+    this.presencePenalty,
+    this.seed,
+    this.candidateCount,
+    this.responseLogprobs,
+    this.logprobs,
     this.thinkingConfig,
     this.responseSchema,
+    this.responseJsonSchema,
     this.responseMimeType,
+    this.toolConfig,
+    this.cachedContent,
     this.httpOptions,
     Map<String, String>? labels,
-  }) : labels = labels ?? <String, String>{};
+  }) : stopSequences = stopSequences ?? <String>[],
+       labels = labels ?? <String, String>{};
 
   List<ToolDeclaration>? tools;
   String? systemInstruction;
+  double? temperature;
+  double? topP;
+  int? maxOutputTokens;
+  List<String> stopSequences;
+  double? frequencyPenalty;
+  double? presencePenalty;
+  int? seed;
+  int? candidateCount;
+  bool? responseLogprobs;
+  int? logprobs;
   Object? thinkingConfig;
   Object? responseSchema;
+  Object? responseJsonSchema;
   String? responseMimeType;
+  LlmToolConfig? toolConfig;
+  String? cachedContent;
   HttpOptions? httpOptions;
   Map<String, String> labels;
 
   GenerateContentConfig copyWith({
     Object? tools = _sentinel,
     Object? systemInstruction = _sentinel,
+    Object? temperature = _sentinel,
+    Object? topP = _sentinel,
+    Object? maxOutputTokens = _sentinel,
+    List<String>? stopSequences,
+    Object? frequencyPenalty = _sentinel,
+    Object? presencePenalty = _sentinel,
+    Object? seed = _sentinel,
+    Object? candidateCount = _sentinel,
+    Object? responseLogprobs = _sentinel,
+    Object? logprobs = _sentinel,
     Object? thinkingConfig = _sentinel,
     Object? responseSchema = _sentinel,
+    Object? responseJsonSchema = _sentinel,
     Object? responseMimeType = _sentinel,
+    Object? toolConfig = _sentinel,
+    Object? cachedContent = _sentinel,
     Object? httpOptions = _sentinel,
     Map<String, String>? labels,
   }) {
@@ -146,15 +246,48 @@ class GenerateContentConfig {
       systemInstruction: identical(systemInstruction, _sentinel)
           ? this.systemInstruction
           : systemInstruction as String?,
+      temperature: identical(temperature, _sentinel)
+          ? this.temperature
+          : temperature as double?,
+      topP: identical(topP, _sentinel) ? this.topP : topP as double?,
+      maxOutputTokens: identical(maxOutputTokens, _sentinel)
+          ? this.maxOutputTokens
+          : maxOutputTokens as int?,
+      stopSequences: stopSequences ?? List<String>.from(this.stopSequences),
+      frequencyPenalty: identical(frequencyPenalty, _sentinel)
+          ? this.frequencyPenalty
+          : frequencyPenalty as double?,
+      presencePenalty: identical(presencePenalty, _sentinel)
+          ? this.presencePenalty
+          : presencePenalty as double?,
+      seed: identical(seed, _sentinel) ? this.seed : seed as int?,
+      candidateCount: identical(candidateCount, _sentinel)
+          ? this.candidateCount
+          : candidateCount as int?,
+      responseLogprobs: identical(responseLogprobs, _sentinel)
+          ? this.responseLogprobs
+          : responseLogprobs as bool?,
+      logprobs: identical(logprobs, _sentinel)
+          ? this.logprobs
+          : logprobs as int?,
       thinkingConfig: identical(thinkingConfig, _sentinel)
           ? this.thinkingConfig
           : thinkingConfig,
       responseSchema: identical(responseSchema, _sentinel)
           ? this.responseSchema
           : responseSchema,
+      responseJsonSchema: identical(responseJsonSchema, _sentinel)
+          ? this.responseJsonSchema
+          : responseJsonSchema,
       responseMimeType: identical(responseMimeType, _sentinel)
           ? this.responseMimeType
           : responseMimeType as String?,
+      toolConfig: identical(toolConfig, _sentinel)
+          ? this.toolConfig?.copyWith()
+          : toolConfig as LlmToolConfig?,
+      cachedContent: identical(cachedContent, _sentinel)
+          ? this.cachedContent
+          : cachedContent as String?,
       httpOptions: identical(httpOptions, _sentinel)
           ? this.httpOptions?.copyWith()
           : httpOptions as HttpOptions?,
@@ -169,6 +302,9 @@ class LiveConnectConfig {
     this.speechConfig,
     this.outputAudioTranscription,
     this.inputAudioTranscription,
+    this.systemInstruction,
+    this.tools,
+    this.httpOptions,
     this.realtimeInputConfig,
     this.enableAffectiveDialog,
     this.proactivity,
@@ -180,6 +316,9 @@ class LiveConnectConfig {
   Object? speechConfig;
   Object? outputAudioTranscription;
   Object? inputAudioTranscription;
+  Object? systemInstruction;
+  List<ToolDeclaration>? tools;
+  HttpOptions? httpOptions;
   Object? realtimeInputConfig;
   bool? enableAffectiveDialog;
   Object? proactivity;
@@ -191,6 +330,9 @@ class LiveConnectConfig {
     Object? speechConfig = _sentinel,
     Object? outputAudioTranscription = _sentinel,
     Object? inputAudioTranscription = _sentinel,
+    Object? systemInstruction = _sentinel,
+    Object? tools = _sentinel,
+    Object? httpOptions = _sentinel,
     Object? realtimeInputConfig = _sentinel,
     Object? enableAffectiveDialog = _sentinel,
     Object? proactivity = _sentinel,
@@ -212,6 +354,15 @@ class LiveConnectConfig {
       inputAudioTranscription: identical(inputAudioTranscription, _sentinel)
           ? this.inputAudioTranscription
           : inputAudioTranscription,
+      systemInstruction: identical(systemInstruction, _sentinel)
+          ? this.systemInstruction
+          : systemInstruction,
+      tools: identical(tools, _sentinel)
+          ? this.tools?.map((ToolDeclaration tool) => tool.copyWith()).toList()
+          : tools as List<ToolDeclaration>?,
+      httpOptions: identical(httpOptions, _sentinel)
+          ? this.httpOptions?.copyWith()
+          : httpOptions as HttpOptions?,
       realtimeInputConfig: identical(realtimeInputConfig, _sentinel)
           ? this.realtimeInputConfig
           : realtimeInputConfig,
