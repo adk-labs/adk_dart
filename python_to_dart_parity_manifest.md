@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 227
+- done: 229
 - partial: 29
-- missing: 230
+- missing: 228
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -399,7 +399,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/computer_use/base_computer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/computer_use/computer_use_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/computer_use/computer_use_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/crewai_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/crewai_tool.py` | `lib/src/tools/crewai_tool.dart` | `done` | Added CrewAI-style wrapper tool with mandatory-argument guard, schema-aware declaration override, and config-driven runner resolution hooks. |
 | `ref/adk-python/src/google/adk/tools/data_agent/__init__.py` | `lib/src/tools/data_agent/(package)` | `done` | Added Data Agent credential package surface under tools namespace. |
 | `ref/adk-python/src/google/adk/tools/data_agent/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/data_agent/credentials.py` | `lib/src/tools/data_agent/credentials.dart` | `done` | Added Data Agent credential config with default BigQuery scope and token-cache-key parity behavior. |
@@ -420,7 +420,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/google_search_agent_tool.py` | `lib/src/tools/google_search_agent_tool.dart` | `done` | Added Google search sub-agent factory and agent-tool wrapper parity surface. |
 | `ref/adk-python/src/google/adk/tools/google_search_tool.py` | `lib/src/tools/google_search_tool.dart` | `done` | Added built-in google_search tool request processor with Gemini model guards and model-override behavior. |
 | `ref/adk-python/src/google/adk/tools/google_tool.py` | `lib/src/tools/google_tool.dart` | `done` | Added Google tool wrapper that resolves credentials and injects credential/settings arguments with fallback invocation behavior. |
-| `ref/adk-python/src/google/adk/tools/langchain_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/langchain_tool.py` | `lib/src/tools/langchain_tool.dart` | `done` | Added LangChain-style wrapper tool with `run_manager` filtering, schema-aware declaration override, and config-driven runner resolution hooks. |
 | `ref/adk-python/src/google/adk/tools/load_artifacts_tool.py` | `lib/src/tools/load_artifacts_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/load_mcp_resource_tool.py` | `lib/src/tools/load_mcp_resource_tool.dart` | `done` | Added MCP resource loader tool with resource-list instruction injection and resource-content attachment. |
 | `ref/adk-python/src/google/adk/tools/load_memory_tool.py` | `lib/src/tools/load_memory_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |

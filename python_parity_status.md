@@ -187,6 +187,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] explicit missing-toolbox integration error path
 - [x] dedicated parity tests for delegate forwarding and missing-delegate failures
 
+## Newly Added External Tool Adapter Parity (this iteration)
+
+- [x] `LangchainTool` parity baseline with run-manager filtering, schema-aware declaration override, and config-driven runner resolution
+- [x] `CrewaiTool` parity baseline with mandatory-argument validation, schema-aware declaration override, and config-driven runner resolution
+- [x] adapter config model parity (`LangchainToolConfig`, `CrewaiToolConfig`)
+- [x] dedicated parity tests for adapter execution paths and config loader hooks
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
