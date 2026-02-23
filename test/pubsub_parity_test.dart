@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
@@ -180,6 +182,169 @@ void main() {
         'publisher': 0,
         'subscriber': 0,
       });
+    });
+
+    test('default factory requires access token in credentials', () async {
+      await expectLater(
+        () => getPublisherClient(credentials: Object()),
+        throwsArgumentError,
+      );
+      await expectLater(
+        () => getSubscriberClient(credentials: <String, Object?>{}),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('pubsub http client parity', () {
+    test(
+      'publisher client sends publish request and parses message id',
+      () async {
+        final HttpServer server = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(() async {
+          await server.close(force: true);
+        });
+
+        final Completer<void> handled = Completer<void>();
+        unawaited(() async {
+          await for (final HttpRequest request in server) {
+            expect(request.method, 'POST');
+            expect(request.uri.path, '/v1/projects/p/topics/t1:publish');
+            expect(
+              request.headers.value(HttpHeaders.authorizationHeader),
+              'Bearer token-123',
+            );
+            expect(
+              request.headers.value(HttpHeaders.userAgentHeader),
+              contains('pubsub-test'),
+            );
+            final Object? payload = jsonDecode(
+              await utf8.decodeStream(request),
+            );
+            expect(payload, isA<Map>());
+            final List<Object?> messages =
+                ((payload as Map)['messages'] as List).cast<Object?>();
+            final Map message = messages.single as Map;
+            expect(message['orderingKey'], 'order-1');
+            expect(message['attributes'], <String, String>{'k': 'v'});
+
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, Object?>{
+                'messageIds': <String>['m-http-1'],
+              }),
+            );
+            await request.response.close();
+            handled.complete();
+            break;
+          }
+        }());
+
+        final HttpPubSubPublisherClient client = HttpPubSubPublisherClient(
+          accessToken: 'token-123',
+          userAgents: <String>['pubsub-test'],
+          enableMessageOrdering: true,
+          apiBaseUrl: 'http://${server.address.host}:${server.port}/v1',
+        );
+
+        final String messageId = await client.publish(
+          topicName: 'projects/p/topics/t1',
+          data: utf8.encode('hello'),
+          attributes: <String, String>{'k': 'v'},
+          orderingKey: 'order-1',
+        );
+
+        expect(messageId, 'm-http-1');
+        await handled.future.timeout(const Duration(seconds: 2));
+      },
+    );
+
+    test('subscriber client pulls and acknowledges via REST', () async {
+      final HttpServer server = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+
+      int calls = 0;
+      final Completer<void> handled = Completer<void>();
+      unawaited(() async {
+        await for (final HttpRequest request in server) {
+          calls += 1;
+          expect(request.method, 'POST');
+          expect(
+            request.headers.value(HttpHeaders.authorizationHeader),
+            'Bearer token-xyz',
+          );
+
+          if (request.uri.path.endsWith(':pull')) {
+            final Object? payload = jsonDecode(
+              await utf8.decodeStream(request),
+            );
+            expect((payload as Map)['maxMessages'], 2);
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(
+              jsonEncode(<String, Object?>{
+                'receivedMessages': <Object?>[
+                  <String, Object?>{
+                    'ackId': 'ack-1',
+                    'message': <String, Object?>{
+                      'messageId': 'm-1',
+                      'data': base64Encode(utf8.encode('hello')),
+                      'attributes': <String, String>{'a': '1'},
+                      'orderingKey': 'o-1',
+                      'publishTime': '2026-02-23T10:00:00Z',
+                    },
+                  },
+                ],
+              }),
+            );
+            await request.response.close();
+            continue;
+          }
+
+          if (request.uri.path.endsWith(':acknowledge')) {
+            final Object? payload = jsonDecode(
+              await utf8.decodeStream(request),
+            );
+            expect((payload as Map)['ackIds'], <String>['ack-1']);
+            request.response.headers.contentType = ContentType.json;
+            request.response.write('{}');
+            await request.response.close();
+            if (calls >= 2) {
+              handled.complete();
+            }
+            break;
+          }
+        }
+      }());
+
+      final HttpPubSubSubscriberClient client = HttpPubSubSubscriberClient(
+        accessToken: 'token-xyz',
+        userAgents: <String>['pubsub-test'],
+        apiBaseUrl: 'http://${server.address.host}:${server.port}/v1',
+      );
+
+      final List<PulledPubSubMessage> pulled = await client.pull(
+        subscriptionName: 'projects/p/subscriptions/s1',
+        maxMessages: 2,
+      );
+      expect(pulled, hasLength(1));
+      expect(pulled.single.messageId, 'm-1');
+      expect(utf8.decode(pulled.single.data), 'hello');
+      expect(pulled.single.attributes, <String, String>{'a': '1'});
+      expect(pulled.single.orderingKey, 'o-1');
+
+      await client.acknowledge(
+        subscriptionName: 'projects/p/subscriptions/s1',
+        ackIds: <String>['ack-1'],
+      );
+      await handled.future.timeout(const Duration(seconds: 2));
     });
   });
 
