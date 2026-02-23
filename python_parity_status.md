@@ -440,6 +440,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] BigQuery toolset parity (`bigquery_toolset.dart`) with metadata/query/data-insights tool registration, filter support, and `GoogleTool` credentials/settings bridge
 - [x] BigQuery package-barrel parity (`bigquery.dart`) and end-to-end regression coverage (`test/bigquery_parity_test.dart`)
 
+## Newly Added APIHub Tooling Parity (this iteration)
+
+- [x] APIHub client parity surface (`apihub_tool/clients/apihub_client.dart`) with API/UI resource-name parsing, api/version/spec resolution flow, and base64 spec content decoding
+- [x] Secret Manager client parity surface (`apihub_tool/clients/secret_client.dart`) with service-account JSON validation and injectable secret fetcher contract
+- [x] APIHub toolset parity (`apihub_tool/apihub_toolset.dart`) with lazy/eager spec loading, OpenAPI toolset generation, title/description derivation, filter propagation, and auth-config exposure
+- [x] APIHub package barrel parity (`apihub_tool/apihub_tool.dart`, `clients/clients.dart`) and public export wiring in `adk_dart.dart`
+- [x] end-to-end regression coverage (`test/apihub_tool_parity_test.dart`)
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)

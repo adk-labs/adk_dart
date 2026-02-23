@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 364
+- done: 369
 - partial: 0
-- missing: 122
+- missing: 117
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -366,11 +366,11 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/agent_simulator/tool_connection_map.py` | `lib/src/tools/agent_simulator/tool_connection_map.dart` | `done` | Added stateful-parameter mapping models and JSON serializers. |
 | `ref/adk-python/src/google/adk/tools/agent_tool.py` | `lib/src/tools/agent_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/api_registry.py` | `lib/src/tools/api_registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/apihub_tool/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/apihub_tool/apihub_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/apihub_tool/clients/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/apihub_tool/clients/apihub_client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/apihub_tool/clients/secret_client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/apihub_tool/__init__.py` | `lib/src/tools/apihub_tool/apihub_tool.dart` | `done` | Added package barrel exporting APIHub toolset and client surfaces. |
+| `ref/adk-python/src/google/adk/tools/apihub_tool/apihub_toolset.py` | `lib/src/tools/apihub_tool/apihub_toolset.dart` | `done` | Added APIHub-backed OpenAPI toolset with lazy/eager spec loading, title/description derivation, auth config surface, and tool filtering parity. |
+| `ref/adk-python/src/google/adk/tools/apihub_tool/clients/__init__.py` | `lib/src/tools/apihub_tool/clients/clients.dart` | `done` | Added APIHub client package barrel exports. |
+| `ref/adk-python/src/google/adk/tools/apihub_tool/clients/apihub_client.py` | `lib/src/tools/apihub_tool/clients/apihub_client.dart` | `done` | Added APIHub REST client with resource-name extraction, API/version/spec resolution flow, base64 spec decoding, and injectable request/token providers. |
+| `ref/adk-python/src/google/adk/tools/apihub_tool/clients/secret_client.py` | `lib/src/tools/apihub_tool/clients/secret_client.dart` | `done` | Added Secret Manager client facade with service-account JSON validation and injectable secret fetcher parity surface. |
 | `ref/adk-python/src/google/adk/tools/application_integration_tool/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/application_integration_tool/application_integration_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/tools/application_integration_tool/clients/connections_client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
