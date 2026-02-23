@@ -64,11 +64,15 @@ class AuthHandler {
 
     final AuthCredential? raw = authConfig.rawAuthCredential;
     if (raw == null) {
-      return authConfig.copyWith();
+      throw ArgumentError(
+        'Auth scheme `${authConfig.authScheme}` requires auth_credential.',
+      );
     }
     final OAuth2Auth? oauth2 = raw.oauth2;
     if (oauth2 == null) {
-      return authConfig.copyWith();
+      throw ArgumentError(
+        'Auth scheme `${authConfig.authScheme}` requires oauth2 in auth_credential.',
+      );
     }
 
     if (oauth2.authUri?.isNotEmpty == true) {
@@ -79,7 +83,10 @@ class AuthHandler {
         (oauth2.clientId?.isNotEmpty ?? false) &&
         (oauth2.clientSecret?.isNotEmpty ?? false);
     if (!hasClientCredentials) {
-      return authConfig.copyWith();
+      throw ArgumentError(
+        'Auth scheme `${authConfig.authScheme}` requires both client_id and '
+        'client_secret in auth_credential.oauth2.',
+      );
     }
 
     // Dart runtime currently does not synthesize provider-specific auth URI.

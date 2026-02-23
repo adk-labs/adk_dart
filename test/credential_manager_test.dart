@@ -57,7 +57,13 @@ void main() {
   group('CredentialManager', () {
     test('requestCredential records auth config in event actions', () async {
       final Context context = _newContext(functionCallId: 'call_1');
-      final AuthConfig authConfig = AuthConfig(authScheme: 'oauth2');
+      final AuthConfig authConfig = AuthConfig(
+        authScheme: 'oauth2',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(authUri: 'https://auth.example.com'),
+        ),
+      );
       final CredentialManager manager = CredentialManager(
         authConfig: authConfig,
       );
@@ -225,6 +231,22 @@ void main() {
       await expectLater(
         manager.getAuthCredential(context),
         _throwsArgumentMessage('rawAuthCredential is required'),
+      );
+    });
+
+    test('throws when oauth credential type has no oauth2 payload', () async {
+      final Context context = _newContext();
+      final AuthConfig authConfig = AuthConfig(
+        authScheme: 'oauth2',
+        rawAuthCredential: AuthCredential(authType: AuthCredentialType.oauth2),
+      );
+      final CredentialManager manager = CredentialManager(
+        authConfig: authConfig,
+      );
+
+      await expectLater(
+        manager.getAuthCredential(context),
+        _throwsArgumentMessage('rawAuthCredential.oauth2 is required'),
       );
     });
   });

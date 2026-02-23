@@ -28,6 +28,77 @@ void main() {
   });
 
   test(
+    'AuthHandler generateAuthRequest throws for oauth scheme without raw auth credential',
+    () {
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2_authorization_code',
+        credentialKey: 'cred_missing',
+      );
+      final AuthHandler handler = AuthHandler(authConfig: config);
+
+      expect(
+        handler.generateAuthRequest,
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => '${error.message}',
+            'message',
+            contains('requires auth_credential'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'AuthHandler generateAuthRequest throws when oauth2 payload is missing',
+    () {
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2_authorization_code',
+        credentialKey: 'cred_missing_oauth2',
+        rawAuthCredential: AuthCredential(authType: AuthCredentialType.oauth2),
+      );
+      final AuthHandler handler = AuthHandler(authConfig: config);
+
+      expect(
+        handler.generateAuthRequest,
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => '${error.message}',
+            'message',
+            contains('requires oauth2 in auth_credential'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'AuthHandler generateAuthRequest throws when auth URI and client credentials are both missing',
+    () {
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2_authorization_code',
+        credentialKey: 'cred_missing_client',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(),
+        ),
+      );
+      final AuthHandler handler = AuthHandler(authConfig: config);
+
+      expect(
+        handler.generateAuthRequest,
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => '${error.message}',
+            'message',
+            contains('requires both client_id and client_secret'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'AuthHandler parseAndStoreAuthResponse stores temp and auth keys',
     () async {
       final Session session = Session(id: 's1', appName: 'app', userId: 'u1');

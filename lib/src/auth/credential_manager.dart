@@ -226,6 +226,20 @@ class CredentialManager {
         'rawAuthCredential is required for auth scheme `${_authConfig.authScheme}`.',
       );
     }
+
+    final AuthCredential? raw = _authConfig.rawAuthCredential;
+    if (raw == null) {
+      return;
+    }
+    if (raw.authType == AuthCredentialType.oauth2 ||
+        raw.authType == AuthCredentialType.openIdConnect) {
+      if (raw.oauth2 == null) {
+        throw ArgumentError(
+          'authConfig.rawAuthCredential.oauth2 is required for credential '
+          'type `${raw.authType}`.',
+        );
+      }
+    }
   }
 }
 

@@ -150,6 +150,7 @@ void main() {
           authScheme: 'oauth2',
           rawAuthCredential: AuthCredential(
             authType: AuthCredentialType.oauth2,
+            oauth2: OAuth2Auth(authUri: 'https://auth.example.com'),
           ),
         );
         final _EchoAuthTool tool = _EchoAuthTool(authConfig: authConfig);
@@ -175,6 +176,7 @@ void main() {
           authScheme: 'oauth2',
           rawAuthCredential: AuthCredential(
             authType: AuthCredentialType.oauth2,
+            oauth2: OAuth2Auth(),
           ),
         );
         final Context context = await _newToolContext();
