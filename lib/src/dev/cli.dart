@@ -15,6 +15,8 @@ Commands:
   create <project_dir>  Create a new ADK Dart project scaffold.
   run [project_dir]     Run an interactive CLI chat session.
   web [project_dir]     Start the ADK dev web server.
+  api_server [project_dir]
+                       Start the ADK API server (alias of `web`).
 
 Create options:
       --app-name        Logical app name (default: directory name)
@@ -95,6 +97,7 @@ ParsedAdkCommand parseAdkCliArgs(List<String> args) {
     case 'run':
       return _parseRunCommand(commandArgs);
     case 'web':
+    case 'api_server':
       return _parseWebCommand(commandArgs);
     default:
       throw CliUsageError('Unknown command: $command');

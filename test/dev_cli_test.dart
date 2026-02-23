@@ -36,6 +36,17 @@ void main() {
       expect(command.host?.address, InternetAddress.loopbackIPv4.address);
     });
 
+    test('parses api_server command as web alias', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'api_server',
+        '--port',
+        '8100',
+      ]);
+
+      expect(command.type, AdkCommandType.web);
+      expect(command.port, 8100);
+    });
+
     test('parses web command with explicit port', () {
       final ParsedAdkCommand command = parseAdkCliArgs(<String>[
         'web',

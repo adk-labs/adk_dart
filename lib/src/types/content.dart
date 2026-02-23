@@ -1,5 +1,51 @@
 typedef JsonMap = Map<String, dynamic>;
 
+class InlineData {
+  InlineData({required this.mimeType, required this.data, this.displayName});
+
+  String mimeType;
+  List<int> data;
+  String? displayName;
+
+  InlineData copyWith({
+    String? mimeType,
+    List<int>? data,
+    Object? displayName = _sentinel,
+  }) {
+    return InlineData(
+      mimeType: mimeType ?? this.mimeType,
+      data: data ?? List<int>.from(this.data),
+      displayName: identical(displayName, _sentinel)
+          ? this.displayName
+          : displayName as String?,
+    );
+  }
+}
+
+class FileData {
+  FileData({required this.fileUri, this.mimeType, this.displayName});
+
+  String fileUri;
+  String? mimeType;
+  String? displayName;
+
+  FileData copyWith({
+    String? fileUri,
+    Object? mimeType = _sentinel,
+    Object? displayName = _sentinel,
+  }) {
+    return FileData(
+      fileUri: fileUri ?? this.fileUri,
+      mimeType: identical(mimeType, _sentinel)
+          ? this.mimeType
+          : mimeType as String?,
+      displayName: identical(displayName, _sentinel)
+          ? this.displayName
+          : displayName as String?,
+    );
+  }
+}
+
 class FunctionCall {
   FunctionCall({required this.name, JsonMap? args, this.id})
     : args = args ?? <String, dynamic>{};
@@ -44,6 +90,9 @@ class Part {
     this.thought = false,
     this.functionCall,
     this.functionResponse,
+    this.inlineData,
+    this.fileData,
+    this.executableCode,
     this.codeExecutionResult,
   });
 
@@ -75,10 +124,41 @@ class Part {
     );
   }
 
+  factory Part.fromInlineData({
+    required String mimeType,
+    required List<int> data,
+    String? displayName,
+  }) {
+    return Part(
+      inlineData: InlineData(
+        mimeType: mimeType,
+        data: List<int>.from(data),
+        displayName: displayName,
+      ),
+    );
+  }
+
+  factory Part.fromFileData({
+    required String fileUri,
+    String? mimeType,
+    String? displayName,
+  }) {
+    return Part(
+      fileData: FileData(
+        fileUri: fileUri,
+        mimeType: mimeType,
+        displayName: displayName,
+      ),
+    );
+  }
+
   String? text;
   bool thought;
   FunctionCall? functionCall;
   FunctionResponse? functionResponse;
+  InlineData? inlineData;
+  FileData? fileData;
+  Object? executableCode;
   Object? codeExecutionResult;
 
   bool get hasText => text != null && text!.isNotEmpty;
@@ -88,6 +168,9 @@ class Part {
     bool? thought,
     Object? functionCall = _sentinel,
     Object? functionResponse = _sentinel,
+    Object? inlineData = _sentinel,
+    Object? fileData = _sentinel,
+    Object? executableCode = _sentinel,
     Object? codeExecutionResult = _sentinel,
   }) {
     return Part(
@@ -99,6 +182,15 @@ class Part {
       functionResponse: identical(functionResponse, _sentinel)
           ? this.functionResponse?.copyWith()
           : functionResponse as FunctionResponse?,
+      inlineData: identical(inlineData, _sentinel)
+          ? this.inlineData?.copyWith()
+          : inlineData as InlineData?,
+      fileData: identical(fileData, _sentinel)
+          ? this.fileData?.copyWith()
+          : fileData as FileData?,
+      executableCode: identical(executableCode, _sentinel)
+          ? this.executableCode
+          : executableCode,
       codeExecutionResult: identical(codeExecutionResult, _sentinel)
           ? this.codeExecutionResult
           : codeExecutionResult,
