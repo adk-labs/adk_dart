@@ -108,8 +108,10 @@ class LoopAgent extends BaseAgent {
   }
 
   @override
-  Stream<Event> runLiveImpl(InvocationContext context) {
-    throw UnimplementedError('runLiveImpl is not supported for LoopAgent.');
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    await for (final Event event in runAsyncImpl(context)) {
+      yield event;
+    }
   }
 
   (int, int) _getStartState(LoopAgentState? state) {

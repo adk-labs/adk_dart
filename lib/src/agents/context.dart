@@ -1,4 +1,9 @@
 import '../events/event_actions.dart';
+import '../events/event.dart';
+import '../auth/auth_handler.dart';
+import '../auth/auth_tool.dart';
+import '../memory/base_memory_service.dart';
+import '../memory/memory_entry.dart';
 import '../sessions/state.dart';
 import '../tools/tool_confirmation.dart';
 import '../types/content.dart';
@@ -7,17 +12,31 @@ import 'readonly_context.dart';
 import '../artifacts/base_artifact_service.dart';
 
 class Context extends ReadonlyContext {
-  Context(
+  factory Context(
     InvocationContext invocationContext, {
     EventActions? eventActions,
+    String? functionCallId,
+    ToolConfirmation? toolConfirmation,
+  }) {
+    final EventActions resolvedEventActions = eventActions ?? EventActions();
+    return Context._internal(
+      invocationContext,
+      resolvedEventActions,
+      functionCallId,
+      toolConfirmation,
+    );
+  }
+
+  Context._internal(
+    InvocationContext invocationContext,
+    this._eventActions,
     this.functionCallId,
     this.toolConfirmation,
-  }) : _eventActions = eventActions ?? EventActions(),
-       _state = State(
-         value: invocationContext.session.state,
-         delta: (eventActions ?? EventActions()).stateDelta,
-       ),
-       super(invocationContext);
+  ) : _state = State(
+        value: invocationContext.session.state,
+        delta: _eventActions.stateDelta,
+      ),
+      super(invocationContext);
 
   final EventActions _eventActions;
   final State _state;
@@ -63,6 +82,32 @@ class Context extends ReadonlyContext {
     return invocationContext.listArtifactVersions(filename: filename);
   }
 
+  Future<SearchMemoryResponse> searchMemory(String query) {
+    return invocationContext.searchMemory(query: query);
+  }
+
+  Future<void> addEventsToMemory({
+    required List<Event> events,
+    String? sessionId,
+    Map<String, Object?>? customMetadata,
+  }) {
+    return invocationContext.addEventsToMemory(
+      events: events,
+      sessionId: sessionId,
+      customMetadata: customMetadata,
+    );
+  }
+
+  Future<void> addMemory({
+    required List<MemoryEntry> memories,
+    Map<String, Object?>? customMetadata,
+  }) {
+    return invocationContext.addMemory(
+      memories: memories,
+      customMetadata: customMetadata,
+    );
+  }
+
   Future<void> deleteArtifact(String filename) {
     return invocationContext.deleteArtifact(filename: filename);
   }
@@ -87,6 +132,12 @@ class Context extends ReadonlyContext {
       throw StateError(
         'requestCredential requires functionCallId. This method can only be used in a tool context.',
       );
+    }
+    if (authConfig is AuthConfig) {
+      _eventActions.requestedAuthConfigs[callId] = AuthHandler(
+        authConfig: authConfig,
+      ).generateAuthRequest();
+      return;
     }
     _eventActions.requestedAuthConfigs[callId] = authConfig;
   }

@@ -7,7 +7,12 @@ import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../agents/readonly_context.dart';
 import '../../agents/run_config.dart';
+import '../../auth/auth_credential.dart';
+import '../../auth/auth_handler.dart';
+import '../../auth/auth_tool.dart';
+import '../../auth/credential_manager.dart';
 import '../../events/event.dart';
+import '../../events/event_actions.dart';
 import '../../models/base_llm.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
@@ -17,6 +22,7 @@ import '../../tools/tool_context.dart';
 import '../../tools/transfer_to_agent_tool.dart';
 import '../../types/content.dart';
 import 'functions.dart' as flow_functions;
+import 'output_schema_processor.dart' as output_schema;
 
 abstract class BaseLlmRequestProcessor {
   Stream<Event> runAsync(InvocationContext context, LlmRequest request);
@@ -35,8 +41,120 @@ class BaseLlmFlow {
       <BaseLlmResponseProcessor>[];
 
   Stream<Event> runLive(InvocationContext context) async* {
-    throw UnimplementedError(
-      'Live flow is not implemented yet in adk_dart. Use runAsync().',
+    final liveQueue = context.liveRequestQueue;
+    if (liveQueue == null) {
+      await for (final Event event in runAsync(context)) {
+        yield event;
+      }
+      return;
+    }
+
+    while (true) {
+      final liveRequest = await liveQueue.get();
+      if (liveRequest.close) {
+        break;
+      }
+
+      if (liveRequest.activityStart) {
+        yield _buildLiveSignalEvent(context, 'live_activity_start');
+        continue;
+      }
+      if (liveRequest.activityEnd) {
+        yield _buildLiveSignalEvent(context, 'live_activity_end');
+        continue;
+      }
+      if (liveRequest.blob != null) {
+        final Event blobEvent = await _handleLiveBlob(
+          context,
+          liveRequest.blob!,
+        );
+        yield blobEvent;
+        continue;
+      }
+
+      final Content? content = liveRequest.content;
+      if (content == null || content.parts.isEmpty) {
+        continue;
+      }
+
+      content.role ??= 'user';
+      if (content.role!.isEmpty) {
+        content.role = 'user';
+      }
+
+      await _appendLiveUserContent(context, content);
+
+      final InvocationContext turnContext = context.copyWith(
+        userContent: content.copyWith(),
+      );
+      await for (final Event event in runAsync(turnContext)) {
+        yield event;
+      }
+
+      if (turnContext.endInvocation) {
+        break;
+      }
+    }
+  }
+
+  Event _buildLiveSignalEvent(InvocationContext context, String signal) {
+    return Event(
+      invocationId: context.invocationId,
+      author: 'user',
+      branch: context.branch,
+      content: Content(role: 'user', parts: <Part>[Part.text(signal)]),
+    );
+  }
+
+  Future<Event> _handleLiveBlob(InvocationContext context, Object blob) async {
+    final String blobText = blob is List<int>
+        ? '[binary:${blob.length}]'
+        : '$blob';
+    final bool saveBlob = context.runConfig?.saveLiveBlob ?? false;
+    if (!saveBlob || context.artifactService == null) {
+      return Event(
+        invocationId: context.invocationId,
+        author: 'user',
+        branch: context.branch,
+        content: Content(
+          role: 'user',
+          parts: <Part>[Part.text('live_blob:$blobText')],
+        ),
+      );
+    }
+
+    final String filename =
+        '_adk_live/live_blob_${DateTime.now().microsecondsSinceEpoch}.txt';
+    final int version = await context.saveArtifact(
+      filename: filename,
+      artifact: Part.text(blobText),
+    );
+
+    return Event(
+      invocationId: context.invocationId,
+      author: 'user',
+      branch: context.branch,
+      content: Content(
+        role: 'user',
+        parts: <Part>[Part.text('Saved live blob as artifact: $filename')],
+      ),
+      actions: EventActions(artifactDelta: <String, int>{filename: version}),
+    );
+  }
+
+  Future<void> _appendLiveUserContent(
+    InvocationContext context,
+    Content content,
+  ) async {
+    final Event event = Event(
+      invocationId: context.invocationId,
+      author: 'user',
+      branch: context.branch,
+      content: content.copyWith(),
+    );
+    await context.sessionService.appendEvent(
+      session: context.session,
+      event: event,
     );
   }
 
@@ -132,8 +250,26 @@ class BaseLlmFlow {
       return;
     }
 
+    await for (final Event event in _resolveToolsetAuth(context)) {
+      yield event;
+    }
+
+    if (context.endInvocation) {
+      return;
+    }
+
     if (request.contents.isEmpty) {
-      for (final Event event in context.session.events) {
+      final LlmAgent agent = context.agent as LlmAgent;
+      final List<Event> sourceEvents = switch (agent.includeContents) {
+        'none' => const <Event>[],
+        'current_turn' => context.getEvents(
+          currentInvocation: true,
+          currentBranch: true,
+        ),
+        _ => context.getEvents(currentBranch: true),
+      };
+
+      for (final Event event in sourceEvents) {
         final Content? content = event.content;
         if (content != null) {
           request.contents.add(content.copyWith());
@@ -142,6 +278,57 @@ class BaseLlmFlow {
     }
 
     await _processAgentTools(context, request);
+  }
+
+  Stream<Event> _resolveToolsetAuth(InvocationContext context) async* {
+    final BaseAgent current = context.agent;
+    if (current is! LlmAgent || current.tools.isEmpty) {
+      return;
+    }
+
+    final Map<String, AuthConfig> pendingAuthRequests = <String, AuthConfig>{};
+    final Context callbackContext = Context(context);
+
+    for (final Object toolUnion in current.tools) {
+      if (toolUnion is! BaseToolset) {
+        continue;
+      }
+
+      final AuthConfig? authConfig = toolUnion.getAuthConfig();
+      if (authConfig == null) {
+        continue;
+      }
+
+      try {
+        final AuthCredential? credential = await CredentialManager(
+          authConfig: authConfig,
+        ).getAuthCredential(callbackContext);
+        if (credential != null) {
+          authConfig.exchangedAuthCredential = credential;
+          continue;
+        }
+      } catch (_) {
+        // Keep toolset execution tolerant to auth validation errors.
+        continue;
+      }
+
+      final String toolsetCredentialId =
+          '$toolsetAuthCredentialIdPrefix${toolUnion.runtimeType}';
+      pendingAuthRequests[toolsetCredentialId] = AuthHandler(
+        authConfig: authConfig,
+      ).generateAuthRequest();
+    }
+
+    if (pendingAuthRequests.isEmpty) {
+      return;
+    }
+
+    yield flow_functions.buildAuthRequestEvent(
+      context,
+      pendingAuthRequests,
+      author: current.name,
+    );
+    context.endInvocation = true;
   }
 
   Future<void> _processAgentTools(
@@ -360,6 +547,13 @@ If neither you nor the other agents are best for the question, transfer to your 
     }
 
     yield functionResponseEvent;
+
+    final String? jsonResponse = output_schema.getStructuredModelResponse(
+      functionResponseEvent,
+    );
+    if (jsonResponse != null) {
+      yield output_schema.createFinalModelResponseEvent(context, jsonResponse);
+    }
 
     final String? transferToAgent =
         functionResponseEvent.actions.transferToAgent;

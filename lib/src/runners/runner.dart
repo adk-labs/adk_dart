@@ -6,6 +6,7 @@ import '../agents/live_request_queue.dart';
 import '../agents/llm_agent.dart';
 import '../agents/run_config.dart';
 import '../apps/app.dart';
+import '../apps/compaction.dart' as app_compaction;
 import '../artifacts/base_artifact_service.dart';
 import '../artifacts/in_memory_artifact_service.dart';
 import '../events/event.dart';
@@ -18,6 +19,28 @@ import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_toolset.dart';
 import '../types/content.dart';
+
+bool _isToolCallOrResponse(Event event) {
+  return event.getFunctionCalls().isNotEmpty ||
+      event.getFunctionResponses().isNotEmpty;
+}
+
+bool _isTranscription(Event event) {
+  return event.inputTranscription != null || event.outputTranscription != null;
+}
+
+bool _hasNonEmptyTranscriptionText(Object? transcription) {
+  if (transcription is Map) {
+    final Object? text = transcription['text'];
+    if (text is String && text.trim().isNotEmpty) {
+      return true;
+    }
+  }
+  if (transcription is String && transcription.trim().isNotEmpty) {
+    return true;
+  }
+  return false;
+}
 
 class Runner {
   Runner({
@@ -183,6 +206,15 @@ class Runner {
     )) {
       yield event;
     }
+
+    if (app != null && app!.eventsCompactionConfig != null) {
+      await app_compaction.runCompactionForSlidingWindow(
+        app: app!,
+        session: session,
+        sessionService: sessionService,
+        skipTokenCompaction: context.tokenCompactionChecked,
+      );
+    }
   }
 
   Future<void> rewindAsync({
@@ -344,6 +376,17 @@ class Runner {
     RunConfig? runConfig,
   }) async* {
     final RunConfig config = runConfig ?? RunConfig();
+    config.responseModalities ??= <String>['AUDIO'];
+    if (agent.subAgents.isNotEmpty) {
+      if (config.responseModalities!.contains('AUDIO') &&
+          config.outputAudioTranscription == null) {
+        config.outputAudioTranscription = <String, Object?>{};
+      }
+      if (config.inputAudioTranscription == null) {
+        config.inputAudioTranscription = <String, Object?>{};
+      }
+    }
+
     if (session == null) {
       if (userId == null || sessionId == null) {
         throw ArgumentError(
@@ -624,10 +667,49 @@ class Runner {
       return;
     }
 
+    final List<Event> bufferedEvents = <Event>[];
+    bool isTranscribing = false;
+
     await for (final Event event in execute(invocationContext)) {
       _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
 
-      if (event.partial != true && _shouldAppendEvent(event, isLiveCall)) {
+      if (isLiveCall) {
+        if (event.partial == true && _isTranscription(event)) {
+          isTranscribing = true;
+        }
+
+        if (isTranscribing &&
+            _isToolCallOrResponse(event) &&
+            event.partial != true) {
+          bufferedEvents.add(event);
+          continue;
+        }
+
+        if (event.partial != true) {
+          if (_isTranscription(event) &&
+              (_hasNonEmptyTranscriptionText(event.inputTranscription) ||
+                  _hasNonEmptyTranscriptionText(event.outputTranscription))) {
+            isTranscribing = false;
+            if (_shouldAppendEvent(event, isLiveCall)) {
+              await sessionService.appendEvent(session: session, event: event);
+            }
+
+            for (final Event buffered in bufferedEvents) {
+              if (_shouldAppendEvent(buffered, isLiveCall)) {
+                await sessionService.appendEvent(
+                  session: session,
+                  event: buffered,
+                );
+              }
+              yield buffered;
+            }
+            bufferedEvents.clear();
+          } else if (_shouldAppendEvent(event, isLiveCall)) {
+            await sessionService.appendEvent(session: session, event: event);
+          }
+        }
+      } else if (event.partial != true &&
+          _shouldAppendEvent(event, isLiveCall)) {
         await sessionService.appendEvent(session: session, event: event);
       }
 

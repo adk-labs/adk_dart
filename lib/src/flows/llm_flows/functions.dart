@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
+import '../../auth/auth_tool.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../tools/base_tool.dart';
@@ -67,31 +68,55 @@ Event? generateAuthEvent(
     return null;
   }
 
-  final List<Part> parts = <Part>[];
-  final Set<String> longRunningIds = <String>{};
+  final Map<String, AuthConfig> authRequests = <String, AuthConfig>{};
   functionResponseEvent.actions.requestedAuthConfigs.forEach((
     String functionCallId,
     Object authConfig,
   ) {
+    if (authConfig is AuthConfig) {
+      authRequests[functionCallId] = authConfig;
+    }
+  });
+  if (authRequests.isEmpty) {
+    return null;
+  }
+
+  return buildAuthRequestEvent(
+    invocationContext,
+    authRequests,
+    role: functionResponseEvent.content?.role,
+  );
+}
+
+Event buildAuthRequestEvent(
+  InvocationContext invocationContext,
+  Map<String, AuthConfig> authRequests, {
+  String? author,
+  String? role,
+}) {
+  final List<Part> parts = <Part>[];
+  final Set<String> longRunningIds = <String>{};
+
+  authRequests.forEach((String functionCallId, AuthConfig authConfig) {
     final String id = generateClientFunctionCallId();
     longRunningIds.add(id);
     parts.add(
       Part.fromFunctionCall(
         name: requestEucFunctionCallName,
         id: id,
-        args: <String, dynamic>{
-          'function_call_id': functionCallId,
-          'auth_config': authConfig,
-        },
+        args: AuthToolArguments(
+          functionCallId: functionCallId,
+          authConfig: authConfig,
+        ).toJson(),
       ),
     );
   });
 
   return Event(
     invocationId: invocationContext.invocationId,
-    author: invocationContext.agent.name,
+    author: author ?? invocationContext.agent.name,
     branch: invocationContext.branch,
-    content: Content(role: 'user', parts: parts),
+    content: Content(role: role, parts: parts),
     longRunningToolIds: longRunningIds,
   );
 }

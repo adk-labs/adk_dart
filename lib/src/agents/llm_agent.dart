@@ -289,8 +289,9 @@ class LlmAgent extends BaseAgent {
         disallowTransferToPeers &&
         subAgents.isEmpty) {
       return SingleFlow();
+    } else {
+      return AutoFlow();
     }
-    return AutoFlow();
   }
 
   BaseAgent? _getSubagentToResume(InvocationContext context) {

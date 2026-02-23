@@ -112,10 +112,11 @@ abstract class BaseAgent {
 
   Stream<Event> runAsyncImpl(InvocationContext context);
 
-  Stream<Event> runLiveImpl(InvocationContext context) {
-    throw UnimplementedError(
-      'runLiveImpl for ${runtimeType.toString()} is not implemented.',
-    );
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    // Default live behavior falls back to non-live execution.
+    await for (final Event event in runAsyncImpl(context)) {
+      yield event;
+    }
   }
 
   BaseAgent get rootAgent {

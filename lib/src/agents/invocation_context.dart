@@ -1,6 +1,8 @@
 import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
 import '../events/event.dart';
+import '../memory/base_memory_service.dart';
+import '../memory/memory_entry.dart';
 import '../plugins/plugin_manager.dart';
 import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
@@ -127,6 +129,48 @@ class InvocationContext {
       sessionId: sessionId ?? session.id,
       filename: filename,
       version: version,
+    );
+  }
+
+  Future<SearchMemoryResponse> searchMemory({required String query}) async {
+    final Object? service = memoryService;
+    if (service is! BaseMemoryService) {
+      throw StateError('Memory service is not initialized.');
+    }
+    return service.searchMemory(appName: appName, userId: userId, query: query);
+  }
+
+  Future<void> addEventsToMemory({
+    required List<Event> events,
+    String? sessionId,
+    Map<String, Object?>? customMetadata,
+  }) async {
+    final Object? service = memoryService;
+    if (service is! BaseMemoryService) {
+      throw StateError('Memory service is not initialized.');
+    }
+    await service.addEventsToMemory(
+      appName: appName,
+      userId: userId,
+      events: events,
+      sessionId: sessionId ?? session.id,
+      customMetadata: customMetadata,
+    );
+  }
+
+  Future<void> addMemory({
+    required List<MemoryEntry> memories,
+    Map<String, Object?>? customMetadata,
+  }) async {
+    final Object? service = memoryService;
+    if (service is! BaseMemoryService) {
+      throw StateError('Memory service is not initialized.');
+    }
+    await service.addMemory(
+      appName: appName,
+      userId: userId,
+      memories: memories,
+      customMetadata: customMetadata,
     );
   }
 
