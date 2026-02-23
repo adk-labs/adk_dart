@@ -7,6 +7,7 @@ import 'eval_metrics.dart';
 import 'eval_set.dart';
 import 'evaluation_generator.dart';
 import 'metric_evaluator_registry.dart';
+import 'simulation/user_simulator_provider.dart';
 
 class AgentMetricAggregate {
   AgentMetricAggregate({
@@ -56,6 +57,9 @@ class AgentEvaluator {
     final List<EvalMetricSpec> evalMetrics = getEvalMetricsFromConfig(
       effectiveConfig,
     );
+    final UserSimulatorProvider userSimulatorProvider = UserSimulatorProvider(
+      userSimulatorConfig: effectiveConfig.userSimulatorConfig,
+    );
     final MetricEvaluatorRegistry registry =
         metricRegistry ?? defaultMetricEvaluatorRegistry;
 
@@ -64,6 +68,7 @@ class AgentEvaluator {
           evalSet: evalSet,
           rootAgent: rootAgent,
           repeatNum: repeatNum,
+          userSimulatorProvider: userSimulatorProvider,
         );
 
     final List<AgentEvalCaseSummary> summaries = <AgentEvalCaseSummary>[];

@@ -3,8 +3,8 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 306
-- partial: 13
+- done: 308
+- partial: 11
 - missing: 167
 
 | python_file | dart_file | status | parity_notes |
@@ -207,13 +207,13 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/eval_set_results_manager.py` | `lib/src/evaluation/eval_set_results_manager.dart` | `done` | Added eval set result manager contract and local persistence implementation. |
 | `ref/adk-python/src/google/adk/evaluation/eval_sets_manager.py` | `lib/src/evaluation/eval_sets_manager.dart` | `done` | Added eval sets manager contract with in-memory/local implementations. |
 | `ref/adk-python/src/google/adk/evaluation/evaluation_constants.py` | `lib/src/evaluation/evaluation_constants.dart` | `done` | Added evaluation file key constants parity. |
-| `ref/adk-python/src/google/adk/evaluation/evaluation_generator.py` | `lib/src/evaluation/evaluation_generator.dart` | `partial` | Added runner-based response generation and event-to-invocation conversion; full user-simulator provider integration is still incomplete. |
+| `ref/adk-python/src/google/adk/evaluation/evaluation_generator.py` | `lib/src/evaluation/evaluation_generator.dart` | `done` | Ported simulator-driven inference loop with `UserSimulatorProvider` routing, per-invocation user-event synthesis, request-intercepter-based app-detail extraction, and parity tests for simulator/provider and app-details capture. |
 | `ref/adk-python/src/google/adk/evaluation/evaluator.py` | `lib/src/evaluation/evaluator.dart` | `done` | Added evaluator interface with per-invocation and overall evaluation result models. |
 | `ref/adk-python/src/google/adk/evaluation/final_response_match_v1.py` | `lib/src/evaluation/final_response_match_v1.dart` | `done` | Added Rouge-style unigram overlap evaluator and per-invocation aggregation. |
 | `ref/adk-python/src/google/adk/evaluation/final_response_match_v2.py` | `lib/src/evaluation/final_response_match_v2.dart` | `done` | Ported LLM-as-judge scoring path with prompt formatting, critique parsing, per-invocation majority vote aggregation, and parity tests for label parsing + sampling behavior. |
 | `ref/adk-python/src/google/adk/evaluation/gcs_eval_set_results_manager.py` | `lib/src/evaluation/gcs_eval_set_results_manager.dart` | `done` | Added bucket-backed eval-set-results manager with pluggable GCS store adapter and parity CRUD tests. |
 | `ref/adk-python/src/google/adk/evaluation/gcs_eval_sets_manager.py` | `lib/src/evaluation/gcs_eval_sets_manager.dart` | `done` | Added bucket-backed eval-set manager with id validation, eval-case CRUD helpers, and parity manager tests. |
-| `ref/adk-python/src/google/adk/evaluation/hallucinations_v1.py` | `lib/src/evaluation/hallucinations_v1.dart` | `partial` | Added criterion parsing and grounding scorer; full two-stage prompt+judge workflow remains to be aligned. |
+| `ref/adk-python/src/google/adk/evaluation/hallucinations_v1.py` | `lib/src/evaluation/hallucinations_v1.dart` | `done` | Ported two-stage LLM workflow (sentence segmentation + sentence validation), context construction from app/tool/intermediate events, label parsing/aggregation, and parity tests for intermediate-step/context behavior. |
 | `ref/adk-python/src/google/adk/evaluation/in_memory_eval_sets_manager.py` | `lib/src/evaluation/in_memory_eval_sets_manager.dart` | `done` | Added in-memory CRUD manager and parity tests. |
 | `ref/adk-python/src/google/adk/evaluation/llm_as_judge.py` | `lib/src/evaluation/llm_as_judge.dart` | `done` | Added registry-backed judge model resolution/invocation with default retry options, while preserving pluggable invoker support; parity tests cover direct `LLMRegistry` judge execution. |
 | `ref/adk-python/src/google/adk/evaluation/llm_as_judge_utils.py` | `lib/src/evaluation/llm_as_judge_utils.dart` | `done` | Added text/status/rubric/tool serialization helpers for judge-style evaluators. |

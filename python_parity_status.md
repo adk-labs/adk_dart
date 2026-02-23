@@ -348,7 +348,8 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] metric metadata/registry stack (`metric_info_providers`, `metric_evaluator_registry`)
 - [x] custom metric execution surface (`custom_metric_evaluator` function registry)
 - [x] model request interception plugin parity (`request_intercepter_plugin`)
-- [x] response generation pipeline baseline (`evaluation_generator`) with runner event→invocation conversion
+- [x] response generation pipeline parity (`evaluation_generator`) with user-simulator provider routing, runner event→invocation conversion, and request-intercepter app-details extraction
+- [x] hallucination evaluator parity (`hallucinations_v1`) with two-stage segmenter/validator LLM workflow and context-aware sentence scoring
 - [x] eval-set orchestrator baseline (`agent_evaluator`) with metric aggregation over repeated runs
 - [x] judge evaluator base contract (`llm_as_judge`) with registry-backed judge model invocation, retry defaults, and pluggable auto-rater invoker
 - [x] simulation persona baseline (`user_simulator_personas`, `pre_built_personas`, `per_turn_user_simulator_quality_v1`) with LLM-graded per-turn scoring + stop-signal verification
@@ -373,7 +374,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [ ] code executors parity
 - [ ] optimization/features parity
 - [ ] telemetry parity with OTEL semconv mapping
-- [ ] full evaluation suite parity (full hallucination pipeline and evaluation-generator user-simulator provider integration)
+- [ ] full evaluation suite parity (`agent_evaluator` module-loading entrypoints and full legacy dataset migration utility surface)
 - [ ] A2A protocol parity
 - [ ] full skills framework parity (integration with toolset/runtime wiring)
 - [ ] platform/dependencies/utils parity modules

@@ -1,5 +1,6 @@
 import '../agents/base_agent.dart';
 import '../events/event.dart';
+import '../models/llm_request.dart';
 import '../plugins/base_plugin.dart';
 import '../runners/runner.dart';
 import '../types/content.dart';
@@ -7,6 +8,8 @@ import 'app_details.dart';
 import 'common.dart';
 import 'eval_case.dart';
 import 'eval_set.dart';
+import 'simulation/user_simulator.dart';
+import 'simulation/user_simulator_provider.dart';
 import '_retry_options_utils.dart';
 import 'request_intercepter_plugin.dart';
 
@@ -28,16 +31,24 @@ class EvaluationGenerator {
     int repeatNum = 3,
     String appName = 'EvaluationGenerator',
     String userId = 'test_user_id',
+    UserSimulatorProvider? userSimulatorProvider,
   }) async {
+    final UserSimulatorProvider simulatorProvider =
+        userSimulatorProvider ?? UserSimulatorProvider();
     final List<EvalCaseResponses> results = <EvalCaseResponses>[];
 
     for (final EvalCase evalCase in evalSet.evalCases) {
       final List<List<Invocation>> responses = <List<Invocation>>[];
       for (int i = 0; i < repeatNum; i += 1) {
+        final UserSimulator? userSimulator = _resolveUserSimulator(
+          evalCase,
+          simulatorProvider,
+        );
         responses.add(
           await _runEvalCase(
             rootAgent: rootAgent,
             evalCase: evalCase,
+            userSimulator: userSimulator,
             appName: evalCase.sessionInput?.appName ?? appName,
             userId: evalCase.sessionInput?.userId ?? userId,
           ),
@@ -48,9 +59,23 @@ class EvaluationGenerator {
     return results;
   }
 
+  static UserSimulator? _resolveUserSimulator(
+    EvalCase evalCase,
+    UserSimulatorProvider userSimulatorProvider,
+  ) {
+    final bool hasConversationData =
+        evalCase.conversation != null || evalCase.conversationScenario != null;
+    if (!hasConversationData) {
+      // Backward compatibility: older eval cases may only have `input`.
+      return null;
+    }
+    return userSimulatorProvider.provide(evalCase);
+  }
+
   static Future<List<Invocation>> _runEvalCase({
     required BaseAgent rootAgent,
     required EvalCase evalCase,
+    required UserSimulator? userSimulator,
     required String appName,
     required String userId,
   }) async {
@@ -78,34 +103,75 @@ class EvaluationGenerator {
         state: evalCase.sessionInput?.state,
       );
 
-      final List<Content> userMessages = _collectUserMessages(evalCase);
       final List<Event> allEvents = <Event>[];
 
-      for (final Content userContent in userMessages) {
-        String? invocationId;
-        await for (final Event event in runner.runAsync(
-          userId: userId,
-          sessionId: sessionId,
-          newMessage: userContent,
-        )) {
-          invocationId ??= event.invocationId;
-          if (allEvents.isEmpty ||
-              allEvents.last.invocationId != invocationId) {
-            allEvents.add(
-              Event(
-                invocationId: invocationId,
-                author: userAuthor,
-                content: userContent.copyWith(),
-              ),
-            );
+      if (userSimulator != null) {
+        while (true) {
+          final NextUserMessage nextUserMessage = await userSimulator
+              .getNextUserMessage(_cloneEvents(allEvents));
+          if (nextUserMessage.status != Status.success ||
+              nextUserMessage.userMessage == null) {
+            break;
           }
-          allEvents.add(event);
+
+          await for (final Event event
+              in _generateInferencesForSingleUserInvocation(
+                runner: runner,
+                userId: userId,
+                sessionId: sessionId,
+                userContent: nextUserMessage.userMessage!,
+              )) {
+            allEvents.add(event);
+          }
+        }
+      } else {
+        final List<Content> userMessages = _collectUserMessages(evalCase);
+        for (final Content userContent in userMessages) {
+          await for (final Event event
+              in _generateInferencesForSingleUserInvocation(
+                runner: runner,
+                userId: userId,
+                sessionId: sessionId,
+                userContent: userContent,
+              )) {
+            allEvents.add(event);
+          }
         }
       }
 
-      return convertEventsToEvalInvocations(allEvents);
+      final Map<String, AppDetails> appDetailsByInvocationId =
+          _getAppDetailsByInvocationId(allEvents, requestIntercepterPlugin);
+
+      return convertEventsToEvalInvocations(
+        allEvents,
+        appDetailsPerInvocation: appDetailsByInvocationId,
+      );
     } finally {
       await runner.close();
+    }
+  }
+
+  static Stream<Event> _generateInferencesForSingleUserInvocation({
+    required InMemoryRunner runner,
+    required String userId,
+    required String sessionId,
+    required Content userContent,
+  }) async* {
+    String? invocationId;
+    await for (final Event event in runner.runAsync(
+      userId: userId,
+      sessionId: sessionId,
+      newMessage: userContent,
+    )) {
+      if (invocationId == null) {
+        invocationId = event.invocationId;
+        yield Event(
+          invocationId: invocationId,
+          author: userAuthor,
+          content: userContent.copyWith(),
+        );
+      }
+      yield event;
     }
   }
 
@@ -197,6 +263,77 @@ class EvaluationGenerator {
     }
     return grouped;
   }
+
+  static Map<String, AppDetails> _getAppDetailsByInvocationId(
+    List<Event> events,
+    RequestIntercepterPlugin requestIntercepter,
+  ) {
+    final Map<String, List<Event>> eventsByInvocationId =
+        _collectEventsByInvocationId(events);
+    final Map<String, AppDetails> appDetailsByInvocationId =
+        <String, AppDetails>{};
+
+    eventsByInvocationId.forEach((String invocationId, List<Event> bucket) {
+      final AppDetails appDetails = AppDetails(
+        agentDetails: <String, AgentDetails>{},
+      );
+      appDetailsByInvocationId[invocationId] = appDetails;
+
+      for (final Event event in bucket) {
+        if (event.author == userAuthor) {
+          continue;
+        }
+
+        final LlmRequest? llmRequest = requestIntercepter.getModelRequest(
+          event,
+        );
+        if (llmRequest == null) {
+          continue;
+        }
+
+        if (!appDetails.agentDetails.containsKey(event.author)) {
+          appDetails.agentDetails[event.author] = AgentDetails(
+            name: event.author,
+            instructions: llmRequest.config.systemInstruction ?? '',
+            toolDeclarations: _serializeToolDeclarations(
+              llmRequest.config.tools,
+            ),
+          );
+        }
+      }
+    });
+
+    return appDetailsByInvocationId;
+  }
+
+  static List<Event> _cloneEvents(List<Event> events) {
+    return events.map((Event event) => event.copyWith()).toList();
+  }
+}
+
+List<Object?> _serializeToolDeclarations(List<ToolDeclaration>? tools) {
+  if (tools == null || tools.isEmpty) {
+    return <Object?>[];
+  }
+  return tools.map((ToolDeclaration tool) {
+    return <String, Object?>{
+      'function_declarations': _serializeFunctionDeclarations(
+        tool.functionDeclarations,
+      ),
+    };
+  }).toList();
+}
+
+List<Object?> _serializeFunctionDeclarations(
+  List<FunctionDeclaration> declarations,
+) {
+  return declarations.map((FunctionDeclaration declaration) {
+    return <String, Object?>{
+      'name': declaration.name,
+      'description': declaration.description,
+      'parameters': Map<String, Object?>.from(declaration.parameters),
+    };
+  }).toList();
 }
 
 Content _contentFromEvalJson(EvalJsonMap content) {
