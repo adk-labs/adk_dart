@@ -30,6 +30,16 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] skills registry skeleton
 - [x] A2A in-memory router skeleton
 
+## Newly Added Agent Config Parity (this iteration)
+
+- [x] agent config contracts (`ArgumentConfig`, `CodeConfig`, `AgentRefConfig`, `BaseAgentConfig`)
+- [x] specialized config models (`LlmAgentConfig`, `LoopAgentConfig`, `ParallelAgentConfig`, `SequentialAgentConfig`)
+- [x] config union/discriminator parity (`AgentConfig`, `agentConfigDiscriminator`)
+- [x] context cache/transcription contracts (`ContextCacheConfig`, `TranscriptionEntry`)
+- [x] config runtime loader parity (`fromConfig`, `resolveAgentReference`, `resolveCodeReference`, callback resolution)
+- [x] dependency-free YAML decoding path for ADK-style config files
+- [x] parity regression tests for config normalization/validation/loading/custom-factory hooks
+
 ## Newly Added Skills Parity (this iteration)
 
 - [x] skill frontmatter/resource models (`Frontmatter`, `Resources`, `Script`, `Skill`)

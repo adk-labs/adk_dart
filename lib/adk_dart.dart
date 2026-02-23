@@ -1,16 +1,25 @@
 export 'src/agents/agent_state.dart';
 export 'src/agents/base_agent.dart';
+export 'src/agents/base_agent_config.dart';
 export 'src/agents/callback_context.dart';
+export 'src/agents/context_cache_config.dart';
 export 'src/agents/context.dart';
+export 'src/agents/config_agent_utils.dart';
 export 'src/agents/invocation_context.dart';
 export 'src/agents/live_request_queue.dart';
 export 'src/agents/llm_agent.dart';
+export 'src/agents/llm_agent_config.dart';
 export 'src/agents/loop_agent.dart';
+export 'src/agents/loop_agent_config.dart';
 export 'src/agents/parallel_agent.dart';
+export 'src/agents/parallel_agent_config.dart';
 export 'src/agents/readonly_context.dart';
 export 'src/agents/run_config.dart';
 export 'src/agents/sequential_agent.dart';
+export 'src/agents/sequential_agent_config.dart';
 export 'src/agents/common_configs.dart';
+export 'src/agents/agent_config.dart';
+export 'src/agents/transcription_entry.dart';
 
 export 'src/a2a/a2a_message.dart';
 export 'src/a2a/experimental.dart';
