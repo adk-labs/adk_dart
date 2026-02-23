@@ -8,9 +8,7 @@ class EchoModel extends BaseLlm {
     LlmRequest request, {
     bool stream = false,
   }) async* {
-    yield LlmResponse(
-      content: Content.modelText('hello from adk package'),
-    );
+    yield LlmResponse(content: Content.modelText('hello from adk package'));
   }
 }
 

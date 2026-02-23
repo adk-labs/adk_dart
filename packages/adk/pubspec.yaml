@@ -1,12 +1,14 @@
 name: adk
 description: Package alias that re-exports adk_dart under the adk package name.
 version: 0.1.0
+publish_to: none
 
 environment:
   sdk: ^3.11.0
 
 dependencies:
-  adk_dart: 0.1.0
+  adk_dart:
+    path: ../..
 
 dev_dependencies:
   lints: ^6.0.0
