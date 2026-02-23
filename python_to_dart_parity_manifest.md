@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 226
+- done: 227
 - partial: 29
-- missing: 231
+- missing: 230
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -474,7 +474,7 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/tool_configs.py` | `lib/src/tools/tool_configs.dart` | `done` | Added tool config datatypes (`BaseToolConfig`, `ToolArgsConfig`, `ToolConfig`) with JSON mapping helpers. |
 | `ref/adk-python/src/google/adk/tools/tool_confirmation.py` | `lib/src/tools/tool_confirmation.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/tool_context.py` | `lib/src/tools/tool_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/tools/toolbox_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/toolbox_toolset.py` | `lib/src/tools/toolbox_toolset.dart` | `done` | Added toolbox toolset wrapper with delegate-backed tool loading/close lifecycle and explicit missing-SDK error path. |
 | `ref/adk-python/src/google/adk/tools/transfer_to_agent_tool.py` | `lib/src/tools/transfer_to_agent_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/url_context_tool.py` | `lib/src/tools/url_context_tool.dart` | `done` | Added URL context tool model compatibility checks and built-in declaration injection behavior. |
 | `ref/adk-python/src/google/adk/tools/vertex_ai_search_tool.py` | `lib/src/tools/vertex_ai_search_tool.dart` | `done` | Added Vertex AI Search built-in tool with data-store/engine exclusivity validation, dynamic config builder, and Gemini model guard parity. |

@@ -180,6 +180,13 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] request-time default skill instruction + available-skills XML injection parity
 - [x] dedicated parity tests for all skill toolset behaviors
 
+## Newly Added Toolbox Toolset Parity (this iteration)
+
+- [x] `ToolboxToolset` parity baseline with constructor contract fields (`server_url`, `toolset_name`, `tool_names`, auth/bound params)
+- [x] delegate-backed tool loading and close lifecycle forwarding parity
+- [x] explicit missing-toolbox integration error path
+- [x] dedicated parity tests for delegate forwarding and missing-delegate failures
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests
