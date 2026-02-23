@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 271
+- done: 281
 - partial: 20
-- missing: 195
+- missing: 185
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -354,16 +354,16 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/_gemini_schema_util.py` | `lib/src/tools/_gemini_schema_util.dart` | `done` | Added OpenAPI-to-Gemini schema sanitization utilities (snake_case, dereference, anyOf/type normalization). |
 | `ref/adk-python/src/google/adk/tools/_google_credentials.py` | `lib/src/tools/_google_credentials.dart` | `done` | Added Google credentials config/manager parity with external-token lookup, OAuth request flow bridging, and cached-token handling. |
 | `ref/adk-python/src/google/adk/tools/_memory_entry_utils.py` | `lib/src/tools/_memory_entry_utils.dart` | `done` | Added memory text extraction helper that joins textual parts only. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_engine.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_factory.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_plugin.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/strategies/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/strategies/base.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/strategies/tool_spec_mock_strategy.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/tool_connection_analyzer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/agent_simulator/tool_connection_map.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/__init__.py` | `lib/src/tools/agent_simulator/agent_simulator.dart` | `done` | Added top-level AgentSimulator alias surface for factory-backed callbacks/plugins. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_config.py` | `lib/src/tools/agent_simulator/agent_simulator_config.dart` | `done` | Added simulation config models with probability/latency/strategy validation and JSON conversion parity. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_engine.py` | `lib/src/tools/agent_simulator/agent_simulator_engine.dart` | `done` | Added core simulation engine with injection matching, seeded randomness, optional latency, and mock-strategy fallback execution. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_factory.py` | `lib/src/tools/agent_simulator/agent_simulator_factory.dart` | `done` | Added callback/plugin factory that wires shared AgentSimulatorEngine instances. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/agent_simulator_plugin.py` | `lib/src/tools/agent_simulator/agent_simulator_plugin.dart` | `done` | Added BasePlugin adapter that delegates before-tool callbacks to simulator engine. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/strategies/__init__.py` | `lib/src/tools/agent_simulator/strategies/(package)` | `done` | Added strategy package surface exports for simulator mock strategies. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/strategies/base.py` | `lib/src/tools/agent_simulator/strategies/base.dart` | `done` | Added mock strategy base contract plus tracing strategy error response behavior. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/strategies/tool_spec_mock_strategy.py` | `lib/src/tools/agent_simulator/strategies/tool_spec_mock_strategy.dart` | `done` | Added LLM-backed tool-spec prompt strategy with JSON cleanup and mutative state-store updates. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/tool_connection_analyzer.py` | `lib/src/tools/agent_simulator/tool_connection_analyzer.dart` | `done` | Added tool-connection analyzer prompt flow that derives stateful parameter maps from tool declarations. |
+| `ref/adk-python/src/google/adk/tools/agent_simulator/tool_connection_map.py` | `lib/src/tools/agent_simulator/tool_connection_map.dart` | `done` | Added stateful-parameter mapping models and JSON serializers. |
 | `ref/adk-python/src/google/adk/tools/agent_tool.py` | `lib/src/tools/agent_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/api_registry.py` | `lib/src/tools/api_registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/tools/apihub_tool/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |

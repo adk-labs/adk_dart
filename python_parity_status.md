@@ -152,6 +152,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] MCP conversion/session/tool parity surfaces (`conversion_utils`, `SessionContext`, `McpTool`)
 - [x] MCP session manager resource/executor capabilities and extended tests
 
+## Newly Added Agent Simulator Parity (this iteration)
+
+- [x] simulator config contracts (`InjectedError`, `InjectionConfig`, `ToolSimulationConfig`, `AgentSimulatorConfig`) with validation parity
+- [x] simulation engine parity (`AgentSimulatorEngine`) for injection matching, seeded randomness, latency injection, and mock-strategy fallback
+- [x] simulator strategy parity (`ToolConnectionAnalyzer`, `ToolConnectionMap`, `ToolSpecMockStrategy`, `TracingMockStrategy`)
+- [x] plugin/factory parity (`AgentSimulatorPlugin`, `AgentSimulatorFactory`, callback adapter surface)
+- [x] dedicated parity tests for config validation, engine behavior, plugin delegation, strategy state updates, and analyzer parsing
+
 ## Newly Added Google Tooling Parity (this iteration)
 
 - [x] Google credential config/manager parity (`_google_credentials`) including external token lookup and OAuth request bridge
