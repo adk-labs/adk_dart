@@ -8,6 +8,148 @@ import 'code_execution_utils.dart';
 
 const String defaultContainerImageTag = 'adk-code-executor:latest';
 
+class DockerExecResult {
+  DockerExecResult({
+    required this.exitCode,
+    this.stdout = '',
+    this.stderr = '',
+  });
+
+  final int exitCode;
+  final String stdout;
+  final String stderr;
+}
+
+abstract class ContainerRuntimeClient {
+  Future<void> buildImage({
+    required String dockerPath,
+    required String imageTag,
+  });
+
+  Future<String> startContainer({required String imageTag});
+
+  Future<DockerExecResult> exec({
+    required String containerId,
+    required List<String> command,
+    String? workingDirectory,
+    Map<String, String>? environment,
+    Duration? timeout,
+  });
+
+  Future<void> stopContainer({required String containerId});
+
+  Future<bool> isAvailable();
+}
+
+class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
+  ProcessContainerRuntimeClient({this.dockerBinary = 'docker'});
+
+  final String dockerBinary;
+
+  @override
+  Future<void> buildImage({
+    required String dockerPath,
+    required String imageTag,
+  }) async {
+    final ProcessResult result = await Process.run(dockerBinary, <String>[
+      'build',
+      '-t',
+      imageTag,
+      dockerPath,
+    ]);
+    if (result.exitCode != 0) {
+      throw ProcessException(
+        dockerBinary,
+        <String>['build', '-t', imageTag, dockerPath],
+        '${result.stderr}'.trim(),
+        result.exitCode,
+      );
+    }
+  }
+
+  @override
+  Future<String> startContainer({required String imageTag}) async {
+    final ProcessResult result = await Process.run(dockerBinary, <String>[
+      'run',
+      '-d',
+      '--rm',
+      '-t',
+      imageTag,
+      'tail',
+      '-f',
+      '/dev/null',
+    ]);
+    if (result.exitCode != 0) {
+      throw ProcessException(
+        dockerBinary,
+        <String>['run', '-d', '--rm', '-t', imageTag],
+        '${result.stderr}'.trim(),
+        result.exitCode,
+      );
+    }
+
+    final String containerId = '${result.stdout}'.trim();
+    if (containerId.isEmpty) {
+      throw StateError('Container started but no container ID was returned.');
+    }
+    return containerId;
+  }
+
+  @override
+  Future<DockerExecResult> exec({
+    required String containerId,
+    required List<String> command,
+    String? workingDirectory,
+    Map<String, String>? environment,
+    Duration? timeout,
+  }) async {
+    final List<String> args = <String>['exec'];
+    if (workingDirectory != null && workingDirectory.isNotEmpty) {
+      args
+        ..add('-w')
+        ..add(workingDirectory);
+    }
+    if (environment != null) {
+      environment.forEach((String key, String value) {
+        args
+          ..add('-e')
+          ..add('$key=$value');
+      });
+    }
+    args
+      ..add(containerId)
+      ..addAll(command);
+
+    final Future<ProcessResult> runFuture = Process.run(dockerBinary, args);
+    final ProcessResult result = timeout == null
+        ? await runFuture
+        : await runFuture.timeout(timeout);
+
+    return DockerExecResult(
+      exitCode: result.exitCode,
+      stdout: '${result.stdout}',
+      stderr: '${result.stderr}',
+    );
+  }
+
+  @override
+  Future<void> stopContainer({required String containerId}) async {
+    await Process.run(dockerBinary, <String>['stop', containerId]);
+  }
+
+  @override
+  Future<bool> isAvailable() async {
+    try {
+      final ProcessResult probe = await Process.run(dockerBinary, <String>[
+        '--version',
+      ]);
+      return probe.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 class ContainerCodeExecutor extends BaseCodeExecutor {
   ContainerCodeExecutor({
     this.baseUrl,
@@ -16,7 +158,9 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     bool stateful = false,
     bool optimizeDataFile = false,
     int errorRetryAttempts = 2,
+    ContainerRuntimeClient? runtimeClient,
   }) : image = image ?? defaultContainerImageTag,
+       _runtimeClient = runtimeClient ?? ProcessContainerRuntimeClient(),
        super(
          stateful: stateful,
          optimizeDataFile: optimizeDataFile,
@@ -43,30 +187,68 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
   final String? baseUrl;
   final String image;
   final String? dockerPath;
+  final ContainerRuntimeClient _runtimeClient;
+
+  String? _containerId;
+  bool _imageBuilt = false;
+
+  Future<void> _ensureContainerReady() async {
+    if (_containerId != null && _containerId!.isNotEmpty) {
+      return;
+    }
+
+    final bool dockerAvailable = await _runtimeClient.isAvailable();
+    if (!dockerAvailable) {
+      throw ProcessException(
+        'docker',
+        const <String>['--version'],
+        'Docker is not available in this runtime.',
+        127,
+      );
+    }
+
+    if (!_imageBuilt && dockerPath != null && dockerPath!.trim().isNotEmpty) {
+      await _runtimeClient.buildImage(dockerPath: dockerPath!, imageTag: image);
+      _imageBuilt = true;
+    }
+
+    _containerId = await _runtimeClient.startContainer(imageTag: image);
+    final DockerExecResult verify = await _runtimeClient.exec(
+      containerId: _containerId!,
+      command: const <String>['which', 'python3'],
+      timeout: const Duration(seconds: 10),
+    );
+    if (verify.exitCode != 0) {
+      await closeContainer();
+      throw StateError('python3 is not installed in the container.');
+    }
+  }
+
+  Future<void> closeContainer() async {
+    final String? containerId = _containerId;
+    _containerId = null;
+    if (containerId == null || containerId.isEmpty) {
+      return;
+    }
+    await _runtimeClient.stopContainer(containerId: containerId);
+  }
 
   @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
-    final List<String> args = <String>[
-      'run',
-      '--rm',
-      image,
-      'python3',
-      '-c',
-      request.command,
-    ];
-
     try {
-      final ProcessResult result = await Process.run(
-        'docker',
-        args,
-        environment: request.environment,
+      await _ensureContainerReady();
+      final DockerExecResult result = await _runtimeClient.exec(
+        containerId: _containerId!,
+        command: <String>['python3', '-c', request.command],
         workingDirectory: request.workingDirectory,
-      ).timeout(request.timeout ?? const Duration(minutes: 2));
+        environment: request.environment,
+        timeout: request.timeout ?? const Duration(minutes: 2),
+      );
 
       return CodeExecutionResult(
         exitCode: result.exitCode,
-        stdout: '${result.stdout}',
-        stderr: '${result.stderr}',
+        stdout: result.stdout,
+        stderr: result.stderr,
       );
     } on TimeoutException {
       return CodeExecutionResult(
@@ -79,6 +261,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
         exitCode: -1,
         stderr: 'Docker invocation failed: ${error.message}',
       );
+    } on StateError catch (error) {
+      return CodeExecutionResult(exitCode: -1, stderr: '$error');
     }
   }
 

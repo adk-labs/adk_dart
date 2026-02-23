@@ -334,7 +334,7 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] code execution utility parity (`code_execution_utils`) for executable/result part conversion and code extraction/truncation
 - [x] code executor persistent context parity (`code_executor_context`) for execution-id/input files/error counters/result history
 - [x] base/built-in executor contract parity (`BaseCodeExecutor`, `BuiltInCodeExecutor`, `UnsafeLocalCodeExecutor`) with surface-level guardrail/delegation tests
-- [x] executor surface expansion (`ContainerCodeExecutor`, `GkeCodeExecutor`, `VertexAiCodeExecutor`, `AgentEngineSandboxCodeExecutor`) with functional local fallback baselines
+- [x] executor surface expansion (`ContainerCodeExecutor`, `GkeCodeExecutor`, `VertexAiCodeExecutor`, `AgentEngineSandboxCodeExecutor`) with injectable remote client orchestration paths and local fallback baselines
 - [x] parity tests for A2A converters/executor and code execution utils/context/executor behaviors
 
 ## Newly Added Evaluation Pipeline Parity (this iteration)
@@ -371,7 +371,6 @@ Reference: `ref/adk-python/src/google/adk`
 - [ ] runner live buffering parity for inline audio/file artifact edge cases
 - [ ] full live flow parity (`BaseLlmFlow.runLive` end-to-end integration, live connection semantics, artifact-backed media routing edge-cases)
 - [ ] full model backend parity (google-genai/Anthropic/Apigee/LiteLLM live + streaming API behavior)
-- [ ] code executors parity
 - [ ] optimization/features parity
 - [ ] telemetry parity with OTEL semconv mapping
 - [ ] full evaluation suite parity (`agent_evaluator` Python-style module-string dynamic loader entrypoints)

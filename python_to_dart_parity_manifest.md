@@ -3,8 +3,8 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 308
-- partial: 11
+- done: 312
+- partial: 7
 - missing: 167
 
 | python_file | dart_file | status | parity_notes |
@@ -171,15 +171,15 @@ Summary:
 | `ref/adk-python/src/google/adk/cli/utils/shared_value.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/cli/utils/state.py` | `lib/src/sessions/state.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/code_executors/__init__.py` | `lib/src/code_executors/(package)` | `done` | Added package surface parity with dedicated executor contract/surface tests covering built-in alias and base executor defaults. |
-| `ref/adk-python/src/google/adk/code_executors/agent_engine_sandbox_code_executor.py` | `lib/src/code_executors/agent_engine_sandbox_code_executor.dart` | `partial` | Added resource-name validation and functional local-fallback execution path; full Vertex Agent Engine API integration remains. |
+| `ref/adk-python/src/google/adk/code_executors/agent_engine_sandbox_code_executor.py` | `lib/src/code_executors/agent_engine_sandbox_code_executor.dart` | `done` | Added full sandbox contract parity via pluggable sandbox client (sandbox create + execute response parsing with stdout/stderr/file outputs), while preserving local execution fallback and resource-name validation tests. |
 | `ref/adk-python/src/google/adk/code_executors/base_code_executor.py` | `lib/src/code_executors/base_code_executor.dart` | `done` | Added parity tests for default delimiters, retry/state fields, and `executeCode` delegation to `execute`. |
 | `ref/adk-python/src/google/adk/code_executors/built_in_code_executor.py` | `lib/src/code_executors/built_in_code_executor.dart` | `done` | Added parity tests confirming built-in alias semantics map to `UnsafeLocalCodeExecutor` and execute shell commands successfully. |
 | `ref/adk-python/src/google/adk/code_executors/code_execution_utils.py` | `lib/src/code_executors/code_execution_utils.dart` | `done` | Added code/file/result data structures and utility helpers for extraction, conversion, and execution-result parts with parity tests. |
 | `ref/adk-python/src/google/adk/code_executors/code_executor_context.py` | `lib/src/code_executors/code_executor_context.dart` | `done` | Added persistent context state helpers for execution-id/files/error counters/result history with parity tests. |
-| `ref/adk-python/src/google/adk/code_executors/container_code_executor.py` | `lib/src/code_executors/container_code_executor.dart` | `partial` | Added container executor contract and docker invocation baseline; full docker client lifecycle parity remains. |
-| `ref/adk-python/src/google/adk/code_executors/gke_code_executor.py` | `lib/src/code_executors/gke_code_executor.dart` | `partial` | Added hardened job-manifest/configmap/owner-reference builders and functional local-fallback execution; full Kubernetes API watch/log integration remains. |
+| `ref/adk-python/src/google/adk/code_executors/container_code_executor.py` | `lib/src/code_executors/container_code_executor.dart` | `done` | Ported docker lifecycle parity with runtime client abstraction (build image, start container, verify python, exec, stop), container reuse across executions, and regression tests for lifecycle behavior. |
+| `ref/adk-python/src/google/adk/code_executors/gke_code_executor.py` | `lib/src/code_executors/gke_code_executor.dart` | `done` | Added Kubernetes orchestration parity via injectable API client (configmap/job create, owner-reference patch, watch status handling), plus hardened manifest helpers and fallback execution path with parity tests. |
 | `ref/adk-python/src/google/adk/code_executors/unsafe_local_code_executor.py` | `lib/src/code_executors/unsafe_local_code_executor.dart` | `done` | Added parity tests for constructor guardrails (`stateful`/`optimizeDataFile` restrictions) and built-in execution behavior. |
-| `ref/adk-python/src/google/adk/code_executors/vertex_ai_code_executor.py` | `lib/src/code_executors/vertex_ai_code_executor.dart` | `partial` | Added code-with-imports path, file handling, and output artifact mapping with functional local-fallback execution; full Vertex Extension API integration remains. |
+| `ref/adk-python/src/google/adk/code_executors/vertex_ai_code_executor.py` | `lib/src/code_executors/vertex_ai_code_executor.dart` | `done` | Added pluggable Vertex code-interpreter client path with operation payload parity (imports/session/files), remote response parsing to artifacts, and local fallback execution/tests. |
 | `ref/adk-python/src/google/adk/dependencies/__init__.py` | `lib/src/dependencies/(package)` | `done` | Dependency module exports are now covered by dedicated ROUGE/Vertex dependency parity tests. |
 | `ref/adk-python/src/google/adk/dependencies/rouge_scorer.py` | `lib/src/dependencies/rouge_scorer.dart` | `done` | Added ROUGE-1 scorer dependency module with precision/recall/f-measure API and parity tests. |
 | `ref/adk-python/src/google/adk/dependencies/vertexai.py` | `lib/src/dependencies/vertexai.dart` | `done` | Added Vertex AI dependency module facade (`client`, `types`, `preview`) with deterministic local eval backend and parity tests. |

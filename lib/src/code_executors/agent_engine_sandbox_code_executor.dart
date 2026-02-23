@@ -6,11 +6,36 @@ import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
+class AgentEngineSandboxOutput {
+  AgentEngineSandboxOutput({this.mimeType, required this.data, this.metadata});
+
+  final String? mimeType;
+  final Object data;
+  final Map<String, Object?>? metadata;
+}
+
+class AgentEngineSandboxExecutionResponse {
+  AgentEngineSandboxExecutionResponse({List<AgentEngineSandboxOutput>? outputs})
+    : outputs = outputs ?? <AgentEngineSandboxOutput>[];
+
+  final List<AgentEngineSandboxOutput> outputs;
+}
+
+abstract class AgentEngineSandboxClient {
+  Future<String> createSandbox({required String agentEngineResourceName});
+
+  Future<AgentEngineSandboxExecutionResponse> executeCode({
+    required String sandboxResourceName,
+    required Map<String, Object?> inputData,
+  });
+}
+
 class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
   AgentEngineSandboxCodeExecutor({
     this.sandboxResourceName,
     String? agentEngineResourceName,
-  }) {
+    AgentEngineSandboxClient? sandboxClient,
+  }) : _sandboxClient = sandboxClient {
     const String sandboxPattern =
         r'^projects/([a-zA-Z0-9-_]+)/locations/([a-zA-Z0-9-_]+)/reasoningEngines/(\d+)/sandboxEnvironments/(\d+)$';
     const String agentEnginePattern =
@@ -39,7 +64,11 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
       );
       _projectId = projectId;
       _location = location;
-      sandboxResourceName = '$agentEngineResourceName/sandboxEnvironments/0';
+      _agentEngineResourceName = agentEngineResourceName;
+
+      if (_sandboxClient == null) {
+        sandboxResourceName = '$agentEngineResourceName/sandboxEnvironments/0';
+      }
       return;
     }
 
@@ -49,8 +78,28 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
   }
 
   String? sandboxResourceName;
+  final AgentEngineSandboxClient? _sandboxClient;
+  String? _agentEngineResourceName;
   late final String _projectId;
   late final String _location;
+
+  Future<void> _ensureSandboxResourceName() async {
+    if (sandboxResourceName != null && sandboxResourceName!.isNotEmpty) {
+      return;
+    }
+
+    final AgentEngineSandboxClient? client = _sandboxClient;
+    final String? agentEngineResourceName = _agentEngineResourceName;
+    if (client == null ||
+        agentEngineResourceName == null ||
+        agentEngineResourceName.isEmpty) {
+      throw StateError('Sandbox resource name is not initialized.');
+    }
+
+    sandboxResourceName = await client.createSandbox(
+      agentEngineResourceName: agentEngineResourceName,
+    );
+  }
 
   @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
@@ -77,6 +126,64 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,
   ) async {
+    final AgentEngineSandboxClient? client = _sandboxClient;
+    if (client != null) {
+      await _ensureSandboxResourceName();
+      final Map<String, Object?> inputData = <String, Object?>{
+        'code': codeExecutionInput.code,
+      };
+
+      if (codeExecutionInput.inputFiles.isNotEmpty) {
+        inputData['files'] = codeExecutionInput.inputFiles
+            .map(
+              (CodeExecutionFile file) => <String, Object?>{
+                'name': file.name,
+                'contents': file.content,
+                'mimeType': file.mimeType,
+              },
+            )
+            .toList();
+      }
+
+      final AgentEngineSandboxExecutionResponse response = await client
+          .executeCode(
+            sandboxResourceName: sandboxResourceName!,
+            inputData: inputData,
+          );
+
+      String stdout = '';
+      String stderr = '';
+      final List<CodeExecutionFile> savedFiles = <CodeExecutionFile>[];
+
+      for (final AgentEngineSandboxOutput output in response.outputs) {
+        final bool jsonPayload = output.mimeType == 'application/json';
+        final String? fileName = _getOutputFileName(output.metadata);
+        if (jsonPayload && (fileName == null || fileName.isEmpty)) {
+          final Map<String, Object?> jsonOutput = _decodeJsonPayload(
+            output.data,
+          );
+          stdout = _asString(jsonOutput['stdout']);
+          stderr = _asString(jsonOutput['stderr']);
+          continue;
+        }
+
+        final String resolvedFileName = fileName ?? '';
+        savedFiles.add(
+          CodeExecutionFile(
+            name: resolvedFileName,
+            content: _toBytes(output.data),
+            mimeType: output.mimeType ?? _detectMimeType(resolvedFileName),
+          ),
+        );
+      }
+
+      return CodeExecutionResult(
+        stdout: stdout,
+        stderr: stderr,
+        outputFiles: savedFiles,
+      );
+    }
+
     final Directory tempDirectory = await Directory.systemTemp.createTemp(
       'adk_agent_engine_exec_',
     );
@@ -125,6 +232,85 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
     }
     return 'python3';
   }
+}
+
+Map<String, Object?> _decodeJsonPayload(Object value) {
+  try {
+    final String rawText = _asString(value);
+    final Object? decoded = jsonDecode(rawText);
+    if (decoded is Map) {
+      return decoded.map(
+        (Object? key, Object? item) =>
+            MapEntry<String, Object?>(key.toString(), item),
+      );
+    }
+  } catch (_) {
+    // Ignore parsing errors; return empty map.
+  }
+  return <String, Object?>{};
+}
+
+String? _getOutputFileName(Map<String, Object?>? metadata) {
+  if (metadata == null) {
+    return null;
+  }
+
+  final Map<String, Object?> attributes = metadata['attributes'] is Map
+      ? _asMap(metadata['attributes'])
+      : metadata;
+  final Object? rawFileName = attributes['file_name'];
+  if (rawFileName == null) {
+    return null;
+  }
+  if (rawFileName is List<int>) {
+    return utf8.decode(rawFileName, allowMalformed: true);
+  }
+  return rawFileName.toString();
+}
+
+String _detectMimeType(String fileName) {
+  final String extension = fileName.contains('.')
+      ? fileName.split('.').last.toLowerCase()
+      : '';
+  if (extension == 'png' || extension == 'jpg' || extension == 'jpeg') {
+    return 'image/$extension';
+  }
+  if (extension == 'csv') {
+    return 'text/csv';
+  }
+  if (extension == 'json') {
+    return 'application/json';
+  }
+  if (extension == 'txt') {
+    return 'text/plain';
+  }
+  return 'application/octet-stream';
+}
+
+Map<String, Object?> _asMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) =>
+          MapEntry<String, Object?>(key.toString(), item),
+    );
+  }
+  return <String, Object?>{};
+}
+
+String _asString(Object? value) {
+  if (value == null) {
+    return '';
+  }
+  if (value is String) {
+    return value;
+  }
+  if (value is List<int>) {
+    return utf8.decode(value, allowMalformed: true);
+  }
+  return '$value';
 }
 
 List<int> _toBytes(Object value) {

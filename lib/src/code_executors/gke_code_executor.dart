@@ -1,10 +1,45 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:io';
 
 import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
+
+enum GkeJobStatus { succeeded, failed, timedOut }
+
+class GkeJobWatchResult {
+  GkeJobWatchResult({required this.status, this.logs = '', this.errorMessage});
+
+  final GkeJobStatus status;
+  final String logs;
+  final String? errorMessage;
+}
+
+abstract class GkeApiClient {
+  Future<void> createCodeConfigMap({
+    required String namespace,
+    required Map<String, Object?> body,
+  });
+
+  Future<Map<String, Object?>> createJob({
+    required String namespace,
+    required Map<String, Object?> body,
+  });
+
+  Future<void> patchConfigMap({
+    required String namespace,
+    required String name,
+    required Map<String, Object?> body,
+  });
+
+  Future<GkeJobWatchResult> watchJob({
+    required String namespace,
+    required String jobName,
+    required int timeoutSeconds,
+  });
+}
 
 class GkeCodeExecutor extends BaseCodeExecutor {
   GkeCodeExecutor({
@@ -17,7 +52,8 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     this.memLimit = '512Mi',
     this.kubeconfigPath,
     this.kubeconfigContext,
-  });
+    GkeApiClient? apiClient,
+  }) : _apiClient = apiClient;
 
   final String namespace;
   final String image;
@@ -28,6 +64,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
   final String memLimit;
   final String? kubeconfigPath;
   final String? kubeconfigContext;
+  final GkeApiClient? _apiClient;
 
   Map<String, Object?> createJobManifest({
     required String jobName,
@@ -101,7 +138,6 @@ class GkeCodeExecutor extends BaseCodeExecutor {
 
   @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
-    // Baseline behavior for environments without Kubernetes SDK bindings.
     final ProcessResult result = await Process.run(
       _pythonBinary(),
       <String>['-c', request.command],
@@ -128,6 +164,82 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,
   ) async {
+    final GkeApiClient? apiClient = _apiClient;
+    if (apiClient != null) {
+      final String randomSuffix = _randomSuffix(10);
+      final String jobName = 'adk-exec-$randomSuffix';
+      final String configMapName = 'code-src-$jobName';
+
+      try {
+        await apiClient.createCodeConfigMap(
+          namespace: namespace,
+          body: createCodeConfigMapBody(configMapName, codeExecutionInput.code),
+        );
+
+        final Map<String, Object?> createdJob = await apiClient.createJob(
+          namespace: namespace,
+          body: createJobManifest(
+            jobName: jobName,
+            configMapName: configMapName,
+            invocationContext: invocationContext,
+          ),
+        );
+
+        final String ownerApiVersion =
+            _asString(createdJob['apiVersion']).isEmpty
+            ? 'batch/v1'
+            : _asString(createdJob['apiVersion']);
+        final String ownerKind = _asString(createdJob['kind']).isEmpty
+            ? 'Job'
+            : _asString(createdJob['kind']);
+        final Map<String, Object?> metadata = _asMap(createdJob['metadata']);
+        final String ownerName = _asString(metadata['name']).isEmpty
+            ? jobName
+            : _asString(metadata['name']);
+        final String ownerUid = _asString(metadata['uid']);
+
+        if (ownerUid.isNotEmpty) {
+          await apiClient.patchConfigMap(
+            namespace: namespace,
+            name: configMapName,
+            body: addOwnerReferencePatch(
+              ownerApiVersion: ownerApiVersion,
+              ownerKind: ownerKind,
+              ownerName: ownerName,
+              ownerUid: ownerUid,
+            ),
+          );
+        }
+
+        final GkeJobWatchResult watch = await apiClient.watchJob(
+          namespace: namespace,
+          jobName: jobName,
+          timeoutSeconds: timeoutSeconds,
+        );
+
+        if (watch.status == GkeJobStatus.succeeded) {
+          return CodeExecutionResult(stdout: watch.logs);
+        }
+        if (watch.status == GkeJobStatus.failed) {
+          return CodeExecutionResult(
+            stderr: 'Job failed. Logs:\n${watch.logs}',
+          );
+        }
+        return CodeExecutionResult(
+          stderr:
+              watch.errorMessage ??
+              'Executor timed out after ${timeoutSeconds}s.',
+          timedOut: true,
+          exitCode: -1,
+        );
+      } catch (error) {
+        return CodeExecutionResult(
+          stderr: 'Kubernetes API error: $error',
+          exitCode: -1,
+        );
+      }
+    }
+
     final Directory tempDir = await Directory.systemTemp.createTemp(
       'adk_gke_exec_',
     );
@@ -198,6 +310,35 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     }
     return 'python3';
   }
+}
+
+String _randomSuffix(int length) {
+  const String alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  final Random random = Random();
+  return List<String>.generate(
+    length,
+    (_) => alphabet[random.nextInt(alphabet.length)],
+  ).join();
+}
+
+String _asString(Object? value) {
+  if (value == null) {
+    return '';
+  }
+  return '$value';
+}
+
+Map<String, Object?> _asMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) =>
+          MapEntry<String, Object?>(key.toString(), item),
+    );
+  }
+  return <String, Object?>{};
 }
 
 List<int> _toBytes(Object value) {

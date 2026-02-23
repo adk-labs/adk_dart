@@ -15,6 +15,175 @@ class _NoopModel extends BaseLlm {
   }
 }
 
+class _FakeContainerRuntimeClient implements ContainerRuntimeClient {
+  final List<String> buildCalls = <String>[];
+  int startCalls = 0;
+  int stopCalls = 0;
+  final List<List<String>> execCommands = <List<String>>[];
+  bool available = true;
+
+  @override
+  Future<void> buildImage({
+    required String dockerPath,
+    required String imageTag,
+  }) async {
+    buildCalls.add('$dockerPath|$imageTag');
+  }
+
+  @override
+  Future<String> startContainer({required String imageTag}) async {
+    startCalls += 1;
+    return 'container-$startCalls';
+  }
+
+  @override
+  Future<DockerExecResult> exec({
+    required String containerId,
+    required List<String> command,
+    String? workingDirectory,
+    Map<String, String>? environment,
+    Duration? timeout,
+  }) async {
+    execCommands.add(command);
+    if (command.length == 2 &&
+        command[0] == 'which' &&
+        command[1] == 'python3') {
+      return DockerExecResult(exitCode: 0, stdout: '/usr/bin/python3\n');
+    }
+    return DockerExecResult(exitCode: 0, stdout: 'ok', stderr: '');
+  }
+
+  @override
+  Future<void> stopContainer({required String containerId}) async {
+    stopCalls += 1;
+  }
+
+  @override
+  Future<bool> isAvailable() async => available;
+}
+
+class _FakeAgentEngineSandboxClient implements AgentEngineSandboxClient {
+  int createSandboxCalls = 0;
+  String? lastAgentEngineResourceName;
+  String? lastSandboxResourceName;
+  Map<String, Object?>? lastInputData;
+
+  @override
+  Future<String> createSandbox({
+    required String agentEngineResourceName,
+  }) async {
+    createSandboxCalls += 1;
+    lastAgentEngineResourceName = agentEngineResourceName;
+    return '$agentEngineResourceName/sandboxEnvironments/99';
+  }
+
+  @override
+  Future<AgentEngineSandboxExecutionResponse> executeCode({
+    required String sandboxResourceName,
+    required Map<String, Object?> inputData,
+  }) async {
+    lastSandboxResourceName = sandboxResourceName;
+    lastInputData = inputData;
+    return AgentEngineSandboxExecutionResponse(
+      outputs: <AgentEngineSandboxOutput>[
+        AgentEngineSandboxOutput(
+          mimeType: 'application/json',
+          data: utf8.encode('{"stdout":"remote ok","stderr":"remote warn"}'),
+        ),
+        AgentEngineSandboxOutput(
+          mimeType: 'image/png',
+          data: <int>[1, 2, 3],
+          metadata: <String, Object?>{
+            'attributes': <String, Object?>{'file_name': 'plot.png'},
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _FakeVertexClient implements VertexCodeInterpreterClient {
+  String? lastCode;
+  List<CodeExecutionFile>? lastInputFiles;
+  String? lastSessionId;
+
+  @override
+  Future<Map<String, Object?>> execute({
+    required String code,
+    List<CodeExecutionFile>? inputFiles,
+    String? sessionId,
+  }) async {
+    lastCode = code;
+    lastInputFiles = inputFiles;
+    lastSessionId = sessionId;
+    return <String, Object?>{
+      'execution_result': 'vertex ok',
+      'execution_error': '',
+      'output_files': <Object?>[
+        <String, Object?>{'name': 'data.csv', 'contents': 'a,b\n1,2'},
+        <String, Object?>{
+          'name': 'plot.png',
+          'contents': <int>[3, 4, 5],
+        },
+      ],
+    };
+  }
+}
+
+class _FakeGkeApiClient implements GkeApiClient {
+  _FakeGkeApiClient(this.watchResult);
+
+  final GkeJobWatchResult watchResult;
+  Map<String, Object?>? createdConfigMap;
+  Map<String, Object?>? createdJob;
+  Map<String, Object?>? patchedConfigMap;
+  String? patchedConfigMapName;
+
+  @override
+  Future<void> createCodeConfigMap({
+    required String namespace,
+    required Map<String, Object?> body,
+  }) async {
+    createdConfigMap = <String, Object?>{'namespace': namespace, 'body': body};
+  }
+
+  @override
+  Future<Map<String, Object?>> createJob({
+    required String namespace,
+    required Map<String, Object?> body,
+  }) async {
+    createdJob = <String, Object?>{'namespace': namespace, 'body': body};
+    return <String, Object?>{
+      'apiVersion': 'batch/v1',
+      'kind': 'Job',
+      'metadata': <String, Object?>{'name': 'adk-exec-123', 'uid': 'uid-123'},
+    };
+  }
+
+  @override
+  Future<void> patchConfigMap({
+    required String namespace,
+    required String name,
+    required Map<String, Object?> body,
+  }) async {
+    patchedConfigMapName = name;
+    patchedConfigMap = <String, Object?>{
+      'namespace': namespace,
+      'name': name,
+      'body': body,
+    };
+  }
+
+  @override
+  Future<GkeJobWatchResult> watchJob({
+    required String namespace,
+    required String jobName,
+    required int timeoutSeconds,
+  }) async {
+    return watchResult;
+  }
+}
+
 Future<InvocationContext> _buildInvocationContext() async {
   final InMemorySessionService sessionService = InMemorySessionService();
   final Session session = await sessionService.createSession(
@@ -171,6 +340,49 @@ void main() {
       );
     });
 
+    test('container executor reuses initialized container runtime', () async {
+      final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
+      final ContainerCodeExecutor executor = ContainerCodeExecutor(
+        image: 'custom-image:latest',
+        runtimeClient: runtime,
+      );
+
+      final CodeExecutionResult first = await executor.execute(
+        CodeExecutionRequest(command: 'print(1)'),
+      );
+      final CodeExecutionResult second = await executor.execute(
+        CodeExecutionRequest(command: 'print(2)'),
+      );
+
+      expect(first.stdout, 'ok');
+      expect(second.stdout, 'ok');
+      expect(runtime.startCalls, 1);
+      expect(
+        runtime.execCommands.where(
+          (List<String> cmd) => cmd.first == 'python3',
+        ),
+        hasLength(2),
+      );
+
+      await executor.closeContainer();
+      expect(runtime.stopCalls, 1);
+    });
+
+    test('container executor builds image when dockerPath is set', () async {
+      final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
+      final ContainerCodeExecutor executor = ContainerCodeExecutor(
+        image: 'built:latest',
+        dockerPath: '/tmp/docker_dir',
+        runtimeClient: runtime,
+      );
+
+      await executor.execute(CodeExecutionRequest(command: 'print(3)'));
+
+      expect(runtime.buildCalls, hasLength(1));
+      expect(runtime.buildCalls.first, '/tmp/docker_dir|built:latest');
+      await executor.closeContainer();
+    });
+
     test('gke manifest contains hardened settings', () async {
       final InvocationContext invocationContext =
           await _buildInvocationContext();
@@ -190,6 +402,56 @@ void main() {
       expect(podSpec['containers'], isA<List>());
     });
 
+    test('gke executor uses api client orchestration path', () async {
+      final InvocationContext invocationContext =
+          await _buildInvocationContext();
+      final _FakeGkeApiClient apiClient = _FakeGkeApiClient(
+        GkeJobWatchResult(status: GkeJobStatus.succeeded, logs: 'job logs'),
+      );
+      final GkeCodeExecutor executor = GkeCodeExecutor(apiClient: apiClient);
+
+      final CodeExecutionResult result = await executor.executeCode(
+        invocationContext,
+        CodeExecutionInput(code: 'print(42)'),
+      );
+
+      expect(result.stdout, 'job logs');
+      expect(apiClient.createdConfigMap, isNotNull);
+      expect(apiClient.createdJob, isNotNull);
+      expect(apiClient.patchedConfigMapName, isNotNull);
+    });
+
+    test('gke executor maps failed and timeout watch statuses', () async {
+      final InvocationContext invocationContext =
+          await _buildInvocationContext();
+
+      final GkeCodeExecutor failedExecutor = GkeCodeExecutor(
+        apiClient: _FakeGkeApiClient(
+          GkeJobWatchResult(status: GkeJobStatus.failed, logs: 'failure logs'),
+        ),
+      );
+      final CodeExecutionResult failed = await failedExecutor.executeCode(
+        invocationContext,
+        CodeExecutionInput(code: 'raise RuntimeError()'),
+      );
+      expect(failed.stderr, contains('Job failed. Logs:'));
+
+      final GkeCodeExecutor timeoutExecutor = GkeCodeExecutor(
+        apiClient: _FakeGkeApiClient(
+          GkeJobWatchResult(
+            status: GkeJobStatus.timedOut,
+            errorMessage: 'timeout reached',
+          ),
+        ),
+      );
+      final CodeExecutionResult timedOut = await timeoutExecutor.executeCode(
+        invocationContext,
+        CodeExecutionInput(code: 'while True: pass'),
+      );
+      expect(timedOut.timedOut, isTrue);
+      expect(timedOut.stderr, contains('timeout reached'));
+    });
+
     test('agent engine sandbox validates resource names', () {
       expect(
         () => AgentEngineSandboxCodeExecutor(
@@ -204,5 +466,72 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test(
+      'agent engine sandbox executor uses remote client when configured',
+      () async {
+        final InvocationContext invocationContext =
+            await _buildInvocationContext();
+        final _FakeAgentEngineSandboxClient client =
+            _FakeAgentEngineSandboxClient();
+        final AgentEngineSandboxCodeExecutor executor =
+            AgentEngineSandboxCodeExecutor(
+              agentEngineResourceName:
+                  'projects/p1/locations/us-central1/reasoningEngines/77',
+              sandboxClient: client,
+            );
+
+        final CodeExecutionResult result = await executor.executeCode(
+          invocationContext,
+          CodeExecutionInput(
+            code: 'print("remote")',
+            inputFiles: <CodeExecutionFile>[
+              CodeExecutionFile(name: 'input.txt', content: 'hello'),
+            ],
+          ),
+        );
+
+        expect(client.createSandboxCalls, 1);
+        expect(result.stdout, 'remote ok');
+        expect(result.stderr, 'remote warn');
+        expect(result.outputFiles, hasLength(1));
+        expect(result.outputFiles.first.name, 'plot.png');
+        expect(result.outputFiles.first.mimeType, 'image/png');
+      },
+    );
+
+    test(
+      'vertex executor parses extension response and preserves imports',
+      () async {
+        final InvocationContext invocationContext =
+            await _buildInvocationContext();
+        final _FakeVertexClient client = _FakeVertexClient();
+        final VertexAiCodeExecutor executor = VertexAiCodeExecutor(
+          client: client,
+        );
+
+        final CodeExecutionResult result = await executor.executeCode(
+          invocationContext,
+          CodeExecutionInput(
+            code: 'print("vertex")',
+            inputFiles: <CodeExecutionFile>[
+              CodeExecutionFile(name: 'seed.csv', content: 'x,y\\n1,2'),
+            ],
+            executionId: 'session_123',
+          ),
+        );
+
+        expect(client.lastCode, contains('import pandas as pd'));
+        expect(client.lastCode, contains('print("vertex")'));
+        expect(client.lastSessionId, 'session_123');
+        expect(client.lastInputFiles, hasLength(1));
+
+        expect(result.stdout, 'vertex ok');
+        expect(result.stderr, isEmpty);
+        expect(result.outputFiles, hasLength(2));
+        expect(result.outputFiles[0].mimeType, 'text/csv');
+        expect(result.outputFiles[1].mimeType, 'image/png');
+      },
+    );
   });
 }

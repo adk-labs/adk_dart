@@ -40,13 +40,30 @@ def explore_df(df: pd.DataFrame) -> None:
     print(f'Total rows: {df.shape[0]}\\nTotal columns: {df.shape[1]}\\n\\n{df_info}')
 ''';
 
+abstract class VertexCodeInterpreterClient {
+  Future<Map<String, Object?>> execute({
+    required String code,
+    List<CodeExecutionFile>? inputFiles,
+    String? sessionId,
+  });
+}
+
 class VertexAiCodeExecutor extends BaseCodeExecutor {
-  VertexAiCodeExecutor({this.resourceName});
+  VertexAiCodeExecutor({this.resourceName, VertexCodeInterpreterClient? client})
+    : _client = client;
 
   final String? resourceName;
+  final VertexCodeInterpreterClient? _client;
 
   @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
+    if (_client != null) {
+      final Map<String, Object?> response = await _executeCodeInterpreter(
+        _getCodeWithImports(request.command),
+      );
+      return _parseInterpreterResponse(response);
+    }
+
     final ProcessResult result = await Process.run(
       _pythonBinary(),
       <String>['-c', _getCodeWithImports(request.command)],
@@ -66,6 +83,15 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,
   ) async {
+    if (_client != null) {
+      final Map<String, Object?> response = await _executeCodeInterpreter(
+        _getCodeWithImports(codeExecutionInput.code),
+        codeExecutionInput.inputFiles,
+        codeExecutionInput.executionId,
+      );
+      return _parseInterpreterResponse(response);
+    }
+
     final Directory tempDirectory = await Directory.systemTemp.createTemp(
       'adk_vertex_exec_',
     );
@@ -118,12 +144,60 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
     }
   }
 
+  Future<Map<String, Object?>> _executeCodeInterpreter(
+    String code, [
+    List<CodeExecutionFile>? inputFiles,
+    String? sessionId,
+  ]) async {
+    final VertexCodeInterpreterClient? client = _client;
+    if (client == null) {
+      throw StateError('VertexCodeInterpreterClient is not configured.');
+    }
+    return client.execute(
+      code: code,
+      inputFiles: inputFiles,
+      sessionId: sessionId,
+    );
+  }
+
+  CodeExecutionResult _parseInterpreterResponse(Map<String, Object?> response) {
+    final String stdout = _asString(response['execution_result']);
+    final String stderr = _asString(response['execution_error']);
+
+    final List<CodeExecutionFile> savedFiles = <CodeExecutionFile>[];
+    final List<Object?> outputFiles = _asObjectList(response['output_files']);
+    for (final Object? outputFile in outputFiles) {
+      final Map<String, Object?> output = _asMap(outputFile);
+      final String fileName = _asString(output['name']);
+      final Object contents = output['contents'] ?? <int>[];
+      final String explicitMimeType = _asString(output['mimeType']);
+      final String mimeType = explicitMimeType.isEmpty
+          ? _detectMimeType(fileName)
+          : explicitMimeType;
+      savedFiles.add(
+        CodeExecutionFile(
+          name: fileName,
+          content: contents,
+          mimeType: mimeType,
+        ),
+      );
+    }
+
+    return CodeExecutionResult(
+      stdout: stdout,
+      stderr: stderr,
+      outputFiles: savedFiles,
+    );
+  }
+
   String _getCodeWithImports(String code) {
     return '\n$_importedLibraries\n\n$code\n';
   }
 
   String _detectMimeType(String fileName) {
-    final String extension = fileName.split('.').last.toLowerCase();
+    final String extension = fileName.contains('.')
+        ? fileName.split('.').last.toLowerCase()
+        : '';
     if (_supportedImageTypes.contains(extension)) {
       return 'image/$extension';
     }
@@ -135,6 +209,9 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
     }
     if (extension == 'json') {
       return 'application/json';
+    }
+    if (extension == 'html') {
+      return 'text/html';
     }
     return 'application/octet-stream';
   }
@@ -154,6 +231,39 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
     }
     return 'python3';
   }
+}
+
+String _asString(Object? value) {
+  if (value == null) {
+    return '';
+  }
+  if (value is String) {
+    return value;
+  }
+  if (value is List<int>) {
+    return utf8.decode(value, allowMalformed: true);
+  }
+  return '$value';
+}
+
+List<Object?> _asObjectList(Object? value) {
+  if (value is List) {
+    return List<Object?>.from(value);
+  }
+  return const <Object?>[];
+}
+
+Map<String, Object?> _asMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) =>
+          MapEntry<String, Object?>(key.toString(), item),
+    );
+  }
+  return <String, Object?>{};
 }
 
 List<int> _contentToBytes(Object content) {
