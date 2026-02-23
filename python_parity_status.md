@@ -218,6 +218,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] simulator provider parity (`UserSimulatorProvider`) for static-vs-scenario routing and strict conversation contract checks
 - [x] dedicated parity tests for simulator contracts, prompt generation, provider routing, and LLM-backed runtime behavior
 
+## Newly Added Evaluation Cloud Manager Parity (this iteration)
+
+- [x] GCS eval-set manager parity (`GcsEvalSetsManager`) with app/eval-set blob layout and eval-case CRUD behavior
+- [x] GCS eval-result manager parity (`GcsEvalSetResultsManager`) with eval-history blob layout and list/get/save flows
+- [x] pluggable storage adapter parity surface (`GcsStorageStore`) with local filesystem-backed default implementation
+- [x] Vertex AI eval facade parity baseline (`VertexAiEvalFacade`) with credential precondition checks and invoker-injected evaluation path
+- [x] dedicated parity tests for GCS managers and Vertex facade score/status aggregation behavior
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

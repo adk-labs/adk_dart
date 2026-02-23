@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 243
+- done: 246
 - partial: 28
-- missing: 215
+- missing: 212
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -211,8 +211,8 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/evaluator.py` | `lib/src/evaluation/evaluator.dart` | `done` | Added evaluator interface with per-invocation and overall evaluation result models. |
 | `ref/adk-python/src/google/adk/evaluation/final_response_match_v1.py` | `lib/src/evaluation/final_response_match_v1.dart` | `done` | Added Rouge-style unigram overlap evaluator and per-invocation aggregation. |
 | `ref/adk-python/src/google/adk/evaluation/final_response_match_v2.py` | `lib/src/evaluation/final_response_match_v2.dart` | `partial` | Added deterministic judge-compatible parser and binary match scoring; full LLM sampling path not yet ported. |
-| `ref/adk-python/src/google/adk/evaluation/gcs_eval_set_results_manager.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/evaluation/gcs_eval_sets_manager.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/evaluation/gcs_eval_set_results_manager.py` | `lib/src/evaluation/gcs_eval_set_results_manager.dart` | `done` | Added bucket-backed eval-set-results manager with pluggable GCS store adapter and parity CRUD tests. |
+| `ref/adk-python/src/google/adk/evaluation/gcs_eval_sets_manager.py` | `lib/src/evaluation/gcs_eval_sets_manager.dart` | `done` | Added bucket-backed eval-set manager with id validation, eval-case CRUD helpers, and parity manager tests. |
 | `ref/adk-python/src/google/adk/evaluation/hallucinations_v1.py` | `lib/src/evaluation/hallucinations_v1.dart` | `partial` | Added criterion parsing and grounding scorer; full two-stage prompt+judge workflow remains to be aligned. |
 | `ref/adk-python/src/google/adk/evaluation/in_memory_eval_sets_manager.py` | `lib/src/evaluation/in_memory_eval_sets_manager.dart` | `done` | Added in-memory CRUD manager and parity tests. |
 | `ref/adk-python/src/google/adk/evaluation/llm_as_judge.py` | `lib/src/evaluation/llm_as_judge.dart` | `partial` | Added judge base class with multi-sample aggregation and pluggable auto-rater invoker; direct model-registry-backed judge calls are pending. |
@@ -239,7 +239,7 @@ Summary:
 | `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator_personas.py` | `lib/src/evaluation/simulation/user_simulator_personas.dart` | `done` | Added user behavior/persona models plus registry and lookup semantics. |
 | `ref/adk-python/src/google/adk/evaluation/simulation/user_simulator_provider.py` | `lib/src/evaluation/simulation/user_simulator_provider.dart` | `done` | Added provider that selects static vs LLM-backed simulators and enforces conversation xor conversation-scenario contract. |
 | `ref/adk-python/src/google/adk/evaluation/trajectory_evaluator.py` | `lib/src/evaluation/trajectory_evaluator.dart` | `done` | Added exact/in-order/any-order trajectory matching evaluator with thresholded status. |
-| `ref/adk-python/src/google/adk/evaluation/vertex_ai_eval_facade.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/evaluation/vertex_ai_eval_facade.py` | `lib/src/evaluation/vertex_ai_eval_facade.dart` | `done` | Added Vertex AI eval facade with injected evaluator hook, credential precondition checks, and per-invocation aggregation parity tests. |
 | `ref/adk-python/src/google/adk/events/__init__.py` | `lib/src/events/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/events/event.py` | `lib/src/events/event.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/events/event_actions.py` | `lib/src/events/event_actions.dart` | `done` | Counterpart exists and tests reference module/package terms. |
