@@ -42,7 +42,10 @@ void main() {
 
     test('ExampleTool appends example instruction', () async {
       final ExampleTool tool = ExampleTool(<Example>[
-        Example(input: 'hi', output: 'hello'),
+        Example(
+          input: Content.userText('hi'),
+          output: <Content>[Content.modelText('hello')],
+        ),
       ]);
       final Context context = await _newContext(
         userContent: Content.userText('what is up?'),

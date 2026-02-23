@@ -1,1 +1,1 @@
-export 'src/dev/cli.dart' show runAdkCli;
+export 'src/cli/cli_tools_click.dart' show main, runAdkCli;

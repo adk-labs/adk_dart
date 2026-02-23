@@ -5,8 +5,10 @@ import '../../agents/llm_agent.dart';
 import '../../agents/loop_agent.dart';
 import '../../agents/parallel_agent.dart';
 import '../../agents/sequential_agent.dart';
+import '../../examples/example.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/example_tool.dart';
+import '../../types/content.dart';
 import '../protocol.dart';
 
 class AgentCardBuilder {
@@ -465,8 +467,10 @@ List<Map<String, Object?>> _convertExampleToolExamples(ExampleTool tool) {
   if (examples is List<Example>) {
     return examples.map((Example example) {
       return <String, Object?>{
-        'input': example.input,
-        'output': <String>[example.output],
+        'input': _contentToSimpleMap(example.input),
+        'output': example.output
+            .map(_contentToSimpleMap)
+            .toList(growable: false),
       };
     }).toList();
   }
@@ -487,6 +491,38 @@ List<Map<String, Object?>> _convertExampleToolExamples(ExampleTool tool) {
   }
 
   return <Map<String, Object?>>[];
+}
+
+Map<String, Object?> _contentToSimpleMap(Content content) {
+  return <String, Object?>{
+    if (content.role != null) 'role': content.role,
+    'parts': content.parts
+        .map((Part part) {
+          final Map<String, Object?> mapped = <String, Object?>{};
+          if (part.text != null) {
+            mapped['text'] = part.text;
+          }
+          if (part.functionCall != null) {
+            mapped['function_call'] = <String, Object?>{
+              if (part.functionCall!.id != null) 'id': part.functionCall!.id,
+              'name': part.functionCall!.name,
+              'args': Map<String, dynamic>.from(part.functionCall!.args),
+            };
+          }
+          if (part.functionResponse != null) {
+            mapped['function_response'] = <String, Object?>{
+              if (part.functionResponse!.id != null)
+                'id': part.functionResponse!.id,
+              'name': part.functionResponse!.name,
+              'response': Map<String, dynamic>.from(
+                part.functionResponse!.response,
+              ),
+            };
+          }
+          return mapped;
+        })
+        .toList(growable: false),
+  };
 }
 
 List<Map<String, Object?>> _extractExamplesFromInstruction(String instruction) {

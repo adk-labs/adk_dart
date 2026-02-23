@@ -477,21 +477,32 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] ApplicationIntegrationToolset parity (`application_integration_tool/application_integration_toolset.dart`) with integration/connection modes, auth-override handling, OpenAPI toolset delegation, and connector-tool synthesis
 - [x] package/export wiring parity (`application_integration_tool/application_integration_tool.dart`, `adk_dart.dart`) and regression coverage (`test/application_integration_tool_parity_test.dart`)
 
+## Newly Added Examples/Memory/Plugin Parity (this iteration)
+
+- [x] examples package parity (`examples/example.dart`, `base_example_provider.dart`, `example_util.dart`, `vertex_ai_example_store.dart`, `examples.dart`) with formatting/provider dispatch/user-message extraction tests
+- [x] example tool alignment (`tools/example_tool.dart`) migrated to shared examples contracts to remove divergent duplicate models
+- [x] Vertex memory bank parity baseline (`memory/vertex_ai_memory_bank_service.dart`) with add-session/events/memory flows, consolidation batching, metadata normalization, and injectable client abstraction
+- [x] Vertex RAG memory parity baseline (`memory/vertex_ai_rag_memory_service.dart`) with transcript upload payload generation, retrieval parsing, overlap merge semantics, and scope filtering
+- [x] BigQuery analytics plugin parity surface (`plugins/bigquery_agent_analytics_plugin.dart`) including logger config/retry/event model, trace/span manager, callback event logging, HITL request/completion mapping, and sink-backed tests
+- [x] metadata/file parity assets (`lib/src/adk.dart`, `lib/src/agents/config_schemas/AgentConfig.json`, `lib/src/skills/README.md`, `lib/src/py.typed`)
+- [x] dedicated regression coverage (`test/examples_parity_test.dart`, `test/vertex_memory_services_parity_test.dart`, `test/bigquery_agent_analytics_plugin_parity_test.dart`)
+
+## Newly Added CLI/Conformance Parity (this iteration)
+
+- [x] CLI module parity surfaces (`cli/__init__.dart`, `cli/__main__.dart`, `cli/adk_web_server.dart`, `cli/agent_graph.dart`, `cli/cli_create.dart`, `cli/cli_deploy.dart`, `cli/cli_eval.dart`, `cli/cli_tools_click.dart`, `cli/fast_api.dart`)
+- [x] browser bundle parity assets (`cli/browser/**`) copied into `lib/src/cli/browser/**` for web UI static file parity
+- [x] service registry parity baseline (`cli/service_registry.dart`) with built-in session/artifact/memory URI scheme factories and YAML service registration hook
+- [x] CLI utility parity baseline (`cli/utils/**`) including dotenv loading, local storage routing, state extraction, agent loader/change handler, cleanup/log helpers
+- [x] conformance harness parity baseline (`cli/conformance/**`) with web client, replay validators, generated-file helpers, markdown reporting, record/test runners
+- [x] recordings/replay plugin parity baseline (`cli/plugins/**`) with JSON schema models and file load/save replay cycle
+- [x] dedicated regression coverage (`test/cli_*_test.dart` suite additions for graph/server/registry/service-factory/conformance/plugins/state/dot-adk)
+
 ## Remaining for Full Python Parity
 
-- [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)
-- [ ] full contents parity (async function-response history merging, richer live artifact transcription handling)
-- [ ] full code-execution processor parity (data-file optimization, artifact outputs, retry counters, built-in executor compatibility)
-- [ ] runner live buffering parity for inline audio/file artifact edge cases
-- [ ] full live flow parity (`BaseLlmFlow.runLive` end-to-end integration, live connection semantics, artifact-backed media routing edge-cases)
-- [ ] extended provider SDK edge-case parity (google-genai/Anthropic/Apigee/LiteLLM production transport specifics)
-- [ ] optimization/features parity
-- [ ] telemetry parity with OTEL semconv mapping
-- [ ] A2A protocol parity
-- [ ] full skills framework parity (integration with toolset/runtime wiring)
-- [ ] platform/dependencies/utils parity modules
-- [ ] full tool ecosystem parity (OpenAPI, MCP advanced, integrations, retrieval, etc.)
-- [ ] production-grade web/dev server parity with Python CLI behavior
+- [ ] built-in agent pack parity (`ref/adk-python/src/google/adk/cli/built_in_agents/**`): agent-builder assistant, bundled tools, and bundled prompt/template files remain unported
+- [ ] complete `adk web` behavior parity with Python CLI web-server stack for built-in agent orchestration paths
+- [ ] optional provider-native production integrations for memory/analytics paths (Vertex SDK + BigQuery Write API transports beyond current injectable parity surface)
+- [ ] final parity closure for remaining manifest `missing` entries and corresponding integration tests
 
 ## Notes
 

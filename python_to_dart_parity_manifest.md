@@ -3,13 +3,13 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 390
+- done: 463
 - partial: 0
-- missing: 96
+- missing: 23
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
-| `ref/adk-python/src/google/adk/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/__init__.py` | `lib/src/adk.dart` | `done` | Added package-level surface exporting `Agent`, `Context`, `Runner`, and `adkVersion`, matching Python root module entrypoint semantics. |
 | `ref/adk-python/src/google/adk/a2a/__init__.py` | `lib/src/a2a/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/a2a/converters/__init__.py` | `lib/src/a2a/converters/(package)` | `done` | Added converter package surfaces and parity tests. |
 | `ref/adk-python/src/google/adk/a2a/converters/event_converter.py` | `lib/src/a2a/converters/event_converter.dart` | `done` | Added A2A↔ADK event conversion, long-running tool metadata mapping, and state conversion tests. |
@@ -33,7 +33,7 @@ Summary:
 | `ref/adk-python/src/google/adk/agents/callback_context.py` | `lib/src/agents/callback_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/common_configs.py` | `lib/src/agents/common_configs.dart` | `done` | Added `ArgumentConfig`/`CodeConfig`/`AgentRefConfig` contracts with one-of validation and argument normalization parity. |
 | `ref/adk-python/src/google/adk/agents/config_agent_utils.py` | `lib/src/agents/config_agent_utils.dart` | `done` | Added config loading, YAML parsing, code/callback/agent reference resolution, and built-in/custom agent instantiation parity path. |
-| `ref/adk-python/src/google/adk/agents/config_schemas/AgentConfig.json` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/agents/config_schemas/AgentConfig.json` | `lib/src/agents/config_schemas/AgentConfig.json` | `done` | Added canonical AgentConfig JSON schema asset for parity with Python config schema contract. |
 | `ref/adk-python/src/google/adk/agents/context.py` | `lib/src/agents/context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/context_cache_config.py` | `lib/src/agents/context_cache_config.dart` | `done` | Added cache interval/ttl/min-token config with range validation, ttl string helper, and string representation parity. |
 | `ref/adk-python/src/google/adk/agents/invocation_context.py` | `lib/src/agents/invocation_context.dart` | `done` | Counterpart exists and tests reference module/package terms. |
@@ -84,36 +84,36 @@ Summary:
 | `ref/adk-python/src/google/adk/auth/refresher/base_credential_refresher.py` | `lib/src/auth/refresher/base_credential_refresher.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/refresher/credential_refresher_registry.py` | `lib/src/auth/refresher/credential_refresher_registry.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/refresher/oauth2_credential_refresher.py` | `lib/src/auth/refresher/oauth2_credential_refresher.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/cli/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/__main__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/adk_web_server.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/agent_graph.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/adk_favicon.svg` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/assets/ADK-512-color.svg` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/assets/audio-processor.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/assets/config/runtime-config.json` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-4MSGFQCD.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-7MR4QDTO.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-A6XEKK5I.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-AK5ESGDJ.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-BWFUMX67.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-BX7YU7E6.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-CHLIPOEM.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-GLGRLUIJ.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-HAQR6HJ6.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-HYLIZOX5.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-IXLBQLFI.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-M3M3P5CP.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-RLBEOMT4.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-RUWE7IJV.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-UATSMTT5.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-VPVAD56Y.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-W7GRJBO5.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/chunk-XB75PFJS.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/index.html` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/main-QQBY56NS.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/polyfills-5CFQRCPP.js` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/browser/styles-SI5RXIFC.css` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/cli/__init__.py` | `lib/src/cli/__init__.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/__main__.py` | `lib/src/cli/__main__.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/adk_web_server.py` | `lib/src/cli/adk_web_server.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/agent_graph.py` | `lib/src/cli/agent_graph.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/adk_favicon.svg` | `lib/src/cli/browser/adk_favicon.svg` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/assets/ADK-512-color.svg` | `lib/src/cli/browser/assets/ADK-512-color.svg` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/assets/audio-processor.js` | `lib/src/cli/browser/assets/audio-processor.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/assets/config/runtime-config.json` | `lib/src/cli/browser/assets/config/runtime-config.json` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-4MSGFQCD.js` | `lib/src/cli/browser/chunk-4MSGFQCD.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-7MR4QDTO.js` | `lib/src/cli/browser/chunk-7MR4QDTO.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-A6XEKK5I.js` | `lib/src/cli/browser/chunk-A6XEKK5I.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-AK5ESGDJ.js` | `lib/src/cli/browser/chunk-AK5ESGDJ.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-BWFUMX67.js` | `lib/src/cli/browser/chunk-BWFUMX67.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-BX7YU7E6.js` | `lib/src/cli/browser/chunk-BX7YU7E6.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-CHLIPOEM.js` | `lib/src/cli/browser/chunk-CHLIPOEM.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-GLGRLUIJ.js` | `lib/src/cli/browser/chunk-GLGRLUIJ.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-HAQR6HJ6.js` | `lib/src/cli/browser/chunk-HAQR6HJ6.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-HYLIZOX5.js` | `lib/src/cli/browser/chunk-HYLIZOX5.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-IXLBQLFI.js` | `lib/src/cli/browser/chunk-IXLBQLFI.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-M3M3P5CP.js` | `lib/src/cli/browser/chunk-M3M3P5CP.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-RLBEOMT4.js` | `lib/src/cli/browser/chunk-RLBEOMT4.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-RUWE7IJV.js` | `lib/src/cli/browser/chunk-RUWE7IJV.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-UATSMTT5.js` | `lib/src/cli/browser/chunk-UATSMTT5.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-VPVAD56Y.js` | `lib/src/cli/browser/chunk-VPVAD56Y.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-W7GRJBO5.js` | `lib/src/cli/browser/chunk-W7GRJBO5.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/chunk-XB75PFJS.js` | `lib/src/cli/browser/chunk-XB75PFJS.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/index.html` | `lib/src/cli/browser/index.html` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/main-QQBY56NS.js` | `lib/src/cli/browser/main-QQBY56NS.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/polyfills-5CFQRCPP.js` | `lib/src/cli/browser/polyfills-5CFQRCPP.js` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/browser/styles-SI5RXIFC.css` | `lib/src/cli/browser/styles-SI5RXIFC.css` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
 | `ref/adk-python/src/google/adk/cli/built_in_agents/README.md` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/cli/built_in_agents/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/cli/built_in_agents/adk_agent_builder_assistant.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
@@ -138,37 +138,37 @@ Summary:
 | `ref/adk-python/src/google/adk/cli/built_in_agents/utils/path_normalizer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/cli/built_in_agents/utils/resolve_root_directory.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
 | `ref/adk-python/src/google/adk/cli/cli.py` | `lib/src/dev/cli.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/cli/cli_create.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/cli_deploy.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/cli_eval.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/cli_tools_click.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/_generate_markdown_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/_generated_file_utils.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/_replay_validators.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/adk_web_server_client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/cli_record.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/cli_test.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/conformance/test_case.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/fast_api.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/plugins/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/plugins/recordings_plugin.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/plugins/recordings_schema.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/plugins/replay_plugin.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/service_registry.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/agent_change_handler.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/agent_loader.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/base_agent_loader.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/cleanup.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/common.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/dot_adk_folder.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/envs.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/evals.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/local_storage.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/logs.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/service_factory.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/cli/utils/shared_value.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/cli/cli_create.py` | `lib/src/cli/cli_create.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/cli_deploy.py` | `lib/src/cli/cli_deploy.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/cli_eval.py` | `lib/src/cli/cli_eval.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/cli_tools_click.py` | `lib/src/cli/cli_tools_click.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/__init__.py` | `lib/src/cli/conformance/__init__.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/_generate_markdown_utils.py` | `lib/src/cli/conformance/_generate_markdown_utils.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/_generated_file_utils.py` | `lib/src/cli/conformance/_generated_file_utils.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/_replay_validators.py` | `lib/src/cli/conformance/_replay_validators.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/adk_web_server_client.py` | `lib/src/cli/conformance/adk_web_server_client.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/cli_record.py` | `lib/src/cli/conformance/cli_record.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/cli_test.py` | `lib/src/cli/conformance/cli_test.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/conformance/test_case.py` | `lib/src/cli/conformance/test_case.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/fast_api.py` | `lib/src/cli/fast_api.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/plugins/__init__.py` | `lib/src/cli/plugins/__init__.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/plugins/recordings_plugin.py` | `lib/src/cli/plugins/recordings_plugin.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/plugins/recordings_schema.py` | `lib/src/cli/plugins/recordings_schema.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/plugins/replay_plugin.py` | `lib/src/cli/plugins/replay_plugin.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/service_registry.py` | `lib/src/cli/service_registry.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/__init__.py` | `lib/src/cli/utils/__init__.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/agent_change_handler.py` | `lib/src/cli/utils/agent_change_handler.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/agent_loader.py` | `lib/src/cli/utils/agent_loader.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/base_agent_loader.py` | `lib/src/cli/utils/base_agent_loader.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/cleanup.py` | `lib/src/cli/utils/cleanup.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/common.py` | `lib/src/cli/utils/common.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/dot_adk_folder.py` | `lib/src/cli/utils/dot_adk_folder.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/envs.py` | `lib/src/cli/utils/envs.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/evals.py` | `lib/src/cli/utils/evals.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/local_storage.py` | `lib/src/cli/utils/local_storage.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/logs.py` | `lib/src/cli/utils/logs.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/service_factory.py` | `lib/src/cli/utils/service_factory.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
+| `ref/adk-python/src/google/adk/cli/utils/shared_value.py` | `lib/src/cli/utils/shared_value.dart` | `done` | Ported Dart counterpart with parity coverage/tests in `test/cli_*` suites. |
 | `ref/adk-python/src/google/adk/cli/utils/state.py` | `lib/src/sessions/state.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/code_executors/__init__.py` | `lib/src/code_executors/(package)` | `done` | Added package surface parity with dedicated executor contract/surface tests covering built-in alias and base executor defaults. |
 | `ref/adk-python/src/google/adk/code_executors/agent_engine_sandbox_code_executor.py` | `lib/src/code_executors/agent_engine_sandbox_code_executor.dart` | `done` | Added full sandbox contract parity via pluggable sandbox client (sandbox create + execute response parsing with stdout/stderr/file outputs), while preserving local execution fallback and resource-name validation tests. |
@@ -243,11 +243,11 @@ Summary:
 | `ref/adk-python/src/google/adk/events/__init__.py` | `lib/src/events/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/events/event.py` | `lib/src/events/event.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/events/event_actions.py` | `lib/src/events/event_actions.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/examples/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/examples/base_example_provider.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/examples/example.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/examples/example_util.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/examples/vertex_ai_example_store.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/examples/__init__.py` | `lib/src/examples/examples.dart` | `done` | Added examples package surface exporting provider/model/util/store modules with parity tests. |
+| `ref/adk-python/src/google/adk/examples/base_example_provider.py` | `lib/src/examples/base_example_provider.dart` | `done` | Added abstract example provider contract (`getExamples(query)`) matching Python few-shot provider interface. |
+| `ref/adk-python/src/google/adk/examples/example.py` | `lib/src/examples/example.dart` | `done` | Added strongly-typed few-shot example model with `Content` input/output parity and copy semantics. |
+| `ref/adk-python/src/google/adk/examples/example_util.py` | `lib/src/examples/example_util.dart` | `done` | Added example-to-system-instruction conversion, latest-user-message helper, and provider/list dispatch parity behavior. |
+| `ref/adk-python/src/google/adk/examples/vertex_ai_example_store.py` | `lib/src/examples/vertex_ai_example_store.dart` | `done` | Added Vertex example-store provider abstraction with similarity threshold filtering and expected-output mapping parity. |
 | `ref/adk-python/src/google/adk/features/__init__.py` | `lib/src/features/features.dart` | `done` | Added feature module export surface with decorator/registry contracts and parity tests for warning/override/decorator behavior. |
 | `ref/adk-python/src/google/adk/features/_feature_decorator.py` | `lib/src/features/_feature_decorator.dart` | `done` | Added feature gate decorators (`workingInProgress`/`experimental`/`stable`) with registration, stage consistency checks, and runtime guard execution parity. |
 | `ref/adk-python/src/google/adk/features/_feature_registry.py` | `lib/src/features/_feature_registry.dart` | `done` | Added feature enum/config registry, override/env/default precedence, one-time non-stable warning emission, and temporary override helpers with parity tests. |
@@ -278,8 +278,8 @@ Summary:
 | `ref/adk-python/src/google/adk/memory/base_memory_service.py` | `lib/src/memory/base_memory_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/memory/in_memory_memory_service.py` | `lib/src/memory/in_memory_memory_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/memory/memory_entry.py` | `lib/src/memory/memory_entry.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/memory/vertex_ai_memory_bank_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/memory/vertex_ai_rag_memory_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/memory/vertex_ai_memory_bank_service.py` | `lib/src/memory/vertex_ai_memory_bank_service.dart` | `done` | Added Vertex memory-bank service parity with event/memory ingestion modes, consolidation batching, metadata normalization, and retriever client abstraction. |
+| `ref/adk-python/src/google/adk/memory/vertex_ai_rag_memory_service.py` | `lib/src/memory/vertex_ai_rag_memory_service.dart` | `done` | Added Vertex RAG memory service parity for transcript upload, retrieval parsing, overlap merging, and scoped memory extraction. |
 | `ref/adk-python/src/google/adk/models/__init__.py` | `lib/src/models/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/models/anthropic_llm.py` | `lib/src/models/anthropic_llm.dart` | `done` | Added Anthropic conversion contracts (role/finish-reason mapping, part/content/tool conversion, response parsing) and invoker-backed request execution surface with dedicated parity tests. |
 | `ref/adk-python/src/google/adk/models/apigee_llm.py` | `lib/src/models/apigee_llm.dart` | `done` | Added Apigee model-spec validation/version/provider parsing, Vertex/Gemini/OpenAI API-type routing, chat-completions payload/response conversion, and completions-client integration tests. |
@@ -308,7 +308,7 @@ Summary:
 | `ref/adk-python/src/google/adk/platform/thread.py` | `lib/src/platform/thread.dart` | `done` | Added `createThread` shim with optional internal creator delegation plus start/join thread wrapper that mirrors Python callable + args behavior. |
 | `ref/adk-python/src/google/adk/plugins/__init__.py` | `lib/src/plugins/(package)` | `done` | Plugin package now exports core baseline plugins (`Base`, `DebugLogging`, `Logging`, `PluginManager`, `ReflectRetry`) with tests. |
 | `ref/adk-python/src/google/adk/plugins/base_plugin.py` | `lib/src/plugins/base_plugin.dart` | `done` | Callback surface matches Python base plugin and is covered by plugin manager callback tests. |
-| `ref/adk-python/src/google/adk/plugins/bigquery_agent_analytics_plugin.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/plugins/bigquery_agent_analytics_plugin.py` | `lib/src/plugins/bigquery_agent_analytics_plugin.dart` | `done` | Added BigQuery analytics plugin parity surface (config/event model/trace manager/callback logging/HITL event mapping) with sink-based test coverage. |
 | `ref/adk-python/src/google/adk/plugins/context_filter_plugin.py` | `lib/src/plugins/context_filter_plugin.dart` | `done` | Added invocation window filtering with orphaned function-call/response preservation and tests. |
 | `ref/adk-python/src/google/adk/plugins/debug_logging_plugin.py` | `lib/src/plugins/debug_logging_plugin.dart` | `done` | Added file-backed debug logging plugin with lifecycle/model/tool event capture and output tests. |
 | `ref/adk-python/src/google/adk/plugins/global_instruction_plugin.py` | `lib/src/plugins/global_instruction_plugin.dart` | `done` | Added global instruction injection plugin with string/provider handling and tests. |
@@ -317,7 +317,7 @@ Summary:
 | `ref/adk-python/src/google/adk/plugins/plugin_manager.py` | `lib/src/plugins/plugin_manager.dart` | `done` | Added callback error wrapping and parity-focused plugin manager early-exit/close tests. |
 | `ref/adk-python/src/google/adk/plugins/reflect_retry_tool_plugin.py` | `lib/src/plugins/reflect_retry_tool_plugin.dart` | `done` | Added scoped retry guidance plugin with reset/exceed logic and parity behavior tests. |
 | `ref/adk-python/src/google/adk/plugins/save_files_as_artifacts_plugin.py` | `lib/src/plugins/save_files_as_artifacts_plugin.dart` | `done` | Added inline-file upload to artifact persistence plugin with placeholder insertion and model-accessible URI tests. |
-| `ref/adk-python/src/google/adk/py.typed` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/py.typed` | `lib/src/py.typed` | `done` | Added marker file counterpart to preserve package-level typing metadata parity surface. |
 | `ref/adk-python/src/google/adk/runners.py` | `lib/src/runners/runner.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/sessions/__init__.py` | `lib/src/sessions/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/sessions/_session_util.py` | `lib/src/sessions/session_util.dart` | `done` | Counterpart exists and tests reference module/package terms. |
@@ -336,7 +336,7 @@ Summary:
 | `ref/adk-python/src/google/adk/sessions/sqlite_session_service.py` | `lib/src/sessions/sqlite_session_service.dart` | `done` | Added persistent local session service with state merge and append parity behavior tests. |
 | `ref/adk-python/src/google/adk/sessions/state.py` | `lib/src/sessions/state.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/sessions/vertex_ai_session_service.py` | `lib/src/sessions/vertex_ai_session_service.dart` | `done` | Added Vertex-compatible session facade with app-name validation and lifecycle delegation tests. |
-| `ref/adk-python/src/google/adk/skills/README.md` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/skills/README.md` | `lib/src/skills/README.md` | `done` | Added skills README counterpart documenting experimental skills subsystem parity. |
 | `ref/adk-python/src/google/adk/skills/__init__.py` | `lib/src/skills/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/skills/_utils.py` | `lib/src/skills/_utils.dart` | `done` | Added dedicated utility module export; behavior is implemented and tested via `skill.dart`. |
 | `ref/adk-python/src/google/adk/skills/models.py` | `lib/src/skills/models.dart` | `done` | Added dedicated models module export; frontmatter/resources/skill model tests already cover parity. |

@@ -1,19 +1,10 @@
+import '../examples/base_example_provider.dart';
+import '../examples/example.dart';
 import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
 import 'tool_configs.dart';
 import 'tool_context.dart';
-
-class Example {
-  Example({required this.input, required this.output});
-
-  final String input;
-  final String output;
-}
-
-abstract class BaseExampleProvider {
-  List<Example> provideExamples();
-}
 
 class ExampleToolConfig extends BaseToolConfig {
   ExampleToolConfig({required this.examples, super.extras});
@@ -48,19 +39,19 @@ class ExampleTool extends BaseTool {
       return;
     }
 
-    final List<Example> resolved = _resolveExamples();
+    final List<Example> resolved = _resolveExamples(query.trim());
     if (resolved.isEmpty) {
       return;
     }
     llmRequest.appendInstructions(<String>[
-      buildExampleSystemInstruction(resolved, query),
+      buildExampleSystemInstruction(resolved, query.trim()),
     ]);
   }
 
-  List<Example> _resolveExamples() {
+  List<Example> _resolveExamples(String query) {
     final Object value = examples;
     if (value is BaseExampleProvider) {
-      return value.provideExamples();
+      return value.getExamples(query);
     }
     if (value is List<Example>) {
       return value;
@@ -77,7 +68,12 @@ class ExampleTool extends BaseTool {
           final String? input = item['input'] as String?;
           final String? output = item['output'] as String?;
           if (input != null && output != null) {
-            parsed.add(Example(input: input, output: output));
+            parsed.add(
+              Example(
+                input: Content.userText(input),
+                output: <Content>[Content.modelText(output)],
+              ),
+            );
           }
         }
       }
@@ -94,9 +90,19 @@ String buildExampleSystemInstruction(List<Example> examples, String query) {
   buffer.writeln('Use the following examples as guidance.');
   for (int i = 0; i < examples.length; i += 1) {
     final Example example = examples[i];
+    final String inputText = example.input.parts
+        .where((Part part) => part.text != null && part.text!.trim().isNotEmpty)
+        .map((Part part) => part.text!.trim())
+        .join(' ');
+    final String outputText = example.output
+        .expand((Content content) => content.parts)
+        .where((Part part) => part.text != null && part.text!.trim().isNotEmpty)
+        .map((Part part) => part.text!.trim())
+        .join(' ');
+
     buffer.writeln('Example ${i + 1}');
-    buffer.writeln('Input: ${example.input}');
-    buffer.writeln('Output: ${example.output}');
+    buffer.writeln('Input: $inputText');
+    buffer.writeln('Output: $outputText');
   }
   buffer.writeln('Now answer this user query: $query');
   return buffer.toString().trim();
