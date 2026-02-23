@@ -448,6 +448,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] APIHub package barrel parity (`apihub_tool/apihub_tool.dart`, `clients/clients.dart`) and public export wiring in `adk_dart.dart`
 - [x] end-to-end regression coverage (`test/apihub_tool_parity_test.dart`)
 
+## Newly Added Application Integration Tooling Parity (this iteration)
+
+- [x] Connections client parity (`application_integration_tool/clients/connections_client.dart`) with connection/entity/action schema retrieval, long-running operation polling, connector OpenAPI template generation, and JSON-schema to OpenAPI schema conversion
+- [x] Integration client parity (`application_integration_tool/clients/integration_client.dart`) for `generateOpenApiSpec` request flow and entity/action-based connector OpenAPI assembly
+- [x] Connector wrapper tool parity (`application_integration_tool/integration_connector_tool.dart`) with declaration field filtering, dynamic auth token propagation, and connector context arg injection
+- [x] ApplicationIntegrationToolset parity (`application_integration_tool/application_integration_toolset.dart`) with integration/connection modes, auth-override handling, OpenAPI toolset delegation, and connector-tool synthesis
+- [x] package/export wiring parity (`application_integration_tool/application_integration_tool.dart`, `adk_dart.dart`) and regression coverage (`test/application_integration_tool_parity_test.dart`)
+
 ## Remaining for Full Python Parity
 
 - [ ] full auth flow parity (protocol edge-cases + richer oauth/openid handlers)

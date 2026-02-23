@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 369
+- done: 374
 - partial: 0
-- missing: 117
+- missing: 112
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -371,11 +371,11 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/apihub_tool/clients/__init__.py` | `lib/src/tools/apihub_tool/clients/clients.dart` | `done` | Added APIHub client package barrel exports. |
 | `ref/adk-python/src/google/adk/tools/apihub_tool/clients/apihub_client.py` | `lib/src/tools/apihub_tool/clients/apihub_client.dart` | `done` | Added APIHub REST client with resource-name extraction, API/version/spec resolution flow, base64 spec decoding, and injectable request/token providers. |
 | `ref/adk-python/src/google/adk/tools/apihub_tool/clients/secret_client.py` | `lib/src/tools/apihub_tool/clients/secret_client.dart` | `done` | Added Secret Manager client facade with service-account JSON validation and injectable secret fetcher parity surface. |
-| `ref/adk-python/src/google/adk/tools/application_integration_tool/__init__.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/application_integration_tool/application_integration_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/application_integration_tool/clients/connections_client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/application_integration_tool/clients/integration_client.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/application_integration_tool/integration_connector_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/application_integration_tool/__init__.py` | `lib/src/tools/application_integration_tool/application_integration_tool.dart` | `done` | Added application-integration package barrel exporting toolset/connector/client surfaces. |
+| `ref/adk-python/src/google/adk/tools/application_integration_tool/application_integration_toolset.py` | `lib/src/tools/application_integration_tool/application_integration_toolset.dart` | `done` | Added integration/connector toolset orchestration with OpenAPI generation path, connector auth-override behavior, and tool filtering/auth config parity. |
+| `ref/adk-python/src/google/adk/tools/application_integration_tool/clients/connections_client.py` | `lib/src/tools/application_integration_tool/clients/connections_client.dart` | `done` | Added connectors API client parity including connection/entity/action metadata calls, operation polling, connector OpenAPI template/operation builders, and schema conversion helpers. |
+| `ref/adk-python/src/google/adk/tools/application_integration_tool/clients/integration_client.py` | `lib/src/tools/application_integration_tool/clients/integration_client.dart` | `done` | Added Application Integration API client parity for generateOpenApiSpec requests and connection/entity/action OpenAPI assembly flow. |
+| `ref/adk-python/src/google/adk/tools/application_integration_tool/integration_connector_tool.py` | `lib/src/tools/application_integration_tool/integration_connector_tool.dart` | `done` | Added connector wrapper tool that filters declaration fields, prepares dynamic auth payloads, injects connector context args, and delegates execution to RestApiTool. |
 | `ref/adk-python/src/google/adk/tools/authenticated_function_tool.py` | `lib/src/tools/authenticated_function_tool.dart` | `done` | Added authenticated function tool with credential injection and auth-request fallback behavior. |
 | `ref/adk-python/src/google/adk/tools/base_authenticated_tool.py` | `lib/src/tools/base_authenticated_tool.dart` | `done` | Added base authenticated tool that routes through CredentialManager before executing implementation logic. |
 | `ref/adk-python/src/google/adk/tools/base_tool.py` | `lib/src/tools/base_tool.dart` | `done` | Counterpart exists and tests reference module/package terms. |

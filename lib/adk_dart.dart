@@ -244,6 +244,7 @@ export 'src/tools/agent_simulator/tool_connection_map.dart';
 export 'src/tools/agent_tool.dart';
 export 'src/tools/api_registry.dart';
 export 'src/tools/apihub_tool/apihub_tool.dart';
+export 'src/tools/application_integration_tool/application_integration_tool.dart';
 export 'src/tools/bigquery/bigquery.dart'
     hide
         executeSql,
