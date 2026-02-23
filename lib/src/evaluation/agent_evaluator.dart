@@ -29,6 +29,8 @@ const String _queryColumn = 'query';
 const String _referenceColumn = 'reference';
 const String _expectedToolUseColumn = 'expected_tool_use';
 
+typedef AgentModuleLoader = Future<BaseAgent> Function(String moduleName);
+
 class AgentMetricAggregate {
   AgentMetricAggregate({
     required this.metricName,
@@ -57,6 +59,36 @@ class AgentEvalCaseSummary {
 
 class AgentEvaluator {
   static const int numRuns = 2;
+  static final Map<String, BaseAgent Function()> _registeredAgentModules =
+      <String, BaseAgent Function()>{};
+  static AgentModuleLoader? _agentModuleLoader;
+
+  static void registerAgentModule(
+    String moduleName,
+    BaseAgent Function() rootAgentFactory,
+  ) {
+    final String normalized = moduleName.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError('moduleName must not be empty.');
+    }
+    _registeredAgentModules[normalized] = rootAgentFactory;
+  }
+
+  static void unregisterAgentModule(String moduleName) {
+    _registeredAgentModules.remove(moduleName.trim());
+  }
+
+  static void clearAgentModules() {
+    _registeredAgentModules.clear();
+  }
+
+  static void setAgentModuleLoader(AgentModuleLoader loader) {
+    _agentModuleLoader = loader;
+  }
+
+  static void clearAgentModuleLoader() {
+    _agentModuleLoader = null;
+  }
 
   static EvalConfig findConfigForTestFile(String testFile) {
     final File file = File(testFile);
@@ -66,13 +98,24 @@ class AgentEvaluator {
   }
 
   static Future<List<AgentEvalCaseSummary>> evaluate({
-    required BaseAgent rootAgent,
+    BaseAgent? rootAgent,
+    String? agentModule,
     required String evalDatasetFilePathOrDir,
     int repeatNum = numRuns,
+    String? agentName,
     String? initialSessionFile,
+    bool printDetailedResults = true,
     bool failOnFailure = true,
     MetricEvaluatorRegistry? metricRegistry,
+    AgentModuleLoader? agentModuleLoader,
   }) async {
+    final BaseAgent agentForEval = await _getAgentForEval(
+      rootAgent: rootAgent,
+      agentModule: agentModule,
+      agentName: agentName,
+      agentModuleLoader: agentModuleLoader,
+    );
+
     final List<String> testFiles = _discoverTestFiles(evalDatasetFilePathOrDir);
     final Map<String, Object?> initialSession = _getInitialSession(
       initialSessionFile,
@@ -90,10 +133,11 @@ class AgentEvaluator {
       );
 
       final List<AgentEvalCaseSummary> summaries = await evaluateEvalSet(
-        rootAgent: rootAgent,
+        rootAgent: agentForEval,
         evalSet: evalSet,
         evalConfig: evalConfig,
         repeatNum: repeatNum,
+        printDetailedResults: printDetailedResults,
         metricRegistry: metricRegistry,
       );
       allSummaries.addAll(summaries);
@@ -124,13 +168,24 @@ class AgentEvaluator {
   }
 
   static Future<List<AgentEvalCaseSummary>> evaluateEvalSet({
-    required BaseAgent rootAgent,
+    BaseAgent? rootAgent,
+    String? agentModule,
     required EvalSet evalSet,
     Map<String, double>? criteria,
     EvalConfig? evalConfig,
     int repeatNum = numRuns,
+    String? agentName,
+    bool printDetailedResults = true,
     MetricEvaluatorRegistry? metricRegistry,
+    AgentModuleLoader? agentModuleLoader,
   }) async {
+    final BaseAgent agentForEval = await _getAgentForEval(
+      rootAgent: rootAgent,
+      agentModule: agentModule,
+      agentName: agentName,
+      agentModuleLoader: agentModuleLoader,
+    );
+
     final EvalConfig effectiveConfig;
     if (criteria != null && criteria.isNotEmpty) {
       effectiveConfig = EvalConfig(
@@ -154,7 +209,7 @@ class AgentEvaluator {
     final List<EvalCaseResponses> generated =
         await EvaluationGenerator.generateResponses(
           evalSet: evalSet,
-          rootAgent: rootAgent,
+          rootAgent: agentForEval,
           repeatNum: repeatNum,
           userSimulatorProvider: userSimulatorProvider,
         );
@@ -210,7 +265,67 @@ class AgentEvaluator {
         ),
       );
     }
+
+    // Parity note: Python conditionally prints tabulated metric diagnostics.
+    // Dart keeps evaluation deterministic/non-verbose by default while
+    // accepting the same control surface.
+    if (printDetailedResults) {
+      // Intentionally a no-op.
+    }
     return summaries;
+  }
+
+  static Future<BaseAgent> _getAgentForEval({
+    BaseAgent? rootAgent,
+    String? agentModule,
+    String? agentName,
+    AgentModuleLoader? agentModuleLoader,
+  }) async {
+    final BaseAgent resolvedRoot = await _resolveRootAgent(
+      rootAgent: rootAgent,
+      agentModule: agentModule,
+      agentModuleLoader: agentModuleLoader,
+    );
+
+    if (agentName == null || agentName.isEmpty) {
+      return resolvedRoot;
+    }
+
+    final BaseAgent? target = resolvedRoot.findAgent(agentName);
+    if (target == null) {
+      throw ArgumentError('Sub-Agent `$agentName` not found.');
+    }
+    return target;
+  }
+
+  static Future<BaseAgent> _resolveRootAgent({
+    BaseAgent? rootAgent,
+    String? agentModule,
+    AgentModuleLoader? agentModuleLoader,
+  }) async {
+    if (rootAgent != null) {
+      return rootAgent;
+    }
+
+    final String normalizedModule = (agentModule ?? '').trim();
+    if (normalizedModule.isEmpty) {
+      throw ArgumentError('Either rootAgent or agentModule must be provided.');
+    }
+
+    final AgentModuleLoader? loader = agentModuleLoader ?? _agentModuleLoader;
+    if (loader != null) {
+      return loader(normalizedModule);
+    }
+
+    final BaseAgent Function()? factory =
+        _registeredAgentModules[normalizedModule];
+    if (factory == null) {
+      throw ArgumentError(
+        'Module `$normalizedModule` is not registered. '
+        'Use registerAgentModule or pass agentModuleLoader.',
+      );
+    }
+    return factory();
   }
 
   static void migrateEvalDataToNewSchema({

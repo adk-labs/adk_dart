@@ -23,6 +23,20 @@ class _EchoAgent extends BaseAgent {
   }
 }
 
+class _RootAgent extends BaseAgent {
+  _RootAgent({List<BaseAgent>? subAgents})
+    : super(name: 'root_agent', subAgents: subAgents);
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('Root fallback'),
+    );
+  }
+}
+
 class _BinaryJudgeEvaluator extends LlmAsJudge {
   _BinaryJudgeEvaluator({
     required EvalMetricSpec evalMetric,
@@ -293,6 +307,89 @@ void main() {
           evalConfig: invalidConfig,
         ),
         throwsArgumentError,
+      );
+    });
+  });
+
+  group('agent evaluator module resolution parity', () {
+    setUp(() {
+      AgentEvaluator.clearAgentModules();
+      AgentEvaluator.clearAgentModuleLoader();
+    });
+
+    tearDown(() {
+      AgentEvaluator.clearAgentModules();
+      AgentEvaluator.clearAgentModuleLoader();
+    });
+
+    test('evaluate resolves root agent from registered module name', () async {
+      final Directory tempDir = Directory.systemTemp.createTempSync(
+        'agent_eval_module_',
+      );
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      File('${tempDir.path}/case_a.test.json').writeAsStringSync(
+        jsonEncode(<Map<String, Object?>>[
+          <String, Object?>{'query': 'hello', 'reference': 'Echo: hello'},
+        ]),
+      );
+      File('${tempDir.path}/test_config.json').writeAsStringSync(
+        jsonEncode(<String, Object?>{
+          'criteria': <String, Object?>{
+            PrebuiltMetricNames.responseMatchScore: 0.8,
+          },
+        }),
+      );
+
+      AgentEvaluator.registerAgentModule(
+        'sample.agent',
+        () => _RootAgent(subAgents: <BaseAgent>[_EchoAgent()]),
+      );
+
+      final List<AgentEvalCaseSummary> summaries =
+          await AgentEvaluator.evaluate(
+            agentModule: 'sample.agent',
+            agentName: 'echo_agent',
+            evalDatasetFilePathOrDir: tempDir.path,
+            repeatNum: 1,
+          );
+
+      expect(summaries, hasLength(1));
+      expect(summaries.first.passed, isTrue);
+    });
+
+    test('evaluateEvalSet uses injected module loader when provided', () async {
+      final List<AgentEvalCaseSummary> summary =
+          await AgentEvaluator.evaluateEvalSet(
+            agentModule: 'dynamic.module',
+            evalSet: _singleTurnEvalSet(),
+            evalConfig: EvalConfig(
+              criteria: <String, Object?>{
+                PrebuiltMetricNames.responseMatchScore: 0.9,
+              },
+            ),
+            repeatNum: 1,
+            agentModuleLoader: (String moduleName) async {
+              expect(moduleName, 'dynamic.module');
+              return _EchoAgent();
+            },
+          );
+
+      expect(summary, hasLength(1));
+      expect(summary.first.passed, isTrue);
+    });
+
+    test('evaluate rejects unknown module when no loader is registered', () {
+      expect(
+        () => AgentEvaluator.evaluate(
+          agentModule: 'missing.module',
+          evalDatasetFilePathOrDir: '/tmp/does-not-matter',
+        ),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });
