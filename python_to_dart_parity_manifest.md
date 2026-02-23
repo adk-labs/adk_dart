@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 324
+- done: 327
 - partial: 0
-- missing: 162
+- missing: 159
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -401,10 +401,10 @@ Summary:
 | `ref/adk-python/src/google/adk/tools/computer_use/computer_use_toolset.py` | `lib/src/tools/computer_use/computer_use_toolset.dart` | `done` | Added computer-use toolset with lazy initialization, method-tool wiring, adapter hook, request tool injection, and environment label propagation. |
 | `ref/adk-python/src/google/adk/tools/crewai_tool.py` | `lib/src/tools/crewai_tool.dart` | `done` | Added CrewAI-style wrapper tool with mandatory-argument guard, schema-aware declaration override, and config-driven runner resolution hooks. |
 | `ref/adk-python/src/google/adk/tools/data_agent/__init__.py` | `lib/src/tools/data_agent/(package)` | `done` | Added Data Agent credential package surface under tools namespace. |
-| `ref/adk-python/src/google/adk/tools/data_agent/config.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/data_agent/config.py` | `lib/src/tools/data_agent/config.dart` | `done` | Added Data Agent tool config with default row cap, extra-field rejection, and JSON decode parity. |
 | `ref/adk-python/src/google/adk/tools/data_agent/credentials.py` | `lib/src/tools/data_agent/credentials.dart` | `done` | Added Data Agent credential config with default BigQuery scope and token-cache-key parity behavior. |
-| `ref/adk-python/src/google/adk/tools/data_agent/data_agent_tool.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/tools/data_agent/data_agent_toolset.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/tools/data_agent/data_agent_tool.py` | `lib/src/tools/data_agent/data_agent_tool.dart` | `done` | Added Data Agent REST/chat helpers including auth-header handling, stream-response formatting, and query-row truncation parity. |
+| `ref/adk-python/src/google/adk/tools/data_agent/data_agent_toolset.py` | `lib/src/tools/data_agent/data_agent_toolset.dart` | `done` | Added Data Agent toolset wiring `GoogleTool` wrappers with credentials/settings propagation and tool filtering parity. |
 | `ref/adk-python/src/google/adk/tools/discovery_engine_search_tool.py` | `lib/src/tools/discovery_engine_search_tool.dart` | `done` | Added Discovery Engine search tool contract with query validation, serving-config derivation, and injectable request handler for deterministic parity testing. |
 | `ref/adk-python/src/google/adk/tools/enterprise_search_tool.py` | `lib/src/tools/enterprise_search_tool.dart` | `done` | Added enterprise web search built-in tool request processor with Gemini model gating and Gemini 1.x multi-tool guard parity. |
 | `ref/adk-python/src/google/adk/tools/example_tool.py` | `lib/src/tools/example_tool.dart` | `done` | Added example injection tool/config with provider/list support and llm instruction composition. |

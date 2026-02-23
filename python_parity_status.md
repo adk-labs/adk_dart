@@ -209,6 +209,14 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] Data Agent credential config parity (`DataAgentCredentialsConfig`)
 - [x] parity tests for default scope/token-cache-key assignment and explicit scope override behavior
 
+## Newly Added Data Agent Tooling Parity (this iteration)
+
+- [x] data-agent tool config parity (`DataAgentToolConfig`) with default row limit and strict extra-field validation
+- [x] data-agent HTTP/chat helpers parity (`listAccessibleDataAgents`, `getDataAgentInfo`, `askDataAgent`) with auth-header enforcement and streaming event normalization
+- [x] schema/data/error formatter parity for agent stream events (question/schema/sql/data/answer/error buckets)
+- [x] data-agent toolset parity (`DataAgentToolset`) with `GoogleTool` credential + settings bridge and filter support
+- [x] dedicated parity tests for config parsing, tool helpers, and toolset invocation flow
+
 ## Newly Added Skill Toolset Parity (this iteration)
 
 - [x] skill toolset parity (`SkillToolset`) with duplicate-name guard and tool filtering integration
