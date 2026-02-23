@@ -252,6 +252,15 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] tracing API parity expansion (`telemetry/tracing`) with `tracer` context and tool/LLM/send-data attribute helpers
 - [x] dedicated parity tests for feature/platform/telemetry modules
 
+## Newly Added Apps/Artifacts Parity (this iteration)
+
+- [x] apps event summarizer base contract parity (`apps/base_events_summarizer`)
+- [x] LLM event summarizer parity (`apps/llm_event_summarizer`) with prompt formatting + `EventCompaction` summary event generation
+- [x] artifact URI utility parity (`artifacts/artifact_util`) for parse/build/reference checks
+- [x] filesystem artifact service parity (`artifacts/file_artifact_service`) with namespace pathing, version metadata, and traversal guard validation
+- [x] GCS artifact service parity (`artifacts/gcs_artifact_service`) with blob-prefix naming, per-version metadata listing, and gs:// canonical URIs
+- [x] dedicated parity tests for apps/artifacts modules
+
 ## Newly Added Planner/Plugin/Skills Utility Parity (this iteration)
 
 - [x] planner parity validation completed (`BasePlanner`, `BuiltInPlanner`, `PlanReActPlanner`) with dedicated planner parity tests

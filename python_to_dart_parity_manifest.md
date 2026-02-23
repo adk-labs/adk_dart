@@ -3,9 +3,9 @@
 Generated: 2026-02-23
 
 Summary:
-- done: 260
-- partial: 24
-- missing: 202
+- done: 266
+- partial: 23
+- missing: 197
 
 | python_file | dart_file | status | parity_notes |
 | --- | --- | --- | --- |
@@ -52,16 +52,16 @@ Summary:
 | `ref/adk-python/src/google/adk/agents/sequential_agent.py` | `lib/src/agents/sequential_agent.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/agents/sequential_agent_config.py` | `lib/src/agents/sequential_agent_config.dart` | `done` | Added sequential config with strict extra-field rejection parity. |
 | `ref/adk-python/src/google/adk/agents/transcription_entry.py` | `lib/src/agents/transcription_entry.dart` | `done` | Added transcription entry model with role/data contract parity (Content or inline binary payload). |
-| `ref/adk-python/src/google/adk/apps/__init__.py` | `lib/src/apps/(package)` | `partial` | Counterpart exists but parity-focused tests were not detected. |
+| `ref/adk-python/src/google/adk/apps/__init__.py` | `lib/src/apps/(package)` | `done` | Added event summarizer module surfaces and parity tests for LLM summary compaction behavior. |
 | `ref/adk-python/src/google/adk/apps/app.py` | `lib/src/apps/app.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/apps/base_events_summarizer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/apps/base_events_summarizer.py` | `lib/src/apps/base_events_summarizer.dart` | `done` | Added abstract event summarizer contract (`maybeSummarizeEvents`) for compaction pipelines. |
 | `ref/adk-python/src/google/adk/apps/compaction.py` | `lib/src/apps/compaction.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/apps/llm_event_summarizer.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/apps/llm_event_summarizer.py` | `lib/src/apps/llm_event_summarizer.dart` | `done` | Added LLM-backed event summarizer with prompt formatting, stream-first summary selection, and EventCompaction output parity tests. |
 | `ref/adk-python/src/google/adk/artifacts/__init__.py` | `lib/src/artifacts/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/artifacts/artifact_util.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/artifacts/artifact_util.py` | `lib/src/artifacts/artifact_util.dart` | `done` | Added artifact URI parse/build helpers and artifact reference detection parity (`artifact://` URIs). |
 | `ref/adk-python/src/google/adk/artifacts/base_artifact_service.py` | `lib/src/artifacts/base_artifact_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
-| `ref/adk-python/src/google/adk/artifacts/file_artifact_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
-| `ref/adk-python/src/google/adk/artifacts/gcs_artifact_service.py` | `-` | `missing` | No Dart counterpart found under lib/src. |
+| `ref/adk-python/src/google/adk/artifacts/file_artifact_service.py` | `lib/src/artifacts/file_artifact_service.dart` | `done` | Added filesystem-backed artifact service with user/session namespace paths, versioned metadata, canonical file URIs, traversal guards, and parity tests. |
+| `ref/adk-python/src/google/adk/artifacts/gcs_artifact_service.py` | `lib/src/artifacts/gcs_artifact_service.dart` | `done` | Added GCS-style artifact service facade with blob-prefix naming, per-version storage/metadata listing, and gs:// canonical URI parity tests. |
 | `ref/adk-python/src/google/adk/artifacts/in_memory_artifact_service.py` | `lib/src/artifacts/in_memory_artifact_service.dart` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/__init__.py` | `lib/src/auth/(package)` | `done` | Counterpart exists and tests reference module/package terms. |
 | `ref/adk-python/src/google/adk/auth/auth_credential.py` | `lib/src/auth/auth_credential.dart` | `done` | Counterpart exists and tests reference module/package terms. |
