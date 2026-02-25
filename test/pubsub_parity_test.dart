@@ -150,7 +150,9 @@ void main() {
             },
       );
 
-      final Object credentialRef = Object();
+      final GoogleOAuthCredential credentialRef = GoogleOAuthCredential(
+        accessToken: 'cache-token',
+      );
       final PubSubPublisherClient publisher1 = await getPublisherClient(
         credentials: credentialRef,
         userAgent: <String>['ua'],
@@ -183,6 +185,102 @@ void main() {
         'subscriber': 0,
       });
     });
+
+    test(
+      'uses stable credential fingerprint and cleans stale clients on token rotation',
+      () async {
+        int publisherCreations = 0;
+        int subscriberCreations = 0;
+        final List<_FakePublisherClient> publishers = <_FakePublisherClient>[];
+        final List<_FakeSubscriberClient> subscribers =
+            <_FakeSubscriberClient>[];
+
+        setPubSubClientFactories(
+          publisherFactory:
+              ({
+                required Object credentials,
+                required List<String> userAgents,
+                required bool enableMessageOrdering,
+              }) async {
+                publisherCreations += 1;
+                final _FakePublisherClient client = _FakePublisherClient(
+                  messageId: 'm-$publisherCreations',
+                );
+                publishers.add(client);
+                return client;
+              },
+          subscriberFactory:
+              ({
+                required Object credentials,
+                required List<String> userAgents,
+              }) async {
+                subscriberCreations += 1;
+                final _FakeSubscriberClient client = _FakeSubscriberClient();
+                subscribers.add(client);
+                return client;
+              },
+        );
+
+        final GoogleOAuthCredential v1 = GoogleOAuthCredential(
+          accessToken: 'token-v1',
+          refreshToken: 'refresh-stable',
+          clientId: 'client-stable',
+        );
+        final GoogleOAuthCredential v1Clone = GoogleOAuthCredential(
+          accessToken: 'token-v1',
+          refreshToken: 'refresh-stable',
+          clientId: 'client-stable',
+        );
+        final GoogleOAuthCredential v2 = GoogleOAuthCredential(
+          accessToken: 'token-v2',
+          refreshToken: 'refresh-stable',
+          clientId: 'client-stable',
+        );
+
+        final PubSubPublisherClient publisherV1 = await getPublisherClient(
+          credentials: v1,
+          userAgent: <String>['ua'],
+        );
+        final PubSubPublisherClient publisherV1Clone = await getPublisherClient(
+          credentials: v1Clone,
+          userAgent: <String>['ua'],
+        );
+        final PubSubSubscriberClient subscriberV1 = await getSubscriberClient(
+          credentials: v1,
+          userAgent: <String>['ua'],
+        );
+        final PubSubSubscriberClient subscriberV1Clone =
+            await getSubscriberClient(
+              credentials: v1Clone,
+              userAgent: <String>['ua'],
+            );
+
+        expect(identical(publisherV1, publisherV1Clone), isTrue);
+        expect(identical(subscriberV1, subscriberV1Clone), isTrue);
+        expect(publisherCreations, 1);
+        expect(subscriberCreations, 1);
+
+        final PubSubPublisherClient publisherV2 = await getPublisherClient(
+          credentials: v2,
+          userAgent: <String>['ua'],
+        );
+        final PubSubSubscriberClient subscriberV2 = await getSubscriberClient(
+          credentials: v2,
+          userAgent: <String>['ua'],
+        );
+
+        expect(identical(publisherV2, publisherV1), isFalse);
+        expect(identical(subscriberV2, subscriberV1), isFalse);
+        expect(publisherCreations, 2);
+        expect(subscriberCreations, 2);
+        expect(publishers.first.closeCount, 1);
+        expect(subscribers.first.closeCount, 1);
+        expect(pubSubCacheSizes(), <String, int>{
+          'publisher': 1,
+          'subscriber': 1,
+        });
+      },
+    );
 
     test('default factory requires access token in credentials', () async {
       await expectLater(
