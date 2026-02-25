@@ -106,6 +106,7 @@ class ParallelAgent extends BaseAgent {
         }
 
         final Event event = result.event!;
+        _syncSubAgentStateFromEvent(context, event);
         yield event;
         if (context.shouldPauseInvocation(event)) {
           pauseInvocation = true;
@@ -124,7 +125,10 @@ class ParallelAgent extends BaseAgent {
       return;
     }
 
-    if (context.isResumable) {
+    if (context.isResumable &&
+        subAgents.every(
+          (BaseAgent subAgent) => context.endOfAgents[subAgent.name] == true,
+        )) {
       context.setAgentState(name, endOfAgent: true);
       yield createAgentStateEvent(context);
     }
@@ -132,9 +136,7 @@ class ParallelAgent extends BaseAgent {
 
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
-    await for (final Event event in runAsyncImpl(context)) {
-      yield event;
-    }
+    throw UnimplementedError('This is not supported yet for ParallelAgent.');
   }
 
   InvocationContext _createBranchContextForSubAgent(
@@ -146,7 +148,12 @@ class ParallelAgent extends BaseAgent {
     final String nextBranch = branch == null || branch.isEmpty
         ? branchSuffix
         : '$branch.$branchSuffix';
-    return context.copyWith(branch: nextBranch);
+    final InvocationContext subAgentContext = context.copyWith(
+      branch: nextBranch,
+    );
+    subAgentContext.agentStates = context.agentStates;
+    subAgentContext.endOfAgents = context.endOfAgents;
+    return subAgentContext;
   }
 
   Future<_ParallelResult> _nextResult(
@@ -159,6 +166,29 @@ class ParallelAgent extends BaseAgent {
       hasEvent: hasEvent,
       event: hasEvent ? iterator.current : null,
     );
+  }
+
+  void _syncSubAgentStateFromEvent(InvocationContext context, Event event) {
+    if (event.actions.endOfAgent == true) {
+      context.endOfAgents[event.author] = true;
+      context.agentStates.remove(event.author);
+      return;
+    }
+
+    if (event.actions.agentState != null) {
+      context.agentStates[event.author] = Map<String, Object?>.from(
+        event.actions.agentState!,
+      );
+      context.endOfAgents[event.author] = false;
+      return;
+    }
+
+    if (event.author != 'user' &&
+        event.content != null &&
+        !context.agentStates.containsKey(event.author)) {
+      context.agentStates[event.author] = <String, Object?>{};
+      context.endOfAgents[event.author] = false;
+    }
   }
 }
 

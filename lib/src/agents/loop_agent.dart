@@ -100,7 +100,7 @@ class LoopAgent extends BaseAgent {
     bool shouldExit = false;
     bool pauseInvocation = false;
 
-    while ((maxIterations == null || timesLooped < maxIterations!) &&
+    while ((_hasNoIterationLimit || timesLooped < maxIterations!) &&
         !(shouldExit || pauseInvocation)) {
       for (int index = startIndex; index < subAgents.length; index += 1) {
         final BaseAgent subAgent = subAgents[index];
@@ -154,10 +154,10 @@ class LoopAgent extends BaseAgent {
 
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
-    await for (final Event event in runAsyncImpl(context)) {
-      yield event;
-    }
+    throw UnimplementedError('This is not supported yet for LoopAgent.');
   }
+
+  bool get _hasNoIterationLimit => maxIterations == null || maxIterations == 0;
 
   (int, int) _getStartState(LoopAgentState? state) {
     if (state == null) {

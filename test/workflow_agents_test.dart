@@ -249,13 +249,32 @@ void main() {
       );
 
       final List<Event> events = await root.runAsync(context).toList();
-      expect(events, hasLength(4));
+      expect(events, hasLength(3));
       expect(events[0].author, 'root');
       expect(events[1].author, 'fast');
       expect(events[2].author, 'slow');
       expect(events[1].branch, 'root.fast');
       expect(events[2].branch, 'root.slow');
-      expect(events[3].actions.endOfAgent, isTrue);
+      expect(
+        events.where((Event event) => event.actions.endOfAgent == true),
+        isEmpty,
+      );
+    });
+
+    test('runLive is not supported yet', () async {
+      final ParallelAgent root = ParallelAgent(
+        name: 'root',
+        subAgents: <BaseAgent>[_EmitAgent(name: 'child')],
+      );
+      final InvocationContext context = await _newContext(
+        agent: root,
+        resumable: false,
+      );
+
+      await expectLater(
+        root.runLive(context).toList(),
+        throwsA(isA<UnimplementedError>()),
+      );
     });
 
     test(
@@ -391,6 +410,46 @@ void main() {
         'escalator',
         'escalator',
       ]);
+    });
+
+    test('treats maxIterations=0 as no iteration limit', () async {
+      final _EmitAgent worker = _EmitAgent(name: 'worker');
+      final _EmitAgent escalator = _EmitAgent(
+        name: 'escalator',
+        escalate: true,
+      );
+      final LoopAgent loop = LoopAgent(
+        name: 'loop',
+        subAgents: <BaseAgent>[worker, escalator],
+        maxIterations: 0,
+      );
+      final InvocationContext context = await _newContext(
+        agent: loop,
+        resumable: false,
+      );
+
+      final List<Event> events = await loop.runAsync(context).toList();
+      expect(events.map((Event event) => event.author), <String>[
+        'worker',
+        'escalator',
+        'escalator',
+      ]);
+    });
+
+    test('runLive is not supported yet', () async {
+      final LoopAgent loop = LoopAgent(
+        name: 'loop',
+        subAgents: <BaseAgent>[_EmitAgent(name: 'worker')],
+      );
+      final InvocationContext context = await _newContext(
+        agent: loop,
+        resumable: false,
+      );
+
+      await expectLater(
+        loop.runLive(context).toList(),
+        throwsA(isA<UnimplementedError>()),
+      );
     });
   });
 }

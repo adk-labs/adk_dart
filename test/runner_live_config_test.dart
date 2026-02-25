@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -29,6 +31,29 @@ void main() {
   test('RunConfig allows non-positive maxLlmCalls for unbounded runs', () {
     expect(RunConfig(maxLlmCalls: 0).maxLlmCalls, 0);
     expect(RunConfig(maxLlmCalls: -1).maxLlmCalls, -1);
+  });
+
+  test('RunConfig warns when maxLlmCalls is non-positive', () {
+    final List<String> printed = <String>[];
+    runZoned(
+      () {
+        RunConfig(maxLlmCalls: 0);
+        RunConfig(maxLlmCalls: -1);
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
+          printed.add(line);
+        },
+      ),
+    );
+
+    final int warningCount = printed
+        .where(
+          (String line) =>
+              line.contains('maxLlmCalls is less than or equal to 0'),
+        )
+        .length;
+    expect(warningCount, 2);
   });
 
   test('RunConfig rejects Python sys.maxsize for maxLlmCalls', () {
