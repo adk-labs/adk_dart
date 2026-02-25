@@ -754,6 +754,57 @@ void main() {
     );
 
     test(
+      'similarity_search returns embedder guard payload when embedder is missing',
+      () async {
+        bool sqlInvoked = false;
+        final _FakeSpannerDatabase database = _FakeSpannerDatabase(
+          databaseDialect: SpannerDatabaseDialect.googleStandardSql,
+        );
+        database.onExecuteSql =
+            ({
+              required String sql,
+              required Map<String, Object?>? params,
+              required Map<String, Object?>? paramTypes,
+            }) {
+              sqlInvoked = true;
+              return _FakeSpannerResultSet(rowsData: <Object?>[]);
+            };
+        final _FakeSpannerClient client = _FakeSpannerClient(
+          instances: <String, _FakeSpannerInstance>{
+            'inst': _FakeSpannerInstance(
+              databases: <String, _FakeSpannerDatabase>{'db': database},
+            ),
+          },
+        );
+        setSpannerClientFactory(
+          ({required String project, required Object credentials}) => client,
+        );
+
+        final Map<String, Object?> result = await similaritySearch(
+          projectId: 'p',
+          instanceId: 'inst',
+          databaseId: 'db',
+          tableName: 'docs',
+          query: 'find me docs',
+          embeddingColumnToSearch: 'embedding',
+          columns: <String>['content'],
+          embeddingOptions: <String, Object?>{
+            'vertex_ai_embedding_model_name': 'text-embedding-005',
+          },
+          credentials: Object(),
+        );
+
+        expect(result['status'], 'ERROR');
+        expect(
+          result['error_code'],
+          SpannerEmbedderNotConfiguredException.defaultCode,
+        );
+        expect('${result['error_details']}', contains('setSpannerEmbedders()'));
+        expect(sqlInvoked, isFalse);
+      },
+    );
+
+    test(
       'vector_store_similarity_search uses settings-derived options',
       () async {
         final _FakeSpannerDatabase database = _FakeSpannerDatabase(
@@ -914,6 +965,47 @@ void main() {
         expect(database.batchInsertCalls.first['table'], 'docs');
       },
     );
+
+    test('vector store add_contents surfaces typed embedder guard', () async {
+      final _FakeSpannerDatabase database = _FakeSpannerDatabase(
+        databaseDialect: SpannerDatabaseDialect.googleStandardSql,
+      );
+      final _FakeSpannerClient client = _FakeSpannerClient(
+        userAgent: 'custom-agent',
+        instances: <String, _FakeSpannerInstance>{
+          'inst': _FakeSpannerInstance(
+            databases: <String, _FakeSpannerDatabase>{'db': database},
+          ),
+        },
+      );
+      final SpannerToolSettings settings = SpannerToolSettings(
+        vectorStoreSettings: SpannerVectorStoreSettings(
+          projectId: 'p',
+          instanceId: 'inst',
+          databaseId: 'db',
+          tableName: 'docs',
+          contentColumn: 'content',
+          embeddingColumn: 'embedding',
+          vectorLength: 1,
+          vertexAiEmbeddingModelName: 'text-embedding-005',
+        ),
+      );
+      final SpannerVectorStore store = SpannerVectorStore(
+        settings: settings,
+        spannerClient: client,
+      );
+
+      await expectLater(
+        () => store.addContents(contents: <String>['a']),
+        throwsA(
+          isA<SpannerEmbedderNotConfiguredException>().having(
+            (SpannerEmbedderNotConfiguredException e) => e.code,
+            'code',
+            SpannerEmbedderNotConfiguredException.defaultCode,
+          ),
+        ),
+      );
+    });
 
     test(
       'toolset returns expected tools and GoogleTool bridge runs execute_sql',

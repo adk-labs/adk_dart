@@ -417,6 +417,14 @@ Future<Map<String, Object?>> similaritySearch({
     }
 
     return <String, Object?>{'status': 'SUCCESS', 'rows': rows};
+  } on utils.SpannerEmbedderNotConfiguredException catch (error) {
+    return _structuredErrorResult(
+      code: error.code,
+      details: error.message,
+      context: <String, Object?>{
+        'hint': 'Call setSpannerEmbedders() before similarity search.',
+      },
+    );
   } catch (error) {
     return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
   }

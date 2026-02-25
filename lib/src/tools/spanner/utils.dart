@@ -90,6 +90,22 @@ typedef SpannerEmbedderAsync =
       Object? genAiClient,
     });
 
+class SpannerEmbedderNotConfiguredException implements Exception {
+  SpannerEmbedderNotConfiguredException([
+    this.message =
+        'No embedding runtime is configured for adk_dart Spanner tools. '
+        'Inject an embedder with setSpannerEmbedders().',
+  ]);
+
+  static const String defaultCode = 'SPANNER_EMBEDDER_NOT_CONFIGURED';
+  final String message;
+
+  String get code => defaultCode;
+
+  @override
+  String toString() => '$code: $message';
+}
+
 SpannerEmbedder _spannerEmbedder = _defaultSpannerEmbedder;
 SpannerEmbedderAsync _spannerEmbedderAsync = _defaultSpannerEmbedderAsync;
 
@@ -116,6 +132,9 @@ List<List<double>> embedContents({
   int? outputDimensionality,
   Object? genAiClient,
 }) {
+  if (identical(_spannerEmbedder, _defaultSpannerEmbedder)) {
+    throw SpannerEmbedderNotConfiguredException();
+  }
   try {
     return _spannerEmbedder(
       vertexAiEmbeddingModelName: vertexAiEmbeddingModelName,
@@ -123,6 +142,8 @@ List<List<double>> embedContents({
       outputDimensionality: outputDimensionality,
       genAiClient: genAiClient,
     );
+  } on SpannerEmbedderNotConfiguredException {
+    rethrow;
   } catch (error) {
     throw StateError('Failed to embed content: $error');
   }
@@ -134,6 +155,9 @@ Future<List<List<double>>> embedContentsAsync({
   int? outputDimensionality,
   Object? genAiClient,
 }) async {
+  if (identical(_spannerEmbedderAsync, _defaultSpannerEmbedderAsync)) {
+    throw SpannerEmbedderNotConfiguredException();
+  }
   try {
     return await _spannerEmbedderAsync(
       vertexAiEmbeddingModelName: vertexAiEmbeddingModelName,
@@ -141,6 +165,8 @@ Future<List<List<double>>> embedContentsAsync({
       outputDimensionality: outputDimensionality,
       genAiClient: genAiClient,
     );
+  } on SpannerEmbedderNotConfiguredException {
+    rethrow;
   } catch (error) {
     throw StateError('Failed to embed content: $error');
   }
@@ -152,10 +178,7 @@ List<List<double>> _defaultSpannerEmbedder({
   int? outputDimensionality,
   Object? genAiClient,
 }) {
-  throw UnsupportedError(
-    'No default embedding client is available in adk_dart. '
-    'Inject an embedder with setSpannerEmbedders().',
-  );
+  throw SpannerEmbedderNotConfiguredException();
 }
 
 Future<List<List<double>>> _defaultSpannerEmbedderAsync({
