@@ -273,7 +273,7 @@ void main() {
 
       await expectLater(
         root.runLive(context).toList(),
-        throwsA(isA<UnimplementedError>()),
+        throwsA(isA<UnsupportedError>()),
       );
     });
 
@@ -448,7 +448,7 @@ void main() {
 
       await expectLater(
         loop.runLive(context).toList(),
-        throwsA(isA<UnimplementedError>()),
+        throwsA(isA<UnsupportedError>()),
       );
     });
   });

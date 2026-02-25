@@ -136,7 +136,7 @@ class ParallelAgent extends BaseAgent {
 
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
-    throw UnimplementedError('This is not supported yet for ParallelAgent.');
+    throw UnsupportedError('This is not supported yet for ParallelAgent.');
   }
 
   InvocationContext _createBranchContextForSubAgent(
