@@ -386,15 +386,70 @@ BaseAgent _resolveAgentCodeReference(
 }
 
 GenerateContentConfig _toGenerateContentConfig(Map<String, Object?> map) {
+  final double? temperature = _readDoubleField(
+    map,
+    'temperature',
+    'temperature',
+  );
+  final double? topP = _readDoubleField(map, 'topP', 'top_p');
+  final int? topK = _readIntField(map, 'topK', 'top_k');
+  final int? maxOutputTokens = _readIntField(
+    map,
+    'maxOutputTokens',
+    'max_output_tokens',
+  );
+  final double? frequencyPenalty = _readDoubleField(
+    map,
+    'frequencyPenalty',
+    'frequency_penalty',
+  );
+  final double? presencePenalty = _readDoubleField(
+    map,
+    'presencePenalty',
+    'presence_penalty',
+  );
+  final int? seed = _readIntField(map, 'seed', 'seed');
+  final int? candidateCount = _readIntField(
+    map,
+    'candidateCount',
+    'candidate_count',
+  );
+  final bool? responseLogprobs = _readBoolField(
+    map,
+    'responseLogprobs',
+    'response_logprobs',
+  );
+  final int? logprobs = _readIntField(map, 'logprobs', 'logprobs');
+  final List<String> stopSequences = _readStringListField(
+    map,
+    'stopSequences',
+    'stop_sequences',
+  );
+
   final GenerateContentConfig config = GenerateContentConfig(
     systemInstruction:
         map['systemInstruction'] as String? ??
         map['system_instruction'] as String?,
+    temperature: temperature,
+    topP: topP,
+    topK: topK,
+    maxOutputTokens: maxOutputTokens,
+    stopSequences: stopSequences,
+    frequencyPenalty: frequencyPenalty,
+    presencePenalty: presencePenalty,
+    seed: seed,
+    candidateCount: candidateCount,
+    responseLogprobs: responseLogprobs,
+    logprobs: logprobs,
     responseSchema: map['responseSchema'] ?? map['response_schema'],
+    responseJsonSchema:
+        map['responseJsonSchema'] ?? map['response_json_schema'],
     responseMimeType:
         map['responseMimeType'] as String? ??
         map['response_mime_type'] as String?,
     thinkingConfig: map['thinkingConfig'] ?? map['thinking_config'],
+    cachedContent:
+        map['cachedContent'] as String? ?? map['cached_content'] as String?,
   );
 
   final Object? labels = map['labels'];
@@ -404,6 +459,83 @@ GenerateContentConfig _toGenerateContentConfig(Map<String, Object?> map) {
     );
   }
   return config;
+}
+
+Object? _readField(Map<String, Object?> map, String camelKey, String snakeKey) {
+  if (map.containsKey(camelKey)) {
+    return map[camelKey];
+  }
+  if (map.containsKey(snakeKey)) {
+    return map[snakeKey];
+  }
+  return null;
+}
+
+double? _readDoubleField(
+  Map<String, Object?> map,
+  String camelKey,
+  String snakeKey,
+) {
+  final Object? value = _readField(map, camelKey, snakeKey);
+  if (value is num) {
+    return value.toDouble();
+  }
+  if (value is String) {
+    return double.tryParse(value);
+  }
+  return null;
+}
+
+int? _readIntField(Map<String, Object?> map, String camelKey, String snakeKey) {
+  final Object? value = _readField(map, camelKey, snakeKey);
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
+}
+
+bool? _readBoolField(
+  Map<String, Object?> map,
+  String camelKey,
+  String snakeKey,
+) {
+  final Object? value = _readField(map, camelKey, snakeKey);
+  if (value is bool) {
+    return value;
+  }
+  if (value is String) {
+    final String normalized = value.trim().toLowerCase();
+    if (normalized == 'true') {
+      return true;
+    }
+    if (normalized == 'false') {
+      return false;
+    }
+  }
+  if (value is num) {
+    if (value == 0) {
+      return false;
+    }
+    if (value == 1) {
+      return true;
+    }
+  }
+  return null;
+}
+
+List<String> _readStringListField(
+  Map<String, Object?> map,
+  String camelKey,
+  String snakeKey,
+) {
+  final Object? value = _readField(map, camelKey, snakeKey);
+  if (value is List) {
+    return value.map((Object? item) => '$item').toList(growable: false);
+  }
+  return <String>[];
 }
 
 class _BaseAgentConstructorArgs {

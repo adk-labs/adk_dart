@@ -238,5 +238,61 @@ instruction: |-
       expect(agent, isA<LlmAgent>());
       expect((agent as LlmAgent).instruction, 'Line one.\nLine two.');
     });
+
+    test(
+      'fromConfig maps generate_content_config numeric and bool fields',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_generate_cfg_',
+        );
+        addTearDown(() async {
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
+
+        final File root = File('${dir.path}/root.yaml');
+        await root.writeAsString('''
+name: root
+instruction: root instruction
+generate_content_config:
+  temperature: 0.1
+  top_p: 0.9
+  top_k: 12
+  max_output_tokens: 256
+  stop_sequences:
+    - END
+    - DONE
+  frequency_penalty: 0.2
+  presence_penalty: 0.3
+  seed: 7
+  candidate_count: 2
+  response_logprobs: true
+  logprobs: 3
+  cached_content: caches/abc
+  labels:
+    env: test
+''');
+
+        final BaseAgent agent = fromConfig(root.path);
+        expect(agent, isA<LlmAgent>());
+        final GenerateContentConfig? config =
+            (agent as LlmAgent).generateContentConfig;
+        expect(config, isNotNull);
+        expect(config!.temperature, 0.1);
+        expect(config.topP, 0.9);
+        expect(config.topK, 12);
+        expect(config.maxOutputTokens, 256);
+        expect(config.stopSequences, <String>['END', 'DONE']);
+        expect(config.frequencyPenalty, 0.2);
+        expect(config.presencePenalty, 0.3);
+        expect(config.seed, 7);
+        expect(config.candidateCount, 2);
+        expect(config.responseLogprobs, isTrue);
+        expect(config.logprobs, 3);
+        expect(config.cachedContent, 'caches/abc');
+        expect(config.labels['env'], 'test');
+      },
+    );
   });
 }

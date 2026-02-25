@@ -480,6 +480,8 @@ Map<String, Object?> _eventToJson(Event event) {
     if (event.cacheMetadata != null) 'cacheMetadata': event.cacheMetadata,
     if (event.citationMetadata != null)
       'citationMetadata': event.citationMetadata,
+    if (event.groundingMetadata != null)
+      'groundingMetadata': event.groundingMetadata,
     if (event.interactionId != null) 'interactionId': event.interactionId,
   };
 }
@@ -511,6 +513,7 @@ Event _eventFromJson(Map<String, Object?> json) {
     logprobsResult: json['logprobsResult'],
     cacheMetadata: json['cacheMetadata'],
     citationMetadata: json['citationMetadata'],
+    groundingMetadata: json['groundingMetadata'],
     interactionId: json['interactionId'] as String?,
   );
 }
@@ -596,11 +599,22 @@ Map<String, Object?> _partToJson(Part part) {
   return <String, Object?>{
     if (part.text != null) 'text': part.text,
     'thought': part.thought,
+    if (part.thoughtSignature != null)
+      'thoughtSignature': List<int>.from(part.thoughtSignature!),
     if (part.functionCall != null)
       'functionCall': <String, Object?>{
         'name': part.functionCall!.name,
         'args': part.functionCall!.args,
         if (part.functionCall!.id != null) 'id': part.functionCall!.id,
+        if (part.functionCall!.partialArgs != null)
+          'partialArgs': part.functionCall!.partialArgs
+              ?.map(
+                (Map<String, Object?> value) =>
+                    Map<String, Object?>.from(value),
+              )
+              .toList(growable: false),
+        if (part.functionCall!.willContinue != null)
+          'willContinue': part.functionCall!.willContinue,
       },
     if (part.functionResponse != null)
       'functionResponse': <String, Object?>{
@@ -637,6 +651,12 @@ Part _partFromJson(Map<String, Object?> json) {
       name: (functionMap['name'] ?? '') as String,
       args: _castDynamicMap(functionMap['args']) ?? <String, dynamic>{},
       id: functionMap['id'] as String?,
+      partialArgs: _castMapList(
+        functionMap['partialArgs'] ?? functionMap['partial_args'],
+      ),
+      willContinue: _asNullableBool(
+        functionMap['willContinue'] ?? functionMap['will_continue'],
+      ),
     );
   }
 
@@ -682,6 +702,9 @@ Part _partFromJson(Map<String, Object?> json) {
   return Part(
     text: json['text'] as String?,
     thought: (json['thought'] as bool?) ?? false,
+    thoughtSignature: _castNullableIntList(
+      json['thoughtSignature'] ?? json['thought_signature'],
+    ),
     functionCall: functionCall,
     functionResponse: functionResponse,
     inlineData: inlineData,
@@ -725,6 +748,68 @@ Map<String, Object> _castObjectMap(Object? value) {
 Map<String, dynamic>? _castDynamicMap(Object? value) {
   if (value is Map) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return null;
+}
+
+List<int>? _castNullableIntList(Object? value) {
+  if (value is! List) {
+    return null;
+  }
+  final List<int> output = <int>[];
+  for (final Object? item in value) {
+    if (item is num) {
+      output.add(item.toInt());
+    }
+  }
+  if (output.isEmpty) {
+    return null;
+  }
+  return output;
+}
+
+List<Map<String, Object?>>? _castMapList(Object? value) {
+  if (value is! List) {
+    return null;
+  }
+  final List<Map<String, Object?>> output = <Map<String, Object?>>[];
+  for (final Object? item in value) {
+    if (item is Map<String, Object?>) {
+      output.add(Map<String, Object?>.from(item));
+      continue;
+    }
+    if (item is Map) {
+      output.add(
+        item.map((Object? key, Object? entry) => MapEntry('$key', entry)),
+      );
+    }
+  }
+  if (output.isEmpty) {
+    return null;
+  }
+  return output;
+}
+
+bool? _asNullableBool(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is String) {
+    final String normalized = value.trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0') {
+      return false;
+    }
+  }
+  if (value is num) {
+    if (value == 1) {
+      return true;
+    }
+    if (value == 0) {
+      return false;
+    }
   }
   return null;
 }

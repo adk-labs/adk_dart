@@ -42,6 +42,8 @@ Map<String, Object?> _getContextMetadata(
     'branch': event.branch,
     'custom_metadata': event.customMetadata,
     'usage_metadata': event.usageMetadata,
+    'citation_metadata': event.citationMetadata,
+    'grounding_metadata': event.groundingMetadata,
     'error_code': event.errorCode,
     'actions': event.actions,
   };

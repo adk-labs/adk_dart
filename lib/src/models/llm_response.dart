@@ -18,6 +18,7 @@ class LlmResponse {
     this.logprobsResult,
     this.cacheMetadata,
     this.citationMetadata,
+    this.groundingMetadata,
     this.interactionId,
   });
 
@@ -37,6 +38,7 @@ class LlmResponse {
   Object? logprobsResult;
   Object? cacheMetadata;
   Object? citationMetadata;
+  Object? groundingMetadata;
   String? interactionId;
 
   LlmResponse copyWith({
@@ -56,6 +58,7 @@ class LlmResponse {
     Object? logprobsResult = _sentinel,
     Object? cacheMetadata = _sentinel,
     Object? citationMetadata = _sentinel,
+    Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
   }) {
     return LlmResponse(
@@ -107,6 +110,9 @@ class LlmResponse {
       citationMetadata: identical(citationMetadata, _sentinel)
           ? this.citationMetadata
           : citationMetadata,
+      groundingMetadata: identical(groundingMetadata, _sentinel)
+          ? this.groundingMetadata
+          : groundingMetadata,
       interactionId: identical(interactionId, _sentinel)
           ? this.interactionId
           : interactionId as String?,

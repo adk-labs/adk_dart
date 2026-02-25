@@ -71,8 +71,26 @@ void main() {
         author: 'agent',
         timestamp: 1700000000.123,
         actions: EventActions(stateDelta: <String, Object?>{'k': 'v'}),
-        content: Content(parts: <Part>[Part.text('hello')]),
+        content: Content(
+          parts: <Part>[
+            Part.text('hello', thought: true, thoughtSignature: <int>[1, 2, 3]),
+            Part.fromFunctionCall(
+              name: 'lookup',
+              args: <String, dynamic>{'q': 'abc'},
+              partialArgs: <Map<String, Object?>>[
+                <String, Object?>{'json_path': r'$.q', 'string_value': 'abc'},
+              ],
+              willContinue: false,
+              thoughtSignature: <int>[7, 8, 9],
+            ),
+          ],
+        ),
         turnComplete: true,
+        groundingMetadata: <String, Object?>{
+          'searchEntryPoint': <String, Object?>{
+            'renderedContent': '<div>grounded</div>',
+          },
+        },
       );
 
       final StorageEventV0 v0 = StorageEventV0.fromEvent(
@@ -84,6 +102,15 @@ void main() {
       expect(v0Roundtrip.invocationId, original.invocationId);
       expect(v0Roundtrip.author, original.author);
       expect(v0Roundtrip.content?.parts.first.text, 'hello');
+      expect(v0Roundtrip.content?.parts.first.thought, isTrue);
+      expect(v0Roundtrip.content?.parts.first.thoughtSignature, <int>[1, 2, 3]);
+      expect(
+        v0Roundtrip.content?.parts[1].functionCall?.partialArgs,
+        isA<List<Map<String, Object?>>>(),
+      );
+      expect(v0Roundtrip.content?.parts[1].functionCall?.willContinue, isFalse);
+      expect(v0Roundtrip.content?.parts[1].thoughtSignature, <int>[7, 8, 9]);
+      expect(v0Roundtrip.groundingMetadata, isA<Map<String, Object?>>());
       expect(v0Roundtrip.actions.stateDelta['k'], 'v');
 
       final StorageEventV1 v1 = StorageEventV1.fromEvent(
@@ -95,6 +122,15 @@ void main() {
       expect(v1Roundtrip.invocationId, original.invocationId);
       expect(v1Roundtrip.author, original.author);
       expect(v1Roundtrip.content?.parts.first.text, 'hello');
+      expect(v1Roundtrip.content?.parts.first.thought, isTrue);
+      expect(v1Roundtrip.content?.parts.first.thoughtSignature, <int>[1, 2, 3]);
+      expect(
+        v1Roundtrip.content?.parts[1].functionCall?.partialArgs,
+        isA<List<Map<String, Object?>>>(),
+      );
+      expect(v1Roundtrip.content?.parts[1].functionCall?.willContinue, isFalse);
+      expect(v1Roundtrip.content?.parts[1].thoughtSignature, <int>[7, 8, 9]);
+      expect(v1Roundtrip.groundingMetadata, isA<Map<String, Object?>>());
       expect(v1Roundtrip.actions.stateDelta['k'], 'v');
       expect(v1.eventData['invocation_id'], original.invocationId);
     });

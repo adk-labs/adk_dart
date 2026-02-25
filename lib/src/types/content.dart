@@ -47,18 +47,45 @@ class FileData {
 }
 
 class FunctionCall {
-  FunctionCall({required this.name, JsonMap? args, this.id})
-    : args = args ?? <String, dynamic>{};
+  FunctionCall({
+    required this.name,
+    JsonMap? args,
+    this.id,
+    List<Map<String, Object?>>? partialArgs,
+    this.willContinue,
+  }) : args = args ?? <String, dynamic>{},
+       partialArgs = partialArgs
+           ?.map((Map<String, Object?> item) => Map<String, Object?>.from(item))
+           .toList(growable: false);
 
   String name;
   JsonMap args;
   String? id;
+  List<Map<String, Object?>>? partialArgs;
+  bool? willContinue;
 
-  FunctionCall copyWith({String? name, JsonMap? args, Object? id = _sentinel}) {
+  FunctionCall copyWith({
+    String? name,
+    JsonMap? args,
+    Object? id = _sentinel,
+    Object? partialArgs = _sentinel,
+    Object? willContinue = _sentinel,
+  }) {
     return FunctionCall(
       name: name ?? this.name,
       args: args ?? Map<String, dynamic>.from(this.args),
       id: identical(id, _sentinel) ? this.id : id as String?,
+      partialArgs: identical(partialArgs, _sentinel)
+          ? this.partialArgs
+                ?.map(
+                  (Map<String, Object?> item) =>
+                      Map<String, Object?>.from(item),
+                )
+                .toList(growable: false)
+          : partialArgs as List<Map<String, Object?>>?,
+      willContinue: identical(willContinue, _sentinel)
+          ? this.willContinue
+          : willContinue as bool?,
     );
   }
 }
@@ -88,6 +115,7 @@ class Part {
   Part({
     this.text,
     this.thought = false,
+    this.thoughtSignature,
     this.functionCall,
     this.functionResponse,
     this.inlineData,
@@ -96,17 +124,39 @@ class Part {
     this.codeExecutionResult,
   });
 
-  factory Part.text(String text, {bool thought = false}) {
-    return Part(text: text, thought: thought);
+  factory Part.text(
+    String text, {
+    bool thought = false,
+    List<int>? thoughtSignature,
+  }) {
+    return Part(
+      text: text,
+      thought: thought,
+      thoughtSignature: thoughtSignature == null
+          ? null
+          : List<int>.from(thoughtSignature),
+    );
   }
 
   factory Part.fromFunctionCall({
     required String name,
     JsonMap? args,
     String? id,
+    List<Map<String, Object?>>? partialArgs,
+    bool? willContinue,
+    List<int>? thoughtSignature,
   }) {
     return Part(
-      functionCall: FunctionCall(name: name, args: args, id: id),
+      functionCall: FunctionCall(
+        name: name,
+        args: args,
+        id: id,
+        partialArgs: partialArgs,
+        willContinue: willContinue,
+      ),
+      thoughtSignature: thoughtSignature == null
+          ? null
+          : List<int>.from(thoughtSignature),
     );
   }
 
@@ -154,6 +204,7 @@ class Part {
 
   String? text;
   bool thought;
+  List<int>? thoughtSignature;
   FunctionCall? functionCall;
   FunctionResponse? functionResponse;
   InlineData? inlineData;
@@ -166,6 +217,7 @@ class Part {
   Part copyWith({
     Object? text = _sentinel,
     bool? thought,
+    Object? thoughtSignature = _sentinel,
     Object? functionCall = _sentinel,
     Object? functionResponse = _sentinel,
     Object? inlineData = _sentinel,
@@ -176,6 +228,11 @@ class Part {
     return Part(
       text: identical(text, _sentinel) ? this.text : text as String?,
       thought: thought ?? this.thought,
+      thoughtSignature: identical(thoughtSignature, _sentinel)
+          ? (this.thoughtSignature == null
+                ? null
+                : List<int>.from(this.thoughtSignature!))
+          : thoughtSignature as List<int>?,
       functionCall: identical(functionCall, _sentinel)
           ? this.functionCall?.copyWith()
           : functionCall as FunctionCall?,

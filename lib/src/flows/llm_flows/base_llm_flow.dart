@@ -648,6 +648,7 @@ class BaseLlmFlow {
       logprobsResult: response.logprobsResult,
       cacheMetadata: response.cacheMetadata,
       citationMetadata: response.citationMetadata,
+      groundingMetadata: response.groundingMetadata,
       interactionId: response.interactionId,
     );
 

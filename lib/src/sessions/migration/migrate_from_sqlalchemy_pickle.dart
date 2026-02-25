@@ -94,6 +94,8 @@ Map<String, Object?> _buildEventData(Map<String, Object?> event) {
     'usage_metadata': event['usage_metadata'] ?? event['usageMetadata'],
     'citation_metadata':
         event['citation_metadata'] ?? event['citationMetadata'],
+    'grounding_metadata':
+        event['grounding_metadata'] ?? event['groundingMetadata'],
     'input_transcription':
         event['input_transcription'] ?? event['inputTranscription'],
     'output_transcription':

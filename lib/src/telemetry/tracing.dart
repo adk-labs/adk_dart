@@ -327,6 +327,7 @@ Map<String, Object?> _llmResponseToJson(LlmResponse llmResponse) {
     'interrupted': llmResponse.interrupted,
     'custom_metadata': llmResponse.customMetadata,
     'usage_metadata': llmResponse.usageMetadata,
+    'grounding_metadata': llmResponse.groundingMetadata,
     'interaction_id': llmResponse.interactionId,
   };
 }
@@ -367,11 +368,22 @@ Map<String, Object?> _partToJson(Part part, {required bool includeInlineData}) {
   if (part.thought) {
     data['thought'] = true;
   }
+  if (part.thoughtSignature != null) {
+    data['thought_signature'] = List<int>.from(part.thoughtSignature!);
+  }
   if (part.functionCall != null) {
     data['function_call'] = <String, Object?>{
       'name': part.functionCall!.name,
       'args': part.functionCall!.args,
       'id': part.functionCall!.id,
+      if (part.functionCall!.partialArgs != null)
+        'partial_args': part.functionCall!.partialArgs
+            ?.map(
+              (Map<String, Object?> value) => Map<String, Object?>.from(value),
+            )
+            .toList(growable: false),
+      if (part.functionCall!.willContinue != null)
+        'will_continue': part.functionCall!.willContinue,
     };
   }
   if (part.functionResponse != null) {

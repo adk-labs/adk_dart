@@ -370,6 +370,75 @@ void main() {
       expect(merged.content!.parts[1].functionCall?.args['city'], 'Seoul');
     });
 
+    test(
+      'streaming response aggregator preserves thought signatures and grounding metadata',
+      () async {
+        overrideFeatureEnabled(FeatureName.progressiveSseStreaming, true);
+        final StreamingResponseAggregator aggregator =
+            StreamingResponseAggregator();
+
+        await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[
+                    Part.text('Hel', thoughtSignature: <int>[1, 2, 3]),
+                    Part.fromFunctionCall(
+                      name: 'lookup',
+                      partialArgs: <Map<String, Object?>>[
+                        <String, Object?>{
+                          'json_path': r'$.city',
+                          'string_value': 'Se',
+                        },
+                      ],
+                      willContinue: true,
+                      thoughtSignature: <int>[8, 8],
+                    ),
+                  ],
+                ),
+                groundingMetadata: <String, Object?>{
+                  'searchEntryPoint': <String, Object?>{
+                    'renderedContent': '<div>grounded</div>',
+                  },
+                },
+              ),
+            )
+            .toList();
+
+        await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[
+                    Part.text('lo', thoughtSignature: <int>[1, 2, 3]),
+                    Part.fromFunctionCall(
+                      name: '',
+                      partialArgs: <Map<String, Object?>>[
+                        <String, Object?>{
+                          'json_path': r'$.city',
+                          'string_value': 'ul',
+                        },
+                      ],
+                      willContinue: false,
+                      thoughtSignature: <int>[8, 8],
+                    ),
+                  ],
+                ),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+
+        final LlmResponse? merged = aggregator.close();
+        expect(merged, isNotNull);
+        expect(merged!.groundingMetadata, isA<Map<String, Object?>>());
+        expect(merged.content?.parts.first.text, 'Hello');
+        expect(merged.content?.parts.first.thoughtSignature, <int>[1, 2, 3]);
+        expect(merged.content?.parts[1].functionCall?.args['city'], 'Seul');
+        expect(merged.content?.parts[1].thoughtSignature, <int>[8, 8]);
+      },
+    );
+
     test('getExpressModeApiKey parity behavior', () {
       expect(
         () => getExpressModeApiKey(

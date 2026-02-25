@@ -4,14 +4,35 @@ import 'llm_response.dart';
 
 Map<String, Object?>? convertPartToInteractionContent(Part part) {
   if (part.text != null) {
-    return <String, Object?>{'type': 'text', 'text': part.text};
+    return <String, Object?>{
+      'type': 'text',
+      'text': part.text,
+      if (part.thought) 'thought': true,
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
+    };
   }
   if (part.functionCall != null) {
+    final Map<String, Object?> arguments = Map<String, Object?>.from(
+      part.functionCall!.args,
+    );
+    if (part.functionCall!.partialArgs != null) {
+      arguments['partial_args'] = part.functionCall!.partialArgs
+          ?.map(
+            (Map<String, Object?> value) => Map<String, Object?>.from(value),
+          )
+          .toList(growable: false);
+    }
+    if (part.functionCall!.willContinue != null) {
+      arguments['will_continue'] = part.functionCall!.willContinue;
+    }
     return <String, Object?>{
       'type': 'function_call',
       'id': part.functionCall!.id ?? '',
       'name': part.functionCall!.name,
-      'arguments': Map<String, dynamic>.from(part.functionCall!.args),
+      'arguments': arguments,
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
     };
   }
   if (part.functionResponse != null) {
@@ -21,6 +42,8 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
       'name': part.functionResponse!.name,
       'call_id': part.functionResponse!.id ?? '',
       'result': response,
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
     };
   }
   if (part.inlineData != null) {
@@ -29,6 +52,8 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
       'mime_type': part.inlineData!.mimeType,
       'data': List<int>.from(part.inlineData!.data),
       'display_name': part.inlineData!.displayName,
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
     };
   }
   if (part.fileData != null) {
@@ -37,18 +62,24 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
       'uri': part.fileData!.fileUri,
       'mime_type': part.fileData!.mimeType,
       'display_name': part.fileData!.displayName,
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
     };
   }
   if (part.codeExecutionResult != null) {
     return <String, Object?>{
       'type': 'code_execution_result',
       'result': part.codeExecutionResult,
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
     };
   }
   if (part.executableCode != null) {
     return <String, Object?>{
       'type': 'code_execution_call',
       'arguments': <String, Object?>{'code': '${part.executableCode}'},
+      if (part.thoughtSignature != null)
+        'thought_signature': List<int>.from(part.thoughtSignature!),
     };
   }
   return null;

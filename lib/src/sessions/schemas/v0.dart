@@ -104,6 +104,7 @@ class StorageEventV0 {
     this.customMetadata,
     this.usageMetadata,
     this.citationMetadata,
+    this.groundingMetadata,
     this.partial,
     this.turnComplete,
     this.finishReason,
@@ -134,6 +135,7 @@ class StorageEventV0 {
   final Map<String, dynamic>? customMetadata;
   final Object? usageMetadata;
   final Object? citationMetadata;
+  final Object? groundingMetadata;
   final bool? partial;
   final bool? turnComplete;
   final String? finishReason;
@@ -170,6 +172,8 @@ class StorageEventV0 {
       ),
       usageMetadata: json['usage_metadata'] ?? json['usageMetadata'],
       citationMetadata: json['citation_metadata'] ?? json['citationMetadata'],
+      groundingMetadata:
+          json['grounding_metadata'] ?? json['groundingMetadata'],
       partial: json['partial'] as bool?,
       turnComplete: (json['turn_complete'] ?? json['turnComplete']) as bool?,
       finishReason: (json['finish_reason'] ?? json['finishReason'])?.toString(),
@@ -214,6 +218,7 @@ class StorageEventV0 {
           : Map<String, dynamic>.from(event.customMetadata!),
       usageMetadata: event.usageMetadata,
       citationMetadata: event.citationMetadata,
+      groundingMetadata: event.groundingMetadata,
       partial: event.partial,
       turnComplete: event.turnComplete,
       finishReason: event.finishReason,
@@ -263,6 +268,7 @@ class StorageEventV0 {
       content: content?.copyWith(),
       usageMetadata: usageMetadata,
       citationMetadata: citationMetadata,
+      groundingMetadata: groundingMetadata,
       inputTranscription: inputTranscription,
       outputTranscription: outputTranscription,
       modelVersion: modelVersion,
@@ -290,6 +296,7 @@ class StorageEventV0 {
       if (customMetadata != null) 'custom_metadata': customMetadata,
       if (usageMetadata != null) 'usage_metadata': usageMetadata,
       if (citationMetadata != null) 'citation_metadata': citationMetadata,
+      if (groundingMetadata != null) 'grounding_metadata': groundingMetadata,
       if (partial != null) 'partial': partial,
       if (turnComplete != null) 'turn_complete': turnComplete,
       if (finishReason != null) 'finish_reason': finishReason,
@@ -458,11 +465,22 @@ Map<String, Object?> _partToJson(Part part) {
   return <String, Object?>{
     if (part.text != null) 'text': part.text,
     'thought': part.thought,
+    if (part.thoughtSignature != null)
+      'thoughtSignature': List<int>.from(part.thoughtSignature!),
     if (part.functionCall != null)
       'functionCall': <String, Object?>{
         'name': part.functionCall!.name,
         'args': part.functionCall!.args,
         if (part.functionCall!.id != null) 'id': part.functionCall!.id,
+        if (part.functionCall!.partialArgs != null)
+          'partialArgs': part.functionCall!.partialArgs
+              ?.map(
+                (Map<String, Object?> value) =>
+                    Map<String, Object?>.from(value),
+              )
+              .toList(growable: false),
+        if (part.functionCall!.willContinue != null)
+          'willContinue': part.functionCall!.willContinue,
       },
     if (part.functionResponse != null)
       'functionResponse': <String, Object?>{
@@ -499,6 +517,10 @@ Part _partFromJson(Map<String, Object?> json) {
       name: '${map['name'] ?? ''}',
       args: _castDynamicMap(map['args']) ?? <String, dynamic>{},
       id: map['id'] as String?,
+      partialArgs: _castMapList(map['partialArgs'] ?? map['partial_args']),
+      willContinue: _asNullableBool(
+        map['willContinue'] ?? map['will_continue'],
+      ),
     );
   }
 
@@ -535,6 +557,9 @@ Part _partFromJson(Map<String, Object?> json) {
   return Part(
     text: json['text'] as String?,
     thought: (json['thought'] as bool?) ?? false,
+    thoughtSignature: _castNullableIntList(
+      json['thoughtSignature'] ?? json['thought_signature'],
+    ),
     functionCall: functionCall,
     functionResponse: functionResponse,
     inlineData: inlineData,
@@ -609,6 +634,63 @@ List<int> _castIntList(Object? value) {
         .toList(growable: false);
   }
   return <int>[];
+}
+
+List<int>? _castNullableIntList(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  final List<int> casted = _castIntList(value);
+  if (casted.isEmpty) {
+    return null;
+  }
+  return casted;
+}
+
+List<Map<String, Object?>>? _castMapList(Object? value) {
+  if (value is! List) {
+    return null;
+  }
+  final List<Map<String, Object?>> output = <Map<String, Object?>>[];
+  for (final Object? item in value) {
+    if (item is Map<String, Object?>) {
+      output.add(Map<String, Object?>.from(item));
+      continue;
+    }
+    if (item is Map) {
+      output.add(
+        item.map((Object? key, Object? entry) => MapEntry('$key', entry)),
+      );
+    }
+  }
+  if (output.isEmpty) {
+    return null;
+  }
+  return output;
+}
+
+bool? _asNullableBool(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is String) {
+    final String normalized = value.trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0') {
+      return false;
+    }
+  }
+  if (value is num) {
+    if (value == 1) {
+      return true;
+    }
+    if (value == 0) {
+      return false;
+    }
+  }
+  return null;
 }
 
 DateTime _parseDateTime(Object? value) {

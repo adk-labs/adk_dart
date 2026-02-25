@@ -28,6 +28,7 @@ class Event extends LlmResponse {
     Object? logprobsResult,
     Object? cacheMetadata,
     Object? citationMetadata,
+    Object? groundingMetadata,
     String? interactionId,
   }) : actions = actions ?? EventActions(),
        id = id ?? Event.newId(),
@@ -49,6 +50,7 @@ class Event extends LlmResponse {
          logprobsResult: logprobsResult,
          cacheMetadata: cacheMetadata,
          citationMetadata: citationMetadata,
+         groundingMetadata: groundingMetadata,
          interactionId: interactionId,
        );
 
@@ -134,6 +136,7 @@ class Event extends LlmResponse {
     Object? logprobsResult = _sentinel,
     Object? cacheMetadata = _sentinel,
     Object? citationMetadata = _sentinel,
+    Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
   }) {
     return Event(
@@ -202,6 +205,9 @@ class Event extends LlmResponse {
       citationMetadata: identical(citationMetadata, _sentinel)
           ? this.citationMetadata
           : citationMetadata,
+      groundingMetadata: identical(groundingMetadata, _sentinel)
+          ? this.groundingMetadata
+          : groundingMetadata,
       interactionId: identical(interactionId, _sentinel)
           ? this.interactionId
           : interactionId as String?,

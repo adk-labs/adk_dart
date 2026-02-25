@@ -5,28 +5,38 @@ import '../types/content.dart';
 class StreamingResponseAggregator {
   String _text = '';
   String _thoughtText = '';
+  List<int>? _textThoughtSignature;
+  List<int>? _thoughtTextSignature;
   Object? _usageMetadata;
   Object? _citationMetadata;
+  Object? _groundingMetadata;
   LlmResponse? _response;
 
   final List<Part> _partsSequence = <Part>[];
   String _currentTextBuffer = '';
   bool? _currentTextIsThought;
+  List<int>? _currentTextThoughtSignature;
   String? _finishReason;
 
   String? _currentFcName;
   Map<String, Object?> _currentFcArgs = <String, Object?>{};
   String? _currentFcId;
+  List<int>? _currentFcThoughtSignature;
 
   void _flushTextBufferToSequence() {
     if (_currentTextBuffer.isEmpty) {
       return;
     }
     _partsSequence.add(
-      Part.text(_currentTextBuffer, thought: _currentTextIsThought ?? false),
+      Part.text(
+        _currentTextBuffer,
+        thought: _currentTextIsThought ?? false,
+        thoughtSignature: _currentTextThoughtSignature,
+      ),
     );
     _currentTextBuffer = '';
     _currentTextIsThought = null;
+    _currentTextThoughtSignature = null;
   }
 
   (Object?, bool) _getValueFromPartialArg(
@@ -105,19 +115,24 @@ class StreamingResponseAggregator {
         name: name,
         args: Map<String, dynamic>.from(_currentFcArgs),
         id: _currentFcId,
+        thoughtSignature: _currentFcThoughtSignature,
       ),
     );
     _currentFcName = null;
     _currentFcArgs = <String, Object?>{};
     _currentFcId = null;
+    _currentFcThoughtSignature = null;
   }
 
-  void _processStreamingFunctionCall(FunctionCall functionCall) {
+  void _processStreamingFunctionCall(FunctionCall functionCall, Part part) {
     if (functionCall.name.isNotEmpty) {
       _currentFcName = functionCall.name;
     }
     if (functionCall.id != null && functionCall.id!.isNotEmpty) {
       _currentFcId = functionCall.id;
+    }
+    if (part.thoughtSignature != null && part.thoughtSignature!.isNotEmpty) {
+      _currentFcThoughtSignature = List<int>.from(part.thoughtSignature!);
     }
 
     final List<Map<String, Object?>> partialArgs = _partialArgs(functionCall);
@@ -150,7 +165,7 @@ class StreamingResponseAggregator {
     }
 
     if (_isStreamingFunctionCall(functionCall)) {
-      _processStreamingFunctionCall(functionCall);
+      _processStreamingFunctionCall(functionCall, part);
       return;
     }
 
@@ -163,6 +178,12 @@ class StreamingResponseAggregator {
   }
 
   List<Map<String, Object?>> _partialArgs(FunctionCall functionCall) {
+    final List<Map<String, Object?>>? direct = functionCall.partialArgs;
+    if (direct != null && direct.isNotEmpty) {
+      return direct
+          .map((Map<String, Object?> value) => Map<String, Object?>.from(value))
+          .toList(growable: false);
+    }
     final Object? raw =
         functionCall.args['partial_args'] ?? functionCall.args['partialArgs'];
     if (raw is! List) {
@@ -182,6 +203,10 @@ class StreamingResponseAggregator {
   }
 
   bool _willContinue(FunctionCall functionCall) {
+    final bool? direct = functionCall.willContinue;
+    if (direct != null) {
+      return direct;
+    }
     final Object? raw =
         functionCall.args['will_continue'] ?? functionCall.args['willContinue'];
     if (raw is bool) {
@@ -195,7 +220,28 @@ class StreamingResponseAggregator {
   }
 
   bool _isStreamingFunctionCall(FunctionCall functionCall) {
+    if (functionCall.partialArgs != null || functionCall.willContinue != null) {
+      return true;
+    }
     return _partialArgs(functionCall).isNotEmpty || _willContinue(functionCall);
+  }
+
+  bool _sameThoughtSignature(List<int>? left, List<int>? right) {
+    if (left == null && right == null) {
+      return true;
+    }
+    if (left == null || right == null) {
+      return false;
+    }
+    if (left.length != right.length) {
+      return false;
+    }
+    for (int index = 0; index < left.length; index += 1) {
+      if (left[index] != right[index]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Stream<LlmResponse> processResponse(LlmResponse response) async* {
@@ -203,6 +249,9 @@ class StreamingResponseAggregator {
     _usageMetadata = response.usageMetadata;
     if (response.citationMetadata != null) {
       _citationMetadata = response.citationMetadata;
+    }
+    if (response.groundingMetadata != null) {
+      _groundingMetadata = response.groundingMetadata;
     }
     if (response.finishReason != null) {
       _finishReason = response.finishReason;
@@ -213,11 +262,18 @@ class StreamingResponseAggregator {
       for (final Part part in parts) {
         if (part.text != null) {
           if (_currentTextBuffer.isNotEmpty &&
-              part.thought != _currentTextIsThought) {
+              (part.thought != _currentTextIsThought ||
+                  !_sameThoughtSignature(
+                    part.thoughtSignature,
+                    _currentTextThoughtSignature,
+                  ))) {
             _flushTextBufferToSequence();
           }
           if (_currentTextBuffer.isEmpty) {
             _currentTextIsThought = part.thought;
+            _currentTextThoughtSignature = part.thoughtSignature == null
+                ? null
+                : List<int>.from(part.thoughtSignature!);
           }
           _currentTextBuffer += part.text!;
         } else if (part.functionCall != null) {
@@ -237,8 +293,28 @@ class StreamingResponseAggregator {
       final String text = first.text ?? '';
       if (first.thought) {
         _thoughtText += text;
+        if (first.thoughtSignature != null) {
+          if (_thoughtTextSignature == null) {
+            _thoughtTextSignature = List<int>.from(first.thoughtSignature!);
+          } else if (!_sameThoughtSignature(
+            _thoughtTextSignature,
+            first.thoughtSignature,
+          )) {
+            _thoughtTextSignature = null;
+          }
+        }
       } else {
         _text += text;
+        if (first.thoughtSignature != null) {
+          if (_textThoughtSignature == null) {
+            _textThoughtSignature = List<int>.from(first.thoughtSignature!);
+          } else if (!_sameThoughtSignature(
+            _textThoughtSignature,
+            first.thoughtSignature,
+          )) {
+            _textThoughtSignature = null;
+          }
+        }
       }
       yield response.copyWith(partial: true);
       return;
@@ -250,15 +326,26 @@ class StreamingResponseAggregator {
     if (hasBufferedText &&
         (parts.isEmpty || response.content == null || !hasInlineDataFirst)) {
       final List<Part> mergedParts = <Part>[
-        if (_thoughtText.isNotEmpty) Part.text(_thoughtText, thought: true),
-        if (_text.isNotEmpty) Part.text(_text),
+        if (_thoughtText.isNotEmpty)
+          Part.text(
+            _thoughtText,
+            thought: true,
+            thoughtSignature: _thoughtTextSignature,
+          ),
+        if (_text.isNotEmpty)
+          Part.text(_text, thoughtSignature: _textThoughtSignature),
       ];
       yield LlmResponse(
+        modelVersion: response.modelVersion,
         content: Content(parts: mergedParts),
         usageMetadata: response.usageMetadata,
+        citationMetadata: response.citationMetadata,
+        groundingMetadata: response.groundingMetadata,
       );
       _thoughtText = '';
       _text = '';
+      _thoughtTextSignature = null;
+      _textThoughtSignature = null;
     }
     yield response;
   }
@@ -277,12 +364,14 @@ class StreamingResponseAggregator {
       final String? finishReason = _finishReason ?? _response!.finishReason;
       final bool success = finishReason == null || finishReason == 'STOP';
       return LlmResponse(
+        modelVersion: _response!.modelVersion,
         content: Content(
           parts: _partsSequence
               .map((Part part) => part.copyWith())
               .toList(growable: false),
         ),
         citationMetadata: _citationMetadata,
+        groundingMetadata: _groundingMetadata,
         errorCode: success ? null : finishReason,
         errorMessage: success ? null : _response!.errorMessage,
         usageMetadata: _usageMetadata,
@@ -299,16 +388,26 @@ class StreamingResponseAggregator {
     final String? finishReason = _response!.finishReason;
     final bool success = finishReason == null || finishReason == 'STOP';
     return LlmResponse(
+      modelVersion: _response!.modelVersion,
       content: Content(
         parts: <Part>[
-          if (_thoughtText.isNotEmpty) Part.text(_thoughtText, thought: true),
-          if (_text.isNotEmpty) Part.text(_text),
+          if (_thoughtText.isNotEmpty)
+            Part.text(
+              _thoughtText,
+              thought: true,
+              thoughtSignature: _thoughtTextSignature,
+            ),
+          if (_text.isNotEmpty)
+            Part.text(_text, thoughtSignature: _textThoughtSignature),
         ],
       ),
       citationMetadata: _citationMetadata,
+      groundingMetadata: _groundingMetadata,
       errorCode: success ? null : finishReason,
       errorMessage: success ? null : _response!.errorMessage,
       usageMetadata: _usageMetadata,
+      finishReason: finishReason,
+      partial: false,
     );
   }
 }

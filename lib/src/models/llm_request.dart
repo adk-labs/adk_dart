@@ -177,6 +177,7 @@ class GenerateContentConfig {
     this.systemInstruction,
     this.temperature,
     this.topP,
+    this.topK,
     this.maxOutputTokens,
     List<String>? stopSequences,
     this.frequencyPenalty,
@@ -200,6 +201,7 @@ class GenerateContentConfig {
   String? systemInstruction;
   double? temperature;
   double? topP;
+  int? topK;
   int? maxOutputTokens;
   List<String> stopSequences;
   double? frequencyPenalty;
@@ -222,6 +224,7 @@ class GenerateContentConfig {
     Object? systemInstruction = _sentinel,
     Object? temperature = _sentinel,
     Object? topP = _sentinel,
+    Object? topK = _sentinel,
     Object? maxOutputTokens = _sentinel,
     List<String>? stopSequences,
     Object? frequencyPenalty = _sentinel,
@@ -250,6 +253,7 @@ class GenerateContentConfig {
           ? this.temperature
           : temperature as double?,
       topP: identical(topP, _sentinel) ? this.topP : topP as double?,
+      topK: identical(topK, _sentinel) ? this.topK : topK as int?,
       maxOutputTokens: identical(maxOutputTokens, _sentinel)
           ? this.maxOutputTokens
           : maxOutputTokens as int?,

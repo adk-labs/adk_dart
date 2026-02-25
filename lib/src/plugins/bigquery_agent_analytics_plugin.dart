@@ -1122,11 +1122,23 @@ Map<String, Object?>? _contentToJson(Content? content) {
 Map<String, Object?> _partToJson(Part part) {
   return <String, Object?>{
     if (part.text != null) 'text': part.text,
+    if (part.thought) 'thought': true,
+    if (part.thoughtSignature != null)
+      'thought_signature': List<int>.from(part.thoughtSignature!),
     if (part.functionCall != null)
       'function_call': <String, Object?>{
         if (part.functionCall!.id != null) 'id': part.functionCall!.id,
         'name': part.functionCall!.name,
         'args': Map<String, dynamic>.from(part.functionCall!.args),
+        if (part.functionCall!.partialArgs != null)
+          'partial_args': part.functionCall!.partialArgs
+              ?.map(
+                (Map<String, Object?> value) =>
+                    Map<String, Object?>.from(value),
+              )
+              .toList(growable: false),
+        if (part.functionCall!.willContinue != null)
+          'will_continue': part.functionCall!.willContinue,
       },
     if (part.functionResponse != null)
       'function_response': <String, Object?>{
