@@ -516,6 +516,62 @@ void main() {
       );
     });
   });
+
+  group('A2aAgentExecutor cancel parity', () {
+    test('cancel emits terminal failed status without throwing', () async {
+      final A2aAgentExecutor executor = A2aAgentExecutor(runner: Object());
+      final InMemoryA2aEventQueue queue = InMemoryA2aEventQueue();
+
+      await expectLater(
+        executor.cancel(
+          A2aRequestContext(
+            taskId: 'task-cancel',
+            contextId: 'ctx-cancel',
+            message: A2aMessage(
+              messageId: 'm-cancel',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('cancel')],
+            ),
+          ),
+          queue,
+        ),
+        completes,
+      );
+
+      expect(queue.events, hasLength(1));
+      final A2aTaskStatusUpdateEvent event =
+          queue.events.single as A2aTaskStatusUpdateEvent;
+      expect(event.taskId, 'task-cancel');
+      expect(event.contextId, 'ctx-cancel');
+      expect(event.finalEvent, isTrue);
+      expect(event.status.state, A2aTaskState.failed);
+      expect(event.metadata[getAdkMetadataKey('cancel_requested')], true);
+      expect(
+        event.status.message?.parts.single.textPart?.text,
+        'Task cancellation requested.',
+      );
+    });
+
+    test('cancel swallows queue failures and remains safe', () async {
+      final A2aAgentExecutor executor = A2aAgentExecutor(runner: Object());
+
+      await expectLater(
+        executor.cancel(
+          A2aRequestContext(
+            taskId: 'task-cancel',
+            contextId: 'ctx-cancel',
+            message: A2aMessage(
+              messageId: 'm-cancel',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('cancel')],
+            ),
+          ),
+          _FailingA2aEventQueue(),
+        ),
+        completes,
+      );
+    });
+  });
 }
 
 InvocationContext _context({
@@ -615,5 +671,12 @@ class _FakeSessionService extends BaseSessionService {
     String? userId,
   }) async {
     return ListSessionsResponse();
+  }
+}
+
+class _FailingA2aEventQueue implements A2aEventQueue {
+  @override
+  Future<void> enqueueEvent(A2aEvent event) async {
+    throw StateError('Event queue unavailable');
   }
 }

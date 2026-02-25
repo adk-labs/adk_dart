@@ -88,8 +88,39 @@ class A2aAgentExecutor {
     );
   }
 
-  Future<void> cancel(A2aRequestContext context, A2aEventQueue eventQueue) {
-    throw UnsupportedError('Cancellation is not supported.');
+  Future<void> cancel(
+    A2aRequestContext context,
+    A2aEventQueue eventQueue,
+  ) async {
+    final A2aTaskState? currentState = context.currentTask?.status.state;
+    if (currentState == A2aTaskState.completed ||
+        currentState == A2aTaskState.failed) {
+      return;
+    }
+
+    try {
+      await eventQueue.enqueueEvent(
+        A2aTaskStatusUpdateEvent(
+          taskId: context.taskId,
+          contextId: context.contextId,
+          finalEvent: true,
+          status: A2aTaskStatus(
+            state: A2aTaskState.failed,
+            message: A2aMessage(
+              messageId: 'a2a_cancel_${DateTime.now().microsecondsSinceEpoch}',
+              role: A2aRole.agent,
+              parts: <A2aPart>[A2aPart.text('Task cancellation requested.')],
+            ),
+          ),
+          metadata: <String, Object?>{
+            getAdkMetadataKey('cancel_requested'): true,
+          },
+        ),
+      );
+    } catch (_) {
+      // Cancellation is best effort; swallowing queue failures keeps the
+      // cancel path safe for callers.
+    }
   }
 
   Future<void> execute(
