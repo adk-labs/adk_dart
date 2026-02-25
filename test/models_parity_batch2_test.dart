@@ -519,6 +519,22 @@ void main() {
       expect(message['role'], 'user');
     });
 
+    test('unknown outbound part is converted to text fallback', () {
+      final Map<String, Object?> block = AnthropicLlm.partToMessageBlock(
+        Part.fromFileData(
+          fileUri: 'gs://bucket/sample.csv',
+          mimeType: 'text/csv',
+          displayName: 'sample.csv',
+        ),
+      );
+      expect(block['type'], 'text');
+      expect(
+        '${block['text']}',
+        contains('Unsupported anthropic part payload'),
+      );
+      expect('${block['text']}', contains('gs://bucket/sample.csv'));
+    });
+
     test('message response parser produces llm response with usage', () {
       final LlmResponse response = AnthropicLlm.messageToLlmResponse(
         <String, Object?>{
@@ -532,6 +548,29 @@ void main() {
       expect(response.content?.parts.single.text, 'hello');
       expect(response.finishReason, 'STOP');
       expect(response.usageMetadata, isNotNull);
+    });
+
+    test('unknown inbound content blocks are preserved as text', () {
+      final LlmResponse response = AnthropicLlm.messageToLlmResponse(
+        <String, Object?>{
+          'content': <Object?>[
+            <String, Object?>{
+              'type': 'thinking',
+              'summary': 'token-efficient reasoning block',
+            },
+            'raw-non-map-block',
+          ],
+          'usage': <String, Object?>{'input_tokens': 1, 'output_tokens': 1},
+          'stop_reason': 'end_turn',
+        },
+      );
+
+      expect(response.content?.parts, hasLength(2));
+      expect(
+        response.content?.parts.first.text,
+        contains('Unsupported anthropic content block'),
+      );
+      expect(response.content?.parts.last.text, 'raw-non-map-block');
     });
   });
 

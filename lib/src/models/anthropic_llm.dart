@@ -113,7 +113,7 @@ class AnthropicLlm extends BaseLlm {
             'Execution Result:```code_output\n${part.codeExecutionResult}\n```',
       };
     }
-    throw UnsupportedError('Unsupported part: $part');
+    return <String, Object?>{'type': 'text', 'text': _fallbackPartText(part)};
   }
 
   static Map<String, Object?> contentToMessageParam(Content content) {
@@ -145,7 +145,7 @@ class AnthropicLlm extends BaseLlm {
         id: block['id'] as String?,
       );
     }
-    throw UnsupportedError('Unsupported content block type: $type');
+    return Part.text(_fallbackContentBlockText(block));
   }
 
   static Map<String, Object?> functionDeclarationToToolParam(
@@ -170,6 +170,10 @@ class AnthropicLlm extends BaseLlm {
     for (final Object? block in contentBlocks) {
       if (block is Map) {
         parts.add(contentBlockToPart(block.cast<String, Object?>()));
+        continue;
+      }
+      if (block != null) {
+        parts.add(Part.text('$block'));
       }
     }
 
@@ -265,6 +269,70 @@ class AnthropicLlm extends BaseLlm {
       }
     }
     return '';
+  }
+}
+
+String _fallbackPartText(Part part) {
+  final Map<String, Object?> payload = <String, Object?>{};
+  if (part.text != null) {
+    payload['text'] = part.text;
+  }
+  if (part.fileData != null) {
+    payload['file_data'] = <String, Object?>{
+      'file_uri': part.fileData!.fileUri,
+      'mime_type': part.fileData!.mimeType,
+      'display_name': part.fileData!.displayName,
+    };
+  }
+  if (part.inlineData != null) {
+    payload['inline_data'] = <String, Object?>{
+      'mime_type': part.inlineData!.mimeType,
+      'display_name': part.inlineData!.displayName,
+      'byte_count': part.inlineData!.data.length,
+    };
+  }
+  if (part.executableCode != null) {
+    payload['executable_code'] = part.executableCode;
+  }
+  if (part.codeExecutionResult != null) {
+    payload['code_execution_result'] = part.codeExecutionResult;
+  }
+
+  if (payload.isEmpty) {
+    return 'Unsupported anthropic part payload.';
+  }
+  try {
+    return 'Unsupported anthropic part payload: ${jsonEncode(payload)}';
+  } catch (_) {
+    return 'Unsupported anthropic part payload: $payload';
+  }
+}
+
+String _fallbackContentBlockText(Map<String, Object?> block) {
+  final Object? text = block['text'];
+  if (text is String && text.isNotEmpty) {
+    return text;
+  }
+
+  final Object? content = block['content'];
+  if (content is String && content.isNotEmpty) {
+    return content;
+  }
+  if (content is List) {
+    final String joined = content
+        .where((Object? item) => item != null)
+        .map((Object? item) => '$item')
+        .join('\n')
+        .trim();
+    if (joined.isNotEmpty) {
+      return joined;
+    }
+  }
+
+  try {
+    return 'Unsupported anthropic content block: ${jsonEncode(block)}';
+  } catch (_) {
+    return 'Unsupported anthropic content block: $block';
   }
 }
 
