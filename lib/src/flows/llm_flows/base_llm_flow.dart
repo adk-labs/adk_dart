@@ -4,6 +4,7 @@ import '../../agents/base_agent.dart';
 import '../../agents/callback_context.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
+import '../../agents/live_request_queue.dart';
 import '../../agents/llm_agent.dart';
 import '../../agents/readonly_context.dart';
 import '../../agents/run_config.dart';
@@ -14,6 +15,7 @@ import '../../auth/credential_manager.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../models/base_llm.dart';
+import '../../models/base_llm_connection.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../tools/base_tool.dart';
@@ -42,7 +44,7 @@ class BaseLlmFlow {
   final AudioCacheManager audioCacheManager = AudioCacheManager();
 
   Stream<Event> runLive(InvocationContext context) async* {
-    final liveQueue = context.liveRequestQueue;
+    final LiveRequestQueue? liveQueue = context.liveRequestQueue;
     if (liveQueue == null) {
       await for (final Event event in runAsync(context)) {
         yield event;
@@ -50,27 +52,100 @@ class BaseLlmFlow {
       return;
     }
 
+    final BaseLlm llm = _getLlm(context);
+    if (!_supportsLiveConnect(llm)) {
+      await for (final Event event in _runLiveFallback(context, liveQueue)) {
+        yield event;
+      }
+      return;
+    }
+
+    final LlmRequest request = LlmRequest();
+    await for (final Event event in _preprocessAsync(context, request)) {
+      yield event;
+    }
+    if (context.endInvocation) {
+      return;
+    }
+
+    _applyLiveSessionResumptionHandle(context, request);
+
+    final BaseLlmConnection connection = _connectLive(llm, request);
+    Future<void>? sendTask;
+    try {
+      if (request.contents.isNotEmpty) {
+        await connection.sendHistory(
+          request.contents
+              .map((Content content) => content.copyWith())
+              .toList(growable: false),
+        );
+      }
+
+      sendTask = _sendToModel(connection, context);
+      await for (final Event event in _receiveFromModel(
+        connection,
+        context,
+        request,
+      )) {
+        yield event;
+        if (event.getFunctionResponses().isNotEmpty && event.content != null) {
+          context.liveRequestQueue?.sendContent(event.content!.copyWith());
+        }
+      }
+    } finally {
+      context.liveRequestQueue?.close();
+      if (sendTask != null) {
+        try {
+          await sendTask;
+        } catch (_) {}
+      }
+      await connection.close();
+    }
+  }
+
+  bool _supportsLiveConnect(BaseLlm llm) {
+    final dynamic dynamicLlm = llm;
+    try {
+      final Object? connectMethod = dynamicLlm.connect;
+      return connectMethod is Function;
+    } on NoSuchMethodError {
+      return false;
+    }
+  }
+
+  BaseLlmConnection _connectLive(BaseLlm llm, LlmRequest request) {
+    final dynamic dynamicLlm = llm;
+    final Object? value = dynamicLlm.connect(request);
+    if (value is! BaseLlmConnection) {
+      throw StateError(
+        'Model `${llm.runtimeType}` returned an invalid live connection.',
+      );
+    }
+    return value;
+  }
+
+  Stream<Event> _runLiveFallback(
+    InvocationContext context,
+    LiveRequestQueue liveQueue,
+  ) async* {
     while (true) {
-      final liveRequest = await liveQueue.get();
+      final LiveRequest liveRequest = await liveQueue.get();
+      _fanOutLiveRequest(context, liveRequest);
+
       if (liveRequest.close) {
         break;
       }
 
-      if (liveRequest.activityStart) {
+      if (liveRequest.activityStart != null) {
         yield _buildLiveSignalEvent(context, 'live_activity_start');
-        continue;
-      }
-      if (liveRequest.activityEnd) {
+      } else if (liveRequest.activityEnd != null) {
         yield _buildLiveSignalEvent(context, 'live_activity_end');
-        continue;
-      }
-      if (liveRequest.blob != null) {
+      } else if (liveRequest.blob != null) {
         final Event blobEvent = await _handleLiveBlob(
           context,
           liveRequest.blob!,
         );
         yield blobEvent;
-        continue;
       }
 
       final Content? content = liveRequest.content;
@@ -78,23 +153,320 @@ class BaseLlmFlow {
         continue;
       }
 
-      content.role ??= 'user';
-      if (content.role!.isEmpty) {
-        content.role = 'user';
-      }
-
+      _normalizeLiveContentRole(content);
       await _appendLiveUserContent(context, content);
 
       final InvocationContext turnContext = context.copyWith(
         userContent: content.copyWith(),
       );
       await for (final Event event in runAsync(turnContext)) {
+        _maybeUpdateLiveSessionResumptionHandle(context, event.customMetadata);
         yield event;
       }
 
       if (turnContext.endInvocation) {
+        context.endInvocation = true;
         break;
       }
+    }
+  }
+
+  Future<void> _sendToModel(
+    BaseLlmConnection connection,
+    InvocationContext context,
+  ) async {
+    while (true) {
+      final LiveRequestQueue? liveQueue = context.liveRequestQueue;
+      if (liveQueue == null) {
+        return;
+      }
+
+      final LiveRequest liveRequest = await liveQueue.get();
+      _fanOutLiveRequest(context, liveRequest);
+
+      await Future<void>.delayed(Duration.zero);
+      if (liveRequest.close) {
+        await connection.close();
+        return;
+      }
+
+      if (liveRequest.activityStart != null) {
+        await connection.sendRealtime(
+          RealtimeBlob(
+            mimeType: 'application/vnd.adk.activity_start',
+            data: const <int>[],
+          ),
+        );
+      } else if (liveRequest.activityEnd != null) {
+        await connection.sendRealtime(
+          RealtimeBlob(
+            mimeType: 'application/vnd.adk.activity_end',
+            data: const <int>[],
+          ),
+        );
+      } else if (liveRequest.blob != null) {
+        final RealtimeBlob realtimeBlob = _coerceRealtimeBlob(
+          liveRequest.blob!,
+        );
+        if (realtimeBlob.mimeType.startsWith('audio/')) {
+          audioCacheManager.cacheAudio(
+            context,
+            InlineData(
+              mimeType: realtimeBlob.mimeType,
+              data: List<int>.from(realtimeBlob.data),
+            ),
+            cacheType: 'input',
+          );
+        }
+        await connection.sendRealtime(realtimeBlob);
+      }
+
+      final Content? content = liveRequest.content;
+      if (content == null || content.parts.isEmpty) {
+        continue;
+      }
+      _normalizeLiveContentRole(content);
+      await _appendLiveUserContent(context, content);
+      await connection.sendContent(content.copyWith());
+    }
+  }
+
+  Stream<Event> _receiveFromModel(
+    BaseLlmConnection connection,
+    InvocationContext context,
+    LlmRequest request,
+  ) async* {
+    await for (final LlmResponse response in connection.receive()) {
+      _maybeUpdateLiveSessionResumptionHandle(context, response.customMetadata);
+
+      final Event modelResponseEvent = Event(
+        id: Event.newId(),
+        invocationId: context.invocationId,
+        author: response.content?.role == 'user' ? 'user' : context.agent.name,
+        branch: context.branch,
+      );
+
+      await for (final Event event in _postprocessLive(
+        context,
+        request,
+        response,
+        modelResponseEvent,
+      )) {
+        if ((context.runConfig?.saveLiveBlob ?? false) &&
+            event.content?.parts.isNotEmpty == true &&
+            event.content!.parts.first.inlineData != null &&
+            event.content!.parts.first.inlineData!.mimeType.startsWith(
+              'audio/',
+            )) {
+          audioCacheManager.cacheAudio(
+            context,
+            event.content!.parts.first.inlineData!.copyWith(),
+            cacheType: 'output',
+          );
+        }
+        yield event;
+      }
+    }
+  }
+
+  Stream<Event> _postprocessLive(
+    InvocationContext context,
+    LlmRequest request,
+    LlmResponse response,
+    Event modelResponseEvent,
+  ) async* {
+    await for (final Event event in _postprocessRunProcessorsAsync(
+      context,
+      response,
+    )) {
+      yield event;
+    }
+
+    if (response.content == null &&
+        response.errorCode == null &&
+        response.interrupted != true &&
+        response.turnComplete != true &&
+        response.inputTranscription == null &&
+        response.outputTranscription == null &&
+        response.usageMetadata == null) {
+      return;
+    }
+
+    if (response.inputTranscription != null) {
+      modelResponseEvent.inputTranscription = response.inputTranscription;
+      modelResponseEvent.partial = response.partial;
+      yield modelResponseEvent;
+      return;
+    }
+
+    if (response.outputTranscription != null) {
+      modelResponseEvent.outputTranscription = response.outputTranscription;
+      modelResponseEvent.partial = response.partial;
+      yield modelResponseEvent;
+      return;
+    }
+
+    if (context.runConfig?.saveLiveBlob == true) {
+      final List<Event> flushed = await handleControlEventFlush(
+        context,
+        response,
+      );
+      if (flushed.isNotEmpty) {
+        for (final Event event in flushed) {
+          yield event;
+        }
+        return;
+      }
+    }
+
+    final Event finalized = _finalizeModelResponseEvent(
+      request,
+      response,
+      modelResponseEvent,
+    );
+    yield finalized;
+
+    if (finalized.getFunctionCalls().isNotEmpty) {
+      final Event? functionResponseEvent = await flow_functions
+          .handleFunctionCallsAsync(context, finalized, request.toolsDict);
+      if (functionResponseEvent != null) {
+        yield functionResponseEvent;
+        final String? jsonResponse = output_schema.getStructuredModelResponse(
+          functionResponseEvent,
+        );
+        if (jsonResponse != null) {
+          yield output_schema.createFinalModelResponseEvent(
+            context,
+            jsonResponse,
+          );
+        }
+      }
+    }
+  }
+
+  void _fanOutLiveRequest(InvocationContext context, LiveRequest liveRequest) {
+    final activeStreams = context.activeStreamingTools;
+    if (activeStreams == null || activeStreams.isEmpty) {
+      return;
+    }
+
+    for (final dynamic activeStream in activeStreams.values) {
+      final LiveRequestQueue? stream = activeStream.stream;
+      if (stream == null || identical(stream, context.liveRequestQueue)) {
+        continue;
+      }
+      stream.send(liveRequest);
+    }
+  }
+
+  void _normalizeLiveContentRole(Content content) {
+    content.role ??= 'user';
+    if (content.role!.isEmpty) {
+      content.role = 'user';
+    }
+  }
+
+  RealtimeBlob _coerceRealtimeBlob(Object blob) {
+    if (blob is RealtimeBlob) {
+      return RealtimeBlob(
+        mimeType: blob.mimeType,
+        data: List<int>.from(blob.data),
+      );
+    }
+    if (blob is InlineData) {
+      return RealtimeBlob(
+        mimeType: blob.mimeType,
+        data: List<int>.from(blob.data),
+      );
+    }
+    if (blob is List<int>) {
+      return RealtimeBlob(
+        mimeType: 'application/octet-stream',
+        data: List<int>.from(blob),
+      );
+    }
+    if (blob is Map) {
+      final Object? rawMimeType = blob['mimeType'] ?? blob['mime_type'];
+      final Object? rawData = blob['data'];
+      if (rawMimeType is String && rawData is List<int>) {
+        return RealtimeBlob(
+          mimeType: rawMimeType,
+          data: List<int>.from(rawData),
+        );
+      }
+      if (rawMimeType is String && rawData is List) {
+        final List<int> bytes = <int>[];
+        for (final Object? item in rawData) {
+          if (item is! int) {
+            throw ArgumentError.value(
+              blob,
+              'blob',
+              'Realtime blob map data must contain bytes.',
+            );
+          }
+          bytes.add(item);
+        }
+        return RealtimeBlob(mimeType: rawMimeType, data: bytes);
+      }
+    }
+
+    throw ArgumentError.value(
+      blob,
+      'blob',
+      'Unsupported live realtime blob payload.',
+    );
+  }
+
+  void _applyLiveSessionResumptionHandle(
+    InvocationContext context,
+    LlmRequest request,
+  ) {
+    final String? handle = context.liveSessionResumptionHandle;
+    if (handle == null || handle.isEmpty) {
+      return;
+    }
+
+    final Object? sessionResumption =
+        request.liveConnectConfig.sessionResumption;
+    final Map<String, Object?> mutable = sessionResumption is Map
+        ? sessionResumption.map(
+            (Object? key, Object? value) =>
+                MapEntry<String, Object?>('$key', value),
+          )
+        : <String, Object?>{};
+    mutable['handle'] = handle;
+    mutable['transparent'] = true;
+    request.liveConnectConfig.sessionResumption = mutable;
+  }
+
+  void _maybeUpdateLiveSessionResumptionHandle(
+    InvocationContext context,
+    Map<String, dynamic>? metadata,
+  ) {
+    if (metadata == null || metadata.isEmpty) {
+      return;
+    }
+
+    final Object? update =
+        metadata['live_session_resumption_update'] ??
+        metadata['liveSessionResumptionUpdate'];
+    if (update is String && update.isNotEmpty) {
+      context.liveSessionResumptionHandle = update;
+      return;
+    }
+    if (update is Map) {
+      final Object? handle =
+          update['new_handle'] ?? update['newHandle'] ?? update['handle'];
+      if (handle is String && handle.isNotEmpty) {
+        context.liveSessionResumptionHandle = handle;
+      }
+      return;
+    }
+
+    final Object? topLevelHandle =
+        metadata['new_handle'] ?? metadata['newHandle'] ?? metadata['handle'];
+    if (topLevelHandle is String && topLevelHandle.isNotEmpty) {
+      context.liveSessionResumptionHandle = topLevelHandle;
     }
   }
 
@@ -147,6 +519,13 @@ class BaseLlmFlow {
     InvocationContext context,
     Content content,
   ) async {
+    final bool isFunctionResponse = content.parts.any(
+      (Part part) => part.functionResponse != null,
+    );
+    if (isFunctionResponse) {
+      return;
+    }
+
     final Event event = Event(
       invocationId: context.invocationId,
       author: 'user',

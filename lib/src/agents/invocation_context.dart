@@ -9,6 +9,7 @@ import '../sessions/session.dart';
 import '../tools/base_tool.dart';
 import '../types/content.dart';
 import 'agent_state.dart';
+import 'active_streaming_tool.dart';
 import 'base_agent.dart';
 import 'live_request_queue.dart';
 import 'run_config.dart';
@@ -70,7 +71,7 @@ class InvocationContext {
   bool endInvocation;
 
   LiveRequestQueue? liveRequestQueue;
-  Map<String, Object?>? activeStreamingTools;
+  Map<String, ActiveStreamingTool>? activeStreamingTools;
   List<Object?>? transcriptionCache;
   String? liveSessionResumptionHandle;
   List<Object?>? inputRealtimeCache;
@@ -414,7 +415,7 @@ class InvocationContext {
       liveRequestQueue: liveRequestQueue,
       activeStreamingTools: activeStreamingTools == null
           ? null
-          : Map<String, Object?>.from(activeStreamingTools!),
+          : Map<String, ActiveStreamingTool>.from(activeStreamingTools!),
       transcriptionCache: transcriptionCache == null
           ? null
           : List<Object?>.from(transcriptionCache!),

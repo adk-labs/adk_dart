@@ -3,19 +3,27 @@ import 'dart:collection';
 
 import '../types/content.dart';
 
+class LiveActivityStart {
+  const LiveActivityStart();
+}
+
+class LiveActivityEnd {
+  const LiveActivityEnd();
+}
+
 class LiveRequest {
   LiveRequest({
     this.content,
     this.blob,
-    this.activityStart = false,
-    this.activityEnd = false,
+    this.activityStart,
+    this.activityEnd,
     this.close = false,
   });
 
   Content? content;
   Object? blob;
-  bool activityStart;
-  bool activityEnd;
+  LiveActivityStart? activityStart;
+  LiveActivityEnd? activityEnd;
   bool close;
 }
 
@@ -36,11 +44,11 @@ class LiveRequestQueue {
   }
 
   void sendActivityStart() {
-    _enqueue(LiveRequest(activityStart: true));
+    _enqueue(LiveRequest(activityStart: const LiveActivityStart()));
   }
 
   void sendActivityEnd() {
-    _enqueue(LiveRequest(activityEnd: true));
+    _enqueue(LiveRequest(activityEnd: const LiveActivityEnd()));
   }
 
   void send(LiveRequest request) {

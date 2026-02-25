@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -13,6 +15,76 @@ class _CaptureRequestModel extends BaseLlm {
   }) async* {
     lastRequest = request;
     yield LlmResponse(content: Content.modelText('ok'));
+  }
+}
+
+class _FakeLiveConnection extends BaseLlmConnection {
+  final List<Content> historySent = <Content>[];
+  final List<Content> contentsSent = <Content>[];
+  final List<RealtimeBlob> realtimeSent = <RealtimeBlob>[];
+  final StreamController<LlmResponse> _responses =
+      StreamController<LlmResponse>();
+
+  Future<void> Function(Content content)? onSendContent;
+  int closeCount = 0;
+
+  @override
+  Future<void> sendHistory(List<Content> history) async {
+    historySent.addAll(
+      history.map((Content content) => content.copyWith()).toList(),
+    );
+  }
+
+  @override
+  Future<void> sendContent(Content content) async {
+    contentsSent.add(content.copyWith());
+    if (onSendContent != null) {
+      await onSendContent!(content);
+    }
+  }
+
+  @override
+  Future<void> sendRealtime(RealtimeBlob blob) async {
+    realtimeSent.add(
+      RealtimeBlob(mimeType: blob.mimeType, data: List<int>.from(blob.data)),
+    );
+  }
+
+  @override
+  Stream<LlmResponse> receive() => _responses.stream;
+
+  void emit(LlmResponse response) {
+    if (!_responses.isClosed) {
+      _responses.add(response);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    closeCount += 1;
+    if (!_responses.isClosed) {
+      await _responses.close();
+    }
+  }
+}
+
+class _LiveConnectModel extends BaseLlm {
+  _LiveConnectModel({required this.connection}) : super(model: 'live-connect');
+
+  final _FakeLiveConnection connection;
+  LlmRequest? connectedRequest;
+
+  BaseLlmConnection connect(LlmRequest request) {
+    connectedRequest = request.sanitizedForModelCall();
+    return connection;
+  }
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) {
+    throw StateError('generateContent should not be used in live-connect mode');
   }
 }
 
@@ -185,6 +257,84 @@ void main() {
         isNot(contains('peer')),
       );
     });
+  });
+
+  group('live queue and streaming parity', () {
+    test(
+      'BaseLlmFlow live mode fans out requests and updates resumption handle',
+      () async {
+        final _FakeLiveConnection connection = _FakeLiveConnection();
+        connection.onSendContent = (Content content) async {
+          connection.emit(
+            LlmResponse(
+              customMetadata: <String, dynamic>{
+                'live_session_resumption_update': <String, Object?>{
+                  'new_handle': 'updated-handle',
+                },
+              },
+            ),
+          );
+          connection.emit(LlmResponse(content: Content.modelText('live:ok')));
+        };
+
+        final _LiveConnectModel model = _LiveConnectModel(
+          connection: connection,
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_queue_parity',
+          events: <Event>[
+            Event(
+              invocationId: 'inv_live_queue_parity',
+              author: 'user',
+              content: Content.userText('history'),
+            ),
+          ],
+        );
+
+        final LiveRequestQueue rootQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('live input'))
+          ..close();
+        final LiveRequestQueue mirroredQueue = LiveRequestQueue();
+        context.liveRequestQueue = rootQueue;
+        context.activeStreamingTools = <String, ActiveStreamingTool>{
+          'tool': ActiveStreamingTool(stream: mirroredQueue),
+        };
+        context.liveSessionResumptionHandle = 'resume-token';
+
+        final List<Event> events = await BaseLlmFlow()
+            .runLive(context)
+            .toList();
+
+        expect(connection.historySent, isNotEmpty);
+        expect(connection.historySent.first.parts.first.text, 'history');
+        expect(connection.contentsSent, hasLength(1));
+        expect(connection.contentsSent.first.parts.first.text, 'live input');
+        expect(
+          events.any(
+            (Event event) =>
+                event.content?.parts.first.text?.contains('live:ok') == true,
+          ),
+          isTrue,
+        );
+
+        final LiveRequest mirroredContent = await mirroredQueue.get();
+        final LiveRequest mirroredClose = await mirroredQueue.get();
+        expect(mirroredContent.content?.parts.first.text, 'live input');
+        expect(mirroredClose.close, isTrue);
+
+        expect(context.liveSessionResumptionHandle, 'updated-handle');
+        expect(model.connectedRequest, isNotNull);
+        final Object? sessionResumption =
+            model.connectedRequest!.liveConnectConfig.sessionResumption;
+        expect(sessionResumption, isA<Map>());
+        final Map<dynamic, dynamic> sessionResumptionMap =
+            sessionResumption as Map<dynamic, dynamic>;
+        expect(sessionResumptionMap['handle'], 'resume-token');
+        expect(sessionResumptionMap['transparent'], isTrue);
+      },
+    );
   });
 
   group('live audio/transcription parity modules', () {

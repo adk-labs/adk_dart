@@ -36,9 +36,27 @@ void main() {
       final LiveRequest second = await queue.get();
       final LiveRequest third = await queue.get();
 
-      expect(first.activityStart, isTrue);
+      expect(first.activityStart, isNotNull);
       expect(second.blob, <int>[1, 2, 3]);
-      expect(third.activityEnd, isTrue);
+      expect(third.activityEnd, isNotNull);
+    });
+
+    test('supports structured requests carrying multiple fields', () async {
+      final LiveRequestQueue queue = LiveRequestQueue();
+      final LiveRequest request = LiveRequest(
+        content: Content.userText('hello'),
+        blob: InlineData(mimeType: 'audio/wav', data: <int>[1, 2]),
+        activityStart: const LiveActivityStart(),
+      );
+
+      queue.send(request);
+      final LiveRequest received = await queue.get();
+
+      expect(received.content?.parts.single.text, 'hello');
+      expect(received.blob, isA<InlineData>());
+      expect(received.activityStart, isNotNull);
+      expect(received.activityEnd, isNull);
+      expect(received.close, isFalse);
     });
   });
 }
