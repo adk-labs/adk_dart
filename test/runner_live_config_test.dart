@@ -22,6 +22,26 @@ class _LiveEchoAgent extends BaseAgent {
 }
 
 void main() {
+  test('RunConfig defaults maxLlmCalls to a bounded value', () {
+    expect(RunConfig().maxLlmCalls, 500);
+  });
+
+  test('RunConfig allows non-positive maxLlmCalls for unbounded runs', () {
+    expect(RunConfig(maxLlmCalls: 0).maxLlmCalls, 0);
+    expect(RunConfig(maxLlmCalls: -1).maxLlmCalls, -1);
+  });
+
+  test('RunConfig rejects Python sys.maxsize for maxLlmCalls', () {
+    expect(
+      () => RunConfig(maxLlmCalls: 9223372036854775807),
+      throwsArgumentError,
+    );
+    expect(
+      () => RunConfig().copyWith(maxLlmCalls: 9223372036854775807),
+      throwsArgumentError,
+    );
+  });
+
   test(
     'runLive applies default audio modality and transcription placeholders',
     () async {

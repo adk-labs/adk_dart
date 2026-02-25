@@ -1,5 +1,7 @@
 enum StreamingMode { none, sse, bidi }
 
+const int _pythonSysMaxSize = 9223372036854775807;
+
 class ToolThreadPoolConfig {
   ToolThreadPoolConfig({this.maxWorkers = 4}) {
     if (maxWorkers < 1) {
@@ -14,7 +16,7 @@ class RunConfig {
   RunConfig({
     this.supportCfc = false,
     this.streamingMode = StreamingMode.none,
-    this.maxLlmCalls = 0,
+    this.maxLlmCalls = 500,
     this.speechConfig,
     this.saveLiveBlob = false,
     this.toolThreadPoolConfig,
@@ -27,7 +29,9 @@ class RunConfig {
     this.sessionResumption,
     this.contextWindowCompression,
     this.customMetadata,
-  });
+  }) {
+    maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
+  }
 
   bool supportCfc;
   StreamingMode streamingMode;
@@ -44,6 +48,17 @@ class RunConfig {
   Object? sessionResumption;
   Object? contextWindowCompression;
   Map<String, dynamic>? customMetadata;
+
+  static int validateMaxLlmCalls(int value) {
+    if (value == _pythonSysMaxSize) {
+      throw ArgumentError.value(
+        value,
+        'maxLlmCalls',
+        'maxLlmCalls should be less than $_pythonSysMaxSize.',
+      );
+    }
+    return value;
+  }
 
   RunConfig copyWith({
     bool? supportCfc,
