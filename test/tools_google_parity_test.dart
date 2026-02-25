@@ -247,13 +247,13 @@ void main() {
     );
 
     test(
-      'GoogleTool returns callable errors instead of silently retrying without credentials',
+      'GoogleTool preserves callable StateError instead of retrying on matching text',
       () async {
         int callCount = 0;
 
         String fn({Object? credentials}) {
           callCount += 1;
-          throw StateError('upstream api failure');
+          throw StateError('Failed to invoke function tool from upstream api');
         }
 
         final GoogleTool tool = GoogleTool(
@@ -273,7 +273,7 @@ void main() {
         expect(result, isA<Map<String, Object?>>());
         final Map<String, Object?> payload = result! as Map<String, Object?>;
         expect(payload['status'], 'ERROR');
-        expect('${payload['error_details']}', contains('upstream api failure'));
+        expect('${payload['error_details']}', contains('from upstream api'));
         expect(callCount, 1);
       },
     );

@@ -42,10 +42,10 @@ class GoogleTool extends FunctionTool {
 
       try {
         return await super.run(args: enrichedArgs, toolContext: toolContext);
-      } on StateError catch (error) {
+      } on StateError catch (error, stackTrace) {
         // Mirror Python behavior: only fall back when the callable signature
         // does not accept injected credentials/settings.
-        if (!_isInvocationFailure(error)) {
+        if (!_isInvocationMismatchError(stackTrace)) {
           rethrow;
         }
         return super.run(args: args, toolContext: toolContext);
@@ -55,7 +55,9 @@ class GoogleTool extends FunctionTool {
     }
   }
 
-  bool _isInvocationFailure(StateError error) {
-    return '${error.message}'.contains('Failed to invoke function tool');
+  bool _isInvocationMismatchError(StackTrace stackTrace) {
+    final String firstFrame = stackTrace.toString().trim().split('\n').first;
+    return firstFrame.contains('FunctionTool._invokeFunction') &&
+        firstFrame.contains('function_tool.dart');
   }
 }
