@@ -73,6 +73,25 @@ typedef BigtableDataClientFactory =
       required String userAgent,
     });
 
+class BigtableClientFactoryNotConfiguredException implements Exception {
+  BigtableClientFactoryNotConfiguredException({
+    required this.target,
+    String? message,
+  }) : message =
+           message ??
+           'Bigtable $target client factory is not configured in adk_dart. '
+               'Call setBigtableClientFactories(...) before invoking Bigtable tools.';
+
+  static const String defaultCode = 'BIGTABLE_CLIENT_FACTORY_NOT_CONFIGURED';
+  final String target;
+  final String message;
+
+  String get code => defaultCode;
+
+  @override
+  String toString() => '$code[$target]: $message';
+}
+
 BigtableAdminClientFactory _adminClientFactory = _defaultAdminClientFactory;
 BigtableDataClientFactory _dataClientFactory = _defaultDataClientFactory;
 
@@ -80,6 +99,9 @@ BigtableAdminClient getBigtableAdminClient({
   required String project,
   required Object credentials,
 }) {
+  if (identical(_adminClientFactory, _defaultAdminClientFactory)) {
+    throw BigtableClientFactoryNotConfiguredException(target: 'admin');
+  }
   return _adminClientFactory(
     project: project,
     credentials: credentials,
@@ -91,6 +113,9 @@ BigtableDataClient getBigtableDataClient({
   required String project,
   required Object credentials,
 }) {
+  if (identical(_dataClientFactory, _defaultDataClientFactory)) {
+    throw BigtableClientFactoryNotConfiguredException(target: 'data');
+  }
   return _dataClientFactory(
     project: project,
     credentials: credentials,
@@ -120,10 +145,7 @@ BigtableAdminClient _defaultAdminClientFactory({
   required Object credentials,
   required String userAgent,
 }) {
-  throw UnsupportedError(
-    'No default Bigtable admin client is available in adk_dart. '
-    'Inject a client factory with setBigtableClientFactories().',
-  );
+  throw BigtableClientFactoryNotConfiguredException(target: 'admin');
 }
 
 BigtableDataClient _defaultDataClientFactory({
@@ -131,8 +153,5 @@ BigtableDataClient _defaultDataClientFactory({
   required Object credentials,
   required String userAgent,
 }) {
-  throw UnsupportedError(
-    'No default Bigtable data client is available in adk_dart. '
-    'Inject a client factory with setBigtableClientFactories().',
-  );
+  throw BigtableClientFactoryNotConfiguredException(target: 'data');
 }

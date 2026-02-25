@@ -291,6 +291,31 @@ void main() {
     });
   });
 
+  group('spanner client guard parity', () {
+    test('default factory surfaces actionable configuration guard', () {
+      resetSpannerClientFactory();
+
+      expect(
+        () => getSpannerClient(project: 'p', credentials: Object()),
+        throwsA(
+          isA<SpannerClientFactoryNotConfiguredException>()
+              .having(
+                (SpannerClientFactoryNotConfiguredException error) =>
+                    error.code,
+                'code',
+                SpannerClientFactoryNotConfiguredException.defaultCode,
+              )
+              .having(
+                (SpannerClientFactoryNotConfiguredException error) =>
+                    error.message,
+                'message',
+                contains('setSpannerClientFactory'),
+              ),
+        ),
+      );
+    });
+  });
+
   group('spanner metadata/query parity', () {
     test('metadata tools return success payloads and schema details', () async {
       final _FakeSpannerDatabase database = _FakeSpannerDatabase(

@@ -75,12 +75,31 @@ typedef SpannerClientFactory =
       required Object credentials,
     });
 
+class SpannerClientFactoryNotConfiguredException implements Exception {
+  SpannerClientFactoryNotConfiguredException([
+    this.message =
+        'Cloud Spanner client factory is not configured in adk_dart. '
+        'Call setSpannerClientFactory(...) before invoking Spanner tools.',
+  ]);
+
+  static const String defaultCode = 'SPANNER_CLIENT_FACTORY_NOT_CONFIGURED';
+  final String message;
+
+  String get code => defaultCode;
+
+  @override
+  String toString() => '$code: $message';
+}
+
 SpannerClientFactory _spannerClientFactory = _defaultSpannerClientFactory;
 
 SpannerClient getSpannerClient({
   required String project,
   required Object credentials,
 }) {
+  if (identical(_spannerClientFactory, _defaultSpannerClientFactory)) {
+    throw SpannerClientFactoryNotConfiguredException();
+  }
   final SpannerClient spannerClient = _spannerClientFactory(
     project: project,
     credentials: credentials,
@@ -101,8 +120,5 @@ SpannerClient _defaultSpannerClientFactory({
   required String project,
   required Object credentials,
 }) {
-  throw UnsupportedError(
-    'No default Cloud Spanner client is available in adk_dart. '
-    'Inject a client factory with setSpannerClientFactory().',
-  );
+  throw SpannerClientFactoryNotConfiguredException();
 }

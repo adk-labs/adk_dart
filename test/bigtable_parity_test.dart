@@ -177,6 +177,56 @@ void main() {
     });
   });
 
+  group('bigtable client guard parity', () {
+    test('default factories surface actionable configuration guards', () {
+      resetBigtableClientFactories();
+
+      expect(
+        () => getBigtableAdminClient(project: 'p', credentials: Object()),
+        throwsA(
+          isA<BigtableClientFactoryNotConfiguredException>()
+              .having(
+                (BigtableClientFactoryNotConfiguredException error) =>
+                    error.code,
+                'code',
+                BigtableClientFactoryNotConfiguredException.defaultCode,
+              )
+              .having(
+                (BigtableClientFactoryNotConfiguredException error) =>
+                    error.target,
+                'target',
+                'admin',
+              )
+              .having(
+                (BigtableClientFactoryNotConfiguredException error) =>
+                    error.message,
+                'message',
+                contains('setBigtableClientFactories'),
+              ),
+        ),
+      );
+
+      expect(
+        () => getBigtableDataClient(project: 'p', credentials: Object()),
+        throwsA(
+          isA<BigtableClientFactoryNotConfiguredException>()
+              .having(
+                (BigtableClientFactoryNotConfiguredException error) =>
+                    error.code,
+                'code',
+                BigtableClientFactoryNotConfiguredException.defaultCode,
+              )
+              .having(
+                (BigtableClientFactoryNotConfiguredException error) =>
+                    error.target,
+                'target',
+                'data',
+              ),
+        ),
+      );
+    });
+  });
+
   group('bigtable metadata parity', () {
     test('lists instances/tables and gets metadata info', () async {
       final _FakeBigtableInstance instance = _FakeBigtableInstance(
