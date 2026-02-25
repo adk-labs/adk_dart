@@ -31,6 +31,9 @@ class GoogleMapsGroundingTool extends BaseTool {
     }
 
     if (isGeminiModel(modelName) || modelCheckDisabled) {
+      llmRequest.config.tools!.add(
+        ToolDeclaration(googleMaps: const <String, Object?>{}),
+      );
       llmRequest.config.labels['adk_google_maps_grounding_tool'] =
           'google_maps';
       return;

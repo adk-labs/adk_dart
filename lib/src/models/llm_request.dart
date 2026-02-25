@@ -111,14 +111,35 @@ class HttpOptions {
 class ToolDeclaration {
   ToolDeclaration({
     List<FunctionDeclaration>? functionDeclarations,
+    this.googleSearch,
+    this.googleSearchRetrieval,
+    this.urlContext,
+    this.codeExecution,
+    this.googleMaps,
+    this.enterpriseWebSearch,
+    this.retrieval,
     this.computerUse,
   }) : functionDeclarations = functionDeclarations ?? <FunctionDeclaration>[];
 
   List<FunctionDeclaration> functionDeclarations;
+  Object? googleSearch;
+  Object? googleSearchRetrieval;
+  Object? urlContext;
+  Object? codeExecution;
+  Object? googleMaps;
+  Object? enterpriseWebSearch;
+  Object? retrieval;
   Object? computerUse;
 
   ToolDeclaration copyWith({
     List<FunctionDeclaration>? functionDeclarations,
+    Object? googleSearch = _sentinel,
+    Object? googleSearchRetrieval = _sentinel,
+    Object? urlContext = _sentinel,
+    Object? codeExecution = _sentinel,
+    Object? googleMaps = _sentinel,
+    Object? enterpriseWebSearch = _sentinel,
+    Object? retrieval = _sentinel,
     Object? computerUse = _sentinel,
   }) {
     return ToolDeclaration(
@@ -127,6 +148,25 @@ class ToolDeclaration {
           this.functionDeclarations
               .map((declaration) => declaration.copyWith())
               .toList(),
+      googleSearch: identical(googleSearch, _sentinel)
+          ? this.googleSearch
+          : googleSearch,
+      googleSearchRetrieval: identical(googleSearchRetrieval, _sentinel)
+          ? this.googleSearchRetrieval
+          : googleSearchRetrieval,
+      urlContext: identical(urlContext, _sentinel)
+          ? this.urlContext
+          : urlContext,
+      codeExecution: identical(codeExecution, _sentinel)
+          ? this.codeExecution
+          : codeExecution,
+      googleMaps: identical(googleMaps, _sentinel)
+          ? this.googleMaps
+          : googleMaps,
+      enterpriseWebSearch: identical(enterpriseWebSearch, _sentinel)
+          ? this.enterpriseWebSearch
+          : enterpriseWebSearch,
+      retrieval: identical(retrieval, _sentinel) ? this.retrieval : retrieval,
       computerUse: identical(computerUse, _sentinel)
           ? this.computerUse
           : computerUse,

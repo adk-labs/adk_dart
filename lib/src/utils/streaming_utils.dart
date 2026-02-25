@@ -10,6 +10,11 @@ class StreamingResponseAggregator {
   Object? _usageMetadata;
   Object? _citationMetadata;
   Object? _groundingMetadata;
+  double? _avgLogprobs;
+  Object? _logprobsResult;
+  Object? _cacheMetadata;
+  String? _interactionId;
+  String? _modelVersion;
   LlmResponse? _response;
 
   final List<Part> _partsSequence = <Part>[];
@@ -247,11 +252,24 @@ class StreamingResponseAggregator {
   Stream<LlmResponse> processResponse(LlmResponse response) async* {
     _response = response;
     _usageMetadata = response.usageMetadata;
+    _modelVersion = response.modelVersion ?? _modelVersion;
     if (response.citationMetadata != null) {
       _citationMetadata = response.citationMetadata;
     }
     if (response.groundingMetadata != null) {
       _groundingMetadata = response.groundingMetadata;
+    }
+    if (response.avgLogprobs != null) {
+      _avgLogprobs = response.avgLogprobs;
+    }
+    if (response.logprobsResult != null) {
+      _logprobsResult = response.logprobsResult;
+    }
+    if (response.cacheMetadata != null) {
+      _cacheMetadata = response.cacheMetadata;
+    }
+    if ((response.interactionId ?? '').isNotEmpty) {
+      _interactionId = response.interactionId;
     }
     if (response.finishReason != null) {
       _finishReason = response.finishReason;
@@ -336,11 +354,15 @@ class StreamingResponseAggregator {
           Part.text(_text, thoughtSignature: _textThoughtSignature),
       ];
       yield LlmResponse(
-        modelVersion: response.modelVersion,
+        modelVersion: response.modelVersion ?? _modelVersion,
         content: Content(parts: mergedParts),
         usageMetadata: response.usageMetadata,
         citationMetadata: response.citationMetadata,
         groundingMetadata: response.groundingMetadata,
+        avgLogprobs: response.avgLogprobs,
+        logprobsResult: response.logprobsResult,
+        cacheMetadata: response.cacheMetadata,
+        interactionId: response.interactionId,
       );
       _thoughtText = '';
       _text = '';
@@ -364,7 +386,7 @@ class StreamingResponseAggregator {
       final String? finishReason = _finishReason ?? _response!.finishReason;
       final bool success = finishReason == null || finishReason == 'STOP';
       return LlmResponse(
-        modelVersion: _response!.modelVersion,
+        modelVersion: _response!.modelVersion ?? _modelVersion,
         content: Content(
           parts: _partsSequence
               .map((Part part) => part.copyWith())
@@ -372,6 +394,10 @@ class StreamingResponseAggregator {
         ),
         citationMetadata: _citationMetadata,
         groundingMetadata: _groundingMetadata,
+        avgLogprobs: _avgLogprobs,
+        logprobsResult: _logprobsResult,
+        cacheMetadata: _cacheMetadata,
+        interactionId: _interactionId,
         errorCode: success ? null : finishReason,
         errorMessage: success ? null : _response!.errorMessage,
         usageMetadata: _usageMetadata,
@@ -388,7 +414,7 @@ class StreamingResponseAggregator {
     final String? finishReason = _response!.finishReason;
     final bool success = finishReason == null || finishReason == 'STOP';
     return LlmResponse(
-      modelVersion: _response!.modelVersion,
+      modelVersion: _response!.modelVersion ?? _modelVersion,
       content: Content(
         parts: <Part>[
           if (_thoughtText.isNotEmpty)
@@ -403,6 +429,10 @@ class StreamingResponseAggregator {
       ),
       citationMetadata: _citationMetadata,
       groundingMetadata: _groundingMetadata,
+      avgLogprobs: _avgLogprobs,
+      logprobsResult: _logprobsResult,
+      cacheMetadata: _cacheMetadata,
+      interactionId: _interactionId,
       errorCode: success ? null : finishReason,
       errorMessage: success ? null : _response!.errorMessage,
       usageMetadata: _usageMetadata,

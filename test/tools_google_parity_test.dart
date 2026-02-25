@@ -26,6 +26,31 @@ void main() {
         llmRequest: request,
       );
       expect(request.config.labels['adk_google_search_tool'], 'google_search');
+      expect(request.config.tools, isNotNull);
+      expect(
+        request.config.tools!.last.googleSearch,
+        isA<Map<String, Object?>>(),
+      );
+    });
+
+    test('GoogleSearchTool configures Gemini 1 retrieval payload', () async {
+      final GoogleSearchTool tool = GoogleSearchTool();
+      final LlmRequest request = LlmRequest(model: 'gemini-1.5-flash');
+
+      await tool.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: request,
+      );
+
+      expect(
+        request.config.labels['adk_google_search_tool'],
+        'google_search_retrieval',
+      );
+      expect(request.config.tools, isNotNull);
+      expect(
+        request.config.tools!.last.googleSearchRetrieval,
+        isA<Map<String, Object?>>(),
+      );
     });
 
     test('GoogleSearchTool enforces Gemini 1 multi-tool limitation', () async {
@@ -63,7 +88,33 @@ void main() {
       );
       expect(request.model, 'not-gemini');
       expect(request.config.labels['adk_google_search_tool'], 'google_search');
+      expect(request.config.tools, isNotNull);
+      expect(
+        request.config.tools!.last.googleSearch,
+        isA<Map<String, Object?>>(),
+      );
     });
+
+    test(
+      'LlmAgent wraps GoogleSearchTool into GoogleSearchAgentTool for multi-tool bypass',
+      () async {
+        final LlmAgent agent = LlmAgent(
+          name: 'multi_search',
+          model: 'gemini-2.5-flash',
+          instruction: 'search',
+          tools: <Object>[
+            GoogleSearchTool(bypassMultiToolsLimit: true),
+            FunctionTool(name: 'echo', func: ({required String text}) => text),
+          ],
+        );
+
+        final List<BaseTool> tools = await agent.canonicalTools();
+        expect(
+          tools.any((BaseTool tool) => tool is GoogleSearchAgentTool),
+          isTrue,
+        );
+      },
+    );
 
     test('createGoogleSearchAgent returns search-only agent tooling', () {
       final LlmAgent agent = createGoogleSearchAgent('gemini-2.5-flash');

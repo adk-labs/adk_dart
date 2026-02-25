@@ -231,6 +231,27 @@ class ComputerUseToolset extends BaseToolset {
     }
 
     final ComputerEnvironment environment = await _computer.environment();
+    llmRequest.config.tools ??= <ToolDeclaration>[];
+    if (!llmRequest.config.tools!.any(
+      (ToolDeclaration tool) => tool.computerUse != null,
+    )) {
+      llmRequest.config.tools!.add(
+        ToolDeclaration(
+          computerUse: <String, Object?>{
+            'environment': _computerEnvironmentValue(environment),
+          },
+        ),
+      );
+    }
     llmRequest.config.labels['adk_computer_use_environment'] = environment.name;
+  }
+}
+
+String _computerEnvironmentValue(ComputerEnvironment environment) {
+  switch (environment) {
+    case ComputerEnvironment.environmentBrowser:
+      return 'ENVIRONMENT_BROWSER';
+    case ComputerEnvironment.environmentUnspecified:
+      return 'ENVIRONMENT_UNSPECIFIED';
   }
 }

@@ -306,6 +306,308 @@ void main() {
         expect(response.content?.parts[1].functionCall?.willContinue, isTrue);
       },
     );
+
+    test(
+      'does not synthesize interaction id from previous interaction id',
+      () async {
+        final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+          nonStreamResponse: <String, Object?>{
+            'candidates': <Object?>[
+              <String, Object?>{
+                'content': <String, Object?>{
+                  'role': 'model',
+                  'parts': <Object?>[
+                    <String, Object?>{'text': 'ok'},
+                  ],
+                },
+                'finishReason': 'STOP',
+              },
+            ],
+          },
+        );
+        final Gemini model = Gemini(
+          restTransport: transport,
+          environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+        );
+        final LlmResponse response =
+            (await model
+                    .generateContent(
+                      LlmRequest(
+                        model: 'gemini-2.5-flash',
+                        previousInteractionId: 'previous-id',
+                        contents: <Content>[Content.userText('hello')],
+                      ),
+                    )
+                    .toList())
+                .single;
+
+        expect(response.interactionId, isNull);
+      },
+    );
+
+    test(
+      'routes interactions API calls through interactions endpoint',
+      () async {
+        final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+          interactionResponse: <String, Object?>{
+            'id': 'interaction-2',
+            'status': 'completed',
+            'outputs': <Object?>[
+              <String, Object?>{'type': 'text', 'text': 'interactions-result'},
+            ],
+            'usage': <String, Object?>{
+              'total_input_tokens': 3,
+              'total_output_tokens': 5,
+            },
+          },
+        );
+        final Gemini model = Gemini(
+          useInteractionsApi: true,
+          restTransport: transport,
+          environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+        );
+
+        final List<LlmResponse> responses = await model
+            .generateContent(
+              LlmRequest(
+                model: 'gemini-2.5-flash',
+                previousInteractionId: 'interaction-1',
+                contents: <Content>[
+                  Content.modelText('call_tool'),
+                  Content.userText('tool result'),
+                ],
+              ),
+            )
+            .toList();
+
+        expect(transport.createInteractionCallCount, 1);
+        expect(transport.generateContentCallCount, 0);
+        expect(
+          transport.lastInteractionPayload?['previous_interaction_id'],
+          'interaction-1',
+        );
+        expect(responses, hasLength(1));
+        expect(
+          responses.single.content?.parts.single.text,
+          'interactions-result',
+        );
+        expect(responses.single.interactionId, 'interaction-2');
+        expect(responses.single.turnComplete, isTrue);
+        expect(responses.single.finishReason, 'STOP');
+      },
+    );
+
+    test('forwards retry options to REST transport', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        nonStreamResponse: <String, Object?>{
+          'candidates': <Object?>[
+            <String, Object?>{
+              'content': <String, Object?>{
+                'role': 'model',
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'ok'},
+                ],
+              },
+              'finishReason': 'STOP',
+            },
+          ],
+        },
+      );
+      final Gemini model = Gemini(
+        restTransport: transport,
+        retryOptions: HttpRetryOptions(
+          attempts: 4,
+          initialDelay: 1.5,
+          maxDelay: 20.0,
+          expBase: 2.5,
+          httpStatusCodes: <int>[429, 500],
+        ),
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      await model
+          .generateContent(
+            LlmRequest(
+              model: 'gemini-2.5-flash',
+              contents: <Content>[Content.userText('hello')],
+            ),
+          )
+          .toList();
+      expect(transport.lastRetryOptions?.attempts, 4);
+      expect(transport.lastRetryOptions?.httpStatusCodes, <int>[429, 500]);
+
+      await model
+          .generateContent(
+            LlmRequest(
+              model: 'gemini-2.5-flash',
+              contents: <Content>[Content.userText('hello')],
+              config: GenerateContentConfig(
+                httpOptions: HttpOptions(
+                  retryOptions: HttpRetryOptions(attempts: 2),
+                ),
+              ),
+            ),
+          )
+          .toList();
+      expect(transport.lastRetryOptions?.attempts, 2);
+    });
+
+    test('serializes built-in Gemini tools in REST payload', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        nonStreamResponse: <String, Object?>{
+          'candidates': <Object?>[
+            <String, Object?>{
+              'content': <String, Object?>{
+                'role': 'model',
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'ok'},
+                ],
+              },
+              'finishReason': 'STOP',
+            },
+          ],
+        },
+      );
+      final Gemini model = Gemini(
+        restTransport: transport,
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      await model
+          .generateContent(
+            LlmRequest(
+              model: 'gemini-2.5-flash',
+              contents: <Content>[Content.userText('hello')],
+              config: GenerateContentConfig(
+                tools: <ToolDeclaration>[
+                  ToolDeclaration(googleSearch: const <String, Object?>{}),
+                  ToolDeclaration(urlContext: const <String, Object?>{}),
+                  ToolDeclaration(codeExecution: const <String, Object?>{}),
+                  ToolDeclaration(
+                    enterpriseWebSearch: const <String, Object?>{},
+                  ),
+                  ToolDeclaration(googleMaps: const <String, Object?>{}),
+                  ToolDeclaration(
+                    retrieval: <String, Object?>{
+                      'vertexAiSearch': <String, Object?>{
+                        'engine': 'engines/e',
+                      },
+                    },
+                  ),
+                  ToolDeclaration(
+                    computerUse: <String, Object?>{
+                      'environment': 'ENVIRONMENT_BROWSER',
+                    },
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList();
+
+      final List<Object?> tools =
+          transport.lastPayload?['tools'] as List<Object?>;
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('googleSearch'),
+        ),
+        isTrue,
+      );
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('urlContext'),
+        ),
+        isTrue,
+      );
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('codeExecution'),
+        ),
+        isTrue,
+      );
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('enterpriseWebSearch'),
+        ),
+        isTrue,
+      );
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('googleMaps'),
+        ),
+        isTrue,
+      );
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('retrieval'),
+        ),
+        isTrue,
+      );
+      expect(
+        tools.any(
+          (Object? tool) =>
+              (tool as Map<String, Object?>).containsKey('computerUse'),
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'converts interactions built-in tools to interactions tool types',
+      () async {
+        final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+          interactionResponse: <String, Object?>{
+            'id': 'ix-tools',
+            'status': 'completed',
+            'outputs': <Object?>[
+              <String, Object?>{'type': 'text', 'text': 'ok'},
+            ],
+          },
+        );
+        final Gemini model = Gemini(
+          useInteractionsApi: true,
+          restTransport: transport,
+          environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+        );
+
+        await model
+            .generateContent(
+              LlmRequest(
+                model: 'gemini-2.5-flash',
+                contents: <Content>[Content.userText('hello')],
+                config: GenerateContentConfig(
+                  tools: <ToolDeclaration>[
+                    ToolDeclaration(
+                      googleSearch: const <String, Object?>{},
+                      urlContext: const <String, Object?>{},
+                      codeExecution: const <String, Object?>{},
+                      computerUse: const <String, Object?>{},
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList();
+
+        final List<Object?> tools =
+            transport.lastInteractionPayload?['tools'] as List<Object?>;
+        expect(
+          tools.map((Object? item) => (item as Map<String, Object?>)['type']),
+          containsAll(<String>[
+            'google_search',
+            'url_context',
+            'code_execution',
+            'computer_use',
+          ]),
+        );
+      },
+    );
   });
 }
 
@@ -313,19 +615,29 @@ class _FakeGeminiRestTransport implements GeminiRestTransport {
   _FakeGeminiRestTransport({
     this.nonStreamResponse,
     List<Map<String, Object?>>? streamResponses,
-  }) : _streamResponses = streamResponses ?? const <Map<String, Object?>>[];
+    this.interactionResponse,
+    List<Map<String, Object?>>? interactionStreamResponses,
+  }) : _streamResponses = streamResponses ?? const <Map<String, Object?>>[],
+       _interactionStreamResponses =
+           interactionStreamResponses ?? const <Map<String, Object?>>[];
 
   final Map<String, Object?>? nonStreamResponse;
   final List<Map<String, Object?>> _streamResponses;
+  final Map<String, Object?>? interactionResponse;
+  final List<Map<String, Object?>> _interactionStreamResponses;
 
   int generateContentCallCount = 0;
   int streamGenerateContentCallCount = 0;
+  int createInteractionCallCount = 0;
+  int streamCreateInteractionCallCount = 0;
   String? lastModel;
   String? lastApiKey;
   Map<String, Object?>? lastPayload;
+  Map<String, Object?>? lastInteractionPayload;
   String? lastApiVersion;
   String? lastBaseUrl;
   Map<String, String>? lastHeaders;
+  HttpRetryOptions? lastRetryOptions;
 
   @override
   Future<Map<String, Object?>> generateContent({
@@ -335,6 +647,7 @@ class _FakeGeminiRestTransport implements GeminiRestTransport {
     String? baseUrl,
     String apiVersion = 'v1beta',
     Map<String, String>? headers,
+    HttpRetryOptions? retryOptions,
   }) async {
     generateContentCallCount += 1;
     lastModel = model;
@@ -343,6 +656,7 @@ class _FakeGeminiRestTransport implements GeminiRestTransport {
     lastApiVersion = apiVersion;
     lastBaseUrl = baseUrl;
     lastHeaders = headers;
+    lastRetryOptions = retryOptions;
     return nonStreamResponse ?? <String, Object?>{};
   }
 
@@ -354,6 +668,7 @@ class _FakeGeminiRestTransport implements GeminiRestTransport {
     String? baseUrl,
     String apiVersion = 'v1beta',
     Map<String, String>? headers,
+    HttpRetryOptions? retryOptions,
   }) async* {
     streamGenerateContentCallCount += 1;
     lastModel = model;
@@ -362,7 +677,48 @@ class _FakeGeminiRestTransport implements GeminiRestTransport {
     lastApiVersion = apiVersion;
     lastBaseUrl = baseUrl;
     lastHeaders = headers;
+    lastRetryOptions = retryOptions;
     for (final Map<String, Object?> chunk in _streamResponses) {
+      yield chunk;
+    }
+  }
+
+  @override
+  Future<Map<String, Object?>> createInteraction({
+    required String apiKey,
+    required Map<String, Object?> payload,
+    String? baseUrl,
+    String apiVersion = 'v1beta',
+    Map<String, String>? headers,
+    HttpRetryOptions? retryOptions,
+  }) async {
+    createInteractionCallCount += 1;
+    lastApiKey = apiKey;
+    lastInteractionPayload = payload;
+    lastApiVersion = apiVersion;
+    lastBaseUrl = baseUrl;
+    lastHeaders = headers;
+    lastRetryOptions = retryOptions;
+    return interactionResponse ?? <String, Object?>{};
+  }
+
+  @override
+  Stream<Map<String, Object?>> streamCreateInteraction({
+    required String apiKey,
+    required Map<String, Object?> payload,
+    String? baseUrl,
+    String apiVersion = 'v1beta',
+    Map<String, String>? headers,
+    HttpRetryOptions? retryOptions,
+  }) async* {
+    streamCreateInteractionCallCount += 1;
+    lastApiKey = apiKey;
+    lastInteractionPayload = payload;
+    lastApiVersion = apiVersion;
+    lastBaseUrl = baseUrl;
+    lastHeaders = headers;
+    lastRetryOptions = retryOptions;
+    for (final Map<String, Object?> chunk in _interactionStreamResponses) {
       yield chunk;
     }
   }

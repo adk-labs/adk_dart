@@ -35,6 +35,11 @@ void main() {
           request.config.labels['adk_enterprise_web_search_tool'],
           'enterprise_web_search',
         );
+        expect(request.config.tools, isNotNull);
+        expect(
+          request.config.tools!.last.enterpriseWebSearch,
+          isA<Map<String, Object?>>(),
+        );
       },
     );
 
@@ -104,6 +109,11 @@ void main() {
         request.config.labels['adk_google_maps_grounding_tool'],
         'google_maps',
       );
+      expect(request.config.tools, isNotNull);
+      expect(
+        request.config.tools!.last.googleMaps,
+        isA<Map<String, Object?>>(),
+      );
     });
 
     test('VertexAiSearchTool validates data store / engine exclusivity', () {
@@ -159,6 +169,21 @@ void main() {
       expect(json['engine'], 'projects/p/locations/l/collections/c/engines/e');
       expect(json['filter'], 'category = "docs"');
       expect(json['max_results'], 5);
+
+      expect(request.config.tools, isNotNull);
+      final ToolDeclaration retrievalTool = request.config.tools!.last;
+      final Map<String, Object?> retrieval = Map<String, Object?>.from(
+        retrievalTool.retrieval! as Map,
+      );
+      final Map<String, Object?> vertexAiSearch = Map<String, Object?>.from(
+        retrieval['vertexAiSearch'] as Map,
+      );
+      expect(
+        vertexAiSearch['engine'],
+        'projects/p/locations/l/collections/c/engines/e',
+      );
+      expect(vertexAiSearch['filter'], 'category = "docs"');
+      expect(vertexAiSearch['max_results'], 5);
     });
 
     test(
@@ -218,6 +243,34 @@ void main() {
         expect(
           request.config.labels['adk_vertex_ai_search_tool'],
           'vertex_ai_search',
+        );
+      },
+    );
+
+    test(
+      'LlmAgent wraps VertexAiSearchTool into DiscoveryEngineSearchTool for multi-tool bypass',
+      () async {
+        final LlmAgent agent = LlmAgent(
+          name: 'multi_vertex_search',
+          model: 'gemini-2.5-flash',
+          instruction: 'search',
+          tools: <Object>[
+            VertexAiSearchTool(
+              dataStoreId: 'projects/p/locations/l/collections/c/dataStores/d',
+              bypassMultiToolsLimit: true,
+            ),
+            FunctionTool(name: 'echo', func: ({required String text}) => text),
+          ],
+        );
+
+        final List<BaseTool> tools = await agent.canonicalTools();
+        expect(
+          tools.any((BaseTool tool) => tool is DiscoveryEngineSearchTool),
+          isTrue,
+        );
+        expect(
+          tools.any((BaseTool tool) => tool is VertexAiSearchTool),
+          isFalse,
         );
       },
     );

@@ -401,6 +401,10 @@ void main() {
                     'renderedContent': '<div>grounded</div>',
                   },
                 },
+                interactionId: 'ix-agg',
+                avgLogprobs: -0.25,
+                logprobsResult: <String, Object?>{'topCandidates': <Object?>[]},
+                cacheMetadata: <String, Object?>{'cacheName': 'cache-1'},
               ),
             )
             .toList();
@@ -436,6 +440,10 @@ void main() {
         expect(merged.content?.parts.first.thoughtSignature, <int>[1, 2, 3]);
         expect(merged.content?.parts[1].functionCall?.args['city'], 'Seul');
         expect(merged.content?.parts[1].thoughtSignature, <int>[8, 8]);
+        expect(merged.interactionId, 'ix-agg');
+        expect(merged.avgLogprobs, closeTo(-0.25, 0.0001));
+        expect(merged.logprobsResult, isA<Map<String, Object?>>());
+        expect(merged.cacheMetadata, isA<Map<String, Object?>>());
       },
     );
 

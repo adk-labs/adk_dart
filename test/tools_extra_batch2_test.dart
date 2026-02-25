@@ -76,7 +76,7 @@ void main() {
         final List<ToolDeclaration>? tools = request.config.tools;
         expect(tools, isNotNull);
         expect(tools!.isNotEmpty, isTrue);
-        expect(tools.last.functionDeclarations.first.name, 'url_context');
+        expect(tools.last.urlContext, isA<Map<String, Object?>>());
       },
     );
   });

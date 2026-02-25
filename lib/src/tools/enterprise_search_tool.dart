@@ -33,6 +33,9 @@ class EnterpriseWebSearchTool extends BaseTool {
           'Enterprise Web Search tool cannot be used with other tools in Gemini 1.x.',
         );
       }
+      llmRequest.config.tools!.add(
+        ToolDeclaration(enterpriseWebSearch: const <String, Object?>{}),
+      );
       llmRequest.config.labels['adk_enterprise_web_search_tool'] =
           'enterprise_web_search';
       return;

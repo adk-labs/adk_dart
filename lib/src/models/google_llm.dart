@@ -11,6 +11,7 @@ import 'cache_metadata.dart';
 import 'gemini_context_cache_manager.dart';
 import 'gemini_llm_connection.dart';
 import 'gemini_rest_api_client.dart';
+import 'interactions_utils.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
@@ -98,21 +99,8 @@ class Gemini extends BaseLlm {
     );
 
     CacheMetadata? cacheMetadata;
-    if (prepared.cacheConfig != null) {
+    if (!useInteractionsApi && prepared.cacheConfig != null) {
       cacheMetadata = await cacheManager.handleContextCaching(prepared);
-    }
-
-    if (useInteractionsApi && interactionsInvoker != null) {
-      await for (final LlmResponse response in interactionsInvoker!(
-        prepared,
-        stream: stream,
-      )) {
-        if (cacheMetadata != null) {
-          cacheManager.populateCacheMetadataInResponse(response, cacheMetadata);
-        }
-        yield response;
-      }
-      return;
     }
 
     if (_generateHook != null) {
@@ -130,7 +118,13 @@ class Gemini extends BaseLlm {
 
     try {
       final String? apiKey = _resolveApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
+      final HttpRetryOptions? resolvedRetryOptions = _resolveRetryOptions(
+        requestRetryOptions: prepared.config.httpOptions?.retryOptions,
+      );
+
+      if (useInteractionsApi &&
+          interactionsInvoker == null &&
+          (apiKey == null || apiKey.isEmpty)) {
         developer.log(
           'Warning: GEMINI_API_KEY not set. Using mock Gemini response.',
           name: 'adk_dart.models',
@@ -141,12 +135,46 @@ class Gemini extends BaseLlm {
           content: Content.modelText(text),
           partial: stream ? false : null,
           turnComplete: true,
-          interactionId: _deriveInteractionId(prepared),
+        );
+        yield response;
+        return;
+      }
+
+      if (!useInteractionsApi && (apiKey == null || apiKey.isEmpty)) {
+        developer.log(
+          'Warning: GEMINI_API_KEY not set. Using mock Gemini response.',
+          name: 'adk_dart.models',
+        );
+        final String text = _defaultText(prepared);
+        final LlmResponse response = LlmResponse(
+          modelVersion: prepared.model,
+          content: Content.modelText(text),
+          partial: stream ? false : null,
+          turnComplete: true,
         );
         if (cacheMetadata != null) {
           cacheManager.populateCacheMetadataInResponse(response, cacheMetadata);
         }
         yield response;
+        return;
+      }
+
+      if (useInteractionsApi) {
+        await for (final LlmResponse response in generateContentViaInteractions(
+          llmRequest: prepared,
+          stream: stream,
+          invoker: interactionsInvoker,
+          restTransport: interactionsInvoker == null
+              ? _resolvedRestTransport
+              : null,
+          apiKey: apiKey,
+          baseUrl: baseUrl,
+          apiVersion: prepared.config.httpOptions?.apiVersion ?? 'v1beta',
+          headers: prepared.config.httpOptions?.headers,
+          retryOptions: resolvedRetryOptions,
+        )) {
+          yield response;
+        }
         return;
       }
 
@@ -163,11 +191,12 @@ class Gemini extends BaseLlm {
         await for (final Map<String, Object?> chunk
             in _resolvedRestTransport.streamGenerateContent(
               model: computedModel,
-              apiKey: apiKey,
+              apiKey: apiKey!,
               payload: payload,
               baseUrl: baseUrl,
               apiVersion: apiVersion,
               headers: prepared.config.httpOptions?.headers,
+              retryOptions: resolvedRetryOptions,
             )) {
           final LlmResponse response = _responseFromGeminiApi(
             chunk,
@@ -179,7 +208,6 @@ class Gemini extends BaseLlm {
             final LlmResponse emitted = aggregated.copyWith();
             emitted.partial ??= true;
             emitted.turnComplete ??= emitted.finishReason != null;
-            emitted.interactionId ??= _deriveInteractionId(prepared);
             if (cacheMetadata != null) {
               cacheManager.populateCacheMetadataInResponse(
                 emitted,
@@ -194,7 +222,6 @@ class Gemini extends BaseLlm {
         if (finalResponse != null) {
           finalResponse.partial ??= false;
           finalResponse.turnComplete ??= true;
-          finalResponse.interactionId ??= _deriveInteractionId(prepared);
           if (cacheMetadata != null) {
             cacheManager.populateCacheMetadataInResponse(
               finalResponse,
@@ -207,11 +234,12 @@ class Gemini extends BaseLlm {
         final Map<String, Object?> rawResponse = await _resolvedRestTransport
             .generateContent(
               model: computedModel,
-              apiKey: apiKey,
+              apiKey: apiKey!,
               payload: payload,
               baseUrl: baseUrl,
               apiVersion: apiVersion,
               headers: prepared.config.httpOptions?.headers,
+              retryOptions: resolvedRetryOptions,
             );
         final LlmResponse response = _responseFromGeminiApi(
           rawResponse,
@@ -219,7 +247,6 @@ class Gemini extends BaseLlm {
         );
         response.partial ??= false;
         response.turnComplete ??= true;
-        response.interactionId ??= _deriveInteractionId(prepared);
         if (cacheMetadata != null) {
           cacheManager.populateCacheMetadataInResponse(response, cacheMetadata);
         }
@@ -285,14 +312,6 @@ class Gemini extends BaseLlm {
     return 'Gemini response.';
   }
 
-  String? _deriveInteractionId(LlmRequest request) {
-    final String? previous = request.previousInteractionId;
-    if (previous == null || previous.isEmpty) {
-      return null;
-    }
-    return '${previous}_next';
-  }
-
   String? _resolveApiKey() {
     final Map<String, String> env = environment ?? Platform.environment;
     final String? key = env['GEMINI_API_KEY'] ?? env['GOOGLE_API_KEY'];
@@ -300,6 +319,33 @@ class Gemini extends BaseLlm {
       return null;
     }
     return key;
+  }
+
+  HttpRetryOptions? _resolveRetryOptions({
+    required HttpRetryOptions? requestRetryOptions,
+  }) {
+    if (requestRetryOptions != null) {
+      return requestRetryOptions;
+    }
+    final Object? configured = retryOptions;
+    if (configured is HttpRetryOptions) {
+      return configured.copyWith();
+    }
+    if (configured is Map) {
+      final Map<String, Object?> map = configured.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      return HttpRetryOptions(
+        attempts: _intValue(map['attempts']),
+        initialDelay: _doubleValue(map['initialDelay'] ?? map['initial_delay']),
+        maxDelay: _doubleValue(map['maxDelay'] ?? map['max_delay']),
+        expBase: _doubleValue(map['expBase'] ?? map['exp_base']),
+        httpStatusCodes: _coerceIntList(
+          map['httpStatusCodes'] ?? map['http_status_codes'],
+        ),
+      );
+    }
+    return null;
   }
 
   void _preprocessRequest(LlmRequest request) {
@@ -523,6 +569,31 @@ class Gemini extends BaseLlm {
             .toList(growable: false);
       }
 
+      if (tool.googleSearch != null) {
+        encoded['googleSearch'] = _jsonCompatible(tool.googleSearch);
+      }
+      if (tool.googleSearchRetrieval != null) {
+        encoded['googleSearchRetrieval'] = _jsonCompatible(
+          tool.googleSearchRetrieval,
+        );
+      }
+      if (tool.urlContext != null) {
+        encoded['urlContext'] = _jsonCompatible(tool.urlContext);
+      }
+      if (tool.codeExecution != null) {
+        encoded['codeExecution'] = _jsonCompatible(tool.codeExecution);
+      }
+      if (tool.googleMaps != null) {
+        encoded['googleMaps'] = _jsonCompatible(tool.googleMaps);
+      }
+      if (tool.enterpriseWebSearch != null) {
+        encoded['enterpriseWebSearch'] = _jsonCompatible(
+          tool.enterpriseWebSearch,
+        );
+      }
+      if (tool.retrieval != null) {
+        encoded['retrieval'] = _jsonCompatible(tool.retrieval);
+      }
       if (tool.computerUse != null) {
         encoded['computerUse'] = _jsonCompatible(tool.computerUse);
       }
@@ -1011,6 +1082,19 @@ String? _stringValue(Object? value) {
   return text;
 }
 
+int? _intValue(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
+}
+
 double? _doubleValue(Object? value) {
   if (value is num) {
     return value.toDouble();
@@ -1019,6 +1103,26 @@ double? _doubleValue(Object? value) {
     return double.tryParse(value);
   }
   return null;
+}
+
+List<int> _coerceIntList(Object? value) {
+  if (value is! List) {
+    return const <int>[];
+  }
+  final List<int> output = <int>[];
+  for (final Object? item in value) {
+    if (item is int) {
+      output.add(item);
+    } else if (item is num) {
+      output.add(item.toInt());
+    } else if (item is String) {
+      final int? parsed = int.tryParse(item);
+      if (parsed != null) {
+        output.add(parsed);
+      }
+    }
+  }
+  return output;
 }
 
 typedef GoogleLlm = Gemini;

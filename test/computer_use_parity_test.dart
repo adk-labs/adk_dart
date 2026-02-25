@@ -110,6 +110,13 @@ void main() {
         request.config.labels['adk_computer_use_environment'],
         ComputerEnvironment.environmentBrowser.name,
       );
+      expect(request.config.tools, isNotNull);
+      final ToolDeclaration declaredTool = request.config.tools!.last;
+      expect(declaredTool.computerUse, isA<Map<String, Object?>>());
+      expect(
+        (declaredTool.computerUse! as Map<String, Object?>)['environment'],
+        'ENVIRONMENT_BROWSER',
+      );
     });
 
     test('adaptComputerUseTool swaps tool implementation and name', () async {

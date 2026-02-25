@@ -1,6 +1,6 @@
 # ADK Dart Python Parity Status
 
-Last updated: 2026-02-23
+Last updated: 2026-02-25
 Reference: `ref/adk-python/src/google/adk`
 
 ## Core Runtime
@@ -13,6 +13,19 @@ Reference: `ref/adk-python/src/google/adk`
 - [x] base plugins
 - [x] artifacts (in-memory)
 - [x] dev CLI (`create`, `run`, `web`, `api_server` alias)
+
+## Newly Added Gemini REST/Interactions Parity (this iteration)
+
+- [x] `GeminiRestHttpTransport` retry/backoff parity path via `HttpRetryOptions` (`attempts`, delay, exp base, retriable status codes)
+- [x] Interactions REST endpoint support (`/v1beta/interactions`) for both non-stream and SSE stream paths
+- [x] `useInteractionsApi` default runtime path implemented without requiring injected invoker
+- [x] interactions request shaping parity (`previous_interaction_id`, latest user turn extraction, function-result chaining turn inclusion)
+- [x] interactions response/event conversion parity baseline (text/function/media/error/status to `LlmResponse`)
+- [x] streaming aggregate metadata parity hardening (`interactionId`, `avgLogprobs`, `logprobsResult`, `cacheMetadata`)
+- [x] removed synthetic interaction-id derivation from standard Gemini REST calls (now only server-provided IDs are used)
+- [x] regression tests added for retry forwarding, interactions routing, transport retries, SSE event typing, and stream metadata preservation
+- [x] built-in Gemini tool payload parity for REST/interactions (`google_search`, `google_search_retrieval`, `url_context`, `code_execution`, `computer_use`, `google_maps`, `enterprise_web_search`, `retrieval.vertex_ai_search`)
+- [x] built-in multi-tool bypass parity in `LlmAgent` (`GoogleSearchTool` -> `GoogleSearchAgentTool`, `VertexAiSearchTool` -> `DiscoveryEngineSearchTool`)
 
 ## Newly Added A2A Remote Agent Parity (this iteration)
 

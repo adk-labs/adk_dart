@@ -35,20 +35,25 @@ class GoogleSearchTool extends BaseTool {
 
     final String? modelName = llmRequest.model;
     final bool modelCheckDisabled = _modelIdCheckDisabledResolver();
+    llmRequest.config.tools ??= <ToolDeclaration>[];
     if (isGemini1Model(modelName)) {
-      if (!bypassMultiToolsLimit &&
-          llmRequest.config.tools != null &&
-          llmRequest.config.tools!.isNotEmpty) {
+      if (!bypassMultiToolsLimit && llmRequest.config.tools!.isNotEmpty) {
         throw ArgumentError(
           'Google search tool cannot be used with other tools in Gemini 1.x.',
         );
       }
+      llmRequest.config.tools!.add(
+        ToolDeclaration(googleSearchRetrieval: const <String, Object?>{}),
+      );
       llmRequest.config.labels['adk_google_search_tool'] =
           'google_search_retrieval';
       return;
     }
 
     if (isGeminiModel(modelName) || modelCheckDisabled) {
+      llmRequest.config.tools!.add(
+        ToolDeclaration(googleSearch: const <String, Object?>{}),
+      );
       llmRequest.config.labels['adk_google_search_tool'] = 'google_search';
       return;
     }

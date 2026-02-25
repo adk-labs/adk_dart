@@ -10,8 +10,12 @@ import '../models/llm_response.dart';
 import '../models/registry.dart';
 import '../tools/base_tool.dart';
 import '../tools/base_toolset.dart';
+import '../tools/discovery_engine_search_tool.dart';
 import '../tools/function_tool.dart';
+import '../tools/google_search_agent_tool.dart';
+import '../tools/google_search_tool.dart';
 import '../tools/tool_context.dart';
+import '../tools/vertex_ai_search_tool.dart';
 import '../types/content.dart';
 import 'agent_state.dart';
 import 'base_agent.dart';
@@ -425,10 +429,26 @@ Future<List<BaseTool>> _convertToolUnionToTools(
   BaseLlm model,
   bool multipleTools,
 ) async {
-  // Reserved for parity with python ADK logic where some built-ins are wrapped
-  // when multiple tools are present.
-  if (multipleTools) {
-    // no-op
+  if (multipleTools && toolUnion is GoogleSearchTool) {
+    if (toolUnion.bypassMultiToolsLimit) {
+      return <BaseTool>[
+        GoogleSearchAgentTool(agent: createGoogleSearchAgent(model)),
+      ];
+    }
+  }
+
+  if (multipleTools && toolUnion is VertexAiSearchTool) {
+    if (toolUnion.bypassMultiToolsLimit) {
+      return <BaseTool>[
+        DiscoveryEngineSearchTool(
+          dataStoreId: toolUnion.dataStoreId,
+          dataStoreSpecs: toolUnion.dataStoreSpecs,
+          searchEngineId: toolUnion.searchEngineId,
+          filter: toolUnion.filter,
+          maxResults: toolUnion.maxResults,
+        ),
+      ];
+    }
   }
 
   if (toolUnion is BaseTool) {

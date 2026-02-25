@@ -1,9 +1,15 @@
 import '../models/llm_request.dart';
+import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
 class UrlContextTool extends BaseTool {
-  UrlContextTool() : super(name: 'url_context', description: 'url_context');
+  UrlContextTool({bool Function()? modelIdCheckDisabledResolver})
+    : _modelIdCheckDisabledResolver =
+          modelIdCheckDisabledResolver ?? isGeminiModelIdCheckDisabled,
+      super(name: 'url_context', description: 'url_context');
+
+  final bool Function() _modelIdCheckDisabledResolver;
 
   @override
   Future<Object?> run({
@@ -18,6 +24,7 @@ class UrlContextTool extends BaseTool {
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
+    final bool modelCheckDisabled = _modelIdCheckDisabledResolver();
     final String model = (llmRequest.model ?? '').trim();
     final bool isGemini1 = model.startsWith('gemini-1');
     final bool isGemini2OrAbove =
@@ -28,25 +35,13 @@ class UrlContextTool extends BaseTool {
     if (isGemini1) {
       throw ArgumentError('Url context tool cannot be used in Gemini 1.x.');
     }
-    if (model.isNotEmpty && !isGemini2OrAbove) {
+    if (!isGemini2OrAbove && !modelCheckDisabled) {
       throw ArgumentError('Url context tool is not supported for model $model');
     }
 
     llmRequest.config.tools ??= <ToolDeclaration>[];
     llmRequest.config.tools!.add(
-      ToolDeclaration(
-        functionDeclarations: <FunctionDeclaration>[
-          FunctionDeclaration(
-            name: name,
-            description:
-                'Built-in URL context retrieval; model may invoke automatically.',
-            parameters: <String, dynamic>{
-              'type': 'object',
-              'properties': <String, dynamic>{},
-            },
-          ),
-        ],
-      ),
+      ToolDeclaration(urlContext: const <String, Object?>{}),
     );
   }
 }

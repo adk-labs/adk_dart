@@ -114,6 +114,11 @@ class VertexAiSearchTool extends BaseTool {
       final VertexAiSearchConfig config = buildVertexAiSearchConfig(
         toolContext,
       );
+      llmRequest.config.tools!.add(
+        ToolDeclaration(
+          retrieval: <String, Object?>{'vertexAiSearch': config.toJson()},
+        ),
+      );
       llmRequest.config.labels['adk_vertex_ai_search_tool'] =
           'vertex_ai_search';
       llmRequest.config.labels['adk_vertex_ai_search_config'] = jsonEncode(
