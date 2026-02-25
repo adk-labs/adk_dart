@@ -356,8 +356,16 @@ class InvocationContext {
       return null;
     }
 
-    for (int index = session.events.length - 1; index >= 0; index -= 1) {
-      final Event event = session.events[index];
+    final List<Event> invocationEvents = getEvents(currentInvocation: true);
+    final int responseIndex = invocationEvents.lastIndexWhere(
+      (Event event) => event.id == functionResponseEvent.id,
+    );
+    final int startIndex = responseIndex >= 0
+        ? responseIndex - 1
+        : invocationEvents.length - 1;
+
+    for (int index = startIndex; index >= 0; index -= 1) {
+      final Event event = invocationEvents[index];
       for (final call in event.getFunctionCalls()) {
         if (call.id == functionCallId) {
           return event;
