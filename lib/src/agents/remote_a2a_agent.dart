@@ -166,6 +166,100 @@ class RemoteA2aAgent extends BaseAgent {
   AgentCard? get resolvedAgentCard => _agentCard;
   bool get isResolved => _isResolved;
 
+  @override
+  RemoteA2aAgent clone({Map<String, Object?>? update}) {
+    final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
+    validateCloneUpdateFields(
+      update: cloneUpdate,
+      allowedFields: <String>{
+        ...BaseAgent.baseCloneUpdateFields,
+        'agentCard',
+        'httpClient',
+        'timeout',
+        'genaiPartConverter',
+        'a2aPartConverter',
+        'a2aClientFactory',
+        'a2aRequestMetaProvider',
+        'fullHistoryWhenStateless',
+      },
+    );
+
+    final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
+    final Object? currentAgentCard = _agentCardSource ?? _agentCard;
+    final Object? clonedAgentCard = cloneUpdate.containsKey('agentCard')
+        ? cloneUpdate['agentCard']
+        : currentAgentCard;
+    if (clonedAgentCard == null) {
+      throw StateError(
+        'RemoteA2aAgent clone requires `agentCard` to be set on the source '
+        'agent or in the clone update.',
+      );
+    }
+
+    final RemoteA2aAgent clonedAgent = RemoteA2aAgent(
+      name: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'name',
+        currentValue: name,
+      ),
+      agentCard: clonedAgentCard,
+      description: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'description',
+        currentValue: description,
+      ),
+      httpClient: cloneFieldValue<HttpClient?>(
+        update: cloneUpdate,
+        fieldName: 'httpClient',
+        currentValue: _httpClient,
+      ),
+      timeout: cloneFieldValue<double>(
+        update: cloneUpdate,
+        fieldName: 'timeout',
+        currentValue: timeout,
+      ),
+      genaiPartConverter: cloneFieldValue<GenAIPartToA2APartConverter>(
+        update: cloneUpdate,
+        fieldName: 'genaiPartConverter',
+        currentValue: _genaiPartConverter,
+      ),
+      a2aPartConverter: cloneFieldValue<A2APartToGenAIPartConverter>(
+        update: cloneUpdate,
+        fieldName: 'a2aPartConverter',
+        currentValue: _a2aPartConverter,
+      ),
+      a2aClientFactory: cloneFieldValue<A2aClientFactory?>(
+        update: cloneUpdate,
+        fieldName: 'a2aClientFactory',
+        currentValue: _a2aClientFactory,
+      ),
+      a2aRequestMetaProvider: cloneFieldValue<A2aRequestMetaProvider?>(
+        update: cloneUpdate,
+        fieldName: 'a2aRequestMetaProvider',
+        currentValue: a2aRequestMetaProvider,
+      ),
+      fullHistoryWhenStateless: cloneFieldValue<bool>(
+        update: cloneUpdate,
+        fieldName: 'fullHistoryWhenStateless',
+        currentValue: fullHistoryWhenStateless,
+      ),
+      subAgents: <BaseAgent>[],
+      beforeAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeAgentCallback',
+        currentValue: beforeAgentCallback,
+      ),
+      afterAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterAgentCallback',
+        currentValue: afterAgentCallback,
+      ),
+    );
+    clonedAgent.subAgents = clonedSubAgents;
+    relinkClonedSubAgents(clonedAgent);
+    return clonedAgent;
+  }
+
   Future<HttpClient> _ensureHttpClient() async {
     if (_httpClient == null) {
       _httpClient = HttpClient()

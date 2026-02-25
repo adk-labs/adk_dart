@@ -37,6 +37,51 @@ class LoopAgent extends BaseAgent {
   final int? maxIterations;
 
   @override
+  LoopAgent clone({Map<String, Object?>? update}) {
+    final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
+    validateCloneUpdateFields(
+      update: cloneUpdate,
+      allowedFields: <String>{
+        ...BaseAgent.baseCloneUpdateFields,
+        'maxIterations',
+      },
+    );
+
+    final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
+    final LoopAgent clonedAgent = LoopAgent(
+      name: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'name',
+        currentValue: name,
+      ),
+      description: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'description',
+        currentValue: description,
+      ),
+      subAgents: <BaseAgent>[],
+      beforeAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeAgentCallback',
+        currentValue: beforeAgentCallback,
+      ),
+      afterAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterAgentCallback',
+        currentValue: afterAgentCallback,
+      ),
+      maxIterations: cloneFieldValue<int?>(
+        update: cloneUpdate,
+        fieldName: 'maxIterations',
+        currentValue: maxIterations,
+      ),
+    );
+    clonedAgent.subAgents = clonedSubAgents;
+    relinkClonedSubAgents(clonedAgent);
+    return clonedAgent;
+  }
+
+  @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     if (subAgents.isEmpty) {
       return;

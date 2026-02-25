@@ -32,6 +32,15 @@ abstract class BaseAgent {
   Object? beforeAgentCallback;
   Object? afterAgentCallback;
 
+  static const Set<String> baseCloneUpdateFields = <String>{
+    'name',
+    'description',
+    'parentAgent',
+    'subAgents',
+    'beforeAgentCallback',
+    'afterAgentCallback',
+  };
+
   BaseAgentState? loadAgentState(InvocationContext context) {
     final Map<String, Object?>? raw = context.agentStates[name];
     if (raw == null) {
@@ -119,6 +128,10 @@ abstract class BaseAgent {
     }
   }
 
+  BaseAgent clone({Map<String, Object?>? update}) {
+    throw UnsupportedError('clone() is not implemented for `${runtimeType}`.');
+  }
+
   BaseAgent get rootAgent {
     BaseAgent current = this;
     while (current.parentAgent != null) {
@@ -146,6 +159,104 @@ abstract class BaseAgent {
 
   InvocationContext createInvocationContext(InvocationContext parentContext) {
     return parentContext.copyWith(agent: this);
+  }
+
+  Map<String, Object?> normalizeCloneUpdate(Map<String, Object?>? update) {
+    if (update == null) {
+      return <String, Object?>{};
+    }
+    return Map<String, Object?>.from(update);
+  }
+
+  void validateCloneUpdateFields({
+    required Map<String, Object?> update,
+    required Set<String> allowedFields,
+  }) {
+    if (update.containsKey('parentAgent')) {
+      throw ArgumentError(
+        'Cannot update `parentAgent` field in clone. Parent agent is set only '
+        'when the parent agent is instantiated with the sub-agents.',
+      );
+    }
+
+    final Set<String> invalidFields = update.keys
+        .where((String field) => !allowedFields.contains(field))
+        .toSet();
+    if (invalidFields.isNotEmpty) {
+      throw ArgumentError(
+        'Cannot update nonexistent fields in ${runtimeType}: $invalidFields',
+      );
+    }
+  }
+
+  T cloneFieldValue<T>({
+    required Map<String, Object?> update,
+    required String fieldName,
+    required T currentValue,
+  }) {
+    if (!update.containsKey(fieldName)) {
+      return currentValue;
+    }
+    return update[fieldName] as T;
+  }
+
+  Object? cloneObjectFieldValue({
+    required Map<String, Object?> update,
+    required String fieldName,
+    required Object? currentValue,
+  }) {
+    if (update.containsKey(fieldName)) {
+      return update[fieldName];
+    }
+    if (currentValue is List) {
+      return List<Object?>.from(currentValue);
+    }
+    return currentValue;
+  }
+
+  List<T> cloneListFieldValue<T>({
+    required Map<String, Object?> update,
+    required String fieldName,
+    required List<T> currentValue,
+  }) {
+    if (!update.containsKey(fieldName)) {
+      return List<T>.from(currentValue);
+    }
+
+    final Object? updatedValue = update[fieldName];
+    if (updatedValue is! List<T>) {
+      throw ArgumentError.value(
+        updatedValue,
+        fieldName,
+        'Expected `List<$T>` for `$fieldName`.',
+      );
+    }
+    return updatedValue;
+  }
+
+  List<BaseAgent> cloneSubAgentsField(Map<String, Object?> update) {
+    if (update.containsKey('subAgents')) {
+      final Object? updatedValue = update['subAgents'];
+      if (updatedValue is! List<BaseAgent>) {
+        throw ArgumentError.value(
+          updatedValue,
+          'subAgents',
+          'Expected `List<BaseAgent>` for `subAgents`.',
+        );
+      }
+      return updatedValue;
+    }
+
+    return subAgents
+        .map((BaseAgent subAgent) => subAgent.clone())
+        .toList(growable: true);
+  }
+
+  void relinkClonedSubAgents(BaseAgent clonedAgent) {
+    for (final BaseAgent subAgent in clonedAgent.subAgents) {
+      subAgent.parentAgent = clonedAgent;
+    }
+    clonedAgent.parentAgent = null;
   }
 
   List<AgentLifecycleCallback> get canonicalBeforeAgentCallbacks {

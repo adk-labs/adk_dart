@@ -59,6 +59,69 @@ class LangGraphAgent extends BaseAgent {
   final LangGraphStateChecker? hasExistingGraphState;
 
   @override
+  LangGraphAgent clone({Map<String, Object?>? update}) {
+    final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
+    validateCloneUpdateFields(
+      update: cloneUpdate,
+      allowedFields: <String>{
+        ...BaseAgent.baseCloneUpdateFields,
+        'invokeGraph',
+        'instruction',
+        'hasCheckpointer',
+        'hasExistingGraphState',
+      },
+    );
+
+    final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
+    final LangGraphAgent clonedAgent = LangGraphAgent(
+      name: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'name',
+        currentValue: name,
+      ),
+      invokeGraph: cloneFieldValue<LangGraphInvoker>(
+        update: cloneUpdate,
+        fieldName: 'invokeGraph',
+        currentValue: invokeGraph,
+      ),
+      instruction: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'instruction',
+        currentValue: instruction,
+      ),
+      hasCheckpointer: cloneFieldValue<bool>(
+        update: cloneUpdate,
+        fieldName: 'hasCheckpointer',
+        currentValue: hasCheckpointer,
+      ),
+      hasExistingGraphState: cloneFieldValue<LangGraphStateChecker?>(
+        update: cloneUpdate,
+        fieldName: 'hasExistingGraphState',
+        currentValue: hasExistingGraphState,
+      ),
+      description: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'description',
+        currentValue: description,
+      ),
+      subAgents: <BaseAgent>[],
+      beforeAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeAgentCallback',
+        currentValue: beforeAgentCallback,
+      ),
+      afterAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterAgentCallback',
+        currentValue: afterAgentCallback,
+      ),
+    );
+    clonedAgent.subAgents = clonedSubAgents;
+    relinkClonedSubAgents(clonedAgent);
+    return clonedAgent;
+  }
+
+  @override
   Stream<Event> runAsyncImpl(InvocationContext ctx) async* {
     final String threadId = ctx.session.id;
     final bool graphHasState = hasExistingGraphState == null

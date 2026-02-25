@@ -131,6 +131,171 @@ class LlmAgent extends BaseAgent {
   Object? onToolErrorCallback;
 
   @override
+  LlmAgent clone({Map<String, Object?>? update}) {
+    final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
+    validateCloneUpdateFields(
+      update: cloneUpdate,
+      allowedFields: <String>{
+        ...BaseAgent.baseCloneUpdateFields,
+        'model',
+        'instruction',
+        'globalInstruction',
+        'staticInstruction',
+        'tools',
+        'generateContentConfig',
+        'disallowTransferToParent',
+        'disallowTransferToPeers',
+        'includeContents',
+        'inputSchema',
+        'outputSchema',
+        'outputKey',
+        'planner',
+        'codeExecutor',
+        'beforeModelCallback',
+        'afterModelCallback',
+        'onModelErrorCallback',
+        'beforeToolCallback',
+        'afterToolCallback',
+        'onToolErrorCallback',
+      },
+    );
+
+    final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
+    final LlmAgent clonedAgent = LlmAgent(
+      name: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'name',
+        currentValue: name,
+      ),
+      description: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'description',
+        currentValue: description,
+      ),
+      subAgents: <BaseAgent>[],
+      beforeAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeAgentCallback',
+        currentValue: beforeAgentCallback,
+      ),
+      afterAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterAgentCallback',
+        currentValue: afterAgentCallback,
+      ),
+      model:
+          cloneObjectFieldValue(
+                update: cloneUpdate,
+                fieldName: 'model',
+                currentValue: model,
+              )
+              as Object,
+      instruction:
+          cloneObjectFieldValue(
+                update: cloneUpdate,
+                fieldName: 'instruction',
+                currentValue: instruction,
+              )
+              as Object,
+      globalInstruction:
+          cloneObjectFieldValue(
+                update: cloneUpdate,
+                fieldName: 'globalInstruction',
+                currentValue: globalInstruction,
+              )
+              as Object,
+      staticInstruction: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'staticInstruction',
+        currentValue: staticInstruction,
+      ),
+      tools: cloneListFieldValue<Object>(
+        update: cloneUpdate,
+        fieldName: 'tools',
+        currentValue: tools,
+      ),
+      generateContentConfig: cloneFieldValue<GenerateContentConfig?>(
+        update: cloneUpdate,
+        fieldName: 'generateContentConfig',
+        currentValue: generateContentConfig,
+      ),
+      disallowTransferToParent: cloneFieldValue<bool>(
+        update: cloneUpdate,
+        fieldName: 'disallowTransferToParent',
+        currentValue: disallowTransferToParent,
+      ),
+      disallowTransferToPeers: cloneFieldValue<bool>(
+        update: cloneUpdate,
+        fieldName: 'disallowTransferToPeers',
+        currentValue: disallowTransferToPeers,
+      ),
+      includeContents: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'includeContents',
+        currentValue: includeContents,
+      ),
+      inputSchema: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'inputSchema',
+        currentValue: inputSchema,
+      ),
+      outputSchema: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'outputSchema',
+        currentValue: outputSchema,
+      ),
+      outputKey: cloneFieldValue<String?>(
+        update: cloneUpdate,
+        fieldName: 'outputKey',
+        currentValue: outputKey,
+      ),
+      planner: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'planner',
+        currentValue: planner,
+      ),
+      codeExecutor: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'codeExecutor',
+        currentValue: codeExecutor,
+      ),
+      beforeModelCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeModelCallback',
+        currentValue: beforeModelCallback,
+      ),
+      afterModelCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterModelCallback',
+        currentValue: afterModelCallback,
+      ),
+      onModelErrorCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'onModelErrorCallback',
+        currentValue: onModelErrorCallback,
+      ),
+      beforeToolCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeToolCallback',
+        currentValue: beforeToolCallback,
+      ),
+      afterToolCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterToolCallback',
+        currentValue: afterToolCallback,
+      ),
+      onToolErrorCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'onToolErrorCallback',
+        currentValue: onToolErrorCallback,
+      ),
+    );
+    clonedAgent.subAgents = clonedSubAgents;
+    relinkClonedSubAgents(clonedAgent);
+    return clonedAgent;
+  }
+
+  @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     final BaseAgentState? agentState = loadAgentState(context);
 

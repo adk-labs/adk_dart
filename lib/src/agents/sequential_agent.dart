@@ -27,6 +27,43 @@ class SequentialAgent extends BaseAgent {
   });
 
   @override
+  SequentialAgent clone({Map<String, Object?>? update}) {
+    final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
+    validateCloneUpdateFields(
+      update: cloneUpdate,
+      allowedFields: BaseAgent.baseCloneUpdateFields,
+    );
+
+    final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
+    final SequentialAgent clonedAgent = SequentialAgent(
+      name: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'name',
+        currentValue: name,
+      ),
+      description: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'description',
+        currentValue: description,
+      ),
+      subAgents: <BaseAgent>[],
+      beforeAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'beforeAgentCallback',
+        currentValue: beforeAgentCallback,
+      ),
+      afterAgentCallback: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'afterAgentCallback',
+        currentValue: afterAgentCallback,
+      ),
+    );
+    clonedAgent.subAgents = clonedSubAgents;
+    relinkClonedSubAgents(clonedAgent);
+    return clonedAgent;
+  }
+
+  @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     if (subAgents.isEmpty) {
       return;
