@@ -72,6 +72,7 @@ class ParallelAgent extends BaseAgent {
         yield event;
         if (context.shouldPauseInvocation(event)) {
           pauseInvocation = true;
+          break;
         }
 
         current.pending = _nextResult(result.index, current.iterator);

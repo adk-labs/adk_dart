@@ -47,6 +47,120 @@ class _EmitAgent extends BaseAgent {
   }
 }
 
+class _PauseOnceAgent extends BaseAgent {
+  _PauseOnceAgent({required super.name, this.delay = Duration.zero});
+
+  final Duration delay;
+  static const String _longRunningToolId = 'call_pause';
+  bool hasPaused = false;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+
+    if (!hasPaused) {
+      hasPaused = true;
+      yield Event(
+        invocationId: context.invocationId,
+        author: name,
+        branch: context.branch,
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'long_running',
+              id: _longRunningToolId,
+              args: <String, Object?>{'agent': name},
+            ),
+          ],
+        ),
+        longRunningToolIds: <String>{_longRunningToolId},
+      );
+      return;
+    }
+
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content.modelText('resumed $name'),
+    );
+
+    if (context.isResumable) {
+      context.setAgentState(name, endOfAgent: true);
+      yield createAgentStateEvent(context);
+    }
+  }
+}
+
+class _DelayedMultiEventAgent extends BaseAgent {
+  _DelayedMultiEventAgent({
+    required super.name,
+    this.firstDelay = Duration.zero,
+    this.secondDelay = Duration.zero,
+  });
+
+  final Duration firstDelay;
+  final Duration secondDelay;
+  int emittedEvents = 0;
+  bool streamClosed = false;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    try {
+      if (firstDelay > Duration.zero) {
+        await Future<void>.delayed(firstDelay);
+      }
+
+      emittedEvents += 1;
+      yield Event(
+        invocationId: context.invocationId,
+        author: name,
+        branch: context.branch,
+        content: Content.modelText('first $name'),
+      );
+
+      if (secondDelay > Duration.zero) {
+        await Future<void>.delayed(secondDelay);
+      }
+
+      emittedEvents += 1;
+      yield Event(
+        invocationId: context.invocationId,
+        author: name,
+        branch: context.branch,
+        content: Content.modelText('second $name'),
+      );
+    } finally {
+      streamClosed = true;
+    }
+  }
+}
+
+class _CompletingCheckpointAgent extends BaseAgent {
+  _CompletingCheckpointAgent({required super.name});
+  int runCount = 0;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    runCount += 1;
+
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content.modelText('done $name'),
+    );
+
+    if (context.isResumable) {
+      context.setAgentState(name, endOfAgent: true);
+      yield createAgentStateEvent(context);
+    }
+  }
+}
+
 Future<InvocationContext> _newContext({
   required BaseAgent agent,
   required bool resumable,
@@ -142,6 +256,93 @@ void main() {
       expect(events[1].branch, 'root.fast');
       expect(events[2].branch, 'root.slow');
       expect(events[3].actions.endOfAgent, isTrue);
+    });
+
+    test(
+      'pauses immediately without draining remaining sub-agent streams',
+      () async {
+        final _PauseOnceAgent pauser = _PauseOnceAgent(
+          name: 'pauser',
+          delay: const Duration(milliseconds: 10),
+        );
+        final _DelayedMultiEventAgent trailing = _DelayedMultiEventAgent(
+          name: 'trailing',
+          firstDelay: const Duration(milliseconds: 200),
+          secondDelay: const Duration(milliseconds: 200),
+        );
+        final ParallelAgent root = ParallelAgent(
+          name: 'root',
+          subAgents: <BaseAgent>[pauser, trailing],
+        );
+
+        final InvocationContext context = await _newContext(
+          agent: root,
+          resumable: true,
+        );
+
+        final List<Event> events = await root.runAsync(context).toList();
+
+        expect(events.map((Event event) => event.author), <String>[
+          'root',
+          'pauser',
+        ]);
+        expect(
+          events.where(
+            (Event event) =>
+                event.author == 'root' && event.actions.endOfAgent == true,
+          ),
+          isEmpty,
+        );
+        expect(trailing.emittedEvents, lessThan(2));
+        expect(trailing.streamClosed, isTrue);
+      },
+    );
+
+    test('keeps resumability when paused run is resumed', () async {
+      final _CompletingCheckpointAgent completed = _CompletingCheckpointAgent(
+        name: 'completed',
+      );
+      final _PauseOnceAgent pauser = _PauseOnceAgent(
+        name: 'pauser',
+        delay: const Duration(milliseconds: 50),
+      );
+      final ParallelAgent root = ParallelAgent(
+        name: 'root',
+        subAgents: <BaseAgent>[completed, pauser],
+      );
+
+      final InvocationContext context = await _newContext(
+        agent: root,
+        resumable: true,
+      );
+
+      final List<Event> firstRun = await root.runAsync(context).toList();
+      expect(
+        firstRun.where(
+          (Event event) =>
+              event.author == 'root' && event.actions.endOfAgent == true,
+        ),
+        isEmpty,
+      );
+      expect(completed.runCount, 1);
+
+      context.session.events.addAll(firstRun);
+      context.populateInvocationAgentStates();
+
+      final List<Event> resumedRun = await root.runAsync(context).toList();
+      expect(completed.runCount, 1);
+      expect(
+        resumedRun.where((Event event) => event.author == 'completed'),
+        isEmpty,
+      );
+      expect(resumedRun.map((Event event) => event.author), <String>[
+        'pauser',
+        'pauser',
+        'root',
+      ]);
+      expect(resumedRun[0].content?.parts.single.text, 'resumed pauser');
+      expect(resumedRun[1].actions.endOfAgent, isTrue);
+      expect(resumedRun[2].actions.endOfAgent, isTrue);
     });
   });
 
