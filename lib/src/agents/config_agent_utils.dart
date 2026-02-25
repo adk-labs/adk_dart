@@ -480,33 +480,52 @@ class _SimpleYamlDecoder {
     if (lines.isEmpty) {
       return <String, Object?>{};
     }
-    final _ParseResult result = _parseBlock(lines, 0, lines.first.indent);
+    final int start = _skipIgnorableLines(lines, 0);
+    if (start >= lines.length) {
+      return <String, Object?>{};
+    }
+    final _ParseResult result = _parseBlock(lines, start, lines[start].indent);
     return result.value;
   }
 
   List<_YamlLine> _toLines(String source) {
     final List<_YamlLine> lines = <_YamlLine>[];
     for (String line in const LineSplitter().convert(source)) {
-      final String stripped = line.trimRight();
-      if (stripped.trim().isEmpty || stripped.trimLeft().startsWith('#')) {
-        continue;
-      }
-      final int indent = stripped.length - stripped.trimLeft().length;
-      final String text = stripped.trimLeft();
-      lines.add(_YamlLine(indent: indent, text: text));
+      final String raw = line.trimRight();
+      final String text = raw.trimLeft();
+      final int indent = raw.length - text.length;
+      lines.add(
+        _YamlLine(
+          indent: indent,
+          text: text,
+          raw: raw,
+          isBlank: text.isEmpty,
+          isComment: text.startsWith('#'),
+        ),
+      );
     }
     return lines;
   }
 
+  int _skipIgnorableLines(List<_YamlLine> lines, int index) {
+    int cursor = index;
+    while (cursor < lines.length &&
+        (lines[cursor].isBlank || lines[cursor].isComment)) {
+      cursor += 1;
+    }
+    return cursor;
+  }
+
   _ParseResult _parseBlock(List<_YamlLine> lines, int index, int indent) {
-    if (index >= lines.length) {
+    final int start = _skipIgnorableLines(lines, index);
+    if (start >= lines.length) {
       return _ParseResult(<String, Object?>{}, index);
     }
-    final _YamlLine line = lines[index];
+    final _YamlLine line = lines[start];
     if (line.text.startsWith('- ')) {
-      return _parseList(lines, index, indent);
+      return _parseList(lines, start, indent);
     }
-    return _parseMap(lines, index, indent);
+    return _parseMap(lines, start, indent);
   }
 
   _ParseResult _parseMap(List<_YamlLine> lines, int index, int indent) {
@@ -514,6 +533,10 @@ class _SimpleYamlDecoder {
     int cursor = index;
 
     while (cursor < lines.length) {
+      cursor = _skipIgnorableLines(lines, cursor);
+      if (cursor >= lines.length) {
+        break;
+      }
       final _YamlLine line = lines[cursor];
       if (line.indent < indent) {
         break;
@@ -531,12 +554,27 @@ class _SimpleYamlDecoder {
       final String key = line.text.substring(0, split).trim();
       final String rawValue = line.text.substring(split + 1).trim();
       cursor += 1;
+
+      final _BlockScalarHeader? blockScalar = _parseBlockScalarHeader(rawValue);
+      if (blockScalar != null) {
+        final _ParseResult parsed = _parseBlockScalar(
+          lines,
+          cursor,
+          indent,
+          blockScalar,
+        );
+        map[key] = parsed.value;
+        cursor = parsed.nextIndex;
+        continue;
+      }
+
       if (rawValue.isEmpty) {
-        if (cursor < lines.length && lines[cursor].indent > indent) {
+        final int nestedStart = _skipIgnorableLines(lines, cursor);
+        if (nestedStart < lines.length && lines[nestedStart].indent > indent) {
           final _ParseResult nested = _parseBlock(
             lines,
-            cursor,
-            lines[cursor].indent,
+            nestedStart,
+            lines[nestedStart].indent,
           );
           map[key] = nested.value;
           cursor = nested.nextIndex;
@@ -556,6 +594,10 @@ class _SimpleYamlDecoder {
     int cursor = index;
 
     while (cursor < lines.length) {
+      cursor = _skipIgnorableLines(lines, cursor);
+      if (cursor >= lines.length) {
+        break;
+      }
       final _YamlLine line = lines[cursor];
       if (line.indent < indent) {
         break;
@@ -566,12 +608,28 @@ class _SimpleYamlDecoder {
       final String itemText = line.text.substring(2).trim();
       cursor += 1;
 
+      final _BlockScalarHeader? itemBlockScalar = _parseBlockScalarHeader(
+        itemText,
+      );
+      if (itemBlockScalar != null) {
+        final _ParseResult parsed = _parseBlockScalar(
+          lines,
+          cursor,
+          indent,
+          itemBlockScalar,
+        );
+        values.add(parsed.value);
+        cursor = parsed.nextIndex;
+        continue;
+      }
+
       if (itemText.isEmpty) {
-        if (cursor < lines.length && lines[cursor].indent > indent) {
+        final int nestedStart = _skipIgnorableLines(lines, cursor);
+        if (nestedStart < lines.length && lines[nestedStart].indent > indent) {
           final _ParseResult nested = _parseBlock(
             lines,
-            cursor,
-            lines[cursor].indent,
+            nestedStart,
+            lines[nestedStart].indent,
           );
           values.add(nested.value);
           cursor = nested.nextIndex;
@@ -586,12 +644,27 @@ class _SimpleYamlDecoder {
         final String key = itemText.substring(0, split).trim();
         final String rawValue = itemText.substring(split + 1).trim();
         final Map<String, Object?> itemMap = <String, Object?>{};
-        if (rawValue.isEmpty) {
-          if (cursor < lines.length && lines[cursor].indent > indent) {
+
+        final _BlockScalarHeader? blockScalar = _parseBlockScalarHeader(
+          rawValue,
+        );
+        if (blockScalar != null) {
+          final _ParseResult parsed = _parseBlockScalar(
+            lines,
+            cursor,
+            indent,
+            blockScalar,
+          );
+          itemMap[key] = parsed.value;
+          cursor = parsed.nextIndex;
+        } else if (rawValue.isEmpty) {
+          final int nestedStart = _skipIgnorableLines(lines, cursor);
+          if (nestedStart < lines.length &&
+              lines[nestedStart].indent > indent) {
             final _ParseResult nested = _parseBlock(
               lines,
-              cursor,
-              lines[cursor].indent,
+              nestedStart,
+              lines[nestedStart].indent,
             );
             itemMap[key] = nested.value;
             cursor = nested.nextIndex;
@@ -602,13 +675,14 @@ class _SimpleYamlDecoder {
           itemMap[key] = _parseScalar(rawValue);
         }
 
-        if (cursor < lines.length &&
-            lines[cursor].indent > indent &&
-            !lines[cursor].text.startsWith('- ')) {
+        final int restStart = _skipIgnorableLines(lines, cursor);
+        if (restStart < lines.length &&
+            lines[restStart].indent > indent &&
+            !lines[restStart].text.startsWith('- ')) {
           final _ParseResult rest = _parseMap(
             lines,
-            cursor,
-            lines[cursor].indent,
+            restStart,
+            lines[restStart].indent,
           );
           final Object? value = rest.value;
           if (value is Map<String, Object?>) {
@@ -625,6 +699,126 @@ class _SimpleYamlDecoder {
     }
 
     return _ParseResult(values, cursor);
+  }
+
+  _BlockScalarHeader? _parseBlockScalarHeader(String text) {
+    if (text.isEmpty) {
+      return null;
+    }
+    final bool? folded = switch (text[0]) {
+      '|' => false,
+      '>' => true,
+      _ => null,
+    };
+    if (folded == null) {
+      return null;
+    }
+
+    _BlockScalarChomp chomp = _BlockScalarChomp.clip;
+    int? indentOffset;
+    final String indicators = text.substring(1).trim();
+    for (int index = 0; index < indicators.length; index += 1) {
+      final String char = indicators[index];
+      if (char == '-') {
+        chomp = _BlockScalarChomp.strip;
+        continue;
+      }
+      if (char == '+') {
+        chomp = _BlockScalarChomp.keep;
+        continue;
+      }
+      final int? parsedIndent = int.tryParse(char);
+      if (parsedIndent != null) {
+        indentOffset = parsedIndent;
+        continue;
+      }
+      break;
+    }
+
+    return _BlockScalarHeader(
+      folded: folded,
+      chomp: chomp,
+      indentOffset: indentOffset,
+    );
+  }
+
+  _ParseResult _parseBlockScalar(
+    List<_YamlLine> lines,
+    int index,
+    int parentIndent,
+    _BlockScalarHeader header,
+  ) {
+    final List<String> scalarLines = <String>[];
+    int cursor = index;
+    int? contentIndent = header.indentOffset == null
+        ? null
+        : parentIndent + header.indentOffset!;
+
+    while (cursor < lines.length) {
+      final _YamlLine line = lines[cursor];
+      if (!line.isBlank && line.indent <= parentIndent) {
+        break;
+      }
+      if (line.isBlank) {
+        scalarLines.add('');
+        cursor += 1;
+        continue;
+      }
+
+      contentIndent ??= line.indent;
+      if (line.indent < contentIndent) {
+        break;
+      }
+
+      if (line.raw.length <= contentIndent) {
+        scalarLines.add('');
+      } else {
+        scalarLines.add(line.raw.substring(contentIndent));
+      }
+      cursor += 1;
+    }
+
+    final String body = header.folded
+        ? _foldScalarLines(scalarLines)
+        : scalarLines.join('\n');
+    final String withTerminalNewline = scalarLines.isEmpty ? '' : '$body\n';
+    final String normalized = _applyBlockScalarChomp(
+      withTerminalNewline,
+      header.chomp,
+    );
+    return _ParseResult(normalized, cursor);
+  }
+
+  String _foldScalarLines(List<String> lines) {
+    if (lines.isEmpty) {
+      return '';
+    }
+    final StringBuffer buffer = StringBuffer();
+    for (int index = 0; index < lines.length; index += 1) {
+      final String line = lines[index];
+      buffer.write(line);
+      if (index == lines.length - 1) {
+        continue;
+      }
+      final String next = lines[index + 1];
+      if (line.isEmpty || next.isEmpty) {
+        buffer.write('\n');
+      } else {
+        buffer.write(' ');
+      }
+    }
+    return buffer.toString();
+  }
+
+  String _applyBlockScalarChomp(String value, _BlockScalarChomp chomp) {
+    return switch (chomp) {
+      _BlockScalarChomp.keep => value,
+      _BlockScalarChomp.strip => value.replaceFirst(RegExp(r'\n+$'), ''),
+      _BlockScalarChomp.clip =>
+        !value.endsWith('\n')
+            ? value
+            : '${value.replaceFirst(RegExp(r'\n+$'), '')}\n',
+    };
   }
 
   Object? _parseScalar(String text) {
@@ -653,10 +847,33 @@ class _SimpleYamlDecoder {
 }
 
 class _YamlLine {
-  _YamlLine({required this.indent, required this.text});
+  _YamlLine({
+    required this.indent,
+    required this.text,
+    required this.raw,
+    required this.isBlank,
+    required this.isComment,
+  });
 
   final int indent;
   final String text;
+  final String raw;
+  final bool isBlank;
+  final bool isComment;
+}
+
+enum _BlockScalarChomp { clip, strip, keep }
+
+class _BlockScalarHeader {
+  _BlockScalarHeader({
+    required this.folded,
+    required this.chomp,
+    required this.indentOffset,
+  });
+
+  final bool folded;
+  final _BlockScalarChomp chomp;
+  final int? indentOffset;
 }
 
 class _ParseResult {

@@ -149,7 +149,7 @@ description: from custom factory
         resolvers: AgentConfigResolvers(
           customAgentFactories: <String, CustomAgentFactory>{
             'my.CustomAgent':
-                (BaseAgentConfig config, String _, AgentConfigResolvers __) {
+                (BaseAgentConfig config, String _, AgentConfigResolvers _) {
                   return SequentialAgent(
                     name: config.name,
                     description: config.description,
@@ -162,6 +162,81 @@ description: from custom factory
       expect(agent, isA<SequentialAgent>());
       expect(agent.name, 'custom_root');
       expect(agent.description, 'from custom factory');
+    });
+
+    test('fromConfig parses literal block scalar instructions', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_block_literal_cfg_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final File root = File('${dir.path}/root.yaml');
+      await root.writeAsString('''
+name: root
+instruction: |
+  You are a routing assistant.
+  Keep responses concise.
+''');
+
+      final BaseAgent agent = fromConfig(root.path);
+      expect(agent, isA<LlmAgent>());
+      expect(
+        (agent as LlmAgent).instruction,
+        'You are a routing assistant.\nKeep responses concise.',
+      );
+    });
+
+    test('fromConfig parses folded block scalar instructions', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_block_folded_cfg_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final File root = File('${dir.path}/root.yaml');
+      await root.writeAsString('''
+name: root
+instruction: >
+  First sentence.
+  Second sentence.
+''');
+
+      final BaseAgent agent = fromConfig(root.path);
+      expect(agent, isA<LlmAgent>());
+      expect(
+        (agent as LlmAgent).instruction,
+        'First sentence. Second sentence.',
+      );
+    });
+
+    test('fromConfig supports block scalar chomp indicator', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_block_chomp_cfg_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final File root = File('${dir.path}/root.yaml');
+      await root.writeAsString('''
+name: root
+instruction: |-
+  Line one.
+  Line two.
+''');
+
+      final BaseAgent agent = fromConfig(root.path);
+      expect(agent, isA<LlmAgent>());
+      expect((agent as LlmAgent).instruction, 'Line one.\nLine two.');
     });
   });
 }
