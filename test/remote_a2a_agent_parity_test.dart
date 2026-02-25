@@ -471,7 +471,7 @@ void main() {
       );
     });
 
-    test('runLiveImpl remains explicitly unsupported', () async {
+    test('runLive falls back to async execution path', () async {
       final RemoteA2aAgent agent = RemoteA2aAgent(
         name: 'remote_agent',
         agentCard: AgentCard(
@@ -504,16 +504,12 @@ void main() {
         ],
       );
 
-      await expectLater(
-        agent.runLive(context).toList(),
-        throwsA(
-          isA<StateError>().having(
-            (StateError error) => error.message,
-            'message',
-            contains('not implemented'),
-          ),
-        ),
-      );
+      final List<Event> events = await agent.runLive(context).toList();
+      expect(events, hasLength(1));
+      expect(events.single.author, 'remote_agent');
+      expect(events.single.content?.parts.single.text, 'ok');
+      expect(events.single.customMetadata?['a2a:request'], isA<Map>());
+      expect(events.single.customMetadata?['a2a:response'], isA<Map>());
     });
   });
 

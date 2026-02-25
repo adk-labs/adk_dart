@@ -628,9 +628,9 @@ class RemoteA2aAgent extends BaseAgent {
 
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
-    throw StateError(
-      '_run_live_impl for ${runtimeType} via A2A is not implemented.',
-    );
+    await for (final Event event in runAsyncImpl(context)) {
+      yield event;
+    }
   }
 
   Future<void> cleanup() async {
