@@ -247,7 +247,11 @@ Future<Map<String, Object?>> similaritySearch({
     final SpannerDatabaseDialect dialect = database.databaseDialect;
     if (dialect != SpannerDatabaseDialect.googleStandardSql &&
         dialect != SpannerDatabaseDialect.postgresql) {
-      throw ArgumentError('Unsupported database dialect: $dialect');
+      return _structuredErrorResult(
+        code: 'UNSUPPORTED_DIALECT',
+        details: 'Unsupported database dialect: $dialect',
+        context: <String, Object?>{'dialect': '$dialect'},
+      );
     }
 
     final Map<String, Object?> embeddingOpts = Map<String, Object?>.from(
@@ -321,9 +325,32 @@ Future<Map<String, Object?>> similaritySearch({
 
     if (nearestNeighborsAlgorithm != exactNearestNeighbors &&
         nearestNeighborsAlgorithm != approximateNearestNeighbors) {
-      throw UnsupportedError(
-        "Unsupported search_options['$_nearestNeighborsAlgorithmKey']: "
-        '$nearestNeighborsAlgorithm',
+      return _structuredErrorResult(
+        code: 'UNSUPPORTED_NEAREST_NEIGHBORS_ALGORITHM',
+        details:
+            "Unsupported search_options['$_nearestNeighborsAlgorithmKey']: "
+            '$nearestNeighborsAlgorithm',
+        context: <String, Object?>{
+          'nearest_neighbors_algorithm': nearestNeighborsAlgorithm,
+          'supported_values': <String>[
+            exactNearestNeighbors,
+            approximateNearestNeighbors,
+          ],
+        },
+      );
+    }
+
+    if (dialect == SpannerDatabaseDialect.postgresql &&
+        nearestNeighborsAlgorithm == approximateNearestNeighbors) {
+      return _structuredErrorResult(
+        code: 'UNSUPPORTED_SEARCH_COMBINATION',
+        details:
+            '$approximateNearestNeighbors is not supported for PostgreSQL '
+            'dialect.',
+        context: <String, Object?>{
+          'dialect': '$dialect',
+          'nearest_neighbors_algorithm': nearestNeighborsAlgorithm,
+        },
       );
     }
 
@@ -393,6 +420,20 @@ Future<Map<String, Object?>> similaritySearch({
   } catch (error) {
     return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
   }
+}
+
+Map<String, Object?> _structuredErrorResult({
+  required String code,
+  required String details,
+  Map<String, Object?>? context,
+}) {
+  return <String, Object?>{
+    'status': 'ERROR',
+    'error_code': code,
+    'error_details': details,
+    if (context != null && context.isNotEmpty)
+      'error_context': Map<String, Object?>.from(context),
+  };
 }
 
 Future<Map<String, Object?>> vectorStoreSimilaritySearch({

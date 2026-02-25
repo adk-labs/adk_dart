@@ -590,6 +590,170 @@ void main() {
     });
 
     test(
+      'similarity_search returns structured errors for unsupported dialects',
+      () async {
+        bool embedderCalled = false;
+        final _FakeSpannerDatabase database = _FakeSpannerDatabase(
+          databaseDialect: SpannerDatabaseDialect.unknown,
+        );
+        final _FakeSpannerClient client = _FakeSpannerClient(
+          instances: <String, _FakeSpannerInstance>{
+            'inst': _FakeSpannerInstance(
+              databases: <String, _FakeSpannerDatabase>{'db': database},
+            ),
+          },
+        );
+        setSpannerClientFactory(
+          ({required String project, required Object credentials}) => client,
+        );
+        setSpannerEmbedders(
+          embedder:
+              ({
+                required String vertexAiEmbeddingModelName,
+                required List<String> contents,
+                int? outputDimensionality,
+                Object? genAiClient,
+              }) {
+                embedderCalled = true;
+                return <List<double>>[
+                  <double>[0.1, 0.2],
+                ];
+              },
+        );
+
+        final Map<String, Object?> result = await similaritySearch(
+          projectId: 'p',
+          instanceId: 'inst',
+          databaseId: 'db',
+          tableName: 'docs',
+          query: 'find me docs',
+          embeddingColumnToSearch: 'embedding',
+          columns: <String>['content'],
+          embeddingOptions: <String, Object?>{
+            'vertex_ai_embedding_model_name': 'text-embedding-005',
+          },
+          credentials: Object(),
+        );
+
+        expect(result['status'], 'ERROR');
+        expect(result['error_code'], 'UNSUPPORTED_DIALECT');
+        expect('${result['error_details']}', contains('Unsupported database'));
+        expect(embedderCalled, isFalse);
+      },
+    );
+
+    test(
+      'similarity_search returns structured errors for unsupported algorithm combinations',
+      () async {
+        bool embedderCalled = false;
+        setSpannerEmbedders(
+          embedder:
+              ({
+                required String vertexAiEmbeddingModelName,
+                required List<String> contents,
+                int? outputDimensionality,
+                Object? genAiClient,
+              }) {
+                embedderCalled = true;
+                return <List<double>>[
+                  <double>[0.1, 0.2],
+                ];
+              },
+        );
+
+        final _FakeSpannerDatabase googleSqlDatabase = _FakeSpannerDatabase(
+          databaseDialect: SpannerDatabaseDialect.googleStandardSql,
+        );
+        setSpannerClientFactory(({
+          required String project,
+          required Object credentials,
+        }) {
+          return _FakeSpannerClient(
+            instances: <String, _FakeSpannerInstance>{
+              'inst': _FakeSpannerInstance(
+                databases: <String, _FakeSpannerDatabase>{
+                  'db': googleSqlDatabase,
+                },
+              ),
+            },
+          );
+        });
+
+        final Map<String, Object?> unsupportedAlgorithm =
+            await similaritySearch(
+              projectId: 'p',
+              instanceId: 'inst',
+              databaseId: 'db',
+              tableName: 'docs',
+              query: 'find me docs',
+              embeddingColumnToSearch: 'embedding',
+              columns: <String>['content'],
+              embeddingOptions: <String, Object?>{
+                'vertex_ai_embedding_model_name': 'text-embedding-005',
+              },
+              credentials: Object(),
+              searchOptions: <String, Object?>{
+                'nearest_neighbors_algorithm': 'INVALID_ALGORITHM',
+              },
+            );
+
+        expect(unsupportedAlgorithm['status'], 'ERROR');
+        expect(
+          unsupportedAlgorithm['error_code'],
+          'UNSUPPORTED_NEAREST_NEIGHBORS_ALGORITHM',
+        );
+        expect(embedderCalled, isFalse);
+
+        final _FakeSpannerDatabase postgresqlDatabase = _FakeSpannerDatabase(
+          databaseDialect: SpannerDatabaseDialect.postgresql,
+        );
+        setSpannerClientFactory(({
+          required String project,
+          required Object credentials,
+        }) {
+          return _FakeSpannerClient(
+            instances: <String, _FakeSpannerInstance>{
+              'inst': _FakeSpannerInstance(
+                databases: <String, _FakeSpannerDatabase>{
+                  'db': postgresqlDatabase,
+                },
+              ),
+            },
+          );
+        });
+
+        final Map<String, Object?> unsupportedCombination =
+            await similaritySearch(
+              projectId: 'p',
+              instanceId: 'inst',
+              databaseId: 'db',
+              tableName: 'docs',
+              query: 'find me docs',
+              embeddingColumnToSearch: 'embedding',
+              columns: <String>['content'],
+              embeddingOptions: <String, Object?>{
+                'vertex_ai_embedding_model_name': 'text-embedding-005',
+              },
+              credentials: Object(),
+              searchOptions: <String, Object?>{
+                'nearest_neighbors_algorithm': approximateNearestNeighbors,
+              },
+            );
+
+        expect(unsupportedCombination['status'], 'ERROR');
+        expect(
+          unsupportedCombination['error_code'],
+          'UNSUPPORTED_SEARCH_COMBINATION',
+        );
+        expect(
+          '${unsupportedCombination['error_details']}',
+          contains('not supported for PostgreSQL dialect'),
+        );
+        expect(embedderCalled, isFalse);
+      },
+    );
+
+    test(
       'vector_store_similarity_search uses settings-derived options',
       () async {
         final _FakeSpannerDatabase database = _FakeSpannerDatabase(
