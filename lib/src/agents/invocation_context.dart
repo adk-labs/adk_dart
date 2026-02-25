@@ -174,6 +174,14 @@ class InvocationContext {
     );
   }
 
+  Future<void> addSessionToMemory() async {
+    final Object? service = memoryService;
+    if (service is! BaseMemoryService) {
+      throw StateError('Memory service is not initialized.');
+    }
+    await service.addSessionToMemory(session);
+  }
+
   Future<List<String>> listArtifacts({String? sessionId}) async {
     final BaseArtifactService? service = artifactService;
     if (service == null) {

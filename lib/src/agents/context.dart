@@ -1,7 +1,9 @@
 import '../events/event_actions.dart';
 import '../events/event.dart';
+import '../auth/auth_credential.dart';
 import '../auth/auth_handler.dart';
 import '../auth/auth_tool.dart';
+import '../auth/credential_service/base_credential_service.dart';
 import '../memory/base_memory_service.dart';
 import '../memory/memory_entry.dart';
 import '../sessions/state.dart';
@@ -108,8 +110,32 @@ class Context extends ReadonlyContext {
     );
   }
 
+  Future<void> addSessionToMemory() {
+    return invocationContext.addSessionToMemory();
+  }
+
   Future<void> deleteArtifact(String filename) {
     return invocationContext.deleteArtifact(filename: filename);
+  }
+
+  Future<void> saveCredential(AuthConfig authConfig) async {
+    final Object? service = invocationContext.credentialService;
+    if (service is! BaseCredentialService) {
+      throw StateError('Credential service is not initialized.');
+    }
+    await service.saveCredential(authConfig, this);
+  }
+
+  Future<AuthCredential?> loadCredential(AuthConfig authConfig) async {
+    final Object? service = invocationContext.credentialService;
+    if (service is! BaseCredentialService) {
+      throw StateError('Credential service is not initialized.');
+    }
+    return service.loadCredential(authConfig, this);
+  }
+
+  AuthCredential? getAuthResponse(AuthConfig authConfig) {
+    return AuthHandler(authConfig: authConfig).getAuthResponse(state);
   }
 
   void requestConfirmation({String? hint, Object? payload}) {
