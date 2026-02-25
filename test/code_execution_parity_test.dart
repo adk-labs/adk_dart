@@ -479,6 +479,88 @@ void main() {
       expect(runtime.stopCalls, 1);
     });
 
+    test('container executor rejects unsafe input file paths', () async {
+      final InvocationContext invocationContext =
+          await _buildInvocationContext();
+      final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
+      final ContainerCodeExecutor executor = ContainerCodeExecutor(
+        image: 'custom-image:latest',
+        runtimeClient: runtime,
+      );
+
+      final CodeExecutionResult parentTraversal = await executor.executeCode(
+        invocationContext,
+        CodeExecutionInput(
+          code: 'print(1)',
+          inputFiles: <CodeExecutionFile>[
+            CodeExecutionFile(name: '../escape.txt', content: 'bad'),
+          ],
+        ),
+      );
+      expect(parentTraversal.exitCode, -1);
+      expect(parentTraversal.stderr, contains('Invalid input file name'));
+
+      final CodeExecutionResult absolute = await executor.executeCode(
+        invocationContext,
+        CodeExecutionInput(
+          code: 'print(1)',
+          inputFiles: <CodeExecutionFile>[
+            CodeExecutionFile(name: '/tmp/escape.txt', content: 'bad'),
+          ],
+        ),
+      );
+      expect(absolute.exitCode, -1);
+      expect(absolute.stderr, contains('Invalid input file name'));
+
+      final CodeExecutionResult drivePrefixed = await executor.executeCode(
+        invocationContext,
+        CodeExecutionInput(
+          code: 'print(1)',
+          inputFiles: <CodeExecutionFile>[
+            CodeExecutionFile(name: r'C:\temp\escape.txt', content: 'bad'),
+          ],
+        ),
+      );
+      expect(drivePrefixed.exitCode, -1);
+      expect(drivePrefixed.stderr, contains('Invalid input file name'));
+      expect(runtime.startCalls, 0);
+    });
+
+    test(
+      'container executor accepts nested relative input file paths',
+      () async {
+        final InvocationContext invocationContext =
+            await _buildInvocationContext();
+        final _FakeContainerRuntimeClient runtime =
+            _FakeContainerRuntimeClient();
+        final ContainerCodeExecutor executor = ContainerCodeExecutor(
+          image: 'custom-image:latest',
+          runtimeClient: runtime,
+        );
+
+        final CodeExecutionResult result = await executor.executeCode(
+          invocationContext,
+          CodeExecutionInput(
+            code: 'print(1)',
+            inputFiles: <CodeExecutionFile>[
+              CodeExecutionFile(name: 'dir/input.txt', content: 'safe'),
+            ],
+          ),
+        );
+
+        expect(result.exitCode, 0);
+        expect(result.stdout, 'ok');
+        expect(runtime.startCalls, 1);
+        expect(
+          runtime.execCommands.where(
+            (List<String> command) =>
+                command.length == 3 && command.first == 'python3',
+          ),
+          hasLength(1),
+        );
+      },
+    );
+
     test('container executor builds image when dockerPath is set', () async {
       final _FakeContainerRuntimeClient runtime = _FakeContainerRuntimeClient();
       final Directory dockerDir = await Directory.systemTemp.createTemp(

@@ -313,7 +313,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     );
     try {
       for (final CodeExecutionFile file in codeExecutionInput.inputFiles) {
-        final File out = File('${tempDirectory.path}/${file.name}');
+        final String safeName = _sanitizeCodeExecutionFileName(file.name);
+        final File out = File('${tempDirectory.path}/$safeName');
         await out.parent.create(recursive: true);
         await out.writeAsBytes(_toBytes(file.content));
       }
@@ -324,6 +325,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
           workingDirectory: tempDirectory.path,
         ),
       );
+    } on ArgumentError catch (error) {
+      return CodeExecutionResult(exitCode: -1, stderr: '$error');
     } finally {
       await tempDirectory.delete(recursive: true);
     }
@@ -342,4 +345,43 @@ List<int> _toBytes(Object value) {
     }
   }
   return utf8.encode('$value');
+}
+
+String _sanitizeCodeExecutionFileName(String rawName) {
+  final String normalized = rawName.replaceAll('\\', '/').trim();
+  if (normalized.isEmpty) {
+    throw ArgumentError(
+      'Invalid input file name: file name must not be empty.',
+    );
+  }
+  if (normalized.contains('\u0000')) {
+    throw ArgumentError(
+      'Invalid input file name `$rawName`: null bytes are not allowed.',
+    );
+  }
+  if (normalized.startsWith('/')) {
+    throw ArgumentError(
+      'Invalid input file name `$rawName`: absolute paths are not allowed.',
+    );
+  }
+  if (RegExp(r'^[a-zA-Z]:([/\\]|$)').hasMatch(normalized)) {
+    throw ArgumentError(
+      'Invalid input file name `$rawName`: drive-prefixed paths are not allowed.',
+    );
+  }
+
+  final List<String> segments = normalized.split('/');
+  for (final String segment in segments) {
+    if (segment.isEmpty) {
+      throw ArgumentError(
+        'Invalid input file name `$rawName`: empty path segments are not allowed.',
+      );
+    }
+    if (segment == '.' || segment == '..') {
+      throw ArgumentError(
+        'Invalid input file name `$rawName`: path traversal segments are not allowed.',
+      );
+    }
+  }
+  return segments.join('/');
 }
