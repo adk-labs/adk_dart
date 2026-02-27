@@ -10,17 +10,20 @@ class DatabaseSessionService extends BaseSessionService {
   final BaseSessionService _delegate;
 
   static BaseSessionService _buildDelegate(String dbUrl) {
-    if (dbUrl.trim().isEmpty) {
+    final String normalizedDbUrl = dbUrl.trim();
+    if (normalizedDbUrl.isEmpty) {
       throw ArgumentError('Database url must not be empty.');
     }
-    if (dbUrl.startsWith('sqlite:') || dbUrl.startsWith('sqlite+aiosqlite:')) {
-      return SqliteSessionService(dbUrl);
+    if (normalizedDbUrl.startsWith('sqlite:') ||
+        normalizedDbUrl.startsWith('sqlite+aiosqlite:')) {
+      return SqliteSessionService(normalizedDbUrl);
     }
-    if (dbUrl == ':memory:' || dbUrl.startsWith('memory:')) {
+    if (normalizedDbUrl == ':memory:' ||
+        normalizedDbUrl.startsWith('memory:')) {
       return InMemorySessionService();
     }
     throw UnsupportedError(
-      'Unsupported database url: $dbUrl. '
+      'Unsupported database url: $normalizedDbUrl. '
       'Supported urls are sqlite:, sqlite+aiosqlite:, :memory:, and memory:.',
     );
   }

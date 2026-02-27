@@ -162,14 +162,11 @@ extension on ServiceRegistry {
       Map<String, Object?>? kwargs,
     }) {
       final Uri parsed = Uri.parse(uri);
-      String dbPath = parsed.path;
+      final String dbPath = parsed.path;
       if (dbPath.isEmpty || dbPath == '/') {
         return InMemorySessionService();
       }
-      if (dbPath.startsWith('/')) {
-        dbPath = dbPath.substring(1);
-      }
-      return SqliteSessionService(dbPath);
+      return SqliteSessionService(uri);
     });
 
     registerSessionService('postgresql', (

@@ -225,13 +225,26 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
   Map<String, String> _buildHeaders({
     required String apiKey,
     required Map<String, String>? headers,
+    bool acceptEventStream = false,
   }) {
-    final Map<String, String> merged = <String, String>{
-      'content-type': 'application/json',
-      'x-goog-api-key': apiKey,
-    };
+    final Map<String, String> merged = <String, String>{};
+    bool hasAcceptHeader = false;
     if (headers != null) {
-      merged.addAll(headers);
+      headers.forEach((String key, String value) {
+        final String lowered = key.toLowerCase();
+        if (lowered == 'content-type' || lowered == 'x-goog-api-key') {
+          return;
+        }
+        if (lowered == 'accept') {
+          hasAcceptHeader = true;
+        }
+        merged[key] = value;
+      });
+    }
+    merged['content-type'] = 'application/json';
+    merged['x-goog-api-key'] = apiKey;
+    if (acceptEventStream && !hasAcceptHeader) {
+      merged['accept'] = 'text/event-stream';
     }
     return merged;
   }
@@ -298,12 +311,18 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
       bool emittedChunks = false;
       try {
         final http.Request request = http.Request('POST', uri)
-          ..headers.addAll(_buildHeaders(apiKey: apiKey, headers: headers))
+          ..headers.addAll(
+            _buildHeaders(
+              apiKey: apiKey,
+              headers: headers,
+              acceptEventStream: true,
+            ),
+          )
           ..body = jsonEncode(payload);
 
         final http.StreamedResponse response = await _httpClient.send(request);
         if (response.statusCode >= 400) {
-          final String body = await response.stream.bytesToString();
+          final String body = await _readStreamedBody(response);
           final GeminiRestApiException exception = GeminiRestApiException(
             response.statusCode,
             _extractErrorMessage(body),
@@ -322,12 +341,21 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
         }
 
         final StringBuffer dataBuffer = StringBuffer();
+        final StringBuffer unexpectedLinePreview = StringBuffer();
         String? eventName;
+        bool sawRecognizedSseField = false;
+        bool sawUnexpectedContent = false;
+        bool isFirstLine = true;
         final Stream<String> lines = response.stream
             .transform(utf8.decoder)
             .transform(const LineSplitter());
 
-        await for (final String line in lines) {
+        await for (final String rawLine in lines) {
+          String line = rawLine;
+          if (isFirstLine) {
+            line = _stripUtf8Bom(line);
+            isFirstLine = false;
+          }
           if (line.isEmpty) {
             final Map<String, Object?>? parsed = _decodeSseData(
               dataBuffer.toString(),
@@ -343,13 +371,34 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
             continue;
           }
 
-          if (line.startsWith('event:')) {
-            eventName = line.substring(6).trimLeft();
+          if (line.startsWith(':')) {
             continue;
           }
 
-          if (line.startsWith('data:')) {
-            dataBuffer.writeln(line.substring(5).trimLeft());
+          final _SseField? field = _parseSseField(line);
+          if (field == null) {
+            sawUnexpectedContent = true;
+            _appendSseUnexpectedLine(unexpectedLinePreview, line);
+            continue;
+          }
+
+          switch (field.name) {
+            case 'event':
+              sawRecognizedSseField = true;
+              eventName = field.value;
+              break;
+            case 'data':
+              sawRecognizedSseField = true;
+              dataBuffer.writeln(field.value);
+              break;
+            case 'id':
+            case 'retry':
+              sawRecognizedSseField = true;
+              break;
+            default:
+              sawUnexpectedContent = true;
+              _appendSseUnexpectedLine(unexpectedLinePreview, line);
+              break;
           }
         }
 
@@ -361,6 +410,14 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
         if (parsed != null) {
           emittedChunks = true;
           yield parsed;
+        }
+
+        if (!emittedChunks && sawUnexpectedContent && !sawRecognizedSseField) {
+          throw GeminiRestApiException(
+            500,
+            'Gemini SSE response is not a valid event stream.',
+            responseBody: unexpectedLinePreview.toString().trimRight(),
+          );
         }
         return;
       } on GeminiRestApiException {
@@ -379,6 +436,11 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
       }
     }
     throw StateError('Retry loop exited unexpectedly.');
+  }
+
+  Future<String> _readStreamedBody(http.StreamedResponse response) async {
+    final List<int> bytes = await response.stream.toBytes();
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   bool _isRetriableException(Object error) {
@@ -469,6 +531,49 @@ Map<String, Object?>? _decodeSseData(
   return mapped;
 }
 
+_SseField? _parseSseField(String line) {
+  final int separatorIndex = line.indexOf(':');
+  if (separatorIndex < 0) {
+    return _SseField(name: line, value: '');
+  }
+  final String name = line.substring(0, separatorIndex);
+  if (name.isEmpty) {
+    return null;
+  }
+  String value = line.substring(separatorIndex + 1);
+  if (value.startsWith(' ')) {
+    value = value.substring(1);
+  }
+  return _SseField(name: name, value: value);
+}
+
+String _stripUtf8Bom(String value) {
+  if (value.startsWith('\ufeff')) {
+    return value.substring(1);
+  }
+  return value;
+}
+
+void _appendSseUnexpectedLine(StringBuffer preview, String line) {
+  const int maxPreviewLength = 2048;
+  if (preview.length >= maxPreviewLength) {
+    return;
+  }
+  final String trimmedLine = line.trimRight();
+  if (trimmedLine.isEmpty) {
+    return;
+  }
+  if (preview.isNotEmpty) {
+    preview.writeln();
+  }
+  final int remaining = maxPreviewLength - preview.length;
+  if (trimmedLine.length <= remaining) {
+    preview.write(trimmedLine);
+    return;
+  }
+  preview.write(trimmedLine.substring(0, remaining));
+}
+
 String _extractErrorMessage(String body) {
   if (body.isEmpty) {
     return 'Gemini API request failed.';
@@ -531,4 +636,11 @@ class _ResolvedRetryConfig {
   final double maxDelaySeconds;
   final double expBase;
   final Set<int> retryStatusCodes;
+}
+
+class _SseField {
+  const _SseField({required this.name, required this.value});
+
+  final String name;
+  final String value;
 }

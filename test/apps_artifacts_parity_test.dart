@@ -276,6 +276,58 @@ void main() {
       );
       expect(keys, contains('user:shared.txt'));
     });
+
+    test('supports fileData artifacts and preserves canonical uri', () async {
+      final GcsArtifactService service = GcsArtifactService('bucket-a');
+
+      final int version = await service.saveArtifact(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'docs/report.pdf',
+        artifact: Part.fromFileData(
+          fileUri: 'gs://external-bucket/docs/report.pdf',
+          mimeType: 'application/pdf',
+        ),
+      );
+      expect(version, 0);
+
+      final Part? loaded = await service.loadArtifact(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'docs/report.pdf',
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.fileData, isNotNull);
+      expect(loaded.fileData!.fileUri, 'gs://external-bucket/docs/report.pdf');
+      expect(loaded.fileData!.mimeType, 'application/pdf');
+
+      final ArtifactVersion? metadata = await service.getArtifactVersion(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'docs/report.pdf',
+      );
+      expect(metadata, isNotNull);
+      expect(metadata!.canonicalUri, 'gs://external-bucket/docs/report.pdf');
+      expect(metadata.mimeType, 'application/pdf');
+    });
+
+    test('rejects fileData artifacts with empty uri', () async {
+      final GcsArtifactService service = GcsArtifactService('bucket-a');
+
+      expect(
+        () => service.saveArtifact(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: 's1',
+          filename: 'bad.dat',
+          artifact: Part.fromFileData(fileUri: '   '),
+        ),
+        throwsA(isA<InputValidationError>()),
+      );
+    });
   });
 }
 

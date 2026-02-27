@@ -10,6 +10,22 @@ class GcsArtifactService extends BaseArtifactService {
   final String bucketName;
   final Map<String, _GcsBlob> _blobs = <String, _GcsBlob>{};
 
+  String? _normalizeMimeType(String? value) {
+    final String? trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  String _canonicalUriForBlob(String blobName, _GcsBlob blob) {
+    final String? fileUri = blob.fileUri;
+    if (fileUri != null && fileUri.isNotEmpty) {
+      return fileUri;
+    }
+    return 'gs://$bucketName/$blobName';
+  }
+
   bool _fileHasUserNamespace(String filename) {
     return filename.startsWith('user:');
   }
@@ -60,19 +76,28 @@ class GcsArtifactService extends BaseArtifactService {
 
     late final List<int> data;
     String? contentType;
+    String? fileUri;
     if (artifact.inlineData != null) {
       data = List<int>.from(artifact.inlineData!.data);
-      contentType = artifact.inlineData!.mimeType;
+      contentType =
+          _normalizeMimeType(artifact.inlineData!.mimeType) ??
+          'application/octet-stream';
     } else if (artifact.text != null) {
       data = utf8.encode(artifact.text!);
       contentType = 'text/plain';
     } else if (artifact.fileData != null) {
-      throw UnsupportedError(
-        'Saving artifact with fileData is not supported in GcsArtifactService.',
-      );
+      final String parsedUri = artifact.fileData!.fileUri.trim();
+      if (parsedUri.isEmpty) {
+        throw InputValidationError(
+          'Artifact file_data.file_uri must be provided.',
+        );
+      }
+      data = const <int>[];
+      contentType = _normalizeMimeType(artifact.fileData!.mimeType);
+      fileUri = parsedUri;
     } else {
       throw InputValidationError(
-        'Artifact must have either inline_data or text.',
+        'Artifact must have either inline_data, text, or file_data.',
       );
     }
 
@@ -90,6 +115,7 @@ class GcsArtifactService extends BaseArtifactService {
       metadata: customMetadata == null
           ? <String, Object?>{}
           : Map<String, Object?>.from(customMetadata),
+      fileUri: fileUri,
     );
 
     return version;
@@ -125,7 +151,14 @@ class GcsArtifactService extends BaseArtifactService {
       sessionId,
     );
     final _GcsBlob? blob = _blobs[blobName];
-    if (blob == null || blob.data.isEmpty) {
+    if (blob == null) {
+      return null;
+    }
+    final String? fileUri = blob.fileUri;
+    if (fileUri != null && fileUri.isNotEmpty) {
+      return Part.fromFileData(fileUri: fileUri, mimeType: blob.contentType);
+    }
+    if (blob.data.isEmpty) {
       return null;
     }
 
@@ -247,7 +280,7 @@ class GcsArtifactService extends BaseArtifactService {
       artifactVersions.add(
         ArtifactVersion(
           version: version,
-          canonicalUri: 'gs://$bucketName/$blobName',
+          canonicalUri: _canonicalUriForBlob(blobName, blob),
           createTime: blob.createTime.millisecondsSinceEpoch / 1000,
           mimeType: blob.contentType,
           customMetadata: Map<String, Object?>.from(blob.metadata),
@@ -297,7 +330,7 @@ class GcsArtifactService extends BaseArtifactService {
 
     return ArtifactVersion(
       version: versionToRead,
-      canonicalUri: 'gs://$bucketName/$blobName',
+      canonicalUri: _canonicalUriForBlob(blobName, blob),
       createTime: blob.createTime.millisecondsSinceEpoch / 1000,
       mimeType: blob.contentType,
       customMetadata: Map<String, Object?>.from(blob.metadata),
@@ -319,10 +352,12 @@ class _GcsBlob {
     required this.contentType,
     required this.createTime,
     required this.metadata,
+    this.fileUri,
   });
 
   final List<int> data;
   final String? contentType;
   final DateTime createTime;
   final Map<String, Object?> metadata;
+  final String? fileUri;
 }

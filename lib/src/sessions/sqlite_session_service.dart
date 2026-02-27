@@ -13,9 +13,14 @@ import 'session_util.dart';
 import 'state.dart';
 
 class SqliteSessionService extends BaseSessionService {
-  SqliteSessionService(String dbPath) : _storePath = _resolveStorePath(dbPath);
+  SqliteSessionService(String dbPath) : this._(_resolveStorePath(dbPath));
+
+  SqliteSessionService._(_ResolvedStorePath resolved)
+    : _storePath = resolved.path,
+      _readOnly = resolved.readOnly;
 
   final String _storePath;
+  final bool _readOnly;
   Future<void> _lock = Future<void>.value();
 
   @override
@@ -281,6 +286,12 @@ class SqliteSessionService extends BaseSessionService {
   }
 
   Future<void> _saveStore(_PersistedStore store) async {
+    if (_readOnly) {
+      throw FileSystemException(
+        'SQLite URL is read-only (mode=ro).',
+        _storePath,
+      );
+    }
     final File file = File(_storePath);
     await file.parent.create(recursive: true);
     final String jsonText = const JsonEncoder.withIndent(
@@ -414,22 +425,107 @@ class _StoredSession {
   }
 }
 
-String _resolveStorePath(String dbPath) {
-  if (!dbPath.startsWith('sqlite:') &&
-      !dbPath.startsWith('sqlite+aiosqlite:')) {
-    return dbPath;
+class _ResolvedStorePath {
+  const _ResolvedStorePath({required this.path, required this.readOnly});
+
+  final String path;
+  final bool readOnly;
+}
+
+_ResolvedStorePath _resolveStorePath(String dbPath) {
+  final String input = dbPath.trim();
+  if (input.isEmpty) {
+    throw ArgumentError('Database path must not be empty.');
   }
-  final Uri uri = Uri.parse(dbPath);
+
+  if (!input.startsWith('sqlite:') && !input.startsWith('sqlite+aiosqlite:')) {
+    return _ResolvedStorePath(path: input, readOnly: false);
+  }
+
+  final Uri uri;
+  try {
+    uri = Uri.parse(input);
+  } on FormatException catch (e) {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'Invalid sqlite URL: ${e.message}',
+    );
+  }
+
+  if (uri.fragment.isNotEmpty) {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'SQLite URL fragments are not supported.',
+    );
+  }
+
   String path = Uri.decodeComponent(uri.path);
-  if (path.isEmpty) {
-    return dbPath;
+  if (path.isEmpty || path == '/') {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'SQLite URL must include a file path.',
+    );
   }
   if (path.startsWith('//')) {
     path = path.substring(1);
   } else if (path.startsWith('/')) {
     path = path.substring(1);
   }
-  return path;
+  if (path.isEmpty) {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'SQLite URL must include a file path.',
+    );
+  }
+
+  final bool readOnly = _parseSqliteReadOnlyMode(uri: uri, dbPath: dbPath);
+  return _ResolvedStorePath(path: path, readOnly: readOnly);
+}
+
+bool _parseSqliteReadOnlyMode({required Uri uri, required String dbPath}) {
+  if (!uri.hasQuery) {
+    return false;
+  }
+
+  final Map<String, List<String>> query = uri.queryParametersAll;
+  final Iterable<String> unsupportedKeys = query.keys.where(
+    (String key) => key != 'mode',
+  );
+  if (unsupportedKeys.isNotEmpty) {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'Unsupported sqlite URL query parameter(s): ${unsupportedKeys.join(', ')}',
+    );
+  }
+
+  final List<String> modeValues = query['mode'] ?? <String>[];
+  if (modeValues.isEmpty || modeValues.length > 1) {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'SQLite URL must include exactly one mode query value.',
+    );
+  }
+
+  final String mode = modeValues.first;
+  if (mode == 'ro') {
+    return true;
+  }
+  if (mode == 'rw' || mode == 'rwc') {
+    return false;
+  }
+
+  throw ArgumentError.value(
+    dbPath,
+    'dbPath',
+    'Unsupported sqlite URL mode "$mode". '
+        'Supported values are ro, rw, and rwc.',
+  );
 }
 
 Map<String, Object?> _mergeState({

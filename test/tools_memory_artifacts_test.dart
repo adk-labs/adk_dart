@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -150,6 +152,110 @@ void main() {
         ),
       );
       expect(hasArtifactBody, isTrue);
+    },
+  );
+
+  test(
+    'LoadArtifactsTool converts unsupported inline mime artifacts to text',
+    () async {
+      final Context toolContext = await _newToolContext(
+        memoryService: InMemoryMemoryService(),
+        artifactService: InMemoryArtifactService(),
+      );
+      await toolContext.saveArtifact(
+        'table.csv',
+        Part.fromInlineData(
+          mimeType: 'application/csv',
+          data: utf8.encode('col1,col2\n1,2\n'),
+        ),
+      );
+
+      final LoadArtifactsTool tool = LoadArtifactsTool();
+      final LlmRequest request = LlmRequest(
+        contents: <Content>[
+          Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: 'load_artifacts',
+                response: <String, dynamic>{
+                  'artifact_names': <String>['table.csv'],
+                },
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tool.processLlmRequest(
+        toolContext: toolContext,
+        llmRequest: request,
+      );
+
+      final Content appended = request.contents.last;
+      expect(appended.parts.first.text, 'Artifact table.csv is:');
+      expect(appended.parts[1].inlineData, isNull);
+      expect(appended.parts[1].text, 'col1,col2\n1,2\n');
+    },
+  );
+
+  test(
+    'LoadArtifactsTool keeps supported inline and fileData artifacts',
+    () async {
+      final Context toolContext = await _newToolContext(
+        memoryService: InMemoryMemoryService(),
+        artifactService: InMemoryArtifactService(),
+      );
+      await toolContext.saveArtifact(
+        'paper.pdf',
+        Part.fromInlineData(
+          mimeType: 'application/pdf',
+          data: <int>[37, 80, 68, 70],
+        ),
+      );
+      await toolContext.saveArtifact(
+        'audio.ref',
+        Part.fromFileData(
+          fileUri: 'gs://bucket/path/audio.mp3',
+          mimeType: 'audio/mpeg',
+        ),
+      );
+
+      final LoadArtifactsTool tool = LoadArtifactsTool();
+      final LlmRequest request = LlmRequest(
+        contents: <Content>[
+          Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: 'load_artifacts',
+                response: <String, dynamic>{
+                  'artifact_names': <String>['paper.pdf', 'audio.ref'],
+                },
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tool.processLlmRequest(
+        toolContext: toolContext,
+        llmRequest: request,
+      );
+
+      final List<Content> appended = request.contents.skip(1).toList();
+      expect(appended, hasLength(2));
+      expect(appended[0].parts.first.text, 'Artifact paper.pdf is:');
+      expect(appended[0].parts[1].inlineData, isNotNull);
+      expect(appended[0].parts[1].inlineData!.mimeType, 'application/pdf');
+
+      expect(appended[1].parts.first.text, 'Artifact audio.ref is:');
+      expect(appended[1].parts[1].fileData, isNotNull);
+      expect(
+        appended[1].parts[1].fileData!.fileUri,
+        'gs://bucket/path/audio.mp3',
+      );
+      expect(appended[1].parts[1].fileData!.mimeType, 'audio/mpeg');
     },
   );
 }

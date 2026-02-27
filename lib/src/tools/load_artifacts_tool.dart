@@ -1,7 +1,21 @@
+import 'dart:convert';
+
 import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
+
+const List<String> _geminiSupportedInlineMimePrefixes = <String>[
+  'image/',
+  'audio/',
+  'video/',
+];
+const Set<String> _geminiSupportedInlineMimeTypes = <String>{'application/pdf'};
+const Set<String> _textLikeMimeTypes = <String>{
+  'application/csv',
+  'application/json',
+  'application/xml',
+};
 
 class LoadArtifactsTool extends BaseTool {
   LoadArtifactsTool()
@@ -103,13 +117,27 @@ When answering questions about these files, call `load_artifacts` with `artifact
 
 List<String> _coerceArtifactNames(Object? value) {
   if (value is List) {
-    return value.map<String>((dynamic item) => '$item').toList(growable: false);
+    final List<String> artifactNames = <String>[];
+    for (final dynamic item in value) {
+      final String name = '$item'.trim();
+      if (name.isEmpty || name == 'null') {
+        continue;
+      }
+      artifactNames.add(name);
+    }
+    return artifactNames;
   }
   return const <String>[];
 }
 
 Part _asSafePart(Part artifact, String artifactName) {
+  if (artifact.inlineData != null) {
+    return _asSafeInlineDataPart(artifact, artifactName);
+  }
   if (artifact.text != null && artifact.text!.isNotEmpty) {
+    return artifact.copyWith();
+  }
+  if (artifact.fileData != null) {
     return artifact.copyWith();
   }
   if (artifact.functionCall != null || artifact.functionResponse != null) {
@@ -117,10 +145,66 @@ Part _asSafePart(Part artifact, String artifactName) {
       '[Artifact $artifactName contains structured tool data and was loaded.]',
     );
   }
-  if (artifact.codeExecutionResult != null) {
+  if (artifact.codeExecutionResult != null || artifact.executableCode != null) {
     return Part.text(
       '[Artifact $artifactName contains code execution output and was loaded.]',
     );
   }
   return Part.text('[Artifact $artifactName was loaded.]');
+}
+
+Part _asSafeInlineDataPart(Part artifact, String artifactName) {
+  final InlineData inlineData = artifact.inlineData!;
+  if (_isInlineMimeTypeSupported(inlineData.mimeType)) {
+    return artifact.copyWith();
+  }
+
+  final String mimeType =
+      _normalizeMimeType(inlineData.mimeType) ?? 'application/octet-stream';
+  final List<int> data = inlineData.data;
+  if (data.isEmpty) {
+    return Part.text(
+      '[Artifact: $artifactName, type: $mimeType. No inline data was provided.]',
+    );
+  }
+
+  if (mimeType.startsWith('text/') || _textLikeMimeTypes.contains(mimeType)) {
+    return Part.text(utf8.decode(data, allowMalformed: true));
+  }
+
+  final double sizeKb = data.length / 1024;
+  return Part.text(
+    '[Binary artifact: $artifactName, type: $mimeType, size: ${sizeKb.toStringAsFixed(1)} KB. Content cannot be displayed inline.]',
+  );
+}
+
+String? _normalizeMimeType(String? mimeType) {
+  if (mimeType == null) {
+    return null;
+  }
+  final String trimmed = mimeType.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  final int delimiterIndex = trimmed.indexOf(';');
+  final String normalized = delimiterIndex == -1
+      ? trimmed
+      : trimmed.substring(0, delimiterIndex);
+  return normalized.trim().toLowerCase();
+}
+
+bool _isInlineMimeTypeSupported(String? mimeType) {
+  final String? normalized = _normalizeMimeType(mimeType);
+  if (normalized == null) {
+    return false;
+  }
+  if (_geminiSupportedInlineMimeTypes.contains(normalized)) {
+    return true;
+  }
+  for (final String prefix in _geminiSupportedInlineMimePrefixes) {
+    if (normalized.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
 }
