@@ -1,5 +1,50 @@
+import 'dart:collection';
+import 'dart:convert';
+
 import 'package:adk_dart/adk_dart.dart';
+import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
+
+class _RecordedHttpCall {
+  _RecordedHttpCall({
+    required this.uri,
+    required this.headers,
+    required this.body,
+  });
+
+  final Uri uri;
+  final Map<String, String> headers;
+  final String body;
+}
+
+class _QueuedHttpClient extends http.BaseClient {
+  _QueuedHttpClient({required List<http.Response> responses})
+    : _responses = Queue<http.Response>.from(responses);
+
+  final Queue<http.Response> _responses;
+  final List<_RecordedHttpCall> recordedCalls = <_RecordedHttpCall>[];
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (_responses.isEmpty) {
+      throw StateError('No queued response for ${request.url}.');
+    }
+    final http.Response response = _responses.removeFirst();
+    final List<int> bodyBytes = await request.finalize().toBytes();
+    recordedCalls.add(
+      _RecordedHttpCall(
+        uri: request.url,
+        headers: Map<String, String>.from(request.headers),
+        body: utf8.decode(bodyBytes),
+      ),
+    );
+    return http.StreamedResponse(
+      Stream<List<int>>.fromIterable(<List<int>>[utf8.encode(response.body)]),
+      response.statusCode,
+      headers: <String, String>{'content-type': 'application/json'},
+    );
+  }
+}
 
 class _NoopModel extends BaseLlm {
   _NoopModel() : super(model: 'noop');
@@ -193,6 +238,67 @@ void main() {
           .toList(growable: false);
 
       expect(eventTypes, <String?>['LLM_REQUEST']);
+    });
+
+    test('native insertAll sink batches rows with auth header', () async {
+      final _QueuedHttpClient httpClient = _QueuedHttpClient(
+        responses: <http.Response>[http.Response('{}', 200)],
+      );
+      final BigQueryInsertAllEventSink sink = BigQueryInsertAllEventSink(
+        projectId: 'project',
+        datasetId: 'dataset',
+        tableId: 'agent_events',
+        maxBatchSize: 2,
+        httpClient: httpClient,
+        accessTokenProvider: () async => 'token-123',
+      );
+
+      await sink.append(<String, Object?>{'event_type': 'A', 'value': 1});
+      await sink.append(<String, Object?>{'event_type': 'B', 'value': 2});
+      await sink.close();
+
+      expect(httpClient.recordedCalls, hasLength(1));
+      final _RecordedHttpCall call = httpClient.recordedCalls.single;
+      expect(call.uri.toString(), contains('/insertAll'));
+      expect(call.headers['authorization'], 'Bearer token-123');
+      final Map<String, Object?> payload = (jsonDecode(call.body) as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final List<Object?> rows = payload['rows'] as List<Object?>;
+      expect(rows, hasLength(2));
+      final Map<String, Object?> firstRow = (rows.first as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      expect((firstRow['json'] as Map)['event_type'], 'A');
+    });
+
+    test('plugin can use native insertAll sink', () async {
+      final _QueuedHttpClient httpClient = _QueuedHttpClient(
+        responses: <http.Response>[
+          http.Response('{}', 200),
+          http.Response('{}', 200),
+        ],
+      );
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        useBigQueryInsertAllSink: true,
+        accessToken: 'token-xyz',
+        httpClient: httpClient,
+        config: BigQueryLoggerConfig(batchSize: 1),
+      );
+
+      final InvocationContext context = _newInvocationContext(
+        invocationId: 'inv_native',
+      );
+      await plugin.beforeRunCallback(invocationContext: context);
+      await plugin.afterRunCallback(invocationContext: context);
+
+      expect(httpClient.recordedCalls.length, greaterThanOrEqualTo(2));
+      expect(
+        httpClient.recordedCalls.first.headers['authorization'],
+        'Bearer token-xyz',
+      );
     });
   });
 }

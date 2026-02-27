@@ -154,7 +154,9 @@ class LoopAgent extends BaseAgent {
 
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
-    throw UnsupportedError('This is not supported yet for LoopAgent.');
+    await for (final Event event in runAsyncImpl(context)) {
+      yield event;
+    }
   }
 
   bool get _hasNoIterationLimit => maxIterations == null || maxIterations == 0;

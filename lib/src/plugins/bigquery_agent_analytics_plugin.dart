@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import '../agents/base_agent.dart';
 import '../agents/callback_context.dart';
@@ -122,6 +125,149 @@ abstract class BigQueryEventSink {
   Future<void> flush();
 
   Future<void> close();
+}
+
+typedef BigQueryAccessTokenProvider = Future<String?> Function();
+
+class BigQueryInsertAllEventSink implements BigQueryEventSink {
+  BigQueryInsertAllEventSink({
+    required this.projectId,
+    required this.datasetId,
+    required this.tableId,
+    this.apiKey,
+    this.maxBatchSize = 100,
+    http.Client? httpClient,
+    BigQueryAccessTokenProvider? accessTokenProvider,
+  }) : _httpClient = httpClient ?? http.Client(),
+       _accessTokenProvider =
+           accessTokenProvider ?? _defaultBigQueryAccessTokenProvider,
+       _ownsHttpClient = httpClient == null;
+
+  final String projectId;
+  final String datasetId;
+  final String tableId;
+  final String? apiKey;
+  final int maxBatchSize;
+  final http.Client _httpClient;
+  final BigQueryAccessTokenProvider _accessTokenProvider;
+  final bool _ownsHttpClient;
+  final List<Map<String, Object?>> _pendingRows = <Map<String, Object?>>[];
+  bool _closed = false;
+
+  @override
+  Future<void> append(Map<String, Object?> row) async {
+    if (_closed) {
+      throw StateError('Cannot append rows after BigQuery sink is closed.');
+    }
+    _pendingRows.add(Map<String, Object?>.from(row));
+    if (_pendingRows.length >= maxBatchSize) {
+      await _flushBatch();
+    }
+  }
+
+  @override
+  Future<void> flush() async {
+    while (_pendingRows.isNotEmpty) {
+      await _flushBatch();
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) {
+      return;
+    }
+    await flush();
+    _closed = true;
+    if (_ownsHttpClient) {
+      _httpClient.close();
+    }
+  }
+
+  Future<void> _flushBatch() async {
+    if (_pendingRows.isEmpty) {
+      return;
+    }
+    final int batchLimit = maxBatchSize <= 0 ? 1 : maxBatchSize;
+    final int takeCount = _pendingRows.length < batchLimit
+        ? _pendingRows.length
+        : batchLimit;
+    final List<Map<String, Object?>> batch = _pendingRows
+        .sublist(0, takeCount)
+        .map((Map<String, Object?> row) => Map<String, Object?>.from(row))
+        .toList(growable: false);
+    _pendingRows.removeRange(0, takeCount);
+
+    final Uri uri = _buildInsertAllUri();
+    final String? accessToken = await _accessTokenProvider();
+    final Map<String, String> headers = <String, String>{
+      'content-type': 'application/json',
+      'accept': 'application/json',
+    };
+    if (accessToken != null && accessToken.isNotEmpty) {
+      headers[HttpHeaders.authorizationHeader] = 'Bearer $accessToken';
+    }
+
+    final List<Map<String, Object?>> rows = <Map<String, Object?>>[];
+    for (final Map<String, Object?> row in batch) {
+      rows.add(<String, Object?>{
+        'insertId': _newInsertId(),
+        'json': _toJsonSafeMap(row),
+      });
+    }
+    final Map<String, Object?> payload = <String, Object?>{
+      'kind': 'bigquery#tableDataInsertAllRequest',
+      'skipInvalidRows': false,
+      'ignoreUnknownValues': false,
+      'rows': rows,
+    };
+
+    final http.Response response = await _httpClient.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode >= 400) {
+      throw HttpException(
+        'BigQuery insertAll failed (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final String body = response.body.trim();
+    if (body.isEmpty) {
+      return;
+    }
+    final Object? decoded = jsonDecode(body);
+    if (decoded is! Map) {
+      return;
+    }
+    final Map<String, Object?> map = decoded.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+    final Object? insertErrors = map['insertErrors'];
+    if (insertErrors is List && insertErrors.isNotEmpty) {
+      throw StateError(
+        'BigQuery insertAll returned insert errors: $insertErrors',
+      );
+    }
+  }
+
+  Uri _buildInsertAllUri() {
+    final Uri base = Uri.parse(
+      'https://bigquery.googleapis.com/bigquery/v2/projects/'
+      '$projectId/datasets/$datasetId/tables/$tableId/insertAll',
+    );
+    final String? resolvedApiKey = apiKey?.trim();
+    if (resolvedApiKey == null || resolvedApiKey.isEmpty) {
+      return base;
+    }
+    return base.replace(
+      queryParameters: <String, String>{
+        ...base.queryParameters,
+        'key': resolvedApiKey,
+      },
+    );
+  }
 }
 
 class InMemoryBigQueryEventSink implements BigQueryEventSink {
@@ -325,8 +471,29 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     this.location = 'US',
     this.configOverrides,
     BigQueryEventSink? sink,
+    bool useBigQueryInsertAllSink = false,
+    String? accessToken,
+    String? apiKey,
+    http.Client? httpClient,
+    BigQueryAccessTokenProvider? accessTokenProvider,
   }) : config = config ?? BigQueryLoggerConfig(),
-       _sink = sink ?? InMemoryBigQueryEventSink(),
+       _sink =
+           sink ??
+           (useBigQueryInsertAllSink
+               ? BigQueryInsertAllEventSink(
+                   projectId: projectId,
+                   datasetId: datasetId,
+                   tableId: tableId ?? (config?.tableId ?? 'agent_events'),
+                   apiKey: apiKey,
+                   maxBatchSize: (config?.batchSize ?? 1) <= 0
+                       ? 1
+                       : (config?.batchSize ?? 1),
+                   httpClient: httpClient,
+                   accessTokenProvider: accessToken == null
+                       ? accessTokenProvider
+                       : () async => accessToken,
+                 )
+               : InMemoryBigQueryEventSink()),
        super(name: 'bigquery_agent_analytics') {
     this.tableId = tableId ?? this.config.tableId;
     _applyConfigOverrides(configOverrides);
@@ -1259,4 +1426,48 @@ void _putIfNotNull(Map<String, Object?> map, String key, Object? value) {
   if (value != null) {
     map[key] = value;
   }
+}
+
+Future<String?> _defaultBigQueryAccessTokenProvider() async {
+  final Map<String, String> environment = Platform.environment;
+  return environment['GOOGLE_OAUTH_ACCESS_TOKEN'] ??
+      environment['GOOGLE_ACCESS_TOKEN'] ??
+      environment['ACCESS_TOKEN'];
+}
+
+String _newInsertId() {
+  final int micros = DateTime.now().microsecondsSinceEpoch;
+  final int randomBits = Random().nextInt(1 << 20);
+  return '${micros.toRadixString(16)}${randomBits.toRadixString(16)}';
+}
+
+Map<String, Object?> _toJsonSafeMap(Map<String, Object?> source) {
+  final Map<String, Object?> converted = <String, Object?>{};
+  source.forEach((String key, Object? value) {
+    converted[key] = _toJsonSafeValue(value);
+  });
+  return converted;
+}
+
+Object? _toJsonSafeValue(Object? value) {
+  if (value == null || value is num || value is bool || value is String) {
+    return value;
+  }
+  if (value is DateTime) {
+    return value.toUtc().toIso8601String();
+  }
+  if (value is List) {
+    return value.map(_toJsonSafeValue).toList(growable: false);
+  }
+  if (value is Set) {
+    return value.map(_toJsonSafeValue).toList(growable: false);
+  }
+  if (value is Map) {
+    final Map<String, Object?> nested = <String, Object?>{};
+    value.forEach((Object? nestedKey, Object? nestedValue) {
+      nested['$nestedKey'] = _toJsonSafeValue(nestedValue);
+    });
+    return nested;
+  }
+  return '$value';
 }

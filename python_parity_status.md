@@ -515,7 +515,7 @@ Reference: `ref/adk-python/src/google/adk`
 
 - [x] built-in agent pack baseline parity assets bundled under `lib/src/cli/built_in_agents/**` (agent-builder assistant, tools, utils, prompt template, README)
 - [x] manifest closure: `python_to_dart_parity_manifest.md` now reports `missing: 0`
-- [ ] optional provider-native production integrations for memory/analytics paths (Vertex SDK + BigQuery Write API transports beyond current injectable parity surface)
+- [x] optional provider-native production integrations for memory/analytics paths via built-in REST transports (`VertexAiMemoryBankHttpApiClient`, `BigQueryInsertAllEventSink`) with env/token auth wiring while preserving in-memory fallbacks
 
 ## Notes
 

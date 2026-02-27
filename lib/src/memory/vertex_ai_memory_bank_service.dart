@@ -1,4 +1,8 @@
 import 'dart:collection';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import '../events/event.dart';
 import '../sessions/session.dart';
@@ -101,7 +105,345 @@ VertexAiMemoryBankApiClient _defaultMemoryBankApiClientFactory({
   String? location,
   String? apiKey,
 }) {
+  final bool hasProjectAndLocation =
+      (project?.isNotEmpty ?? false) && (location?.isNotEmpty ?? false);
+  if (hasProjectAndLocation || (apiKey?.isNotEmpty ?? false)) {
+    return VertexAiMemoryBankHttpApiClient(
+      project: project,
+      location: location,
+      apiKey: apiKey,
+    );
+  }
   return InMemoryVertexAiMemoryBankApiClient();
+}
+
+typedef VertexAiMemoryBankAccessTokenProvider = Future<String?> Function();
+
+typedef VertexAiMemoryBankUriBuilder =
+    Uri Function({
+      required String operation,
+      required String agentEngineId,
+      required String? project,
+      required String? location,
+      required String apiVersion,
+      required String? apiKey,
+    });
+
+class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
+  VertexAiMemoryBankHttpApiClient({
+    this.project,
+    this.location,
+    this.apiKey,
+    String apiVersion = 'v1beta1',
+    http.Client? httpClient,
+    VertexAiMemoryBankAccessTokenProvider? accessTokenProvider,
+    VertexAiMemoryBankUriBuilder? uriBuilder,
+  }) : _apiVersion = apiVersion,
+       _httpClient = httpClient ?? http.Client(),
+       _accessTokenProvider =
+           accessTokenProvider ?? _defaultVertexAiAccessTokenProvider,
+       _uriBuilder = uriBuilder ?? _defaultVertexAiMemoryUriBuilder;
+
+  final String? project;
+  final String? location;
+  final String? apiKey;
+  final String _apiVersion;
+  final http.Client _httpClient;
+  final VertexAiMemoryBankAccessTokenProvider _accessTokenProvider;
+  final VertexAiMemoryBankUriBuilder _uriBuilder;
+
+  @override
+  Future<void> generateFromEventTexts({
+    required String agentEngineId,
+    required String appName,
+    required String userId,
+    required List<String> eventTexts,
+    required Map<String, Object?> config,
+  }) async {
+    final List<Map<String, Object?>> events = eventTexts
+        .where((String text) => text.trim().isNotEmpty)
+        .map(
+          (String text) => <String, Object?>{
+            'content': <String, Object?>{
+              'parts': <Map<String, Object?>>[
+                <String, Object?>{'text': text},
+              ],
+            },
+          },
+        )
+        .toList(growable: false);
+    if (events.isEmpty) {
+      return;
+    }
+
+    await _postJson(
+      operation: 'generate',
+      agentEngineId: agentEngineId,
+      payload: <String, Object?>{
+        'scope': <String, Object?>{'app_name': appName, 'user_id': userId},
+        'direct_contents_source': <String, Object?>{'events': events},
+        'config': Map<String, Object?>.from(config),
+      },
+    );
+  }
+
+  @override
+  Future<void> createMemory({
+    required String agentEngineId,
+    required String appName,
+    required String userId,
+    required String fact,
+    required Map<String, Object?> config,
+  }) async {
+    await _postJson(
+      operation: 'create',
+      agentEngineId: agentEngineId,
+      payload: <String, Object?>{
+        'scope': <String, Object?>{'app_name': appName, 'user_id': userId},
+        'fact': fact,
+        'config': Map<String, Object?>.from(config),
+      },
+    );
+  }
+
+  @override
+  Future<void> generateFromDirectMemories({
+    required String agentEngineId,
+    required String appName,
+    required String userId,
+    required List<String> directMemories,
+    required Map<String, Object?> config,
+  }) async {
+    final List<Map<String, Object?>> normalizedDirectMemories = directMemories
+        .where((String fact) => fact.trim().isNotEmpty)
+        .map((String fact) => <String, Object?>{'fact': fact})
+        .toList(growable: false);
+    if (normalizedDirectMemories.isEmpty) {
+      return;
+    }
+
+    await _postJson(
+      operation: 'generate',
+      agentEngineId: agentEngineId,
+      payload: <String, Object?>{
+        'scope': <String, Object?>{'app_name': appName, 'user_id': userId},
+        'direct_memories_source': <String, Object?>{
+          'direct_memories': normalizedDirectMemories,
+        },
+        'config': Map<String, Object?>.from(config),
+      },
+    );
+  }
+
+  @override
+  Stream<VertexAiRetrievedMemory> retrieve({
+    required String agentEngineId,
+    required String appName,
+    required String userId,
+    required String query,
+  }) async* {
+    final Map<String, Object?> json = await _postJson(
+      operation: 'retrieve',
+      agentEngineId: agentEngineId,
+      payload: <String, Object?>{
+        'scope': <String, Object?>{'app_name': appName, 'user_id': userId},
+        'query': query,
+      },
+    );
+
+    for (final Map<String, Object?> memoryJson in _extractMemoryRows(json)) {
+      final String? fact = _readStringByKeys(memoryJson, const <String>[
+        'fact',
+        'memory_fact',
+        'text',
+      ]);
+      if (fact == null || fact.trim().isEmpty) {
+        continue;
+      }
+      final DateTime updateTime =
+          _readDateTimeByKeys(memoryJson, const <String>[
+            'update_time',
+            'updateTime',
+            'create_time',
+            'createTime',
+          ]) ??
+          DateTime.now().toUtc();
+      yield VertexAiRetrievedMemory(fact: fact, updateTime: updateTime);
+    }
+  }
+
+  Future<Map<String, Object?>> _postJson({
+    required String operation,
+    required String agentEngineId,
+    required Map<String, Object?> payload,
+  }) async {
+    final Uri uri = _uriBuilder(
+      operation: operation,
+      agentEngineId: agentEngineId,
+      project: project,
+      location: location,
+      apiVersion: _apiVersion,
+      apiKey: apiKey,
+    );
+    final String? accessToken = await _accessTokenProvider();
+    final Map<String, String> headers = <String, String>{
+      'content-type': 'application/json',
+      'accept': 'application/json',
+    };
+    if (accessToken != null && accessToken.isNotEmpty) {
+      headers[HttpHeaders.authorizationHeader] = 'Bearer $accessToken';
+    }
+
+    final http.Response response = await _httpClient.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode >= 400) {
+      throw HttpException(
+        'Vertex Memory Bank API call failed (${response.statusCode}): '
+        '${response.body}',
+      );
+    }
+    final String body = response.body.trim();
+    if (body.isEmpty) {
+      return <String, Object?>{};
+    }
+    final Object? decoded = jsonDecode(body);
+    if (decoded is! Map) {
+      return <String, Object?>{};
+    }
+    return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
+  }
+}
+
+Future<String?> _defaultVertexAiAccessTokenProvider() async {
+  final Map<String, String> environment = Platform.environment;
+  return environment['GOOGLE_OAUTH_ACCESS_TOKEN'] ??
+      environment['GOOGLE_ACCESS_TOKEN'] ??
+      environment['ACCESS_TOKEN'];
+}
+
+Uri _defaultVertexAiMemoryUriBuilder({
+  required String operation,
+  required String agentEngineId,
+  required String? project,
+  required String? location,
+  required String apiVersion,
+  required String? apiKey,
+}) {
+  final bool hasProjectAndLocation =
+      (project?.isNotEmpty ?? false) && (location?.isNotEmpty ?? false);
+  final String baseUrl = (location?.isNotEmpty ?? false)
+      ? 'https://$location-aiplatform.googleapis.com/'
+      : 'https://aiplatform.googleapis.com/';
+  final String engineResource = hasProjectAndLocation
+      ? 'projects/$project/locations/$location/reasoningEngines/$agentEngineId'
+      : 'reasoningEngines/$agentEngineId';
+
+  final String operationPath;
+  switch (operation) {
+    case 'generate':
+      operationPath = '$apiVersion/$engineResource:generateMemories';
+      break;
+    case 'create':
+      operationPath = '$apiVersion/$engineResource/memories';
+      break;
+    case 'retrieve':
+      operationPath = '$apiVersion/$engineResource:retrieveMemories';
+      break;
+    default:
+      throw ArgumentError.value(
+        operation,
+        'operation',
+        'Unsupported Vertex memory bank operation.',
+      );
+  }
+
+  final Uri uri = Uri.parse(baseUrl).resolve(operationPath);
+  final String? resolvedApiKey = apiKey?.trim();
+  if (resolvedApiKey == null || resolvedApiKey.isEmpty) {
+    return uri;
+  }
+  return uri.replace(
+    queryParameters: <String, String>{
+      ...uri.queryParameters,
+      'key': resolvedApiKey,
+    },
+  );
+}
+
+Iterable<Map<String, Object?>> _extractMemoryRows(
+  Map<String, Object?> json,
+) sync* {
+  final List<Object?> buckets = <Object?>[
+    json['memories'],
+    json['retrieved_memories'],
+    json['retrievedMemories'],
+    json['items'],
+    json['results'],
+  ];
+  for (final Object? bucket in buckets) {
+    if (bucket is! List) {
+      continue;
+    }
+    for (final Object? item in bucket) {
+      final Map<String, Object?> row = _asStringMap(item);
+      if (row.isEmpty) {
+        continue;
+      }
+      final Map<String, Object?> nestedMemory = _asStringMap(row['memory']);
+      if (nestedMemory.isNotEmpty) {
+        yield nestedMemory;
+      } else {
+        yield row;
+      }
+    }
+  }
+}
+
+Map<String, Object?> _asStringMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return <String, Object?>{};
+}
+
+String? _readStringByKeys(Map<String, Object?> json, List<String> keys) {
+  for (final String key in keys) {
+    final Object? value = json[key];
+    if (value == null) {
+      continue;
+    }
+    final String text = '$value';
+    if (text.trim().isNotEmpty) {
+      return text;
+    }
+  }
+  return null;
+}
+
+DateTime? _readDateTimeByKeys(Map<String, Object?> json, List<String> keys) {
+  for (final String key in keys) {
+    final Object? value = json[key];
+    if (value == null) {
+      continue;
+    }
+    if (value is num) {
+      final int millis = (value.toDouble() * 1000).round();
+      return DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true);
+    }
+    if (value is String && value.isNotEmpty) {
+      final DateTime? parsed = DateTime.tryParse(value);
+      if (parsed != null) {
+        return parsed.toUtc();
+      }
+    }
+  }
+  return null;
 }
 
 class InMemoryVertexAiMemoryBankApiClient

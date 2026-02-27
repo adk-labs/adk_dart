@@ -261,7 +261,7 @@ void main() {
       );
     });
 
-    test('runLive is not supported yet', () async {
+    test('runLive falls back to async execution', () async {
       final ParallelAgent root = ParallelAgent(
         name: 'root',
         subAgents: <BaseAgent>[_EmitAgent(name: 'child')],
@@ -271,10 +271,10 @@ void main() {
         resumable: false,
       );
 
-      await expectLater(
-        root.runLive(context).toList(),
-        throwsA(isA<UnsupportedError>()),
-      );
+      final List<Event> events = await root.runLive(context).toList();
+      expect(events, hasLength(1));
+      expect(events.single.author, 'child');
+      expect(events.single.branch, 'root.child');
     });
 
     test(
@@ -436,20 +436,20 @@ void main() {
       ]);
     });
 
-    test('runLive is not supported yet', () async {
+    test('runLive falls back to async execution', () async {
       final LoopAgent loop = LoopAgent(
         name: 'loop',
         subAgents: <BaseAgent>[_EmitAgent(name: 'worker')],
+        maxIterations: 1,
       );
       final InvocationContext context = await _newContext(
         agent: loop,
         resumable: false,
       );
 
-      await expectLater(
-        loop.runLive(context).toList(),
-        throwsA(isA<UnsupportedError>()),
-      );
+      final List<Event> events = await loop.runLive(context).toList();
+      expect(events, hasLength(1));
+      expect(events.single.author, 'worker');
     });
   });
 }
