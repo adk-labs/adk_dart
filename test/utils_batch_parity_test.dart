@@ -81,6 +81,30 @@ items:
       expect(map['items'], isA<List>());
     });
 
+    test('loadYamlFile parses block scalar multiline strings', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_yaml_block_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+      final File file = File('${dir.path}/sample.yaml');
+      await file.writeAsString('''
+name: root
+description: |
+  line one
+  line two
+''');
+
+      final Object? loaded = loadYamlFile(file.path);
+      expect(loaded, isA<Map>());
+      final Map map = loaded as Map;
+      expect(map['name'], 'root');
+      expect(map['description'], 'line one\nline two\n');
+    });
+
     test('dumpPydanticToYaml writes and round-trips map data', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_yaml_dump_',

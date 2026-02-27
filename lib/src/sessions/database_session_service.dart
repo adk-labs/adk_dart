@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import '../events/event.dart';
 import 'base_session_service.dart';
 import 'in_memory_session_service.dart';
@@ -21,10 +19,10 @@ class DatabaseSessionService extends BaseSessionService {
     if (dbUrl == ':memory:' || dbUrl.startsWith('memory:')) {
       return InMemorySessionService();
     }
-    final String encoded = base64Url
-        .encode(utf8.encode(dbUrl))
-        .replaceAll('=', '');
-    return SqliteSessionService('.adk/session_dbs/$encoded.json');
+    throw UnsupportedError(
+      'Unsupported database url: $dbUrl. '
+      'Supported urls are sqlite:, sqlite+aiosqlite:, :memory:, and memory:.',
+    );
   }
 
   @override

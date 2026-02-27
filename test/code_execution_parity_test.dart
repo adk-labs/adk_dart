@@ -78,10 +78,15 @@ class _RecordedDockerProcessRunner {
 }
 
 class _FakeAgentEngineSandboxClient implements AgentEngineSandboxClient {
+  _FakeAgentEngineSandboxClient({
+    this.jsonPayload = '{"stdout":"remote ok","stderr":"remote warn"}',
+  });
+
   int createSandboxCalls = 0;
   String? lastAgentEngineResourceName;
   String? lastSandboxResourceName;
   Map<String, Object?>? lastInputData;
+  final String jsonPayload;
 
   @override
   Future<String> createSandbox({
@@ -103,7 +108,7 @@ class _FakeAgentEngineSandboxClient implements AgentEngineSandboxClient {
       outputs: <AgentEngineSandboxOutput>[
         AgentEngineSandboxOutput(
           mimeType: 'application/json',
-          data: utf8.encode('{"stdout":"remote ok","stderr":"remote warn"}'),
+          data: utf8.encode(jsonPayload),
         ),
         AgentEngineSandboxOutput(
           mimeType: 'image/png',
@@ -747,6 +752,33 @@ void main() {
         expect(result.outputFiles, hasLength(1));
         expect(result.outputFiles.first.name, 'plot.png');
         expect(result.outputFiles.first.mimeType, 'image/png');
+      },
+    );
+
+    test(
+      'agent engine sandbox executor prefers msg_out/msg_err in json payload',
+      () async {
+        final InvocationContext invocationContext =
+            await _buildInvocationContext();
+        final _FakeAgentEngineSandboxClient
+        client = _FakeAgentEngineSandboxClient(
+          jsonPayload:
+              '{"msg_out":"remote msg","msg_err":"remote issue","stdout":"legacy out","stderr":"legacy err"}',
+        );
+        final AgentEngineSandboxCodeExecutor executor =
+            AgentEngineSandboxCodeExecutor(
+              agentEngineResourceName:
+                  'projects/p1/locations/us-central1/reasoningEngines/77',
+              sandboxClient: client,
+            );
+
+        final CodeExecutionResult result = await executor.executeCode(
+          invocationContext,
+          CodeExecutionInput(code: 'print("remote")'),
+        );
+
+        expect(result.stdout, 'remote msg');
+        expect(result.stderr, 'remote issue');
       },
     );
 

@@ -86,6 +86,47 @@ void main() {
       expect(responses.single.usageMetadata, isA<Map<String, Object?>>());
     });
 
+    test('throws when API key is missing', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        nonStreamResponse: <String, Object?>{
+          'candidates': <Object?>[
+            <String, Object?>{
+              'content': <String, Object?>{
+                'role': 'model',
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'should-not-be-used'},
+                ],
+              },
+            },
+          ],
+        },
+      );
+      final Gemini model = Gemini(
+        restTransport: transport,
+        environment: const <String, String>{},
+      );
+
+      await expectLater(
+        model
+            .generateContent(
+              LlmRequest(
+                model: 'gemini-2.5-flash',
+                contents: <Content>[Content.userText('hello')],
+              ),
+            )
+            .toList(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => '${error.message}',
+            'message',
+            contains('GEMINI_API_KEY or GOOGLE_API_KEY'),
+          ),
+        ),
+      );
+      expect(transport.generateContentCallCount, 0);
+      expect(transport.streamGenerateContentCallCount, 0);
+    });
+
     test(
       'stream requests emit partial responses from REST transport',
       () async {

@@ -98,13 +98,16 @@ Future<bool> runCompactionForSlidingWindow({
   }
 
   if (!skipTokenCompaction) {
-    await runCompactionForTokenThresholdConfig(
+    final bool tokenCompacted = await runCompactionForTokenThresholdConfig(
       config: config,
       session: session,
       sessionService: sessionService,
       agentName: app.rootAgent.name,
       currentBranch: null,
     );
+    if (tokenCompacted) {
+      return true;
+    }
   }
 
   if (!hasSlidingWindowConfig(config)) {

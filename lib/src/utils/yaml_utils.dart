@@ -229,6 +229,15 @@ class _SimpleYamlDecoder {
         } else {
           map[key] = <String, Object?>{};
         }
+      } else if (_isLiteralBlockScalarIndicator(rawValue)) {
+        final _ParseResult literal = _parseLiteralBlockScalar(
+          lines,
+          cursor,
+          indent,
+          rawValue,
+        );
+        map[key] = literal.value;
+        cursor = literal.nextIndex;
       } else {
         map[key] = _parseScalar(rawValue);
       }
@@ -265,6 +274,18 @@ class _SimpleYamlDecoder {
         continue;
       }
 
+      if (_isLiteralBlockScalarIndicator(itemText)) {
+        final _ParseResult literal = _parseLiteralBlockScalar(
+          lines,
+          cursor,
+          line.indent,
+          itemText,
+        );
+        values.add(literal.value);
+        cursor = literal.nextIndex;
+        continue;
+      }
+
       final int split = itemText.indexOf(':');
       if (split > 0) {
         final String key = itemText.substring(0, split).trim();
@@ -282,6 +303,15 @@ class _SimpleYamlDecoder {
           } else {
             itemMap[key] = <String, Object?>{};
           }
+        } else if (_isLiteralBlockScalarIndicator(rawValue)) {
+          final _ParseResult literal = _parseLiteralBlockScalar(
+            lines,
+            cursor,
+            line.indent + 2,
+            rawValue,
+          );
+          itemMap[key] = literal.value;
+          cursor = literal.nextIndex;
         } else {
           itemMap[key] = _parseScalar(rawValue);
         }
@@ -306,6 +336,62 @@ class _SimpleYamlDecoder {
       values.add(_parseScalar(itemText));
     }
     return _ParseResult(values, cursor);
+  }
+
+  bool _isLiteralBlockScalarIndicator(String text) {
+    if (!text.startsWith('|')) {
+      return false;
+    }
+    final String suffix = text.substring(1);
+    for (final int codeUnit in suffix.codeUnits) {
+      final bool isDigit = codeUnit >= 48 && codeUnit <= 57;
+      if (!isDigit && codeUnit != 43 && codeUnit != 45) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  _ParseResult _parseLiteralBlockScalar(
+    List<_YamlLine> lines,
+    int index,
+    int parentIndent,
+    String indicator,
+  ) {
+    if (index >= lines.length || lines[index].indent <= parentIndent) {
+      return _ParseResult('', index);
+    }
+
+    final int blockIndent = lines[index].indent;
+    final List<String> values = <String>[];
+    int cursor = index;
+    while (cursor < lines.length) {
+      final _YamlLine line = lines[cursor];
+      if (line.indent <= parentIndent) {
+        break;
+      }
+      final int extraIndent = line.indent - blockIndent;
+      final String prefix = extraIndent > 0 ? ' ' * extraIndent : '';
+      values.add('$prefix${line.text}');
+      cursor += 1;
+    }
+
+    String result = values.join('\n');
+    final String chomp = _blockScalarChompMode(indicator);
+    if (values.isNotEmpty && chomp != '-') {
+      result = '$result\n';
+    }
+    return _ParseResult(result, cursor);
+  }
+
+  String _blockScalarChompMode(String indicator) {
+    if (indicator.contains('-')) {
+      return '-';
+    }
+    if (indicator.contains('+')) {
+      return '+';
+    }
+    return '';
   }
 
   Object? _parseScalar(String text) {

@@ -6,6 +6,7 @@ import '../../events/event.dart';
 import '../../models/llm_request.dart';
 import '../../tools/set_model_response_tool.dart';
 import '../../types/content.dart';
+import '../../utils/output_schema_utils.dart';
 import 'base_llm_flow.dart';
 
 /// Handles output schema when the agent also has tools.
@@ -16,11 +17,13 @@ class OutputSchemaRequestProcessor extends BaseLlmRequestProcessor {
     LlmRequest llmRequest,
   ) async* {
     final LlmAgent agent = invocationContext.agent as LlmAgent;
-    if (agent.outputSchema == null || agent.tools.isEmpty) {
+    if (agent.outputSchema == null ||
+        agent.tools.isEmpty ||
+        canUseOutputSchemaWithTools(agent.canonicalModel)) {
       return;
     }
 
-    // Dart currently assumes tools+response schema needs set_model_response.
+    // Preserve Python parity fallback for unsupported model+tool combinations.
     final SetModelResponseTool setResponseTool = SetModelResponseTool(
       agent.outputSchema!,
     );

@@ -28,6 +28,23 @@ class _CaptureModel extends BaseLlm {
   }
 }
 
+class _CaptureGeminiModel extends BaseLlm {
+  _CaptureGeminiModel() : super(model: 'gemini-2.5-flash');
+
+  int callCount = 0;
+  LlmRequest? lastRequest;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    callCount += 1;
+    lastRequest = request;
+    yield LlmResponse(content: Content.modelText('native schema response'));
+  }
+}
+
 class _OutputSchemaModel extends BaseLlm {
   _OutputSchemaModel() : super(model: 'output-schema-model');
 
@@ -406,6 +423,74 @@ void main() {
         isEmpty,
       );
     },
+  );
+
+  test(
+    'output schema with tools uses native response schema on Vertex Gemini 2+',
+    () async {
+      String noopTool({required String query}) => query;
+
+      final _CaptureGeminiModel model = _CaptureGeminiModel();
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        outputSchema: <String, dynamic>{
+          'type': 'object',
+          'properties': <String, dynamic>{
+            'answer': <String, dynamic>{'type': 'string'},
+          },
+          'required': <String>['answer'],
+        },
+        tools: <Object>[FunctionTool(func: noopTool, name: 'noop_tool')],
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 's_output_schema_vertex_native',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('answer this'),
+        ),
+      );
+
+      expect(model.callCount, 1);
+      final LlmRequest request = model.lastRequest!;
+      expect(request.config.responseSchema, isNotNull);
+      expect(request.config.responseMimeType, 'application/json');
+
+      final List<String> toolNames =
+          request.config.tools
+              ?.expand(
+                (ToolDeclaration declaration) =>
+                    declaration.functionDeclarations,
+              )
+              .map((FunctionDeclaration declaration) => declaration.name)
+              .toList() ??
+          <String>[];
+      expect(toolNames, contains('noop_tool'));
+      expect(toolNames, isNot(contains('set_model_response')));
+
+      final String systemInstruction = request.config.systemInstruction ?? '';
+      expect(systemInstruction, isNot(contains('set_model_response')));
+      expect(
+        events.any(
+          (Event event) => event.getFunctionCalls().any(
+            (FunctionCall call) => call.name == 'set_model_response',
+          ),
+        ),
+        isFalse,
+      );
+    },
+    skip: !isEnvEnabled('GOOGLE_GENAI_USE_VERTEXAI')
+        ? 'requires GOOGLE_GENAI_USE_VERTEXAI=true'
+        : false,
   );
 
   test(

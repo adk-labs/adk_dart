@@ -201,5 +201,47 @@ void main() {
         expect(setResult.toJson()['eval_set_id'], 'set1');
       },
     );
+
+    test('eval metric result supports python metric json contract', () {
+      final EvalMetricResult passedResult = EvalMetricResult.fromJson(
+        <String, Object?>{
+          'metric_name': 'finalResponseExactMatch',
+          'score': 1.0,
+          'eval_status': 'PASSED',
+          'details': <String, Object?>{'detail': 'python detail'},
+        },
+      );
+
+      expect(passedResult.metric, EvalMetric.finalResponseExactMatch);
+      expect(passedResult.evalStatus, EvalStatus.passed);
+      expect(passedResult.passed, isTrue);
+      expect(passedResult.detail, 'python detail');
+      expect(passedResult.toJson(), <String, Object?>{
+        'metric_name': 'finalResponseExactMatch',
+        'score': 1.0,
+        'eval_status': 'passed',
+        'details': <String, Object?>{'detail': 'python detail'},
+      });
+
+      final EvalMetricResult notEvaluatedResult =
+          EvalMetricResult.fromJson(<String, Object?>{
+            'metric_name': 'finalResponseContains',
+            'score': 0.0,
+            'eval_status': 'not_evaluated',
+            'details': <String, Object?>{},
+          });
+      expect(notEvaluatedResult.evalStatus, EvalStatus.notEvaluated);
+      expect(notEvaluatedResult.toJson()['eval_status'], 'not_evaluated');
+
+      final EvalMetricResult legacyResult =
+          EvalMetricResult.fromJson(<String, Object?>{
+            'metric': 'finalResponseContains',
+            'score': 0.5,
+            'passed': false,
+            'detail': 'legacy detail',
+          });
+      expect(legacyResult.evalStatus, EvalStatus.failed);
+      expect(legacyResult.detail, 'legacy detail');
+    });
   });
 }

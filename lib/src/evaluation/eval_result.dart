@@ -28,32 +28,49 @@ class EvalMetricResult {
   EvalMetricResult({
     required this.metric,
     required this.score,
-    this.passed = false,
+    bool passed = false,
+    EvalStatus? evalStatus,
     this.detail,
-  });
+  }) : evalStatus =
+           evalStatus ?? (passed ? EvalStatus.passed : EvalStatus.failed),
+       passed = evalStatus == null ? passed : evalStatus == EvalStatus.passed;
 
   final EvalMetric metric;
   final double score;
   final bool passed;
+  final EvalStatus evalStatus;
   final String? detail;
 
   factory EvalMetricResult.fromJson(Map<String, Object?> json) {
-    final String metricName = (json['metric'] ?? '').toString();
+    final String metricName =
+        (json['metric_name'] ?? json['metricName'] ?? json['metric'] ?? '')
+            .toString();
     final EvalMetric metric = _evalMetricFromString(metricName);
+    final bool? rawPassed = json['passed'] as bool?;
+    final Object? rawEvalStatus = json['eval_status'] ?? json['evalStatus'];
+    final EvalStatus parsedEvalStatus = rawEvalStatus == null
+        ? (rawPassed == null
+              ? EvalStatus.notEvaluated
+              : (rawPassed ? EvalStatus.passed : EvalStatus.failed))
+        : _evalStatusFromString(rawEvalStatus.toString());
     return EvalMetricResult(
       metric: metric,
       score: _asDouble(json['score']),
-      passed: (json['passed'] as bool?) ?? false,
-      detail: json['detail'] as String?,
+      evalStatus: parsedEvalStatus,
+      detail: _metricDetailFromJson(json),
     );
   }
 
   Map<String, Object?> toJson() {
+    final Map<String, Object?> details = <String, Object?>{};
+    if (detail != null) {
+      details['detail'] = detail;
+    }
     return <String, Object?>{
-      'metric': metric.name,
+      'metric_name': metric.name,
       'score': score,
-      'passed': passed,
-      if (detail != null) 'detail': detail,
+      'eval_status': _evalStatusToJson(evalStatus),
+      'details': details,
     };
   }
 }
@@ -188,8 +205,10 @@ class EvalSetResult {
 }
 
 EvalMetric _evalMetricFromString(String name) {
+  final String normalizedName = _normalizeSnakeLike(name);
   for (final EvalMetric value in EvalMetric.values) {
-    if (value.name == name) {
+    if (value.name == name ||
+        _normalizeSnakeLike(value.name) == normalizedName) {
       return value;
     }
   }
@@ -197,12 +216,27 @@ EvalMetric _evalMetricFromString(String name) {
 }
 
 EvalStatus _evalStatusFromString(String value) {
-  for (final EvalStatus status in EvalStatus.values) {
-    if (status.name == value) {
-      return status;
-    }
+  final String normalized = _normalizeSnakeLike(value);
+  switch (normalized) {
+    case 'passed':
+      return EvalStatus.passed;
+    case 'failed':
+      return EvalStatus.failed;
+    case 'not_evaluated':
+      return EvalStatus.notEvaluated;
   }
   return EvalStatus.notEvaluated;
+}
+
+String _evalStatusToJson(EvalStatus status) {
+  switch (status) {
+    case EvalStatus.passed:
+      return 'passed';
+    case EvalStatus.failed:
+      return 'failed';
+    case EvalStatus.notEvaluated:
+      return 'not_evaluated';
+  }
 }
 
 double _asDouble(Object? value) {
@@ -210,6 +244,41 @@ double _asDouble(Object? value) {
     return value.toDouble();
   }
   return 0;
+}
+
+String? _metricDetailFromJson(Map<String, Object?> json) {
+  final Object? rawDetails = json.containsKey('details')
+      ? json['details']
+      : json['detail'];
+  if (rawDetails == null) {
+    return null;
+  }
+  if (rawDetails is String) {
+    return rawDetails;
+  }
+  if (rawDetails is Map) {
+    final Object? nestedDetail = rawDetails['detail'];
+    if (nestedDetail is String) {
+      return nestedDetail;
+    }
+    return null;
+  }
+  return '$rawDetails';
+}
+
+String _normalizeSnakeLike(String value) {
+  final String trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  final String withUnderscores = trimmed.replaceAllMapped(
+    RegExp(r'([a-z0-9])([A-Z])'),
+    (Match match) => '${match.group(1)}_${match.group(2)}',
+  );
+  return withUnderscores
+      .replaceAll('-', '_')
+      .replaceAll(' ', '_')
+      .toLowerCase();
 }
 
 Map<String, Object?> _castJsonMap(Map map) {

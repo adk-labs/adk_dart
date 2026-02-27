@@ -8,7 +8,12 @@ Future<int> runAdkCli(List<String> args, {IOSink? outSink, IOSink? errSink}) {
   return dev_cli.runAdkCli(args, outSink: outSink, errSink: errSink);
 }
 
-Future<int> main(List<String> args, {IOSink? outSink, IOSink? errSink}) async {
+Future<int> main(
+  List<String> args, {
+  IOSink? outSink,
+  IOSink? errSink,
+  Map<String, String>? environment,
+}) async {
   if (args.isEmpty) {
     return runAdkCli(args, outSink: outSink, errSink: errSink);
   }
@@ -22,10 +27,14 @@ Future<int> main(List<String> args, {IOSink? outSink, IOSink? errSink}) async {
       return runAdkCli(args, outSink: outSink, errSink: errSink);
     case 'deploy':
       final IOSink out = outSink ?? stdout;
-      final String project = resolveProject(
-        null,
-        env: <String, String>{'GOOGLE_CLOUD_PROJECT': 'demo-project'},
-      );
+      final IOSink err = errSink ?? stderr;
+      final String project;
+      try {
+        project = resolveProject(null, env: environment);
+      } on StateError catch (error) {
+        err.writeln(error.message);
+        return 1;
+      }
       final List<String> preview = toCloudRun(
         DeployCommand(
           service: 'adk-service',

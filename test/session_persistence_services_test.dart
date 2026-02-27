@@ -83,6 +83,13 @@ void main() {
       expect(loaded, isNotNull);
       expect(loaded!.id, session.id);
     });
+
+    test('fails fast for unsupported database URLs', () {
+      expect(
+        () => DatabaseSessionService('postgresql://localhost/mydb'),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
   });
 
   group('VertexAiSessionService', () {

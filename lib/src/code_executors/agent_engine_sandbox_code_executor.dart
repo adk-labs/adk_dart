@@ -162,8 +162,16 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
           final Map<String, Object?> jsonOutput = _decodeJsonPayload(
             output.data,
           );
-          stdout = _asString(jsonOutput['stdout']);
-          stderr = _asString(jsonOutput['stderr']);
+          stdout = _readJsonStreamField(
+            jsonOutput,
+            preferredKey: 'msg_out',
+            fallbackKey: 'stdout',
+          );
+          stderr = _readJsonStreamField(
+            jsonOutput,
+            preferredKey: 'msg_err',
+            fallbackKey: 'stderr',
+          );
           continue;
         }
 
@@ -248,6 +256,17 @@ Map<String, Object?> _decodeJsonPayload(Object value) {
     // Ignore parsing errors; return empty map.
   }
   return <String, Object?>{};
+}
+
+String _readJsonStreamField(
+  Map<String, Object?> payload, {
+  required String preferredKey,
+  required String fallbackKey,
+}) {
+  if (payload.containsKey(preferredKey)) {
+    return _asString(payload[preferredKey]);
+  }
+  return _asString(payload[fallbackKey]);
 }
 
 String? _getOutputFileName(Map<String, Object?>? metadata) {

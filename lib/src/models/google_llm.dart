@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer' as developer;
 import 'dart:io';
 
 import '../types/content.dart';
@@ -118,46 +117,16 @@ class Gemini extends BaseLlm {
 
     try {
       final String? apiKey = _resolveApiKey();
+      final bool requiresApiKey =
+          !useInteractionsApi || interactionsInvoker == null;
+      if (requiresApiKey && (apiKey == null || apiKey.isEmpty)) {
+        throw StateError(
+          'Gemini.generateContent requires GEMINI_API_KEY or GOOGLE_API_KEY to be set.',
+        );
+      }
       final HttpRetryOptions? resolvedRetryOptions = _resolveRetryOptions(
         requestRetryOptions: prepared.config.httpOptions?.retryOptions,
       );
-
-      if (useInteractionsApi &&
-          interactionsInvoker == null &&
-          (apiKey == null || apiKey.isEmpty)) {
-        developer.log(
-          'Warning: GEMINI_API_KEY not set. Using mock Gemini response.',
-          name: 'adk_dart.models',
-        );
-        final String text = _defaultText(prepared);
-        final LlmResponse response = LlmResponse(
-          modelVersion: prepared.model,
-          content: Content.modelText(text),
-          partial: stream ? false : null,
-          turnComplete: true,
-        );
-        yield response;
-        return;
-      }
-
-      if (!useInteractionsApi && (apiKey == null || apiKey.isEmpty)) {
-        developer.log(
-          'Warning: GEMINI_API_KEY not set. Using mock Gemini response.',
-          name: 'adk_dart.models',
-        );
-        final String text = _defaultText(prepared);
-        final LlmResponse response = LlmResponse(
-          modelVersion: prepared.model,
-          content: Content.modelText(text),
-          partial: stream ? false : null,
-          turnComplete: true,
-        );
-        if (cacheMetadata != null) {
-          cacheManager.populateCacheMetadataInResponse(response, cacheMetadata);
-        }
-        yield response;
-        return;
-      }
 
       if (useInteractionsApi) {
         await for (final LlmResponse response in generateContentViaInteractions(
@@ -294,22 +263,6 @@ class Gemini extends BaseLlm {
       apiBackend: apiBackend,
       modelVersion: prepared.model,
     );
-  }
-
-  String _defaultText(LlmRequest request) {
-    for (int i = request.contents.length - 1; i >= 0; i -= 1) {
-      final Content content = request.contents[i];
-      if (content.role != 'user') {
-        continue;
-      }
-      for (int j = content.parts.length - 1; j >= 0; j -= 1) {
-        final String? text = content.parts[j].text;
-        if (text != null && text.isNotEmpty) {
-          return 'Gemini response: $text';
-        }
-      }
-    }
-    return 'Gemini response.';
   }
 
   String? _resolveApiKey() {
