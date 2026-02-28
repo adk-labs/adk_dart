@@ -613,5 +613,89 @@ void main() {
       expect(parsed.finishReason, 'MAX_TOKENS');
       expect(parsed.content?.parts.single.text, 'ok');
     });
+
+    test('enforces strict OpenAI schema for structured outputs', () {
+      final LlmRequest request = LlmRequest(
+        model: 'openai/gpt-4o-mini',
+        contents: <Content>[Content.userText('hello')],
+        config: GenerateContentConfig(
+          responseJsonSchema: <String, Object?>{
+            'title': 'MySchema',
+            'type': 'object',
+            'properties': <String, Object?>{
+              'nested': <String, Object?>{
+                'type': 'object',
+                'properties': <String, Object?>{
+                  'value': <String, Object?>{'type': 'string'},
+                },
+              },
+              'refProp': <String, Object?>{
+                r'$ref': r'#/$defs/Inner',
+                'description': 'should be removed',
+              },
+            },
+            r'$defs': <String, Object?>{
+              'Inner': <String, Object?>{
+                'type': 'object',
+                'properties': <String, Object?>{
+                  'id': <String, Object?>{'type': 'integer'},
+                },
+              },
+            },
+          },
+        ),
+      );
+
+      final Map<String, Object?> payload = LiteLlm.buildPayload(
+        request,
+        stream: false,
+      );
+      final Map<String, Object?> responseFormat =
+          payload['response_format'] as Map<String, Object?>;
+      expect(responseFormat['type'], 'json_schema');
+      final Map<String, Object?> jsonSchema =
+          responseFormat['json_schema'] as Map<String, Object?>;
+      expect(jsonSchema['name'], 'MySchema');
+      expect(jsonSchema['strict'], isTrue);
+
+      final Map<String, Object?> schema =
+          jsonSchema['schema'] as Map<String, Object?>;
+      expect(schema['additionalProperties'], isFalse);
+      expect(schema['required'], <String>['nested', 'refProp']);
+
+      final Map<String, Object?> nested =
+          (schema['properties'] as Map<String, Object?>)['nested']
+              as Map<String, Object?>;
+      expect(nested['additionalProperties'], isFalse);
+      expect(nested['required'], <String>['value']);
+
+      final Map<String, Object?> refProp =
+          (schema['properties'] as Map<String, Object?>)['refProp']
+              as Map<String, Object?>;
+      expect(refProp.keys, <String>[r'$ref']);
+    });
+
+    test('uses gemini response_schema format for gemini models', () {
+      final LlmRequest request = LlmRequest(
+        model: 'gemini/gemini-2.5-pro',
+        contents: <Content>[Content.userText('hello')],
+        config: GenerateContentConfig(
+          responseJsonSchema: <String, Object?>{
+            'type': 'object',
+            'properties': <String, Object?>{
+              'answer': <String, Object?>{'type': 'string'},
+            },
+          },
+        ),
+      );
+      final Map<String, Object?> payload = LiteLlm.buildPayload(
+        request,
+        stream: false,
+      );
+      final Map<String, Object?> responseFormat =
+          payload['response_format'] as Map<String, Object?>;
+      expect(responseFormat['type'], 'json_object');
+      expect(responseFormat['response_schema'], isA<Map<String, Object?>>());
+    });
   });
 }

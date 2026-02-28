@@ -60,6 +60,9 @@ Map<String, dynamic> sanitizeSchemaFormatsForGemini(
           .map((dynamic item) => sanitize(item, preserveNull: preserveNull))
           .toList(growable: false);
     }
+    if (node is bool) {
+      return <String, dynamic>{'type': 'object'};
+    }
     if (node is! Map) {
       return node;
     }

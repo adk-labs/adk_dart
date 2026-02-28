@@ -77,5 +77,23 @@ void main() {
       expect(item['type'], 'string');
       expect(item['format'], 'enum');
     });
+
+    test('gemini schema util handles boolean schemas without crashing', () {
+      final Map<String, dynamic> schema = <String, dynamic>{
+        'type': 'object',
+        'properties': <String, dynamic>{'allow_any': true, 'reject_all': false},
+      };
+      final Map<String, dynamic> converted = toGeminiSchema(schema);
+      final Map<String, dynamic> properties =
+          converted['properties'] as Map<String, dynamic>;
+      expect(
+        (properties['allow_any'] as Map<String, dynamic>)['type'],
+        'object',
+      );
+      expect(
+        (properties['reject_all'] as Map<String, dynamic>)['type'],
+        'object',
+      );
+    });
   });
 }

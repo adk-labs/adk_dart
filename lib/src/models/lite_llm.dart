@@ -90,11 +90,14 @@ class LiteLlm extends BaseLlm {
     if (request.config.stopSequences.isNotEmpty) {
       payload['stop'] = request.config.stopSequences;
     }
-    if (request.config.responseJsonSchema != null) {
-      payload['response_format'] = <String, Object?>{
-        'type': 'json_schema',
-        'json_schema': request.config.responseJsonSchema!,
-      };
+    final Map<String, Object?>? responseJsonSchema = _asObjectMap(
+      request.config.responseJsonSchema,
+    );
+    if (responseJsonSchema != null) {
+      payload['response_format'] = _toLiteLlmResponseFormat(
+        _deepCopyJsonMap(responseJsonSchema),
+        request.model ?? '',
+      );
     } else if (request.config.responseMimeType == 'application/json') {
       payload['response_format'] = const <String, Object?>{
         'type': 'json_object',
@@ -286,4 +289,133 @@ Map<String, Object?> _asMap(Object? value) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
   }
   return <String, Object?>{};
+}
+
+Map<String, Object?> _toLiteLlmResponseFormat(
+  Map<String, Object?> responseSchema,
+  String model,
+) {
+  final String? schemaType = responseSchema['type'] is String
+      ? '${responseSchema['type']}'.toLowerCase()
+      : null;
+  if (schemaType == 'json_object' || schemaType == 'json_schema') {
+    return responseSchema;
+  }
+
+  if (_isLiteLlmGeminiModel(model)) {
+    return <String, Object?>{
+      'type': 'json_object',
+      'response_schema': responseSchema,
+    };
+  }
+
+  _enforceStrictOpenAiSchema(responseSchema);
+  final String schemaName =
+      responseSchema['title'] is String &&
+          (responseSchema['title'] as String).isNotEmpty
+      ? responseSchema['title'] as String
+      : 'response';
+  return <String, Object?>{
+    'type': 'json_schema',
+    'json_schema': <String, Object?>{
+      'name': schemaName,
+      'strict': true,
+      'schema': responseSchema,
+    },
+  };
+}
+
+bool _isLiteLlmGeminiModel(String model) {
+  final String normalized = model.toLowerCase();
+  return normalized.startsWith('gemini/gemini-') ||
+      normalized.startsWith('vertex_ai/gemini-');
+}
+
+void _enforceStrictOpenAiSchema(Map<String, Object?> schema) {
+  if (schema.containsKey(r'$ref')) {
+    schema.removeWhere((String key, Object? _) => key != r'$ref');
+    return;
+  }
+
+  final Object? schemaType = schema['type'];
+  final Map<String, Object?>? properties = _asObjectMap(schema['properties']);
+  final bool isObject =
+      schemaType == 'object' ||
+      (schemaType is List && schemaType.contains('object'));
+  if (isObject && properties != null) {
+    schema['additionalProperties'] = false;
+    final List<String> required = properties.keys.toList()..sort();
+    schema['required'] = required;
+  }
+
+  final Map<String, Object?>? defs = _asObjectMap(schema[r'$defs']);
+  if (defs != null) {
+    for (final MapEntry<String, Object?> entry in defs.entries) {
+      final Map<String, Object?>? defSchema = _asObjectMap(entry.value);
+      if (defSchema != null) {
+        defs[entry.key] = defSchema;
+        _enforceStrictOpenAiSchema(defSchema);
+      }
+    }
+  }
+
+  if (properties != null) {
+    for (final MapEntry<String, Object?> entry in properties.entries) {
+      final Map<String, Object?>? propertySchema = _asObjectMap(entry.value);
+      if (propertySchema != null) {
+        properties[entry.key] = propertySchema;
+        _enforceStrictOpenAiSchema(propertySchema);
+      }
+    }
+  }
+
+  for (final String key in <String>['anyOf', 'oneOf', 'allOf']) {
+    final Object? combinator = schema[key];
+    if (combinator is! List) {
+      continue;
+    }
+    for (int i = 0; i < combinator.length; i += 1) {
+      final Map<String, Object?>? itemSchema = _asObjectMap(combinator[i]);
+      if (itemSchema != null) {
+        combinator[i] = itemSchema;
+        _enforceStrictOpenAiSchema(itemSchema);
+      }
+    }
+  }
+
+  final Map<String, Object?>? items = _asObjectMap(schema['items']);
+  if (items != null) {
+    schema['items'] = items;
+    _enforceStrictOpenAiSchema(items);
+  }
+}
+
+Map<String, Object?> _deepCopyJsonMap(Map<String, Object?> source) {
+  return _deepCopyJsonValue(source) as Map<String, Object?>;
+}
+
+Object? _deepCopyJsonValue(Object? value) {
+  if (value is Map) {
+    final Map<String, Object?> copied = <String, Object?>{};
+    value.forEach((Object? key, Object? nested) {
+      copied['$key'] = _deepCopyJsonValue(nested);
+    });
+    return copied;
+  }
+  if (value is List) {
+    return value
+        .map((Object? item) => _deepCopyJsonValue(item))
+        .toList(growable: false);
+  }
+  return value;
+}
+
+Map<String, Object?>? _asObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return null;
 }
