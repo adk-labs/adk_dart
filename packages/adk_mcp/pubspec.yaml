@@ -1,6 +1,6 @@
 name: adk_mcp
 description: MCP protocol client primitives for ADK Dart packages.
-version: 0.1.0
+version: 2026.2.28
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart
 issue_tracker: https://github.com/adk-labs/adk_dart/issues

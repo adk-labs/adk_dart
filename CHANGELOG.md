@@ -1,3 +1,10 @@
+## 2026.2.28
+
+- Switched package versioning scheme to date-based `YYYY.M.D`.
+- Expanded `adk web` / `adk api_server` parity surface with bundled `/dev-ui` serving and broader API route compatibility.
+- Hardened MCP transport/session behavior through `adk_mcp` integration updates and related tests.
+- Added runtime gap audit document for remaining non-functional/default-unwired features.
+
 ## 0.1.2
 
 - Added package topics metadata on pub.dev to improve discoverability.

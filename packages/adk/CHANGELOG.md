@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.2.28
+
+- Switched package versioning scheme to date-based `YYYY.M.D`.
+- Updated dependency constraint to `adk_dart: ^2026.2.28`.
+- Synced facade package release with latest `adk_dart` web/MCP parity work.
+
 ## 0.1.2
 
 - Added package topics metadata on pub.dev to improve discoverability.
