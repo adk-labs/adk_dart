@@ -70,6 +70,42 @@ Then:
 dart pub get
 ```
 
+## 🔐 Gemini API Key Setup
+
+For compatibility with `ref/adk-python`, ADK Dart recommends the same primary
+environment variable name:
+
+- `GOOGLE_API_KEY` (recommended)
+
+ADK Dart also accepts `GEMINI_API_KEY` as a compatibility alias.
+
+### Option A: Gemini API mode (default)
+
+Create a `.env` file (or export env vars in your shell):
+
+```env
+GOOGLE_GENAI_USE_VERTEXAI=0
+GOOGLE_API_KEY=your_google_api_key
+# Optional alias (if both are set, GEMINI_API_KEY is used first):
+# GEMINI_API_KEY=your_google_api_key
+```
+
+### Option B: Vertex AI mode
+
+```env
+GOOGLE_GENAI_USE_VERTEXAI=1
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_API_KEY=your_google_api_key
+```
+
+Notes:
+
+- `adk create ...` generates `.env` with `GOOGLE_API_KEY="YOUR_API_KEY"` by
+  default.
+- `adk` CLI loads `.env` automatically unless
+  `ADK_DISABLE_LOAD_DOTENV=1` (or `true`) is set.
+
 ## 🤖 MCP (Model Context Protocol)
 
 ADK Dart includes MCP support and now ships protocol primitives as a dedicated

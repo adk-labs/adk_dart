@@ -53,6 +53,30 @@ Then:
 dart pub get
 ```
 
+## 🔐 Gemini API Key Setup
+
+For parity with `ref/adk-python`, use `GOOGLE_API_KEY` as the primary key
+environment variable.
+
+```env
+GOOGLE_GENAI_USE_VERTEXAI=0
+GOOGLE_API_KEY=your_google_api_key
+```
+
+`adk_dart` also accepts `GEMINI_API_KEY` as a compatibility alias.
+
+For Vertex AI usage:
+
+```env
+GOOGLE_GENAI_USE_VERTEXAI=1
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_API_KEY=your_google_api_key
+```
+
+Detailed runtime behavior and full setup guidance:
+[adk_dart README](https://github.com/adk-labs/adk_dart/blob/main/README.md#-gemini-api-key-setup)
+
 ## 📦 Import
 
 ```dart
