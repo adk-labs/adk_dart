@@ -55,8 +55,7 @@ dart pub get
 
 ## 🔐 Gemini API Key Setup
 
-For parity with `ref/adk-python`, use `GOOGLE_API_KEY` as the primary key
-environment variable.
+Use `GOOGLE_API_KEY` as the primary key environment variable.
 
 ```env
 GOOGLE_GENAI_USE_VERTEXAI=0

@@ -72,8 +72,7 @@ dart pub get
 
 ## 🔐 Gemini API Key Setup
 
-For compatibility with `ref/adk-python`, ADK Dart recommends the same primary
-environment variable name:
+ADK Dart recommends the following primary environment variable name:
 
 - `GOOGLE_API_KEY` (recommended)
 
