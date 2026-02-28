@@ -962,10 +962,11 @@ class BaseLlmFlow {
       context,
       eventActions: modelResponseEvent.actions,
     );
+    final CallbackContext pluginCallbackContext = Context(context);
 
     final LlmResponse? pluginOverride = await context.pluginManager
         .runAfterModelCallback(
-          callbackContext: callbackContext,
+          callbackContext: pluginCallbackContext,
           llmResponse: response,
         );
     if (pluginOverride != null) {

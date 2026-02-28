@@ -300,5 +300,94 @@ void main() {
         'Bearer token-xyz',
       );
     });
+
+    test('default sink is native insertAll sink', () {
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+      );
+      expect(plugin.sink, isA<BigQueryInsertAllEventSink>());
+    });
+
+    test('logs multimodal content_parts when enabled', () async {
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+        config: BigQueryLoggerConfig(logMultiModalContent: true),
+      );
+
+      final InvocationContext invocationContext = _newInvocationContext(
+        invocationId: 'inv_content_parts_enabled',
+      );
+      await plugin.onUserMessageCallback(
+        invocationContext: invocationContext,
+        userMessage: Content(
+          role: 'user',
+          parts: <Part>[
+            Part.text('hello'),
+            Part.fromInlineData(mimeType: 'image/png', data: <int>[1, 2, 3]),
+          ],
+        ),
+      );
+
+      expect(sink.rows, hasLength(1));
+      final List<Object?> parts =
+          sink.rows.first['content_parts'] as List<Object?>;
+      expect(parts, isNotEmpty);
+    });
+
+    test('omits multimodal content_parts when disabled', () async {
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+        config: BigQueryLoggerConfig(logMultiModalContent: false),
+      );
+
+      final InvocationContext invocationContext = _newInvocationContext(
+        invocationId: 'inv_content_parts_disabled',
+      );
+      await plugin.onUserMessageCallback(
+        invocationContext: invocationContext,
+        userMessage: Content.userText('hello'),
+      );
+
+      expect(sink.rows, hasLength(1));
+      final List<Object?> parts =
+          sink.rows.first['content_parts'] as List<Object?>;
+      expect(parts, isEmpty);
+    });
+
+    test('content formatter failure does not drop event', () async {
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+        config: BigQueryLoggerConfig(
+          contentFormatter: (Object? _, String __) {
+            throw StateError('formatter failed');
+          },
+        ),
+      );
+
+      final InvocationContext invocationContext = _newInvocationContext(
+        invocationId: 'inv_formatter_error',
+      );
+      final CallbackContext callbackContext = Context(invocationContext);
+      await plugin.beforeModelCallback(
+        callbackContext: callbackContext,
+        llmRequest: LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+        ),
+      );
+
+      expect(sink.rows, hasLength(1));
+      expect(sink.rows.first['event_type'], 'LLM_REQUEST');
+    });
   });
 }

@@ -11,7 +11,7 @@ class _NoopModel extends BaseLlm {
   }) async* {}
 }
 
-Context _newContext() {
+Context _newContext({Map<String, Object?>? state}) {
   final InvocationContext invocationContext = InvocationContext(
     sessionService: InMemorySessionService(),
     invocationId: 'inv_global_instruction',
@@ -21,7 +21,12 @@ Context _newContext() {
       disallowTransferToParent: true,
       disallowTransferToPeers: true,
     ),
-    session: Session(id: 's1', appName: 'app', userId: 'u1'),
+    session: Session(
+      id: 's1',
+      appName: 'app',
+      userId: 'u1',
+      state: state ?? <String, Object?>{},
+    ),
   );
   return Context(invocationContext);
 }
@@ -77,5 +82,35 @@ void main() {
       request.config.systemInstruction,
       'Provider instruction for root_agent',
     );
+  });
+
+  test('injects session state into static global instruction', () async {
+    final GlobalInstructionPlugin plugin = GlobalInstructionPlugin(
+      globalInstruction: 'Hello {user_name}',
+    );
+    final LlmRequest request = LlmRequest();
+
+    await plugin.beforeModelCallback(
+      callbackContext: _newContext(state: <String, Object?>{'user_name': 'alice'}),
+      llmRequest: request,
+    );
+
+    expect(request.config.systemInstruction, 'Hello alice');
+  });
+
+  test('supports sync instruction provider', () async {
+    final GlobalInstructionPlugin plugin = GlobalInstructionPlugin(
+      globalInstructionProvider: (CallbackContext context) {
+        return 'sync provider for ${context.userId}';
+      },
+    );
+    final LlmRequest request = LlmRequest();
+
+    await plugin.beforeModelCallback(
+      callbackContext: _newContext(),
+      llmRequest: request,
+    );
+
+    expect(request.config.systemInstruction, 'sync provider for u1');
   });
 }

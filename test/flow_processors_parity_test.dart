@@ -289,11 +289,17 @@ void main() {
       final String systemInstruction = request.config.systemInstruction ?? '';
       expect(systemInstruction, contains('global instruction'));
       expect(systemInstruction, contains('static instruction'));
-      expect(systemInstruction, contains('dynamic instruction'));
+      expect(systemInstruction, isNot(contains('dynamic instruction')));
       expect(
         systemInstruction,
         contains('You are an agent. Your internal name is "root_agent".'),
       );
+      final bool hasDynamicInstructionInContents = request.contents.any((
+        Content content,
+      ) {
+        return content.parts.any((Part part) => part.text == 'dynamic instruction');
+      });
+      expect(hasDynamicInstructionInContents, isTrue);
     },
   );
 

@@ -471,7 +471,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     this.location = 'US',
     this.configOverrides,
     BigQueryEventSink? sink,
-    bool useBigQueryInsertAllSink = false,
+    bool useBigQueryInsertAllSink = true,
     String? accessToken,
     String? apiKey,
     http.Client? httpClient,
@@ -557,7 +557,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required InvocationContext invocationContext,
     required Content userMessage,
   }) async {
-    return _safeCallback<Content?>(() async {
+    return _safeCallback<Content?>('onUserMessageCallback', () async {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
@@ -600,7 +600,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required InvocationContext invocationContext,
     required Event event,
   }) async {
-    return _safeCallback<Event?>(() async {
+    return _safeCallback<Event?>('onEventCallback', () async {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
@@ -674,7 +674,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   Future<Content?> beforeRunCallback({
     required InvocationContext invocationContext,
   }) async {
-    return _safeCallback<Content?>(() async {
+    return _safeCallback<Content?>('beforeRunCallback', () async {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
@@ -688,7 +688,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
   }) async {
-    await _safeCallback<void>(() async {
+    await _safeCallback<void>('afterRunCallback', () async {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
@@ -703,7 +703,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required BaseAgent agent,
     required CallbackContext callbackContext,
   }) async {
-    return _safeCallback<Content?>(() async {
+    return _safeCallback<Content?>('beforeAgentCallback', () async {
       TraceManager.initTrace(callbackContext);
       TraceManager.pushSpan(callbackContext, 'agent');
       await _logEvent(
@@ -720,7 +720,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required BaseAgent agent,
     required CallbackContext callbackContext,
   }) async {
-    return _safeCallback<Content?>(() async {
+    return _safeCallback<Content?>('afterAgentCallback', () async {
       final _PopResult popResult = TraceManager.popSpan(callbackContext);
       await _logEvent(
         'AGENT_COMPLETED',
@@ -740,7 +740,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
   }) async {
-    return _safeCallback<LlmResponse?>(() async {
+    return _safeCallback<LlmResponse?>('beforeModelCallback', () async {
       final Map<String, Object?> attributes = <String, Object?>{};
 
       final GenerateContentConfig llmConfig = llmRequest.config;
@@ -792,7 +792,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required CallbackContext callbackContext,
     required LlmResponse llmResponse,
   }) async {
-    return _safeCallback<LlmResponse?>(() async {
+    return _safeCallback<LlmResponse?>('afterModelCallback', () async {
       final Map<String, Object?> content = <String, Object?>{};
       bool isTruncated = false;
 
@@ -866,7 +866,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required LlmRequest llmRequest,
     required Exception error,
   }) async {
-    return _safeCallback<LlmResponse?>(() async {
+    return _safeCallback<LlmResponse?>('onModelErrorCallback', () async {
       final _PopResult popResult = TraceManager.popSpan(callbackContext);
       await _logEvent(
         'LLM_ERROR',
@@ -888,7 +888,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required Map<String, dynamic> toolArgs,
     required ToolContext toolContext,
   }) async {
-    return _safeCallback<Map<String, dynamic>?>(() async {
+    return _safeCallback<Map<String, dynamic>?>('beforeToolCallback', () async {
       final _TruncateResult args = _recursiveSmartTruncate(
         toolArgs,
         config.maxContentLength,
@@ -915,7 +915,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Map<String, dynamic> result,
   }) async {
-    return _safeCallback<Map<String, dynamic>?>(() async {
+    return _safeCallback<Map<String, dynamic>?>('afterToolCallback', () async {
       final _TruncateResult truncatedResult = _recursiveSmartTruncate(
         result,
         config.maxContentLength,
@@ -948,7 +948,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Exception error,
   }) async {
-    return _safeCallback<Map<String, dynamic>?>(() async {
+    return _safeCallback<Map<String, dynamic>?>('onToolErrorCallback', () async {
       final _TruncateResult args = _recursiveSmartTruncate(
         toolArgs,
         config.maxContentLength,
@@ -975,10 +975,16 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
-  Future<T?> _safeCallback<T>(Future<T?> Function() run) async {
+  Future<T?> _safeCallback<T>(
+    String callbackName,
+    Future<T?> Function() run,
+  ) async {
     try {
       return await run();
-    } catch (_) {
+    } catch (error) {
+      stderr.writeln(
+        'BigQuery analytics plugin error in $callbackName; skipping. $error',
+      );
       return null;
     }
   }
@@ -1009,7 +1015,11 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     Object? normalizedContent = rawContent;
     final BigQueryContentFormatter? formatter = config.contentFormatter;
     if (formatter != null) {
-      normalizedContent = formatter(normalizedContent, eventType);
+      try {
+        normalizedContent = formatter(normalizedContent, eventType);
+      } catch (error) {
+        stderr.writeln('Content formatter failed: $error');
+      }
     }
 
     final _TruncateResult contentResult = _serializeContentPayload(
@@ -1017,6 +1027,12 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       maxLength: config.maxContentLength,
     );
     isTruncated = isTruncated || contentResult.isTruncated;
+    final List<Object?> contentParts = config.logMultiModalContent
+        ? _extractContentPartsForLogging(
+            normalizedContent,
+            maxLength: config.maxContentLength,
+          )
+        : const <Object?>[];
 
     final _TracePair pair = TraceManager.getCurrentSpanAndParent(
       callbackContext,
@@ -1030,6 +1046,15 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       callbackContext: callbackContext,
       eventData: resolvedEventData,
     );
+    String attributesJson;
+    try {
+      attributesJson = jsonEncode(attributes);
+    } on Object {
+      attributesJson = jsonEncode(
+        attributes,
+        toEncodable: (Object? value) => '$value',
+      );
+    }
 
     final Map<String, Object?> row = <String, Object?>{
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1042,8 +1067,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       'span_id': spanId,
       'parent_span_id': parentSpanId,
       'content': contentResult.value,
-      'content_parts': const <Object?>[],
-      'attributes': jsonEncode(attributes),
+      'content_parts': contentParts,
+      'attributes': attributesJson,
       'latency_ms': _extractLatency(resolvedEventData),
       'status': resolvedEventData.status,
       'error_message': resolvedEventData.errorMessage,
@@ -1273,6 +1298,70 @@ _TruncateResult _serializeContentPayload(
   }
 
   return _recursiveSmartTruncate(value, maxLength);
+}
+
+List<Object?> _extractContentPartsForLogging(
+  Object? value, {
+  required int maxLength,
+}) {
+  if (value is Content) {
+    return value.parts
+        .map((Part part) => _recursiveSmartTruncate(_partToJson(part), maxLength))
+        .map((_TruncateResult result) => result.value)
+        .toList(growable: false);
+  }
+
+  if (value is Part) {
+    return <Object?>[_recursiveSmartTruncate(_partToJson(value), maxLength).value];
+  }
+
+  if (value is LlmResponse) {
+    return _extractContentPartsForLogging(value.content, maxLength: maxLength);
+  }
+
+  if (value is LlmRequest) {
+    final List<Object?> parts = <Object?>[];
+    for (final Content content in value.contents) {
+      parts.addAll(_extractContentPartsForLogging(content, maxLength: maxLength));
+    }
+    return parts;
+  }
+
+  if (value is Map) {
+    final Map<String, Object?> map = _toStringObjectMap(value);
+    final Object? explicitParts = map['content_parts'];
+    if (explicitParts is List) {
+      return explicitParts
+          .map(
+            (Object? part) => _recursiveSmartTruncate(part, maxLength).value,
+          )
+          .toList(growable: false);
+    }
+
+    final Map<String, Object?> content = _toStringObjectMap(map['content']);
+    final Object? partsRaw = content['parts'];
+    if (partsRaw is List) {
+      return partsRaw
+          .map(
+            (Object? part) => _recursiveSmartTruncate(part, maxLength).value,
+          )
+          .toList(growable: false);
+    }
+  }
+
+  return const <Object?>[];
+}
+
+Map<String, Object?> _toStringObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry('$key', item),
+    );
+  }
+  return <String, Object?>{};
 }
 
 Map<String, Object?>? _contentToJson(Content? content) {

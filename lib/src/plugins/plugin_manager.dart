@@ -9,6 +9,15 @@ import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
 
+class PluginManagerException implements Exception {
+  PluginManagerException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'PluginManagerException: $message';
+}
+
 class PluginManager {
   PluginManager({List<BasePlugin>? plugins, Duration? closeTimeout})
     : _closeTimeout = closeTimeout ?? const Duration(seconds: 5),
@@ -36,7 +45,7 @@ class PluginManager {
           return result;
         }
       } catch (error) {
-        throw StateError(
+        throw PluginManagerException(
           "Error in plugin '${plugin.name}' during "
           "'$callbackName' callback: $error",
         );
@@ -96,7 +105,7 @@ class PluginManager {
       try {
         await plugin.afterRunCallback(invocationContext: invocationContext);
       } catch (error) {
-        throw StateError(
+        throw PluginManagerException(
           "Error in plugin '${plugin.name}' during "
           "'after_run_callback' callback: $error",
         );
@@ -267,7 +276,7 @@ class PluginManager {
             return "'${entry.key}': ${entry.value.runtimeType}";
           })
           .join(', ');
-      throw StateError('Failed to close plugins: $summary');
+      throw PluginManagerException('Failed to close plugins: $summary');
     }
   }
 }

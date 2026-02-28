@@ -35,6 +35,26 @@ class _MetadataRewritePlugin extends BasePlugin {
   }
 }
 
+class _EarlyExitPlugin extends BasePlugin {
+  _EarlyExitPlugin() : super(name: 'early_exit');
+
+  int afterRunCalls = 0;
+
+  @override
+  Future<Content?> beforeRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    return Content.modelText('early exit');
+  }
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    afterRunCalls += 1;
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) async {
   return stream.toList();
 }
@@ -330,6 +350,37 @@ void main() {
         expect(events.first.customMetadata!['run'], 'override');
       },
     );
+
+    test('after_run callback runs even when before_run short-circuits', () async {
+      final MockModel model = MockModel(
+        responses: <LlmResponse>[LlmResponse(content: Content.modelText('unused'))],
+      );
+      final Agent agent = Agent(name: 'root_agent', model: model);
+      final _EarlyExitPlugin plugin = _EarlyExitPlugin();
+      final InMemoryRunner runner = InMemoryRunner(
+        agent: agent,
+        plugins: <BasePlugin>[plugin],
+      );
+
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_early_exit_after_run',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+        ),
+      );
+
+      expect(events, hasLength(1));
+      expect(events.first.content?.parts.first.text, 'early exit');
+      expect(plugin.afterRunCalls, 1);
+      expect(model.requests, isEmpty);
+    });
 
     test('throws SessionNotFoundError when session is missing', () async {
       final MockModel model = MockModel(

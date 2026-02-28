@@ -279,17 +279,20 @@ class DebugLoggingPlugin extends BasePlugin {
     }
 
     _addEntry(invocationId, 'invocation_end');
-
-    final Map<String, Object?> outputData = state.toJson();
-    final JsonEncoder encoder = const JsonEncoder.withIndent('  ');
-    await _outputFile.parent.create(recursive: true);
-    await _outputFile.writeAsString(
-      '---\n${encoder.convert(outputData)}\n',
-      mode: FileMode.append,
-      flush: true,
-    );
-
-    _invocationStates.remove(invocationId);
+    try {
+      final Map<String, Object?> outputData = state.toJson();
+      final JsonEncoder encoder = const JsonEncoder.withIndent('  ');
+      await _outputFile.parent.create(recursive: true);
+      await _outputFile.writeAsString(
+        '---\n${encoder.convert(outputData)}\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (error) {
+      stderr.writeln('Failed to write debug data: $error');
+    } finally {
+      _invocationStates.remove(invocationId);
+    }
   }
 
   @override

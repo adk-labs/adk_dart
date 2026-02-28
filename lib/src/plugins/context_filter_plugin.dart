@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../agents/callback_context.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
@@ -94,7 +96,9 @@ class ContextFilterPlugin extends BasePlugin {
       }
 
       llmRequest.contents = contents;
-    } catch (_) {}
+    } catch (error) {
+      stderr.writeln('Failed to reduce context for request: $error');
+    }
 
     return null;
   }

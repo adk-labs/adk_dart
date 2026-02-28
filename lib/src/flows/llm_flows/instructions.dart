@@ -5,6 +5,7 @@ import '../../agents/readonly_context.dart';
 import '../../events/event.dart';
 import '../../models/llm_request.dart';
 import '../../types/content.dart';
+import '../../utils/instructions_utils.dart';
 import 'base_llm_flow.dart';
 
 /// Appends global/static/dynamic instructions into the LLM request.
@@ -16,11 +17,19 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
   ) async* {
     final LlmAgent agent = invocationContext.agent as LlmAgent;
     final BaseAgent rootAgent = agent.rootAgent;
+    final ReadonlyContext readonlyContext = ReadonlyContext(invocationContext);
 
     if (rootAgent is LlmAgent &&
         _hasInstructionValue(rootAgent.globalInstruction)) {
-      final (String globalInstruction, bool _) = await rootAgent
-          .canonicalGlobalInstruction(ReadonlyContext(invocationContext));
+      final (String rawGlobalInstruction, bool bypassStateInjection) =
+          await rootAgent.canonicalGlobalInstruction(readonlyContext);
+      String globalInstruction = rawGlobalInstruction;
+      if (!bypassStateInjection) {
+        globalInstruction = await injectSessionState(
+          rawGlobalInstruction,
+          readonlyContext,
+        );
+      }
       if (globalInstruction.isNotEmpty) {
         llmRequest.appendInstructions(<String>[globalInstruction]);
       }
@@ -31,17 +40,47 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
       _appendStaticInstruction(llmRequest, staticInstruction);
     }
 
-    if (_hasInstructionValue(agent.instruction)) {
-      final (String instruction, bool _) = await agent.canonicalInstruction(
-        ReadonlyContext(invocationContext),
+    if (_hasInstructionValue(agent.instruction) && staticInstruction == null) {
+      final String instruction = await _processAgentInstruction(
+        agent,
+        invocationContext,
       );
       if (instruction.isNotEmpty) {
         llmRequest.appendInstructions(<String>[instruction]);
       }
+      return;
+    }
+
+    if (_hasInstructionValue(agent.instruction) && staticInstruction != null) {
+      final String instruction = await _processAgentInstruction(
+        agent,
+        invocationContext,
+      );
+      if (instruction.isNotEmpty) {
+        llmRequest.contents.add(
+          Content(role: 'user', parts: <Part>[Part.text(instruction)]),
+        );
+      }
     }
   }
 
-  bool _hasInstructionValue(Object value) {
+  Future<String> _processAgentInstruction(
+    LlmAgent agent,
+    InvocationContext invocationContext,
+  ) async {
+    final ReadonlyContext readonlyContext = ReadonlyContext(invocationContext);
+    final (String rawInstruction, bool bypassStateInjection) =
+        await agent.canonicalInstruction(readonlyContext);
+    if (bypassStateInjection) {
+      return rawInstruction;
+    }
+    return injectSessionState(rawInstruction, readonlyContext);
+  }
+
+  bool _hasInstructionValue(Object? value) {
+    if (value == null) {
+      return false;
+    }
     if (value is String) {
       return value.isNotEmpty;
     }

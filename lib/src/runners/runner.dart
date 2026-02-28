@@ -766,64 +766,63 @@ class Runner {
         await sessionService.appendEvent(session: session, event: event);
       }
       yield event;
-      return;
-    }
+    } else {
+      final List<Event> bufferedEvents = <Event>[];
+      bool isTranscribing = false;
 
-    final List<Event> bufferedEvents = <Event>[];
-    bool isTranscribing = false;
+      await for (final Event event in execute(invocationContext)) {
+        _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
 
-    await for (final Event event in execute(invocationContext)) {
-      _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
+        if (isLiveCall) {
+          if (event.partial == true && _isTranscription(event)) {
+            isTranscribing = true;
+          }
 
-      if (isLiveCall) {
-        if (event.partial == true && _isTranscription(event)) {
-          isTranscribing = true;
-        }
+          if (isTranscribing && _isToolCallOrResponse(event)) {
+            bufferedEvents.add(event);
+            continue;
+          }
 
-        if (isTranscribing && _isToolCallOrResponse(event)) {
-          bufferedEvents.add(event);
-          continue;
-        }
+          if (event.partial != true) {
+            if (_isTranscription(event) &&
+                (_hasNonEmptyTranscriptionText(event.inputTranscription) ||
+                    _hasNonEmptyTranscriptionText(event.outputTranscription))) {
+              isTranscribing = false;
+              if (_shouldAppendEvent(event, isLiveCall)) {
+                await sessionService.appendEvent(session: session, event: event);
+              }
 
-        if (event.partial != true) {
-          if (_isTranscription(event) &&
-              (_hasNonEmptyTranscriptionText(event.inputTranscription) ||
-                  _hasNonEmptyTranscriptionText(event.outputTranscription))) {
-            isTranscribing = false;
-            if (_shouldAppendEvent(event, isLiveCall)) {
+              for (final Event buffered in bufferedEvents) {
+                if (_shouldAppendEvent(buffered, isLiveCall)) {
+                  await sessionService.appendEvent(
+                    session: session,
+                    event: buffered,
+                  );
+                }
+                yield buffered;
+              }
+              bufferedEvents.clear();
+            } else if (_shouldAppendEvent(event, isLiveCall)) {
               await sessionService.appendEvent(session: session, event: event);
             }
-
-            for (final Event buffered in bufferedEvents) {
-              if (_shouldAppendEvent(buffered, isLiveCall)) {
-                await sessionService.appendEvent(
-                  session: session,
-                  event: buffered,
-                );
-              }
-              yield buffered;
-            }
-            bufferedEvents.clear();
-          } else if (_shouldAppendEvent(event, isLiveCall)) {
-            await sessionService.appendEvent(session: session, event: event);
           }
+        } else if (event.partial != true &&
+            _shouldAppendEvent(event, isLiveCall)) {
+          await sessionService.appendEvent(session: session, event: event);
         }
-      } else if (event.partial != true &&
-          _shouldAppendEvent(event, isLiveCall)) {
-        await sessionService.appendEvent(session: session, event: event);
-      }
 
-      final Event? modified = await invocationContext.pluginManager
-          .runOnEventCallback(
-            invocationContext: invocationContext,
-            event: event,
-          );
+        final Event? modified = await invocationContext.pluginManager
+            .runOnEventCallback(
+              invocationContext: invocationContext,
+              event: event,
+            );
 
-      if (modified != null) {
-        _applyRunConfigCustomMetadata(modified, invocationContext.runConfig);
-        yield modified;
-      } else {
-        yield event;
+        if (modified != null) {
+          _applyRunConfigCustomMetadata(modified, invocationContext.runConfig);
+          yield modified;
+        } else {
+          yield event;
+        }
       }
     }
 

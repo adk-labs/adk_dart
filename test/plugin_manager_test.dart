@@ -141,8 +141,8 @@ void main() {
         llmRequest: LlmRequest(),
       ),
       throwsA(
-        isA<StateError>().having(
-          (StateError error) => error.message,
+        isA<PluginManagerException>().having(
+          (PluginManagerException error) => error.message,
           'message',
           contains("Error in plugin 'bad' during 'before_model_callback'"),
         ),
@@ -162,8 +162,8 @@ void main() {
     await expectLater(
       manager.close(),
       throwsA(
-        isA<StateError>().having(
-          (StateError error) => error.message,
+        isA<PluginManagerException>().having(
+          (PluginManagerException error) => error.message,
           'message',
           contains('Failed to close plugins'),
         ),
@@ -179,8 +179,8 @@ void main() {
     await expectLater(
       manager.runAfterRunCallback(invocationContext: _newInvocationContext()),
       throwsA(
-        isA<StateError>().having(
-          (StateError error) => error.message,
+        isA<PluginManagerException>().having(
+          (PluginManagerException error) => error.message,
           'message',
           contains("Error in plugin 'bad_after' during 'after_run_callback'"),
         ),

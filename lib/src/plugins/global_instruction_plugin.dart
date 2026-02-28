@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import '../agents/callback_context.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
+import '../utils/instructions_utils.dart';
 import 'base_plugin.dart';
 
 typedef GlobalInstructionProvider =
-    Future<String> Function(CallbackContext readonlyContext);
+    FutureOr<String> Function(CallbackContext readonlyContext);
 
 class GlobalInstructionPlugin extends BasePlugin {
   GlobalInstructionPlugin({
@@ -45,9 +48,13 @@ class GlobalInstructionPlugin extends BasePlugin {
   }
 
   Future<String> _resolveGlobalInstruction(CallbackContext context) async {
-    if (_globalInstructionProvider == null) {
-      return _globalInstruction;
+    if (_globalInstructionProvider != null) {
+      final FutureOr<String> value = _globalInstructionProvider(context);
+      return await Future<String>.value(value);
     }
-    return _globalInstructionProvider(context);
+    if (_globalInstruction.isEmpty) {
+      return '';
+    }
+    return injectSessionState(_globalInstruction, context);
   }
 }
