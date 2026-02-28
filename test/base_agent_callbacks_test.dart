@@ -51,6 +51,24 @@ class _InterceptingPlugin extends BasePlugin {
   }
 }
 
+class _LiveEndingAgent extends BaseAgent {
+  _LiveEndingAgent({required super.name, super.afterAgentCallback});
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {}
+
+  @override
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    context.endInvocation = true;
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content.modelText('live-run'),
+    );
+  }
+}
+
 InvocationContext _newContext(BaseAgent agent, {PluginManager? pluginManager}) {
   return InvocationContext(
     sessionService: InMemorySessionService(),
@@ -183,6 +201,27 @@ void main() {
         expect(events, hasLength(2));
         expect(events.first.content?.parts.single.text, 'run:1');
         expect(events.last.content?.parts.single.text, 'plugin-after');
+      },
+    );
+
+    test(
+      'runLive executes after callback even when endInvocation is set',
+      () async {
+        final _LiveEndingAgent agent = _LiveEndingAgent(
+          name: 'live_probe',
+          afterAgentCallback: (CallbackContext context) async {
+            context.state['after_live'] = true;
+            return null;
+          },
+        );
+
+        final List<Event> events = await agent
+            .runLive(_newContext(agent))
+            .toList();
+
+        expect(events, hasLength(2));
+        expect(events.first.content?.parts.single.text, 'live-run');
+        expect(events.last.actions.stateDelta['after_live'], isTrue);
       },
     );
   });

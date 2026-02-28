@@ -1,7 +1,19 @@
 import '../events/event.dart';
+import '../tools/base_tool.dart';
+import '../tools/function_tool.dart';
 import 'agent_state.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
+import 'llm_agent.dart';
+
+const String _taskCompletedToolName = 'task_completed';
+const String _taskCompletedInstruction = '''
+If you finished the user's request according to its description, call the task_completed function to exit so the next agents can take over. When calling this function, do not generate any text other than the function call.
+''';
+
+String _taskCompleted() {
+  return 'Task completion signaled.';
+}
 
 class SequentialAgentState extends BaseAgentState {
   SequentialAgentState({this.currentSubAgent = ''})
@@ -114,11 +126,57 @@ class SequentialAgent extends BaseAgent {
       return;
     }
 
+    _prepareLiveSubAgentsForHandoff();
+
     for (final BaseAgent subAgent in subAgents) {
       await for (final Event event in subAgent.runLive(context)) {
         yield event;
       }
     }
+  }
+
+  void _prepareLiveSubAgentsForHandoff() {
+    for (final BaseAgent subAgent in subAgents) {
+      if (subAgent is! LlmAgent) {
+        continue;
+      }
+
+      final bool addedTaskCompletedTool = _ensureTaskCompletedTool(subAgent);
+      if (!addedTaskCompletedTool) {
+        continue;
+      }
+
+      final Object currentInstruction = subAgent.instruction;
+      if (currentInstruction is! String) {
+        continue;
+      }
+      final String separator = currentInstruction.isEmpty ? '' : '\n';
+      subAgent.instruction =
+          '$currentInstruction$separator$_taskCompletedInstruction';
+    }
+  }
+
+  bool _ensureTaskCompletedTool(LlmAgent agent) {
+    final bool hasTaskCompletedTool = agent.tools.any((Object tool) {
+      if (tool is BaseTool) {
+        return tool.name == _taskCompletedToolName;
+      }
+      final String toolLabel = '$tool';
+      return toolLabel.contains(_taskCompletedToolName);
+    });
+    if (hasTaskCompletedTool) {
+      return false;
+    }
+
+    agent.tools.add(
+      FunctionTool(
+        func: _taskCompleted,
+        name: _taskCompletedToolName,
+        description:
+            'Signals that the agent has successfully completed the user\'s question or task.',
+      ),
+    );
+    return true;
   }
 
   int _getStartIndex(SequentialAgentState? state) {

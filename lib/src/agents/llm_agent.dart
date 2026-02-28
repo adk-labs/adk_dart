@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../events/event.dart';
 import '../flows/llm_flows/auto_flow.dart';
@@ -544,6 +545,14 @@ class LlmAgent extends BaseAgent {
         .where((Part part) => part.text != null && !part.thought)
         .map((Part part) => part.text!)
         .join();
+
+    if (outputSchema != null) {
+      if (value.trim().isEmpty) {
+        return;
+      }
+      event.actions.stateDelta[outputKey!] = jsonDecode(value);
+      return;
+    }
 
     event.actions.stateDelta[outputKey!] = value;
   }

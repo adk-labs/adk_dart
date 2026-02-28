@@ -47,6 +47,20 @@ class _EmitAgent extends BaseAgent {
   }
 }
 
+class _LiveStubLlmAgent extends LlmAgent {
+  _LiveStubLlmAgent({required super.name, super.instruction = 'stub'});
+
+  @override
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content.modelText('live-llm $name'),
+    );
+  }
+}
+
 class _PauseOnceAgent extends BaseAgent {
   _PauseOnceAgent({required super.name, this.delay = Duration.zero});
 
@@ -228,6 +242,39 @@ void main() {
       expect(events[0].author, 'a2');
       expect(events[1].actions.endOfAgent, isTrue);
     });
+
+    test(
+      'runLive injects task_completed handoff tool once for LLM sub-agent',
+      () async {
+        final _LiveStubLlmAgent llm = _LiveStubLlmAgent(
+          name: 'llm_child',
+          instruction: 'Base instruction.',
+        );
+        final SequentialAgent root = SequentialAgent(
+          name: 'root',
+          subAgents: <BaseAgent>[llm],
+        );
+        final InvocationContext context = await _newContext(
+          agent: root,
+          resumable: false,
+        );
+
+        await root.runLive(context).toList();
+        await root.runLive(context).toList();
+
+        final List<BaseTool> taskCompletedTools = llm.tools
+            .whereType<BaseTool>()
+            .where((BaseTool tool) => tool.name == 'task_completed')
+            .toList(growable: false);
+        expect(taskCompletedTools, hasLength(1));
+        expect(llm.instruction, isA<String>());
+        final String instruction = llm.instruction as String;
+        expect(
+          RegExp(r'\btask_completed\b').allMatches(instruction).length,
+          equals(1),
+        );
+      },
+    );
   });
 
   group('ParallelAgent', () {

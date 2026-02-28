@@ -109,10 +109,6 @@ abstract class BaseAgent {
       yield event;
     }
 
-    if (context.endInvocation) {
-      return;
-    }
-
     final Event? after = await _handleAfterAgentCallback(context);
     if (after != null) {
       yield after;
