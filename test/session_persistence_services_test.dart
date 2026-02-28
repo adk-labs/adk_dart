@@ -229,6 +229,10 @@ void main() {
   });
 
   group('DatabaseSessionService', () {
+    tearDown(() {
+      DatabaseSessionService.resetCustomResolversAndFactories();
+    });
+
     test('uses sqlite backend for sqlite URLs', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_db_service_',
@@ -251,6 +255,67 @@ void main() {
       );
       expect(loaded, isNotNull);
       expect(loaded!.id, session.id);
+    });
+
+    test('uses registered custom factory for non-sqlite schemes', () async {
+      int factoryCalls = 0;
+      String? capturedDbUrl;
+      final InMemorySessionService delegate = InMemorySessionService();
+      DatabaseSessionService.registerCustomFactory(
+        scheme: 'postgresql',
+        factory: (String dbUrl) {
+          factoryCalls += 1;
+          capturedDbUrl = dbUrl;
+          return delegate;
+        },
+      );
+
+      final DatabaseSessionService service = DatabaseSessionService(
+        '  postgresql://localhost/mydb  ',
+      );
+      expect(factoryCalls, 1);
+      expect(capturedDbUrl, 'postgresql://localhost/mydb');
+
+      final Session created = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      final Session? loaded = await delegate.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: created.id,
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.id, created.id);
+    });
+
+    test('uses registered custom resolver for unmatched urls', () async {
+      int resolverCalls = 0;
+      final InMemorySessionService delegate = InMemorySessionService();
+      DatabaseSessionService.registerCustomResolver((String dbUrl) {
+        resolverCalls += 1;
+        if (dbUrl.startsWith('customdb://')) {
+          return delegate;
+        }
+        return null;
+      });
+
+      final DatabaseSessionService service = DatabaseSessionService(
+        ' customdb://region-a/tenant-1 ',
+      );
+      expect(resolverCalls, 1);
+
+      final Session created = await service.createSession(
+        appName: 'app',
+        userId: 'u2',
+      );
+      final Session? loaded = await delegate.getSession(
+        appName: 'app',
+        userId: 'u2',
+        sessionId: created.id,
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.id, created.id);
     });
 
     test('fails fast for unsupported database URLs', () {
@@ -322,6 +387,50 @@ void main() {
       expect(reopenedLoaded, isNull);
       expect(File('${dir.path}/:memory:').existsSync(), isFalse);
     });
+
+    test(
+      'keeps sqlite dispatch precedence over custom registrations',
+      () async {
+        int customFactoryCalls = 0;
+        int customResolverCalls = 0;
+        DatabaseSessionService.registerCustomFactory(
+          scheme: 'sqlite',
+          factory: (String dbUrl) {
+            customFactoryCalls += 1;
+            return InMemorySessionService();
+          },
+        );
+        DatabaseSessionService.registerCustomResolver((String dbUrl) {
+          customResolverCalls += 1;
+          return InMemorySessionService();
+        });
+
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_db_service_sqlite_precedence_',
+        );
+        addTearDown(() async {
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
+
+        final String dbUrl = 'sqlite:///${dir.path}/sqlite_precedence.json';
+        final DatabaseSessionService service = DatabaseSessionService(dbUrl);
+        final Session created = await service.createSession(
+          appName: 'app',
+          userId: 'u1',
+        );
+        final Session? loaded = await service.getSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: created.id,
+        );
+        expect(loaded, isNotNull);
+        expect(File('${dir.path}/sqlite_precedence.json').existsSync(), isTrue);
+        expect(customFactoryCalls, 0);
+        expect(customResolverCalls, 0);
+      },
+    );
   });
 
   group('VertexAiSessionService', () {

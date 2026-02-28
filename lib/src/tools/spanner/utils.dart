@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../pubsub/client.dart' as pubsub;
 import '../tool_context.dart';
 import 'client.dart';
 import 'settings.dart';
@@ -124,6 +125,41 @@ void setSpannerEmbedders({
 void resetSpannerEmbedders() {
   _spannerEmbedder = _defaultSpannerEmbedder;
   _spannerEmbedderAsync = _defaultSpannerEmbedderAsync;
+}
+
+void configureSpannerPubSubRuntime({
+  SpannerClientFactory? spannerClientFactory,
+  SpannerEmbedder? spannerEmbedder,
+  SpannerEmbedderAsync? spannerEmbedderAsync,
+  pubsub.PubSubPublisherFactory? pubSubPublisherFactory,
+  pubsub.PubSubSubscriberFactory? pubSubSubscriberFactory,
+}) {
+  if (spannerClientFactory != null) {
+    setSpannerClientFactory(spannerClientFactory);
+  }
+  if (spannerEmbedder != null || spannerEmbedderAsync != null) {
+    setSpannerEmbedders(
+      embedder: spannerEmbedder,
+      embedderAsync: spannerEmbedderAsync,
+    );
+  }
+  if (pubSubPublisherFactory != null || pubSubSubscriberFactory != null) {
+    pubsub.setPubSubClientFactories(
+      publisherFactory: pubSubPublisherFactory,
+      subscriberFactory: pubSubSubscriberFactory,
+    );
+  }
+}
+
+Future<void> resetSpannerPubSubRuntime({
+  bool cleanupPubSubClients = true,
+}) async {
+  if (cleanupPubSubClients) {
+    await pubsub.cleanupClients();
+  }
+  pubsub.resetPubSubClientFactories();
+  resetSpannerClientFactory();
+  resetSpannerEmbedders();
 }
 
 List<List<double>> embedContents({
