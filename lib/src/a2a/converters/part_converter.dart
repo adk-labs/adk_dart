@@ -22,7 +22,14 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
   final A2aPartRoot root = a2aPart.root;
 
   if (root is A2aTextPart) {
-    return Part.text(root.text);
+    final Object? rawThought = root.metadata[getAdkMetadataKey('thought')];
+    bool thought = false;
+    if (rawThought is bool) {
+      thought = rawThought;
+    } else if (rawThought is String) {
+      thought = rawThought.toLowerCase() == 'true';
+    }
+    return Part.text(root.text, thought: thought);
   }
 
   if (root is A2aFilePart) {

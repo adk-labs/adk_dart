@@ -59,6 +59,59 @@ class A2aClientCallContext {
   Map<String, Object?> state;
 }
 
+class A2aRequestParametersConfig {
+  A2aRequestParametersConfig({this.requestMetadata, this.clientCallContext});
+
+  Map<String, Object?>? requestMetadata;
+  A2aClientCallContext? clientCallContext;
+}
+
+class A2aBeforeRequestResult {
+  A2aBeforeRequestResult.request(
+    A2aMessage request, {
+    A2aRequestParametersConfig? parameters,
+  }) : request = request,
+       event = null,
+       parameters = parameters ?? A2aRequestParametersConfig();
+
+  A2aBeforeRequestResult.event(
+    Event event, {
+    A2aRequestParametersConfig? parameters,
+  }) : request = null,
+       event = event,
+       parameters = parameters ?? A2aRequestParametersConfig();
+
+  final A2aMessage? request;
+  final Event? event;
+  final A2aRequestParametersConfig parameters;
+}
+
+typedef A2aBeforeRequestInterceptor =
+    FutureOr<A2aBeforeRequestResult> Function(
+      InvocationContext context,
+      A2aMessage request,
+      A2aRequestParametersConfig parameters,
+    );
+typedef A2aAfterRequestInterceptor =
+    FutureOr<Event?> Function(
+      InvocationContext context,
+      Object a2aResponse,
+      Event event,
+    );
+
+class A2aRequestInterceptor {
+  A2aRequestInterceptor({this.beforeRequest, this.afterRequest});
+
+  final A2aBeforeRequestInterceptor? beforeRequest;
+  final A2aAfterRequestInterceptor? afterRequest;
+}
+
+class A2aRemoteAgentConfig {
+  const A2aRemoteAgentConfig({this.requestInterceptors});
+
+  final List<A2aRequestInterceptor>? requestInterceptors;
+}
+
 abstract class A2aClient {
   Stream<Object> sendMessage({
     required A2aMessage request,
@@ -110,6 +163,7 @@ class RemoteA2aAgent extends BaseAgent {
     A2aClientFactory? a2aClientFactory,
     this.a2aRequestMetaProvider,
     this.fullHistoryWhenStateless = false,
+    this.config = const A2aRemoteAgentConfig(),
     List<BaseAgent>? subAgents,
     Object? beforeAgentCallback,
     Object? afterAgentCallback,
@@ -154,6 +208,7 @@ class RemoteA2aAgent extends BaseAgent {
   final A2APartToGenAIPartConverter _a2aPartConverter;
   final A2aRequestMetaProvider? a2aRequestMetaProvider;
   final bool fullHistoryWhenStateless;
+  final A2aRemoteAgentConfig config;
 
   AgentCard? _agentCard;
   String? _agentCardSource;
@@ -181,6 +236,7 @@ class RemoteA2aAgent extends BaseAgent {
         'a2aClientFactory',
         'a2aRequestMetaProvider',
         'fullHistoryWhenStateless',
+        'config',
       },
     );
 
@@ -242,6 +298,11 @@ class RemoteA2aAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'fullHistoryWhenStateless',
         currentValue: fullHistoryWhenStateless,
+      ),
+      config: cloneFieldValue<A2aRemoteAgentConfig>(
+        update: cloneUpdate,
+        fieldName: 'config',
+        currentValue: config,
       ),
       subAgents: <BaseAgent>[],
       beforeAgentCallback: cloneObjectFieldValue(
@@ -605,6 +666,73 @@ class RemoteA2aAgent extends BaseAgent {
     }
   }
 
+  Future<A2aBeforeRequestResult> _executeBeforeRequestInterceptors(
+    InvocationContext context,
+    A2aMessage request,
+    A2aRequestParametersConfig parameters,
+  ) async {
+    final List<A2aRequestInterceptor>? interceptors =
+        config.requestInterceptors;
+    if (interceptors == null || interceptors.isEmpty) {
+      return A2aBeforeRequestResult.request(request, parameters: parameters);
+    }
+
+    A2aMessage currentRequest = request;
+    A2aRequestParametersConfig currentParameters = parameters;
+    for (final A2aRequestInterceptor interceptor in interceptors) {
+      final A2aBeforeRequestInterceptor? beforeRequest =
+          interceptor.beforeRequest;
+      if (beforeRequest == null) {
+        continue;
+      }
+      final A2aBeforeRequestResult result =
+          await Future<A2aBeforeRequestResult>.value(
+            beforeRequest(context, currentRequest, currentParameters),
+          );
+      currentParameters = result.parameters;
+      if (result.event != null) {
+        return A2aBeforeRequestResult.event(
+          result.event!,
+          parameters: currentParameters,
+        );
+      }
+      if (result.request != null) {
+        currentRequest = result.request!;
+      }
+    }
+    return A2aBeforeRequestResult.request(
+      currentRequest,
+      parameters: currentParameters,
+    );
+  }
+
+  Future<Event?> _executeAfterRequestInterceptors(
+    InvocationContext context,
+    Object a2aResponse,
+    Event event,
+  ) async {
+    final List<A2aRequestInterceptor>? interceptors =
+        config.requestInterceptors;
+    if (interceptors == null || interceptors.isEmpty) {
+      return event;
+    }
+
+    Event? current = event;
+    for (final A2aRequestInterceptor interceptor in interceptors.reversed) {
+      final A2aAfterRequestInterceptor? afterRequest = interceptor.afterRequest;
+      if (afterRequest == null || current == null) {
+        continue;
+      }
+      current = await Future<Event?>.value(
+        afterRequest(context, a2aResponse, current),
+      );
+      if (current == null) {
+        return null;
+      }
+    }
+    return current;
+  }
+
   @override
   Stream<Event> runAsyncImpl(InvocationContext ctx) async* {
     try {
@@ -651,22 +779,43 @@ class RemoteA2aAgent extends BaseAgent {
     );
 
     try {
-      final Map<String, Object?>? requestMetadata = a2aRequestMetaProvider
-          ?.call(ctx, a2aRequest);
+      final A2aBeforeRequestResult beforeRequestResult =
+          await _executeBeforeRequestInterceptors(
+            ctx,
+            a2aRequest,
+            A2aRequestParametersConfig(
+              clientCallContext: A2aClientCallContext(
+                state: Map<String, Object?>.from(ctx.session.state),
+              ),
+            ),
+          );
+      if (beforeRequestResult.event != null) {
+        yield beforeRequestResult.event!;
+        return;
+      }
+
+      a2aRequest = beforeRequestResult.request!;
+      final A2aRequestParametersConfig parameters =
+          beforeRequestResult.parameters;
+      if (a2aRequestMetaProvider != null) {
+        parameters.requestMetadata = a2aRequestMetaProvider!(ctx, a2aRequest);
+      }
 
       await for (final Object a2aResponse in _a2aClient!.sendMessage(
         request: a2aRequest,
-        requestMetadata: requestMetadata,
-        context: A2aClientCallContext(
-          state: Map<String, Object?>.from(ctx.session.state),
-        ),
+        requestMetadata: parameters.requestMetadata,
+        context: parameters.clientCallContext,
       )) {
         developer.log(
           buildA2aResponseLog(_responseForLog(a2aResponse)),
           name: 'adk_dart.remote_a2a_agent',
         );
 
-        final Event? event = await _handleA2aResponse(a2aResponse, ctx);
+        Event? event = await _handleA2aResponse(a2aResponse, ctx);
+        if (event == null) {
+          continue;
+        }
+        event = await _executeAfterRequestInterceptors(ctx, a2aResponse, event);
         if (event == null) {
           continue;
         }
@@ -839,7 +988,10 @@ String _newMessageId() {
   return 'a2a_msg_$micros';
 }
 
-Map<String, Object?> _a2aMessageToJson(A2aMessage message) {
+Map<String, Object?> _a2aMessageToJson(A2aMessage? message) {
+  if (message == null) {
+    return <String, Object?>{};
+  }
   return <String, Object?>{
     'message_id': message.messageId,
     'role': message.role.name,

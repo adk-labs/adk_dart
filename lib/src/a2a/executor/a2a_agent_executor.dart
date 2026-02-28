@@ -12,12 +12,49 @@ import '../converters/utils.dart';
 import '../protocol.dart';
 import 'task_result_aggregator.dart';
 
+typedef A2aExecutorBeforeAgentInterceptor =
+    FutureOr<A2aRequestContext> Function(A2aRequestContext context);
+typedef A2aExecutorAfterEventInterceptor =
+    FutureOr<A2aEvent?> Function(
+      A2aExecutorContext executorContext,
+      A2aEvent a2aEvent,
+      Event adkEvent,
+    );
+typedef A2aExecutorAfterAgentInterceptor =
+    FutureOr<A2aTaskStatusUpdateEvent> Function(
+      A2aExecutorContext executorContext,
+      A2aTaskStatusUpdateEvent finalEvent,
+    );
+
+class A2aExecuteInterceptor {
+  A2aExecuteInterceptor({this.beforeAgent, this.afterEvent, this.afterAgent});
+
+  final A2aExecutorBeforeAgentInterceptor? beforeAgent;
+  final A2aExecutorAfterEventInterceptor? afterEvent;
+  final A2aExecutorAfterAgentInterceptor? afterAgent;
+}
+
+class A2aExecutorContext {
+  A2aExecutorContext({
+    required this.appName,
+    required this.userId,
+    required this.sessionId,
+    required this.runner,
+  });
+
+  final String appName;
+  final String userId;
+  final String sessionId;
+  final Runner runner;
+}
+
 class A2aAgentExecutorConfig {
   A2aAgentExecutorConfig({
     A2APartToGenAIPartConverter? a2aPartConverter,
     GenAIPartToA2APartConverter? genAiPartConverter,
     A2ARequestToAgentRunRequestConverter? requestConverter,
     AdkEventToA2AEventsConverter? eventConverter,
+    List<A2aExecuteInterceptor>? executeInterceptors,
   }) : a2aPartConverter = a2aPartConverter ?? convertA2aPartToGenaiPart,
        genAiPartConverter = genAiPartConverter ?? convertGenaiPartToA2aPart,
        requestConverter =
@@ -44,12 +81,14 @@ class A2aAgentExecutorConfig {
                contextId: contextId,
                partConverter: partConverter,
              );
-           });
+           }),
+       executeInterceptors = executeInterceptors;
 
   A2APartToGenAIPartConverter a2aPartConverter;
   GenAIPartToA2APartConverter genAiPartConverter;
   A2ARequestToAgentRunRequestConverter requestConverter;
   AdkEventToA2AEventsConverter eventConverter;
+  List<A2aExecuteInterceptor>? executeInterceptors;
 }
 
 class A2aAgentExecutor {
@@ -130,6 +169,7 @@ class A2aAgentExecutor {
     if (context.message == null) {
       throw ArgumentError('A2A request must include a message.');
     }
+    context = await _executeBeforeAgentInterceptors(context);
 
     if (context.currentTask == null) {
       await eventQueue.enqueueEvent(
@@ -210,6 +250,13 @@ class A2aAgentExecutor {
       ),
     );
 
+    final A2aExecutorContext executorContext = A2aExecutorContext(
+      appName: runner.appName,
+      userId: runRequest.userId!,
+      sessionId: runRequest.sessionId!,
+      runner: runner,
+    );
+
     final TaskResultAggregator taskResultAggregator = TaskResultAggregator();
     final bool resumable = runner.resumabilityConfig?.isResumable ?? false;
     final String? invocationIdForRunAsync = resumable
@@ -233,11 +280,20 @@ class A2aAgentExecutor {
       );
 
       for (final A2aEvent a2aEvent in a2aEvents) {
-        taskResultAggregator.processEvent(a2aEvent);
-        await eventQueue.enqueueEvent(a2aEvent);
+        final A2aEvent? interceptedEvent = await _executeAfterEventInterceptors(
+          a2aEvent: a2aEvent,
+          executorContext: executorContext,
+          adkEvent: adkEvent,
+        );
+        if (interceptedEvent == null) {
+          continue;
+        }
+        taskResultAggregator.processEvent(interceptedEvent);
+        await eventQueue.enqueueEvent(interceptedEvent);
       }
     }
 
+    A2aTaskStatusUpdateEvent finalEvent;
     if (taskResultAggregator.taskState == A2aTaskState.working &&
         taskResultAggregator.taskStatusMessage != null &&
         taskResultAggregator.taskStatusMessage!.parts.isNotEmpty) {
@@ -253,19 +309,14 @@ class A2aAgentExecutor {
         ),
       );
 
-      await eventQueue.enqueueEvent(
-        A2aTaskStatusUpdateEvent(
-          taskId: context.taskId,
-          contextId: context.contextId,
-          finalEvent: true,
-          status: A2aTaskStatus(state: A2aTaskState.completed),
-        ),
+      finalEvent = A2aTaskStatusUpdateEvent(
+        taskId: context.taskId,
+        contextId: context.contextId,
+        finalEvent: true,
+        status: A2aTaskStatus(state: A2aTaskState.completed),
       );
-      return;
-    }
-
-    await eventQueue.enqueueEvent(
-      A2aTaskStatusUpdateEvent(
+    } else {
+      finalEvent = A2aTaskStatusUpdateEvent(
         taskId: context.taskId,
         contextId: context.contextId,
         finalEvent: true,
@@ -273,8 +324,14 @@ class A2aAgentExecutor {
           state: taskResultAggregator.taskState,
           message: taskResultAggregator.taskStatusMessage,
         ),
-      ),
+      );
+    }
+
+    finalEvent = await _executeAfterAgentInterceptors(
+      executorContext,
+      finalEvent,
     );
+    await eventQueue.enqueueEvent(finalEvent);
   }
 
   Future<Session> _prepareSession(
@@ -304,5 +361,73 @@ class A2aAgentExecutor {
     runRequest.userId = userId;
     runRequest.sessionId = session.id;
     return session;
+  }
+
+  Future<A2aRequestContext> _executeBeforeAgentInterceptors(
+    A2aRequestContext context,
+  ) async {
+    final List<A2aExecuteInterceptor>? interceptors =
+        _config.executeInterceptors;
+    if (interceptors == null || interceptors.isEmpty) {
+      return context;
+    }
+    A2aRequestContext current = context;
+    for (final A2aExecuteInterceptor interceptor in interceptors) {
+      final A2aExecutorBeforeAgentInterceptor? handler =
+          interceptor.beforeAgent;
+      if (handler == null) {
+        continue;
+      }
+      current = await Future<A2aRequestContext>.value(handler(current));
+    }
+    return current;
+  }
+
+  Future<A2aEvent?> _executeAfterEventInterceptors({
+    required A2aEvent a2aEvent,
+    required A2aExecutorContext executorContext,
+    required Event adkEvent,
+  }) async {
+    final List<A2aExecuteInterceptor>? interceptors =
+        _config.executeInterceptors;
+    if (interceptors == null || interceptors.isEmpty) {
+      return a2aEvent;
+    }
+    A2aEvent? current = a2aEvent;
+    for (final A2aExecuteInterceptor interceptor in interceptors) {
+      final A2aExecutorAfterEventInterceptor? handler = interceptor.afterEvent;
+      if (handler == null || current == null) {
+        continue;
+      }
+      current = await Future<A2aEvent?>.value(
+        handler(executorContext, current, adkEvent),
+      );
+      if (current == null) {
+        return null;
+      }
+    }
+    return current;
+  }
+
+  Future<A2aTaskStatusUpdateEvent> _executeAfterAgentInterceptors(
+    A2aExecutorContext executorContext,
+    A2aTaskStatusUpdateEvent finalEvent,
+  ) async {
+    final List<A2aExecuteInterceptor>? interceptors =
+        _config.executeInterceptors;
+    if (interceptors == null || interceptors.isEmpty) {
+      return finalEvent;
+    }
+    A2aTaskStatusUpdateEvent current = finalEvent;
+    for (final A2aExecuteInterceptor interceptor in interceptors.reversed) {
+      final A2aExecutorAfterAgentInterceptor? handler = interceptor.afterAgent;
+      if (handler == null) {
+        continue;
+      }
+      current = await Future<A2aTaskStatusUpdateEvent>.value(
+        handler(executorContext, current),
+      );
+    }
+    return current;
   }
 }

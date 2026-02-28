@@ -54,6 +54,16 @@ void main() {
       );
     });
 
+    test('part converter propagates thought metadata from text parts', () {
+      final A2aPart part = A2aPart.text(
+        'thinking',
+        metadata: <String, Object?>{getAdkMetadataKey('thought'): true},
+      );
+      final Object? converted = convertA2aPartToGenaiPart(part);
+      expect(converted, isA<Part>());
+      expect((converted! as Part).thought, isTrue);
+    });
+
     test(
       'event converter marks auth_required for long-running auth call',
       () async {
@@ -145,5 +155,84 @@ void main() {
         );
       },
     );
+
+    test('executor applies before/after interceptors in order', () async {
+      final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+      final InMemoryRunner runner = InMemoryRunner(
+        agent: agent,
+        appName: 'app',
+      );
+      String? capturedAppName;
+      int afterEventCalls = 0;
+      final A2aAgentExecutor executor = A2aAgentExecutor(
+        runner: runner,
+        config: A2aAgentExecutorConfig(
+          executeInterceptors: <A2aExecuteInterceptor>[
+            A2aExecuteInterceptor(
+              beforeAgent: (A2aRequestContext context) {
+                context.contextId = 'ctx_intercepted';
+                return context;
+              },
+              afterEvent:
+                  (
+                    A2aExecutorContext executorContext,
+                    A2aEvent a2aEvent,
+                    Event _,
+                  ) {
+                    if (a2aEvent is A2aTaskArtifactUpdateEvent) {
+                      return null;
+                    }
+                    afterEventCalls += 1;
+                    return a2aEvent;
+                  },
+              afterAgent:
+                  (
+                    A2aExecutorContext executorContext,
+                    A2aTaskStatusUpdateEvent finalEvent,
+                  ) {
+                    capturedAppName = executorContext.appName;
+                    finalEvent.status.message = A2aMessage(
+                      messageId: 'm-final',
+                      role: A2aRole.agent,
+                      parts: <A2aPart>[A2aPart.text('intercepted final')],
+                    );
+                    return finalEvent;
+                  },
+            ),
+          ],
+        ),
+      );
+
+      final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+      await executor.execute(
+        A2aRequestContext(
+          taskId: 'task_2',
+          contextId: 'ctx_2',
+          message: A2aMessage(
+            messageId: 'msg_2',
+            role: A2aRole.user,
+            parts: <A2aPart>[A2aPart.text('hello')],
+          ),
+        ),
+        eventQueue,
+      );
+
+      expect(capturedAppName, 'app');
+      final A2aTaskStatusUpdateEvent submitted = eventQueue.events
+          .whereType<A2aTaskStatusUpdateEvent>()
+          .firstWhere(
+            (A2aTaskStatusUpdateEvent event) =>
+                event.status.state == A2aTaskState.submitted,
+          );
+      expect(submitted.contextId, 'ctx_intercepted');
+      expect(afterEventCalls, greaterThan(0));
+      final A2aTaskStatusUpdateEvent finalEvent = eventQueue.events
+          .whereType<A2aTaskStatusUpdateEvent>()
+          .firstWhere((A2aTaskStatusUpdateEvent event) => event.finalEvent);
+      expect(
+        finalEvent.status.message?.parts.single.textPart?.text,
+        'intercepted final',
+      );
+    });
   });
 }

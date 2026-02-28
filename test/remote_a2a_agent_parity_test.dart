@@ -145,6 +145,144 @@ void main() {
       expect(agent.description, 'Resolved from URL');
     });
 
+    test('applies request interceptors before and after sendMessage', () async {
+      final _RecordingClient client = _RecordingClient(
+        () => Stream<Object>.value(
+          A2aMessage(
+            messageId: 'resp-int',
+            role: A2aRole.agent,
+            parts: <A2aPart>[A2aPart.text('ok')],
+          ),
+        ),
+      );
+      final RemoteA2aAgent agent = RemoteA2aAgent(
+        name: 'remote_agent',
+        agentCard: AgentCard(
+          name: 'remote',
+          description: 'desc',
+          url: 'https://remote.example/rpc',
+          version: '1.0.0',
+        ),
+        a2aClientFactory: _RecordingClientFactory(client),
+        config: A2aRemoteAgentConfig(
+          requestInterceptors: <A2aRequestInterceptor>[
+            A2aRequestInterceptor(
+              beforeRequest:
+                  (
+                    InvocationContext _,
+                    A2aMessage request,
+                    A2aRequestParametersConfig params,
+                  ) {
+                    request.metadata['intercepted'] = true;
+                    params.requestMetadata = <String, Object?>{
+                      'from_interceptor': true,
+                    };
+                    params.clientCallContext ??= A2aClientCallContext();
+                    params.clientCallContext!.state['seen'] = 'before';
+                    return A2aBeforeRequestResult.request(
+                      request,
+                      parameters: params,
+                    );
+                  },
+            ),
+            A2aRequestInterceptor(
+              afterRequest: (InvocationContext _, Object __, Event event) {
+                event.customMetadata ??= <String, dynamic>{};
+                event.customMetadata!['after_interceptor'] = true;
+                return event;
+              },
+            ),
+          ],
+        ),
+      );
+
+      final List<Event> events = await agent
+          .runAsync(
+            _context(
+              agent: agent,
+              events: <Event>[
+                Event(
+                  invocationId: 'inv-int',
+                  author: 'user',
+                  content: Content.userText('hi'),
+                ),
+              ],
+            ),
+          )
+          .toList();
+
+      expect(client.requests, hasLength(1));
+      expect(client.requests.single.metadata['intercepted'], isTrue);
+      expect(client.requestMetadatas.single, <String, Object?>{
+        'from_interceptor': true,
+      });
+      expect(client.contexts.single?.state['seen'], 'before');
+      expect(events, hasLength(1));
+      expect(events.single.customMetadata?['after_interceptor'], isTrue);
+    });
+
+    test('before request interceptor can short-circuit with Event', () async {
+      final _RecordingClient client = _RecordingClient(
+        () => Stream<Object>.value(
+          A2aMessage(
+            messageId: 'resp-short',
+            role: A2aRole.agent,
+            parts: <A2aPart>[A2aPart.text('unreachable')],
+          ),
+        ),
+      );
+      final RemoteA2aAgent agent = RemoteA2aAgent(
+        name: 'remote_agent',
+        agentCard: AgentCard(
+          name: 'remote',
+          description: 'desc',
+          url: 'https://remote.example/rpc',
+          version: '1.0.0',
+        ),
+        a2aClientFactory: _RecordingClientFactory(client),
+        config: A2aRemoteAgentConfig(
+          requestInterceptors: <A2aRequestInterceptor>[
+            A2aRequestInterceptor(
+              beforeRequest:
+                  (
+                    InvocationContext ctx,
+                    A2aMessage _,
+                    A2aRequestParametersConfig __,
+                  ) {
+                    return A2aBeforeRequestResult.event(
+                      Event(
+                        invocationId: ctx.invocationId,
+                        author: 'remote_agent',
+                        branch: ctx.branch,
+                        content: Content.modelText('short-circuited'),
+                      ),
+                    );
+                  },
+            ),
+          ],
+        ),
+      );
+
+      final List<Event> events = await agent
+          .runAsync(
+            _context(
+              agent: agent,
+              events: <Event>[
+                Event(
+                  invocationId: 'inv-short',
+                  author: 'user',
+                  content: Content.userText('hello'),
+                ),
+              ],
+            ),
+          )
+          .toList();
+
+      expect(client.requests, isEmpty);
+      expect(events, hasLength(1));
+      expect(events.single.content?.parts.single.text, 'short-circuited');
+    });
+
     test(
       'reuses task/context ids for user function response request',
       () async {
