@@ -54,7 +54,8 @@ class _QueuedHttpClient extends http.BaseClient {
 class _RecordingMemoryBankClient implements VertexAiMemoryBankApiClient {
   final List<int> directBatchSizes = <int>[];
   final List<String> createdFacts = <String>[];
-  final List<String> generatedEventTexts = <String>[];
+  final List<Map<String, Object?>> generatedEvents =
+      <Map<String, Object?>>[];
   final List<Map<String, Object?>> directConfigs = <Map<String, Object?>>[];
   final List<VertexAiRetrievedMemory> retrieved = <VertexAiRetrievedMemory>[];
 
@@ -82,14 +83,18 @@ class _RecordingMemoryBankClient implements VertexAiMemoryBankApiClient {
   }
 
   @override
-  Future<void> generateFromEventTexts({
+  Future<void> generateFromEvents({
     required String agentEngineId,
     required String appName,
     required String userId,
-    required List<String> eventTexts,
+    required List<Map<String, Object?>> events,
     required Map<String, Object?> config,
   }) async {
-    generatedEventTexts.addAll(eventTexts);
+    generatedEvents.addAll(
+      events.map(
+        (Map<String, Object?> item) => Map<String, Object?>.from(item),
+      ),
+    );
   }
 
   @override
@@ -161,6 +166,45 @@ void main() {
 
       expect(result.memories, hasLength(1));
       expect(result.memories.first.content.parts.first.text, contains('alpha'));
+    });
+
+    test('addEventsToMemory forwards structured content payload', () async {
+      final _RecordingMemoryBankClient recording = _RecordingMemoryBankClient();
+      final VertexAiMemoryBankService service = VertexAiMemoryBankService(
+        agentEngineId: 'ae_structured',
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return recording;
+        },
+      );
+
+      await service.addEventsToMemory(
+        appName: 'app',
+        userId: 'u1',
+        events: <Event>[
+          Event(
+            invocationId: 'inv_payload',
+            author: 'user',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.text('alpha'),
+                Part.fromInlineData(mimeType: 'image/png', data: <int>[1, 2]),
+              ],
+            ),
+          ),
+        ],
+      );
+
+      expect(recording.generatedEvents, hasLength(1));
+      final Map<String, Object?> firstEvent = recording.generatedEvents.first;
+      final Map<Object?, Object?> content =
+          firstEvent['content'] as Map<Object?, Object?>;
+      expect(content['role'], 'user');
+      final List<Object?> parts = content['parts'] as List<Object?>;
+      expect(parts, hasLength(2));
+      final Map<Object?, Object?> inlineDataPart =
+          parts[1] as Map<Object?, Object?>;
+      expect(inlineDataPart['inline_data'], isA<Map<Object?, Object?>>());
     });
 
     test('uses direct memory batches when consolidation is enabled', () async {
@@ -254,11 +298,19 @@ void main() {
             accessTokenProvider: () async => 'access-token',
           );
 
-      await client.generateFromEventTexts(
+      await client.generateFromEvents(
         agentEngineId: '123',
         appName: 'app',
         userId: 'u1',
-        eventTexts: <String>['hello memory'],
+        events: <Map<String, Object?>>[
+          <String, Object?>{
+            'content': <String, Object?>{
+              'parts': <Map<String, Object?>>[
+                <String, Object?>{'text': 'hello memory'},
+              ],
+            },
+          },
+        ],
         config: <String, Object?>{'wait_for_completion': false},
       );
       await client.generateFromDirectMemories(
@@ -308,6 +360,16 @@ void main() {
       expect(
         (firstPayload['direct_contents_source'] as Map)['events'],
         isA<List<Object?>>(),
+      );
+
+      final Map<String, Object?> fourthPayload =
+          (jsonDecode(httpClient.recordedRequests[3].body) as Map).map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          );
+      expect(fourthPayload, contains('similarity_search_params'));
+      expect(
+        (fourthPayload['similarity_search_params'] as Map)['search_query'],
+        'remember',
       );
 
       expect(retrieved, hasLength(1));

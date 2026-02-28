@@ -38,52 +38,51 @@ void main() {
       );
     });
 
-    test(
-      'addEventsToMemory merges customMetadata into stored events',
-      () async {
-        final InMemoryMemoryService service = InMemoryMemoryService();
+    test('addEventsToMemory ignores customMetadata payload', () async {
+      final InMemoryMemoryService service = InMemoryMemoryService();
 
-        await service.addEventsToMemory(
+      await service.addEventsToMemory(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        customMetadata: <String, Object?>{
+          'source': 'ingest',
+          'priority': 'high',
+        },
+        events: <Event>[
+          Event(
+            invocationId: 'inv3',
+            author: 'agent',
+            content: Content.modelText('metadata searchable text'),
+            customMetadata: <String, dynamic>{
+              'priority': 'low',
+              'event_only': 'yes',
+            },
+          ),
+        ],
+      );
+
+      final SearchMemoryResponse response = await service.searchMemory(
+        appName: 'app',
+        userId: 'u1',
+        query: 'metadata searchable',
+      );
+
+      expect(response.memories, hasLength(1));
+      expect(response.memories.first.customMetadata, isEmpty);
+    });
+
+    test('addMemory is unsupported', () async {
+      final InMemoryMemoryService service = InMemoryMemoryService();
+
+      await expectLater(
+        service.addMemory(
           appName: 'app',
           userId: 'u1',
-          sessionId: 's1',
-          customMetadata: <String, Object?>{
-            'source': 'ingest',
-            'priority': 'high',
-          },
-          events: <Event>[
-            Event(
-              invocationId: 'inv3',
-              author: 'agent',
-              content: Content.modelText('metadata searchable text'),
-              customMetadata: <String, dynamic>{
-                'priority': 'low',
-                'event_only': 'yes',
-              },
-            ),
-          ],
-        );
-
-        final SearchMemoryResponse response = await service.searchMemory(
-          appName: 'app',
-          userId: 'u1',
-          query: 'metadata searchable',
-        );
-
-        expect(response.memories, hasLength(1));
-        expect(
-          response.memories.first.customMetadata,
-          containsPair('source', 'ingest'),
-        );
-        expect(
-          response.memories.first.customMetadata,
-          containsPair('event_only', 'yes'),
-        );
-        expect(
-          response.memories.first.customMetadata,
-          containsPair('priority', 'high'),
-        );
-      },
-    );
+          memories: <MemoryEntry>[MemoryEntry(content: Content.userText('m1'))],
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
   });
 }

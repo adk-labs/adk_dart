@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -61,11 +60,11 @@ class VertexAiRetrievedMemory {
 }
 
 abstract class VertexAiMemoryBankApiClient {
-  Future<void> generateFromEventTexts({
+  Future<void> generateFromEvents({
     required String agentEngineId,
     required String appName,
     required String userId,
-    required List<String> eventTexts,
+    required List<Map<String, Object?>> events,
     required Map<String, Object?> config,
   });
 
@@ -153,26 +152,18 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
   final VertexAiMemoryBankUriBuilder _uriBuilder;
 
   @override
-  Future<void> generateFromEventTexts({
+  Future<void> generateFromEvents({
     required String agentEngineId,
     required String appName,
     required String userId,
-    required List<String> eventTexts,
+    required List<Map<String, Object?>> events,
     required Map<String, Object?> config,
   }) async {
-    final List<Map<String, Object?>> events = eventTexts
-        .where((String text) => text.trim().isNotEmpty)
-        .map(
-          (String text) => <String, Object?>{
-            'content': <String, Object?>{
-              'parts': <Map<String, Object?>>[
-                <String, Object?>{'text': text},
-              ],
-            },
-          },
-        )
+    final List<Map<String, Object?>> normalizedEvents = events
+        .map(_normalizeVertexGenerateEvent)
+        .where((Map<String, Object?> event) => event.isNotEmpty)
         .toList(growable: false);
-    if (events.isEmpty) {
+    if (normalizedEvents.isEmpty) {
       return;
     }
 
@@ -181,7 +172,7 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
       agentEngineId: agentEngineId,
       payload: <String, Object?>{
         'scope': <String, Object?>{'app_name': appName, 'user_id': userId},
-        'direct_contents_source': <String, Object?>{'events': events},
+        'direct_contents_source': <String, Object?>{'events': normalizedEvents},
         'config': Map<String, Object?>.from(config),
       },
     );
@@ -247,7 +238,7 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
       agentEngineId: agentEngineId,
       payload: <String, Object?>{
         'scope': <String, Object?>{'app_name': appName, 'user_id': userId},
-        'query': query,
+        'similarity_search_params': <String, Object?>{'search_query': query},
       },
     );
 
@@ -514,11 +505,11 @@ class InMemoryVertexAiMemoryBankApiClient
   }
 
   @override
-  Future<void> generateFromEventTexts({
+  Future<void> generateFromEvents({
     required String agentEngineId,
     required String appName,
     required String userId,
-    required List<String> eventTexts,
+    required List<Map<String, Object?>> events,
     required Map<String, Object?> config,
   }) async {
     final String key = _scopeKey(
@@ -530,13 +521,14 @@ class InMemoryVertexAiMemoryBankApiClient
       key,
       () => <_StoredMemory>[],
     );
-    for (final String text in eventTexts) {
-      if (text.trim().isEmpty) {
+    for (final Map<String, Object?> event in events) {
+      final String fact = _extractFactFromGenerateEvent(event);
+      if (fact.isEmpty) {
         continue;
       }
       bucket.add(
         _StoredMemory(
-          fact: text,
+          fact: fact,
           updateTime: DateTime.now().toUtc(),
           metadata: Map<String, Object?>.from(config),
         ),
@@ -699,7 +691,7 @@ class VertexAiMemoryBankService extends BaseMemoryService {
     required List<Event> eventsToProcess,
     Map<String, Object?>? customMetadata,
   }) async {
-    final List<String> directEvents = <String>[];
+    final List<Map<String, Object?>> directEvents = <Map<String, Object?>>[];
     for (final Event event in eventsToProcess) {
       if (_shouldFilterOutEvent(event.content)) {
         continue;
@@ -708,11 +700,7 @@ class VertexAiMemoryBankService extends BaseMemoryService {
       if (content == null) {
         continue;
       }
-      final String text = _contentToMemoryText(content);
-      if (text.isEmpty) {
-        continue;
-      }
-      directEvents.add(text);
+      directEvents.add(<String, Object?>{'content': _contentToVertexJson(content)});
     }
 
     if (directEvents.isEmpty) {
@@ -723,11 +711,11 @@ class VertexAiMemoryBankService extends BaseMemoryService {
     final Map<String, Object?> config = _buildGenerateMemoriesConfig(
       customMetadata,
     );
-    await apiClient.generateFromEventTexts(
+    await apiClient.generateFromEvents(
       agentEngineId: _agentEngineId,
       appName: appName,
       userId: userId,
-      eventTexts: directEvents,
+      events: directEvents,
       config: config,
     );
   }
@@ -1153,7 +1141,7 @@ Map<String, Object?>? _toVertexMetadataValue(String key, Object? value) {
     };
   }
   if (value is Map) {
-    final Map<String, Object?> normalized = LinkedHashMap<String, Object?>();
+    final Map<String, Object?> normalized = <String, Object?>{};
     value.forEach((Object? mapKey, Object? mapValue) {
       normalized['$mapKey'] = mapValue;
     });
@@ -1175,16 +1163,132 @@ Map<String, Object?>? _toVertexMetadataValue(String key, Object? value) {
   return <String, Object?>{'string_value': '$value'};
 }
 
-String _contentToMemoryText(Content content) {
+Map<String, Object?> _contentToVertexJson(Content content) {
+  final Map<String, Object?> payload = <String, Object?>{
+    'parts': content.parts.map(_partToVertexJson).toList(growable: false),
+  };
+  if (content.role != null) {
+    payload['role'] = content.role!;
+  }
+  return payload;
+}
+
+Map<String, Object?> _partToVertexJson(Part part) {
+  final Map<String, Object?> payload = <String, Object?>{};
+  if (part.text != null) {
+    payload['text'] = part.text!;
+  }
+  if (part.thought) {
+    payload['thought'] = true;
+  }
+  if (part.thoughtSignature != null) {
+    payload['thought_signature'] = List<int>.from(part.thoughtSignature!);
+  }
+  if (part.functionCall != null) {
+    payload['function_call'] = <String, Object?>{
+      'name': part.functionCall!.name,
+      if (part.functionCall!.args.isNotEmpty)
+        'args': Map<String, dynamic>.from(part.functionCall!.args),
+      if (part.functionCall!.id != null) 'id': part.functionCall!.id!,
+      if (part.functionCall!.partialArgs != null)
+        'partial_args': part.functionCall!.partialArgs!
+            .map((Map<String, Object?> item) => Map<String, Object?>.from(item))
+            .toList(growable: false),
+      if (part.functionCall!.willContinue != null)
+        'will_continue': part.functionCall!.willContinue!,
+    };
+  }
+  if (part.functionResponse != null) {
+    payload['function_response'] = <String, Object?>{
+      'name': part.functionResponse!.name,
+      if (part.functionResponse!.response.isNotEmpty)
+        'response': Map<String, dynamic>.from(part.functionResponse!.response),
+      if (part.functionResponse!.id != null) 'id': part.functionResponse!.id!,
+    };
+  }
+  if (part.inlineData != null) {
+    payload['inline_data'] = <String, Object?>{
+      'mime_type': part.inlineData!.mimeType,
+      'data': List<int>.from(part.inlineData!.data),
+      if (part.inlineData!.displayName != null)
+        'display_name': part.inlineData!.displayName!,
+    };
+  }
+  if (part.fileData != null) {
+    payload['file_data'] = <String, Object?>{
+      'file_uri': part.fileData!.fileUri,
+      if (part.fileData!.mimeType != null) 'mime_type': part.fileData!.mimeType!,
+      if (part.fileData!.displayName != null)
+        'display_name': part.fileData!.displayName!,
+    };
+  }
+  if (part.executableCode != null) {
+    payload['executable_code'] = part.executableCode;
+  }
+  if (part.codeExecutionResult != null) {
+    payload['code_execution_result'] = part.codeExecutionResult;
+  }
+  return payload;
+}
+
+Map<String, Object?> _normalizeVertexGenerateEvent(Map<String, Object?> event) {
+  final Map<String, Object?> normalizedEvent = _asStringMap(event);
+  final Map<String, Object?> content = _asStringMap(normalizedEvent['content']);
+  if (content.isEmpty) {
+    return <String, Object?>{};
+  }
+  final Object? partsRaw = content['parts'];
+  if (partsRaw is! List) {
+    return <String, Object?>{};
+  }
+  final List<Map<String, Object?>> parts = partsRaw
+      .map(_asStringMap)
+      .where((Map<String, Object?> part) => part.isNotEmpty)
+      .toList(growable: false);
+  if (parts.isEmpty) {
+    return <String, Object?>{};
+  }
+  final Map<String, Object?> normalizedContent = <String, Object?>{
+    'parts': parts,
+  };
+  if (content['role'] != null) {
+    normalizedContent['role'] = '${content['role']}';
+  }
+  return <String, Object?>{'content': normalizedContent};
+}
+
+String _extractFactFromGenerateEvent(Map<String, Object?> event) {
+  final Map<String, Object?> normalized = _normalizeVertexGenerateEvent(event);
+  if (normalized.isEmpty) {
+    return '';
+  }
+  final Map<String, Object?> content = _asStringMap(normalized['content']);
+  final Object? partsRaw = content['parts'];
+  if (partsRaw is! List) {
+    return '';
+  }
   final List<String> segments = <String>[];
-  for (final Part part in content.parts) {
-    final String? text = part.text;
+  for (final Object? partRaw in partsRaw) {
+    final Map<String, Object?> part = _asStringMap(partRaw);
+    final String? text = _readStringByKeys(part, const <String>['text']);
     if (text != null && text.trim().isNotEmpty) {
       segments.add(text.trim());
-    } else if (part.inlineData != null) {
-      segments.add('[inline_data:${part.inlineData!.mimeType}]');
-    } else if (part.fileData != null) {
-      segments.add('[file_data:${part.fileData!.fileUri}]');
+      continue;
+    }
+    final Map<String, Object?> inlineData = _asStringMap(part['inline_data']);
+    if (inlineData.isNotEmpty) {
+      final String mimeType = '${inlineData['mime_type'] ?? ''}'.trim();
+      if (mimeType.isNotEmpty) {
+        segments.add('[inline_data:$mimeType]');
+        continue;
+      }
+    }
+    final Map<String, Object?> fileData = _asStringMap(part['file_data']);
+    if (fileData.isNotEmpty) {
+      final String fileUri = '${fileData['file_uri'] ?? ''}'.trim();
+      if (fileUri.isNotEmpty) {
+        segments.add('[file_data:$fileUri]');
+      }
     }
   }
   return segments.join('\n');

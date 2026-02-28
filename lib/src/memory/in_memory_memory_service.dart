@@ -1,5 +1,6 @@
 import '../events/event.dart';
 import '../sessions/session.dart';
+import '_utils.dart';
 import 'base_memory_service.dart';
 import 'memory_entry.dart';
 
@@ -32,6 +33,7 @@ class InMemoryMemoryService extends BaseMemoryService {
     String? sessionId,
     Map<String, Object?>? customMetadata,
   }) async {
+    final Map<String, Object?>? _ = customMetadata;
     final String key = _userKey(appName, userId);
     final String scopedSessionId = sessionId ?? '__unknown_session_id__';
     final List<Event> target = _sessionEventsByUserKey
@@ -48,49 +50,9 @@ class InMemoryMemoryService extends BaseMemoryService {
       if (existingIds.contains(event.id)) {
         continue;
       }
-
-      Map<String, dynamic>? mergedMetadata;
-      if ((event.customMetadata?.isNotEmpty ?? false) ||
-          (customMetadata?.isNotEmpty ?? false)) {
-        mergedMetadata = <String, dynamic>{
-          ...?event.customMetadata,
-          ...?customMetadata?.map(
-            (String key, Object? value) =>
-                MapEntry<String, dynamic>(key, value),
-          ),
-        };
-      }
-
-      target.add(
-        mergedMetadata == null
-            ? event.copyWith()
-            : event.copyWith(customMetadata: mergedMetadata),
-      );
+      target.add(event.copyWith());
       existingIds.add(event.id);
     }
-  }
-
-  @override
-  Future<void> addMemory({
-    required String appName,
-    required String userId,
-    required List<MemoryEntry> memories,
-    Map<String, Object?>? customMetadata,
-  }) async {
-    final List<Event> asEvents = memories.map((MemoryEntry memory) {
-      return Event(
-        invocationId: 'memory_ingest',
-        author: memory.author ?? 'memory',
-        content: memory.content.copyWith(),
-      );
-    }).toList();
-    await addEventsToMemory(
-      appName: appName,
-      userId: userId,
-      events: asEvents,
-      sessionId: '__manual_memory__',
-      customMetadata: customMetadata,
-    );
   }
 
   @override
@@ -120,21 +82,11 @@ class InMemoryMemoryService extends BaseMemoryService {
           continue;
         }
 
-        final Map<String, Object?> metadata = event.customMetadata == null
-            ? <String, Object?>{}
-            : event.customMetadata!.map(
-                (String key, dynamic value) =>
-                    MapEntry<String, Object?>(key, value),
-              );
         found.add(
           MemoryEntry(
             content: event.content!.copyWith(),
             author: event.author,
-            customMetadata: metadata,
-            id: event.id,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(
-              (event.timestamp * 1000).toInt(),
-            ).toIso8601String(),
+            timestamp: formatTimestamp(event.timestamp),
           ),
         );
       }

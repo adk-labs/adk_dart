@@ -20,46 +20,41 @@ class _RecordingMemoryService extends BaseMemoryService {
 }
 
 void main() {
-  test('default addEventsToMemory ingests synthetic session', () async {
+  test('default addEventsToMemory throws unsupported', () async {
     final _RecordingMemoryService service = _RecordingMemoryService();
-    await service.addEventsToMemory(
-      appName: 'app',
-      userId: 'u1',
-      sessionId: 's_memory_events',
-      events: <Event>[
-        Event(
-          invocationId: 'inv',
-          author: 'agent',
-          content: Content.modelText('hello'),
-        ),
-      ],
+    await expectLater(
+      service.addEventsToMemory(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's_memory_events',
+        events: <Event>[
+          Event(
+            invocationId: 'inv',
+            author: 'agent',
+            content: Content.modelText('hello'),
+          ),
+        ],
+      ),
+      throwsA(isA<UnsupportedError>()),
     );
-
-    expect(service.ingestedSessions, hasLength(1));
-    expect(service.ingestedSessions.first.id, 's_memory_events');
-    expect(
-      service.ingestedSessions.first.events.first.content?.parts.first.text,
-      'hello',
-    );
+    expect(service.ingestedSessions, isEmpty);
   });
 
-  test('default addMemory converts entries to events', () async {
+  test('default addMemory throws unsupported', () async {
     final _RecordingMemoryService service = _RecordingMemoryService();
-    await service.addMemory(
-      appName: 'app',
-      userId: 'u1',
-      memories: <MemoryEntry>[
-        MemoryEntry(
-          content: Content(role: 'user', parts: <Part>[Part.text('memo')]),
-          author: 'memory',
-        ),
-      ],
+    await expectLater(
+      service.addMemory(
+        appName: 'app',
+        userId: 'u1',
+        memories: <MemoryEntry>[
+          MemoryEntry(
+            content: Content(role: 'user', parts: <Part>[Part.text('memo')]),
+            author: 'memory',
+          ),
+        ],
+      ),
+      throwsA(isA<UnsupportedError>()),
     );
-
-    expect(service.ingestedSessions, hasLength(1));
-    expect(
-      service.ingestedSessions.first.events.first.content?.parts.first.text,
-      'memo',
-    );
+    expect(service.ingestedSessions, isEmpty);
   });
 }
