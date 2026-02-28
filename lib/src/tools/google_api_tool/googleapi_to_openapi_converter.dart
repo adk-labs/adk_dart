@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 typedef GoogleDiscoverySpecFetcher =
     Future<Map<String, Object?>> Function(String apiName, String apiVersion);
@@ -33,13 +34,9 @@ class GoogleApiToOpenApiConverter {
     if (_googleApiSpec != null) {
       return;
     }
-    if (_specFetcher == null) {
-      throw StateError(
-        'No Google discovery spec fetcher configured. '
-        'Provide `discoverySpec` or `specFetcher`.',
-      );
-    }
-    _googleApiSpec = await _specFetcher(apiName, apiVersion);
+    final GoogleDiscoverySpecFetcher fetcher =
+        _specFetcher ?? _defaultGoogleDiscoverySpecFetcher;
+    _googleApiSpec = await fetcher(apiName, apiVersion);
   }
 
   Future<Map<String, Object?>> convert() async {
@@ -160,11 +157,10 @@ class GoogleApiToOpenApiConverter {
           final Map<String, Object?> converted = <String, Object?>{};
           final List<String> required = <String>[];
           for (final MapEntry<String, Object?> entry in properties.entries) {
-            final Map<String, Object?> value = _convertSchemaObject(
-              _readMap(entry.value),
-            );
+            final Map<String, Object?> propertyDef = _readMap(entry.value);
+            final Map<String, Object?> value = _convertSchemaObject(propertyDef);
             converted[entry.key] = value;
-            if (_readBool(value['required'])) {
+            if (_readBool(propertyDef['required'])) {
               required.add(entry.key);
             }
           }
@@ -358,6 +354,35 @@ class GoogleApiToOpenApiConverter {
 
   String saveOpenApiSpec() {
     return const JsonEncoder.withIndent('  ').convert(_openApiSpec);
+  }
+}
+
+Future<Map<String, Object?>> _defaultGoogleDiscoverySpecFetcher(
+  String apiName,
+  String apiVersion,
+) async {
+  final Uri uri = Uri.parse(
+    'https://www.googleapis.com/discovery/v1/apis/$apiName/$apiVersion/rest',
+  );
+  final HttpClient client = HttpClient();
+  try {
+    final HttpClientRequest request = await client.getUrl(uri);
+    final HttpClientResponse response = await request.close();
+    final String body = await utf8.decodeStream(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(
+        'Google discovery request failed (${response.statusCode}): $body',
+      );
+    }
+    final Object? decoded = jsonDecode(body);
+    if (decoded is! Map) {
+      throw StateError('Google discovery response is malformed.');
+    }
+    return decoded.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+  } finally {
+    client.close(force: true);
   }
 }
 

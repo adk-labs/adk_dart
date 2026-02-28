@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import '../../agents/readonly_context.dart';
 import '../../auth/auth_credential.dart';
 import '../../auth/auth_schemes.dart';
 import '../base_tool.dart';
 import '../base_toolset.dart';
+import '../openapi_tool/openapi_spec_parser/openapi_toolset.dart';
+import '../openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 import 'google_api_tool.dart';
 import 'googleapi_to_openapi_converter.dart';
 
@@ -33,34 +37,37 @@ class GoogleApiToolset extends BaseToolset {
   final GoogleDiscoverySpecFetcher? specFetcher;
   final GoogleApiRequestExecutor? requestExecutor;
 
-  List<GoogleApiOperation>? _operations;
-  String? _baseUrl;
+  OpenAPIToolset? _openApiToolset;
   OpenIdConnectWithConfig? _oidcScheme;
 
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     await _ensureLoaded();
+
+    final List<BaseTool> openApiTools = await _openApiToolset!.getTools(
+      readonlyContext: readonlyContext,
+    );
     final List<BaseTool> tools = <BaseTool>[];
-    for (final GoogleApiOperation operation in _operations!) {
-      final GoogleApiTool tool = GoogleApiTool(
-        operation: operation,
-        baseUrl: _baseUrl!,
-        defaultHeaders: additionalHeaders,
-        requestExecutor: requestExecutor,
-      );
-      if (serviceAccount != null) {
-        tool.configureSaAuth(serviceAccount!);
-      } else if (clientId != null &&
-          clientId!.isNotEmpty &&
-          clientSecret != null &&
-          clientSecret!.isNotEmpty) {
-        tool.configureAuth(clientId!, clientSecret!);
+
+    for (final BaseTool baseTool in openApiTools) {
+      if (baseTool is! RestApiTool) {
+        continue;
       }
-      tool.authScheme = _oidcScheme;
-      if (isToolSelected(tool, readonlyContext)) {
-        tools.add(tool);
+
+      final GoogleApiTool wrapped = GoogleApiTool.fromRestApiTool(
+        baseTool,
+        clientId: clientId,
+        clientSecret: clientSecret,
+        serviceAccount: serviceAccount,
+        additionalHeaders: additionalHeaders,
+      );
+      wrapped.authScheme = _oidcScheme;
+
+      if (isToolSelected(wrapped, readonlyContext)) {
+        tools.add(wrapped);
       }
     }
+
     return tools;
   }
 
@@ -78,10 +85,15 @@ class GoogleApiToolset extends BaseToolset {
   }
 
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    final OpenAPIToolset? toolset = _openApiToolset;
+    if (toolset != null) {
+      await toolset.close();
+    }
+  }
 
   Future<void> _ensureLoaded() async {
-    if (_operations != null && _baseUrl != null) {
+    if (_openApiToolset != null) {
       return;
     }
 
@@ -98,19 +110,106 @@ class GoogleApiToolset extends BaseToolset {
       spec = await converter.convert();
     }
 
-    _baseUrl = _extractBaseUrl(spec);
-    _operations = _extractOperations(spec);
     _oidcScheme = _buildOpenIdScheme(spec);
+
+    _openApiToolset = OpenAPIToolset(
+      specDict: spec,
+      specStrType: 'yaml',
+      authScheme: _oidcScheme,
+      requestExecutor: requestExecutor == null
+          ? null
+          : _wrapGoogleApiRequestExecutor(requestExecutor!),
+    );
   }
 }
 
-String _extractBaseUrl(Map<String, Object?> openApiSpec) {
-  final List<Object?> servers = _readList(openApiSpec['servers']);
-  if (servers.isEmpty) {
-    return '';
-  }
-  final Map<String, Object?> first = _readMap(servers.first);
-  return '${first['url'] ?? ''}';
+RestApiRequestExecutor _wrapGoogleApiRequestExecutor(
+  GoogleApiRequestExecutor requestExecutor,
+) {
+  return ({required Map<String, Object?> requestParams}) async {
+    final String method = '${requestParams['method'] ?? 'GET'}'.toUpperCase();
+    final String rawUrl = '${requestParams['url'] ?? ''}';
+    Uri uri = Uri.parse(rawUrl);
+
+    final Map<String, Object?> queryParams = _readMap(requestParams['params']);
+    if (queryParams.isNotEmpty) {
+      final Map<String, String> mergedQuery = <String, String>{
+        ...uri.queryParameters,
+        for (final MapEntry<String, Object?> entry in queryParams.entries)
+          if (entry.value != null) entry.key: '${entry.value}',
+      };
+      uri = uri.replace(queryParameters: mergedQuery);
+    }
+
+    final Map<String, String> headers = <String, String>{
+      for (final MapEntry<String, Object?> entry in _readMap(
+        requestParams['headers'],
+      ).entries)
+        if (entry.value != null) entry.key: '${entry.value}',
+    };
+
+    final Map<String, Object?> cookieParams = _readMap(requestParams['cookies']);
+    if (cookieParams.isNotEmpty) {
+      final String cookieHeader = cookieParams.entries
+          .where((MapEntry<String, Object?> entry) => entry.value != null)
+          .map((MapEntry<String, Object?> entry) => '${entry.key}=${entry.value}')
+          .join('; ');
+      if (cookieHeader.isNotEmpty) {
+        headers['cookie'] = cookieHeader;
+      }
+    }
+
+    Object? body;
+    if (requestParams.containsKey('json')) {
+      body = requestParams['json'];
+    } else if (requestParams.containsKey('data')) {
+      body = requestParams['data'];
+    } else if (requestParams.containsKey('files')) {
+      body = requestParams['files'];
+    }
+
+    final Map<String, Object?> response = await requestExecutor(
+      method: method,
+      uri: uri,
+      headers: headers,
+      body: body,
+    );
+
+    final int statusCode = _readInt(response['status']) ??
+        _readInt(response['statusCode']) ??
+        500;
+    final Object? bodyPayload = response.containsKey('body')
+        ? response['body']
+        : response['data'];
+
+    final Map<String, List<String>> responseHeaders =
+        _normalizeResponseHeaders(response['headers']);
+
+    Object? jsonBody;
+    String textBody = '';
+    if (bodyPayload is String) {
+      textBody = bodyPayload;
+      try {
+        jsonBody = jsonDecode(bodyPayload);
+      } catch (_) {
+        jsonBody = null;
+      }
+    } else if (bodyPayload != null) {
+      jsonBody = bodyPayload;
+      try {
+        textBody = jsonEncode(bodyPayload);
+      } catch (_) {
+        textBody = '$bodyPayload';
+      }
+    }
+
+    return RestApiResponse(
+      statusCode: statusCode,
+      text: textBody,
+      jsonData: jsonBody,
+      headers: responseHeaders,
+    );
+  };
 }
 
 OpenIdConnectWithConfig _buildOpenIdScheme(Map<String, Object?> openApiSpec) {
@@ -122,7 +221,7 @@ OpenIdConnectWithConfig _buildOpenIdScheme(Map<String, Object?> openApiSpec) {
   final Map<String, Object?> flows = _readMap(oauth2['flows']);
   final Map<String, Object?> authCode = _readMap(flows['authorizationCode']);
   final Map<String, Object?> scopes = _readMap(authCode['scopes']);
-  final List<String> scopeKeys = scopes.keys.toList();
+  final List<String> scopeKeys = scopes.keys.toList(growable: false);
 
   return OpenIdConnectWithConfig(
     authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -134,59 +233,44 @@ OpenIdConnectWithConfig _buildOpenIdScheme(Map<String, Object?> openApiSpec) {
       'client_secret_basic',
     ],
     grantTypesSupported: const <String>['authorization_code'],
-    scopes: scopeKeys,
+    scopes: scopeKeys.isEmpty ? const <String>[] : <String>[scopeKeys.first],
   );
 }
 
-List<GoogleApiOperation> _extractOperations(Map<String, Object?> openApiSpec) {
-  final Map<String, Object?> paths = _readMap(openApiSpec['paths']);
-  final List<GoogleApiOperation> operations = <GoogleApiOperation>[];
-  for (final MapEntry<String, Object?> pathEntry in paths.entries) {
-    final Map<String, Object?> pathItem = _readMap(pathEntry.value);
-    for (final MapEntry<String, Object?> methodEntry in pathItem.entries) {
-      final String method = methodEntry.key.toUpperCase();
-      final Map<String, Object?> operation = _readMap(methodEntry.value);
-      final String operationId = '${operation['operationId'] ?? ''}';
-      if (operationId.isEmpty) {
-        continue;
+Map<String, List<String>> _normalizeResponseHeaders(Object? value) {
+  final Map<String, List<String>> headers = <String, List<String>>{};
+  if (value is Map) {
+    value.forEach((Object? key, Object? item) {
+      final String name = '$key';
+      if (item is List) {
+        headers[name] = item.map((Object? element) => '$element').toList();
+      } else if (item != null) {
+        headers[name] = <String>['$item'];
       }
-      final List<Map<String, Object?>> parameters = _readList(
-        operation['parameters'],
-      ).map(_readMap).toList();
-      final Map<String, Object?> requestBody = _readMap(
-        operation['requestBody'],
-      );
-      final Map<String, Object?> content = _readMap(requestBody['content']);
-      final Map<String, Object?> appJson = _readMap(
-        content['application/json'],
-      );
-      final Map<String, Object?> schema = _readMap(appJson['schema']);
-      operations.add(
-        GoogleApiOperation(
-          operationId: operationId,
-          method: method,
-          path: pathEntry.key,
-          summary: '${operation['summary'] ?? ''}',
-          description: '${operation['description'] ?? ''}',
-          parameters: parameters,
-          requestBodySchema: schema.isEmpty ? null : schema,
-        ),
-      );
-    }
+    });
   }
-  return operations;
+  return headers;
 }
 
 Map<String, Object?> _readMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return value;
+  }
   if (value is Map) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
   }
   return <String, Object?>{};
 }
 
-List<Object?> _readList(Object? value) {
-  if (value is List) {
-    return value.cast<Object?>();
+int? _readInt(Object? value) {
+  if (value is int) {
+    return value;
   }
-  return <Object?>[];
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
 }

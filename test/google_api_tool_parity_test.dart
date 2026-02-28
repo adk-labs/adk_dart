@@ -197,7 +197,10 @@ void main() {
           tool.authCredential?.authType,
           AuthCredentialType.serviceAccount,
         );
-        expect(tool.authScheme, 'service_account');
+        expect(tool.authScheme, isA<SecurityScheme>());
+        final SecurityScheme scheme = tool.authScheme! as SecurityScheme;
+        expect(scheme.type, AuthSchemeType.http);
+        expect(scheme.scheme, 'bearer');
       },
     );
   });

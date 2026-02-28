@@ -4,6 +4,8 @@ import 'dart:io';
 import '../../auth/auth_credential.dart';
 import '../../models/llm_request.dart';
 import '../base_tool.dart';
+import '../openapi_tool/auth/auth_helpers.dart';
+import '../openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 import '../tool_context.dart';
 
 typedef GoogleApiRequestExecutor =
@@ -44,8 +46,7 @@ class GoogleApiOperation {
         continue;
       }
       properties[name] = _readMap(parameter['schema']);
-      final Object? isRequired = parameter['required'];
-      if (isRequired == true) {
+      if (parameter['required'] == true) {
         required.add(name);
       }
     }
@@ -66,14 +67,19 @@ class GoogleApiOperation {
 
 class GoogleApiTool extends BaseTool {
   GoogleApiTool({
-    required this.operation,
-    required this.baseUrl,
-    this.authCredential,
-    this.authScheme,
+    required GoogleApiOperation operation,
+    required String baseUrl,
+    AuthCredential? authCredential,
+    Object? authScheme,
     Map<String, String>? defaultHeaders,
     GoogleApiRequestExecutor? requestExecutor,
-  }) : _defaultHeaders = defaultHeaders ?? <String, String>{},
-       _requestExecutor = requestExecutor ?? _defaultHttpRequestExecutor,
+  }) : _operation = operation,
+       _baseUrl = baseUrl,
+       _defaultHeaders = defaultHeaders ?? <String, String>{},
+       _legacyRequestExecutor = requestExecutor ?? _defaultHttpRequestExecutor,
+       _restApiTool = null,
+       _authCredential = authCredential,
+       _authScheme = authScheme,
        super(
          name: operation.declarationName,
          description: operation.description.isEmpty
@@ -81,16 +87,63 @@ class GoogleApiTool extends BaseTool {
              : operation.description,
        );
 
-  final GoogleApiOperation operation;
-  final String baseUrl;
-  AuthCredential? authCredential;
-  Object? authScheme;
-  final GoogleApiRequestExecutor _requestExecutor;
+  GoogleApiTool.fromRestApiTool(
+    RestApiTool restApiTool, {
+    String? clientId,
+    String? clientSecret,
+    ServiceAccountAuth? serviceAccount,
+    Map<String, String>? additionalHeaders,
+  }) : _operation = null,
+       _baseUrl = null,
+       _defaultHeaders = <String, String>{},
+       _legacyRequestExecutor = null,
+       _restApiTool = restApiTool,
+       _authCredential = restApiTool.authCredential,
+       _authScheme = restApiTool.authScheme,
+       super(name: restApiTool.name, description: restApiTool.description) {
+    if (additionalHeaders != null && additionalHeaders.isNotEmpty) {
+      restApiTool.setDefaultHeaders(additionalHeaders);
+    }
+    if (serviceAccount != null) {
+      configureSaAuth(serviceAccount);
+    } else if (clientId != null &&
+        clientId.isNotEmpty &&
+        clientSecret != null &&
+        clientSecret.isNotEmpty) {
+      configureAuth(clientId, clientSecret);
+    }
+  }
+
+  final GoogleApiOperation? _operation;
+  final String? _baseUrl;
+  final GoogleApiRequestExecutor? _legacyRequestExecutor;
   final Map<String, String> _defaultHeaders;
+  final RestApiTool? _restApiTool;
+
+  AuthCredential? _authCredential;
+  Object? _authScheme;
+
+  AuthCredential? get authCredential => _authCredential;
+
+  set authCredential(AuthCredential? value) {
+    _authCredential = value;
+    _restApiTool?.configureAuthCredential(value);
+  }
+
+  Object? get authScheme => _authScheme;
+
+  set authScheme(Object? value) {
+    _authScheme = value;
+    _restApiTool?.configureAuthScheme(value);
+  }
 
   @override
   FunctionDeclaration? getDeclaration() {
-    return operation.toDeclaration();
+    final RestApiTool? delegate = _restApiTool;
+    if (delegate != null) {
+      return delegate.getDeclaration();
+    }
+    return _operation?.toDeclaration();
   }
 
   @override
@@ -98,17 +151,27 @@ class GoogleApiTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
+    final RestApiTool? delegate = _restApiTool;
+    if (delegate != null) {
+      if (_authScheme != null) {
+        delegate.configureAuthScheme(_authScheme);
+      }
+      if (_authCredential != null) {
+        delegate.configureAuthCredential(_authCredential);
+      }
+      return delegate.run(args: args, toolContext: toolContext);
+    }
+
     final Uri resolvedUri = _buildUri(args);
-    final Map<String, String> headers = _buildHeaders();
+    final Map<String, String> headers = _buildHeaders(args);
     final Object? body = args['body'];
 
-    final Map<String, Object?> response = await _requestExecutor(
-      method: operation.method.toUpperCase(),
+    return _legacyRequestExecutor!(
+      method: _operation!.method.toUpperCase(),
       uri: resolvedUri,
       headers: headers,
       body: body,
     );
-    return response;
   }
 
   void configureAuth(String clientId, String clientSecret) {
@@ -119,20 +182,24 @@ class GoogleApiTool extends BaseTool {
   }
 
   void configureSaAuth(ServiceAccountAuth serviceAccount) {
-    authScheme = 'service_account';
-    authCredential = AuthCredential(
-      authType: AuthCredentialType.serviceAccount,
-      serviceAccount: serviceAccount,
-    );
+    final binding = serviceAccountSchemeCredential(serviceAccount);
+    authScheme = binding.authScheme;
+    authCredential = binding.authCredential;
   }
 
   void setDefaultHeaders(Map<String, String> headers) {
+    final RestApiTool? delegate = _restApiTool;
+    if (delegate != null) {
+      delegate.setDefaultHeaders(headers);
+      return;
+    }
     _defaultHeaders
       ..clear()
       ..addAll(headers);
   }
 
   Uri _buildUri(Map<String, dynamic> args) {
+    final GoogleApiOperation operation = _operation!;
     String resolvedPath = operation.path;
     final Map<String, String> query = <String, String>{};
 
@@ -156,9 +223,9 @@ class GoogleApiTool extends BaseTool {
       }
     }
 
-    final String normalizedBase = baseUrl.endsWith('/')
-        ? baseUrl.substring(0, baseUrl.length - 1)
-        : baseUrl;
+    final String normalizedBase = _baseUrl!.endsWith('/')
+        ? _baseUrl.substring(0, _baseUrl.length - 1)
+        : _baseUrl;
     final String normalizedPath = resolvedPath.startsWith('/')
         ? resolvedPath
         : '/$resolvedPath';
@@ -167,15 +234,52 @@ class GoogleApiTool extends BaseTool {
     ).replace(queryParameters: query.isEmpty ? null : query);
   }
 
-  Map<String, String> _buildHeaders() {
+  Map<String, String> _buildHeaders(Map<String, dynamic> args) {
+    final GoogleApiOperation operation = _operation!;
     final Map<String, String> headers = <String, String>{
       'accept': 'application/json',
       ..._defaultHeaders,
     };
-    final AuthCredential? credential = authCredential;
+
+    for (final Map<String, Object?> parameter in operation.parameters) {
+      final String name = '${parameter['name'] ?? ''}';
+      if (name.isEmpty || !args.containsKey(name)) {
+        continue;
+      }
+      final Object? value = args[name];
+      if (value == null) {
+        continue;
+      }
+      final String location = '${parameter['in'] ?? 'query'}';
+      if (location == 'header') {
+        headers[name] = '$value';
+      }
+    }
+
+    final List<String> cookieParts = <String>[];
+    for (final Map<String, Object?> parameter in operation.parameters) {
+      final String name = '${parameter['name'] ?? ''}';
+      if (name.isEmpty || !args.containsKey(name)) {
+        continue;
+      }
+      final Object? value = args[name];
+      if (value == null) {
+        continue;
+      }
+      final String location = '${parameter['in'] ?? 'query'}';
+      if (location == 'cookie') {
+        cookieParts.add('$name=$value');
+      }
+    }
+    if (cookieParts.isNotEmpty) {
+      headers[HttpHeaders.cookieHeader] = cookieParts.join('; ');
+    }
+
+    final AuthCredential? credential = _authCredential;
     if (credential?.oauth2?.accessToken != null &&
         credential!.oauth2!.accessToken!.isNotEmpty) {
-      headers['authorization'] = 'Bearer ${credential.oauth2!.accessToken}';
+      headers[HttpHeaders.authorizationHeader] =
+          'Bearer ${credential.oauth2!.accessToken}';
     }
     return headers;
   }
