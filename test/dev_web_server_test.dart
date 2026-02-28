@@ -49,6 +49,97 @@ void main() {
       });
     });
 
+    test('reports a2a/trace/otel/extra plugin options in api info', () async {
+      final DevAgentRuntime infoRuntime = DevAgentRuntime(config: config);
+      final HttpServer infoServer = await startAdkDevWebServer(
+        runtime: infoRuntime,
+        project: config,
+        port: 0,
+        traceToCloud: true,
+        otelToCloud: true,
+        a2a: true,
+        extraPlugins: const <String>[
+          'logging_plugin',
+          'unknown.package.CustomPlugin',
+        ],
+      );
+      addTearDown(() async {
+        await infoServer.close(force: true);
+        await infoRuntime.runner.close();
+      });
+
+      final HttpClient infoClient = HttpClient();
+      addTearDown(() => infoClient.close(force: true));
+
+      final HttpClientRequest request = await infoClient.getUrl(
+        Uri.parse('http://127.0.0.1:${infoServer.port}/api/info'),
+      );
+      final HttpClientResponse response = await request.close();
+      final String body = await utf8.decoder.bind(response).join();
+      final Map<String, dynamic> payload =
+          jsonDecode(body) as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(payload['a2a'], isTrue);
+      expect(payload['trace_to_cloud'], isTrue);
+      expect(payload['otel_to_cloud'], isTrue);
+      expect(payload['extra_plugins'], <String>[
+        'logging_plugin',
+        'unknown.package.CustomPlugin',
+      ]);
+    });
+
+    test('returns not found for a2a agent card when a2a is disabled', () async {
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/.well-known/agent.json'),
+      );
+      final HttpClientResponse response = await request.close();
+      await utf8.decoder.bind(response).join();
+      expect(response.statusCode, HttpStatus.notFound);
+    });
+
+    test('serves a2a agent cards when a2a is enabled', () async {
+      final DevAgentRuntime a2aRuntime = DevAgentRuntime(config: config);
+      final HttpServer a2aServer = await startAdkDevWebServer(
+        runtime: a2aRuntime,
+        project: config,
+        port: 0,
+        a2a: true,
+      );
+      addTearDown(() async {
+        await a2aServer.close(force: true);
+        await a2aRuntime.runner.close();
+      });
+
+      final HttpClient a2aClient = HttpClient();
+      addTearDown(() => a2aClient.close(force: true));
+
+      final HttpClientRequest rootRequest = await a2aClient.getUrl(
+        Uri.parse('http://127.0.0.1:${a2aServer.port}/.well-known/agent.json'),
+      );
+      final HttpClientResponse rootResponse = await rootRequest.close();
+      final Map<String, dynamic> rootPayload = jsonDecode(
+        await utf8.decoder.bind(rootResponse).join(),
+      ) as Map<String, dynamic>;
+
+      final HttpClientRequest scopedRequest = await a2aClient.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${a2aServer.port}/a2a/test_app/.well-known/agent.json',
+        ),
+      );
+      final HttpClientResponse scopedResponse = await scopedRequest.close();
+      final Map<String, dynamic> scopedPayload = jsonDecode(
+        await utf8.decoder.bind(scopedResponse).join(),
+      ) as Map<String, dynamic>;
+
+      expect(rootResponse.statusCode, HttpStatus.ok);
+      expect(scopedResponse.statusCode, HttpStatus.ok);
+      expect(rootPayload['name'], 'root_agent');
+      expect(rootPayload['url'], contains('/a2a/test_app'));
+      expect(scopedPayload['name'], 'root_agent');
+      expect(scopedPayload['url'], contains('/a2a/test_app'));
+    });
+
     test('creates a session and sends a message', () async {
       final HttpClientRequest createSessionRequest = await client.postUrl(
         Uri.parse('http://127.0.0.1:${server.port}/api/sessions'),

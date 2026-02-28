@@ -10,7 +10,7 @@ class McpInstructionProvider {
   }) : _errlog = errlog,
        _mcpSessionManager = sessionManager ?? McpSessionManager.instance;
 
-  final StreamableHTTPConnectionParams connectionParams;
+  final McpConnectionParams connectionParams;
   final String promptName;
   final Object? _errlog;
   final McpSessionManager _mcpSessionManager;

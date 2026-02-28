@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import '../events/event.dart';
 import '../sessions/session.dart';
+import '../sessions/schemas/v0.dart';
 import '../types/content.dart';
 import 'project.dart';
 import 'runtime.dart';
@@ -24,6 +26,9 @@ Create options:
 Run options:
       --user-id         User id (default: from adk.json or "user")
       --session-id      Reuse a session id (default: auto-generated)
+      --save_session    Save session snapshot on exit
+      --resume          Resume from a saved session snapshot json file
+      --replay          Replay session input file json (state + queries)
   -m, --message         Single message mode (no interactive prompt)
 
 Web options:
@@ -37,6 +42,12 @@ Web options:
       --memory_service_uri
       --use_local_storage / --no-use_local_storage
       --auto_create_session
+      --trace_to_cloud
+      --otel_to_cloud
+      --reload / --no-reload
+      --reload_agents
+      --a2a
+      --extra_plugins
       --logo_text
       --logo_image_url
   -h, --help            Show this help message.
@@ -76,12 +87,18 @@ class ParsedAdkCommand {
       autoCreateSession = false,
       enableWebUi = true,
       sessionId = null,
+      saveSession = false,
+      resumeFilePath = null,
+      replayFilePath = null,
       message = null;
 
   ParsedAdkCommand.run({
     required this.projectDir,
     this.userId,
     this.sessionId,
+    required this.saveSession,
+    this.resumeFilePath,
+    this.replayFilePath,
     this.message,
   }) : type = AdkCommandType.run,
        appName = null,
@@ -128,6 +145,9 @@ class ParsedAdkCommand {
   }) : type = AdkCommandType.web,
        appName = null,
        sessionId = null,
+       saveSession = false,
+       resumeFilePath = null,
+       replayFilePath = null,
        message = null;
 
   final AdkCommandType type;
@@ -153,6 +173,9 @@ class ParsedAdkCommand {
   final bool autoCreateSession;
   final bool enableWebUi;
   final String? sessionId;
+  final bool saveSession;
+  final String? resumeFilePath;
+  final String? replayFilePath;
   final String? message;
 }
 
@@ -267,7 +290,10 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
   String projectDir = '.';
   String? userId;
   String? sessionId;
+  String? resumeFilePath;
+  String? replayFilePath;
   String? message;
+  bool saveSession = false;
   bool seenProjectDir = false;
 
   for (int i = 0; i < args.length; i += 1) {
@@ -299,6 +325,28 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
       message = arg.substring('--message='.length);
       continue;
     }
+    if (arg == '--save_session') {
+      saveSession = true;
+      continue;
+    }
+    if (arg == '--resume') {
+      resumeFilePath = _nextArg(args, i, '--resume');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--resume=')) {
+      resumeFilePath = arg.substring('--resume='.length);
+      continue;
+    }
+    if (arg == '--replay') {
+      replayFilePath = _nextArg(args, i, '--replay');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--replay=')) {
+      replayFilePath = arg.substring('--replay='.length);
+      continue;
+    }
 
     if (arg.startsWith('-')) {
       throw CliUsageError('Unknown option for run: $arg');
@@ -311,10 +359,21 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     seenProjectDir = true;
   }
 
+  if (_emptyToNull(resumeFilePath) != null &&
+      _emptyToNull(replayFilePath) != null) {
+    throw CliUsageError('--resume and --replay cannot be used together.');
+  }
+  if (_emptyToNull(message) != null && _emptyToNull(replayFilePath) != null) {
+    throw CliUsageError('--message and --replay cannot be used together.');
+  }
+
   return ParsedAdkCommand.run(
     projectDir: projectDir,
     userId: _emptyToNull(userId),
     sessionId: _emptyToNull(sessionId),
+    saveSession: saveSession,
+    resumeFilePath: _emptyToNull(resumeFilePath),
+    replayFilePath: _emptyToNull(replayFilePath),
     message: _emptyToNull(message),
   );
 }
@@ -652,9 +711,32 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
   final DevAgentRuntime runtime = DevAgentRuntime(config: config);
 
   final String userId = config.userId;
-  final Session session = await runtime.createSession(
+
+  if (command.replayFilePath != null) {
+    final Session replaySession = await _runReplayFile(
+      runtime: runtime,
+      userId: userId,
+      replayFilePath: command.replayFilePath!,
+      out: out,
+    );
+    if (command.saveSession) {
+      await _saveSessionSnapshot(
+        runtime: runtime,
+        session: replaySession,
+        projectDir: command.projectDir,
+        requestedSessionIdForSave: command.sessionId,
+        out: out,
+      );
+    }
+    await runtime.runner.close();
+    return 0;
+  }
+
+  final Session session = await _prepareRunSession(
+    runtime: runtime,
     userId: userId,
-    sessionId: command.sessionId,
+    requestedSessionId: command.sessionId,
+    resumeFilePath: command.resumeFilePath,
   );
 
   if (command.message != null) {
@@ -668,6 +750,15 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
       agentName: runtime.config.agentName,
     );
     out.writeln(replies.isEmpty ? '(no response)' : replies.join('\n'));
+    if (command.saveSession) {
+      await _saveSessionSnapshot(
+        runtime: runtime,
+        session: session,
+        projectDir: command.projectDir,
+        requestedSessionIdForSave: command.sessionId,
+        out: out,
+      );
+    }
     await runtime.runner.close();
     return 0;
   }
@@ -710,8 +801,204 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
     }
   }
 
+  if (command.saveSession) {
+    await _saveSessionSnapshot(
+      runtime: runtime,
+      session: session,
+      projectDir: command.projectDir,
+      requestedSessionIdForSave: command.sessionId,
+      out: out,
+    );
+  }
+
   await runtime.runner.close();
   return 0;
+}
+
+class _ReplayInput {
+  _ReplayInput({required this.state, required this.queries});
+
+  final Map<String, Object?> state;
+  final List<String> queries;
+
+  factory _ReplayInput.fromJson(Map<String, Object?> json) {
+    final Map<String, Object?> state = <String, Object?>{};
+    final Object? rawState = json['state'];
+    if (rawState is Map) {
+      state.addAll(
+        rawState.map((Object? key, Object? value) => MapEntry('$key', value)),
+      );
+    }
+
+    final List<String> queries = <String>[];
+    final Object? rawQueries = json['queries'];
+    if (rawQueries is List) {
+      for (final Object? query in rawQueries) {
+        if (query == null) {
+          continue;
+        }
+        final String text = '$query';
+        if (text.trim().isEmpty) {
+          continue;
+        }
+        queries.add(text);
+      }
+    }
+
+    return _ReplayInput(state: state, queries: queries);
+  }
+}
+
+Future<Session> _runReplayFile({
+  required DevAgentRuntime runtime,
+  required String userId,
+  required String replayFilePath,
+  required IOSink out,
+}) async {
+  final File replayFile = File(replayFilePath);
+  if (!await replayFile.exists()) {
+    throw FileSystemException('Replay file not found.', replayFile.path);
+  }
+  final Object? decoded = jsonDecode(await replayFile.readAsString());
+  if (decoded is! Map) {
+    throw const FormatException('Invalid replay file: expected object.');
+  }
+  final Map<String, Object?> replayJson = decoded.map(
+    (Object? key, Object? value) => MapEntry('$key', value),
+  );
+  final _ReplayInput replayInput = _ReplayInput.fromJson(replayJson);
+  replayInput.state['_time'] = DateTime.now().toIso8601String();
+
+  final Session session = await runtime.createSessionWithState(
+    userId: userId,
+    state: replayInput.state,
+  );
+
+  for (final String query in replayInput.queries) {
+    out.writeln('[user]: $query');
+    final List<Event> events = await runtime.sendMessage(
+      userId: userId,
+      sessionId: session.id,
+      message: query,
+    );
+    for (final Event event in events) {
+      final Content? content = event.content;
+      if (content == null || content.parts.isEmpty) {
+        continue;
+      }
+      final String text = content.parts
+          .where((Part part) => part.text != null && part.text!.isNotEmpty)
+          .map((Part part) => part.text!)
+          .join();
+      if (text.isEmpty) {
+        continue;
+      }
+      out.writeln('[${event.author}]: $text');
+    }
+  }
+
+  return session;
+}
+
+Future<Session> _prepareRunSession({
+  required DevAgentRuntime runtime,
+  required String userId,
+  required String? requestedSessionId,
+  required String? resumeFilePath,
+}) async {
+  if (resumeFilePath == null) {
+    return runtime.createSession(userId: userId, sessionId: requestedSessionId);
+  }
+
+  final Session loaded = await _loadSessionSnapshot(resumeFilePath);
+  final Session session = await runtime.createSessionWithState(
+    userId: userId,
+    sessionId: requestedSessionId,
+    state: loaded.events.isEmpty
+        ? Map<String, Object?>.from(loaded.state)
+        : null,
+  );
+
+  for (final Event event in loaded.events) {
+    await runtime.runner.sessionService.appendEvent(
+      session: session,
+      event: event.copyWith(),
+    );
+  }
+
+  return session;
+}
+
+Future<Session> _loadSessionSnapshot(String filePath) async {
+  final File file = File(filePath);
+  if (!await file.exists()) {
+    throw FileSystemException('Resume file not found.', file.path);
+  }
+
+  final Object? decoded = jsonDecode(await file.readAsString());
+  if (decoded is! Map) {
+    throw const FormatException('Invalid session snapshot: expected object.');
+  }
+  final Map<String, Object?> json = decoded.map(
+    (Object? key, Object? value) => MapEntry('$key', value),
+  );
+
+  final StorageSessionV0 storage = StorageSessionV0.fromJson(json);
+  final List<Event> events = storage.storageEvents
+      .map((StorageEventV0 item) => item.toEvent())
+      .toList(growable: false);
+
+  return storage.toSession(
+    stateOverride: Map<String, Object?>.from(storage.state),
+    events: events,
+  );
+}
+
+Map<String, Object?> _sessionSnapshotJson(Session session) {
+  final StorageSessionV0 storage = StorageSessionV0(
+    appName: session.appName,
+    userId: session.userId,
+    id: session.id,
+    state: Map<String, Object?>.from(session.state),
+    storageEvents: session.events
+        .map(
+          (Event event) =>
+              StorageEventV0.fromEvent(session: session, event: event),
+        )
+        .toList(growable: false),
+  );
+  return storage.toJson();
+}
+
+Future<void> _saveSessionSnapshot({
+  required DevAgentRuntime runtime,
+  required Session session,
+  required String projectDir,
+  required String? requestedSessionIdForSave,
+  required IOSink out,
+}) async {
+  final Session? refreshed = await runtime.getSession(
+    userId: session.userId,
+    sessionId: session.id,
+  );
+  final Session target = refreshed ?? session;
+  String? saveId = requestedSessionIdForSave?.trim();
+  if (saveId == null || saveId.isEmpty) {
+    out.write('Session ID to save: ');
+    await out.flush();
+    saveId = stdin.readLineSync()?.trim();
+    if (saveId == null || saveId.isEmpty) {
+      saveId = target.id;
+    }
+  }
+  final File output = File(
+    '${Directory(projectDir).absolute.path}${Platform.pathSeparator}$saveId.session.json',
+  );
+  final String payload = const JsonEncoder.withIndent(
+    '  ',
+  ).convert(_sessionSnapshotJson(target));
+  await output.writeAsString(payload);
+  out.writeln('Session saved to ${output.path}');
 }
 
 Future<int> _runWebCommand(
@@ -745,6 +1032,13 @@ Future<int> _runWebCommand(
       enableWebUi: command.enableWebUi,
       logoText: command.logoText,
       logoImageUrl: command.logoImageUrl,
+      reload: command.reload,
+      reloadAgents: command.reloadAgents,
+      traceToCloud: command.traceToCloud,
+      otelToCloud: command.otelToCloud,
+      a2a: command.a2a,
+      extraPlugins: command.extraPlugins,
+      environment: Platform.environment,
     );
   } on SocketException catch (error) {
     err.writeln(
@@ -760,17 +1054,6 @@ Future<int> _runWebCommand(
   );
   if (!command.enableWebUi) {
     out.writeln('UI is disabled for api_server mode.');
-  }
-  if (command.traceToCloud ||
-      command.otelToCloud ||
-      command.reloadAgents ||
-      command.a2a ||
-      command.extraPlugins.isNotEmpty ||
-      !command.reload) {
-    out.writeln(
-      'Some options are accepted for CLI parity but are not fully implemented '
-      '(trace/otel/reload_agents/a2a/extra_plugins/reload).',
-    );
   }
   out.writeln('Press Ctrl+C to stop.');
 

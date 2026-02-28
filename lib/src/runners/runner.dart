@@ -42,6 +42,15 @@ bool _hasNonEmptyTranscriptionText(Object? transcription) {
   return false;
 }
 
+class SessionNotFoundError implements Exception {
+  SessionNotFoundError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'SessionNotFoundError: $message';
+}
+
 class Runner {
   Runner({
     this.app,
@@ -139,7 +148,11 @@ class Runner {
 
     if (session == null) {
       if (!autoCreateSession) {
-        throw StateError('Session not found: $sessionId');
+        throw SessionNotFoundError(
+          'Session not found: $sessionId. '
+          'Runner appName is "$appName". '
+          'To automatically create a session when missing, set autoCreateSession=true.',
+        );
       }
       session = await sessionService.createSession(
         appName: appName,
@@ -149,6 +162,20 @@ class Runner {
     }
 
     return session;
+  }
+
+  Stream<Event> run({
+    required String userId,
+    required String sessionId,
+    required Content newMessage,
+    RunConfig? runConfig,
+  }) {
+    return runAsync(
+      userId: userId,
+      sessionId: sessionId,
+      newMessage: newMessage,
+      runConfig: runConfig,
+    );
   }
 
   Stream<Event> runAsync({
@@ -177,25 +204,46 @@ class Runner {
       );
     }
 
-    InvocationContext context;
-    if (invocationId != null) {
-      context = await _setupContextForResumedInvocation(
-        session: session,
-        invocationId: invocationId,
-        newMessage: newMessage,
-        stateDelta: stateDelta,
-        runConfig: config,
+    final bool isResumable = resumabilityConfigOrDefault;
+    if (!isResumable && newMessage == null) {
+      throw ArgumentError(
+        'Running an agent requires newMessage when app is not resumable.',
       );
-      if (context.endOfAgents[context.agent.name] == true) {
-        return;
-      }
-    } else {
+    }
+
+    InvocationContext context;
+    if (!isResumable) {
       context = await _setupContextForNewInvocation(
         session: session,
         newMessage: newMessage!,
         stateDelta: stateDelta,
         runConfig: config,
       );
+    } else {
+      final String? resolvedInvocationId = _resolveInvocationId(
+        session: session,
+        newMessage: newMessage,
+        invocationId: invocationId,
+      );
+      if (resolvedInvocationId == null) {
+        context = await _setupContextForNewInvocation(
+          session: session,
+          newMessage: newMessage!,
+          stateDelta: stateDelta,
+          runConfig: config,
+        );
+      } else {
+        context = await _setupContextForResumedInvocation(
+          session: session,
+          invocationId: resolvedInvocationId,
+          newMessage: newMessage,
+          stateDelta: stateDelta,
+          runConfig: config,
+        );
+        if (context.endOfAgents[context.agent.name] == true) {
+          return;
+        }
+      }
     }
 
     await for (final Event event in _execWithPlugin(
@@ -382,9 +430,7 @@ class Runner {
           config.outputAudioTranscription == null) {
         config.outputAudioTranscription = <String, Object?>{};
       }
-      if (config.inputAudioTranscription == null) {
-        config.inputAudioTranscription = <String, Object?>{};
-      }
+      config.inputAudioTranscription ??= <String, Object?>{};
     }
 
     if (session == null) {
@@ -545,6 +591,62 @@ class Runner {
     return resumabilityConfig?.isResumable ?? false;
   }
 
+  String? _resolveInvocationId({
+    required Session session,
+    required Content? newMessage,
+    required String? invocationId,
+  }) {
+    final List<FunctionResponse> responses = _functionResponsesFromContent(
+      newMessage,
+    );
+    if (responses.isEmpty) {
+      return invocationId;
+    }
+
+    final String? functionCallId = responses.first.id;
+    if (functionCallId == null || functionCallId.isEmpty) {
+      return invocationId;
+    }
+
+    final Event? functionCallEvent = _findEventByFunctionCallId(
+      session.events,
+      functionCallId,
+    );
+    if (functionCallEvent == null) {
+      throw ArgumentError(
+        'Function call event not found for function response id: $functionCallId',
+      );
+    }
+
+    return functionCallEvent.invocationId;
+  }
+
+  List<FunctionResponse> _functionResponsesFromContent(Content? content) {
+    if (content == null) {
+      return const <FunctionResponse>[];
+    }
+    final List<FunctionResponse> responses = <FunctionResponse>[];
+    for (final Part part in content.parts) {
+      final FunctionResponse? response = part.functionResponse;
+      if (response != null) {
+        responses.add(response);
+      }
+    }
+    return responses;
+  }
+
+  Event? _findEventByFunctionCallId(List<Event> events, String functionCallId) {
+    for (int i = events.length - 1; i >= 0; i -= 1) {
+      final Event event = events[i];
+      for (final FunctionCall call in event.getFunctionCalls()) {
+        if (call.id == functionCallId) {
+          return event;
+        }
+      }
+    }
+    return null;
+  }
+
   Content? _findUserMessageForInvocation(
     List<Event> events,
     String invocationId,
@@ -678,9 +780,7 @@ class Runner {
           isTranscribing = true;
         }
 
-        if (isTranscribing &&
-            _isToolCallOrResponse(event) &&
-            event.partial != true) {
+        if (isTranscribing && _isToolCallOrResponse(event)) {
           bufferedEvents.add(event);
           continue;
         }
@@ -719,7 +819,12 @@ class Runner {
             event: event,
           );
 
-      yield modified ?? event;
+      if (modified != null) {
+        _applyRunConfigCustomMetadata(modified, invocationContext.runConfig);
+        yield modified;
+      } else {
+        yield event;
+      }
     }
 
     await invocationContext.pluginManager.runAfterRunCallback(
@@ -783,7 +888,24 @@ class Runner {
     if (!isLiveCall) {
       return true;
     }
+    if (_isLiveModelAudioEventWithInlineData(event)) {
+      return false;
+    }
     return true;
+  }
+
+  bool _isLiveModelAudioEventWithInlineData(Event event) {
+    final Content? content = event.content;
+    if (content == null || content.parts.isEmpty) {
+      return false;
+    }
+    for (final Part part in content.parts) {
+      final InlineData? inlineData = part.inlineData;
+      if (inlineData != null && inlineData.mimeType.startsWith('audio/')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _applyRunConfigCustomMetadata(Event event, RunConfig? runConfig) {

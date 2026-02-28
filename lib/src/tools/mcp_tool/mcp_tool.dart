@@ -29,7 +29,7 @@ class McpBaseTool {
 class McpTool extends BaseAuthenticatedTool {
   McpTool({
     required McpBaseTool mcpTool,
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required McpSessionManager sessionManager,
     AuthConfig? authConfig,
     Object requireConfirmation = false,
@@ -45,7 +45,7 @@ class McpTool extends BaseAuthenticatedTool {
        );
 
   final McpBaseTool _mcpTool;
-  final StreamableHTTPConnectionParams _connectionParams;
+  final McpConnectionParams _connectionParams;
   final McpSessionManager _sessionManager;
   final Object _requireConfirmation;
   final McpToolHeaderProvider? headerProvider;

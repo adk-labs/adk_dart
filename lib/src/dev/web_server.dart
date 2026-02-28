@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import '../a2a/utils/agent_card_builder.dart';
 import '../agents/live_request_queue.dart';
 import '../agents/run_config.dart';
 import '../apps/app.dart';
@@ -13,10 +14,20 @@ import '../cli/utils/service_factory.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../memory/base_memory_service.dart';
+import '../plugins/base_plugin.dart';
+import '../plugins/context_filter_plugin.dart';
+import '../plugins/debug_logging_plugin.dart';
+import '../plugins/global_instruction_plugin.dart';
+import '../plugins/logging_plugin.dart';
+import '../plugins/multimodal_tool_results_plugin.dart';
+import '../plugins/reflect_retry_tool_plugin.dart';
+import '../plugins/save_files_as_artifacts_plugin.dart';
 import '../runners/runner.dart';
 import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
 import '../sessions/schemas/v0.dart';
+import '../telemetry/google_cloud.dart';
+import '../telemetry/setup.dart';
 import '../types/content.dart';
 import '../version.dart';
 import 'project.dart';
@@ -38,6 +49,13 @@ Future<HttpServer> startAdkDevWebServer({
   bool enableWebUi = true,
   String? logoText,
   String? logoImageUrl,
+  bool reload = true,
+  bool reloadAgents = false,
+  bool traceToCloud = false,
+  bool otelToCloud = false,
+  bool a2a = false,
+  List<String> extraPlugins = const <String>[],
+  Map<String, String>? environment,
 }) async {
   if (port < 0 || port > 65535) {
     throw ArgumentError.value(port, 'port', 'Port must be between 0 and 65535');
@@ -57,12 +75,26 @@ Future<HttpServer> startAdkDevWebServer({
     enableWebUi: enableWebUi,
     logoText: logoText,
     logoImageUrl: logoImageUrl,
+    reload: reload,
+    reloadAgents: reloadAgents,
+    traceToCloud: traceToCloud,
+    otelToCloud: otelToCloud,
+    a2a: a2a,
+    extraPlugins: extraPlugins,
+    environment: environment,
   );
 
   final InternetAddress resolvedHost = host ?? InternetAddress.loopbackIPv4;
   final HttpServer server = await HttpServer.bind(resolvedHost, port);
   unawaited(_handleRequests(server, context));
   return server;
+}
+
+class _ExtraPluginSpec {
+  _ExtraPluginSpec({required this.raw, required this.normalizedName});
+
+  final String raw;
+  final String normalizedName;
 }
 
 class _AdkDevWebContext {
@@ -80,6 +112,12 @@ class _AdkDevWebContext {
     required this.enableWebUi,
     required this.logoText,
     required this.logoImageUrl,
+    required this.reload,
+    required this.reloadAgents,
+    required this.traceToCloud,
+    required this.otelToCloud,
+    required this.a2a,
+    required this.extraPluginSpecs,
     required this.webAssetsDir,
   });
 
@@ -96,6 +134,12 @@ class _AdkDevWebContext {
   final bool enableWebUi;
   final String? logoText;
   final String? logoImageUrl;
+  final bool reload;
+  final bool reloadAgents;
+  final bool traceToCloud;
+  final bool otelToCloud;
+  final bool a2a;
+  final List<_ExtraPluginSpec> extraPluginSpecs;
   final Directory? webAssetsDir;
 
   final Map<String, Runner> _runners = <String, Runner>{};
@@ -114,6 +158,13 @@ class _AdkDevWebContext {
     required bool enableWebUi,
     required String? logoText,
     required String? logoImageUrl,
+    required bool reload,
+    required bool reloadAgents,
+    required bool traceToCloud,
+    required bool otelToCloud,
+    required bool a2a,
+    required List<String> extraPlugins,
+    Map<String, String>? environment,
   }) async {
     final Directory agentsRoot = Directory(agentsDir).absolute;
     final Map<String, String> appNameToDir = _buildAppNameToDir(
@@ -144,6 +195,14 @@ class _AdkDevWebContext {
     final Directory? webAssetsDir = enableWebUi
         ? await _resolveWebAssetsDir()
         : null;
+    final List<_ExtraPluginSpec> parsedExtraPlugins = _parseExtraPluginSpecs(
+      extraPlugins,
+    );
+    _configureCloudTelemetry(
+      traceToCloud: traceToCloud,
+      otelToCloud: otelToCloud,
+      environment: environment ?? Platform.environment,
+    );
 
     return _AdkDevWebContext(
       runtime: runtime,
@@ -159,6 +218,12 @@ class _AdkDevWebContext {
       enableWebUi: enableWebUi,
       logoText: logoText,
       logoImageUrl: logoImageUrl,
+      reload: reload,
+      reloadAgents: reloadAgents,
+      traceToCloud: traceToCloud,
+      otelToCloud: otelToCloud,
+      a2a: a2a,
+      extraPluginSpecs: parsedExtraPlugins,
       webAssetsDir: webAssetsDir,
     );
   }
@@ -171,9 +236,17 @@ class _AdkDevWebContext {
         ? defaultAppName
         : appName.trim();
 
-    final Runner? cached = _runners[resolvedAppName];
-    if (cached != null) {
-      return cached;
+    final bool shouldReload = reload || reloadAgents;
+    if (!shouldReload) {
+      final Runner? cached = _runners[resolvedAppName];
+      if (cached != null) {
+        return cached;
+      }
+    } else {
+      final Runner? stale = _runners.remove(resolvedAppName);
+      if (stale != null) {
+        await stale.close();
+      }
     }
 
     final Runner runner = _createRunner(resolvedAppName);
@@ -182,6 +255,10 @@ class _AdkDevWebContext {
   }
 
   Runner _createRunner(String appName) {
+    final List<BasePlugin> extraPlugins = _instantiateExtraPlugins(
+      extraPluginSpecs,
+      baseDir: agentsDir,
+    );
     final Object loaded;
     try {
       loaded = agentLoader.loadAgent(appName);
@@ -196,6 +273,7 @@ class _AdkDevWebContext {
         sessionService: sessionService,
         artifactService: artifactService,
         memoryService: memoryService,
+        plugins: extraPlugins,
         autoCreateSession: autoCreateSession,
       );
     }
@@ -207,6 +285,7 @@ class _AdkDevWebContext {
         sessionService: sessionService,
         artifactService: artifactService,
         memoryService: memoryService,
+        plugins: extraPlugins,
         autoCreateSession: autoCreateSession,
       );
     }
@@ -217,6 +296,7 @@ class _AdkDevWebContext {
       sessionService: sessionService,
       artifactService: artifactService,
       memoryService: memoryService,
+      plugins: extraPlugins,
       autoCreateSession: autoCreateSession,
     );
   }
@@ -330,6 +410,26 @@ Future<void> _handleRequest(
     return;
   }
 
+  if (context.a2a &&
+      request.method == 'GET' &&
+      (routedPath == '/.well-known/agent.json' ||
+          routedPath == '/a2a/agent-card')) {
+    await _handleA2aAgentCard(request, context);
+    return;
+  }
+
+  if (context.a2a && request.method == 'GET') {
+    final String? scopedAppName = _extractA2aScopedAppName(routedPath);
+    if (scopedAppName != null) {
+      await _handleA2aAgentCard(
+        request,
+        context,
+        appNameFromPath: scopedAppName,
+      );
+      return;
+    }
+  }
+
   if (await _handleWebUi(request, context, routedPath)) {
     return;
   }
@@ -384,6 +484,12 @@ Future<void> _handleRequest(
         'appName': context.defaultAppName,
         'agentName': context.project.agentName,
         'description': context.project.description,
+        'a2a': context.a2a,
+        'extra_plugins': context.extraPluginSpecs
+            .map((_ExtraPluginSpec spec) => spec.raw)
+            .toList(growable: false),
+        'trace_to_cloud': context.traceToCloud,
+        'otel_to_cloud': context.otelToCloud,
       },
     );
     return;
@@ -2139,6 +2245,233 @@ Future<Directory?> _resolveWebAssetsDir() async {
     return null;
   }
   return file.parent;
+}
+
+List<_ExtraPluginSpec> _parseExtraPluginSpecs(List<String> extraPlugins) {
+  final List<_ExtraPluginSpec> specs = <_ExtraPluginSpec>[];
+  for (final String raw in extraPlugins) {
+    final String trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      continue;
+    }
+    specs.add(
+      _ExtraPluginSpec(
+        raw: trimmed,
+        normalizedName: _normalizePluginName(trimmed),
+      ),
+    );
+  }
+  return specs;
+}
+
+String _normalizePluginName(String raw) {
+  final String canonical = raw.toLowerCase().trim();
+  final String base = canonical.split('.').last;
+  final String left = base.split(':').first.split('=').first.trim();
+  if (left.endsWith('contextfilterplugin') || left == 'context_filter_plugin') {
+    return 'context_filter_plugin';
+  }
+  if (left.endsWith('debugloggingplugin') || left == 'debug_logging_plugin') {
+    return 'debug_logging_plugin';
+  }
+  if (left.endsWith('globalinstructionplugin') ||
+      left == 'global_instruction_plugin') {
+    return 'global_instruction_plugin';
+  }
+  if (left.endsWith('loggingplugin') || left == 'logging_plugin') {
+    return 'logging_plugin';
+  }
+  if (left.endsWith('multimodaltoolresultsplugin') ||
+      left == 'multimodal_tool_results_plugin') {
+    return 'multimodal_tool_results_plugin';
+  }
+  if (left.endsWith('reflectandretrytoolplugin') ||
+      left == 'reflect_retry_tool_plugin') {
+    return 'reflect_retry_tool_plugin';
+  }
+  if (left.endsWith('savefilesasartifactsplugin') ||
+      left == 'save_files_as_artifacts_plugin') {
+    return 'save_files_as_artifacts_plugin';
+  }
+  return left;
+}
+
+List<BasePlugin> _instantiateExtraPlugins(
+  List<_ExtraPluginSpec> specs, {
+  required String baseDir,
+}) {
+  final List<BasePlugin> plugins = <BasePlugin>[];
+  for (final _ExtraPluginSpec spec in specs) {
+    final BasePlugin? plugin = switch (spec.normalizedName) {
+      'context_filter_plugin' => ContextFilterPlugin(),
+      'debug_logging_plugin' => DebugLoggingPlugin(
+        outputPath: '$baseDir${Platform.pathSeparator}adk_debug.yaml',
+      ),
+      'global_instruction_plugin' => GlobalInstructionPlugin(),
+      'logging_plugin' => LoggingPlugin(),
+      'multimodal_tool_results_plugin' => MultimodalToolResultsPlugin(),
+      'reflect_retry_tool_plugin' => ReflectAndRetryToolPlugin(),
+      'save_files_as_artifacts_plugin' => SaveFilesAsArtifactsPlugin(),
+      _ => null,
+    };
+
+    if (plugin != null) {
+      plugins.add(plugin);
+    } else {
+      stderr.writeln(
+        'Unsupported extra plugin "${
+            spec.raw
+          }"; ignoring. Supported plugins are built-in ADK plugins only.',
+      );
+    }
+  }
+  return plugins;
+}
+
+void _configureCloudTelemetry({
+  required bool traceToCloud,
+  required bool otelToCloud,
+  required Map<String, String> environment,
+}) {
+  final bool hasOtelEnv =
+      _hasValue(environment, otelExporterOtlpEndpoint) ||
+      _hasValue(environment, otelExporterOtlpTracesEndpoint) ||
+      _hasValue(environment, otelExporterOtlpMetricsEndpoint) ||
+      _hasValue(environment, otelExporterOtlpLogsEndpoint);
+
+  if (!traceToCloud && !otelToCloud && !hasOtelEnv) {
+    return;
+  }
+
+  final List<OTelHooks> hooks = <OTelHooks>[];
+  OTelResource? resource;
+
+  if (traceToCloud || otelToCloud) {
+    final String? projectId = environment['GOOGLE_CLOUD_PROJECT'];
+    final OTelHooks gcpHooks = getGcpExporters(
+      enableCloudTracing: traceToCloud || otelToCloud,
+      enableCloudMetrics: false,
+      enableCloudLogging: otelToCloud,
+      googleAuth: GoogleAuthResult(
+        credentials: Object(),
+        projectId: projectId,
+      ),
+      environment: environment,
+    );
+    if (gcpHooks.spanProcessors.isNotEmpty ||
+        gcpHooks.metricReaders.isNotEmpty ||
+        gcpHooks.logRecordProcessors.isNotEmpty) {
+      hooks.add(gcpHooks);
+      resource = getGcpResource(projectId: projectId, environment: environment);
+    }
+  }
+
+  maybeSetOtelProviders(
+    otelHooksToSetup: hooks,
+    otelResource: resource,
+    environment: environment,
+  );
+}
+
+bool _hasValue(Map<String, String> environment, String key) {
+  final String? value = environment[key];
+  return value != null && value.isNotEmpty;
+}
+
+Future<void> _handleA2aAgentCard(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  String? appNameFromPath,
+}) async {
+  final String fromQuery =
+      request.uri.queryParameters['app_name'] ??
+      request.uri.queryParameters['appName'] ??
+      '';
+  final String resolvedAppName = appNameFromPath?.trim().isNotEmpty == true
+      ? appNameFromPath!.trim()
+      : (fromQuery.trim().isNotEmpty ? fromQuery.trim() : context.defaultAppName);
+
+  final Map<String, Object?>? diskCard = await _loadA2aAgentCardFromDisk(
+    context,
+    resolvedAppName,
+  );
+  if (diskCard != null) {
+    await _writeJson(request, context, payload: diskCard);
+    return;
+  }
+
+  final Runner runner = await context.getRunner(resolvedAppName);
+  final Uri requested = request.requestedUri;
+  final String authority = requested.authority;
+  final String basePrefix = context.urlPrefix ?? '';
+  final AgentCardBuilder cardBuilder = AgentCardBuilder(
+    agent: runner.agent,
+    rpcUrl: '${requested.scheme}://$authority$basePrefix/a2a/$resolvedAppName',
+  );
+  final dynamic card = await cardBuilder.build();
+  await _writeJson(request, context, payload: card.toJson());
+}
+
+Future<Map<String, Object?>?> _loadA2aAgentCardFromDisk(
+  _AdkDevWebContext context,
+  String appName,
+) async {
+  final String sep = Platform.pathSeparator;
+  final List<String> candidates = <String>[
+    '${context.agentsDir}$sep$appName${sep}agent.json',
+    if (appName == context.defaultAppName)
+      '${context.agentsDir}${sep}agent.json',
+  ];
+
+  for (final String candidate in candidates) {
+    final File file = File(candidate);
+    if (!await file.exists()) {
+      continue;
+    }
+    try {
+      final Object? decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) {
+        continue;
+      }
+      return decoded.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+    } on FormatException {
+      continue;
+    } on FileSystemException {
+      continue;
+    }
+  }
+  return null;
+}
+
+String? _extractA2aScopedAppName(String routedPath) {
+  const String suffix = '/.well-known/agent.json';
+  if (routedPath.startsWith('/a2a/') && routedPath.endsWith(suffix)) {
+    final String raw = routedPath.substring(
+      '/a2a/'.length,
+      routedPath.length - suffix.length,
+    );
+    final String appName = Uri.decodeComponent(raw).trim();
+    if (appName.isEmpty || appName.contains('/')) {
+      return null;
+    }
+    return appName;
+  }
+
+  if (routedPath.startsWith('/a2a/') && routedPath.endsWith('/agent-card')) {
+    final String raw = routedPath.substring(
+      '/a2a/'.length,
+      routedPath.length - '/agent-card'.length,
+    );
+    final String appName = Uri.decodeComponent(raw).trim();
+    if (appName.isEmpty || appName.contains('/')) {
+      return null;
+    }
+    return appName;
+  }
+
+  return null;
 }
 
 class _RunRequest {

@@ -23,6 +23,31 @@ class _LiveEchoAgent extends BaseAgent {
   }
 }
 
+class _InlineAudioLiveAgent extends BaseAgent {
+  _InlineAudioLiveAgent({required super.name});
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {}
+
+  @override
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part.fromInlineData(
+            mimeType: 'audio/pcm;rate=24000',
+            data: <int>[1, 0, 2, 0],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 void main() {
   test('RunConfig defaults maxLlmCalls to a bounded value', () {
     expect(RunConfig().maxLlmCalls, 500);
@@ -99,4 +124,33 @@ void main() {
       expect(config.inputAudioTranscription, isNotNull);
     },
   );
+
+  test('runLive does not persist inline audio events to session', () async {
+    final _InlineAudioLiveAgent root = _InlineAudioLiveAgent(
+      name: 'root_agent',
+    );
+    final InMemoryRunner runner = InMemoryRunner(agent: root);
+    final Session session = await runner.sessionService.createSession(
+      appName: runner.appName,
+      userId: 'u1',
+      sessionId: 's_live_inline_audio',
+    );
+
+    final List<Event> events = await runner
+        .runLive(
+          liveRequestQueue: LiveRequestQueue()..close(),
+          session: session,
+        )
+        .toList();
+    expect(events, hasLength(1));
+    expect(events.first.content?.parts.first.inlineData, isNotNull);
+
+    final Session? updated = await runner.sessionService.getSession(
+      appName: runner.appName,
+      userId: session.userId,
+      sessionId: session.id,
+    );
+    expect(updated, isNotNull);
+    expect(updated!.events, isEmpty);
+  });
 }

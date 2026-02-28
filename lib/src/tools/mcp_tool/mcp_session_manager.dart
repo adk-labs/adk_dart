@@ -5,6 +5,8 @@ import 'package:adk_mcp/adk_mcp.dart'
         McpRemoteClient,
         McpResourceContent,
         McpServerMessage,
+        McpStdioClient,
+        StdioConnectionParams,
         StreamableHTTPConnectionParams,
         mcpMethodNotFoundCode;
 
@@ -16,7 +18,10 @@ export 'package:adk_mcp/adk_mcp.dart'
         McpHttpStatusException,
         McpJsonRpcException,
         McpResourceContent,
+        StdioConnectionParams,
         StreamableHTTPConnectionParams;
+
+typedef McpConnectionParams = Object;
 
 typedef McpToolExecutor =
     FutureOr<Object?> Function(
@@ -30,11 +35,17 @@ class McpSessionManager {
         clientInfoName: 'adk_dart',
         clientInfoVersion: adkVersion,
         onServerMessage: _handleServerMessage,
+      ),
+      _stdioClient = McpStdioClient(
+        clientInfoName: 'adk_dart',
+        clientInfoVersion: adkVersion,
+        onServerMessage: _handleServerMessage,
       );
 
   static final McpSessionManager instance = McpSessionManager._();
 
   final McpRemoteClient _remoteClient;
+  final McpStdioClient _stdioClient;
 
   final Map<String, List<BaseTool>> _toolsByUrl = <String, List<BaseTool>>{};
   final Map<String, Map<String, List<McpResourceContent>>> _resourcesByUrl =
@@ -45,20 +56,22 @@ class McpSessionManager {
       <String, List<Map<String, Object?>>>{};
 
   void registerTools({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required List<BaseTool> tools,
   }) {
-    _toolsByUrl[connectionParams.url] = tools
+    final String key = _connectionKey(connectionParams);
+    _toolsByUrl[key] = tools
         .map((BaseTool tool) => tool)
         .toList(growable: false);
-    _remoteToolDescriptorsByUrl.remove(connectionParams.url);
+    _remoteToolDescriptorsByUrl.remove(key);
   }
 
   void registerResources({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required Map<String, List<McpResourceContent>> resources,
   }) {
-    _resourcesByUrl[connectionParams.url] = resources.map(
+    final String key = _connectionKey(connectionParams);
+    _resourcesByUrl[key] = resources.map(
       (String key, List<McpResourceContent> value) => MapEntry(
         key,
         value
@@ -75,18 +88,19 @@ class McpSessionManager {
   }
 
   void registerToolExecutor({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required String toolName,
     required McpToolExecutor executor,
   }) {
+    final String key = _connectionKey(connectionParams);
     _executorsByUrl.putIfAbsent(
-      connectionParams.url,
+      key,
       () => <String, McpToolExecutor>{},
     )[toolName] = executor;
   }
 
-  List<BaseTool> getTools(StreamableHTTPConnectionParams connectionParams) {
-    final List<BaseTool>? tools = _toolsByUrl[connectionParams.url];
+  List<BaseTool> getTools(McpConnectionParams connectionParams) {
+    final List<BaseTool>? tools = _toolsByUrl[_connectionKey(connectionParams)];
     if (tools == null) {
       return const <BaseTool>[];
     }
@@ -94,15 +108,11 @@ class McpSessionManager {
   }
 
   Future<List<Map<String, Object?>>> listRemoteToolDescriptors({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     bool forceRefresh = true,
     Map<String, String>? headers,
   }) async {
-    if (!_remoteClient.isRemoteCapable(connectionParams)) {
-      return const <Map<String, Object?>>[];
-    }
-
-    final String url = connectionParams.url;
+    final String url = _connectionKey(connectionParams);
     if (!forceRefresh) {
       final List<Map<String, Object?>>? cached =
           _remoteToolDescriptorsByUrl[url];
@@ -113,18 +123,17 @@ class McpSessionManager {
       }
     }
 
-    await _remoteClient.ensureInitialized(connectionParams, headers: headers);
-    if (!_remoteClient.hasNegotiatedCapability(connectionParams, 'tools')) {
+    await _ensureInitialized(connectionParams, headers: headers);
+    if (!_hasCapability(connectionParams, 'tools')) {
       return const <Map<String, Object?>>[];
     }
 
-    final List<Map<String, Object?>> descriptors = await _remoteClient
-        .collectPaginatedMaps(
-          connectionParams: connectionParams,
-          method: 'tools/list',
-          resultArrayField: 'tools',
-          headers: headers,
-        );
+    final List<Map<String, Object?>> descriptors = await _collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'tools/list',
+      resultArrayField: 'tools',
+      headers: headers,
+    );
     final List<Map<String, Object?>> filtered = descriptors
         .where((Map<String, Object?> descriptor) {
           return _asString(descriptor['name']).isNotEmpty;
@@ -141,9 +150,10 @@ class McpSessionManager {
     return _toolsByUrl.keys.toList(growable: false);
   }
 
-  List<String> listResources(StreamableHTTPConnectionParams connectionParams) {
+  List<String> listResources(McpConnectionParams connectionParams) {
+    final String key = _connectionKey(connectionParams);
     final Map<String, List<McpResourceContent>>? resources =
-        _resourcesByUrl[connectionParams.url];
+        _resourcesByUrl[key];
     if (resources == null) {
       return const <String>[];
     }
@@ -151,28 +161,23 @@ class McpSessionManager {
   }
 
   Future<List<String>> listResourcesAsync(
-    StreamableHTTPConnectionParams connectionParams, {
+    McpConnectionParams connectionParams, {
     Map<String, String>? headers,
   }) async {
     final List<String> local = listResources(connectionParams);
     if (local.isNotEmpty) {
       return local;
     }
-    if (!_remoteClient.isRemoteCapable(connectionParams)) {
-      return const <String>[];
-    }
-
-    await _remoteClient.ensureInitialized(connectionParams, headers: headers);
+    await _ensureInitialized(connectionParams, headers: headers);
     final Set<String> names = <String>{};
 
-    if (_remoteClient.hasNegotiatedCapability(connectionParams, 'resources')) {
-      final List<Map<String, Object?>> resources = await _remoteClient
-          .collectPaginatedMaps(
-            connectionParams: connectionParams,
-            method: 'resources/list',
-            resultArrayField: 'resources',
-            headers: headers,
-          );
+    if (_hasCapability(connectionParams, 'resources')) {
+      final List<Map<String, Object?>> resources = await _collectPaginatedMaps(
+        connectionParams: connectionParams,
+        method: 'resources/list',
+        resultArrayField: 'resources',
+        headers: headers,
+      );
       for (final Map<String, Object?> resource in resources) {
         final String name = _asString(resource['uri']).isNotEmpty
             ? _asString(resource['uri'])
@@ -182,8 +187,8 @@ class McpSessionManager {
         }
       }
 
-      final List<Map<String, Object?>> resourceTemplates = await _remoteClient
-          .collectPaginatedMaps(
+      final List<Map<String, Object?>> resourceTemplates =
+          await _collectPaginatedMaps(
             connectionParams: connectionParams,
             method: 'resources/templates/list',
             resultArrayField: 'resourceTemplates',
@@ -201,15 +206,14 @@ class McpSessionManager {
       }
     }
 
-    if (_remoteClient.hasNegotiatedCapability(connectionParams, 'prompts')) {
-      final List<Map<String, Object?>> prompts = await _remoteClient
-          .collectPaginatedMaps(
-            connectionParams: connectionParams,
-            method: 'prompts/list',
-            resultArrayField: 'prompts',
-            headers: headers,
-            suppressJsonRpcErrorCodes: const <int>{mcpMethodNotFoundCode},
-          );
+    if (_hasCapability(connectionParams, 'prompts')) {
+      final List<Map<String, Object?>> prompts = await _collectPaginatedMaps(
+        connectionParams: connectionParams,
+        method: 'prompts/list',
+        resultArrayField: 'prompts',
+        headers: headers,
+        suppressJsonRpcErrorCodes: const <int>{mcpMethodNotFoundCode},
+      );
       for (final Map<String, Object?> prompt in prompts) {
         final String name = _asString(prompt['name']);
         if (name.isNotEmpty) {
@@ -223,11 +227,12 @@ class McpSessionManager {
   }
 
   List<McpResourceContent> readResource({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required String resourceName,
   }) {
+    final String key = _connectionKey(connectionParams);
     final List<McpResourceContent>? resources =
-        _resourcesByUrl[connectionParams.url]?[resourceName];
+        _resourcesByUrl[key]?[resourceName];
     if (resources == null) {
       return const <McpResourceContent>[];
     }
@@ -243,7 +248,7 @@ class McpSessionManager {
   }
 
   Future<List<McpResourceContent>> readResourceAsync({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required String resourceName,
     Map<String, Object?>? promptArguments,
     Map<String, String>? headers,
@@ -255,14 +260,10 @@ class McpSessionManager {
     if (local.isNotEmpty) {
       return local;
     }
-    if (!_remoteClient.isRemoteCapable(connectionParams)) {
-      return const <McpResourceContent>[];
-    }
+    await _ensureInitialized(connectionParams, headers: headers);
 
-    await _remoteClient.ensureInitialized(connectionParams, headers: headers);
-
-    if (_remoteClient.hasNegotiatedCapability(connectionParams, 'resources')) {
-      final Object? readResult = await _remoteClient.tryCall(
+    if (_hasCapability(connectionParams, 'resources')) {
+      final Object? readResult = await _tryCall(
         connectionParams: connectionParams,
         method: 'resources/read',
         params: <String, Object?>{'uri': resourceName},
@@ -277,8 +278,8 @@ class McpSessionManager {
       }
     }
 
-    if (_remoteClient.hasNegotiatedCapability(connectionParams, 'prompts')) {
-      final Object? promptResult = await _remoteClient.tryCall(
+    if (_hasCapability(connectionParams, 'prompts')) {
+      final Object? promptResult = await _tryCall(
         connectionParams: connectionParams,
         method: 'prompts/get',
         params: <String, Object?>{
@@ -298,18 +299,15 @@ class McpSessionManager {
   }
 
   Future<void> subscribeResource({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required String resourceUri,
     Map<String, String>? headers,
   }) async {
-    if (!_remoteClient.isRemoteCapable(connectionParams)) {
+    await _ensureInitialized(connectionParams, headers: headers);
+    if (!_hasCapability(connectionParams, 'resources')) {
       return;
     }
-    await _remoteClient.ensureInitialized(connectionParams, headers: headers);
-    if (!_remoteClient.hasNegotiatedCapability(connectionParams, 'resources')) {
-      return;
-    }
-    await _remoteClient.tryCall(
+    await _tryCall(
       connectionParams: connectionParams,
       method: 'resources/subscribe',
       params: <String, Object?>{'uri': resourceUri},
@@ -320,18 +318,15 @@ class McpSessionManager {
   }
 
   Future<void> unsubscribeResource({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required String resourceUri,
     Map<String, String>? headers,
   }) async {
-    if (!_remoteClient.isRemoteCapable(connectionParams)) {
+    await _ensureInitialized(connectionParams, headers: headers);
+    if (!_hasCapability(connectionParams, 'resources')) {
       return;
     }
-    await _remoteClient.ensureInitialized(connectionParams, headers: headers);
-    if (!_remoteClient.hasNegotiatedCapability(connectionParams, 'resources')) {
-      return;
-    }
-    await _remoteClient.tryCall(
+    await _tryCall(
       connectionParams: connectionParams,
       method: 'resources/unsubscribe',
       params: <String, Object?>{'uri': resourceUri},
@@ -342,13 +337,13 @@ class McpSessionManager {
   }
 
   Future<Object?> callTool({
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
     required String toolName,
     required Map<String, dynamic> args,
     Map<String, String>? headers,
   }) async {
-    final McpToolExecutor? executor =
-        _executorsByUrl[connectionParams.url]?[toolName];
+    final String key = _connectionKey(connectionParams);
+    final McpToolExecutor? executor = _executorsByUrl[key]?[toolName];
     if (executor != null) {
       final Object? result = executor(args, headers: headers);
       if (result is Future<Object?>) {
@@ -360,18 +355,19 @@ class McpSessionManager {
       return result;
     }
 
-    if (!_remoteClient.isRemoteCapable(connectionParams)) {
+    if (connectionParams is StreamableHTTPConnectionParams &&
+        !_remoteClient.isRemoteCapable(connectionParams)) {
       throw ArgumentError('MCP tool `$toolName` is not registered.');
     }
 
-    await _remoteClient.ensureInitialized(connectionParams, headers: headers);
-    if (!_remoteClient.hasNegotiatedCapability(connectionParams, 'tools')) {
+    await _ensureInitialized(connectionParams, headers: headers);
+    if (!_hasCapability(connectionParams, 'tools')) {
       throw StateError(
-        'MCP server `${connectionParams.url}` does not expose `tools` capability.',
+        'MCP server `${_connectionLabel(connectionParams)}` does not expose `tools` capability.',
       );
     }
 
-    final Object? result = await _remoteClient.call(
+    final Object? result = await _call(
       connectionParams: connectionParams,
       method: 'tools/call',
       params: <String, Object?>{'name': toolName, 'arguments': args},
@@ -384,12 +380,138 @@ class McpSessionManager {
     return result;
   }
 
+  Future<void> _ensureInitialized(
+    McpConnectionParams connectionParams, {
+    Map<String, String>? headers,
+  }) async {
+    if (connectionParams is StreamableHTTPConnectionParams) {
+      if (!_remoteClient.isRemoteCapable(connectionParams)) {
+        return;
+      }
+      await _remoteClient.ensureInitialized(connectionParams, headers: headers);
+      return;
+    }
+    if (connectionParams is StdioConnectionParams) {
+      await _stdioClient.ensureInitialized(connectionParams);
+      return;
+    }
+    throw ArgumentError(
+      'Unsupported MCP connection params type: ${connectionParams.runtimeType}. '
+      'Expected StreamableHTTPConnectionParams or StdioConnectionParams.',
+    );
+  }
+
+  bool _hasCapability(McpConnectionParams connectionParams, String name) {
+    if (connectionParams is StreamableHTTPConnectionParams) {
+      return _remoteClient.hasNegotiatedCapability(connectionParams, name);
+    }
+    if (connectionParams is StdioConnectionParams) {
+      final Object? raw = _stdioClient.negotiatedCapabilities[name];
+      if (raw is bool) {
+        return raw;
+      }
+      return raw is Map;
+    }
+    return false;
+  }
+
+  Future<List<Map<String, Object?>>> _collectPaginatedMaps({
+    required McpConnectionParams connectionParams,
+    required String method,
+    required String resultArrayField,
+    Map<String, String>? headers,
+    Set<int> suppressJsonRpcErrorCodes = const <int>{},
+    bool suppressErrors = false,
+  }) async {
+    if (connectionParams is StreamableHTTPConnectionParams) {
+      return _remoteClient.collectPaginatedMaps(
+        connectionParams: connectionParams,
+        method: method,
+        resultArrayField: resultArrayField,
+        headers: headers,
+        suppressJsonRpcErrorCodes: suppressJsonRpcErrorCodes,
+        suppressErrors: suppressErrors,
+      );
+    }
+    if (connectionParams is StdioConnectionParams) {
+      return _stdioClient.collectPaginatedMaps(
+        connectionParams: connectionParams,
+        method: method,
+        resultArrayField: resultArrayField,
+        suppressJsonRpcErrorCodes: suppressJsonRpcErrorCodes,
+        suppressErrors: suppressErrors,
+      );
+    }
+    throw ArgumentError(
+      'Unsupported MCP connection params type: ${connectionParams.runtimeType}.',
+    );
+  }
+
+  Future<Object?> _call({
+    required McpConnectionParams connectionParams,
+    required String method,
+    required Map<String, Object?> params,
+    Map<String, String>? headers,
+  }) {
+    if (connectionParams is StreamableHTTPConnectionParams) {
+      return _remoteClient.call(
+        connectionParams: connectionParams,
+        method: method,
+        params: params,
+        headers: headers,
+      );
+    }
+    if (connectionParams is StdioConnectionParams) {
+      return _stdioClient.call(
+        connectionParams: connectionParams,
+        method: method,
+        params: params,
+      );
+    }
+    throw ArgumentError(
+      'Unsupported MCP connection params type: ${connectionParams.runtimeType}.',
+    );
+  }
+
+  Future<Object?> _tryCall({
+    required McpConnectionParams connectionParams,
+    required String method,
+    required Map<String, Object?> params,
+    Map<String, String>? headers,
+    Set<int> suppressJsonRpcErrorCodes = const <int>{},
+    bool suppressErrors = false,
+  }) {
+    if (connectionParams is StreamableHTTPConnectionParams) {
+      return _remoteClient.tryCall(
+        connectionParams: connectionParams,
+        method: method,
+        params: params,
+        headers: headers,
+        suppressJsonRpcErrorCodes: suppressJsonRpcErrorCodes,
+        suppressErrors: suppressErrors,
+      );
+    }
+    if (connectionParams is StdioConnectionParams) {
+      return _stdioClient.tryCall(
+        connectionParams: connectionParams,
+        method: method,
+        params: params,
+        suppressJsonRpcErrorCodes: suppressJsonRpcErrorCodes,
+        suppressErrors: suppressErrors,
+      );
+    }
+    throw ArgumentError(
+      'Unsupported MCP connection params type: ${connectionParams.runtimeType}.',
+    );
+  }
+
   void clear() {
     _toolsByUrl.clear();
     _resourcesByUrl.clear();
     _executorsByUrl.clear();
     _remoteToolDescriptorsByUrl.clear();
     _remoteClient.clear();
+    unawaited(_stdioClient.close());
   }
 
   static void _handleServerMessage(McpServerMessage message) {
@@ -482,4 +604,27 @@ String _asString(Object? value) {
     return '';
   }
   return '$value';
+}
+
+String _connectionKey(McpConnectionParams connectionParams) {
+  if (connectionParams is StreamableHTTPConnectionParams) {
+    return connectionParams.url;
+  }
+  if (connectionParams is StdioConnectionParams) {
+    return connectionParams.resolvedConnectionId;
+  }
+  throw ArgumentError(
+    'Unsupported MCP connection params type: ${connectionParams.runtimeType}. '
+    'Expected StreamableHTTPConnectionParams or StdioConnectionParams.',
+  );
+}
+
+String _connectionLabel(McpConnectionParams connectionParams) {
+  if (connectionParams is StreamableHTTPConnectionParams) {
+    return connectionParams.url;
+  }
+  if (connectionParams is StdioConnectionParams) {
+    return connectionParams.resolvedConnectionId;
+  }
+  return '${connectionParams.runtimeType}';
 }

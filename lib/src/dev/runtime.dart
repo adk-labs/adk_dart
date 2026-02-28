@@ -46,6 +46,19 @@ class DevAgentRuntime {
     );
   }
 
+  Future<Session> createSessionWithState({
+    required String userId,
+    String? sessionId,
+    Map<String, Object?>? state,
+  }) {
+    return runner.sessionService.createSession(
+      appName: runner.appName,
+      userId: userId,
+      state: state,
+      sessionId: sessionId,
+    );
+  }
+
   Future<Session> ensureSession({
     required String userId,
     required String sessionId,

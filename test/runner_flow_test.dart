@@ -21,6 +21,20 @@ class MockModel extends BaseLlm {
   }
 }
 
+class _MetadataRewritePlugin extends BasePlugin {
+  _MetadataRewritePlugin() : super(name: 'metadata_rewrite');
+
+  @override
+  Future<Event?> onEventCallback({
+    required InvocationContext invocationContext,
+    required Event event,
+  }) async {
+    return event.copyWith(
+      customMetadata: <String, dynamic>{'plugin': 'yes', 'run': 'override'},
+    );
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) async {
   return stream.toList();
 }
@@ -174,6 +188,172 @@ void main() {
       expect(events[1].getFunctionResponses().first.name, 'transfer_to_agent');
       expect(events[2].author, 'sub_agent');
       expect(events[2].content?.parts.first.text, 'from sub agent');
+    });
+
+    test(
+      'non-resumable app ignores invocationId when newMessage is provided',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('fresh turn')),
+          ],
+        );
+
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final InMemoryRunner runner = InMemoryRunner(agent: agent);
+
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: 'session_non_resumable',
+        );
+
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            invocationId: 'previous_invocation',
+            newMessage: Content.userText('new message'),
+          ),
+        );
+
+        expect(events, hasLength(1));
+        expect(events.first.content?.parts.first.text, 'fresh turn');
+        expect(events.first.invocationId, isNot('previous_invocation'));
+      },
+    );
+
+    test(
+      'resumable app resolves invocationId from function response call id',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('resumed')),
+          ],
+        );
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final App app = App(
+          name: 'resumable_app',
+          rootAgent: agent,
+          resumabilityConfig: ResumabilityConfig(isResumable: true),
+        );
+        final Runner runner = Runner(
+          app: app,
+          sessionService: InMemorySessionService(),
+        );
+
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: 'session_resume_resolution',
+        );
+        await runner.sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'invocation_from_call',
+            author: 'root_agent',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'lookup_weather',
+                  args: <String, dynamic>{'city': 'Seoul'},
+                  id: 'call_123',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  name: 'lookup_weather',
+                  response: <String, dynamic>{'result': 'sunny'},
+                  id: 'call_123',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        expect(events, isNotEmpty);
+        final Event resumedEvent = events.firstWhere(
+          (Event event) =>
+              event.content?.parts.any((Part part) => part.text == 'resumed') ==
+              true,
+          orElse: () => throw StateError('Missing resumed model response'),
+        );
+        expect(resumedEvent.invocationId, 'invocation_from_call');
+      },
+    );
+
+    test(
+      'run-level custom metadata is re-applied to plugin modified events',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('metadata test')),
+          ],
+        );
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final InMemoryRunner runner = InMemoryRunner(
+          agent: agent,
+          plugins: <BasePlugin>[_MetadataRewritePlugin()],
+        );
+
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: 'session_metadata_merge',
+        );
+
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content.userText('hi'),
+            runConfig: RunConfig(
+              customMetadata: <String, dynamic>{'run': 'from_run'},
+            ),
+          ),
+        );
+
+        expect(events, hasLength(1));
+        expect(events.first.customMetadata, isNotNull);
+        expect(events.first.customMetadata!['plugin'], 'yes');
+        expect(events.first.customMetadata!['run'], 'override');
+      },
+    );
+
+    test('throws SessionNotFoundError when session is missing', () async {
+      final MockModel model = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('unused')),
+        ],
+      );
+      final Agent agent = Agent(name: 'root_agent', model: model);
+      final Runner runner = Runner(
+        appName: 'test_app',
+        agent: agent,
+        sessionService: InMemorySessionService(),
+      );
+
+      expect(
+        runner
+            .runAsync(
+              userId: 'user_1',
+              sessionId: 'missing_session',
+              newMessage: Content.userText('hi'),
+            )
+            .toList(),
+        throwsA(isA<SessionNotFoundError>()),
+      );
     });
   });
 }

@@ -15,7 +15,7 @@ class McpToolset extends BaseToolset {
     this.headerProvider,
   });
 
-  final StreamableHTTPConnectionParams connectionParams;
+  final McpConnectionParams connectionParams;
   final McpHeaderProvider? headerProvider;
 
   @override

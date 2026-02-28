@@ -7,7 +7,7 @@ class RegisteredMcpServer {
   RegisteredMcpServer({required this.name, required this.connectionParams});
 
   final String name;
-  final StreamableHTTPConnectionParams connectionParams;
+  final McpConnectionParams connectionParams;
 }
 
 class ApiRegistry {
@@ -32,7 +32,7 @@ class ApiRegistry {
 
   void registerMcpServer({
     required String name,
-    required StreamableHTTPConnectionParams connectionParams,
+    required McpConnectionParams connectionParams,
   }) {
     _mcpServers[name] = RegisteredMcpServer(
       name: name,

@@ -173,13 +173,13 @@ extension on ServiceRegistry {
       String uri, {
       Map<String, Object?>? kwargs,
     }) {
-      return DatabaseSessionService(uri);
+      return _createNetworkDatabaseSessionService('postgresql', uri);
     });
     registerSessionService('mysql', (
       String uri, {
       Map<String, Object?>? kwargs,
     }) {
-      return DatabaseSessionService(uri);
+      return _createNetworkDatabaseSessionService('mysql', uri);
     });
 
     registerArtifactService('memory', (
@@ -257,6 +257,22 @@ extension on ServiceRegistry {
 String _uriScheme(String uri) {
   final Uri parsed = Uri.parse(uri);
   return parsed.scheme;
+}
+
+BaseSessionService _createNetworkDatabaseSessionService(
+  String scheme,
+  String dbUrl,
+) {
+  try {
+    return DatabaseSessionService(dbUrl);
+  } on UnsupportedError {
+    throw UnsupportedError(
+      '`$scheme://` session backend is not wired by default. '
+      'Register a custom adapter via '
+      'DatabaseSessionService.registerCustomFactory(scheme: \'$scheme\', ...), '
+      'or use sqlite:// / memory://.',
+    );
+  }
 }
 
 (String, String) _loadGcpConfig({

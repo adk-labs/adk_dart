@@ -68,6 +68,7 @@ class _CustomSessionService extends BaseSessionService {
 void main() {
   group('ServiceRegistry', () {
     setUp(resetServiceRegistryForTest);
+    tearDown(DatabaseSessionService.resetCustomResolversAndFactories);
 
     test('creates built-in session/artifact/memory services', () {
       final ServiceRegistry registry = getServiceRegistry();
@@ -116,6 +117,34 @@ services:
       final BaseSessionService? service = getServiceRegistry()
           .createSessionService('custom://endpoint');
       expect(service, isA<_CustomSessionService>());
+    });
+
+    test('postgresql uri fails fast with adapter guidance by default', () {
+      final ServiceRegistry registry = getServiceRegistry();
+      expect(
+        () => registry.createSessionService('postgresql://localhost/app'),
+        throwsA(
+          predicate(
+            (Object error) =>
+                error is UnsupportedError &&
+                '$error'.contains('registerCustomFactory') &&
+                '$error'.contains('postgresql://'),
+          ),
+        ),
+      );
+    });
+
+    test('postgresql uri uses registered DatabaseSessionService adapter', () {
+      DatabaseSessionService.registerCustomFactory(
+        scheme: 'postgresql',
+        factory: (_) => InMemorySessionService(),
+      );
+
+      final ServiceRegistry registry = getServiceRegistry();
+      final BaseSessionService? service = registry.createSessionService(
+        'postgresql://localhost/app',
+      );
+      expect(service, isA<DatabaseSessionService>());
     });
   });
 }
