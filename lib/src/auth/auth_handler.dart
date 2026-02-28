@@ -33,13 +33,17 @@ class AuthHandler {
       return;
     }
 
+    final String tempKey = authTemporaryStateKey(authConfig.credentialKey);
+    final String authKey = authResponseStateKey(authConfig.credentialKey);
     AuthCredential parsed = credential.copyWith();
+    state[tempKey] = parsed.copyWith();
+    state[authKey] = parsed.copyWith();
+
     if (_requiresOAuthExchange(parsed)) {
       parsed = await exchangeAuthToken();
+      state[tempKey] = parsed.copyWith();
+      state[authKey] = parsed.copyWith();
     }
-
-    state[authTemporaryStateKey(authConfig.credentialKey)] = parsed.copyWith();
-    state[authResponseStateKey(authConfig.credentialKey)] = parsed.copyWith();
   }
 
   AuthCredential? getAuthResponse(State state) {

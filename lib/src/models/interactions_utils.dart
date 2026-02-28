@@ -7,46 +7,30 @@ import 'llm_response.dart';
 
 Map<String, Object?>? convertPartToInteractionContent(Part part) {
   if (part.text != null) {
-    return <String, Object?>{
-      'type': 'text',
-      'text': part.text,
-      if (part.thought) 'thought': true,
-      if (part.thoughtSignature != null)
-        'thought_signature': base64Encode(part.thoughtSignature!),
-    };
+    return <String, Object?>{'type': 'text', 'text': part.text};
   }
   if (part.functionCall != null) {
-    final Map<String, Object?> arguments = Map<String, Object?>.from(
-      part.functionCall!.args,
-    );
-    if (part.functionCall!.partialArgs != null) {
-      arguments['partial_args'] = part.functionCall!.partialArgs
-          ?.map(
-            (Map<String, Object?> value) => Map<String, Object?>.from(value),
-          )
-          .toList(growable: false);
-    }
-    if (part.functionCall!.willContinue != null) {
-      arguments['will_continue'] = part.functionCall!.willContinue;
-    }
     return <String, Object?>{
       'type': 'function_call',
       'id': part.functionCall!.id ?? '',
       'name': part.functionCall!.name,
-      'arguments': arguments,
+      'arguments': Map<String, Object?>.from(part.functionCall!.args),
       if (part.thoughtSignature != null)
         'thought_signature': base64Encode(part.thoughtSignature!),
     };
   }
   if (part.functionResponse != null) {
-    final Object response = part.functionResponse!.response;
+    Object result = part.functionResponse!.response;
+    if (result is Map) {
+      result = jsonEncode(result);
+    } else if (result is! String) {
+      result = '$result';
+    }
     return <String, Object?>{
       'type': 'function_result',
       'name': part.functionResponse!.name,
       'call_id': part.functionResponse!.id ?? '',
-      'result': response,
-      if (part.thoughtSignature != null)
-        'thought_signature': base64Encode(part.thoughtSignature!),
+      'result': result,
     };
   }
   if (part.inlineData != null) {
@@ -54,8 +38,6 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
       'type': _contentTypeFromMimeType(part.inlineData!.mimeType),
       'mime_type': part.inlineData!.mimeType,
       'data': base64Encode(part.inlineData!.data),
-      if (part.thoughtSignature != null)
-        'thought_signature': base64Encode(part.thoughtSignature!),
     };
   }
   if (part.fileData != null) {
@@ -64,8 +46,6 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
       'type': _contentTypeFromMimeType(mimeType),
       'uri': part.fileData!.fileUri,
       'mime_type': mimeType,
-      if (part.thoughtSignature != null)
-        'thought_signature': base64Encode(part.thoughtSignature!),
     };
   }
   if (part.codeExecutionResult != null) {
@@ -82,8 +62,6 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
       'call_id': '',
       'result': output,
       'is_error': isError,
-      if (part.thoughtSignature != null)
-        'thought_signature': base64Encode(part.thoughtSignature!),
     };
   }
   if (part.executableCode != null) {
@@ -95,8 +73,6 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
         'code': _stringValue(codeMap['code']) ?? '${part.executableCode}',
         'language': _stringValue(codeMap['language']) ?? 'PYTHON',
       },
-      if (part.thoughtSignature != null)
-        'thought_signature': base64Encode(part.thoughtSignature!),
     };
   }
   if (part.thought) {
@@ -317,12 +293,16 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
     return Part.text(_stringValue(output['text']) ?? '');
   }
   if (outputType == 'function_call') {
+    final String? name = _stringValue(output['name']);
+    if (name == null || name.isEmpty) {
+      return null;
+    }
     final List<int>? thoughtSignature = _decodeThoughtSignature(
       output['thought_signature'],
     );
     return Part.fromFunctionCall(
       id: _stringValue(output['id']),
-      name: _stringValue(output['name']) ?? '',
+      name: name,
       args: _asMap(output['arguments']),
       thoughtSignature: thoughtSignature,
     );

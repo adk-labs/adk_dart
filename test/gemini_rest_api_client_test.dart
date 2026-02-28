@@ -123,6 +123,83 @@ void main() {
       },
     );
 
+    test('preserves caller-provided accept header for stream requests', () async {
+      final _SequencedClient client = _SequencedClient(
+        responses: <http.StreamedResponse>[
+          http.StreamedResponse(
+            Stream<List<int>>.fromIterable(<List<int>>[
+              utf8.encode(
+                'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}\n\n',
+              ),
+            ]),
+            200,
+            headers: <String, String>{'content-type': 'text/event-stream'},
+          ),
+        ],
+      );
+      final GeminiRestHttpTransport transport = GeminiRestHttpTransport(
+        httpClient: client,
+      );
+
+      await transport
+          .streamGenerateContent(
+            model: 'gemini-2.5-flash',
+            apiKey: 'test-key',
+            payload: <String, Object?>{
+              'contents': <Object?>[
+                <String, Object?>{
+                  'parts': <Object?>[
+                    <String, Object?>{'text': 'hello'},
+                  ],
+                },
+              ],
+            },
+            headers: <String, String>{'Accept': 'application/custom-sse'},
+          )
+          .toList();
+
+      final Map<String, String>? requestHeaders = client.lastRequestHeaders;
+      expect(requestHeaders, isNotNull);
+      expect(requestHeaders!['accept'], 'application/custom-sse');
+    });
+
+    test('throws a clear error when non-stream JSON is malformed', () async {
+      final _SequencedClient client = _SequencedClient(
+        responses: <http.StreamedResponse>[
+          _bytesResponse(
+            statusCode: 200,
+            bodyBytes: utf8.encode('{"candidates": [}'),
+          ),
+        ],
+      );
+      final GeminiRestHttpTransport transport = GeminiRestHttpTransport(
+        httpClient: client,
+      );
+
+      await expectLater(
+        transport.generateContent(
+          model: 'gemini-2.5-flash',
+          apiKey: 'test-key',
+          payload: <String, Object?>{
+            'contents': <Object?>[
+              <String, Object?>{
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'hello'},
+                ],
+              },
+            ],
+          },
+        ),
+        throwsA(
+          isA<GeminiRestApiException>().having(
+            (GeminiRestApiException error) => error.message,
+            'message',
+            contains('not valid JSON'),
+          ),
+        ),
+      );
+    });
+
     test('retries stream connection failures before first chunk', () async {
       final _SequencedClient client = _SequencedClient(
         responses: <http.StreamedResponse>[
@@ -273,6 +350,52 @@ void main() {
       );
       expect(client.requestCount, 1);
     });
+
+    test(
+      'throws a clear error when SSE data contains malformed JSON',
+      () async {
+        final _SequencedClient client = _SequencedClient(
+          responses: <http.StreamedResponse>[
+            http.StreamedResponse(
+              Stream<List<int>>.fromIterable(<List<int>>[
+                utf8.encode('data: {"candidates":[}\n\n'),
+              ]),
+              200,
+              headers: <String, String>{'content-type': 'text/event-stream'},
+            ),
+          ],
+        );
+        final GeminiRestHttpTransport transport = GeminiRestHttpTransport(
+          httpClient: client,
+        );
+
+        await expectLater(
+          transport
+              .streamGenerateContent(
+                model: 'gemini-2.5-flash',
+                apiKey: 'test-key',
+                payload: <String, Object?>{
+                  'contents': <Object?>[
+                    <String, Object?>{
+                      'parts': <Object?>[
+                        <String, Object?>{'text': 'hello'},
+                      ],
+                    },
+                  ],
+                },
+              )
+              .toList(),
+          throwsA(
+            isA<GeminiRestApiException>().having(
+              (GeminiRestApiException error) => error.message,
+              'message',
+              contains('malformed JSON'),
+            ),
+          ),
+        );
+        expect(client.requestCount, 1);
+      },
+    );
 
     test(
       'throws a clear error when stream response is not valid SSE',

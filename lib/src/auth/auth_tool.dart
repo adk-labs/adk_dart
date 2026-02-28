@@ -130,6 +130,7 @@ OAuth2Auth? _copyOAuth2Auth(OAuth2Auth? oauth2) {
     authCode: oauth2.authCode,
     accessToken: oauth2.accessToken,
     refreshToken: oauth2.refreshToken,
+    idToken: oauth2.idToken,
     expiresAt: oauth2.expiresAt,
     expiresIn: oauth2.expiresIn,
     audience: oauth2.audience,

@@ -127,4 +127,37 @@ void main() {
       expect((auth as AuthCredential).apiKey, 'abc123');
     },
   );
+
+  test(
+    'AuthHandler parseAndStoreAuthResponse keeps initial credential when exchange fails',
+    () async {
+      final Session session = Session(id: 's1', appName: 'app', userId: 'u1');
+      final State state = State(
+        value: session.state,
+        delta: <String, Object?>{},
+      );
+
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2',
+        credentialKey: 'cred_exchange',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(authCode: 'auth-code-123'),
+        ),
+      );
+
+      final AuthHandler handler = AuthHandler(authConfig: config);
+      await expectLater(
+        handler.parseAndStoreAuthResponse(state),
+        throwsA(isA<StateError>()),
+      );
+
+      final Object? temp = state[authTemporaryStateKey('cred_exchange')];
+      final Object? auth = state[authResponseStateKey('cred_exchange')];
+      expect(temp, isA<AuthCredential>());
+      expect(auth, isA<AuthCredential>());
+      expect((temp as AuthCredential).oauth2?.authCode, 'auth-code-123');
+      expect((auth as AuthCredential).oauth2?.authCode, 'auth-code-123');
+    },
+  );
 }

@@ -238,7 +238,7 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
         if (lowered == 'accept') {
           hasAcceptHeader = true;
         }
-        merged[key] = value;
+        merged[lowered] = value;
       });
     }
     merged['content-type'] = 'application/json';
@@ -490,7 +490,24 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
 }
 
 Map<String, Object?> _decodeJsonObject(String body) {
-  final Object? decoded = jsonDecode(body);
+  final String normalized = body.trim();
+  if (normalized.isEmpty) {
+    throw GeminiRestApiException(
+      500,
+      'Gemini API response body is empty.',
+      responseBody: body,
+    );
+  }
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(normalized);
+  } on FormatException {
+    throw GeminiRestApiException(
+      500,
+      'Gemini API response is not valid JSON.',
+      responseBody: body,
+    );
+  }
   if (decoded is! Map) {
     throw GeminiRestApiException(
       500,
@@ -510,7 +527,16 @@ Map<String, Object?>? _decodeSseData(
   if (data.isEmpty || data == '[DONE]') {
     return null;
   }
-  final Object? decoded = jsonDecode(data);
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(data);
+  } on FormatException {
+    throw GeminiRestApiException(
+      500,
+      'Gemini SSE event contains malformed JSON.',
+      responseBody: data,
+    );
+  }
   if (decoded is! Map) {
     throw GeminiRestApiException(
       500,

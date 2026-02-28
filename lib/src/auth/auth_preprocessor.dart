@@ -310,6 +310,7 @@ class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
           _readString(map['accessToken']) ?? _readString(map['access_token']),
       refreshToken:
           _readString(map['refreshToken']) ?? _readString(map['refresh_token']),
+      idToken: _readString(map['idToken']) ?? _readString(map['id_token']),
       expiresAt: _readInt(map['expiresAt']) ?? _readInt(map['expires_at']),
       expiresIn: _readInt(map['expiresIn']) ?? _readInt(map['expires_in']),
       audience: _readString(map['audience']),

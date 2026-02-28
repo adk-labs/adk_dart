@@ -17,10 +17,13 @@ class SqliteSessionService extends BaseSessionService {
 
   SqliteSessionService._(_ResolvedStorePath resolved)
     : _storePath = resolved.path,
-      _readOnly = resolved.readOnly;
+      _readOnly = resolved.readOnly,
+      _inMemory = resolved.inMemory;
 
   final String _storePath;
   final bool _readOnly;
+  final bool _inMemory;
+  _PersistedStore? _memoryStore;
   Future<void> _lock = Future<void>.value();
 
   @override
@@ -268,6 +271,10 @@ class SqliteSessionService extends BaseSessionService {
   }
 
   Future<_PersistedStore> _loadStore() async {
+    if (_inMemory) {
+      return _memoryStore?.copy() ?? _PersistedStore.empty();
+    }
+
     final File file = File(_storePath);
     if (!await file.exists()) {
       return _PersistedStore.empty();
@@ -292,6 +299,12 @@ class SqliteSessionService extends BaseSessionService {
         _storePath,
       );
     }
+
+    if (_inMemory) {
+      _memoryStore = store.copy();
+      return;
+    }
+
     final File file = File(_storePath);
     await file.parent.create(recursive: true);
     final String jsonText = const JsonEncoder.withIndent(
@@ -386,6 +399,8 @@ class _PersistedStore {
       'userState': userState,
     };
   }
+
+  _PersistedStore copy() => _PersistedStore.fromJson(toJson());
 }
 
 class _StoredSession {
@@ -426,10 +441,15 @@ class _StoredSession {
 }
 
 class _ResolvedStorePath {
-  const _ResolvedStorePath({required this.path, required this.readOnly});
+  const _ResolvedStorePath({
+    required this.path,
+    required this.readOnly,
+    required this.inMemory,
+  });
 
   final String path;
   final bool readOnly;
+  final bool inMemory;
 }
 
 _ResolvedStorePath _resolveStorePath(String dbPath) {
@@ -438,13 +458,35 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
     throw ArgumentError('Database path must not be empty.');
   }
 
-  if (!input.startsWith('sqlite:') && !input.startsWith('sqlite+aiosqlite:')) {
-    return _ResolvedStorePath(path: input, readOnly: false);
+  final String lowerInput = input.toLowerCase();
+  if (!lowerInput.startsWith('sqlite:') &&
+      !lowerInput.startsWith('sqlite+aiosqlite:')) {
+    return _ResolvedStorePath(
+      path: input,
+      readOnly: false,
+      inMemory: _isInMemoryStorePath(input),
+    );
   }
 
+  final RegExp shorthandMemoryUrl = RegExp(
+    r'^sqlite(?:\+aiosqlite)?:\/\/:memory:(?:\?(.*))?$',
+    caseSensitive: false,
+  );
+  final Match? shorthandMatch = shorthandMemoryUrl.firstMatch(input);
+  if (shorthandMatch != null) {
+    final String queryText = shorthandMatch.group(1) ?? '';
+    final Map<String, List<String>> query = _parseQueryParameters(queryText);
+    return _ResolvedStorePath(
+      path: ':memory:',
+      readOnly: _parseSqliteReadOnlyMode(query),
+      inMemory: true,
+    );
+  }
+
+  final String sanitizedInput = _escapeInvalidPercents(input);
   final Uri uri;
   try {
-    uri = Uri.parse(input);
+    uri = Uri.parse(sanitizedInput);
   } on FormatException catch (e) {
     throw ArgumentError.value(
       dbPath,
@@ -453,15 +495,10 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
     );
   }
 
-  if (uri.fragment.isNotEmpty) {
-    throw ArgumentError.value(
-      dbPath,
-      'dbPath',
-      'SQLite URL fragments are not supported.',
-    );
-  }
-
   String path = Uri.decodeComponent(uri.path);
+  if ((path.isEmpty || path == '/') && uri.authority == ':memory:') {
+    path = ':memory:';
+  }
   if (path.isEmpty || path == '/') {
     throw ArgumentError.value(
       dbPath,
@@ -482,50 +519,82 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
     );
   }
 
-  final bool readOnly = _parseSqliteReadOnlyMode(uri: uri, dbPath: dbPath);
-  return _ResolvedStorePath(path: path, readOnly: readOnly);
+  final Map<String, List<String>> query = _parseQueryParameters(uri.query);
+  final bool readOnly = _parseSqliteReadOnlyMode(query);
+  final bool inMemory =
+      _isInMemoryStorePath(path) || _parseSqliteInMemoryMode(query);
+  return _ResolvedStorePath(path: path, readOnly: readOnly, inMemory: inMemory);
 }
 
-bool _parseSqliteReadOnlyMode({required Uri uri, required String dbPath}) {
-  if (!uri.hasQuery) {
-    return false;
-  }
-
-  final Map<String, List<String>> query = uri.queryParametersAll;
-  final Iterable<String> unsupportedKeys = query.keys.where(
-    (String key) => key != 'mode',
-  );
-  if (unsupportedKeys.isNotEmpty) {
-    throw ArgumentError.value(
-      dbPath,
-      'dbPath',
-      'Unsupported sqlite URL query parameter(s): ${unsupportedKeys.join(', ')}',
-    );
-  }
-
+bool _parseSqliteReadOnlyMode(Map<String, List<String>> query) {
   final List<String> modeValues = query['mode'] ?? <String>[];
-  if (modeValues.isEmpty || modeValues.length > 1) {
-    throw ArgumentError.value(
-      dbPath,
-      'dbPath',
-      'SQLite URL must include exactly one mode query value.',
-    );
+  for (final String rawMode in modeValues) {
+    if (rawMode.trim().toLowerCase() == 'ro') {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _parseSqliteInMemoryMode(Map<String, List<String>> query) {
+  final List<String> modeValues = query['mode'] ?? <String>[];
+  for (final String rawMode in modeValues) {
+    if (rawMode.trim().toLowerCase() == 'memory') {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _isInMemoryStorePath(String path) {
+  final String normalized = path.trim().toLowerCase();
+  return normalized == ':memory:' || normalized == 'file::memory:';
+}
+
+Map<String, List<String>> _parseQueryParameters(String query) {
+  if (query.isEmpty) {
+    return <String, List<String>>{};
   }
 
-  final String mode = modeValues.first;
-  if (mode == 'ro') {
-    return true;
+  final Map<String, List<String>> parsed = <String, List<String>>{};
+  for (final String pair in query.split('&')) {
+    if (pair.isEmpty) {
+      continue;
+    }
+    final int separator = pair.indexOf('=');
+    final String keyPart = separator < 0 ? pair : pair.substring(0, separator);
+    final String valuePart = separator < 0 ? '' : pair.substring(separator + 1);
+    final String key = Uri.decodeQueryComponent(keyPart);
+    final String value = Uri.decodeQueryComponent(valuePart);
+    parsed.putIfAbsent(key, () => <String>[]).add(value);
   }
-  if (mode == 'rw' || mode == 'rwc') {
-    return false;
-  }
+  return parsed;
+}
 
-  throw ArgumentError.value(
-    dbPath,
-    'dbPath',
-    'Unsupported sqlite URL mode "$mode". '
-        'Supported values are ro, rw, and rwc.',
-  );
+String _escapeInvalidPercents(String input) {
+  final StringBuffer escaped = StringBuffer();
+  for (int index = 0; index < input.length; index++) {
+    final String char = input[index];
+    if (char != '%') {
+      escaped.write(char);
+      continue;
+    }
+
+    if (index + 2 < input.length &&
+        _isHexDigit(input.codeUnitAt(index + 1)) &&
+        _isHexDigit(input.codeUnitAt(index + 2))) {
+      escaped.write(char);
+      continue;
+    }
+    escaped.write('%25');
+  }
+  return escaped.toString();
+}
+
+bool _isHexDigit(int codeUnit) {
+  return (codeUnit >= 48 && codeUnit <= 57) ||
+      (codeUnit >= 65 && codeUnit <= 70) ||
+      (codeUnit >= 97 && codeUnit <= 102);
 }
 
 Map<String, Object?> _mergeState({

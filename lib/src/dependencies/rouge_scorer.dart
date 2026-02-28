@@ -8,11 +8,22 @@ class RougeScore {
   final double precision;
   final double recall;
   final double fmeasure;
+
+  @override
+  String toString() {
+    return 'RougeScore('
+        'precision: $precision, '
+        'recall: $recall, '
+        'fmeasure: $fmeasure'
+        ')';
+  }
 }
 
 class RougeScorer {
   RougeScorer({List<String>? metrics})
-    : metrics = metrics ?? <String>['rouge1'];
+    : metrics = List<String>.unmodifiable(
+        _validateMetrics(metrics ?? <String>['rouge1']),
+      );
 
   final List<String> metrics;
 
@@ -25,13 +36,34 @@ class RougeScorer {
       prediction: prediction,
     );
     final Map<String, RougeScore> result = <String, RougeScore>{};
-    for (final String metric in metrics) {
-      final String normalized = metric.toLowerCase();
-      if (normalized == 'rouge1' || normalized == 'rouge_1') {
-        result[metric] = rouge1;
-      }
+    for (final String metric in _validateMetrics(metrics)) {
+      result[metric] = rouge1;
     }
     return result;
+  }
+
+  static List<String> _validateMetrics(List<String> metrics) {
+    if (metrics.isEmpty) {
+      throw ArgumentError.value(
+        metrics,
+        'metrics',
+        'must contain at least one metric.',
+      );
+    }
+
+    final List<String> normalizedMetrics = <String>[];
+    for (final String metric in metrics) {
+      final String normalized = _normalizeMetric(metric);
+      if (normalized != _rouge1Metric) {
+        throw ArgumentError.value(
+          metric,
+          'metrics',
+          'Unsupported metric "$metric". Only rouge1 is supported.',
+        );
+      }
+      normalizedMetrics.add(metric);
+    }
+    return normalizedMetrics;
   }
 }
 
@@ -59,13 +91,82 @@ RougeScore rouge1Score({required String target, required String prediction}) {
   return RougeScore(precision: precision, recall: recall, fmeasure: fmeasure);
 }
 
+const String _rouge1Metric = 'rouge1';
+
+String _normalizeMetric(String metric) {
+  final String compact = metric.trim().toLowerCase().replaceAll(
+    RegExp(r'[\s_-]+'),
+    '',
+  );
+  if (compact.isEmpty) {
+    throw ArgumentError.value(metric, 'metrics', 'must not contain blanks.');
+  }
+  return compact;
+}
+
 List<String> _tokenize(String input) {
-  return input
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-      .split(RegExp(r'\s+'))
-      .where((String token) => token.isNotEmpty)
-      .toList();
+  final List<String> tokens = <String>[];
+  final StringBuffer current = StringBuffer();
+
+  for (final int rune in input.runes) {
+    if (_isTokenRune(rune)) {
+      current.write(String.fromCharCode(rune).toLowerCase());
+      continue;
+    }
+    if (current.length > 0) {
+      tokens.add(current.toString());
+      current.clear();
+    }
+  }
+
+  if (current.length > 0) {
+    tokens.add(current.toString());
+  }
+  return tokens;
+}
+
+bool _isTokenRune(int rune) {
+  if (_isWhitespaceRune(rune) || _isPunctuationRune(rune)) {
+    return false;
+  }
+  if ((rune >= 0x2600 && rune <= 0x27BF) ||
+      (rune >= 0x1F300 && rune <= 0x1FAFF)) {
+    return false;
+  }
+  return true;
+}
+
+bool _isWhitespaceRune(int rune) {
+  return rune == 0x09 ||
+      rune == 0x0A ||
+      rune == 0x0B ||
+      rune == 0x0C ||
+      rune == 0x0D ||
+      rune == 0x20 ||
+      rune == 0x85 ||
+      rune == 0xA0 ||
+      rune == 0x1680 ||
+      (rune >= 0x2000 && rune <= 0x200A) ||
+      rune == 0x2028 ||
+      rune == 0x2029 ||
+      rune == 0x202F ||
+      rune == 0x205F ||
+      rune == 0x3000;
+}
+
+bool _isPunctuationRune(int rune) {
+  if ((rune >= 0x21 && rune <= 0x2F) ||
+      (rune >= 0x3A && rune <= 0x40) ||
+      (rune >= 0x5B && rune <= 0x60) ||
+      (rune >= 0x7B && rune <= 0x7E)) {
+    return true;
+  }
+  return (rune >= 0x2000 && rune <= 0x206F) ||
+      (rune >= 0x2E00 && rune <= 0x2E7F) ||
+      (rune >= 0x3000 && rune <= 0x303F) ||
+      (rune >= 0xFE10 && rune <= 0xFE1F) ||
+      (rune >= 0xFE30 && rune <= 0xFE6F) ||
+      (rune >= 0xFF00 && rune <= 0xFF65);
 }
 
 Map<String, int> _countTokens(List<String> tokens) {

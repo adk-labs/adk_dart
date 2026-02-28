@@ -52,6 +52,23 @@ void main() {
       expect(a.credentialKey, b.credentialKey);
       expect(a.credentialKey, startsWith('adk_'));
     });
+
+    test('copyWith keeps oauth id token payload', () {
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(
+            clientId: 'client',
+            clientSecret: 'secret',
+            idToken: 'id-token-123',
+          ),
+        ),
+      );
+
+      final AuthConfig copied = config.copyWith();
+      expect(copied.rawAuthCredential?.oauth2?.idToken, 'id-token-123');
+    });
   });
 
   group('CredentialManager', () {
@@ -126,6 +143,7 @@ void main() {
             return <String, Object?>{
               'access_token': 'exchanged-token',
               'refresh_token': 'refresh-token',
+              'id_token': 'exchanged-id-token',
               'expires_in': 3600,
             };
           },
@@ -138,12 +156,14 @@ void main() {
       expect(credential, isNotNull);
       expect(credential!.oauth2?.accessToken, 'exchanged-token');
       expect(credential.oauth2?.refreshToken, 'refresh-token');
+      expect(credential.oauth2?.idToken, 'exchanged-id-token');
 
       final AuthCredential? saved = await service.loadCredential(
         authConfig,
         context,
       );
       expect(saved?.oauth2?.accessToken, 'exchanged-token');
+      expect(saved?.oauth2?.idToken, 'exchanged-id-token');
     });
 
     test(
@@ -182,6 +202,7 @@ void main() {
             refreshHandler: (OAuth2Auth _, String? unusedAuthScheme) async {
               return <String, Object?>{
                 'access_token': 'new-token',
+                'id_token': 'new-id-token',
                 'expires_in': 1800,
               };
             },
@@ -193,6 +214,7 @@ void main() {
         );
         expect(credential, isNotNull);
         expect(credential!.oauth2?.accessToken, 'new-token');
+        expect(credential.oauth2?.idToken, 'new-id-token');
       },
     );
 

@@ -93,7 +93,14 @@ class PluginManager {
     required InvocationContext invocationContext,
   }) async {
     for (final BasePlugin plugin in _plugins) {
-      await plugin.afterRunCallback(invocationContext: invocationContext);
+      try {
+        await plugin.afterRunCallback(invocationContext: invocationContext);
+      } catch (error) {
+        throw StateError(
+          "Error in plugin '${plugin.name}' during "
+          "'after_run_callback' callback: $error",
+        );
+      }
     }
   }
 

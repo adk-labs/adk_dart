@@ -94,7 +94,10 @@ void main() {
                     'credentialKey': 'cred_1',
                     'exchangedAuthCredential': <String, Object?>{
                       'authType': 'oauth2',
-                      'oauth2': <String, Object?>{'accessToken': 'token-abc'},
+                      'oauth2': <String, Object?>{
+                        'accessToken': 'token-abc',
+                        'id_token': 'id-token-xyz',
+                      },
                     },
                   },
                 ),
@@ -127,6 +130,7 @@ void main() {
       final Object? saved = session.state[authResponseStateKey('cred_1')];
       expect(saved, isA<AuthCredential>());
       expect((saved as AuthCredential).oauth2?.accessToken, 'token-abc');
+      expect(saved.oauth2?.idToken, 'id-token-xyz');
     },
   );
 

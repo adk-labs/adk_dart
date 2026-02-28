@@ -60,6 +60,17 @@ class _CloseThrowingPlugin extends BasePlugin {
   }
 }
 
+class _AfterRunThrowingPlugin extends BasePlugin {
+  _AfterRunThrowingPlugin({required super.name});
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    throw StateError('after run failure');
+  }
+}
+
 class _CloseSlowPlugin extends BasePlugin {
   _CloseSlowPlugin({required super.name});
 
@@ -155,6 +166,23 @@ void main() {
           (StateError error) => error.message,
           'message',
           contains('Failed to close plugins'),
+        ),
+      ),
+    );
+  });
+
+  test('runAfterRunCallback wraps plugin errors with callback name', () async {
+    final PluginManager manager = PluginManager(
+      plugins: <BasePlugin>[_AfterRunThrowingPlugin(name: 'bad_after')],
+    );
+
+    await expectLater(
+      manager.runAfterRunCallback(invocationContext: _newInvocationContext()),
+      throwsA(
+        isA<StateError>().having(
+          (StateError error) => error.message,
+          'message',
+          contains("Error in plugin 'bad_after' during 'after_run_callback'"),
         ),
       ),
     );

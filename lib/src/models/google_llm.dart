@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../types/content.dart';
+import '../utils/google_client_headers.dart';
 import '../utils/streaming_utils.dart';
 import '../utils/variant_utils.dart';
 import 'base_llm.dart';
@@ -324,13 +325,7 @@ class Gemini extends BaseLlm {
   }
 
   Map<String, String> _mergeTrackingHeaders(Map<String, String>? headers) {
-    final Map<String, String> merged = <String, String>{
-      'x-goog-api-client': 'adk_dart',
-    };
-    if (headers != null) {
-      merged.addAll(headers);
-    }
-    return merged;
+    return mergeTrackingHeaders(headers, environment: environment);
   }
 
   Map<String, Object?> _buildGenerateContentPayload(LlmRequest request) {

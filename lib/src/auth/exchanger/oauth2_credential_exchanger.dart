@@ -70,6 +70,7 @@ class OAuth2CredentialExchanger extends BaseCredentialExchanger {
       authCode: oauth2.authCode,
       accessToken: _readToken(tokens, 'access_token') ?? oauth2.accessToken,
       refreshToken: _readToken(tokens, 'refresh_token') ?? oauth2.refreshToken,
+      idToken: _readToken(tokens, 'id_token') ?? oauth2.idToken,
       expiresAt:
           _readInt(tokens, 'expires_at') ??
           _deriveExpiresAt(_readInt(tokens, 'expires_in'), oauth2.expiresAt),
