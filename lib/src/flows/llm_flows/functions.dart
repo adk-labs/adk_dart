@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
@@ -6,6 +7,7 @@ import '../../auth/auth_tool.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../tools/base_tool.dart';
+import '../../tools/computer_use/computer_use_tool.dart';
 import '../../tools/tool_confirmation.dart';
 import '../../tools/tool_context.dart';
 import '../../types/content.dart';
@@ -415,19 +417,55 @@ Event _buildResponseEvent({
   required ToolContext toolContext,
   required InvocationContext invocationContext,
 }) {
-  final Part part = Part.fromFunctionResponse(
+  final Part functionResponsePart = Part.fromFunctionResponse(
     name: tool.name,
     response: functionResult,
     id: toolContext.functionCallId,
   );
+  final Part? imagePart = _decodeComputerUseImagePart(tool, functionResult);
+  final List<Part> parts = <Part>[
+    functionResponsePart,
+    if (imagePart != null) imagePart,
+  ];
 
   return Event(
     invocationId: invocationContext.invocationId,
     author: invocationContext.agent.name,
     branch: invocationContext.branch,
-    content: Content(role: 'user', parts: <Part>[part]),
+    content: Content(role: 'user', parts: parts),
     actions: toolContext.actions,
   );
+}
+
+Part? _decodeComputerUseImagePart(
+  BaseTool tool,
+  Map<String, dynamic> functionResult,
+) {
+  if (tool is! ComputerUseTool) {
+    return null;
+  }
+  final Object? imageObject = functionResult['image'];
+  if (imageObject is! Map) {
+    return null;
+  }
+
+  final Map<String, Object?> image = imageObject.map(
+    (Object? key, Object? value) => MapEntry('$key', value),
+  );
+  final Object? encoded = image['data'];
+  final Object? mimeType =
+      image['mimetype'] ?? image['mimeType'] ?? image['mime_type'];
+  if (encoded is! String || encoded.isEmpty || mimeType == null) {
+    return null;
+  }
+
+  try {
+    final List<int> bytes = base64Decode(encoded);
+    functionResult.remove('image');
+    return Part.fromInlineData(mimeType: '$mimeType', data: bytes);
+  } catch (_) {
+    return null;
+  }
 }
 
 Map<String, dynamic> _normalizeFunctionResult(Object? result) {

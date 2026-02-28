@@ -149,6 +149,52 @@ void main() {
       expect(computer.lastWaitSeconds, 1);
     });
   });
+
+  group('computer use function flow parity', () {
+    test(
+      'decodes image payload to inline data part in function response event',
+      () async {
+        final ComputerUseTool tool = ComputerUseTool(
+          name: 'click_at',
+          func: ({required int x, required int y}) async => <String, Object?>{
+            'image': <String, Object?>{
+              'mimetype': 'image/png',
+              'data': base64Encode(<int>[7, 8, 9]),
+            },
+            'url': 'https://example.com',
+          },
+          screenSize: const (100, 100),
+        );
+
+        final Event? event = await handleFunctionCallListAsync(
+          _functionFlowInvocationContext(),
+          <FunctionCall>[
+            FunctionCall(
+              name: 'click_at',
+              id: 'call-1',
+              args: <String, dynamic>{'x': 10, 'y': 20},
+            ),
+          ],
+          <String, BaseTool>{'click_at': tool},
+        );
+
+        expect(event, isNotNull);
+        final Content content = event!.content!;
+        expect(content.parts, hasLength(2));
+        expect(content.parts.first.functionResponse, isNotNull);
+        expect(
+          content.parts.first.functionResponse!.response.containsKey('image'),
+          isFalse,
+        );
+        expect(
+          content.parts.first.functionResponse!.response['url'],
+          'https://example.com',
+        );
+        expect(content.parts[1].inlineData?.mimeType, 'image/png');
+        expect(content.parts[1].inlineData?.data, <int>[7, 8, 9]);
+      },
+    );
+  });
 }
 
 class _FakeComputer extends BaseComputer {
@@ -267,6 +313,15 @@ ToolContext _toolContext() {
     session: Session(id: 'session', appName: 'app', userId: 'user'),
   );
   return Context(invocationContext);
+}
+
+InvocationContext _functionFlowInvocationContext() {
+  return InvocationContext(
+    sessionService: _FakeSessionService(),
+    invocationId: 'invocation_flow',
+    agent: LlmAgent(name: 'root_llm', instruction: 'root'),
+    session: Session(id: 'session', appName: 'app', userId: 'user'),
+  );
 }
 
 class _NoopModel extends BaseLlm {
