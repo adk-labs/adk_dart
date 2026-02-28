@@ -16,17 +16,18 @@ class McpInstructionProvider {
   final McpSessionManager _mcpSessionManager;
 
   Future<String> call(ReadonlyContext context) async {
-    final List<String> prompts = _mcpSessionManager.listResources(
+    final List<String> prompts = await _mcpSessionManager.listResourcesAsync(
       connectionParams,
     );
     if (!prompts.contains(promptName)) {
       throw StateError("Failed to load MCP prompt '$promptName'.");
     }
 
-    final List<McpResourceContent> resources = _mcpSessionManager.readResource(
-      connectionParams: connectionParams,
-      resourceName: promptName,
-    );
+    final List<McpResourceContent> resources = await _mcpSessionManager
+        .readResourceAsync(
+          connectionParams: connectionParams,
+          resourceName: promptName,
+        );
     final String instruction = resources
         .map((McpResourceContent resource) => resource.text ?? '')
         .where((String text) => text.isNotEmpty)

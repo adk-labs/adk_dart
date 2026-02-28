@@ -42,7 +42,7 @@ void main() {
         }
       });
 
-      final String dbPath = '${dir.path}/sessions.json';
+      final String dbPath = '${dir.path}/sessions.db';
       final SqliteSessionService service = SqliteSessionService(dbPath);
       final Session created = await service.createSession(
         appName: 'app',
@@ -71,6 +71,11 @@ void main() {
       );
       await service.appendEvent(session: created, event: event);
 
+      final RandomAccessFile sqliteFile = await File(dbPath).open();
+      final List<int> header = await sqliteFile.read(16);
+      await sqliteFile.close();
+      expect(String.fromCharCodes(header.take(15)), 'SQLite format 3');
+
       final SqliteSessionService reopened = SqliteSessionService(dbPath);
       final Session? loaded = await reopened.getSession(
         appName: 'app',
@@ -83,6 +88,214 @@ void main() {
       expect(loaded.state['${State.userPrefix}tier'], 'gold');
       expect(loaded.state.containsKey('${State.tempPrefix}scratch'), isFalse);
       expect(loaded.events.first.content?.parts.first.text, 'hello');
+    });
+
+    test('enforces stale-session protection when appending events', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_stale_check_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final String dbPath = '${dir.path}/stale_check.db';
+      final SqliteSessionService service = SqliteSessionService(dbPath);
+      final Session original = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      final Session fresh = (await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: original.id,
+      ))!;
+
+      final Event first = Event(
+        invocationId: 'inv_stale_1',
+        author: 'agent',
+        timestamp: original.lastUpdateTime + 10,
+        actions: EventActions(stateDelta: <String, Object?>{'a': 1}),
+      );
+      await service.appendEvent(session: fresh, event: first);
+
+      final Event staleAppend = Event(
+        invocationId: 'inv_stale_2',
+        author: 'agent',
+        timestamp: first.timestamp + 1,
+        actions: EventActions(stateDelta: <String, Object?>{'b': 2}),
+      );
+      expect(
+        () => service.appendEvent(session: original, event: staleAppend),
+        throwsA(isA<StateError>()),
+      );
+
+      final Session? loaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: original.id,
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.events, hasLength(1));
+      expect(loaded.state['a'], 1);
+      expect(loaded.state.containsKey('b'), isFalse);
+    });
+
+    test('applies GetSessionConfig filters for persisted events', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_event_filters_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/filters.db',
+      );
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+
+      final double base = session.lastUpdateTime + 100;
+      for (int i = 1; i <= 5; i += 1) {
+        await service.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'inv_filter_$i',
+            author: 'agent',
+            timestamp: base + i,
+            actions: EventActions(stateDelta: <String, Object?>{'k$i': 'v$i'}),
+          ),
+        );
+      }
+
+      final Session? recent = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+        config: GetSessionConfig(numRecentEvents: 3),
+      );
+      expect(recent, isNotNull);
+      expect(recent!.events, hasLength(3));
+      expect(
+        recent.events.map((Event event) => event.timestamp).toList(),
+        <double>[base + 3, base + 4, base + 5],
+      );
+
+      final Session? after = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+        config: GetSessionConfig(afterTimestamp: base + 4),
+      );
+      expect(after, isNotNull);
+      expect(after!.events, hasLength(2));
+      expect(
+        after.events.map((Event event) => event.timestamp).toList(),
+        <double>[base + 4, base + 5],
+      );
+
+      final Session? combined = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+        config: GetSessionConfig(afterTimestamp: base + 4, numRecentEvents: 3),
+      );
+      expect(combined, isNotNull);
+      expect(combined!.events, hasLength(2));
+      expect(
+        combined.events.map((Event event) => event.timestamp).toList(),
+        <double>[base + 4, base + 5],
+      );
+    });
+
+    test('lists merged state and deletes persisted sessions', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_list_delete_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/list_delete.db',
+      );
+      final Session user1 = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        state: <String, Object?>{
+          '${State.appPrefix}locale': 'ko',
+          '${State.userPrefix}plan': 'pro',
+          'turn': 1,
+        },
+      );
+      await service.createSession(
+        appName: 'app',
+        userId: 'u2',
+        sessionId: 's2',
+      );
+
+      await service.appendEvent(
+        session: user1,
+        event: Event(
+          invocationId: 'inv_list',
+          author: 'agent',
+          actions: EventActions(
+            stateDelta: <String, Object?>{
+              '${State.appPrefix}theme': 'dark',
+              '${State.userPrefix}tier': 'gold',
+              'score': 42,
+            },
+          ),
+        ),
+      );
+
+      final ListSessionsResponse all = await service.listSessions(
+        appName: 'app',
+      );
+      expect(all.sessions, hasLength(2));
+      final Map<String, Session> byId = <String, Session>{
+        for (final Session value in all.sessions) value.id: value,
+      };
+      expect(byId['s1'], isNotNull);
+      expect(byId['s2'], isNotNull);
+      expect(byId['s1']!.state['${State.appPrefix}locale'], 'ko');
+      expect(byId['s1']!.state['${State.appPrefix}theme'], 'dark');
+      expect(byId['s1']!.state['${State.userPrefix}plan'], 'pro');
+      expect(byId['s1']!.state['${State.userPrefix}tier'], 'gold');
+      expect(byId['s1']!.state['score'], 42);
+      expect(byId['s2']!.state['${State.appPrefix}locale'], 'ko');
+      expect(byId['s2']!.state['${State.appPrefix}theme'], 'dark');
+      expect(byId['s2']!.state.containsKey('${State.userPrefix}plan'), isFalse);
+      expect(byId['s2']!.state.containsKey('${State.userPrefix}tier'), isFalse);
+
+      await service.deleteSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+
+      final Session? deleted = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+      expect(deleted, isNull);
+
+      final Session? remaining = await service.getSession(
+        appName: 'app',
+        userId: 'u2',
+        sessionId: 's2',
+      );
+      expect(remaining, isNotNull);
+      expect(remaining!.id, 's2');
     });
 
     test('accepts sqlite URL relative and absolute path forms', () async {

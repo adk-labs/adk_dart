@@ -243,7 +243,9 @@ void main() {
 
   group('gcs artifact service parity', () {
     test('saves/loads/lists versions and metadata using gcs naming', () async {
-      final GcsArtifactService service = GcsArtifactService('bucket-a');
+      final GcsArtifactService service = GcsArtifactService.inMemory(
+        'bucket-a',
+      );
 
       final int v0 = await service.saveArtifact(
         appName: 'app',
@@ -310,7 +312,9 @@ void main() {
     });
 
     test('user namespace does not require session id', () async {
-      final GcsArtifactService service = GcsArtifactService('bucket-a');
+      final GcsArtifactService service = GcsArtifactService.inMemory(
+        'bucket-a',
+      );
 
       await service.saveArtifact(
         appName: 'app',
@@ -327,7 +331,9 @@ void main() {
     });
 
     test('supports fileData artifacts and preserves canonical uri', () async {
-      final GcsArtifactService service = GcsArtifactService('bucket-a');
+      final GcsArtifactService service = GcsArtifactService.inMemory(
+        'bucket-a',
+      );
 
       final int version = await service.saveArtifact(
         appName: 'app',
@@ -364,7 +370,9 @@ void main() {
     });
 
     test('rejects fileData artifacts with empty uri', () async {
-      final GcsArtifactService service = GcsArtifactService('bucket-a');
+      final GcsArtifactService service = GcsArtifactService.inMemory(
+        'bucket-a',
+      );
 
       expect(
         () => service.saveArtifact(
@@ -376,6 +384,174 @@ void main() {
         ),
         throwsA(isA<InputValidationError>()),
       );
+    });
+
+    test('live mode fails fast without backend bridge wiring', () {
+      expect(() => GcsArtifactService('bucket-a'), throwsA(isA<StateError>()));
+      expect(
+        () => GcsArtifactService(
+          'bucket-a',
+          mode: GcsArtifactMode.live,
+          httpRequestProvider: (_) async => GcsArtifactHttpResponse(
+            statusCode: 200,
+            bodyBytes: utf8.encode('{}'),
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test(
+      'live mode fails fast when auth provider returns no headers',
+      () async {
+        final GcsArtifactService service = GcsArtifactService(
+          'bucket-a',
+          mode: GcsArtifactMode.live,
+          authHeadersProvider: () async => <String, String>{},
+          httpRequestProvider: (_) async => GcsArtifactHttpResponse(
+            statusCode: 200,
+            bodyBytes: utf8.encode('{}'),
+          ),
+        );
+
+        await expectLater(
+          service.listArtifactKeys(
+            appName: 'app',
+            userId: 'u1',
+            sessionId: 's1',
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test('live mode wires bucket/object paths and auth headers', () async {
+      final List<GcsArtifactHttpRequest> captured = <GcsArtifactHttpRequest>[];
+      final GcsArtifactService service = GcsArtifactService(
+        'bucket-a',
+        mode: GcsArtifactMode.live,
+        authHeadersProvider: () async => <String, String>{
+          'authorization': 'Bearer token-1',
+        },
+        httpRequestProvider: (GcsArtifactHttpRequest request) async {
+          captured.add(request);
+          if (request.method == 'GET' &&
+              request.uri.path == '/storage/v1/b/bucket-a/o' &&
+              request.uri.queryParameters['prefix'] == 'app/u1/s1/file.bin/') {
+            return GcsArtifactHttpResponse(
+              statusCode: 200,
+              bodyBytes: utf8.encode('{}'),
+            );
+          }
+          if (request.method == 'POST' &&
+              request.uri.path == '/upload/storage/v1/b/bucket-a/o' &&
+              request.uri.queryParameters['uploadType'] == 'media' &&
+              request.uri.queryParameters['name'] == 'app/u1/s1/file.bin/0') {
+            return GcsArtifactHttpResponse(
+              statusCode: 200,
+              bodyBytes: utf8.encode(
+                '{"name":"app/u1/s1/file.bin/0","contentType":"text/plain"}',
+              ),
+            );
+          }
+          if (request.method == 'GET' &&
+              request.uri.path == '/storage/v1/b/bucket-a/o' &&
+              request.uri.queryParameters['prefix'] == 'app/u1/s1/') {
+            return GcsArtifactHttpResponse(
+              statusCode: 200,
+              bodyBytes: utf8.encode(
+                '{"items":[{"name":"app/u1/s1/file.bin/0"}]}',
+              ),
+            );
+          }
+          if (request.method == 'GET' &&
+              request.uri.path == '/storage/v1/b/bucket-a/o' &&
+              request.uri.queryParameters['prefix'] == 'app/u1/user/') {
+            return GcsArtifactHttpResponse(
+              statusCode: 200,
+              bodyBytes: utf8.encode('{}'),
+            );
+          }
+          throw StateError(
+            'Unexpected request: ${request.method} ${request.uri}',
+          );
+        },
+      );
+
+      final int savedVersion = await service.saveArtifact(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'file.bin',
+        artifact: Part.text('hello'),
+      );
+      expect(savedVersion, 0);
+
+      final List<String> keys = await service.listArtifactKeys(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+      expect(keys, <String>['file.bin']);
+      expect(captured, isNotEmpty);
+      expect(
+        captured.every(
+          (GcsArtifactHttpRequest request) =>
+              request.headers['authorization'] == 'Bearer token-1',
+        ),
+        isTrue,
+      );
+    });
+
+    test('canonicalizes gs uris for bucket and fileData artifacts', () async {
+      final GcsArtifactService service = GcsArtifactService.inMemory(
+        '  gs://bucket-a/  ',
+      );
+
+      await service.saveArtifact(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'text.txt',
+        artifact: Part.text('v0'),
+      );
+      final ArtifactVersion? sessionVersion = await service.getArtifactVersion(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'text.txt',
+      );
+      expect(sessionVersion, isNotNull);
+      expect(sessionVersion!.canonicalUri, startsWith('gs://bucket-a/'));
+
+      await service.saveArtifact(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'docs/report.pdf',
+        artifact: Part.fromFileData(
+          fileUri: '  gs://external-bucket//docs///report.pdf  ',
+          mimeType: 'application/pdf',
+        ),
+      );
+      final Part? loaded = await service.loadArtifact(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'docs/report.pdf',
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.fileData, isNotNull);
+      expect(loaded.fileData!.fileUri, 'gs://external-bucket/docs/report.pdf');
+
+      final ArtifactVersion? metadata = await service.getArtifactVersion(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+        filename: 'docs/report.pdf',
+      );
+      expect(metadata, isNotNull);
+      expect(metadata!.canonicalUri, 'gs://external-bucket/docs/report.pdf');
     });
   });
 }

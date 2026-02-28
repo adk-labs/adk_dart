@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../errors/already_exists_error.dart';
 import '../events/event.dart';
@@ -12,18 +14,67 @@ import 'session.dart';
 import 'session_util.dart';
 import 'state.dart';
 
+const String _appStatesTableSchema = '''
+CREATE TABLE IF NOT EXISTS app_states (
+    app_name TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    update_time REAL NOT NULL
+);
+''';
+
+const String _userStatesTableSchema = '''
+CREATE TABLE IF NOT EXISTS user_states (
+    app_name TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    update_time REAL NOT NULL,
+    PRIMARY KEY (app_name, user_id)
+);
+''';
+
+const String _sessionsTableSchema = '''
+CREATE TABLE IF NOT EXISTS sessions (
+    app_name TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    create_time REAL NOT NULL,
+    update_time REAL NOT NULL,
+    PRIMARY KEY (app_name, user_id, id)
+);
+''';
+
+const String _eventsTableSchema = '''
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT NOT NULL,
+    app_name TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    invocation_id TEXT NOT NULL,
+    timestamp REAL NOT NULL,
+    event_data TEXT NOT NULL,
+    PRIMARY KEY (app_name, user_id, session_id, id),
+    FOREIGN KEY (app_name, user_id, session_id) REFERENCES sessions(app_name, user_id, id) ON DELETE CASCADE
+);
+''';
+
 class SqliteSessionService extends BaseSessionService {
   SqliteSessionService(String dbPath) : this._(_resolveStorePath(dbPath));
 
   SqliteSessionService._(_ResolvedStorePath resolved)
     : _storePath = resolved.path,
+      _connectPath = resolved.connectPath,
+      _connectAsUri = resolved.connectUri,
       _readOnly = resolved.readOnly,
       _inMemory = resolved.inMemory;
 
   final String _storePath;
+  final String _connectPath;
+  final bool _connectAsUri;
   final bool _readOnly;
   final bool _inMemory;
-  _PersistedStore? _memoryStore;
+
+  _SqliteDatabase? _memoryDatabase;
   Future<void> _lock = Future<void>.value();
 
   @override
@@ -38,55 +89,73 @@ class SqliteSessionService extends BaseSessionService {
           (sessionId != null && sessionId.trim().isNotEmpty)
           ? sessionId.trim()
           : newAdkId(prefix: 'session_');
-      final _PersistedStore store = await _loadStore();
-
-      if (store.sessions[appName]?[userId]?.containsKey(resolvedSessionId) ??
-          false) {
-        throw AlreadyExistsError(
-          'Session with id $resolvedSessionId already exists.',
-        );
-      }
-
       final SessionStateDelta deltas = extractStateDelta(state);
-      if (deltas.app.isNotEmpty) {
-        store.appState
-            .putIfAbsent(appName, () => <String, Object?>{})
-            .addAll(deltas.app);
-      }
-      if (deltas.user.isNotEmpty) {
-        store.userState
-            .putIfAbsent(appName, () => <String, Map<String, Object?>>{})
-            .putIfAbsent(userId, () => <String, Object?>{})
-            .addAll(deltas.user);
-      }
-
       final double now = DateTime.now().millisecondsSinceEpoch / 1000;
-      store.sessions
-          .putIfAbsent(appName, () => <String, Map<String, _StoredSession>>{})
-          .putIfAbsent(
-            userId,
-            () => <String, _StoredSession>{},
-          )[resolvedSessionId] = _StoredSession(
-        state: Map<String, Object?>.from(deltas.session),
-        events: <Map<String, Object?>>[],
-        lastUpdateTime: now,
-      );
 
-      await _saveStore(store);
+      return _withDatabase<Session>((_SqliteDatabase db) {
+        final List<Map<String, Object?>> existing = db.query(
+          'SELECT 1 FROM sessions WHERE app_name=? AND user_id=? AND id=? LIMIT 1',
+          <Object?>[appName, userId, resolvedSessionId],
+        );
+        if (existing.isNotEmpty) {
+          throw AlreadyExistsError(
+            'Session with id $resolvedSessionId already exists.',
+          );
+        }
 
-      final Session session = Session(
-        id: resolvedSessionId,
-        appName: appName,
-        userId: userId,
-        state: _mergeState(
-          appState: store.appState[appName],
-          userState: store.userState[appName]?[userId],
-          sessionState: deltas.session,
-        ),
-        events: <Event>[],
-        lastUpdateTime: now,
-      );
-      return session;
+        _runTransaction(db, () {
+          if (deltas.app.isNotEmpty) {
+            _upsertAppState(
+              db,
+              appName: appName,
+              delta: deltas.app,
+              updateTime: now,
+            );
+          }
+          if (deltas.user.isNotEmpty) {
+            _upsertUserState(
+              db,
+              appName: appName,
+              userId: userId,
+              delta: deltas.user,
+              updateTime: now,
+            );
+          }
+
+          db.execute(
+            'INSERT INTO sessions (app_name, user_id, id, state, create_time, update_time) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            <Object?>[
+              appName,
+              userId,
+              resolvedSessionId,
+              jsonEncode(deltas.session),
+              now,
+              now,
+            ],
+          );
+        });
+
+        final Map<String, Object?> appState = _getAppState(db, appName);
+        final Map<String, Object?> userState = _getUserState(
+          db,
+          appName,
+          userId,
+        );
+
+        return Session(
+          id: resolvedSessionId,
+          appName: appName,
+          userId: userId,
+          state: _mergeState(
+            appState: appState,
+            userState: userState,
+            sessionState: deltas.session,
+          ),
+          events: <Event>[],
+          lastUpdateTime: now,
+        );
+      });
     });
   }
 
@@ -98,42 +167,67 @@ class SqliteSessionService extends BaseSessionService {
     GetSessionConfig? config,
   }) {
     return _withLock<Session?>(() async {
-      final _PersistedStore store = await _loadStore();
-      final _StoredSession? stored =
-          store.sessions[appName]?[userId]?[sessionId];
-      if (stored == null) {
-        return null;
-      }
-
-      List<Event> events = stored.events
-          .map((Map<String, Object?> eventJson) => _eventFromJson(eventJson))
-          .toList();
-      if (config != null) {
-        if (config.afterTimestamp != null) {
-          events = events
-              .where((Event event) => event.timestamp >= config.afterTimestamp!)
-              .toList();
+      return _withDatabase<Session?>((_SqliteDatabase db) {
+        final List<Map<String, Object?>> rows = db.query(
+          'SELECT state, update_time FROM sessions WHERE app_name=? AND user_id=? AND id=?',
+          <Object?>[appName, userId, sessionId],
+        );
+        if (rows.isEmpty) {
+          return null;
         }
-        if (config.numRecentEvents != null && config.numRecentEvents! > 0) {
-          final int count = config.numRecentEvents!;
-          if (events.length > count) {
-            events = events.sublist(events.length - count);
-          }
-        }
-      }
 
-      return Session(
-        id: sessionId,
-        appName: appName,
-        userId: userId,
-        state: _mergeState(
-          appState: store.appState[appName],
-          userState: store.userState[appName]?[userId],
-          sessionState: stored.state,
-        ),
-        events: events,
-        lastUpdateTime: stored.lastUpdateTime,
-      );
+        final Map<String, Object?> sessionState = _decodeJsonMap(
+          rows.first['state'],
+        );
+        final double lastUpdateTime = _asDouble(rows.first['update_time']);
+
+        final List<Object?> eventParams = <Object?>[appName, userId, sessionId];
+        final StringBuffer eventQuery = StringBuffer(
+          'SELECT event_data FROM events '
+          'WHERE app_name=? AND user_id=? AND session_id=?',
+        );
+        if (config?.afterTimestamp != null) {
+          eventQuery.write(' AND timestamp >= ?');
+          eventParams.add(config!.afterTimestamp);
+        }
+        eventQuery.write(' ORDER BY timestamp DESC');
+        if (config?.numRecentEvents != null && config!.numRecentEvents! > 0) {
+          eventQuery.write(' LIMIT ?');
+          eventParams.add(config.numRecentEvents);
+        }
+
+        final List<Map<String, Object?>> eventRows = db.query(
+          eventQuery.toString(),
+          eventParams,
+        );
+
+        final List<Event> events = eventRows.reversed
+            .map(
+              (Map<String, Object?> row) =>
+                  _eventFromJson(_decodeJsonMap(row['event_data'])),
+            )
+            .toList();
+
+        final Map<String, Object?> appState = _getAppState(db, appName);
+        final Map<String, Object?> userState = _getUserState(
+          db,
+          appName,
+          userId,
+        );
+
+        return Session(
+          id: sessionId,
+          appName: appName,
+          userId: userId,
+          state: _mergeState(
+            appState: appState,
+            userState: userState,
+            sessionState: sessionState,
+          ),
+          events: events,
+          lastUpdateTime: lastUpdateTime,
+        );
+      });
     });
   }
 
@@ -143,55 +237,58 @@ class SqliteSessionService extends BaseSessionService {
     String? userId,
   }) {
     return _withLock<ListSessionsResponse>(() async {
-      final _PersistedStore store = await _loadStore();
-      final Map<String, Map<String, _StoredSession>> appSessions =
-          store.sessions[appName] ?? <String, Map<String, _StoredSession>>{};
-      final List<Session> result = <Session>[];
+      return _withDatabase<ListSessionsResponse>((_SqliteDatabase db) {
+        final List<Map<String, Object?>> rows = userId == null
+            ? db.query(
+                'SELECT id, user_id, state, update_time FROM sessions WHERE app_name=?',
+                <Object?>[appName],
+              )
+            : db.query(
+                'SELECT id, user_id, state, update_time FROM sessions '
+                'WHERE app_name=? AND user_id=?',
+                <Object?>[appName, userId],
+              );
 
-      if (userId == null) {
-        for (final MapEntry<String, Map<String, _StoredSession>> userEntry
-            in appSessions.entries) {
-          for (final MapEntry<String, _StoredSession> entry
-              in userEntry.value.entries) {
-            result.add(
-              Session(
-                id: entry.key,
-                appName: appName,
-                userId: userEntry.key,
-                state: _mergeState(
-                  appState: store.appState[appName],
-                  userState: store.userState[appName]?[userEntry.key],
-                  sessionState: entry.value.state,
-                ),
-                events: <Event>[],
-                lastUpdateTime: entry.value.lastUpdateTime,
-              ),
-            );
+        final Map<String, Object?> appState = _getAppState(db, appName);
+        final Map<String, Map<String, Object?>> userStates =
+            <String, Map<String, Object?>>{};
+
+        if (userId != null) {
+          userStates[userId] = _getUserState(db, appName, userId);
+        } else {
+          final List<Map<String, Object?>> userRows = db.query(
+            'SELECT user_id, state FROM user_states WHERE app_name=?',
+            <Object?>[appName],
+          );
+          for (final Map<String, Object?> row in userRows) {
+            final String rowUserId = (row['user_id'] ?? '') as String;
+            userStates[rowUserId] = _decodeJsonMap(row['state']);
           }
         }
-      } else {
-        final Map<String, _StoredSession> userSessions =
-            appSessions[userId] ?? <String, _StoredSession>{};
-        for (final MapEntry<String, _StoredSession> entry
-            in userSessions.entries) {
-          result.add(
-            Session(
-              id: entry.key,
-              appName: appName,
-              userId: userId,
-              state: _mergeState(
-                appState: store.appState[appName],
-                userState: store.userState[appName]?[userId],
-                sessionState: entry.value.state,
-              ),
-              events: <Event>[],
-              lastUpdateTime: entry.value.lastUpdateTime,
-            ),
-          );
-        }
-      }
 
-      return ListSessionsResponse(sessions: result);
+        final List<Session> sessions = rows
+            .map((Map<String, Object?> row) {
+              final String rowUserId = (row['user_id'] ?? '') as String;
+              final Map<String, Object?> sessionState = _decodeJsonMap(
+                row['state'],
+              );
+              return Session(
+                id: (row['id'] ?? '') as String,
+                appName: appName,
+                userId: rowUserId,
+                state: _mergeState(
+                  appState: appState,
+                  userState: userStates[rowUserId],
+                  sessionState: sessionState,
+                ),
+                events: <Event>[],
+                lastUpdateTime: _asDouble(row['update_time']),
+              );
+            })
+            .toList(growable: false);
+
+        return ListSessionsResponse(sessions: sessions);
+      });
     });
   }
 
@@ -202,9 +299,12 @@ class SqliteSessionService extends BaseSessionService {
     required String sessionId,
   }) {
     return _withLock<void>(() async {
-      final _PersistedStore store = await _loadStore();
-      store.sessions[appName]?[userId]?.remove(sessionId);
-      await _saveStore(store);
+      _withDatabase<void>((_SqliteDatabase db) {
+        db.execute(
+          'DELETE FROM sessions WHERE app_name=? AND user_id=? AND id=?',
+          <Object?>[appName, userId, sessionId],
+        );
+      });
     });
   }
 
@@ -214,46 +314,99 @@ class SqliteSessionService extends BaseSessionService {
       if (event.partial == true) {
         return event;
       }
-      final _PersistedStore store = await _loadStore();
-      final _StoredSession? stored =
-          store.sessions[session.appName]?[session.userId]?[session.id];
-      if (stored == null) {
-        throw StateError('Session ${session.id} not found.');
-      }
-      if (stored.lastUpdateTime > session.lastUpdateTime) {
-        throw StateError(
-          'The provided session has stale lastUpdateTime. Reload the session and retry.',
-        );
-      }
 
+      _trimTempDeltaState(event);
+      final SessionStateDelta delta = extractStateDelta(
+        event.actions.stateDelta,
+      );
+
+      _withDatabase<void>((_SqliteDatabase db) {
+        _runTransaction(db, () {
+          final List<Map<String, Object?>> rows = db.query(
+            'SELECT update_time FROM sessions WHERE app_name=? AND user_id=? AND id=?',
+            <Object?>[session.appName, session.userId, session.id],
+          );
+          if (rows.isEmpty) {
+            throw StateError('Session ${session.id} not found.');
+          }
+
+          final double storedLastUpdateTime = _asDouble(
+            rows.first['update_time'],
+          );
+          if (storedLastUpdateTime > session.lastUpdateTime) {
+            throw StateError(
+              'The provided session has stale lastUpdateTime. Reload the session and retry.',
+            );
+          }
+
+          if (delta.app.isNotEmpty) {
+            _upsertAppState(
+              db,
+              appName: session.appName,
+              delta: delta.app,
+              updateTime: event.timestamp,
+            );
+          }
+
+          if (delta.user.isNotEmpty) {
+            _upsertUserState(
+              db,
+              appName: session.appName,
+              userId: session.userId,
+              delta: delta.user,
+              updateTime: event.timestamp,
+            );
+          }
+
+          if (delta.session.isNotEmpty) {
+            db.execute(
+              'UPDATE sessions '
+              'SET state=json_patch(state, ?), update_time=? '
+              'WHERE app_name=? AND user_id=? AND id=?',
+              <Object?>[
+                jsonEncode(delta.session),
+                event.timestamp,
+                session.appName,
+                session.userId,
+                session.id,
+              ],
+            );
+          } else {
+            db.execute(
+              'UPDATE sessions '
+              'SET update_time=? '
+              'WHERE app_name=? AND user_id=? AND id=?',
+              <Object?>[
+                event.timestamp,
+                session.appName,
+                session.userId,
+                session.id,
+              ],
+            );
+          }
+
+          db.execute(
+            'INSERT INTO events '
+            '(id, app_name, user_id, session_id, invocation_id, timestamp, event_data) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?)',
+            <Object?>[
+              event.id,
+              session.appName,
+              session.userId,
+              session.id,
+              event.invocationId,
+              event.timestamp,
+              jsonEncode(_eventToJson(event)),
+            ],
+          );
+        });
+      });
+
+      session.lastUpdateTime = event.timestamp;
       final Event appended = await super.appendEvent(
         session: session,
         event: event,
       );
-      stored.events.add(_eventToJson(appended));
-      stored.lastUpdateTime = appended.timestamp;
-
-      final SessionStateDelta delta = extractStateDelta(
-        appended.actions.stateDelta,
-      );
-      if (delta.app.isNotEmpty) {
-        store.appState
-            .putIfAbsent(session.appName, () => <String, Object?>{})
-            .addAll(delta.app);
-      }
-      if (delta.user.isNotEmpty) {
-        store.userState
-            .putIfAbsent(
-              session.appName,
-              () => <String, Map<String, Object?>>{},
-            )
-            .putIfAbsent(session.userId, () => <String, Object?>{})
-            .addAll(delta.user);
-      }
-      if (delta.session.isNotEmpty) {
-        stored.state.addAll(delta.session);
-      }
-      await _saveStore(store);
       return appended;
     });
   }
@@ -270,184 +423,146 @@ class SqliteSessionService extends BaseSessionService {
     }
   }
 
-  Future<_PersistedStore> _loadStore() async {
+  T _withDatabase<T>(T Function(_SqliteDatabase db) action) {
     if (_inMemory) {
-      return _memoryStore?.copy() ?? _PersistedStore.empty();
+      final _SqliteDatabase db = _memoryDatabase ??= _SqliteDatabase.open(
+        connectPath: _connectPath,
+        displayPath: _storePath,
+        uri: _connectAsUri,
+        readOnly: _readOnly,
+      );
+      _prepareDatabase(db);
+      return action(db);
     }
 
-    final File file = File(_storePath);
-    if (!await file.exists()) {
-      return _PersistedStore.empty();
+    _ensureWritableParentDirectory();
+    final _SqliteDatabase db = _SqliteDatabase.open(
+      connectPath: _connectPath,
+      displayPath: _storePath,
+      uri: _connectAsUri,
+      readOnly: _readOnly,
+    );
+    try {
+      _prepareDatabase(db);
+      return action(db);
+    } finally {
+      db.dispose();
     }
-    final String content = await file.readAsString();
-    if (content.trim().isEmpty) {
-      return _PersistedStore.empty();
-    }
-    final Object? decoded = jsonDecode(content);
-    if (decoded is Map) {
-      return _PersistedStore.fromJson(
-        decoded.map((Object? key, Object? value) => MapEntry('$key', value)),
-      );
-    }
-    return _PersistedStore.empty();
   }
 
-  Future<void> _saveStore(_PersistedStore store) async {
-    if (_readOnly) {
-      throw FileSystemException(
-        'SQLite URL is read-only (mode=ro).',
-        _storePath,
-      );
-    }
-
-    if (_inMemory) {
-      _memoryStore = store.copy();
+  void _ensureWritableParentDirectory() {
+    if (_readOnly || _inMemory) {
       return;
     }
-
-    final File file = File(_storePath);
-    await file.parent.create(recursive: true);
-    final String jsonText = const JsonEncoder.withIndent(
-      '  ',
-    ).convert(store.toJson());
-    await file.writeAsString(jsonText);
-  }
-}
-
-class _PersistedStore {
-  _PersistedStore({
-    required this.sessions,
-    required this.appState,
-    required this.userState,
-  });
-
-  factory _PersistedStore.empty() {
-    return _PersistedStore(
-      sessions: <String, Map<String, Map<String, _StoredSession>>>{},
-      appState: <String, Map<String, Object?>>{},
-      userState: <String, Map<String, Map<String, Object?>>>{},
-    );
+    File(_storePath).parent.createSync(recursive: true);
   }
 
-  final Map<String, Map<String, Map<String, _StoredSession>>> sessions;
-  final Map<String, Map<String, Object?>> appState;
-  final Map<String, Map<String, Map<String, Object?>>> userState;
-
-  factory _PersistedStore.fromJson(Map<String, Object?> json) {
-    final Map<String, Map<String, Map<String, _StoredSession>>> sessions =
-        <String, Map<String, Map<String, _StoredSession>>>{};
-    final Map<String, Object?> rawSessions = _castMap(json['sessions']);
-    rawSessions.forEach((String appName, Object? usersValue) {
-      final Map<String, Map<String, _StoredSession>> byUser =
-          <String, Map<String, _StoredSession>>{};
-      final Map<String, Object?> usersMap = _castMap(usersValue);
-      usersMap.forEach((String userId, Object? sessionValue) {
-        final Map<String, _StoredSession> bySession =
-            <String, _StoredSession>{};
-        final Map<String, Object?> sessionsMap = _castMap(sessionValue);
-        sessionsMap.forEach((String sessionId, Object? storedValue) {
-          bySession[sessionId] = _StoredSession.fromJson(_castMap(storedValue));
-        });
-        byUser[userId] = bySession;
-      });
-      sessions[appName] = byUser;
-    });
-
-    final Map<String, Map<String, Object?>> appState =
-        <String, Map<String, Object?>>{};
-    _castMap(json['appState']).forEach((String appName, Object? value) {
-      appState[appName] = _castMap(value);
-    });
-
-    final Map<String, Map<String, Map<String, Object?>>> userState =
-        <String, Map<String, Map<String, Object?>>>{};
-    _castMap(json['userState']).forEach((String appName, Object? value) {
-      final Map<String, Map<String, Object?>> byUser =
-          <String, Map<String, Object?>>{};
-      _castMap(value).forEach((String userId, Object? userMap) {
-        byUser[userId] = _castMap(userMap);
-      });
-      userState[appName] = byUser;
-    });
-
-    return _PersistedStore(
-      sessions: sessions,
-      appState: appState,
-      userState: userState,
-    );
+  void _prepareDatabase(_SqliteDatabase db) {
+    db.execute('PRAGMA foreign_keys = ON');
+    db.execute(_appStatesTableSchema);
+    db.execute(_userStatesTableSchema);
+    db.execute(_sessionsTableSchema);
+    db.execute(_eventsTableSchema);
   }
 
-  Map<String, Object?> toJson() {
-    final Map<String, Object?> encodedSessions = <String, Object?>{};
-    sessions.forEach((
-      String appName,
-      Map<String, Map<String, _StoredSession>> byUser,
-    ) {
-      final Map<String, Object?> encodedUsers = <String, Object?>{};
-      byUser.forEach((String userId, Map<String, _StoredSession> bySession) {
-        final Map<String, Object?> encodedPerSession = <String, Object?>{};
-        bySession.forEach((String sessionId, _StoredSession stored) {
-          encodedPerSession[sessionId] = stored.toJson();
-        });
-        encodedUsers[userId] = encodedPerSession;
-      });
-      encodedSessions[appName] = encodedUsers;
-    });
-    return <String, Object?>{
-      'sessions': encodedSessions,
-      'appState': appState,
-      'userState': userState,
-    };
-  }
-
-  _PersistedStore copy() => _PersistedStore.fromJson(toJson());
-}
-
-class _StoredSession {
-  _StoredSession({
-    required this.state,
-    required this.events,
-    required this.lastUpdateTime,
-  });
-
-  final Map<String, Object?> state;
-  final List<Map<String, Object?>> events;
-  double lastUpdateTime;
-
-  factory _StoredSession.fromJson(Map<String, Object?> json) {
-    final List<Map<String, Object?>> events = <Map<String, Object?>>[];
-    final Object? rawEvents = json['events'];
-    if (rawEvents is List) {
-      for (final Object? item in rawEvents) {
-        if (item is Map) {
-          events.add(_castMap(item));
+  void _runTransaction(_SqliteDatabase db, void Function() action) {
+    db.execute('BEGIN');
+    bool committed = false;
+    try {
+      action();
+      db.execute('COMMIT');
+      committed = true;
+    } finally {
+      if (!committed) {
+        try {
+          db.execute('ROLLBACK');
+        } catch (_) {
+          // Best effort rollback only.
         }
       }
     }
-    return _StoredSession(
-      state: _castMap(json['state']),
-      events: events,
-      lastUpdateTime: _asDouble(json['lastUpdateTime']),
+  }
+
+  void _upsertAppState(
+    _SqliteDatabase db, {
+    required String appName,
+    required Map<String, Object?> delta,
+    required double updateTime,
+  }) {
+    db.execute(
+      'INSERT INTO app_states (app_name, state, update_time) VALUES (?, ?, ?) '
+      'ON CONFLICT(app_name) DO UPDATE '
+      'SET state=json_patch(state, excluded.state), '
+      'update_time=excluded.update_time',
+      <Object?>[appName, jsonEncode(delta), updateTime],
     );
   }
 
-  Map<String, Object?> toJson() {
-    return <String, Object?>{
-      'state': state,
-      'events': events,
-      'lastUpdateTime': lastUpdateTime,
-    };
+  void _upsertUserState(
+    _SqliteDatabase db, {
+    required String appName,
+    required String userId,
+    required Map<String, Object?> delta,
+    required double updateTime,
+  }) {
+    db.execute(
+      'INSERT INTO user_states (app_name, user_id, state, update_time) '
+      'VALUES (?, ?, ?, ?) '
+      'ON CONFLICT(app_name, user_id) DO UPDATE '
+      'SET state=json_patch(state, excluded.state), '
+      'update_time=excluded.update_time',
+      <Object?>[appName, userId, jsonEncode(delta), updateTime],
+    );
+  }
+
+  Map<String, Object?> _getAppState(_SqliteDatabase db, String appName) {
+    final List<Map<String, Object?>> rows = db.query(
+      'SELECT state FROM app_states WHERE app_name=?',
+      <Object?>[appName],
+    );
+    if (rows.isEmpty) {
+      return <String, Object?>{};
+    }
+    return _decodeJsonMap(rows.first['state']);
+  }
+
+  Map<String, Object?> _getUserState(
+    _SqliteDatabase db,
+    String appName,
+    String userId,
+  ) {
+    final List<Map<String, Object?>> rows = db.query(
+      'SELECT state FROM user_states WHERE app_name=? AND user_id=?',
+      <Object?>[appName, userId],
+    );
+    if (rows.isEmpty) {
+      return <String, Object?>{};
+    }
+    return _decodeJsonMap(rows.first['state']);
+  }
+
+  void _trimTempDeltaState(Event event) {
+    if (event.actions.stateDelta.isEmpty) {
+      return;
+    }
+    event.actions.stateDelta.removeWhere(
+      (String key, Object? _) => key.startsWith(State.tempPrefix),
+    );
   }
 }
 
 class _ResolvedStorePath {
   const _ResolvedStorePath({
     required this.path,
+    required this.connectPath,
+    required this.connectUri,
     required this.readOnly,
     required this.inMemory,
   });
 
   final String path;
+  final String connectPath;
+  final bool connectUri;
   final bool readOnly;
   final bool inMemory;
 }
@@ -463,6 +578,8 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
       !lowerInput.startsWith('sqlite+aiosqlite:')) {
     return _ResolvedStorePath(
       path: input,
+      connectPath: input,
+      connectUri: input.startsWith('file:'),
       readOnly: false,
       inMemory: _isInMemoryStorePath(input),
     );
@@ -476,10 +593,10 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
   if (shorthandMatch != null) {
     final String queryText = shorthandMatch.group(1) ?? '';
     final Map<String, List<String>> query = _parseQueryParameters(queryText);
-    return _ResolvedStorePath(
+    return _buildResolvedStorePath(
       path: ':memory:',
-      readOnly: _parseSqliteReadOnlyMode(query),
-      inMemory: true,
+      query: query,
+      dbPath: dbPath,
     );
   }
 
@@ -499,10 +616,44 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
   final String path = _resolveSqliteUriPath(rawPath, dbPath);
 
   final Map<String, List<String>> query = _parseQueryParameters(uri.query);
+  return _buildResolvedStorePath(path: path, query: query, dbPath: dbPath);
+}
+
+_ResolvedStorePath _buildResolvedStorePath({
+  required String path,
+  required Map<String, List<String>> query,
+  required String dbPath,
+}) {
+  if (path.isEmpty) {
+    throw ArgumentError.value(
+      dbPath,
+      'dbPath',
+      'SQLite URL must include a file path.',
+    );
+  }
+
   final bool readOnly = _parseSqliteReadOnlyMode(query);
   final bool inMemory =
       _isInMemoryStorePath(path) || _parseSqliteInMemoryMode(query);
-  return _ResolvedStorePath(path: path, readOnly: readOnly, inMemory: inMemory);
+  final String connectQuery = _buildSqliteConnectionQuery(query);
+
+  if (connectQuery.isNotEmpty) {
+    return _ResolvedStorePath(
+      path: path,
+      connectPath: 'file:$path?$connectQuery',
+      connectUri: true,
+      readOnly: readOnly,
+      inMemory: inMemory,
+    );
+  }
+
+  return _ResolvedStorePath(
+    path: path,
+    connectPath: path,
+    connectUri: path.startsWith('file:'),
+    readOnly: readOnly,
+    inMemory: inMemory,
+  );
 }
 
 String _resolveSqliteUriPath(String rawPath, String dbPath) {
@@ -638,6 +789,43 @@ Map<String, List<String>> _parseQueryParameters(String query) {
   return parsed;
 }
 
+String _buildSqliteConnectionQuery(Map<String, List<String>> query) {
+  if (query.isEmpty) {
+    return '';
+  }
+
+  const Set<String> validModes = <String>{'ro', 'rw', 'rwc', 'memory'};
+  final List<String> encodedPairs = <String>[];
+
+  query.forEach((String key, List<String> values) {
+    if (values.isEmpty) {
+      return;
+    }
+
+    if (key == 'mode') {
+      final List<String> validValues = values
+          .where(
+            (String value) => validModes.contains(value.trim().toLowerCase()),
+          )
+          .toList(growable: false);
+      for (final String value in validValues) {
+        encodedPairs.add(
+          '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(value)}',
+        );
+      }
+      return;
+    }
+
+    for (final String value in values) {
+      encodedPairs.add(
+        '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(value)}',
+      );
+    }
+  });
+
+  return encodedPairs.join('&');
+}
+
 String _escapeInvalidPercents(String input) {
   final StringBuffer escaped = StringBuffer();
   for (int index = 0; index < input.length; index++) {
@@ -681,6 +869,23 @@ Map<String, Object?> _mergeState({
     });
   }
   return merged;
+}
+
+Map<String, Object?> _decodeJsonMap(Object? value) {
+  if (value is Map) {
+    return _castMap(value);
+  }
+  if (value is String && value.trim().isNotEmpty) {
+    try {
+      final Object? decoded = jsonDecode(value);
+      if (decoded is Map) {
+        return _castMap(decoded);
+      }
+    } catch (_) {
+      return <String, Object?>{};
+    }
+  }
+  return <String, Object?>{};
 }
 
 Map<String, Object?> _eventToJson(Event event) {
@@ -1066,3 +1271,653 @@ double? _asNullableDouble(Object? value) {
   }
   return null;
 }
+
+final class _Sqlite3Handle extends Opaque {}
+
+final class _Sqlite3Statement extends Opaque {}
+
+const int _sqliteOk = 0;
+const int _sqliteRow = 100;
+const int _sqliteDone = 101;
+
+const int _sqliteInteger = 1;
+const int _sqliteFloat = 2;
+const int _sqliteText = 3;
+const int _sqliteBlob = 4;
+const int _sqliteNull = 5;
+
+const int _sqliteOpenReadOnly = 0x00000001;
+const int _sqliteOpenReadWrite = 0x00000002;
+const int _sqliteOpenCreate = 0x00000004;
+const int _sqliteOpenUri = 0x00000040;
+const int _sqliteOpenFullMutex = 0x00010000;
+
+class _SqliteDatabase {
+  _SqliteDatabase._({
+    required _SqliteBindings bindings,
+    required Pointer<_Sqlite3Handle> handle,
+    required String displayPath,
+  }) : _bindings = bindings,
+       _handle = handle,
+       _displayPath = displayPath;
+
+  factory _SqliteDatabase.open({
+    required String connectPath,
+    required String displayPath,
+    required bool uri,
+    required bool readOnly,
+  }) {
+    final _SqliteBindings bindings = _SqliteBindings.instance;
+    final Pointer<Pointer<_Sqlite3Handle>> dbOut = _NativeMemory.allocate(
+      sizeOf<Pointer<_Sqlite3Handle>>(),
+    ).cast<Pointer<_Sqlite3Handle>>();
+    dbOut.value = nullptr;
+
+    final _NativeString path = _NativeString.fromDart(connectPath);
+    final int flags =
+        (readOnly
+            ? _sqliteOpenReadOnly
+            : (_sqliteOpenReadWrite | _sqliteOpenCreate)) |
+        (uri ? _sqliteOpenUri : 0) |
+        _sqliteOpenFullMutex;
+
+    final int resultCode;
+    try {
+      resultCode = bindings.sqlite3OpenV2(
+        path.pointer,
+        dbOut,
+        flags,
+        nullptr.cast<Uint8>(),
+      );
+    } finally {
+      path.dispose();
+    }
+
+    final Pointer<_Sqlite3Handle> handle = dbOut.value;
+    _NativeMemory.free(dbOut.cast<Void>());
+
+    if (resultCode != _sqliteOk) {
+      String message = 'Failed to open SQLite database.';
+      if (handle != nullptr) {
+        message = _decodeCString(bindings.sqlite3Errmsg(handle));
+        bindings.sqlite3CloseV2(handle);
+      }
+      throw FileSystemException(
+        'SQLite open error ($resultCode): $message',
+        displayPath,
+      );
+    }
+
+    return _SqliteDatabase._(
+      bindings: bindings,
+      handle: handle,
+      displayPath: displayPath,
+    );
+  }
+
+  final _SqliteBindings _bindings;
+  final Pointer<_Sqlite3Handle> _handle;
+  final String _displayPath;
+  bool _disposed = false;
+
+  void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _bindings.sqlite3CloseV2(_handle);
+    _disposed = true;
+  }
+
+  void execute(String sql, [List<Object?> params = const <Object?>[]]) {
+    _ensureOpen();
+    final _PreparedStatement statement = _prepare(sql);
+    try {
+      _bindParameters(statement, params);
+      int stepCode = _bindings.sqlite3Step(statement.handle);
+      while (stepCode == _sqliteRow) {
+        stepCode = _bindings.sqlite3Step(statement.handle);
+      }
+      if (stepCode != _sqliteDone) {
+        _throwSqliteError(operation: 'execute', code: stepCode);
+      }
+    } finally {
+      statement.dispose();
+    }
+  }
+
+  List<Map<String, Object?>> query(
+    String sql, [
+    List<Object?> params = const <Object?>[],
+  ]) {
+    _ensureOpen();
+    final _PreparedStatement statement = _prepare(sql);
+    try {
+      _bindParameters(statement, params);
+      final List<Map<String, Object?>> rows = <Map<String, Object?>>[];
+
+      while (true) {
+        final int stepCode = _bindings.sqlite3Step(statement.handle);
+        if (stepCode == _sqliteDone) {
+          break;
+        }
+        if (stepCode != _sqliteRow) {
+          _throwSqliteError(operation: 'query', code: stepCode);
+        }
+
+        final int columnCount = _bindings.sqlite3ColumnCount(statement.handle);
+        final Map<String, Object?> row = <String, Object?>{};
+        for (int index = 0; index < columnCount; index++) {
+          final String name = _decodeCString(
+            _bindings.sqlite3ColumnName(statement.handle, index),
+          );
+          row[name] = _readColumn(statement.handle, index);
+        }
+        rows.add(row);
+      }
+
+      return rows;
+    } finally {
+      statement.dispose();
+    }
+  }
+
+  _PreparedStatement _prepare(String sql) {
+    final _NativeString sqlString = _NativeString.fromDart(sql);
+    final Pointer<Pointer<_Sqlite3Statement>> stmtOut = _NativeMemory.allocate(
+      sizeOf<Pointer<_Sqlite3Statement>>(),
+    ).cast<Pointer<_Sqlite3Statement>>();
+    stmtOut.value = nullptr;
+
+    final int resultCode;
+    try {
+      resultCode = _bindings.sqlite3PrepareV2(
+        _handle,
+        sqlString.pointer,
+        -1,
+        stmtOut,
+        nullptr.cast<Pointer<Uint8>>(),
+      );
+    } finally {
+      sqlString.dispose();
+    }
+
+    final Pointer<_Sqlite3Statement> statement = stmtOut.value;
+    _NativeMemory.free(stmtOut.cast<Void>());
+
+    if (resultCode != _sqliteOk) {
+      if (statement != nullptr) {
+        _bindings.sqlite3Finalize(statement);
+      }
+      _throwSqliteError(operation: 'prepare', code: resultCode);
+    }
+
+    return _PreparedStatement(_bindings, statement);
+  }
+
+  void _bindParameters(_PreparedStatement statement, List<Object?> params) {
+    for (int index = 0; index < params.length; index++) {
+      final Object? value = params[index];
+      final int parameterIndex = index + 1;
+      int resultCode;
+
+      if (value == null) {
+        resultCode = _bindings.sqlite3BindNull(
+          statement.handle,
+          parameterIndex,
+        );
+      } else if (value is bool) {
+        resultCode = _bindings.sqlite3BindInt(
+          statement.handle,
+          parameterIndex,
+          value ? 1 : 0,
+        );
+      } else if (value is int) {
+        resultCode = _bindings.sqlite3BindInt64(
+          statement.handle,
+          parameterIndex,
+          value,
+        );
+      } else if (value is double) {
+        resultCode = _bindings.sqlite3BindDouble(
+          statement.handle,
+          parameterIndex,
+          value,
+        );
+      } else if (value is num) {
+        resultCode = _bindings.sqlite3BindDouble(
+          statement.handle,
+          parameterIndex,
+          value.toDouble(),
+        );
+      } else {
+        final _NativeString textValue = _NativeString.fromDart('$value');
+        statement.registerOwnedString(textValue);
+        resultCode = _bindings.sqlite3BindText(
+          statement.handle,
+          parameterIndex,
+          textValue.pointer,
+          -1,
+          nullptr.cast<NativeFunction<_SqliteDestructorNative>>(),
+        );
+      }
+
+      if (resultCode != _sqliteOk) {
+        _throwSqliteError(operation: 'bind', code: resultCode);
+      }
+    }
+  }
+
+  Object? _readColumn(Pointer<_Sqlite3Statement> statement, int index) {
+    final int type = _bindings.sqlite3ColumnType(statement, index);
+    switch (type) {
+      case _sqliteNull:
+        return null;
+      case _sqliteInteger:
+        return _bindings.sqlite3ColumnInt64(statement, index);
+      case _sqliteFloat:
+        return _bindings.sqlite3ColumnDouble(statement, index);
+      case _sqliteText:
+        return _decodeCString(_bindings.sqlite3ColumnText(statement, index));
+      case _sqliteBlob:
+        final int length = _bindings.sqlite3ColumnBytes(statement, index);
+        if (length <= 0) {
+          return Uint8List(0);
+        }
+        final Pointer<Void> blobPointer = _bindings.sqlite3ColumnBlob(
+          statement,
+          index,
+        );
+        if (blobPointer == nullptr) {
+          return Uint8List(0);
+        }
+        return Uint8List.fromList(
+          blobPointer.cast<Uint8>().asTypedList(length),
+        );
+      default:
+        return null;
+    }
+  }
+
+  void _ensureOpen() {
+    if (_disposed) {
+      throw StateError('SQLite database connection is already closed.');
+    }
+  }
+
+  Never _throwSqliteError({required String operation, required int code}) {
+    final String message = _decodeCString(_bindings.sqlite3Errmsg(_handle));
+    throw FileSystemException(
+      'SQLite $operation error ($code): $message',
+      _displayPath,
+    );
+  }
+}
+
+class _PreparedStatement {
+  _PreparedStatement(this._bindings, this.handle);
+
+  final _SqliteBindings _bindings;
+  final Pointer<_Sqlite3Statement> handle;
+  final List<_NativeString> _ownedStrings = <_NativeString>[];
+  bool _disposed = false;
+
+  void registerOwnedString(_NativeString value) {
+    _ownedStrings.add(value);
+  }
+
+  void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _bindings.sqlite3Finalize(handle);
+    for (final _NativeString string in _ownedStrings) {
+      string.dispose();
+    }
+    _ownedStrings.clear();
+    _disposed = true;
+  }
+}
+
+class _SqliteBindings {
+  _SqliteBindings._(DynamicLibrary library)
+    : sqlite3OpenV2 = library
+          .lookupFunction<_SqliteOpenV2Native, _SqliteOpenV2Dart>(
+            'sqlite3_open_v2',
+          ),
+      sqlite3CloseV2 = library
+          .lookupFunction<_SqliteCloseV2Native, _SqliteCloseV2Dart>(
+            'sqlite3_close_v2',
+          ),
+      sqlite3Errmsg = library
+          .lookupFunction<_SqliteErrmsgNative, _SqliteErrmsgDart>(
+            'sqlite3_errmsg',
+          ),
+      sqlite3PrepareV2 = library
+          .lookupFunction<_SqlitePrepareV2Native, _SqlitePrepareV2Dart>(
+            'sqlite3_prepare_v2',
+          ),
+      sqlite3Step = library.lookupFunction<_SqliteStepNative, _SqliteStepDart>(
+        'sqlite3_step',
+      ),
+      sqlite3Finalize = library
+          .lookupFunction<_SqliteFinalizeNative, _SqliteFinalizeDart>(
+            'sqlite3_finalize',
+          ),
+      sqlite3BindNull = library
+          .lookupFunction<_SqliteBindNullNative, _SqliteBindNullDart>(
+            'sqlite3_bind_null',
+          ),
+      sqlite3BindInt = library
+          .lookupFunction<_SqliteBindIntNative, _SqliteBindIntDart>(
+            'sqlite3_bind_int',
+          ),
+      sqlite3BindInt64 = library
+          .lookupFunction<_SqliteBindInt64Native, _SqliteBindInt64Dart>(
+            'sqlite3_bind_int64',
+          ),
+      sqlite3BindDouble = library
+          .lookupFunction<_SqliteBindDoubleNative, _SqliteBindDoubleDart>(
+            'sqlite3_bind_double',
+          ),
+      sqlite3BindText = library
+          .lookupFunction<_SqliteBindTextNative, _SqliteBindTextDart>(
+            'sqlite3_bind_text',
+          ),
+      sqlite3ColumnCount = library
+          .lookupFunction<_SqliteColumnCountNative, _SqliteColumnCountDart>(
+            'sqlite3_column_count',
+          ),
+      sqlite3ColumnName = library
+          .lookupFunction<_SqliteColumnNameNative, _SqliteColumnNameDart>(
+            'sqlite3_column_name',
+          ),
+      sqlite3ColumnType = library
+          .lookupFunction<_SqliteColumnTypeNative, _SqliteColumnTypeDart>(
+            'sqlite3_column_type',
+          ),
+      sqlite3ColumnInt64 = library
+          .lookupFunction<_SqliteColumnInt64Native, _SqliteColumnInt64Dart>(
+            'sqlite3_column_int64',
+          ),
+      sqlite3ColumnDouble = library
+          .lookupFunction<_SqliteColumnDoubleNative, _SqliteColumnDoubleDart>(
+            'sqlite3_column_double',
+          ),
+      sqlite3ColumnText = library
+          .lookupFunction<_SqliteColumnTextNative, _SqliteColumnTextDart>(
+            'sqlite3_column_text',
+          ),
+      sqlite3ColumnBlob = library
+          .lookupFunction<_SqliteColumnBlobNative, _SqliteColumnBlobDart>(
+            'sqlite3_column_blob',
+          ),
+      sqlite3ColumnBytes = library
+          .lookupFunction<_SqliteColumnBytesNative, _SqliteColumnBytesDart>(
+            'sqlite3_column_bytes',
+          );
+
+  static final _SqliteBindings instance = _SqliteBindings._(
+    _openSqliteLibrary(),
+  );
+
+  final _SqliteOpenV2Dart sqlite3OpenV2;
+  final _SqliteCloseV2Dart sqlite3CloseV2;
+  final _SqliteErrmsgDart sqlite3Errmsg;
+  final _SqlitePrepareV2Dart sqlite3PrepareV2;
+  final _SqliteStepDart sqlite3Step;
+  final _SqliteFinalizeDart sqlite3Finalize;
+  final _SqliteBindNullDart sqlite3BindNull;
+  final _SqliteBindIntDart sqlite3BindInt;
+  final _SqliteBindInt64Dart sqlite3BindInt64;
+  final _SqliteBindDoubleDart sqlite3BindDouble;
+  final _SqliteBindTextDart sqlite3BindText;
+  final _SqliteColumnCountDart sqlite3ColumnCount;
+  final _SqliteColumnNameDart sqlite3ColumnName;
+  final _SqliteColumnTypeDart sqlite3ColumnType;
+  final _SqliteColumnInt64Dart sqlite3ColumnInt64;
+  final _SqliteColumnDoubleDart sqlite3ColumnDouble;
+  final _SqliteColumnTextDart sqlite3ColumnText;
+  final _SqliteColumnBlobDart sqlite3ColumnBlob;
+  final _SqliteColumnBytesDart sqlite3ColumnBytes;
+}
+
+class _NativeMemory {
+  static final DynamicLibrary _library = _openCLibrary();
+
+  static final Pointer<Void> Function(int) _malloc = _library
+      .lookupFunction<
+        Pointer<Void> Function(IntPtr),
+        Pointer<Void> Function(int)
+      >('malloc');
+
+  static final void Function(Pointer<Void>) _free = _library
+      .lookupFunction<
+        Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)
+      >('free');
+
+  static Pointer<Void> allocate(int byteCount) {
+    final Pointer<Void> pointer = _malloc(byteCount);
+    if (pointer == nullptr) {
+      throw StateError('Native allocation failed.');
+    }
+    return pointer;
+  }
+
+  static void free(Pointer<Void> pointer) {
+    if (pointer == nullptr) {
+      return;
+    }
+    _free(pointer);
+  }
+}
+
+class _NativeString {
+  _NativeString._(this.pointer);
+
+  final Pointer<Uint8> pointer;
+
+  factory _NativeString.fromDart(String value) {
+    final List<int> bytes = utf8.encode(value);
+    final Pointer<Uint8> buffer = _NativeMemory.allocate(
+      bytes.length + 1,
+    ).cast<Uint8>();
+    final Uint8List nativeBytes = buffer.asTypedList(bytes.length + 1);
+    nativeBytes.setRange(0, bytes.length, bytes);
+    nativeBytes[bytes.length] = 0;
+    return _NativeString._(buffer);
+  }
+
+  void dispose() {
+    _NativeMemory.free(pointer.cast<Void>());
+  }
+}
+
+String _decodeCString(Pointer<Uint8> pointer) {
+  if (pointer == nullptr) {
+    return '';
+  }
+
+  int length = 0;
+  while (pointer[length] != 0) {
+    length += 1;
+  }
+
+  if (length == 0) {
+    return '';
+  }
+
+  return utf8.decode(pointer.asTypedList(length), allowMalformed: true);
+}
+
+DynamicLibrary _openSqliteLibrary() {
+  if (Platform.isMacOS) {
+    return DynamicLibrary.open('/usr/lib/libsqlite3.dylib');
+  }
+  if (Platform.isLinux) {
+    try {
+      return DynamicLibrary.open('libsqlite3.so.0');
+    } catch (_) {
+      return DynamicLibrary.open('libsqlite3.so');
+    }
+  }
+  if (Platform.isWindows) {
+    return DynamicLibrary.open('sqlite3.dll');
+  }
+  return DynamicLibrary.process();
+}
+
+DynamicLibrary _openCLibrary() {
+  if (Platform.isMacOS) {
+    return DynamicLibrary.open('/usr/lib/libSystem.B.dylib');
+  }
+  if (Platform.isLinux) {
+    return DynamicLibrary.open('libc.so.6');
+  }
+  if (Platform.isWindows) {
+    return DynamicLibrary.open('msvcrt.dll');
+  }
+  return DynamicLibrary.process();
+}
+
+typedef _SqliteDestructorNative = Void Function(Pointer<Void>);
+
+typedef _SqliteOpenV2Native =
+    Int32 Function(
+      Pointer<Uint8> filename,
+      Pointer<Pointer<_Sqlite3Handle>> db,
+      Int32 flags,
+      Pointer<Uint8> vfs,
+    );
+
+typedef _SqliteOpenV2Dart =
+    int Function(
+      Pointer<Uint8> filename,
+      Pointer<Pointer<_Sqlite3Handle>> db,
+      int flags,
+      Pointer<Uint8> vfs,
+    );
+
+typedef _SqliteCloseV2Native = Int32 Function(Pointer<_Sqlite3Handle> db);
+typedef _SqliteCloseV2Dart = int Function(Pointer<_Sqlite3Handle> db);
+
+typedef _SqliteErrmsgNative =
+    Pointer<Uint8> Function(Pointer<_Sqlite3Handle> db);
+typedef _SqliteErrmsgDart = Pointer<Uint8> Function(Pointer<_Sqlite3Handle> db);
+
+typedef _SqlitePrepareV2Native =
+    Int32 Function(
+      Pointer<_Sqlite3Handle> db,
+      Pointer<Uint8> sql,
+      Int32 byteCount,
+      Pointer<Pointer<_Sqlite3Statement>> statement,
+      Pointer<Pointer<Uint8>> tail,
+    );
+
+typedef _SqlitePrepareV2Dart =
+    int Function(
+      Pointer<_Sqlite3Handle> db,
+      Pointer<Uint8> sql,
+      int byteCount,
+      Pointer<Pointer<_Sqlite3Statement>> statement,
+      Pointer<Pointer<Uint8>> tail,
+    );
+
+typedef _SqliteStepNative =
+    Int32 Function(Pointer<_Sqlite3Statement> statement);
+typedef _SqliteStepDart = int Function(Pointer<_Sqlite3Statement> statement);
+
+typedef _SqliteFinalizeNative =
+    Int32 Function(Pointer<_Sqlite3Statement> statement);
+typedef _SqliteFinalizeDart =
+    int Function(Pointer<_Sqlite3Statement> statement);
+
+typedef _SqliteBindNullNative =
+    Int32 Function(Pointer<_Sqlite3Statement> statement, Int32 index);
+typedef _SqliteBindNullDart =
+    int Function(Pointer<_Sqlite3Statement> statement, int index);
+
+typedef _SqliteBindIntNative =
+    Int32 Function(
+      Pointer<_Sqlite3Statement> statement,
+      Int32 index,
+      Int32 value,
+    );
+typedef _SqliteBindIntDart =
+    int Function(Pointer<_Sqlite3Statement> statement, int index, int value);
+
+typedef _SqliteBindInt64Native =
+    Int32 Function(
+      Pointer<_Sqlite3Statement> statement,
+      Int32 index,
+      Int64 value,
+    );
+typedef _SqliteBindInt64Dart =
+    int Function(Pointer<_Sqlite3Statement> statement, int index, int value);
+
+typedef _SqliteBindDoubleNative =
+    Int32 Function(
+      Pointer<_Sqlite3Statement> statement,
+      Int32 index,
+      Double value,
+    );
+typedef _SqliteBindDoubleDart =
+    int Function(Pointer<_Sqlite3Statement> statement, int index, double value);
+
+typedef _SqliteBindTextNative =
+    Int32 Function(
+      Pointer<_Sqlite3Statement> statement,
+      Int32 index,
+      Pointer<Uint8> value,
+      Int32 length,
+      Pointer<NativeFunction<_SqliteDestructorNative>> destructor,
+    );
+
+typedef _SqliteBindTextDart =
+    int Function(
+      Pointer<_Sqlite3Statement> statement,
+      int index,
+      Pointer<Uint8> value,
+      int length,
+      Pointer<NativeFunction<_SqliteDestructorNative>> destructor,
+    );
+
+typedef _SqliteColumnCountNative =
+    Int32 Function(Pointer<_Sqlite3Statement> statement);
+typedef _SqliteColumnCountDart =
+    int Function(Pointer<_Sqlite3Statement> statement);
+
+typedef _SqliteColumnNameNative =
+    Pointer<Uint8> Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnNameDart =
+    Pointer<Uint8> Function(Pointer<_Sqlite3Statement> statement, int column);
+
+typedef _SqliteColumnTypeNative =
+    Int32 Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnTypeDart =
+    int Function(Pointer<_Sqlite3Statement> statement, int column);
+
+typedef _SqliteColumnInt64Native =
+    Int64 Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnInt64Dart =
+    int Function(Pointer<_Sqlite3Statement> statement, int column);
+
+typedef _SqliteColumnDoubleNative =
+    Double Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnDoubleDart =
+    double Function(Pointer<_Sqlite3Statement> statement, int column);
+
+typedef _SqliteColumnTextNative =
+    Pointer<Uint8> Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnTextDart =
+    Pointer<Uint8> Function(Pointer<_Sqlite3Statement> statement, int column);
+
+typedef _SqliteColumnBlobNative =
+    Pointer<Void> Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnBlobDart =
+    Pointer<Void> Function(Pointer<_Sqlite3Statement> statement, int column);
+
+typedef _SqliteColumnBytesNative =
+    Int32 Function(Pointer<_Sqlite3Statement> statement, Int32 column);
+typedef _SqliteColumnBytesDart =
+    int Function(Pointer<_Sqlite3Statement> statement, int column);
