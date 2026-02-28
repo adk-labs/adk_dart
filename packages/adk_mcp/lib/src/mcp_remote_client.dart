@@ -39,6 +39,8 @@ class McpServerMessage {
 }
 
 typedef McpServerMessageHandler = void Function(McpServerMessage message);
+typedef McpServerRequestHandler =
+    FutureOr<Object?> Function(McpServerMessage request);
 typedef HttpClientFactory = http.Client Function();
 
 class McpRemoteClient {
@@ -46,20 +48,24 @@ class McpRemoteClient {
     required this.clientInfoName,
     required this.clientInfoVersion,
     this.onServerMessage,
-    this.latestProtocolVersion = '2025-11-25',
+    this.onServerRequest,
+    this.latestProtocolVersion = mcpLatestProtocolVersion,
     Set<String>? supportedProtocolVersions,
+    Map<String, Object?>? clientCapabilities,
     this.requestTimeout = const Duration(seconds: 30),
     HttpClientFactory? httpClientFactory,
   }) : supportedProtocolVersions =
-           supportedProtocolVersions ??
-           const <String>{'2025-03-26', '2025-06-18', '2025-11-25'},
+           supportedProtocolVersions ?? mcpSupportedProtocolVersions,
+       clientCapabilities = clientCapabilities ?? const <String, Object?>{},
        _httpClientFactory = httpClientFactory ?? http.Client.new;
 
   final String clientInfoName;
   final String clientInfoVersion;
   final McpServerMessageHandler? onServerMessage;
+  final McpServerRequestHandler? onServerRequest;
   final String latestProtocolVersion;
   final Set<String> supportedProtocolVersions;
+  final Map<String, Object?> clientCapabilities;
   final Duration requestTimeout;
   final HttpClientFactory _httpClientFactory;
 
@@ -71,6 +77,10 @@ class McpRemoteClient {
   final Map<String, String> _sessionIdByUrl = <String, String>{};
   final Map<String, Map<String, Object?>> _capabilitiesByUrl =
       <String, Map<String, Object?>>{};
+  final Map<String, StreamableHTTPConnectionParams> _connectionParamsByUrl =
+      <String, StreamableHTTPConnectionParams>{};
+  final Map<String, Map<String, String>> _lastRequestHeadersByUrl =
+      <String, Map<String, String>>{};
   int _requestSequence = 1;
 
   bool isRemoteCapable(StreamableHTTPConnectionParams connectionParams) {
@@ -140,7 +150,7 @@ class McpRemoteClient {
         method: 'initialize',
         params: <String, Object?>{
           'protocolVersion': latestProtocolVersion,
-          'capabilities': <String, Object?>{},
+          'capabilities': clientCapabilities,
           'clientInfo': <String, Object?>{
             'name': clientInfoName,
             'version': clientInfoVersion,
@@ -312,17 +322,417 @@ class McpRemoteClient {
     );
   }
 
+  Future<Map<String, Object?>> ping({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, Object?> params = const <String, Object?>{},
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'ping',
+      params: params,
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> complete({
+    required StreamableHTTPConnectionParams connectionParams,
+    required Map<String, Object?> ref,
+    required Object? argument,
+    Map<String, Object?>? context,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'completion/complete',
+      params: <String, Object?>{
+        'ref': ref,
+        'argument': <String, Object?>{'value': argument},
+        if (context != null && context.isNotEmpty) 'context': context,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> setLoggingLevel({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String level,
+    Map<String, String>? headers,
+  }) async {
+    _validateLoggingLevel(level);
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'logging/setLevel',
+      params: <String, Object?>{'level': level},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> listResourcesPage({
+    required StreamableHTTPConnectionParams connectionParams,
+    String? cursor,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listResources({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'resources/list',
+      resultArrayField: 'resources',
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> listResourceTemplatesPage({
+    required StreamableHTTPConnectionParams connectionParams,
+    String? cursor,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/templates/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listResourceTemplates({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'resources/templates/list',
+      resultArrayField: 'resourceTemplates',
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> readResource({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String uri,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/read',
+      params: <String, Object?>{'uri': uri},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> subscribeResource({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String uri,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/subscribe',
+      params: <String, Object?>{'uri': uri},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> unsubscribeResource({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String uri,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/unsubscribe',
+      params: <String, Object?>{'uri': uri},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> listPromptsPage({
+    required StreamableHTTPConnectionParams connectionParams,
+    String? cursor,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'prompts/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listPrompts({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'prompts/list',
+      resultArrayField: 'prompts',
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> getPrompt({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String name,
+    Map<String, String>? arguments,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'prompts/get',
+      params: <String, Object?>{
+        'name': name,
+        if (arguments != null && arguments.isNotEmpty) 'arguments': arguments,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> listToolsPage({
+    required StreamableHTTPConnectionParams connectionParams,
+    String? cursor,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tools/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listTools({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'tools/list',
+      resultArrayField: 'tools',
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> callTool({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String name,
+    Map<String, Object?> arguments = const <String, Object?>{},
+    Map<String, Object?>? task,
+    Map<String, Object?>? meta,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tools/call',
+      params: <String, Object?>{
+        'name': name,
+        if (arguments.isNotEmpty) 'arguments': arguments,
+        if (task != null && task.isNotEmpty) 'task': task,
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> getTask({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String taskId,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/get',
+      params: <String, Object?>{'taskId': taskId},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> getTaskResult({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String taskId,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/result',
+      params: <String, Object?>{'taskId': taskId},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> cancelTask({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String taskId,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/cancel',
+      params: <String, Object?>{'taskId': taskId},
+      headers: headers,
+    );
+  }
+
+  Future<Map<String, Object?>> listTasksPage({
+    required StreamableHTTPConnectionParams connectionParams,
+    String? cursor,
+    Map<String, String>? headers,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listTasks({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'tasks/list',
+      resultArrayField: 'tasks',
+      headers: headers,
+    );
+  }
+
+  Future<void> notifyCancelledRequest({
+    required StreamableHTTPConnectionParams connectionParams,
+    required Object requestId,
+    String? reason,
+    Map<String, Object?>? meta,
+    Map<String, String>? headers,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/cancelled',
+      params: <String, Object?>{
+        'requestId': requestId,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<void> notifyProgress({
+    required StreamableHTTPConnectionParams connectionParams,
+    required Object progressToken,
+    required num progress,
+    num? total,
+    String? message,
+    Map<String, Object?>? meta,
+    Map<String, String>? headers,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/progress',
+      params: <String, Object?>{
+        'progressToken': progressToken,
+        'progress': progress,
+        ...?total == null ? null : <String, Object?>{'total': total},
+        if (message != null && message.trim().isNotEmpty) 'message': message,
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<void> notifyRootsListChanged({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, Object?>? meta,
+    Map<String, String>? headers,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/roots/list_changed',
+      params: <String, Object?>{
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+      headers: headers,
+    );
+  }
+
+  Future<void> notifyTaskStatus({
+    required StreamableHTTPConnectionParams connectionParams,
+    required Map<String, Object?> status,
+    Map<String, String>? headers,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/tasks/status',
+      params: status,
+      headers: headers,
+    );
+  }
+
+  Future<void> sendInitializedNotification({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, Object?>? meta,
+    Map<String, String>? headers,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/initialized',
+      params: <String, Object?>{
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+      headers: headers,
+    );
+  }
+
   void clear() {
     _initializedUrls.clear();
     _initializationTasksByUrl.clear();
     _negotiatedProtocolVersionByUrl.clear();
     _sessionIdByUrl.clear();
     _capabilitiesByUrl.clear();
+    _connectionParamsByUrl.clear();
+    _lastRequestHeadersByUrl.clear();
     _requestSequence = 1;
   }
 
   void clearConnection(StreamableHTTPConnectionParams connectionParams) {
     _resetRemoteSession(connectionParams.url);
+  }
+
+  Future<Map<String, Object?>> _callMap({
+    required StreamableHTTPConnectionParams connectionParams,
+    required String method,
+    required Map<String, Object?> params,
+    Map<String, String>? headers,
+  }) async {
+    return _asStringObjectMap(
+      await call(
+        connectionParams: connectionParams,
+        method: method,
+        params: params,
+        headers: headers,
+      ),
+    );
   }
 
   Future<void> _jsonRpcNotifyWithRecovery({
@@ -472,6 +882,10 @@ class McpRemoteClient {
   }) async {
     final Uri uri = Uri.parse(connectionParams.url);
     final String url = connectionParams.url;
+    _connectionParamsByUrl[url] = connectionParams;
+    if (headers != null) {
+      _lastRequestHeadersByUrl[url] = Map<String, String>.from(headers);
+    }
     final String protocolVersion =
         _negotiatedProtocolVersionByUrl[url] ?? latestProtocolVersion;
 
@@ -584,6 +998,10 @@ class McpRemoteClient {
           }
           continue;
         }
+        if (_isRequestObject(message)) {
+          unawaited(_handleIncomingRequest(connectionUrl, message));
+          continue;
+        }
         _emitServerMessage(connectionUrl, message);
       }
 
@@ -603,6 +1021,13 @@ class McpRemoteClient {
     final Map<String, Object?> map = decoded.map(
       (Object? key, Object? value) => MapEntry<String, Object?>('$key', value),
     );
+    if (_isRequestObject(map)) {
+      unawaited(_handleIncomingRequest(connectionUrl, map));
+      throw FormatException(
+        'MCP response for `$requestMethod` contained a server request instead of '
+        'a JSON-RPC response object.',
+      );
+    }
     if (!_isResponseObject(map)) {
       _emitServerMessage(connectionUrl, map);
       throw FormatException(
@@ -672,6 +1097,19 @@ class McpRemoteClient {
         (message.containsKey('result') || message.containsKey('error'));
   }
 
+  bool _isRequestObject(Map<String, Object?> message) {
+    if (!message.containsKey('method')) {
+      return false;
+    }
+    if (!message.containsKey('id')) {
+      return false;
+    }
+    if (message['id'] == null) {
+      return false;
+    }
+    return !message.containsKey('result') && !message.containsKey('error');
+  }
+
   bool _idMatches(Object? id, int expectedRequestId) {
     if (id is int) {
       return id == expectedRequestId;
@@ -700,12 +1138,98 @@ class McpRemoteClient {
     );
   }
 
+  Future<void> _handleIncomingRequest(
+    String url,
+    Map<String, Object?> payload,
+  ) async {
+    _emitServerMessage(url, payload);
+
+    final Object? id = payload['id'];
+    if (id == null) {
+      return;
+    }
+
+    final String method = _asString(payload['method']).trim();
+    final McpServerMessage message = McpServerMessage(
+      url: url,
+      method: method,
+      params: _asStringObjectMap(payload['params']),
+      id: id,
+    );
+
+    Object? result = const <String, Object?>{};
+    Map<String, Object?>? error;
+    try {
+      if (onServerRequest != null) {
+        final Object? handled = await onServerRequest!(message);
+        if (handled != null) {
+          result = handled;
+        }
+      } else if (method != 'ping') {
+        throw McpServerRequestException(
+          code: mcpMethodNotFoundCode,
+          message: 'Unsupported server request method: $method',
+          method: method,
+        );
+      }
+    } on McpServerRequestException catch (exception) {
+      error = <String, Object?>{
+        'code': exception.code,
+        'message': exception.message,
+        if (exception.data != null) 'data': exception.data,
+      };
+    } catch (exception) {
+      error = <String, Object?>{
+        'code': mcpServerErrorCode,
+        'message': 'Unhandled error while handling server request `$method`.',
+        'data': '$exception',
+      };
+    }
+
+    await _respondToIncomingRequest(
+      url: url,
+      id: id,
+      result: result,
+      error: error,
+    );
+  }
+
+  Future<void> _respondToIncomingRequest({
+    required String url,
+    required Object id,
+    required Object? result,
+    Map<String, Object?>? error,
+  }) async {
+    final StreamableHTTPConnectionParams? connectionParams =
+        _connectionParamsByUrl[url];
+    if (connectionParams == null) {
+      return;
+    }
+    try {
+      await _postJsonRpc(
+        connectionParams: connectionParams,
+        requestBody: <String, Object?>{
+          'jsonrpc': '2.0',
+          'id': id,
+          if (error != null) 'error': error else 'result': result,
+        },
+        headers: _lastRequestHeadersByUrl[url],
+        includeSessionHeaders: true,
+        includeProtocolHeader: true,
+      );
+    } catch (_) {
+      // Best effort response for server-initiated requests.
+    }
+  }
+
   void _resetRemoteSession(String url) {
     _initializedUrls.remove(url);
     _initializationTasksByUrl.remove(url);
     _sessionIdByUrl.remove(url);
     _negotiatedProtocolVersionByUrl.remove(url);
     _capabilitiesByUrl.remove(url);
+    _connectionParamsByUrl.remove(url);
+    _lastRequestHeadersByUrl.remove(url);
   }
 }
 
@@ -756,6 +1280,16 @@ String? _headerValue(Map<String, String> headers, String name) {
   return headers[lowerName]?.trim();
 }
 
+void _validateLoggingLevel(String level) {
+  if (!mcpLoggingLevels.contains(level)) {
+    throw ArgumentError(
+      'Invalid MCP logging level: $level. '
+          'Expected one of: ${mcpLoggingLevels.join(', ')}',
+      'level',
+    );
+  }
+}
+
 class McpJsonRpcException extends StateError {
   McpJsonRpcException({
     required this.method,
@@ -778,6 +1312,26 @@ class McpHttpStatusException extends HttpException {
 
   final int statusCode;
   final String body;
+}
+
+class McpServerRequestException implements Exception {
+  McpServerRequestException({
+    required this.code,
+    required this.message,
+    this.method,
+    this.data,
+  });
+
+  final int code;
+  final String message;
+  final String? method;
+  final Object? data;
+
+  @override
+  String toString() {
+    final String label = method == null ? '' : ' `$method`';
+    return 'MCP server request$label failed ($code): $message';
+  }
 }
 
 class _McpJsonRpcCallResponse {
@@ -805,3 +1359,20 @@ class _McpHttpResponse {
 }
 
 const int mcpMethodNotFoundCode = -32601;
+const int mcpServerErrorCode = -32000;
+const String mcpLatestProtocolVersion = '2025-11-25';
+const Set<String> mcpSupportedProtocolVersions = <String>{
+  '2025-03-26',
+  '2025-06-18',
+  '2025-11-25',
+};
+const Set<String> mcpLoggingLevels = <String>{
+  'debug',
+  'info',
+  'notice',
+  'warning',
+  'error',
+  'critical',
+  'alert',
+  'emergency',
+};

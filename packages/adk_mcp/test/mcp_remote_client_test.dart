@@ -28,6 +28,17 @@ Future<void> _respondJsonRpc(
   await request.response.close();
 }
 
+Future<Map<String, Object?>> _readRpc(HttpRequest request) async {
+  final String body = await utf8.decoder.bind(request).join();
+  final Object? decoded = jsonDecode(body);
+  if (decoded is! Map) {
+    return <String, Object?>{};
+  }
+  return decoded.map(
+    (Object? key, Object? value) => MapEntry<String, Object?>('$key', value),
+  );
+}
+
 void main() {
   test('does not send protocol header on initialize', () async {
     final HttpServer server = await HttpServer.bind(
@@ -257,5 +268,572 @@ void main() {
 
     await Future<void>.delayed(const Duration(milliseconds: 250));
     expect(seenMethods, contains('notifications/cancelled'));
+  });
+
+  test('covers 2025-11-25 client request/notification wrappers', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    final List<String> seenMethods = <String>[];
+    server.listen((HttpRequest request) async {
+      final Map<String, Object?> rpc = await _readRpc(request);
+      final String method = '${rpc['method'] ?? ''}';
+      if (method.isNotEmpty) {
+        seenMethods.add(method);
+      }
+      final Object? id = rpc['id'];
+
+      switch (method) {
+        case 'initialize':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'protocolVersion': '2025-11-25',
+              'capabilities': <String, Object?>{
+                'tools': <String, Object?>{'listChanged': true},
+                'resources': <String, Object?>{
+                  'subscribe': true,
+                  'listChanged': true,
+                },
+                'prompts': <String, Object?>{'listChanged': true},
+                'tasks': <String, Object?>{
+                  'list': <String, Object?>{},
+                  'cancel': <String, Object?>{},
+                },
+                'logging': <String, Object?>{},
+                'completions': <String, Object?>{},
+              },
+            },
+            headers: <String, String>{'MCP-Session-Id': 'session-main'},
+          );
+          return;
+        case 'notifications/initialized':
+        case 'notifications/progress':
+        case 'notifications/roots/list_changed':
+        case 'notifications/tasks/status':
+        case 'notifications/cancelled':
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        case 'ping':
+        case 'logging/setLevel':
+        case 'resources/subscribe':
+        case 'resources/unsubscribe':
+          await _respondJsonRpc(request, id: id, result: <String, Object?>{});
+          return;
+        case 'completion/complete':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'completion': <String, Object?>{
+                'values': <String>['one', 'two'],
+                'total': 2,
+                'hasMore': false,
+              },
+            },
+          );
+          return;
+        case 'resources/list':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'resources': <Map<String, Object?>>[
+                <String, Object?>{'uri': 'file:///r1', 'name': 'r1'},
+              ],
+            },
+          );
+          return;
+        case 'resources/templates/list':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'resourceTemplates': <Map<String, Object?>>[
+                <String, Object?>{'uriTemplate': 'file:///tmpl/{name}'},
+              ],
+            },
+          );
+          return;
+        case 'resources/read':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'contents': <Map<String, Object?>>[
+                <String, Object?>{
+                  'uri': 'file:///r1',
+                  'mimeType': 'text/plain',
+                  'text': 'resource-body',
+                },
+              ],
+            },
+          );
+          return;
+        case 'prompts/list':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'prompts': <Map<String, Object?>>[
+                <String, Object?>{'name': 'prompt.one'},
+              ],
+            },
+          );
+          return;
+        case 'prompts/get':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'messages': <Map<String, Object?>>[
+                <String, Object?>{
+                  'role': 'user',
+                  'content': <String, Object?>{'type': 'text', 'text': 'hello'},
+                },
+              ],
+            },
+          );
+          return;
+        case 'tools/list':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'tools': <Map<String, Object?>>[
+                <String, Object?>{
+                  'name': 'echo',
+                  'description': 'echo tool',
+                  'inputSchema': <String, Object?>{
+                    'type': 'object',
+                    'properties': <String, Object?>{
+                      'text': <String, Object?>{'type': 'string'},
+                    },
+                  },
+                },
+              ],
+            },
+          );
+          return;
+        case 'tools/call':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'content': <Map<String, Object?>>[
+                <String, Object?>{'type': 'text', 'text': 'done'},
+              ],
+              'isError': false,
+            },
+          );
+          return;
+        case 'tasks/list':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'tasks': <Map<String, Object?>>[
+                <String, Object?>{
+                  'taskId': 'task-1',
+                  'status': 'completed',
+                  'createdAt': '2026-02-28T00:00:00Z',
+                  'updatedAt': '2026-02-28T00:00:01Z',
+                },
+              ],
+            },
+          );
+          return;
+        case 'tasks/get':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'taskId': 'task-1',
+              'status': 'completed',
+              'createdAt': '2026-02-28T00:00:00Z',
+              'updatedAt': '2026-02-28T00:00:01Z',
+            },
+          );
+          return;
+        case 'tasks/result':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'content': <Map<String, Object?>>[
+                <String, Object?>{'type': 'text', 'text': 'task-result'},
+              ],
+            },
+          );
+          return;
+        case 'tasks/cancel':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'taskId': 'task-1',
+              'status': 'cancelled',
+              'createdAt': '2026-02-28T00:00:00Z',
+              'updatedAt': '2026-02-28T00:00:02Z',
+            },
+          );
+          return;
+        default:
+          await _respondJsonRpc(
+            request,
+            id: id,
+            error: <String, Object?>{
+              'code': -32601,
+              'message': 'Method not found: $method',
+            },
+          );
+      }
+    });
+
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+    );
+
+    final Map<String, Object?> ping = await client.ping(
+      connectionParams: connectionParams,
+    );
+    final Map<String, Object?> completion = await client.complete(
+      connectionParams: connectionParams,
+      ref: <String, Object?>{'type': 'ref/prompt', 'name': 'prompt.one'},
+      argument: 'pr',
+    );
+    final Map<String, Object?> logResult = await client.setLoggingLevel(
+      connectionParams: connectionParams,
+      level: 'info',
+    );
+    final List<Map<String, Object?>> resources = await client.listResources(
+      connectionParams: connectionParams,
+    );
+    final List<Map<String, Object?>> templates = await client
+        .listResourceTemplates(connectionParams: connectionParams);
+    final Map<String, Object?> readResource = await client.readResource(
+      connectionParams: connectionParams,
+      uri: 'file:///r1',
+    );
+    await client.subscribeResource(
+      connectionParams: connectionParams,
+      uri: 'file:///r1',
+    );
+    await client.unsubscribeResource(
+      connectionParams: connectionParams,
+      uri: 'file:///r1',
+    );
+    final List<Map<String, Object?>> prompts = await client.listPrompts(
+      connectionParams: connectionParams,
+    );
+    final Map<String, Object?> prompt = await client.getPrompt(
+      connectionParams: connectionParams,
+      name: 'prompt.one',
+    );
+    final List<Map<String, Object?>> tools = await client.listTools(
+      connectionParams: connectionParams,
+    );
+    final Map<String, Object?> toolCall = await client.callTool(
+      connectionParams: connectionParams,
+      name: 'echo',
+      arguments: <String, Object?>{'text': 'hello'},
+      task: <String, Object?>{'ttlMs': 1000},
+    );
+    final List<Map<String, Object?>> tasks = await client.listTasks(
+      connectionParams: connectionParams,
+    );
+    final Map<String, Object?> task = await client.getTask(
+      connectionParams: connectionParams,
+      taskId: 'task-1',
+    );
+    final Map<String, Object?> taskResult = await client.getTaskResult(
+      connectionParams: connectionParams,
+      taskId: 'task-1',
+    );
+    final Map<String, Object?> cancelled = await client.cancelTask(
+      connectionParams: connectionParams,
+      taskId: 'task-1',
+    );
+    await client.notifyProgress(
+      connectionParams: connectionParams,
+      progressToken: 'tok-1',
+      progress: 30,
+      total: 100,
+      message: 'in progress',
+    );
+    await client.notifyRootsListChanged(connectionParams: connectionParams);
+    await client.notifyTaskStatus(
+      connectionParams: connectionParams,
+      status: <String, Object?>{
+        'taskId': 'task-1',
+        'status': 'running',
+        'createdAt': '2026-02-28T00:00:00Z',
+        'updatedAt': '2026-02-28T00:00:01Z',
+      },
+    );
+    await client.notifyCancelledRequest(
+      connectionParams: connectionParams,
+      requestId: 999,
+      reason: 'test_cancel',
+    );
+
+    expect(ping, isEmpty);
+    expect(logResult, isEmpty);
+    expect((completion['completion'] as Map)['values'], isNotEmpty);
+    expect(resources.single['uri'], 'file:///r1');
+    expect(templates.single['uriTemplate'], 'file:///tmpl/{name}');
+    expect(readResource['contents'], isNotEmpty);
+    expect(prompts.single['name'], 'prompt.one');
+    expect(prompt['messages'], isNotEmpty);
+    expect(tools.single['name'], 'echo');
+    expect((toolCall['content'] as List).isNotEmpty, isTrue);
+    expect(tasks.single['taskId'], 'task-1');
+    expect(task['status'], 'completed');
+    expect((taskResult['content'] as List).isNotEmpty, isTrue);
+    expect(cancelled['status'], 'cancelled');
+
+    expect(seenMethods, contains('ping'));
+    expect(seenMethods, contains('completion/complete'));
+    expect(seenMethods, contains('logging/setLevel'));
+    expect(seenMethods, contains('resources/list'));
+    expect(seenMethods, contains('resources/templates/list'));
+    expect(seenMethods, contains('resources/read'));
+    expect(seenMethods, contains('resources/subscribe'));
+    expect(seenMethods, contains('resources/unsubscribe'));
+    expect(seenMethods, contains('prompts/list'));
+    expect(seenMethods, contains('prompts/get'));
+    expect(seenMethods, contains('tools/list'));
+    expect(seenMethods, contains('tools/call'));
+    expect(seenMethods, contains('tasks/list'));
+    expect(seenMethods, contains('tasks/get'));
+    expect(seenMethods, contains('tasks/result'));
+    expect(seenMethods, contains('tasks/cancel'));
+    expect(seenMethods, contains('notifications/progress'));
+    expect(seenMethods, contains('notifications/roots/list_changed'));
+    expect(seenMethods, contains('notifications/tasks/status'));
+    expect(seenMethods, contains('notifications/cancelled'));
+  });
+
+  test('automatically responds to server ping request over SSE', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    final Completer<Map<String, Object?>> pingResponseCompleter =
+        Completer<Map<String, Object?>>();
+    server.listen((HttpRequest request) async {
+      final Map<String, Object?> rpc = await _readRpc(request);
+      final String method = '${rpc['method'] ?? ''}';
+      final Object? id = rpc['id'];
+
+      if (method.isEmpty && rpc.containsKey('result')) {
+        if (!pingResponseCompleter.isCompleted) {
+          pingResponseCompleter.complete(rpc);
+        }
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      switch (method) {
+        case 'initialize':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'protocolVersion': '2025-11-25',
+              'capabilities': <String, Object?>{'tools': <String, Object?>{}},
+            },
+            headers: <String, String>{'MCP-Session-Id': 'session-main'},
+          );
+          return;
+        case 'notifications/initialized':
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        case 'tools/list':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'text/event-stream',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': 'srv-ping-1', 'method': 'ping', 'params': <String, Object?>{}})}\n\n',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': <String, Object?>{
+                'tools': <Map<String, Object?>>[
+                  <String, Object?>{'name': 'echo'},
+                ],
+              },
+            })}\n\n',
+          );
+          await request.response.close();
+          return;
+        default:
+          await _respondJsonRpc(
+            request,
+            id: id,
+            error: <String, Object?>{
+              'code': -32601,
+              'message': 'Method not found: $method',
+            },
+          );
+      }
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+    );
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+
+    final List<Map<String, Object?>> tools = await client.listTools(
+      connectionParams: connectionParams,
+    );
+    expect(tools.single['name'], 'echo');
+
+    final Map<String, Object?> pingResponse = await pingResponseCompleter.future
+        .timeout(const Duration(seconds: 1));
+    expect(pingResponse['id'], 'srv-ping-1');
+    expect(pingResponse['result'], <String, Object?>{});
+  });
+
+  test('uses onServerRequest callback for server-initiated requests', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    final Completer<Map<String, Object?>> rootsResponseCompleter =
+        Completer<Map<String, Object?>>();
+    server.listen((HttpRequest request) async {
+      final Map<String, Object?> rpc = await _readRpc(request);
+      final String method = '${rpc['method'] ?? ''}';
+      final Object? id = rpc['id'];
+
+      if (method.isEmpty && rpc.containsKey('result')) {
+        if (!rootsResponseCompleter.isCompleted) {
+          rootsResponseCompleter.complete(rpc);
+        }
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      switch (method) {
+        case 'initialize':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'protocolVersion': '2025-11-25',
+              'capabilities': <String, Object?>{'tools': <String, Object?>{}},
+            },
+            headers: <String, String>{'MCP-Session-Id': 'session-main'},
+          );
+          return;
+        case 'notifications/initialized':
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        case 'tools/list':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'text/event-stream',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': 77, 'method': 'roots/list', 'params': <String, Object?>{}})}\n\n',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': <String, Object?>{'tools': <Object?>[]},
+            })}\n\n',
+          );
+          await request.response.close();
+          return;
+        default:
+          await _respondJsonRpc(
+            request,
+            id: id,
+            error: <String, Object?>{
+              'code': -32601,
+              'message': 'Method not found: $method',
+            },
+          );
+      }
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+      onServerRequest: (McpServerMessage request) {
+        if (request.method == 'roots/list') {
+          return <String, Object?>{
+            'roots': <Map<String, Object?>>[
+              <String, Object?>{
+                'uri': 'file:///workspace',
+                'name': 'workspace',
+              },
+            ],
+          };
+        }
+        return const <String, Object?>{};
+      },
+    );
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+
+    await client.listTools(connectionParams: connectionParams);
+
+    final Map<String, Object?> rootsResponse = await rootsResponseCompleter
+        .future
+        .timeout(const Duration(seconds: 1));
+    expect(rootsResponse['id'], 77);
+    expect(
+      (rootsResponse['result'] as Map<String, Object?>)['roots'],
+      isNotEmpty,
+    );
+  });
+
+  test('rejects invalid logging level', () async {
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+    );
+
+    await expectLater(
+      () async => client.setLoggingLevel(
+        connectionParams: StreamableHTTPConnectionParams(
+          url: 'https://example.com/mcp',
+        ),
+        level: 'verbose',
+      ),
+      throwsArgumentError,
+    );
   });
 }
