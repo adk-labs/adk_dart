@@ -1,15 +1,30 @@
 # flutter_adk 멀티플랫폼 플러그인 체크리스트
 
+## 전수점사 메모
+- 점검 시각: 2026-02-28 21:41:11 KST
+- 점검 기준: 현재 `main` 작업트리의 실제 파일/워크플로우/패키지 상태
+- 상태 표기:
+  - `[x]` 확인 완료(현황 확인 포함)
+  - `[ ]` 미완료(실제 구현/검증 필요)
+
 ## 문서 목적
 - `packages/flutter_adk`를 Android, iOS, Web, Linux, macOS, Windows에서 동작 가능한 Flutter 플러그인으로 도입한다.
 - 기존 `adk_dart` 공개 API의 플랫폼 결합(`dart:io`, CLI 포함)을 분리해 Flutter/Web 컴파일 가능 경로를 확보한다.
 
-## 현재 상태 요약
-- [x] `adk_dart` 메인 엔트리(`lib/adk_dart.dart`)가 광범위한 모듈을 export 중
-- [x] 다수 모듈이 `dart:io`에 직접 의존
-- [x] facade 패키지 `packages/adk`가 `adk_dart`를 그대로 재export
-- [ ] Flutter/Web-safe 전용 엔트리(`adk_core`) 없음
-- [ ] `packages/flutter_adk` 패키지 없음
+## 전수점사 요약
+- [x] `adk_dart` 엔트리가 VM/CLI 포함 대형 export 상태임 (`lib/adk_dart.dart`).
+- [x] `dart:io` 직접 import가 다수 존재함 (현재 `71`건, `lib/` + `packages/` 기준).
+- [x] facade `packages/adk`는 `adk_dart`를 그대로 재export함.
+- [x] Flutter/Web-safe 전용 엔트리 `lib/adk_core.dart`는 아직 없음.
+- [x] `packages/flutter_adk` 패키지는 아직 없음.
+- [x] CI는 Dart 경로만 검사 중이며 Flutter 단계가 없음 (`.github/workflows/package-sync.yml`).
+- [x] 패키지 동기화 스크립트는 현재 `packages/adk`만 대상으로 함 (`tool/check_package_sync.dart`, `tool/sync_facade_versions.dart`).
+
+## 진행률 스냅샷
+- Phase 1: 0 / 7
+- Phase 2: 0 / 7
+- Phase 3: 0 / 7
+- Phase 4: 0 / 7
 
 ## 목표 범위
 - [ ] `flutter_adk` 패키지 생성 및 6개 플랫폼 등록
@@ -18,10 +33,10 @@
 - [ ] 최소 스모크 테스트(웹 + 1개 이상 네이티브) 자동화
 - [ ] CI에 Flutter 검사 단계 추가
 
-## 비범위(초기 릴리스)
-- [ ] CLI 기능(`adk run`, `adk web`, 배포/컨포먼스 도구) Flutter 노출
-- [ ] 로컬 프로세스 실행 기반 코드 실행기(컨테이너/GKE/로컬 쉘) 완전 지원
-- [ ] 모든 기존 `adk_dart` 기능의 Web parity 즉시 보장
+## 비범위(초기 릴리스 정책)
+- [x] CLI 기능(`adk run`, `adk web`, 배포/컨포먼스 도구)은 Flutter 노출 범위에서 제외
+- [x] 로컬 프로세스 실행 기반 코드 실행기(컨테이너/GKE/로컬 쉘)는 초기 릴리스에서 완전 지원 목표 제외
+- [x] 모든 기존 `adk_dart` 기능의 즉시 Web parity는 초기 릴리스 목표에서 제외
 
 ## 단계별 체크리스트
 
@@ -30,7 +45,7 @@
 - [ ] IO/CLI 결합 API를 별도 경로로 유지 (`adk_dart.dart` 또는 `adk_io.dart`)
 - [ ] `dart:io` 직접 참조 유틸 중 대체 가능한 항목은 인터페이스로 추상화
 - [ ] 최소 컴파일 기준 수립: `adk_core` import 시 Flutter Web 컴파일 가능
-- [ ] 문서화: 어떤 기능이 core에 포함/제외되는지 표로 정리
+- [ ] 문서화: core 포함/제외 기능 표 정리
 
 완료 기준(DoD)
 - [ ] `adk_core`만 사용하는 샘플이 Flutter Web에서 빌드 성공
@@ -39,7 +54,7 @@
 ### Phase 2: flutter_adk 스캐폴드
 - [ ] `packages/flutter_adk` 생성 (`flutter create --template=plugin --platforms=android,ios,web,linux,macos,windows`)
 - [ ] 패키지 메타데이터 정리 (name: `flutter_adk`, description, repository, issue tracker)
-- [ ] `pubspec.yaml`에 `flutter` SDK 및 `adk_dart` 의존 연결
+- [ ] `pubspec.yaml`에 `flutter` SDK 및 `adk_core`(또는 분리된 core 패키지) 의존 연결
 - [ ] 예제 앱(`example/`)에서 기본 에이전트 실행 샘플 추가
 - [ ] 패키지 엔트리(`lib/flutter_adk.dart`)와 내부 구조(`src/`) 정리
 
@@ -62,7 +77,7 @@
 - [ ] 단위 테스트: core facade, adapter fallback, 에러 시나리오
 - [ ] 통합 스모크 테스트: Web + Android(또는 iOS) 최소 1개 네이티브
 - [ ] GitHub Actions에 Flutter 단계 추가 (`flutter pub get`, `flutter analyze`, `flutter test`)
-- [ ] 기존 `package-sync` 스크립트/정책을 `flutter_adk` 포함하도록 확장
+- [ ] `package-sync` 스크립트/정책을 `flutter_adk` 포함하도록 확장
 - [ ] 릴리스 체크리스트 추가 (버전 동기화, changelog, publish 순서)
 
 완료 기준(DoD)
