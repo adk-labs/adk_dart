@@ -255,5 +255,47 @@ paths: {}
 
       expect(value, 'my-secret');
     });
+
+    test('resolves token from service account json before fetch', () async {
+      setSecretManagerSecretFetcher(({
+        required String resourceName,
+        String? serviceAccountJson,
+        String? authToken,
+      }) async {
+        expect(resourceName, 'projects/p/secrets/s/versions/latest');
+        expect(authToken, 'token-from-service-account');
+        expect(serviceAccountJson, contains('access_token'));
+        return 'my-secret';
+      });
+
+      final SecretManagerClient client = SecretManagerClient(
+        serviceAccountJson: '{"access_token":"token-from-service-account"}',
+      );
+      final String value = await client.getSecret(
+        'projects/p/secrets/s/versions/latest',
+      );
+
+      expect(value, 'my-secret');
+    });
+
+    test('auth token takes precedence over service account embedded token', () async {
+      setSecretManagerSecretFetcher(({
+        required String resourceName,
+        String? serviceAccountJson,
+        String? authToken,
+      }) async {
+        expect(authToken, 'token-from-auth-arg');
+        return 'my-secret';
+      });
+
+      final SecretManagerClient client = SecretManagerClient(
+        serviceAccountJson: '{"access_token":"token-from-service-account"}',
+        authToken: 'token-from-auth-arg',
+      );
+      final String value = await client.getSecret(
+        'projects/p/secrets/s/versions/latest',
+      );
+      expect(value, 'my-secret');
+    });
   });
 }
