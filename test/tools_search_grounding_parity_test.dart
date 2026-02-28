@@ -369,6 +369,8 @@ void main() {
     test('DiscoveryEngineSearchTool returns error without handler', () async {
       final DiscoveryEngineSearchTool tool = DiscoveryEngineSearchTool(
         dataStoreId: 'projects/p/locations/l/collections/c/dataStores/d',
+        accessTokenProvider: () async =>
+            throw StateError('token resolution failed'),
       );
 
       final Object? result = await tool.run(
@@ -381,8 +383,87 @@ void main() {
       expect(payload['status'], 'error');
       expect(
         payload['error_message'],
-        'Discovery Engine search handler is not configured.',
+        contains('token resolution failed'),
       );
     });
+
+    test(
+      'DiscoveryEngineSearchTool default API path sends chunk search request and normalizes response',
+      () async {
+        late DiscoveryEngineSearchHttpRequest capturedRequest;
+        final DiscoveryEngineSearchTool tool = DiscoveryEngineSearchTool(
+          dataStoreId: 'projects/p/locations/l/collections/c/dataStores/d',
+          filter: 'lang = "en"',
+          maxResults: 2,
+          accessTokenProvider: () async => 'token-1',
+          httpRequestProvider: (
+            DiscoveryEngineSearchHttpRequest request,
+          ) async {
+            capturedRequest = request;
+            final Map<String, Object?> response = <String, Object?>{
+              'results': <Object?>[
+                <String, Object?>{
+                  'chunk': <String, Object?>{
+                    'content': 'chunk-content-1',
+                    'documentMetadata': <String, Object?>{
+                      'title': 'Doc 1',
+                      'uri': 'https://fallback.example/doc1',
+                      'structData': <String, Object?>{
+                        'uri': 'https://preferred.example/doc1',
+                      },
+                    },
+                  },
+                },
+                <String, Object?>{
+                  'chunk': <String, Object?>{
+                    'content': 'chunk-content-2',
+                    'documentMetadata': <String, Object?>{
+                      'title': 'Doc 2',
+                      'uri': 'https://example/doc2',
+                    },
+                  },
+                },
+              ],
+            };
+            return DiscoveryEngineSearchHttpResponse(
+              statusCode: 200,
+              bodyBytes: utf8.encode(jsonEncode(response)),
+            );
+          },
+        );
+
+        final Object? result = await tool.run(
+          args: <String, dynamic>{'query': 'raw query'},
+          toolContext: _newToolContext(),
+        );
+
+        expect(capturedRequest.method, 'POST');
+        expect(capturedRequest.uri.toString(), contains(':search'));
+        expect(capturedRequest.headers['Authorization'], 'Bearer token-1');
+        final Map<String, Object?> requestBody = (jsonDecode(
+          utf8.decode(capturedRequest.bodyBytes),
+        ) as Map).cast<String, Object?>();
+        expect(requestBody['query'], 'raw query');
+        expect(
+          ((requestBody['contentSearchSpec'] as Map)['searchResultMode']),
+          'CHUNKS',
+        );
+        expect(requestBody['filter'], 'lang = "en"');
+        expect(requestBody['pageSize'], 2);
+
+        final Map<String, Object?> payload = Map<String, Object?>.from(
+          result! as Map,
+        );
+        expect(payload['status'], 'success');
+        final List<Object?> rows = List<Object?>.from(payload['results'] as List);
+        expect(rows, hasLength(2));
+        final Map<String, Object?> first = Map<String, Object?>.from(
+          rows.first! as Map,
+        );
+        expect(first['title'], 'Doc 1');
+        expect(first['url'], 'https://preferred.example/doc1');
+        expect(first['content'], 'chunk-content-1');
+      },
+    );
   });
 }
