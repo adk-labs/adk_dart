@@ -26,6 +26,34 @@ It re-exports `adk_dart` so you can use a shorter import path:
   `adk_dart`.
 - **CLI Included**: Use `adk create`, `adk run`, `adk web`, `adk api_server`.
 
+## 📊 Feature Support Matrix (Current)
+
+This package is a facade. Runtime behavior comes from `adk_dart`, and this
+package mainly provides short import/CLI ergonomics.
+
+Status legend:
+
+- `✅` Supported
+- `⚠️` Partial / integration required
+- `❌` Not supported yet
+
+### Supported / Working
+
+| Area | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| Package role | Short import path (`package:adk/adk.dart`) | ✅ | Primary purpose of this package. |
+| API surface | Re-export of `adk_dart` runtime/tooling APIs | ✅ | Uses upstream API surface directly. |
+| CLI | `adk` executable entrypoint forwarding | ✅ | `bin/adk.dart` forwards to upstream CLI. |
+| Runtime parity | Feature behavior aligned with `adk_dart` | ✅ | Same implementation path as upstream package. |
+
+### Partial / Not Yet Supported
+
+| Area | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| Runtime implementation | Independent runtime implementation in this package | ❌ | `adk` does not implement runtime itself; it delegates to `adk_dart`. |
+| Feature divergence | Separate feature set different from `adk_dart` | ❌ | Feature availability follows upstream `adk_dart` status. |
+| Release decoupling | Independent publishability from upstream core | ⚠️ | Depends on availability of matching `adk_dart` hosted versions. |
+
 ## 🚀 Installation
 
 ```bash

@@ -40,6 +40,10 @@ developer ergonomics.
 
 ## 📊 Feature Support Matrix (Current)
 
+This matrix is rebuilt from a fresh source audit plus targeted runtime tests
+(`dev_web_server`, `cli_adk_web_server`, `mcp_http`, `mcp_tooling`,
+`session_persistence`) rather than legacy parity docs.
+
 Status legend:
 
 - `✅` Supported
@@ -50,45 +54,40 @@ Status legend:
 
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| Core runtime | Agent execution (`Runner`, `InMemoryRunner`) | ✅ | Async event-driven runtime is available. |
-| Core runtime | Session services (`memory://`, local sqlite default) | ✅ | In-memory + local persistence paths are available. |
-| Core runtime | Artifact services (`memory://`, local file default) | ✅ | Local artifact lifecycle APIs are available. |
-| Core runtime | Memory service baseline | ✅ | In-memory/default memory operations are available. |
-| Multi-agent | Sub-agent orchestration | ✅ | `subAgents` workflows are available. |
-| Tools | Function tools and base tool lifecycle | ✅ | Core tool invocation path is available. |
-| MCP | Streamable HTTP client path | ✅ | `McpToolset` + `McpSessionManager` support HTTP transport. |
-| MCP | stdio client path | ✅ | `McpToolset` supports stdio transport. |
-| CLI | `adk create`, `adk run`, `adk web`, `adk api_server` | ✅ | Core developer workflow commands are available. |
-| CLI run | `--save_session`, `--resume`, `--replay` | ✅ | Session snapshot save/resume/replay flows are available. |
-| Web server | Web UI static serving (`/dev-ui`) | ✅ | Bundled UI is served by the ADK web server. |
-| Web server | Core endpoints (`/health`, `/version`, `/list-apps`, `/run`, `/run_sse`, `/run_live`) | ✅ | Main dev-runtime endpoints are available. |
-| Web server | Python-style session/artifact routes | ✅ | Session/memory/artifact API routes are available. |
-| Web options | `allow_origins`, `url_prefix`, service URIs, `use_local_storage`, `auto_create_session`, logo options | ✅ | Implemented and wired in runtime. |
-| Web options | `reload` / `reload_agents` | ✅ | Runner reload path is connected. |
-| Telemetry | `trace_to_cloud` / `otel_to_cloud` flags | ✅ | Telemetry provider setup path is connected. |
-| A2A | Agent card endpoints (`/.well-known/agent.json`, `/a2a/.../agent.json`) | ✅ | Agent card responses are available from web server. |
+| Core runtime | Agent execution (`Runner`, `InMemoryRunner`) | ✅ | Event-driven run / rewind / live paths are implemented and tested. |
+| Sessions | `memory://` and local sqlite session persistence | ✅ | `SqliteSessionService` uses native SQLite FFI; local storage wiring is active. |
+| Artifacts | `memory://` and local file artifacts | ✅ | Artifact CRUD/version APIs are wired through web + runner flows. |
+| MCP | Streamable HTTP + stdio tool/resource/prompt flows | ✅ | `adk_mcp` + `McpSessionManager` cover initialize/call/pagination/notifications. |
+| CLI | `create`, `run`, `web`, `api_server` | ✅ | Parsed and executed through `lib/src/dev/cli.dart`. |
+| CLI run | `--save_session`, `--resume`, `--replay`, `--message` | ✅ | Session snapshot import/export and replay paths are implemented. |
+| Web server | `/dev-ui` static hosting and config endpoint | ✅ | Bundled UI serving and SPA fallback are implemented. |
+| Web server | `/health`, `/version`, `/list-apps`, `/run`, `/run_sse`, `/run_live` | ✅ | Core dev runtime API works and is covered by web tests. |
+| Web server | Python-style session/memory/artifact routes | ✅ | `/apps/{app}/users/{user}/sessions...` CRUD and artifact routes are implemented. |
+| Web options | `allow_origins`, `url_prefix`, `reload`, `reload_agents`, logo, telemetry flags | ✅ | Options are parsed and propagated into runtime/web context. |
+| A2A | Agent card endpoints (`/.well-known/agent.json`, `/a2a/<app>/.well-known/agent.json`) | ✅ | Agent card generation/serving works when `--a2a` is enabled. |
 
 ### Partial / Not Yet Supported
 
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| Deploy | Full deployment execution via CLI | ❌ | Current deploy path is still preview/command composition centric. |
-| Web parity | Full Python `adk web` endpoint parity (Eval/Debug/Trace suite) | ⚠️ | Core endpoints exist, but full eval/debug/trace parity is still in progress. |
-| A2A | Full A2A server RPC route parity in `adk web` | ⚠️ | Agent-card serving is implemented; full A2A RPC parity is not complete. |
-| Extra plugins | Python-style dynamic import/instantiation of arbitrary plugin symbols | ⚠️ | Built-in plugin names are supported; arbitrary dynamic import parity is limited. |
-| Sessions | `postgresql://`, `mysql://` default adapters | ❌ | Schemes are recognized, but default adapter path is not fully wired. |
-| Artifacts | `gs://` artifact service default path | ⚠️ | Requires cloud integration wiring; default local-only use works. |
-| Session backend | `VertexAiSessionService` true remote persistence parity | ⚠️ | Current behavior uses local/in-memory delegate pattern. |
-| Data tools | BigQuery/Bigtable/Spanner default no-config execution | ❌ | Production use requires explicit client/provider integration. |
-| Data tools | BigQuery Data Insights default provider | ❌ | Default provider path is not available without integration. |
-| Google API tools | Default discovery spec fetcher (no injected fetcher) | ❌ | Explicit discovery/spec integration is required. |
-| Toolbox | Default toolbox delegate | ❌ | Delegate/provider must be supplied. |
-| Discovery | Discovery Engine default handler | ❌ | Handler/provider integration is required. |
-| Audio | Default speech recognizer wiring | ❌ | Recognizer/provider integration is required. |
-| Secrets | Default Secret Manager fetcher wiring | ❌ | Fetcher/provider integration is required. |
-| OpenAPI | External multi-file `$ref` resolution parity | ❌ | External reference loading is not complete. |
-| Spanner | PostgreSQL-dialect feature parity (including ANN scenarios) | ⚠️ | Partially constrained compared to full parity target. |
-| Model connectors | Full real-API behavior as default across all connectors | ⚠️ | Some connectors still rely on fallback behavior unless fully wired. |
+| Deploy | `adk deploy` full execution | ❌ | Current command is a preview that prints gcloud command composition. |
+| Web parity | Python `adk web` Eval/Debug/Trace endpoint parity | ❌ | These endpoint families are not implemented in Dart web server routes. |
+| A2A | Full A2A RPC server routes | ⚠️ | Agent-card endpoints exist, but full A2A task/message RPC surface is missing. |
+| Extra plugins | Arbitrary dynamic plugin imports | ❌ | `--extra_plugins` currently instantiates built-in plugin names only. |
+| Sessions | `postgresql://`, `mysql://` out-of-box backend | ❌ | Requires custom `DatabaseSessionService.registerCustomFactory(...)`. |
+| Sessions | `VertexAiSessionService` remote persistence parity | ⚠️ | Current implementation delegates storage to in-memory service. |
+| Artifacts | `gs://` default artifact backend | ❌ | Default `GcsArtifactService` live mode needs injected HTTP/auth providers. |
+| Tools runtime | BigQuery default client | ❌ | No default BigQuery client; must inject via `setBigQueryClientFactory()`. |
+| Tools runtime | Bigtable default clients | ❌ | Admin/data factories must be injected via `setBigtableClientFactories()`. |
+| Tools runtime | Spanner default client + embedder | ❌ | Client/embedder must be injected; defaults throw not-configured errors. |
+| Tools runtime | BigQuery Data Insights default provider | ❌ | Requires `setBigQueryInsightsStreamProvider()` injection. |
+| Tools runtime | Discovery Engine search without handler | ❌ | `DiscoveryEngineSearchTool` requires explicit `searchHandler`. |
+| Tools runtime | Toolbox integration without delegate | ❌ | `ToolboxToolset` requires `ToolboxToolsetDelegate`. |
+| Secrets | Secret Manager access without fetcher | ❌ | Requires `setSecretManagerSecretFetcher()` injection. |
+| Audio | Speech transcription without recognizer | ❌ | `AudioTranscriber` requires recognizer callback at runtime. |
+| OpenAPI | External multi-file `$ref` resolution | ❌ | Parser throws on external refs (`External references not supported`). |
+| Spanner | PostgreSQL vector/ANN parity | ⚠️ | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |
+| Telemetry | `SqliteSpanExporter` physical sqlite parity | ⚠️ | Current exporter persists JSON rows to file, not a real sqlite DB. |
 
 ## 🚀 Installation
 
