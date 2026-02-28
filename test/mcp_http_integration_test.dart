@@ -64,9 +64,13 @@ Future<void> _respondJsonRpc(
   required Object? id,
   Object? result,
   Map<String, Object?>? error,
+  Map<String, String>? headers,
 }) async {
   request.response.statusCode = HttpStatus.ok;
   request.response.headers.contentType = ContentType.json;
+  if (headers != null) {
+    headers.forEach(request.response.headers.set);
+  }
   request.response.write(
     jsonEncode(<String, Object?>{
       'jsonrpc': '2.0',
@@ -82,15 +86,25 @@ void main() {
     late HttpServer server;
     late StreamableHTTPConnectionParams connectionParams;
     late List<String> seenMethods;
+    late Map<String, List<Map<String, String>>> seenHeadersByMethod;
+    late bool resourcesReadSentLegacyNameParam;
+    late Map<String, Object?> lastPromptGetArguments;
 
     setUp(() async {
       seenMethods = <String>[];
+      seenHeadersByMethod = <String, List<Map<String, String>>>{};
+      resourcesReadSentLegacyNameParam = false;
+      lastPromptGetArguments = <String, Object?>{};
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       connectionParams = StreamableHTTPConnectionParams(
         url: 'http://${server.address.address}:${server.port}/mcp',
       );
 
       server.listen((HttpRequest request) async {
+        final Map<String, String> requestHeaders = <String, String>{};
+        request.headers.forEach((String name, List<String> values) {
+          requestHeaders[name.toLowerCase()] = values.join(', ');
+        });
         final String body = await utf8.decoder.bind(request).join();
         final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
           (Object? key, Object? value) => MapEntry('$key', value),
@@ -98,6 +112,9 @@ void main() {
         final Object? id = rpc['id'];
         final String method = '${rpc['method'] ?? ''}';
         seenMethods.add(method);
+        seenHeadersByMethod
+            .putIfAbsent(method, () => <Map<String, String>>[])
+            .add(requestHeaders);
 
         switch (method) {
           case 'initialize':
@@ -116,12 +133,45 @@ void main() {
               request,
               id: id,
               result: <String, Object?>{
-                'protocolVersion': '2025-03-26',
-                'capabilities': <String, Object?>{},
+                'protocolVersion': '2025-11-25',
+                'capabilities': <String, Object?>{
+                  'tools': <String, Object?>{},
+                  'resources': <String, Object?>{},
+                  'prompts': <String, Object?>{},
+                },
               },
+              headers: <String, String>{'MCP-Session-Id': 'session-main'},
             );
             return;
+          case 'notifications/initialized':
+            request.response.statusCode = HttpStatus.accepted;
+            await request.response.close();
+            return;
           case 'tools/list':
+            if (request.headers.value('x-sse-mode') ==
+                'notify-before-response') {
+              request.response.statusCode = HttpStatus.ok;
+              request.response.headers.set(
+                HttpHeaders.contentTypeHeader,
+                'text/event-stream',
+              );
+              request.response.write(
+                'data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'method': 'notifications/tools/list_changed', 'params': <String, Object?>{}})}\n\n',
+              );
+              request.response.write(
+                'data: ${jsonEncode(<String, Object?>{
+                  'jsonrpc': '2.0',
+                  'id': id,
+                  'result': <String, Object?>{
+                    'tools': <Map<String, Object?>>[
+                      <String, Object?>{'name': 'remote_echo', 'description': 'Remote echo tool'},
+                    ],
+                  },
+                })}\n\n',
+              );
+              await request.response.close();
+              return;
+            }
             await _respondJsonRpc(
               request,
               id: id,
@@ -187,6 +237,7 @@ void main() {
             final Map<String, Object?> params = (rpc['params'] as Map).map(
               (Object? key, Object? value) => MapEntry('$key', value),
             );
+            resourcesReadSentLegacyNameParam = params.containsKey('name');
             final String uri = '${params['uri'] ?? ''}';
             if (uri == 'docs://guide') {
               await _respondJsonRpc(
@@ -222,10 +273,19 @@ void main() {
               },
             );
             return;
+          case 'resources/templates/list':
+            await _respondJsonRpc(
+              request,
+              id: id,
+              result: <String, Object?>{'resourceTemplates': <Object?>[]},
+            );
+            return;
           case 'prompts/get':
             final Map<String, Object?> params = (rpc['params'] as Map).map(
               (Object? key, Object? value) => MapEntry('$key', value),
             );
+            lastPromptGetArguments = (params['arguments'] as Map? ?? const {})
+                .map((Object? key, Object? value) => MapEntry('$key', value));
             final String name = '${params['name'] ?? ''}';
             if (name == 'agent_prompt') {
               await _respondJsonRpc(
@@ -305,8 +365,18 @@ void main() {
         'hello',
       );
       expect(seenMethods, contains('initialize'));
+      expect(seenMethods, contains('notifications/initialized'));
       expect(seenMethods, contains('tools/list'));
       expect(seenMethods, contains('tools/call'));
+
+      final Map<String, String> toolsListHeaders =
+          seenHeadersByMethod['tools/list']!.single;
+      final Map<String, String> initializeHeaders =
+          seenHeadersByMethod['initialize']!.single;
+      expect(initializeHeaders.containsKey('mcp-protocol-version'), isFalse);
+      expect(toolsListHeaders['mcp-protocol-version'], '2025-11-25');
+      expect(toolsListHeaders['mcp-session-id'], 'session-main');
+      expect(toolsListHeaders['accept'], contains('text/event-stream'));
     });
 
     test('loads remote MCP resources through toolset', () async {
@@ -320,9 +390,26 @@ void main() {
       );
       expect(resources, hasLength(1));
       expect(resources.single.text, 'Remote MCP guide');
+      expect(resourcesReadSentLegacyNameParam, isFalse);
       expect(seenMethods, contains('resources/list'));
       expect(seenMethods, contains('resources/read'));
     });
+
+    test(
+      'parses SSE responses when server sends notifications before result',
+      () async {
+        final StreamableHTTPConnectionParams sseParams =
+            StreamableHTTPConnectionParams(
+              url: connectionParams.url,
+              headers: <String, String>{'x-sse-mode': 'notify-before-response'},
+            );
+        final McpToolset toolset = McpToolset(connectionParams: sseParams);
+
+        final List<BaseTool> tools = await toolset.getTools();
+        expect(tools, hasLength(1));
+        expect(tools.single.name, 'remote_echo');
+      },
+    );
 
     test('instruction provider reads prompt via remote prompts/get', () async {
       final McpInstructionProvider provider = McpInstructionProvider(
@@ -338,37 +425,34 @@ void main() {
       );
 
       expect(instruction, 'Hello Seoul!');
+      expect(lastPromptGetArguments['city'], 'Seoul');
       expect(seenMethods, contains('prompts/list'));
       expect(seenMethods, contains('prompts/get'));
     });
 
-    test(
-      'continues when initialize is unsupported and does not repeat handshake',
-      () async {
-        final StreamableHTTPConnectionParams unsupportedInitParams =
-            StreamableHTTPConnectionParams(
-              url: connectionParams.url,
-              headers: <String, String>{'x-init-mode': 'unsupported'},
-            );
-        final McpToolset toolset = McpToolset(
-          connectionParams: unsupportedInitParams,
-        );
+    test('fails when initialize is unsupported by the server', () async {
+      final StreamableHTTPConnectionParams unsupportedInitParams =
+          StreamableHTTPConnectionParams(
+            url: connectionParams.url,
+            headers: <String, String>{'x-init-mode': 'unsupported'},
+          );
+      final McpToolset toolset = McpToolset(
+        connectionParams: unsupportedInitParams,
+      );
 
-        final List<BaseTool> tools = await toolset.getTools();
-        expect(tools, hasLength(1));
-
-        final Object? result = await tools.first.run(
-          args: <String, dynamic>{'q': 'ok'},
-          toolContext: await _newToolContext(),
-        );
-        expect(result, isA<Map<String, Object?>>());
-
-        final int initializeCalls = seenMethods
-            .where((String method) => method == 'initialize')
-            .length;
-        expect(initializeCalls, 1);
-      },
-    );
+      await expectLater(
+        toolset.getTools(),
+        throwsA(
+          predicate(
+            (Object error) =>
+                error is StateError &&
+                '$error'.contains('(-32601)') &&
+                '$error'.contains('Method not found: initialize'),
+          ),
+        ),
+      );
+      expect(seenMethods, isNot(contains('tools/list')));
+    });
 
     test('propagates JSON-RPC tool call errors', () async {
       final McpToolset toolset = McpToolset(connectionParams: connectionParams);
@@ -454,10 +538,16 @@ void main() {
               request,
               id: id,
               result: <String, Object?>{
-                'protocolVersion': '2025-03-26',
-                'capabilities': <String, Object?>{},
+                'protocolVersion': '2025-11-25',
+                'capabilities': <String, Object?>{'tools': <String, Object?>{}},
               },
+              headers: <String, String>{'MCP-Session-Id': 'session-flaky'},
             );
+            return;
+          case 'notifications/initialized':
+            initialized = true;
+            request.response.statusCode = HttpStatus.accepted;
+            await request.response.close();
             return;
           case 'tools/list':
             if (!initialized) {
@@ -509,7 +599,9 @@ void main() {
         throwsA(
           predicate(
             (Object error) =>
-                error is StateError && '$error'.contains('not initialized'),
+                error is StateError &&
+                '$error'.contains('(-32001)') &&
+                '$error'.contains('temporary init failure'),
           ),
         ),
       );

@@ -27,6 +27,7 @@ class McpInstructionProvider {
         .readResourceAsync(
           connectionParams: connectionParams,
           resourceName: promptName,
+          promptArguments: Map<String, Object?>.from(context.state),
         );
     final String instruction = resources
         .map((McpResourceContent resource) => resource.text ?? '')

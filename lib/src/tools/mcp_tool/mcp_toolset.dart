@@ -25,7 +25,10 @@ class McpToolset extends BaseToolset {
     List<BaseTool> tools = manager.getTools(connectionParams);
     if (tools.isEmpty) {
       final List<Map<String, Object?>> descriptors = await manager
-          .listRemoteToolDescriptors(connectionParams: connectionParams);
+          .listRemoteToolDescriptors(
+            connectionParams: connectionParams,
+            forceRefresh: true,
+          );
 
       tools = descriptors
           .map((Map<String, Object?> descriptor) {
