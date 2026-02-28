@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import '../../auth/auth_credential.dart';
 import '../_google_credentials.dart';
 import 'config.dart';
 
@@ -103,10 +105,10 @@ Future<List<Map<String, Object?>>> _getStream({
   final List<Map<String, Object?>> messages = <Map<String, Object?>>[];
 
   await for (final String rawLine in responseStream) {
-    final String decodedLine = rawLine.trim();
-    if (decodedLine.isEmpty) {
+    if (rawLine.isEmpty) {
       continue;
     }
+    final String decodedLine = rawLine;
 
     if (decodedLine == '[{') {
       accumulator = '{';
@@ -243,8 +245,12 @@ Map<String, Object?> _formatDatasourceAsDict(Map<String, Object?> datasource) {
 Map<String, Object?> _handleTextResponse(Map<String, Object?> response) {
   final Object? partsRaw = response['parts'];
   final List<Object?> parts = partsRaw is List ? partsRaw : <Object?>[];
+  final String answer = parts
+      .where((Object? value) => value != null)
+      .map((Object? part) => '$part')
+      .join();
   return <String, Object?>{
-    'Answer': parts.map((Object? part) => '$part').join(),
+    'Answer': answer,
   };
 }
 
@@ -378,6 +384,13 @@ String? _extractAccessToken(Object credentials) {
   if (credentials is GoogleOAuthCredential) {
     return credentials.accessToken;
   }
+  if (credentials is AuthCredential) {
+    final String? accessToken = credentials.oauth2?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+    return accessToken;
+  }
   if (credentials is Map) {
     final Object? rawToken =
         credentials['token'] ??
@@ -388,6 +401,10 @@ String? _extractAccessToken(Object credentials) {
       return text.isEmpty ? null : text;
     }
   }
+  if (credentials is String) {
+    final String text = credentials.trim();
+    return text.isEmpty ? null : text;
+  }
   return null;
 }
 
@@ -396,13 +413,28 @@ Future<Stream<String>> _defaultInsightsStreamProvider({
   required Map<String, Object?> payload,
   required Map<String, String> headers,
 }) async {
-  url;
-  payload;
-  headers;
-  throw StateError(
-    'No default BigQuery Data Insights stream provider is available in '
-    'adk_dart. Inject one with setBigQueryInsightsStreamProvider().',
-  );
+  final HttpClient client = HttpClient();
+  try {
+    final HttpClientRequest request = await client.postUrl(url);
+    headers.forEach(request.headers.set);
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode(payload));
+
+    final HttpClientResponse response = await request.close();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final String body = await utf8.decodeStream(response);
+      throw HttpException(
+        'POST $url failed (${response.statusCode}): $body',
+      );
+    }
+
+    final String body = await utf8.decodeStream(response);
+    return Stream<String>.fromIterable(
+      const LineSplitter().convert(body),
+    );
+  } finally {
+    client.close(force: true);
+  }
 }
 
 void setBigQueryInsightsStreamProvider(

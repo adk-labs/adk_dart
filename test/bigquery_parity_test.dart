@@ -773,7 +773,7 @@ void main() {
         required Map<String, String> headers,
       }) async {
         expect(url.toString(), contains('geminidataanalytics.googleapis.com'));
-        expect(headers['Authorization'], 'Bearer token_123');
+        expect(headers['Authorization'], startsWith('Bearer token_'));
 
         return Stream<String>.fromIterable(<String>[
           '{"systemMessage":{"data":{"generatedSql":"SELECT 1"}}}',
@@ -804,6 +804,25 @@ void main() {
         response.any((dynamic item) => '$item'.contains('Final answer')),
         isTrue,
       );
+
+      final Map<String, Object?> fromAuthCredential = await data_insights_tool
+          .askDataInsights(
+            projectId: 'project1',
+            userQueryWithContext: 'question',
+            tableReferences: <Map<String, String>>[
+              <String, String>{
+                'projectId': 'project1',
+                'datasetId': 'dataset',
+                'tableId': 'table',
+              },
+            ],
+            credentials: AuthCredential(
+              authType: AuthCredentialType.oauth2,
+              oauth2: OAuth2Auth(accessToken: 'token_456'),
+            ),
+            settings: BigQueryToolConfig(maxQueryResultRows: 1),
+          );
+      expect(fromAuthCredential['status'], 'SUCCESS');
     });
   });
 
