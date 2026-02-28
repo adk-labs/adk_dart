@@ -267,7 +267,12 @@ void main() {
               id: id,
               result: <String, Object?>{
                 'prompts': <Map<String, Object?>>[
-                  <String, Object?>{'name': 'agent_prompt'},
+                  <String, Object?>{
+                    'name': 'agent_prompt',
+                    'arguments': <Map<String, Object?>>[
+                      <String, Object?>{'name': 'city'},
+                    ],
+                  },
                   <String, Object?>{'name': 'error_prompt'},
                 ],
               },
@@ -418,7 +423,7 @@ void main() {
       );
 
       final InvocationContext invocationContext = _newInvocationContext(
-        state: <String, Object?>{'city': 'Seoul'},
+        state: <String, Object?>{'city': 'Seoul', 'unused': 'ignored'},
       );
       final String instruction = await provider(
         ReadonlyContext(invocationContext),
@@ -426,6 +431,7 @@ void main() {
 
       expect(instruction, 'Hello Seoul!');
       expect(lastPromptGetArguments['city'], 'Seoul');
+      expect(lastPromptGetArguments.containsKey('unused'), isFalse);
       expect(seenMethods, contains('prompts/list'));
       expect(seenMethods, contains('prompts/get'));
     });

@@ -23,11 +23,21 @@ class McpInstructionProvider {
       throw StateError("Failed to load MCP prompt '$promptName'.");
     }
 
+    final Set<String> promptArgumentNames = await _mcpSessionManager
+        .listPromptArgumentNames(
+          connectionParams: connectionParams,
+          promptName: promptName,
+        );
+    final Map<String, Object?> promptArguments = <String, Object?>{
+      for (final MapEntry<String, Object?> entry in context.state.entries)
+        if (promptArgumentNames.contains(entry.key)) entry.key: entry.value,
+    };
+
     final List<McpResourceContent> resources = await _mcpSessionManager
         .readResourceAsync(
           connectionParams: connectionParams,
           resourceName: promptName,
-          promptArguments: Map<String, Object?>.from(context.state),
+          promptArguments: promptArguments,
         );
     final String instruction = resources
         .map((McpResourceContent resource) => resource.text ?? '')

@@ -164,6 +164,75 @@ description: from custom factory
       expect(agent.description, 'from custom factory');
     });
 
+    test(
+      'fromConfig resolves built-in agent classes from fully-qualified names',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_builtin_fqn_cfg_',
+        );
+        addTearDown(() async {
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
+
+        final LlmAgent childAgent = LlmAgent(
+          name: 'child',
+          instruction: 'child',
+        );
+        final File root = File('${dir.path}/root.yaml');
+        await root.writeAsString('''
+agent_class: google.adk.agents.SequentialAgent
+name: root
+sub_agents:
+  - code: fixtures.child
+''');
+
+        final BaseAgent agent = fromConfig(
+          root.path,
+          resolvers: AgentConfigResolvers(
+            symbols: <String, Object?>{'fixtures.child': childAgent},
+          ),
+        );
+
+        expect(agent, isA<SequentialAgent>());
+        expect(agent.name, 'root');
+        expect(agent.subAgents, hasLength(1));
+        expect(agent.subAgents.single.name, 'child');
+      },
+    );
+
+    test('fromConfig resolves custom factory from symbol resolver', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_custom_symbol_cfg_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final File root = File('${dir.path}/root.yaml');
+      await root.writeAsString('''
+agent_class: my.pkg.CustomAgent
+name: custom_symbol_root
+''');
+
+      final BaseAgent agent = fromConfig(
+        root.path,
+        resolvers: AgentConfigResolvers(
+          symbols: <String, Object?>{
+            'my.pkg.CustomAgent':
+                (BaseAgentConfig config, String _, AgentConfigResolvers __) =>
+                    ParallelAgent(name: config.name),
+          },
+        ),
+      );
+
+      expect(agent, isA<ParallelAgent>());
+      expect(agent.name, 'custom_symbol_root');
+    });
+
     test('fromConfig parses literal block scalar instructions', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_block_literal_cfg_',

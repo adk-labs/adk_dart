@@ -27,6 +27,13 @@ typedef CustomAgentFactory =
       AgentConfigResolvers resolvers,
     );
 
+const Set<String> _builtInAgentClasses = <String>{
+  'LlmAgent',
+  'LoopAgent',
+  'ParallelAgent',
+  'SequentialAgent',
+};
+
 class AgentConfigResolvers {
   AgentConfigResolvers({
     this.symbolResolver,
@@ -153,9 +160,7 @@ BaseAgent _buildAgentFromConfig(
   String configAbsPath,
   AgentConfigResolvers resolvers,
 ) {
-  final String agentClass = config.agentClass.isEmpty
-      ? 'LlmAgent'
-      : config.agentClass;
+  final String agentClass = _normalizeAgentClassName(config.agentClass);
   final BaseAgentConfig normalized = _normalizeConfigForAgentClass(
     config,
     agentClass,
@@ -212,16 +217,44 @@ BaseAgent _buildCustomAgent(
   String configAbsPath,
   AgentConfigResolvers resolvers,
 ) {
-  final String name = config.agentClass.isEmpty
+  final String configuredName = config.agentClass.trim().isEmpty
       ? 'LlmAgent'
-      : config.agentClass;
-  final CustomAgentFactory? factory = resolvers.customAgentFactories[name];
-  if (factory == null) {
-    throw ArgumentError(
-      'Invalid agent class `$name`. Register it in AgentConfigResolvers.customAgentFactories.',
-    );
+      : config.agentClass.trim();
+  final String shortName = configuredName.split('.').last;
+  final CustomAgentFactory? factory =
+      resolvers.customAgentFactories[configuredName] ??
+      resolvers.customAgentFactories[shortName];
+  if (factory != null) {
+    return factory(config, configAbsPath, resolvers);
   }
-  return factory(config, configAbsPath, resolvers);
+
+  final Object? resolvedFactory =
+      resolvers.resolveSymbol(configuredName) ??
+      resolvers.resolveSymbol(shortName);
+  if (resolvedFactory is CustomAgentFactory) {
+    return resolvedFactory(config, configAbsPath, resolvers);
+  }
+
+  final String displayName = configuredName;
+  throw ArgumentError(
+    'Invalid agent class `$displayName`. Register it in AgentConfigResolvers.customAgentFactories.',
+  );
+}
+
+String _normalizeAgentClassName(String agentClass) {
+  final String trimmed = agentClass.trim();
+  if (trimmed.isEmpty) {
+    return 'LlmAgent';
+  }
+
+  if (_builtInAgentClasses.contains(trimmed)) {
+    return trimmed;
+  }
+  final String shortName = trimmed.split('.').last;
+  if (_builtInAgentClasses.contains(shortName)) {
+    return shortName;
+  }
+  return trimmed;
 }
 
 BaseAgent _buildLoopAgent(

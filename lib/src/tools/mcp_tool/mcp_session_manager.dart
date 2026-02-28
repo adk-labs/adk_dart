@@ -226,6 +226,51 @@ class McpSessionManager {
     return ordered;
   }
 
+  Future<Set<String>> listPromptArgumentNames({
+    required McpConnectionParams connectionParams,
+    required String promptName,
+    Map<String, String>? headers,
+  }) async {
+    if (promptName.trim().isEmpty) {
+      return const <String>{};
+    }
+
+    await _ensureInitialized(connectionParams, headers: headers);
+    if (!_hasCapability(connectionParams, 'prompts')) {
+      return const <String>{};
+    }
+
+    final List<Map<String, Object?>> prompts = await _collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'prompts/list',
+      resultArrayField: 'prompts',
+      headers: headers,
+      suppressJsonRpcErrorCodes: const <int>{mcpMethodNotFoundCode},
+    );
+    final Map<String, Object?> prompt = prompts.firstWhere(
+      (Map<String, Object?> candidate) =>
+          _asString(candidate['name']) == promptName,
+      orElse: () => <String, Object?>{},
+    );
+    if (prompt.isEmpty) {
+      return const <String>{};
+    }
+
+    final Object? arguments = prompt['arguments'];
+    if (arguments is! List) {
+      return const <String>{};
+    }
+    final Set<String> names = <String>{};
+    for (final Object? rawArg in arguments) {
+      final Map<String, Object?> arg = _asStringObjectMap(rawArg);
+      final String name = _asString(arg['name']);
+      if (name.isNotEmpty) {
+        names.add(name);
+      }
+    }
+    return names;
+  }
+
   List<McpResourceContent> readResource({
     required McpConnectionParams connectionParams,
     required String resourceName,
