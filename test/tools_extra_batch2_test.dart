@@ -53,8 +53,9 @@ void main() {
       final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
 
       await tool.processLlmRequest(toolContext: context, llmRequest: request);
-      expect(request.config.systemInstruction, contains('Example 1'));
-      expect(request.config.systemInstruction, contains('what is up?'));
+      expect(request.config.systemInstruction, contains('<EXAMPLES>'));
+      expect(request.config.systemInstruction, contains('EXAMPLE 1'));
+      expect(request.config.systemInstruction, contains('[user]'));
     });
 
     test(

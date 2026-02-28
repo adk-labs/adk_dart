@@ -1,5 +1,5 @@
-import '../examples/base_example_provider.dart';
 import '../examples/example.dart';
+import '../examples/example_util.dart' as example_util;
 import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
@@ -39,24 +39,9 @@ class ExampleTool extends BaseTool {
       return;
     }
 
-    final List<Example> resolved = _resolveExamples(query.trim());
-    if (resolved.isEmpty) {
-      return;
-    }
     llmRequest.appendInstructions(<String>[
-      buildExampleSystemInstruction(resolved, query.trim()),
+      example_util.buildExampleSi(examples, query.trim(), llmRequest.model),
     ]);
-  }
-
-  List<Example> _resolveExamples(String query) {
-    final Object value = examples;
-    if (value is BaseExampleProvider) {
-      return value.getExamples(query);
-    }
-    if (value is List<Example>) {
-      return value;
-    }
-    return <Example>[];
   }
 
   static ExampleTool fromConfig(ToolArgsConfig config) {
@@ -83,27 +68,4 @@ class ExampleTool extends BaseTool {
       'Example tool config must contain `examples` as a list of {input, output}.',
     );
   }
-}
-
-String buildExampleSystemInstruction(List<Example> examples, String query) {
-  final StringBuffer buffer = StringBuffer();
-  buffer.writeln('Use the following examples as guidance.');
-  for (int i = 0; i < examples.length; i += 1) {
-    final Example example = examples[i];
-    final String inputText = example.input.parts
-        .where((Part part) => part.text != null && part.text!.trim().isNotEmpty)
-        .map((Part part) => part.text!.trim())
-        .join(' ');
-    final String outputText = example.output
-        .expand((Content content) => content.parts)
-        .where((Part part) => part.text != null && part.text!.trim().isNotEmpty)
-        .map((Part part) => part.text!.trim())
-        .join(' ');
-
-    buffer.writeln('Example ${i + 1}');
-    buffer.writeln('Input: $inputText');
-    buffer.writeln('Output: $outputText');
-  }
-  buffer.writeln('Now answer this user query: $query');
-  return buffer.toString().trim();
 }

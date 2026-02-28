@@ -11,11 +11,12 @@ LlmAgent createGoogleSearchAgent(Object model) {
   return LlmAgent(
     name: 'google_search_agent',
     model: model,
-    description: 'An agent for performing Google search using google_search.',
+    description:
+        'An agent for performing Google search using the `google_search` tool',
     instruction: '''
 You are a specialized Google search agent.
 
-When given a search query, use the `google_search` tool to find related information.
+When given a search query, use the `google_search` tool to find the related information.
 ''',
     tools: <Object>[googleSearch],
   );

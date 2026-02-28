@@ -29,7 +29,7 @@ Tool Arguments: {tool_arguments_json}
 Your instructions:
 1. Analyze the tool call. Is it a "creating" or "consuming" tool based on the connection map?
 2. If it's a "consuming" tool, check the provided arguments against the state store. If an ID is provided that does not exist in the state, return a realistic error (e.g., a 404 Not Found error). Otherwise, use the data from the state and the provided environment data to generate the response.
-3. If it's a "creating" tool, generate a new, unique ID for the stateful parameter (e.g., a random string for a ticket_id). Include this new ID in your response. The simulator updates the state from this response.
+3. If it's a "creating" tool, generate a new, unique ID for the stateful parameter (e.g., a random string for a ticket_id). Include this new ID in your response. I will then update the state with it.
 4. Leverage the provided environment data (if any) to make your response more realistic and consistent with the simulated environment.
 5. Generate a convincing, valid JSON object that mocks the tool's response. The response must be only the JSON object, without any additional text or formatting.
 6. The response must start with '{' and end with '}'.

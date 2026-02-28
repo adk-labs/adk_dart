@@ -31,6 +31,28 @@ Skill _sampleSkill() {
   );
 }
 
+class _FakeCodeExecutor extends BaseCodeExecutor {
+  _FakeCodeExecutor(this.result);
+
+  final CodeExecutionResult result;
+  String? lastCode;
+
+  @override
+  Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
+    lastCode = request.command;
+    return result;
+  }
+
+  @override
+  Future<CodeExecutionResult> executeCode(
+    InvocationContext invocationContext,
+    CodeExecutionInput codeExecutionInput,
+  ) async {
+    lastCode = codeExecutionInput.code;
+    return result;
+  }
+}
+
 void main() {
   group('SkillToolset parity', () {
     test('rejects duplicate skill names', () {
@@ -50,6 +72,7 @@ void main() {
         'list_skills',
         'load_skill',
         'load_skill_resource',
+        'run_skill_script',
       ]);
     });
 
@@ -195,6 +218,61 @@ void main() {
     });
 
     test(
+      'run_skill_script returns no executor error when unavailable',
+      () async {
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_sampleSkill()],
+        );
+        final BaseTool runTool = (await toolset.getTools())[3];
+
+        final Object? result = await runTool.run(
+          args: <String, Object?>{
+            'skill_name': 'my-skill',
+            'script_path': 'scripts/setup.sh',
+          },
+          toolContext: _newToolContext(),
+        );
+        expect(
+          Map<String, Object?>.from(result! as Map)['error_code'],
+          'NO_CODE_EXECUTOR',
+        );
+      },
+    );
+
+    test('run_skill_script executes using configured code executor', () async {
+      final _FakeCodeExecutor fakeExecutor = _FakeCodeExecutor(
+        CodeExecutionResult(
+          stdout:
+              '{"__shell_result__":true,"stdout":"done","stderr":"","returncode":0}',
+          stderr: '',
+          exitCode: 0,
+        ),
+      );
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        codeExecutor: fakeExecutor,
+      );
+      final BaseTool runTool = (await toolset.getTools())[3];
+
+      final Object? result = await runTool.run(
+        args: <String, Object?>{
+          'skill_name': 'my-skill',
+          'script_path': 'scripts/setup.sh',
+          'args': <String, Object?>{'name': 'dart'},
+        },
+        toolContext: _newToolContext(),
+      );
+      final Map<String, Object?> payload = Map<String, Object?>.from(
+        result! as Map,
+      );
+      expect(payload['status'], 'success');
+      expect(payload['stdout'], 'done');
+      expect(fakeExecutor.lastCode, contains('scripts/setup.sh'));
+      expect(fakeExecutor.lastCode, contains('--name'));
+      expect(fakeExecutor.lastCode, contains('dart'));
+    });
+
+    test(
       'processLlmRequest appends default system instruction and skills xml',
       () async {
         final SkillToolset toolset = SkillToolset(
@@ -210,6 +288,7 @@ void main() {
         final String? instruction = request.config.systemInstruction;
         expect(instruction, isNotNull);
         expect(instruction!, contains("You can use specialized 'skills'"));
+        expect(instruction, contains('run_skill_script'));
         expect(instruction, contains('<available_skills>'));
         expect(instruction, contains('my-skill'));
       },

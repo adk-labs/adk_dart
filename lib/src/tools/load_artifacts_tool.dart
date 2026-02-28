@@ -21,8 +21,10 @@ class LoadArtifactsTool extends BaseTool {
   LoadArtifactsTool()
     : super(
         name: 'load_artifacts',
-        description:
-            'Loads artifacts into the current request context when requested.',
+        description: '''Loads artifacts into the session for this request.
+
+NOTE: Call when you need access to artifacts (for example, uploads saved by the
+web UI).''',
       );
 
   @override
@@ -53,7 +55,7 @@ class LoadArtifactsTool extends BaseTool {
     return <String, Object?>{
       'artifact_names': artifactNames,
       'status':
-          'artifact contents are attached to the in-flight request when available',
+          'artifact contents temporarily inserted and removed. to access these artifacts, call load_artifacts tool again.',
     };
   }
 
@@ -72,9 +74,13 @@ class LoadArtifactsTool extends BaseTool {
       llmRequest.appendInstructions(<String>[
         '''
 You have a list of artifacts:
-${artifactNames.join(', ')}
+${jsonEncode(artifactNames)}
 
-When answering questions about these files, call `load_artifacts` with `artifact_names`.
+When the user asks questions about any of the artifacts, you should call the
+`load_artifacts` function to load the artifact. Always call load_artifacts
+before answering questions related to the artifacts, regardless of whether the
+artifacts have been loaded before. Do not depend on prior answers about the
+artifacts.
 ''',
       ]);
     }

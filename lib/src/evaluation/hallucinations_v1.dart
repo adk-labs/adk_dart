@@ -23,15 +23,47 @@ Your task is to segment the provided response sentence by sentence so that we co
 1. Overall, you should decompose the whole provided response into individual sentences. You should make sure the output covers ALL the sentences in the provided response block.
 2. You should COPY each sentence as it is, WORD BY WORD. DO NOT modify the sentence or the surrounding punctuation.
 3. If there are bullet points in the response, you should segment each bullet point into DIFFERENT sentences. If one bullet point has sub bullet points, you should further decompose sub bullet points into DIFFERENT sentences.
+For example, if there are responses like "it has three criteria: * aaa. * bbb. * ccc", you should segment them into FOUR sentences: "it has three criteria", "aaa", "bbb", "ccc". Bullet points could start with numbers (1/2/3/etc) or symbols like "*", "-" etc.
 4. When encountering tables, you should include the whole table in ONE sentence output.
 5. Each sentence should be meaningful to further analyze on. DO NOT ONLY put symbols themselves into a sentence.
 6. You should ONLY output segmented sentences in the provided response. DO NOT make up any new sentences.
 
 **Input Format:**
-The input will be the model-generated response.
+
+The input will be the model-generated response:
+* **Response:** The model-generated response to be analyzed.
 
 **Output Format:**
-For each decomposed sentence, wrap them with <sentence> and </sentence>.
+For each decomposed sentence, wrap them with <sentence> and </sentence> like the following:
+<sentence>...</sentence>
+<sentence>...</sentence>
+
+**Example:**
+
+**Input:**
+
+**Response Begin**
+There are three kinds of fruits:
+1. Apples are red.
+2. Bananas are green.
+3. Pears are purple.
+
+For prices:
+* Bananas are cheaper than apples.
+
+Enjoy your fruit!
+**Response End**
+
+**Output:**
+<sentence>There are three kinds of fruits:</sentence>
+<sentence>1. Apples are red.</sentence>
+<sentence>2. Bananas are green.</sentence>
+<sentence>3. Pears are purple.</sentence>
+<sentence>For prices:</sentence>
+<sentence>* Bananas are cheaper than apples.</sentence>
+<sentence>Enjoy your fruit!</sentence>
+
+**Now, given the following response, please segment the response into sentences:**
 
 **Input:**
 **Response Begin**
@@ -46,17 +78,84 @@ You are a helpful and harmless AI assistant. You will be provided with a textual
 Your task is to analyze sentence by sentence and classify each sentence according to its relationship with the provided context.
 
 **Instructions:**
-1. For each sentence, assign one label: supported, unsupported, contradictory, disputed, or not_applicable.
-2. Provide a short rationale for each sentence.
-3. Use supported/contradictory/disputed only when clear evidence exists in context.
-4. If sentence is based on tool_outputs, ensure corresponding tool_calls are supported.
+
+1. **Read the textual context carefully.**
+2. **For each sentence, assign one of the following labels:**
+    * **`supported`**: The sentence is entailed by the given context. Provide a supporting excerpt from the context. The supporting except must *fully* entail the sentence.
+    * **`unsupported`**: The sentence is not entailed by the given context. No excerpt is needed for this label.
+    * **`contradictory`**: The sentence is falsified by the given context. Provide a contradicting excerpt from the context.
+    * **`disputed`**: The given context contains both supporting and contradicting information. Provide both supporting and contradicting excerpt from the context.
+    * **`not_applicable`**: The sentence does not require factual attribution (e.g., opinions, planning steps, greetings, questions, disclaimers, mathematical calculation).
+3. **For each label, provide a short rationale explaining your decision.** The rationale should be separate from the excerpt.
+4. **Be very strict with your `supported`, `contradictory` and `disputed` decisions.** Unless you can find straightforward, indisputable evidence excepts *in the context* that a sentence is `supported`, `contradictory` or `disputed`, consider it `unsupported`.  You should not employ world knowledge unless it is truly trivial.
+5. "tool_outputs" blocks contain code execution results of the "tool_code" blocks immediately above them. If any sentence is based on "tool_outputs" results, first analyze if the corresponding "tool_code" is supported and if the results are error-free. Only if the "tool_code" block is supported, you can treat code execution results as correct.
+6. If you need to cite multiple supporting excerpts, simply concatenate them. Excerpt could be summary from the context if it is too long.
+
+**Input Format:**
+
+The input will consist of two parts, clearly separated:
+
+* **Context:**  The textual context used to generate the response.
+* **Sentences:** The sentences from the model-generated response to be analyzed. Each sentence will be wrapped in <sentence>...</sentence>.
 
 **Output Format:**
-sentence: <sentence>
-label: <supported|unsupported|contradictory|disputed|not_applicable>
-rationale: <brief explanation>
-supporting_excerpt: <text or null>
-contradicting_excerpt: <text or null>
+
+For each sentence, output a block of text with the following fields:
+
+* sentence: The sentence being analyzed. Please directly copy the sentence which is provided.
+* label: One of `supported`, `unsupported`, `contradictory`, `disputed` or `not_applicable`.
+* rationale: A brief explanation for the assessment
+* supporting_excerpt: A relevant excerpt from the context that supports the sentence. Only required for `supported` and `disputed` labels.
+* contradicting_excerpt: A relevant excerpt from the context that contradicts with the sentence. Only required for `contradictory` and `disputed` labels.
+
+**Example:**
+
+**Input:**
+
+**Context Begin**
+Apples are red fruits. Bananas are yellow fruits. Pears are purple fruits. Pears are blue fruits.
+**Context End**
+
+**Sentences Begin**
+<sentence>Apples are red.</sentence>
+<sentence>Bananas are green.</sentence>
+<sentence>Pears are purple.</sentence>
+<sentence>Bananas are cheaper than apples.</sentence>
+<sentence>Enjoy your fruit!</sentence>
+**Sentences End**
+
+**Output:**
+sentence: Apples are red.
+label: supported
+rationale: The context explicitly states that apples are red.
+supporting_excerpt: Apples are red fruits.
+contradicting_excerpt: null
+
+sentence: Bananas are green.
+label: contradictory
+rationale: The context states that bananas are yellow, not green.
+supporting_excerpt: null
+contradicting_excerpt: Bananas are yellow fruits.
+
+sentence: Pears are purple.
+label: disputed
+rationale: The context states that pears are purple but it also states that pears are blue.
+supporting_excerpt: Pears are purple fruits
+contradicting_excerpt: Pears are blue fruits
+
+sentence: Bananas are cheaper than apples.
+label: unsupported
+rationale: The context does not mention the price of bananas or apples.
+supporting_excerpt: null
+contradicting_excerpt: null
+
+sentence: Enjoy your fruit!
+label: not_applicable
+rationale: This is a general expression and does not require factual attribution.
+supporting_excerpt: null
+contradicting_excerpt: null
+
+**Now, please analyze the following context and sentences:**
 
 **Input:**
 **Context Begin**

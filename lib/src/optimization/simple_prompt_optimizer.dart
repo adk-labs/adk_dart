@@ -12,7 +12,7 @@ import 'sampler.dart';
 
 const String _optimizerPromptTemplate = '''
 You are an expert prompt engineer. Your task is to improve the system prompt for an AI agent.
-The agent's current prompt achieved an average score of {current_score} on a set of evaluation tasks. A higher score is better.
+The agent's current prompt achieved an average score of {current_score:.2f} on a set of evaluation tasks. A higher score is better.
 
 Here is the current prompt:
 <current_prompt>
@@ -23,7 +23,7 @@ Based on the current prompt, rewrite it to create a new, improved version that i
 The agent needs to solve customer support tasks by using tools correctly and following policies.
 Focus on clarity, structure, and providing actionable guidance for the agent.
 
-Output only the new, full, improved agent prompt. Do not add any other text, explanations, or markdown formatting.
+**Output only the new, full, improved agent prompt. Do not add any other text, explanations, or markdown formatting.**
 ''';
 
 class SimplePromptOptimizerConfig {
@@ -73,7 +73,7 @@ class SimplePromptOptimizer
   ) async {
     final String currentPromptText = '${bestAgent.instruction}';
     final String promptForOptimizer = _optimizerPromptTemplate
-        .replaceAll('{current_score}', bestScore.toStringAsFixed(2))
+        .replaceAll('{current_score:.2f}', bestScore.toStringAsFixed(2))
         .replaceAll('{current_prompt_text}', currentPromptText);
 
     final LlmRequest request = LlmRequest(

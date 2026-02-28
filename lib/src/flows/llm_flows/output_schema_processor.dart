@@ -29,8 +29,11 @@ class OutputSchemaRequestProcessor extends BaseLlmRequestProcessor {
     );
     llmRequest.appendTools(<SetModelResponseTool>[setResponseTool]);
     llmRequest.appendInstructions(<String>[
-      'IMPORTANT: You can use other tools, but final answer must be returned '
-          'using `set_model_response` in the required structured format.',
+      'IMPORTANT: You have access to other tools, but you must provide '
+          'your final response using the set_model_response tool with the '
+          'required structured format. After using any other tools needed '
+          'to complete the task, always call set_model_response with your '
+          'final answer in the specified schema format.',
     ]);
   }
 }

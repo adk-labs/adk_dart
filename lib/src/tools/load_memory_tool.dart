@@ -57,8 +57,8 @@ class LoadMemoryTool extends BaseTool {
     );
     llmRequest.appendInstructions(<String>[
       '''
-You have access to prior user memories.
-Call `load_memory` with a focused query whenever prior conversations might help answer the user.
+You have memory. You can use it to answer questions. If any questions need
+you to look up the memory, you should call load_memory function with a query.
 ''',
     ]);
   }

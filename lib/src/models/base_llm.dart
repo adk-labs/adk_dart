@@ -16,7 +16,7 @@ abstract class BaseLlm {
     if (request.contents.isEmpty) {
       request.contents.add(
         Content.userText(
-          'Handle the requests as specified in the system instruction.',
+          'Handle the requests as specified in the System Instruction.',
         ),
       );
       return;
@@ -25,7 +25,7 @@ abstract class BaseLlm {
     if (request.contents.last.role != 'user') {
       request.contents.add(
         Content.userText(
-          'Continue processing previous requests as instructed.',
+          'Continue processing previous requests as instructed. Exit or provide a summary if no more outputs are needed.',
         ),
       );
     }

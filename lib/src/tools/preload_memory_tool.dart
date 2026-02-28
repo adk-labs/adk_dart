@@ -59,8 +59,8 @@ class PreloadMemoryTool extends BaseTool {
 
     llmRequest.appendInstructions(<String>[
       '''
-The following content is from previous conversations with the same user.
-Use it only when relevant to the current request.
+The following content is from your previous conversations with the user.
+They may be useful for answering the user's current query.
 <PAST_CONVERSATIONS>
 $memoryText
 </PAST_CONVERSATIONS>
