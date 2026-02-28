@@ -38,6 +38,16 @@ void main() {
         'unknown_field': 'value',
       });
       expect(frontmatter.name, 'my-skill');
+      expect(frontmatter.extraFields['unknown_field'], 'value');
+      expect(frontmatter.toMap()['unknown_field'], 'value');
+    });
+
+    test('applies NFKC-like normalization for full-width letters', () {
+      final Frontmatter frontmatter = Frontmatter(
+        name: 'ｍｙ-skill',
+        description: 'desc',
+      );
+      expect(frontmatter.name, 'my-skill');
     });
 
     test('reads allowed-tools alias in fromMap', () {

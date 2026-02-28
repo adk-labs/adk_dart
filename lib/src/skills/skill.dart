@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:yaml/yaml.dart';
+
 final RegExp _skillNamePattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
-final RegExp _yamlPairPattern = RegExp(r'^([A-Za-z0-9._-]+)\s*:\s*(.*)$');
 
 const Set<String> _allowedFrontmatterKeys = <String>{
   'name',
@@ -28,21 +29,25 @@ class Frontmatter implements SkillDescriptor {
     String? compatibility,
     this.allowedTools,
     Map<String, String>? metadata,
+    Map<String, Object?>? extraFields,
   }) : name = _validateName(name),
        description = _validateDescription(description),
        compatibility = _validateCompatibility(compatibility),
        metadata = Map<String, String>.unmodifiable(
          metadata ?? <String, String>{},
+       ),
+       extraFields = Map<String, Object?>.unmodifiable(
+         extraFields ?? <String, Object?>{},
        );
 
   factory Frontmatter.fromMap(
     Map<String, Object?> value, {
     bool allowUnknownFields = true,
   }) {
+    final Set<String> unknown = value.keys
+        .where((String key) => !_allowedFrontmatterKeys.contains(key))
+        .toSet();
     if (!allowUnknownFields) {
-      final Set<String> unknown = value.keys
-          .where((String key) => !_allowedFrontmatterKeys.contains(key))
-          .toSet();
       if (unknown.isNotEmpty) {
         throw ArgumentError(
           'Unknown frontmatter fields: ${unknown.toList()..sort()}',
@@ -70,6 +75,11 @@ class Frontmatter implements SkillDescriptor {
       compatibility: _readOptionalString(value['compatibility']),
       allowedTools: allowedTools,
       metadata: _readMetadata(value['metadata']),
+      extraFields: allowUnknownFields
+          ? <String, Object?>{
+              for (final String key in unknown) key: value[key],
+            }
+          : <String, Object?>{},
     );
   }
 
@@ -83,6 +93,7 @@ class Frontmatter implements SkillDescriptor {
   final String? compatibility;
   final String? allowedTools;
   final Map<String, String> metadata;
+  final Map<String, Object?> extraFields;
 
   Map<String, Object?> toMap({bool byAlias = false}) {
     final Map<String, Object?> result = <String, Object?>{
@@ -101,20 +112,26 @@ class Frontmatter implements SkillDescriptor {
     if (metadata.isNotEmpty) {
       result['metadata'] = Map<String, String>.from(metadata);
     }
+    if (extraFields.isNotEmpty) {
+      for (final MapEntry<String, Object?> entry in extraFields.entries) {
+        result[entry.key] = entry.value;
+      }
+    }
     return result;
   }
 
   static String _validateName(String value) {
-    if (value.length > 64) {
+    final String normalized = _normalizeNfkcLike(value);
+    if (normalized.length > 64) {
       throw ArgumentError('name must be at most 64 characters');
     }
-    if (!_skillNamePattern.hasMatch(value)) {
+    if (!_skillNamePattern.hasMatch(normalized)) {
       throw ArgumentError(
         'name must be lowercase kebab-case (a-z, 0-9, hyphens), '
         'with no leading, trailing, or consecutive hyphens',
       );
     }
-    return value;
+    return normalized;
   }
 
   static String _validateDescription(String value) {
@@ -284,7 +301,7 @@ String formatSkillsAsXml(List<SkillDescriptor> skills) {
 }
 
 Skill loadSkillFromDir(String skillDirPath) {
-  final Directory skillDir = Directory(skillDirPath).absolute;
+  final Directory skillDir = _resolveSkillDir(skillDirPath);
   final _ParsedSkillMd parsed = _parseSkillMd(skillDir);
   final Frontmatter frontmatter = Frontmatter.fromMap(parsed.frontmatter);
 
@@ -322,7 +339,7 @@ Skill loadSkillFromDir(String skillDirPath) {
 }
 
 List<String> validateSkillDir(String skillDirPath) {
-  final Directory skillDir = Directory(skillDirPath).absolute;
+  final Directory skillDir = _resolveSkillDir(skillDirPath);
 
   if (!skillDir.existsSync()) {
     return <String>["Directory '${skillDir.path}' does not exist."];
@@ -371,7 +388,7 @@ List<String> validateSkillDir(String skillDirPath) {
 }
 
 Frontmatter readSkillProperties(String skillDirPath) {
-  final Directory skillDir = Directory(skillDirPath).absolute;
+  final Directory skillDir = _resolveSkillDir(skillDirPath);
   final _ParsedSkillMd parsed = _parseSkillMd(skillDir);
   return Frontmatter.fromMap(parsed.frontmatter);
 }
@@ -454,69 +471,42 @@ Map<String, String> _loadDir(Directory directory) {
 }
 
 Map<String, Object?> _parseYamlMapping(String text) {
-  final Map<String, Object?> map = <String, Object?>{};
-  String? activeMapKey;
-  Map<String, String>? activeMap;
-
-  final List<String> lines = LineSplitter.split(text).toList();
-  for (final String line in lines) {
-    if (line.trim().isEmpty) {
-      continue;
+  try {
+    final Object? parsed = loadYaml(text);
+    if (parsed is! Map) {
+      throw const FormatException('SKILL.md frontmatter must be a YAML mapping');
     }
-
-    final bool indented = line.startsWith(' ') || line.startsWith('\t');
-    if (indented) {
-      if (activeMap == null || activeMapKey == null) {
-        throw FormatException('Invalid YAML indentation: $line');
-      }
-      final Match? nestedMatch = _yamlPairPattern.firstMatch(line.trim());
-      if (nestedMatch == null) {
-        throw FormatException('Invalid YAML line: $line');
-      }
-      final String nestedKey = nestedMatch.group(1)!;
-      final String nestedValue = _parseYamlScalar(nestedMatch.group(2)!);
-      activeMap[nestedKey] = nestedValue;
-      continue;
+    return _yamlToMap(parsed);
+  } catch (error) {
+    if (error is FormatException) {
+      throw FormatException('Invalid YAML in frontmatter: ${error.message}');
     }
-
-    activeMapKey = null;
-    activeMap = null;
-
-    final Match? match = _yamlPairPattern.firstMatch(line);
-    if (match == null) {
-      throw FormatException('Invalid YAML line: $line');
-    }
-
-    final String key = match.group(1)!;
-    final String rawValue = match.group(2) ?? '';
-    if (rawValue.trim().isEmpty) {
-      final Map<String, String> nestedMap = <String, String>{};
-      map[key] = nestedMap;
-      activeMapKey = key;
-      activeMap = nestedMap;
-      continue;
-    }
-    map[key] = _parseYamlScalar(rawValue);
+    throw FormatException('Invalid YAML in frontmatter: $error');
   }
-
-  return map;
 }
 
-String _parseYamlScalar(String rawValue) {
-  String value = rawValue.trim();
-  if (value.length >= 2) {
-    final String first = value[0];
-    final String last = value[value.length - 1];
-    if ((first == '"' && last == '"') || (first == "'" && last == "'")) {
-      value = value.substring(1, value.length - 1);
-      if (first == '"') {
-        value = value
-            .replaceAll(r'\"', '"')
-            .replaceAll(r'\\', '\\')
-            .replaceAll(r'\n', '\n');
-      }
-      return value;
-    }
+Map<String, Object?> _yamlToMap(Object? value) {
+  if (value is YamlMap) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry('$key', _yamlToObject(item)),
+    );
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry('$key', _yamlToObject(item)),
+    );
+  }
+  return <String, Object?>{};
+}
+
+Object? _yamlToObject(Object? value) {
+  if (value is YamlMap) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry('$key', _yamlToObject(item)),
+    );
+  }
+  if (value is YamlList) {
+    return value.map(_yamlToObject).toList(growable: false);
   }
   return value;
 }
@@ -556,6 +546,32 @@ String _join(String left, String right) {
     return '$left$right';
   }
   return '$left${Platform.pathSeparator}$right';
+}
+
+Directory _resolveSkillDir(String skillDirPath) {
+  final Directory candidate = Directory(skillDirPath);
+  try {
+    final String resolvedPath = candidate.resolveSymbolicLinksSync();
+    return Directory(resolvedPath);
+  } on FileSystemException {
+    return candidate.absolute;
+  }
+}
+
+String _normalizeNfkcLike(String input) {
+  final StringBuffer normalized = StringBuffer();
+  for (final int rune in input.runes) {
+    if (rune == 0x3000) {
+      normalized.writeCharCode(0x20);
+      continue;
+    }
+    if (rune >= 0xFF01 && rune <= 0xFF5E) {
+      normalized.writeCharCode(rune - 0xFEE0);
+      continue;
+    }
+    normalized.writeCharCode(rune);
+  }
+  return normalized.toString();
 }
 
 String _normalizePath(String path) => path.replaceAll('\\', '/');

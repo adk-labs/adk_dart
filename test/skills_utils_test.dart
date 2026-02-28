@@ -79,6 +79,33 @@ Instructions here
       expect(skill.frontmatter.allowedTools, 'some-tool-*');
     });
 
+    test('loadSkillFromDir parses YAML block scalars in frontmatter', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk-skill-test-',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      final Directory skillDir = Directory(_join(tempDir.path, 'my-skill'));
+      skillDir.createSync(recursive: true);
+
+      _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+---
+name: my-skill
+description: |
+  Multi-line
+  description
+compatibility: >
+  python-parity
+---
+Instructions here
+''');
+
+      final Skill skill = loadSkillFromDir(skillDir.path);
+      expect(skill.name, 'my-skill');
+      expect(skill.description, contains('Multi-line'));
+      expect(skill.frontmatter.compatibility, contains('python-parity'));
+    });
+
     test('loadSkillFromDir rejects directory-name mismatch', () async {
       final Directory tempDir = await Directory.systemTemp.createTemp(
         'adk-skill-test-',
@@ -99,6 +126,29 @@ Body
         () => loadSkillFromDir(skillDir.path),
         _throwsArgumentMessage('does not match directory'),
       );
+    });
+
+    test('loadSkillFromDir accepts resolved symlink directory name', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk-skill-test-',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      final Directory realSkillDir = Directory(_join(tempDir.path, 'my-skill'));
+      realSkillDir.createSync(recursive: true);
+      _writeFile(_join(realSkillDir.path, 'SKILL.md'), '''
+---
+name: my-skill
+description: A skill
+---
+Body
+''');
+
+      final Link skillLink = Link(_join(tempDir.path, 'linked-skill'));
+      skillLink.createSync(realSkillDir.path);
+
+      final Skill skill = loadSkillFromDir(skillLink.path);
+      expect(skill.name, 'my-skill');
     });
 
     test('validateSkillDir returns empty list for valid skill', () async {

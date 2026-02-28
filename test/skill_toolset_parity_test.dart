@@ -21,6 +21,7 @@ Skill _sampleSkill() {
     frontmatter: Frontmatter(
       name: 'my-skill',
       description: 'Helpful specialized workflow',
+      extraFields: <String, Object?>{'x-extra': 'custom'},
     ),
     instructions: 'Follow these steps carefully.',
     resources: Resources(
@@ -113,6 +114,7 @@ void main() {
       );
       expect(frontmatter['name'], 'my-skill');
       expect(frontmatter['description'], 'Helpful specialized workflow');
+      expect(frontmatter['x-extra'], 'custom');
     });
 
     test('load_skill returns missing/not-found errors', () async {
