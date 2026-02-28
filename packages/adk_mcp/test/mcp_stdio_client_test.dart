@@ -56,6 +56,10 @@ Future<void> main() async {
   Object? pendingToolsListId;
   bool waitingPingResponse = false;
   bool waitingRootsResponse = false;
+  bool waitingSamplingResponse = false;
+  bool waitingElicitationResponse = false;
+  bool samplingAck = false;
+  bool elicitationAck = false;
   bool cancelledSeen = false;
   Object? slowRequestId;
 
@@ -110,6 +114,54 @@ Future<void> main() async {
                 <String, Object?>{'name': 'remote_echo'},
               ],
               'rootAck': rootAck,
+            },
+          );
+        }
+        continue;
+      }
+      if (waitingSamplingResponse && '$id' == 'srv-sampling-1') {
+        waitingSamplingResponse = false;
+        final Map<String, Object?> resultMap = rpc['result'] is Map
+            ? (rpc['result'] as Map).map(
+                (Object? key, Object? value) =>
+                    MapEntry<String, Object?>('$key', value),
+              )
+            : <String, Object?>{};
+        samplingAck = resultMap['model'] == 'test-model';
+        final Object? responseId = pendingToolsListId;
+        pendingToolsListId = null;
+        if (responseId != null) {
+          respond(
+            responseId,
+            result: <String, Object?>{
+              'tools': <Map<String, Object?>>[
+                <String, Object?>{'name': 'remote_echo'},
+              ],
+              'samplingAck': samplingAck,
+            },
+          );
+        }
+        continue;
+      }
+      if (waitingElicitationResponse && '$id' == 'srv-elicit-1') {
+        waitingElicitationResponse = false;
+        final Map<String, Object?> resultMap = rpc['result'] is Map
+            ? (rpc['result'] as Map).map(
+                (Object? key, Object? value) =>
+                    MapEntry<String, Object?>('$key', value),
+              )
+            : <String, Object?>{};
+        elicitationAck = resultMap['action'] == 'accept';
+        final Object? responseId = pendingToolsListId;
+        pendingToolsListId = null;
+        if (responseId != null) {
+          respond(
+            responseId,
+            result: <String, Object?>{
+              'tools': <Map<String, Object?>>[
+                <String, Object?>{'name': 'remote_echo'},
+              ],
+              'elicitationAck': elicitationAck,
             },
           );
         }
@@ -246,6 +298,29 @@ Future<void> main() async {
         if (params['requestRoots'] == true) {
           waitingRootsResponse = true;
           request('srv-roots-1', 'roots/list', <String, Object?>{});
+        } else if (params['requestSampling'] == true) {
+          waitingSamplingResponse = true;
+          request('srv-sampling-1', 'sampling/createMessage', <String, Object?>{
+            'messages': <Map<String, Object?>>[
+              <String, Object?>{
+                'role': 'user',
+                'content': <String, Object?>{'type': 'text', 'text': 'hello'},
+              },
+            ],
+          });
+        } else if (params['requestElicitation'] == true) {
+          waitingElicitationResponse = true;
+          request('srv-elicit-1', 'elicitation/create', <String, Object?>{
+            'mode': 'form',
+            'message': 'Need email',
+            'requestedSchema': <String, Object?>{
+              'type': 'object',
+              'properties': <String, Object?>{
+                'email': <String, Object?>{'type': 'string', 'format': 'email'},
+              },
+              'required': <String>['email'],
+            },
+          });
         } else {
           waitingPingResponse = true;
           request('srv-ping-1', 'ping', <String, Object?>{});
@@ -327,6 +402,22 @@ Future<void> main() async {
           },
         );
         continue;
+      case 'debug/samplingAck':
+        respond(
+          id,
+          result: <String, Object?>{
+            'seen': samplingAck,
+          },
+        );
+        continue;
+      case 'debug/elicitationAck':
+        respond(
+          id,
+          result: <String, Object?>{
+            'seen': elicitationAck,
+          },
+        );
+        continue;
       default:
         respond(
           id,
@@ -359,22 +450,31 @@ void main() {
               ],
             };
           }
+          if (request.method == 'sampling/createMessage') {
+            return <String, Object?>{
+              'model': 'test-model',
+              'role': 'assistant',
+              'content': <String, Object?>{'type': 'text', 'text': 'sampled'},
+              'stopReason': 'endTurn',
+            };
+          }
+          if (request.method == 'elicitation/create') {
+            return <String, Object?>{
+              'action': 'accept',
+              'content': <String, Object?>{'email': 'user@example.com'},
+            };
+          }
           return const <String, Object?>{};
         },
       );
       addTearDown(() async => client.close());
 
-      final Object? ping = await client.call(
+      final Map<String, Object?> ping = await client.ping(
         connectionParams: params,
-        method: 'ping',
-        params: const <String, Object?>{},
       );
-      final List<Map<String, Object?>> tools = await client
-          .collectPaginatedMaps(
-            connectionParams: params,
-            method: 'tools/list',
-            resultArrayField: 'tools',
-          );
+      final List<Map<String, Object?>> tools = await client.listTools(
+        connectionParams: params,
+      );
       final Map<String, Object?> toolsWithRoots =
           (await client.call(
                 connectionParams: params,
@@ -382,112 +482,85 @@ void main() {
                 params: const <String, Object?>{'requestRoots': true},
               ))
               as Map<String, Object?>;
-      final Object? completion = await client.call(
+      final Map<String, Object?> toolsWithSampling =
+          (await client.call(
+                connectionParams: params,
+                method: 'tools/list',
+                params: const <String, Object?>{'requestSampling': true},
+              ))
+              as Map<String, Object?>;
+      final Map<String, Object?> toolsWithElicitation =
+          (await client.call(
+                connectionParams: params,
+                method: 'tools/list',
+                params: const <String, Object?>{'requestElicitation': true},
+              ))
+              as Map<String, Object?>;
+      final Map<String, Object?> completion = await client.complete(
         connectionParams: params,
-        method: 'completion/complete',
-        params: const <String, Object?>{
-          'ref': <String, Object?>{'type': 'ref/prompt', 'name': 'prompt.one'},
-          'argument': <String, Object?>{'value': 'pr'},
+        ref: const <String, Object?>{
+          'type': 'ref/prompt',
+          'name': 'prompt.one',
         },
+        argument: 'pr',
       );
-      final Object? logging = await client.call(
+      final Map<String, Object?> logging = await client.setLoggingLevel(
         connectionParams: params,
-        method: 'logging/setLevel',
-        params: const <String, Object?>{'level': 'info'},
+        level: 'info',
       );
-      final List<Map<String, Object?>> resources = await client
-          .collectPaginatedMaps(
-            connectionParams: params,
-            method: 'resources/list',
-            resultArrayField: 'resources',
-          );
+      final List<Map<String, Object?>> resources = await client.listResources(
+        connectionParams: params,
+      );
       final List<Map<String, Object?>> templates = await client
-          .collectPaginatedMaps(
-            connectionParams: params,
-            method: 'resources/templates/list',
-            resultArrayField: 'resourceTemplates',
-          );
-      final Map<String, Object?> readResource =
-          (await client.call(
-                connectionParams: params,
-                method: 'resources/read',
-                params: const <String, Object?>{'uri': 'file:///r1'},
-              ))
-              as Map<String, Object?>;
-      await client.call(
+          .listResourceTemplates(connectionParams: params);
+      final Map<String, Object?> readResource = await client.readResource(
         connectionParams: params,
-        method: 'resources/subscribe',
-        params: const <String, Object?>{'uri': 'file:///r1'},
+        uri: 'file:///r1',
       );
-      await client.call(
+      await client.subscribeResource(
         connectionParams: params,
-        method: 'resources/unsubscribe',
-        params: const <String, Object?>{'uri': 'file:///r1'},
+        uri: 'file:///r1',
       );
-      final List<Map<String, Object?>> prompts = await client
-          .collectPaginatedMaps(
-            connectionParams: params,
-            method: 'prompts/list',
-            resultArrayField: 'prompts',
-          );
-      final Map<String, Object?> prompt =
-          (await client.call(
-                connectionParams: params,
-                method: 'prompts/get',
-                params: const <String, Object?>{'name': 'prompt.one'},
-              ))
-              as Map<String, Object?>;
-      final Map<String, Object?> toolCall =
-          (await client.call(
-                connectionParams: params,
-                method: 'tools/call',
-                params: const <String, Object?>{
-                  'name': 'remote_echo',
-                  'arguments': <String, Object?>{'text': 'hello'},
-                },
-              ))
-              as Map<String, Object?>;
-      final List<Map<String, Object?>> tasks = await client
-          .collectPaginatedMaps(
-            connectionParams: params,
-            method: 'tasks/list',
-            resultArrayField: 'tasks',
-          );
-      final Map<String, Object?> task =
-          (await client.call(
-                connectionParams: params,
-                method: 'tasks/get',
-                params: const <String, Object?>{'taskId': 'task-1'},
-              ))
-              as Map<String, Object?>;
-      final Map<String, Object?> taskResult =
-          (await client.call(
-                connectionParams: params,
-                method: 'tasks/result',
-                params: const <String, Object?>{'taskId': 'task-1'},
-              ))
-              as Map<String, Object?>;
-      final Map<String, Object?> cancelledTask =
-          (await client.call(
-                connectionParams: params,
-                method: 'tasks/cancel',
-                params: const <String, Object?>{'taskId': 'task-1'},
-              ))
-              as Map<String, Object?>;
-      await client.notify(
+      await client.unsubscribeResource(
         connectionParams: params,
-        method: 'notifications/progress',
-        params: const <String, Object?>{'progressToken': 'p1', 'progress': 50},
+        uri: 'file:///r1',
       );
-      await client.notify(
+      final List<Map<String, Object?>> prompts = await client.listPrompts(
         connectionParams: params,
-        method: 'notifications/roots/list_changed',
-        params: const <String, Object?>{},
       );
-      await client.notify(
+      final Map<String, Object?> prompt = await client.getPrompt(
         connectionParams: params,
-        method: 'notifications/tasks/status',
-        params: const <String, Object?>{
+        name: 'prompt.one',
+      );
+      final Map<String, Object?> toolCall = await client.callTool(
+        connectionParams: params,
+        name: 'remote_echo',
+        arguments: const <String, Object?>{'text': 'hello'},
+      );
+      final List<Map<String, Object?>> tasks = await client.listTasks(
+        connectionParams: params,
+      );
+      final Map<String, Object?> task = await client.getTask(
+        connectionParams: params,
+        taskId: 'task-1',
+      );
+      final Map<String, Object?> taskResult = await client.getTaskResult(
+        connectionParams: params,
+        taskId: 'task-1',
+      );
+      final Map<String, Object?> cancelledTask = await client.cancelTask(
+        connectionParams: params,
+        taskId: 'task-1',
+      );
+      await client.notifyProgress(
+        connectionParams: params,
+        progressToken: 'p1',
+        progress: 50,
+      );
+      await client.notifyRootsListChanged(connectionParams: params);
+      await client.notifyTaskStatus(
+        connectionParams: params,
+        status: const <String, Object?>{
           'taskId': 'task-1',
           'status': 'running',
         },
@@ -496,7 +569,9 @@ void main() {
       expect(ping, <String, Object?>{});
       expect(tools.single['name'], 'remote_echo');
       expect(toolsWithRoots['rootAck'], isTrue);
-      expect((completion as Map<String, Object?>)['completion'], isNotEmpty);
+      expect(toolsWithSampling['samplingAck'], isTrue);
+      expect(toolsWithElicitation['elicitationAck'], isTrue);
+      expect(completion['completion'], isNotEmpty);
       expect(logging, <String, Object?>{});
       expect(resources.single['uri'], 'file:///r1');
       expect(templates.single['uriTemplate'], 'file:///tmpl/{name}');

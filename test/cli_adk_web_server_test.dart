@@ -28,10 +28,21 @@ void main() {
       final HttpClientRequest request = await client.getUrl(uri);
       final HttpClientResponse response = await request.close();
       final String body = await utf8.decoder.bind(response).join();
-      client.close(force: true);
 
       expect(response.statusCode, HttpStatus.ok);
       expect(body, contains('"status":"ok"'));
+
+      final HttpClientRequest configRequest = await client.getUrl(
+        Uri.parse(
+          'http://${httpServer.address.address}:${httpServer.port}/dev-ui/config',
+        ),
+      );
+      final HttpClientResponse configResponse = await configRequest.close();
+      final String configBody = await utf8.decoder.bind(configResponse).join();
+
+      expect(configResponse.statusCode, HttpStatus.ok);
+      expect(configBody, contains('logo_text'));
+      client.close(force: true);
     });
   });
 }

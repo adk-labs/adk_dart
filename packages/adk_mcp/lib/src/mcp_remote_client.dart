@@ -36,6 +36,20 @@ class McpServerMessage {
   final Object? id;
 
   bool get isNotification => id == null;
+  bool get isResourceListChangedNotification =>
+      method == mcpMethodResourcesListChangedNotification;
+  bool get isResourceUpdatedNotification =>
+      method == mcpMethodResourcesUpdatedNotification;
+  bool get isPromptListChangedNotification =>
+      method == mcpMethodPromptsListChangedNotification;
+  bool get isToolListChangedNotification =>
+      method == mcpMethodToolsListChangedNotification;
+  bool get isTaskStatusNotification =>
+      method == mcpMethodTasksStatusNotification;
+  bool get isLoggingMessageNotification =>
+      method == mcpMethodLoggingMessageNotification;
+  bool get isElicitationCompleteNotification =>
+      method == mcpMethodElicitationCompleteNotification;
 }
 
 typedef McpServerMessageHandler = void Function(McpServerMessage message);
@@ -1542,3 +1556,40 @@ const Set<String> mcpLoggingLevels = <String>{
   'alert',
   'emergency',
 };
+const String mcpMethodInitialize = 'initialize';
+const String mcpMethodInitializedNotification = 'notifications/initialized';
+const String mcpMethodPing = 'ping';
+const String mcpMethodProgressNotification = 'notifications/progress';
+const String mcpMethodResourcesList = 'resources/list';
+const String mcpMethodResourcesTemplatesList = 'resources/templates/list';
+const String mcpMethodResourcesRead = 'resources/read';
+const String mcpMethodResourcesSubscribe = 'resources/subscribe';
+const String mcpMethodResourcesUnsubscribe = 'resources/unsubscribe';
+const String mcpMethodResourcesListChangedNotification =
+    'notifications/resources/list_changed';
+const String mcpMethodResourcesUpdatedNotification =
+    'notifications/resources/updated';
+const String mcpMethodPromptsList = 'prompts/list';
+const String mcpMethodPromptsGet = 'prompts/get';
+const String mcpMethodPromptsListChangedNotification =
+    'notifications/prompts/list_changed';
+const String mcpMethodToolsList = 'tools/list';
+const String mcpMethodToolsCall = 'tools/call';
+const String mcpMethodToolsListChangedNotification =
+    'notifications/tools/list_changed';
+const String mcpMethodTasksGet = 'tasks/get';
+const String mcpMethodTasksResult = 'tasks/result';
+const String mcpMethodTasksCancel = 'tasks/cancel';
+const String mcpMethodTasksList = 'tasks/list';
+const String mcpMethodTasksStatusNotification = 'notifications/tasks/status';
+const String mcpMethodLoggingSetLevel = 'logging/setLevel';
+const String mcpMethodLoggingMessageNotification = 'notifications/message';
+const String mcpMethodSamplingCreateMessage = 'sampling/createMessage';
+const String mcpMethodCompletionComplete = 'completion/complete';
+const String mcpMethodRootsList = 'roots/list';
+const String mcpMethodRootsListChangedNotification =
+    'notifications/roots/list_changed';
+const String mcpMethodElicitationCreate = 'elicitation/create';
+const String mcpMethodElicitationCompleteNotification =
+    'notifications/elicitation/complete';
+const String mcpMethodCancelledNotification = 'notifications/cancelled';

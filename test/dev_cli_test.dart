@@ -45,6 +45,37 @@ void main() {
 
       expect(command.type, AdkCommandType.web);
       expect(command.port, 8100);
+      expect(command.enableWebUi, isFalse);
+    });
+
+    test('parses parity web options', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'web',
+        '--allow_origins',
+        'https://example.com,regex:https://.*\\.example\\.org',
+        '--url_prefix',
+        '/adk',
+        '--session_service_uri',
+        'memory://',
+        '--artifact_service_uri',
+        'memory://',
+        '--memory_service_uri',
+        'memory://',
+        '--no-use_local_storage',
+        '--auto_create_session',
+      ]);
+
+      expect(command.allowOrigins, <String>[
+        'https://example.com',
+        'regex:https://.*\\.example\\.org',
+      ]);
+      expect(command.urlPrefix, '/adk');
+      expect(command.sessionServiceUri, 'memory://');
+      expect(command.artifactServiceUri, 'memory://');
+      expect(command.memoryServiceUri, 'memory://');
+      expect(command.useLocalStorage, isFalse);
+      expect(command.autoCreateSession, isTrue);
+      expect(command.enableWebUi, isTrue);
     });
 
     test('parses web command with explicit port', () {

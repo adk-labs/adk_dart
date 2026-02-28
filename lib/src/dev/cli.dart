@@ -30,6 +30,15 @@ Web options:
   -p, --port            Port to bind (default: 8000)
       --host            Host to bind (default: 127.0.0.1)
       --user-id         User id used by default web session
+      --allow_origins   CORS origins (repeatable, supports regex: prefix)
+      --url_prefix      URL prefix (example: /adk)
+      --session_service_uri
+      --artifact_service_uri
+      --memory_service_uri
+      --use_local_storage / --no-use_local_storage
+      --auto_create_session
+      --logo_text
+      --logo_image_url
   -h, --help            Show this help message.
 ''';
 
@@ -50,6 +59,22 @@ class ParsedAdkCommand {
       port = null,
       host = null,
       userId = null,
+      allowOrigins = const <String>[],
+      sessionServiceUri = null,
+      artifactServiceUri = null,
+      memoryServiceUri = null,
+      useLocalStorage = true,
+      urlPrefix = null,
+      traceToCloud = false,
+      otelToCloud = false,
+      reload = true,
+      a2a = false,
+      reloadAgents = false,
+      extraPlugins = const <String>[],
+      logoText = null,
+      logoImageUrl = null,
+      autoCreateSession = false,
+      enableWebUi = true,
       sessionId = null,
       message = null;
 
@@ -61,13 +86,45 @@ class ParsedAdkCommand {
   }) : type = AdkCommandType.run,
        appName = null,
        port = null,
-       host = null;
+       host = null,
+       allowOrigins = const <String>[],
+       sessionServiceUri = null,
+       artifactServiceUri = null,
+       memoryServiceUri = null,
+       useLocalStorage = true,
+       urlPrefix = null,
+       traceToCloud = false,
+       otelToCloud = false,
+       reload = true,
+       a2a = false,
+       reloadAgents = false,
+       extraPlugins = const <String>[],
+       logoText = null,
+       logoImageUrl = null,
+       autoCreateSession = false,
+       enableWebUi = true;
 
   ParsedAdkCommand.web({
     required this.projectDir,
     required this.port,
     required this.host,
     this.userId,
+    required this.allowOrigins,
+    this.sessionServiceUri,
+    this.artifactServiceUri,
+    this.memoryServiceUri,
+    required this.useLocalStorage,
+    this.urlPrefix,
+    required this.traceToCloud,
+    required this.otelToCloud,
+    required this.reload,
+    required this.a2a,
+    required this.reloadAgents,
+    required this.extraPlugins,
+    this.logoText,
+    this.logoImageUrl,
+    required this.autoCreateSession,
+    required this.enableWebUi,
   }) : type = AdkCommandType.web,
        appName = null,
        sessionId = null,
@@ -79,6 +136,22 @@ class ParsedAdkCommand {
   final int? port;
   final InternetAddress? host;
   final String? userId;
+  final List<String> allowOrigins;
+  final String? sessionServiceUri;
+  final String? artifactServiceUri;
+  final String? memoryServiceUri;
+  final bool useLocalStorage;
+  final String? urlPrefix;
+  final bool traceToCloud;
+  final bool otelToCloud;
+  final bool reload;
+  final bool a2a;
+  final bool reloadAgents;
+  final List<String> extraPlugins;
+  final String? logoText;
+  final String? logoImageUrl;
+  final bool autoCreateSession;
+  final bool enableWebUi;
   final String? sessionId;
   final String? message;
 }
@@ -97,8 +170,9 @@ ParsedAdkCommand parseAdkCliArgs(List<String> args) {
     case 'run':
       return _parseRunCommand(commandArgs);
     case 'web':
+      return _parseWebCommand(commandArgs, enableWebUi: true);
     case 'api_server':
-      return _parseWebCommand(commandArgs);
+      return _parseWebCommand(commandArgs, enableWebUi: false);
     default:
       throw CliUsageError('Unknown command: $command');
   }
@@ -245,11 +319,31 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
   );
 }
 
-ParsedAdkCommand _parseWebCommand(List<String> args) {
+ParsedAdkCommand _parseWebCommand(
+  List<String> args, {
+  required bool enableWebUi,
+}) {
   int port = 8000;
   InternetAddress host = InternetAddress.loopbackIPv4;
   String projectDir = '.';
   String? userId;
+  final List<String> allowOrigins = <String>[];
+  String? sessionServiceUri;
+  String? artifactServiceUri;
+  String? memoryServiceUri;
+  String? deprecatedSessionDbUrl;
+  String? deprecatedArtifactStorageUri;
+  bool useLocalStorage = true;
+  String? urlPrefix;
+  bool traceToCloud = false;
+  bool otelToCloud = false;
+  bool reload = true;
+  bool a2a = false;
+  bool reloadAgents = false;
+  final List<String> extraPlugins = <String>[];
+  String? logoText;
+  String? logoImageUrl;
+  bool autoCreateSession = false;
   bool seenProjectDir = false;
 
   for (int i = 0; i < args.length; i += 1) {
@@ -281,6 +375,156 @@ ParsedAdkCommand _parseWebCommand(List<String> args) {
       userId = arg.substring('--user-id='.length);
       continue;
     }
+    if (arg == '--allow_origins') {
+      allowOrigins.add(_nextArg(args, i, '--allow_origins').trim());
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--allow_origins=')) {
+      allowOrigins.add(arg.substring('--allow_origins='.length).trim());
+      continue;
+    }
+    if (arg == '--session_service_uri') {
+      sessionServiceUri = _nextArg(args, i, '--session_service_uri').trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--session_service_uri=')) {
+      sessionServiceUri = arg.substring('--session_service_uri='.length).trim();
+      continue;
+    }
+    if (arg == '--artifact_service_uri') {
+      artifactServiceUri = _nextArg(args, i, '--artifact_service_uri').trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--artifact_service_uri=')) {
+      artifactServiceUri = arg
+          .substring('--artifact_service_uri='.length)
+          .trim();
+      continue;
+    }
+    if (arg == '--memory_service_uri') {
+      memoryServiceUri = _nextArg(args, i, '--memory_service_uri').trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--memory_service_uri=')) {
+      memoryServiceUri = arg.substring('--memory_service_uri='.length).trim();
+      continue;
+    }
+    if (arg == '--session_db_url') {
+      deprecatedSessionDbUrl = _nextArg(args, i, '--session_db_url').trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--session_db_url=')) {
+      deprecatedSessionDbUrl = arg.substring('--session_db_url='.length).trim();
+      continue;
+    }
+    if (arg == '--artifact_storage_uri') {
+      deprecatedArtifactStorageUri = _nextArg(
+        args,
+        i,
+        '--artifact_storage_uri',
+      ).trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--artifact_storage_uri=')) {
+      deprecatedArtifactStorageUri = arg
+          .substring('--artifact_storage_uri='.length)
+          .trim();
+      continue;
+    }
+    if (arg == '--url_prefix') {
+      urlPrefix = _normalizeUrlPrefix(_nextArg(args, i, '--url_prefix'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--url_prefix=')) {
+      urlPrefix = _normalizeUrlPrefix(arg.substring('--url_prefix='.length));
+      continue;
+    }
+    if (arg == '--extra_plugins') {
+      extraPlugins.add(_nextArg(args, i, '--extra_plugins').trim());
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--extra_plugins=')) {
+      extraPlugins.add(arg.substring('--extra_plugins='.length).trim());
+      continue;
+    }
+    if (arg == '--logo_text') {
+      logoText = _nextArg(args, i, '--logo_text').trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--logo_text=')) {
+      logoText = arg.substring('--logo_text='.length).trim();
+      continue;
+    }
+    if (arg == '--logo_image_url') {
+      logoImageUrl = _nextArg(args, i, '--logo_image_url').trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--logo_image_url=')) {
+      logoImageUrl = arg.substring('--logo_image_url='.length).trim();
+      continue;
+    }
+    if (arg == '--use_local_storage') {
+      useLocalStorage = true;
+      continue;
+    }
+    if (arg == '--no-use_local_storage') {
+      useLocalStorage = false;
+      continue;
+    }
+    if (arg == '--trace_to_cloud') {
+      traceToCloud = true;
+      continue;
+    }
+    if (arg == '--otel_to_cloud') {
+      otelToCloud = true;
+      continue;
+    }
+    if (arg == '--reload') {
+      reload = true;
+      continue;
+    }
+    if (arg == '--no-reload') {
+      reload = false;
+      continue;
+    }
+    if (arg == '--a2a') {
+      a2a = true;
+      continue;
+    }
+    if (arg == '--reload_agents') {
+      reloadAgents = true;
+      continue;
+    }
+    if (arg == '--auto_create_session') {
+      autoCreateSession = true;
+      continue;
+    }
+    if (arg == '--eval_storage_uri') {
+      _nextArg(args, i, '--eval_storage_uri');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--eval_storage_uri=')) {
+      continue;
+    }
+    if (arg == '--log_level' || arg == '--verbosity') {
+      _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      continue;
+    }
     if (arg.startsWith('-')) {
       throw CliUsageError('Unknown option for web: $arg');
     }
@@ -291,11 +535,30 @@ ParsedAdkCommand _parseWebCommand(List<String> args) {
     seenProjectDir = true;
   }
 
+  sessionServiceUri ??= deprecatedSessionDbUrl;
+  artifactServiceUri ??= deprecatedArtifactStorageUri;
+
   return ParsedAdkCommand.web(
     projectDir: projectDir,
     port: port,
     host: host,
     userId: _emptyToNull(userId),
+    allowOrigins: _normalizeCsvValues(allowOrigins),
+    sessionServiceUri: _emptyToNull(sessionServiceUri),
+    artifactServiceUri: _emptyToNull(artifactServiceUri),
+    memoryServiceUri: _emptyToNull(memoryServiceUri),
+    useLocalStorage: useLocalStorage,
+    urlPrefix: _emptyToNull(urlPrefix),
+    traceToCloud: traceToCloud,
+    otelToCloud: otelToCloud,
+    reload: reload,
+    a2a: a2a,
+    reloadAgents: reloadAgents,
+    extraPlugins: _normalizeCsvValues(extraPlugins),
+    logoText: _emptyToNull(logoText),
+    logoImageUrl: _emptyToNull(logoImageUrl),
+    autoCreateSession: autoCreateSession,
+    enableWebUi: enableWebUi,
   );
 }
 
@@ -335,6 +598,35 @@ InternetAddress _parseHost(String rawHost) {
     throw CliUsageError('Invalid host: $rawHost');
   }
   return host;
+}
+
+List<String> _normalizeCsvValues(List<String> values) {
+  final List<String> expanded = <String>[];
+  for (final String value in values) {
+    final List<String> parts = value
+        .split(',')
+        .map((String item) => item.trim())
+        .where((String item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isNotEmpty) {
+      expanded.addAll(parts);
+    }
+  }
+  return expanded;
+}
+
+String _normalizeUrlPrefix(String raw) {
+  final String trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  if (!trimmed.startsWith('/')) {
+    throw CliUsageError('url_prefix must start with "/": $trimmed');
+  }
+  if (trimmed.length > 1 && trimmed.endsWith('/')) {
+    return trimmed.substring(0, trimmed.length - 1);
+  }
+  return trimmed;
 }
 
 Future<int> _runCreateCommand(ParsedAdkCommand command, IOSink out) async {
@@ -440,8 +732,19 @@ Future<int> _runWebCommand(
     server = await startAdkDevWebServer(
       runtime: runtime,
       project: config,
+      agentsDir: command.projectDir,
       port: command.port!,
       host: command.host!,
+      allowOrigins: command.allowOrigins,
+      sessionServiceUri: command.sessionServiceUri,
+      artifactServiceUri: command.artifactServiceUri,
+      memoryServiceUri: command.memoryServiceUri,
+      useLocalStorage: command.useLocalStorage,
+      urlPrefix: command.urlPrefix,
+      autoCreateSession: command.autoCreateSession,
+      enableWebUi: command.enableWebUi,
+      logoText: command.logoText,
+      logoImageUrl: command.logoImageUrl,
     );
   } on SocketException catch (error) {
     err.writeln(
@@ -452,8 +755,23 @@ Future<int> _runWebCommand(
   }
 
   out.writeln(
-    'ADK web server is running on http://${_displayHost(server.address)}:${server.port}',
+    'ADK web server is running on '
+    'http://${_displayHost(server.address)}:${server.port}${command.urlPrefix ?? ''}',
   );
+  if (!command.enableWebUi) {
+    out.writeln('UI is disabled for api_server mode.');
+  }
+  if (command.traceToCloud ||
+      command.otelToCloud ||
+      command.reloadAgents ||
+      command.a2a ||
+      command.extraPlugins.isNotEmpty ||
+      !command.reload) {
+    out.writeln(
+      'Some options are accepted for CLI parity but are not fully implemented '
+      '(trace/otel/reload_agents/a2a/extra_plugins/reload).',
+    );
+  }
   out.writeln('Press Ctrl+C to stop.');
 
   final List<StreamSubscription<ProcessSignal>> signalSubscriptions =

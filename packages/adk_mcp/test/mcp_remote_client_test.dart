@@ -979,4 +979,167 @@ void main() {
     expect(streamed.single.params['data'], 'hello');
     expect(notifications, hasLength(1));
   });
+
+  test('handles sampling and elicitation server requests via callback', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    final Completer<Map<String, Object?>> samplingResponseCompleter =
+        Completer<Map<String, Object?>>();
+    final Completer<Map<String, Object?>> elicitationResponseCompleter =
+        Completer<Map<String, Object?>>();
+
+    server.listen((HttpRequest request) async {
+      final Map<String, Object?> rpc = await _readRpc(request);
+      final String method = '${rpc['method'] ?? ''}';
+      final Object? id = rpc['id'];
+
+      if (method.isEmpty && id != null) {
+        if ('$id' == 'srv-sampling-1' &&
+            !samplingResponseCompleter.isCompleted) {
+          samplingResponseCompleter.complete(rpc);
+        }
+        if ('$id' == 'srv-elicit-1' &&
+            !elicitationResponseCompleter.isCompleted) {
+          elicitationResponseCompleter.complete(rpc);
+        }
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      switch (method) {
+        case 'initialize':
+          await _respondJsonRpc(
+            request,
+            id: id,
+            result: <String, Object?>{
+              'protocolVersion': '2025-11-25',
+              'capabilities': <String, Object?>{'tools': <String, Object?>{}},
+            },
+            headers: <String, String>{'MCP-Session-Id': 'session-main'},
+          );
+          return;
+        case 'notifications/initialized':
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          return;
+        case 'tools/list':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'text/event-stream',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': 'srv-sampling-1',
+              'method': 'sampling/createMessage',
+              'params': <String, Object?>{
+                'messages': <Map<String, Object?>>[
+                  <String, Object?>{
+                    'role': 'user',
+                    'content': <String, Object?>{'type': 'text', 'text': 'hello'},
+                  },
+                ],
+              },
+            })}\n\n',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': 'srv-elicit-1',
+              'method': 'elicitation/create',
+              'params': <String, Object?>{
+                'mode': 'form',
+                'message': 'Need email',
+                'requestedSchema': <String, Object?>{
+                  'type': 'object',
+                  'properties': <String, Object?>{
+                    'email': <String, Object?>{'type': 'string', 'format': 'email'},
+                  },
+                  'required': <String>['email'],
+                },
+              },
+            })}\n\n',
+          );
+          request.response.write(
+            'data: ${jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': id,
+              'result': <String, Object?>{
+                'tools': <Map<String, Object?>>[
+                  <String, Object?>{'name': 'echo'},
+                ],
+              },
+            })}\n\n',
+          );
+          await request.response.close();
+          return;
+        default:
+          await _respondJsonRpc(
+            request,
+            id: id,
+            error: <String, Object?>{
+              'code': -32601,
+              'message': 'Method not found: $method',
+            },
+          );
+      }
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+      onServerRequest: (McpServerMessage request) {
+        if (request.method == 'sampling/createMessage') {
+          return <String, Object?>{
+            'model': 'test-model',
+            'role': 'assistant',
+            'content': <String, Object?>{'type': 'text', 'text': 'sampled'},
+            'stopReason': 'endTurn',
+          };
+        }
+        if (request.method == 'elicitation/create') {
+          return <String, Object?>{
+            'action': 'accept',
+            'content': <String, Object?>{'email': 'user@example.com'},
+          };
+        }
+        return const <String, Object?>{};
+      },
+    );
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+
+    final List<Map<String, Object?>> tools = await client.listTools(
+      connectionParams: connectionParams,
+    );
+    expect(tools.single['name'], 'echo');
+
+    final Map<String, Object?> samplingResponse =
+        await samplingResponseCompleter.future.timeout(
+          const Duration(seconds: 1),
+        );
+    expect(samplingResponse['id'], 'srv-sampling-1');
+    expect(
+      (samplingResponse['result'] as Map<String, Object?>)['model'],
+      'test-model',
+    );
+
+    final Map<String, Object?> elicitationResponse =
+        await elicitationResponseCompleter.future.timeout(
+          const Duration(seconds: 1),
+        );
+    expect(elicitationResponse['id'], 'srv-elicit-1');
+    expect(
+      (elicitationResponse['result'] as Map<String, Object?>)['action'],
+      'accept',
+    );
+  });
 }

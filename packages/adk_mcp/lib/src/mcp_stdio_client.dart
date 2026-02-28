@@ -5,6 +5,7 @@ import 'dart:io';
 import 'mcp_remote_client.dart'
     show
         McpJsonRpcException,
+        mcpLoggingLevels,
         McpServerMessage,
         McpServerMessageHandler,
         McpServerRequestException,
@@ -314,6 +315,350 @@ class McpStdioClient {
     });
   }
 
+  Future<Map<String, Object?>> ping({
+    required StdioConnectionParams connectionParams,
+    Map<String, Object?> params = const <String, Object?>{},
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'ping',
+      params: params,
+    );
+  }
+
+  Future<Map<String, Object?>> complete({
+    required StdioConnectionParams connectionParams,
+    required Map<String, Object?> ref,
+    required Object? argument,
+    Map<String, Object?>? context,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'completion/complete',
+      params: <String, Object?>{
+        'ref': ref,
+        'argument': <String, Object?>{'value': argument},
+        if (context != null && context.isNotEmpty) 'context': context,
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> setLoggingLevel({
+    required StdioConnectionParams connectionParams,
+    required String level,
+  }) async {
+    _validateLoggingLevel(level);
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'logging/setLevel',
+      params: <String, Object?>{'level': level},
+    );
+  }
+
+  Future<Map<String, Object?>> listResourcesPage({
+    required StdioConnectionParams connectionParams,
+    String? cursor,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listResources({
+    required StdioConnectionParams connectionParams,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'resources/list',
+      resultArrayField: 'resources',
+    );
+  }
+
+  Future<Map<String, Object?>> listResourceTemplatesPage({
+    required StdioConnectionParams connectionParams,
+    String? cursor,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/templates/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listResourceTemplates({
+    required StdioConnectionParams connectionParams,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'resources/templates/list',
+      resultArrayField: 'resourceTemplates',
+    );
+  }
+
+  Future<Map<String, Object?>> readResource({
+    required StdioConnectionParams connectionParams,
+    required String uri,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/read',
+      params: <String, Object?>{'uri': uri},
+    );
+  }
+
+  Future<Map<String, Object?>> subscribeResource({
+    required StdioConnectionParams connectionParams,
+    required String uri,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/subscribe',
+      params: <String, Object?>{'uri': uri},
+    );
+  }
+
+  Future<Map<String, Object?>> unsubscribeResource({
+    required StdioConnectionParams connectionParams,
+    required String uri,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'resources/unsubscribe',
+      params: <String, Object?>{'uri': uri},
+    );
+  }
+
+  Future<Map<String, Object?>> listPromptsPage({
+    required StdioConnectionParams connectionParams,
+    String? cursor,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'prompts/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listPrompts({
+    required StdioConnectionParams connectionParams,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'prompts/list',
+      resultArrayField: 'prompts',
+    );
+  }
+
+  Future<Map<String, Object?>> getPrompt({
+    required StdioConnectionParams connectionParams,
+    required String name,
+    Map<String, String>? arguments,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'prompts/get',
+      params: <String, Object?>{
+        'name': name,
+        if (arguments != null && arguments.isNotEmpty) 'arguments': arguments,
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> listToolsPage({
+    required StdioConnectionParams connectionParams,
+    String? cursor,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tools/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listTools({
+    required StdioConnectionParams connectionParams,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'tools/list',
+      resultArrayField: 'tools',
+    );
+  }
+
+  Future<Map<String, Object?>> callTool({
+    required StdioConnectionParams connectionParams,
+    required String name,
+    Map<String, Object?> arguments = const <String, Object?>{},
+    Map<String, Object?>? task,
+    Map<String, Object?>? meta,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tools/call',
+      params: <String, Object?>{
+        'name': name,
+        if (arguments.isNotEmpty) 'arguments': arguments,
+        if (task != null && task.isNotEmpty) 'task': task,
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> getTask({
+    required StdioConnectionParams connectionParams,
+    required String taskId,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/get',
+      params: <String, Object?>{'taskId': taskId},
+    );
+  }
+
+  Future<Map<String, Object?>> getTaskResult({
+    required StdioConnectionParams connectionParams,
+    required String taskId,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/result',
+      params: <String, Object?>{'taskId': taskId},
+    );
+  }
+
+  Future<Map<String, Object?>> cancelTask({
+    required StdioConnectionParams connectionParams,
+    required String taskId,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/cancel',
+      params: <String, Object?>{'taskId': taskId},
+    );
+  }
+
+  Future<Map<String, Object?>> listTasksPage({
+    required StdioConnectionParams connectionParams,
+    String? cursor,
+  }) async {
+    return _callMap(
+      connectionParams: connectionParams,
+      method: 'tasks/list',
+      params: <String, Object?>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+  }
+
+  Future<List<Map<String, Object?>>> listTasks({
+    required StdioConnectionParams connectionParams,
+  }) {
+    return collectPaginatedMaps(
+      connectionParams: connectionParams,
+      method: 'tasks/list',
+      resultArrayField: 'tasks',
+    );
+  }
+
+  Future<void> notifyCancelledRequest({
+    required StdioConnectionParams connectionParams,
+    required Object requestId,
+    String? reason,
+    Map<String, Object?>? meta,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/cancelled',
+      params: <String, Object?>{
+        'requestId': requestId,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+    );
+  }
+
+  Future<void> notifyProgress({
+    required StdioConnectionParams connectionParams,
+    required Object progressToken,
+    required num progress,
+    num? total,
+    String? message,
+    Map<String, Object?>? meta,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/progress',
+      params: <String, Object?>{
+        'progressToken': progressToken,
+        'progress': progress,
+        ...?total == null ? null : <String, Object?>{'total': total},
+        if (message != null && message.trim().isNotEmpty) 'message': message,
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+    );
+  }
+
+  Future<void> notifyRootsListChanged({
+    required StdioConnectionParams connectionParams,
+    Map<String, Object?>? meta,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/roots/list_changed',
+      params: <String, Object?>{
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+    );
+  }
+
+  Future<void> notifyTaskStatus({
+    required StdioConnectionParams connectionParams,
+    required Map<String, Object?> status,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/tasks/status',
+      params: status,
+    );
+  }
+
+  Future<void> sendInitializedNotification({
+    required StdioConnectionParams connectionParams,
+    Map<String, Object?>? meta,
+  }) {
+    return notify(
+      connectionParams: connectionParams,
+      method: 'notifications/initialized',
+      params: <String, Object?>{
+        if (meta != null && meta.isNotEmpty) '_meta': meta,
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> _callMap({
+    required StdioConnectionParams connectionParams,
+    required String method,
+    required Map<String, Object?> params,
+  }) async {
+    return _asStringObjectMap(
+      await call(
+        connectionParams: connectionParams,
+        method: method,
+        params: params,
+      ),
+    );
+  }
+
   Future<void> close({bool killProcess = true}) async {
     _closing = true;
     _initialized = false;
@@ -614,4 +959,14 @@ int? _asInt(Object? value) {
     return int.tryParse(value.trim());
   }
   return null;
+}
+
+void _validateLoggingLevel(String level) {
+  if (!mcpLoggingLevels.contains(level)) {
+    throw ArgumentError(
+      'Invalid MCP logging level: $level. '
+          'Expected one of: ${mcpLoggingLevels.join(', ')}',
+      'level',
+    );
+  }
 }
