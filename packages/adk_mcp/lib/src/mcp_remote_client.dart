@@ -322,6 +322,172 @@ class McpRemoteClient {
     );
   }
 
+  Future<void> terminateSession({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+    bool allowMethodNotAllowed = true,
+  }) async {
+    final String url = connectionParams.url;
+    final String? sessionId = _sessionIdByUrl[url];
+    if (sessionId == null || sessionId.isEmpty) {
+      return;
+    }
+
+    final Uri uri = Uri.parse(connectionParams.url);
+    final String protocolVersion =
+        _negotiatedProtocolVersionByUrl[url] ?? latestProtocolVersion;
+    final Map<String, String> mergedHeaders = <String, String>{
+      ...connectionParams.headers,
+      if (headers != null) ...headers,
+      'MCP-Session-Id': sessionId,
+      'MCP-Protocol-Version': protocolVersion,
+      HttpHeaders.acceptHeader: 'application/json, text/event-stream',
+    };
+
+    final http.Client client = _httpClientFactory();
+    try {
+      final http.Response response = await client
+          .delete(uri, headers: mergedHeaders)
+          .timeout(requestTimeout);
+      if (response.statusCode == HttpStatus.methodNotAllowed &&
+          allowMethodNotAllowed) {
+        _resetRemoteSession(url);
+        return;
+      }
+      if (response.statusCode >= 400) {
+        throw McpHttpStatusException(
+          uri: uri,
+          statusCode: response.statusCode,
+          body: response.body,
+        );
+      }
+      _resetRemoteSession(url);
+    } finally {
+      client.close();
+    }
+  }
+
+  Stream<McpServerMessage> readServerMessagesOnce({
+    required StreamableHTTPConnectionParams connectionParams,
+    Map<String, String>? headers,
+    String? lastEventId,
+  }) async* {
+    await ensureInitialized(connectionParams, headers: headers);
+
+    final String url = connectionParams.url;
+    final String protocolVersion =
+        _negotiatedProtocolVersionByUrl[url] ?? latestProtocolVersion;
+
+    final HttpClient client = HttpClient();
+    final Uri uri = Uri.parse(connectionParams.url);
+    final HttpClientRequest request = await client.getUrl(uri);
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    request.headers.set('MCP-Protocol-Version', protocolVersion);
+    final String? sessionId = _sessionIdByUrl[url];
+    if (sessionId != null && sessionId.isNotEmpty) {
+      request.headers.set('MCP-Session-Id', sessionId);
+    }
+    connectionParams.headers.forEach(request.headers.set);
+    headers?.forEach(request.headers.set);
+    if (lastEventId != null && lastEventId.trim().isNotEmpty) {
+      request.headers.set('Last-Event-ID', lastEventId.trim());
+    }
+
+    final HttpClientResponse response = await request.close();
+    if (response.statusCode >= 400) {
+      final String body = await utf8.decoder.bind(response).join();
+      throw McpHttpStatusException(
+        uri: uri,
+        statusCode: response.statusCode,
+        body: body,
+      );
+    }
+
+    final String contentType =
+        response.headers.value(HttpHeaders.contentTypeHeader)?.toLowerCase() ??
+        '';
+    if (!contentType.contains('text/event-stream')) {
+      final String body = await utf8.decoder.bind(response).join();
+      throw FormatException(
+        'Expected text/event-stream for GET server messages, got `$contentType` '
+        'with body: $body',
+      );
+    }
+
+    final List<String> dataLines = <String>[];
+    Future<McpServerMessage?> flush() async {
+      if (dataLines.isEmpty) {
+        return null;
+      }
+      final String payload = dataLines.join('\n').trim();
+      dataLines.clear();
+      if (payload.isEmpty) {
+        return null;
+      }
+      Object? decoded;
+      try {
+        decoded = jsonDecode(payload);
+      } catch (_) {
+        return null;
+      }
+      if (decoded is! Map) {
+        return null;
+      }
+      final Map<String, Object?> map = decoded.map(
+        (Object? key, Object? value) =>
+            MapEntry<String, Object?>('$key', value),
+      );
+      if (_isRequestObject(map)) {
+        await _handleIncomingRequest(url, map);
+        return null;
+      }
+      if (_isResponseObject(map)) {
+        return null;
+      }
+      final String method = _asString(map['method']).trim();
+      if (method.isEmpty) {
+        return null;
+      }
+      final McpServerMessage message = McpServerMessage(
+        url: url,
+        method: method,
+        params: _asStringObjectMap(map['params']),
+        id: map['id'],
+      );
+      onServerMessage?.call(message);
+      return message;
+    }
+
+    try {
+      await for (final String line
+          in response.transform(utf8.decoder).transform(const LineSplitter())) {
+        if (line.isEmpty) {
+          final McpServerMessage? message = await flush();
+          if (message != null) {
+            yield message;
+          }
+          continue;
+        }
+        if (line.startsWith(':')) {
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          String data = line.substring(5);
+          if (data.startsWith(' ')) {
+            data = data.substring(1);
+          }
+          dataLines.add(data);
+        }
+      }
+      final McpServerMessage? message = await flush();
+      if (message != null) {
+        yield message;
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<Map<String, Object?>> ping({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, Object?> params = const <String, Object?>{},

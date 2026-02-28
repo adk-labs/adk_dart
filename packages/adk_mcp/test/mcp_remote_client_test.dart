@@ -836,4 +836,147 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('terminates session with DELETE and session headers', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    final Map<String, String> deleteHeaders = <String, String>{};
+    server.listen((HttpRequest request) async {
+      if (request.method == 'DELETE') {
+        request.headers.forEach((String name, List<String> values) {
+          deleteHeaders[name.toLowerCase()] = values.join(', ');
+        });
+        request.response.statusCode = HttpStatus.ok;
+        await request.response.close();
+        return;
+      }
+
+      final Map<String, Object?> rpc = await _readRpc(request);
+      final String method = '${rpc['method'] ?? ''}';
+      final Object? id = rpc['id'];
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: id,
+          result: <String, Object?>{
+            'protocolVersion': '2025-11-25',
+            'capabilities': <String, Object?>{},
+          },
+          headers: <String, String>{'MCP-Session-Id': 'delete-session-id'},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+      await _respondJsonRpc(
+        request,
+        id: id,
+        error: <String, Object?>{
+          'code': -32601,
+          'message': 'Method not found: $method',
+        },
+      );
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+    );
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+
+    await client.ensureInitialized(connectionParams);
+    expect(client.sessionId(connectionParams), 'delete-session-id');
+
+    await client.terminateSession(connectionParams: connectionParams);
+    expect(deleteHeaders['mcp-session-id'], 'delete-session-id');
+    expect(deleteHeaders['mcp-protocol-version'], '2025-11-25');
+    expect(client.sessionId(connectionParams), isNull);
+  });
+
+  test('reads server notifications from GET SSE stream', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    server.listen((HttpRequest request) async {
+      if (request.method == 'GET') {
+        request.response.statusCode = HttpStatus.ok;
+        request.response.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'text/event-stream',
+        );
+        request.response.write(
+          'data: ${jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'method': 'notifications/message',
+            'params': <String, Object?>{'level': 'info', 'data': 'hello'},
+          })}\n\n',
+        );
+        await request.response.close();
+        return;
+      }
+
+      final Map<String, Object?> rpc = await _readRpc(request);
+      final String method = '${rpc['method'] ?? ''}';
+      final Object? id = rpc['id'];
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: id,
+          result: <String, Object?>{
+            'protocolVersion': '2025-11-25',
+            'capabilities': <String, Object?>{},
+          },
+          headers: <String, String>{'MCP-Session-Id': 'stream-session-id'},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+      await _respondJsonRpc(
+        request,
+        id: id,
+        error: <String, Object?>{
+          'code': -32601,
+          'message': 'Method not found: $method',
+        },
+      );
+    });
+
+    final List<McpServerMessage> notifications = <McpServerMessage>[];
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+      onServerMessage: notifications.add,
+    );
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+
+    final List<McpServerMessage> streamed = await client
+        .readServerMessagesOnce(connectionParams: connectionParams)
+        .toList();
+
+    expect(streamed, hasLength(1));
+    expect(streamed.single.method, 'notifications/message');
+    expect(streamed.single.params['level'], 'info');
+    expect(streamed.single.params['data'], 'hello');
+    expect(notifications, hasLength(1));
+  });
 }
