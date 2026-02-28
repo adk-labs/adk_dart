@@ -175,7 +175,11 @@ void main() {
     test('service-account exchanger uses injected token resolver', () async {
       final ServiceAccountCredentialExchanger exchanger =
           ServiceAccountCredentialExchanger(
-            tokenResolver: (ServiceAccountAuth _) async => 'sa-token',
+            tokenResolver: (ServiceAccountAuth serviceAccount) async {
+              expect(serviceAccount.useIdToken, isTrue);
+              expect(serviceAccount.audience, 'https://svc.run.app');
+              return 'sa-token';
+            },
           );
       final AuthCredential? exchanged = await exchanger.exchangeCredential(
         SecurityScheme(type: AuthSchemeType.http),
@@ -191,11 +195,17 @@ void main() {
               authUri: 'https://accounts.google.com/o/oauth2/auth',
               tokenUri: 'https://oauth2.googleapis.com/token',
             ),
+            useIdToken: true,
+            audience: 'https://svc.run.app',
           ),
         ),
       );
       expect(exchanged?.authType, AuthCredentialType.http);
       expect(exchanged?.http?.credentials.token, 'sa-token');
+    });
+
+    test('service account auth validates audience for ID token flow', () {
+      expect(() => ServiceAccountAuth(useIdToken: true), throwsArgumentError);
     });
 
     test('auto exchanger dispatches by credential type', () async {

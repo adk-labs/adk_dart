@@ -273,8 +273,31 @@ class RestApiTool extends BaseTool {
     final String normalizedBaseUrl = endpoint.baseUrl.endsWith('/')
         ? endpoint.baseUrl.substring(0, endpoint.baseUrl.length - 1)
         : endpoint.baseUrl;
-    final String url =
-        '$normalizedBaseUrl${_formatPath(endpoint.path, pathParams)}';
+    String url = '$normalizedBaseUrl${_formatPath(endpoint.path, pathParams)}';
+
+    // Preserve query params that may be embedded in the OpenAPI path itself.
+    final Uri parsedUrl = Uri.parse(url);
+    if (parsedUrl.hasQuery || parsedUrl.fragment.isNotEmpty) {
+      parsedUrl.queryParametersAll.forEach((String key, List<String> values) {
+        queryParams.putIfAbsent(
+          key,
+          () => values.length == 1 ? values.first : values,
+        );
+      });
+      final int queryStart = url.indexOf('?');
+      final int fragmentStart = url.indexOf('#');
+      int trimIndex = -1;
+      if (queryStart >= 0 && fragmentStart >= 0) {
+        trimIndex = queryStart < fragmentStart ? queryStart : fragmentStart;
+      } else if (queryStart >= 0) {
+        trimIndex = queryStart;
+      } else if (fragmentStart >= 0) {
+        trimIndex = fragmentStart;
+      }
+      if (trimIndex >= 0) {
+        url = url.substring(0, trimIndex);
+      }
+    }
 
     final Map<String, Object?> bodyKwargs = <String, Object?>{};
     final Map<String, Object?> requestBody = _readMap(operation['requestBody']);
@@ -819,6 +842,8 @@ ServiceAccountAuth? _parseServiceAccount(Object? value) {
     useDefaultCredential: _readBool(
       map['useDefaultCredential'] ?? map['use_default_credential'],
     ),
+    useIdToken: _readBool(map['useIdToken'] ?? map['use_id_token']),
+    audience: _readString(map['audience']),
   );
 }
 

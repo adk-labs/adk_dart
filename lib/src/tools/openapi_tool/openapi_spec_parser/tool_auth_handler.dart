@@ -424,6 +424,8 @@ Object? _authCredentialToPrimitive(AuthCredential credential) {
               },
         'scopes': List<String>.from(serviceAccount.scopes),
         'useDefaultCredential': serviceAccount.useDefaultCredential,
+        'useIdToken': serviceAccount.useIdToken,
+        'audience': serviceAccount.audience,
       },
   };
 }
@@ -591,6 +593,8 @@ ServiceAccountAuth? _serviceAccountFromObject(Object? value) {
     useDefaultCredential: _readBool(
       map['useDefaultCredential'] ?? map['use_default_credential'],
     ),
+    useIdToken: _readBool(map['useIdToken'] ?? map['use_id_token']) ?? false,
+    audience: _readString(map['audience']),
   );
 }
 

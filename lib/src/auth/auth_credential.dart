@@ -79,11 +79,22 @@ class ServiceAccountAuth {
     this.serviceAccountCredential,
     List<String>? scopes,
     this.useDefaultCredential = false,
-  }) : scopes = scopes ?? <String>[];
+    this.useIdToken = false,
+    this.audience,
+  }) : scopes = scopes ?? <String>[] {
+    if (useIdToken && (audience == null || audience!.isEmpty)) {
+      throw ArgumentError(
+        'audience is required when useIdToken is true. '
+        'Set it to the target service URL.',
+      );
+    }
+  }
 
   ServiceAccountCredential? serviceAccountCredential;
   List<String> scopes;
   bool useDefaultCredential;
+  bool useIdToken;
+  String? audience;
 }
 
 class AuthCredential {

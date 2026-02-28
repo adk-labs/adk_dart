@@ -150,6 +150,8 @@ ServiceAccountAuth? _copyServiceAccountAuth(
     ),
     scopes: List<String>.from(serviceAccount.scopes),
     useDefaultCredential: serviceAccount.useDefaultCredential,
+    useIdToken: serviceAccount.useIdToken,
+    audience: serviceAccount.audience,
   );
 }
 

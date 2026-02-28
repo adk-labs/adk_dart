@@ -388,6 +388,11 @@ class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
           _readBool(map['useDefaultCredential']) ??
           _readBool(map['use_default_credential']) ??
           false,
+      useIdToken:
+          _readBool(map['useIdToken']) ??
+          _readBool(map['use_id_token']) ??
+          false,
+      audience: _readString(map['audience']),
     );
   }
 

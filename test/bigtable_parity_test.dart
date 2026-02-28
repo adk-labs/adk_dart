@@ -122,14 +122,21 @@ class _FakeBigtableDataClient implements BigtableDataClient {
   _FakeBigtableDataClient({required this.iterator});
 
   final _FakeBigtableQueryIterator iterator;
-  final List<Map<String, String>> calls = <Map<String, String>>[];
+  final List<Map<String, Object?>> calls = <Map<String, Object?>>[];
 
   @override
   BigtableQueryIterator executeQuery({
     required String query,
     required String instanceId,
+    Map<String, Object?>? parameters,
+    Map<String, Object?>? parameterTypes,
   }) {
-    calls.add(<String, String>{'query': query, 'instance_id': instanceId});
+    calls.add(<String, Object?>{
+      'query': query,
+      'instance_id': instanceId,
+      'parameters': parameters,
+      'parameter_types': parameterTypes,
+    });
     return iterator;
   }
 }
@@ -353,7 +360,47 @@ void main() {
       expect(result['result_is_likely_truncated'], isTrue);
       expect(iterator.closeCount, 1);
       expect(dataClient.calls.single['instance_id'], 'inst1');
+      expect(dataClient.calls.single['parameters'], isNull);
+      expect(dataClient.calls.single['parameter_types'], isNull);
     });
+
+    test(
+      'execute_sql passes query parameters and explicit parameter types',
+      () async {
+        final _FakeBigtableQueryIterator iterator = _FakeBigtableQueryIterator(
+          <BigtableQueryRow>[],
+        );
+        final _FakeBigtableDataClient dataClient = _FakeBigtableDataClient(
+          iterator: iterator,
+        );
+        setBigtableClientFactories(
+          dataClientFactory:
+              ({
+                required String project,
+                required Object credentials,
+                required String userAgent,
+              }) => dataClient,
+        );
+
+        await bigtable_query.executeSql(
+          projectId: 'project1',
+          instanceId: 'inst1',
+          query: 'SELECT * FROM users WHERE id=@id',
+          credentials: Object(),
+          settings: BigtableToolSettings(),
+          toolContext: _newToolContext(),
+          parameters: <String, Object?>{'id': 7},
+          parameterTypes: <String, Object?>{'id': 'INT64'},
+        );
+
+        expect(dataClient.calls.single['parameters'], <String, Object?>{
+          'id': 7,
+        });
+        expect(dataClient.calls.single['parameter_types'], <String, Object?>{
+          'id': 'INT64',
+        });
+      },
+    );
 
     test('execute_sql returns ERROR payload when data client throws', () async {
       setBigtableClientFactories(

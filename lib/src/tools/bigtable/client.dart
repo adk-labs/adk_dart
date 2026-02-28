@@ -48,6 +48,8 @@ abstract class BigtableDataClient {
   BigtableQueryIterator executeQuery({
     required String query,
     required String instanceId,
+    Map<String, Object?>? parameters,
+    Map<String, Object?>? parameterTypes,
   });
 }
 

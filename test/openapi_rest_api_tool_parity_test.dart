@@ -221,6 +221,81 @@ void main() {
       expect(requestCalled, isFalse);
       expect(context.actions.requestedAuthConfigs.containsKey('fc1'), isTrue);
     });
+
+    test('parses service account auth map with ID token fields', () {
+      final RestApiTool tool = RestApiTool(
+        name: 'id_token_tool',
+        description: 'desc',
+        endpoint: OperationEndpoint(
+          baseUrl: 'https://example.com',
+          path: '/secure',
+          method: 'GET',
+        ),
+        operation: <String, Object?>{
+          'operationId': 'secure.get',
+          'responses': <String, Object?>{
+            '200': <String, Object?>{'description': 'ok'},
+          },
+        },
+        authCredential: <String, Object?>{
+          'authType': 'serviceAccount',
+          'serviceAccount': <String, Object?>{
+            'useDefaultCredential': true,
+            'useIdToken': true,
+            'audience': 'https://svc.run.app',
+          },
+        },
+      );
+
+      expect(tool.authCredential?.serviceAccount?.useIdToken, isTrue);
+      expect(
+        tool.authCredential?.serviceAccount?.audience,
+        'https://svc.run.app',
+      );
+    });
+
+    test('keeps query params embedded in path when params are provided', () {
+      final RestApiTool tool = RestApiTool(
+        name: 'embedded_query_tool',
+        description: 'desc',
+        endpoint: OperationEndpoint(
+          baseUrl: 'https://example.com',
+          path: '/search?static=1&lang=ko#frag',
+          method: 'GET',
+        ),
+        operation: <String, Object?>{
+          'operationId': 'search.get',
+          'parameters': <Object?>[
+            <String, Object?>{
+              'name': 'q',
+              'in': 'query',
+              'schema': <String, Object?>{'type': 'string'},
+            },
+          ],
+          'responses': <String, Object?>{
+            '200': <String, Object?>{'description': 'ok'},
+          },
+        },
+      );
+
+      final Map<String, Object?> params = tool.prepareRequestParams(
+        <ApiParameter>[
+          ApiParameter(
+            originalName: 'q',
+            paramLocation: 'query',
+            paramSchema: <String, Object?>{'type': 'string'},
+          ),
+        ],
+        <String, Object?>{'q': 'term'},
+      );
+
+      expect(params['url'], 'https://example.com/search');
+      expect(params['params'], <String, Object?>{
+        'q': 'term',
+        'static': '1',
+        'lang': 'ko',
+      });
+    });
   });
 
   group('tool auth handler parity', () {

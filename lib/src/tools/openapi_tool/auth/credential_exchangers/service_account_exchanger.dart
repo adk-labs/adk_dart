@@ -25,6 +25,12 @@ class ServiceAccountCredentialExchanger extends BaseAuthCredentialExchanger {
         'Provide serviceAccountCredential or set useDefaultCredential=true.',
       );
     }
+    if (serviceAccount.useIdToken &&
+        (serviceAccount.audience == null || serviceAccount.audience!.isEmpty)) {
+      throw AuthCredentialMissingError(
+        'audience is required when useIdToken=true for service account auth.',
+      );
+    }
 
     final ServiceAccountTokenResolver? resolver = tokenResolver;
     if (resolver == null) {
