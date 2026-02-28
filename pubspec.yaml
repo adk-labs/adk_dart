@@ -26,5 +26,4 @@ dev_dependencies:
 dependencies:
   google_generative_ai: ^0.4.7
   http: ^1.2.2
-  adk_mcp:
-    path: packages/adk_mcp
+  adk_mcp: ^2026.2.28
