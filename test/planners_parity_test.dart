@@ -113,7 +113,7 @@ void main() {
     });
 
     test(
-      'preserves consecutive function calls when first part is a function call',
+      'keeps only first function call when function call appears first',
       () {
         final PlanReActPlanner planner = PlanReActPlanner();
         final List<Part>? processed = planner.processPlanningResponse(
@@ -126,9 +126,8 @@ void main() {
         );
 
         expect(processed, isNotNull);
-        expect(processed, hasLength(2));
+        expect(processed, hasLength(1));
         expect(processed![0].functionCall?.name, 'tool_a');
-        expect(processed[1].functionCall?.name, 'tool_b');
       },
     );
   });

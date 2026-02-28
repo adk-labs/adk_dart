@@ -7,15 +7,11 @@ import '../types/content.dart';
 import 'base_planner.dart';
 
 class BuiltInPlanner extends BasePlanner {
-  BuiltInPlanner({this.thinkingConfig});
+  BuiltInPlanner({required this.thinkingConfig});
 
-  final Object? thinkingConfig;
+  final Object thinkingConfig;
 
   void applyThinkingConfig(LlmRequest llmRequest) {
-    if (thinkingConfig == null) {
-      return;
-    }
-
     if (llmRequest.config.thinkingConfig != null) {
       developer.log(
         'Overwriting existing thinkingConfig with BuiltInPlanner value.',

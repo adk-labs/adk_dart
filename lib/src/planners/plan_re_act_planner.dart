@@ -46,7 +46,7 @@ class PlanReActPlanner extends BasePlanner {
       _handleNonFunctionCallPart(part, preservedParts);
     }
 
-    if (firstFunctionCallPartIndex >= 0) {
+    if (firstFunctionCallPartIndex > 0) {
       int index = firstFunctionCallPartIndex + 1;
       while (index < responseParts.length) {
         final Part part = responseParts[index];
