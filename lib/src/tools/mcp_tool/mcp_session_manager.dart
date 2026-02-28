@@ -613,6 +613,10 @@ class McpSessionManager {
       }
 
       final Map<String, Object?> contentMap = _asStringObjectMap(content);
+      final String contentType = _asString(contentMap['type']).toLowerCase();
+      if (contentType.isNotEmpty && contentType != 'text') {
+        continue;
+      }
       final String text = _asString(contentMap['text']);
       if (text.isNotEmpty) {
         parsed.add(McpResourceContent(text: text));

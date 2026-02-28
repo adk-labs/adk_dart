@@ -224,5 +224,17 @@ void main() {
         expect(events.last.actions.stateDelta['after_live'], isTrue);
       },
     );
+
+    test('throws when callback list contains invalid entry types', () {
+      final _ProbeAgent agent = _ProbeAgent(
+        name: 'probe',
+        beforeAgentCallback: <Object?>[
+          (CallbackContext context) => null,
+          'invalid',
+        ],
+      );
+
+      expect(() => agent.canonicalBeforeAgentCallbacks, throwsArgumentError);
+    });
   });
 }

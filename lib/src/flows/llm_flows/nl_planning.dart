@@ -82,7 +82,7 @@ BasePlanner? _getPlanner(InvocationContext invocationContext) {
   }
 
   final Object? planner = agent.planner;
-  if (planner == null) {
+  if (_isFalsyPlannerValue(planner)) {
     return null;
   }
 
@@ -90,6 +90,28 @@ BasePlanner? _getPlanner(InvocationContext invocationContext) {
     return planner;
   }
   return PlanReActPlanner();
+}
+
+bool _isFalsyPlannerValue(Object? planner) {
+  if (planner == null) {
+    return true;
+  }
+  if (planner is bool) {
+    return planner == false;
+  }
+  if (planner is String) {
+    return planner.isEmpty;
+  }
+  if (planner is num) {
+    return planner == 0;
+  }
+  if (planner is Iterable) {
+    return planner.isEmpty;
+  }
+  if (planner is Map) {
+    return planner.isEmpty;
+  }
+  return false;
 }
 
 void _removeThoughtFromRequest(LlmRequest llmRequest) {

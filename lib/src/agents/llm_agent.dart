@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../events/event.dart';
 import '../flows/llm_flows/auto_flow.dart';
@@ -9,6 +10,7 @@ import '../models/base_llm.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../models/registry.dart';
+import '../planners/built_in_planner.dart';
 import '../tools/base_tool.dart';
 import '../tools/base_toolset.dart';
 import '../tools/discovery_engine_search_tool.dart';
@@ -98,6 +100,7 @@ class LlmAgent extends BaseAgent {
     this.onToolErrorCallback,
   }) : tools = tools ?? <Object>[] {
     _validateGenerateContentConfig(generateContentConfig);
+    _warnOnThinkingConfigPrecedence();
   }
 
   static const String defaultModel = 'gemini-2.5-flash';
@@ -568,7 +571,16 @@ class LlmAgent extends BaseAgent {
       return value;
     }
     if (value is List) {
-      return value.whereType<T>().toList(growable: false);
+      final List<T> callbacks = <T>[];
+      for (final Object? item in value) {
+        if (item is! T) {
+          throw ArgumentError(
+            'Invalid callback entry type `${item.runtimeType}`.',
+          );
+        }
+        callbacks.add(item);
+      }
+      return callbacks;
     }
     throw ArgumentError('Invalid callback value type `${value.runtimeType}`.');
   }
@@ -592,6 +604,37 @@ class LlmAgent extends BaseAgent {
     if (config.responseSchema != null) {
       throw ArgumentError(
         'Response schema must be set via LlmAgent.outputSchema.',
+      );
+    }
+  }
+
+  void _warnOnThinkingConfigPrecedence() {
+    if (generateContentConfig?.thinkingConfig == null) {
+      return;
+    }
+    final Object? plannerConfig = planner;
+    if (plannerConfig == null) {
+      return;
+    }
+
+    Object? plannerThinkingConfig;
+    if (plannerConfig is BuiltInPlanner) {
+      plannerThinkingConfig = plannerConfig.thinkingConfig;
+    } else {
+      final dynamic dynamicPlanner = plannerConfig;
+      try {
+        plannerThinkingConfig = dynamicPlanner.thinkingConfig;
+      } catch (_) {
+        plannerThinkingConfig = null;
+      }
+    }
+
+    if (plannerThinkingConfig != null) {
+      developer.log(
+        'Both `thinkingConfig` in `generateContentConfig` and planner '
+        '`thinkingConfig` are provided. Planner thinkingConfig takes '
+        'precedence.',
+        name: 'adk_dart.agents',
       );
     }
   }

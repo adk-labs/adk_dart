@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
@@ -357,9 +358,17 @@ abstract class BaseAgent {
       return callback;
     }
     if (callback is List) {
-      return callback.whereType<AgentLifecycleCallback>().toList(
-        growable: false,
-      );
+      final List<AgentLifecycleCallback> callbacks = <AgentLifecycleCallback>[];
+      for (final Object? entry in callback) {
+        if (entry is! AgentLifecycleCallback) {
+          throw ArgumentError(
+            'Invalid callback entry type `${entry.runtimeType}` for '
+            'agent `$name`.',
+          );
+        }
+        callbacks.add(entry);
+      }
+      return callbacks;
     }
     throw ArgumentError(
       'Invalid callback type `${callback.runtimeType}` for agent `$name`.',
@@ -393,12 +402,18 @@ abstract class BaseAgent {
 
   void _validateSubAgentUniqueNames() {
     final Set<String> seen = <String>{};
+    final Set<String> duplicates = <String>{};
     for (final BaseAgent subAgent in subAgents) {
       if (!seen.add(subAgent.name)) {
-        throw ArgumentError(
-          'Duplicate sub-agent name `${subAgent.name}` under `$name`.',
-        );
+        duplicates.add(subAgent.name);
       }
+    }
+    if (duplicates.isNotEmpty) {
+      developer.log(
+        'Found duplicate sub-agent names under `$name`: '
+        '${duplicates.toList(growable: false)..sort()}',
+        name: 'adk_dart.agents',
+      );
     }
   }
 }

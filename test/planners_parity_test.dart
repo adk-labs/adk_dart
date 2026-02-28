@@ -112,24 +112,21 @@ void main() {
       expect(processed!.first.text, 'plain response');
     });
 
-    test(
-      'keeps only first function call when function call appears first',
-      () {
-        final PlanReActPlanner planner = PlanReActPlanner();
-        final List<Part>? processed = planner.processPlanningResponse(
-          Context(_newInvocationContext(planner: planner)),
-          <Part>[
-            Part.fromFunctionCall(name: 'tool_a', args: <String, dynamic>{}),
-            Part.fromFunctionCall(name: 'tool_b', args: <String, dynamic>{}),
-            Part.text('done'),
-          ],
-        );
+    test('keeps only first function call when function call appears first', () {
+      final PlanReActPlanner planner = PlanReActPlanner();
+      final List<Part>? processed = planner.processPlanningResponse(
+        Context(_newInvocationContext(planner: planner)),
+        <Part>[
+          Part.fromFunctionCall(name: 'tool_a', args: <String, dynamic>{}),
+          Part.fromFunctionCall(name: 'tool_b', args: <String, dynamic>{}),
+          Part.text('done'),
+        ],
+      );
 
-        expect(processed, isNotNull);
-        expect(processed, hasLength(1));
-        expect(processed![0].functionCall?.name, 'tool_a');
-      },
-    );
+      expect(processed, isNotNull);
+      expect(processed, hasLength(1));
+      expect(processed![0].functionCall?.name, 'tool_a');
+    });
   });
 
   group('NL planning processors', () {
@@ -209,6 +206,23 @@ void main() {
         expect(request.config.systemInstruction, isNotNull);
         expect(request.config.systemInstruction, contains(planningTag));
         expect(request.contents.first.parts.first.thought, isFalse);
+      },
+    );
+
+    test(
+      'request processor treats falsy planner values as planner disabled',
+      () async {
+        final InvocationContext context = _newInvocationContext(planner: '');
+        final LlmRequest request = LlmRequest(
+          contents: <Content>[
+            Content(role: 'user', parts: <Part>[Part.text('q', thought: true)]),
+          ],
+        );
+
+        await NlPlanningRequestProcessor().runAsync(context, request).toList();
+
+        expect(request.config.systemInstruction, isNull);
+        expect(request.contents.first.parts.first.thought, isTrue);
       },
     );
 

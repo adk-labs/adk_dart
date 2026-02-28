@@ -107,7 +107,7 @@ class SequentialAgent extends BaseAgent {
         }
       }
 
-      if (context.endInvocation || pauseInvocation) {
+      if (pauseInvocation) {
         return;
       }
 

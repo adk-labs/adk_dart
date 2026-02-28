@@ -175,6 +175,21 @@ class _CompletingCheckpointAgent extends BaseAgent {
   }
 }
 
+class _EndInvocationAgent extends BaseAgent {
+  _EndInvocationAgent({required super.name});
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    context.endInvocation = true;
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content.modelText('stop $name'),
+    );
+  }
+}
+
 Future<InvocationContext> _newContext({
   required BaseAgent agent,
   required bool resumable,
@@ -195,6 +210,19 @@ Future<InvocationContext> _newContext({
 
 void main() {
   group('SequentialAgent', () {
+    test('allows duplicate sub-agent names (warn-only parity)', () {
+      final _EmitAgent first = _EmitAgent(name: 'dup');
+      final _EmitAgent second = _EmitAgent(name: 'dup');
+      final SequentialAgent root = SequentialAgent(
+        name: 'root',
+        subAgents: <BaseAgent>[first, second],
+      );
+
+      expect(root.subAgents, hasLength(2));
+      expect(root.subAgents[0].name, 'dup');
+      expect(root.subAgents[1].name, 'dup');
+    });
+
     test(
       'runs sub-agents in order and emits checkpoints when resumable',
       () async {
@@ -242,6 +270,33 @@ void main() {
       expect(events[0].author, 'a2');
       expect(events[1].actions.endOfAgent, isTrue);
     });
+
+    test(
+      'marks workflow end_of_agent on resumable run even when invocation ends',
+      () async {
+        final _EndInvocationAgent stopper = _EndInvocationAgent(
+          name: 'stopper',
+        );
+        final _EmitAgent trailing = _EmitAgent(name: 'trailing');
+        final SequentialAgent root = SequentialAgent(
+          name: 'root',
+          subAgents: <BaseAgent>[stopper, trailing],
+        );
+        final InvocationContext context = await _newContext(
+          agent: root,
+          resumable: true,
+        );
+
+        final List<Event> events = await root.runAsync(context).toList();
+
+        expect(events.first.author, 'root');
+        expect(events.any((Event event) => event.author == 'stopper'), isTrue);
+        expect(
+          events.where((Event event) => event.actions.endOfAgent == true),
+          isNotEmpty,
+        );
+      },
+    );
 
     test(
       'runLive injects task_completed handoff tool once for LLM sub-agent',

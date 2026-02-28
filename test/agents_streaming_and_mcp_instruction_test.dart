@@ -55,7 +55,7 @@ void main() {
         final String instruction = await provider(
           ReadonlyContext(invocationContext),
         );
-        expect(instruction, 'Hello Seoul! Welcome Jaichang.');
+        expect(instruction, 'Hello {city}! Welcome {{user}}.');
       },
     );
 

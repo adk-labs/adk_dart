@@ -293,6 +293,7 @@ void main() {
                 .map((Object? key, Object? value) => MapEntry('$key', value));
             final String name = '${params['name'] ?? ''}';
             if (name == 'agent_prompt') {
+              final String city = '${lastPromptGetArguments['city'] ?? ''}';
               await _respondJsonRpc(
                 request,
                 id: id,
@@ -302,7 +303,7 @@ void main() {
                       'role': 'system',
                       'content': <String, Object?>{
                         'type': 'text',
-                        'text': 'Hello {city}!',
+                        'text': city.isEmpty ? 'Hello!' : 'Hello $city!',
                       },
                     },
                   ],
