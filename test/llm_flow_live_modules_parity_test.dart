@@ -68,6 +68,16 @@ class _FakeLiveConnection extends BaseLlmConnection {
   }
 }
 
+class _NonIdempotentCloseConnection extends _FakeLiveConnection {
+  @override
+  Future<void> close() async {
+    if (closeCount >= 1) {
+      throw StateError('close called multiple times');
+    }
+    await super.close();
+  }
+}
+
 class _LiveConnectModel extends BaseLlm {
   _LiveConnectModel({required this.connection}) : super(model: 'live-connect');
 
@@ -88,6 +98,48 @@ class _LiveConnectModel extends BaseLlm {
   }
 }
 
+class _PassthroughSessionService extends BaseSessionService {
+  @override
+  Future<Session> createSession({
+    required String appName,
+    required String userId,
+    Map<String, Object?>? state,
+    String? sessionId,
+  }) async {
+    return Session(
+      id: sessionId ?? 's_passthrough',
+      appName: appName,
+      userId: userId,
+      state: state ?? <String, Object?>{},
+    );
+  }
+
+  @override
+  Future<Session?> getSession({
+    required String appName,
+    required String userId,
+    required String sessionId,
+    GetSessionConfig? config,
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<ListSessionsResponse> listSessions({
+    required String appName,
+    String? userId,
+  }) async {
+    return ListSessionsResponse();
+  }
+
+  @override
+  Future<void> deleteSession({
+    required String appName,
+    required String userId,
+    required String sessionId,
+  }) async {}
+}
+
 InvocationContext _newInvocationContext({
   required BaseAgent agent,
   required String invocationId,
@@ -95,7 +147,7 @@ InvocationContext _newInvocationContext({
   List<Event>? events,
 }) {
   return InvocationContext(
-    sessionService: InMemorySessionService(),
+    sessionService: _PassthroughSessionService(),
     artifactService: artifactService,
     invocationId: invocationId,
     agent: agent,
@@ -261,6 +313,69 @@ void main() {
 
   group('live queue and streaming parity', () {
     test(
+      'BaseLlmFlow live mode does not execute partial function-call chunks',
+      () async {
+        int toolCalls = 0;
+        final _FakeLiveConnection connection = _FakeLiveConnection();
+        connection.onSendContent = (Content _) async {
+          connection.emit(
+            LlmResponse(
+              content: Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromFunctionCall(
+                    name: 'echo_tool',
+                    id: 'call_partial',
+                    args: <String, dynamic>{'value': 'hello'},
+                  ),
+                ],
+              ),
+              partial: true,
+            ),
+          );
+        };
+
+        final _LiveConnectModel model = _LiveConnectModel(
+          connection: connection,
+        );
+        final LlmAgent agent = LlmAgent(
+          name: 'agent',
+          model: model,
+          tools: <Object>[
+            FunctionTool(
+              name: 'echo_tool',
+              func: ({required String value}) {
+                toolCalls += 1;
+                return <String, Object?>{'value': value};
+              },
+            ),
+          ],
+        );
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_partial_function_call',
+        );
+        context.liveRequestQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('call tool'))
+          ..close();
+
+        final List<Event> events = await BaseLlmFlow()
+            .runLive(context)
+            .toList();
+
+        expect(
+          events.where((Event event) => event.getFunctionCalls().isNotEmpty),
+          isNotEmpty,
+        );
+        expect(
+          events.expand((Event event) => event.getFunctionResponses()),
+          isEmpty,
+        );
+        expect(toolCalls, 0);
+      },
+    );
+
+    test(
       'BaseLlmFlow live mode fans out requests and updates resumption handle',
       () async {
         final _FakeLiveConnection connection = _FakeLiveConnection();
@@ -333,6 +448,29 @@ void main() {
             sessionResumption as Map<dynamic, dynamic>;
         expect(sessionResumptionMap['handle'], 'resume-token');
         expect(sessionResumptionMap['transparent'], isTrue);
+      },
+    );
+
+    test(
+      'BaseLlmFlow live mode closes connection once for terminal close',
+      () async {
+        final _NonIdempotentCloseConnection connection =
+            _NonIdempotentCloseConnection();
+        final _LiveConnectModel model = _LiveConnectModel(
+          connection: connection,
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_close_once',
+        );
+        context.liveRequestQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('close after one turn'))
+          ..close();
+
+        await BaseLlmFlow().runLive(context).toList();
+
+        expect(connection.closeCount, 1);
       },
     );
   });

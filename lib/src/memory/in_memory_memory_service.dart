@@ -48,7 +48,24 @@ class InMemoryMemoryService extends BaseMemoryService {
       if (existingIds.contains(event.id)) {
         continue;
       }
-      target.add(event.copyWith());
+
+      Map<String, dynamic>? mergedMetadata;
+      if ((event.customMetadata?.isNotEmpty ?? false) ||
+          (customMetadata?.isNotEmpty ?? false)) {
+        mergedMetadata = <String, dynamic>{
+          ...?event.customMetadata,
+          ...?customMetadata?.map(
+            (String key, Object? value) =>
+                MapEntry<String, dynamic>(key, value),
+          ),
+        };
+      }
+
+      target.add(
+        mergedMetadata == null
+            ? event.copyWith()
+            : event.copyWith(customMetadata: mergedMetadata),
+      );
       existingIds.add(event.id);
     }
   }
@@ -103,10 +120,17 @@ class InMemoryMemoryService extends BaseMemoryService {
           continue;
         }
 
+        final Map<String, Object?> metadata = event.customMetadata == null
+            ? <String, Object?>{}
+            : event.customMetadata!.map(
+                (String key, dynamic value) =>
+                    MapEntry<String, Object?>(key, value),
+              );
         found.add(
           MemoryEntry(
             content: event.content!.copyWith(),
             author: event.author,
+            customMetadata: metadata,
             id: event.id,
             timestamp: DateTime.fromMillisecondsSinceEpoch(
               (event.timestamp * 1000).toInt(),

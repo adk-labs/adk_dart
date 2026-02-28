@@ -39,16 +39,23 @@ class _ResumptionMetadataModel extends BaseLlm {
   }
 }
 
-InvocationContext _newInvocationContext({
+Future<InvocationContext> _newInvocationContext({
   required LlmAgent agent,
   required String invocationId,
   required LiveRequestQueue liveRequestQueue,
-}) {
+}) async {
+  final InMemorySessionService sessionService = InMemorySessionService();
+  final Session session = await sessionService.createSession(
+    appName: 'app',
+    userId: 'u1',
+    sessionId: 's_$invocationId',
+  );
+
   return InvocationContext(
-    sessionService: InMemorySessionService(),
+    sessionService: sessionService,
     invocationId: invocationId,
     agent: agent,
-    session: Session(id: 's_$invocationId', appName: 'app', userId: 'u1'),
+    session: session,
     liveRequestQueue: liveRequestQueue,
   );
 }
@@ -96,7 +103,7 @@ void main() {
         ..close();
       final LiveRequestQueue mirroredQueue = LiveRequestQueue();
 
-      final InvocationContext context = _newInvocationContext(
+      final InvocationContext context = await _newInvocationContext(
         agent: agent,
         invocationId: 'inv_fallback_fanout',
         liveRequestQueue: rootQueue,
@@ -125,11 +132,13 @@ void main() {
       final LiveRequestQueue queue = LiveRequestQueue()
         ..sendContent(Content.userText('hello'))
         ..close();
-      final InvocationContext context = _newInvocationContext(
-        agent: agent,
-        invocationId: 'inv_fallback_resumption',
-        liveRequestQueue: queue,
-      )..liveSessionResumptionHandle = 'old-handle';
+      final InvocationContext context =
+          await _newInvocationContext(
+              agent: agent,
+              invocationId: 'inv_fallback_resumption',
+              liveRequestQueue: queue,
+            )
+            ..liveSessionResumptionHandle = 'old-handle';
 
       final List<Event> events = await BaseLlmFlow().runLive(context).toList();
       expect(events, isNotEmpty);

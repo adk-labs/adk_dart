@@ -335,6 +335,14 @@ class FileArtifactService extends BaseArtifactService {
     return _readMetadata(_metadataPath(artifactDir, versions.last));
   }
 
+  bool _isUnderRootDir(File file) {
+    final String rootPath = rootDir.absolute.uri.path.endsWith('/')
+        ? rootDir.absolute.uri.path
+        : '${rootDir.absolute.uri.path}/';
+    final String candidatePath = file.absolute.uri.path;
+    return candidatePath.startsWith(rootPath);
+  }
+
   @override
   Future<int> saveArtifact({
     required String appName,
@@ -446,6 +454,11 @@ class FileArtifactService extends BaseArtifactService {
     if (!contentPath.existsSync() && metadata != null) {
       final File? fromUri = _fileUriToPath(metadata.canonicalUri);
       if (fromUri != null && fromUri.existsSync()) {
+        if (!_isUnderRootDir(fromUri)) {
+          throw InputValidationError(
+            "Artifact canonical_uri '${metadata.canonicalUri}' points outside rootDir ${rootDir.path}.",
+          );
+        }
         contentPath = fromUri;
       }
     }

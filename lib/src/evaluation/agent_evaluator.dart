@@ -374,22 +374,35 @@ class AgentEvaluator {
     final String content = file.readAsStringSync();
     final Object? decoded = jsonDecode(content);
     if (decoded is Map) {
+      if (safeInitialSession.isNotEmpty) {
+        throw ArgumentError(
+          'Initial session should be specified as a part of EvalSet file.',
+        );
+      }
       try {
-        if (safeInitialSession.isNotEmpty) {
-          throw ArgumentError(
-            'Initial session should be specified as a part of EvalSet file.',
-          );
-        }
         return EvalSet.fromJson(_asJsonMap(decoded));
-      } catch (_) {
-        // Fall through to legacy parser path.
+      } on Object catch (error, stackTrace) {
+        Error.throwWithStackTrace(
+          FormatException(
+            'Failed to parse modern EvalSet JSON in `$evalSetFile`.',
+            error,
+          ),
+          stackTrace,
+        );
       }
     }
 
-    return _getEvalSetFromOldFormat(
-      evalSetFile: evalSetFile,
-      evalConfig: evalConfig,
-      initialSession: safeInitialSession,
+    if (decoded is List) {
+      return _getEvalSetFromOldFormat(
+        evalSetFile: evalSetFile,
+        evalConfig: evalConfig,
+        initialSession: safeInitialSession,
+      );
+    }
+
+    throw ArgumentError(
+      'Unsupported eval set format in `$evalSetFile`. '
+      'Expected a JSON object (modern) or list (legacy).',
     );
   }
 

@@ -4,6 +4,33 @@ import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('InMemorySessionService', () {
+    test('appendEvent returns event when session does not exist', () async {
+      final InMemorySessionService service = InMemorySessionService();
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      await service.deleteSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+
+      final Event event = Event(
+        invocationId: 'inv_missing',
+        author: 'agent',
+        content: Content.modelText('hello'),
+      );
+
+      final Event appended = await service.appendEvent(
+        session: session,
+        event: event,
+      );
+      expect(appended, same(event));
+    });
+  });
+
   group('SqliteSessionService', () {
     test('persists sessions and events to disk', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
@@ -92,6 +119,62 @@ void main() {
       await absolute.createSession(appName: 'app', userId: 'u1');
       expect(File(absolutePath).existsSync(), isTrue);
     });
+
+    test(
+      'treats sqlite:/// and sqlite+aiosqlite:/// absolute paths correctly',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_sqlite_absolute_triple_slash_',
+        );
+        final Directory cwd = await Directory.systemTemp.createTemp(
+          'adk_sqlite_absolute_cwd_',
+        );
+        final Directory originalCwd = Directory.current;
+        Directory.current = cwd;
+        addTearDown(() async {
+          Directory.current = originalCwd;
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+          if (await cwd.exists()) {
+            await cwd.delete(recursive: true);
+          }
+        });
+
+        final String targetA = '${dir.path}/triple_sqlite.db';
+        final String targetB = '${dir.path}/triple_aiosqlite.db';
+        final String normalizedA = targetA.replaceAll('\\', '/');
+        final String normalizedB = targetB.replaceAll('\\', '/');
+
+        final String urlA = normalizedA.startsWith('/')
+            ? 'sqlite:///${normalizedA.substring(1)}'
+            : 'sqlite:///$normalizedA';
+        final String urlB = normalizedB.startsWith('/')
+            ? 'sqlite+aiosqlite:///${normalizedB.substring(1)}'
+            : 'sqlite+aiosqlite:///$normalizedB';
+
+        await SqliteSessionService(
+          urlA,
+        ).createSession(appName: 'app', userId: 'u1');
+        await SqliteSessionService(
+          urlB,
+        ).createSession(appName: 'app', userId: 'u1');
+
+        expect(File(targetA).existsSync(), isTrue);
+        expect(File(targetB).existsSync(), isTrue);
+
+        if (normalizedA.startsWith('/') && normalizedB.startsWith('/')) {
+          final File accidentalRelativeA = File(
+            '${cwd.path}/${normalizedA.substring(1)}',
+          );
+          final File accidentalRelativeB = File(
+            '${cwd.path}/${normalizedB.substring(1)}',
+          );
+          expect(accidentalRelativeA.existsSync(), isFalse);
+          expect(accidentalRelativeB.existsSync(), isFalse);
+        }
+      },
+    );
 
     test('supports mode=ro query and rejects writes in read-only mode', () async {
       final Directory dir = await Directory.systemTemp.createTemp(

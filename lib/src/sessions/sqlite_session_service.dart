@@ -495,9 +495,20 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
     );
   }
 
-  String path = Uri.decodeComponent(uri.path);
-  if ((path.isEmpty || path == '/') && uri.authority == ':memory:') {
-    path = ':memory:';
+  final String rawPath = _extractRawSqlitePath(sanitizedInput);
+  final String path = _resolveSqliteUriPath(rawPath, dbPath);
+
+  final Map<String, List<String>> query = _parseQueryParameters(uri.query);
+  final bool readOnly = _parseSqliteReadOnlyMode(query);
+  final bool inMemory =
+      _isInMemoryStorePath(path) || _parseSqliteInMemoryMode(query);
+  return _ResolvedStorePath(path: path, readOnly: readOnly, inMemory: inMemory);
+}
+
+String _resolveSqliteUriPath(String rawPath, String dbPath) {
+  String path = Uri.decodeComponent(rawPath);
+  if (path == ':memory:' || path == '/:memory:') {
+    return ':memory:';
   }
   if (path.isEmpty || path == '/') {
     throw ArgumentError.value(
@@ -506,11 +517,20 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
       'SQLite URL must include a file path.',
     );
   }
+
   if (path.startsWith('//')) {
+    // sqlite:////abs/path.db -> /abs/path.db
     path = path.substring(1);
-  } else if (path.startsWith('/')) {
+  } else if (_looksLikeWindowsDrivePath(path) ||
+      path.startsWith('/./') ||
+      path == '/.' ||
+      path.startsWith('/../') ||
+      path == '/..' ||
+      _looksLikeRelativePlaceholderPath(path)) {
+    // sqlite:///./rel.db and placeholder-style relative paths stay relative.
     path = path.substring(1);
   }
+
   if (path.isEmpty) {
     throw ArgumentError.value(
       dbPath,
@@ -518,12 +538,59 @@ _ResolvedStorePath _resolveStorePath(String dbPath) {
       'SQLite URL must include a file path.',
     );
   }
+  return path;
+}
 
-  final Map<String, List<String>> query = _parseQueryParameters(uri.query);
-  final bool readOnly = _parseSqliteReadOnlyMode(query);
-  final bool inMemory =
-      _isInMemoryStorePath(path) || _parseSqliteInMemoryMode(query);
-  return _ResolvedStorePath(path: path, readOnly: readOnly, inMemory: inMemory);
+bool _looksLikeWindowsDrivePath(String path) {
+  if (!path.startsWith('/') || path.length < 3) {
+    return false;
+  }
+  return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path.substring(1));
+}
+
+bool _looksLikeRelativePlaceholderPath(String path) {
+  if (!path.startsWith('/')) {
+    return false;
+  }
+  final String firstSegment = path.substring(1).split('/').first;
+  return firstSegment.contains('%') ||
+      firstSegment.contains('{') ||
+      firstSegment.contains('}');
+}
+
+String _extractRawSqlitePath(String sqliteUrl) {
+  final int schemeSeparator = sqliteUrl.indexOf('://');
+  if (schemeSeparator < 0) {
+    return '';
+  }
+
+  String rest = sqliteUrl.substring(schemeSeparator + 3);
+  final int queryIndex = rest.indexOf('?');
+  final int fragmentIndex = rest.indexOf('#');
+  int end = rest.length;
+  if (queryIndex >= 0 && queryIndex < end) {
+    end = queryIndex;
+  }
+  if (fragmentIndex >= 0 && fragmentIndex < end) {
+    end = fragmentIndex;
+  }
+  rest = rest.substring(0, end);
+  if (rest.isEmpty) {
+    return '';
+  }
+
+  if (!rest.startsWith('/')) {
+    if (rest == ':memory:') {
+      return ':memory:';
+    }
+    final int slash = rest.indexOf('/');
+    if (slash < 0) {
+      return '';
+    }
+    return rest.substring(slash);
+  }
+
+  return rest;
 }
 
 bool _parseSqliteReadOnlyMode(Map<String, List<String>> query) {

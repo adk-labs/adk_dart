@@ -309,6 +309,75 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('loadEvalSetFromFile surfaces modern map parsing errors', () {
+      final Directory tempDir = Directory.systemTemp.createTempSync(
+        'agent_eval_modern_parse_',
+      );
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      final File modernFile = File('${tempDir.path}/invalid.evalset.json')
+        ..writeAsStringSync(
+          jsonEncode(<String, Object?>{
+            'eval_set_id': 123,
+            'eval_cases': <Object?>[],
+          }),
+        );
+      final EvalConfig evalConfig = EvalConfig(
+        criteria: <String, Object?>{
+          PrebuiltMetricNames.responseMatchScore: 0.8,
+        },
+      );
+
+      expect(
+        () => AgentEvaluator.loadEvalSetFromFile(
+          evalSetFile: modernFile.path,
+          evalConfig: evalConfig,
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (FormatException error) => error.message,
+            'message',
+            contains('Failed to parse modern EvalSet JSON'),
+          ),
+        ),
+      );
+    });
+
+    test('loadEvalSetFromFile allows legacy fallback for list input', () {
+      final Directory tempDir = Directory.systemTemp.createTempSync(
+        'agent_eval_legacy_fallback_',
+      );
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      final File legacyFile = File('${tempDir.path}/legacy.test.json')
+        ..writeAsStringSync(
+          jsonEncode(<Map<String, Object?>>[
+            <String, Object?>{'query': 'hello', 'reference': 'Echo: hello'},
+          ]),
+        );
+      final EvalConfig evalConfig = EvalConfig(
+        criteria: <String, Object?>{
+          PrebuiltMetricNames.responseMatchScore: 0.8,
+        },
+      );
+
+      final EvalSet evalSet = AgentEvaluator.loadEvalSetFromFile(
+        evalSetFile: legacyFile.path,
+        evalConfig: evalConfig,
+      );
+      expect(evalSet.evalCases, hasLength(1));
+      expect(evalSet.evalCases.first.input, 'hello');
+      expect(evalSet.evalCases.first.expectedOutput, 'Echo: hello');
+    });
   });
 
   group('agent evaluator module resolution parity', () {

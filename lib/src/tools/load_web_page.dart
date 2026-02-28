@@ -1,35 +1,83 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
-Future<String> loadWebPage(String url) async {
-  final Uri uri = Uri.parse(url);
-  final HttpClient client = HttpClient();
+const Duration _defaultLoadWebPageTimeout = Duration(seconds: 10);
+const int _defaultLoadWebPageMaxResponseBytes = 1024 * 1024;
+
+Future<String> loadWebPage(
+  String url, {
+  Duration timeout = _defaultLoadWebPageTimeout,
+  int maxResponseBytes = _defaultLoadWebPageMaxResponseBytes,
+}) async {
+  if (maxResponseBytes <= 0) {
+    throw ArgumentError.value(
+      maxResponseBytes,
+      'maxResponseBytes',
+      'maxResponseBytes must be greater than 0.',
+    );
+  }
+
+  final Uri uri;
   try {
-    final HttpClientRequest request = await client.getUrl(uri);
+    uri = Uri.parse(url);
+  } on FormatException catch (e) {
+    return 'Failed to fetch URL "$url": invalid URL (${e.message}).';
+  }
+  if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
+    return 'Failed to fetch URL "$url": only http and https URLs are supported.';
+  }
+  if (uri.host.trim().isEmpty) {
+    return 'Failed to fetch URL "$url": host is missing.';
+  }
+
+  final HttpClient client = HttpClient();
+  client.connectionTimeout = timeout;
+  try {
+    final HttpClientRequest request = await client.getUrl(uri).timeout(timeout);
     request.followRedirects = false;
-    final HttpClientResponse response = await request.close();
-    final List<int> bytes = await response.fold<List<int>>(<int>[], (
-      List<int> acc,
-      List<int> chunk,
-    ) {
-      acc.addAll(chunk);
-      return acc;
-    });
+    final HttpClientResponse response = await request.close().timeout(timeout);
 
     if (response.statusCode != HttpStatus.ok) {
-      return 'Failed to fetch url: $url';
+      final String reason = response.reasonPhrase.trim();
+      final String reasonSuffix = reason.isNotEmpty ? ' ($reason)' : '';
+      return 'Failed to fetch URL "$url": HTTP ${response.statusCode}$reasonSuffix.';
     }
 
-    final String html = utf8.decode(bytes, allowMalformed: true);
+    final BytesBuilder bytes = BytesBuilder(copy: false);
+    int totalBytes = 0;
+    await for (final List<int> chunk in response.timeout(timeout)) {
+      totalBytes += chunk.length;
+      if (totalBytes > maxResponseBytes) {
+        return 'Failed to fetch URL "$url": response exceeded $maxResponseBytes bytes.';
+      }
+      bytes.add(chunk);
+    }
+
+    final String html = utf8.decode(bytes.takeBytes(), allowMalformed: true);
     final String text = _extractText(html);
     return text
         .split('\n')
         .map((String line) => line.trim())
         .where((String line) => line.split(RegExp(r'\s+')).length > 3)
         .join('\n');
+  } on TimeoutException {
+    return 'Failed to fetch URL "$url": timed out after ${_formatDuration(timeout)}.';
+  } on SocketException catch (e) {
+    return 'Failed to fetch URL "$url": network error (${e.message}).';
+  } on HttpException catch (e) {
+    return 'Failed to fetch URL "$url": HTTP error (${e.message}).';
   } finally {
     client.close(force: true);
   }
+}
+
+String _formatDuration(Duration duration) {
+  if (duration.inMilliseconds % 1000 == 0) {
+    return '${duration.inSeconds}s';
+  }
+  return '${duration.inMilliseconds}ms';
 }
 
 String _extractText(String html) {

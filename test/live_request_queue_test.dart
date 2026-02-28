@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -24,6 +26,26 @@ void main() {
       expect(request.close, isTrue);
       expect(request.content, isNull);
       expect(request.blob, isNull);
+    });
+
+    test('close is idempotent and ignores sends after closure', () async {
+      final LiveRequestQueue queue = LiveRequestQueue();
+
+      queue.close();
+      queue.close();
+      queue.sendContent(Content.userText('late message'));
+      queue.sendRealtime(<int>[1, 2, 3]);
+      queue.sendActivityStart();
+      queue.sendActivityEnd();
+      queue.send(LiveRequest(content: Content.userText('late structured')));
+
+      final LiveRequest request = await queue.get();
+      expect(request.close, isTrue);
+
+      await expectLater(
+        queue.get().timeout(const Duration(milliseconds: 30)),
+        throwsA(isA<TimeoutException>()),
+      );
     });
 
     test('preserves FIFO ordering for queued requests', () async {

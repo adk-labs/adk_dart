@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
@@ -186,6 +187,54 @@ void main() {
           sessionId: 's1',
           filename: '../escape.txt',
           artifact: Part.text('nope'),
+        ),
+        throwsA(isA<InputValidationError>()),
+      );
+    });
+
+    test('rejects metadata canonical uri fallback outside root dir', () async {
+      final FileArtifactService service = FileArtifactService(tempDir.path);
+      await service.saveArtifact(
+        appName: 'app',
+        userId: 'user1',
+        sessionId: 's1',
+        filename: 'notes/outside.txt',
+        artifact: Part.text('safe'),
+      );
+
+      final File payload = File(
+        '${tempDir.path}/users/user1/sessions/s1/artifacts/notes/outside.txt/versions/0/outside.txt',
+      );
+      expect(payload.existsSync(), isTrue);
+      payload.deleteSync();
+
+      final Directory outside = Directory.systemTemp.createTempSync(
+        'adk_artifact_outside_',
+      );
+      addTearDown(() {
+        if (outside.existsSync()) {
+          outside.deleteSync(recursive: true);
+        }
+      });
+      final File outsideFile = File('${outside.path}/outside.txt')
+        ..writeAsStringSync('outside');
+
+      final File metadataFile = File(
+        '${tempDir.path}/users/user1/sessions/s1/artifacts/notes/outside.txt/versions/0/metadata.json',
+      );
+      final Map<String, Object?> metadata =
+          (jsonDecode(metadataFile.readAsStringSync()) as Map).map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          );
+      metadata['canonical_uri'] = outsideFile.absolute.uri.toString();
+      metadataFile.writeAsStringSync(jsonEncode(metadata));
+
+      expect(
+        () => service.loadArtifact(
+          appName: 'app',
+          userId: 'user1',
+          sessionId: 's1',
+          filename: 'notes/outside.txt',
         ),
         throwsA(isA<InputValidationError>()),
       );

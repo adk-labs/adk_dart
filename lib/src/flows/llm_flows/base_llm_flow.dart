@@ -72,6 +72,12 @@ class BaseLlmFlow {
 
     final BaseLlmConnection connection = _connectLive(llm, request);
     Future<void>? sendTask;
+    Future<void>? closeTask;
+    Future<void> closeConnectionOnce() {
+      closeTask ??= connection.close();
+      return closeTask!;
+    }
+
     try {
       if (request.contents.isNotEmpty) {
         await connection.sendHistory(
@@ -81,7 +87,11 @@ class BaseLlmFlow {
         );
       }
 
-      sendTask = _sendToModel(connection, context);
+      sendTask = _sendToModel(
+        connection,
+        context,
+        closeConnection: closeConnectionOnce,
+      );
       await for (final Event event in _receiveFromModel(
         connection,
         context,
@@ -99,7 +109,7 @@ class BaseLlmFlow {
           await sendTask;
         } catch (_) {}
       }
-      await connection.close();
+      await closeConnectionOnce();
     }
   }
 
@@ -173,8 +183,9 @@ class BaseLlmFlow {
 
   Future<void> _sendToModel(
     BaseLlmConnection connection,
-    InvocationContext context,
-  ) async {
+    InvocationContext context, {
+    required Future<void> Function() closeConnection,
+  }) async {
     while (true) {
       final LiveRequestQueue? liveQueue = context.liveRequestQueue;
       if (liveQueue == null) {
@@ -186,7 +197,7 @@ class BaseLlmFlow {
 
       await Future<void>.delayed(Duration.zero);
       if (liveRequest.close) {
-        await connection.close();
+        await closeConnection();
         return;
       }
 
@@ -327,6 +338,10 @@ class BaseLlmFlow {
     yield finalized;
 
     if (finalized.getFunctionCalls().isNotEmpty) {
+      if (finalized.partial == true) {
+        return;
+      }
+
       final Event? functionResponseEvent = await flow_functions
           .handleFunctionCallsAsync(context, finalized, request.toolsDict);
       if (functionResponseEvent != null) {
