@@ -288,6 +288,7 @@ export 'src/tools/bigtable/metadata_tool.dart';
 export 'src/tools/bigtable/query_tool.dart'
     hide executeSql, defaultMaxExecutedQueryResultRows;
 export 'src/tools/bigtable/settings.dart';
+export 'src/tools/bash_tool.dart';
 export 'src/tools/crewai_tool.dart';
 export 'src/tools/computer_use/base_computer.dart';
 export 'src/tools/computer_use/computer_use_tool.dart';
