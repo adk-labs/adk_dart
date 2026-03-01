@@ -1,6 +1,6 @@
 name: flutter_adk
 description: Flutter facade package for adk_dart core runtime on all Flutter platforms.
-version: 2026.3.1
+version: 2026.3.1+1
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart
 issue_tracker: https://github.com/adk-labs/adk_dart/issues
