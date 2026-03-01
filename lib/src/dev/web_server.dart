@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import '../a2a/executor/a2a_agent_executor.dart';
+import '../a2a/protocol.dart';
 import '../a2a/utils/agent_card_builder.dart';
 import '../agents/live_request_queue.dart';
 import '../agents/run_config.dart';
@@ -143,6 +145,8 @@ class _AdkDevWebContext {
   final Directory? webAssetsDir;
 
   final Map<String, Runner> _runners = <String, Runner>{};
+  final Map<String, Map<String, Map<String, Object?>>> _a2aTasksByApp =
+      <String, Map<String, Map<String, Object?>>>{};
 
   static Future<_AdkDevWebContext> create({
     required DevAgentRuntime runtime,
@@ -344,6 +348,28 @@ class _AdkDevWebContext {
       await runner.close();
     }
     _runners.clear();
+    _a2aTasksByApp.clear();
+  }
+
+  void upsertA2aTask(String appName, Map<String, Object?> task) {
+    final String taskId = '${task['id'] ?? ''}'.trim();
+    if (taskId.isEmpty) {
+      return;
+    }
+    final Map<String, Map<String, Object?>> byTask = _a2aTasksByApp.putIfAbsent(
+      appName,
+      () => <String, Map<String, Object?>>{},
+    );
+    byTask[taskId] = Map<String, Object?>.from(task);
+  }
+
+  Map<String, Object?>? readA2aTask(String appName, String taskId) {
+    final Map<String, Map<String, Object?>>? byTask = _a2aTasksByApp[appName];
+    final Map<String, Object?>? found = byTask?[taskId];
+    if (found == null) {
+      return null;
+    }
+    return Map<String, Object?>.from(found);
   }
 }
 
@@ -426,6 +452,14 @@ Future<void> _handleRequest(
         context,
         appNameFromPath: scopedAppName,
       );
+      return;
+    }
+  }
+
+  if (context.a2a && request.method == 'POST') {
+    final _A2aRpcRoute? rpcRoute = _parseA2aRpcRoute(routedPath);
+    if (rpcRoute != null) {
+      await _handleA2aRpc(request, context, route: rpcRoute);
       return;
     }
   }
@@ -2319,9 +2353,7 @@ List<BasePlugin> _instantiateExtraPlugins(
       plugins.add(plugin);
     } else {
       stderr.writeln(
-        'Unsupported extra plugin "${
-            spec.raw
-          }"; ignoring. Supported plugins are built-in ADK plugins only.',
+        'Unsupported extra plugin "${spec.raw}"; ignoring. Supported plugins are built-in ADK plugins only.',
       );
     }
   }
@@ -2352,10 +2384,7 @@ void _configureCloudTelemetry({
       enableCloudTracing: traceToCloud || otelToCloud,
       enableCloudMetrics: false,
       enableCloudLogging: otelToCloud,
-      googleAuth: GoogleAuthResult(
-        credentials: Object(),
-        projectId: projectId,
-      ),
+      googleAuth: GoogleAuthResult(credentials: Object(), projectId: projectId),
       environment: environment,
     );
     if (gcpHooks.spanProcessors.isNotEmpty ||
@@ -2389,7 +2418,9 @@ Future<void> _handleA2aAgentCard(
       '';
   final String resolvedAppName = appNameFromPath?.trim().isNotEmpty == true
       ? appNameFromPath!.trim()
-      : (fromQuery.trim().isNotEmpty ? fromQuery.trim() : context.defaultAppName);
+      : (fromQuery.trim().isNotEmpty
+            ? fromQuery.trim()
+            : context.defaultAppName);
 
   final Map<String, Object?>? diskCard = await _loadA2aAgentCardFromDisk(
     context,
@@ -2472,6 +2503,565 @@ String? _extractA2aScopedAppName(String routedPath) {
   }
 
   return null;
+}
+
+class _A2aRpcRoute {
+  _A2aRpcRoute({required this.appName, this.methodFromPath});
+
+  final String appName;
+  final String? methodFromPath;
+}
+
+class _A2aExecutionResult {
+  _A2aExecutionResult({required this.message, required this.task});
+
+  final Map<String, Object?> message;
+  final Map<String, Object?> task;
+}
+
+_A2aRpcRoute? _parseA2aRpcRoute(String routedPath) {
+  if (!routedPath.startsWith('/a2a/')) {
+    return null;
+  }
+
+  final List<String> segments = Uri(
+    path: routedPath,
+  ).pathSegments.where((String value) => value.isNotEmpty).toList();
+  if (segments.length < 2 || segments[0] != 'a2a') {
+    return null;
+  }
+
+  final String appName = Uri.decodeComponent(segments[1]).trim();
+  if (appName.isEmpty || appName.contains('/')) {
+    return null;
+  }
+  if (segments.length == 2) {
+    return _A2aRpcRoute(appName: appName);
+  }
+  if (segments.length == 4 && segments[2] == 'v1') {
+    final String? methodFromPath = _a2aMethodFromV1Operation(segments[3]);
+    if (methodFromPath == null) {
+      return null;
+    }
+    return _A2aRpcRoute(appName: appName, methodFromPath: methodFromPath);
+  }
+  return null;
+}
+
+String? _a2aMethodFromV1Operation(String operation) {
+  switch (operation.trim().toLowerCase()) {
+    case 'message:send':
+      return 'message/send';
+    case 'message:stream':
+      return 'message/stream';
+    case 'tasks:get':
+      return 'tasks/get';
+    case 'tasks:cancel':
+      return 'tasks/cancel';
+    default:
+      return null;
+  }
+}
+
+Future<void> _handleA2aRpc(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required _A2aRpcRoute route,
+}) async {
+  final Map<String, dynamic> payload = await _readJsonBody(request);
+  final Object? id = payload['id'];
+  final String method = _normalizeA2aRpcMethod(
+    (payload['method'] is String ? payload['method'] as String : null) ??
+        route.methodFromPath ??
+        '',
+  );
+  final Map<String, dynamic> params = payload['params'] is Map
+      ? _toDynamicMap(payload['params'])
+      : <String, dynamic>{};
+
+  if (method.isEmpty) {
+    await _writeJson(
+      request,
+      context,
+      payload: _a2aJsonRpcError(
+        id: id,
+        code: -32600,
+        message: 'A2A JSON-RPC request must provide a method.',
+      ),
+    );
+    return;
+  }
+
+  try {
+    switch (method) {
+      case 'message/send':
+        final _A2aExecutionResult result = await _executeA2aMessageSend(
+          context,
+          appName: route.appName,
+          params: params,
+        );
+        await _writeJson(
+          request,
+          context,
+          payload: _a2aJsonRpcSuccess(id: id, result: result.message),
+        );
+        return;
+      case 'message/stream':
+        final _A2aExecutionResult result = await _executeA2aMessageSend(
+          context,
+          appName: route.appName,
+          params: params,
+        );
+        await _writeJson(
+          request,
+          context,
+          payload: _a2aJsonRpcSuccess(id: id, result: result.task),
+        );
+        return;
+      case 'tasks/get':
+        final String taskId = _readString(params, const <String>[
+          'taskId',
+          'task_id',
+          'id',
+        ], required: true);
+        final Map<String, Object?>? task = context.readA2aTask(
+          route.appName,
+          taskId,
+        );
+        if (task == null) {
+          await _writeJson(
+            request,
+            context,
+            payload: _a2aJsonRpcError(
+              id: id,
+              code: -32004,
+              message: 'A2A task not found: $taskId',
+            ),
+          );
+          return;
+        }
+        await _writeJson(
+          request,
+          context,
+          payload: _a2aJsonRpcSuccess(id: id, result: task),
+        );
+        return;
+      case 'tasks/cancel':
+        final String taskId = _readString(params, const <String>[
+          'taskId',
+          'task_id',
+          'id',
+        ], required: true);
+        final Map<String, Object?>? existing = context.readA2aTask(
+          route.appName,
+          taskId,
+        );
+        if (existing == null) {
+          await _writeJson(
+            request,
+            context,
+            payload: _a2aJsonRpcError(
+              id: id,
+              code: -32004,
+              message: 'A2A task not found: $taskId',
+            ),
+          );
+          return;
+        }
+
+        final Map<String, Object?> canceled = <String, Object?>{
+          ...existing,
+          'status': <String, Object?>{
+            'state': 'failed',
+            'timestamp': DateTime.now().toUtc().toIso8601String(),
+            'message': _a2aMessageToJson(
+              A2aMessage(
+                messageId:
+                    'a2a_cancel_${DateTime.now().microsecondsSinceEpoch}',
+                role: A2aRole.agent,
+                taskId: taskId,
+                contextId:
+                    '${existing['contextId'] ?? existing['context_id'] ?? ''}',
+                parts: <A2aPart>[A2aPart.text('Task cancellation requested.')],
+              ),
+            ),
+          },
+        };
+        context.upsertA2aTask(route.appName, canceled);
+        await _writeJson(
+          request,
+          context,
+          payload: _a2aJsonRpcSuccess(id: id, result: canceled),
+        );
+        return;
+      default:
+        await _writeJson(
+          request,
+          context,
+          payload: _a2aJsonRpcError(
+            id: id,
+            code: -32601,
+            message: 'A2A JSON-RPC method not found: $method',
+          ),
+        );
+        return;
+    }
+  } on FormatException catch (error) {
+    await _writeJson(
+      request,
+      context,
+      payload: _a2aJsonRpcError(id: id, code: -32602, message: error.message),
+    );
+  } on ArgumentError catch (error) {
+    await _writeJson(
+      request,
+      context,
+      payload: _a2aJsonRpcError(
+        id: id,
+        code: -32602,
+        message: '${error.message}',
+      ),
+    );
+  } catch (error) {
+    await _writeJson(
+      request,
+      context,
+      payload: _a2aJsonRpcError(
+        id: id,
+        code: -32000,
+        message: 'A2A RPC execution failed: $error',
+      ),
+    );
+  }
+}
+
+Future<_A2aExecutionResult> _executeA2aMessageSend(
+  _AdkDevWebContext context, {
+  required String appName,
+  required Map<String, dynamic> params,
+}) async {
+  final Map<String, dynamic> messageJson = params['message'] is Map
+      ? _toDynamicMap(params['message'])
+      : params;
+  final A2aMessage message = _a2aMessageFromJson(messageJson);
+  if (message.parts.isEmpty) {
+    throw const FormatException(
+      'A2A request message must contain at least one part.',
+    );
+  }
+
+  final String contextId = (message.contextId ?? '').trim().isNotEmpty
+      ? message.contextId!.trim()
+      : 'a2a_ctx_${DateTime.now().microsecondsSinceEpoch}';
+  final String taskId = (message.taskId ?? '').trim().isNotEmpty
+      ? message.taskId!.trim()
+      : 'a2a_task_${DateTime.now().microsecondsSinceEpoch}';
+
+  message.contextId = contextId;
+  message.taskId = taskId;
+
+  final Runner runner = await context.getRunner(appName);
+  final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+  final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+  await executor.execute(
+    A2aRequestContext(taskId: taskId, contextId: contextId, message: message),
+    eventQueue,
+  );
+  await eventQueue.close();
+
+  final Map<String, Object?> task = _a2aTaskFromEvents(
+    taskId: taskId,
+    contextId: contextId,
+    events: eventQueue.events,
+  );
+  context.upsertA2aTask(appName, task);
+
+  final Map<String, Object?> status = _toObjectMap(task['status']);
+  final Map<String, Object?> statusMessage = _toObjectMap(status['message']);
+  final Map<String, Object?> messageResult = statusMessage.isNotEmpty
+      ? statusMessage
+      : _a2aFallbackMessage(task);
+
+  return _A2aExecutionResult(message: messageResult, task: task);
+}
+
+Map<String, Object?> _a2aTaskFromEvents({
+  required String taskId,
+  required String contextId,
+  required List<A2aEvent> events,
+}) {
+  A2aTaskStatus status = A2aTaskStatus(state: A2aTaskState.completed);
+  final List<Map<String, Object?>> history = <Map<String, Object?>>[];
+  final List<Map<String, Object?>> artifacts = <Map<String, Object?>>[];
+
+  for (final A2aEvent event in events) {
+    if (event is A2aTaskStatusUpdateEvent) {
+      status = event.status;
+      final A2aMessage? message = event.status.message;
+      if (message != null) {
+        history.add(_a2aMessageToJson(message));
+      }
+      continue;
+    }
+    if (event is A2aTaskArtifactUpdateEvent) {
+      artifacts.add(_a2aArtifactToJson(event.artifact));
+    }
+  }
+
+  final Map<String, Object?> statusJson = _a2aTaskStatusToJson(status);
+  if (_toObjectMap(statusJson['message']).isEmpty && artifacts.isNotEmpty) {
+    final Map<String, Object?> lastArtifact = artifacts.last;
+    final List<Object?> partsRaw = lastArtifact['parts'] is List
+        ? List<Object?>.from(lastArtifact['parts'] as List)
+        : const <Object?>[];
+    final List<A2aPart> parts = partsRaw
+        .whereType<Map>()
+        .map((Map value) => _a2aPartFromJson(_toDynamicMap(value)))
+        .toList(growable: false);
+    statusJson['message'] = _a2aMessageToJson(
+      A2aMessage(
+        messageId: 'a2a_msg_${DateTime.now().microsecondsSinceEpoch}',
+        role: A2aRole.agent,
+        taskId: taskId,
+        contextId: contextId,
+        parts: parts,
+      ),
+    );
+  }
+
+  return <String, Object?>{
+    'kind': 'task',
+    'id': taskId,
+    'taskId': taskId,
+    'task_id': taskId,
+    'contextId': contextId,
+    'context_id': contextId,
+    'status': statusJson,
+    'history': history,
+    'artifacts': artifacts,
+  };
+}
+
+Map<String, Object?> _a2aFallbackMessage(Map<String, Object?> task) {
+  final String taskId =
+      '${task['id'] ?? task['taskId'] ?? task['task_id'] ?? ''}';
+  final String contextId = '${task['contextId'] ?? task['context_id'] ?? ''}'
+      .trim();
+  return _a2aMessageToJson(
+    A2aMessage(
+      messageId: 'a2a_msg_${DateTime.now().microsecondsSinceEpoch}',
+      role: A2aRole.agent,
+      taskId: taskId.isEmpty ? null : taskId,
+      contextId: contextId.isEmpty ? null : contextId,
+      parts: <A2aPart>[A2aPart.text('')],
+    ),
+  );
+}
+
+Map<String, Object?> _a2aTaskStatusToJson(A2aTaskStatus status) {
+  return <String, Object?>{
+    'state': _a2aTaskStateToWire(status.state),
+    'timestamp': status.timestamp,
+    if (status.message != null) 'message': _a2aMessageToJson(status.message!),
+  };
+}
+
+String _a2aTaskStateToWire(A2aTaskState state) {
+  switch (state) {
+    case A2aTaskState.submitted:
+      return 'submitted';
+    case A2aTaskState.working:
+      return 'working';
+    case A2aTaskState.inputRequired:
+      return 'input_required';
+    case A2aTaskState.authRequired:
+      return 'auth_required';
+    case A2aTaskState.failed:
+      return 'failed';
+    case A2aTaskState.completed:
+      return 'completed';
+  }
+}
+
+Map<String, Object?> _a2aArtifactToJson(A2aArtifact artifact) {
+  return <String, Object?>{
+    'kind': 'artifact',
+    'artifactId': artifact.artifactId,
+    'artifact_id': artifact.artifactId,
+    'parts': artifact.parts
+        .map<Map<String, Object?>>(_a2aPartToJson)
+        .toList(growable: false),
+  };
+}
+
+Map<String, Object?> _a2aMessageToJson(A2aMessage message) {
+  return <String, Object?>{
+    'kind': 'message',
+    'messageId': message.messageId,
+    'message_id': message.messageId,
+    'role': message.role == A2aRole.user ? 'user' : 'agent',
+    if (message.taskId != null) 'taskId': message.taskId,
+    if (message.taskId != null) 'task_id': message.taskId,
+    if (message.contextId != null) 'contextId': message.contextId,
+    if (message.contextId != null) 'context_id': message.contextId,
+    'parts': message.parts
+        .map<Map<String, Object?>>(_a2aPartToJson)
+        .toList(growable: false),
+  };
+}
+
+A2aMessage _a2aMessageFromJson(Map<String, dynamic> json) {
+  final String messageId = _readString(json, const <String>[
+    'messageId',
+    'message_id',
+    'id',
+  ], fallback: 'a2a_msg_${DateTime.now().microsecondsSinceEpoch}');
+  final String roleRaw = _readString(json, const <String>[
+    'role',
+  ], fallback: 'user');
+  final List<A2aPart> parts = _a2aPartsFromJson(json['parts']);
+  return A2aMessage(
+    messageId: messageId,
+    role: roleRaw.toLowerCase() == 'agent' ? A2aRole.agent : A2aRole.user,
+    taskId: _nullableString(json, const <String>['taskId', 'task_id']),
+    contextId: _nullableString(json, const <String>['contextId', 'context_id']),
+    parts: parts,
+    metadata: _toObjectMap(json['metadata']),
+  );
+}
+
+List<A2aPart> _a2aPartsFromJson(Object? raw) {
+  if (raw is! List) {
+    return const <A2aPart>[];
+  }
+  final List<A2aPart> parts = <A2aPart>[];
+  for (final Object? item in raw) {
+    if (item is! Map) {
+      continue;
+    }
+    parts.add(_a2aPartFromJson(_toDynamicMap(item)));
+  }
+  return parts;
+}
+
+A2aPart _a2aPartFromJson(Map<String, dynamic> json) {
+  final Map<String, Object?> metadata = _toObjectMap(json['metadata']);
+  final String kind = _readString(json, const <String>[
+    'kind',
+  ], fallback: '').toLowerCase();
+
+  if (kind == 'data') {
+    return A2aPart.data(_toObjectMap(json['data']), metadata: metadata);
+  }
+
+  if (kind == 'file') {
+    final Map<String, dynamic> file = _toDynamicMap(json['file']);
+    final String? mimeType = _nullableString(file, const <String>[
+      'mimeType',
+      'mime_type',
+    ]);
+    final String? uri = _nullableString(file, const <String>['uri', 'url']);
+    if (uri != null && uri.isNotEmpty) {
+      return A2aPart.fileUri(uri, mimeType: mimeType, metadata: metadata);
+    }
+    final String bytes = _readString(file, const <String>[
+      'bytes',
+    ], fallback: '');
+    return A2aPart.fileBytes(bytes, mimeType: mimeType, metadata: metadata);
+  }
+
+  final String text = _readString(json, const <String>['text'], fallback: '');
+  return A2aPart.text(text, metadata: metadata);
+}
+
+Map<String, Object?> _a2aPartToJson(A2aPart part) {
+  final Map<String, Object?> metadata = Map<String, Object?>.from(
+    part.root.metadata,
+  );
+  final A2aTextPart? textPart = part.textPart;
+  if (textPart != null) {
+    return <String, Object?>{
+      'kind': 'text',
+      'text': textPart.text,
+      if (metadata.isNotEmpty) 'metadata': metadata,
+    };
+  }
+
+  final A2aDataPart? dataPart = part.dataPart;
+  if (dataPart != null) {
+    return <String, Object?>{
+      'kind': 'data',
+      'data': Map<String, Object?>.from(dataPart.data),
+      if (metadata.isNotEmpty) 'metadata': metadata,
+    };
+  }
+
+  final A2aFilePart? filePart = part.filePart;
+  if (filePart != null) {
+    final A2aFile file = filePart.file;
+    if (file is A2aFileWithUri) {
+      return <String, Object?>{
+        'kind': 'file',
+        'file': <String, Object?>{
+          'uri': file.uri,
+          if (file.mimeType != null) 'mimeType': file.mimeType,
+          if (file.mimeType != null) 'mime_type': file.mimeType,
+        },
+        if (metadata.isNotEmpty) 'metadata': metadata,
+      };
+    }
+    if (file is A2aFileWithBytes) {
+      return <String, Object?>{
+        'kind': 'file',
+        'file': <String, Object?>{
+          'bytes': file.bytes,
+          if (file.mimeType != null) 'mimeType': file.mimeType,
+          if (file.mimeType != null) 'mime_type': file.mimeType,
+        },
+        if (metadata.isNotEmpty) 'metadata': metadata,
+      };
+    }
+  }
+
+  return <String, Object?>{
+    'kind': 'text',
+    'text': '',
+    if (metadata.isNotEmpty) 'metadata': metadata,
+  };
+}
+
+String _normalizeA2aRpcMethod(String raw) {
+  return raw.trim().toLowerCase().replaceAll(':', '/').replaceAll('.', '/');
+}
+
+Map<String, Object?> _a2aJsonRpcSuccess({required Object? id, Object? result}) {
+  return <String, Object?>{'jsonrpc': '2.0', 'id': id, 'result': result};
+}
+
+Map<String, Object?> _a2aJsonRpcError({
+  required Object? id,
+  required int code,
+  required String message,
+  Object? data,
+}) {
+  final Map<String, Object?> error = <String, Object?>{
+    'code': code,
+    'message': message,
+  };
+  if (data != null) {
+    error['data'] = data;
+  }
+  return <String, Object?>{'jsonrpc': '2.0', 'id': id, 'error': error};
+}
+
+Map<String, Object?> _toObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return <String, Object?>{};
 }
 
 class _RunRequest {

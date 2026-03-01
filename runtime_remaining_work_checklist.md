@@ -29,7 +29,7 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
     - `lib/src/cli/cli_tools_click.dart:28-47`
     - Python reference executes deploy command: `ref/adk-python/src/google/adk/cli/cli_deploy.py:760-800`
 
-- [ ] Complete `--a2a` server behavior to include A2A RPC routes, not only agent card routes.
+- [x] Complete `--a2a` server behavior to include A2A RPC routes. (2026-03-01)
   - Current: only `/.well-known/agent.json`, `/a2a/agent-card`, and scoped agent-card URLs are served.
   - Effect: A2A protocol calls cannot run, only card discovery works.
   - Evidence:

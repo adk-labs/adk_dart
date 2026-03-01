@@ -118,9 +118,9 @@ void main() {
         Uri.parse('http://127.0.0.1:${a2aServer.port}/.well-known/agent.json'),
       );
       final HttpClientResponse rootResponse = await rootRequest.close();
-      final Map<String, dynamic> rootPayload = jsonDecode(
-        await utf8.decoder.bind(rootResponse).join(),
-      ) as Map<String, dynamic>;
+      final Map<String, dynamic> rootPayload =
+          jsonDecode(await utf8.decoder.bind(rootResponse).join())
+              as Map<String, dynamic>;
 
       final HttpClientRequest scopedRequest = await a2aClient.getUrl(
         Uri.parse(
@@ -128,9 +128,9 @@ void main() {
         ),
       );
       final HttpClientResponse scopedResponse = await scopedRequest.close();
-      final Map<String, dynamic> scopedPayload = jsonDecode(
-        await utf8.decoder.bind(scopedResponse).join(),
-      ) as Map<String, dynamic>;
+      final Map<String, dynamic> scopedPayload =
+          jsonDecode(await utf8.decoder.bind(scopedResponse).join())
+              as Map<String, dynamic>;
 
       expect(rootResponse.statusCode, HttpStatus.ok);
       expect(scopedResponse.statusCode, HttpStatus.ok);
@@ -138,6 +138,108 @@ void main() {
       expect(rootPayload['url'], contains('/a2a/test_app'));
       expect(scopedPayload['name'], 'root_agent');
       expect(scopedPayload['url'], contains('/a2a/test_app'));
+    });
+
+    test(
+      'returns not found for a2a rpc endpoint when a2a is disabled',
+      () async {
+        final HttpClientRequest request = await client.postUrl(
+          Uri.parse('http://127.0.0.1:${server.port}/a2a/test_app'),
+        );
+        request.headers.contentType = ContentType.json;
+        request.write(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': 'rpc-disabled',
+            'method': 'message/send',
+            'params': <String, Object?>{},
+          }),
+        );
+        final HttpClientResponse response = await request.close();
+        await utf8.decoder.bind(response).join();
+        expect(response.statusCode, HttpStatus.notFound);
+      },
+    );
+
+    test('handles a2a message send and task get rpc routes', () async {
+      final DevAgentRuntime a2aRuntime = DevAgentRuntime(config: config);
+      final HttpServer a2aServer = await startAdkDevWebServer(
+        runtime: a2aRuntime,
+        project: config,
+        port: 0,
+        a2a: true,
+      );
+      addTearDown(() async {
+        await a2aServer.close(force: true);
+        await a2aRuntime.runner.close();
+      });
+
+      final HttpClient a2aClient = HttpClient();
+      addTearDown(() => a2aClient.close(force: true));
+
+      final HttpClientRequest sendRequest = await a2aClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${a2aServer.port}/a2a/test_app/v1/message:send',
+        ),
+      );
+      sendRequest.headers.contentType = ContentType.json;
+      sendRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-send-1',
+          'params': <String, Object?>{
+            'message': <String, Object?>{
+              'kind': 'message',
+              'messageId': 'msg-send-1',
+              'role': 'user',
+              'parts': <Object>[
+                <String, Object?>{
+                  'kind': 'text',
+                  'text': 'What time in Seoul?',
+                },
+              ],
+            },
+          },
+        }),
+      );
+      final HttpClientResponse sendResponse = await sendRequest.close();
+      final Map<String, dynamic> sendPayload =
+          jsonDecode(await utf8.decoder.bind(sendResponse).join())
+              as Map<String, dynamic>;
+      final Map<String, dynamic> result =
+          sendPayload['result'] as Map<String, dynamic>;
+      final String taskId = '${result['taskId'] ?? result['task_id'] ?? ''}';
+
+      expect(sendResponse.statusCode, HttpStatus.ok);
+      expect(sendPayload['jsonrpc'], '2.0');
+      expect(taskId, isNotEmpty);
+      expect(result['kind'], 'message');
+      expect(result['contextId'] ?? result['context_id'], isNotEmpty);
+
+      final HttpClientRequest getRequest = await a2aClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${a2aServer.port}/a2a/test_app/v1/tasks:get',
+        ),
+      );
+      getRequest.headers.contentType = ContentType.json;
+      getRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-get-1',
+          'params': <String, Object?>{'taskId': taskId},
+        }),
+      );
+      final HttpClientResponse getResponse = await getRequest.close();
+      final Map<String, dynamic> getPayload =
+          jsonDecode(await utf8.decoder.bind(getResponse).join())
+              as Map<String, dynamic>;
+      final Map<String, dynamic> task =
+          getPayload['result'] as Map<String, dynamic>;
+
+      expect(getResponse.statusCode, HttpStatus.ok);
+      expect(task['kind'], 'task');
+      expect(task['id'] ?? task['taskId'] ?? task['task_id'], taskId);
+      expect(task['status'], isA<Map>());
     });
 
     test('creates a session and sends a message', () async {
