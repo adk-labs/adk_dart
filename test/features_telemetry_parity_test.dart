@@ -122,6 +122,8 @@ void main() {
     setUp(() {
       resetOtelProvidersForTest();
       resetGoogleAuthResolverForTest();
+      resetOtelLoggerForTest();
+      resetGenAiInstrumentationDetectorForTest();
       tracer.clear();
     });
 
@@ -150,6 +152,35 @@ void main() {
       expect(globalOtelProviders.loggerProvider, isNotNull);
       expect(globalOtelProviders.eventLoggerProvider, isNotNull);
       expect(globalOtelProviders.tracerProvider!.spanProcessors, hasLength(1));
+    });
+
+    test('maybeSetOtelProviders does not override existing providers', () {
+      maybeSetOtelProviders(
+        otelHooksToSetup: <OTelHooks>[
+          OTelHooks(
+            spanProcessors: <SpanProcessor>[
+              BatchSpanProcessor(OtlpSpanExporter(endpoint: 'first')),
+            ],
+          ),
+        ],
+      );
+      final TracerProvider? first = globalOtelProviders.tracerProvider;
+
+      maybeSetOtelProviders(
+        otelHooksToSetup: <OTelHooks>[
+          OTelHooks(
+            spanProcessors: <SpanProcessor>[
+              BatchSpanProcessor(OtlpSpanExporter(endpoint: 'second')),
+            ],
+          ),
+        ],
+      );
+
+      expect(globalOtelProviders.tracerProvider, same(first));
+      expect(first!.spanProcessors, hasLength(1));
+      final BatchSpanProcessor processor =
+          first.spanProcessors.single as BatchSpanProcessor;
+      expect((processor.exporter as OtlpSpanExporter).endpoint, 'first');
     });
 
     test('OTLP env vars create generic exporters', () {
@@ -307,6 +338,7 @@ void main() {
       final LlmRequest request = LlmRequest(
         model: 'gemini-2.5-flash',
         contents: <Content>[Content.userText('hello')],
+        config: GenerateContentConfig(topP: 0.8, maxOutputTokens: 128),
       );
       final LlmResponse response = LlmResponse(
         finishReason: 'STOP',
@@ -321,6 +353,8 @@ void main() {
       expect(span.attributes['gen_ai.response.finish_reasons'], <String>[
         'stop',
       ]);
+      expect(span.attributes['gen_ai.request.top_p'], 0.8);
+      expect(span.attributes['gen_ai.request.max_tokens'], 128);
 
       traceSendData(context, 'evt-2', <Content>[
         Content.userText('payload'),
@@ -337,6 +371,103 @@ void main() {
       );
       expect(span.attributes['gcp.vertex.agent.data'], '{}');
     });
+
+    test(
+      'agent invocation and inference span helpers match python telemetry path',
+      () async {
+        final _FakeSessionService sessionService = _FakeSessionService();
+        final InvocationContext context = InvocationContext(
+          sessionService: sessionService,
+          invocationId: 'inv-2',
+          agent: _FakeAgent(),
+          session: Session(id: 's-2', appName: 'app', userId: 'user-2'),
+        );
+        final Event modelResponseEvent = Event(
+          invocationId: 'inv-2',
+          author: 'model',
+        );
+        final LlmRequest request = LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello world')],
+          config: GenerateContentConfig(
+            systemInstruction: 'answer clearly',
+            tools: <ToolDeclaration>[
+              ToolDeclaration(
+                functionDeclarations: <FunctionDeclaration>[
+                  FunctionDeclaration(
+                    name: 'clock',
+                    description: 'returns time',
+                    parameters: <String, dynamic>{
+                      'type': 'object',
+                      'properties': <String, dynamic>{},
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+        final LlmResponse response = LlmResponse(
+          finishReason: 'STOP',
+          content: Content.modelText('hi'),
+          usageMetadata: <String, Object?>{
+            'promptTokenCount': 2,
+            'candidatesTokenCount': 4,
+          },
+        );
+
+        final TraceSpanRecord invocationSpan = tracer.startAsCurrentSpan(
+          'invoke_agent',
+        );
+        traceAgentInvocation(invocationSpan, context.agent, context);
+        expect(
+          invocationSpan.attributes['gen_ai.operation.name'],
+          'invoke_agent',
+        );
+        expect(invocationSpan.attributes['gen_ai.conversation.id'], 's-2');
+        tracer.endCurrentSpan();
+
+        final Map<String, String> env = <String, String>{
+          'OTEL_SEMCONV_STABILITY_OPT_IN': 'gen_ai_latest_experimental',
+          'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT':
+              'SPAN_AND_EVENT',
+        };
+        await useInferenceSpan(request, context, modelResponseEvent, (
+          GenerateContentSpan? span,
+        ) async {
+          expect(span, isNotNull);
+          traceInferenceResult(span, response, environment: env);
+        }, environment: env);
+
+        final TraceSpanRecord inferenceSpan = tracer.finishedSpans.last;
+        expect(inferenceSpan.name, contains('generate_content'));
+        expect(
+          inferenceSpan.attributes['gen_ai.operation.name'],
+          'generate_content',
+        );
+        expect(
+          inferenceSpan.attributes['gen_ai.input.messages'],
+          isA<String>(),
+        );
+        expect(
+          inferenceSpan.attributes['gen_ai.tool_definitions'],
+          contains('"name":"clock"'),
+        );
+
+        final OTelLogRecord detailsEvent = otelLogger.records.singleWhere(
+          (OTelLogRecord record) =>
+              record.eventName == 'gen_ai.client.inference.operation.details',
+        );
+        expect(
+          detailsEvent.attributes['gen_ai.response.finish_reasons'],
+          <String>['stop'],
+        );
+        expect(
+          detailsEvent.attributes['gen_ai.output.messages'],
+          isA<List<Map<String, Object?>>>(),
+        );
+      },
+    );
   });
 }
 

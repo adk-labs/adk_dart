@@ -59,3 +59,25 @@ Target: `lib/src/telemetry`
 - `gen_ai.request.max_tokens`
 5. Updated `maybeSetOtelProviders` to avoid overriding pre-existing providers.
 6. Added warning log on missing GCP project in `getGcpExporters`.
+
+## Work Unit 3 - Validation and Regression Tests
+
+### Updated test file
+- `test/features_telemetry_parity_test.dart`
+
+### Added coverage
+1. Provider override prevention behavior in `maybeSetOtelProviders`.
+2. `traceCallLlm` attribute parity for:
+- `gen_ai.request.top_p`
+- `gen_ai.request.max_tokens`
+3. `traceAgentInvocation` attribute behavior.
+4. `useInferenceSpan` + `traceInferenceResult` experimental semconv path:
+- completion-details event emission
+- span operation-details attribute persistence
+
+### Validation commands and result
+- `dart analyze lib/src/telemetry test/features_telemetry_parity_test.dart` -> passed.
+- `mcp__dart__run_tests` on:
+  - `test/features_telemetry_parity_test.dart`
+  - `test/telemetry_test.dart`
+  -> passed (`14 tests passed`).
