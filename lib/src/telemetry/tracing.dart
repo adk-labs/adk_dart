@@ -1,26 +1,79 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import '../agents/base_agent.dart';
 import '../agents/invocation_context.dart';
+import '../agents/llm_agent.dart';
 import '../events/event.dart';
+import '../models/google_llm.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../tools/base_tool.dart';
 import '../types/content.dart';
+import '../utils/model_name_utils.dart';
 import 'base_telemetry_service.dart';
+import '_experimental_semconv.dart' as experimental_semconv;
 
 const String adkCaptureMessageContentInSpans =
     'ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS';
+const String otelInstrumentationGenaiCaptureMessageContent =
+    'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT';
+const String userContentElided = '<elided>';
 
-class TraceSpanRecord {
+class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
   TraceSpanRecord(this.name, {Map<String, Object?>? attributes})
     : attributes = attributes ?? <String, Object?>{};
 
   final String name;
   final Map<String, Object?> attributes;
 
+  @override
   void setAttribute(String key, Object? value) {
     attributes[key] = value;
+  }
+
+  void setAttributes(Map<String, Object?> values) {
+    attributes.addAll(values);
+  }
+}
+
+class OTelLogRecord {
+  OTelLogRecord({
+    required this.eventName,
+    this.body,
+    Map<String, Object?>? attributes,
+  }) : attributes = attributes ?? <String, Object?>{};
+
+  final String eventName;
+  final Object? body;
+  final Map<String, Object?> attributes;
+}
+
+class AdkOtelLogger implements experimental_semconv.CompletionDetailsLogger {
+  final List<OTelLogRecord> _records = <OTelLogRecord>[];
+
+  void emit(OTelLogRecord record) {
+    _records.add(record);
+  }
+
+  @override
+  void emitCompletionDetailsLog(
+    experimental_semconv.CompletionDetailsLogRecord record,
+  ) {
+    emit(
+      OTelLogRecord(
+        eventName: record.eventName,
+        body: record.body,
+        attributes: record.attributes,
+      ),
+    );
+  }
+
+  List<OTelLogRecord> get records => List<OTelLogRecord>.unmodifiable(_records);
+
+  void clear() {
+    _records.clear();
   }
 }
 
@@ -94,6 +147,11 @@ class AdkTracer {
 }
 
 final AdkTracer tracer = AdkTracer();
+final AdkOtelLogger otelLogger = AdkOtelLogger();
+
+void resetOtelLoggerForTest() {
+  otelLogger.clear();
+}
 
 Future<T> traceSpan<T>(
   BaseTelemetryService telemetryService,
@@ -115,6 +173,18 @@ Future<T> traceSpan<T>(
     telemetryService.endSpan(span.id, error: error);
     rethrow;
   }
+}
+
+void traceAgentInvocation(
+  TraceSpanRecord span,
+  BaseAgent agent,
+  InvocationContext ctx,
+) {
+  span
+    ..setAttribute('gen_ai.operation.name', 'invoke_agent')
+    ..setAttribute('gen_ai.agent.description', agent.description)
+    ..setAttribute('gen_ai.agent.name', agent.name)
+    ..setAttribute('gen_ai.conversation.id', ctx.session.id);
 }
 
 void traceToolCall(
@@ -239,21 +309,16 @@ void traceCallLlm(
       ..setAttribute('gcp.vertex.agent.llm_response', '{}');
   }
 
-  if (llmResponse.usageMetadata is Map<String, Object?>) {
-    final Map<String, Object?> usage =
-        llmResponse.usageMetadata! as Map<String, Object?>;
-    final Object? promptTokenCount = usage['promptTokenCount'];
-    final Object? candidatesTokenCount = usage['candidatesTokenCount'];
-    if (promptTokenCount is num) {
-      targetSpan.setAttribute('gen_ai.usage.input_tokens', promptTokenCount);
-    }
-    if (candidatesTokenCount is num) {
-      targetSpan.setAttribute(
-        'gen_ai.usage.output_tokens',
-        candidatesTokenCount,
-      );
-    }
+  final double? topP = llmRequest.config.topP;
+  if (topP != null) {
+    targetSpan.setAttribute('gen_ai.request.top_p', topP);
   }
+  final int? maxOutputTokens = llmRequest.config.maxOutputTokens;
+  if (maxOutputTokens != null) {
+    targetSpan.setAttribute('gen_ai.request.max_tokens', maxOutputTokens);
+  }
+
+  _setUsageMetadataAttributes(targetSpan, llmResponse.usageMetadata);
 
   final String? finishReason = llmResponse.finishReason;
   if (finishReason != null && finishReason.isNotEmpty) {
@@ -296,14 +361,156 @@ void traceSendData(
   }
 }
 
+@Deprecated('Replaced by useInferenceSpan to support experimental semconv.')
+Future<T> useGenerateContentSpan<T>(
+  LlmRequest llmRequest,
+  InvocationContext invocationContext,
+  Event modelResponseEvent,
+  Future<T> Function(TraceSpanRecord? span) run, {
+  Map<String, String>? environment,
+}) {
+  return useInferenceSpan(llmRequest, invocationContext, modelResponseEvent, (
+    GenerateContentSpan? generateContentSpan,
+  ) {
+    return run(generateContentSpan?.span);
+  }, environment: environment);
+}
+
+Future<T> useInferenceSpan<T>(
+  LlmRequest llmRequest,
+  InvocationContext invocationContext,
+  Event modelResponseEvent,
+  Future<T> Function(GenerateContentSpan? span) run, {
+  Map<String, String>? environment,
+}) async {
+  final Map<String, Object?> commonAttributes = _buildCommonInferenceAttributes(
+    invocationContext,
+    modelResponseEvent,
+  );
+
+  if (_isGeminiAgent(invocationContext.agent) &&
+      _instrumentedWithOpenTelemetryInstrumentationGoogleGenai()) {
+    return _runWithExtraGenerateContentAttributes(
+      commonAttributes,
+      () => run(null),
+    );
+  }
+
+  final bool useExperimentalSemconv = experimental_semconv
+      .isExperimentalSemconv(environment: environment);
+  final TraceSpanRecord span = tracer.startAsCurrentSpan(
+    'generate_content ${llmRequest.model ?? ''}',
+  );
+  final GenerateContentSpan gcSpan = GenerateContentSpan(span);
+
+  try {
+    _setCommonGenerateContentAttributes(span, llmRequest, commonAttributes);
+
+    if (useExperimentalSemconv) {
+      await experimental_semconv.setOperationDetailsAttributesFromRequest(
+        gcSpan.operationDetailsAttributes,
+        llmRequest,
+      );
+      experimental_semconv.setOperationDetailsCommonAttributes(
+        gcSpan.operationDetailsCommonAttributes,
+        commonAttributes,
+      );
+    } else {
+      span.setAttribute(
+        'gen_ai.system',
+        _guessGeminiSystemName(environment: environment),
+      );
+      _emitStablePromptLogs(llmRequest, environment: environment);
+    }
+
+    return await run(gcSpan);
+  } finally {
+    if (useExperimentalSemconv) {
+      experimental_semconv.maybeLogCompletionDetails(
+        span,
+        otelLogger,
+        gcSpan.operationDetailsAttributes,
+        gcSpan.operationDetailsCommonAttributes,
+        environment: environment,
+      );
+    }
+    tracer.endCurrentSpan();
+  }
+}
+
+class GenerateContentSpan {
+  GenerateContentSpan(this.span);
+
+  final TraceSpanRecord span;
+  final Map<String, Object?> operationDetailsAttributes = <String, Object?>{};
+  final Map<String, Object?> operationDetailsCommonAttributes =
+      <String, Object?>{};
+}
+
+@Deprecated('Replaced by traceInferenceResult to support experimental semconv.')
+void traceGenerateContentResult(
+  TraceSpanRecord? span,
+  LlmResponse llmResponse, {
+  Map<String, String>? environment,
+}) {
+  if (span == null || llmResponse.partial == true) {
+    return;
+  }
+
+  final String? finishReason = llmResponse.finishReason;
+  if (finishReason != null && finishReason.isNotEmpty) {
+    span.setAttribute('gen_ai.response.finish_reasons', <String>[
+      finishReason.toLowerCase(),
+    ]);
+  }
+  _setUsageMetadataAttributes(span, llmResponse.usageMetadata);
+  _emitChoiceLog(llmResponse, environment: environment);
+}
+
+void traceInferenceResult(
+  Object? span,
+  LlmResponse llmResponse, {
+  Map<String, String>? environment,
+}) {
+  GenerateContentSpan? generateContentSpan;
+  TraceSpanRecord? targetSpan;
+
+  if (span is GenerateContentSpan) {
+    generateContentSpan = span;
+    targetSpan = span.span;
+  } else if (span is TraceSpanRecord) {
+    targetSpan = span;
+  }
+
+  if (targetSpan == null || llmResponse.partial == true) {
+    return;
+  }
+
+  final String? finishReason = llmResponse.finishReason;
+  if (finishReason != null && finishReason.isNotEmpty) {
+    targetSpan.setAttribute('gen_ai.response.finish_reasons', <String>[
+      finishReason.toLowerCase(),
+    ]);
+  }
+  _setUsageMetadataAttributes(targetSpan, llmResponse.usageMetadata);
+
+  if (experimental_semconv.isExperimentalSemconv(environment: environment) &&
+      generateContentSpan != null) {
+    experimental_semconv.setOperationDetailsAttributesFromResponse(
+      llmResponse,
+      generateContentSpan.operationDetailsAttributes,
+      generateContentSpan.operationDetailsCommonAttributes,
+    );
+    return;
+  }
+
+  _emitChoiceLog(llmResponse, environment: environment);
+}
+
 Map<String, Object?> _buildLlmRequestForTrace(LlmRequest llmRequest) {
   return <String, Object?>{
     'model': llmRequest.model,
-    'config': <String, Object?>{
-      'system_instruction': llmRequest.config.systemInstruction,
-      'response_mime_type': llmRequest.config.responseMimeType,
-      'labels': llmRequest.config.labels,
-    },
+    'config': _generateContentConfigToJson(llmRequest.config),
     'contents': llmRequest.contents
         .map(
           (Content content) =>
@@ -311,6 +518,85 @@ Map<String, Object?> _buildLlmRequestForTrace(LlmRequest llmRequest) {
         )
         .toList(),
   };
+}
+
+Map<String, Object?> _generateContentConfigToJson(
+  GenerateContentConfig config,
+) {
+  final Map<String, Object?> toolConfig = _dropNullEntries(<String, Object?>{
+    'function_calling_config': config.toolConfig?.functionCallingConfig == null
+        ? null
+        : _dropNullEntries(<String, Object?>{
+            'mode': config.toolConfig!.functionCallingConfig!.mode.name,
+            'allowed_function_names':
+                config.toolConfig!.functionCallingConfig!.allowedFunctionNames,
+          }),
+  });
+
+  final Map<String, Object?> httpOptions = _dropNullEntries(<String, Object?>{
+    'api_version': config.httpOptions?.apiVersion,
+    'headers': config.httpOptions?.headers,
+    'retry_options': config.httpOptions?.retryOptions == null
+        ? null
+        : _dropNullEntries(<String, Object?>{
+            'attempts': config.httpOptions!.retryOptions!.attempts,
+            'initial_delay': config.httpOptions!.retryOptions!.initialDelay,
+            'max_delay': config.httpOptions!.retryOptions!.maxDelay,
+            'exp_base': config.httpOptions!.retryOptions!.expBase,
+            'http_status_codes':
+                config.httpOptions!.retryOptions!.httpStatusCodes,
+          }),
+  });
+
+  final List<Map<String, Object?>> tools = (config.tools ?? <ToolDeclaration>[])
+      .map(_toolDeclarationToJson)
+      .toList(growable: false);
+
+  return _dropNullEntries(<String, Object?>{
+    'tools': tools,
+    'system_instruction': config.systemInstruction,
+    'temperature': config.temperature,
+    'top_p': config.topP,
+    'top_k': config.topK,
+    'max_output_tokens': config.maxOutputTokens,
+    'stop_sequences': config.stopSequences,
+    'frequency_penalty': config.frequencyPenalty,
+    'presence_penalty': config.presencePenalty,
+    'seed': config.seed,
+    'candidate_count': config.candidateCount,
+    'response_logprobs': config.responseLogprobs,
+    'logprobs': config.logprobs,
+    'thinking_config': config.thinkingConfig,
+    'response_json_schema': config.responseJsonSchema,
+    'response_mime_type': config.responseMimeType,
+    'tool_config': toolConfig.isEmpty ? null : toolConfig,
+    'cached_content': config.cachedContent,
+    'http_options': httpOptions.isEmpty ? null : httpOptions,
+    'labels': config.labels,
+  });
+}
+
+Map<String, Object?> _toolDeclarationToJson(ToolDeclaration declaration) {
+  return _dropNullEntries(<String, Object?>{
+    'function_declarations': declaration.functionDeclarations
+        .map(
+          (FunctionDeclaration functionDeclaration) =>
+              _dropNullEntries(<String, Object?>{
+                'name': functionDeclaration.name,
+                'description': functionDeclaration.description,
+                'parameters': functionDeclaration.parameters,
+              }),
+        )
+        .toList(growable: false),
+    'google_search': declaration.googleSearch,
+    'google_search_retrieval': declaration.googleSearchRetrieval,
+    'url_context': declaration.urlContext,
+    'code_execution': declaration.codeExecution,
+    'google_maps': declaration.googleMaps,
+    'enterprise_web_search': declaration.enterpriseWebSearch,
+    'retrieval': declaration.retrieval,
+    'computer_use': declaration.computerUse,
+  });
 }
 
 Map<String, Object?> _llmResponseToJson(LlmResponse llmResponse) {
@@ -441,9 +727,250 @@ Object? _normalizeForJson(Object? value) {
 }
 
 bool _shouldAddRequestResponseToSpans({Map<String, String>? environment}) {
-  final Map<String, String>? env = environment;
-  final String raw = (env?[adkCaptureMessageContentInSpans] ?? 'true')
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String raw = (env[adkCaptureMessageContentInSpans] ?? 'true')
       .toLowerCase();
   final bool disabled = raw == 'false' || raw == '0';
   return !disabled;
+}
+
+bool _shouldLogPromptResponseContent({Map<String, String>? environment}) {
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String value =
+      (env[otelInstrumentationGenaiCaptureMessageContent] ?? '').toLowerCase();
+  return value == 'true' || value == '1';
+}
+
+Object? _serializeContent(Object? content) {
+  if (content == null ||
+      content is String ||
+      content is num ||
+      content is bool) {
+    return content;
+  }
+  if (content is Content) {
+    return _contentToJson(content, includeInlineData: true);
+  }
+  if (content is Part) {
+    return _partToJson(content, includeInlineData: true);
+  }
+  if (content is Iterable) {
+    return content.map((Object? item) => _serializeContent(item)).toList();
+  }
+  if (content is Map) {
+    return content.map(
+      (Object? key, Object? value) =>
+          MapEntry('$key', _serializeContent(value)),
+    );
+  }
+  return _safeJsonSerialize(content);
+}
+
+Object? _serializeContentWithElision(
+  Object? content, {
+  Map<String, String>? environment,
+}) {
+  if (!_shouldLogPromptResponseContent(environment: environment)) {
+    return userContentElided;
+  }
+  return _serializeContent(content);
+}
+
+void _emitStablePromptLogs(
+  LlmRequest llmRequest, {
+  Map<String, String>? environment,
+}) {
+  final String systemName = _guessGeminiSystemName(environment: environment);
+  otelLogger.emit(
+    OTelLogRecord(
+      eventName: 'gen_ai.system.message',
+      body: <String, Object?>{
+        'content': _serializeContentWithElision(
+          llmRequest.config.systemInstruction,
+          environment: environment,
+        ),
+      },
+      attributes: <String, Object?>{'gen_ai.system': systemName},
+    ),
+  );
+
+  for (final Content content in llmRequest.contents) {
+    otelLogger.emit(
+      OTelLogRecord(
+        eventName: 'gen_ai.user.message',
+        body: <String, Object?>{
+          'content': _serializeContentWithElision(
+            content,
+            environment: environment,
+          ),
+        },
+        attributes: <String, Object?>{'gen_ai.system': systemName},
+      ),
+    );
+  }
+}
+
+void _emitChoiceLog(
+  LlmResponse llmResponse, {
+  Map<String, String>? environment,
+}) {
+  final Map<String, Object?> body = <String, Object?>{
+    'content': _serializeContentWithElision(
+      llmResponse.content,
+      environment: environment,
+    ),
+    'index': 0,
+  };
+  if (llmResponse.finishReason != null) {
+    body['finish_reason'] = llmResponse.finishReason;
+  }
+
+  otelLogger.emit(
+    OTelLogRecord(
+      eventName: 'gen_ai.choice',
+      body: body,
+      attributes: <String, Object?>{
+        'gen_ai.system': _guessGeminiSystemName(environment: environment),
+      },
+    ),
+  );
+}
+
+void _setUsageMetadataAttributes(TraceSpanRecord span, Object? usageMetadata) {
+  final Map<String, Object?>? usage = _usageMetadataAsMap(usageMetadata);
+  if (usage == null) {
+    return;
+  }
+
+  final Object? promptTokenCount =
+      usage['prompt_token_count'] ?? usage['promptTokenCount'];
+  final Object? candidatesTokenCount =
+      usage['candidates_token_count'] ?? usage['candidatesTokenCount'];
+
+  if (promptTokenCount is num) {
+    span.setAttribute('gen_ai.usage.input_tokens', promptTokenCount);
+  }
+  if (candidatesTokenCount is num) {
+    span.setAttribute('gen_ai.usage.output_tokens', candidatesTokenCount);
+  }
+}
+
+Map<String, Object?>? _usageMetadataAsMap(Object? usageMetadata) {
+  if (usageMetadata is Map<String, Object?>) {
+    return usageMetadata;
+  }
+  if (usageMetadata is Map<String, dynamic>) {
+    return usageMetadata.map(
+      (String key, dynamic value) => MapEntry<String, Object?>(key, value),
+    );
+  }
+  if (usageMetadata is Map) {
+    return usageMetadata.map(
+      (Object? key, Object? value) => MapEntry<String, Object?>('$key', value),
+    );
+  }
+  return null;
+}
+
+Map<String, Object?> _buildCommonInferenceAttributes(
+  InvocationContext invocationContext,
+  Event modelResponseEvent,
+) {
+  return <String, Object?>{
+    'gen_ai.agent.name': invocationContext.agent.name,
+    'gen_ai.conversation.id': invocationContext.session.id,
+    'user.id': invocationContext.session.userId,
+    'gcp.vertex.agent.event_id': modelResponseEvent.id,
+    'gcp.vertex.agent.invocation_id': invocationContext.invocationId,
+  };
+}
+
+void _setCommonGenerateContentAttributes(
+  TraceSpanRecord span,
+  LlmRequest llmRequest,
+  Map<String, Object?> commonAttributes,
+) {
+  span
+    ..setAttribute('gen_ai.operation.name', 'generate_content')
+    ..setAttribute('gen_ai.request.model', llmRequest.model ?? '');
+  span.setAttributes(commonAttributes);
+}
+
+typedef GenAiInstrumentationDetector = bool Function();
+
+GenAiInstrumentationDetector _genAiInstrumentationDetector = () => false;
+
+void setGenAiInstrumentationDetectorForTest(
+  GenAiInstrumentationDetector detector,
+) {
+  _genAiInstrumentationDetector = detector;
+}
+
+void resetGenAiInstrumentationDetectorForTest() {
+  _genAiInstrumentationDetector = () => false;
+}
+
+bool _instrumentedWithOpenTelemetryInstrumentationGoogleGenai() {
+  return _genAiInstrumentationDetector();
+}
+
+const Object _generateContentExtraAttributesContextKey = Object();
+
+Map<String, Object?>? getCurrentGenerateContentExtraAttributes() {
+  final Object? value = Zone.current[_generateContentExtraAttributesContextKey];
+  if (value is Map<String, Object?>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? nestedValue) =>
+          MapEntry<String, Object?>('$key', nestedValue),
+    );
+  }
+  return null;
+}
+
+T _runWithExtraGenerateContentAttributes<T>(
+  Map<String, Object?> extraAttributes,
+  T Function() run,
+) {
+  return runZoned(
+    run,
+    zoneValues: <Object?, Object?>{
+      _generateContentExtraAttributesContextKey: Map<String, Object?>.from(
+        extraAttributes,
+      ),
+    },
+  );
+}
+
+bool _isGeminiAgent(BaseAgent agent) {
+  if (agent is! LlmAgent) {
+    return false;
+  }
+
+  final Object model = agent.model;
+  if (model is String) {
+    return isGeminiModel(model);
+  }
+  return model is Gemini;
+}
+
+String _guessGeminiSystemName({Map<String, String>? environment}) {
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String value = (env['GOOGLE_GENAI_USE_VERTEXAI'] ?? '').toLowerCase();
+  if (value == 'true' || value == '1') {
+    return 'vertex_ai';
+  }
+  return 'gemini';
+}
+
+Map<String, Object?> _dropNullEntries(Map<String, Object?> values) {
+  final Map<String, Object?> cleaned = <String, Object?>{};
+  for (final MapEntry<String, Object?> entry in values.entries) {
+    if (entry.value != null) {
+      cleaned[entry.key] = entry.value;
+    }
+  }
+  return cleaned;
 }

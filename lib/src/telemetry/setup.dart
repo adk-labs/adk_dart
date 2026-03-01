@@ -177,7 +177,7 @@ void maybeSetOtelProviders({
     logRecordProcessors.addAll(hook.logRecordProcessors);
   }
 
-  if (spanProcessors.isNotEmpty) {
+  if (spanProcessors.isNotEmpty && providerRegistry.tracerProvider == null) {
     final TracerProvider tracerProvider = TracerProvider(resource: resource);
     for (final SpanProcessor processor in spanProcessors) {
       tracerProvider.addSpanProcessor(processor);
@@ -185,14 +185,15 @@ void maybeSetOtelProviders({
     providerRegistry.tracerProvider = tracerProvider;
   }
 
-  if (metricReaders.isNotEmpty) {
+  if (metricReaders.isNotEmpty && providerRegistry.meterProvider == null) {
     providerRegistry.meterProvider = MeterProvider(
       metricReaders: metricReaders,
       resource: resource,
     );
   }
 
-  if (logRecordProcessors.isNotEmpty) {
+  if (logRecordProcessors.isNotEmpty &&
+      providerRegistry.loggerProvider == null) {
     final LoggerProvider loggerProvider = LoggerProvider(resource: resource);
     for (final LogRecordProcessor processor in logRecordProcessors) {
       loggerProvider.addLogRecordProcessor(processor);

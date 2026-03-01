@@ -32,3 +32,30 @@ Target: `lib/src/telemetry`
 ### Planned implementation units
 - Work Unit 2: Implement missing telemetry APIs and semconv behavior.
 - Work Unit 3: Add parity tests and validate behavior.
+
+## Work Unit 2 - Missing Feature Implementation
+
+### Implemented files
+- `lib/src/telemetry/tracing.dart`
+- `lib/src/telemetry/_experimental_semconv.dart` (new)
+- `lib/src/telemetry/setup.dart`
+- `lib/src/telemetry/google_cloud.dart`
+
+### Implemented parity items
+1. Added `traceAgentInvocation` to match Python `trace_agent_invocation`.
+2. Added inference-span API parity:
+- `useGenerateContentSpan` (deprecated parity helper)
+- `useInferenceSpan`
+- `GenerateContentSpan`
+- `traceGenerateContentResult` (deprecated parity helper)
+- `traceInferenceResult`
+3. Ported experimental semconv behavior into new `_experimental_semconv.dart`:
+- experimental opt-in detection (`OTEL_SEMCONV_STABILITY_OPT_IN`)
+- capturing mode logic (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`)
+- request/response operation-detail attribute builders
+- completion-details log emission and span-attribute serialization
+4. Updated `traceCallLlm` parity fields:
+- `gen_ai.request.top_p`
+- `gen_ai.request.max_tokens`
+5. Updated `maybeSetOtelProviders` to avoid overriding pre-existing providers.
+6. Added warning log on missing GCP project in `getGcpExporters`.

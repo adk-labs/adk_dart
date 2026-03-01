@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'setup.dart';
@@ -39,6 +40,11 @@ OTelHooks getGcpExporters({
   final String? projectId = auth.projectId;
 
   if (projectId == null || projectId.isEmpty) {
+    developer.log(
+      'Cannot determine GCP Project. OTel GCP Exporters cannot be set up. '
+      'Please make sure to log into correct GCP Project.',
+      name: 'adk_dart.telemetry',
+    );
     return OTelHooks();
   }
 
