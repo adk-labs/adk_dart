@@ -212,3 +212,33 @@
 ### 단위 결론
 - `flutter_adk` 단일 import로 `Agent/Runner/Gemini`까지 접근 가능한
   Web Lite 런타임 기반이 확보됨.
+
+## Work Unit 7 — flutter_adk example 챗봇 UX 구현
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 19:20~19:45 KST
+
+### 구현 내용
+- `packages/flutter_adk/example/lib/main.dart`를 기본 플러그인 샘플에서
+  실제 챗봇형 예제로 전면 교체:
+  - 채팅 UI(버블, 입력창, 전송 버튼)
+  - 설정 시트에서 Gemini API 키 입력/저장/삭제
+  - `Agent + InMemoryRunner + Gemini + FunctionTool` 실행
+  - 수도 조회 툴(`get_capital_city`) 포함
+- API 키 저장을 위해 example 의존성 추가:
+  - `packages/flutter_adk/example/pubspec.yaml`
+  - `shared_preferences`
+- widget test를 챗봇 셸 기준으로 업데이트:
+  - `packages/flutter_adk/example/test/widget_test.dart`
+- example 문서 갱신:
+  - `packages/flutter_adk/example/README.md`
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- `flutter_adk` 예제가 “실제 챗봇 형태”로 동작하며,
+  Flutter Web 포함 멀티플랫폼 실행 경로를 확인했다.
