@@ -3,6 +3,145 @@ import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
+class _FakeVertexAiSessionApiClient implements VertexAiSessionApiClient {
+  int _sessionCounter = 1;
+  int _eventCounter = 1;
+  final Map<String, Map<String, Object?>> _sessionsById =
+      <String, Map<String, Object?>>{};
+  final Map<String, List<Map<String, Object?>>> _eventsBySessionId =
+      <String, List<Map<String, Object?>>>{};
+
+  @override
+  Future<Map<String, Object?>?> createSession({
+    required String reasoningEngineId,
+    required String userId,
+    required Map<String, Object?> config,
+  }) async {
+    final String id = 'session_${_sessionCounter++}';
+    final String now = DateTime.now().toUtc().toIso8601String();
+    final Map<String, Object?> session = <String, Object?>{
+      'name': 'reasoningEngines/$reasoningEngineId/sessions/$id',
+      'user_id': userId,
+      'session_state': _asObjectMap(config['session_state']),
+      'update_time': now,
+      'create_time': now,
+    };
+    _sessionsById[id] = Map<String, Object?>.from(session);
+    _eventsBySessionId[id] = <Map<String, Object?>>[];
+    return Map<String, Object?>.from(session);
+  }
+
+  @override
+  Future<Map<String, Object?>?> getSession({
+    required String reasoningEngineId,
+    required String sessionId,
+  }) async {
+    final Map<String, Object?>? session = _sessionsById[sessionId];
+    if (session == null) {
+      return null;
+    }
+    return Map<String, Object?>.from(session);
+  }
+
+  @override
+  Stream<Map<String, Object?>> listSessions({
+    required String reasoningEngineId,
+    String? userId,
+  }) async* {
+    for (final Map<String, Object?> row in _sessionsById.values) {
+      final String name = '${row['name'] ?? ''}';
+      if (!name.startsWith('reasoningEngines/$reasoningEngineId/sessions/')) {
+        continue;
+      }
+      if (userId != null && '${row['user_id'] ?? ''}' != userId) {
+        continue;
+      }
+      yield Map<String, Object?>.from(row);
+    }
+  }
+
+  @override
+  Future<void> deleteSession({
+    required String reasoningEngineId,
+    required String sessionId,
+  }) async {
+    _sessionsById.remove(sessionId);
+    _eventsBySessionId.remove(sessionId);
+  }
+
+  @override
+  Stream<Map<String, Object?>> listEvents({
+    required String reasoningEngineId,
+    required String sessionId,
+    double? afterTimestamp,
+  }) async* {
+    final List<Map<String, Object?>> rows =
+        _eventsBySessionId[sessionId] ?? <Map<String, Object?>>[];
+    for (final Map<String, Object?> row in rows) {
+      if (afterTimestamp != null) {
+        final DateTime? parsed = DateTime.tryParse('${row['timestamp'] ?? ''}');
+        if (parsed != null &&
+            parsed.toUtc().millisecondsSinceEpoch / 1000 < afterTimestamp) {
+          continue;
+        }
+      }
+      yield Map<String, Object?>.from(row);
+    }
+  }
+
+  @override
+  Future<void> appendEvent({
+    required String reasoningEngineId,
+    required String sessionId,
+    required String author,
+    required String invocationId,
+    required double timestamp,
+    required Map<String, Object?> config,
+  }) async {
+    final Map<String, Object?>? session = _sessionsById[sessionId];
+    if (session == null) {
+      throw StateError('Session $sessionId not found.');
+    }
+
+    final String eventId = 'evt_${_eventCounter++}';
+    final Map<String, Object?> event = <String, Object?>{
+      'name': 'reasoningEngines/$reasoningEngineId/sessions/$sessionId/events/$eventId',
+      'invocation_id': invocationId,
+      'author': author,
+      'timestamp': DateTime.fromMillisecondsSinceEpoch(
+        (timestamp * 1000).round(),
+        isUtc: true,
+      ).toIso8601String(),
+      if (config['content'] != null) 'content': config['content'],
+      if (config['actions'] != null) 'actions': config['actions'],
+      if (config['event_metadata'] != null) 'event_metadata': config['event_metadata'],
+      if (config['error_code'] != null) 'error_code': config['error_code'],
+      if (config['error_message'] != null)
+        'error_message': config['error_message'],
+    };
+    _eventsBySessionId.putIfAbsent(sessionId, () => <Map<String, Object?>>[]).add(
+      event,
+    );
+
+    final Map<String, Object?> actions = _asObjectMap(config['actions']);
+    final Map<String, Object?> stateDelta = _asObjectMap(actions['state_delta']);
+    final Map<String, Object?> state = _asObjectMap(session['session_state']);
+    state.addAll(stateDelta);
+    session['session_state'] = state;
+    session['update_time'] = event['timestamp']!;
+  }
+}
+
+Map<String, Object?> _asObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return <String, Object?>{};
+}
+
 void main() {
   group('InMemorySessionService', () {
     test('appendEvent returns event when session does not exist', () async {
@@ -826,10 +965,17 @@ CREATE TABLE events (
   });
 
   group('VertexAiSessionService', () {
-    test('validates app name and proxies base session operations', () async {
+    test('creates/gets/lists/updates/deletes sessions via injected api client', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
       final VertexAiSessionService service = VertexAiSessionService(
-        project: 'p',
-        location: 'us-central1',
+        clientFactory: ({
+          String? project,
+          String? location,
+          String? apiKey,
+        }) {
+          return fakeClient;
+        },
       );
       final Session session = await service.createSession(
         appName: 'projects/p/locations/us-central1/reasoningEngines/123',
@@ -843,6 +989,112 @@ CREATE TABLE events (
       );
       expect(loaded, isNotNull);
       expect(loaded!.state['x'], 1);
+
+      await service.appendEvent(
+        session: loaded,
+        event: Event(
+          invocationId: 'inv_vertex_1',
+          author: 'agent',
+          actions: EventActions(stateDelta: <String, Object?>{'k': 'v'}),
+          content: Content.modelText('vertex reply'),
+        ),
+      );
+
+      final Session? withEvent = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(withEvent, isNotNull);
+      expect(withEvent!.events, hasLength(1));
+      expect(withEvent.state['k'], 'v');
+
+      final ListSessionsResponse listed = await service.listSessions(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+      );
+      expect(listed.sessions.map((Session row) => row.id), contains(session.id));
+
+      await service.deleteSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      final Session? deleted = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(deleted, isNull);
+    });
+
+    test('returns null for missing session id', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({
+          String? project,
+          String? location,
+          String? apiKey,
+        }) {
+          return fakeClient;
+        },
+      );
+      final Session? missing = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: 'missing',
+      );
+      expect(missing, isNull);
+    });
+
+    test('rejects user-provided session id', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({
+          String? project,
+          String? location,
+          String? apiKey,
+        }) {
+          return fakeClient;
+        },
+      );
+      await expectLater(
+        service.createSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: 'manual',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws when session belongs to another user', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({
+          String? project,
+          String? location,
+          String? apiKey,
+        }) {
+          return fakeClient;
+        },
+      );
+      final Session created = await service.createSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'owner',
+      );
+
+      await expectLater(
+        service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'other',
+          sessionId: created.id,
+        ),
+        throwsArgumentError,
+      );
     });
 
     test('rejects unsupported app names', () {
