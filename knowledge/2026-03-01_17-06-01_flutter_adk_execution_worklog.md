@@ -108,4 +108,32 @@
   다음 단위는 CI/sync 규칙 확장(Work Unit 4) 진행 가능.
 
 ## Work Unit 4 — CI/동기화 규칙 확장
-- 상태: 진행 예정
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 17:46~18:00 KST
+
+### 구현 내용
+- 패키지 동기화 검사 확장:
+  - `tool/check_package_sync.dart`
+  - `packages/flutter_adk`에 대해 다음 항목 검증 추가:
+    - 패키지 존재/이름(`flutter_adk`)
+    - 버전 = 루트 `adk_dart` 버전
+    - `adk_dart` 의존 버전 동기화
+    - `lib/flutter_adk.dart`의 `adk_core` re-export 존재
+- CI 워크플로우 확장:
+  - `.github/workflows/package-sync.yml`
+  - 기존 Dart sync job에 `adk_core` web compile smoke 추가
+  - 신규 `flutter-adk-check` job 추가:
+    - `flutter pub get`
+    - `flutter analyze --no-pub`
+    - `flutter test --no-pub`
+
+### 검증 결과
+- `dart run tool/check_package_sync.dart`: 통과
+- `./tool/check_adk_core_web_compile.sh`: 통과
+- `flutter analyze --no-pub` (`packages/flutter_adk`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk`): 통과
+
+### 단위 결론
+- `flutter_adk` 분리 이후 회귀를 막는 최소 CI/동기화 가드를 확보.

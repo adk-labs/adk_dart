@@ -16,5 +16,24 @@ jobs:
         run: dart pub get
       - name: Run tests
         run: dart test
+      - name: Check adk_core web compile smoke
+        run: ./tool/check_adk_core_web_compile.sh
       - name: Check facade sync
         run: dart run tool/check_package_sync.dart
+
+  flutter-adk-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Get flutter_adk dependencies
+        working-directory: packages/flutter_adk
+        run: flutter pub get
+      - name: Analyze flutter_adk
+        working-directory: packages/flutter_adk
+        run: flutter analyze --no-pub
+      - name: Test flutter_adk
+        working-directory: packages/flutter_adk
+        run: flutter test --no-pub
