@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
+
+const String _httpHeaderAccept = 'accept';
+const String _httpHeaderContentType = 'content-type';
+const int _httpStatusMethodNotAllowed = 405;
+const int _httpStatusNotFound = 404;
 
 class StreamableHTTPConnectionParams {
   StreamableHTTPConnectionParams({
@@ -355,7 +359,7 @@ class McpRemoteClient {
       if (headers != null) ...headers,
       'MCP-Session-Id': sessionId,
       'MCP-Protocol-Version': protocolVersion,
-      HttpHeaders.acceptHeader: 'application/json, text/event-stream',
+      _httpHeaderAccept: 'application/json, text/event-stream',
     };
 
     final http.Client client = _httpClientFactory();
@@ -363,7 +367,7 @@ class McpRemoteClient {
       final http.Response response = await client
           .delete(uri, headers: mergedHeaders)
           .timeout(requestTimeout);
-      if (response.statusCode == HttpStatus.methodNotAllowed &&
+      if (response.statusCode == _httpStatusMethodNotAllowed &&
           allowMethodNotAllowed) {
         _resetRemoteSession(url);
         return;
@@ -392,24 +396,28 @@ class McpRemoteClient {
     final String protocolVersion =
         _negotiatedProtocolVersionByUrl[url] ?? latestProtocolVersion;
 
-    final HttpClient client = HttpClient();
+    final http.Client client = _httpClientFactory();
     final Uri uri = Uri.parse(connectionParams.url);
-    final HttpClientRequest request = await client.getUrl(uri);
-    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
-    request.headers.set('MCP-Protocol-Version', protocolVersion);
+    final http.Request request = http.Request('GET', uri);
+    request.headers[_httpHeaderAccept] = 'text/event-stream';
+    request.headers['MCP-Protocol-Version'] = protocolVersion;
     final String? sessionId = _sessionIdByUrl[url];
     if (sessionId != null && sessionId.isNotEmpty) {
-      request.headers.set('MCP-Session-Id', sessionId);
+      request.headers['MCP-Session-Id'] = sessionId;
     }
-    connectionParams.headers.forEach(request.headers.set);
-    headers?.forEach(request.headers.set);
+    request.headers.addAll(connectionParams.headers);
+    if (headers != null) {
+      request.headers.addAll(headers);
+    }
     if (lastEventId != null && lastEventId.trim().isNotEmpty) {
-      request.headers.set('Last-Event-ID', lastEventId.trim());
+      request.headers['Last-Event-ID'] = lastEventId.trim();
     }
 
-    final HttpClientResponse response = await request.close();
+    final http.StreamedResponse response = await client
+        .send(request)
+        .timeout(requestTimeout);
     if (response.statusCode >= 400) {
-      final String body = await utf8.decoder.bind(response).join();
+      final String body = await response.stream.bytesToString();
       throw McpHttpStatusException(
         uri: uri,
         statusCode: response.statusCode,
@@ -418,10 +426,9 @@ class McpRemoteClient {
     }
 
     final String contentType =
-        response.headers.value(HttpHeaders.contentTypeHeader)?.toLowerCase() ??
-        '';
+        response.headers[_httpHeaderContentType]?.toLowerCase() ?? '';
     if (!contentType.contains('text/event-stream')) {
-      final String body = await utf8.decoder.bind(response).join();
+      final String body = await response.stream.bytesToString();
       throw FormatException(
         'Expected text/event-stream for GET server messages, got `$contentType` '
         'with body: $body',
@@ -474,7 +481,9 @@ class McpRemoteClient {
 
     try {
       await for (final String line
-          in response.transform(utf8.decoder).transform(const LineSplitter())) {
+          in response.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
         if (line.isEmpty) {
           final McpServerMessage? message = await flush();
           if (message != null) {
@@ -498,7 +507,7 @@ class McpRemoteClient {
         yield message;
       }
     } finally {
-      client.close(force: true);
+      client.close();
     }
   }
 
@@ -940,7 +949,7 @@ class McpRemoteClient {
       final String url = connectionParams.url;
       final bool hasServerSession = _sessionIdByUrl.containsKey(url);
       if (!allowSessionRecovery ||
-          error.statusCode != HttpStatus.notFound ||
+          error.statusCode != _httpStatusNotFound ||
           !hasServerSession ||
           method == 'initialize') {
         rethrow;
@@ -977,7 +986,7 @@ class McpRemoteClient {
       final String url = connectionParams.url;
       final bool hasServerSession = _sessionIdByUrl.containsKey(url);
       if (!allowSessionRecovery ||
-          error.statusCode != HttpStatus.notFound ||
+          error.statusCode != _httpStatusNotFound ||
           !hasServerSession ||
           method == 'initialize') {
         rethrow;
@@ -1075,8 +1084,8 @@ class McpRemoteClient {
       if (includeProtocolHeader) 'MCP-Protocol-Version': protocolVersion,
       if (includeSessionHeaders && _sessionIdByUrl[url] != null)
         'MCP-Session-Id': _sessionIdByUrl[url]!,
-      HttpHeaders.contentTypeHeader: 'application/json',
-      HttpHeaders.acceptHeader: 'application/json, text/event-stream',
+      _httpHeaderContentType: 'application/json',
+      _httpHeaderAccept: 'application/json, text/event-stream',
     };
 
     final http.Client client = _httpClientFactory();
@@ -1160,8 +1169,7 @@ class McpRemoteClient {
     }
 
     final String contentType =
-        httpResponse.headers[HttpHeaders.contentTypeHeader]?.toLowerCase() ??
-        '';
+        httpResponse.headers[_httpHeaderContentType]?.toLowerCase() ?? '';
     if (contentType.contains('text/event-stream')) {
       final List<Map<String, Object?>> messages = _decodeSseMessages(body);
       if (messages.isEmpty) {
@@ -1483,15 +1491,21 @@ class McpJsonRpcException extends StateError {
   final int? code;
 }
 
-class McpHttpStatusException extends HttpException {
+class McpHttpStatusException implements Exception {
   McpHttpStatusException({
     required Uri uri,
     required this.statusCode,
     required this.body,
-  }) : super('MCP HTTP request failed ($statusCode): $body', uri: uri);
+  }) : uri = uri;
 
+  final Uri uri;
   final int statusCode;
   final String body;
+
+  @override
+  String toString() {
+    return 'MCP HTTP request failed ($statusCode) for $uri: $body';
+  }
 }
 
 class McpServerRequestException implements Exception {

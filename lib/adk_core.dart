@@ -11,7 +11,10 @@ export 'src/agents/context.dart';
 export 'src/agents/invocation_context.dart';
 export 'src/agents/live_request_queue.dart';
 export 'src/agents/llm_agent.dart';
+export 'src/agents/loop_agent.dart';
+export 'src/agents/parallel_agent.dart';
 export 'src/agents/run_config.dart';
+export 'src/agents/sequential_agent.dart';
 
 export 'src/apps/app.dart';
 
@@ -49,6 +52,16 @@ export 'src/telemetry/in_memory_telemetry_service.dart';
 
 export 'src/tools/base_tool.dart';
 export 'src/tools/function_tool.dart';
+export 'src/tools/load_mcp_resource_tool.dart';
+export 'src/tools/mcp_tool/mcp_session_manager.dart';
+export 'src/tools/mcp_tool/mcp_tool.dart';
+export 'src/tools/mcp_tool/mcp_toolset.dart';
+export 'src/tools/skill_toolset.dart';
 export 'src/tools/tool_context.dart';
 
 export 'src/types/content.dart';
+
+// Web-safe skill surface:
+// - Inline Skill objects are supported on all platforms.
+// - Directory-based Skill loading remains unavailable on Web.
+export 'src/skills/skill_runtime.dart';

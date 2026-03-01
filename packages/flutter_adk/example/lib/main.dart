@@ -230,6 +230,11 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                   icon: Icon(Icons.hub_outlined),
                   label: Text('Multi-Agent'),
                 ),
+                ButtonSegment<int>(
+                  value: 2,
+                  icon: Icon(Icons.account_tree_outlined),
+                  label: Text('Workflow'),
+                ),
               ],
               selected: <int>{_selectedExampleIndex},
               onSelectionChanged: (Set<int> selected) {
@@ -271,6 +276,21 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                   apiKey: apiKey,
                   createAgent: _buildMultiAgentCoordinator,
                 ),
+                _ChatExampleView(
+                  key: const ValueKey<String>('workflow_example'),
+                  exampleId: 'workflow',
+                  exampleTitle: 'Workflow Agents Example',
+                  summary:
+                      'Sequential + Parallel + Loop 조합 예제입니다.\n'
+                      '입력 요약, 병렬 관점 생성, 루프 정리 후 최종 답변합니다.',
+                  initialAssistantMessage:
+                      '안녕하세요. 워크플로우 에이전트 예제입니다.\n'
+                      '질문을 보내면 Sequential/Parallel/Loop 체인으로 처리합니다.',
+                  emptyStateMessage: '메시지를 보내 워크플로우 실행을 확인하세요.',
+                  inputHint: '예: 파리 2박 3일 일정 추천',
+                  apiKey: apiKey,
+                  createAgent: _buildWorkflowOrchestrator,
+                ),
               ],
             ),
           ),
@@ -280,7 +300,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
   }
 }
 
-typedef _AgentFactory = Agent Function(String apiKey);
+typedef _AgentFactory = BaseAgent Function(String apiKey);
 
 class _ChatExampleView extends StatefulWidget {
   const _ChatExampleView({
@@ -365,7 +385,7 @@ class _ChatExampleViewState extends State<_ChatExampleView> {
 
     await _resetRunner();
 
-    final Agent agent = widget.createAgent(apiKey);
+    final BaseAgent agent = widget.createAgent(apiKey);
     final InMemoryRunner runner = InMemoryRunner(
       agent: agent,
       appName: 'flutter_adk_${widget.exampleId}_example',
@@ -651,6 +671,76 @@ You are a help desk coordinator.
 - After routing, the selected specialist should provide the final answer.
 ''',
     subAgents: <BaseAgent>[billingAgent, supportAgent],
+  );
+}
+
+BaseAgent _buildWorkflowOrchestrator(String apiKey) {
+  final Agent summarize = Agent(
+    name: 'SummarizeInput',
+    model: _createGeminiModel(apiKey),
+    instruction: '''
+Read the latest user message and write a short summary.
+- Keep it under 2 sentences.
+- Save concise output for downstream steps.
+''',
+    outputKey: 'task_summary',
+  );
+
+  final Agent angleProduct = Agent(
+    name: 'ProductAngle',
+    model: _createGeminiModel(apiKey),
+    instruction: '''
+Based on {task_summary}, provide product/feature perspective recommendations.
+- Keep it concise.
+''',
+    outputKey: 'angle_product',
+  );
+
+  final Agent angleUser = Agent(
+    name: 'UserAngle',
+    model: _createGeminiModel(apiKey),
+    instruction: '''
+Based on {task_summary}, provide user-experience perspective recommendations.
+- Keep it concise.
+''',
+    outputKey: 'angle_user',
+  );
+
+  final ParallelAgent parallel = ParallelAgent(
+    name: 'ParallelAngles',
+    subAgents: <BaseAgent>[angleProduct, angleUser],
+  );
+
+  final Agent refineOnce = Agent(
+    name: 'RefineDraft',
+    model: _createGeminiModel(apiKey),
+    instruction: '''
+Combine {angle_product} and {angle_user} into a cleaner draft answer.
+- Keep actionable bullets.
+''',
+    outputKey: 'draft_answer',
+  );
+
+  final LoopAgent loop = LoopAgent(
+    name: 'SingleLoopRefinement',
+    maxIterations: 1,
+    subAgents: <BaseAgent>[refineOnce],
+  );
+
+  final Agent finalAnswer = Agent(
+    name: 'FinalAnswer',
+    model: _createGeminiModel(apiKey),
+    instruction: '''
+Return the final response to user using:
+- summary: {task_summary}
+- draft: {draft_answer}
+Output a clear, concise final answer in Korean.
+''',
+  );
+
+  return SequentialAgent(
+    name: 'WorkflowOrchestrator',
+    subAgents: <BaseAgent>[summarize, parallel, loop, finalAnswer],
   );
 }
 

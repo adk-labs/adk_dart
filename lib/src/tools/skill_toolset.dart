@@ -5,7 +5,7 @@ import '../agents/readonly_context.dart';
 import '../code_executors/base_code_executor.dart';
 import '../code_executors/code_execution_utils.dart';
 import '../models/llm_request.dart';
-import '../skills/skill.dart';
+import '../skills/skill_runtime.dart';
 import 'base_tool.dart';
 import 'base_toolset.dart';
 import 'tool_context.dart';

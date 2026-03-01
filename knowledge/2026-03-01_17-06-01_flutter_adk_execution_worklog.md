@@ -279,3 +279,57 @@
 ### 단위 결론
 - example 앱이 “기본 예제 + 공식 문서 기반 Multi-Agent 예제” 2단계 구조로 확장되었고,
   Flutter Web 포함 실행 가능 상태를 확인했다.
+
+## Work Unit 9 — Workflow/MCP/Skills flutter_adk surface 확장
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 20:30~21:20 KST
+
+### 문제 인식
+- 기존 `flutter_adk`는 transfer 기반 Multi-Agent 예제는 가능했지만,
+  `Sequential/Parallel/Loop` 노출이 빠져 공식 workflow-agent 예제 적용 범위가 제한됨.
+- MCP/Skills는 코어 구현이 존재해도 Web compile 경로에서 `dart:io` 의존으로
+  `flutter_adk` surface에 포함되지 못함.
+
+### 구현 내용
+- `adk_core` export 확장:
+  - Workflow agents: `SequentialAgent`, `ParallelAgent`, `LoopAgent`
+  - MCP: `McpToolset`, `McpTool`, `mcp_session_manager`, `load_mcp_resource_tool`
+  - Skills: `SkillToolset`, `skill_runtime`
+- `adk_mcp` Web 경로 정리:
+  - `mcp_remote_client.dart`의 `dart:io` 의존 제거
+    - HTTP/SSE 처리 경로를 `package:http` 기반으로 변경
+    - `HttpException` 상속 제거, 커스텀 예외 문자열화
+  - stdio는 플랫폼 분리:
+    - `packages/adk_mcp/lib/src/mcp_stdio_client_stub.dart` 추가
+    - `packages/adk_mcp/lib/adk_mcp.dart`를 조건부 export로 전환
+- Skills Web 경로 정리:
+  - `lib/src/skills/skill_web.dart` 추가 (inline skill 중심, dir-loader는 Unsupported)
+  - `lib/src/skills/skill_runtime.dart` 추가 (조건부 export)
+  - `skill_toolset.dart`가 `skill_runtime.dart`를 사용하도록 전환
+- example 앱 확장:
+  - 기존 `Basic Chatbot`, `Multi-Agent` 유지
+  - 신규 `Workflow` 예제 추가 (`Sequential + Parallel + Loop`)
+- 문서/스모크/테스트 갱신:
+  - `tool/smoke/adk_core_web_smoke.dart`
+  - `packages/flutter_adk/test/flutter_adk_test.dart`
+  - `packages/flutter_adk/example/README.md`
+  - `packages/flutter_adk/README.md`
+  - 플랫폼 매트릭스 문서 갱신
+
+### 검증 결과
+- `dart format`: 통과
+- `dart analyze`: 통과
+- `./tool/check_adk_core_web_compile.sh`: 통과
+- `flutter analyze --no-pub` (`packages/flutter_adk`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk`): 통과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- `flutter_adk` 단일 import로 workflow agents를 직접 사용할 수 있게 되었고,
+  MCP/Skills도 Web 포함 멀티플랫폼에서 사용할 수 있는 surface가 확보됨.
+- 단, Web에서는 MCP stdio 및 directory-based skill loading은 정책적으로 미지원이며,
+  문서에 명시했다.

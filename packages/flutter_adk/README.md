@@ -6,8 +6,11 @@ Flutter facade package for ADK Dart core runtime.
 - Re-exports `package:adk_dart/adk_core.dart` so Flutter apps can use the Web-safe ADK surface through `package:flutter_adk/flutter_adk.dart`.
 - Exposes core runtime APIs needed for Flutter app usage:
   - `Agent` / `LlmAgent`
+  - `SequentialAgent` / `ParallelAgent` / `LoopAgent`
   - `Runner` / `InMemoryRunner`
   - `FunctionTool`
+  - `McpToolset` (remote MCP over Streamable HTTP)
+  - `SkillToolset` + inline `Skill`
   - `Gemini` (BYOK-style key injection)
 - Includes a Flutter plugin scaffold registered for all major Flutter platforms:
   - Android
@@ -40,4 +43,6 @@ void main() {
 
 ## Limitations
 - Features requiring `dart:io`, `dart:ffi`, or `dart:mirrors` are outside the current `flutter_adk` surface.
+- MCP stdio transport (`StdioConnectionParams`) is not supported on Web.
+- Directory-based skill loading (`loadSkillFromDir`) is not supported on Web. Use inline `Skill` definitions.
 - For browser BYOK (user-entered API key), document security risks before production rollout.

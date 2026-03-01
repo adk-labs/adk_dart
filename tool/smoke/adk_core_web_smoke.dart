@@ -34,6 +34,35 @@ void main() {
     ],
   );
   final InMemoryRunner runner = InMemoryRunner(agent: agent);
+  final SequentialAgent sequential = SequentialAgent(
+    name: 'seq',
+    subAgents: <BaseAgent>[agent],
+  );
+  final ParallelAgent parallel = ParallelAgent(
+    name: 'par',
+    subAgents: <BaseAgent>[agent],
+  );
+  final LoopAgent loop = LoopAgent(
+    name: 'loop',
+    maxIterations: 1,
+    subAgents: <BaseAgent>[agent],
+  );
+  final McpToolset mcpToolset = McpToolset(
+    connectionParams: StreamableHTTPConnectionParams(
+      url: 'https://example.com/mcp',
+    ),
+  );
+  final Skill inlineSkill = Skill(
+    name: 'hello-skill',
+    description: 'Inline skill for web-safe smoke test.',
+    instructions: 'Always answer hello.',
+    resources: Resources(
+      references: <String, String>{'hello.md': 'hello'},
+      assets: <String, String>{},
+      scripts: <String, Script>{},
+    ),
+  );
+  final SkillToolset skillToolset = SkillToolset(skills: <Skill>[inlineSkill]);
   final Gemini gemini = Gemini(
     model: 'gemini-2.5-flash',
     environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
@@ -47,6 +76,11 @@ void main() {
     '${event.id}:'
     '${agent.runtimeType}:'
     '${runner.runtimeType}:'
+    '${sequential.runtimeType}:'
+    '${parallel.runtimeType}:'
+    '${loop.runtimeType}:'
+    '${mcpToolset.runtimeType}:'
+    '${skillToolset.runtimeType}:'
     '${gemini.runtimeType}',
   );
 }

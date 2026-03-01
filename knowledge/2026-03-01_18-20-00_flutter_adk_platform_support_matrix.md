@@ -5,7 +5,7 @@
 - 플랫폼별 제한 사항을 사전에 고지하고, 회피 전략과 다음 구현 단위를 정의한다.
 
 ## 기준 스냅샷 (as-is)
-- `packages/flutter_adk`는 `adk_core`를 통해 Flutter 런타임 핵심(`Agent/LlmAgent`, `Runner`, `Gemini`, `FunctionTool`)을 노출.
+- `packages/flutter_adk`는 `adk_core`를 통해 Flutter 런타임 핵심(`Agent/LlmAgent`, Workflow Agents, `Runner`, `Gemini`, Toolset 일부)을 노출.
 - `adk_core` Web compile smoke에서 `Agent/Runner/Gemini` 참조 스모크까지 통과.
 - `lib/src` 기준:
   - `dart:io` import 파일: `83`
@@ -19,8 +19,13 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `adk_core` 데이터/세션/메모리 기본 타입 | Supported | Supported | Supported | Supported | Supported | Supported | `adk_core` web compile smoke 게이트 통과 |
 | `LlmAgent`/`Agent` 생성 | Supported | Supported | Supported | Supported | Supported | Supported | `flutter_adk` 단일 import로 노출 |
+| `SequentialAgent`/`ParallelAgent`/`LoopAgent` | Supported | Supported | Supported | Supported | Supported | Supported | 워크플로우 오케스트레이션 가능 |
 | `Runner`/`InMemoryRunner` 실행 | Supported | Supported | Supported | Supported | Supported | Supported | in-memory 기본 런타임 |
 | `Gemini` 모델 직접 호출 | Supported | Supported | Supported* | Supported | Supported | Supported | *BYOK/CORS/키보안 정책 영향 |
+| MCP Toolset (Streamable HTTP) | Supported | Supported | Supported | Supported | Supported | Supported | 원격 MCP 서버 연결 경로 |
+| MCP Toolset (Stdio) | Supported | Supported | Not supported | Supported | Supported | Supported | Web에서 로컬 프로세스 실행 불가 |
+| Skills (inline `Skill` + `SkillToolset`) | Supported | Supported | Supported | Supported | Supported | Supported | 인라인 정의는 공통 |
+| Skills (디렉토리 로딩 `loadSkillFromDir`) | Supported | Supported | Not supported | Supported | Supported | Supported | Web은 파일시스템 접근 불가 |
 | CLI/dev server 계열 기능 | Not supported | Not supported | Not supported | Not supported | Not supported | Not supported | Flutter 런타임 대상 아님 |
 
 ## 참고: adk_dart 직접 import 시 플랫폼 특성
@@ -35,6 +40,11 @@
 | HTTP 기반 모델 호출(예: Gemini) | Supported | Supported | Supported | Supported | Supported | Supported | 웹 안전 HTTP 경로 필요 |
 | In-memory 세션/아티팩트/메모리 | Supported | Supported | Supported | Supported | Supported | Supported | 공통 기본 런타임 |
 | FFI/sqlite 기반 세션 | Supported | Supported | Not supported | Supported | Supported | Supported | Web은 명시적 `UnsupportedError` |
+| Workflow Agents | Supported | Supported | Supported | Supported | Supported | Supported | `Sequential/Parallel/Loop` |
+| MCP Toolset (remote HTTP) | Supported | Supported | Supported | Supported | Supported | Supported | 서버형 MCP 권장 |
+| MCP Toolset (stdio) | Supported | Supported | Not supported | Supported | Supported | Supported | Web에서 미지원 |
+| Skills inline 실행 | Supported | Supported | Supported | Supported | Supported | Supported | 파일시스템 없이 동작 |
+| Skills 디렉토리 로딩 | Supported | Supported | Not supported | Supported | Supported | Supported | Web에서 미지원 |
 | 로컬 프로세스/CLI/dev server | Not supported | Not supported | Not supported | Not supported | Not supported | Not supported | Flutter 패키지 범위에서 제외 |
 
 ## API 키 입력/저장(BYOK) 정책

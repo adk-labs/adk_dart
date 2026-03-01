@@ -93,4 +93,58 @@ void main() {
     );
     expect(gemini.model, 'gemini-2.5-flash');
   });
+
+  test('exports workflow agent symbols', () {
+    final Agent leafForSequential = Agent(
+      name: 'leaf_seq',
+      model: _EchoModel(),
+      instruction: 'Echo',
+    );
+    final Agent leafForParallel = Agent(
+      name: 'leaf_par',
+      model: _EchoModel(),
+      instruction: 'Echo',
+    );
+    final Agent leafForLoop = Agent(
+      name: 'leaf_loop',
+      model: _EchoModel(),
+      instruction: 'Echo',
+    );
+    final SequentialAgent sequential = SequentialAgent(
+      name: 'seq',
+      subAgents: <BaseAgent>[leafForSequential],
+    );
+    final ParallelAgent parallel = ParallelAgent(
+      name: 'par',
+      subAgents: <BaseAgent>[leafForParallel],
+    );
+    final LoopAgent loop = LoopAgent(
+      name: 'loop',
+      maxIterations: 1,
+      subAgents: <BaseAgent>[leafForLoop],
+    );
+    expect(sequential.subAgents.length, 1);
+    expect(parallel.subAgents.length, 1);
+    expect(loop.subAgents.length, 1);
+  });
+
+  test('exports mcp and skill symbols', () {
+    final StreamableHTTPConnectionParams connection =
+        StreamableHTTPConnectionParams(url: 'https://example.com/mcp');
+    final McpToolset mcpToolset = McpToolset(connectionParams: connection);
+
+    final Skill skill = Skill(
+      name: 'hello-skill',
+      description: 'simple skill',
+      instructions: 'say hello',
+      resources: Resources(
+        references: <String, String>{'hello.md': 'hello'},
+        scripts: <String, Script>{},
+      ),
+    );
+    final SkillToolset skillToolset = SkillToolset(skills: <Skill>[skill]);
+
+    expect(mcpToolset.runtimeType, McpToolset);
+    expect(skillToolset.runtimeType, SkillToolset);
+  });
 }
