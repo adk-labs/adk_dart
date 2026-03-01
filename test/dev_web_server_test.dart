@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -294,6 +295,312 @@ void main() {
       expect(task['kind'], 'task');
       expect(task['id'] ?? task['taskId'] ?? task['task_id'], taskId);
       expect(task['status'], isA<Map>());
+    });
+
+    test('supports a2a streaming, push config, and resubscribe routes', () async {
+      final DevAgentRuntime a2aRuntime = DevAgentRuntime(config: config);
+      final HttpServer a2aServer = await startAdkDevWebServer(
+        runtime: a2aRuntime,
+        project: config,
+        port: 0,
+        a2a: true,
+      );
+      addTearDown(() async {
+        await a2aServer.close(force: true);
+        await a2aRuntime.runner.close();
+      });
+
+      final HttpClient a2aClient = HttpClient();
+      addTearDown(() => a2aClient.close(force: true));
+
+      final HttpClientRequest streamRequest = await a2aClient.postUrl(
+        Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+      );
+      streamRequest.headers.contentType = ContentType.json;
+      streamRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-stream-1',
+          'method': 'message/stream',
+          'params': <String, Object?>{
+            'message': <String, Object?>{
+              'kind': 'message',
+              'messageId': 'msg-stream-1',
+              'role': 'user',
+              'parts': <Object>[
+                <String, Object?>{
+                  'kind': 'text',
+                  'text': 'Give me a short answer.',
+                },
+              ],
+            },
+          },
+        }),
+      );
+      final HttpClientResponse streamResponse = await streamRequest.close();
+      final String streamBody = await utf8.decoder.bind(streamResponse).join();
+      final List<Map<String, dynamic>> streamEvents = _decodeSseJsonEvents(
+        streamBody,
+      );
+
+      expect(streamResponse.statusCode, HttpStatus.ok);
+      expect(
+        streamResponse.headers.contentType?.mimeType,
+        ContentType('text', 'event-stream').mimeType,
+      );
+      expect(streamEvents, isNotEmpty);
+      expect(streamEvents.first['jsonrpc'], '2.0');
+
+      final Map<String, dynamic> streamedTask =
+          streamEvents.first['result'] as Map<String, dynamic>;
+      final String taskId =
+          '${streamedTask['id'] ?? streamedTask['taskId'] ?? streamedTask['task_id']}';
+      expect(taskId, isNotEmpty);
+      expect(streamedTask['kind'], 'task');
+
+      final HttpClientRequest setPushRequest = await a2aClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${a2aServer.port}/a2a/test_app/v1/tasks:pushNotificationConfig:set',
+        ),
+      );
+      setPushRequest.headers.contentType = ContentType.json;
+      setPushRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-push-set-1',
+          'params': <String, Object?>{
+            'taskId': taskId,
+            'pushNotificationConfig': <String, Object?>{
+              'url': 'https://example.invalid/hook',
+              'authentication': <String, Object?>{
+                'scheme': 'bearer',
+                'token': 'secret',
+              },
+            },
+          },
+        }),
+      );
+      final HttpClientResponse setPushResponse = await setPushRequest.close();
+      final Map<String, dynamic> setPushPayload =
+          jsonDecode(await utf8.decoder.bind(setPushResponse).join())
+              as Map<String, dynamic>;
+      final Map<String, dynamic> setPushResult =
+          setPushPayload['result'] as Map<String, dynamic>;
+
+      expect(setPushResponse.statusCode, HttpStatus.ok);
+      expect(
+        (setPushResult['pushNotificationConfig']
+            as Map<String, dynamic>)['url'],
+        'https://example.invalid/hook',
+      );
+
+      final HttpClientRequest getPushRequest = await a2aClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${a2aServer.port}/a2a/test_app/v1/tasks:pushNotificationConfig:get',
+        ),
+      );
+      getPushRequest.headers.contentType = ContentType.json;
+      getPushRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-push-get-1',
+          'params': <String, Object?>{'taskId': taskId},
+        }),
+      );
+      final HttpClientResponse getPushResponse = await getPushRequest.close();
+      final Map<String, dynamic> getPushPayload =
+          jsonDecode(await utf8.decoder.bind(getPushResponse).join())
+              as Map<String, dynamic>;
+      final Map<String, dynamic> getPushResult =
+          getPushPayload['result'] as Map<String, dynamic>;
+
+      expect(getPushResponse.statusCode, HttpStatus.ok);
+      expect(
+        (getPushResult['pushNotificationConfig']
+            as Map<String, dynamic>)['url'],
+        'https://example.invalid/hook',
+      );
+
+      final HttpClientRequest resubscribeRequest = await a2aClient.postUrl(
+        Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+      );
+      resubscribeRequest.headers.contentType = ContentType.json;
+      resubscribeRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-resub-1',
+          'method': 'tasks/resubscribe',
+          'params': <String, Object?>{'taskId': taskId},
+        }),
+      );
+      final HttpClientResponse resubscribeResponse = await resubscribeRequest
+          .close();
+      final String resubscribeBody = await utf8.decoder
+          .bind(resubscribeResponse)
+          .join();
+      final List<Map<String, dynamic>> resubscribeEvents = _decodeSseJsonEvents(
+        resubscribeBody,
+      );
+
+      expect(resubscribeResponse.statusCode, HttpStatus.ok);
+      expect(
+        resubscribeResponse.headers.contentType?.mimeType,
+        ContentType('text', 'event-stream').mimeType,
+      );
+      expect(resubscribeEvents, isNotEmpty);
+      expect(
+        resubscribeEvents.any((Map<String, dynamic> event) {
+          final Object? result = event['result'];
+          if (result is! Map) {
+            return false;
+          }
+          final Map<String, dynamic> resultMap = result.cast<String, dynamic>();
+          return '${resultMap['kind'] ?? ''}' == 'task_status_update';
+        }),
+        isTrue,
+      );
+
+      final HttpClientRequest pathGetRequest = await a2aClient.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${a2aServer.port}/a2a/test_app/v1/tasks/$taskId',
+        ),
+      );
+      final HttpClientResponse pathGetResponse = await pathGetRequest.close();
+      final Map<String, dynamic> pathGetPayload =
+          jsonDecode(await utf8.decoder.bind(pathGetResponse).join())
+              as Map<String, dynamic>;
+
+      expect(pathGetResponse.statusCode, HttpStatus.ok);
+      expect(pathGetPayload['kind'], 'task');
+    });
+
+    test('dispatches a2a push notifications to callback endpoint', () async {
+      final Completer<Map<String, dynamic>> pushRequestCompleter =
+          Completer<Map<String, dynamic>>();
+      final HttpServer callbackServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      callbackServer.listen((HttpRequest request) async {
+        final String body = await utf8.decoder.bind(request).join();
+        if (!pushRequestCompleter.isCompleted) {
+          pushRequestCompleter.complete(
+            jsonDecode(body) as Map<String, dynamic>,
+          );
+        }
+        request.response.statusCode = HttpStatus.ok;
+        await request.response.close();
+      });
+      addTearDown(() async {
+        await callbackServer.close(force: true);
+      });
+
+      final DevAgentRuntime a2aRuntime = DevAgentRuntime(config: config);
+      final HttpServer a2aServer = await startAdkDevWebServer(
+        runtime: a2aRuntime,
+        project: config,
+        port: 0,
+        a2a: true,
+      );
+      addTearDown(() async {
+        await a2aServer.close(force: true);
+        await a2aRuntime.runner.close();
+      });
+
+      final HttpClient a2aClient = HttpClient();
+      addTearDown(() => a2aClient.close(force: true));
+
+      const String taskId = 'task_push_dispatch_1';
+
+      final HttpClientRequest firstSendRequest = await a2aClient.postUrl(
+        Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+      );
+      firstSendRequest.headers.contentType = ContentType.json;
+      firstSendRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-send-push-1',
+          'method': 'message/send',
+          'params': <String, Object?>{
+            'message': <String, Object?>{
+              'messageId': 'msg-push-1',
+              'role': 'user',
+              'taskId': taskId,
+              'parts': <Object>[
+                <String, Object?>{'kind': 'text', 'text': 'hello'},
+              ],
+            },
+          },
+        }),
+      );
+      final HttpClientResponse firstSendResponse = await firstSendRequest
+          .close();
+      await utf8.decoder.bind(firstSendResponse).join();
+      expect(firstSendResponse.statusCode, HttpStatus.ok);
+
+      final HttpClientRequest setPushRequest = await a2aClient.postUrl(
+        Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+      );
+      setPushRequest.headers.contentType = ContentType.json;
+      setPushRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-push-set-dispatch',
+          'method': 'tasks/pushNotificationConfig/set',
+          'params': <String, Object?>{
+            'taskId': taskId,
+            'pushNotificationConfig': <String, Object?>{
+              'url':
+                  'http://127.0.0.1:${callbackServer.port}/push/task-updates',
+              'authentication': <String, Object?>{
+                'scheme': 'Bearer',
+                'token': 'token-123',
+              },
+            },
+          },
+        }),
+      );
+      final HttpClientResponse setPushResponse = await setPushRequest.close();
+      await utf8.decoder.bind(setPushResponse).join();
+      expect(setPushResponse.statusCode, HttpStatus.ok);
+
+      final HttpClientRequest secondSendRequest = await a2aClient.postUrl(
+        Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+      );
+      secondSendRequest.headers.contentType = ContentType.json;
+      secondSendRequest.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 'rpc-send-push-2',
+          'method': 'message/send',
+          'params': <String, Object?>{
+            'message': <String, Object?>{
+              'messageId': 'msg-push-2',
+              'role': 'user',
+              'taskId': taskId,
+              'parts': <Object>[
+                <String, Object?>{'kind': 'text', 'text': 'second'},
+              ],
+            },
+          },
+        }),
+      );
+      final HttpClientResponse secondSendResponse = await secondSendRequest
+          .close();
+      await utf8.decoder.bind(secondSendResponse).join();
+      expect(secondSendResponse.statusCode, HttpStatus.ok);
+
+      final Map<String, dynamic> callbackPayload = await pushRequestCompleter
+          .future
+          .timeout(const Duration(seconds: 5));
+
+      expect(callbackPayload['jsonrpc'], '2.0');
+      expect(callbackPayload['method'], 'tasks/pushNotification');
+      final Map<String, dynamic> callbackParams =
+          callbackPayload['params'] as Map<String, dynamic>;
+      expect(callbackParams['taskId'], taskId);
+      expect(callbackParams['task'], isA<Map<String, dynamic>>());
+      expect(callbackParams['update'], isA<Map<String, dynamic>>());
     });
 
     test('creates a session and sends a message', () async {
@@ -721,6 +1028,34 @@ void main() {
       expect(payload['author'], isNotNull);
     });
   });
+}
+
+List<Map<String, dynamic>> _decodeSseJsonEvents(String body) {
+  final List<Map<String, dynamic>> events = <Map<String, dynamic>>[];
+  for (final String line in const LineSplitter().convert(body)) {
+    final String trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) {
+      continue;
+    }
+    final String payload = trimmed.substring('data:'.length).trim();
+    if (payload.isEmpty) {
+      continue;
+    }
+    final Object? decoded = jsonDecode(payload);
+    if (decoded is Map<String, dynamic>) {
+      events.add(decoded);
+      continue;
+    }
+    if (decoded is Map) {
+      events.add(
+        decoded.map(
+          (Object? key, Object? value) =>
+              MapEntry<String, dynamic>('$key', value),
+        ),
+      );
+    }
+  }
+  return events;
 }
 
 class _FactoryLoadedPlugin extends BasePlugin {

@@ -1,6 +1,6 @@
 # Runtime Remaining Work Checklist (Re-Audit)
 
-Last updated: 2026-03-01 (post-P2 telemetry sqlite implementation pass)
+Last updated: 2026-03-01 (post-A2A parity expansion pass)
 Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual runnable status.
 
 ## Audit method
@@ -14,6 +14,13 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
 - [x] `gs://` artifact service registry wiring is fixed and constructible in runtime.
 - [x] `adk deploy` has real execution path (`--dry-run` + actual gcloud process execution).
 - [x] `--a2a` dev web now serves agent card + JSON-RPC entry routes (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`).
+- [x] A2A runtime route parity expanded beyond minimal RPC:
+  - `tasks/resubscribe` streaming replay
+  - `tasks/pushNotificationConfig/set`
+  - `tasks/pushNotificationConfig/get`
+  - best-effort outbound push callback dispatch (`tasks/pushNotification`)
+  - SSE behavior for `message/stream`
+  - REST-style task routes under `/a2a/{app}/v1/tasks/{task_id}*` (get/subscribe/push config)
 - [x] SQLite session persistence path is operational and covered by tests.
 - [x] PostgreSQL/MySQL URL dispatch is operational at service-selection level.
 - [x] ADK web debug/eval/metrics/event-graph route families are now present in Dart web server:
@@ -33,13 +40,10 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
     - `lib/src/dev/web_server.dart` uses built-in mapping + explicit factory registry + registered class-factory fallback.
     - Python still supports direct dotted import (`importlib.import_module`).
 
-- [ ] Expand A2A server parity beyond minimal RPC surface.
-  - Current: minimal JSON-RPC support is present, but advanced server behaviors from full A2A server stack are not implemented.
-  - Evidence:
-    - Dart routing maps only a small fixed set of operations in `web_server.dart`.
-    - Python delegates to A2A server application stack (`A2AStarletteApplication` + default handlers/stores).
-
 ## P2 - Runtime integration completion (production readiness)
+- [ ] Harden A2A push callback delivery with retry/backoff and persistence.
+  - Current: callback dispatch is best-effort in-memory and does not retry across failures or process restarts.
+
 - [ ] Provide default runtime adapters (or officially shipped bootstrap) for cloud/service clients that currently fail fast without injection.
   - Current examples:
     - BigQuery default client factory throws.

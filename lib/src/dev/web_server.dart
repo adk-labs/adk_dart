@@ -260,6 +260,10 @@ class _AdkDevWebContext {
   final Map<String, Runner> _runners = <String, Runner>{};
   final Map<String, Map<String, Map<String, Object?>>> _a2aTasksByApp =
       <String, Map<String, Map<String, Object?>>>{};
+  final Map<String, Map<String, List<Map<String, Object?>>>>
+  _a2aTaskUpdatesByApp = <String, Map<String, List<Map<String, Object?>>>>{};
+  final Map<String, Map<String, Map<String, Object?>>> _a2aPushConfigsByApp =
+      <String, Map<String, Map<String, Object?>>>{};
   final Map<String, Map<String, Object?>> _traceByEventId =
       <String, Map<String, Object?>>{};
   final Map<String, List<Map<String, Object?>>> _traceBySessionId =
@@ -479,6 +483,8 @@ class _AdkDevWebContext {
     }
     _runners.clear();
     _a2aTasksByApp.clear();
+    _a2aTaskUpdatesByApp.clear();
+    _a2aPushConfigsByApp.clear();
     spanExporter.shutdown();
   }
 
@@ -496,6 +502,58 @@ class _AdkDevWebContext {
 
   Map<String, Object?>? readA2aTask(String appName, String taskId) {
     final Map<String, Map<String, Object?>>? byTask = _a2aTasksByApp[appName];
+    final Map<String, Object?>? found = byTask?[taskId];
+    if (found == null) {
+      return null;
+    }
+    return Map<String, Object?>.from(found);
+  }
+
+  void upsertA2aTaskUpdates(
+    String appName,
+    String taskId,
+    List<Map<String, Object?>> updates,
+  ) {
+    final String normalizedTaskId = taskId.trim();
+    if (normalizedTaskId.isEmpty) {
+      return;
+    }
+    final Map<String, List<Map<String, Object?>>> byTask = _a2aTaskUpdatesByApp
+        .putIfAbsent(appName, () => <String, List<Map<String, Object?>>>{});
+    byTask[normalizedTaskId] = updates
+        .map((Map<String, Object?> value) => Map<String, Object?>.from(value))
+        .toList(growable: false);
+  }
+
+  List<Map<String, Object?>> readA2aTaskUpdates(String appName, String taskId) {
+    final Map<String, List<Map<String, Object?>>>? byTask =
+        _a2aTaskUpdatesByApp[appName];
+    final List<Map<String, Object?>>? found = byTask?[taskId];
+    if (found == null) {
+      return const <Map<String, Object?>>[];
+    }
+    return found
+        .map((Map<String, Object?> value) => Map<String, Object?>.from(value))
+        .toList(growable: false);
+  }
+
+  void upsertA2aPushConfig(
+    String appName,
+    String taskId,
+    Map<String, Object?> config,
+  ) {
+    final String normalizedTaskId = taskId.trim();
+    if (normalizedTaskId.isEmpty) {
+      return;
+    }
+    final Map<String, Map<String, Object?>> byTask = _a2aPushConfigsByApp
+        .putIfAbsent(appName, () => <String, Map<String, Object?>>{});
+    byTask[normalizedTaskId] = Map<String, Object?>.from(config);
+  }
+
+  Map<String, Object?>? readA2aPushConfig(String appName, String taskId) {
+    final Map<String, Map<String, Object?>>? byTask =
+        _a2aPushConfigsByApp[appName];
     final Map<String, Object?>? found = byTask?[taskId];
     if (found == null) {
       return null;
@@ -786,8 +844,11 @@ Future<void> _handleRequest(
     }
   }
 
-  if (context.a2a && request.method == 'POST') {
-    final _A2aRpcRoute? rpcRoute = _parseA2aRpcRoute(routedPath);
+  if (context.a2a && (request.method == 'POST' || request.method == 'GET')) {
+    final _A2aRpcRoute? rpcRoute = _parseA2aRpcRoute(
+      routedPath,
+      request.method,
+    );
     if (rpcRoute != null) {
       await _handleA2aRpc(request, context, route: rpcRoute);
       return;
@@ -3721,20 +3782,30 @@ String? _extractA2aScopedAppName(String routedPath) {
 }
 
 class _A2aRpcRoute {
-  _A2aRpcRoute({required this.appName, this.methodFromPath});
+  _A2aRpcRoute({
+    required this.appName,
+    this.methodFromPath,
+    this.taskIdFromPath,
+  });
 
   final String appName;
   final String? methodFromPath;
+  final String? taskIdFromPath;
 }
 
 class _A2aExecutionResult {
-  _A2aExecutionResult({required this.message, required this.task});
+  _A2aExecutionResult({
+    required this.message,
+    required this.task,
+    required this.updates,
+  });
 
   final Map<String, Object?> message;
   final Map<String, Object?> task;
+  final List<Map<String, Object?>> updates;
 }
 
-_A2aRpcRoute? _parseA2aRpcRoute(String routedPath) {
+_A2aRpcRoute? _parseA2aRpcRoute(String routedPath, String httpMethod) {
   if (!routedPath.startsWith('/a2a/')) {
     return null;
   }
@@ -3753,6 +3824,7 @@ _A2aRpcRoute? _parseA2aRpcRoute(String routedPath) {
   if (segments.length == 2) {
     return _A2aRpcRoute(appName: appName);
   }
+
   if (segments.length == 4 && segments[2] == 'v1') {
     final String? methodFromPath = _a2aMethodFromV1Operation(segments[3]);
     if (methodFromPath == null) {
@@ -3760,6 +3832,62 @@ _A2aRpcRoute? _parseA2aRpcRoute(String routedPath) {
     }
     return _A2aRpcRoute(appName: appName, methodFromPath: methodFromPath);
   }
+
+  if (segments.length >= 5 && segments[2] == 'v1' && segments[3] == 'tasks') {
+    final String rawTaskSegment = Uri.decodeComponent(segments[4]).trim();
+    if (rawTaskSegment.isEmpty) {
+      return null;
+    }
+
+    if (segments.length == 5) {
+      if (rawTaskSegment.endsWith(':cancel')) {
+        final String taskId = rawTaskSegment
+            .substring(0, rawTaskSegment.length - ':cancel'.length)
+            .trim();
+        if (taskId.isEmpty) {
+          return null;
+        }
+        return _A2aRpcRoute(
+          appName: appName,
+          methodFromPath: 'tasks/cancel',
+          taskIdFromPath: taskId,
+        );
+      }
+
+      if (rawTaskSegment.endsWith(':subscribe')) {
+        final String taskId = rawTaskSegment
+            .substring(0, rawTaskSegment.length - ':subscribe'.length)
+            .trim();
+        if (taskId.isEmpty) {
+          return null;
+        }
+        return _A2aRpcRoute(
+          appName: appName,
+          methodFromPath: 'tasks/resubscribe',
+          taskIdFromPath: taskId,
+        );
+      }
+
+      return _A2aRpcRoute(
+        appName: appName,
+        methodFromPath: 'tasks/get',
+        taskIdFromPath: rawTaskSegment,
+      );
+    }
+
+    if (segments.length == 6 &&
+        segments[5].toLowerCase() == 'pushnotificationconfigs') {
+      final String methodFromPath = httpMethod.toUpperCase() == 'GET'
+          ? 'tasks/pushnotificationconfig/get'
+          : 'tasks/pushnotificationconfig/set';
+      return _A2aRpcRoute(
+        appName: appName,
+        methodFromPath: methodFromPath,
+        taskIdFromPath: rawTaskSegment,
+      );
+    }
+  }
+
   return null;
 }
 
@@ -3773,6 +3901,15 @@ String? _a2aMethodFromV1Operation(String operation) {
       return 'tasks/get';
     case 'tasks:cancel':
       return 'tasks/cancel';
+    case 'tasks:resubscribe':
+    case 'tasks:subscribe':
+      return 'tasks/resubscribe';
+    case 'tasks:pushnotificationconfig:set':
+    case 'tasks:push_notification_config:set':
+      return 'tasks/pushnotificationconfig/set';
+    case 'tasks:pushnotificationconfig:get':
+    case 'tasks:push_notification_config:get':
+      return 'tasks/pushnotificationconfig/get';
     default:
       return null;
   }
@@ -3784,25 +3921,40 @@ Future<void> _handleA2aRpc(
   required _A2aRpcRoute route,
 }) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
+  final bool useJsonRpcEnvelope =
+      payload.containsKey('jsonrpc') ||
+      payload.containsKey('id') ||
+      payload.containsKey('method');
   final Object? id = payload['id'];
+  final Map<String, dynamic> params;
+  if (payload['params'] is Map) {
+    params = _toDynamicMap(payload['params']);
+  } else if (!useJsonRpcEnvelope && route.methodFromPath != null) {
+    params = _toDynamicMap(payload);
+  } else {
+    params = <String, dynamic>{};
+  }
+  if (route.taskIdFromPath != null && route.taskIdFromPath!.trim().isNotEmpty) {
+    params.putIfAbsent('taskId', () => route.taskIdFromPath!);
+    params.putIfAbsent('task_id', () => route.taskIdFromPath!);
+    params.putIfAbsent('id', () => route.taskIdFromPath!);
+  }
+
   final String method = _normalizeA2aRpcMethod(
     (payload['method'] is String ? payload['method'] as String : null) ??
         route.methodFromPath ??
         '',
   );
-  final Map<String, dynamic> params = payload['params'] is Map
-      ? _toDynamicMap(payload['params'])
-      : <String, dynamic>{};
 
   if (method.isEmpty) {
-    await _writeJson(
+    await _writeA2aError(
       request,
       context,
-      payload: _a2aJsonRpcError(
-        id: id,
-        code: -32600,
-        message: 'A2A JSON-RPC request must provide a method.',
-      ),
+      id: id,
+      jsonRpcEnvelope: useJsonRpcEnvelope,
+      jsonRpcCode: -32600,
+      statusCode: HttpStatus.badRequest,
+      message: 'A2A JSON-RPC request must provide a method.',
     );
     return;
   }
@@ -3815,10 +3967,12 @@ Future<void> _handleA2aRpc(
           appName: route.appName,
           params: params,
         );
-        await _writeJson(
+        await _writeA2aSuccess(
           request,
           context,
-          payload: _a2aJsonRpcSuccess(id: id, result: result.message),
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          result: result.message,
         );
         return;
       case 'message/stream':
@@ -3827,10 +3981,13 @@ Future<void> _handleA2aRpc(
           appName: route.appName,
           params: params,
         );
-        await _writeJson(
+        await _writeA2aSseTaskReplay(
           request,
           context,
-          payload: _a2aJsonRpcSuccess(id: id, result: result.task),
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          task: result.task,
+          updates: result.updates,
         );
         return;
       case 'tasks/get':
@@ -3844,21 +4001,23 @@ Future<void> _handleA2aRpc(
           taskId,
         );
         if (task == null) {
-          await _writeJson(
+          await _writeA2aError(
             request,
             context,
-            payload: _a2aJsonRpcError(
-              id: id,
-              code: -32004,
-              message: 'A2A task not found: $taskId',
-            ),
+            id: id,
+            jsonRpcEnvelope: useJsonRpcEnvelope,
+            jsonRpcCode: -32004,
+            statusCode: HttpStatus.notFound,
+            message: 'A2A task not found: $taskId',
           );
           return;
         }
-        await _writeJson(
+        await _writeA2aSuccess(
           request,
           context,
-          payload: _a2aJsonRpcSuccess(id: id, result: task),
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          result: task,
         );
         return;
       case 'tasks/cancel':
@@ -3872,14 +4031,14 @@ Future<void> _handleA2aRpc(
           taskId,
         );
         if (existing == null) {
-          await _writeJson(
+          await _writeA2aError(
             request,
             context,
-            payload: _a2aJsonRpcError(
-              id: id,
-              code: -32004,
-              message: 'A2A task not found: $taskId',
-            ),
+            id: id,
+            jsonRpcEnvelope: useJsonRpcEnvelope,
+            jsonRpcCode: -32004,
+            statusCode: HttpStatus.notFound,
+            message: 'A2A task not found: $taskId',
           );
           return;
         }
@@ -3903,51 +4062,270 @@ Future<void> _handleA2aRpc(
           },
         };
         context.upsertA2aTask(route.appName, canceled);
-        await _writeJson(
+        await _writeA2aSuccess(
           request,
           context,
-          payload: _a2aJsonRpcSuccess(id: id, result: canceled),
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          result: canceled,
+        );
+        return;
+      case 'tasks/pushnotificationconfig/set':
+        final String taskId = _readString(params, const <String>[
+          'taskId',
+          'task_id',
+          'id',
+        ], required: true);
+        final Map<String, Object?>? task = context.readA2aTask(
+          route.appName,
+          taskId,
+        );
+        if (task == null) {
+          await _writeA2aError(
+            request,
+            context,
+            id: id,
+            jsonRpcEnvelope: useJsonRpcEnvelope,
+            jsonRpcCode: -32004,
+            statusCode: HttpStatus.notFound,
+            message: 'A2A task not found: $taskId',
+          );
+          return;
+        }
+
+        final Map<String, Object?> pushConfig =
+            _readObjectMap(params, const <String>[
+              'pushNotificationConfig',
+              'push_notification_config',
+            ]) ??
+            <String, Object?>{...params};
+        pushConfig.remove('taskId');
+        pushConfig.remove('task_id');
+        pushConfig.remove('id');
+
+        if (pushConfig.isEmpty) {
+          throw const FormatException(
+            'Missing required field: pushNotificationConfig',
+          );
+        }
+
+        context.upsertA2aPushConfig(route.appName, taskId, pushConfig);
+        final Map<String, Object?> result = <String, Object?>{
+          'taskId': taskId,
+          'task_id': taskId,
+          'pushNotificationConfig': pushConfig,
+          'push_notification_config': pushConfig,
+        };
+        await _writeA2aSuccess(
+          request,
+          context,
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          result: result,
+        );
+        return;
+      case 'tasks/pushnotificationconfig/get':
+        final String taskId = _readString(params, const <String>[
+          'taskId',
+          'task_id',
+          'id',
+        ], required: true);
+        final Map<String, Object?>? task = context.readA2aTask(
+          route.appName,
+          taskId,
+        );
+        if (task == null) {
+          await _writeA2aError(
+            request,
+            context,
+            id: id,
+            jsonRpcEnvelope: useJsonRpcEnvelope,
+            jsonRpcCode: -32004,
+            statusCode: HttpStatus.notFound,
+            message: 'A2A task not found: $taskId',
+          );
+          return;
+        }
+
+        final Map<String, Object?>? pushConfig = context.readA2aPushConfig(
+          route.appName,
+          taskId,
+        );
+        if (pushConfig == null) {
+          await _writeA2aError(
+            request,
+            context,
+            id: id,
+            jsonRpcEnvelope: useJsonRpcEnvelope,
+            jsonRpcCode: -32004,
+            statusCode: HttpStatus.notFound,
+            message: 'A2A push notification config not found for task: $taskId',
+          );
+          return;
+        }
+
+        final Map<String, Object?> result = <String, Object?>{
+          'taskId': taskId,
+          'task_id': taskId,
+          'pushNotificationConfig': pushConfig,
+          'push_notification_config': pushConfig,
+        };
+        await _writeA2aSuccess(
+          request,
+          context,
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          result: result,
+        );
+        return;
+      case 'tasks/resubscribe':
+        final String taskId = _readString(params, const <String>[
+          'taskId',
+          'task_id',
+          'id',
+        ], required: true);
+        final Map<String, Object?>? task = context.readA2aTask(
+          route.appName,
+          taskId,
+        );
+        if (task == null) {
+          await _writeA2aError(
+            request,
+            context,
+            id: id,
+            jsonRpcEnvelope: useJsonRpcEnvelope,
+            jsonRpcCode: -32004,
+            statusCode: HttpStatus.notFound,
+            message: 'A2A task not found: $taskId',
+          );
+          return;
+        }
+
+        final List<Map<String, Object?>> updates = context.readA2aTaskUpdates(
+          route.appName,
+          taskId,
+        );
+        await _writeA2aSseTaskReplay(
+          request,
+          context,
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          task: task,
+          updates: updates,
         );
         return;
       default:
-        await _writeJson(
+        await _writeA2aError(
           request,
           context,
-          payload: _a2aJsonRpcError(
-            id: id,
-            code: -32601,
-            message: 'A2A JSON-RPC method not found: $method',
-          ),
+          id: id,
+          jsonRpcEnvelope: useJsonRpcEnvelope,
+          jsonRpcCode: -32601,
+          statusCode: HttpStatus.notFound,
+          message: 'A2A JSON-RPC method not found: $method',
         );
         return;
     }
   } on FormatException catch (error) {
-    await _writeJson(
+    await _writeA2aError(
       request,
       context,
-      payload: _a2aJsonRpcError(id: id, code: -32602, message: error.message),
+      id: id,
+      jsonRpcEnvelope: useJsonRpcEnvelope,
+      jsonRpcCode: -32602,
+      statusCode: HttpStatus.badRequest,
+      message: error.message,
     );
   } on ArgumentError catch (error) {
-    await _writeJson(
+    await _writeA2aError(
       request,
       context,
-      payload: _a2aJsonRpcError(
-        id: id,
-        code: -32602,
-        message: '${error.message}',
-      ),
+      id: id,
+      jsonRpcEnvelope: useJsonRpcEnvelope,
+      jsonRpcCode: -32602,
+      statusCode: HttpStatus.badRequest,
+      message: '${error.message}',
     );
   } catch (error) {
+    await _writeA2aError(
+      request,
+      context,
+      id: id,
+      jsonRpcEnvelope: useJsonRpcEnvelope,
+      jsonRpcCode: -32000,
+      statusCode: HttpStatus.internalServerError,
+      message: 'A2A RPC execution failed: $error',
+    );
+  }
+}
+
+Future<void> _writeA2aSuccess(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required Object? id,
+  required bool jsonRpcEnvelope,
+  required Object? result,
+}) async {
+  if (jsonRpcEnvelope) {
     await _writeJson(
       request,
       context,
-      payload: _a2aJsonRpcError(
-        id: id,
-        code: -32000,
-        message: 'A2A RPC execution failed: $error',
-      ),
+      payload: _a2aJsonRpcSuccess(id: id, result: result),
     );
+    return;
   }
+  await _writeJson(request, context, payload: result ?? <String, Object?>{});
+}
+
+Future<void> _writeA2aError(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required Object? id,
+  required bool jsonRpcEnvelope,
+  required int jsonRpcCode,
+  required int statusCode,
+  required String message,
+}) async {
+  if (jsonRpcEnvelope) {
+    await _writeJson(
+      request,
+      context,
+      payload: _a2aJsonRpcError(id: id, code: jsonRpcCode, message: message),
+    );
+    return;
+  }
+  await _writeError(request, context, statusCode: statusCode, message: message);
+}
+
+Future<void> _writeA2aSseTaskReplay(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required Object? id,
+  required bool jsonRpcEnvelope,
+  required Map<String, Object?> task,
+  required List<Map<String, Object?>> updates,
+}) async {
+  final HttpResponse response = request.response;
+  _setCorsHeaders(request, response, context);
+  response.statusCode = HttpStatus.ok;
+  response.headers.contentType = ContentType(
+    'text',
+    'event-stream',
+    charset: 'utf-8',
+  );
+  response.headers.set('Cache-Control', 'no-cache');
+  response.headers.set('Connection', 'keep-alive');
+
+  final List<Object?> streamItems = <Object?>[task, ...updates];
+  for (final Object? item in streamItems) {
+    final Object payload = jsonRpcEnvelope
+        ? _a2aJsonRpcSuccess(id: id, result: item)
+        : (item ?? <String, Object?>{});
+    response.write('data: ${jsonEncode(payload)}\n\n');
+    await response.flush();
+  }
+
+  await response.close();
 }
 
 Future<_A2aExecutionResult> _executeA2aMessageSend(
@@ -3989,7 +4367,24 @@ Future<_A2aExecutionResult> _executeA2aMessageSend(
     contextId: contextId,
     events: eventQueue.events,
   );
+  final List<Map<String, Object?>> updates = eventQueue.events
+      .map<Map<String, Object?>>(_a2aEventToJson)
+      .toList(growable: false);
   context.upsertA2aTask(appName, task);
+  context.upsertA2aTaskUpdates(appName, taskId, updates);
+  final Map<String, Object?>? pushConfig = context.readA2aPushConfig(
+    appName,
+    taskId,
+  );
+  if (pushConfig != null && updates.isNotEmpty) {
+    unawaited(
+      _dispatchA2aPushNotifications(
+        pushConfig: pushConfig,
+        task: task,
+        updates: updates,
+      ),
+    );
+  }
 
   final Map<String, Object?> status = _toObjectMap(task['status']);
   final Map<String, Object?> statusMessage = _toObjectMap(status['message']);
@@ -3997,7 +4392,154 @@ Future<_A2aExecutionResult> _executeA2aMessageSend(
       ? statusMessage
       : _a2aFallbackMessage(task);
 
-  return _A2aExecutionResult(message: messageResult, task: task);
+  return _A2aExecutionResult(
+    message: messageResult,
+    task: task,
+    updates: updates,
+  );
+}
+
+Map<String, Object?> _a2aEventToJson(A2aEvent event) {
+  if (event is A2aTaskStatusUpdateEvent) {
+    return <String, Object?>{
+      'kind': 'task_status_update',
+      if (event.taskId != null) 'taskId': event.taskId,
+      if (event.taskId != null) 'task_id': event.taskId,
+      if (event.contextId != null) 'contextId': event.contextId,
+      if (event.contextId != null) 'context_id': event.contextId,
+      'status': _a2aTaskStatusToJson(event.status),
+      'final': event.finalEvent,
+      if (event.metadata.isNotEmpty)
+        'metadata': Map<String, Object?>.from(event.metadata),
+    };
+  }
+
+  if (event is A2aTaskArtifactUpdateEvent) {
+    return <String, Object?>{
+      'kind': 'task_artifact_update',
+      if (event.taskId != null) 'taskId': event.taskId,
+      if (event.taskId != null) 'task_id': event.taskId,
+      if (event.contextId != null) 'contextId': event.contextId,
+      if (event.contextId != null) 'context_id': event.contextId,
+      'lastChunk': event.lastChunk,
+      'last_chunk': event.lastChunk,
+      'append': event.append,
+      'artifact': _a2aArtifactToJson(event.artifact),
+    };
+  }
+
+  return <String, Object?>{'kind': 'unknown'};
+}
+
+Future<void> _dispatchA2aPushNotifications({
+  required Map<String, Object?> pushConfig,
+  required Map<String, Object?> task,
+  required List<Map<String, Object?>> updates,
+}) async {
+  final String? url = _resolveA2aPushUrl(pushConfig);
+  if (url == null || url.isEmpty) {
+    return;
+  }
+  final Uri? uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    return;
+  }
+
+  final HttpClient client = HttpClient();
+  try {
+    final Map<String, String> headers = _resolveA2aPushHeaders(pushConfig);
+    final String? authHeader = _resolveA2aPushAuthorization(pushConfig);
+
+    for (final Map<String, Object?> update in updates) {
+      try {
+        final HttpClientRequest request = await client.postUrl(uri);
+        request.headers.contentType = ContentType.json;
+        headers.forEach((String key, String value) {
+          request.headers.set(key, value);
+        });
+        if (authHeader != null && authHeader.isNotEmpty) {
+          request.headers.set(HttpHeaders.authorizationHeader, authHeader);
+        }
+        request.write(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'method': 'tasks/pushNotification',
+            'params': <String, Object?>{
+              'task': task,
+              'update': update,
+              'taskId':
+                  '${task['id'] ?? task['taskId'] ?? task['task_id'] ?? ''}',
+            },
+          }),
+        );
+        final HttpClientResponse response = await request.close();
+        await response.drain<Object?>();
+      } catch (_) {
+        // Best effort: an unreachable callback endpoint should not fail the
+        // serving request.
+      }
+    }
+  } finally {
+    client.close(force: true);
+  }
+}
+
+String? _resolveA2aPushUrl(Map<String, Object?> pushConfig) {
+  for (final String key in const <String>[
+    'url',
+    'endpoint',
+    'webhook',
+    'webhook_url',
+    'webhookUrl',
+  ]) {
+    final Object? raw = pushConfig[key];
+    if (raw is String && raw.trim().isNotEmpty) {
+      return raw.trim();
+    }
+  }
+  return null;
+}
+
+Map<String, String> _resolveA2aPushHeaders(Map<String, Object?> pushConfig) {
+  final Object? rawHeaders = pushConfig['headers'];
+  if (rawHeaders is! Map) {
+    return <String, String>{};
+  }
+  final Map<String, String> headers = <String, String>{};
+  rawHeaders.forEach((Object? key, Object? value) {
+    final String normalizedKey = '$key'.trim();
+    final String normalizedValue = '$value'.trim();
+    if (normalizedKey.isEmpty || normalizedValue.isEmpty) {
+      return;
+    }
+    headers[normalizedKey] = normalizedValue;
+  });
+  return headers;
+}
+
+String? _resolveA2aPushAuthorization(Map<String, Object?> pushConfig) {
+  final Object? rawAuth =
+      pushConfig['authentication'] ?? pushConfig['auth'] ?? pushConfig['token'];
+  if (rawAuth is String && rawAuth.trim().isNotEmpty) {
+    return rawAuth.trim();
+  }
+  if (rawAuth is! Map) {
+    return null;
+  }
+  final Map<String, dynamic> auth = _toDynamicMap(rawAuth);
+  final String token = _readString(auth, const <String>[
+    'token',
+    'accessToken',
+    'access_token',
+  ]);
+  if (token.isEmpty) {
+    return null;
+  }
+  final String scheme = _readString(auth, const <String>[
+    'scheme',
+    'type',
+  ], fallback: 'Bearer');
+  return '${scheme.isEmpty ? 'Bearer' : scheme} $token';
 }
 
 Map<String, Object?> _a2aTaskFromEvents({
