@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
@@ -444,10 +443,16 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
   }
 
   bool _isRetriableException(Object error) {
-    return error is SocketException ||
-        error is HttpException ||
-        error is TimeoutException ||
-        error is http.ClientException;
+    if (error is TimeoutException || error is http.ClientException) {
+      return true;
+    }
+
+    // Avoid hard dependency on dart:io exception types so this transport stays
+    // web-compilable. We still treat common network exception names as retriable.
+    final String typeName = error.runtimeType.toString();
+    return typeName == 'SocketException' ||
+        typeName == 'HttpException' ||
+        typeName == 'HandshakeException';
   }
 
   Duration _retryDelay({

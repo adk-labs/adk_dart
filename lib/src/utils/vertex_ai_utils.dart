@@ -1,6 +1,5 @@
-import 'dart:io';
-
 import 'env_utils.dart';
+import 'system_environment/system_environment.dart';
 
 String? getExpressModeApiKey({
   String? project,
@@ -23,6 +22,6 @@ String? getExpressModeApiKey({
     return expressModeApiKey;
   }
 
-  final Map<String, String> env = environment ?? Platform.environment;
+  final Map<String, String> env = environment ?? readSystemEnvironment();
   return env['GOOGLE_API_KEY'];
 }

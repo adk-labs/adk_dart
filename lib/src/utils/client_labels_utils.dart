@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'system_environment/system_environment.dart';
 import '../version.dart';
 
 const String _adkLabel = 'google-adk';
@@ -13,13 +13,13 @@ const Object _labelContextKey = Object();
 const String evalClientLabel = 'google-adk-eval/$adkVersion';
 
 List<String> _getDefaultLabels({Map<String, String>? environment}) {
-  final Map<String, String> env = environment ?? Platform.environment;
+  final Map<String, String> env = environment ?? readSystemEnvironment();
   String frameworkLabel = '$_adkLabel/$adkVersion';
   if ((env[_agentEngineTelemetryEnvVariableName] ?? '').isNotEmpty) {
     frameworkLabel = '$frameworkLabel+$_agentEngineTelemetryTag';
   }
 
-  final String languageVersion = Platform.version.split(' ').first;
+  final String languageVersion = readRuntimeLanguageVersion();
   final String languageLabel = '$_languageLabel/$languageVersion';
   return <String>[frameworkLabel, languageLabel];
 }

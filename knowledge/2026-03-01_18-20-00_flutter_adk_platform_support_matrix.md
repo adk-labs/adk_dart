@@ -5,22 +5,22 @@
 - 플랫폼별 제한 사항을 사전에 고지하고, 회피 전략과 다음 구현 단위를 정의한다.
 
 ## 기준 스냅샷 (as-is)
-- `packages/flutter_adk`는 현재 `adk_core`만 re-export.
-- `adk_core`는 Web-safe 화이트리스트로 제한되어 `LlmAgent`, `Runner`, `Gemini`를 포함하지 않음.
+- `packages/flutter_adk`는 `adk_core`를 통해 Flutter 런타임 핵심(`Agent/LlmAgent`, `Runner`, `Gemini`, `FunctionTool`)을 노출.
+- `adk_core` Web compile smoke에서 `Agent/Runner/Gemini` 참조 스모크까지 통과.
 - `lib/src` 기준:
   - `dart:io` import 파일: `83`
   - `dart:ffi` import 파일: `2`
   - `dart:mirrors` import 파일: `1`
-- `Gemini` 구현(`lib/src/models/google_llm.dart`)은 `dart:io`를 직접 import.
+- `Gemini`/env 유틸 경로는 조건부 환경 리더를 사용해 Web compile 가능하도록 정리.
 
 ## 현재 지원 매트릭스 (flutter_adk 단일 import 기준)
 
 | 기능 영역 | Android | iOS | Web | Linux | macOS | Windows | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `adk_core` 데이터/세션/메모리 기본 타입 | Supported | Supported | Supported | Supported | Supported | Supported | `adk_core` web compile smoke 게이트 통과 |
-| `LlmAgent`/`Agent` 생성 | Not supported | Not supported | Not supported | Not supported | Not supported | Not supported | 현재 `flutter_adk` export 범위 밖 |
-| `Runner`/`InMemoryRunner` 실행 | Not supported | Not supported | Not supported | Not supported | Not supported | Not supported | 현재 `flutter_adk` export 범위 밖 |
-| `Gemini` 모델 직접 호출 | Not supported | Not supported | Not supported | Not supported | Not supported | Not supported | 현재 `flutter_adk` export 범위 밖 |
+| `LlmAgent`/`Agent` 생성 | Supported | Supported | Supported | Supported | Supported | Supported | `flutter_adk` 단일 import로 노출 |
+| `Runner`/`InMemoryRunner` 실행 | Supported | Supported | Supported | Supported | Supported | Supported | in-memory 기본 런타임 |
+| `Gemini` 모델 직접 호출 | Supported | Supported | Supported* | Supported | Supported | Supported | *BYOK/CORS/키보안 정책 영향 |
 | CLI/dev server 계열 기능 | Not supported | Not supported | Not supported | Not supported | Not supported | Not supported | Flutter 런타임 대상 아님 |
 
 ## 참고: adk_dart 직접 import 시 플랫폼 특성

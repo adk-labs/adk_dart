@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../types/content.dart';
 import '../utils/env_utils.dart';
+import '../utils/system_environment/system_environment.dart';
 import 'google_llm.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
@@ -55,14 +55,10 @@ class ApigeeLlm extends Gemini {
     Map<String, String>? environment,
     this.completionsClient,
     super.retryOptions,
-    GeminiGenerateHook? generateHook,
+    super.generateHook,
   }) : customHeaders = customHeaders ?? <String, String>{},
        _apiType = ApiType.parse(apiType),
-       super(
-         model: model,
-         generateHook: generateHook,
-         environment: environment,
-       ) {
+       super(model: model, environment: environment) {
     if (!validateModelString(model)) {
       throw ArgumentError('Invalid model string: $model');
     }
@@ -507,7 +503,7 @@ Map<String, Object?> _asMap(Object? value) {
 
 Map<String, String> get _safeEnvironment {
   try {
-    return Map<String, String>.from(Platform.environment);
+    return readSystemEnvironment();
   } catch (_) {
     return <String, String>{};
   }

@@ -10,6 +10,7 @@ export 'src/agents/callback_context.dart';
 export 'src/agents/context.dart';
 export 'src/agents/invocation_context.dart';
 export 'src/agents/live_request_queue.dart';
+export 'src/agents/llm_agent.dart';
 export 'src/agents/run_config.dart';
 
 export 'src/apps/app.dart';
@@ -30,9 +31,13 @@ export 'src/memory/memory_entry.dart';
 
 export 'src/models/llm_request.dart';
 export 'src/models/llm_response.dart';
+export 'src/models/base_llm.dart';
+export 'src/models/google_llm.dart';
 
 export 'src/plugins/base_plugin.dart';
 export 'src/plugins/plugin_manager.dart';
+
+export 'src/runners/runner.dart';
 
 export 'src/sessions/base_session_service.dart';
 export 'src/sessions/in_memory_session_service.dart';
@@ -43,6 +48,7 @@ export 'src/telemetry/base_telemetry_service.dart';
 export 'src/telemetry/in_memory_telemetry_service.dart';
 
 export 'src/tools/base_tool.dart';
+export 'src/tools/function_tool.dart';
 export 'src/tools/tool_context.dart';
 
 export 'src/types/content.dart';

@@ -160,3 +160,55 @@
 ### 단위 결론
 - “flutter_adk 단일 import 목표” 대비 현재 상태와 제한 사항이 명시되어,
   사용자 기대치 관리와 다음 구현 단위 합의가 가능한 상태.
+
+## Work Unit 6 — flutter_adk Web Lite 런타임 export 확장
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 18:35~19:20 KST
+
+### 구현 내용
+- `adk_core` export 확장:
+  - `Agent/LlmAgent`, `Runner/InMemoryRunner`, `FunctionTool`, `BaseLlm`, `Gemini`
+  - 파일: `lib/adk_core.dart`
+- Web 컴파일 차단 요인 정리:
+  - 모델/환경 유틸의 `dart:io` 직접 의존 제거
+  - 조건부 환경 리더 추가:
+    - `lib/src/utils/system_environment/system_environment.dart`
+    - `lib/src/utils/system_environment/system_environment_io.dart`
+    - `lib/src/utils/system_environment/system_environment_stub.dart`
+  - 수정 파일:
+    - `lib/src/utils/env_utils.dart`
+    - `lib/src/utils/client_labels_utils.dart`
+    - `lib/src/utils/vertex_ai_utils.dart`
+    - `lib/src/models/google_llm.dart`
+    - `lib/src/models/apigee_llm.dart`
+    - `lib/src/models/gemini_rest_api_client.dart`
+- `LlmAgent`의 Web 비호환 import 경로 정리:
+  - `discovery_engine_search_tool` 직접 의존 제거
+  - `VertexAiSearchTool` bypass 경로는 self tool 반환으로 유지
+- smoke/test 강화:
+  - `tool/smoke/adk_core_web_smoke.dart`에 `Agent/Runner/Gemini` 참조 추가
+  - `packages/flutter_adk/test/flutter_adk_test.dart`에
+    `Agent/Runner` 실행 및 `Gemini` 심볼 테스트 추가
+- Flutter 앱 import 충돌/의존성 보정:
+  - `packages/flutter_adk/lib/flutter_adk.dart`에서
+    Flutter `State` 충돌 방지를 위해 `hide State` 적용
+  - `packages/flutter_adk/example/pubspec_overrides.yaml` 추가
+    (로컬 최신 `adk_dart`를 예제가 참조하도록 고정)
+- sync 체크 정책 보정:
+  - `tool/check_package_sync.dart`
+  - `flutter_adk` 버전은 루트와 동일 core 버전(빌드 메타데이터 허용),
+    `adk_dart` 의존은 exact 또는 caret 허용
+
+### 검증 결과
+- `dart analyze` (수정 파일): 통과
+- `./tool/check_adk_core_web_compile.sh`: 통과
+- `flutter analyze --no-pub` (`packages/flutter_adk`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+- `dart run tool/check_package_sync.dart`: 통과 (정책 보정 후)
+
+### 단위 결론
+- `flutter_adk` 단일 import로 `Agent/Runner/Gemini`까지 접근 가능한
+  Web Lite 런타임 기반이 확보됨.

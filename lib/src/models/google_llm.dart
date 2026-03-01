@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../types/content.dart';
 import '../utils/google_client_headers.dart';
+import '../utils/system_environment/system_environment.dart';
 import '../utils/streaming_utils.dart';
 import '../utils/variant_utils.dart';
 import 'base_llm.dart';
@@ -267,7 +267,7 @@ class Gemini extends BaseLlm {
   }
 
   String? _resolveApiKey() {
-    final Map<String, String> env = environment ?? Platform.environment;
+    final Map<String, String> env = environment ?? readSystemEnvironment();
     final String? key = env['GEMINI_API_KEY'] ?? env['GOOGLE_API_KEY'];
     if (key == null || key.isEmpty) {
       return null;

@@ -60,10 +60,10 @@ void main() {
       'Run `dart run tool/sync_facade_versions.dart`.',
     );
   }
-  if (flutterFacadeVersion != rootVersion) {
+  if (!_isFlutterFacadeVersionCompatible(flutterFacadeVersion, rootVersion)) {
     _fail(
-      'Version mismatch: root=$rootVersion '
-      'flutter_facade=$flutterFacadeVersion.',
+      'Version mismatch: root=$rootVersion flutter_facade=$flutterFacadeVersion. '
+      'flutter_adk must share the same core version (build metadata allowed).',
     );
   }
   if (facadeDependency != rootVersion) {
@@ -72,10 +72,14 @@ void main() {
       'but root version is $rootVersion.',
     );
   }
-  if (flutterFacadeDependency != rootVersion) {
+  if (!_isFlutterFacadeDependencyCompatible(
+    flutterFacadeDependency,
+    rootVersion,
+  )) {
     _fail(
       'Dependency mismatch: packages/flutter_adk depends on '
-      'adk_dart:$flutterFacadeDependency but root version is $rootVersion.',
+      'adk_dart:$flutterFacadeDependency but root version is $rootVersion. '
+      'Allowed: exact root version or caret constraint on the root version.',
     );
   }
 
@@ -102,7 +106,7 @@ void main() {
     _fail('packages/adk/lib/cli.dart must re-export package:adk_dart/cli.dart');
   }
   if (!flutterFacadeLibText.contains(
-    "export 'package:adk_dart/adk_core.dart';",
+    "export 'package:adk_dart/adk_core.dart'",
   )) {
     _fail(
       'packages/flutter_adk/lib/flutter_adk.dart must re-export '
@@ -119,6 +123,30 @@ void main() {
     'flutter_facade: $flutterFacadeName@$flutterFacadeVersion '
     '-> adk_dart:$flutterFacadeDependency',
   );
+}
+
+bool _isFlutterFacadeVersionCompatible(
+  String facadeVersion,
+  String rootVersion,
+) {
+  return _stripBuildMetadata(facadeVersion) == _stripBuildMetadata(rootVersion);
+}
+
+bool _isFlutterFacadeDependencyCompatible(
+  String dependencyVersion,
+  String rootVersion,
+) {
+  final String normalized = dependencyVersion.replaceAll(' ', '');
+  final String root = _stripBuildMetadata(rootVersion);
+  return normalized == root || normalized == '^$root';
+}
+
+String _stripBuildMetadata(String version) {
+  final int index = version.indexOf('+');
+  if (index < 0) {
+    return version;
+  }
+  return version.substring(0, index);
 }
 
 String _extractScalar(String text, String key) {
