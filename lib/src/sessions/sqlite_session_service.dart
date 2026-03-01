@@ -59,14 +59,16 @@ CREATE TABLE IF NOT EXISTS events (
 ''';
 
 class SqliteSessionService extends BaseSessionService {
-  SqliteSessionService(String dbPath) : this._(_resolveStorePath(dbPath));
+  SqliteSessionService(String dbPath) : this._(_resolveStorePath(dbPath), dbPath);
 
-  SqliteSessionService._(_ResolvedStorePath resolved)
+  SqliteSessionService._(_ResolvedStorePath resolved, String originalDbPath)
     : _storePath = resolved.path,
       _connectPath = resolved.connectPath,
       _connectAsUri = resolved.connectUri,
       _readOnly = resolved.readOnly,
-      _inMemory = resolved.inMemory;
+      _inMemory = resolved.inMemory {
+    _ensureNotLegacySchema(originalDbPath);
+  }
 
   final String _storePath;
   final String _connectPath;
@@ -76,6 +78,50 @@ class SqliteSessionService extends BaseSessionService {
 
   _SqliteDatabase? _memoryDatabase;
   Future<void> _lock = Future<void>.value();
+
+  void _ensureNotLegacySchema(String originalDbPath) {
+    if (_inMemory || _storePath.isEmpty || _storePath.startsWith('file:')) {
+      return;
+    }
+    if (!File(_storePath).existsSync()) {
+      return;
+    }
+
+    _SqliteDatabase? db;
+    try {
+      db = _SqliteDatabase.open(
+        connectPath: _connectPath,
+        displayPath: _storePath,
+        uri: _connectAsUri,
+        readOnly: true,
+      );
+
+      final List<Map<String, Object?>> eventTableRows = db.query(
+        "SELECT 1 FROM sqlite_master WHERE type='table' and name='events'",
+      );
+      if (eventTableRows.isEmpty) {
+        return;
+      }
+
+      final List<Map<String, Object?>> columns = db.query(
+        'PRAGMA table_info(events)',
+      );
+      final bool hasEventDataColumn = columns.any(
+        (Map<String, Object?> row) => '${row['name'] ?? ''}' == 'event_data',
+      );
+      if (hasEventDataColumn) {
+        return;
+      }
+
+      throw StateError(
+        'Database $_storePath seems to use an old schema. '
+        'Please run migration before using this database: '
+        '`dart run adk migrate session --source_db_path "$originalDbPath"`.',
+      );
+    } finally {
+      db?.dispose();
+    }
+  }
 
   @override
   Future<Session> createSession({
@@ -670,15 +716,12 @@ String _resolveSqliteUriPath(String rawPath, String dbPath) {
   }
 
   if (path.startsWith('//')) {
+    // SQLAlchemy convention:
     // sqlite:////abs/path.db -> /abs/path.db
     path = path.substring(1);
-  } else if (_looksLikeWindowsDrivePath(path) ||
-      path.startsWith('/./') ||
-      path == '/.' ||
-      path.startsWith('/../') ||
-      path == '/..' ||
-      _looksLikeRelativePlaceholderPath(path)) {
-    // sqlite:///./rel.db and placeholder-style relative paths stay relative.
+  } else if (path.startsWith('/')) {
+    // SQLAlchemy convention:
+    // sqlite:///relative.db -> relative.db
     path = path.substring(1);
   }
 
@@ -690,23 +733,6 @@ String _resolveSqliteUriPath(String rawPath, String dbPath) {
     );
   }
   return path;
-}
-
-bool _looksLikeWindowsDrivePath(String path) {
-  if (!path.startsWith('/') || path.length < 3) {
-    return false;
-  }
-  return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path.substring(1));
-}
-
-bool _looksLikeRelativePlaceholderPath(String path) {
-  if (!path.startsWith('/')) {
-    return false;
-  }
-  final String firstSegment = path.substring(1).split('/').first;
-  return firstSegment.contains('%') ||
-      firstSegment.contains('{') ||
-      firstSegment.contains('}');
 }
 
 String _extractRawSqlitePath(String sqliteUrl) {
@@ -794,25 +820,10 @@ String _buildSqliteConnectionQuery(Map<String, List<String>> query) {
     return '';
   }
 
-  const Set<String> validModes = <String>{'ro', 'rw', 'rwc', 'memory'};
   final List<String> encodedPairs = <String>[];
 
   query.forEach((String key, List<String> values) {
     if (values.isEmpty) {
-      return;
-    }
-
-    if (key == 'mode') {
-      final List<String> validValues = values
-          .where(
-            (String value) => validModes.contains(value.trim().toLowerCase()),
-          )
-          .toList(growable: false);
-      for (final String value in validValues) {
-        encodedPairs.add(
-          '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(value)}',
-        );
-      }
       return;
     }
 

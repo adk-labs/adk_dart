@@ -334,37 +334,31 @@ void main() {
     });
 
     test(
-      'treats sqlite:/// and sqlite+aiosqlite:/// absolute paths correctly',
+      'treats sqlite:/// and sqlite+aiosqlite:/// paths as relative by SQLAlchemy convention',
       () async {
-        final Directory dir = await Directory.systemTemp.createTemp(
-          'adk_sqlite_absolute_triple_slash_',
-        );
         final Directory cwd = await Directory.systemTemp.createTemp(
-          'adk_sqlite_absolute_cwd_',
+          'adk_sqlite_triple_slash_relative_',
         );
         final Directory originalCwd = Directory.current;
         Directory.current = cwd;
         addTearDown(() async {
           Directory.current = originalCwd;
-          if (await dir.exists()) {
-            await dir.delete(recursive: true);
-          }
           if (await cwd.exists()) {
             await cwd.delete(recursive: true);
           }
         });
 
-        final String targetA = '${dir.path}/triple_sqlite.db';
-        final String targetB = '${dir.path}/triple_aiosqlite.db';
-        final String normalizedA = targetA.replaceAll('\\', '/');
-        final String normalizedB = targetB.replaceAll('\\', '/');
+        final String absoluteLikeA = '${cwd.path}/absolute_like_a.db'
+            .replaceAll('\\', '/');
+        final String absoluteLikeB = '${cwd.path}/absolute_like_b.db'
+            .replaceAll('\\', '/');
 
-        final String urlA = normalizedA.startsWith('/')
-            ? 'sqlite:///${normalizedA.substring(1)}'
-            : 'sqlite:///$normalizedA';
-        final String urlB = normalizedB.startsWith('/')
-            ? 'sqlite+aiosqlite:///${normalizedB.substring(1)}'
-            : 'sqlite+aiosqlite:///$normalizedB';
+        final String urlA = absoluteLikeA.startsWith('/')
+            ? 'sqlite:///${absoluteLikeA.substring(1)}'
+            : 'sqlite:///$absoluteLikeA';
+        final String urlB = absoluteLikeB.startsWith('/')
+            ? 'sqlite+aiosqlite:///${absoluteLikeB.substring(1)}'
+            : 'sqlite+aiosqlite:///$absoluteLikeB';
 
         await SqliteSessionService(
           urlA,
@@ -373,19 +367,17 @@ void main() {
           urlB,
         ).createSession(appName: 'app', userId: 'u1');
 
-        expect(File(targetA).existsSync(), isTrue);
-        expect(File(targetB).existsSync(), isTrue);
+        expect(File(absoluteLikeA).existsSync(), isFalse);
+        expect(File(absoluteLikeB).existsSync(), isFalse);
 
-        if (normalizedA.startsWith('/') && normalizedB.startsWith('/')) {
-          final File accidentalRelativeA = File(
-            '${cwd.path}/${normalizedA.substring(1)}',
-          );
-          final File accidentalRelativeB = File(
-            '${cwd.path}/${normalizedB.substring(1)}',
-          );
-          expect(accidentalRelativeA.existsSync(), isFalse);
-          expect(accidentalRelativeB.existsSync(), isFalse);
-        }
+        expect(
+          File('${cwd.path}/${absoluteLikeA.substring(1)}').existsSync(),
+          isTrue,
+        );
+        expect(
+          File('${cwd.path}/${absoluteLikeB.substring(1)}').existsSync(),
+          isTrue,
+        );
       },
     );
 
@@ -413,7 +405,9 @@ void main() {
       );
     });
 
-    test('accepts sqlite URLs with additional query parameters', () async {
+    test(
+      'preserves sqlite URLs with additional query parameters without sanitizing mode',
+      () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_sqlite_query_options_',
       );
@@ -432,11 +426,13 @@ void main() {
       await cacheShared.createSession(appName: 'app', userId: 'u1');
       expect(File('${dir.path}/sessions.db').existsSync(), isTrue);
 
-      final SqliteSessionService unknownMode = SqliteSessionService(
+      final SqliteSessionService invalidMode = SqliteSessionService(
         'sqlite:///./sessions2.db?mode=invalid',
       );
-      await unknownMode.createSession(appName: 'app', userId: 'u1');
-      expect(File('${dir.path}/sessions2.db').existsSync(), isTrue);
+      await expectLater(
+        () => invalidMode.createSession(appName: 'app', userId: 'u1'),
+        throwsA(isA<FileSystemException>()),
+      );
     });
 
     test(
@@ -521,6 +517,52 @@ void main() {
     test('rejects sqlite URLs without a file path', () {
       expect(() => SqliteSessionService('sqlite://'), throwsArgumentError);
       expect(() => SqliteSessionService('sqlite:///'), throwsArgumentError);
+    });
+
+    test('fails fast when opening legacy schema without event_data column', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_legacy_schema_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final String dbPath = '${dir.path}/legacy.db';
+      final ProcessResult init = await Process.run('sqlite3', <String>[
+        dbPath,
+        '''
+CREATE TABLE events (
+  id TEXT NOT NULL,
+  app_name TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  invocation_id TEXT NOT NULL,
+  timestamp REAL NOT NULL,
+  actions TEXT NOT NULL
+);
+''',
+      ]);
+      if (init.exitCode != 0) {
+        final String stderr = '${init.stderr}'.toLowerCase();
+        if (stderr.contains('not found')) {
+          markTestSkipped('sqlite3 CLI is not available in test environment.');
+          return;
+        }
+        fail('Failed to initialize legacy sqlite schema: ${init.stderr}');
+      }
+
+      expect(
+        () => SqliteSessionService(dbPath),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message.toString(),
+            'message',
+            contains('old schema'),
+          ),
+        ),
+      );
     });
   });
 
@@ -727,6 +769,60 @@ void main() {
         expect(customResolverCalls, 0);
       },
     );
+
+    test('reloads stale session and appends event successfully', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_db_service_stale_reload_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final DatabaseSessionService service = DatabaseSessionService(
+        'sqlite:///${dir.path}/stale_reload.db',
+      );
+      final Session original = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      final Session fresh = (await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: original.id,
+      ))!;
+
+      await service.appendEvent(
+        session: fresh,
+        event: Event(
+          invocationId: 'inv_db_stale_1',
+          author: 'agent',
+          timestamp: original.lastUpdateTime + 10,
+          actions: EventActions(stateDelta: <String, Object?>{'k1': 'v1'}),
+        ),
+      );
+
+      await service.appendEvent(
+        session: original,
+        event: Event(
+          invocationId: 'inv_db_stale_2',
+          author: 'agent',
+          timestamp: original.lastUpdateTime + 20,
+          actions: EventActions(stateDelta: <String, Object?>{'k2': 'v2'}),
+        ),
+      );
+
+      final Session? reloaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: original.id,
+      );
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events, hasLength(2));
+      expect(reloaded.state['k1'], 'v1');
+      expect(reloaded.state['k2'], 'v2');
+    });
   });
 
   group('VertexAiSessionService', () {

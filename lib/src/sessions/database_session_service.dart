@@ -157,6 +157,45 @@ class DatabaseSessionService extends BaseSessionService {
 
   @override
   Future<Event> appendEvent({required Session session, required Event event}) {
-    return _delegate.appendEvent(session: session, event: event);
+    return _appendEventWithStaleRetry(session: session, event: event);
+  }
+
+  Future<Event> _appendEventWithStaleRetry({
+    required Session session,
+    required Event event,
+  }) async {
+    const int maxAttempts = 3;
+    int attempts = 0;
+    while (true) {
+      try {
+        return await _delegate.appendEvent(session: session, event: event);
+      } on StateError catch (error) {
+        attempts += 1;
+        if (!_isStaleSessionError(error) || attempts >= maxAttempts) {
+          rethrow;
+        }
+
+        final Session? latest = await _delegate.getSession(
+          appName: session.appName,
+          userId: session.userId,
+          sessionId: session.id,
+        );
+        if (latest == null) {
+          rethrow;
+        }
+
+        final Session refreshed = latest.copyWith();
+        session.state = refreshed.state;
+        session.events = refreshed.events;
+        session.lastUpdateTime = refreshed.lastUpdateTime;
+      }
+    }
+  }
+
+  bool _isStaleSessionError(StateError error) {
+    final String message = error.message.toLowerCase();
+    return message.contains('stale') &&
+        (message.contains('lastupdatetime') ||
+            message.contains('last_update_time'));
   }
 }
