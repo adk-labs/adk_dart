@@ -109,6 +109,18 @@ void registerServiceClassFactory(
   _customYamlClassFactories[classPath] = factory;
 }
 
+Object? instantiateRegisteredClassFactory(
+  String classPath, {
+  String? uri,
+  Map<String, Object?>? kwargs,
+}) {
+  final ServiceFactory<Object>? factory = _customYamlClassFactories[classPath];
+  if (factory == null) {
+    return null;
+  }
+  return factory(uri ?? classPath, kwargs: kwargs);
+}
+
 void loadServicesModule(String agentsDir) {
   final Directory directory = Directory(agentsDir);
   if (!directory.existsSync()) {
@@ -274,13 +286,13 @@ Future<GcsArtifactHttpResponse> _sendGcsArtifactHttpRequest(
     }
 
     final HttpClientResponse response = await rawRequest.close();
-    final List<int> bodyBytes = await response.fold<List<int>>(
-      <int>[],
-      (List<int> previous, List<int> element) {
-        previous.addAll(element);
-        return previous;
-      },
-    );
+    final List<int> bodyBytes = await response.fold<List<int>>(<int>[], (
+      List<int> previous,
+      List<int> element,
+    ) {
+      previous.addAll(element);
+      return previous;
+    });
     final Map<String, String> headers = <String, String>{};
     response.headers.forEach((String name, List<String> values) {
       if (values.isNotEmpty) {

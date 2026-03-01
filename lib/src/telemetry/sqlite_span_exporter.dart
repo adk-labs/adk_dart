@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:sqlite3/sqlite3.dart' as sqlite;
+
 class TraceState {
   const TraceState([Map<String, String>? values])
     : values = values ?? const <String, String>{};
@@ -70,15 +72,36 @@ class SqliteSpanExporter implements SpanExporter {
 
   final String dbPath;
   final File _storeFile;
+  late final sqlite.Database _database = sqlite.sqlite3.open(dbPath);
 
   void _ensureSchema() {
-    final Directory? parent = _storeFile.parent;
-    if (parent != null && !parent.existsSync()) {
+    final Directory parent = _storeFile.parent;
+    if (!parent.existsSync()) {
       parent.createSync(recursive: true);
     }
-    if (!_storeFile.existsSync()) {
-      _storeFile.writeAsStringSync('[]');
-    }
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS spans (
+        span_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        parent_span_id TEXT,
+        name TEXT NOT NULL,
+        start_time_unix_nano INTEGER,
+        end_time_unix_nano INTEGER,
+        session_id TEXT,
+        invocation_id TEXT,
+        event_id TEXT,
+        attributes_json TEXT NOT NULL
+      )
+    ''');
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_spans_session_id ON spans(session_id)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON spans(trace_id)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_spans_event_id ON spans(event_id)',
+    );
   }
 
   String _serializeAttributes(Map<String, Object?> attributes) {
@@ -111,16 +134,31 @@ class SqliteSpanExporter implements SpanExporter {
   @override
   SpanExportResult export(List<ReadableSpan> spans) {
     try {
-      final List<Map<String, Object?>> rows = _loadRows();
-      final Map<String, Map<String, Object?>> rowsBySpanId =
-          <String, Map<String, Object?>>{};
-      for (final Map<String, Object?> row in rows) {
-        final Object? spanId = row['span_id'];
-        if (spanId != null) {
-          rowsBySpanId['$spanId'] = row;
-        }
-      }
-
+      final sqlite.PreparedStatement statement = _database.prepare('''
+        INSERT INTO spans (
+          span_id,
+          trace_id,
+          parent_span_id,
+          name,
+          start_time_unix_nano,
+          end_time_unix_nano,
+          session_id,
+          invocation_id,
+          event_id,
+          attributes_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(span_id) DO UPDATE SET
+          trace_id = excluded.trace_id,
+          parent_span_id = excluded.parent_span_id,
+          name = excluded.name,
+          start_time_unix_nano = excluded.start_time_unix_nano,
+          end_time_unix_nano = excluded.end_time_unix_nano,
+          session_id = excluded.session_id,
+          invocation_id = excluded.invocation_id,
+          event_id = excluded.event_id,
+          attributes_json = excluded.attributes_json
+      ''');
       for (final ReadableSpan span in spans) {
         final Map<String, Object?> attributes = Map<String, Object?>.from(
           span.attributes,
@@ -130,21 +168,21 @@ class SqliteSpanExporter implements SpanExporter {
             attributes['gen_ai.conversation.id'];
         final Object? invocationId =
             attributes['gcp.vertex.agent.invocation_id'];
-
-        rowsBySpanId[span.context.spanIdHex] = <String, Object?>{
-          'span_id': span.context.spanIdHex,
-          'trace_id': span.context.traceIdHex,
-          'parent_span_id': span.parent?.spanIdHex,
-          'name': span.name,
-          'start_time_unix_nano': span.startTimeUnixNano,
-          'end_time_unix_nano': span.endTimeUnixNano,
-          'session_id': sessionId == null ? null : '$sessionId',
-          'invocation_id': invocationId == null ? null : '$invocationId',
-          'attributes_json': _serializeAttributes(attributes),
-        };
+        final Object? eventId = attributes['gcp.vertex.agent.event_id'];
+        statement.execute(<Object?>[
+          span.context.spanIdHex,
+          span.context.traceIdHex,
+          span.parent?.spanIdHex,
+          span.name,
+          span.startTimeUnixNano,
+          span.endTimeUnixNano,
+          sessionId == null ? null : '$sessionId',
+          invocationId == null ? null : '$invocationId',
+          eventId == null ? null : '$eventId',
+          _serializeAttributes(attributes),
+        ]);
       }
-
-      _saveRows(rowsBySpanId.values.toList());
+      statement.close();
       return SpanExportResult.success;
     } catch (_) {
       return SpanExportResult.failure;
@@ -153,7 +191,7 @@ class SqliteSpanExporter implements SpanExporter {
 
   @override
   void shutdown() {
-    // No persistent connection is held in this Dart implementation.
+    _database.close();
   }
 
   @override
@@ -161,43 +199,7 @@ class SqliteSpanExporter implements SpanExporter {
     return true;
   }
 
-  List<Map<String, Object?>> _loadRows() {
-    _ensureSchema();
-    final String raw = _storeFile.readAsStringSync();
-    if (raw.trim().isEmpty) {
-      return <Map<String, Object?>>[];
-    }
-
-    final Object? decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      return <Map<String, Object?>>[];
-    }
-
-    return decoded
-        .whereType<Map>()
-        .map(
-          (Map row) =>
-              row.map((Object? key, Object? value) => MapEntry('$key', value)),
-        )
-        .toList();
-  }
-
-  void _saveRows(List<Map<String, Object?>> rows) {
-    rows.sort((Map<String, Object?> a, Map<String, Object?> b) {
-      final int left = _asInt(a['start_time_unix_nano']);
-      final int right = _asInt(b['start_time_unix_nano']);
-      return left.compareTo(right);
-    });
-    _storeFile.writeAsStringSync(jsonEncode(rows));
-  }
-
-  List<Map<String, Object?>> _query(
-    bool Function(Map<String, Object?> row) predicate,
-  ) {
-    return _loadRows().where(predicate).toList();
-  }
-
-  ReadableSpan _rowToReadableSpan(Map<String, Object?> row) {
+  ReadableSpan _rowToReadableSpan(sqlite.Row row) {
     final int traceId = int.parse('${row['trace_id']}', radix: 16);
     final int spanId = int.parse('${row['span_id']}', radix: 16);
 
@@ -232,41 +234,65 @@ class SqliteSpanExporter implements SpanExporter {
   }
 
   List<ReadableSpan> getAllSpansForSession(String sessionId) {
-    final List<Map<String, Object?>> traceRows = _query(
-      (Map<String, Object?> row) => row['session_id'] == sessionId,
+    final sqlite.ResultSet rows = _database.select(
+      '''
+      SELECT
+        span_id,
+        trace_id,
+        parent_span_id,
+        name,
+        start_time_unix_nano,
+        end_time_unix_nano,
+        attributes_json
+      FROM spans
+      WHERE trace_id IN (
+        SELECT DISTINCT trace_id FROM spans WHERE session_id = ?
+      )
+      ORDER BY COALESCE(start_time_unix_nano, 0), span_id
+    ''',
+      <Object?>[sessionId],
     );
-    final Set<String> traceIds = traceRows
-        .map((Map<String, Object?> row) => row['trace_id'])
-        .where((Object? traceId) => traceId != null)
-        .map((Object? traceId) => '$traceId')
-        .toSet();
 
-    if (traceIds.isEmpty) {
-      return <ReadableSpan>[];
-    }
-
-    final List<Map<String, Object?>> rows = _query(
-      (Map<String, Object?> row) => traceIds.contains('${row['trace_id']}'),
-    );
-    rows.sort((Map<String, Object?> a, Map<String, Object?> b) {
-      final int left = _asInt(a['start_time_unix_nano']);
-      final int right = _asInt(b['start_time_unix_nano']);
-      return left.compareTo(right);
-    });
-
-    return rows
-        .map((Map<String, Object?> row) => _rowToReadableSpan(row))
-        .toList();
+    return rows.map((sqlite.Row row) => _rowToReadableSpan(row)).toList();
   }
 
-  int _asInt(Object? value) {
-    if (value is int) {
-      return value;
+  Map<String, Object?>? getTraceByEventId(String eventId) {
+    final sqlite.ResultSet rows = _database.select(
+      '''
+      SELECT
+        span_id,
+        trace_id,
+        parent_span_id,
+        name,
+        start_time_unix_nano,
+        end_time_unix_nano,
+        session_id,
+        invocation_id,
+        event_id,
+        attributes_json
+      FROM spans
+      WHERE event_id = ?
+      ORDER BY COALESCE(start_time_unix_nano, 0), span_id
+      LIMIT 1
+    ''',
+      <Object?>[eventId],
+    );
+    if (rows.isEmpty) {
+      return null;
     }
-    if (value is num) {
-      return value.toInt();
-    }
-    return int.tryParse('$value') ?? 0;
+    final sqlite.Row row = rows.first;
+    return <String, Object?>{
+      'name': '${row['name'] ?? ''}',
+      'span_id': '${row['span_id'] ?? ''}',
+      'trace_id': '${row['trace_id'] ?? ''}',
+      'start_time': row['start_time_unix_nano'],
+      'end_time': row['end_time_unix_nano'],
+      'attributes': _deserializeAttributes(row['attributes_json']),
+      'parent_span_id': row['parent_span_id'],
+      'event_id': row['event_id'],
+      'session_id': row['session_id'],
+      'invocation_id': row['invocation_id'],
+    };
   }
 
   Object? _normalizeJsonValue(Object? value) {

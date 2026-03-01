@@ -1,6 +1,6 @@
 # Runtime Remaining Work Checklist (Re-Audit)
 
-Last updated: 2026-03-01 (post-P1 web parity implementation pass)
+Last updated: 2026-03-01 (post-P2 telemetry sqlite implementation pass)
 Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual runnable status.
 
 ## Audit method
@@ -24,12 +24,13 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
   - `/apps/{app_name}/users/{user_id}/sessions/{session_id}/events/{event_id}/graph`
 - [x] `--eval_storage_uri` is now wired end-to-end from CLI parse to web server eval manager selection.
 - [x] `/run_sse` now applies Python-style split emission when content and `artifact_delta` co-exist.
+- [x] `SqliteSpanExporter` now uses real SQLite persistence (sqlite3 package), and debug trace endpoints read persisted spans (`event_id`, `session_id`).
 
 ## P1 - Remaining parity gaps (high priority)
 - [ ] Implement Python-style dynamic plugin loading for `--extra_plugins`.
-  - Current: registry-backed custom factory loading is implemented (`registerExtraPluginFactory`), but importlib-equivalent module/class runtime loading from arbitrary dotted path is not available.
+  - Current: registry-backed custom factory loading is implemented (`registerExtraPluginFactory`) and class-factory fallback is wired (`registerServiceClassFactory` + dotted-path spec resolution), but importlib-equivalent module/class runtime loading from arbitrary package path without pre-registration is not available.
   - Evidence:
-    - `lib/src/dev/web_server.dart` uses built-in mapping + explicit factory registry.
+    - `lib/src/dev/web_server.dart` uses built-in mapping + explicit factory registry + registered class-factory fallback.
     - Python still supports direct dotted import (`importlib.import_module`).
 
 - [ ] Expand A2A server parity beyond minimal RPC surface.
@@ -39,11 +40,6 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
     - Python delegates to A2A server application stack (`A2AStarletteApplication` + default handlers/stores).
 
 ## P2 - Runtime integration completion (production readiness)
-- [ ] Replace JSON-file storage in `SqliteSpanExporter` with real SQLite-backed exporter and wire it into debug trace endpoints.
-  - Current: exporter persists JSON file at `dbPath`; no runtime debug route integration.
-  - Evidence:
-    - `lib/src/telemetry/sqlite_span_exporter.dart`.
-
 - [ ] Provide default runtime adapters (or officially shipped bootstrap) for cloud/service clients that currently fail fast without injection.
   - Current examples:
     - BigQuery default client factory throws.

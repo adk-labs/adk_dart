@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:adk_dart/src/dev/project.dart';
 import 'package:adk_dart/src/dev/runtime.dart';
 import 'package:adk_dart/src/dev/web_server.dart';
+import 'package:adk_dart/src/plugins/base_plugin.dart';
+import 'package:adk_dart/src/cli/service_registry.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -87,6 +89,58 @@ void main() {
         'logging_plugin',
         'unknown.package.CustomPlugin',
       ]);
+    });
+
+    test('loads extra plugin via registered class factory fallback', () async {
+      _FactoryLoadedPlugin.instances = 0;
+      registerServiceClassFactory('test.plugins.FactoryPlugin', (
+        String _, {
+        Map<String, Object?>? kwargs,
+      }) {
+        return _FactoryLoadedPlugin(
+          name: 'factory_plugin_${_FactoryLoadedPlugin.instances}',
+        );
+      });
+      addTearDown(resetServiceRegistryForTest);
+
+      final DevAgentRuntime pluginRuntime = DevAgentRuntime(config: config);
+      final HttpServer pluginServer = await startAdkDevWebServer(
+        runtime: pluginRuntime,
+        project: config,
+        port: 0,
+        autoCreateSession: true,
+        extraPlugins: const <String>['test.plugins.FactoryPlugin'],
+      );
+      addTearDown(() async {
+        await pluginServer.close(force: true);
+        await pluginRuntime.runner.close();
+      });
+
+      final HttpClient pluginClient = HttpClient();
+      addTearDown(() => pluginClient.close(force: true));
+
+      final HttpClientRequest runRequest = await pluginClient.postUrl(
+        Uri.parse('http://127.0.0.1:${pluginServer.port}/run'),
+      );
+      runRequest.headers.contentType = ContentType.json;
+      runRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': 's_plugin',
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'hello'},
+            ],
+          },
+        }),
+      );
+      final HttpClientResponse runResponse = await runRequest.close();
+      await utf8.decoder.bind(runResponse).join();
+
+      expect(runResponse.statusCode, HttpStatus.ok);
+      expect(_FactoryLoadedPlugin.instances, greaterThan(0));
     });
 
     test('returns not found for a2a agent card when a2a is disabled', () async {
@@ -667,4 +721,12 @@ void main() {
       expect(payload['author'], isNotNull);
     });
   });
+}
+
+class _FactoryLoadedPlugin extends BasePlugin {
+  _FactoryLoadedPlugin({required super.name}) {
+    instances += 1;
+  }
+
+  static int instances = 0;
 }

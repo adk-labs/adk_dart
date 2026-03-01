@@ -15,6 +15,7 @@ import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/utils/agent_loader.dart';
 import '../cli/utils/base_agent_loader.dart';
 import '../cli/utils/evals.dart' as cli_evals;
+import '../cli/service_registry.dart';
 import '../cli/utils/service_factory.dart';
 import '../evaluation/base_eval_service.dart';
 import '../evaluation/eval_case.dart';
@@ -48,6 +49,7 @@ import '../sessions/session.dart';
 import '../sessions/schemas/v0.dart';
 import '../telemetry/google_cloud.dart';
 import '../telemetry/setup.dart';
+import '../telemetry/sqlite_span_exporter.dart';
 import '../types/content.dart';
 import '../version.dart';
 import 'project.dart';
@@ -214,6 +216,7 @@ class _AdkDevWebContext {
     required this.evalSetsManager,
     required this.evalSetResultsManager,
     required this.evalStorageUri,
+    required this.spanExporter,
     required this.allowOrigins,
     required this.urlPrefix,
     required this.autoCreateSession,
@@ -239,6 +242,7 @@ class _AdkDevWebContext {
   final EvalSetsManager evalSetsManager;
   final EvalSetResultsManager evalSetResultsManager;
   final String? evalStorageUri;
+  final SqliteSpanExporter spanExporter;
   final List<String> allowOrigins;
   final String? urlPrefix;
   final bool autoCreateSession;
@@ -285,6 +289,7 @@ class _AdkDevWebContext {
     Map<String, String>? environment,
   }) async {
     final Directory agentsRoot = Directory(agentsDir).absolute;
+    loadServicesModule(agentsRoot.path);
     final Map<String, String> appNameToDir = _buildAppNameToDir(
       agentsRoot,
       fallbackAppName: project.appName,
@@ -337,6 +342,10 @@ class _AdkDevWebContext {
       evalSetsManager: evalManagers.evalSetsManager,
       evalSetResultsManager: evalManagers.evalSetResultsManager,
       evalStorageUri: evalStorageUri,
+      spanExporter: SqliteSpanExporter(
+        dbPath:
+            '${agentsRoot.path}${Platform.pathSeparator}.adk${Platform.pathSeparator}debug_spans.db',
+      ),
       allowOrigins: allowOrigins,
       urlPrefix: urlPrefix,
       autoCreateSession: autoCreateSession,
@@ -470,6 +479,7 @@ class _AdkDevWebContext {
     }
     _runners.clear();
     _a2aTasksByApp.clear();
+    spanExporter.shutdown();
   }
 
   void upsertA2aTask(String appName, Map<String, Object?> task) {
@@ -524,17 +534,71 @@ class _AdkDevWebContext {
       final double right = _asDouble(b['start_time']);
       return left.compareTo(right);
     });
+
+    final SpanContext contextSpan = SpanContext(
+      traceId: _stablePositiveInt(event.invocationId),
+      spanId: _stablePositiveInt(event.id),
+      isRemote: false,
+      traceFlags: TraceFlags.sampled,
+      traceState: const TraceState(),
+    );
+    SpanContext? parent;
+    final String? parentHex = trace['parent_span_id']?.toString();
+    if (parentHex != null && parentHex.isNotEmpty) {
+      parent = SpanContext(
+        traceId: contextSpan.traceId,
+        spanId: int.tryParse(parentHex, radix: 16) ?? 0,
+        isRemote: false,
+        traceFlags: TraceFlags.sampled,
+        traceState: const TraceState(),
+      );
+    }
+
+    final Map<String, Object?> attributes = Map<String, Object?>.from(
+      trace['attributes'] as Map<String, Object?>? ?? const <String, Object?>{},
+    );
+    spanExporter.export(<ReadableSpan>[
+      ReadableSpan(
+        name: '${trace['name'] ?? 'event'}',
+        context: contextSpan,
+        parent: parent,
+        attributes: attributes,
+        startTimeUnixNano: _toUnixNano(event.timestamp),
+        endTimeUnixNano: _toUnixNano(event.timestamp),
+      ),
+    ]);
   }
 
   Map<String, Object?>? readTraceByEventId(String eventId) {
-    final Map<String, Object?>? trace = _traceByEventId[eventId];
-    if (trace == null) {
-      return null;
+    final Map<String, Object?>? persisted = spanExporter.getTraceByEventId(
+      eventId,
+    );
+    if (persisted != null) {
+      return persisted;
     }
-    return Map<String, Object?>.from(trace);
+    final Map<String, Object?>? trace = _traceByEventId[eventId];
+    return trace == null ? null : Map<String, Object?>.from(trace);
   }
 
   List<Map<String, Object?>> readTraceBySessionId(String sessionId) {
+    final List<ReadableSpan> persisted = spanExporter.getAllSpansForSession(
+      sessionId,
+    );
+    if (persisted.isNotEmpty) {
+      return persisted
+          .map<Map<String, Object?>>((ReadableSpan span) {
+            return <String, Object?>{
+              'name': span.name,
+              'span_id': span.context.spanIdHex,
+              'trace_id': span.context.traceIdHex,
+              'start_time': span.startTimeUnixNano,
+              'end_time': span.endTimeUnixNano,
+              'attributes': Map<String, Object?>.from(span.attributes),
+              'parent_span_id': span.parent?.spanIdHex,
+            };
+          })
+          .toList(growable: false);
+    }
     final List<Map<String, Object?>> values =
         _traceBySessionId[sessionId] ?? const <Map<String, Object?>>[];
     return values
@@ -567,6 +631,21 @@ class _AdkDevWebContext {
       return value.toDouble();
     }
     return double.tryParse('$value') ?? 0.0;
+  }
+
+  int _stablePositiveInt(String value) {
+    int hash = 0;
+    for (final int unit in value.codeUnits) {
+      hash = (hash * 31 + unit) & 0x7fffffff;
+    }
+    if (hash == 0) {
+      return 1;
+    }
+    return hash;
+  }
+
+  int _toUnixNano(double seconds) {
+    return (seconds * 1000000000).round();
   }
 }
 
@@ -3466,6 +3545,20 @@ List<BasePlugin> _instantiateExtraPlugins(
           _extraPluginFactories[spec.normalizedName];
       if (customFactory != null) {
         plugin = customFactory(spec.raw, baseDir: baseDir);
+      }
+    }
+
+    if (plugin == null) {
+      final Object? dynamicPlugin = instantiateRegisteredClassFactory(
+        spec.raw,
+        kwargs: <String, Object?>{
+          'base_dir': baseDir,
+          'agents_dir': baseDir,
+          'plugin_spec': spec.raw,
+        },
+      );
+      if (dynamicPlugin is BasePlugin) {
+        plugin = dynamicPlugin;
       }
     }
 
