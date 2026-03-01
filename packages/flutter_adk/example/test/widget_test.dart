@@ -22,13 +22,16 @@ void main() {
     expect(find.text('Skills'), findsOneWidget);
 
     expect(find.text('Basic Chatbot Example'), findsOneWidget);
-    expect(find.textContaining('단일 Agent + Tool'), findsOneWidget);
+    expect(find.textContaining('Single Agent + FunctionTool'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'Transfer Multi-Agent'));
     await tester.pumpAndSettle();
 
     expect(find.text('Multi-Agent Coordinator Example'), findsOneWidget);
-    expect(find.textContaining('Coordinator/Dispatcher 패턴'), findsOneWidget);
+    expect(
+      find.textContaining('Coordinator/Dispatcher pattern'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'Workflow Combo'));
     await tester.pumpAndSettle();

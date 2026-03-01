@@ -415,3 +415,37 @@
 ### 단위 결론
 - 사용자 요청한 MCP/Skills 활용 예제가 example 앱에 추가되었고,
   기존 워크플로우/팀 예제와 함께 동일 UI에서 비교 실행 가능한 상태가 됨.
+
+## Work Unit 12 — Example 다국어 지원(EN/KO/JA/ZH)
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 22:30~23:00 KST
+
+### 구현 내용
+- 예제 앱 다국어 상태 추가:
+  - `_AppLanguage`(`en`, `ko`, `ja`, `zh`)
+  - 언어 선택 UI: AppBar `translate` 메뉴
+  - 선택 언어 `shared_preferences` 저장/복원
+- i18n 맵 적용:
+  - 앱 셸(타이틀, 설정, 경고 배너, 탭 라벨)
+  - 예제별 title/summary/initial/empty/hint 문구
+  - 공통 에러 문구
+- Agent 생성 경로 다국어 반영:
+  - `_AgentFactory` 시그니처를 `(apiKey, language)`로 확장
+  - 주요 agent instruction에 응답 언어 지시 주입
+  - Agent Team의 인사/작별/시간대 오류/MCP 상태 메시지 다국어화
+- 테스트/문서 갱신:
+  - `packages/flutter_adk/example/test/widget_test.dart`
+    - 영어 기본 로케일 기준 문자열 검증으로 정렬
+  - `packages/flutter_adk/example/README.md`
+    - 다국어 지원 섹션 추가
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- 예제 앱이 요청한 4개 언어(영어/한국어/일본어/중국어)를 UI 레벨에서 지원하며,
+  언어 선택이 에이전트 응답 지시에도 반영되는 상태로 정리됨.

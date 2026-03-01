@@ -2,6 +2,11 @@
 
 `flutter_adk` 예제 앱입니다.
 
+## 다국어 지원
+- 지원 언어: English, 한국어, 日本語, 中文
+- 상단 `번역(🌐)` 아이콘에서 즉시 전환할 수 있습니다.
+- 선택 언어는 로컬 저장소에 유지됩니다.
+
 ## 포함 예제
 - `Basic Chatbot`: 단일 `Agent + FunctionTool` 예제
 - `Transfer Multi-Agent`: 공식 문서 MAS의 Coordinator/Dispatcher 패턴 예제
