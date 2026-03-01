@@ -75,16 +75,27 @@ class AuthToolArguments {
 }
 
 String _stableFnv1a64Hex(String value) {
-  const int fnvOffsetBasis = 0xcbf29ce484222325;
-  const int fnvPrime = 0x100000001b3;
-  const int mask64 = 0xFFFFFFFFFFFFFFFF;
+  final BigInt fnvOffsetBasis = _signedInt64FromHex('cbf29ce484222325');
+  final BigInt fnvPrime = BigInt.parse('100000001b3', radix: 16);
 
-  int hash = fnvOffsetBasis;
+  BigInt hash = fnvOffsetBasis;
   for (int i = 0; i < value.length; i += 1) {
-    hash ^= value.codeUnitAt(i);
-    hash = (hash * fnvPrime) & mask64;
+    hash = _toSignedInt64(hash ^ BigInt.from(value.codeUnitAt(i)));
+    hash = _toSignedInt64(hash * fnvPrime);
   }
   return hash.toRadixString(16).padLeft(16, '0');
+}
+
+BigInt _signedInt64FromHex(String value) {
+  return _toSignedInt64(BigInt.parse(value, radix: 16));
+}
+
+BigInt _toSignedInt64(BigInt value) {
+  final BigInt masked = value & _int64Mask;
+  if (masked >= _int64SignBit) {
+    return masked - _int64Modulus;
+  }
+  return masked;
 }
 
 AuthCredential? _copyCredential(AuthCredential? credential) {
@@ -173,3 +184,6 @@ ServiceAccountCredential? _copyServiceAccountCredential(
 }
 
 const Object _sentinel = Object();
+final BigInt _int64Mask = BigInt.parse('ffffffffffffffff', radix: 16);
+final BigInt _int64SignBit = BigInt.parse('8000000000000000', radix: 16);
+final BigInt _int64Modulus = BigInt.parse('10000000000000000', radix: 16);

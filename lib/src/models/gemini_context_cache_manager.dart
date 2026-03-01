@@ -393,11 +393,27 @@ double? _asDouble(Object? value) {
 }
 
 String _fnv1a64Hex(String input) {
-  const int fnvPrime = 0x100000001b3;
-  int hash = 0xcbf29ce484222325;
+  final BigInt fnvPrime = BigInt.parse('100000001b3', radix: 16);
+  BigInt hash = _signedInt64FromHex('cbf29ce484222325');
   for (final int byte in utf8.encode(input)) {
-    hash ^= byte;
-    hash = (hash * fnvPrime) & 0xFFFFFFFFFFFFFFFF;
+    hash = _toSignedInt64(hash ^ BigInt.from(byte));
+    hash = _toSignedInt64(hash * fnvPrime);
   }
   return hash.toRadixString(16).padLeft(16, '0');
 }
+
+BigInt _signedInt64FromHex(String value) {
+  return _toSignedInt64(BigInt.parse(value, radix: 16));
+}
+
+BigInt _toSignedInt64(BigInt value) {
+  final BigInt masked = value & _int64Mask;
+  if (masked >= _int64SignBit) {
+    return masked - _int64Modulus;
+  }
+  return masked;
+}
+
+final BigInt _int64Mask = BigInt.parse('ffffffffffffffff', radix: 16);
+final BigInt _int64SignBit = BigInt.parse('8000000000000000', radix: 16);
+final BigInt _int64Modulus = BigInt.parse('10000000000000000', radix: 16);

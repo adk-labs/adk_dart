@@ -1,6 +1,6 @@
 enum StreamingMode { none, sse, bidi }
 
-const int _pythonSysMaxSize = 9223372036854775807;
+final BigInt _pythonSysMaxSize = BigInt.parse('9223372036854775807');
 
 class ToolThreadPoolConfig {
   ToolThreadPoolConfig({this.maxWorkers = 4}) {
@@ -50,7 +50,7 @@ class RunConfig {
   Map<String, dynamic>? customMetadata;
 
   static int validateMaxLlmCalls(int value) {
-    if (value == _pythonSysMaxSize) {
+    if (BigInt.from(value) == _pythonSysMaxSize) {
       throw ArgumentError.value(
         value,
         'maxLlmCalls',

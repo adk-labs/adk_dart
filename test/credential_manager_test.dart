@@ -53,6 +53,20 @@ void main() {
       expect(a.credentialKey, startsWith('adk_'));
     });
 
+    test('credential key hash remains stable for known payloads', () {
+      final AuthConfig oauthConfig = AuthConfig(authScheme: 'oauth2');
+      final AuthConfig httpConfig = AuthConfig(
+        authScheme: 'http',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.apiKey,
+          resourceRef: 'https://example.com',
+        ),
+      );
+
+      expect(oauthConfig.credentialKey, 'adk_-2e3076df909d6f8');
+      expect(httpConfig.credentialKey, 'adk_-58998e89e822d238');
+    });
+
     test('copyWith keeps oauth id token payload', () {
       final AuthConfig config = AuthConfig(
         authScheme: 'oauth2',
