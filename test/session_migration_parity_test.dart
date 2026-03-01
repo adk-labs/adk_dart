@@ -2,30 +2,145 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
+import 'package:adk_dart/src/sessions/migration/sqlite_db.dart';
 import 'package:test/test.dart';
 
-Future<File> _writeJsonFile(String path, Map<String, Object?> json) async {
-  final File file = File(path);
-  await file.parent.create(recursive: true);
-  await file.writeAsString(const JsonEncoder.withIndent('  ').convert(json));
-  return file;
+const String _legacyAppStatesSchema = '''
+CREATE TABLE IF NOT EXISTS app_states (
+  app_name TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  update_time REAL NOT NULL
+);
+''';
+
+const String _legacyUserStatesSchema = '''
+CREATE TABLE IF NOT EXISTS user_states (
+  app_name TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  update_time REAL NOT NULL,
+  PRIMARY KEY (app_name, user_id)
+);
+''';
+
+const String _legacySessionsSchema = '''
+CREATE TABLE IF NOT EXISTS sessions (
+  app_name TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  create_time REAL NOT NULL,
+  update_time REAL NOT NULL,
+  PRIMARY KEY (app_name, user_id, id)
+);
+''';
+
+const String _legacyEventsSchema = '''
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT NOT NULL,
+  app_name TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  invocation_id TEXT,
+  author TEXT,
+  actions BLOB,
+  long_running_tool_ids_json TEXT,
+  branch TEXT,
+  timestamp REAL,
+  content TEXT,
+  grounding_metadata TEXT,
+  custom_metadata TEXT,
+  usage_metadata TEXT,
+  citation_metadata TEXT,
+  partial INTEGER,
+  turn_complete INTEGER,
+  error_code TEXT,
+  error_message TEXT,
+  interrupted INTEGER,
+  input_transcription TEXT,
+  output_transcription TEXT,
+  PRIMARY KEY (app_name, user_id, session_id, id)
+);
+''';
+
+Future<void> _createLegacySourceDb(String path) async {
+  final SqliteMigrationDatabase db = SqliteMigrationDatabase.open(
+    connectPath: path,
+    displayPath: path,
+    uri: false,
+    readOnly: false,
+  );
+  try {
+    db.execute(_legacyAppStatesSchema);
+    db.execute(_legacyUserStatesSchema);
+    db.execute(_legacySessionsSchema);
+    db.execute(_legacyEventsSchema);
+
+    db.execute(
+      'INSERT INTO app_states (app_name, state, update_time) VALUES (?, ?, ?)',
+      <Object?>['app', '{"global":"g"}', 1700000000.0],
+    );
+    db.execute(
+      'INSERT INTO user_states (app_name, user_id, state, update_time) VALUES (?, ?, ?, ?)',
+      <Object?>['app', 'user', '{"profile":"u"}', 1700000001.0],
+    );
+    db.execute(
+      'INSERT INTO sessions (app_name, user_id, id, state, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?)',
+      <Object?>[
+        'app',
+        'user',
+        'session_1',
+        '{"session":"s"}',
+        1700000002.0,
+        1700000003.0,
+      ],
+    );
+    db.execute(
+      'INSERT INTO events (id, app_name, user_id, session_id, invocation_id, author, actions, long_running_tool_ids_json, branch, timestamp, content, grounding_metadata, custom_metadata, usage_metadata, citation_metadata, partial, turn_complete, error_code, error_message, interrupted, input_transcription, output_transcription) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      <Object?>[
+        'evt_1',
+        'app',
+        'user',
+        'session_1',
+        'inv_1',
+        'agent',
+        '{"stateDelta":{"k":"v"}}',
+        '["tool_1"]',
+        'main',
+        1700000004.0,
+        '{"parts":[{"text":"hello"}]}',
+        '{"ground":"yes"}',
+        '{"meta":"ok"}',
+        '{"tokens":1}',
+        '{"citations":[]}',
+        0,
+        1,
+        null,
+        null,
+        0,
+        '{"text":"in"}',
+        '{"text":"out"}',
+      ],
+    );
+  } finally {
+    db.dispose();
+  }
 }
 
-Future<Map<String, Object?>> _readJsonFile(String path) async {
-  final String raw = await File(path).readAsString();
-  final Object? decoded = jsonDecode(raw);
-  if (decoded is Map<String, Object?>) {
-    return decoded;
+Map<String, Object?> _asObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
   }
-  if (decoded is Map) {
-    return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
+  if (value is Map) {
+    return value.map((Object? key, Object? value) => MapEntry('$key', value));
   }
-  throw StateError('Expected JSON map in $path.');
+  throw StateError('Expected a JSON map.');
 }
 
 void main() {
   group('sessions migration/schema parity', () {
-    test('schema check utils normalize URL and detect versions', () {
+    test('schema check utils normalize URL and detect versions', () async {
       expect(
         toSyncUrl('postgresql+asyncpg://localhost/mydb'),
         'postgresql://localhost/mydb',
@@ -40,27 +155,42 @@ void main() {
         }),
         schemaVersion1Json,
       );
+
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_schema_check_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final String v0Path = '${dir.path}/v0.db';
+      await _createLegacySourceDb(v0Path);
       expect(
-        getDbSchemaVersionFromDecoded(<String, Object?>{
-          'sessions': <String, Object?>{
-            'app': <String, Object?>{
-              'user': <String, Object?>{
-                'session': <String, Object?>{
-                  'events': <Map<String, Object?>>[
-                    <String, Object?>{
-                      'id': 'evt',
-                      'invocationId': 'inv',
-                      'author': 'agent',
-                      'actions': <String, Object?>{},
-                    },
-                  ],
-                },
-              },
-            },
-          },
-        }),
+        await getDbSchemaVersion('sqlite:///$v0Path'),
         schemaVersion0Pickle,
       );
+
+      final String v1Path = '${dir.path}/v1.db';
+      final SqliteMigrationDatabase v1Db = SqliteMigrationDatabase.open(
+        connectPath: v1Path,
+        displayPath: v1Path,
+        uri: false,
+        readOnly: false,
+      );
+      try {
+        v1Db.execute(
+          'CREATE TABLE IF NOT EXISTS adk_internal_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+        );
+        v1Db.execute(
+          'INSERT OR REPLACE INTO adk_internal_metadata (key, value) VALUES (?, ?)',
+          <Object?>[schemaVersionKey, schemaVersion1Json],
+        );
+      } finally {
+        v1Db.dispose();
+      }
+      expect(await getDbSchemaVersion('sqlite:///$v1Path'), schemaVersion1Json);
     });
 
     test('schema v0/v1 storage events convert to Event and back', () {
@@ -147,61 +277,49 @@ void main() {
           }
         });
 
-        final String source = '${dir.path}/source.json';
-        final String dest = '${dir.path}/dest.json';
-        await _writeJsonFile(source, <String, Object?>{
-          'sessions': <String, Object?>{
-            'app': <String, Object?>{
-              'user': <String, Object?>{
-                'session_1': <String, Object?>{
-                  'state': <String, Object?>{},
-                  'events': <Map<String, Object?>>[
-                    <String, Object?>{
-                      'id': 'evt_1',
-                      'invocationId': 'inv_1',
-                      'author': 'agent',
-                      'actions': <String, Object?>{
-                        'stateDelta': <String, Object?>{},
-                      },
-                      'timestamp': 1700000000.0,
-                      'content': <String, Object?>{
-                        'parts': <Map<String, Object?>>[
-                          <String, Object?>{'text': 'hello', 'thought': false},
-                        ],
-                      },
-                    },
-                  ],
-                  'lastUpdateTime': 1700000000.0,
-                },
-              },
-            },
-          },
-          'appState': <String, Object?>{},
-          'userState': <String, Object?>{},
-        });
+        final String source = '${dir.path}/source.db';
+        final String dest = '${dir.path}/dest.db';
+        await _createLegacySourceDb(source);
 
         await migrateFromSqlalchemyPickle(
           'sqlite:///$source',
           'sqlite:///$dest',
         );
 
-        final Map<String, Object?> migrated = await _readJsonFile(dest);
-        expect(
-          (migrated['metadata'] as Map)['schema_version'],
-          schemaVersion1Json,
+        final SqliteMigrationDatabase db = SqliteMigrationDatabase.open(
+          connectPath: dest,
+          displayPath: dest,
+          uri: false,
+          readOnly: true,
         );
-        expect(migrated['schemaVersion'], schemaVersion1Json);
+        try {
+          final List<Map<String, Object?>> metadata = db.query(
+            'SELECT value FROM adk_internal_metadata WHERE key=?',
+            <Object?>[schemaVersionKey],
+          );
+          expect(metadata, isNotEmpty);
+          expect('${metadata.first['value']}', schemaVersion1Json);
 
-        final Map sessions = migrated['sessions'] as Map;
-        final Map byUser = sessions['app'] as Map;
-        final Map bySession = byUser['user'] as Map;
-        final Map stored = bySession['session_1'] as Map;
-        final Map event = (stored['events'] as List).first as Map;
-        expect(event['event_data'], isA<Map>());
-        final Map eventData = event['event_data'] as Map;
-        expect(eventData['id'], 'evt_1');
-        expect(eventData['invocation_id'], 'inv_1');
-        expect(eventData['actions'], isA<Map>());
+          final List<Map<String, Object?>> events = db.query(
+            'SELECT id, invocation_id, event_data FROM events WHERE id=?',
+            <Object?>['evt_1'],
+          );
+          expect(events, isNotEmpty);
+          final Map<String, Object?> eventData = _asObjectMap(
+            jsonDecode('${events.first['event_data']}'),
+          );
+          expect(eventData['id'], 'evt_1');
+          expect(eventData['invocation_id'], 'inv_1');
+          expect(eventData['actions'], isA<Map>());
+          expect(_asObjectMap(eventData['actions'])['stateDelta'], isA<Map>());
+          expect(
+            (_asObjectMap(eventData['actions'])['stateDelta'] as Map)['k'],
+            'v',
+          );
+          expect(eventData['long_running_tool_ids'], isA<List>());
+        } finally {
+          db.dispose();
+        }
 
         expect(await getDbSchemaVersion('sqlite:///$dest'), schemaVersion1Json);
       },
@@ -217,29 +335,9 @@ void main() {
         }
       });
 
-      final String source = '${dir.path}/source.json';
-      final String dest = '${dir.path}/dest.json';
-      await _writeJsonFile(source, <String, Object?>{
-        'sessions': <String, Object?>{
-          'app': <String, Object?>{
-            'user': <String, Object?>{
-              'session_1': <String, Object?>{
-                'state': <String, Object?>{},
-                'events': <Map<String, Object?>>[
-                  <String, Object?>{
-                    'id': 'evt_1',
-                    'invocationId': 'inv_1',
-                    'author': 'agent',
-                    'actions': <String, Object?>{},
-                    'timestamp': 1700000000.0,
-                  },
-                ],
-                'lastUpdateTime': 1700000000.0,
-              },
-            },
-          },
-        },
-      });
+      final String source = '${dir.path}/source.db';
+      final String dest = '${dir.path}/dest.db';
+      await _createLegacySourceDb(source);
 
       await upgrade('sqlite:///$source', 'sqlite:///$dest');
       expect(await getDbSchemaVersion('sqlite:///$dest'), schemaVersion1Json);

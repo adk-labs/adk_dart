@@ -6,6 +6,8 @@ Future<void> migrateFromSqlalchemySqlite(
 ) async {
   final String destinationUrl = destDbPath.startsWith('sqlite:')
       ? destDbPath
+      : destDbPath == ':memory:'
+      ? ':memory:'
       : 'sqlite:///$destDbPath';
   await migrateFromSqlalchemyPickle(sourceDbUrl, destinationUrl);
 }

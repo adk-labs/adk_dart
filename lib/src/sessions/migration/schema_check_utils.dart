@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
+
+import 'sqlite_db.dart';
 
 const String schemaVersionKey = 'schema_version';
 const String schemaVersion0Pickle = '0';
@@ -24,20 +25,22 @@ String toSyncUrl(String dbUrl) {
 }
 
 String resolveDbPath(String dbUrl) {
-  if (!dbUrl.startsWith('sqlite:') && !dbUrl.startsWith('sqlite+aiosqlite:')) {
-    return dbUrl;
+  final String normalized = dbUrl.trim();
+  if (normalized.isEmpty) {
+    return normalized;
   }
-  final Uri uri = Uri.parse(dbUrl);
-  String path = Uri.decodeComponent(uri.path);
-  if (path.isEmpty) {
-    return dbUrl;
+  if (!normalized.startsWith('sqlite:') &&
+      !normalized.startsWith('sqlite+aiosqlite:')) {
+    return normalized;
   }
-  if (path.startsWith('//')) {
-    path = path.substring(1);
-  } else if (path.startsWith('/')) {
-    path = path.substring(1);
-  }
-  return path;
+  return resolveSqliteDbUrl(
+    toSyncUrl(normalized),
+    argumentName: 'dbUrl',
+  ).storePath;
+}
+
+String getDbSchemaVersionFromConnection(SqliteMigrationDatabase db) {
+  return _getSchemaVersionImpl(db);
 }
 
 String getDbSchemaVersionFromDecoded(Object? decoded) {
@@ -74,17 +77,28 @@ String getDbSchemaVersionFromDecoded(Object? decoded) {
 }
 
 Future<String> getDbSchemaVersion(String dbUrl) async {
-  final String path = resolveDbPath(toSyncUrl(dbUrl));
-  final File file = File(path);
-  if (!await file.exists()) {
+  final String normalizedUrl = toSyncUrl(dbUrl.trim());
+  final ResolvedSqliteDbUrl resolved = resolveSqliteDbUrl(
+    normalizedUrl,
+    argumentName: 'dbUrl',
+  );
+  if (!resolved.inMemory &&
+      !resolved.storePath.startsWith('file:') &&
+      !await File(resolved.storePath).exists()) {
     return latestSchemaVersion;
   }
-  final String raw = await file.readAsString();
-  if (raw.trim().isEmpty) {
-    return latestSchemaVersion;
+
+  final SqliteMigrationDatabase db = SqliteMigrationDatabase.open(
+    connectPath: resolved.connectPath,
+    displayPath: resolved.storePath,
+    uri: resolved.connectUri,
+    readOnly: true,
+  );
+  try {
+    return _getSchemaVersionImpl(db);
+  } finally {
+    db.dispose();
   }
-  final Object? decoded = jsonDecode(raw);
-  return getDbSchemaVersionFromDecoded(decoded);
 }
 
 String? _schemaVersionFromMetadata(Object? metadata) {
@@ -158,4 +172,36 @@ Iterable<Map<String, Object?>> _iterEventsFromStore(
       }
     }
   }
+}
+
+String _getSchemaVersionImpl(SqliteMigrationDatabase db) {
+  if (db.hasTable('adk_internal_metadata')) {
+    final List<Map<String, Object?>> rows = db.query(
+      'SELECT value FROM adk_internal_metadata WHERE key=? LIMIT 1',
+      <Object?>[schemaVersionKey],
+    );
+    if (rows.isEmpty || rows.first['value'] == null) {
+      throw StateError(
+        'Schema version not found in adk_internal_metadata. '
+        'The database might be malformed.',
+      );
+    }
+    final String value = '${rows.first['value']}'.trim();
+    if (value.isEmpty) {
+      throw StateError(
+        'Schema version not found in adk_internal_metadata. '
+        'The database might be malformed.',
+      );
+    }
+    return value;
+  }
+
+  if (db.hasTable('events')) {
+    final Set<String> columns = db.tableColumns('events');
+    if (columns.contains('actions') && !columns.contains('event_data')) {
+      return schemaVersion0Pickle;
+    }
+  }
+
+  return latestSchemaVersion;
 }

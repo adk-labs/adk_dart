@@ -55,7 +55,7 @@ Future<void> upgrade(String sourceDbUrl, String destDbUrl) async {
       } else {
         final File temp = File(
           '${Directory.systemTemp.path}/adk_session_migration_$i'
-          '_${DateTime.now().microsecondsSinceEpoch}.json',
+          '_${DateTime.now().microsecondsSinceEpoch}.db',
         );
         tempFiles.add(temp);
         outputUrl = 'sqlite:///${temp.path}';

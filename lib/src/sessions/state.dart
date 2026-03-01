@@ -55,7 +55,24 @@ class State extends MapBase<String, Object?> {
 
   bool hasDelta() => _delta.isNotEmpty;
 
+  Object? setDefault(String key, [Object? defaultValue]) {
+    return putIfAbsent(key, () => defaultValue);
+  }
+
+  Object? getValue(String key, [Object? defaultValue]) {
+    if (!containsKey(key)) {
+      return defaultValue;
+    }
+    return this[key];
+  }
+
+  void updateFromDelta(Map<String, Object?> delta) {
+    addAll(delta);
+  }
+
   Map<String, Object?> toMap() {
     return <String, Object?>{..._value, ..._delta};
   }
+
+  Map<String, Object?> toDict() => toMap();
 }
