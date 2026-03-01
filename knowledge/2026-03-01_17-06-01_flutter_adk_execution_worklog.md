@@ -333,3 +333,85 @@
   MCP/Skills도 Web 포함 멀티플랫폼에서 사용할 수 있는 surface가 확보됨.
 - 단, Web에서는 MCP stdio 및 directory-based skill loading은 정책적으로 미지원이며,
   문서에 명시했다.
+
+## Work Unit 10 — Example 확장(Sequential/Parallel/Loop/Agent Team 개별 추가)
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 21:35~22:05 KST
+
+### 문제 인식
+- 기존 example은 `Workflow Combo`만 제공해 `Sequential/Parallel/Loop`의 개별 동작 확인이 어려웠음.
+- `Agent Team`(전문가 팀 transfer 라우팅)도 별도 예제로 분리되지 않아 학습/검증 동선이 길었음.
+
+### 구현 내용
+- example selector 확장:
+  - `SegmentedButton` -> 가로 스크롤 `ChoiceChip` 전환
+  - 예제 탭 7개 구성:
+    - `Basic Chatbot`
+    - `Transfer Multi-Agent`
+    - `Workflow Combo`
+    - `Sequential`
+    - `Parallel`
+    - `Loop`
+    - `Agent Team`
+- 신규 예제 에이전트 빌더 추가 (`packages/flutter_adk/example/lib/main.dart`):
+  - `_buildSequentialCodePipeline`
+    - `CodeWriter -> CodeReviewer -> CodeRefactorer` 순차 파이프라인
+  - `_buildParallelResearchPipeline`
+    - 3개 관점 에이전트 병렬 실행 후 통합
+  - `_buildLoopRefinementPipeline`
+    - `Critic + Refiner` 반복, `exit_loop` tool로 조기 종료
+  - `_buildAgentTeamWeather`
+    - `WeatherTeamCoordinator`가 `Greeting/WeatherTime/Farewell` 전문 에이전트로 transfer
+  - 팀 예제 보조 툴/헬퍼 추가:
+    - `get_weather`, `get_current_time`, `say_hello`, `say_goodbye`
+- example 문서 갱신:
+  - `packages/flutter_adk/example/README.md`
+  - 신규 예제 목록/테스트 프롬프트 반영
+- widget test 갱신:
+  - `packages/flutter_adk/example/test/widget_test.dart`
+  - ChoiceChip 기반 화면 전환 검증으로 업데이트
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- 사용자 요청대로 `Sequential/Parallel/Loop`를 각각 독립 예제로 추가했고,
+  `Agent Team` 예제도 별도 제공되어 공식 문서 학습 패턴을 앱에서 바로 비교/실행할 수 있는 상태가 됨.
+
+## Work Unit 11 — Example 확장(MCP Toolset + Skills)
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 22:05~22:30 KST
+
+### 구현 내용
+- example 탭 2종 추가:
+  - `MCP Toolset`
+  - `Skills`
+- 설정 시트 확장:
+  - `Gemini API Key` 외에
+    - `MCP Streamable HTTP URL`
+    - `MCP Bearer Token (Optional)`
+  - `shared_preferences`에 URL/토큰 저장/복원 지원
+- MCP 예제 구현:
+  - `McpToolset(connectionParams: StreamableHTTPConnectionParams(...))` 연동
+  - URL 미설정 시 `mcp_connection_status` 도구로 안내하는 폴백 추가
+- Skills 예제 구현:
+  - inline `Skill` 2개(`writing-refiner`, `planning-advisor`) 정의
+  - `SkillToolset` 연결 후 list/load/resource 흐름을 따르는 지시문 구성
+- 문서/테스트 갱신:
+  - `packages/flutter_adk/example/README.md`
+  - `packages/flutter_adk/example/test/widget_test.dart`
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- 사용자 요청한 MCP/Skills 활용 예제가 example 앱에 추가되었고,
+  기존 워크플로우/팀 예제와 함께 동일 UI에서 비교 실행 가능한 상태가 됨.
