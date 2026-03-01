@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 2026.3.1
+
 - Hardened A2A push callback delivery with a persistent SQLite queue, retry/backoff policy handling, startup/background drain, and dead-letter capture.
 - Added A2A delivery reliability coverage in `test/dev_web_server_test.dart`, including persisted queue replay after restart.
 - Added live network backend integration tests for PostgreSQL/MySQL session services (env-gated via `ADK_TEST_POSTGRES_URL` / `ADK_TEST_MYSQL_URL`).
@@ -10,6 +12,8 @@
 - Added built-in default Spanner embedder runtime via Vertex AI predict API (with env/full-model resource fallback handling and explicit fallback guidance).
 - Added built-in default Toolbox HTTP delegate (`/api/toolset/*`, `/api/tool/*/invoke`) so `ToolboxToolset` can run without pre-registered delegate wiring.
 - Added built-in live HTTP/auth providers in `GcsArtifactService`, removing mandatory provider injection for direct service usage.
+- Ported telemetry parity for inference span/experimental semconv paths and added regression coverage.
+- Added telemetry parity worklog and aligned package release versions to `2026.3.1`.
 - Updated parity tests to validate concrete default Bigtable/Spanner client availability.
 - Refreshed runtime checklist and README feature matrix to reflect current implemented behavior.
 

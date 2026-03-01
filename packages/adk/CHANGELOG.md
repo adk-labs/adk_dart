@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.3.1
+
+- Bumped package version to `2026.3.1`.
+- Updated dependency to `adk_dart: 2026.3.1`.
+- Synced facade release with the latest `adk_dart` runtime and telemetry parity updates.
+
 ## 2026.2.28
 
 - Switched package versioning scheme to date-based `YYYY.M.D`.
