@@ -137,3 +137,26 @@
 
 ### 단위 결론
 - `flutter_adk` 분리 이후 회귀를 막는 최소 CI/동기화 가드를 확보.
+
+## Work Unit 5 — 플랫폼 지원/제한 매트릭스 문서화
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 18:20~18:35 KST
+
+### 구현 내용
+- 플랫폼 지원 매트릭스 문서 신규 작성:
+  - `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
+  - `as-is`/`to-be`를 분리해 플랫폼별 지원 상태와 제한을 명시
+  - BYOK(API 키 입력/저장/주입) 정책 및 보안 주의사항 포함
+- `flutter_adk` README 제한사항 명시:
+  - `packages/flutter_adk/README.md`
+  - 현재 export 범위(`adk_core` only)와 Web 제한 안내
+
+### 검증 결과
+- 문서 변경 단위로 런타임 동작 변경 없음.
+- 기존 코드/CI 게이트 설정과 충돌 없음 확인.
+
+### 단위 결론
+- “flutter_adk 단일 import 목표” 대비 현재 상태와 제한 사항이 명시되어,
+  사용자 기대치 관리와 다음 구현 단위 합의가 가능한 상태.

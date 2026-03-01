@@ -26,3 +26,14 @@ void main() {
 
 ## Full Runtime Surface
 - For VM/CLI-only APIs, import `package:adk_dart/adk_dart.dart`.
+
+## Platform Scope (Current)
+- `flutter_adk` currently re-exports `adk_core` only.
+- This means `Agent/LlmAgent`, `Runner`, and model adapters like `Gemini` are not yet exposed through `flutter_adk`.
+- Platform support and limitations are tracked in:
+  - `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
+
+## Limitations
+- Features requiring `dart:io`, `dart:ffi`, or `dart:mirrors` are outside the current `flutter_adk` surface.
+- Web support currently targets the `adk_core` subset only.
+- For browser BYOK (user-entered API key), document security risks before production rollout.
