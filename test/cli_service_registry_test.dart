@@ -119,19 +119,20 @@ services:
       expect(service, isA<_CustomSessionService>());
     });
 
-    test('postgresql uri fails fast with adapter guidance by default', () {
+    test('postgresql uri resolves to built-in database session service', () {
       final ServiceRegistry registry = getServiceRegistry();
-      expect(
-        () => registry.createSessionService('postgresql://localhost/app'),
-        throwsA(
-          predicate(
-            (Object error) =>
-                error is UnsupportedError &&
-                '$error'.contains('registerCustomFactory') &&
-                '$error'.contains('postgresql://'),
-          ),
-        ),
+      final BaseSessionService? service = registry.createSessionService(
+        'postgresql://localhost/app',
       );
+      expect(service, isA<DatabaseSessionService>());
+    });
+
+    test('mysql uri resolves to built-in database session service', () {
+      final ServiceRegistry registry = getServiceRegistry();
+      final BaseSessionService? service = registry.createSessionService(
+        'mysql://localhost/app',
+      );
+      expect(service, isA<DatabaseSessionService>());
     });
 
     test('postgresql uri uses registered DatabaseSessionService adapter', () {

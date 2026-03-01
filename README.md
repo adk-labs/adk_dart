@@ -55,7 +55,7 @@ Status legend:
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
 | Core runtime | Agent execution (`Runner`, `InMemoryRunner`) | ✅ | Event-driven run / rewind / live paths are implemented and tested. |
-| Sessions | `memory://` and local sqlite session persistence | ✅ | `SqliteSessionService` uses native SQLite FFI; local storage wiring is active. |
+| Sessions | `memory://`, local sqlite, `postgresql://`, `mysql://` session persistence | ✅ | SQLite(local FFI) and network database backends are wired through `DatabaseSessionService`. |
 | Artifacts | `memory://` and local file artifacts | ✅ | Artifact CRUD/version APIs are wired through web + runner flows. |
 | MCP | Streamable HTTP + stdio tool/resource/prompt flows | ✅ | `adk_mcp` + `McpSessionManager` cover initialize/call/pagination/notifications. |
 | CLI | `create`, `run`, `web`, `api_server` | ✅ | Parsed and executed through `lib/src/dev/cli.dart`. |
@@ -74,7 +74,7 @@ Status legend:
 | Web parity | Python `adk web` Eval/Debug/Trace endpoint parity | ❌ | These endpoint families are not implemented in Dart web server routes. |
 | A2A | Full A2A RPC server routes | ⚠️ | Agent-card endpoints exist, but full A2A task/message RPC surface is missing. |
 | Extra plugins | Arbitrary dynamic plugin imports | ❌ | `--extra_plugins` currently instantiates built-in plugin names only. |
-| Sessions | `postgresql://`, `mysql://` out-of-box backend | ❌ | Requires custom `DatabaseSessionService.registerCustomFactory(...)`. |
+| Sessions | `mysql://` TLS/SSL transport options | ✅ | Uses `mysql_client_plus`; supports TLS flags (`secure`/`ssl`/`tls`, `sslmode=require`), CA file (`ssl_ca_file`), client cert/key (`ssl_cert_file` + `ssl_key_file`), optional verify toggle (`ssl_verify=false`), and auto secure-retry for auth plugins that require TLS (unless explicitly disabled). |
 | Sessions | `VertexAiSessionService` remote persistence parity | ⚠️ | Current implementation delegates storage to in-memory service. |
 | Artifacts | `gs://` default artifact backend | ❌ | Default `GcsArtifactService` live mode needs injected HTTP/auth providers. |
 | Tools runtime | BigQuery default client | ❌ | No default BigQuery client; must inject via `setBigQueryClientFactory()`. |

@@ -135,7 +135,7 @@ void loadServicesModule(String agentsDir) {
 extension on ServiceRegistry {
   void _registerBuiltinServices() {
     registerSessionService('memory', (
-      String _uri, {
+      String uri, {
       Map<String, Object?>? kwargs,
     }) {
       return InMemorySessionService();
@@ -183,7 +183,7 @@ extension on ServiceRegistry {
     });
 
     registerArtifactService('memory', (
-      String _uri, {
+      String uri, {
       Map<String, Object?>? kwargs,
     }) {
       return InMemoryArtifactService();
@@ -213,7 +213,7 @@ extension on ServiceRegistry {
     });
 
     registerMemoryService('memory', (
-      String _uri, {
+      String uri, {
       Map<String, Object?>? kwargs,
     }) {
       return InMemoryMemoryService();
@@ -265,12 +265,9 @@ BaseSessionService _createNetworkDatabaseSessionService(
 ) {
   try {
     return DatabaseSessionService(dbUrl);
-  } on UnsupportedError {
-    throw UnsupportedError(
-      '`$scheme://` session backend is not wired by default. '
-      'Register a custom adapter via '
-      'DatabaseSessionService.registerCustomFactory(scheme: \'$scheme\', ...), '
-      'or use sqlite:// / memory://.',
+  } catch (error) {
+    throw StateError(
+      'Failed to initialize `$scheme://` session backend for URI `$dbUrl`: $error',
     );
   }
 }

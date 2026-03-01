@@ -105,7 +105,8 @@ class _FakeVertexAiSessionApiClient implements VertexAiSessionApiClient {
 
     final String eventId = 'evt_${_eventCounter++}';
     final Map<String, Object?> event = <String, Object?>{
-      'name': 'reasoningEngines/$reasoningEngineId/sessions/$sessionId/events/$eventId',
+      'name':
+          'reasoningEngines/$reasoningEngineId/sessions/$sessionId/events/$eventId',
       'invocation_id': invocationId,
       'author': author,
       'timestamp': DateTime.fromMillisecondsSinceEpoch(
@@ -114,17 +115,20 @@ class _FakeVertexAiSessionApiClient implements VertexAiSessionApiClient {
       ).toIso8601String(),
       if (config['content'] != null) 'content': config['content'],
       if (config['actions'] != null) 'actions': config['actions'],
-      if (config['event_metadata'] != null) 'event_metadata': config['event_metadata'],
+      if (config['event_metadata'] != null)
+        'event_metadata': config['event_metadata'],
       if (config['error_code'] != null) 'error_code': config['error_code'],
       if (config['error_message'] != null)
         'error_message': config['error_message'],
     };
-    _eventsBySessionId.putIfAbsent(sessionId, () => <Map<String, Object?>>[]).add(
-      event,
-    );
+    _eventsBySessionId
+        .putIfAbsent(sessionId, () => <Map<String, Object?>>[])
+        .add(event);
 
     final Map<String, Object?> actions = _asObjectMap(config['actions']);
-    final Map<String, Object?> stateDelta = _asObjectMap(actions['state_delta']);
+    final Map<String, Object?> stateDelta = _asObjectMap(
+      actions['state_delta'],
+    );
     final Map<String, Object?> state = _asObjectMap(session['session_state']);
     state.addAll(stateDelta);
     session['session_state'] = state;
@@ -547,32 +551,33 @@ void main() {
     test(
       'preserves sqlite URLs with additional query parameters without sanitizing mode',
       () async {
-      final Directory dir = await Directory.systemTemp.createTemp(
-        'adk_sqlite_query_options_',
-      );
-      final Directory originalCwd = Directory.current;
-      Directory.current = dir;
-      addTearDown(() async {
-        Directory.current = originalCwd;
-        if (await dir.exists()) {
-          await dir.delete(recursive: true);
-        }
-      });
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_sqlite_query_options_',
+        );
+        final Directory originalCwd = Directory.current;
+        Directory.current = dir;
+        addTearDown(() async {
+          Directory.current = originalCwd;
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
 
-      final SqliteSessionService cacheShared = SqliteSessionService(
-        'sqlite:///./sessions.db?cache=shared',
-      );
-      await cacheShared.createSession(appName: 'app', userId: 'u1');
-      expect(File('${dir.path}/sessions.db').existsSync(), isTrue);
+        final SqliteSessionService cacheShared = SqliteSessionService(
+          'sqlite:///./sessions.db?cache=shared',
+        );
+        await cacheShared.createSession(appName: 'app', userId: 'u1');
+        expect(File('${dir.path}/sessions.db').existsSync(), isTrue);
 
-      final SqliteSessionService invalidMode = SqliteSessionService(
-        'sqlite:///./sessions2.db?mode=invalid',
-      );
-      await expectLater(
-        () => invalidMode.createSession(appName: 'app', userId: 'u1'),
-        throwsA(isA<FileSystemException>()),
-      );
-    });
+        final SqliteSessionService invalidMode = SqliteSessionService(
+          'sqlite:///./sessions2.db?mode=invalid',
+        );
+        await expectLater(
+          () => invalidMode.createSession(appName: 'app', userId: 'u1'),
+          throwsA(isA<FileSystemException>()),
+        );
+      },
+    );
 
     test(
       'supports sqlite memory URLs without creating placeholder files',
@@ -658,20 +663,22 @@ void main() {
       expect(() => SqliteSessionService('sqlite:///'), throwsArgumentError);
     });
 
-    test('fails fast when opening legacy schema without event_data column', () async {
-      final Directory dir = await Directory.systemTemp.createTemp(
-        'adk_sqlite_legacy_schema_',
-      );
-      addTearDown(() async {
-        if (await dir.exists()) {
-          await dir.delete(recursive: true);
-        }
-      });
+    test(
+      'fails fast when opening legacy schema without event_data column',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_sqlite_legacy_schema_',
+        );
+        addTearDown(() async {
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
 
-      final String dbPath = '${dir.path}/legacy.db';
-      final ProcessResult init = await Process.run('sqlite3', <String>[
-        dbPath,
-        '''
+        final String dbPath = '${dir.path}/legacy.db';
+        final ProcessResult init = await Process.run('sqlite3', <String>[
+          dbPath,
+          '''
 CREATE TABLE events (
   id TEXT NOT NULL,
   app_name TEXT NOT NULL,
@@ -682,27 +689,30 @@ CREATE TABLE events (
   actions TEXT NOT NULL
 );
 ''',
-      ]);
-      if (init.exitCode != 0) {
-        final String stderr = '${init.stderr}'.toLowerCase();
-        if (stderr.contains('not found')) {
-          markTestSkipped('sqlite3 CLI is not available in test environment.');
-          return;
+        ]);
+        if (init.exitCode != 0) {
+          final String stderr = '${init.stderr}'.toLowerCase();
+          if (stderr.contains('not found')) {
+            markTestSkipped(
+              'sqlite3 CLI is not available in test environment.',
+            );
+            return;
+          }
+          fail('Failed to initialize legacy sqlite schema: ${init.stderr}');
         }
-        fail('Failed to initialize legacy sqlite schema: ${init.stderr}');
-      }
 
-      expect(
-        () => SqliteSessionService(dbPath),
-        throwsA(
-          isA<StateError>().having(
-            (StateError error) => error.message.toString(),
-            'message',
-            contains('old schema'),
+        expect(
+          () => SqliteSessionService(dbPath),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) => error.message.toString(),
+              'message',
+              contains('old schema'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   group('DatabaseSessionService', () {
@@ -795,9 +805,64 @@ CREATE TABLE events (
       expect(loaded!.id, created.id);
     });
 
-    test('fails fast for unsupported database URLs', () {
+    test('supports built-in postgres and mysql URL schemes', () {
       expect(
         () => DatabaseSessionService('postgresql://localhost/mydb'),
+        returnsNormally,
+      );
+      expect(
+        () => DatabaseSessionService('postgresql+asyncpg://localhost/mydb'),
+        returnsNormally,
+      );
+      expect(
+        () => DatabaseSessionService('mysql://localhost/mydb'),
+        returnsNormally,
+      );
+      expect(
+        () => DatabaseSessionService('mysql+aiomysql://localhost/mydb'),
+        returnsNormally,
+      );
+    });
+
+    test('fails fast when mysql ssl_ca_file does not exist', () async {
+      final String missingCaFile =
+          '${Directory.systemTemp.path}/adk_missing_ca_${DateTime.now().microsecondsSinceEpoch}.pem';
+      final DatabaseSessionService service = DatabaseSessionService(
+        'mysql://localhost/mydb?ssl_ca_file=$missingCaFile',
+      );
+
+      await expectLater(
+        service.createSession(appName: 'app', userId: 'u1'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.name,
+            'name',
+            'ssl_ca_file',
+          ),
+        ),
+      );
+    });
+
+    test('fails fast when mysql client cert/key pair is incomplete', () async {
+      final DatabaseSessionService service = DatabaseSessionService(
+        'mysql://localhost/mydb?ssl_cert_file=/tmp/client-cert.pem',
+      );
+
+      await expectLater(
+        service.createSession(appName: 'app', userId: 'u1'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message,
+            'message',
+            contains('ssl_cert_file and ssl_key_file'),
+          ),
+        ),
+      );
+    });
+
+    test('fails fast for unsupported database URLs', () {
+      expect(
+        () => DatabaseSessionService('unsupporteddb://localhost/mydb'),
         throwsA(isA<UnsupportedError>()),
       );
     });
@@ -965,78 +1030,76 @@ CREATE TABLE events (
   });
 
   group('VertexAiSessionService', () {
-    test('creates/gets/lists/updates/deletes sessions via injected api client', () async {
-      final _FakeVertexAiSessionApiClient fakeClient =
-          _FakeVertexAiSessionApiClient();
-      final VertexAiSessionService service = VertexAiSessionService(
-        clientFactory: ({
-          String? project,
-          String? location,
-          String? apiKey,
-        }) {
-          return fakeClient;
-        },
-      );
-      final Session session = await service.createSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        state: <String, Object?>{'x': 1},
-      );
-      final Session? loaded = await service.getSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(loaded, isNotNull);
-      expect(loaded!.state['x'], 1);
+    test(
+      'creates/gets/lists/updates/deletes sessions via injected api client',
+      () async {
+        final _FakeVertexAiSessionApiClient fakeClient =
+            _FakeVertexAiSessionApiClient();
+        final VertexAiSessionService service = VertexAiSessionService(
+          clientFactory: ({String? project, String? location, String? apiKey}) {
+            return fakeClient;
+          },
+        );
+        final Session session = await service.createSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          state: <String, Object?>{'x': 1},
+        );
+        final Session? loaded = await service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(loaded, isNotNull);
+        expect(loaded!.state['x'], 1);
 
-      await service.appendEvent(
-        session: loaded,
-        event: Event(
-          invocationId: 'inv_vertex_1',
-          author: 'agent',
-          actions: EventActions(stateDelta: <String, Object?>{'k': 'v'}),
-          content: Content.modelText('vertex reply'),
-        ),
-      );
+        await service.appendEvent(
+          session: loaded,
+          event: Event(
+            invocationId: 'inv_vertex_1',
+            author: 'agent',
+            actions: EventActions(stateDelta: <String, Object?>{'k': 'v'}),
+            content: Content.modelText('vertex reply'),
+          ),
+        );
 
-      final Session? withEvent = await service.getSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(withEvent, isNotNull);
-      expect(withEvent!.events, hasLength(1));
-      expect(withEvent.state['k'], 'v');
+        final Session? withEvent = await service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(withEvent, isNotNull);
+        expect(withEvent!.events, hasLength(1));
+        expect(withEvent.state['k'], 'v');
 
-      final ListSessionsResponse listed = await service.listSessions(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-      );
-      expect(listed.sessions.map((Session row) => row.id), contains(session.id));
+        final ListSessionsResponse listed = await service.listSessions(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+        );
+        expect(
+          listed.sessions.map((Session row) => row.id),
+          contains(session.id),
+        );
 
-      await service.deleteSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      final Session? deleted = await service.getSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(deleted, isNull);
-    });
+        await service.deleteSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        final Session? deleted = await service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(deleted, isNull);
+      },
+    );
 
     test('returns null for missing session id', () async {
       final _FakeVertexAiSessionApiClient fakeClient =
           _FakeVertexAiSessionApiClient();
       final VertexAiSessionService service = VertexAiSessionService(
-        clientFactory: ({
-          String? project,
-          String? location,
-          String? apiKey,
-        }) {
+        clientFactory: ({String? project, String? location, String? apiKey}) {
           return fakeClient;
         },
       );
@@ -1052,11 +1115,7 @@ CREATE TABLE events (
       final _FakeVertexAiSessionApiClient fakeClient =
           _FakeVertexAiSessionApiClient();
       final VertexAiSessionService service = VertexAiSessionService(
-        clientFactory: ({
-          String? project,
-          String? location,
-          String? apiKey,
-        }) {
+        clientFactory: ({String? project, String? location, String? apiKey}) {
           return fakeClient;
         },
       );
@@ -1074,11 +1133,7 @@ CREATE TABLE events (
       final _FakeVertexAiSessionApiClient fakeClient =
           _FakeVertexAiSessionApiClient();
       final VertexAiSessionService service = VertexAiSessionService(
-        clientFactory: ({
-          String? project,
-          String? location,
-          String? apiKey,
-        }) {
+        clientFactory: ({String? project, String? location, String? apiKey}) {
           return fakeClient;
         },
       );

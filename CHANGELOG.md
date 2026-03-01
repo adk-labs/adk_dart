@@ -3,6 +3,9 @@
 - Switched package versioning scheme to date-based `YYYY.M.D`.
 - Expanded `adk web` / `adk api_server` parity surface with bundled `/dev-ui` serving and broader API route compatibility.
 - Hardened MCP transport/session behavior through `adk_mcp` integration updates and related tests.
+- Replaced deprecated `mysql1` runtime dependency with `mysql_client_plus` in network session backend wiring.
+- Added MySQL secure-fallback connect behavior for auth plugins that require TLS (for example `caching_sha2_password`).
+- Added MySQL TLS hardening options (`ssl_ca_file`, `ssl_cert_file`/`ssl_key_file`, `ssl_verify`) with fail-fast validation for invalid TLS file configuration.
 - Added runtime gap audit document for remaining non-functional/default-unwired features.
 
 ## 0.1.2

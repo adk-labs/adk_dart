@@ -1,6 +1,7 @@
 import '../events/event.dart';
 import 'base_session_service.dart';
 import 'in_memory_session_service.dart';
+import 'network_database_session_service.dart';
 import 'session.dart';
 import 'sqlite_session_service.dart';
 
@@ -77,9 +78,14 @@ class DatabaseSessionService extends BaseSessionService {
       }
     }
 
+    if (scheme != null && _isBuiltInNetworkScheme(scheme)) {
+      return NetworkDatabaseSessionService(normalizedDbUrl);
+    }
+
     throw UnsupportedError(
       'Unsupported database url: $normalizedDbUrl. '
-      'Supported urls are sqlite:, sqlite+aiosqlite:, :memory:, and memory:. '
+      'Supported urls are sqlite:, sqlite+aiosqlite:, :memory:, memory:, '
+      'postgresql://, postgres://, mysql://, and mariadb://. '
       'Register custom non-sqlite handling via '
       'registerCustomFactory(...) or registerCustomResolver(...).',
     );
@@ -101,7 +107,18 @@ class DatabaseSessionService extends BaseSessionService {
     if (separatorIndex <= 0) {
       return null;
     }
-    return dbUrl.substring(0, separatorIndex).toLowerCase();
+    final String rawScheme = dbUrl.substring(0, separatorIndex).toLowerCase();
+    if (!rawScheme.contains('+')) {
+      return rawScheme;
+    }
+    return rawScheme.split('+').first;
+  }
+
+  static bool _isBuiltInNetworkScheme(String scheme) {
+    return scheme == 'postgresql' ||
+        scheme == 'postgres' ||
+        scheme == 'mysql' ||
+        scheme == 'mariadb';
   }
 
   @override
