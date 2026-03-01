@@ -242,3 +242,40 @@
 ### 단위 결론
 - `flutter_adk` 예제가 “실제 챗봇 형태”로 동작하며,
   Flutter Web 포함 멀티플랫폼 실행 경로를 확인했다.
+
+## Work Unit 8 — example 2단계 구성(기본 + Multi-Agent) 적용
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 20:00~20:25 KST
+
+### 검토 결과
+- `flutter_adk` 현재 공개 surface 기준으로 공식 문서 MAS의
+  `Coordinator/Dispatcher` 패턴은 적용 가능.
+  - 사용 가능: `Agent(LlmAgent)`, `subAgents`, 자동 `transfer_to_agent`
+- `SequentialAgent/ParallelAgent/LoopAgent`는 현재 `flutter_adk` export에
+  직접 노출되어 있지 않아 이번 예제 범위에서는 제외.
+
+### 구현 내용
+- 기존 챗봇 예제를 `Basic Chatbot`으로 유지하고,
+  두 번째 예제로 `Multi-Agent Coordinator` 추가:
+  - 파일: `packages/flutter_adk/example/lib/main.dart`
+  - 상단 세그먼트 전환 UI 추가 (`Basic Chatbot` / `Multi-Agent`)
+  - API 키 설정/저장은 공통으로 유지
+  - 각 예제는 독립 Runner 세션 사용
+- Multi-Agent 예제 구성:
+  - root: `HelpDeskCoordinator`
+  - sub-agent: `Billing`, `Support`
+  - 라우팅 방식: `transfer_to_agent` 기반
+- example 문서/테스트 갱신:
+  - `packages/flutter_adk/example/README.md`
+  - `packages/flutter_adk/example/test/widget_test.dart`
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- example 앱이 “기본 예제 + 공식 문서 기반 Multi-Agent 예제” 2단계 구조로 확장되었고,
+  Flutter Web 포함 실행 가능 상태를 확인했다.

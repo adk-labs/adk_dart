@@ -1,12 +1,11 @@
 # flutter_adk_example
 
-`flutter_adk` 챗봇 예제 앱입니다.
+`flutter_adk` 예제 앱입니다.
 
-## 포함 기능
-- 채팅 UI (사용자/어시스턴트 버블)
-- 설정 시트에서 Gemini API 키 입력/저장
-- `Agent + InMemoryRunner + Gemini + FunctionTool` 실행 경로
-- 수도 조회 툴(`get_capital_city`) 포함
+## 포함 예제
+- `Basic Chatbot`: 단일 `Agent + FunctionTool` 예제
+- `Multi-Agent`: 공식 문서 MAS의 Coordinator/Dispatcher 패턴 예제
+  - `HelpDeskCoordinator`가 `Billing`, `Support` sub-agent로 라우팅
 
 ## 실행
 
@@ -16,9 +15,19 @@ flutter run
 ```
 
 웹 빌드:
+
 ```bash
 flutter build web
 ```
+
+## 사용 방법
+1. 앱 우측 상단 설정에서 Gemini API 키를 입력/저장
+2. 상단 세그먼트에서 예제를 선택
+3. 메시지를 보내 동작 확인
+
+멀티에이전트 테스트 예시:
+- `결제가 두 번 청구됐어요` (Billing 라우팅)
+- `로그인이 안 되고 앱에서 오류가 나요` (Support 라우팅)
 
 ## 주의사항
 - 브라우저에 API 키를 저장하는 방식은 노출 위험이 있으므로 프로덕션에서는 서버 프록시를 권장합니다.
