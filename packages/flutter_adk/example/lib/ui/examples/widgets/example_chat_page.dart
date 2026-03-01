@@ -20,6 +20,7 @@ class ExampleChatPage extends StatelessWidget {
     required this.apiKey,
     required this.mcpUrl,
     required this.mcpBearerToken,
+    required this.enableDebugLogs,
     required this.language,
     required this.apiKeyMissingMessage,
     required this.genericErrorPrefix,
@@ -38,6 +39,7 @@ class ExampleChatPage extends StatelessWidget {
   final String apiKey;
   final String mcpUrl;
   final String mcpBearerToken;
+  final bool enableDebugLogs;
   final AppLanguage language;
   final String apiKeyMissingMessage;
   final String genericErrorPrefix;
@@ -60,6 +62,7 @@ class ExampleChatPage extends StatelessWidget {
         apiKey: apiKey,
         mcpUrl: mcpUrl,
         mcpBearerToken: mcpBearerToken,
+        enableDebugLogs: enableDebugLogs,
         language: language,
         createAgent: agentBuilder,
         apiKeyMissingMessage: apiKeyMissingMessage,

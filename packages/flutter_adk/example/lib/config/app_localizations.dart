@@ -117,6 +117,26 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ja: '日本・カナダ・オーストラリアの首都をまとめて教えて。',
     AppLanguage.zh: '请一次性列出日本、加拿大、澳大利亚的首都。',
   },
+  'prompt.custom.1': <AppLanguage, String>{
+    AppLanguage.en: 'What can you do with your current tool setup?',
+    AppLanguage.ko: '지금 구성된 도구로 무엇을 할 수 있어?',
+    AppLanguage.ja: '今のツール構成で何ができますか？',
+    AppLanguage.zh: '你在当前工具配置下可以做什么？',
+  },
+  'prompt.custom.2': <AppLanguage, String>{
+    AppLanguage.en:
+        'Find the capital of Germany and weather in Seoul in one answer.',
+    AppLanguage.ko: '독일 수도와 서울 날씨를 한 번에 알려줘.',
+    AppLanguage.ja: 'ドイツの首都とソウルの天気を一度に教えて。',
+    AppLanguage.zh: '请一次回答德国首都和首尔天气。',
+  },
+  'prompt.custom.3': <AppLanguage, String>{
+    AppLanguage.en:
+        'If a needed tool is disabled, explain limitation and suggest next action.',
+    AppLanguage.ko: '필요한 도구가 꺼져 있으면 한계를 설명하고 다음 행동을 제안해줘.',
+    AppLanguage.ja: '必要なツールが無効なら制約を説明し、次の行動を提案して。',
+    AppLanguage.zh: '如果所需工具被禁用，请说明限制并给出下一步建议。',
+  },
   'prompt.transfer.1': <AppLanguage, String>{
     AppLanguage.en: 'I was charged twice this month.',
     AppLanguage.ko: '이번 달에 결제가 두 번 청구됐어요.',
@@ -292,6 +312,19 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ja: 'MCP Bearer Token（任意）',
     AppLanguage.zh: 'MCP Bearer Token（可选）',
   },
+  'settings.debug_logs': <AppLanguage, String>{
+    AppLanguage.en: 'Debug Logs',
+    AppLanguage.ko: '디버그 로그',
+    AppLanguage.ja: 'デバッグログ',
+    AppLanguage.zh: '调试日志',
+  },
+  'settings.debug_logs_description': <AppLanguage, String>{
+    AppLanguage.en:
+        'Print user messages and ADK events to terminal. Share these logs when reporting issues.',
+    AppLanguage.ko: '사용자 메시지와 ADK 이벤트를 터미널에 출력합니다. 이슈 제보 시 로그를 공유해 주세요.',
+    AppLanguage.ja: 'ユーザーメッセージと ADK イベントをターミナルに出力します。問題報告時にこのログを共有してください。',
+    AppLanguage.zh: '将用户消息和 ADK 事件输出到终端。反馈问题时请附上这些日志。',
+  },
   'settings.security': <AppLanguage, String>{
     AppLanguage.en:
         'Storing keys in browser storage may expose secrets. Use a server proxy in production.',
@@ -310,6 +343,66 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ko: '저장',
     AppLanguage.ja: '保存',
     AppLanguage.zh: '保存',
+  },
+  'custom.configure': <AppLanguage, String>{
+    AppLanguage.en: 'Configure',
+    AppLanguage.ko: '구성',
+    AppLanguage.ja: '設定',
+    AppLanguage.zh: '配置',
+  },
+  'custom.config.title': <AppLanguage, String>{
+    AppLanguage.en: 'Custom Agent Configuration',
+    AppLanguage.ko: '커스텀 에이전트 설정',
+    AppLanguage.ja: 'カスタムエージェント設定',
+    AppLanguage.zh: '自定义智能体配置',
+  },
+  'custom.config.name': <AppLanguage, String>{
+    AppLanguage.en: 'Agent name',
+    AppLanguage.ko: '에이전트 이름',
+    AppLanguage.ja: 'エージェント名',
+    AppLanguage.zh: '智能体名称',
+  },
+  'custom.config.description': <AppLanguage, String>{
+    AppLanguage.en: 'Description',
+    AppLanguage.ko: '설명',
+    AppLanguage.ja: '説明',
+    AppLanguage.zh: '描述',
+  },
+  'custom.config.instruction': <AppLanguage, String>{
+    AppLanguage.en: 'Instruction',
+    AppLanguage.ko: '지시문',
+    AppLanguage.ja: '指示文',
+    AppLanguage.zh: '指令',
+  },
+  'custom.config.tool_capital': <AppLanguage, String>{
+    AppLanguage.en: 'Enable capital lookup tool',
+    AppLanguage.ko: '수도 조회 도구 사용',
+    AppLanguage.ja: '首都検索ツールを有効化',
+    AppLanguage.zh: '启用首都查询工具',
+  },
+  'custom.config.tool_weather': <AppLanguage, String>{
+    AppLanguage.en: 'Enable weather tool',
+    AppLanguage.ko: '날씨 도구 사용',
+    AppLanguage.ja: '天気ツールを有効化',
+    AppLanguage.zh: '启用天气工具',
+  },
+  'custom.config.tool_time': <AppLanguage, String>{
+    AppLanguage.en: 'Enable time tool',
+    AppLanguage.ko: '시간 도구 사용',
+    AppLanguage.ja: '時刻ツールを有効化',
+    AppLanguage.zh: '启用时间工具',
+  },
+  'custom.config.saved': <AppLanguage, String>{
+    AppLanguage.en: 'Custom agent configuration saved.',
+    AppLanguage.ko: '커스텀 에이전트 설정이 저장되었습니다.',
+    AppLanguage.ja: 'カスタムエージェント設定を保存しました。',
+    AppLanguage.zh: '已保存自定义智能体配置。',
+  },
+  'custom.config.cancel': <AppLanguage, String>{
+    AppLanguage.en: 'Cancel',
+    AppLanguage.ko: '취소',
+    AppLanguage.ja: 'キャンセル',
+    AppLanguage.zh: '取消',
   },
   'error.api_key_required': <AppLanguage, String>{
     AppLanguage.en: 'Please set Gemini API key first.',
@@ -360,6 +453,310 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ko: '기본 챗봇에게 질문하기...',
     AppLanguage.ja: '基本チャットボットに質問...',
     AppLanguage.zh: '向基础聊天机器人提问...',
+  },
+  'custom.title': <AppLanguage, String>{
+    AppLanguage.en: 'Custom Agent Builder',
+    AppLanguage.ko: '커스텀 에이전트 빌더',
+    AppLanguage.ja: 'カスタムエージェントビルダー',
+    AppLanguage.zh: '自定义智能体构建器',
+  },
+  'custom.summary': <AppLanguage, String>{
+    AppLanguage.en:
+        'Configure your own agent instruction and tools, then reuse it later.',
+    AppLanguage.ko: '지시문/도구를 직접 구성하고, 저장한 에이전트를 다음에도 재사용합니다.',
+    AppLanguage.ja: '指示文/ツールを自分で構成し、保存したエージェントを次回も再利用します。',
+    AppLanguage.zh: '可自定义指令与工具，并在下次继续复用。',
+  },
+  'custom.initial': <AppLanguage, String>{
+    AppLanguage.en:
+        'This is your saved custom agent. Open Configure to change instruction or tool toggles anytime.',
+    AppLanguage.ko: '저장된 커스텀 에이전트입니다. 구성 버튼에서 지시문/도구를 언제든 변경할 수 있습니다.',
+    AppLanguage.ja: '保存済みのカスタムエージェントです。設定ボタンで指示文/ツールをいつでも変更できます。',
+    AppLanguage.zh: '这是你已保存的自定义智能体，可在“配置”中随时修改指令与工具。',
+  },
+  'custom.empty': <AppLanguage, String>{
+    AppLanguage.en: 'Send a message to test your custom agent.',
+    AppLanguage.ko: '메시지를 보내 커스텀 에이전트를 테스트하세요.',
+    AppLanguage.ja: 'メッセージを送ってカスタムエージェントをテストしてください。',
+    AppLanguage.zh: '发送消息测试你的自定义智能体。',
+  },
+  'custom.hint': <AppLanguage, String>{
+    AppLanguage.en: 'Ask your custom agent...',
+    AppLanguage.ko: '커스텀 에이전트에게 질문하기...',
+    AppLanguage.ja: 'カスタムエージェントに質問...',
+    AppLanguage.zh: '向自定义智能体提问...',
+  },
+  'user_example.saved': <AppLanguage, String>{
+    AppLanguage.en: 'User example saved.',
+    AppLanguage.ko: '사용자 예제가 저장되었습니다.',
+    AppLanguage.ja: 'ユーザー例を保存しました。',
+    AppLanguage.zh: '已保存用户示例。',
+  },
+  'user_example.deleted': <AppLanguage, String>{
+    AppLanguage.en: 'User example deleted.',
+    AppLanguage.ko: '사용자 예제가 삭제되었습니다.',
+    AppLanguage.ja: 'ユーザー例を削除しました。',
+    AppLanguage.zh: '已删除用户示例。',
+  },
+  'user_example.delete_title': <AppLanguage, String>{
+    AppLanguage.en: 'Delete user example?',
+    AppLanguage.ko: '사용자 예제를 삭제할까요?',
+    AppLanguage.ja: 'ユーザー例を削除しますか？',
+    AppLanguage.zh: '要删除该用户示例吗？',
+  },
+  'user_example.delete_message': <AppLanguage, String>{
+    AppLanguage.en: 'This action cannot be undone.',
+    AppLanguage.ko: '삭제 후에는 되돌릴 수 없습니다.',
+    AppLanguage.ja: 'この操作は元に戻せません。',
+    AppLanguage.zh: '此操作无法撤销。',
+  },
+  'user_example.builder.new_title': <AppLanguage, String>{
+    AppLanguage.en: 'Create User Example',
+    AppLanguage.ko: '사용자 예제 만들기',
+    AppLanguage.ja: 'ユーザー例を作成',
+    AppLanguage.zh: '创建用户示例',
+  },
+  'user_example.builder.edit_title': <AppLanguage, String>{
+    AppLanguage.en: 'Edit User Example',
+    AppLanguage.ko: '사용자 예제 수정',
+    AppLanguage.ja: 'ユーザー例を編集',
+    AppLanguage.zh: '编辑用户示例',
+  },
+  'user_example.field.title': <AppLanguage, String>{
+    AppLanguage.en: 'Example title',
+    AppLanguage.ko: '예제 제목',
+    AppLanguage.ja: '例のタイトル',
+    AppLanguage.zh: '示例标题',
+  },
+  'user_example.field.summary': <AppLanguage, String>{
+    AppLanguage.en: 'Example summary',
+    AppLanguage.ko: '예제 요약',
+    AppLanguage.ja: '例の概要',
+    AppLanguage.zh: '示例摘要',
+  },
+  'user_example.field.initial': <AppLanguage, String>{
+    AppLanguage.en: 'Initial assistant message',
+    AppLanguage.ko: '초기 안내 메시지',
+    AppLanguage.ja: '初期アシスタントメッセージ',
+    AppLanguage.zh: '初始助手消息',
+  },
+  'user_example.field.hint': <AppLanguage, String>{
+    AppLanguage.en: 'Input hint',
+    AppLanguage.ko: '입력 힌트',
+    AppLanguage.ja: '入力ヒント',
+    AppLanguage.zh: '输入提示',
+  },
+  'user_example.field.architecture': <AppLanguage, String>{
+    AppLanguage.en: 'Agent topology',
+    AppLanguage.ko: '에이전트 연결 방식',
+    AppLanguage.ja: 'エージェント接続方式',
+    AppLanguage.zh: '智能体连接方式',
+  },
+  'user_example.field.entry_agent': <AppLanguage, String>{
+    AppLanguage.en: 'Entry agent',
+    AppLanguage.ko: '시작 에이전트',
+    AppLanguage.ja: '開始エージェント',
+    AppLanguage.zh: '入口智能体',
+  },
+  'user_example.field.connections': <AppLanguage, String>{
+    AppLanguage.en: 'Connections (Graph)',
+    AppLanguage.ko: '연결(그래프)',
+    AppLanguage.ja: '接続（グラフ）',
+    AppLanguage.zh: '连接（图）',
+  },
+  'user_example.connection.from': <AppLanguage, String>{
+    AppLanguage.en: 'From',
+    AppLanguage.ko: '출발',
+    AppLanguage.ja: '接続元',
+    AppLanguage.zh: '起点',
+  },
+  'user_example.connection.to': <AppLanguage, String>{
+    AppLanguage.en: 'To',
+    AppLanguage.ko: '도착',
+    AppLanguage.ja: '接続先',
+    AppLanguage.zh: '终点',
+  },
+  'user_example.field.connection_condition': <AppLanguage, String>{
+    AppLanguage.en: 'Condition (optional)',
+    AppLanguage.ko: '조건(선택)',
+    AppLanguage.ja: '条件（任意）',
+    AppLanguage.zh: '条件（可选）',
+  },
+  'user_example.connection.default_condition': <AppLanguage, String>{
+    AppLanguage.en: 'always',
+    AppLanguage.ko: 'always',
+    AppLanguage.ja: 'always',
+    AppLanguage.zh: 'always',
+  },
+  'user_example.connection.dsl_help': <AppLanguage, String>{
+    AppLanguage.en:
+        'DSL: always | intent:<name> | contains:<keyword> (e.g. intent:weather, contains:refund)',
+    AppLanguage.ko:
+        'DSL: always | intent:<name> | contains:<keyword> (예: intent:weather, contains:refund)',
+    AppLanguage.ja:
+        'DSL: always | intent:<name> | contains:<keyword>（例: intent:weather, contains:refund）',
+    AppLanguage.zh:
+        'DSL：always | intent:<name> | contains:<keyword>（例如：intent:weather, contains:refund）',
+  },
+  'user_example.connection.invalid': <AppLanguage, String>{
+    AppLanguage.en:
+        'Unrecognized DSL format. Use always / intent:* / contains:*.',
+    AppLanguage.ko:
+        'DSL 형식이 인식되지 않았습니다. always / intent:* / contains:* 를 사용하세요.',
+    AppLanguage.ja: 'DSL 形式を認識できません。always / intent:* / contains:* を使用してください。',
+    AppLanguage.zh: '无法识别 DSL 格式，请使用 always / intent:* / contains:*。',
+  },
+  'user_example.connection.empty': <AppLanguage, String>{
+    AppLanguage.en:
+        'No explicit connections. Default order/routing will be used.',
+    AppLanguage.ko: '명시적 연결이 없습니다. 기본 순서/라우팅을 사용합니다.',
+    AppLanguage.ja: '明示的な接続はありません。既定の順序/ルーティングを使用します。',
+    AppLanguage.zh: '暂无显式连接，将使用默认顺序/路由。',
+  },
+  'user_example.field.prompts': <AppLanguage, String>{
+    AppLanguage.en: 'Example prompts',
+    AppLanguage.ko: '예시 질문',
+    AppLanguage.ja: '質問例',
+    AppLanguage.zh: '示例提问',
+  },
+  'user_example.field.prompt1': <AppLanguage, String>{
+    AppLanguage.en: 'Prompt 1',
+    AppLanguage.ko: '질문 1',
+    AppLanguage.ja: '質問 1',
+    AppLanguage.zh: '提问 1',
+  },
+  'user_example.field.prompt2': <AppLanguage, String>{
+    AppLanguage.en: 'Prompt 2',
+    AppLanguage.ko: '질문 2',
+    AppLanguage.ja: '質問 2',
+    AppLanguage.zh: '提问 2',
+  },
+  'user_example.field.prompt3': <AppLanguage, String>{
+    AppLanguage.en: 'Prompt 3',
+    AppLanguage.ko: '질문 3',
+    AppLanguage.ja: '質問 3',
+    AppLanguage.zh: '提问 3',
+  },
+  'user_example.field.agents': <AppLanguage, String>{
+    AppLanguage.en: 'Agents',
+    AppLanguage.ko: '에이전트 목록',
+    AppLanguage.ja: 'エージェント一覧',
+    AppLanguage.zh: '智能体列表',
+  },
+  'user_example.action.new': <AppLanguage, String>{
+    AppLanguage.en: 'New Example',
+    AppLanguage.ko: '새 예제',
+    AppLanguage.ja: '新しい例',
+    AppLanguage.zh: '新建示例',
+  },
+  'user_example.action.add_agent': <AppLanguage, String>{
+    AppLanguage.en: 'Add agent',
+    AppLanguage.ko: '에이전트 추가',
+    AppLanguage.ja: 'エージェント追加',
+    AppLanguage.zh: '添加智能体',
+  },
+  'user_example.action.add_connection': <AppLanguage, String>{
+    AppLanguage.en: 'Add connection',
+    AppLanguage.ko: '연결 추가',
+    AppLanguage.ja: '接続追加',
+    AppLanguage.zh: '添加连接',
+  },
+  'user_example.action.edit_agent': <AppLanguage, String>{
+    AppLanguage.en: 'Edit agent',
+    AppLanguage.ko: '에이전트 수정',
+    AppLanguage.ja: 'エージェント編集',
+    AppLanguage.zh: '编辑智能体',
+  },
+  'user_example.action.remove_agent': <AppLanguage, String>{
+    AppLanguage.en: 'Remove agent',
+    AppLanguage.ko: '에이전트 삭제',
+    AppLanguage.ja: 'エージェント削除',
+    AppLanguage.zh: '删除智能体',
+  },
+  'user_example.action.remove_connection': <AppLanguage, String>{
+    AppLanguage.en: 'Remove connection',
+    AppLanguage.ko: '연결 삭제',
+    AppLanguage.ja: '接続削除',
+    AppLanguage.zh: '删除连接',
+  },
+  'user_example.action.edit': <AppLanguage, String>{
+    AppLanguage.en: 'Edit',
+    AppLanguage.ko: '수정',
+    AppLanguage.ja: '編集',
+    AppLanguage.zh: '编辑',
+  },
+  'user_example.action.delete': <AppLanguage, String>{
+    AppLanguage.en: 'Delete',
+    AppLanguage.ko: '삭제',
+    AppLanguage.ja: '削除',
+    AppLanguage.zh: '删除',
+  },
+  'user_example.validation.min_agents': <AppLanguage, String>{
+    AppLanguage.en:
+        'Current topology requires more agents. Add at least the minimum number of agents.',
+    AppLanguage.ko: '현재 연결 방식에는 더 많은 에이전트가 필요합니다. 최소 개수 이상 추가해 주세요.',
+    AppLanguage.ja: '現在の接続方式には、より多くのエージェントが必要です。最小数以上を追加してください。',
+    AppLanguage.zh: '当前连接方式需要更多智能体，请至少添加到最小数量。',
+  },
+  'user_example.tool.capital': <AppLanguage, String>{
+    AppLanguage.en: 'Capital',
+    AppLanguage.ko: '수도',
+    AppLanguage.ja: '首都',
+    AppLanguage.zh: '首都',
+  },
+  'user_example.tool.weather': <AppLanguage, String>{
+    AppLanguage.en: 'Weather',
+    AppLanguage.ko: '날씨',
+    AppLanguage.ja: '天気',
+    AppLanguage.zh: '天气',
+  },
+  'user_example.tool.time': <AppLanguage, String>{
+    AppLanguage.en: 'Time',
+    AppLanguage.ko: '시간',
+    AppLanguage.ja: '時刻',
+    AppLanguage.zh: '时间',
+  },
+  'user_example.tool.none': <AppLanguage, String>{
+    AppLanguage.en: 'No tools',
+    AppLanguage.ko: '도구 없음',
+    AppLanguage.ja: 'ツールなし',
+    AppLanguage.zh: '无工具',
+  },
+  'user_example.agent.no_description': <AppLanguage, String>{
+    AppLanguage.en: 'No description',
+    AppLanguage.ko: '설명 없음',
+    AppLanguage.ja: '説明なし',
+    AppLanguage.zh: '无描述',
+  },
+  'user_example.arch.single': <AppLanguage, String>{
+    AppLanguage.en: 'Single Agent',
+    AppLanguage.ko: '단일 에이전트',
+    AppLanguage.ja: '単一エージェント',
+    AppLanguage.zh: '单智能体',
+  },
+  'user_example.arch.team': <AppLanguage, String>{
+    AppLanguage.en: 'Agent Team',
+    AppLanguage.ko: '에이전트 팀',
+    AppLanguage.ja: 'エージェントチーム',
+    AppLanguage.zh: '智能体团队',
+  },
+  'user_example.arch.sequential': <AppLanguage, String>{
+    AppLanguage.en: 'Sequential Workflow',
+    AppLanguage.ko: 'Sequential 워크플로우',
+    AppLanguage.ja: 'Sequential ワークフロー',
+    AppLanguage.zh: 'Sequential 工作流',
+  },
+  'user_example.arch.parallel': <AppLanguage, String>{
+    AppLanguage.en: 'Parallel Workflow',
+    AppLanguage.ko: 'Parallel 워크플로우',
+    AppLanguage.ja: 'Parallel ワークフロー',
+    AppLanguage.zh: 'Parallel 工作流',
+  },
+  'user_example.arch.loop': <AppLanguage, String>{
+    AppLanguage.en: 'Loop Workflow',
+    AppLanguage.ko: 'Loop 워크플로우',
+    AppLanguage.ja: 'Loop ワークフロー',
+    AppLanguage.zh: 'Loop 工作流',
   },
   'transfer.title': <AppLanguage, String>{
     AppLanguage.en: 'Multi-Agent Coordinator Example',

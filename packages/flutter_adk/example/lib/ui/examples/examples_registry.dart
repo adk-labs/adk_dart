@@ -31,6 +31,32 @@ List<ExampleMenuItem> buildExampleMenuItems() {
       agentBuilder: AgentService.buildBasic,
     ),
     ExampleMenuItem(
+      id: 'custom_agent',
+      icon: Icons.tune_outlined,
+      category: ExampleCategory.general,
+      titleKey: 'custom.title',
+      summaryKey: 'custom.summary',
+      initialKey: 'custom.initial',
+      emptyKey: 'custom.empty',
+      hintKey: 'custom.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.custom.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.custom.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.custom.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      // 실제 커스텀 구성은 HomeScreen에서 agentBuilderOverride로 주입된다.
+      agentBuilder: AgentService.buildBasic,
+    ),
+    ExampleMenuItem(
       id: 'multi_agent',
       icon: Icons.hub_outlined,
       category: ExampleCategory.general,

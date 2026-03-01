@@ -1,9 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flutter_adk_example/ui/core/widgets/chat_example_view.dart';
 import 'package:flutter_adk_example/ui/core/widgets/example_app.dart';
 
 void main() {
+  Future<void> openExample(
+    WidgetTester tester,
+    String title, {
+    required String summarySnippet,
+  }) async {
+    final Finder tile = find.widgetWithText(ListTile, title);
+    await tester.dragUntilVisible(
+      tile,
+      find.byType(ListView).last,
+      const Offset(0, -220),
+    );
+    await tester.tap(tile, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    if (find.byType(ChatExampleView).evaluate().isEmpty) {
+      await tester.tap(find.text(title).last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.byType(ChatExampleView), findsOneWidget);
+    expect(find.text(title), findsAtLeastNWidgets(1));
+    expect(find.textContaining(summarySnippet), findsAtLeastNWidgets(1));
+  }
+
   testWidgets('renders example list and navigates to details', (
     WidgetTester tester,
   ) async {
@@ -18,7 +42,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Basic Chatbot Example'), findsAtLeastNWidgets(1));
-    expect(find.byIcon(Icons.send), findsOneWidget);
+    expect(find.byType(ChatExampleView), findsOneWidget);
     expect(
       find.textContaining('Single Agent + FunctionTool'),
       findsAtLeastNWidgets(1),
@@ -27,38 +51,19 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    final Finder transferTile = find.widgetWithText(
-      ListTile,
+    await openExample(
+      tester,
       'Multi-Agent Coordinator Example',
+      summarySnippet: 'Coordinator/Dispatcher pattern',
     );
-    await tester.ensureVisible(transferTile);
-    await tester.tap(transferTile);
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Multi-Agent Coordinator Example'),
-      findsAtLeastNWidgets(1),
-    );
-    expect(
-      find.textContaining('Coordinator/Dispatcher pattern'),
-      findsAtLeastNWidgets(1),
-    );
-    expect(find.byIcon(Icons.send), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    final Finder workflowTile = find.widgetWithText(
-      ListTile,
+    await openExample(
+      tester,
       'Workflow Agents Example',
+      summarySnippet: 'Sequential + Parallel + Loop',
     );
-    await tester.ensureVisible(workflowTile);
-    await tester.tap(workflowTile);
-    await tester.pumpAndSettle();
-    expect(find.text('Workflow Agents Example'), findsAtLeastNWidgets(1));
-    expect(
-      find.textContaining('Sequential + Parallel + Loop'),
-      findsAtLeastNWidgets(1),
-    );
-    expect(find.byIcon(Icons.send), findsOneWidget);
   });
 }

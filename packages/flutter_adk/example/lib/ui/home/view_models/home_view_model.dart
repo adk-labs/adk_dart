@@ -15,6 +15,7 @@ class HomeViewModel extends ChangeNotifier {
     mcpUrl: '',
     mcpBearerToken: '',
     language: AppLanguage.en,
+    debugLogsEnabled: true,
   );
 
   AppSettings get settings => _settings;
@@ -22,6 +23,7 @@ class HomeViewModel extends ChangeNotifier {
   String get apiKey => _settings.apiKey;
   String get mcpUrl => _settings.mcpUrl;
   String get mcpBearerToken => _settings.mcpBearerToken;
+  bool get debugLogsEnabled => _settings.debugLogsEnabled;
   bool get hasApiKey => _settings.hasApiKey;
 
   Future<void> initialize({required AppLanguage fallbackLanguage}) async {
@@ -45,11 +47,13 @@ class HomeViewModel extends ChangeNotifier {
     required String apiKey,
     required String mcpUrl,
     required String mcpBearerToken,
+    required bool debugLogsEnabled,
   }) async {
     _settings = _settings.copyWith(
       apiKey: apiKey,
       mcpUrl: mcpUrl,
       mcpBearerToken: mcpBearerToken,
+      debugLogsEnabled: debugLogsEnabled,
     );
     notifyListeners();
     await _settingsRepository.save(_settings);

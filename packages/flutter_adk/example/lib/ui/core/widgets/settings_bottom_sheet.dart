@@ -7,6 +7,9 @@ class SettingsBottomSheet extends StatefulWidget {
     required this.apiKeyLabel,
     required this.mcpUrlLabel,
     required this.mcpTokenLabel,
+    required this.debugLogsLabel,
+    required this.debugLogsDescription,
+    required this.initialDebugLogsEnabled,
     required this.securityNotice,
     required this.clearLabel,
     required this.saveLabel,
@@ -21,6 +24,9 @@ class SettingsBottomSheet extends StatefulWidget {
   final String apiKeyLabel;
   final String mcpUrlLabel;
   final String mcpTokenLabel;
+  final String debugLogsLabel;
+  final String debugLogsDescription;
+  final bool initialDebugLogsEnabled;
   final String securityNotice;
   final String clearLabel;
   final String saveLabel;
@@ -28,7 +34,7 @@ class SettingsBottomSheet extends StatefulWidget {
   final TextEditingController mcpUrlController;
   final TextEditingController mcpBearerTokenController;
   final Future<void> Function() onClear;
-  final Future<void> Function() onSave;
+  final Future<void> Function(bool debugLogsEnabled) onSave;
 
   @override
   State<SettingsBottomSheet> createState() => _SettingsBottomSheetState();
@@ -37,6 +43,13 @@ class SettingsBottomSheet extends StatefulWidget {
 class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
   bool _obscureApiKey = true;
   bool _obscureMcpBearerToken = true;
+  late bool _debugLogsEnabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _debugLogsEnabled = widget.initialDebugLogsEnabled;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +119,18 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: Text(widget.debugLogsLabel),
+            subtitle: Text(widget.debugLogsDescription),
+            value: _debugLogsEnabled,
+            onChanged: (bool value) {
+              setState(() {
+                _debugLogsEnabled = value;
+              });
+            },
+          ),
           const SizedBox(height: 8),
           Text(widget.securityNotice, style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 16),
@@ -122,7 +147,7 @@ class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
               FilledButton(
                 onPressed: () async {
                   Navigator.of(context).pop();
-                  await widget.onSave();
+                  await widget.onSave(_debugLogsEnabled);
                 },
                 child: Text(widget.saveLabel),
               ),

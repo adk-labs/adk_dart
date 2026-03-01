@@ -2,6 +2,9 @@ import 'package:flutter_adk/flutter_adk.dart';
 
 import 'package:flutter_adk_example/config/app_constants.dart';
 import 'package:flutter_adk_example/domain/models/app_language.dart';
+import 'package:flutter_adk_example/domain/models/custom_agent_config.dart';
+import 'package:flutter_adk_example/domain/models/user_example_connection_dsl.dart';
+import 'package:flutter_adk_example/domain/models/user_example_config.dart';
 
 typedef AgentBuilder =
     BaseAgent Function({
@@ -39,6 +42,441 @@ ${responseLanguageInstruction(language)}
         ),
       ],
     );
+  }
+
+  static BaseAgent buildCustom({
+    required String apiKey,
+    required AppLanguage language,
+    required CustomAgentConfig config,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    return _buildConfigAgent(
+      apiKey: apiKey,
+      language: language,
+      config: config,
+      fallbackName: 'CustomAgent',
+      fallbackDescription: 'User-configured custom agent.',
+    );
+  }
+
+  static BaseAgent buildUserDefinedExample({
+    required String apiKey,
+    required AppLanguage language,
+    required UserExampleConfig config,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    final List<CustomAgentConfig> nodeConfigs = config.agents.isEmpty
+        ? <CustomAgentConfig>[CustomAgentConfig.defaults()]
+        : config.agents;
+    final List<int> orderedIndexes = _orderedNodeIndexes(
+      config: config,
+      totalNodes: nodeConfigs.length,
+    );
+    final List<Agent> nodes = nodeConfigs
+        .asMap()
+        .entries
+        .map((entry) {
+          final int index = entry.key;
+          final CustomAgentConfig node = entry.value;
+          return _buildConfigAgent(
+            apiKey: apiKey,
+            language: language,
+            config: node,
+            fallbackName: 'NodeAgent${index + 1}',
+            fallbackDescription: 'User-defined node agent ${index + 1}.',
+          );
+        })
+        .toList(growable: false);
+
+    switch (config.architecture) {
+      case UserExampleArchitecture.single:
+        return nodes[orderedIndexes.first];
+      case UserExampleArchitecture.team:
+        return _buildUserTeamCoordinator(
+          apiKey: apiKey,
+          language: language,
+          config: config,
+          nodes: nodes,
+          orderedIndexes: orderedIndexes,
+        );
+      case UserExampleArchitecture.sequential:
+        return SequentialAgent(
+          name: _normalizeName(config.title, fallback: 'UserSequentialFlow'),
+          description: config.summary,
+          subAgents: orderedIndexes
+              .map((int index) => nodes[index])
+              .toList(growable: false),
+        );
+      case UserExampleArchitecture.parallel:
+        return _buildUserParallelPipeline(
+          apiKey: apiKey,
+          language: language,
+          config: config,
+          nodeConfigs: nodeConfigs,
+          orderedIndexes: orderedIndexes,
+        );
+      case UserExampleArchitecture.loop:
+        return _buildUserLoopPipeline(
+          apiKey: apiKey,
+          language: language,
+          config: config,
+          nodeConfigs: nodeConfigs,
+          orderedIndexes: orderedIndexes,
+        );
+    }
+  }
+
+  static Agent _buildConfigAgent({
+    required String apiKey,
+    required AppLanguage language,
+    required CustomAgentConfig config,
+    required String fallbackName,
+    required String fallbackDescription,
+    String? outputKey,
+  }) {
+    final List<Object> tools = _buildCommonTools(
+      config: config,
+      language: language,
+    );
+    final String toolGuide = tools.isEmpty
+        ? '- No tools are enabled. Answer with general reasoning only.'
+        : '- Use enabled tools when relevant and provide concise, factual answers.';
+    return Agent(
+      name: _normalizeName(config.name, fallback: fallbackName),
+      model: _createGeminiModel(apiKey),
+      description: config.description.trim().isEmpty
+          ? fallbackDescription
+          : config.description.trim(),
+      instruction:
+          '''
+${config.instruction}
+$toolGuide
+${responseLanguageInstruction(language)}
+''',
+      tools: tools,
+      outputKey: outputKey,
+    );
+  }
+
+  static List<Object> _buildCommonTools({
+    required CustomAgentConfig config,
+    required AppLanguage language,
+  }) {
+    final List<Object> tools = <Object>[];
+    if (config.enableCapitalTool) {
+      tools.add(
+        FunctionTool(
+          name: 'get_capital_city',
+          description: 'Returns the capital city for a given country name.',
+          func: ({required String country}) => _lookupCapitalCity(country),
+        ),
+      );
+    }
+    if (config.enableWeatherTool) {
+      tools.add(
+        FunctionTool(
+          name: 'get_weather',
+          description: 'Returns weather report for a city.',
+          func: ({String? city, String? location}) {
+            final String? resolved = _resolveCityArg(
+              city: city,
+              location: location,
+            );
+            if (resolved == null) {
+              return <String, Object?>{
+                'status': 'error',
+                'error_message': _localizedMissingCity(language),
+              };
+            }
+            return _lookupTeamWeather(resolved, language);
+          },
+        ),
+      );
+    }
+    if (config.enableTimeTool) {
+      tools.add(
+        FunctionTool(
+          name: 'get_current_time',
+          description: 'Returns current local time for a city.',
+          func: ({String? city, String? location}) {
+            final String? resolved = _resolveCityArg(
+              city: city,
+              location: location,
+            );
+            if (resolved == null) {
+              return <String, Object?>{
+                'status': 'error',
+                'error_message': _localizedMissingCity(language),
+              };
+            }
+            return _lookupTeamCurrentTime(resolved, language);
+          },
+        ),
+      );
+    }
+    return tools;
+  }
+
+  static BaseAgent _buildUserTeamCoordinator({
+    required String apiKey,
+    required AppLanguage language,
+    required UserExampleConfig config,
+    required List<Agent> nodes,
+    required List<int> orderedIndexes,
+  }) {
+    final int entryIndex = orderedIndexes.first;
+    final StringBuffer specialties = StringBuffer();
+    for (int i = 0; i < nodes.length; i++) {
+      final Agent node = nodes[i];
+      final String entryMarker = i == entryIndex ? ' (entry)' : '';
+      specialties.writeln(
+        '- [A$i] ${node.name}$entryMarker: ${node.description}',
+      );
+    }
+
+    final List<UserExampleConnection> entryEdges = config.connections
+        .where(
+          (UserExampleConnection item) =>
+              item.fromIndex == entryIndex &&
+              item.toIndex >= 0 &&
+              item.toIndex < nodes.length &&
+              item.toIndex != entryIndex,
+        )
+        .toList(growable: false);
+    final StringBuffer routingRules = StringBuffer();
+    if (entryEdges.isEmpty) {
+      routingRules.writeln('- No explicit entry routing rules.');
+    } else {
+      for (final UserExampleConnection edge in entryEdges) {
+        final UserExampleConnectionDsl parsed = UserExampleConnectionDsl.parse(
+          edge.condition,
+        );
+        final String condition = _dslRuleToCoordinatorPhrase(parsed);
+        routingRules.writeln(
+          '- $condition => transfer_to_agent ${nodes[edge.toIndex].name}',
+        );
+      }
+    }
+
+    final String entryAgentName = nodes[entryIndex].name;
+    return Agent(
+      name: _normalizeName(config.title, fallback: 'UserTeamCoordinator'),
+      model: _createGeminiModel(apiKey),
+      description: config.summary,
+      instruction:
+          '''
+You are a team coordinator for user-defined agents.
+Available specialists:
+${specialties.toString()}
+
+Entry agent: $entryAgentName
+Entry routing rules:
+${routingRules.toString()}
+
+DSL semantics:
+- always: unconditional route
+- intent:<name>: route when primary intent matches name
+- contains:<keyword>: route when user message includes keyword (case-insensitive)
+
+Rules:
+- Prefer one transfer_to_agent call per user turn.
+- Apply entry routing rules first when possible.
+- If no explicit rule matches, route to $entryAgentName or the best matching specialist.
+- Prefer exactly one transfer_to_agent per turn.
+- If intent is ambiguous, ask one short clarifying question.
+- Do not solve the request yourself after routing.
+${responseLanguageInstruction(language)}
+''',
+      subAgents: nodes,
+    );
+  }
+
+  static BaseAgent _buildUserParallelPipeline({
+    required String apiKey,
+    required AppLanguage language,
+    required UserExampleConfig config,
+    required List<CustomAgentConfig> nodeConfigs,
+    required List<int> orderedIndexes,
+  }) {
+    final StringBuffer inputs = StringBuffer();
+    final List<Agent> parallelNodes = <Agent>[];
+    for (int i = 0; i < orderedIndexes.length; i++) {
+      final int index = orderedIndexes[i];
+      final CustomAgentConfig nodeConfig = nodeConfigs[index];
+      final Agent node = _buildConfigAgent(
+        apiKey: apiKey,
+        language: language,
+        config: nodeConfig,
+        fallbackName: 'ParallelNode${i + 1}',
+        fallbackDescription: 'User parallel node ${i + 1}.',
+        outputKey: 'user_parallel_${i + 1}_result',
+      );
+      parallelNodes.add(node);
+      inputs.writeln(
+        '- Node ${i + 1} (${node.name}) output: {user_parallel_${i + 1}_result}',
+      );
+    }
+    final ParallelAgent parallel = ParallelAgent(
+      name: _normalizeName('${config.title}Parallel', fallback: 'UserParallel'),
+      description: 'User-defined parallel nodes',
+      subAgents: parallelNodes,
+    );
+    final Agent synth = Agent(
+      name: _normalizeName('${config.title}Synth', fallback: 'UserSynthesizer'),
+      model: _createGeminiModel(apiKey),
+      description: 'Synthesize parallel outputs from user-defined nodes.',
+      instruction:
+          '''
+Synthesize results from parallel nodes:
+${inputs.toString()}
+
+Provide one coherent final answer grounded only on those node outputs.
+${responseLanguageInstruction(language)}
+''',
+    );
+    return SequentialAgent(
+      name: _normalizeName(config.title, fallback: 'UserParallelPipeline'),
+      description: config.summary,
+      subAgents: <BaseAgent>[parallel, synth],
+    );
+  }
+
+  static BaseAgent _buildUserLoopPipeline({
+    required String apiKey,
+    required AppLanguage language,
+    required UserExampleConfig config,
+    required List<CustomAgentConfig> nodeConfigs,
+    required List<int> orderedIndexes,
+  }) {
+    final List<Agent> loopNodes = <Agent>[];
+    for (int i = 0; i < orderedIndexes.length; i++) {
+      final int index = orderedIndexes[i];
+      final CustomAgentConfig nodeConfig = nodeConfigs[index];
+      loopNodes.add(
+        _buildConfigAgent(
+          apiKey: apiKey,
+          language: language,
+          config: nodeConfig,
+          fallbackName: 'LoopNode${i + 1}',
+          fallbackDescription: 'User loop node ${i + 1}.',
+          outputKey: 'user_loop_${i + 1}_result',
+        ),
+      );
+    }
+
+    final LoopAgent loop = LoopAgent(
+      name: _normalizeName('${config.title}Loop', fallback: 'UserLoop'),
+      description: 'User-defined iterative loop',
+      maxIterations: 3,
+      subAgents: loopNodes,
+    );
+    final StringBuffer outputs = StringBuffer();
+    for (int i = 0; i < loopNodes.length; i++) {
+      outputs.writeln(
+        '- Node ${i + 1} (${loopNodes[i].name}) latest output: {user_loop_${i + 1}_result}',
+      );
+    }
+    final Agent finalizer = Agent(
+      name: _normalizeName('${config.title}Final', fallback: 'UserLoopFinal'),
+      model: _createGeminiModel(apiKey),
+      description: 'Finalize loop outputs into one response.',
+      instruction:
+          '''
+Finalize this loop run:
+${outputs.toString()}
+
+Return one concise final response.
+${responseLanguageInstruction(language)}
+''',
+    );
+    return SequentialAgent(
+      name: _normalizeName(config.title, fallback: 'UserLoopPipeline'),
+      description: config.summary,
+      subAgents: <BaseAgent>[loop, finalizer],
+    );
+  }
+
+  static String _normalizeName(String raw, {required String fallback}) {
+    final String trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return fallback;
+    }
+    final String compact = trimmed.replaceAll(RegExp(r'\s+'), '_');
+    return compact.length > 64 ? compact.substring(0, 64) : compact;
+  }
+
+  static String _dslRuleToCoordinatorPhrase(UserExampleConnectionDsl parsed) {
+    switch (parsed.type) {
+      case UserExampleConnectionDslType.always:
+        return 'always';
+      case UserExampleConnectionDslType.intent:
+        return 'intent:${parsed.value}';
+      case UserExampleConnectionDslType.contains:
+        return 'contains:${parsed.value}';
+      case UserExampleConnectionDslType.unknown:
+        if (parsed.raw.trim().isEmpty) {
+          return 'always';
+        }
+        return 'hint("${parsed.raw.trim()}")';
+    }
+  }
+
+  static List<int> _orderedNodeIndexes({
+    required UserExampleConfig config,
+    required int totalNodes,
+  }) {
+    if (totalNodes <= 0) {
+      return <int>[0];
+    }
+    final int entry =
+        config.entryAgentIndex < 0 || config.entryAgentIndex >= totalNodes
+        ? 0
+        : config.entryAgentIndex;
+    final Map<int, List<UserExampleConnection>> edges =
+        <int, List<UserExampleConnection>>{};
+    for (final UserExampleConnection edge in config.connections) {
+      if (edge.fromIndex < 0 ||
+          edge.fromIndex >= totalNodes ||
+          edge.toIndex < 0 ||
+          edge.toIndex >= totalNodes ||
+          edge.fromIndex == edge.toIndex) {
+        continue;
+      }
+      edges
+          .putIfAbsent(edge.fromIndex, () => <UserExampleConnection>[])
+          .add(edge);
+    }
+    final List<int> order = <int>[entry];
+    final Set<int> visited = <int>{entry};
+    int current = entry;
+    while (true) {
+      final List<UserExampleConnection> nextEdges =
+          edges[current] ?? const <UserExampleConnection>[];
+      UserExampleConnection? candidate;
+      for (final UserExampleConnection edge in nextEdges) {
+        if (!visited.contains(edge.toIndex)) {
+          candidate = edge;
+          break;
+        }
+      }
+      if (candidate == null) {
+        break;
+      }
+      current = candidate.toIndex;
+      visited.add(current);
+      order.add(current);
+      if (order.length >= totalNodes) {
+        break;
+      }
+    }
+    for (int i = 0; i < totalNodes; i++) {
+      if (!visited.contains(i)) {
+        order.add(i);
+      }
+    }
+    return order;
   }
 
   static BaseAgent buildTransfer({
@@ -82,12 +520,24 @@ ${responseLanguageInstruction(language)}
       instruction:
           '''
 You are a help desk coordinator.
-- Route payment or billing requests to Billing using transfer_to_agent.
-- Route login/app/account technical requests to Support using transfer_to_agent.
-- If unclear, ask one short clarification question before transfer.
-- After routing, the selected specialist should provide the final answer.
+- For EVERY user turn, call classify_helpdesk_intent first using the latest user message.
+- If route is Support, immediately call transfer_to_agent to Support.
+- If route is Billing, immediately call transfer_to_agent to Billing.
+- If route is Ambiguous, ask exactly one short clarification question to choose Support(login/app/account) or Billing(payment/refund).
+- If user gives a short follow-up like "로그인이요", "결제요", "login", "billing", route immediately without asking again.
+- If route is Unknown, ask one short clarification question.
+- Do not solve the issue yourself after routing. The selected specialist should provide the final answer.
 ${responseLanguageInstruction(language)}
 ''',
+      tools: <Object>[
+        FunctionTool(
+          name: 'classify_helpdesk_intent',
+          description:
+              'Classifies a user message into Support, Billing, Ambiguous, or Unknown.',
+          func: ({required String userMessage}) =>
+              _classifyHelpdeskIntent(userMessage: userMessage),
+        ),
+      ],
       subAgents: <BaseAgent>[billingAgent, supportAgent],
     );
   }
@@ -431,6 +881,7 @@ ${responseLanguageInstruction(language)}
 You are a greeting specialist.
 - For greetings, call say_hello.
 - Keep response short and friendly.
+- Do not call transfer_to_agent.
 ${responseLanguageInstruction(language)}
 ''',
       tools: <Object>[
@@ -451,22 +902,48 @@ ${responseLanguageInstruction(language)}
       instruction:
           '''
 You are a weather/time specialist.
-- For weather questions, call get_weather.
-- For current time questions, call get_current_time.
+- For weather questions, call get_weather with city (or location) argument.
+- For current time questions, call get_current_time with city (or location) argument.
+- If the user also asks for greeting/farewell, include short greeting/farewell directly in one final answer.
+- Prefer a single final response; avoid handing off unless absolutely required.
 - If city is unsupported, explain politely.
+- Do not call transfer_to_agent.
 ${responseLanguageInstruction(language)}
 ''',
       tools: <Object>[
         FunctionTool(
           name: 'get_weather',
           description: 'Returns weather report for a city.',
-          func: ({required String city}) => _lookupTeamWeather(city, language),
+          func: ({String? city, String? location}) {
+            final String? resolved = _resolveCityArg(
+              city: city,
+              location: location,
+            );
+            if (resolved == null) {
+              return <String, Object?>{
+                'status': 'error',
+                'error_message': _localizedMissingCity(language),
+              };
+            }
+            return _lookupTeamWeather(resolved, language);
+          },
         ),
         FunctionTool(
           name: 'get_current_time',
           description: 'Returns current local time for a city.',
-          func: ({required String city}) =>
-              _lookupTeamCurrentTime(city, language),
+          func: ({String? city, String? location}) {
+            final String? resolved = _resolveCityArg(
+              city: city,
+              location: location,
+            );
+            if (resolved == null) {
+              return <String, Object?>{
+                'status': 'error',
+                'error_message': _localizedMissingCity(language),
+              };
+            }
+            return _lookupTeamCurrentTime(resolved, language);
+          },
         ),
       ],
     );
@@ -480,6 +957,7 @@ ${responseLanguageInstruction(language)}
 You are a farewell specialist.
 - For goodbye messages, call say_goodbye.
 - Keep response short.
+- Do not call transfer_to_agent.
 ${responseLanguageInstruction(language)}
 ''',
       tools: <Object>[
@@ -498,9 +976,11 @@ ${responseLanguageInstruction(language)}
       instruction:
           '''
 You are a coordinator for an agent team.
-- Route greetings to GreetingAgent using transfer_to_agent.
+- Route greeting-only requests to GreetingAgent using transfer_to_agent.
 - Route weather/time requests to WeatherTimeAgent using transfer_to_agent.
-- Route farewells to FarewellAgent using transfer_to_agent.
+- Route farewell-only requests to FarewellAgent using transfer_to_agent.
+- For mixed requests (e.g. greeting + time/weather + farewell), route once to WeatherTimeAgent and let it compose one final response.
+- Prefer exactly one transfer_to_agent call per user turn.
 - If intent is unclear, ask one short clarifying question.
 ${responseLanguageInstruction(language)}
 ''',
@@ -656,7 +1136,7 @@ ${responseLanguageInstruction(language)}
 
   static Gemini _createGeminiModel(String apiKey) {
     return Gemini(
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       environment: <String, String>{'GEMINI_API_KEY': apiKey},
     );
   }
@@ -750,6 +1230,125 @@ ${responseLanguageInstruction(language)}
       case AppLanguage.zh:
         return '未知时区城市：$city';
     }
+  }
+
+  static String _localizedMissingCity(AppLanguage language) {
+    switch (language) {
+      case AppLanguage.en:
+        return 'Please provide a city name.';
+      case AppLanguage.ko:
+        return '도시 이름을 입력해 주세요.';
+      case AppLanguage.ja:
+        return '都市名を入力してください。';
+      case AppLanguage.zh:
+        return '请输入城市名称。';
+    }
+  }
+
+  static String? _resolveCityArg({String? city, String? location}) {
+    final String? cityTrimmed = city?.trim();
+    if (cityTrimmed != null && cityTrimmed.isNotEmpty) {
+      return cityTrimmed;
+    }
+    final String? locationTrimmed = location?.trim();
+    if (locationTrimmed != null && locationTrimmed.isNotEmpty) {
+      return locationTrimmed;
+    }
+    return null;
+  }
+
+  static Map<String, Object?> _classifyHelpdeskIntent({
+    required String userMessage,
+  }) {
+    final String normalized = userMessage.trim().toLowerCase();
+
+    final bool hasSupportIntent = _containsAny(normalized, <String>[
+      'login',
+      'sign in',
+      'signin',
+      'password',
+      'account',
+      'app error',
+      'technical',
+      'support',
+      '로그인',
+      '비밀번호',
+      '계정',
+      '접속',
+      '오류',
+      '기술지원',
+      'ログイン',
+      'パスワード',
+      'アカウント',
+      '不具合',
+      'エラー',
+      '技术支持',
+      '技術支援',
+      '登录',
+      '登入',
+      '密码',
+      '密碼',
+      '账号',
+      '帳號',
+      '账户',
+      '帳戶',
+    ]);
+
+    final bool hasBillingIntent = _containsAny(normalized, <String>[
+      'billing',
+      'payment',
+      'charge',
+      'refund',
+      'invoice',
+      'subscription',
+      '결제',
+      '중복결제',
+      '중복 결제',
+      '환불',
+      '청구',
+      '요금',
+      '구독',
+      '請求',
+      '支払い',
+      '決済',
+      '返金',
+      '課金',
+      'サブスク',
+      '二重決済',
+      '支付',
+      '付款',
+      '扣费',
+      '扣費',
+      '账单',
+      '帳單',
+      '退款',
+      '订阅',
+      '訂閱',
+      '重复扣款',
+      '重複扣款',
+    ]);
+
+    final String route = switch ((hasSupportIntent, hasBillingIntent)) {
+      (true, false) => 'Support',
+      (false, true) => 'Billing',
+      (true, true) => 'Ambiguous',
+      (false, false) => 'Unknown',
+    };
+
+    return <String, Object?>{
+      'route': route,
+      'has_support_intent': hasSupportIntent,
+      'has_billing_intent': hasBillingIntent,
+    };
+  }
+
+  static bool _containsAny(String text, List<String> keywords) {
+    for (final String keyword in keywords) {
+      if (text.contains(keyword)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static String _localizedTimeReport(

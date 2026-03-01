@@ -23,6 +23,7 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
         language: appLanguageFromCode(
           prefs.getString(languagePrefKey) ?? fallbackLanguage.code,
         ),
+        debugLogsEnabled: prefs.getBool(debugLogsEnabledPrefKey) ?? true,
       );
     } on MissingPluginException {
       return AppSettings(
@@ -30,6 +31,7 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
         mcpUrl: '',
         mcpBearerToken: '',
         language: fallbackLanguage,
+        debugLogsEnabled: true,
       );
     }
   }
@@ -61,6 +63,7 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
       }
 
       await prefs.setString(languagePrefKey, settings.language.code);
+      await prefs.setBool(debugLogsEnabledPrefKey, settings.debugLogsEnabled);
     } on MissingPluginException {
       // Keep running with in-memory state when plugin is unavailable.
     }
