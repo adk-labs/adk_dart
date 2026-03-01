@@ -1,0 +1,52 @@
+name: flutter_adk
+description: Flutter facade package for adk_dart core runtime on all Flutter platforms.
+version: 2026.3.1
+repository: https://github.com/adk-labs/adk_dart
+homepage: https://github.com/adk-labs/adk_dart
+issue_tracker: https://github.com/adk-labs/adk_dart/issues
+topics:
+  - adk
+  - flutter
+  - agents
+  - ai
+  - llm
+
+environment:
+  sdk: ^3.11.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  adk_dart: 2026.3.1
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  web: ^1.0.0
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+dependency_overrides:
+  adk_dart:
+    path: ../..
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.flutter_adk
+        pluginClass: FlutterAdkPlugin
+      ios:
+        pluginClass: FlutterAdkPlugin
+      linux:
+        pluginClass: FlutterAdkPlugin
+      macos:
+        pluginClass: FlutterAdkPlugin
+      windows:
+        pluginClass: FlutterAdkPluginCApi
+      web:
+        pluginClass: FlutterAdkWeb
+        fileName: flutter_adk_web.dart

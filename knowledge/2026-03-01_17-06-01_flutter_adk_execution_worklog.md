@@ -72,7 +72,40 @@
 - `adk_core` 분리 산출물과 Web compile smoke gate를 확보했으며, Phase 2(`packages/flutter_adk` 스캐폴드)로 진행 가능한 상태.
 
 ## Work Unit 3 — flutter_adk 패키지 스캐폴드
-- 상태: 진행 예정
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 17:18~17:46 KST
+
+### 구현 내용
+- `packages/flutter_adk` 신규 생성 (`flutter create --template=plugin`)
+  - 플랫폼 등록: Android, iOS, Web, Linux, macOS, Windows
+- 메타데이터/릴리스 정렬:
+  - `packages/flutter_adk/pubspec.yaml`
+  - 버전 `2026.3.1`
+  - repository/homepage/issue tracker/topics 설정
+- `adk_core` facade 연결:
+  - `packages/flutter_adk/lib/flutter_adk.dart`에서
+    `export 'package:adk_dart/adk_core.dart';` 추가
+- 문서/릴리스 노트 정리:
+  - `packages/flutter_adk/README.md`
+  - `packages/flutter_adk/CHANGELOG.md`
+- 테스트 보강:
+  - `packages/flutter_adk/test/flutter_adk_test.dart`
+  - `adk_core` 심볼 export 스모크 케이스 추가
+
+### 의존성 정렬
+- `adk_dart: 2026.3.1` 명시
+- 로컬 미배포 API(`adk_core.dart`) 참조를 위해 임시로
+  `dependency_overrides`에 `adk_dart: path: ../..` 추가
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk`): 통과
+
+### 단위 결론
+- `flutter_adk` 6플랫폼 스캐폴드와 core facade 경로를 확보했으며,
+  다음 단위는 CI/sync 규칙 확장(Work Unit 4) 진행 가능.
 
 ## Work Unit 4 — CI/동기화 규칙 확장
 - 상태: 진행 예정
