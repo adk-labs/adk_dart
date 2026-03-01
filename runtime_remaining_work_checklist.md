@@ -22,7 +22,7 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
     - `lib/src/cli/service_registry.dart:192-195`
     - `lib/src/artifacts/gcs_artifact_service.dart:64-69`
 
-- [ ] Implement real `adk deploy` execution path (not preview echo only).
+- [x] Implement real `adk deploy` execution path (2026-03-01).
   - Current: command prints generated gcloud command and exits.
   - Effect: deploy command is non-functional.
   - Evidence:

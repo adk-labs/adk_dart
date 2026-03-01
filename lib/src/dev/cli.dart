@@ -6,6 +6,7 @@ import '../events/event.dart';
 import '../sessions/session.dart';
 import '../sessions/schemas/v0.dart';
 import '../types/content.dart';
+import '../cli/cli_deploy.dart';
 import 'project.dart';
 import 'runtime.dart';
 import 'web_server.dart';
@@ -17,6 +18,7 @@ Commands:
   create <project_dir>  Create a new ADK Dart project scaffold.
   run [project_dir]     Run an interactive CLI chat session.
   web [project_dir]     Start the ADK dev web server.
+  deploy                Deploy app using gcloud command execution.
   api_server [project_dir]
                        Start the ADK API server (alias of `web`).
 
@@ -217,6 +219,15 @@ Future<int> runAdkCli(
   if (args.length > 1 && (args[1] == '-h' || args[1] == '--help')) {
     out.writeln(adkUsage);
     return 0;
+  }
+
+  if (args.first == 'deploy') {
+    return runDeployCommand(
+      args.skip(1).toList(growable: false),
+      outSink: out,
+      errSink: err,
+      environment: Platform.environment,
+    );
   }
 
   final ParsedAdkCommand parsed;
