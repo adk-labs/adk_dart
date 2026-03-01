@@ -16,7 +16,7 @@ environment:
   flutter: '>=3.3.0'
 
 dependencies:
-  adk_dart: 2026.3.1
+  adk_dart: ^2026.3.1
   flutter:
     sdk: flutter
   flutter_web_plugins:
@@ -28,10 +28,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-
-dependency_overrides:
-  adk_dart:
-    path: ../..
 
 flutter:
   plugin:
