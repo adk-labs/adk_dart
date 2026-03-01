@@ -347,5 +347,37 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
+
+    test('sqlite-specific migration omits metadata table', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_migration_sqlite_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final String source = '${dir.path}/source.db';
+      final String dest = '${dir.path}/dest.db';
+      await _createLegacySourceDb(source);
+
+      await migrateFromSqlalchemySqlite('sqlite:///$source', dest);
+
+      final SqliteMigrationDatabase db = SqliteMigrationDatabase.open(
+        connectPath: dest,
+        displayPath: dest,
+        uri: false,
+        readOnly: true,
+      );
+      try {
+        expect(db.hasTable('adk_internal_metadata'), isFalse);
+        expect(db.hasTable('events'), isTrue);
+      } finally {
+        db.dispose();
+      }
+
+      expect(await getDbSchemaVersion('sqlite:///$dest'), schemaVersion1Json);
+    });
   });
 }
