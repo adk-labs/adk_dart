@@ -69,6 +69,37 @@ Skills 테스트 예시:
 - `이 공지문 문장을 더 간결하게 다듬어줘`
 - `신규 기능 출시 계획을 단계별로 정리해줘`
 
+## 사용자 정의 예제(User Example)
+- 홈 우하단 `New Example` 버튼으로 사용자 예제를 만들 수 있습니다.
+- 한 예제 안에서 에이전트를 여러 개 구성하고, 연결 방식(Topology)을 고를 수 있습니다.
+  - `Single Agent`
+  - `Agent Team`
+  - `Sequential Workflow`
+  - `Parallel Workflow`
+  - `Loop Workflow`
+- 생성한 예제는 로컬에 저장되어 앱 재실행 후에도 그대로 재사용됩니다.
+
+### 그래프 연결 규칙 DSL
+사용자 예제의 Connection 조건은 아래 DSL을 지원합니다.
+
+- `always`
+  - 무조건 해당 edge를 우선 적용
+- `intent:<name>`
+  - 의도(intent)가 `<name>`일 때 라우팅
+  - 예: `intent:weather`, `intent:billing`, `intent:login`
+- `contains:<keyword>`
+  - 사용자 메시지에 `<keyword>`가 포함되면 라우팅(대소문자 무시)
+  - 예: `contains:refund`, `contains:서울`
+
+예시:
+- `A0 -> A1` 조건: `intent:weather`
+- `A0 -> A2` 조건: `contains:refund`
+- `A0 -> A3` 조건: `always` (기본 fallback)
+
+권장:
+- Team 토폴로지에서는 시작 에이전트(Entry Agent)를 먼저 지정하고, Entry 기준 라우팅 규칙을 연결하세요.
+- Sequential/Parallel/Loop 토폴로지에서는 연결 그래프가 실행 우선순위(노드 순서)에 반영됩니다.
+
 ## 주의사항
 - 브라우저에 API 키를 저장하는 방식은 노출 위험이 있으므로 프로덕션에서는 서버 프록시를 권장합니다.
 - 로컬 개발에서 최신 루트 소스를 참조하기 위해 `pubspec_overrides.yaml`이 포함되어 있습니다.
