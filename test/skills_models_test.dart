@@ -50,6 +50,14 @@ void main() {
       expect(frontmatter.name, 'my-skill');
     });
 
+    test('applies full NFKC normalization for compatibility characters', () {
+      final Frontmatter frontmatter = Frontmatter(
+        name: 'my﹣ﬀoo',
+        description: 'desc',
+      );
+      expect(frontmatter.name, 'my-ffoo');
+    });
+
     test('reads allowed-tools alias in fromMap', () {
       final Frontmatter frontmatter = Frontmatter.fromMap(<String, Object?>{
         'name': 'my-skill',

@@ -106,6 +106,61 @@ Instructions here
       expect(skill.frontmatter.compatibility, contains('python-parity'));
     });
 
+    test('loadSkillFromDir requires frontmatter delimiter at byte 0', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk-skill-test-',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      final Directory skillDir = Directory(_join(tempDir.path, 'my-skill'));
+      skillDir.createSync(recursive: true);
+
+      _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+  ---
+name: my-skill
+description: A skill
+---
+Body
+''');
+
+      expect(
+        () => loadSkillFromDir(skillDir.path),
+        throwsA(
+          isA<FormatException>().having(
+            (FormatException error) => error.message,
+            'message',
+            contains('must start with YAML frontmatter'),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'loadSkillFromDir closes frontmatter on first subsequent --- substring',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk-skill-test-',
+        );
+        addTearDown(() => tempDir.delete(recursive: true));
+
+        final Directory skillDir = Directory(_join(tempDir.path, 'my-skill'));
+        skillDir.createSync(recursive: true);
+
+        _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+---
+name: my-skill
+description: "A---B"
+---
+Body
+''');
+
+        expect(
+          () => loadSkillFromDir(skillDir.path),
+          throwsA(isA<FormatException>()),
+        );
+      },
+    );
+
     test('loadSkillFromDir rejects directory-name mismatch', () async {
       final Directory tempDir = await Directory.systemTemp.createTemp(
         'adk-skill-test-',
@@ -265,6 +320,49 @@ Body content
       expect(properties.name, 'my-skill');
       expect(properties.description, 'A cool skill');
       expect(properties.license, 'MIT');
+    });
+
+    test('loadSkillFromDir surfaces filesystem read errors from resources', () async {
+      if (Platform.isWindows) {
+        markTestSkipped('permission test is Unix-specific');
+        return;
+      }
+
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk-skill-test-',
+      );
+      addTearDown(() async {
+        final File blocked = File(
+          _join(_join(tempDir.path, 'my-skill'), 'references/blocked.md'),
+        );
+        if (await blocked.exists()) {
+          await Process.run('chmod', <String>['644', blocked.path]);
+        }
+        await tempDir.delete(recursive: true);
+      });
+
+      final Directory skillDir = Directory(_join(tempDir.path, 'my-skill'));
+      skillDir.createSync(recursive: true);
+      _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+---
+name: my-skill
+description: A skill
+---
+Body
+''');
+
+      final String blockedPath = _join(skillDir.path, 'references/blocked.md');
+      _writeFile(blockedPath, 'secret');
+      final ProcessResult chmodResult = await Process.run('chmod', <String>[
+        '000',
+        blockedPath,
+      ]);
+      if (chmodResult.exitCode != 0) {
+        markTestSkipped('chmod is unavailable in current environment');
+        return;
+      }
+
+      expect(() => loadSkillFromDir(skillDir.path), throwsA(isA<FileSystemException>()));
     });
   });
 }

@@ -225,6 +225,9 @@ export 'src/optimization/simple_prompt_optimizer.dart';
 
 export 'src/runners/runner.dart';
 export 'src/skills/skill.dart';
+export 'src/skills/models.dart';
+export 'src/skills/prompt.dart';
+export 'src/skills/_utils.dart';
 
 export 'src/sessions/base_session_service.dart';
 export 'src/sessions/database_session_service.dart';

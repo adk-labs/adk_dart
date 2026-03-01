@@ -1,4 +1,5 @@
 import 'package:adk_dart/adk_dart.dart';
+import 'package:adk_dart/src/skills/prompt.dart' as skills_prompt;
 import 'package:test/test.dart';
 
 void main() {
@@ -32,6 +33,22 @@ void main() {
       final String xml = formatSkillsAsXml(skills);
       expect(xml, contains('my-skill'));
       expect(xml, contains('desc&lt;ription&gt;'));
+    });
+
+    test('escapes apostrophes with python-compatible entity', () {
+      final List<SkillDescriptor> skills = <SkillDescriptor>[
+        Frontmatter(name: 'my-skill', description: "it's fine"),
+      ];
+
+      final String xml = formatSkillsAsXml(skills);
+      expect(xml, contains('it&#x27;s fine'));
+    });
+
+    test('exposes deprecated skill system instruction alias', () {
+      expect(
+        skills_prompt.DEFAULT_SKILL_SYSTEM_INSTRUCTION,
+        defaultSkillSystemInstruction,
+      );
     });
   });
 }

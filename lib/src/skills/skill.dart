@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 import 'package:yaml/yaml.dart';
 
 final RegExp _skillNamePattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
@@ -121,7 +122,7 @@ class Frontmatter implements SkillDescriptor {
   }
 
   static String _validateName(String value) {
-    final String normalized = _normalizeNfkcLike(value);
+    final String normalized = _normalizeNfkc(value);
     if (normalized.length > 64) {
       throw ArgumentError('name must be at most 64 characters');
     }
@@ -356,7 +357,7 @@ List<String> validateSkillDir(String skillDirPath) {
   try {
     parsed = _parseSkillMd(skillDir).frontmatter;
   } catch (error) {
-    return <String>['$error'];
+    return <String>[_formatSkillError(error)];
   }
 
   final List<String> problems = <String>[];
@@ -372,7 +373,7 @@ List<String> validateSkillDir(String skillDirPath) {
   try {
     frontmatter = Frontmatter.fromMap(parsed);
   } catch (error) {
-    problems.add('Frontmatter validation error: $error');
+    problems.add('Frontmatter validation error: ${_formatSkillError(error)}');
     return problems;
   }
 
@@ -402,36 +403,38 @@ class _ParsedSkillMd {
 
 _ParsedSkillMd _parseSkillMd(Directory skillDir) {
   if (!skillDir.existsSync()) {
-    throw ArgumentError("Skill directory '${skillDir.path}' not found.");
+    throw FileSystemException(
+      "Skill directory '${skillDir.path}' not found.",
+      skillDir.path,
+    );
   }
   if (skillDir.statSync().type != FileSystemEntityType.directory) {
-    throw ArgumentError("Skill directory '${skillDir.path}' not found.");
+    throw FileSystemException(
+      "Skill directory '${skillDir.path}' not found.",
+      skillDir.path,
+    );
   }
 
   final File? skillMd = _findSkillMd(skillDir);
   if (skillMd == null) {
-    throw ArgumentError("SKILL.md not found in '${skillDir.path}'.");
+    throw FileSystemException(
+      "SKILL.md not found in '${skillDir.path}'.",
+      skillDir.path,
+    );
   }
 
   final String content = skillMd.readAsStringSync();
-  final List<String> lines = LineSplitter.split(content).toList();
-  if (lines.isEmpty || lines.first.trim() != '---') {
+  if (!content.startsWith('---')) {
     throw FormatException('SKILL.md must start with YAML frontmatter (---)');
   }
 
-  int closingIndex = -1;
-  for (int i = 1; i < lines.length; i += 1) {
-    if (lines[i].trim() == '---') {
-      closingIndex = i;
-      break;
-    }
-  }
+  final int closingIndex = content.indexOf('---', 3);
   if (closingIndex < 0) {
     throw FormatException('SKILL.md frontmatter not properly closed with ---');
   }
 
-  final String frontmatterText = lines.sublist(1, closingIndex).join('\n');
-  final String body = lines.sublist(closingIndex + 1).join('\n').trim();
+  final String frontmatterText = content.substring(3, closingIndex);
+  final String body = content.substring(closingIndex + 3).trim();
 
   final Map<String, Object?> parsed = _parseYamlMapping(frontmatterText);
   return _ParsedSkillMd(frontmatter: parsed, body: body);
@@ -460,9 +463,10 @@ Map<String, String> _loadDir(Directory directory) {
     }
     final String relativePath = normalizedPath.substring(basePath.length + 1);
     try {
-      files[relativePath] = entity.readAsStringSync();
-    } on FileSystemException {
-      continue;
+      files[relativePath] = utf8.decode(
+        entity.readAsBytesSync(),
+        allowMalformed: false,
+      );
     } on FormatException {
       continue;
     }
@@ -527,7 +531,7 @@ String _escapeXml(String value) {
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
-      .replaceAll("'", '&apos;');
+      .replaceAll("'", '&#x27;');
 }
 
 String _basename(String path) {
@@ -558,20 +562,21 @@ Directory _resolveSkillDir(String skillDirPath) {
   }
 }
 
-String _normalizeNfkcLike(String input) {
-  final StringBuffer normalized = StringBuffer();
-  for (final int rune in input.runes) {
-    if (rune == 0x3000) {
-      normalized.writeCharCode(0x20);
-      continue;
-    }
-    if (rune >= 0xFF01 && rune <= 0xFF5E) {
-      normalized.writeCharCode(rune - 0xFEE0);
-      continue;
-    }
-    normalized.writeCharCode(rune);
+String _normalizeNfkc(String input) {
+  return unorm.nfkc(input);
+}
+
+String _formatSkillError(Object error) {
+  if (error is ArgumentError) {
+    return '${error.message}';
   }
-  return normalized.toString();
+  if (error is FileSystemException) {
+    return error.message;
+  }
+  if (error is FormatException) {
+    return error.message;
+  }
+  return '$error';
 }
 
 String _normalizePath(String path) => path.replaceAll('\\', '/');
