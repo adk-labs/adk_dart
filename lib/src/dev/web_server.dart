@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:mirrors';
 
 import '../a2a/executor/a2a_agent_executor.dart';
 import '../a2a/protocol.dart';
@@ -52,6 +53,7 @@ import '../telemetry/setup.dart';
 import '../telemetry/sqlite_span_exporter.dart';
 import '../types/content.dart';
 import '../version.dart';
+import 'a2a_push_delivery_queue.dart';
 import 'project.dart';
 import 'runtime.dart';
 
@@ -229,6 +231,7 @@ class _AdkDevWebContext {
     required this.otelToCloud,
     required this.a2a,
     required this.extraPluginSpecs,
+    required this.a2aPushQueue,
     required this.webAssetsDir,
   });
 
@@ -255,6 +258,7 @@ class _AdkDevWebContext {
   final bool otelToCloud;
   final bool a2a;
   final List<_ExtraPluginSpec> extraPluginSpecs;
+  final A2aPushDeliveryQueue? a2aPushQueue;
   final Directory? webAssetsDir;
 
   final Map<String, Runner> _runners = <String, Runner>{};
@@ -268,6 +272,9 @@ class _AdkDevWebContext {
       <String, Map<String, Object?>>{};
   final Map<String, List<Map<String, Object?>>> _traceBySessionId =
       <String, List<Map<String, Object?>>>{};
+  Timer? _a2aPushDeliveryTimer;
+  bool _a2aPushDrainInProgress = false;
+  static const int _a2aPushDrainBatchSize = 64;
 
   static Future<_AdkDevWebContext> create({
     required DevAgentRuntime runtime,
@@ -334,8 +341,13 @@ class _AdkDevWebContext {
       otelToCloud: otelToCloud,
       environment: environment ?? Platform.environment,
     );
-
-    return _AdkDevWebContext(
+    final A2aPushDeliveryQueue? a2aPushQueue = a2a
+        ? A2aPushDeliveryQueue.open(
+            dbPath:
+                '${agentsRoot.path}${Platform.pathSeparator}.adk${Platform.pathSeparator}a2a_push_delivery.db',
+          )
+        : null;
+    final _AdkDevWebContext context = _AdkDevWebContext(
       runtime: runtime,
       project: project,
       agentsDir: agentsRoot.path,
@@ -362,8 +374,11 @@ class _AdkDevWebContext {
       otelToCloud: otelToCloud,
       a2a: a2a,
       extraPluginSpecs: parsedExtraPlugins,
+      a2aPushQueue: a2aPushQueue,
       webAssetsDir: webAssetsDir,
     );
+    context._startA2aPushDeliveryLoop();
+    return context;
   }
 
   String get defaultAppName => project.appName;
@@ -387,13 +402,13 @@ class _AdkDevWebContext {
       }
     }
 
-    final Runner runner = _createRunner(resolvedAppName);
+    final Runner runner = await _createRunner(resolvedAppName);
     _runners[resolvedAppName] = runner;
     return runner;
   }
 
-  Runner _createRunner(String appName) {
-    final List<BasePlugin> extraPlugins = _instantiateExtraPlugins(
+  Future<Runner> _createRunner(String appName) async {
+    final List<BasePlugin> extraPlugins = await _instantiateExtraPlugins(
       extraPluginSpecs,
       baseDir: agentsDir,
     );
@@ -478,6 +493,11 @@ class _AdkDevWebContext {
   }
 
   Future<void> close() async {
+    _a2aPushDeliveryTimer?.cancel();
+    _a2aPushDeliveryTimer = null;
+    while (_a2aPushDrainInProgress) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
     for (final Runner runner in _runners.values) {
       await runner.close();
     }
@@ -485,6 +505,7 @@ class _AdkDevWebContext {
     _a2aTasksByApp.clear();
     _a2aTaskUpdatesByApp.clear();
     _a2aPushConfigsByApp.clear();
+    a2aPushQueue?.close();
     spanExporter.shutdown();
   }
 
@@ -559,6 +580,118 @@ class _AdkDevWebContext {
       return null;
     }
     return Map<String, Object?>.from(found);
+  }
+
+  void _startA2aPushDeliveryLoop() {
+    if (a2aPushQueue == null) {
+      return;
+    }
+    _a2aPushDeliveryTimer?.cancel();
+    _a2aPushDeliveryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      unawaited(_drainA2aPushDeliveryQueue());
+    });
+    unawaited(_drainA2aPushDeliveryQueue());
+  }
+
+  Future<void> enqueueA2aPushNotifications({
+    required String appName,
+    required String taskId,
+    required Map<String, Object?> pushConfig,
+    required Map<String, Object?> task,
+    required List<Map<String, Object?>> updates,
+  }) async {
+    if (updates.isEmpty) {
+      return;
+    }
+    final _A2aPushTarget? target = _resolveA2aPushTarget(pushConfig);
+    if (target == null) {
+      return;
+    }
+
+    final A2aPushDeliveryQueue? queue = a2aPushQueue;
+    if (queue == null) {
+      for (final Map<String, Object?> update in updates) {
+        try {
+          await _postA2aPushNotification(
+            uri: target.uri,
+            headers: target.headers,
+            authHeader: target.authHeader,
+            task: task,
+            update: update,
+            requestTimeoutMs: target.policy.requestTimeoutMs,
+          );
+        } catch (_) {
+          // Best-effort fallback path when the queue is not configured.
+        }
+      }
+      return;
+    }
+
+    for (final Map<String, Object?> update in updates) {
+      queue.enqueue(
+        appName: appName,
+        taskId: taskId,
+        targetUrl: target.uri.toString(),
+        headers: target.headers,
+        authHeader: target.authHeader,
+        task: task,
+        update: update,
+        policy: target.policy,
+      );
+    }
+    unawaited(_drainA2aPushDeliveryQueue());
+  }
+
+  Future<void> _drainA2aPushDeliveryQueue() async {
+    final A2aPushDeliveryQueue? queue = a2aPushQueue;
+    if (queue == null || _a2aPushDrainInProgress) {
+      return;
+    }
+
+    _a2aPushDrainInProgress = true;
+    try {
+      while (true) {
+        List<A2aPushDeliveryEntry> dueEntries;
+        try {
+          dueEntries = queue.readDue(limit: _a2aPushDrainBatchSize);
+        } catch (_) {
+          return;
+        }
+        if (dueEntries.isEmpty) {
+          return;
+        }
+
+        for (final A2aPushDeliveryEntry entry in dueEntries) {
+          try {
+            await _postA2aPushNotification(
+              uri: Uri.parse(entry.targetUrl),
+              headers: entry.headers,
+              authHeader: entry.authHeader,
+              task: entry.task,
+              update: entry.update,
+              requestTimeoutMs: entry.policy.requestTimeoutMs,
+            );
+            try {
+              queue.markDelivered(entry.id);
+            } catch (_) {
+              // Queue persistence failure should not crash the server.
+            }
+          } catch (error) {
+            try {
+              queue.markFailed(entry, error: '$error');
+            } catch (_) {
+              // Queue persistence failure should not crash the server.
+            }
+          }
+        }
+
+        if (dueEntries.length < _a2aPushDrainBatchSize) {
+          return;
+        }
+      }
+    } finally {
+      _a2aPushDrainInProgress = false;
+    }
   }
 
   void recordTraceEvent({
@@ -3530,6 +3663,7 @@ void registerExtraPluginFactory(String pluginSpec, ExtraPluginFactory factory) {
 
 void clearExtraPluginFactoriesForTest() {
   _extraPluginFactories.clear();
+  _dynamicPluginMirrorCache.clear();
 }
 
 List<_ExtraPluginSpec> _parseExtraPluginSpecs(List<String> extraPlugins) {
@@ -3581,10 +3715,10 @@ String _normalizePluginName(String raw) {
   return left;
 }
 
-List<BasePlugin> _instantiateExtraPlugins(
+Future<List<BasePlugin>> _instantiateExtraPlugins(
   List<_ExtraPluginSpec> specs, {
   required String baseDir,
-}) {
+}) async {
   final List<BasePlugin> plugins = <BasePlugin>[];
   for (final _ExtraPluginSpec spec in specs) {
     BasePlugin? plugin = switch (spec.normalizedName) {
@@ -3623,17 +3757,364 @@ List<BasePlugin> _instantiateExtraPlugins(
       }
     }
 
+    plugin ??= await _instantiatePluginUsingMirrors(spec.raw, baseDir: baseDir);
+
     if (plugin != null) {
       plugins.add(plugin);
     } else {
       stderr.writeln(
         'Unsupported extra plugin "${spec.raw}"; ignoring. '
         'Provide a registered plugin factory via registerExtraPluginFactory() '
-        'or use built-in plugin names.',
+        'or use built-in plugin names, or pass a loadable class spec like '
+        '"package:your_pkg/path/to/plugin.dart:YourPlugin".',
       );
     }
   }
   return plugins;
+}
+
+class _DynamicPluginTarget {
+  _DynamicPluginTarget({
+    required this.className,
+    required this.libraryCandidates,
+  });
+
+  final String className;
+  final List<Uri> libraryCandidates;
+}
+
+final Map<String, ClassMirror?> _dynamicPluginMirrorCache =
+    <String, ClassMirror?>{};
+
+Future<BasePlugin?> _instantiatePluginUsingMirrors(
+  String pluginSpec, {
+  required String baseDir,
+}) async {
+  final _DynamicPluginTarget? target = _parseDynamicPluginTarget(
+    pluginSpec,
+    baseDir: baseDir,
+  );
+  if (target == null) {
+    return null;
+  }
+
+  final ClassMirror? pluginClass = await _resolveDynamicPluginClass(target);
+  if (pluginClass == null) {
+    return null;
+  }
+
+  final ClassMirror basePluginMirror = reflectClass(BasePlugin);
+  if (!(pluginClass == basePluginMirror ||
+      pluginClass.isSubclassOf(basePluginMirror))) {
+    return null;
+  }
+
+  final Map<String, Object?> kwargs = <String, Object?>{
+    'baseDir': baseDir,
+    'base_dir': baseDir,
+    'agentsDir': baseDir,
+    'agents_dir': baseDir,
+    'pluginSpec': pluginSpec,
+    'plugin_spec': pluginSpec,
+    'name': _normalizePluginName(pluginSpec),
+  };
+
+  return _newPluginInstanceFromClassMirror(pluginClass, kwargs);
+}
+
+Future<ClassMirror?> _resolveDynamicPluginClass(
+  _DynamicPluginTarget target,
+) async {
+  for (final Uri candidateUri in target.libraryCandidates) {
+    final String cacheKey = '${candidateUri.toString()}::${target.className}';
+    if (_dynamicPluginMirrorCache.containsKey(cacheKey)) {
+      final ClassMirror? cached = _dynamicPluginMirrorCache[cacheKey];
+      if (cached != null) {
+        return cached;
+      }
+      continue;
+    }
+
+    ClassMirror? resolved;
+    try {
+      final LibraryMirror library = await currentMirrorSystem().isolate.loadUri(
+        candidateUri,
+      );
+      resolved = _findClassMirrorByName(library, target.className);
+    } catch (_) {
+      resolved = null;
+    }
+
+    _dynamicPluginMirrorCache[cacheKey] = resolved;
+    if (resolved != null) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
+ClassMirror? _findClassMirrorByName(LibraryMirror library, String className) {
+  for (final DeclarationMirror declaration in library.declarations.values) {
+    if (declaration is! ClassMirror) {
+      continue;
+    }
+    if (MirrorSystem.getName(declaration.simpleName) == className) {
+      return declaration;
+    }
+  }
+  return null;
+}
+
+BasePlugin? _newPluginInstanceFromClassMirror(
+  ClassMirror classMirror,
+  Map<String, Object?> kwargs,
+) {
+  final List<MethodMirror> constructors =
+      classMirror.declarations.values
+          .whereType<MethodMirror>()
+          .where((MethodMirror value) => value.isConstructor)
+          .toList(growable: false)
+        ..sort((MethodMirror left, MethodMirror right) {
+          final String leftName = MirrorSystem.getName(left.constructorName);
+          final String rightName = MirrorSystem.getName(right.constructorName);
+          if (leftName.isEmpty && rightName.isNotEmpty) {
+            return -1;
+          }
+          if (leftName.isNotEmpty && rightName.isEmpty) {
+            return 1;
+          }
+          return leftName.compareTo(rightName);
+        });
+
+  for (final MethodMirror constructor in constructors) {
+    final List<Object?> positional = <Object?>[];
+    final Map<Symbol, Object?> named = <Symbol, Object?>{};
+    bool isValid = true;
+
+    for (final ParameterMirror parameter in constructor.parameters) {
+      final String parameterName = MirrorSystem.getName(parameter.simpleName);
+      final Object? argument = _lookupDynamicPluginArgument(
+        kwargs: kwargs,
+        parameterName: parameterName,
+      );
+
+      if (parameter.isNamed) {
+        if (argument != null) {
+          named[parameter.simpleName] = argument;
+        } else if (!parameter.isOptional) {
+          isValid = false;
+          break;
+        }
+        continue;
+      }
+
+      if (argument != null) {
+        positional.add(argument);
+      } else if (!parameter.isOptional) {
+        isValid = false;
+        break;
+      }
+    }
+
+    if (!isValid) {
+      continue;
+    }
+
+    try {
+      final InstanceMirror instance = classMirror.newInstance(
+        constructor.constructorName,
+        positional,
+        named,
+      );
+      final Object reflectee = instance.reflectee;
+      if (reflectee is BasePlugin) {
+        return reflectee;
+      }
+    } catch (_) {
+      continue;
+    }
+  }
+
+  try {
+    final InstanceMirror instance = classMirror.newInstance(
+      const Symbol(''),
+      const <Object?>[],
+    );
+    final Object reflectee = instance.reflectee;
+    if (reflectee is BasePlugin) {
+      return reflectee;
+    }
+  } catch (_) {
+    // Fall through and return null.
+  }
+
+  return null;
+}
+
+Object? _lookupDynamicPluginArgument({
+  required Map<String, Object?> kwargs,
+  required String parameterName,
+}) {
+  final String normalizedParameter = _normalizeIdentifierForLookup(
+    parameterName,
+  );
+
+  Object? selected;
+  for (final MapEntry<String, Object?> entry in kwargs.entries) {
+    if (_normalizeIdentifierForLookup(entry.key) == normalizedParameter) {
+      selected = entry.value;
+      break;
+    }
+  }
+
+  if (selected != null) {
+    return selected;
+  }
+
+  if (normalizedParameter == 'plugin') {
+    return kwargs['pluginSpec'] ?? kwargs['plugin_spec'];
+  }
+
+  return null;
+}
+
+String _normalizeIdentifierForLookup(String raw) {
+  return raw.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+}
+
+_DynamicPluginTarget? _parseDynamicPluginTarget(
+  String pluginSpec, {
+  required String baseDir,
+}) {
+  final String trimmed = pluginSpec.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+
+  final _DynamicPluginTarget? explicit = _parseExplicitDynamicPluginTarget(
+    trimmed,
+    baseDir: baseDir,
+  );
+  if (explicit != null) {
+    return explicit;
+  }
+
+  if (!trimmed.contains('.')) {
+    return null;
+  }
+
+  final List<String> parts = trimmed
+      .split('.')
+      .map((String value) => value.trim())
+      .where((String value) => value.isNotEmpty)
+      .toList(growable: false);
+  if (parts.length < 3) {
+    return null;
+  }
+
+  final String packageName = parts.first;
+  final String className = parts.last;
+  final String modulePath = parts.sublist(1, parts.length - 1).join('/');
+  if (packageName.isEmpty || className.isEmpty || modulePath.isEmpty) {
+    return null;
+  }
+
+  final List<Uri> candidates = <Uri>[
+    Uri.parse('package:$packageName/$modulePath.dart'),
+    Uri.parse('package:$packageName/src/$modulePath.dart'),
+  ];
+  return _DynamicPluginTarget(
+    className: className,
+    libraryCandidates: candidates,
+  );
+}
+
+_DynamicPluginTarget? _parseExplicitDynamicPluginTarget(
+  String pluginSpec, {
+  required String baseDir,
+}) {
+  String libraryPart = pluginSpec;
+  String className = '';
+
+  if (pluginSpec.contains('::')) {
+    final int index = pluginSpec.lastIndexOf('::');
+    libraryPart = pluginSpec.substring(0, index).trim();
+    className = pluginSpec.substring(index + 2).trim();
+  } else if (pluginSpec.contains('#')) {
+    final int index = pluginSpec.lastIndexOf('#');
+    libraryPart = pluginSpec.substring(0, index).trim();
+    className = pluginSpec.substring(index + 1).trim();
+  } else {
+    final int index = pluginSpec.lastIndexOf('.dart:');
+    if (index >= 0) {
+      libraryPart = pluginSpec.substring(0, index + '.dart'.length).trim();
+      className = pluginSpec.substring(index + '.dart:'.length).trim();
+    }
+  }
+
+  if (className.isEmpty) {
+    if (!libraryPart.endsWith('.dart')) {
+      return null;
+    }
+    className = _inferClassNameFromLibraryPath(libraryPart);
+  }
+
+  final Uri? libraryUri = _parseDynamicPluginLibraryUri(
+    libraryPart,
+    baseDir: baseDir,
+  );
+  if (libraryUri == null) {
+    return null;
+  }
+
+  return _DynamicPluginTarget(
+    className: className,
+    libraryCandidates: <Uri>[libraryUri],
+  );
+}
+
+Uri? _parseDynamicPluginLibraryUri(
+  String libraryPart, {
+  required String baseDir,
+}) {
+  final String trimmed = libraryPart.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (trimmed.startsWith('package:') || trimmed.startsWith('file:')) {
+    return Uri.tryParse(trimmed);
+  }
+  if (!trimmed.endsWith('.dart')) {
+    return null;
+  }
+
+  final bool absolutePath =
+      trimmed.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(trimmed);
+  final File file = absolutePath
+      ? File(trimmed)
+      : File('$baseDir${Platform.pathSeparator}$trimmed');
+  return file.absolute.uri;
+}
+
+String _inferClassNameFromLibraryPath(String libraryPart) {
+  final String source = libraryPart.split('/').last;
+  final String fileStem = source.endsWith('.dart')
+      ? source.substring(0, source.length - '.dart'.length)
+      : source;
+  final List<String> tokens = fileStem
+      .split(RegExp(r'[^A-Za-z0-9]+'))
+      .where((String value) => value.isNotEmpty)
+      .toList(growable: false);
+  if (tokens.isEmpty) {
+    return fileStem;
+  }
+  return tokens
+      .map(
+        (String token) =>
+            token.substring(0, 1).toUpperCase() +
+            token.substring(1).toLowerCase(),
+      )
+      .join();
 }
 
 void _configureCloudTelemetry({
@@ -4378,7 +4859,9 @@ Future<_A2aExecutionResult> _executeA2aMessageSend(
   );
   if (pushConfig != null && updates.isNotEmpty) {
     unawaited(
-      _dispatchA2aPushNotifications(
+      context.enqueueA2aPushNotifications(
+        appName: appName,
+        taskId: taskId,
         pushConfig: pushConfig,
         task: task,
         updates: updates,
@@ -4431,53 +4914,159 @@ Map<String, Object?> _a2aEventToJson(A2aEvent event) {
   return <String, Object?>{'kind': 'unknown'};
 }
 
-Future<void> _dispatchA2aPushNotifications({
-  required Map<String, Object?> pushConfig,
-  required Map<String, Object?> task,
-  required List<Map<String, Object?>> updates,
-}) async {
+class _A2aPushTarget {
+  const _A2aPushTarget({
+    required this.uri,
+    required this.headers,
+    required this.authHeader,
+    required this.policy,
+  });
+
+  final Uri uri;
+  final Map<String, String> headers;
+  final String? authHeader;
+  final A2aPushDeliveryPolicy policy;
+}
+
+_A2aPushTarget? _resolveA2aPushTarget(Map<String, Object?> pushConfig) {
   final String? url = _resolveA2aPushUrl(pushConfig);
   if (url == null || url.isEmpty) {
-    return;
+    return null;
   }
   final Uri? uri = Uri.tryParse(url);
-  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-    return;
+  if (uri == null || uri.host.isEmpty) {
+    return null;
   }
+  final String scheme = uri.scheme.toLowerCase();
+  if (scheme != 'http' && scheme != 'https') {
+    return null;
+  }
+  return _A2aPushTarget(
+    uri: uri,
+    headers: _resolveA2aPushHeaders(pushConfig),
+    authHeader: _resolveA2aPushAuthorization(pushConfig),
+    policy: _resolveA2aPushPolicy(pushConfig),
+  );
+}
 
+A2aPushDeliveryPolicy _resolveA2aPushPolicy(Map<String, Object?> pushConfig) {
+  final Map<String, dynamic> dynamicPushConfig = _toDynamicMap(pushConfig);
+  final Map<String, Object?> retry =
+      _readObjectMap(dynamicPushConfig, const <String>[
+        'retry',
+        'retryPolicy',
+        'retry_policy',
+      ]) ??
+      <String, Object?>{};
+  final int maxAttempts = _readPositiveInt(
+    retry['maxAttempts'] ??
+        retry['max_attempts'] ??
+        pushConfig['maxAttempts'] ??
+        pushConfig['max_attempts'],
+    fallback: 5,
+    min: 1,
+    max: 32,
+  );
+  final int baseDelayMs = _readPositiveInt(
+    retry['initialDelayMs'] ??
+        retry['initial_delay_ms'] ??
+        retry['baseDelayMs'] ??
+        retry['base_delay_ms'] ??
+        pushConfig['initialDelayMs'] ??
+        pushConfig['initial_delay_ms'],
+    fallback: 1000,
+    min: 1,
+    max: 60000,
+  );
+  final int maxDelayMs = _readPositiveInt(
+    retry['maxDelayMs'] ??
+        retry['max_delay_ms'] ??
+        pushConfig['maxDelayMs'] ??
+        pushConfig['max_delay_ms'],
+    fallback: 60000,
+    min: 1,
+    max: 300000,
+  );
+  final int requestTimeoutMs = _readPositiveInt(
+    retry['requestTimeoutMs'] ??
+        retry['request_timeout_ms'] ??
+        pushConfig['requestTimeoutMs'] ??
+        pushConfig['request_timeout_ms'],
+    fallback: 10000,
+    min: 100,
+    max: 300000,
+  );
+  return A2aPushDeliveryPolicy(
+    maxAttempts: maxAttempts,
+    baseDelayMs: baseDelayMs,
+    maxDelayMs: maxDelayMs < baseDelayMs ? baseDelayMs : maxDelayMs,
+    requestTimeoutMs: requestTimeoutMs,
+  );
+}
+
+int _readPositiveInt(
+  Object? value, {
+  required int fallback,
+  required int min,
+  int? max,
+}) {
+  int? parsed;
+  if (value is int) {
+    parsed = value;
+  } else if (value is num) {
+    parsed = value.toInt();
+  } else if (value is String) {
+    parsed = int.tryParse(value.trim());
+  }
+  if (parsed == null || parsed < min) {
+    return fallback;
+  }
+  if (max != null && parsed > max) {
+    return max;
+  }
+  return parsed;
+}
+
+Future<void> _postA2aPushNotification({
+  required Uri uri,
+  required Map<String, String> headers,
+  required String? authHeader,
+  required Map<String, Object?> task,
+  required Map<String, Object?> update,
+  required int requestTimeoutMs,
+}) async {
   final HttpClient client = HttpClient();
   try {
-    final Map<String, String> headers = _resolveA2aPushHeaders(pushConfig);
-    final String? authHeader = _resolveA2aPushAuthorization(pushConfig);
-
-    for (final Map<String, Object?> update in updates) {
-      try {
-        final HttpClientRequest request = await client.postUrl(uri);
-        request.headers.contentType = ContentType.json;
-        headers.forEach((String key, String value) {
-          request.headers.set(key, value);
-        });
-        if (authHeader != null && authHeader.isNotEmpty) {
-          request.headers.set(HttpHeaders.authorizationHeader, authHeader);
-        }
-        request.write(
-          jsonEncode(<String, Object?>{
-            'jsonrpc': '2.0',
-            'method': 'tasks/pushNotification',
-            'params': <String, Object?>{
-              'task': task,
-              'update': update,
-              'taskId':
-                  '${task['id'] ?? task['taskId'] ?? task['task_id'] ?? ''}',
-            },
-          }),
-        );
-        final HttpClientResponse response = await request.close();
-        await response.drain<Object?>();
-      } catch (_) {
-        // Best effort: an unreachable callback endpoint should not fail the
-        // serving request.
-      }
+    final Duration timeout = Duration(milliseconds: requestTimeoutMs);
+    final HttpClientRequest request = await client
+        .postUrl(uri)
+        .timeout(timeout);
+    request.headers.contentType = ContentType.json;
+    headers.forEach((String key, String value) {
+      request.headers.set(key, value);
+    });
+    if (authHeader != null && authHeader.isNotEmpty) {
+      request.headers.set(HttpHeaders.authorizationHeader, authHeader);
+    }
+    request.write(
+      jsonEncode(<String, Object?>{
+        'jsonrpc': '2.0',
+        'method': 'tasks/pushNotification',
+        'params': <String, Object?>{
+          'task': task,
+          'update': update,
+          'taskId': '${task['id'] ?? task['taskId'] ?? task['task_id'] ?? ''}',
+        },
+      }),
+    );
+    final HttpClientResponse response = await request.close().timeout(timeout);
+    await response.drain<Object?>();
+    if (response.statusCode < HttpStatus.ok ||
+        response.statusCode >= HttpStatus.multipleChoices) {
+      throw HttpException(
+        'A2A push callback returned HTTP ${response.statusCode}',
+        uri: uri,
+      );
     }
   } finally {
     client.close(force: true);

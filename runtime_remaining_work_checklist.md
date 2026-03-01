@@ -1,6 +1,6 @@
 # Runtime Remaining Work Checklist (Re-Audit)
 
-Last updated: 2026-03-01 (post-A2A parity expansion pass)
+Last updated: 2026-03-01 (post-A2A push delivery hardening + live DB integration test pass)
 Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual runnable status.
 
 ## Audit method
@@ -32,32 +32,33 @@ Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual
 - [x] `--eval_storage_uri` is now wired end-to-end from CLI parse to web server eval manager selection.
 - [x] `/run_sse` now applies Python-style split emission when content and `artifact_delta` co-exist.
 - [x] `SqliteSpanExporter` now uses real SQLite persistence (sqlite3 package), and debug trace endpoints read persisted spans (`event_id`, `session_id`).
-
-## P1 - Remaining parity gaps (high priority)
-- [ ] Implement Python-style dynamic plugin loading for `--extra_plugins`.
-  - Current: registry-backed custom factory loading is implemented (`registerExtraPluginFactory`) and class-factory fallback is wired (`registerServiceClassFactory` + dotted-path spec resolution), but importlib-equivalent module/class runtime loading from arbitrary package path without pre-registration is not available.
-  - Evidence:
-    - `lib/src/dev/web_server.dart` uses built-in mapping + explicit factory registry + registered class-factory fallback.
-    - Python still supports direct dotted import (`importlib.import_module`).
+- [x] `--extra_plugins` now supports runtime dynamic class loading from spec strings:
+  - explicit class spec: `package:pkg/path/plugin.dart:PluginClass`
+  - explicit file spec: `/abs/path/plugin.dart:PluginClass`
+  - dotted path: `pkg.module.path.PluginClass`
+  - still supports built-ins + registered factories.
+- [x] A2A push callback delivery now has runtime resilience:
+  - SQLite-backed persistent queue (`.adk/a2a_push_delivery.db`)
+  - retry/backoff policy parsing from push config
+  - startup/background drain loop with at-least-once callback delivery behavior
+  - dead-letter capture when max retries are exhausted
+- [x] Live DB integration test coverage added for network session backends:
+  - PostgreSQL roundtrip test gated by `ADK_TEST_POSTGRES_URL`
+  - MySQL roundtrip test gated by `ADK_TEST_MYSQL_URL`
+  - tests are skipped (not failed) when env/ports are unavailable
 
 ## P2 - Runtime integration completion (production readiness)
-- [ ] Harden A2A push callback delivery with retry/backoff and persistence.
-  - Current: callback dispatch is best-effort in-memory and does not retry across failures or process restarts.
-
-- [ ] Provide default runtime adapters (or officially shipped bootstrap) for cloud/service clients that currently fail fast without injection.
-  - Current examples:
-    - BigQuery default client factory throws.
-    - Bigtable/Spanner factories throw if not configured.
-    - Toolbox delegate missing -> runtime error.
-    - Vertex code interpreter/audio transcriber require injected clients.
-
-- [ ] Add live DB integration tests (PostgreSQL/MySQL) against running containers.
-  - Current: tests cover URL dispatch/guards, not real network CRUD roundtrip.
-  - Evidence:
-    - `test/session_persistence_services_test.dart`.
+- [x] Provide officially shipped runtime bootstrap wiring for cloud/service clients that fail fast without injection.
+  - Added unified registration/reset API:
+    - `configureToolRuntimeBootstrap(...)`
+    - `resetToolRuntimeBootstrap(...)`
+  - Covers bootstrap hooks for:
+    - BigQuery client factory
+    - Bigtable admin/data factories
+    - Spanner client + embedders
+    - Toolbox delegate factory
+    - global audio recognizer (`AudioTranscriber.registerDefaultRecognizer`)
+  - Note: concrete provider-specific clients are still integration-specific and may require user/project dependency wiring.
 
 ## Recommended execution order
-1. P1 dynamic plugin dotted-path loading parity strategy finalization.
-2. P1 A2A server parity expansion.
-3. P2 telemetry SQLite exporter + debug trace linkage.
-4. P2 live Postgres/MySQL integration tests and default adapter packaging policy.
+1. P3 provider-specific default client implementations (optional), e.g. concrete BigQuery/Bigtable/Spanner adapters if "zero-injection" runtime is required.

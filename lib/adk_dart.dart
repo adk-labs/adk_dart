@@ -357,6 +357,7 @@ export 'src/tools/tool_confirmation.dart';
 export 'src/tools/tool_configs.dart';
 export 'src/tools/tool_context.dart';
 export 'src/tools/toolbox_toolset.dart';
+export 'src/tools/runtime_bootstrap.dart';
 export 'src/tools/transfer_to_agent_tool.dart';
 export 'src/tools/url_context_tool.dart';
 export 'src/tools/vertex_ai_search_tool.dart';

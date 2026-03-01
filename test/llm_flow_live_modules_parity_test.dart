@@ -592,6 +592,24 @@ void main() {
           () => AudioTranscriber().transcribeFile(context),
           throwsStateError,
         );
+
+        AudioTranscriber.registerDefaultRecognizer((List<int> audioData) async {
+          return <String>['default recognizer'];
+        });
+        addTearDown(AudioTranscriber.clearDefaultRecognizer);
+        context.transcriptionCache = <Object?>[
+          TranscriptionEntry(
+            role: 'user',
+            data: InlineData(mimeType: 'audio/wav', data: <int>[5]),
+          ),
+        ];
+        final List<Content> defaultRecognizerContents = await AudioTranscriber()
+            .transcribeFile(context);
+        expect(defaultRecognizerContents, hasLength(1));
+        expect(
+          defaultRecognizerContents.first.parts.first.text,
+          'default recognizer',
+        );
       },
     );
 

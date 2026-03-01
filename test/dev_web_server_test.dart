@@ -7,6 +7,7 @@ import 'package:adk_dart/src/dev/runtime.dart';
 import 'package:adk_dart/src/dev/web_server.dart';
 import 'package:adk_dart/src/plugins/base_plugin.dart';
 import 'package:adk_dart/src/cli/service_registry.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:test/test.dart';
 
 void main() {
@@ -142,6 +143,122 @@ void main() {
 
       expect(runResponse.statusCode, HttpStatus.ok);
       expect(_FactoryLoadedPlugin.instances, greaterThan(0));
+    });
+
+    test('loads extra plugin via dynamic file-path class spec', () async {
+      final Directory sandbox = await Directory.systemTemp.createTemp(
+        'adk_dynamic_plugin_',
+      );
+      addTearDown(() async {
+        if (await sandbox.exists()) {
+          await sandbox.delete(recursive: true);
+        }
+      });
+
+      final String fixturePath =
+          '${Directory.current.path}${Platform.pathSeparator}test${Platform.pathSeparator}fixtures${Platform.pathSeparator}dynamic_extra_plugin.dart';
+      final String markerPath =
+          '${sandbox.path}${Platform.pathSeparator}.dynamic_extra_plugin_marker';
+      final File marker = File(markerPath);
+
+      final DevAgentRuntime pluginRuntime = DevAgentRuntime(config: config);
+      final HttpServer pluginServer = await startAdkDevWebServer(
+        runtime: pluginRuntime,
+        project: config,
+        agentsDir: sandbox.path,
+        port: 0,
+        autoCreateSession: true,
+        extraPlugins: <String>['$fixturePath:DynamicExtraPlugin'],
+      );
+      addTearDown(() async {
+        await pluginServer.close(force: true);
+        await pluginRuntime.runner.close();
+      });
+
+      final HttpClient pluginClient = HttpClient();
+      addTearDown(() => pluginClient.close(force: true));
+
+      final HttpClientRequest runRequest = await pluginClient.postUrl(
+        Uri.parse('http://127.0.0.1:${pluginServer.port}/run'),
+      );
+      runRequest.headers.contentType = ContentType.json;
+      runRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': 's_dynamic_file',
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'hello'},
+            ],
+          },
+        }),
+      );
+      final HttpClientResponse runResponse = await runRequest.close();
+      await utf8.decoder.bind(runResponse).join();
+
+      expect(runResponse.statusCode, HttpStatus.ok);
+      expect(await marker.exists(), isTrue);
+      final String markerText = await marker.readAsString();
+      expect(markerText, contains('DynamicExtraPlugin'));
+    });
+
+    test('loads extra plugin via dotted package class path', () async {
+      final String debugPath =
+          '${Directory.current.path}${Platform.pathSeparator}adk_debug.yaml';
+      final File debugFile = File(debugPath);
+      if (await debugFile.exists()) {
+        await debugFile.delete();
+      }
+      addTearDown(() async {
+        if (await debugFile.exists()) {
+          await debugFile.delete();
+        }
+      });
+
+      final DevAgentRuntime pluginRuntime = DevAgentRuntime(config: config);
+      final HttpServer pluginServer = await startAdkDevWebServer(
+        runtime: pluginRuntime,
+        project: config,
+        port: 0,
+        autoCreateSession: true,
+        extraPlugins: const <String>[
+          'adk_dart.src.plugins.debug_logging_plugin.DebugLoggingPlugin',
+        ],
+      );
+      addTearDown(() async {
+        await pluginServer.close(force: true);
+        await pluginRuntime.runner.close();
+      });
+
+      final HttpClient pluginClient = HttpClient();
+      addTearDown(() => pluginClient.close(force: true));
+
+      final HttpClientRequest runRequest = await pluginClient.postUrl(
+        Uri.parse('http://127.0.0.1:${pluginServer.port}/run'),
+      );
+      runRequest.headers.contentType = ContentType.json;
+      runRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': 's_dynamic_dotted',
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'hello'},
+            ],
+          },
+        }),
+      );
+      final HttpClientResponse runResponse = await runRequest.close();
+      await utf8.decoder.bind(runResponse).join();
+
+      expect(runResponse.statusCode, HttpStatus.ok);
+      expect(await debugFile.exists(), isTrue);
+      final String debugText = await debugFile.readAsString();
+      expect(debugText, contains('invocation_id'));
     });
 
     test('returns not found for a2a agent card when a2a is disabled', () async {
@@ -602,6 +719,185 @@ void main() {
       expect(callbackParams['task'], isA<Map<String, dynamic>>());
       expect(callbackParams['update'], isA<Map<String, dynamic>>());
     });
+
+    test(
+      'retries and drains persisted a2a push deliveries after server restart',
+      () async {
+        final Completer<Map<String, dynamic>> deliveredPayload =
+            Completer<Map<String, dynamic>>();
+        int callbackAttempts = 0;
+        bool failResponses = true;
+        final HttpServer callbackServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        callbackServer.listen((HttpRequest request) async {
+          callbackAttempts += 1;
+          final String body = await utf8.decoder.bind(request).join();
+          if (!failResponses && !deliveredPayload.isCompleted) {
+            deliveredPayload.complete(jsonDecode(body) as Map<String, dynamic>);
+            request.response.statusCode = HttpStatus.ok;
+          } else {
+            request.response.statusCode = HttpStatus.serviceUnavailable;
+          }
+          await request.response.close();
+        });
+        addTearDown(() async {
+          await callbackServer.close(force: true);
+        });
+
+        final Directory sandbox = await Directory.systemTemp.createTemp(
+          'adk_a2a_push_restart_',
+        );
+        addTearDown(() async {
+          if (await sandbox.exists()) {
+            await sandbox.delete(recursive: true);
+          }
+        });
+
+        Future<void> sendA2aMessage({
+          required HttpClient httpClient,
+          required int port,
+          required String rpcId,
+          required String taskId,
+          required String text,
+        }) async {
+          final HttpClientRequest sendRequest = await httpClient.postUrl(
+            Uri.parse('http://127.0.0.1:$port/a2a/test_app'),
+          );
+          sendRequest.headers.contentType = ContentType.json;
+          sendRequest.write(
+            jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': rpcId,
+              'method': 'message/send',
+              'params': <String, Object?>{
+                'message': <String, Object?>{
+                  'messageId': 'msg-$rpcId',
+                  'role': 'user',
+                  'taskId': taskId,
+                  'parts': <Object>[
+                    <String, Object?>{'kind': 'text', 'text': text},
+                  ],
+                },
+              },
+            }),
+          );
+          final HttpClientResponse response = await sendRequest.close();
+          await utf8.decoder.bind(response).join();
+          expect(response.statusCode, HttpStatus.ok);
+        }
+
+        Future<void> setPushConfig({
+          required HttpClient httpClient,
+          required int port,
+          required String taskId,
+        }) async {
+          final HttpClientRequest setPushRequest = await httpClient.postUrl(
+            Uri.parse('http://127.0.0.1:$port/a2a/test_app'),
+          );
+          setPushRequest.headers.contentType = ContentType.json;
+          setPushRequest.write(
+            jsonEncode(<String, Object?>{
+              'jsonrpc': '2.0',
+              'id': 'rpc-push-set-restart',
+              'method': 'tasks/pushNotificationConfig/set',
+              'params': <String, Object?>{
+                'taskId': taskId,
+                'pushNotificationConfig': <String, Object?>{
+                  'url':
+                      'http://127.0.0.1:${callbackServer.port}/push/task-updates',
+                  'retry': <String, Object?>{
+                    'maxAttempts': 20,
+                    'initialDelayMs': 60000,
+                    'maxDelayMs': 60000,
+                    'requestTimeoutMs': 2000,
+                  },
+                },
+              },
+            }),
+          );
+          final HttpClientResponse setPushResponse = await setPushRequest
+              .close();
+          await utf8.decoder.bind(setPushResponse).join();
+          expect(setPushResponse.statusCode, HttpStatus.ok);
+        }
+
+        const String taskId = 'task_push_restart_1';
+
+        final DevAgentRuntime runtime1 = DevAgentRuntime(config: config);
+        final HttpServer server1 = await startAdkDevWebServer(
+          runtime: runtime1,
+          project: config,
+          agentsDir: sandbox.path,
+          port: 0,
+          a2a: true,
+        );
+        final HttpClient client1 = HttpClient();
+
+        await sendA2aMessage(
+          httpClient: client1,
+          port: server1.port,
+          rpcId: 'rpc-send-restart-1',
+          taskId: taskId,
+          text: 'first',
+        );
+        await setPushConfig(
+          httpClient: client1,
+          port: server1.port,
+          taskId: taskId,
+        );
+        await sendA2aMessage(
+          httpClient: client1,
+          port: server1.port,
+          rpcId: 'rpc-send-restart-2',
+          taskId: taskId,
+          text: 'second',
+        );
+
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(callbackAttempts, greaterThan(0));
+
+        client1.close(force: true);
+        await server1.close(force: true);
+        await runtime1.runner.close();
+
+        final String queueDbPath =
+            '${sandbox.path}${Platform.pathSeparator}.adk${Platform.pathSeparator}a2a_push_delivery.db';
+        final sqlite.Database queueDb = sqlite.sqlite3.open(queueDbPath);
+        try {
+          queueDb.execute(
+            'UPDATE a2a_push_delivery_queue SET next_attempt_at_ms = ?',
+            <Object?>[DateTime.now().millisecondsSinceEpoch],
+          );
+        } finally {
+          queueDb.close();
+        }
+
+        failResponses = false;
+
+        final DevAgentRuntime runtime2 = DevAgentRuntime(config: config);
+        final HttpServer server2 = await startAdkDevWebServer(
+          runtime: runtime2,
+          project: config,
+          agentsDir: sandbox.path,
+          port: 0,
+          a2a: true,
+        );
+        addTearDown(() async {
+          await server2.close(force: true);
+          await runtime2.runner.close();
+        });
+
+        final Map<String, dynamic> payload = await deliveredPayload.future
+            .timeout(const Duration(seconds: 10));
+        expect(payload['jsonrpc'], '2.0');
+        expect(payload['method'], 'tasks/pushNotification');
+        final Map<String, dynamic> params =
+            payload['params'] as Map<String, dynamic>;
+        expect(params['taskId'], taskId);
+      },
+    );
 
     test('creates a session and sends a message', () async {
       final HttpClientRequest createSessionRequest = await client.postUrl(

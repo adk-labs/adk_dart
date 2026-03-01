@@ -1,3 +1,12 @@
+## Unreleased
+
+- Hardened A2A push callback delivery with a persistent SQLite queue, retry/backoff policy handling, startup/background drain, and dead-letter capture.
+- Added A2A delivery reliability coverage in `test/dev_web_server_test.dart`, including persisted queue replay after restart.
+- Added live network backend integration tests for PostgreSQL/MySQL session services (env-gated via `ADK_TEST_POSTGRES_URL` / `ADK_TEST_MYSQL_URL`).
+- Added unified runtime adapter bootstrap APIs: `configureToolRuntimeBootstrap(...)` and `resetToolRuntimeBootstrap(...)`.
+- Added global default audio recognizer registration support via `AudioTranscriber.registerDefaultRecognizer(...)`.
+- Refreshed runtime checklist and README feature matrix to reflect current implemented behavior.
+
 ## 2026.2.28
 
 - Switched package versioning scheme to date-based `YYYY.M.D`.

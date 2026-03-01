@@ -9,6 +9,16 @@ typedef AudioRecognizer = Future<List<String>> Function(List<int> audioData);
 class AudioTranscriber {
   AudioTranscriber({this.recognizer});
 
+  static AudioRecognizer? _defaultRecognizer;
+
+  static void registerDefaultRecognizer(AudioRecognizer recognizer) {
+    _defaultRecognizer = recognizer;
+  }
+
+  static void clearDefaultRecognizer() {
+    _defaultRecognizer = null;
+  }
+
   final AudioRecognizer? recognizer;
 
   Future<List<Content>> transcribeFile(
@@ -74,12 +84,13 @@ class AudioTranscriber {
         continue;
       }
 
-      final AudioRecognizer? recognizer = this.recognizer;
-      if (recognizer == null) {
+      final AudioRecognizer? resolvedRecognizer =
+          recognizer ?? _defaultRecognizer;
+      if (resolvedRecognizer == null) {
         throw StateError('AudioTranscriber recognizer is not configured.');
       }
 
-      final List<String> transcripts = await recognizer(
+      final List<String> transcripts = await resolvedRecognizer(
         bundle.data as List<int>,
       );
       for (final String transcript in transcripts) {

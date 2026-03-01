@@ -146,6 +146,28 @@ Map<String, Object?> _asObjectMap(Object? value) {
   return <String, Object?>{};
 }
 
+Future<void> _ensureDatabasePortReachableOrSkip({
+  required String dbUrl,
+  required int defaultPort,
+  required String label,
+}) async {
+  final Uri uri = Uri.parse(dbUrl.trim());
+  final String host = uri.host.isEmpty ? 'localhost' : uri.host;
+  final int port = uri.hasPort ? uri.port : defaultPort;
+  try {
+    final Socket socket = await Socket.connect(
+      host,
+      port,
+      timeout: const Duration(seconds: 1),
+    );
+    await socket.close();
+  } catch (_) {
+    markTestSkipped(
+      '$label integration test skipped: cannot reach $host:$port',
+    );
+  }
+}
+
 void main() {
   group('InMemorySessionService', () {
     test('appendEvent returns event when session does not exist', () async {
@@ -823,6 +845,168 @@ CREATE TABLE events (
         returnsNormally,
       );
     });
+
+    test(
+      'performs live postgres roundtrip when ADK_TEST_POSTGRES_URL is set',
+      () async {
+        final String? rawUrl = Platform.environment['ADK_TEST_POSTGRES_URL'];
+        if (rawUrl == null || rawUrl.trim().isEmpty) {
+          markTestSkipped(
+            'Set ADK_TEST_POSTGRES_URL to run live PostgreSQL integration test.',
+          );
+          return;
+        }
+        final String dbUrl = rawUrl.trim();
+        await _ensureDatabasePortReachableOrSkip(
+          dbUrl: dbUrl,
+          defaultPort: 5432,
+          label: 'PostgreSQL',
+        );
+
+        final String suffix = DateTime.now().microsecondsSinceEpoch.toString();
+        final String appName = 'live_pg_app_$suffix';
+        final String userId = 'live_pg_user_$suffix';
+        final String sessionId = 'live_pg_session_$suffix';
+
+        final DatabaseSessionService service = DatabaseSessionService(dbUrl);
+        addTearDown(() async {
+          try {
+            await service.deleteSession(
+              appName: appName,
+              userId: userId,
+              sessionId: sessionId,
+            );
+          } catch (_) {}
+        });
+
+        final Session session = await service.createSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+          state: <String, Object?>{
+            '${State.appPrefix}locale': 'ko',
+            '${State.userPrefix}plan': 'pro',
+            'turn': 1,
+          },
+        );
+        final Event event = Event(
+          invocationId: 'live_pg_inv_$suffix',
+          author: 'agent',
+          timestamp: session.lastUpdateTime + 1,
+          actions: EventActions(
+            stateDelta: <String, Object?>{
+              'score': 7,
+              '${State.userPrefix}tier': 'gold',
+            },
+          ),
+        );
+        await service.appendEvent(session: session, event: event);
+
+        final Session? loaded = await service.getSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+        );
+        expect(loaded, isNotNull);
+        expect(loaded!.events, hasLength(1));
+        expect(loaded.events.first.id, event.id);
+        expect(loaded.state['score'], 7);
+        expect(loaded.state['${State.userPrefix}tier'], 'gold');
+
+        await service.deleteSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+        );
+        final Session? deleted = await service.getSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+        );
+        expect(deleted, isNull);
+      },
+    );
+
+    test(
+      'performs live mysql roundtrip when ADK_TEST_MYSQL_URL is set',
+      () async {
+        final String? rawUrl = Platform.environment['ADK_TEST_MYSQL_URL'];
+        if (rawUrl == null || rawUrl.trim().isEmpty) {
+          markTestSkipped(
+            'Set ADK_TEST_MYSQL_URL to run live MySQL integration test.',
+          );
+          return;
+        }
+        final String dbUrl = rawUrl.trim();
+        await _ensureDatabasePortReachableOrSkip(
+          dbUrl: dbUrl,
+          defaultPort: 3306,
+          label: 'MySQL',
+        );
+
+        final String suffix = DateTime.now().microsecondsSinceEpoch.toString();
+        final String appName = 'live_mysql_app_$suffix';
+        final String userId = 'live_mysql_user_$suffix';
+        final String sessionId = 'live_mysql_session_$suffix';
+
+        final DatabaseSessionService service = DatabaseSessionService(dbUrl);
+        addTearDown(() async {
+          try {
+            await service.deleteSession(
+              appName: appName,
+              userId: userId,
+              sessionId: sessionId,
+            );
+          } catch (_) {}
+        });
+
+        final Session session = await service.createSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+          state: <String, Object?>{
+            '${State.appPrefix}locale': 'en',
+            '${State.userPrefix}plan': 'starter',
+            'turn': 1,
+          },
+        );
+        final Event event = Event(
+          invocationId: 'live_mysql_inv_$suffix',
+          author: 'agent',
+          timestamp: session.lastUpdateTime + 1,
+          actions: EventActions(
+            stateDelta: <String, Object?>{
+              'score': 11,
+              '${State.userPrefix}tier': 'silver',
+            },
+          ),
+        );
+        await service.appendEvent(session: session, event: event);
+
+        final Session? loaded = await service.getSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+        );
+        expect(loaded, isNotNull);
+        expect(loaded!.events, hasLength(1));
+        expect(loaded.events.first.id, event.id);
+        expect(loaded.state['score'], 11);
+        expect(loaded.state['${State.userPrefix}tier'], 'silver');
+
+        await service.deleteSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+        );
+        final Session? deleted = await service.getSession(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+        );
+        expect(deleted, isNull);
+      },
+    );
 
     test('fails fast when mysql ssl_ca_file does not exist', () async {
       final String missingCaFile =
