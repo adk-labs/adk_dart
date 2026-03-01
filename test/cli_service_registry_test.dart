@@ -135,6 +135,14 @@ services:
       expect(service, isA<DatabaseSessionService>());
     });
 
+    test('gs uri resolves to built-in gcs artifact service', () {
+      final ServiceRegistry registry = getServiceRegistry();
+      final BaseArtifactService? service = registry.createArtifactService(
+        'gs://demo-bucket',
+      );
+      expect(service, isA<GcsArtifactService>());
+    });
+
     test('postgresql uri uses registered DatabaseSessionService adapter', () {
       DatabaseSessionService.registerCustomFactory(
         scheme: 'postgresql',
