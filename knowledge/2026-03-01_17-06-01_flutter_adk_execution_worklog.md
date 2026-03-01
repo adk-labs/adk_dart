@@ -449,3 +449,43 @@
 ### 단위 결론
 - 예제 앱이 요청한 4개 언어(영어/한국어/일본어/중국어)를 UI 레벨에서 지원하며,
   언어 선택이 에이전트 응답 지시에도 반영되는 상태로 정리됨.
+
+## Work Unit 13 — Flutter 공식 App Architecture 가이드 기반 main.dart 리팩터링
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 23:00~23:20 KST
+
+### 참고 문서
+- https://docs.flutter.dev/app-architecture/guide
+- https://docs.flutter.dev/app-architecture/concepts
+- https://docs.flutter.dev/app-architecture/case-study
+
+### 리팩터링 방향
+- 문서 권장 패턴을 따라 UI 상태와 데이터 접근 책임 분리:
+  - `View`(`ExamplesHomePage`)는 렌더링/입력 처리 중심
+  - `ViewModel`(`_AppShellViewModel`)은 화면 상태/상태 전이 담당
+  - `Repository`(`_SettingsRepository`, `_SharedPreferencesSettingsRepository`)는 영속화 담당
+- 의존성 주입(Repository -> ViewModel) 형태로 main.dart 내부 구조 정리
+
+### 구현 내용
+- `main.dart`에 다음 계층 추가:
+  - `_AppSettings` 모델
+  - `_SettingsRepository` 인터페이스
+  - `_SharedPreferencesSettingsRepository` 구현체
+  - `_AppShellViewModel`(`ChangeNotifier`) 상태 관리
+- 기존 `StatefulWidget` 내부 직접 prefs 접근 로직 제거:
+  - ViewModel 초기화/리스너 기반으로 UI 동기화
+  - 설정 저장/언어 변경/탭 선택 상태를 ViewModel API로 단일화
+- analyzer 이슈 정리:
+  - `library_private_types_in_public_api` 경고 제거를 위해
+    내부 계층 타입을 private으로 정렬
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- `main.dart`가 문서 권장 아키텍처 방향(계층 분리 + 상태 관리 책임 분리)에 맞게 정리되었고,
+  기존 기능(다국어, 예제 전환, MCP/Skills 포함)과 호환되는 상태로 검증 완료.

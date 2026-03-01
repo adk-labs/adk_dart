@@ -535,6 +535,157 @@ String _tr(_AppLanguage language, String key) {
   return values[language] ?? values[_AppLanguage.en] ?? key;
 }
 
+class _AppSettings {
+  const _AppSettings({
+    required this.apiKey,
+    required this.mcpUrl,
+    required this.mcpBearerToken,
+    required this.language,
+  });
+
+  final String apiKey;
+  final String mcpUrl;
+  final String mcpBearerToken;
+  final _AppLanguage language;
+
+  bool get hasApiKey => apiKey.trim().isNotEmpty;
+
+  _AppSettings copyWith({
+    String? apiKey,
+    String? mcpUrl,
+    String? mcpBearerToken,
+    _AppLanguage? language,
+  }) {
+    return _AppSettings(
+      apiKey: apiKey ?? this.apiKey,
+      mcpUrl: mcpUrl ?? this.mcpUrl,
+      mcpBearerToken: mcpBearerToken ?? this.mcpBearerToken,
+      language: language ?? this.language,
+    );
+  }
+}
+
+abstract interface class _SettingsRepository {
+  Future<_AppSettings> load({required _AppLanguage fallbackLanguage});
+
+  Future<void> save(_AppSettings settings);
+}
+
+class _SharedPreferencesSettingsRepository implements _SettingsRepository {
+  @override
+  Future<_AppSettings> load({required _AppLanguage fallbackLanguage}) async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      return _AppSettings(
+        apiKey: prefs.getString(_apiKeyPrefKey) ?? '',
+        mcpUrl: prefs.getString(_mcpUrlPrefKey) ?? '',
+        mcpBearerToken: prefs.getString(_mcpBearerTokenPrefKey) ?? '',
+        language: _appLanguageFromCode(
+          prefs.getString(_languagePrefKey) ?? fallbackLanguage.code,
+        ),
+      );
+    } on MissingPluginException {
+      return _AppSettings(
+        apiKey: '',
+        mcpUrl: '',
+        mcpBearerToken: '',
+        language: fallbackLanguage,
+      );
+    }
+  }
+
+  @override
+  Future<void> save(_AppSettings settings) async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String apiKey = settings.apiKey.trim();
+      final String mcpUrl = settings.mcpUrl.trim();
+      final String mcpBearerToken = settings.mcpBearerToken.trim();
+      if (apiKey.isEmpty) {
+        await prefs.remove(_apiKeyPrefKey);
+      } else {
+        await prefs.setString(_apiKeyPrefKey, apiKey);
+      }
+
+      if (mcpUrl.isEmpty) {
+        await prefs.remove(_mcpUrlPrefKey);
+      } else {
+        await prefs.setString(_mcpUrlPrefKey, mcpUrl);
+      }
+
+      if (mcpBearerToken.isEmpty) {
+        await prefs.remove(_mcpBearerTokenPrefKey);
+      } else {
+        await prefs.setString(_mcpBearerTokenPrefKey, mcpBearerToken);
+      }
+      await prefs.setString(_languagePrefKey, settings.language.code);
+    } on MissingPluginException {
+      // Keep running with in-memory state when plugin is unavailable.
+    }
+  }
+}
+
+class _AppShellViewModel extends ChangeNotifier {
+  _AppShellViewModel({required _SettingsRepository settingsRepository})
+    : _settingsRepository = settingsRepository;
+
+  final _SettingsRepository _settingsRepository;
+
+  _AppSettings _settings = const _AppSettings(
+    apiKey: '',
+    mcpUrl: '',
+    mcpBearerToken: '',
+    language: _AppLanguage.en,
+  );
+  int _selectedExampleIndex = 0;
+
+  _AppSettings get settings => _settings;
+  int get selectedExampleIndex => _selectedExampleIndex;
+  _AppLanguage get selectedLanguage => _settings.language;
+  String get apiKey => _settings.apiKey;
+  String get mcpUrl => _settings.mcpUrl;
+  String get mcpBearerToken => _settings.mcpBearerToken;
+  bool get hasApiKey => _settings.hasApiKey;
+
+  Future<void> initialize({required _AppLanguage fallbackLanguage}) async {
+    _settings = await _settingsRepository.load(
+      fallbackLanguage: fallbackLanguage,
+    );
+    notifyListeners();
+  }
+
+  void setSelectedExample(int index) {
+    if (_selectedExampleIndex == index) {
+      return;
+    }
+    _selectedExampleIndex = index;
+    notifyListeners();
+  }
+
+  Future<void> setLanguage(_AppLanguage language) async {
+    if (_settings.language == language) {
+      return;
+    }
+    _settings = _settings.copyWith(language: language);
+    notifyListeners();
+    await _settingsRepository.save(_settings);
+  }
+
+  Future<void> saveSettings({
+    required String apiKey,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) async {
+    _settings = _settings.copyWith(
+      apiKey: apiKey,
+      mcpUrl: mcpUrl,
+      mcpBearerToken: mcpBearerToken,
+    );
+    notifyListeners();
+    await _settingsRepository.save(_settings);
+  }
+}
+
 void main() {
   runApp(const MyApp());
 }
@@ -569,83 +720,61 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
   final TextEditingController _mcpBearerTokenController =
       TextEditingController();
 
+  late final _AppShellViewModel _viewModel;
+
   bool _obscureApiKey = true;
   bool _obscureMcpBearerToken = true;
-  int _selectedExampleIndex = 0;
-  _AppLanguage _selectedLanguage = _AppLanguage.en;
-
-  bool get _hasApiKey => _apiKeyController.text.trim().isNotEmpty;
-  String _t(String key) => _tr(_selectedLanguage, key);
+  bool get _hasApiKey => _viewModel.hasApiKey;
+  String _t(String key) => _tr(_viewModel.selectedLanguage, key);
 
   @override
   void initState() {
     super.initState();
-    _selectedLanguage = _appLanguageFromCode(
-      WidgetsBinding.instance.platformDispatcher.locale.languageCode,
+    _viewModel = _AppShellViewModel(
+      settingsRepository: _SharedPreferencesSettingsRepository(),
     );
-    _loadSavedApiKey();
+    _viewModel.addListener(_onViewModelChanged);
+    unawaited(_initializeViewModel());
   }
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     _apiKeyController.dispose();
     _mcpUrlController.dispose();
     _mcpBearerTokenController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadSavedApiKey() async {
-    try {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final String savedKey = prefs.getString(_apiKeyPrefKey) ?? '';
-      final String savedMcpUrl = prefs.getString(_mcpUrlPrefKey) ?? '';
-      final String savedMcpBearerToken =
-          prefs.getString(_mcpBearerTokenPrefKey) ?? '';
-      final String savedLanguage = prefs.getString(_languagePrefKey) ?? '';
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _apiKeyController.text = savedKey;
-        _mcpUrlController.text = savedMcpUrl;
-        _mcpBearerTokenController.text = savedMcpBearerToken;
-        if (savedLanguage.isNotEmpty) {
-          _selectedLanguage = _appLanguageFromCode(savedLanguage);
-        }
-      });
-    } on MissingPluginException {
-      // Widget tests may run without shared_preferences plugin registration.
+  Future<void> _initializeViewModel() async {
+    await _viewModel.initialize(
+      fallbackLanguage: _appLanguageFromCode(
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode,
+      ),
+    );
+    _syncControllersFromSettings();
+  }
+
+  void _onViewModelChanged() {
+    if (!mounted) {
+      return;
     }
+    setState(() {});
+  }
+
+  void _syncControllersFromSettings() {
+    _apiKeyController.text = _viewModel.apiKey;
+    _mcpUrlController.text = _viewModel.mcpUrl;
+    _mcpBearerTokenController.text = _viewModel.mcpBearerToken;
   }
 
   Future<void> _saveApiKey({bool showSnackBar = true}) async {
-    final String key = _apiKeyController.text.trim();
-    final String mcpUrl = _mcpUrlController.text.trim();
-    final String mcpBearerToken = _mcpBearerTokenController.text.trim();
-    try {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      if (key.isEmpty) {
-        await prefs.remove(_apiKeyPrefKey);
-      } else {
-        await prefs.setString(_apiKeyPrefKey, key);
-      }
-
-      if (mcpUrl.isEmpty) {
-        await prefs.remove(_mcpUrlPrefKey);
-      } else {
-        await prefs.setString(_mcpUrlPrefKey, mcpUrl);
-      }
-
-      if (mcpBearerToken.isEmpty) {
-        await prefs.remove(_mcpBearerTokenPrefKey);
-      } else {
-        await prefs.setString(_mcpBearerTokenPrefKey, mcpBearerToken);
-      }
-
-      await prefs.setString(_languagePrefKey, _selectedLanguage.code);
-    } on MissingPluginException {
-      // Keep in-memory value even when persistence plugin is unavailable.
-    }
+    await _viewModel.saveSettings(
+      apiKey: _apiKeyController.text.trim(),
+      mcpUrl: _mcpUrlController.text.trim(),
+      mcpBearerToken: _mcpBearerTokenController.text.trim(),
+    );
 
     if (!mounted) {
       return;
@@ -666,6 +795,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
   }
 
   Future<void> _openSettingsSheet() async {
+    _syncControllersFromSettings();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -791,13 +921,10 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
             tooltip: _t('app.language'),
             icon: const Icon(Icons.translate),
             onSelected: (_AppLanguage language) async {
-              if (_selectedLanguage == language) {
+              if (_viewModel.selectedLanguage == language) {
                 return;
               }
-              setState(() {
-                _selectedLanguage = language;
-              });
-              await _saveApiKey(showSnackBar: false);
+              await _viewModel.setLanguage(language);
             },
             itemBuilder: (BuildContext context) {
               return _AppLanguage.values.map((final _AppLanguage language) {
@@ -805,7 +932,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                   value: language,
                   child: Row(
                     children: <Widget>[
-                      if (_selectedLanguage == language)
+                      if (_viewModel.selectedLanguage == language)
                         const Icon(Icons.check, size: 16)
                       else
                         const SizedBox(width: 16),
@@ -863,14 +990,12 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                     child: ChoiceChip(
                       avatar: Icon(tab.icon, size: 18),
                       label: Text(_t(tab.labelKey)),
-                      selected: _selectedExampleIndex == index,
+                      selected: _viewModel.selectedExampleIndex == index,
                       onSelected: (bool selected) {
                         if (!selected) {
                           return;
                         }
-                        setState(() {
-                          _selectedExampleIndex = index;
-                        });
+                        _viewModel.setSelectedExample(index);
                       },
                     ),
                   );
@@ -880,12 +1005,12 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
           ),
           Expanded(
             child: IndexedStack(
-              index: _selectedExampleIndex,
+              index: _viewModel.selectedExampleIndex,
               children: <Widget>[
                 _ChatExampleView(
                   key: const ValueKey<String>('basic_example'),
                   exampleId: 'basic',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('basic.title'),
                   summary: _t('basic.summary'),
                   initialAssistantMessage: _t('basic.initial'),
@@ -900,7 +1025,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('multi_agent_example'),
                   exampleId: 'multi_agent',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('transfer.title'),
                   summary: _t('transfer.summary'),
                   initialAssistantMessage: _t('transfer.initial'),
@@ -915,7 +1040,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('workflow_example'),
                   exampleId: 'workflow',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('workflow.title'),
                   summary: _t('workflow.summary'),
                   initialAssistantMessage: _t('workflow.initial'),
@@ -930,7 +1055,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('sequential_example'),
                   exampleId: 'sequential',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('sequential.title'),
                   summary: _t('sequential.summary'),
                   initialAssistantMessage: _t('sequential.initial'),
@@ -945,7 +1070,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('parallel_example'),
                   exampleId: 'parallel',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('parallel.title'),
                   summary: _t('parallel.summary'),
                   initialAssistantMessage: _t('parallel.initial'),
@@ -960,7 +1085,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('loop_example'),
                   exampleId: 'loop',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('loop.title'),
                   summary: _t('loop.summary'),
                   initialAssistantMessage: _t('loop.initial'),
@@ -975,7 +1100,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('agent_team_example'),
                   exampleId: 'agent_team',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('team.title'),
                   summary: _t('team.summary'),
                   initialAssistantMessage: _t('team.initial'),
@@ -990,7 +1115,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('mcp_toolset_example'),
                   exampleId: 'mcp_toolset',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('mcp.title'),
                   summary: _t('mcp.summary'),
                   initialAssistantMessage: _t('mcp.initial'),
@@ -1011,7 +1136,7 @@ class _ExamplesHomePageState extends State<ExamplesHomePage> {
                 _ChatExampleView(
                   key: const ValueKey<String>('skills_example'),
                   exampleId: 'skills',
-                  language: _selectedLanguage,
+                  language: _viewModel.selectedLanguage,
                   exampleTitle: _t('skills.title'),
                   summary: _t('skills.summary'),
                   initialAssistantMessage: _t('skills.initial'),
