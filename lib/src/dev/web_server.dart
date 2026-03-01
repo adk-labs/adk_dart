@@ -6,13 +6,31 @@ import 'dart:isolate';
 import '../a2a/executor/a2a_agent_executor.dart';
 import '../a2a/protocol.dart';
 import '../a2a/utils/agent_card_builder.dart';
+import '../agents/base_agent.dart';
 import '../agents/live_request_queue.dart';
 import '../agents/run_config.dart';
 import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
+import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/utils/agent_loader.dart';
 import '../cli/utils/base_agent_loader.dart';
+import '../cli/utils/evals.dart' as cli_evals;
 import '../cli/utils/service_factory.dart';
+import '../evaluation/base_eval_service.dart';
+import '../evaluation/eval_case.dart';
+import '../evaluation/eval_metric.dart';
+import '../evaluation/eval_metrics.dart';
+import '../evaluation/eval_result.dart';
+import '../evaluation/eval_set.dart';
+import '../evaluation/eval_set_results_manager.dart';
+import '../evaluation/eval_sets_manager.dart';
+import '../evaluation/in_memory_eval_set_results_manager.dart';
+import '../evaluation/in_memory_eval_sets_manager.dart';
+import '../evaluation/local_eval_service.dart';
+import '../evaluation/local_eval_set_results_manager.dart';
+import '../evaluation/local_eval_sets_manager.dart';
+import '../evaluation/metric_evaluator_registry.dart';
+import '../errors/not_found_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../memory/base_memory_service.dart';
@@ -45,6 +63,7 @@ Future<HttpServer> startAdkDevWebServer({
   String? sessionServiceUri,
   String? artifactServiceUri,
   String? memoryServiceUri,
+  String? evalStorageUri,
   bool useLocalStorage = true,
   String? urlPrefix,
   bool autoCreateSession = false,
@@ -71,6 +90,7 @@ Future<HttpServer> startAdkDevWebServer({
     sessionServiceUri: sessionServiceUri,
     artifactServiceUri: artifactServiceUri,
     memoryServiceUri: memoryServiceUri,
+    evalStorageUri: evalStorageUri,
     useLocalStorage: useLocalStorage,
     urlPrefix: _normalizeUrlPrefix(urlPrefix),
     autoCreateSession: autoCreateSession,
@@ -99,6 +119,89 @@ class _ExtraPluginSpec {
   final String normalizedName;
 }
 
+class _EvalManagers {
+  _EvalManagers({
+    required this.evalSetsManager,
+    required this.evalSetResultsManager,
+  });
+
+  final EvalSetsManager evalSetsManager;
+  final EvalSetResultsManager evalSetResultsManager;
+}
+
+_EvalManagers _createEvalManagersFromOptions({
+  required String baseDir,
+  required String? evalStorageUri,
+}) {
+  final String? normalized = evalStorageUri?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return _EvalManagers(
+      evalSetsManager: LocalEvalSetsManager(baseDir),
+      evalSetResultsManager: LocalEvalSetResultsManager(baseDir),
+    );
+  }
+
+  if (normalized.startsWith('gs://')) {
+    final cli_evals.GcsEvalManagers gcsManagers = cli_evals
+        .createGcsEvalManagersFromUri(normalized);
+    return _EvalManagers(
+      evalSetsManager: gcsManagers.evalSetsManager,
+      evalSetResultsManager: gcsManagers.evalSetResultsManager,
+    );
+  }
+
+  if (normalized == 'memory' ||
+      normalized == 'memory://' ||
+      normalized.startsWith('memory://')) {
+    return _EvalManagers(
+      evalSetsManager: InMemoryEvalSetsManager(),
+      evalSetResultsManager: InMemoryEvalSetResultsManager(),
+    );
+  }
+
+  final String localBaseDir = _resolveEvalLocalBaseDir(
+    baseDir: baseDir,
+    evalStorageUri: normalized,
+  );
+  return _EvalManagers(
+    evalSetsManager: LocalEvalSetsManager(localBaseDir),
+    evalSetResultsManager: LocalEvalSetResultsManager(localBaseDir),
+  );
+}
+
+String _resolveEvalLocalBaseDir({
+  required String baseDir,
+  required String evalStorageUri,
+}) {
+  if (evalStorageUri.startsWith('file://')) {
+    final Uri parsed = Uri.parse(evalStorageUri);
+    if (parsed.authority.isNotEmpty && parsed.authority != 'localhost') {
+      throw ArgumentError(
+        'file:// eval storage URIs must reference the local filesystem.',
+      );
+    }
+    if (parsed.path.isEmpty) {
+      throw ArgumentError(
+        'file:// eval storage URIs must include a path component.',
+      );
+    }
+    return Uri.decodeFull(parsed.path);
+  }
+
+  if (evalStorageUri.contains('://')) {
+    throw ArgumentError(
+      'Unsupported eval storage URI: $evalStorageUri. '
+      'Supported schemes: gs://, memory://, file:// or local directory path.',
+    );
+  }
+
+  final String candidate = evalStorageUri.trim();
+  if (candidate.isEmpty) {
+    return baseDir;
+  }
+  return candidate;
+}
+
 class _AdkDevWebContext {
   _AdkDevWebContext({
     required this.runtime,
@@ -108,6 +211,9 @@ class _AdkDevWebContext {
     required this.sessionService,
     required this.artifactService,
     required this.memoryService,
+    required this.evalSetsManager,
+    required this.evalSetResultsManager,
+    required this.evalStorageUri,
     required this.allowOrigins,
     required this.urlPrefix,
     required this.autoCreateSession,
@@ -130,6 +236,9 @@ class _AdkDevWebContext {
   final BaseSessionService sessionService;
   final BaseArtifactService artifactService;
   final BaseMemoryService memoryService;
+  final EvalSetsManager evalSetsManager;
+  final EvalSetResultsManager evalSetResultsManager;
+  final String? evalStorageUri;
   final List<String> allowOrigins;
   final String? urlPrefix;
   final bool autoCreateSession;
@@ -147,6 +256,10 @@ class _AdkDevWebContext {
   final Map<String, Runner> _runners = <String, Runner>{};
   final Map<String, Map<String, Map<String, Object?>>> _a2aTasksByApp =
       <String, Map<String, Map<String, Object?>>>{};
+  final Map<String, Map<String, Object?>> _traceByEventId =
+      <String, Map<String, Object?>>{};
+  final Map<String, List<Map<String, Object?>>> _traceBySessionId =
+      <String, List<Map<String, Object?>>>{};
 
   static Future<_AdkDevWebContext> create({
     required DevAgentRuntime runtime,
@@ -156,6 +269,7 @@ class _AdkDevWebContext {
     required String? sessionServiceUri,
     required String? artifactServiceUri,
     required String? memoryServiceUri,
+    required String? evalStorageUri,
     required bool useLocalStorage,
     required String? urlPrefix,
     required bool autoCreateSession,
@@ -195,6 +309,10 @@ class _AdkDevWebContext {
       baseDir: agentsRoot.path,
       memoryServiceUri: memoryServiceUri,
     );
+    final _EvalManagers evalManagers = _createEvalManagersFromOptions(
+      baseDir: agentsRoot.path,
+      evalStorageUri: evalStorageUri,
+    );
 
     final Directory? webAssetsDir = enableWebUi
         ? await _resolveWebAssetsDir()
@@ -216,6 +334,9 @@ class _AdkDevWebContext {
       sessionService: sessionService,
       artifactService: artifactService,
       memoryService: memoryService,
+      evalSetsManager: evalManagers.evalSetsManager,
+      evalSetResultsManager: evalManagers.evalSetResultsManager,
+      evalStorageUri: evalStorageUri,
       allowOrigins: allowOrigins,
       urlPrefix: urlPrefix,
       autoCreateSession: autoCreateSession,
@@ -371,6 +492,136 @@ class _AdkDevWebContext {
     }
     return Map<String, Object?>.from(found);
   }
+
+  void recordTraceEvent({
+    required String appName,
+    required String userId,
+    required String sessionId,
+    required Event event,
+  }) {
+    final Map<String, Object?> trace = _traceFromEvent(
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+      event: event,
+    );
+    _traceByEventId[event.id] = trace;
+
+    final List<Map<String, Object?>> bySession = _traceBySessionId.putIfAbsent(
+      sessionId,
+      () => <Map<String, Object?>>[],
+    );
+    final int existingIndex = bySession.indexWhere(
+      (Map<String, Object?> value) => '${value['event_id'] ?? ''}' == event.id,
+    );
+    if (existingIndex >= 0) {
+      bySession[existingIndex] = trace;
+    } else {
+      bySession.add(trace);
+    }
+    bySession.sort((Map<String, Object?> a, Map<String, Object?> b) {
+      final double left = _asDouble(a['start_time']);
+      final double right = _asDouble(b['start_time']);
+      return left.compareTo(right);
+    });
+  }
+
+  Map<String, Object?>? readTraceByEventId(String eventId) {
+    final Map<String, Object?>? trace = _traceByEventId[eventId];
+    if (trace == null) {
+      return null;
+    }
+    return Map<String, Object?>.from(trace);
+  }
+
+  List<Map<String, Object?>> readTraceBySessionId(String sessionId) {
+    final List<Map<String, Object?>> values =
+        _traceBySessionId[sessionId] ?? const <Map<String, Object?>>[];
+    return values
+        .map((Map<String, Object?> value) => Map<String, Object?>.from(value))
+        .toList(growable: false);
+  }
+
+  Future<Event?> readSessionEvent({
+    required String appName,
+    required String userId,
+    required String sessionId,
+    required String eventId,
+  }) async {
+    final Session? session = await sessionService.getSession(
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+    );
+    final List<Event> events = session?.events ?? const <Event>[];
+    for (final Event event in events) {
+      if (event.id == eventId) {
+        return event;
+      }
+    }
+    return null;
+  }
+
+  double _asDouble(Object? value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse('$value') ?? 0.0;
+  }
+}
+
+Map<String, Object?> _traceFromEvent({
+  required String appName,
+  required String userId,
+  required String sessionId,
+  required Event event,
+}) {
+  final String traceId = event.invocationId;
+  final String spanId = event.id;
+  final List<FunctionCall> functionCalls = event.getFunctionCalls();
+  final List<FunctionResponse> functionResponses = event.getFunctionResponses();
+  final Map<String, Object?> attributes = <String, Object?>{
+    'gcp.vertex.agent.app_name': appName,
+    'gcp.vertex.agent.user_id': userId,
+    'gcp.vertex.agent.session_id': sessionId,
+    'gcp.vertex.agent.event_id': event.id,
+    'gcp.vertex.agent.invocation_id': event.invocationId,
+    'event.author': event.author,
+    'event.partial': event.partial ?? false,
+    'event.turn_complete': event.turnComplete ?? false,
+    'event.function_calls': functionCalls
+        .map((FunctionCall call) => call.name)
+        .toList(growable: false),
+    'event.function_responses': functionResponses
+        .map((FunctionResponse response) => response.name)
+        .toList(growable: false),
+    'event.artifact_delta': Map<String, int>.from(event.actions.artifactDelta),
+    if (event.errorMessage != null) 'event.error_message': event.errorMessage,
+    if (event.finishReason != null) 'event.finish_reason': event.finishReason,
+  };
+  return <String, Object?>{
+    'name': _spanNameFromEvent(event),
+    'span_id': spanId,
+    'trace_id': traceId,
+    'start_time': event.timestamp,
+    'end_time': event.timestamp,
+    'attributes': attributes,
+    'parent_span_id': null,
+    'event_id': event.id,
+  };
+}
+
+String _spanNameFromEvent(Event event) {
+  if (event.getFunctionCalls().isNotEmpty) {
+    return 'execute_tool';
+  }
+  if (event.getFunctionResponses().isNotEmpty) {
+    return 'tool_response';
+  }
+  if ((event.content?.parts.length ?? 0) > 0) {
+    return 'call_llm';
+  }
+  return 'event';
 }
 
 Future<void> _handleRequests(
@@ -494,6 +745,37 @@ Future<void> _handleRequest(
     return;
   }
 
+  if (request.method == 'GET' && routedPath.startsWith('/debug/trace/')) {
+    final List<String> traceSegments = Uri(
+      path: routedPath,
+    ).pathSegments.where((String s) => s.isNotEmpty).toList(growable: false);
+    if (traceSegments.length == 3 &&
+        traceSegments[0] == 'debug' &&
+        traceSegments[1] == 'trace') {
+      if (traceSegments[2] == 'session') {
+        // Session trace endpoint requires /debug/trace/session/{session_id}.
+      } else {
+        await _handleGetTraceByEventId(
+          request,
+          context,
+          eventId: traceSegments[2],
+        );
+        return;
+      }
+    }
+    if (traceSegments.length == 4 &&
+        traceSegments[0] == 'debug' &&
+        traceSegments[1] == 'trace' &&
+        traceSegments[2] == 'session') {
+      await _handleGetTraceBySessionId(
+        request,
+        context,
+        sessionId: traceSegments[3],
+      );
+      return;
+    }
+  }
+
   if (routedPath == '/list-apps' && request.method == 'GET') {
     final bool detailed = _isTruthy(request.uri.queryParameters['detailed']);
     if (detailed) {
@@ -522,6 +804,7 @@ Future<void> _handleRequest(
         'extra_plugins': context.extraPluginSpecs
             .map((_ExtraPluginSpec spec) => spec.raw)
             .toList(growable: false),
+        'eval_storage_uri': context.evalStorageUri,
         'trace_to_cloud': context.traceToCloud,
         'otel_to_cloud': context.otelToCloud,
       },
@@ -593,14 +876,19 @@ Future<bool> _handlePythonStyleRoutes(
   _AdkDevWebContext context,
   List<String> segments,
 ) async {
-  if (segments.length < 5) {
-    return false;
-  }
-  if (segments[0] != 'apps' || segments[2] != 'users') {
+  if (segments.length < 2 || segments[0] != 'apps') {
     return false;
   }
 
   final String appName = segments[1];
+  if (await _handleEvalRoutes(request, context, segments, appName: appName)) {
+    return true;
+  }
+
+  if (segments.length < 5 || segments[2] != 'users') {
+    return false;
+  }
+
   final String userId = segments[3];
 
   if (segments[4] == 'memory' &&
@@ -698,7 +986,766 @@ Future<bool> _handlePythonStyleRoutes(
     return true;
   }
 
+  if (segments.length == 9 &&
+      segments[6] == 'events' &&
+      segments[8] == 'graph' &&
+      request.method == 'GET') {
+    await _handleGetEventGraph(
+      request,
+      context,
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+      eventId: segments[7],
+    );
+    return true;
+  }
+
   return false;
+}
+
+Future<bool> _handleEvalRoutes(
+  HttpRequest request,
+  _AdkDevWebContext context,
+  List<String> segments, {
+  required String appName,
+}) async {
+  if (segments.length < 3) {
+    return false;
+  }
+
+  if (segments.length == 3 &&
+      segments[2] == 'metrics-info' &&
+      request.method == 'GET') {
+    await _handleListMetricsInfo(request, context);
+    return true;
+  }
+
+  final String category = segments[2];
+  final bool isEvalSetCollection = _isEvalSetCollection(category);
+  final bool isEvalResultCollection = _isEvalResultCollection(category);
+
+  if (isEvalResultCollection) {
+    final bool legacy = category == 'eval_results';
+    if (segments.length == 3 && request.method == 'GET') {
+      await _handleListEvalResults(
+        request,
+        context,
+        appName: appName,
+        legacy: legacy,
+      );
+      return true;
+    }
+    if (segments.length == 4 && request.method == 'GET') {
+      await _handleGetEvalResult(
+        request,
+        context,
+        appName: appName,
+        evalResultId: segments[3],
+      );
+      return true;
+    }
+    return false;
+  }
+
+  if (!isEvalSetCollection) {
+    return false;
+  }
+
+  final bool legacy = category == 'eval_sets';
+  if (segments.length == 3) {
+    if (!legacy && request.method == 'POST') {
+      await _handleCreateEvalSet(request, context, appName: appName);
+      return true;
+    }
+    if (request.method == 'GET') {
+      await _handleListEvalSets(
+        request,
+        context,
+        appName: appName,
+        legacy: legacy,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  final String evalSetId = segments[3];
+  if (legacy && segments.length == 4 && request.method == 'POST') {
+    await _handleCreateEvalSetLegacy(
+      request,
+      context,
+      appName: appName,
+      evalSetId: evalSetId,
+    );
+    return true;
+  }
+
+  if (segments.length == 5 &&
+      (segments[4] == 'add-session' || segments[4] == 'add_session') &&
+      request.method == 'POST') {
+    await _handleAddSessionToEvalSet(
+      request,
+      context,
+      appName: appName,
+      evalSetId: evalSetId,
+    );
+    return true;
+  }
+
+  if (segments.length == 5 &&
+      segments[4] == 'evals' &&
+      request.method == 'GET') {
+    await _handleListEvalsInEvalSet(
+      request,
+      context,
+      appName: appName,
+      evalSetId: evalSetId,
+    );
+    return true;
+  }
+
+  if (segments.length == 5 &&
+      (segments[4] == 'run' || segments[4] == 'run_eval') &&
+      request.method == 'POST') {
+    await _handleRunEval(
+      request,
+      context,
+      appName: appName,
+      evalSetId: evalSetId,
+      legacy: segments[4] == 'run_eval',
+    );
+    return true;
+  }
+
+  if (segments.length == 6 &&
+      ((segments[4] == 'eval-cases' && category == 'eval-sets') ||
+          (segments[4] == 'evals' && category == 'eval_sets'))) {
+    final String evalCaseId = segments[5];
+    if (request.method == 'GET') {
+      await _handleGetEvalCase(
+        request,
+        context,
+        appName: appName,
+        evalSetId: evalSetId,
+        evalCaseId: evalCaseId,
+      );
+      return true;
+    }
+    if (request.method == 'PUT') {
+      await _handleUpdateEvalCase(
+        request,
+        context,
+        appName: appName,
+        evalSetId: evalSetId,
+        evalCaseId: evalCaseId,
+      );
+      return true;
+    }
+    if (request.method == 'DELETE') {
+      await _handleDeleteEvalCase(
+        request,
+        context,
+        appName: appName,
+        evalSetId: evalSetId,
+        evalCaseId: evalCaseId,
+      );
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool _isEvalSetCollection(String value) {
+  return value == 'eval-sets' || value == 'eval_sets';
+}
+
+bool _isEvalResultCollection(String value) {
+  return value == 'eval-results' || value == 'eval_results';
+}
+
+Future<void> _handleGetTraceByEventId(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String eventId,
+}) async {
+  final Map<String, Object?>? trace = context.readTraceByEventId(eventId);
+  if (trace == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: 'Trace not found',
+    );
+    return;
+  }
+  await _writeJson(request, context, payload: trace);
+}
+
+Future<void> _handleGetTraceBySessionId(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String sessionId,
+}) async {
+  final List<Map<String, Object?>> trace = context.readTraceBySessionId(
+    sessionId,
+  );
+  await _writeJson(request, context, payload: trace);
+}
+
+Future<void> _handleGetEventGraph(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String userId,
+  required String sessionId,
+  required String eventId,
+}) async {
+  final Event? event = await context.readSessionEvent(
+    appName: appName,
+    userId: userId,
+    sessionId: sessionId,
+    eventId: eventId,
+  );
+  if (event == null) {
+    await _writeJson(request, context, payload: const <String, Object?>{});
+    return;
+  }
+
+  final Set<(String, String)> highlights = <(String, String)>{};
+  final List<FunctionCall> functionCalls = event.getFunctionCalls();
+  final List<FunctionResponse> functionResponses = event.getFunctionResponses();
+
+  if (functionCalls.isNotEmpty) {
+    for (final FunctionCall call in functionCalls) {
+      highlights.add((event.author, 'tool:${call.name}'));
+    }
+  } else if (functionResponses.isNotEmpty) {
+    for (final FunctionResponse response in functionResponses) {
+      highlights.add(('tool:${response.name}', event.author));
+    }
+  } else {
+    highlights.add((event.author, ''));
+  }
+
+  final Runner runner = await context.getRunner(appName);
+  final String dotSrc = await _buildAgentGraphDot(
+    runner.agent,
+    highlightPairs: highlights,
+  );
+  await _writeJson(
+    request,
+    context,
+    payload: <String, Object?>{'dot_src': dotSrc},
+  );
+}
+
+Future<String> _buildAgentGraphDot(
+  BaseAgent rootAgent, {
+  Set<(String, String)> highlightPairs = const <(String, String)>{},
+}) async {
+  final agent_graph.AgentGraph graph = await agent_graph.buildGraph(rootAgent);
+  final StringBuffer out = StringBuffer('digraph G {\n');
+  out.writeln('  rankdir=LR;');
+
+  for (final agent_graph.AgentGraphNode node in graph.nodes) {
+    out.writeln(
+      '  "${_escapeDot(node.id)}" [label="${_escapeDot(node.caption)}"];',
+    );
+  }
+
+  for (final (String from, String to) in graph.edges) {
+    final bool highlighted =
+        highlightPairs.contains((from, to)) ||
+        highlightPairs.contains((to, from));
+    if (highlighted) {
+      out.writeln(
+        '  "${_escapeDot(from)}" -> "${_escapeDot(to)}" '
+        '[color="red", penwidth=2.0];',
+      );
+    } else {
+      out.writeln('  "${_escapeDot(from)}" -> "${_escapeDot(to)}";');
+    }
+  }
+
+  out.writeln('}');
+  return out.toString().trimRight();
+}
+
+String _escapeDot(String value) {
+  return value.replaceAll('\\', r'\\').replaceAll('"', r'\"');
+}
+
+Future<void> _handleListMetricsInfo(
+  HttpRequest request,
+  _AdkDevWebContext context,
+) async {
+  final List<Map<String, Object?>> metrics = defaultMetricEvaluatorRegistry
+      .getRegisteredMetrics()
+      .map((MetricInfo metric) => metric.toJson())
+      .toList(growable: false);
+  await _writeJson(
+    request,
+    context,
+    payload: <String, Object?>{'metrics_info': metrics},
+  );
+}
+
+Future<void> _handleCreateEvalSet(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+}) async {
+  final Map<String, dynamic> payload = await _readJsonBody(request);
+  final Object? evalSetRaw =
+      payload['eval_set'] ?? payload['evalSet'] ?? payload;
+  final Map<String, dynamic> evalSetMap = _toDynamicMap(evalSetRaw);
+  final String evalSetId = _readString(evalSetMap, const <String>[
+    'eval_set_id',
+    'evalSetId',
+    'id',
+    'name',
+  ], required: true);
+  final EvalSet evalSet = await context.evalSetsManager.createEvalSet(
+    appName,
+    evalSetId,
+  );
+  await _writeJson(
+    request,
+    context,
+    payload: evalSet.toJson(includeNulls: false),
+  );
+}
+
+Future<void> _handleCreateEvalSetLegacy(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+}) async {
+  await context.evalSetsManager.createEvalSet(appName, evalSetId);
+  await _writeJson(request, context, payload: const <String, Object?>{});
+}
+
+Future<void> _handleListEvalSets(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required bool legacy,
+}) async {
+  List<String> evalSetIds = <String>[];
+  try {
+    evalSetIds = await context.evalSetsManager.listEvalSets(appName);
+  } on NotFoundError {
+    evalSetIds = <String>[];
+  }
+  if (legacy) {
+    await _writeJson(request, context, payload: evalSetIds);
+  } else {
+    await _writeJson(
+      request,
+      context,
+      payload: <String, Object?>{'eval_set_ids': evalSetIds},
+    );
+  }
+}
+
+Future<void> _handleListEvalResults(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required bool legacy,
+}) async {
+  final List<String> evalResultIds = await context.evalSetResultsManager
+      .listEvalSetResults(appName);
+  if (legacy) {
+    await _writeJson(request, context, payload: evalResultIds);
+  } else {
+    await _writeJson(
+      request,
+      context,
+      payload: <String, Object?>{'eval_result_ids': evalResultIds},
+    );
+  }
+}
+
+Future<void> _handleGetEvalResult(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalResultId,
+}) async {
+  final EvalSetResult evalResult = await context.evalSetResultsManager
+      .getEvalSetResult(appName, evalResultId);
+  await _writeJson(request, context, payload: evalResult.toJson());
+}
+
+Future<void> _handleAddSessionToEvalSet(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+}) async {
+  final Map<String, dynamic> payload = await _readJsonBody(request);
+  final String evalId = _readString(payload, const <String>[
+    'eval_id',
+    'evalId',
+  ], required: true);
+  final String sessionId = _readString(payload, const <String>[
+    'session_id',
+    'sessionId',
+  ], required: true);
+  final String userId = _readString(payload, const <String>[
+    'user_id',
+    'userId',
+  ], required: true);
+
+  final Session? session = await context.sessionService.getSession(
+    appName: appName,
+    userId: userId,
+    sessionId: sessionId,
+  );
+  if (session == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: 'Session not found',
+    );
+    return;
+  }
+
+  final List<Invocation> invocations = cli_evals
+      .convertSessionToEvalInvocations(session);
+  final EvalCase evalCase = EvalCase(
+    evalId: evalId,
+    conversation: invocations,
+    sessionInput: SessionInput(
+      appName: appName,
+      userId: userId,
+      state: Map<String, Object?>.from(session.state),
+    ),
+    creationTimestamp: DateTime.now().millisecondsSinceEpoch / 1000,
+  );
+  await context.evalSetsManager.addEvalCase(appName, evalSetId, evalCase);
+  await _writeJson(request, context, payload: const <String, Object?>{});
+}
+
+Future<void> _handleListEvalsInEvalSet(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+}) async {
+  final EvalSet? evalSet = await context.evalSetsManager.getEvalSet(
+    appName,
+    evalSetId,
+  );
+  if (evalSet == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: 'Eval set `$evalSetId` not found.',
+    );
+    return;
+  }
+  final List<String> ids =
+      evalSet.evalCases
+          .map((EvalCase value) => value.evalId)
+          .toList(growable: false)
+        ..sort();
+  await _writeJson(request, context, payload: ids);
+}
+
+Future<void> _handleGetEvalCase(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+  required String evalCaseId,
+}) async {
+  final EvalCase? evalCase = await context.evalSetsManager.getEvalCase(
+    appName,
+    evalSetId,
+    evalCaseId,
+  );
+  if (evalCase == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: 'Eval set `$evalSetId` or Eval `$evalCaseId` not found.',
+    );
+    return;
+  }
+  await _writeJson(request, context, payload: evalCase.toJson());
+}
+
+Future<void> _handleUpdateEvalCase(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+  required String evalCaseId,
+}) async {
+  final Map<String, dynamic> payload = await _readJsonBody(request);
+  final EvalCase updatedEvalCase = EvalCase.fromJson(
+    payload.map((String key, Object? value) => MapEntry(key, value)),
+  );
+  if (updatedEvalCase.evalId.isNotEmpty &&
+      updatedEvalCase.evalId != evalCaseId) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: 'Eval id in EvalCase should match the eval id in the API route.',
+    );
+    return;
+  }
+
+  final EvalCase withRouteId = _copyEvalCaseWithId(updatedEvalCase, evalCaseId);
+  try {
+    await context.evalSetsManager.updateEvalCase(
+      appName,
+      evalSetId,
+      withRouteId,
+    );
+  } on NotFoundError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '$error',
+    );
+    return;
+  }
+  await _writeJson(request, context, payload: const <String, Object?>{});
+}
+
+EvalCase _copyEvalCaseWithId(EvalCase evalCase, String evalCaseId) {
+  return EvalCase(
+    evalId: evalCaseId,
+    input: evalCase.input,
+    expectedOutput: evalCase.expectedOutput,
+    conversation: evalCase.conversation,
+    conversationScenario: evalCase.conversationScenario,
+    sessionInput: evalCase.sessionInput,
+    creationTimestamp: evalCase.creationTimestamp,
+    rubrics: evalCase.rubrics,
+    finalSessionState: evalCase.finalSessionState,
+    metadata: evalCase.metadata,
+  );
+}
+
+Future<void> _handleDeleteEvalCase(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+  required String evalCaseId,
+}) async {
+  try {
+    await context.evalSetsManager.deleteEvalCase(
+      appName,
+      evalSetId,
+      evalCaseId,
+    );
+  } on NotFoundError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '$error',
+    );
+    return;
+  }
+  await _writeJson(request, context, payload: const <String, Object?>{});
+}
+
+Future<void> _handleRunEval(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String evalSetId,
+  required bool legacy,
+}) async {
+  final EvalSet? evalSet = await context.evalSetsManager.getEvalSet(
+    appName,
+    evalSetId,
+  );
+  if (evalSet == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: 'Eval set `$evalSetId` not found.',
+    );
+    return;
+  }
+
+  final Map<String, dynamic> payload = await _readJsonBody(request);
+  final List<String> requestedEvalCaseIds = _parseRunEvalCaseIds(payload);
+  final List<EvalMetric> evalMetrics = _parseRunEvalMetrics(payload);
+
+  final List<EvalCase> evalCases = requestedEvalCaseIds.isEmpty
+      ? List<EvalCase>.from(evalSet.evalCases)
+      : evalSet.evalCases
+            .where(
+              (EvalCase value) => requestedEvalCaseIds.contains(value.evalId),
+            )
+            .toList(growable: false);
+
+  final Runner runner = await context.getRunner(appName);
+  final LocalEvalService evalService = LocalEvalService(
+    rootAgent: runner.agent,
+    appName: appName,
+  );
+  final List<InferenceResult> inferenceResults = await evalService
+      .performInference(
+        InferenceRequest(
+          appName: appName,
+          evalCases: evalCases,
+          userId: 'eval_user',
+        ),
+      )
+      .toList();
+
+  final Map<String, EvalCase> evalCasesById = <String, EvalCase>{
+    for (final EvalCase evalCase in evalCases) evalCase.evalId: evalCase,
+  };
+  final List<EvalCaseResult> rawResults = await evalService
+      .evaluate(
+        EvaluateRequest(
+          inferenceResults: inferenceResults,
+          evalCasesById: evalCasesById,
+          evaluateConfig: EvaluateConfig(evalMetrics: evalMetrics),
+        ),
+      )
+      .toList();
+
+  final Map<String, InferenceResult> inferenceByEvalCaseId =
+      <String, InferenceResult>{
+        for (final InferenceResult inference in inferenceResults)
+          inference.evalCaseId: inference,
+      };
+  final List<EvalCaseResult> normalizedResults = rawResults
+      .map((EvalCaseResult value) {
+        final InferenceResult? inference =
+            inferenceByEvalCaseId[value.evalCaseId];
+        return EvalCaseResult(
+          evalCaseId: value.evalCaseId,
+          metrics: value.metrics,
+          evalSetId: evalSetId,
+          finalEvalStatus: _deriveEvalStatus(value.metrics),
+          sessionId: inference?.sessionId ?? '',
+          userId:
+              evalCasesById[value.evalCaseId]?.sessionInput?.userId ??
+              'eval_user',
+          evalSetFile: '$evalSetId.evalset.json',
+        );
+      })
+      .toList(growable: false);
+  await context.evalSetResultsManager.saveEvalSetResult(
+    appName,
+    evalSetId,
+    normalizedResults,
+  );
+
+  final List<Map<String, Object?>> runEvalResults = normalizedResults
+      .map((EvalCaseResult value) => value.toJson())
+      .toList(growable: false);
+
+  if (legacy) {
+    await _writeJson(request, context, payload: runEvalResults);
+  } else {
+    await _writeJson(
+      request,
+      context,
+      payload: <String, Object?>{'run_eval_results': runEvalResults},
+    );
+  }
+}
+
+EvalStatus _deriveEvalStatus(List<EvalMetricResult> metrics) {
+  if (metrics.isEmpty) {
+    return EvalStatus.notEvaluated;
+  }
+  final bool passed = metrics.every(
+    (EvalMetricResult value) => value.evalStatus == EvalStatus.passed,
+  );
+  return passed ? EvalStatus.passed : EvalStatus.failed;
+}
+
+List<String> _parseRunEvalCaseIds(Map<String, dynamic> payload) {
+  final List<String> ids = <String>[];
+  final Object? rawCaseIds = payload['eval_case_ids'] ?? payload['evalCaseIds'];
+  if (rawCaseIds is List) {
+    ids.addAll(
+      rawCaseIds
+          .map((Object? value) => '$value'.trim())
+          .where((String value) => value.isNotEmpty),
+    );
+  }
+  final Object? rawLegacyIds = payload['eval_ids'] ?? payload['evalIds'];
+  if (rawLegacyIds is List) {
+    ids.addAll(
+      rawLegacyIds
+          .map((Object? value) => '$value'.trim())
+          .where((String value) => value.isNotEmpty),
+    );
+  }
+  return ids.toSet().toList(growable: false);
+}
+
+List<EvalMetric> _parseRunEvalMetrics(Map<String, dynamic> payload) {
+  final Object? rawMetrics = payload['eval_metrics'] ?? payload['evalMetrics'];
+  if (rawMetrics is! List || rawMetrics.isEmpty) {
+    return <EvalMetric>[EvalMetric.finalResponseExactMatch];
+  }
+
+  final List<EvalMetric> metrics = <EvalMetric>[];
+  for (final Object? raw in rawMetrics) {
+    if (raw is String) {
+      final EvalMetric? parsed = _evalMetricFromName(raw);
+      if (parsed != null) {
+        metrics.add(parsed);
+      }
+      continue;
+    }
+    if (raw is Map) {
+      final Map<String, dynamic> map = _toDynamicMap(raw);
+      final String metricName = _readString(map, const <String>[
+        'metric_name',
+        'metricName',
+        'name',
+      ], fallback: '');
+      final EvalMetric? parsed = _evalMetricFromName(metricName);
+      if (parsed != null) {
+        metrics.add(parsed);
+      }
+    }
+  }
+
+  if (metrics.isEmpty) {
+    return <EvalMetric>[EvalMetric.finalResponseExactMatch];
+  }
+  return metrics;
+}
+
+EvalMetric? _evalMetricFromName(String raw) {
+  final String normalized = raw.trim().toLowerCase().replaceAll('-', '_');
+  switch (normalized) {
+    case 'final_response_exact_match':
+    case 'finalresponseexactmatch':
+      return EvalMetric.finalResponseExactMatch;
+    case 'final_response_contains':
+    case 'finalresponsecontains':
+      return EvalMetric.finalResponseContains;
+    default:
+      return null;
+  }
 }
 
 Future<void> _handleLegacyCreateSession(
@@ -777,6 +1824,14 @@ Future<void> _handleLegacyPostMessage(
         newMessage: Content.userText(text),
       )
       .toList();
+  for (final Event event in events) {
+    context.recordTraceEvent(
+      appName: context.defaultAppName,
+      userId: userId,
+      sessionId: sessionId,
+      event: event,
+    );
+  }
 
   final String reply = _extractReplyText(
     events,
@@ -1299,6 +2354,14 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
           invocationId: runRequest.invocationId,
         )
         .toList();
+    for (final Event event in events) {
+      context.recordTraceEvent(
+        appName: runRequest.appName,
+        userId: runRequest.userId,
+        sessionId: runRequest.sessionId,
+        event: event,
+      );
+    }
   } on StateError catch (error) {
     await _writeError(
       request,
@@ -1374,16 +2437,39 @@ Future<void> _handleRunSse(
             : StreamingMode.none,
       ),
     )) {
-      final String data = jsonEncode(
-        _eventToApiJson(
-          event,
-          appName: runRequest.appName,
-          userId: runRequest.userId,
-          sessionId: runRequest.sessionId,
-        ),
+      context.recordTraceEvent(
+        appName: runRequest.appName,
+        userId: runRequest.userId,
+        sessionId: runRequest.sessionId,
+        event: event,
       );
-      response.write('data: $data\n\n');
-      await response.flush();
+
+      final List<Event> eventsToStream = <Event>[event];
+      final bool hasArtifactDelta = event.actions.artifactDelta.isNotEmpty;
+      final bool hasContentParts = (event.content?.parts.isNotEmpty ?? false);
+      if (hasArtifactDelta && hasContentParts) {
+        final Event contentEvent = event.copyWith(
+          actions: event.actions.copyWith(artifactDelta: <String, int>{}),
+        );
+        final Event artifactEvent = event.copyWith(content: null);
+        eventsToStream
+          ..clear()
+          ..add(contentEvent)
+          ..add(artifactEvent);
+      }
+
+      for (final Event streamEvent in eventsToStream) {
+        final String data = jsonEncode(
+          _eventToApiJson(
+            streamEvent,
+            appName: runRequest.appName,
+            userId: runRequest.userId,
+            sessionId: runRequest.sessionId,
+          ),
+        );
+        response.write('data: $data\n\n');
+        await response.flush();
+      }
     }
   } catch (error) {
     response.write(
@@ -1428,6 +2514,12 @@ Future<void> _handleRunLive(
       session: session,
       runConfig: runConfig,
     )) {
+      context.recordTraceEvent(
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+        event: event,
+      );
       socket.add(
         jsonEncode(
           _eventToApiJson(
@@ -2281,6 +3373,25 @@ Future<Directory?> _resolveWebAssetsDir() async {
   return file.parent;
 }
 
+typedef ExtraPluginFactory =
+    BasePlugin Function(String pluginSpec, {required String baseDir});
+
+final Map<String, ExtraPluginFactory> _extraPluginFactories =
+    <String, ExtraPluginFactory>{};
+
+void registerExtraPluginFactory(String pluginSpec, ExtraPluginFactory factory) {
+  final String trimmed = pluginSpec.trim();
+  if (trimmed.isEmpty) {
+    throw ArgumentError('pluginSpec must not be empty.');
+  }
+  _extraPluginFactories[trimmed] = factory;
+  _extraPluginFactories[_normalizePluginName(trimmed)] = factory;
+}
+
+void clearExtraPluginFactoriesForTest() {
+  _extraPluginFactories.clear();
+}
+
 List<_ExtraPluginSpec> _parseExtraPluginSpecs(List<String> extraPlugins) {
   final List<_ExtraPluginSpec> specs = <_ExtraPluginSpec>[];
   for (final String raw in extraPlugins) {
@@ -2336,7 +3447,7 @@ List<BasePlugin> _instantiateExtraPlugins(
 }) {
   final List<BasePlugin> plugins = <BasePlugin>[];
   for (final _ExtraPluginSpec spec in specs) {
-    final BasePlugin? plugin = switch (spec.normalizedName) {
+    BasePlugin? plugin = switch (spec.normalizedName) {
       'context_filter_plugin' => ContextFilterPlugin(),
       'debug_logging_plugin' => DebugLoggingPlugin(
         outputPath: '$baseDir${Platform.pathSeparator}adk_debug.yaml',
@@ -2349,11 +3460,22 @@ List<BasePlugin> _instantiateExtraPlugins(
       _ => null,
     };
 
+    if (plugin == null) {
+      final ExtraPluginFactory? customFactory =
+          _extraPluginFactories[spec.raw] ??
+          _extraPluginFactories[spec.normalizedName];
+      if (customFactory != null) {
+        plugin = customFactory(spec.raw, baseDir: baseDir);
+      }
+    }
+
     if (plugin != null) {
       plugins.add(plugin);
     } else {
       stderr.writeln(
-        'Unsupported extra plugin "${spec.raw}"; ignoring. Supported plugins are built-in ADK plugins only.',
+        'Unsupported extra plugin "${spec.raw}"; ignoring. '
+        'Provide a registered plugin factory via registerExtraPluginFactory() '
+        'or use built-in plugin names.',
       );
     }
   }

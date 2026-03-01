@@ -301,6 +301,51 @@ void main() {
       );
     });
 
+    test('serves metrics info endpoint', () async {
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/metrics-info'),
+      );
+      final HttpClientResponse response = await request.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(payload['metrics_info'], isA<List<dynamic>>());
+      expect((payload['metrics_info'] as List<dynamic>).isNotEmpty, isTrue);
+    });
+
+    test('creates and lists eval sets via web routes', () async {
+      final String evalSetId =
+          'smoke_eval_${DateTime.now().microsecondsSinceEpoch}';
+      final HttpClientRequest createRequest = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/eval-sets'),
+      );
+      createRequest.headers.contentType = ContentType.json;
+      createRequest.write(
+        jsonEncode(<String, Object?>{
+          'eval_set': <String, Object?>{'eval_set_id': evalSetId},
+        }),
+      );
+      final HttpClientResponse createResponse = await createRequest.close();
+      final String createBody = await utf8.decoder.bind(createResponse).join();
+      final Map<String, dynamic> created =
+          jsonDecode(createBody) as Map<String, dynamic>;
+
+      final HttpClientRequest listRequest = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/eval-sets'),
+      );
+      final HttpClientResponse listResponse = await listRequest.close();
+      final String listBody = await utf8.decoder.bind(listResponse).join();
+      final Map<String, dynamic> listed =
+          jsonDecode(listBody) as Map<String, dynamic>;
+
+      expect(createResponse.statusCode, HttpStatus.ok);
+      expect(created['eval_set_id'], evalSetId);
+      expect(listResponse.statusCode, HttpStatus.ok);
+      expect((listed['eval_set_ids'] as List<dynamic>), contains(evalSetId));
+    });
+
     test('runs agent via /run endpoint', () async {
       final String sessionId = 's_run_${DateTime.now().microsecondsSinceEpoch}';
       final HttpClientRequest createRequest = await client.postUrl(
@@ -340,6 +385,84 @@ void main() {
 
       expect(runResponse.statusCode, HttpStatus.ok);
       expect(events, isNotEmpty);
+    });
+
+    test('serves debug trace and event graph after run', () async {
+      final String sessionId =
+          's_trace_${DateTime.now().microsecondsSinceEpoch}';
+      final HttpClientRequest createRequest = await client.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/apps/test_app/users/u1/sessions',
+        ),
+      );
+      createRequest.headers.contentType = ContentType.json;
+      createRequest.write(
+        jsonEncode(<String, Object>{'session_id': sessionId}),
+      );
+      final HttpClientResponse createResponse = await createRequest.close();
+      await utf8.decoder.bind(createResponse).join();
+      expect(createResponse.statusCode, HttpStatus.ok);
+
+      final HttpClientRequest runRequest = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/run'),
+      );
+      runRequest.headers.contentType = ContentType.json;
+      runRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': sessionId,
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'What time in Seoul?'},
+            ],
+          },
+        }),
+      );
+      final HttpClientResponse runResponse = await runRequest.close();
+      final List<dynamic> events =
+          jsonDecode(await utf8.decoder.bind(runResponse).join())
+              as List<dynamic>;
+      expect(runResponse.statusCode, HttpStatus.ok);
+      expect(events, isNotEmpty);
+
+      final String eventId = '${(events.first as Map<String, dynamic>)['id']}';
+      final HttpClientRequest traceRequest = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/debug/trace/$eventId'),
+      );
+      final HttpClientResponse traceResponse = await traceRequest.close();
+      final Map<String, dynamic> tracePayload =
+          jsonDecode(await utf8.decoder.bind(traceResponse).join())
+              as Map<String, dynamic>;
+
+      final HttpClientRequest sessionTraceRequest = await client.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/debug/trace/session/$sessionId',
+        ),
+      );
+      final HttpClientResponse sessionTraceResponse = await sessionTraceRequest
+          .close();
+      final List<dynamic> sessionTracePayload =
+          jsonDecode(await utf8.decoder.bind(sessionTraceResponse).join())
+              as List<dynamic>;
+
+      final HttpClientRequest graphRequest = await client.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/apps/test_app/users/u1/sessions/$sessionId/events/$eventId/graph',
+        ),
+      );
+      final HttpClientResponse graphResponse = await graphRequest.close();
+      final Map<String, dynamic> graphPayload =
+          jsonDecode(await utf8.decoder.bind(graphResponse).join())
+              as Map<String, dynamic>;
+
+      expect(traceResponse.statusCode, HttpStatus.ok);
+      expect(tracePayload['event_id'], eventId);
+      expect(sessionTraceResponse.statusCode, HttpStatus.ok);
+      expect(sessionTracePayload, isNotEmpty);
+      expect(graphResponse.statusCode, HttpStatus.ok);
+      expect('${graphPayload['dot_src']}', contains('digraph'));
     });
 
     test('streams events via /run_sse endpoint', () async {

@@ -1,97 +1,63 @@
-# Runtime Remaining Work Checklist (Fresh Audit)
+# Runtime Remaining Work Checklist (Re-Audit)
 
-Last updated: 2026-03-01
+Last updated: 2026-03-01 (post-P1 web parity implementation pass)
 Scope: `adk_dart` runtime/CLI/web behavior parity vs `ref/adk-python` and actual runnable status.
 
 ## Audit method
-- Re-audited live code paths under `lib/src` (not relying on old docs).
-- Re-checked Python parity endpoints/CLI behavior from `ref/adk-python/src/google/adk/cli/*`.
+- Re-audited current code paths under `lib/src` after latest commits.
+- Re-checked Python parity endpoints/behavior from `ref/adk-python/src/google/adk/cli/*`.
 - Re-ran core runtime tests:
-  - `dart test test/session_persistence_services_test.dart test/dev_web_server_test.dart test/cli_adk_web_server_test.dart` (pass)
+  - `dart test test/session_persistence_services_test.dart` (pass)
+  - `dart test test/dev_web_server_test.dart test/cli_adk_web_server_test.dart` (pass)
 
-## Verified working (not remaining)
-- SQLite session persistence/runtime behavior is working (create/get/list/update/delete/event persistence).
-- Database URL dispatch now includes built-in PostgreSQL/MySQL path (`DatabaseSessionService` -> `NetworkDatabaseSessionService`).
-- ADK web base routes are working (`/health`, `/version`, `/list-apps`, `/run`, `/run_sse`, legacy session routes).
+## Completed (confirmed)
+- [x] `gs://` artifact service registry wiring is fixed and constructible in runtime.
+- [x] `adk deploy` has real execution path (`--dry-run` + actual gcloud process execution).
+- [x] `--a2a` dev web now serves agent card + JSON-RPC entry routes (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`).
+- [x] SQLite session persistence path is operational and covered by tests.
+- [x] PostgreSQL/MySQL URL dispatch is operational at service-selection level.
+- [x] ADK web debug/eval/metrics/event-graph route families are now present in Dart web server:
+  - `/debug/trace/{event_id}`
+  - `/debug/trace/session/{session_id}`
+  - `/apps/{app_name}/metrics-info`
+  - `/apps/{app_name}/eval-*` and legacy `/eval_*`
+  - `/apps/{app_name}/users/{user_id}/sessions/{session_id}/events/{event_id}/graph`
+- [x] `--eval_storage_uri` is now wired end-to-end from CLI parse to web server eval manager selection.
+- [x] `/run_sse` now applies Python-style split emission when content and `artifact_delta` co-exist.
 
-## P0 - Must fix for real feature operation parity
-- [x] Fix `gs://` artifact service runtime break in service registry. (2026-03-01)
-  - Current: registry creates `GcsArtifactService(parsed.authority)` without required live providers.
-  - Effect: `--artifact_service_uri=gs://...` fails immediately.
+## P1 - Remaining parity gaps (high priority)
+- [ ] Implement Python-style dynamic plugin loading for `--extra_plugins`.
+  - Current: registry-backed custom factory loading is implemented (`registerExtraPluginFactory`), but importlib-equivalent module/class runtime loading from arbitrary dotted path is not available.
   - Evidence:
-    - `lib/src/cli/service_registry.dart:192-195`
-    - `lib/src/artifacts/gcs_artifact_service.dart:64-69`
+    - `lib/src/dev/web_server.dart` uses built-in mapping + explicit factory registry.
+    - Python still supports direct dotted import (`importlib.import_module`).
 
-- [x] Implement real `adk deploy` execution path (2026-03-01).
-  - Current: command prints generated gcloud command and exits.
-  - Effect: deploy command is non-functional.
+- [ ] Expand A2A server parity beyond minimal RPC surface.
+  - Current: minimal JSON-RPC support is present, but advanced server behaviors from full A2A server stack are not implemented.
   - Evidence:
-    - `lib/src/cli/cli_tools_click.dart:28-47`
-    - Python reference executes deploy command: `ref/adk-python/src/google/adk/cli/cli_deploy.py:760-800`
+    - Dart routing maps only a small fixed set of operations in `web_server.dart`.
+    - Python delegates to A2A server application stack (`A2AStarletteApplication` + default handlers/stores).
 
-- [x] Complete `--a2a` server behavior to include A2A RPC routes. (2026-03-01)
-  - Current: only `/.well-known/agent.json`, `/a2a/agent-card`, and scoped agent-card URLs are served.
-  - Effect: A2A protocol calls cannot run, only card discovery works.
+## P2 - Runtime integration completion (production readiness)
+- [ ] Replace JSON-file storage in `SqliteSpanExporter` with real SQLite-backed exporter and wire it into debug trace endpoints.
+  - Current: exporter persists JSON file at `dbPath`; no runtime debug route integration.
   - Evidence:
-    - `lib/src/dev/web_server.dart:413-429`
-    - Python A2A route mounting: `ref/adk-python/src/google/adk/cli/fast_api.py:579-590`
+    - `lib/src/telemetry/sqlite_span_exporter.dart`.
 
-## P1 - High priority parity gaps (web/debug/eval/plugin behavior)
-- [ ] Add missing debug/eval/metrics/event-graph web APIs used by Python ADK web.
-  - Missing families include:
-    - `/debug/trace/{event_id}`
-    - `/debug/trace/session/{session_id}`
-    - `/apps/{app_name}/metrics-info`
-    - `/apps/{app_name}/eval-*` and legacy `/eval_*`
-    - `/apps/{app_name}/users/{user_id}/sessions/{session_id}/events/{event_id}/graph`
+- [ ] Provide default runtime adapters (or officially shipped bootstrap) for cloud/service clients that currently fail fast without injection.
+  - Current examples:
+    - BigQuery default client factory throws.
+    - Bigtable/Spanner factories throw if not configured.
+    - Toolbox delegate missing -> runtime error.
+    - Vertex code interpreter/audio transcriber require injected clients.
+
+- [ ] Add live DB integration tests (PostgreSQL/MySQL) against running containers.
+  - Current: tests cover URL dispatch/guards, not real network CRUD roundtrip.
   - Evidence:
-    - Dart route surface currently limited around: `lib/src/dev/web_server.dart:437-555`, `557-668`, `1013-1250`
-    - Python endpoint definitions: `ref/adk-python/src/google/adk/cli/adk_web_server.py:794-1744`
+    - `test/session_persistence_services_test.dart`.
 
-- [ ] Wire `--eval_storage_uri` into actual runtime configuration.
-  - Current: option is parsed then discarded.
-  - Effect: eval storage backend cannot be configured from CLI.
-  - Evidence:
-    - `lib/src/dev/cli.dart:571-577`
-
-- [ ] Make `--extra_plugins` load external plugins dynamically (module/class), not built-in-name mapping only.
-  - Current: static normalization/switch supports only built-ins; unknown entries are ignored.
-  - Effect: Python-style custom plugin loading path is unavailable.
-  - Evidence:
-    - `lib/src/dev/web_server.dart:2267-2325`
-    - Python dynamic import path: `ref/adk-python/src/google/adk/cli/adk_web_server.py:569-603`
-
-- [ ] Align `/run_sse` artifact delta streaming behavior with Python split-event semantics.
-  - Current: streams one event as-is.
-  - Python: may split into content event + artifact-only action event for web rendering consistency.
-  - Evidence:
-    - Dart: `lib/src/dev/web_server.dart:1331-1353`
-    - Python: `ref/adk-python/src/google/adk/cli/adk_web_server.py:1703-1721`
-
-## P2 - Integration completion / production readiness
-- [ ] Replace JSON-file fallback in `SqliteSpanExporter` with real SQLite-backed exporter + wire into debug trace flow.
-  - Current: writes/reads JSON array from `dbPath`, not sqlite DB.
-  - Effect: telemetry persistence parity and tooling expectations diverge.
-  - Evidence:
-    - Dart: `lib/src/telemetry/sqlite_span_exporter.dart:66-82`, `185-192`
-    - Python sqlite exporter: `ref/adk-python/src/google/adk/telemetry/sqlite_span_exporter.py:21-106`
-
-- [ ] Provide default runtime integrations (or officially shipped adapters) for cloud DB/tool clients.
-  - Current defaults throw until factory/delegate is injected:
-    - BigQuery: `lib/src/tools/bigquery/client.dart:140-149`
-    - Bigtable: `lib/src/tools/bigtable/client.dart:78-120`
-    - Spanner: `lib/src/tools/spanner/client.dart:78-123`
-    - Toolbox delegate: `lib/src/tools/toolbox_toolset.dart:85-91`
-    - Vertex code interpreter client: `lib/src/code_executors/vertex_ai_code_executor.dart:152-155`
-    - Audio transcriber recognizer: `lib/src/flows/llm_flows/audio_transcriber.dart:77-80`
-  - Effect: feature surfaces exist but are not out-of-box runnable without custom wiring.
-
-- [ ] Add real integration tests for network DB backends (PostgreSQL/MySQL) using running containers.
-  - Current tests validate URL dispatch and guards but do not verify end-to-end CRUD against live DB servers.
-  - Evidence:
-    - `test/session_persistence_services_test.dart` (no live Postgres/MySQL round-trip)
-
-## Suggested execution order
-1. P0 blockers (`gs://` artifact, deploy execution, full A2A RPC).
-2. P1 web parity APIs + eval storage wiring + dynamic plugin loading.
-3. P2 telemetry sqlite + default client adapters + live DB integration tests.
+## Recommended execution order
+1. P1 dynamic plugin dotted-path loading parity strategy finalization.
+2. P1 A2A server parity expansion.
+3. P2 telemetry SQLite exporter + debug trace linkage.
+4. P2 live Postgres/MySQL integration tests and default adapter packaging policy.

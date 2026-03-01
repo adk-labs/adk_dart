@@ -42,6 +42,7 @@ Web options:
       --session_service_uri
       --artifact_service_uri
       --memory_service_uri
+      --eval_storage_uri
       --use_local_storage / --no-use_local_storage
       --auto_create_session
       --trace_to_cloud
@@ -76,6 +77,7 @@ class ParsedAdkCommand {
       sessionServiceUri = null,
       artifactServiceUri = null,
       memoryServiceUri = null,
+      evalStorageUri = null,
       useLocalStorage = true,
       urlPrefix = null,
       traceToCloud = false,
@@ -110,6 +112,7 @@ class ParsedAdkCommand {
        sessionServiceUri = null,
        artifactServiceUri = null,
        memoryServiceUri = null,
+       evalStorageUri = null,
        useLocalStorage = true,
        urlPrefix = null,
        traceToCloud = false,
@@ -132,6 +135,7 @@ class ParsedAdkCommand {
     this.sessionServiceUri,
     this.artifactServiceUri,
     this.memoryServiceUri,
+    this.evalStorageUri,
     required this.useLocalStorage,
     this.urlPrefix,
     required this.traceToCloud,
@@ -162,6 +166,7 @@ class ParsedAdkCommand {
   final String? sessionServiceUri;
   final String? artifactServiceUri;
   final String? memoryServiceUri;
+  final String? evalStorageUri;
   final bool useLocalStorage;
   final String? urlPrefix;
   final bool traceToCloud;
@@ -401,6 +406,7 @@ ParsedAdkCommand _parseWebCommand(
   String? sessionServiceUri;
   String? artifactServiceUri;
   String? memoryServiceUri;
+  String? evalStorageUri;
   String? deprecatedSessionDbUrl;
   String? deprecatedArtifactStorageUri;
   bool useLocalStorage = true;
@@ -580,11 +586,12 @@ ParsedAdkCommand _parseWebCommand(
       continue;
     }
     if (arg == '--eval_storage_uri') {
-      _nextArg(args, i, '--eval_storage_uri');
+      evalStorageUri = _nextArg(args, i, '--eval_storage_uri').trim();
       i += 1;
       continue;
     }
     if (arg.startsWith('--eval_storage_uri=')) {
+      evalStorageUri = arg.substring('--eval_storage_uri='.length).trim();
       continue;
     }
     if (arg == '--log_level' || arg == '--verbosity') {
@@ -617,6 +624,7 @@ ParsedAdkCommand _parseWebCommand(
     sessionServiceUri: _emptyToNull(sessionServiceUri),
     artifactServiceUri: _emptyToNull(artifactServiceUri),
     memoryServiceUri: _emptyToNull(memoryServiceUri),
+    evalStorageUri: _emptyToNull(evalStorageUri),
     useLocalStorage: useLocalStorage,
     urlPrefix: _emptyToNull(urlPrefix),
     traceToCloud: traceToCloud,
@@ -1037,6 +1045,7 @@ Future<int> _runWebCommand(
       sessionServiceUri: command.sessionServiceUri,
       artifactServiceUri: command.artifactServiceUri,
       memoryServiceUri: command.memoryServiceUri,
+      evalStorageUri: command.evalStorageUri,
       useLocalStorage: command.useLocalStorage,
       urlPrefix: command.urlPrefix,
       autoCreateSession: command.autoCreateSession,

@@ -116,6 +116,8 @@ void main() {
         'memory://',
         '--memory_service_uri',
         'memory://',
+        '--eval_storage_uri',
+        'memory://',
         '--no-use_local_storage',
         '--auto_create_session',
       ]);
@@ -128,6 +130,7 @@ void main() {
       expect(command.sessionServiceUri, 'memory://');
       expect(command.artifactServiceUri, 'memory://');
       expect(command.memoryServiceUri, 'memory://');
+      expect(command.evalStorageUri, 'memory://');
       expect(command.useLocalStorage, isFalse);
       expect(command.autoCreateSession, isTrue);
       expect(command.enableWebUi, isTrue);

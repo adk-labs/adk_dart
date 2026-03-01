@@ -116,6 +116,7 @@ export 'src/evaluation/gcs_eval_sets_manager.dart';
 export 'src/evaluation/gcs_storage_store.dart';
 export 'src/evaluation/hallucinations_v1.dart';
 export 'src/evaluation/llm_as_judge.dart';
+export 'src/evaluation/in_memory_eval_set_results_manager.dart';
 export 'src/evaluation/in_memory_eval_sets_manager.dart';
 export 'src/evaluation/llm_as_judge_utils.dart';
 export 'src/evaluation/local_eval_service.dart';
