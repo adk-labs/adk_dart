@@ -144,6 +144,9 @@ void main() {
     test('supports in-memory event ingest and search', () async {
       final VertexAiMemoryBankService service = VertexAiMemoryBankService(
         agentEngineId: '123',
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return InMemoryVertexAiMemoryBankApiClient();
+        },
       );
       await service.addEventsToMemory(
         appName: 'app',
@@ -187,7 +190,7 @@ void main() {
             content: Content(
               role: 'user',
               parts: <Part>[
-                Part.text('alpha'),
+                Part.text('alpha', thoughtSignature: <int>[9, 10, 11]),
                 Part.fromInlineData(mimeType: 'image/png', data: <int>[1, 2]),
               ],
             ),
@@ -202,9 +205,14 @@ void main() {
       expect(content['role'], 'user');
       final List<Object?> parts = content['parts'] as List<Object?>;
       expect(parts, hasLength(2));
+      final Map<Object?, Object?> textPart = parts.first as Map<Object?, Object?>;
+      expect(textPart['thought_signature'], 'CQoL');
       final Map<Object?, Object?> inlineDataPart =
           parts[1] as Map<Object?, Object?>;
       expect(inlineDataPart['inline_data'], isA<Map<Object?, Object?>>());
+      final Map<Object?, Object?> inlineData =
+          inlineDataPart['inline_data'] as Map<Object?, Object?>;
+      expect(inlineData['data'], 'AQI=');
     });
 
     test('uses direct memory batches when consolidation is enabled', () async {
@@ -236,6 +244,9 @@ void main() {
     test('validates consolidation flag and memory content', () async {
       final VertexAiMemoryBankService service = VertexAiMemoryBankService(
         agentEngineId: 'ae_2',
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return InMemoryVertexAiMemoryBankApiClient();
+        },
       );
 
       await expectLater(
@@ -265,6 +276,20 @@ void main() {
               ),
             ),
           ],
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('requires project/location or express mode api key by default', () async {
+      final VertexAiMemoryBankService service = VertexAiMemoryBankService(
+        agentEngineId: 'ae_missing',
+      );
+      await expectLater(
+        service.searchMemory(
+          appName: 'app',
+          userId: 'u1',
+          query: 'q',
         ),
         throwsA(isA<ArgumentError>()),
       );

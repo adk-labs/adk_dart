@@ -113,7 +113,10 @@ VertexAiMemoryBankApiClient _defaultMemoryBankApiClientFactory({
       apiKey: apiKey,
     );
   }
-  return InMemoryVertexAiMemoryBankApiClient();
+  throw ArgumentError(
+    'VertexAiMemoryBankService requires either project/location or '
+    'expressModeApiKey.',
+  );
 }
 
 typedef VertexAiMemoryBankAccessTokenProvider = Future<String?> Function();
@@ -1182,7 +1185,7 @@ Map<String, Object?> _partToVertexJson(Part part) {
     payload['thought'] = true;
   }
   if (part.thoughtSignature != null) {
-    payload['thought_signature'] = List<int>.from(part.thoughtSignature!);
+    payload['thought_signature'] = base64Encode(part.thoughtSignature!);
   }
   if (part.functionCall != null) {
     payload['function_call'] = <String, Object?>{
@@ -1209,7 +1212,7 @@ Map<String, Object?> _partToVertexJson(Part part) {
   if (part.inlineData != null) {
     payload['inline_data'] = <String, Object?>{
       'mime_type': part.inlineData!.mimeType,
-      'data': List<int>.from(part.inlineData!.data),
+      'data': base64Encode(part.inlineData!.data),
       if (part.inlineData!.displayName != null)
         'display_name': part.inlineData!.displayName!,
     };
@@ -1243,6 +1246,7 @@ Map<String, Object?> _normalizeVertexGenerateEvent(Map<String, Object?> event) {
   }
   final List<Map<String, Object?>> parts = partsRaw
       .map(_asStringMap)
+      .map(_normalizeVertexPartPayload)
       .where((Map<String, Object?> part) => part.isNotEmpty)
       .toList(growable: false);
   if (parts.isEmpty) {
@@ -1255,6 +1259,33 @@ Map<String, Object?> _normalizeVertexGenerateEvent(Map<String, Object?> event) {
     normalizedContent['role'] = '${content['role']}';
   }
   return <String, Object?>{'content': normalizedContent};
+}
+
+Map<String, Object?> _normalizeVertexPartPayload(Map<String, Object?> part) {
+  final Map<String, Object?> normalized = Map<String, Object?>.from(part);
+  final Object? thoughtSignature = normalized['thought_signature'];
+  if (thoughtSignature is List<int>) {
+    normalized['thought_signature'] = base64Encode(thoughtSignature);
+  } else if (thoughtSignature is List) {
+    normalized['thought_signature'] = base64Encode(
+      thoughtSignature.map((Object? value) => (value as num).toInt()).toList(),
+    );
+  }
+
+  final Map<String, Object?> inlineData = _asStringMap(normalized['inline_data']);
+  if (inlineData.isNotEmpty) {
+    final Object? rawData = inlineData['data'];
+    if (rawData is List<int>) {
+      inlineData['data'] = base64Encode(rawData);
+      normalized['inline_data'] = inlineData;
+    } else if (rawData is List) {
+      inlineData['data'] = base64Encode(
+        rawData.map((Object? value) => (value as num).toInt()).toList(),
+      );
+      normalized['inline_data'] = inlineData;
+    }
+  }
+  return normalized;
 }
 
 String _extractFactFromGenerateEvent(Map<String, Object?> event) {
