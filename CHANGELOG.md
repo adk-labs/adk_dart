@@ -5,6 +5,12 @@
 - Added live network backend integration tests for PostgreSQL/MySQL session services (env-gated via `ADK_TEST_POSTGRES_URL` / `ADK_TEST_MYSQL_URL`).
 - Added unified runtime adapter bootstrap APIs: `configureToolRuntimeBootstrap(...)` and `resetToolRuntimeBootstrap(...)`.
 - Added global default audio recognizer registration support via `AudioTranscriber.registerDefaultRecognizer(...)`.
+- Added bundled default runtime clients for BigQuery, Bigtable (admin/data), and Spanner (REST-based), removing mandatory client-factory injection for core paths.
+- Added token resolution fallbacks for default cloud clients (explicit oauth token, environment variables, gcloud ADC, metadata server).
+- Added built-in default Spanner embedder runtime via Vertex AI predict API (with env/full-model resource fallback handling and explicit fallback guidance).
+- Added built-in default Toolbox HTTP delegate (`/api/toolset/*`, `/api/tool/*/invoke`) so `ToolboxToolset` can run without pre-registered delegate wiring.
+- Added built-in live HTTP/auth providers in `GcsArtifactService`, removing mandatory provider injection for direct service usage.
+- Updated parity tests to validate concrete default Bigtable/Spanner client availability.
 - Refreshed runtime checklist and README feature matrix to reflect current implemented behavior.
 
 ## 2026.2.28

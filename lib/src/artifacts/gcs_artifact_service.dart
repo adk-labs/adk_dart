@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import '../errors/input_validation_error.dart';
 import '../types/content.dart';
+import '../tools/_google_access_token.dart';
 import 'base_artifact_service.dart';
 
 enum GcsArtifactMode { inMemory, live }
@@ -56,19 +58,15 @@ class GcsArtifactService extends BaseArtifactService {
     Uri? uploadApiBaseUri,
   }) : bucketName = _normalizeBucketName(bucketName),
        _mode = mode,
-       _httpRequestProvider = httpRequestProvider,
-       _authHeadersProvider = authHeadersProvider,
+       _httpRequestProvider = mode == GcsArtifactMode.live
+           ? (httpRequestProvider ?? _defaultGcsArtifactHttpRequestProvider)
+           : httpRequestProvider,
+       _authHeadersProvider = mode == GcsArtifactMode.live
+           ? (authHeadersProvider ?? _defaultGcsArtifactAuthHeadersProvider)
+           : authHeadersProvider,
        _apiBaseUri = apiBaseUri ?? Uri.parse(_defaultApiBaseUri),
        _uploadApiBaseUri =
-           uploadApiBaseUri ?? Uri.parse(_defaultUploadApiBaseUri) {
-    if (_mode == GcsArtifactMode.live &&
-        (_httpRequestProvider == null || _authHeadersProvider == null)) {
-      throw StateError(
-        'GcsArtifactService live mode requires both httpRequestProvider and '
-        'authHeadersProvider.',
-      );
-    }
-  }
+           uploadApiBaseUri ?? Uri.parse(_defaultUploadApiBaseUri);
 
   factory GcsArtifactService.inMemory(String bucketName) {
     return GcsArtifactService(bucketName, mode: GcsArtifactMode.inMemory);
@@ -1225,4 +1223,56 @@ class _GcsBlob {
   final DateTime createTime;
   final Map<String, Object?> metadata;
   final String? fileUri;
+}
+
+Future<GcsArtifactHttpResponse> _defaultGcsArtifactHttpRequestProvider(
+  GcsArtifactHttpRequest request,
+) async {
+  final HttpClient client = HttpClient();
+  try {
+    final HttpClientRequest rawRequest = await client.openUrl(
+      request.method,
+      request.uri,
+    );
+    request.headers.forEach(rawRequest.headers.set);
+    if (request.bodyBytes.isNotEmpty) {
+      rawRequest.add(request.bodyBytes);
+    }
+
+    final HttpClientResponse response = await rawRequest.close();
+    final List<int> bodyBytes = await response.fold<List<int>>(<int>[], (
+      List<int> previous,
+      List<int> element,
+    ) {
+      previous.addAll(element);
+      return previous;
+    });
+    final Map<String, String> headers = <String, String>{};
+    response.headers.forEach((String name, List<String> values) {
+      if (values.isNotEmpty) {
+        headers[name] = values.join(',');
+      }
+    });
+
+    return GcsArtifactHttpResponse(
+      statusCode: response.statusCode,
+      headers: headers,
+      bodyBytes: bodyBytes,
+    );
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<Map<String, String>> _defaultGcsArtifactAuthHeadersProvider() async {
+  final String token = await resolveDefaultGoogleAccessToken(
+    scopes: const <String>[
+      'https://www.googleapis.com/auth/devstorage.read_write',
+    ],
+  );
+  return <String, String>{
+    HttpHeaders.authorizationHeader: 'Bearer $token',
+    HttpHeaders.acceptHeader: ContentType.json.mimeType,
+    HttpHeaders.contentTypeHeader: ContentType.json.mimeType,
+  };
 }

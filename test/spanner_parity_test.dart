@@ -291,28 +291,15 @@ void main() {
     });
   });
 
-  group('spanner client guard parity', () {
-    test('default factory surfaces actionable configuration guard', () {
+  group('spanner client default parity', () {
+    test('default factory provides a concrete runtime client', () {
       resetSpannerClientFactory();
 
-      expect(
-        () => getSpannerClient(project: 'p', credentials: Object()),
-        throwsA(
-          isA<SpannerClientFactoryNotConfiguredException>()
-              .having(
-                (SpannerClientFactoryNotConfiguredException error) =>
-                    error.code,
-                'code',
-                SpannerClientFactoryNotConfiguredException.defaultCode,
-              )
-              .having(
-                (SpannerClientFactoryNotConfiguredException error) =>
-                    error.message,
-                'message',
-                contains('setSpannerClientFactory'),
-              ),
-        ),
+      final SpannerClient client = getSpannerClient(
+        project: 'p',
+        credentials: <String, Object?>{'access_token': 'token'},
       );
+      expect(client.userAgent, contains('adk-spanner-tool'));
     });
   });
 

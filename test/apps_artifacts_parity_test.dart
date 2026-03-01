@@ -386,8 +386,8 @@ void main() {
       );
     });
 
-    test('live mode fails fast without backend bridge wiring', () {
-      expect(() => GcsArtifactService('bucket-a'), throwsA(isA<StateError>()));
+    test('live mode provides default backend bridge wiring', () {
+      expect(() => GcsArtifactService('bucket-a'), returnsNormally);
       expect(
         () => GcsArtifactService(
           'bucket-a',
@@ -397,7 +397,7 @@ void main() {
             bodyBytes: utf8.encode('{}'),
           ),
         ),
-        throwsA(isA<StateError>()),
+        returnsNormally,
       );
     });
 

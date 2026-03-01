@@ -77,15 +77,16 @@ Status legend:
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
 | Sessions | `mysql://` TLS/SSL transport options | ✅ | Uses `mysql_client_plus`; supports TLS flags (`secure`/`ssl`/`tls`, `sslmode=require`), CA file (`ssl_ca_file`), client cert/key (`ssl_cert_file` + `ssl_key_file`), optional verify toggle (`ssl_verify=false`), and auto secure-retry for auth plugins that require TLS (unless explicitly disabled). |
-| Sessions | `VertexAiSessionService` remote persistence parity | ⚠️ | Current implementation delegates storage to in-memory service. |
-| Artifacts | `gs://` default artifact backend | ❌ | Default `GcsArtifactService` live mode needs injected HTTP/auth providers. |
-| Tools runtime | BigQuery default client | ⚠️ | No bundled concrete client; inject via `configureToolRuntimeBootstrap(...)` or `setBigQueryClientFactory()`. |
-| Tools runtime | Bigtable default clients | ⚠️ | No bundled concrete admin/data clients; inject via bootstrap or `setBigtableClientFactories()`. |
-| Tools runtime | Spanner default client + embedder | ⚠️ | No bundled concrete client/embedder; inject via bootstrap or `setSpannerClientFactory()` + `setSpannerEmbedders()`. |
-| Tools runtime | BigQuery Data Insights default provider | ❌ | Requires `setBigQueryInsightsStreamProvider()` injection. |
-| Tools runtime | Discovery Engine search without handler | ❌ | `DiscoveryEngineSearchTool` requires explicit `searchHandler`. |
-| Tools runtime | Toolbox integration without delegate | ⚠️ | Requires delegate wiring; bootstrap supports `toolboxDelegateFactory` registration. |
-| Secrets | Secret Manager access without fetcher | ❌ | Requires `setSecretManagerSecretFetcher()` injection. |
+| Sessions | `VertexAiSessionService` remote persistence parity | ✅ | Service uses Vertex Session API client paths (`create/get/list/delete`, events append/list) with HTTP transport. |
+| Artifacts | `gs://` default artifact backend | ✅ | `GcsArtifactService` now includes built-in live HTTP/auth providers; custom providers remain optional. |
+| Tools runtime | BigQuery default client | ✅ | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
+| Tools runtime | Bigtable default clients | ✅ | Bundled REST admin/data clients are available by default (token required via credentials/env/gcloud ADC). |
+| Tools runtime | Spanner default client | ✅ | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
+| Tools runtime | Spanner embedder runtime | ✅ | Built-in Vertex AI embedding runtime is available (project/location + token required); custom embedder injection remains optional. |
+| Tools runtime | BigQuery Data Insights default provider | ✅ | Built-in HTTP stream provider is available; injection is optional for customization/tests. |
+| Tools runtime | Discovery Engine search without handler | ✅ | Uses built-in Discovery Engine API HTTP path when `searchHandler` is not provided. |
+| Tools runtime | Toolbox integration without delegate | ✅ | Built-in native toolbox HTTP delegate is available (`/api/toolset/*`, `/api/tool/*/invoke`); custom delegate registration is still supported. |
+| Secrets | Secret Manager access without fetcher | ✅ | Built-in Secret Manager HTTP fetcher is available; injection is optional. |
 | Audio | Speech transcription runtime bootstrap | ⚠️ | Recognizer is still required, but can now be provided per instance or globally via `AudioTranscriber.registerDefaultRecognizer(...)`. |
 | OpenAPI | External multi-file `$ref` resolution | ❌ | Parser throws on external refs (`External references not supported`). |
 | Spanner | PostgreSQL vector/ANN parity | ⚠️ | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |

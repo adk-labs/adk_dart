@@ -184,53 +184,33 @@ void main() {
     });
   });
 
-  group('bigtable client guard parity', () {
-    test('default factories surface actionable configuration guards', () {
+  group('bigtable client default parity', () {
+    test('default factories provide concrete runtime clients', () {
       resetBigtableClientFactories();
 
-      expect(
-        () => getBigtableAdminClient(project: 'p', credentials: Object()),
-        throwsA(
-          isA<BigtableClientFactoryNotConfiguredException>()
-              .having(
-                (BigtableClientFactoryNotConfiguredException error) =>
-                    error.code,
-                'code',
-                BigtableClientFactoryNotConfiguredException.defaultCode,
-              )
-              .having(
-                (BigtableClientFactoryNotConfiguredException error) =>
-                    error.target,
-                'target',
-                'admin',
-              )
-              .having(
-                (BigtableClientFactoryNotConfiguredException error) =>
-                    error.message,
-                'message',
-                contains('setBigtableClientFactories'),
-              ),
-        ),
+      final BigtableAdminClient admin = getBigtableAdminClient(
+        project: 'p',
+        credentials: <String, Object?>{'access_token': 'token'},
       );
+      final BigtableDataClient data = getBigtableDataClient(
+        project: 'p',
+        credentials: <String, Object?>{'access_token': 'token'},
+      );
+      expect(admin.runtimeType.toString().toLowerCase(), contains('bigtable'));
+      expect(data.runtimeType.toString().toLowerCase(), contains('bigtable'));
+    });
+  });
 
+  group('bigtable compatibility error type', () {
+    test('legacy exception type still exposes expected defaults', () {
+      final BigtableClientFactoryNotConfiguredException error =
+          BigtableClientFactoryNotConfiguredException(target: 'admin');
       expect(
-        () => getBigtableDataClient(project: 'p', credentials: Object()),
-        throwsA(
-          isA<BigtableClientFactoryNotConfiguredException>()
-              .having(
-                (BigtableClientFactoryNotConfiguredException error) =>
-                    error.code,
-                'code',
-                BigtableClientFactoryNotConfiguredException.defaultCode,
-              )
-              .having(
-                (BigtableClientFactoryNotConfiguredException error) =>
-                    error.target,
-                'target',
-                'data',
-              ),
-        ),
+        error.code,
+        BigtableClientFactoryNotConfiguredException.defaultCode,
       );
+      expect(error.target, 'admin');
+      expect(error.message, contains('setBigtableClientFactories'));
     });
   });
 

@@ -593,7 +593,7 @@ ServiceAccountAuth? _serviceAccountFromObject(Object? value) {
     useDefaultCredential: _readBool(
       map['useDefaultCredential'] ?? map['use_default_credential'],
     ),
-    useIdToken: _readBool(map['useIdToken'] ?? map['use_id_token']) ?? false,
+    useIdToken: _readBool(map['useIdToken'] ?? map['use_id_token']),
     audience: _readString(map['audience']),
   );
 }

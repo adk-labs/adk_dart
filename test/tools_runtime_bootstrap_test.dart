@@ -437,21 +437,35 @@ void main() {
 
       resetToolRuntimeBootstrap();
 
-      expect(
-        () => getBigQueryClient(project: 'project', credentials: Object()),
-        throwsStateError,
+      final BigQueryClient bigQueryClient = getBigQueryClient(
+        project: 'project',
+        credentials: <String, Object?>{'access_token': 'token'},
       );
       expect(
-        () => getBigtableAdminClient(project: 'project', credentials: Object()),
-        throwsA(isA<BigtableClientFactoryNotConfiguredException>()),
+        bigQueryClient.runtimeType.toString().toLowerCase(),
+        contains('bigquery'),
+      );
+
+      final BigtableAdminClient bigtableAdminClient = getBigtableAdminClient(
+        project: 'project',
+        credentials: <String, Object?>{'access_token': 'token'},
       );
       expect(
-        () => getSpannerClient(project: 'project', credentials: Object()),
-        throwsA(isA<SpannerClientFactoryNotConfiguredException>()),
+        bigtableAdminClient.runtimeType.toString().toLowerCase(),
+        contains('bigtable'),
+      );
+
+      final SpannerClient spannerClient = getSpannerClient(
+        project: 'project',
+        credentials: <String, Object?>{'access_token': 'token'},
+      );
+      expect(
+        spannerClient.runtimeType.toString().toLowerCase(),
+        contains('spanner'),
       );
       expect(
         () => ToolboxToolset(serverUrl: 'http://toolbox'),
-        throwsStateError,
+        returnsNormally,
       );
 
       final InvocationContext context = _newAudioInvocationContext();

@@ -136,10 +136,15 @@ void main() {
     expect(publisherClient.closeCount, 1);
     expect(subscriberClient.closeCount, 1);
     expect(pubSubCacheSizes(), <String, int>{'publisher': 0, 'subscriber': 0});
-    expect(
-      () => getSpannerClient(project: 'proj-1', credentials: Object()),
-      throwsA(isA<SpannerClientFactoryNotConfiguredException>()),
+    final SpannerClient defaultSpannerClient = getSpannerClient(
+      project: 'proj-1',
+      credentials: <String, Object?>{'access_token': 'token-reset'},
     );
+    expect(
+      defaultSpannerClient.runtimeType.toString().toLowerCase(),
+      contains('spanner'),
+    );
+    expect(defaultSpannerClient.userAgent, spannerUserAgent);
     expect(
       () => embedContents(
         vertexAiEmbeddingModelName: 'text-embedding-005',

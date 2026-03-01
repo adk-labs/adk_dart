@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import '../_google_auth_token.dart';
 import '../pubsub/client.dart' as pubsub;
 import '../tool_context.dart';
 import 'client.dart';
@@ -214,7 +216,12 @@ List<List<double>> _defaultSpannerEmbedder({
   int? outputDimensionality,
   Object? genAiClient,
 }) {
-  throw SpannerEmbedderNotConfiguredException();
+  return _embedViaDefaultVertexAiRuntime(
+    vertexAiEmbeddingModelName: vertexAiEmbeddingModelName,
+    contents: contents,
+    outputDimensionality: outputDimensionality,
+    genAiClient: genAiClient,
+  );
 }
 
 Future<List<List<double>>> _defaultSpannerEmbedderAsync({
@@ -223,7 +230,7 @@ Future<List<List<double>>> _defaultSpannerEmbedderAsync({
   int? outputDimensionality,
   Object? genAiClient,
 }) async {
-  return _defaultSpannerEmbedder(
+  return _embedViaDefaultVertexAiRuntime(
     vertexAiEmbeddingModelName: vertexAiEmbeddingModelName,
     contents: contents,
     outputDimensionality: outputDimensionality,
@@ -612,6 +619,267 @@ Object? _ensureJsonEncodable(Object? value) {
   } catch (_) {
     return '$value';
   }
+}
+
+List<List<double>> _embedViaDefaultVertexAiRuntime({
+  required String vertexAiEmbeddingModelName,
+  required List<String> contents,
+  required int? outputDimensionality,
+  required Object? genAiClient,
+}) {
+  if (contents.isEmpty) {
+    return <List<double>>[];
+  }
+
+  final _ResolvedVertexEmbeddingModel resolvedModel = _resolveVertexModel(
+    vertexAiEmbeddingModelName,
+  );
+  final String accessToken = _resolveVertexAccessToken(
+    genAiClient: genAiClient,
+  );
+
+  final Uri uri = Uri.parse(
+    'https://${resolvedModel.location}-aiplatform.googleapis.com/v1/'
+    'projects/${resolvedModel.project}/locations/${resolvedModel.location}/'
+    'publishers/google/models/${resolvedModel.model}:predict',
+  );
+
+  final Map<String, Object?> payload = <String, Object?>{
+    'instances': contents
+        .map((String content) => <String, Object?>{'content': content})
+        .toList(growable: false),
+    if (outputDimensionality != null)
+      'parameters': <String, Object?>{
+        'outputDimensionality': outputDimensionality,
+      },
+  };
+
+  final List<String> args = <String>[
+    '-sS',
+    '-X',
+    'POST',
+    uri.toString(),
+    '-H',
+    'Authorization: Bearer $accessToken',
+    '-H',
+    'Content-Type: application/json',
+    '-H',
+    'Accept: application/json',
+    '--data-binary',
+    jsonEncode(payload),
+    '-w',
+    '\n%{http_code}',
+  ];
+  final ProcessResult result = Process.runSync('curl', args);
+  if (result.exitCode != 0) {
+    throw SpannerEmbedderNotConfiguredException(
+      'Default Spanner embedder runtime failed to invoke Vertex AI: '
+      '${result.stderr}. Inject an embedder with setSpannerEmbedders().',
+    );
+  }
+
+  final String responseText = '${result.stdout}';
+  final int separator = responseText.lastIndexOf('\n');
+  final String bodyText = separator < 0
+      ? ''
+      : responseText.substring(0, separator);
+  final String statusText = separator < 0
+      ? responseText.trim()
+      : responseText.substring(separator + 1).trim();
+  final int statusCode = int.tryParse(statusText) ?? 0;
+  if (statusCode < 200 || statusCode >= 300) {
+    throw SpannerEmbedderNotConfiguredException(
+      'Default Spanner embedder runtime received Vertex AI error '
+      '($statusCode): $bodyText. Inject an embedder with setSpannerEmbedders().',
+    );
+  }
+
+  final Object? decoded = bodyText.trim().isEmpty ? null : jsonDecode(bodyText);
+  if (decoded is! Map) {
+    throw SpannerEmbedderNotConfiguredException(
+      'Default Spanner embedder runtime got malformed Vertex AI response. '
+      'Inject an embedder with setSpannerEmbedders().',
+    );
+  }
+
+  final List<Object?> predictions = _asObjectList(decoded['predictions']);
+  final List<List<double>> embeddings = <List<double>>[];
+  for (final Object? prediction in predictions) {
+    final Map<String, Object?> map = _asObjectMap(prediction);
+    final Map<String, Object?> embeddingPayload = _asObjectMap(
+      map['embeddings'] ?? map['embedding'],
+    );
+    final List<Object?> values = _asObjectList(
+      embeddingPayload['values'] ?? map['values'],
+    );
+    if (values.isEmpty) {
+      continue;
+    }
+    embeddings.add(
+      values
+          .map((Object? value) => value is num ? value.toDouble() : null)
+          .whereType<double>()
+          .toList(growable: false),
+    );
+  }
+
+  if (embeddings.length != contents.length) {
+    throw SpannerEmbedderNotConfiguredException(
+      'Default Spanner embedder runtime response length mismatch '
+      '(expected ${contents.length}, got ${embeddings.length}). '
+      'Inject an embedder with setSpannerEmbedders().',
+    );
+  }
+
+  return embeddings;
+}
+
+String _resolveVertexAccessToken({required Object? genAiClient}) {
+  final String? fromClient = tryExtractGoogleAccessToken(genAiClient);
+  if (fromClient != null && fromClient.isNotEmpty) {
+    return fromClient;
+  }
+  final String? fromEnv = _firstNonEmptyEnvValue(const <String>[
+    'GOOGLE_OAUTH_ACCESS_TOKEN',
+    'GOOGLE_ACCESS_TOKEN',
+    'ACCESS_TOKEN',
+  ]);
+  if (fromEnv != null) {
+    return fromEnv;
+  }
+
+  final ProcessResult gcloud = Process.runSync('gcloud', <String>[
+    'auth',
+    'application-default',
+    'print-access-token',
+    '--scopes',
+    'https://www.googleapis.com/auth/cloud-platform',
+  ]);
+  if (gcloud.exitCode == 0) {
+    final String token = '${gcloud.stdout}'.trim();
+    if (token.isNotEmpty) {
+      return token;
+    }
+  }
+
+  final ProcessResult metadata = Process.runSync('curl', <String>[
+    '-sS',
+    '-H',
+    'Metadata-Flavor: Google',
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+  ]);
+  if (metadata.exitCode == 0) {
+    final String text = '${metadata.stdout}'.trim();
+    if (text.isNotEmpty) {
+      try {
+        final Object? decoded = jsonDecode(text);
+        if (decoded is Map && decoded['access_token'] != null) {
+          final String token = '${decoded['access_token']}'.trim();
+          if (token.isNotEmpty) {
+            return token;
+          }
+        }
+      } on FormatException {
+        // Ignore malformed metadata response.
+      }
+    }
+  }
+
+  throw SpannerEmbedderNotConfiguredException(
+    'No default Vertex AI access token available. '
+    'Set GOOGLE_OAUTH_ACCESS_TOKEN or inject an embedder with '
+    'setSpannerEmbedders().',
+  );
+}
+
+_ResolvedVertexEmbeddingModel _resolveVertexModel(String rawModelName) {
+  final String modelName = rawModelName.trim();
+  if (modelName.isEmpty) {
+    throw SpannerEmbedderNotConfiguredException(
+      'vertexAiEmbeddingModelName is empty. Inject an embedder with '
+      'setSpannerEmbedders().',
+    );
+  }
+
+  final RegExp fullModelPattern = RegExp(
+    r'^projects/([^/]+)/locations/([^/]+)/publishers/google/models/([^/]+)$',
+  );
+  final RegExpMatch? fullMatch = fullModelPattern.firstMatch(modelName);
+  if (fullMatch != null) {
+    return _ResolvedVertexEmbeddingModel(
+      project: fullMatch.group(1)!,
+      location: fullMatch.group(2)!,
+      model: fullMatch.group(3)!,
+    );
+  }
+
+  final String? project = _firstNonEmptyEnvValue(const <String>[
+    'GOOGLE_CLOUD_PROJECT',
+    'GCP_PROJECT',
+    'GCLOUD_PROJECT',
+  ]);
+  if (project == null) {
+    throw SpannerEmbedderNotConfiguredException(
+      'GOOGLE_CLOUD_PROJECT is required for default Spanner embedder '
+      'when model is not a full Vertex resource path. '
+      'Inject an embedder with setSpannerEmbedders().',
+    );
+  }
+  final String location =
+      _firstNonEmptyEnvValue(const <String>[
+        'GOOGLE_CLOUD_LOCATION',
+        'GOOGLE_LOCATION',
+        'LOCATION',
+      ]) ??
+      'us-central1';
+
+  return _ResolvedVertexEmbeddingModel(
+    project: project,
+    location: location,
+    model: modelName,
+  );
+}
+
+String? _firstNonEmptyEnvValue(List<String> keys) {
+  for (final String key in keys) {
+    final String value = (Platform.environment[key] ?? '').trim();
+    if (value.isNotEmpty) {
+      return value;
+    }
+  }
+  return null;
+}
+
+class _ResolvedVertexEmbeddingModel {
+  const _ResolvedVertexEmbeddingModel({
+    required this.project,
+    required this.location,
+    required this.model,
+  });
+
+  final String project;
+  final String location;
+  final String model;
+}
+
+Map<String, Object?> _asObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return <String, Object?>{};
+}
+
+List<Object?> _asObjectList(Object? value) {
+  if (value is List<Object?>) {
+    return List<Object?>.from(value);
+  }
+  if (value is List) {
+    return value.cast<Object?>();
+  }
+  return <Object?>[];
 }
 
 String _appendUserAgent(String base, String addition) {
