@@ -489,3 +489,38 @@
 ### 단위 결론
 - `main.dart`가 문서 권장 아키텍처 방향(계층 분리 + 상태 관리 책임 분리)에 맞게 정리되었고,
   기존 기능(다국어, 예제 전환, MCP/Skills 포함)과 호환되는 상태로 검증 완료.
+
+## Work Unit 14 — main.dart 물리 분할(로직/계층 파일 분리)
+- 상태: 완료
+
+### 수행 시각
+- 2026-03-01 23:20~23:35 KST
+
+### 문제 인식
+- `packages/flutter_adk/example/lib/main.dart`가 2,000+ 라인으로 과대해
+  변경 영향 범위 추적/리뷰/유지보수가 어려운 상태였음.
+
+### 구현 내용
+- `main.dart`를 엔트리 전용으로 축소(12 lines)
+- 로직/계층을 `lib/src/*.part.dart`로 물리 분할:
+  - `config_and_i18n.part.dart`
+    - 다국어 enum/키/문구 맵/탭 정의
+  - `settings_viewmodel.part.dart`
+    - `_AppSettings`, `_SettingsRepository`,
+      `_SharedPreferencesSettingsRepository`, `_AppShellViewModel`
+  - `app_shell.part.dart`
+    - `MyApp`, `ExamplesHomePage` 및 앱 셸 UI
+  - `chat_view.part.dart`
+    - `_ChatExampleView`, `_ChatMessage`, runner 기반 채팅 화면 로직
+  - `agent_builders.part.dart`
+    - 예제별 agent builder 및 도구 헬퍼 함수
+
+### 검증 결과
+- `flutter analyze --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter test --no-pub` (`packages/flutter_adk/example`): 통과
+- `flutter build web` (`packages/flutter_adk/example`): 통과
+
+### 단위 결론
+- 사용자 요청대로 파일 단위 분리가 완료되었고,
+  구조적으로는 기존 App Architecture 리팩터링(ViewModel/Repository)을 유지한 채
+  코드 탐색/수정 단위를 대폭 축소했다.

@@ -542,6 +542,6 @@ String _asTableOrSubquery(
 String _randomIdentifier() {
   final Random random = Random();
   final int micros = DateTime.now().microsecondsSinceEpoch;
-  final int noise = random.nextInt(1 << 32);
+  final int noise = random.nextInt(0x100000000);
   return '${micros.toRadixString(16)}_${noise.toRadixString(16)}';
 }

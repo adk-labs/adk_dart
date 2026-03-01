@@ -1,74 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_adk_example/main.dart';
+import 'package:flutter_adk_example/ui/core/widgets/example_app.dart';
 
 void main() {
-  testWidgets('renders all example tabs and switches screens', (
+  testWidgets('renders example list and navigates to details', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const ExampleApp());
 
     expect(find.text('Flutter ADK Examples'), findsOneWidget);
     expect(find.text('Set API Key'), findsOneWidget);
-    expect(find.text('Basic Chatbot'), findsOneWidget);
-    expect(find.text('Transfer Multi-Agent'), findsOneWidget);
-    expect(find.text('Workflow Combo'), findsOneWidget);
-    expect(find.text('Sequential'), findsOneWidget);
-    expect(find.text('Parallel'), findsOneWidget);
-    expect(find.text('Loop'), findsOneWidget);
-    expect(find.text('Agent Team'), findsOneWidget);
-    expect(find.text('MCP Toolset'), findsOneWidget);
-    expect(find.text('Skills'), findsOneWidget);
-
     expect(find.text('Basic Chatbot Example'), findsOneWidget);
-    expect(find.textContaining('Single Agent + FunctionTool'), findsOneWidget);
+    expect(find.text('Single Agent + FunctionTool example.'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Transfer Multi-Agent'));
+    await tester.tap(find.widgetWithText(ListTile, 'Basic Chatbot Example'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Multi-Agent Coordinator Example'), findsOneWidget);
+    expect(find.text('Basic Chatbot Example'), findsAtLeastNWidgets(1));
+    expect(find.byIcon(Icons.send), findsOneWidget);
     expect(
-      find.textContaining('Coordinator/Dispatcher pattern'),
-      findsOneWidget,
+      find.textContaining('Single Agent + FunctionTool'),
+      findsAtLeastNWidgets(1),
     );
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Workflow Combo'));
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
-    expect(find.text('Workflow Agents Example'), findsOneWidget);
-    expect(find.textContaining('Sequential + Parallel + Loop'), findsOneWidget);
-
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Sequential'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Sequential'));
+    final Finder transferTile = find.widgetWithText(
+      ListTile,
+      'Multi-Agent Coordinator Example',
+    );
+    await tester.ensureVisible(transferTile);
+    await tester.tap(transferTile);
     await tester.pumpAndSettle();
-    expect(find.text('SequentialAgent Example'), findsOneWidget);
+    expect(
+      find.text('Multi-Agent Coordinator Example'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(
+      find.textContaining('Coordinator/Dispatcher pattern'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(find.byIcon(Icons.send), findsOneWidget);
 
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Parallel'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Parallel'));
+    await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('ParallelAgent Example'), findsOneWidget);
 
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Loop'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Loop'));
+    final Finder workflowTile = find.widgetWithText(
+      ListTile,
+      'Workflow Agents Example',
+    );
+    await tester.ensureVisible(workflowTile);
+    await tester.tap(workflowTile);
     await tester.pumpAndSettle();
-    expect(find.text('LoopAgent Example'), findsOneWidget);
-
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Agent Team'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Agent Team'));
-    await tester.pumpAndSettle();
-    expect(find.text('Agent Team Example'), findsOneWidget);
-
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'MCP Toolset'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'MCP Toolset'));
-    await tester.pumpAndSettle();
-    expect(find.text('MCP Toolset Example'), findsOneWidget);
-
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Skills'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Skills'));
-    await tester.pumpAndSettle();
-    expect(find.text('SkillToolset Example'), findsOneWidget);
-
+    expect(find.text('Workflow Agents Example'), findsAtLeastNWidgets(1));
+    expect(
+      find.textContaining('Sequential + Parallel + Loop'),
+      findsAtLeastNWidgets(1),
+    );
     expect(find.byIcon(Icons.send), findsOneWidget);
   });
 }

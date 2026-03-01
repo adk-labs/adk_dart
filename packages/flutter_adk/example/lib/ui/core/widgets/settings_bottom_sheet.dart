@@ -1,0 +1,135 @@
+import 'package:flutter/material.dart';
+
+class SettingsBottomSheet extends StatefulWidget {
+  const SettingsBottomSheet({
+    super.key,
+    required this.title,
+    required this.apiKeyLabel,
+    required this.mcpUrlLabel,
+    required this.mcpTokenLabel,
+    required this.securityNotice,
+    required this.clearLabel,
+    required this.saveLabel,
+    required this.apiKeyController,
+    required this.mcpUrlController,
+    required this.mcpBearerTokenController,
+    required this.onClear,
+    required this.onSave,
+  });
+
+  final String title;
+  final String apiKeyLabel;
+  final String mcpUrlLabel;
+  final String mcpTokenLabel;
+  final String securityNotice;
+  final String clearLabel;
+  final String saveLabel;
+  final TextEditingController apiKeyController;
+  final TextEditingController mcpUrlController;
+  final TextEditingController mcpBearerTokenController;
+  final Future<void> Function() onClear;
+  final Future<void> Function() onSave;
+
+  @override
+  State<SettingsBottomSheet> createState() => _SettingsBottomSheetState();
+}
+
+class _SettingsBottomSheetState extends State<SettingsBottomSheet> {
+  bool _obscureApiKey = true;
+  bool _obscureMcpBearerToken = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            widget.title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: widget.apiKeyController,
+            obscureText: _obscureApiKey,
+            decoration: InputDecoration(
+              labelText: widget.apiKeyLabel,
+              hintText: 'AIza...',
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscureApiKey ? Icons.visibility_off : Icons.visibility,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscureApiKey = !_obscureApiKey;
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: widget.mcpUrlController,
+            decoration: InputDecoration(
+              labelText: widget.mcpUrlLabel,
+              hintText: 'https://your-mcp-server.example.com/mcp',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: widget.mcpBearerTokenController,
+            obscureText: _obscureMcpBearerToken,
+            decoration: InputDecoration(
+              labelText: widget.mcpTokenLabel,
+              hintText: 'eyJ...',
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscureMcpBearerToken
+                      ? Icons.visibility_off
+                      : Icons.visibility,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscureMcpBearerToken = !_obscureMcpBearerToken;
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(widget.securityNotice, style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 16),
+          Row(
+            children: <Widget>[
+              OutlinedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await widget.onClear();
+                },
+                child: Text(widget.clearLabel),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await widget.onSave();
+                },
+                child: Text(widget.saveLabel),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
