@@ -16,17 +16,25 @@ ToolDeclaration? _findToolWithFunctionDeclarations(LlmRequest request) {
   return null;
 }
 
+/// Function-calling declaration exposed to the model.
 class FunctionDeclaration {
+  /// Creates a function declaration.
   FunctionDeclaration({
     required this.name,
     this.description = '',
     JsonMap? parameters,
   }) : parameters = parameters ?? <String, dynamic>{};
 
+  /// The function name.
   String name;
+
+  /// The function description shown to the model.
   String description;
+
+  /// JSON schema parameters for the function.
   JsonMap parameters;
 
+  /// Returns a copy of this declaration with optional overrides.
   FunctionDeclaration copyWith({
     String? name,
     String? description,
@@ -40,7 +48,9 @@ class FunctionDeclaration {
   }
 }
 
+/// Retry policy for HTTP model requests.
 class HttpRetryOptions {
+  /// Creates HTTP retry options.
   HttpRetryOptions({
     this.attempts,
     this.initialDelay,
@@ -49,12 +59,22 @@ class HttpRetryOptions {
     List<int>? httpStatusCodes,
   }) : httpStatusCodes = httpStatusCodes ?? <int>[];
 
+  /// Maximum number of retry attempts.
   int? attempts;
+
+  /// Initial retry delay in seconds.
   double? initialDelay;
+
+  /// Maximum retry delay in seconds.
   double? maxDelay;
+
+  /// Exponential backoff multiplier.
   double? expBase;
+
+  /// HTTP status codes that should be retried.
   List<int> httpStatusCodes;
 
+  /// Returns a copy of these retry options with optional overrides.
   HttpRetryOptions copyWith({
     Object? attempts = _sentinel,
     Object? initialDelay = _sentinel,
@@ -80,17 +100,25 @@ class HttpRetryOptions {
   }
 }
 
+/// HTTP configuration for model API requests.
 class HttpOptions {
+  /// Creates HTTP options.
   HttpOptions({
     this.retryOptions,
     Map<String, String>? headers,
     this.apiVersion,
   }) : headers = headers ?? <String, String>{};
 
+  /// Retry policy for outbound requests.
   HttpRetryOptions? retryOptions;
+
+  /// Additional HTTP headers.
   Map<String, String> headers;
+
+  /// Optional API version override.
   String? apiVersion;
 
+  /// Returns a copy of these HTTP options with optional overrides.
   HttpOptions copyWith({
     Object? retryOptions = _sentinel,
     Map<String, String>? headers,
@@ -108,7 +136,9 @@ class HttpOptions {
   }
 }
 
+/// Tool declaration payload sent to model backends.
 class ToolDeclaration {
+  /// Creates a tool declaration.
   ToolDeclaration({
     List<FunctionDeclaration>? functionDeclarations,
     this.googleSearch,
@@ -121,16 +151,34 @@ class ToolDeclaration {
     this.computerUse,
   }) : functionDeclarations = functionDeclarations ?? <FunctionDeclaration>[];
 
+  /// Function-calling declarations exposed under this tool entry.
   List<FunctionDeclaration> functionDeclarations;
+
+  /// Backend-specific Google Search tool config.
   Object? googleSearch;
+
+  /// Backend-specific Google Search Retrieval tool config.
   Object? googleSearchRetrieval;
+
+  /// Backend-specific URL Context tool config.
   Object? urlContext;
+
+  /// Backend-specific code execution tool config.
   Object? codeExecution;
+
+  /// Backend-specific Google Maps tool config.
   Object? googleMaps;
+
+  /// Backend-specific enterprise web search tool config.
   Object? enterpriseWebSearch;
+
+  /// Backend-specific retrieval tool config.
   Object? retrieval;
+
+  /// Backend-specific computer use tool config.
   Object? computerUse;
 
+  /// Returns a copy of this tool declaration with optional overrides.
   ToolDeclaration copyWith({
     List<FunctionDeclaration>? functionDeclarations,
     Object? googleSearch = _sentinel,
@@ -174,17 +222,24 @@ class ToolDeclaration {
   }
 }
 
+/// Function-calling modes recognized by model providers.
 enum FunctionCallingConfigMode { modeUnspecified, auto, any, none }
 
+/// Function-calling configuration attached to tool settings.
 class FunctionCallingConfig {
+  /// Creates a function-calling configuration.
   FunctionCallingConfig({
     this.mode = FunctionCallingConfigMode.modeUnspecified,
     List<String>? allowedFunctionNames,
   }) : allowedFunctionNames = allowedFunctionNames ?? <String>[];
 
+  /// Provider mode controlling function-calling behavior.
   FunctionCallingConfigMode mode;
+
+  /// Allowed function names when mode constrains the callable set.
   List<String> allowedFunctionNames;
 
+  /// Returns a copy of this function-calling configuration.
   FunctionCallingConfig copyWith({
     FunctionCallingConfigMode? mode,
     List<String>? allowedFunctionNames,
@@ -197,11 +252,15 @@ class FunctionCallingConfig {
   }
 }
 
+/// Tool-level configuration wrapper for model requests.
 class LlmToolConfig {
+  /// Creates an LLM tool configuration.
   LlmToolConfig({this.functionCallingConfig});
 
+  /// Function-calling behavior for tool execution.
   FunctionCallingConfig? functionCallingConfig;
 
+  /// Returns a copy of this tool configuration with optional overrides.
   LlmToolConfig copyWith({Object? functionCallingConfig = _sentinel}) {
     return LlmToolConfig(
       functionCallingConfig: identical(functionCallingConfig, _sentinel)
@@ -211,7 +270,9 @@ class LlmToolConfig {
   }
 }
 
+/// Generation configuration for text/content model calls.
 class GenerateContentConfig {
+  /// Creates generation settings for content requests.
   GenerateContentConfig({
     this.tools,
     this.systemInstruction,
@@ -237,28 +298,70 @@ class GenerateContentConfig {
   }) : stopSequences = stopSequences ?? <String>[],
        labels = labels ?? <String, String>{};
 
+  /// Tool declarations available to the model.
   List<ToolDeclaration>? tools;
+
+  /// System instruction text sent with the request.
   String? systemInstruction;
+
+  /// Sampling temperature.
   double? temperature;
+
+  /// Nucleus sampling parameter.
   double? topP;
+
+  /// Top-k sampling parameter.
   int? topK;
+
+  /// Maximum output token count.
   int? maxOutputTokens;
+
+  /// Stop sequences that terminate generation.
   List<String> stopSequences;
+
+  /// Frequency penalty parameter.
   double? frequencyPenalty;
+
+  /// Presence penalty parameter.
   double? presencePenalty;
+
+  /// Seed used for deterministic sampling.
   int? seed;
+
+  /// Number of response candidates to request.
   int? candidateCount;
+
+  /// Whether to include response log probabilities.
   bool? responseLogprobs;
+
+  /// Number of top log probabilities to return.
   int? logprobs;
+
+  /// Provider-specific thinking configuration.
   Object? thinkingConfig;
+
+  /// Provider-specific structured response schema.
   Object? responseSchema;
+
+  /// Raw JSON schema payload for structured outputs.
   Object? responseJsonSchema;
+
+  /// Preferred response MIME type.
   String? responseMimeType;
+
+  /// Tool execution configuration.
   LlmToolConfig? toolConfig;
+
+  /// Cached content resource identifier.
   String? cachedContent;
+
+  /// HTTP options for outbound model calls.
   HttpOptions? httpOptions;
+
+  /// Provider labels attached to this request.
   Map<String, String> labels;
 
+  /// Returns a copy of this generation configuration.
   GenerateContentConfig copyWith({
     Object? tools = _sentinel,
     Object? systemInstruction = _sentinel,
@@ -340,7 +443,9 @@ class GenerateContentConfig {
   }
 }
 
+/// Realtime connection configuration for live model sessions.
 class LiveConnectConfig {
+  /// Creates live connection settings.
   LiveConnectConfig({
     this.responseModalities,
     this.speechConfig,
@@ -356,19 +461,43 @@ class LiveConnectConfig {
     this.contextWindowCompression,
   });
 
+  /// Requested response modalities, such as text or audio.
   List<String>? responseModalities;
+
+  /// Provider-specific speech configuration.
   Object? speechConfig;
+
+  /// Provider output transcription configuration.
   Object? outputAudioTranscription;
+
+  /// Provider input transcription configuration.
   Object? inputAudioTranscription;
+
+  /// System instruction payload for the live session.
   Object? systemInstruction;
+
+  /// Tool declarations available during live sessions.
   List<ToolDeclaration>? tools;
+
+  /// HTTP options for the live session.
   HttpOptions? httpOptions;
+
+  /// Provider realtime input configuration.
   Object? realtimeInputConfig;
+
+  /// Whether affective dialog behavior is enabled.
   bool? enableAffectiveDialog;
+
+  /// Provider proactivity configuration.
   Object? proactivity;
+
+  /// Provider session resumption configuration.
   Object? sessionResumption;
+
+  /// Provider context window compression configuration.
   Object? contextWindowCompression;
 
+  /// Returns a copy of this live configuration.
   LiveConnectConfig copyWith({
     List<String>? responseModalities,
     Object? speechConfig = _sentinel,
@@ -426,7 +555,9 @@ class LiveConnectConfig {
   }
 }
 
+/// Full model request payload used by LLM adapters.
 class LlmRequest {
+  /// Creates an LLM request.
   LlmRequest({
     this.model,
     List<Content>? contents,
@@ -442,17 +573,38 @@ class LlmRequest {
        liveConnectConfig = liveConnectConfig ?? LiveConnectConfig(),
        toolsDict = toolsDict ?? <String, BaseTool>{};
 
+  /// Target model identifier.
   String? model;
+
+  /// Conversation contents sent to the model.
   List<Content> contents;
+
+  /// Generation config for standard model calls.
   GenerateContentConfig config;
+
+  /// Connection config for realtime model calls.
   LiveConnectConfig liveConnectConfig;
+
+  /// Runtime lookup map for declared tools by name.
   Map<String, BaseTool> toolsDict;
 
+  /// Cache creation/update configuration payload.
   Object? cacheConfig;
+
+  /// Cache metadata returned by providers.
   Object? cacheMetadata;
+
+  /// Number of tokens eligible for caching.
   int? cacheableContentsTokenCount;
+
+  /// Previous interaction ID for conversational continuity.
   String? previousInteractionId;
 
+  /// Appends [instructions] to this request as system text and user content.
+  ///
+  /// Accepts either a [Content] payload or a `List<String>`.
+  ///
+  /// Throws an [ArgumentError] for unsupported instruction types.
   List<Content> appendInstructions(Object instructions) {
     if (instructions is Content) {
       final List<String> textParts = <String>[];
@@ -516,6 +668,7 @@ class LlmRequest {
     );
   }
 
+  /// Appends tool declarations from [tools] to this request.
   void appendTools(List<BaseTool> tools) {
     if (tools.isEmpty) {
       return;
@@ -545,11 +698,15 @@ class LlmRequest {
     config.tools!.add(ToolDeclaration(functionDeclarations: declarations));
   }
 
+  /// Sets structured output [schema] and JSON response MIME type.
   void setOutputSchema(Object schema) {
     config.responseSchema = schema;
     config.responseMimeType = 'application/json';
   }
 
+  /// Returns a sanitized clone safe for backend model calls.
+  ///
+  /// ADK-generated function IDs are stripped to match provider expectations.
   LlmRequest sanitizedForModelCall() {
     final LlmRequest clone = LlmRequest(
       model: model,
