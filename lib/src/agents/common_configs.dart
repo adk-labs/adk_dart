@@ -1,9 +1,18 @@
+/// Shared config models used across agent configuration types.
+library;
+
+/// Named or positional argument configuration.
 class ArgumentConfig {
+  /// Creates an argument config.
   ArgumentConfig({this.name, required this.value});
 
+  /// Optional argument name.
   final String? name;
+
+  /// Argument value.
   final Object? value;
 
+  /// Creates argument config from JSON.
   factory ArgumentConfig.fromJson(Map<String, Object?> json) {
     if (!json.containsKey('value')) {
       throw ArgumentError('ArgumentConfig requires `value`.');
@@ -11,6 +20,7 @@ class ArgumentConfig {
     return ArgumentConfig(name: json['name'] as String?, value: json['value']);
   }
 
+  /// Creates argument config from dynamic input.
   factory ArgumentConfig.fromDynamic(Object? raw) {
     if (raw is ArgumentConfig) {
       return raw;
@@ -26,18 +36,25 @@ class ArgumentConfig {
     return ArgumentConfig(value: raw);
   }
 
+  /// Serializes argument config to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{'value': value, if (name != null) 'name': name};
   }
 }
 
+/// Callable code reference and arguments.
 class CodeConfig {
+  /// Creates a code config.
   CodeConfig({required this.name, List<Object?>? args})
     : args = _normalizeArgs(args);
 
+  /// Function or symbol name.
   final String name;
+
+  /// Normalized argument list.
   final List<ArgumentConfig> args;
 
+  /// Creates code config from JSON.
   factory CodeConfig.fromJson(Map<String, Object?> json) {
     return CodeConfig(
       name: (json['name'] ?? '') as String,
@@ -71,6 +88,7 @@ class CodeConfig {
         .toList(growable: false);
   }
 
+  /// Serializes code config to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'name': name,
@@ -80,7 +98,9 @@ class CodeConfig {
   }
 }
 
+/// Reference to a sub-agent via config path or code reference.
 class AgentRefConfig {
+  /// Creates an agent reference configuration.
   AgentRefConfig({this.configPath, this.code}) {
     final bool hasConfigPath = configPath != null && configPath!.isNotEmpty;
     final bool hasCode = code != null && code!.isNotEmpty;
@@ -91,9 +111,13 @@ class AgentRefConfig {
     }
   }
 
+  /// Config file path for the sub-agent.
   final String? configPath;
+
+  /// Code symbol path for the sub-agent.
   final String? code;
 
+  /// Creates an agent reference from JSON.
   factory AgentRefConfig.fromJson(Map<String, Object?> json) {
     return AgentRefConfig(
       configPath:
@@ -102,6 +126,7 @@ class AgentRefConfig {
     );
   }
 
+  /// Serializes this reference to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       if (configPath != null) 'config_path': configPath,

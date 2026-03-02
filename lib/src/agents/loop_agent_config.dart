@@ -1,6 +1,11 @@
+/// Configuration model for loop-agent declarations.
+library;
+
 import 'base_agent_config.dart';
 
+/// Loop agent configuration fields.
 class LoopAgentConfig extends BaseAgentConfig {
+  /// Creates a loop agent config.
   LoopAgentConfig({
     super.agentClass = 'LoopAgent',
     required super.name,
@@ -12,6 +17,7 @@ class LoopAgentConfig extends BaseAgentConfig {
     this.maxIterations,
   });
 
+  /// Optional maximum loop iterations.
   final int? maxIterations;
 
   static const Set<String> _knownLoopKeys = <String>{
@@ -19,6 +25,7 @@ class LoopAgentConfig extends BaseAgentConfig {
     'maxIterations',
   };
 
+  /// Creates a loop agent config from JSON.
   factory LoopAgentConfig.fromJson(Map<String, Object?> json) {
     final BaseAgentConfig base = BaseAgentConfig.fromJson(json);
     final Map<String, Object?> extras = Map<String, Object?>.from(base.extras)
@@ -48,6 +55,7 @@ class LoopAgentConfig extends BaseAgentConfig {
     );
   }
 
+  /// Serializes this loop config to JSON.
   @override
   Map<String, Object?> toJson() {
     return <String, Object?>{

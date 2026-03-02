@@ -1,6 +1,11 @@
+/// Configuration model for sequential-agent declarations.
+library;
+
 import 'base_agent_config.dart';
 
+/// Sequential agent configuration fields.
 class SequentialAgentConfig extends BaseAgentConfig {
+  /// Creates a sequential agent config.
   SequentialAgentConfig({
     super.agentClass = 'SequentialAgent',
     required super.name,
@@ -11,6 +16,7 @@ class SequentialAgentConfig extends BaseAgentConfig {
     super.extras,
   });
 
+  /// Creates a sequential agent config from JSON.
   factory SequentialAgentConfig.fromJson(Map<String, Object?> json) {
     final BaseAgentConfig base = BaseAgentConfig.fromJson(
       json,
@@ -29,6 +35,7 @@ class SequentialAgentConfig extends BaseAgentConfig {
     );
   }
 
+  /// Serializes this sequential config to JSON.
   @override
   Map<String, Object?> toJson() {
     return <String, Object?>{

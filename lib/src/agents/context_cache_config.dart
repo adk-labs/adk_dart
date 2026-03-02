@@ -1,4 +1,9 @@
+/// Configuration model for context-cache behavior.
+library;
+
+/// Context-cache policy settings for an agent/app.
 class ContextCacheConfig {
+  /// Creates a context cache config.
   ContextCacheConfig({
     this.cacheIntervals = 10,
     this.ttlSeconds = 1800,
@@ -15,12 +20,19 @@ class ContextCacheConfig {
     }
   }
 
+  /// Interval count used before cache updates.
   final int cacheIntervals;
+
+  /// Cache TTL in seconds.
   final int ttlSeconds;
+
+  /// Minimum token threshold to enable caching.
   final int minTokens;
 
+  /// TTL string representation for backend APIs.
   String get ttlString => '${ttlSeconds}s';
 
+  /// Creates cache config from JSON.
   factory ContextCacheConfig.fromJson(Map<String, Object?> json) {
     return ContextCacheConfig(
       cacheIntervals:
@@ -33,6 +45,7 @@ class ContextCacheConfig {
     );
   }
 
+  /// Serializes cache config to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'cache_intervals': cacheIntervals,

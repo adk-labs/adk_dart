@@ -1,8 +1,13 @@
+/// Configuration model for LLM agent declarations.
+library;
+
 import '../tools/tool_configs.dart';
 import 'base_agent_config.dart';
 import 'common_configs.dart';
 
+/// LLM agent-specific configuration fields.
 class LlmAgentConfig extends BaseAgentConfig {
+  /// Creates an LLM agent configuration.
   LlmAgentConfig({
     super.agentClass = 'LlmAgent',
     required super.name,
@@ -42,21 +47,52 @@ class LlmAgentConfig extends BaseAgentConfig {
     }
   }
 
+  /// Static model name.
   final String? model;
+
+  /// Dynamic model resolver callback.
   final CodeConfig? modelCode;
+
+  /// Core agent instruction.
   final String instruction;
+
+  /// Optional static instruction provider.
   final Object? staticInstruction;
+
+  /// Whether transfer to parent is disallowed.
   final bool? disallowTransferToParent;
+
+  /// Whether transfer to peer agents is disallowed.
   final bool? disallowTransferToPeers;
+
+  /// Optional input schema callback.
   final CodeConfig? inputSchema;
+
+  /// Optional output schema callback.
   final CodeConfig? outputSchema;
+
+  /// Optional output key for state persistence.
   final String? outputKey;
+
+  /// Content inclusion mode (`default` or `none`).
   final String includeContents;
+
+  /// Tool configuration list.
   final List<ToolConfig> tools;
+
+  /// Callbacks before model invocation.
   final List<CodeConfig> beforeModelCallbacks;
+
+  /// Callbacks after model invocation.
   final List<CodeConfig> afterModelCallbacks;
+
+  /// Callbacks before tool invocation.
   final List<CodeConfig> beforeToolCallbacks;
+
+  /// Callbacks after tool invocation.
   final List<CodeConfig> afterToolCallbacks;
+
+  /// Optional model generate-content config.
   final Map<String, Object?>? generateContentConfig;
 
   static const Set<String> _knownLlmKeys = <String>{
@@ -91,6 +127,7 @@ class LlmAgentConfig extends BaseAgentConfig {
     'generateContentConfig',
   };
 
+  /// Creates an LLM agent config from JSON.
   factory LlmAgentConfig.fromJson(Map<String, Object?> json) {
     final Map<String, Object?> normalized = Map<String, Object?>.from(json);
     final Object? modelValue = normalized['model'];
@@ -218,6 +255,7 @@ class LlmAgentConfig extends BaseAgentConfig {
         .toList(growable: false);
   }
 
+  /// Serializes this LLM config to JSON.
   @override
   Map<String, Object?> toJson() {
     final Map<String, Object?> json = super.toJson();
