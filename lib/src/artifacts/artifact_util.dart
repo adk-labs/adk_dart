@@ -1,6 +1,8 @@
 import '../types/content.dart';
 
+/// Parsed components of an `artifact://` URI.
 class ParsedArtifactUri {
+  /// Creates parsed artifact URI fields.
   const ParsedArtifactUri({
     required this.appName,
     required this.userId,
@@ -9,10 +11,19 @@ class ParsedArtifactUri {
     required this.version,
   });
 
+  /// Application scope in the artifact URI.
   final String appName;
+
+  /// User scope in the artifact URI.
   final String userId;
+
+  /// Optional session scope in the artifact URI.
   final String? sessionId;
+
+  /// Artifact filename segment.
   final String filename;
+
+  /// Artifact version number.
   final int version;
 }
 
@@ -23,6 +34,7 @@ final RegExp _userScopedArtifactUriRe = RegExp(
   r'^artifact://apps/([^/]+)/users/([^/]+)/artifacts/([^/]+)/versions/(\d+)$',
 );
 
+/// Parses [uri] into a [ParsedArtifactUri] when it matches known formats.
 ParsedArtifactUri? parseArtifactUri(String uri) {
   if (uri.isEmpty || !uri.startsWith('artifact://')) {
     return null;
@@ -53,6 +65,7 @@ ParsedArtifactUri? parseArtifactUri(String uri) {
   return null;
 }
 
+/// Builds an artifact URI from the provided scope and version fields.
 String getArtifactUri(
   String appName,
   String userId,
@@ -66,6 +79,7 @@ String getArtifactUri(
   return 'artifact://apps/$appName/users/$userId/artifacts/$filename/versions/$version';
 }
 
+/// Whether [artifact] references an `artifact://` file URI.
 bool isArtifactRef(Part artifact) {
   final FileData? fileData = artifact.fileData;
   return fileData != null && fileData.fileUri.startsWith('artifact://');
