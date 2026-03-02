@@ -10,20 +10,28 @@ import '../auth/credential_exchangers/auto_auth_credential_exchanger.dart';
 import '../auth/credential_exchangers/base_credential_exchanger.dart';
 
 class AuthPreparationResult {
+  /// Creates a result object for tool auth preparation state.
   AuthPreparationResult({
     required this.state,
     this.authScheme,
     this.authCredential,
   });
 
+  /// The preparation state, typically `done` or `pending`.
   final String state;
+
+  /// The auth scheme used during preparation.
   final Object? authScheme;
+
+  /// The prepared credential, when available.
   final AuthCredential? authCredential;
 }
 
 class ToolContextCredentialStore {
+  /// Creates a credential store backed by [toolContext] state.
   ToolContextCredentialStore({required this.toolContext});
 
+  /// The current tool context used for state persistence.
   final ToolContext? toolContext;
 
   String _legacyStableDigest(String text) {
@@ -46,6 +54,7 @@ class ToolContextCredentialStore {
     return '${schemeName}_${credentialName}_existing_exchanged_credential';
   }
 
+  /// Builds a deterministic cache key for [authScheme] and [authCredential].
   String getCredentialKey(Object? authScheme, AuthCredential? authCredential) {
     final AuthCredential? normalizedCredential = _normalizeCredentialForKey(
       authCredential,
@@ -59,6 +68,7 @@ class ToolContextCredentialStore {
     return '${schemeName}_${credentialName}_existing_exchanged_credential';
   }
 
+  /// Returns a stored credential for [authScheme] and [authCredential] key data.
   AuthCredential? getCredential(
     Object? authScheme,
     AuthCredential? authCredential,
@@ -95,6 +105,7 @@ class ToolContextCredentialStore {
     return legacyCredential;
   }
 
+  /// Stores [authCredential] under [key] in the context state.
   void storeCredential(String key, AuthCredential? authCredential) {
     if (toolContext == null || authCredential == null) {
       return;
@@ -102,12 +113,14 @@ class ToolContextCredentialStore {
     toolContext!.state[key] = authCredential.copyWith();
   }
 
+  /// Removes the credential stored at [key].
   void removeCredential(String key) {
     toolContext?.state.remove(key);
   }
 }
 
 class ToolAuthHandler {
+  /// Creates a tool auth handler for the provided context and credentials.
   ToolAuthHandler(
     this.toolContext,
     this.authScheme,
@@ -122,14 +135,24 @@ class ToolAuthHandler {
        _oauth2CredentialRefresher =
            oauth2CredentialRefresher ?? OAuth2CredentialRefresher();
 
+  /// The active tool context for auth request and state persistence.
   final ToolContext? toolContext;
+
+  /// The auth scheme definition for the operation.
   final Object? authScheme;
+
+  /// The raw auth credential provided to the tool.
   final AuthCredential? authCredential;
   final String? _credentialKey;
+
+  /// The credential exchanger used to obtain request-ready credentials.
   final BaseAuthCredentialExchanger credentialExchanger;
+
+  /// The credential store used to cache exchanged credentials.
   final ToolContextCredentialStore? credentialStore;
   final OAuth2CredentialRefresher _oauth2CredentialRefresher;
 
+  /// Whether exchanged credentials should be cached in [credentialStore].
   bool shouldStoreCredential = true;
 
   String? _getCredentialKeyOverride() {
@@ -160,6 +183,7 @@ class ToolAuthHandler {
     );
   }
 
+  /// Creates a [ToolAuthHandler] and default credential store from [toolContext].
   static ToolAuthHandler fromToolContext(
     ToolContext? toolContext,
     Object? authScheme,
@@ -275,6 +299,10 @@ class ToolAuthHandler {
     return accessToken == null || accessToken.isEmpty;
   }
 
+  /// Prepares credentials for tool execution, requesting auth when needed.
+  ///
+  /// Returns [AuthPreparationResult] with `pending` when user interaction is
+  /// required, otherwise returns `done` with an exchanged credential.
   Future<AuthPreparationResult> prepareAuthCredentials() async {
     if (authScheme == null) {
       return AuthPreparationResult(state: 'done');
