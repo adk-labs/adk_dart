@@ -5,18 +5,27 @@ import '../../../auth/auth_credential.dart';
 import '../../../auth/auth_schemes.dart';
 import '../common/common.dart';
 
+/// Prefix used for internally injected auth parameter names.
 const String internalAuthPrefix = '_auth_prefix_vaf_';
 
+/// Fetches an OpenID Connect discovery document from [url].
 typedef OpenIdConfigFetcher = Future<Map<String, Object?>> Function(String url);
 
+/// Result of mapping credentials into a request parameter and argument map.
 class AuthParameterBinding {
+  /// Creates an auth parameter binding.
   AuthParameterBinding({this.parameter, this.args});
 
+  /// Parameter definition to inject into the operation.
   final ApiParameter? parameter;
+
+  /// Runtime argument map carrying the credential value.
   final Map<String, Object?>? args;
 }
 
+/// OpenID Connect client configuration.
 class OpenIdConfig {
+  /// Creates OpenID client configuration.
   OpenIdConfig({
     required this.clientId,
     required this.authUri,
@@ -25,13 +34,23 @@ class OpenIdConfig {
     this.redirectUri,
   });
 
+  /// OAuth client id.
   final String clientId;
+
+  /// Authorization endpoint URI.
   final String authUri;
+
+  /// Token endpoint URI.
   final String tokenUri;
+
+  /// OAuth client secret.
   final String clientSecret;
+
+  /// Optional redirect URI.
   final String? redirectUri;
 }
 
+/// Builds a security scheme and optional credential from a token description.
 ({SecurityScheme authScheme, AuthCredential? authCredential})
 tokenToSchemeCredential(
   String tokenType, {
@@ -82,6 +101,7 @@ tokenToSchemeCredential(
   throw ArgumentError('Invalid security scheme type: $tokenType');
 }
 
+/// Builds service-account auth scheme and credential from JSON-like config.
 ({SecurityScheme authScheme, AuthCredential authCredential})
 serviceAccountDictToSchemeCredential(
   Map<String, Object?> config,
@@ -104,6 +124,7 @@ serviceAccountDictToSchemeCredential(
   );
 }
 
+/// Builds service-account auth scheme and credential from typed config.
 ({SecurityScheme authScheme, AuthCredential authCredential})
 serviceAccountSchemeCredential(ServiceAccountAuth config) {
   return (
@@ -119,6 +140,7 @@ serviceAccountSchemeCredential(ServiceAccountAuth config) {
   );
 }
 
+/// Builds OpenID Connect scheme and credential from config and secrets.
 ({OpenIdConnectWithConfig authScheme, AuthCredential authCredential})
 openidDictToSchemeCredential(
   Map<String, Object?> config,
@@ -199,6 +221,7 @@ openidDictToSchemeCredential(
   );
 }
 
+/// Resolves OpenID configuration from [openidUrl] and builds scheme+credential.
 Future<({OpenIdConnectWithConfig authScheme, AuthCredential authCredential})>
 openidUrlToSchemeCredential(
   String openidUrl,
@@ -212,6 +235,7 @@ openidUrlToSchemeCredential(
   return openidDictToSchemeCredential(config, scopes, credential);
 }
 
+/// Converts a scheme and credential into API parameter injection values.
 AuthParameterBinding credentialToParam(
   Object authScheme,
   AuthCredential? authCredential,
@@ -279,6 +303,7 @@ AuthParameterBinding credentialToParam(
   throw ArgumentError('Invalid security scheme and credential combination');
 }
 
+/// Converts a JSON-like dictionary to a typed auth scheme object.
 Object dictToAuthScheme(Map<String, Object?> data) {
   final String type = _readString(data['type'])?.toLowerCase() ?? '';
   if (type.isEmpty) {
