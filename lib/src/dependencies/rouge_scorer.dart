@@ -1,12 +1,22 @@
+/// Lightweight Rouge-like scoring helpers.
+library;
+
+/// Rouge score triple for one metric.
 class RougeScore {
+  /// Creates a Rouge score.
   const RougeScore({
     required this.precision,
     required this.recall,
     required this.fmeasure,
   });
 
+  /// Precision score.
   final double precision;
+
+  /// Recall score.
   final double recall;
+
+  /// Harmonic mean (F1-like) score.
   final double fmeasure;
 
   @override
@@ -19,14 +29,18 @@ class RougeScore {
   }
 }
 
+/// Computes Rouge scores for supported metrics.
 class RougeScorer {
+  /// Creates a Rouge scorer for [metrics].
   RougeScorer({List<String>? metrics})
     : metrics = List<String>.unmodifiable(
         _validateMetrics(metrics ?? <String>['rouge1']),
       );
 
+  /// Requested Rouge metrics.
   final List<String> metrics;
 
+  /// Scores [prediction] against [target] for configured metrics.
   Map<String, RougeScore> score({
     required String target,
     required String prediction,
@@ -67,6 +81,7 @@ class RougeScorer {
   }
 }
 
+/// Computes Rouge-1 score between [target] and [prediction].
 RougeScore rouge1Score({required String target, required String prediction}) {
   final List<String> targetTokens = _tokenize(target);
   final List<String> predictionTokens = _tokenize(prediction);

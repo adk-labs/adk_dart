@@ -1,4 +1,9 @@
+/// Lightweight Vertex AI dependency facades used by evaluations and RAG.
+library;
+
+/// Evaluation dataset wrapper for Vertex dependency shims.
 class VertexAiEvaluationDataset {
+  /// Creates an evaluation dataset wrapper.
   VertexAiEvaluationDataset({
     required List<Map<String, String?>> evalDatasetRows,
   }) : evalDatasetRows = List<Map<String, String?>>.unmodifiable(
@@ -7,25 +12,33 @@ class VertexAiEvaluationDataset {
          ),
        );
 
+  /// Immutable evaluation dataset rows.
   final List<Map<String, String?>> evalDatasetRows;
 }
 
+/// Summary metric payload from dependency-level evaluations.
 class VertexAiDependencySummaryMetric {
+  /// Creates a summary metric payload.
   VertexAiDependencySummaryMetric({this.meanScore});
 
+  /// Mean score value.
   final double? meanScore;
 }
 
+/// Evaluation result payload from dependency-level evaluations.
 class VertexAiDependencyEvalResult {
+  /// Creates an evaluation result payload.
   VertexAiDependencyEvalResult({
     List<VertexAiDependencySummaryMetric>? summaryMetrics,
   }) : summaryMetrics = List<VertexAiDependencySummaryMetric>.unmodifiable(
          summaryMetrics ?? <VertexAiDependencySummaryMetric>[],
        );
 
+  /// Immutable list of summary metrics.
   final List<VertexAiDependencySummaryMetric> summaryMetrics;
 }
 
+/// Metric scorer signature used by [VertexAiEvalsApi].
 typedef VertexAiMetricScorer =
     double Function({
       required String reference,
@@ -33,11 +46,15 @@ typedef VertexAiMetricScorer =
       required List<String> metrics,
     });
 
+/// Minimal evaluation API facade.
 class VertexAiEvalsApi {
+  /// Creates a Vertex AI evals facade.
   const VertexAiEvalsApi({this.metricScorer = _defaultMetricScorer});
 
+  /// Scoring function used to compute dataset row scores.
   final VertexAiMetricScorer metricScorer;
 
+  /// Evaluates [dataset] using the given [metrics].
   Future<VertexAiDependencyEvalResult> evaluate({
     required VertexAiEvaluationDataset dataset,
     required List<String> metrics,
@@ -79,7 +96,9 @@ class VertexAiEvalsApi {
   }
 }
 
+/// Minimal Vertex AI client facade.
 class VertexAiClient {
+  /// Creates a Vertex AI client facade.
   VertexAiClient({
     String? apiKey,
     String? project,
@@ -90,11 +109,19 @@ class VertexAiClient {
        location = _normalizeNullable(location),
        evals = evals ?? const VertexAiEvalsApi();
 
+  /// Optional API key.
   final String? apiKey;
+
+  /// Optional project ID.
   final String? project;
+
+  /// Optional location.
   final String? location;
+
+  /// Evals API facade.
   final VertexAiEvalsApi evals;
 
+  /// Whether this client has enough configuration to operate.
   bool get isConfigured {
     final bool hasApiKey = apiKey != null;
     final bool hasProjectAndLocation = project != null && location != null;
@@ -102,9 +129,12 @@ class VertexAiClient {
   }
 }
 
+/// Namespace facade for Vertex AI types.
 class VertexAiTypesNamespace {
+  /// Creates the types namespace facade.
   const VertexAiTypesNamespace();
 
+  /// Creates an evaluation dataset wrapper.
   VertexAiEvaluationDataset evaluationDataset({
     required List<Map<String, String?>> evalDatasetRows,
   }) {
@@ -112,9 +142,12 @@ class VertexAiTypesNamespace {
   }
 }
 
+/// Namespace facade for example-store helper APIs.
 class VertexAiExampleStores {
+  /// Creates an example-store namespace facade.
   const VertexAiExampleStores();
 
+  /// Normalizes [id] into a safe example identifier.
   String normalizeExampleId(String id, {int maxLength = 63}) {
     final String normalized = id
         .trim()
@@ -138,44 +171,65 @@ class VertexAiExampleStores {
   }
 }
 
+/// Namespace facade for lightweight RAG helpers.
 class VertexAiRag {
+  /// Creates a RAG namespace facade.
   const VertexAiRag();
 
+  /// Computes lexical relevance between [query] and [context].
   double lexicalRelevance({required String query, required String context}) {
     return _tokenRecall(query, context);
   }
 }
 
+/// Preview namespace grouping additional helper APIs.
 class VertexAiPreviewNamespace {
+  /// Creates the preview namespace facade.
   const VertexAiPreviewNamespace({
     this.exampleStores = const VertexAiExampleStores(),
     this.rag = const VertexAiRag(),
   });
 
+  /// Example-store helper APIs.
   final VertexAiExampleStores exampleStores;
+
+  /// RAG helper APIs.
   final VertexAiRag rag;
 }
 
+/// Top-level Vertex module facade.
 class VertexAiModule {
+  /// Creates the Vertex module facade.
   const VertexAiModule({
     this.types = const VertexAiTypesNamespace(),
     this.preview = const VertexAiPreviewNamespace(),
   });
 
+  /// Types namespace.
   final VertexAiTypesNamespace types;
+
+  /// Preview namespace.
   final VertexAiPreviewNamespace preview;
 
+  /// Creates a configured [VertexAiClient].
   VertexAiClient client({String? apiKey, String? project, String? location}) {
     return VertexAiClient(apiKey: apiKey, project: project, location: location);
   }
 }
 
+/// Shared example-store helper instance.
 const VertexAiExampleStores exampleStores = VertexAiExampleStores();
+
+/// Shared RAG helper instance.
 const VertexAiRag rag = VertexAiRag();
+
+/// Shared preview namespace instance.
 const VertexAiPreviewNamespace preview = VertexAiPreviewNamespace(
   exampleStores: exampleStores,
   rag: rag,
 );
+
+/// Shared top-level Vertex module instance.
 const VertexAiModule vertexai = VertexAiModule(preview: preview);
 
 List<String> _normalizeMetrics(List<String> metrics) {
