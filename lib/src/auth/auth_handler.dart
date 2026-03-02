@@ -1,3 +1,6 @@
+/// Auth flow coordinator for exchanging and storing credentials in state.
+library;
+
 import '../sessions/state.dart';
 import 'auth_credential.dart';
 import 'auth_tool.dart';
@@ -14,6 +17,7 @@ class AuthHandler {
   final AuthConfig authConfig;
   final OAuth2CredentialExchanger _oauth2Exchanger;
 
+  /// Exchanges the currently stored auth credential for access tokens.
   Future<AuthCredential> exchangeAuthToken() async {
     final AuthCredential? credential = authConfig.exchangedAuthCredential;
     if (credential == null) {
@@ -26,6 +30,7 @@ class AuthHandler {
     return result.credential;
   }
 
+  /// Parses auth response data and stores normalized credential state.
   Future<void> parseAndStoreAuthResponse(State state) async {
     final AuthCredential? credential =
         authConfig.exchangedAuthCredential ?? authConfig.rawAuthCredential;
@@ -46,6 +51,7 @@ class AuthHandler {
     }
   }
 
+  /// Returns the stored auth response credential, if present.
   AuthCredential? getAuthResponse(State state) {
     final Object? value =
         state[authTemporaryStateKey(authConfig.credentialKey)] ??
@@ -56,6 +62,7 @@ class AuthHandler {
     return value.copyWith();
   }
 
+  /// Produces an auth request config for interactive auth flows.
   AuthConfig generateAuthRequest() {
     if (!_isOAuthScheme(authConfig.authScheme)) {
       return authConfig.copyWith();

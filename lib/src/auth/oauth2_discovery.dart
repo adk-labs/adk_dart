@@ -1,7 +1,12 @@
+/// OAuth2/OpenID discovery models and network helper utilities.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
+/// Authorization server metadata discovered from well-known endpoints.
 class AuthorizationServerMetadata {
+  /// Creates authorization server metadata.
   AuthorizationServerMetadata({
     required this.issuer,
     required this.authorizationEndpoint,
@@ -10,12 +15,22 @@ class AuthorizationServerMetadata {
     this.registrationEndpoint,
   }) : scopesSupported = scopesSupported ?? <String>[];
 
+  /// Issuer URL.
   final String issuer;
+
+  /// Authorization endpoint URL.
   final String authorizationEndpoint;
+
+  /// Token endpoint URL.
   final String tokenEndpoint;
+
+  /// Supported scopes.
   final List<String> scopesSupported;
+
+  /// Optional dynamic client registration endpoint.
   final String? registrationEndpoint;
 
+  /// Creates metadata from JSON payload.
   factory AuthorizationServerMetadata.fromJson(Map<String, Object?> json) {
     return AuthorizationServerMetadata(
       issuer: (json['issuer'] ?? '').toString(),
@@ -32,15 +47,21 @@ class AuthorizationServerMetadata {
   }
 }
 
+/// Protected resource metadata discovered via RFC 9728 endpoints.
 class ProtectedResourceMetadata {
+  /// Creates protected resource metadata.
   ProtectedResourceMetadata({
     required this.resource,
     List<String>? authorizationServers,
   }) : authorizationServers = authorizationServers ?? <String>[];
 
+  /// Protected resource URL.
   final String resource;
+
+  /// Authorization servers trusted by the resource.
   final List<String> authorizationServers;
 
+  /// Creates metadata from JSON payload.
   factory ProtectedResourceMetadata.fromJson(Map<String, Object?> json) {
     return ProtectedResourceMetadata(
       resource: (json['resource'] ?? '').toString(),
@@ -54,15 +75,19 @@ class ProtectedResourceMetadata {
   }
 }
 
+/// HTTP GET function signature used by discovery.
 typedef DiscoveryHttpGet =
     Future<({int statusCode, String body})> Function(Uri uri);
 
+/// Performs OAuth2/OpenID discovery against standard well-known endpoints.
 class OAuth2DiscoveryManager {
+  /// Creates a discovery manager with optional custom HTTP transport.
   OAuth2DiscoveryManager({DiscoveryHttpGet? httpGet})
     : _httpGet = httpGet ?? _defaultHttpGet;
 
   final DiscoveryHttpGet _httpGet;
 
+  /// Discovers authorization-server metadata for [issuerUrl].
   Future<AuthorizationServerMetadata?> discoverAuthServerMetadata(
     String issuerUrl,
   ) async {
@@ -128,6 +153,7 @@ class OAuth2DiscoveryManager {
     return null;
   }
 
+  /// Discovers protected-resource metadata for [resourceUrl].
   Future<ProtectedResourceMetadata?> discoverResourceMetadata(
     String resourceUrl,
   ) async {

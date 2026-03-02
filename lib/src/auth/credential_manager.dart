@@ -1,3 +1,6 @@
+/// Credential orchestration service for auth request/exchange/refresh flows.
+library;
+
 import '../agents/context.dart';
 import 'auth_credential.dart';
 import 'auth_tool.dart';
@@ -10,7 +13,9 @@ import 'refresher/base_credential_refresher.dart';
 import 'refresher/credential_refresher_registry.dart';
 import 'refresher/oauth2_credential_refresher.dart';
 
+/// Manages credential acquisition, exchange, refresh, and persistence.
 class CredentialManager {
+  /// Creates a credential manager for [authConfig].
   CredentialManager({
     required AuthConfig authConfig,
     CredentialExchangerRegistry? exchangerRegistry,
@@ -47,6 +52,7 @@ class CredentialManager {
   final CredentialExchangerRegistry _exchangerRegistry;
   final CredentialRefresherRegistry _refresherRegistry;
 
+  /// Registers an exchanger for [credentialType].
   void registerCredentialExchanger(
     AuthCredentialType credentialType,
     BaseCredentialExchanger exchanger,
@@ -54,6 +60,7 @@ class CredentialManager {
     _exchangerRegistry.register(credentialType, exchanger);
   }
 
+  /// Registers a refresher for [credentialType].
   void registerCredentialRefresher(
     AuthCredentialType credentialType,
     BaseCredentialRefresher refresher,
@@ -61,10 +68,12 @@ class CredentialManager {
     _refresherRegistry.register(credentialType, refresher);
   }
 
+  /// Requests credentials from the active context.
   Future<void> requestCredential(Context context) async {
     context.requestCredential(_authConfig);
   }
 
+  /// Resolves an auth credential for the active request context.
   Future<AuthCredential?> getAuthCredential(Context context) async {
     _validateCredentialConfig();
 

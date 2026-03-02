@@ -1,6 +1,12 @@
+/// Auth scheme models used by tools and OpenAPI integration.
+library;
+
+/// Supported high-level auth scheme types.
 enum AuthSchemeType { apiKey, http, oauth2, openIdConnect }
 
+/// Base security-scheme descriptor.
 class SecurityScheme {
+  /// Creates a security scheme descriptor.
   SecurityScheme({
     required this.type,
     this.description,
@@ -11,14 +17,28 @@ class SecurityScheme {
     this.openIdConnectUrl,
   });
 
+  /// Scheme type discriminator.
   final AuthSchemeType type;
+
+  /// Optional description text.
   final String? description;
+
+  /// Name of header/query/cookie key for API key schemes.
   final String? name;
+
+  /// Location of API key (`header`, `query`, `cookie`).
   final String? inLocation;
+
+  /// HTTP scheme name.
   final String? scheme;
+
+  /// Optional bearer token format.
   final String? bearerFormat;
+
+  /// OpenID Connect discovery URL.
   final String? openIdConnectUrl;
 
+  /// Serializes this scheme to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'type': type.name,
@@ -32,14 +52,22 @@ class SecurityScheme {
   }
 }
 
+/// One OAuth flow configuration.
 class OAuthFlow {
+  /// Creates an OAuth flow descriptor.
   OAuthFlow({this.authorizationUrl, this.tokenUrl, Map<String, String>? scopes})
     : scopes = scopes ?? const <String, String>{};
 
+  /// Authorization URL for the flow.
   final String? authorizationUrl;
+
+  /// Token URL for the flow.
   final String? tokenUrl;
+
+  /// Scope dictionary supported by the flow.
   final Map<String, String> scopes;
 
+  /// Serializes this flow to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       if (authorizationUrl != null) 'authorization_url': authorizationUrl,
@@ -49,7 +77,9 @@ class OAuthFlow {
   }
 }
 
+/// OAuth flow bundle.
 class OAuthFlows {
+  /// Creates an OAuth flows bundle.
   OAuthFlows({
     this.clientCredentials,
     this.authorizationCode,
@@ -57,14 +87,23 @@ class OAuthFlows {
     this.password,
   });
 
+  /// Client credentials flow.
   final OAuthFlow? clientCredentials;
+
+  /// Authorization code flow.
   final OAuthFlow? authorizationCode;
+
+  /// Implicit flow.
   final OAuthFlow? implicit;
+
+  /// Password flow.
   final OAuthFlow? password;
 }
 
+/// Supported OAuth grant types.
 enum OAuthGrantType { clientCredentials, authorizationCode, implicit, password }
 
+/// Returns the first configured grant type in [flow], if any.
 OAuthGrantType? oauthGrantTypeFromFlow(OAuthFlows flow) {
   if (flow.clientCredentials != null) {
     return OAuthGrantType.clientCredentials;
@@ -81,7 +120,9 @@ OAuthGrantType? oauthGrantTypeFromFlow(OAuthFlows flow) {
   return null;
 }
 
+/// OpenID Connect security scheme with resolved endpoint configuration.
 class OpenIdConnectWithConfig extends SecurityScheme {
+  /// Creates an OpenID Connect scheme with explicit endpoint fields.
   OpenIdConnectWithConfig({
     required this.authorizationEndpoint,
     required this.tokenEndpoint,
@@ -90,19 +131,32 @@ class OpenIdConnectWithConfig extends SecurityScheme {
     List<String>? tokenEndpointAuthMethodsSupported,
     List<String>? grantTypesSupported,
     List<String>? scopes,
-    String? description,
+    super.description,
   }) : tokenEndpointAuthMethodsSupported =
            tokenEndpointAuthMethodsSupported ?? const <String>[],
        grantTypesSupported = grantTypesSupported ?? const <String>[],
        scopes = scopes ?? const <String>[],
-       super(type: AuthSchemeType.openIdConnect, description: description);
+       super(type: AuthSchemeType.openIdConnect);
 
+  /// Authorization endpoint URL.
   final String authorizationEndpoint;
+
+  /// Token endpoint URL.
   final String tokenEndpoint;
+
+  /// Optional userinfo endpoint URL.
   final String? userinfoEndpoint;
+
+  /// Optional revocation endpoint URL.
   final String? revocationEndpoint;
+
+  /// Supported token endpoint auth methods.
   final List<String> tokenEndpointAuthMethodsSupported;
+
+  /// Supported grant types.
   final List<String> grantTypesSupported;
+
+  /// Supported scopes.
   final List<String> scopes;
 
   @override
@@ -123,15 +177,22 @@ class OpenIdConnectWithConfig extends SecurityScheme {
   }
 }
 
+/// Alias used for generic auth scheme payloads.
 typedef AuthScheme = Object;
 
+/// OAuth2 scheme with flow configuration and optional issuer.
 class ExtendedOAuth2 extends SecurityScheme {
-  ExtendedOAuth2({required this.flows, this.issuerUrl, String? description})
-    : super(type: AuthSchemeType.oauth2, description: description);
+  /// Creates an extended OAuth2 security scheme.
+  ExtendedOAuth2({required this.flows, this.issuerUrl, super.description})
+    : super(type: AuthSchemeType.oauth2);
 
+  /// Configured OAuth flows.
   final OAuthFlows flows;
+
+  /// Optional issuer URL.
   final String? issuerUrl;
 
+  /// Serializes this scheme to JSON.
   @override
   Map<String, Object?> toJson() {
     return <String, Object?>{
