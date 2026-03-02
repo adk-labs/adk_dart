@@ -63,5 +63,37 @@ model: gemini-2.5-flash
 
       expect(asBaseAgent(loaded).name, 'root_agent');
     });
+
+    test('loads single-app root when appName alias differs from directory', () async {
+      final Directory parent = await Directory.systemTemp.createTemp(
+        'adk_agent_loader_alias_parent_',
+      );
+      addTearDown(() async {
+        if (await parent.exists()) {
+          await parent.delete(recursive: true);
+        }
+      });
+
+      final Directory appDir = Directory(
+        '${parent.path}${Platform.pathSeparator}my_agent',
+      );
+      await appDir.create(recursive: true);
+      await File(
+        '${appDir.path}${Platform.pathSeparator}root_agent.yaml',
+      ).writeAsString('''
+name: root_agent
+description: A helpful assistant for user questions.
+instruction: Answer user questions to the best of your knowledge
+model: gemini-2.5-flash
+''');
+      await File(
+        '${appDir.path}${Platform.pathSeparator}adk.json',
+      ).writeAsString('{"appName":"foo_app"}');
+
+      final AgentLoader loader = AgentLoader(appDir.path);
+      final Object loaded = loader.loadAgent('foo_app');
+
+      expect(asBaseAgent(loaded).name, 'root_agent');
+    });
   });
 }

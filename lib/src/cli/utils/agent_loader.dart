@@ -54,10 +54,13 @@ class AgentLoader extends BaseAgentLoader {
       '${baseDir.path}${Platform.pathSeparator}$normalized',
     ).absolute;
     String agentParentForEnv = baseDir.path;
-    if (_isSingleAppRoot(baseDir) &&
-        projectDirName(baseDir.path) == normalized) {
-      agentDir = baseDir;
-      agentParentForEnv = baseDir.parent.path;
+    if (_isSingleAppRoot(baseDir)) {
+      final bool looksLikeSingleAppAlias =
+          projectDirName(baseDir.path) == normalized || !agentDir.existsSync();
+      if (looksLikeSingleAppAlias) {
+        agentDir = baseDir;
+        agentParentForEnv = baseDir.parent.path;
+      }
     }
 
     loadDotenvForAgent(normalized, agentParentForEnv);
