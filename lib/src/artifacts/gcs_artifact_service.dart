@@ -1,3 +1,6 @@
+/// Google Cloud Storage artifact service and related transport models.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,9 +9,12 @@ import '../types/content.dart';
 import '../tools/_google_access_token.dart';
 import 'base_artifact_service.dart';
 
+/// Runtime mode for [GcsArtifactService].
 enum GcsArtifactMode { inMemory, live }
 
+/// Low-level HTTP request model used by GCS artifact operations.
 class GcsArtifactHttpRequest {
+  /// Creates an HTTP request wrapper.
   GcsArtifactHttpRequest({
     required this.method,
     required this.uri,
@@ -21,13 +27,22 @@ class GcsArtifactHttpRequest {
            ? const <int>[]
            : List<int>.from(bodyBytes);
 
+  /// HTTP method.
   final String method;
+
+  /// Request URI.
   final Uri uri;
+
+  /// Request headers.
   final Map<String, String> headers;
+
+  /// Raw request body bytes.
   final List<int> bodyBytes;
 }
 
+/// Low-level HTTP response model used by GCS artifact operations.
 class GcsArtifactHttpResponse {
+  /// Creates an HTTP response wrapper.
   GcsArtifactHttpResponse({
     required this.statusCode,
     Map<String, String>? headers,
@@ -39,16 +54,26 @@ class GcsArtifactHttpResponse {
            ? const <int>[]
            : List<int>.from(bodyBytes);
 
+  /// HTTP status code.
   final int statusCode;
+
+  /// Response headers.
   final Map<String, String> headers;
+
+  /// Raw response body bytes.
   final List<int> bodyBytes;
 }
 
+/// Function that executes one GCS HTTP request.
 typedef GcsArtifactHttpRequestProvider =
     Future<GcsArtifactHttpResponse> Function(GcsArtifactHttpRequest request);
+
+/// Function that returns auth headers for GCS requests.
 typedef GcsArtifactAuthHeadersProvider = Future<Map<String, String>> Function();
 
+/// Artifact service implementation backed by Google Cloud Storage.
 class GcsArtifactService extends BaseArtifactService {
+  /// Creates a GCS artifact service for [bucketName].
   GcsArtifactService(
     String bucketName, {
     GcsArtifactMode mode = GcsArtifactMode.live,
@@ -68,6 +93,7 @@ class GcsArtifactService extends BaseArtifactService {
        _uploadApiBaseUri =
            uploadApiBaseUri ?? Uri.parse(_defaultUploadApiBaseUri);
 
+  /// Creates an in-memory test-mode GCS artifact service.
   factory GcsArtifactService.inMemory(String bucketName) {
     return GcsArtifactService(bucketName, mode: GcsArtifactMode.inMemory);
   }
@@ -78,6 +104,7 @@ class GcsArtifactService extends BaseArtifactService {
   static const String _fileUriMetadataKey = 'adk_artifact_file_uri';
   static const String _fileMimeTypeMetadataKey = 'adk_artifact_mime_type';
 
+  /// GCS bucket name used for artifact objects.
   final String bucketName;
   final GcsArtifactMode _mode;
   final GcsArtifactHttpRequestProvider? _httpRequestProvider;

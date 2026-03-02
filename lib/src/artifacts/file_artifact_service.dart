@@ -1,3 +1,6 @@
+/// Filesystem-backed artifact storage implementation.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -271,11 +274,13 @@ _FileArtifactMetadata? _readMetadata(File path) {
 }
 
 class FileArtifactService extends BaseArtifactService {
+  /// Creates a file artifact service rooted at [rootDir].
   FileArtifactService(Object rootDir)
     : rootDir = Directory('$rootDir').absolute {
     this.rootDir.createSync(recursive: true);
   }
 
+  /// Absolute root directory used for artifact storage.
   final Directory rootDir;
 
   Directory _baseRoot(String userId) {
