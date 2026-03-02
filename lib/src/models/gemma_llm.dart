@@ -7,16 +7,22 @@ import 'llm_response.dart';
 import 'google_llm.dart';
 import '../types/content.dart';
 
+/// Gemma model adapter implemented on top of Gemini transport behavior.
 class GemmaLlm extends BaseLlm {
+  /// Creates a Gemma adapter for [model].
   GemmaLlm({super.model = 'gemma-3-27b-it', GeminiGenerateHook? generateHook})
     : _delegate = Gemini(model: model, generateHook: generateHook);
 
   final Gemini _delegate;
 
+  /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
     return <RegExp>[RegExp(r'gemma-3.*')];
   }
 
+  /// Generates responses from Gemma-compatible requests.
+  ///
+  /// This normalizes function-calling payloads before delegating to [Gemini].
   @override
   Stream<LlmResponse> generateContent(
     LlmRequest request, {
