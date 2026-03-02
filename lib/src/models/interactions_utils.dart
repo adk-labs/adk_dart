@@ -5,6 +5,7 @@ import 'gemini_rest_api_client.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Converts one [Part] into interactions API content format.
 Map<String, Object?>? convertPartToInteractionContent(Part part) {
   if (part.text != null) {
     return <String, Object?>{'type': 'text', 'text': part.text};
@@ -85,6 +86,7 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
   return null;
 }
 
+/// Converts one [Content] turn into interactions API turn format.
 Map<String, Object?> convertContentToTurn(Content content) {
   final List<Map<String, Object?>> converted = content.parts
       .map(convertPartToInteractionContent)
@@ -96,6 +98,7 @@ Map<String, Object?> convertContentToTurn(Content content) {
   };
 }
 
+/// Converts conversation [contents] into interactions API turns.
 List<Map<String, Object?>> convertContentsToTurns(List<Content> contents) {
   return contents
       .map(convertContentToTurn)
@@ -106,6 +109,7 @@ List<Map<String, Object?>> convertContentsToTurns(List<Content> contents) {
       .toList(growable: false);
 }
 
+/// Converts tool declarations in [config] to interactions API tool entries.
 List<Map<String, Object?>> convertToolsConfigToInteractionsFormat(
   GenerateContentConfig config,
 ) {
@@ -141,6 +145,7 @@ List<Map<String, Object?>> convertToolsConfigToInteractionsFormat(
   return output;
 }
 
+/// Builds interactions generation config from [config].
 Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
   final Map<String, Object?> generationConfig = <String, Object?>{};
   if (config.temperature != null) {
@@ -169,6 +174,7 @@ Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
   return generationConfig;
 }
 
+/// Returns a normalized system instruction string from [config].
 String? extractSystemInstruction(GenerateContentConfig config) {
   final String? systemInstruction = config.systemInstruction;
   if (systemInstruction == null || systemInstruction.isEmpty) {
@@ -177,6 +183,10 @@ String? extractSystemInstruction(GenerateContentConfig config) {
   return systemInstruction;
 }
 
+/// Returns the latest user segment from [contents].
+///
+/// If the user segment starts with function results and is preceded by a model
+/// function-call turn, that model turn is included for continuity.
 List<Content> getLatestUserContents(List<Content> contents) {
   if (contents.isEmpty) {
     return const <Content>[];
@@ -227,6 +237,7 @@ List<Content> getLatestUserContents(List<Content> contents) {
   return <Content>[preceding, ...latestUserContents];
 }
 
+/// Converts a full interactions API object into an [LlmResponse].
 LlmResponse convertInteractionToLlmResponse(
   Map<String, Object?> interaction, {
   String? fallbackModelVersion,
@@ -283,6 +294,7 @@ LlmResponse convertInteractionToLlmResponse(
   );
 }
 
+/// Converts one interactions output row into a [Part].
 Part? convertInteractionOutputToPart(Map<String, Object?> output) {
   final String? outputType = _stringValue(output['type']);
   if (outputType == null || outputType.isEmpty) {
@@ -361,6 +373,7 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
   return null;
 }
 
+/// Converts one interactions streaming event into an [LlmResponse].
 LlmResponse? convertInteractionEventToLlmResponse(
   Map<String, Object?> event,
   List<Part> aggregatedParts, {
@@ -512,6 +525,10 @@ LlmResponse? convertInteractionEventToLlmResponse(
   return null;
 }
 
+/// Generates model responses through the Gemini interactions API pathway.
+///
+/// When [invoker] is provided, this delegates to [invoker] instead of issuing
+/// HTTP requests through [restTransport].
 Stream<LlmResponse> generateContentViaInteractions({
   required LlmRequest llmRequest,
   required bool stream,
@@ -543,9 +560,9 @@ Stream<LlmResponse> generateContentViaInteractions({
     throw ArgumentError('llmRequest.model must be set for interactions API.');
   }
 
+  final String? previousInteractionId = llmRequest.previousInteractionId;
   List<Content> contents = llmRequest.contents;
-  if ((llmRequest.previousInteractionId ?? '').isNotEmpty &&
-      contents.isNotEmpty) {
+  if ((previousInteractionId ?? '').isNotEmpty && contents.isNotEmpty) {
     contents = getLatestUserContents(contents);
   }
 
@@ -554,7 +571,8 @@ Stream<LlmResponse> generateContentViaInteractions({
   );
   final List<Map<String, Object?>> interactionTools =
       convertToolsConfigToInteractionsFormat(llmRequest.config);
-  final String? systemInstruction = extractSystemInstruction(llmRequest.config);
+  final String systemInstruction =
+      extractSystemInstruction(llmRequest.config) ?? '';
   final Map<String, Object?> generationConfig = buildGenerationConfig(
     llmRequest.config,
   );
@@ -563,11 +581,11 @@ Stream<LlmResponse> generateContentViaInteractions({
     'model': model,
     'input': inputTurns,
     'stream': stream,
-    if (systemInstruction != null) 'system_instruction': systemInstruction,
+    if (systemInstruction.isNotEmpty) 'system_instruction': systemInstruction,
     if (interactionTools.isNotEmpty) 'tools': interactionTools,
     if (generationConfig.isNotEmpty) 'generation_config': generationConfig,
-    if ((llmRequest.previousInteractionId ?? '').isNotEmpty)
-      'previous_interaction_id': llmRequest.previousInteractionId,
+    if (previousInteractionId case final String id when id.isNotEmpty)
+      'previous_interaction_id': id,
   };
 
   if (stream) {

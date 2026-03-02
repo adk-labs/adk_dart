@@ -1,4 +1,6 @@
+/// Metadata describing a cached prompt/context entry.
 class CacheMetadata {
+  /// Creates cache metadata.
   CacheMetadata({
     this.cacheName,
     this.expireTime,
@@ -8,13 +10,25 @@ class CacheMetadata {
     this.createdAt,
   });
 
+  /// Provider cache resource name.
   final String? cacheName;
+
+  /// Cache expiration timestamp in Unix seconds.
   final double? expireTime;
+
+  /// Stable fingerprint for cacheable request contents.
   final String fingerprint;
+
+  /// Number of invocations that reused this cache.
   final int? invocationsUsed;
+
+  /// Number of content items included in the cache.
   final int contentsCount;
+
+  /// Cache creation timestamp in Unix seconds.
   final double? createdAt;
 
+  /// Whether this cache will expire within the safety buffer window.
   bool get expireSoon {
     final double? expiresAt = expireTime;
     if (expiresAt == null) {
@@ -25,6 +39,7 @@ class CacheMetadata {
     return now > (expiresAt - bufferSeconds);
   }
 
+  /// Returns a copy of this metadata with optional overrides.
   CacheMetadata copyWith({
     Object? cacheName = _sentinel,
     Object? expireTime = _sentinel,
