@@ -15,17 +15,29 @@ import '../utils/model_name_utils.dart';
 import 'base_telemetry_service.dart';
 import '_experimental_semconv.dart' as experimental_semconv;
 
+/// Environment key controlling whether request and response payloads are
+/// captured in span attributes.
 const String adkCaptureMessageContentInSpans =
     'ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS';
+
+/// Environment key controlling prompt and response content logs for
+/// OpenTelemetry GenAI instrumentation.
 const String otelInstrumentationGenaiCaptureMessageContent =
     'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT';
+
+/// Placeholder used when user content logging is disabled.
 const String userContentElided = '<elided>';
 
+/// In-memory representation of a trace span and its attributes.
 class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
+  /// Creates a trace span record.
   TraceSpanRecord(this.name, {Map<String, Object?>? attributes})
     : attributes = attributes ?? <String, Object?>{};
 
+  /// Span name.
   final String name;
+
+  /// Mutable span attributes.
   final Map<String, Object?> attributes;
 
   @override
@@ -33,26 +45,36 @@ class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
     attributes[key] = value;
   }
 
+  /// Sets multiple [values] on this span.
   void setAttributes(Map<String, Object?> values) {
     attributes.addAll(values);
   }
 }
 
+/// In-memory OpenTelemetry log record.
 class OTelLogRecord {
+  /// Creates a log record.
   OTelLogRecord({
     required this.eventName,
     this.body,
     Map<String, Object?>? attributes,
   }) : attributes = attributes ?? <String, Object?>{};
 
+  /// Event name for this log.
   final String eventName;
+
+  /// Structured log body.
   final Object? body;
+
+  /// Log attributes.
   final Map<String, Object?> attributes;
 }
 
+/// In-memory logger used by tracing helpers.
 class AdkOtelLogger implements experimental_semconv.CompletionDetailsLogger {
   final List<OTelLogRecord> _records = <OTelLogRecord>[];
 
+  /// Stores a [record] in memory.
   void emit(OTelLogRecord record) {
     _records.add(record);
   }
@@ -70,17 +92,21 @@ class AdkOtelLogger implements experimental_semconv.CompletionDetailsLogger {
     );
   }
 
+  /// Collected log records.
   List<OTelLogRecord> get records => List<OTelLogRecord>.unmodifiable(_records);
 
+  /// Clears collected records.
   void clear() {
     _records.clear();
   }
 }
 
+/// In-memory tracer used by ADK telemetry utilities.
 class AdkTracer {
   final List<TraceSpanRecord> _spanStack = <TraceSpanRecord>[];
   final List<TraceSpanRecord> _finishedSpans = <TraceSpanRecord>[];
 
+  /// Starts a span and sets it as current.
   TraceSpanRecord startAsCurrentSpan(
     String name, {
     Map<String, Object?>? attributes,
@@ -90,6 +116,7 @@ class AdkTracer {
     return span;
   }
 
+  /// The current active span, if present.
   TraceSpanRecord? get currentSpan {
     if (_spanStack.isEmpty) {
       return null;
@@ -97,6 +124,7 @@ class AdkTracer {
     return _spanStack.last;
   }
 
+  /// Ends the current span.
   void endCurrentSpan() {
     if (_spanStack.isEmpty) {
       return;
@@ -104,10 +132,12 @@ class AdkTracer {
     _finishedSpans.add(_spanStack.removeLast());
   }
 
+  /// Completed spans in completion order.
   List<TraceSpanRecord> get finishedSpans {
     return List<TraceSpanRecord>.unmodifiable(_finishedSpans);
   }
 
+  /// Runs [body] inside a temporary span.
   T inSpan<T>(
     String name,
     T Function(TraceSpanRecord span) body, {
@@ -124,6 +154,7 @@ class AdkTracer {
     }
   }
 
+  /// Runs async [body] inside a temporary span.
   Future<T> inSpanAsync<T>(
     String name,
     Future<T> Function(TraceSpanRecord span) body, {
@@ -140,19 +171,27 @@ class AdkTracer {
     }
   }
 
+  /// Clears active and finished span state.
   void clear() {
     _spanStack.clear();
     _finishedSpans.clear();
   }
 }
 
+/// Global in-memory tracer.
 final AdkTracer tracer = AdkTracer();
+
+/// Global in-memory OpenTelemetry logger.
 final AdkOtelLogger otelLogger = AdkOtelLogger();
 
+/// Clears global OpenTelemetry logs.
+///
+/// This is primarily used by tests.
 void resetOtelLoggerForTest() {
   otelLogger.clear();
 }
 
+/// Runs [run] inside a telemetry span managed by [telemetryService].
 Future<T> traceSpan<T>(
   BaseTelemetryService telemetryService,
   String name,
@@ -175,6 +214,7 @@ Future<T> traceSpan<T>(
   }
 }
 
+/// Records span attributes for agent invocation metadata.
 void traceAgentInvocation(
   TraceSpanRecord span,
   BaseAgent agent,
@@ -187,6 +227,7 @@ void traceAgentInvocation(
     ..setAttribute('gen_ai.conversation.id', ctx.session.id);
 }
 
+/// Records span attributes for a single tool call.
 void traceToolCall(
   BaseTool tool,
   Map<String, Object?> args,
@@ -245,6 +286,7 @@ void traceToolCall(
   }
 }
 
+/// Records span attributes for merged tool call responses.
 void traceMergedToolCalls(
   String responseEventId,
   Event functionResponseEvent, {
@@ -274,6 +316,7 @@ void traceMergedToolCalls(
   }
 }
 
+/// Records span attributes for an LLM request and response pair.
 void traceCallLlm(
   InvocationContext invocationContext,
   String eventId,
@@ -328,6 +371,7 @@ void traceCallLlm(
   }
 }
 
+/// Records span attributes for send-data events.
 void traceSendData(
   InvocationContext invocationContext,
   String eventId,
@@ -361,6 +405,7 @@ void traceSendData(
   }
 }
 
+/// Runs [run] inside an inference span and passes a legacy span view.
 @Deprecated('Replaced by useInferenceSpan to support experimental semconv.')
 Future<T> useGenerateContentSpan<T>(
   LlmRequest llmRequest,
@@ -376,6 +421,7 @@ Future<T> useGenerateContentSpan<T>(
   }, environment: environment);
 }
 
+/// Runs [run] inside a generate-content span context.
 Future<T> useInferenceSpan<T>(
   LlmRequest llmRequest,
   InvocationContext invocationContext,
@@ -438,15 +484,23 @@ Future<T> useInferenceSpan<T>(
   }
 }
 
+/// Span wrapper for generate-content operations.
 class GenerateContentSpan {
+  /// Creates a generate-content span wrapper.
   GenerateContentSpan(this.span);
 
+  /// Underlying trace span.
   final TraceSpanRecord span;
+
+  /// Experimental operation details attributes.
   final Map<String, Object?> operationDetailsAttributes = <String, Object?>{};
+
+  /// Common attributes shared by operation details logs.
   final Map<String, Object?> operationDetailsCommonAttributes =
       <String, Object?>{};
 }
 
+/// Records inference result attributes on a legacy span.
 @Deprecated('Replaced by traceInferenceResult to support experimental semconv.')
 void traceGenerateContentResult(
   TraceSpanRecord? span,
@@ -467,6 +521,9 @@ void traceGenerateContentResult(
   _emitChoiceLog(llmResponse, environment: environment);
 }
 
+/// Records inference result attributes on [span].
+///
+/// The [span] can be either [GenerateContentSpan] or [TraceSpanRecord].
 void traceInferenceResult(
   Object? span,
   LlmResponse llmResponse, {
@@ -896,16 +953,23 @@ void _setCommonGenerateContentAttributes(
   span.setAttributes(commonAttributes);
 }
 
+/// Callback that reports whether external GenAI instrumentation is active.
 typedef GenAiInstrumentationDetector = bool Function();
 
 GenAiInstrumentationDetector _genAiInstrumentationDetector = () => false;
 
+/// Sets the detector used to identify external GenAI instrumentation.
+///
+/// This is intended for tests.
 void setGenAiInstrumentationDetectorForTest(
   GenAiInstrumentationDetector detector,
 ) {
   _genAiInstrumentationDetector = detector;
 }
 
+/// Restores the default GenAI instrumentation detector.
+///
+/// This is intended for tests.
 void resetGenAiInstrumentationDetectorForTest() {
   _genAiInstrumentationDetector = () => false;
 }
@@ -916,6 +980,7 @@ bool _instrumentedWithOpenTelemetryInstrumentationGoogleGenai() {
 
 const Object _generateContentExtraAttributesContextKey = Object();
 
+/// The current zone-scoped extra attributes for generate-content spans.
 Map<String, Object?>? getCurrentGenerateContentExtraAttributes() {
   final Object? value = Zone.current[_generateContentExtraAttributesContextKey];
   if (value is Map<String, Object?>) {
