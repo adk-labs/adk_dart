@@ -8,10 +8,13 @@ import '../base_authenticated_tool.dart';
 import '../tool_context.dart';
 import 'mcp_session_manager.dart';
 
+/// Header-builder callback used before making MCP tool HTTP calls.
 typedef McpToolHeaderProvider =
     Map<String, String> Function(ReadonlyContext readonlyContext);
 
+/// Lightweight MCP tool descriptor used by [McpTool].
 class McpBaseTool {
+  /// Creates a normalized MCP tool descriptor.
   McpBaseTool({
     required this.name,
     this.description = '',
@@ -20,13 +23,22 @@ class McpBaseTool {
   }) : inputSchema = inputSchema ?? <String, dynamic>{},
        outputSchema = outputSchema ?? <String, dynamic>{};
 
+  /// Tool name returned by MCP tool discovery.
   final String name;
+
+  /// Human-readable tool description.
   final String description;
+
+  /// Input JSON schema accepted by this tool.
   final Map<String, dynamic> inputSchema;
+
+  /// Output JSON schema emitted by this tool.
   final Map<String, dynamic> outputSchema;
 }
 
+/// Auth-aware MCP tool wrapper that delegates calls through [McpSessionManager].
 class McpTool extends BaseAuthenticatedTool {
+  /// Creates an MCP-backed tool.
   McpTool({
     required McpBaseTool mcpTool,
     required McpConnectionParams connectionParams,
@@ -48,11 +60,15 @@ class McpTool extends BaseAuthenticatedTool {
   final McpConnectionParams _connectionParams;
   final McpSessionManager _sessionManager;
   final Object _requireConfirmation;
+
+  /// Optional provider for dynamic per-request headers.
   final McpToolHeaderProvider? headerProvider;
 
+  /// Raw MCP tool descriptor used by this wrapper.
   McpBaseTool get rawMcpTool => _mcpTool;
 
   @override
+  /// Returns a function declaration using MCP input schema as parameters.
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
@@ -62,6 +78,7 @@ class McpTool extends BaseAuthenticatedTool {
   }
 
   @override
+  /// Executes an authenticated MCP tool call.
   Future<Object?> runAuthenticated({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

@@ -11,6 +11,9 @@ import 'state.dart';
 
 /// Session service backed by process-local maps.
 class InMemorySessionService extends BaseSessionService {
+  /// Creates an in-memory session service.
+  InMemorySessionService();
+
   final Map<String, Map<String, Map<String, Session>>> _sessions =
       <String, Map<String, Map<String, Session>>>{};
 

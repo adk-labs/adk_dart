@@ -13,6 +13,7 @@ import 'tool_context.dart';
 const int _defaultScriptTimeout = 300;
 const int _maxSkillPayloadBytes = 16 * 1024 * 1024;
 
+/// Default system instruction injected when skill tools are enabled.
 const String defaultSkillSystemInstruction =
     """You can use specialized 'skills' to help you with complex tasks. You MUST use the skill tools to interact with these skills.
 
@@ -559,7 +560,9 @@ class _RunSkillScriptTool extends BaseTool {
   }
 }
 
+/// Toolset exposing skill-discovery, loading, and script-execution tools.
 class SkillToolset extends BaseToolset {
+  /// Creates a toolset that exposes skill discovery/loading/script tools.
   SkillToolset({
     required List<Skill> skills,
     BaseCodeExecutor? codeExecutor,
@@ -590,6 +593,7 @@ class SkillToolset extends BaseToolset {
   final int _scriptTimeout;
 
   @override
+  /// Returns skill tools filtered by [toolFilter], if configured.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     return _tools
         .where((BaseTool tool) => isToolSelected(tool, readonlyContext))
@@ -601,6 +605,7 @@ class SkillToolset extends BaseToolset {
   List<Skill> _listSkills() => _skills.values.toList(growable: false);
 
   @override
+  /// Appends skill guidance and catalog XML to [llmRequest].
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

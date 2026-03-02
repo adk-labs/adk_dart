@@ -4,7 +4,12 @@ import '../auth/credential_manager.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Base tool that resolves credentials before executing protected calls.
 abstract class BaseAuthenticatedTool extends BaseTool {
+  /// Creates an authenticated tool wrapper.
+  ///
+  /// If [authConfig] is present, credentials are loaded through an internal
+  /// [CredentialManager] before [runAuthenticated] is called.
   BaseAuthenticatedTool({
     required super.name,
     required super.description,
@@ -18,9 +23,12 @@ abstract class BaseAuthenticatedTool extends BaseTool {
 
   final AuthConfig? _authConfig;
   final CredentialManager? _credentialManager;
+
+  /// Fallback payload returned when user authorization is still required.
   final Object? responseForAuthRequired;
 
   @override
+  /// Resolves credentials and delegates to [runAuthenticated].
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -40,6 +48,7 @@ abstract class BaseAuthenticatedTool extends BaseTool {
     );
   }
 
+  /// Executes the tool with resolved [credential] information.
   Future<Object?> runAuthenticated({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

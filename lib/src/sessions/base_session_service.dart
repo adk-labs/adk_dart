@@ -29,6 +29,9 @@ class ListSessionsResponse {
 
 /// Contract for session lifecycle and event persistence operations.
 abstract class BaseSessionService {
+  /// Creates a session service.
+  BaseSessionService();
+
   /// Creates and returns a new session.
   Future<Session> createSession({
     required String appName,

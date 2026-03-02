@@ -16,13 +16,21 @@ const Set<String> _allowedFrontmatterKeys = <String>{
   'compatibility',
 };
 
+/// Minimal shape shared by all skill descriptors.
 abstract class SkillDescriptor {
+  /// Creates a skill descriptor.
+  SkillDescriptor();
+
+  /// Stable skill name in lowercase kebab-case.
   String get name;
+
+  /// Human-readable summary used in skill catalogs.
   String get description;
 }
 
 /// L1 skill metadata parsed from SKILL.md frontmatter.
 class Frontmatter implements SkillDescriptor {
+  /// Creates validated skill frontmatter metadata.
   Frontmatter({
     required String name,
     required String description,
@@ -41,6 +49,7 @@ class Frontmatter implements SkillDescriptor {
          extraFields ?? <String, Object?>{},
        );
 
+  /// Parses frontmatter from a decoded map.
   factory Frontmatter.fromMap(
     Map<String, Object?> value, {
     bool allowUnknownFields = true,
@@ -77,25 +86,35 @@ class Frontmatter implements SkillDescriptor {
       allowedTools: allowedTools,
       metadata: _readMetadata(value['metadata']),
       extraFields: allowUnknownFields
-          ? <String, Object?>{
-              for (final String key in unknown) key: value[key],
-            }
+          ? <String, Object?>{for (final String key in unknown) key: value[key]}
           : <String, Object?>{},
     );
   }
 
+  /// Canonical skill name.
   @override
   final String name;
 
+  /// Short skill description.
   @override
   final String description;
 
+  /// Optional license identifier.
   final String? license;
+
+  /// Optional compatibility note shown to agents/users.
   final String? compatibility;
+
+  /// Optional allowed-tools selector expression.
   final String? allowedTools;
+
+  /// Free-form string metadata map.
   final Map<String, String> metadata;
+
+  /// Unknown frontmatter fields preserved when allowed.
   final Map<String, Object?> extraFields;
 
+  /// Converts this frontmatter object back into a plain map.
   Map<String, Object?> toMap({bool byAlias = false}) {
     final Map<String, Object?> result = <String, Object?>{
       'name': name,
@@ -183,8 +202,10 @@ class Frontmatter implements SkillDescriptor {
 
 /// Wrapper for script content.
 class Script {
+  /// Creates a script wrapper from source text.
   Script({required this.src});
 
+  /// Raw script source code.
   final String src;
 
   @override
@@ -193,6 +214,7 @@ class Script {
 
 /// L3 skill resources loaded from references/assets/scripts directories.
 class Resources {
+  /// Creates grouped skill resources.
   Resources({
     Map<String, String>? references,
     Map<String, String>? assets,
@@ -205,25 +227,37 @@ class Resources {
          scripts ?? <String, Script>{},
        );
 
+  /// Markdown/text references bundled with the skill.
   final Map<String, String> references;
+
+  /// Static assets bundled with the skill.
   final Map<String, String> assets;
+
+  /// Executable scripts bundled with the skill.
   final Map<String, Script> scripts;
 
+  /// Returns one reference by [referenceId], if present.
   String? getReference(String referenceId) => references[referenceId];
 
+  /// Returns one asset by [assetId], if present.
   String? getAsset(String assetId) => assets[assetId];
 
+  /// Returns one script by [scriptId], if present.
   Script? getScript(String scriptId) => scripts[scriptId];
 
+  /// Lists available reference IDs.
   List<String> listReferences() => references.keys.toList(growable: false);
 
+  /// Lists available asset IDs.
   List<String> listAssets() => assets.keys.toList(growable: false);
 
+  /// Lists available script IDs.
   List<String> listScripts() => scripts.keys.toList(growable: false);
 }
 
 /// Complete skill representation with metadata, instructions, and resources.
 class Skill implements SkillDescriptor {
+  /// Creates a complete skill object.
   Skill({
     Frontmatter? frontmatter,
     String? name,
@@ -247,40 +281,60 @@ class Skill implements SkillDescriptor {
            ),
        resources = resources ?? Resources();
 
+  /// Parsed SKILL.md frontmatter metadata.
   final Frontmatter frontmatter;
+
+  /// Markdown body instructions from SKILL.md.
   final String instructions;
+
+  /// Associated references/assets/scripts.
   final Resources resources;
+
+  /// Optional skill version string.
   final String version;
 
+  /// Skill name from [frontmatter].
   @override
   String get name => frontmatter.name;
 
+  /// Skill description from [frontmatter].
   @override
   String get description => frontmatter.description;
 }
 
+/// In-memory registry for named [Skill] objects.
 class SkillRegistry {
+  /// Creates an empty [SkillRegistry].
+  SkillRegistry();
+
   final Map<String, Skill> _skills = <String, Skill>{};
 
+  /// Adds or replaces one [skill] by its name.
   void register(Skill skill) {
     _skills[skill.name] = skill;
   }
 
+  /// Returns a skill by [name], if registered.
   Skill? get(String name) => _skills[name];
 
+  /// Whether a skill exists for [name].
   bool contains(String name) => _skills.containsKey(name);
 
+  /// Removes a skill by [name].
   void remove(String name) {
     _skills.remove(name);
   }
 
+  /// Removes every registered skill.
   void clear() {
     _skills.clear();
   }
 
+  /// Returns all registered skills.
   List<Skill> list() => _skills.values.toList(growable: false);
 }
 
+/// Renders a skill summary list as XML text for model prompts.
 String formatSkillsAsXml(List<SkillDescriptor> skills) {
   if (skills.isEmpty) {
     return '<available_skills>\n</available_skills>';
@@ -301,6 +355,7 @@ String formatSkillsAsXml(List<SkillDescriptor> skills) {
   return lines.join('\n');
 }
 
+/// Loads a [Skill] from a directory containing `SKILL.md`.
 Skill loadSkillFromDir(String skillDirPath) {
   final Directory skillDir = _resolveSkillDir(skillDirPath);
   final _ParsedSkillMd parsed = _parseSkillMd(skillDir);
@@ -339,6 +394,7 @@ Skill loadSkillFromDir(String skillDirPath) {
   );
 }
 
+/// Validates skill directory structure and returns human-readable problems.
 List<String> validateSkillDir(String skillDirPath) {
   final Directory skillDir = _resolveSkillDir(skillDirPath);
 
@@ -388,6 +444,7 @@ List<String> validateSkillDir(String skillDirPath) {
   return problems;
 }
 
+/// Reads only frontmatter properties from a skill directory.
 Frontmatter readSkillProperties(String skillDirPath) {
   final Directory skillDir = _resolveSkillDir(skillDirPath);
   final _ParsedSkillMd parsed = _parseSkillMd(skillDir);
@@ -478,7 +535,9 @@ Map<String, Object?> _parseYamlMapping(String text) {
   try {
     final Object? parsed = loadYaml(text);
     if (parsed is! Map) {
-      throw const FormatException('SKILL.md frontmatter must be a YAML mapping');
+      throw const FormatException(
+        'SKILL.md frontmatter must be a YAML mapping',
+      );
     }
     return _yamlToMap(parsed);
   } catch (error) {

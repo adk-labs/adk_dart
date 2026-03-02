@@ -21,15 +21,19 @@ export 'package:adk_mcp/adk_mcp.dart'
         StdioConnectionParams,
         StreamableHTTPConnectionParams;
 
+/// Union type alias for supported MCP transport connection parameters.
 typedef McpConnectionParams = Object;
 
+/// Callback signature for custom local MCP tool executors.
 typedef McpToolExecutor =
     FutureOr<Object?> Function(
       Map<String, dynamic> args, {
       Map<String, String>? headers,
     });
 
+/// Central registry and transport manager for MCP sessions.
 class McpSessionManager {
+  /// Creates an MCP session manager singleton.
   McpSessionManager._()
     : _remoteClient = McpRemoteClient(
         clientInfoName: 'adk_dart',
@@ -42,6 +46,7 @@ class McpSessionManager {
         onServerMessage: _handleServerMessage,
       );
 
+  /// Shared process-wide session manager instance.
   static final McpSessionManager instance = McpSessionManager._();
 
   final McpRemoteClient _remoteClient;
@@ -55,6 +60,7 @@ class McpSessionManager {
   final Map<String, List<Map<String, Object?>>> _remoteToolDescriptorsByUrl =
       <String, List<Map<String, Object?>>>{};
 
+  /// Registers local [tools] for the given MCP [connectionParams].
   void registerTools({
     required McpConnectionParams connectionParams,
     required List<BaseTool> tools,
@@ -66,6 +72,7 @@ class McpSessionManager {
     _remoteToolDescriptorsByUrl.remove(key);
   }
 
+  /// Registers static [resources] for one MCP [connectionParams] scope.
   void registerResources({
     required McpConnectionParams connectionParams,
     required Map<String, List<McpResourceContent>> resources,
@@ -87,6 +94,7 @@ class McpSessionManager {
     );
   }
 
+  /// Registers a custom [executor] for [toolName] within one connection.
   void registerToolExecutor({
     required McpConnectionParams connectionParams,
     required String toolName,
@@ -99,6 +107,7 @@ class McpSessionManager {
     )[toolName] = executor;
   }
 
+  /// Returns locally registered tools for [connectionParams].
   List<BaseTool> getTools(McpConnectionParams connectionParams) {
     final List<BaseTool>? tools = _toolsByUrl[_connectionKey(connectionParams)];
     if (tools == null) {
@@ -107,6 +116,7 @@ class McpSessionManager {
     return tools.toList(growable: false);
   }
 
+  /// Lists remote MCP tool descriptors and optionally refreshes cache.
   Future<List<Map<String, Object?>>> listRemoteToolDescriptors({
     required McpConnectionParams connectionParams,
     bool forceRefresh = true,
@@ -146,10 +156,12 @@ class McpSessionManager {
     return filtered;
   }
 
+  /// Returns connection keys for all registered MCP servers.
   List<String> listServerUrls() {
     return _toolsByUrl.keys.toList(growable: false);
   }
 
+  /// Returns locally cached resource names for [connectionParams].
   List<String> listResources(McpConnectionParams connectionParams) {
     final String key = _connectionKey(connectionParams);
     final Map<String, List<McpResourceContent>>? resources =
@@ -160,6 +172,7 @@ class McpSessionManager {
     return resources.keys.toList(growable: false);
   }
 
+  /// Lists resources from local cache and remote MCP capabilities.
   Future<List<String>> listResourcesAsync(
     McpConnectionParams connectionParams, {
     Map<String, String>? headers,
@@ -226,6 +239,7 @@ class McpSessionManager {
     return ordered;
   }
 
+  /// Lists argument names declared by a remote MCP prompt definition.
   Future<Set<String>> listPromptArgumentNames({
     required McpConnectionParams connectionParams,
     required String promptName,
@@ -271,6 +285,7 @@ class McpSessionManager {
     return names;
   }
 
+  /// Returns locally cached resource contents for [resourceName].
   List<McpResourceContent> readResource({
     required McpConnectionParams connectionParams,
     required String resourceName,
@@ -292,6 +307,7 @@ class McpSessionManager {
         .toList(growable: false);
   }
 
+  /// Reads one MCP resource or prompt result from the remote server.
   Future<List<McpResourceContent>> readResourceAsync({
     required McpConnectionParams connectionParams,
     required String resourceName,
@@ -343,6 +359,7 @@ class McpSessionManager {
     return const <McpResourceContent>[];
   }
 
+  /// Subscribes to resource-change notifications when supported.
   Future<void> subscribeResource({
     required McpConnectionParams connectionParams,
     required String resourceUri,
@@ -362,6 +379,7 @@ class McpSessionManager {
     );
   }
 
+  /// Unsubscribes from resource-change notifications when supported.
   Future<void> unsubscribeResource({
     required McpConnectionParams connectionParams,
     required String resourceUri,
@@ -381,6 +399,7 @@ class McpSessionManager {
     );
   }
 
+  /// Calls one MCP tool and returns its JSON-like result payload.
   Future<Object?> callTool({
     required McpConnectionParams connectionParams,
     required String toolName,
@@ -550,6 +569,7 @@ class McpSessionManager {
     );
   }
 
+  /// Clears all cached sessions, tools, resources, and descriptors.
   void clear() {
     _toolsByUrl.clear();
     _resourcesByUrl.clear();

@@ -17,6 +17,9 @@ class SearchMemoryResponse {
 
 /// Base contract for memory ingestion and search implementations.
 abstract class BaseMemoryService {
+  /// Creates a memory service.
+  BaseMemoryService();
+
   /// Adds all events from [session] to memory storage.
   Future<void> addSessionToMemory(Session session);
 

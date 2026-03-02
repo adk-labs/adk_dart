@@ -6,6 +6,9 @@ import 'base_artifact_service.dart';
 
 /// Artifact service backed by process-local memory maps.
 class InMemoryArtifactService extends BaseArtifactService {
+  /// Creates an in-memory artifact storage service.
+  InMemoryArtifactService();
+
   final Map<String, List<_ArtifactEntry>> _artifacts =
       <String, List<_ArtifactEntry>>{};
 

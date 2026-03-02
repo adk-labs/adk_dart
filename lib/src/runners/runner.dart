@@ -45,6 +45,7 @@ bool _hasNonEmptyTranscriptionText(Object? transcription) {
   return false;
 }
 
+/// Error thrown when a requested session cannot be found.
 class SessionNotFoundError implements Exception {
   /// Creates a session-not-found error with [message].
   SessionNotFoundError(this.message);
@@ -91,19 +92,37 @@ class Runner {
     }
   }
 
+  /// Optional app container used to initialize runner defaults.
   final App? app;
+
+  /// Effective application name used for session lookups.
   late String appName;
+
+  /// Root agent executed by this runner.
   late BaseAgent agent;
 
+  /// Artifact persistence service, if configured.
   final BaseArtifactService? artifactService;
+
+  /// Session service used for reads/writes during execution.
   final BaseSessionService sessionService;
+
+  /// Memory service implementation or adapter payload.
   final Object? memoryService;
+
+  /// Credential service implementation used by auth-aware tools.
   final Object? credentialService;
+
+  /// Plugin manager orchestrating lifecycle and callbacks.
   final PluginManager pluginManager;
 
+  /// Whether missing sessions should be created automatically.
   final bool autoCreateSession;
 
+  /// Optional context-cache configuration forwarded to invocation context.
   Object? contextCacheConfig;
+
+  /// Optional resumability policy for invocation replay/resume.
   ResumabilityConfig? resumabilityConfig;
 
   (_RunnerParams, List<BasePlugin>) _validateRunnerParams(

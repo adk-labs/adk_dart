@@ -53,6 +53,9 @@ class ArtifactVersion {
 
 /// Base contract for artifact persistence services.
 abstract class BaseArtifactService {
+  /// Creates an artifact persistence service.
+  BaseArtifactService();
+
   /// Saves [artifact] and returns the assigned version number.
   Future<int> saveArtifact({
     required String appName,

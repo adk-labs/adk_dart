@@ -9,6 +9,9 @@ import 'memory_entry.dart';
 
 /// Memory service backed by process-local event collections.
 class InMemoryMemoryService extends BaseMemoryService {
+  /// Creates an in-memory memory service.
+  InMemoryMemoryService();
+
   final Map<String, Map<String, List<Event>>> _sessionEventsByUserKey =
       <String, Map<String, List<Event>>>{};
 

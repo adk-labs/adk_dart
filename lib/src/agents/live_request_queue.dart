@@ -47,6 +47,9 @@ class LiveRequest {
 
 /// In-memory FIFO queue for live requests.
 class LiveRequestQueue {
+  /// Creates an empty live-request queue.
+  LiveRequestQueue();
+
   final Queue<LiveRequest> _queue = Queue<LiveRequest>();
   Completer<LiveRequest>? _pending;
   bool _closed = false;

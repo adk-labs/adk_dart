@@ -4,10 +4,13 @@ import '../base_toolset.dart';
 import 'mcp_session_manager.dart';
 import 'mcp_tool.dart';
 
+/// Header-builder callback applied to MCP tool calls in this toolset.
 typedef McpHeaderProvider =
     Map<String, String> Function(ReadonlyContext readonlyContext);
 
+/// Toolset that exposes tools and resources from one MCP connection.
 class McpToolset extends BaseToolset {
+  /// Creates an MCP toolset bound to [connectionParams].
   McpToolset({
     required this.connectionParams,
     super.toolFilter,
@@ -15,10 +18,14 @@ class McpToolset extends BaseToolset {
     this.headerProvider,
   });
 
+  /// MCP transport parameters for this toolset.
   final McpConnectionParams connectionParams;
+
+  /// Optional callback for injecting request headers dynamically.
   final McpHeaderProvider? headerProvider;
 
   @override
+  /// Returns filtered MCP tools discovered from cache or remote server.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     final McpSessionManager manager = McpSessionManager.instance;
 
@@ -69,10 +76,12 @@ class McpToolset extends BaseToolset {
         .toList(growable: false);
   }
 
+  /// Lists available MCP resource names.
   Future<List<String>> listResources() async {
     return McpSessionManager.instance.listResourcesAsync(connectionParams);
   }
 
+  /// Reads one named MCP resource into content parts.
   Future<List<McpResourceContent>> readResource(String resourceName) async {
     return McpSessionManager.instance.readResourceAsync(
       connectionParams: connectionParams,

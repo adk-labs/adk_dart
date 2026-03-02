@@ -216,6 +216,7 @@ class Event extends LlmResponse {
     );
   }
 
+  /// Creates a new runtime event identifier.
   static String newId() => newAdkId(prefix: 'evt_');
 }
 

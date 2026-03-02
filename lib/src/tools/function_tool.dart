@@ -4,10 +4,16 @@ import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Callback signature for dynamic confirmation requirements.
 typedef ConfirmationPredicate =
     FutureOr<bool> Function(Map<String, dynamic> args);
 
+/// Wraps a Dart callable as a runtime tool.
 class FunctionTool extends BaseTool {
+  /// Creates a function-backed tool.
+  ///
+  /// [requireConfirmation] accepts either `bool`, [ConfirmationPredicate], or
+  /// a plain function returning a truthy value.
   FunctionTool({
     required this.func,
     String? name,
@@ -15,15 +21,20 @@ class FunctionTool extends BaseTool {
     this.requireConfirmation = false,
   }) : super(name: name ?? 'function_tool', description: description ?? '');
 
+  /// Target function invoked when the tool is called.
   final Function func;
+
+  /// Confirmation policy for this tool call.
   final Object requireConfirmation;
 
   @override
+  /// Returns a simple declaration derived from [name] and [description].
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(name: name, description: description);
   }
 
   @override
+  /// Runs the wrapped function with argument-shape fallbacks.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -164,10 +175,15 @@ class FunctionTool extends BaseTool {
   }
 }
 
+/// One invocation strategy used to call flexible user functions.
 class InvocationPlan {
+  /// Creates a function invocation plan with positional and named arguments.
   InvocationPlan({required this.positional, Map<Symbol, Object?>? named})
     : named = named ?? const <Symbol, Object?>{};
 
+  /// Positional arguments supplied to [Function.apply].
   final List<Object?> positional;
+
+  /// Named arguments supplied to [Function.apply].
   final Map<Symbol, Object?> named;
 }
