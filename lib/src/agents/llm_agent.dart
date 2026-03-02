@@ -1,3 +1,6 @@
+/// LLM-backed agent implementation and callback contracts.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -25,18 +28,21 @@ import 'callback_context.dart';
 import 'invocation_context.dart';
 import 'readonly_context.dart';
 
+/// Callback invoked before model generation.
 typedef BeforeModelCallback =
     FutureOr<LlmResponse?> Function(
       CallbackContext callbackContext,
       LlmRequest llmRequest,
     );
 
+/// Callback invoked after model generation.
 typedef AfterModelCallback =
     FutureOr<LlmResponse?> Function(
       CallbackContext callbackContext,
       LlmResponse llmResponse,
     );
 
+/// Callback invoked when model generation throws.
 typedef OnModelErrorCallback =
     FutureOr<LlmResponse?> Function(
       CallbackContext callbackContext,
@@ -44,6 +50,7 @@ typedef OnModelErrorCallback =
       Exception error,
     );
 
+/// Callback invoked before a tool call executes.
 typedef BeforeToolCallback =
     FutureOr<Map<String, dynamic>?> Function(
       BaseTool tool,
@@ -51,6 +58,7 @@ typedef BeforeToolCallback =
       ToolContext toolContext,
     );
 
+/// Callback invoked after a tool call succeeds.
 typedef AfterToolCallback =
     FutureOr<Map<String, dynamic>?> Function(
       BaseTool tool,
@@ -59,6 +67,7 @@ typedef AfterToolCallback =
       Map<String, dynamic> toolResponse,
     );
 
+/// Callback invoked when a tool call throws.
 typedef OnToolErrorCallback =
     FutureOr<Map<String, dynamic>?> Function(
       BaseTool tool,
@@ -67,10 +76,13 @@ typedef OnToolErrorCallback =
       Exception error,
     );
 
+/// Dynamic instruction provider callback.
 typedef InstructionProvider =
     FutureOr<String> Function(ReadonlyContext context);
 
+/// Core LLM agent that drives model and tool orchestration flows.
 class LlmAgent extends BaseAgent {
+  /// Creates an LLM agent.
   LlmAgent({
     required super.name,
     super.description,
@@ -102,37 +114,71 @@ class LlmAgent extends BaseAgent {
     _warnOnThinkingConfigPrecedence();
   }
 
+  /// Built-in default model name.
   static const String defaultModel = 'gemini-2.5-flash';
   static Object _defaultModel = defaultModel;
 
+  /// Model configuration as a model name or [BaseLlm].
   Object model;
+
+  /// Primary instruction as text or [InstructionProvider].
   Object instruction;
+
+  /// Global instruction as text or [InstructionProvider].
   Object globalInstruction;
+
+  /// Optional static instruction payload.
   Object? staticInstruction;
+
+  /// Tool/toolset/function unions used by this agent.
   List<Object> tools;
 
+  /// Additional generation configuration.
   GenerateContentConfig? generateContentConfig;
 
+  /// Whether transfers to parent agents are disallowed.
   bool disallowTransferToParent;
+
+  /// Whether transfers to peer agents are disallowed.
   bool disallowTransferToPeers;
 
+  /// Content inclusion mode for prompts and responses.
   String includeContents;
 
+  /// Optional input schema.
   Object? inputSchema;
+
+  /// Optional output schema.
   Object? outputSchema;
+
+  /// Optional state key to store final response output.
   String? outputKey;
 
+  /// Optional planner implementation.
   Object? planner;
+
+  /// Optional code-execution backend.
   Object? codeExecutor;
 
+  /// Before-model callback(s).
   Object? beforeModelCallback;
+
+  /// After-model callback(s).
   Object? afterModelCallback;
+
+  /// Model-error callback(s).
   Object? onModelErrorCallback;
 
+  /// Before-tool callback(s).
   Object? beforeToolCallback;
+
+  /// After-tool callback(s).
   Object? afterToolCallback;
+
+  /// Tool-error callback(s).
   Object? onToolErrorCallback;
 
+  /// Returns a cloned LLM agent with optional field overrides.
   @override
   LlmAgent clone({Map<String, Object?>? update}) {
     final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
@@ -298,6 +344,7 @@ class LlmAgent extends BaseAgent {
     return clonedAgent;
   }
 
+  /// Runs async LLM flow execution for this agent.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     final BaseAgentState? agentState = loadAgentState(context);
@@ -343,6 +390,7 @@ class LlmAgent extends BaseAgent {
     }
   }
 
+  /// Runs live LLM flow execution for this agent.
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     await for (final Event event in llmFlow.runLive(context)) {
@@ -351,6 +399,7 @@ class LlmAgent extends BaseAgent {
     }
   }
 
+  /// Canonical [BaseLlm] resolved from local, ancestor, or default config.
   BaseLlm get canonicalModel {
     if (model is BaseLlm) {
       return model as BaseLlm;
@@ -371,6 +420,7 @@ class LlmAgent extends BaseAgent {
     return _resolveDefaultModel();
   }
 
+  /// Sets the process-wide default model.
   static void setDefaultModel(Object model) {
     if (model is! String && model is! BaseLlm) {
       throw ArgumentError('Default model must be a model name or BaseLlm.');
@@ -389,6 +439,7 @@ class LlmAgent extends BaseAgent {
     return LLMRegistry.newLlm(defaultValue as String);
   }
 
+  /// Resolves primary instruction text and whether it was dynamic.
   Future<(String, bool)> canonicalInstruction(ReadonlyContext context) async {
     final Object value = instruction;
     if (value is String) {
@@ -400,6 +451,7 @@ class LlmAgent extends BaseAgent {
     throw ArgumentError('instruction must be String or InstructionProvider.');
   }
 
+  /// Resolves global instruction text and whether it was dynamic.
   Future<(String, bool)> canonicalGlobalInstruction(
     ReadonlyContext context,
   ) async {
@@ -415,6 +467,7 @@ class LlmAgent extends BaseAgent {
     );
   }
 
+  /// Resolves configured tools into canonical [BaseTool] instances.
   Future<List<BaseTool>> canonicalTools([ReadonlyContext? context]) async {
     final bool multipleTools = tools.length > 1;
     final List<Future<List<BaseTool>>> futures = tools
@@ -432,30 +485,37 @@ class LlmAgent extends BaseAgent {
     return resolved.expand((List<BaseTool> list) => list).toList();
   }
 
+  /// Canonical before-model callbacks.
   List<BeforeModelCallback> get canonicalBeforeModelCallbacks {
     return _coerceCallbacks<BeforeModelCallback>(beforeModelCallback);
   }
 
+  /// Canonical after-model callbacks.
   List<AfterModelCallback> get canonicalAfterModelCallbacks {
     return _coerceCallbacks<AfterModelCallback>(afterModelCallback);
   }
 
+  /// Canonical model-error callbacks.
   List<OnModelErrorCallback> get canonicalOnModelErrorCallbacks {
     return _coerceCallbacks<OnModelErrorCallback>(onModelErrorCallback);
   }
 
+  /// Canonical before-tool callbacks.
   List<BeforeToolCallback> get canonicalBeforeToolCallbacks {
     return _coerceCallbacks<BeforeToolCallback>(beforeToolCallback);
   }
 
+  /// Canonical after-tool callbacks.
   List<AfterToolCallback> get canonicalAfterToolCallbacks {
     return _coerceCallbacks<AfterToolCallback>(afterToolCallback);
   }
 
+  /// Canonical tool-error callbacks.
   List<OnToolErrorCallback> get canonicalOnToolErrorCallbacks {
     return _coerceCallbacks<OnToolErrorCallback>(onToolErrorCallback);
   }
 
+  /// LLM flow implementation selected from transfer constraints.
   BaseLlmFlow get llmFlow {
     if (disallowTransferToParent &&
         disallowTransferToPeers &&
@@ -678,4 +738,5 @@ Future<List<BaseTool>> _convertToolUnionToTools(
   );
 }
 
+/// Alias for [LlmAgent] kept for API parity.
 typedef Agent = LlmAgent;
