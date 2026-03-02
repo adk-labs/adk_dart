@@ -5,46 +5,69 @@ import 'dart:io';
 import '../_google_auth_token.dart';
 import '../../version.dart';
 
+/// Default ADK user-agent string for Spanner requests.
 const String spannerUserAgent = 'adk-spanner-tool google-adk/$adkVersion';
 
+/// Supported Spanner database dialects.
 enum SpannerDatabaseDialect { googleStandardSql, postgresql, unknown }
 
+/// Table descriptor returned from schema queries.
 class SpannerTable {
+  /// Creates a table descriptor.
   const SpannerTable({required this.tableId});
 
+  /// Table identifier.
   final String tableId;
 }
 
+/// Client interface for Cloud Spanner operations.
 abstract class SpannerClient {
+  /// Returns a Spanner instance handle.
   SpannerInstance instance(String instanceId);
 
+  /// User-agent header value.
   String get userAgent;
+
+  /// Updates the user-agent header value.
   set userAgent(String value);
 }
 
+/// Instance interface for Cloud Spanner.
 abstract class SpannerInstance {
+  /// Whether this instance exists.
   bool exists();
 
+  /// Returns a database handle for [databaseId].
   SpannerDatabase database(String databaseId);
 }
 
+/// Database interface for Cloud Spanner.
 abstract class SpannerDatabase {
+  /// Database dialect.
   SpannerDatabaseDialect get databaseDialect;
 
+  /// Whether this database exists.
   bool exists();
 
+  /// Returns tables in [schema].
   Iterable<SpannerTable> listTables({String schema = '_default'});
 
+  /// Creates a read-only snapshot.
   SpannerSnapshot snapshot({bool multiUse = false});
 
+  /// Reloads database metadata.
   void reload();
 
+  /// Starts a DDL update operation.
   SpannerUpdateDdlOperation updateDdl(List<String> statements);
 
+  /// Creates a mutation batch.
   SpannerBatch batch();
 }
 
+/// Snapshot interface for executing SQL reads.
 abstract class SpannerSnapshot {
+  /// Executes SQL and returns a result set.
   SpannerResultSet executeSql({
     required String sql,
     Map<String, Object?>? params,
@@ -52,19 +75,27 @@ abstract class SpannerSnapshot {
   });
 }
 
+/// Result set interface for Spanner queries.
 abstract class SpannerResultSet {
+  /// Raw row values.
   Iterable<Object?> get rows;
 
+  /// Rows converted to key-value maps.
   List<Map<String, Object?>> toDictList();
 
+  /// First row value, if present.
   Object? one();
 }
 
+/// Handle for long-running DDL operations.
 abstract class SpannerUpdateDdlOperation {
+  /// Awaits operation completion.
   FutureOr<void> result();
 }
 
+/// Batch interface for mutation writes.
 abstract class SpannerBatch {
+  /// Inserts or updates rows in [table].
   void insertOrUpdate({
     required String table,
     required List<String> columns,
@@ -72,13 +103,16 @@ abstract class SpannerBatch {
   });
 }
 
+/// Factory for creating [SpannerClient] instances.
 typedef SpannerClientFactory =
     SpannerClient Function({
       required String project,
       required Object credentials,
     });
 
+/// Exception thrown when no Spanner client factory is configured.
 class SpannerClientFactoryNotConfiguredException implements Exception {
+  /// Creates this exception.
   SpannerClientFactoryNotConfiguredException([
     this.message =
         'Cloud Spanner client factory is not configured in adk_dart. '
@@ -86,8 +120,11 @@ class SpannerClientFactoryNotConfiguredException implements Exception {
   ]);
 
   static const String defaultCode = 'SPANNER_CLIENT_FACTORY_NOT_CONFIGURED';
+
+  /// Human-readable error message.
   final String message;
 
+  /// Stable error code.
   String get code => defaultCode;
 
   @override
@@ -96,6 +133,7 @@ class SpannerClientFactoryNotConfiguredException implements Exception {
 
 SpannerClientFactory _spannerClientFactory = _defaultSpannerClientFactory;
 
+/// Returns a configured Spanner client for [project] and [credentials].
 SpannerClient getSpannerClient({
   required String project,
   required Object credentials,
@@ -108,10 +146,14 @@ SpannerClient getSpannerClient({
   return spannerClient;
 }
 
+/// Overrides the Spanner client factory.
+///
+/// This is primarily used by tests.
 void setSpannerClientFactory(SpannerClientFactory factory) {
   _spannerClientFactory = factory;
 }
 
+/// Restores the default Spanner client factory.
 void resetSpannerClientFactory() {
   _spannerClientFactory = _defaultSpannerClientFactory;
 }
