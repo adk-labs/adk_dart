@@ -6,11 +6,14 @@ import '../../auth/auth_credential.dart';
 import '../../version.dart';
 import '../_google_credentials.dart';
 
+/// Default ADK user-agent string for Pub/Sub requests.
 const String pubSubUserAgent = 'adk-pubsub-tool google-adk/$adkVersion';
 const Duration _cacheTtl = Duration(minutes: 30);
 const String _defaultPubSubApiBaseUrl = 'https://pubsub.googleapis.com/v1';
 
+/// Publisher client interface for Google Cloud Pub/Sub.
 abstract class PubSubPublisherClient {
+  /// Publishes one message to [topicName] and returns its message id.
   Future<String> publish({
     required String topicName,
     required List<int> data,
@@ -18,10 +21,13 @@ abstract class PubSubPublisherClient {
     String orderingKey = '',
   });
 
+  /// Closes this publisher client.
   Future<void> close();
 }
 
+/// One message returned by a Pub/Sub pull operation.
 class PulledPubSubMessage {
+  /// Creates a pulled Pub/Sub message.
   PulledPubSubMessage({
     required this.messageId,
     required this.data,
@@ -32,28 +38,44 @@ class PulledPubSubMessage {
   }) : attributes = attributes ?? <String, String>{},
        publishTime = publishTime ?? DateTime.now().toUtc();
 
+  /// Message identifier.
   final String messageId;
+
+  /// Message payload bytes.
   final List<int> data;
+
+  /// Message attributes.
   final Map<String, String> attributes;
+
+  /// Ordering key, when present.
   final String orderingKey;
+
+  /// Publish timestamp in UTC.
   final DateTime publishTime;
+
+  /// Acknowledgement identifier.
   final String ackId;
 }
 
+/// Subscriber client interface for Google Cloud Pub/Sub.
 abstract class PubSubSubscriberClient {
+  /// Pulls up to [maxMessages] from [subscriptionName].
   Future<List<PulledPubSubMessage>> pull({
     required String subscriptionName,
     required int maxMessages,
   });
 
+  /// Acknowledges messages identified by [ackIds].
   Future<void> acknowledge({
     required String subscriptionName,
     required List<String> ackIds,
   });
 
+  /// Closes this subscriber client.
   Future<void> close();
 }
 
+/// Factory for creating [PubSubPublisherClient] instances.
 typedef PubSubPublisherFactory =
     Future<PubSubPublisherClient> Function({
       required Object credentials,
@@ -61,13 +83,16 @@ typedef PubSubPublisherFactory =
       required bool enableMessageOrdering,
     });
 
+/// Factory for creating [PubSubSubscriberClient] instances.
 typedef PubSubSubscriberFactory =
     Future<PubSubSubscriberClient> Function({
       required Object credentials,
       required List<String> userAgents,
     });
 
+/// HTTP implementation of [PubSubPublisherClient].
 class HttpPubSubPublisherClient implements PubSubPublisherClient {
+  /// Creates an HTTP Pub/Sub publisher client.
   HttpPubSubPublisherClient({
     required this.accessToken,
     required List<String> userAgents,
@@ -77,9 +102,16 @@ class HttpPubSubPublisherClient implements PubSubPublisherClient {
   }) : userAgents = List<String>.from(userAgents),
        _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
+  /// OAuth access token used for Pub/Sub requests.
   final String accessToken;
+
+  /// User-agent list sent on requests.
   final List<String> userAgents;
+
+  /// Whether ordered delivery is enabled.
   final bool enableMessageOrdering;
+
+  /// Base API URL used for requests.
   final String apiBaseUrl;
   final HttpClient Function() _httpClientFactory;
 
@@ -120,7 +152,9 @@ class HttpPubSubPublisherClient implements PubSubPublisherClient {
   Future<void> close() async {}
 }
 
+/// HTTP implementation of [PubSubSubscriberClient].
 class HttpPubSubSubscriberClient implements PubSubSubscriberClient {
+  /// Creates an HTTP Pub/Sub subscriber client.
   HttpPubSubSubscriberClient({
     required this.accessToken,
     required List<String> userAgents,
@@ -129,8 +163,13 @@ class HttpPubSubSubscriberClient implements PubSubSubscriberClient {
   }) : userAgents = List<String>.from(userAgents),
        _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
+  /// OAuth access token used for Pub/Sub requests.
   final String accessToken;
+
+  /// User-agent list sent on requests.
   final List<String> userAgents;
+
+  /// Base API URL used for requests.
   final String apiBaseUrl;
   final HttpClient Function() _httpClientFactory;
 
@@ -210,6 +249,7 @@ final Map<String, _SubscriberCacheEntry> _subscriberClientCache =
 final Map<String, String> _publisherCredentialBindings = <String, String>{};
 final Map<String, String> _subscriberCredentialBindings = <String, String>{};
 
+/// Returns a cached publisher client for [credentials], or creates one.
 Future<PubSubPublisherClient> getPublisherClient({
   required Object credentials,
   Object? userAgent,
@@ -251,6 +291,7 @@ Future<PubSubPublisherClient> getPublisherClient({
   return created;
 }
 
+/// Returns a cached subscriber client for [credentials], or creates one.
 Future<PubSubSubscriberClient> getSubscriberClient({
   required Object credentials,
   Object? userAgent,
@@ -289,6 +330,9 @@ Future<PubSubSubscriberClient> getSubscriberClient({
   return created;
 }
 
+/// Overrides Pub/Sub client factories.
+///
+/// This is primarily used by tests.
 void setPubSubClientFactories({
   PubSubPublisherFactory? publisherFactory,
   PubSubSubscriberFactory? subscriberFactory,
@@ -301,11 +345,13 @@ void setPubSubClientFactories({
   }
 }
 
+/// Restores default Pub/Sub client factories.
 void resetPubSubClientFactories() {
   _publisherFactory = _defaultPublisherFactory;
   _subscriberFactory = _defaultSubscriberFactory;
 }
 
+/// Closes and clears all cached Pub/Sub clients.
 Future<void> cleanupClients() async {
   final List<Future<void>> closing = <Future<void>>[];
   for (final _PublisherCacheEntry entry in _publisherClientCache.values) {
@@ -321,6 +367,7 @@ Future<void> cleanupClients() async {
   await Future.wait(closing);
 }
 
+/// Current in-memory Pub/Sub client cache sizes.
 Map<String, int> pubSubCacheSizes() {
   return UnmodifiableMapView<String, int>(<String, int>{
     'publisher': _publisherClientCache.length,
