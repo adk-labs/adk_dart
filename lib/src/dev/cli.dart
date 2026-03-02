@@ -3029,7 +3029,7 @@ Future<void> _migrateLegacyProjectToRootAgentYaml(String projectDirPath) async {
   await rootAgentFile.writeAsString('''
 name: $escapedName
 description: $escapedDescription
-instruction: Answer user questions to the best of your knowledge.
+instruction: Answer user questions to the best of your knowledge
 model: gemini-2.5-flash
 ''');
 }

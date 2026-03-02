@@ -48,6 +48,16 @@ void main() {
       final DevProjectConfig config = await loadDevProjectConfig(projectPath);
       expect(config.appName, 'my_agent');
       expect(config.agentName, 'root_agent');
+
+      final String rootAgentYaml = await File(
+        '$projectPath${Platform.pathSeparator}root_agent.yaml',
+      ).readAsString();
+      expect(
+        rootAgentYaml,
+        contains(
+          'instruction: Answer user questions to the best of your knowledge\n',
+        ),
+      );
     });
 
     test('loads fallback config when adk.json is missing', () async {

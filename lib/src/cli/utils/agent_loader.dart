@@ -50,11 +50,17 @@ class AgentLoader extends BaseAgentLoader {
     }
 
     final Directory baseDir = Directory(agentsDir).absolute;
-    final Directory agentDir = Directory(
+    Directory agentDir = Directory(
       '${baseDir.path}${Platform.pathSeparator}$normalized',
     ).absolute;
+    String agentParentForEnv = baseDir.path;
+    if (_isSingleAppRoot(baseDir) &&
+        projectDirName(baseDir.path) == normalized) {
+      agentDir = baseDir;
+      agentParentForEnv = baseDir.parent.path;
+    }
 
-    loadDotenvForAgent(normalized, baseDir.path);
+    loadDotenvForAgent(normalized, agentParentForEnv);
 
     final File rootAgentYaml = File(
       '${agentDir.path}${Platform.pathSeparator}root_agent.yaml',
@@ -175,6 +181,14 @@ class AgentLoader extends BaseAgentLoader {
   void removeAgentFromCache(String agentName) {
     _agentCache.remove(agentName);
   }
+}
+
+bool _isSingleAppRoot(Directory dir) {
+  final String path = dir.path;
+  final String sep = Platform.pathSeparator;
+  return File('$path${sep}adk.json').existsSync() ||
+      File('$path${sep}agent.dart').existsSync() ||
+      File('$path${sep}root_agent.yaml').existsSync();
 }
 
 DevProjectConfig _loadDevProjectConfigSync(String projectDirPath) {
