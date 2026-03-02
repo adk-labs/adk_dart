@@ -1,3 +1,6 @@
+/// Service registry and factory wiring for CLI-configured backends.
+library;
+
 import 'dart:io';
 
 import '../artifacts/base_artifact_service.dart';
@@ -17,9 +20,11 @@ import '../tools/_google_access_token.dart';
 import '../utils/yaml_utils.dart';
 import 'utils/envs.dart';
 
+/// Factory signature used to build services from URI-based configuration.
 typedef ServiceFactory<T> =
     T Function(String uri, {Map<String, Object?>? kwargs});
 
+/// Registry of URI-scheme factories for session, artifact, and memory services.
 class ServiceRegistry {
   final Map<String, ServiceFactory<BaseSessionService>> _sessionFactories =
       <String, ServiceFactory<BaseSessionService>>{};
@@ -28,6 +33,7 @@ class ServiceRegistry {
   final Map<String, ServiceFactory<BaseMemoryService>> _memoryFactories =
       <String, ServiceFactory<BaseMemoryService>>{};
 
+  /// Registers a session service [factory] for URI [scheme].
   void registerSessionService(
     String scheme,
     ServiceFactory<BaseSessionService> factory,
@@ -35,6 +41,7 @@ class ServiceRegistry {
     _sessionFactories[scheme] = factory;
   }
 
+  /// Registers an artifact service [factory] for URI [scheme].
   void registerArtifactService(
     String scheme,
     ServiceFactory<BaseArtifactService> factory,
@@ -42,6 +49,7 @@ class ServiceRegistry {
     _artifactFactories[scheme] = factory;
   }
 
+  /// Registers a memory service [factory] for URI [scheme].
   void registerMemoryService(
     String scheme,
     ServiceFactory<BaseMemoryService> factory,
@@ -49,6 +57,7 @@ class ServiceRegistry {
     _memoryFactories[scheme] = factory;
   }
 
+  /// Creates a session service for [uri], or `null` when unregistered.
   BaseSessionService? createSessionService(
     String uri, {
     Map<String, Object?>? kwargs,
@@ -62,6 +71,7 @@ class ServiceRegistry {
     return factory(uri, kwargs: kwargs);
   }
 
+  /// Creates an artifact service for [uri], or `null` when unregistered.
   BaseArtifactService? createArtifactService(
     String uri, {
     Map<String, Object?>? kwargs,
@@ -75,6 +85,7 @@ class ServiceRegistry {
     return factory(uri, kwargs: kwargs);
   }
 
+  /// Creates a memory service for [uri], or `null` when unregistered.
   BaseMemoryService? createMemoryService(
     String uri, {
     Map<String, Object?>? kwargs,
@@ -92,16 +103,19 @@ ServiceRegistry? _serviceRegistryInstance;
 final Map<String, ServiceFactory<Object>> _customYamlClassFactories =
     <String, ServiceFactory<Object>>{};
 
+/// Returns the global [ServiceRegistry] instance with built-ins registered.
 ServiceRegistry getServiceRegistry() {
   _serviceRegistryInstance ??= ServiceRegistry().._registerBuiltinServices();
   return _serviceRegistryInstance!;
 }
 
+/// Resets global registry state for isolated tests.
 void resetServiceRegistryForTest() {
   _serviceRegistryInstance = null;
   _customYamlClassFactories.clear();
 }
 
+/// Registers a custom YAML-instantiable class [factory] for [classPath].
 void registerServiceClassFactory(
   String classPath,
   ServiceFactory<Object> factory,
@@ -109,6 +123,9 @@ void registerServiceClassFactory(
   _customYamlClassFactories[classPath] = factory;
 }
 
+/// Instantiates a previously registered class factory for [classPath].
+///
+/// Returns `null` when no class factory has been registered.
 Object? instantiateRegisteredClassFactory(
   String classPath, {
   String? uri,
@@ -121,6 +138,7 @@ Object? instantiateRegisteredClassFactory(
   return factory(uri ?? classPath, kwargs: kwargs);
 }
 
+/// Loads service registrations from `services.yaml` files under [agentsDir].
 void loadServicesModule(String agentsDir) {
   final Directory directory = Directory(agentsDir);
   if (!directory.existsSync()) {

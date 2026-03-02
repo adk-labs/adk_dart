@@ -1,3 +1,6 @@
+/// Development web/API server implementation used by ADK CLI commands.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -57,6 +60,9 @@ import 'a2a_push_delivery_queue.dart';
 import 'project.dart';
 import 'runtime.dart';
 
+/// Starts the ADK development web server and returns the bound [HttpServer].
+///
+/// The server exposes API routes and optionally serves the bundled web UI.
 Future<HttpServer> startAdkDevWebServer({
   required DevAgentRuntime runtime,
   required DevProjectConfig project,
@@ -3702,12 +3708,14 @@ Future<Directory?> _resolveWebAssetsDir() async {
   return file.parent;
 }
 
+/// Factory signature for dynamically added web-server plugins.
 typedef ExtraPluginFactory =
     BasePlugin Function(String pluginSpec, {required String baseDir});
 
 final Map<String, ExtraPluginFactory> _extraPluginFactories =
     <String, ExtraPluginFactory>{};
 
+/// Registers a plugin factory for a CLI `--extra_plugins` [pluginSpec].
 void registerExtraPluginFactory(String pluginSpec, ExtraPluginFactory factory) {
   final String trimmed = pluginSpec.trim();
   if (trimmed.isEmpty) {
@@ -3717,6 +3725,7 @@ void registerExtraPluginFactory(String pluginSpec, ExtraPluginFactory factory) {
   _extraPluginFactories[_normalizePluginName(trimmed)] = factory;
 }
 
+/// Clears registered extra plugin factories and related test caches.
 void clearExtraPluginFactoriesForTest() {
   _extraPluginFactories.clear();
   _dynamicPluginMirrorCache.clear();
