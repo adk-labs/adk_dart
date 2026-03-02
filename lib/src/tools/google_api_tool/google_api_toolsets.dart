@@ -3,7 +3,9 @@ import 'google_api_tool.dart';
 import 'google_api_toolset.dart';
 import 'googleapi_to_openapi_converter.dart';
 
+/// Google BigQuery API toolset wrapper.
 class BigQueryToolset extends GoogleApiToolset {
+  /// Creates a BigQuery toolset.
   BigQueryToolset({
     String? clientId,
     String? clientSecret,
@@ -29,7 +31,9 @@ class BigQueryToolset extends GoogleApiToolset {
        );
 }
 
+/// Google Calendar API toolset wrapper.
 class CalendarToolset extends GoogleApiToolset {
+  /// Creates a Calendar toolset.
   CalendarToolset({
     String? clientId,
     String? clientSecret,
@@ -55,7 +59,9 @@ class CalendarToolset extends GoogleApiToolset {
        );
 }
 
+/// Google Gmail API toolset wrapper.
 class GmailToolset extends GoogleApiToolset {
+  /// Creates a Gmail toolset.
   GmailToolset({
     String? clientId,
     String? clientSecret,
@@ -81,7 +87,9 @@ class GmailToolset extends GoogleApiToolset {
        );
 }
 
+/// YouTube Data API toolset wrapper.
 class YoutubeToolset extends GoogleApiToolset {
+  /// Creates a YouTube toolset.
   YoutubeToolset({
     String? clientId,
     String? clientSecret,
@@ -107,7 +115,9 @@ class YoutubeToolset extends GoogleApiToolset {
        );
 }
 
+/// Google Slides API toolset wrapper.
 class SlidesToolset extends GoogleApiToolset {
+  /// Creates a Slides toolset.
   SlidesToolset({
     String? clientId,
     String? clientSecret,
@@ -133,7 +143,9 @@ class SlidesToolset extends GoogleApiToolset {
        );
 }
 
+/// Google Sheets API toolset wrapper.
 class SheetsToolset extends GoogleApiToolset {
+  /// Creates a Sheets toolset.
   SheetsToolset({
     String? clientId,
     String? clientSecret,
@@ -159,7 +171,9 @@ class SheetsToolset extends GoogleApiToolset {
        );
 }
 
+/// Google Docs API toolset wrapper.
 class DocsToolset extends GoogleApiToolset {
+  /// Creates a Docs toolset.
   DocsToolset({
     String? clientId,
     String? clientSecret,
