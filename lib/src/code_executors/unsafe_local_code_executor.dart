@@ -1,3 +1,6 @@
+/// Local process-based code executor (unsafe for untrusted code).
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -6,21 +9,17 @@ import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
+/// Executes code locally via shell/Python processes.
 class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
+  /// Creates an unsafe local code executor.
   UnsafeLocalCodeExecutor({
     this.defaultTimeout = const Duration(seconds: 30),
     bool stateful = false,
     bool optimizeDataFile = false,
-    int errorRetryAttempts = 2,
-    List<(String, String)>? codeBlockDelimiters,
-    (String, String)? executionResultDelimiters,
-  }) : super(
-         stateful: stateful,
-         optimizeDataFile: optimizeDataFile,
-         errorRetryAttempts: errorRetryAttempts,
-         codeBlockDelimiters: codeBlockDelimiters,
-         executionResultDelimiters: executionResultDelimiters,
-       ) {
+    super.errorRetryAttempts = 2,
+    super.codeBlockDelimiters,
+    super.executionResultDelimiters,
+  }) : super(stateful: stateful, optimizeDataFile: optimizeDataFile) {
     if (stateful) {
       throw ArgumentError(
         'Cannot set `stateful=true` in UnsafeLocalCodeExecutor.',
@@ -33,9 +32,11 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
     }
   }
 
+  /// Default execution timeout.
   final Duration defaultTimeout;
 
   @override
+  /// Executes a raw command using the local shell.
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     final Process process = await Process.start(
       _shellProgram(),
@@ -76,6 +77,7 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes code in an isolated temporary directory.
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

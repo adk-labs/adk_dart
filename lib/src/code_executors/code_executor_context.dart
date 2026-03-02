@@ -1,3 +1,6 @@
+/// Session-state helpers for code-executor bookkeeping.
+library;
+
 import 'dart:convert';
 
 import 'code_execution_utils.dart';
@@ -9,17 +12,21 @@ const String _inputFileKey = '_code_executor_input_files';
 const String _errorCountKey = '_code_executor_error_counts';
 const String _codeExecutionResultsKey = '_code_execution_results';
 
+/// Wrapper for reading/writing code-executor state in session maps.
 class CodeExecutorContext {
+  /// Creates a code-executor context over [_sessionState].
   CodeExecutorContext(this._sessionState)
     : _context = _getCodeExecutorContext(_sessionState);
 
   final Map<String, Object?> _sessionState;
   final Map<String, Object?> _context;
 
+  /// Returns state delta to persist context updates.
   Map<String, Object?> getStateDelta() {
     return <String, Object?>{_contextKey: _deepCopyMap(_context)};
   }
 
+  /// Returns current execution ID, if set.
   String? getExecutionId() {
     final Object? value = _context[_sessionIdKey];
     if (value is String && value.isNotEmpty) {
@@ -28,10 +35,12 @@ class CodeExecutorContext {
     return null;
   }
 
+  /// Sets current execution [sessionId].
   void setExecutionId(String sessionId) {
     _context[_sessionIdKey] = sessionId;
   }
 
+  /// Returns names of already-processed input files.
   List<String> getProcessedFileNames() {
     final Object? value = _context[_processedFileNamesKey];
     if (value is List) {
@@ -40,12 +49,14 @@ class CodeExecutorContext {
     return <String>[];
   }
 
+  /// Appends [fileNames] to processed file names.
   void addProcessedFileNames(List<String> fileNames) {
     final List<String> current = getProcessedFileNames();
     current.addAll(fileNames);
     _context[_processedFileNamesKey] = current;
   }
 
+  /// Returns currently tracked input files.
   List<CodeExecutionFile> getInputFiles() {
     final Object? value = _sessionState[_inputFileKey];
     if (value is! List) {
@@ -70,6 +81,7 @@ class CodeExecutorContext {
     return files;
   }
 
+  /// Adds [inputFiles] to tracked input files.
   void addInputFiles(List<CodeExecutionFile> inputFiles) {
     final Object? existing = _sessionState[_inputFileKey];
     final List<Map<String, Object?>> files = <Map<String, Object?>>[];
@@ -96,11 +108,13 @@ class CodeExecutorContext {
     _sessionState[_inputFileKey] = files;
   }
 
+  /// Clears tracked input files and processed file names.
   void clearInputFiles() {
     _sessionState[_inputFileKey] = <Map<String, Object?>>[];
     _context[_processedFileNamesKey] = <String>[];
   }
 
+  /// Returns error count for [invocationId].
   int getErrorCount(String invocationId) {
     final Object? raw = _sessionState[_errorCountKey];
     if (raw is! Map) {
@@ -116,6 +130,7 @@ class CodeExecutorContext {
     return 0;
   }
 
+  /// Increments error count for [invocationId].
   void incrementErrorCount(String invocationId) {
     final Map<String, Object?> counts = _getOrCreateMap(
       _sessionState,
@@ -124,6 +139,7 @@ class CodeExecutorContext {
     counts[invocationId] = getErrorCount(invocationId) + 1;
   }
 
+  /// Resets error count for [invocationId].
   void resetErrorCount(String invocationId) {
     final Object? raw = _sessionState[_errorCountKey];
     if (raw is Map<String, Object?>) {
@@ -135,6 +151,7 @@ class CodeExecutorContext {
     }
   }
 
+  /// Stores one execution result entry for [invocationId].
   void updateCodeExecutionResult(
     String invocationId,
     String code,

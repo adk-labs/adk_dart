@@ -1,18 +1,29 @@
+/// Utilities and models for code-execution I/O payloads.
+library;
+
 import 'dart:convert';
 
 import '../types/content.dart';
 
+/// File payload used in code execution input/output.
 class CodeExecutionFile {
+  /// Creates a code-execution file payload.
   CodeExecutionFile({
     required this.name,
     required this.content,
     this.mimeType = 'text/plain',
   });
 
+  /// File name.
   String name;
+
+  /// File content payload.
   Object content;
+
+  /// File MIME type.
   String mimeType;
 
+  /// Serializes this file payload to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'name': name,
@@ -21,6 +32,7 @@ class CodeExecutionFile {
     };
   }
 
+  /// Creates a file payload from JSON.
   factory CodeExecutionFile.fromJson(Map<String, Object?> json) {
     return CodeExecutionFile(
       name: '${json['name'] ?? ''}',
@@ -30,19 +42,28 @@ class CodeExecutionFile {
   }
 }
 
+/// Normalized code execution input payload.
 class CodeExecutionInput {
+  /// Creates a code-execution input payload.
   CodeExecutionInput({
     required this.code,
     List<CodeExecutionFile>? inputFiles,
     this.executionId,
   }) : inputFiles = inputFiles ?? <CodeExecutionFile>[];
 
+  /// Source code to execute.
   String code;
+
+  /// Input files made available during execution.
   List<CodeExecutionFile> inputFiles;
+
+  /// Optional execution/session identifier.
   String? executionId;
 }
 
+/// Normalized code execution result payload.
 class CodeExecutionResult {
+  /// Creates a code-execution result payload.
   CodeExecutionResult({
     this.stdout = '',
     this.stderr = '',
@@ -51,16 +72,28 @@ class CodeExecutionResult {
     this.timedOut = false,
   }) : outputFiles = outputFiles ?? <CodeExecutionFile>[];
 
+  /// Captured stdout output.
   String stdout;
+
+  /// Captured stderr output.
   String stderr;
+
+  /// Produced output files.
   List<CodeExecutionFile> outputFiles;
+
+  /// Process exit code.
   int exitCode;
+
+  /// Whether execution timed out.
   bool timedOut;
 
+  /// Whether execution succeeded without timeout or stderr.
   bool get isSuccess => exitCode == 0 && !timedOut && stderr.isEmpty;
 }
 
+/// Helpers for extracting and converting code-execution content parts.
 class CodeExecutionUtils {
+  /// Returns base64-encoded bytes, preserving existing base64 payloads.
   static List<int> getEncodedFileContent(List<int> data) {
     try {
       final List<int> decoded = base64Decode(utf8.decode(data));
@@ -74,6 +107,7 @@ class CodeExecutionUtils {
     return utf8.encode(base64Encode(data));
   }
 
+  /// Extracts executable code from [content] and truncates trailing parts.
   static String? extractCodeAndTruncateContent(
     Content content,
     List<(String, String)> codeBlockDelimiters,
@@ -150,12 +184,14 @@ class CodeExecutionUtils {
     return bestCode;
   }
 
+  /// Builds an executable-code [Part] from [code].
   static Part buildExecutableCodePart(String code) {
     return Part(
       executableCode: <String, Object?>{'code': code, 'language': 'PYTHON'},
     );
   }
 
+  /// Builds a code-execution-result [Part] from [result].
   static Part buildCodeExecutionResultPart(CodeExecutionResult result) {
     if (result.stderr.isNotEmpty) {
       return Part(
@@ -172,7 +208,7 @@ class CodeExecutionUtils {
     }
     if (result.outputFiles.isNotEmpty) {
       final String fileNames = result.outputFiles
-          .map((CodeExecutionFile file) => '`' + file.name + '`')
+          .map((CodeExecutionFile file) => '`${file.name}`')
           .join(',');
       finalResult.add('Saved artifacts:\n$fileNames');
     }
@@ -185,6 +221,7 @@ class CodeExecutionUtils {
     );
   }
 
+  /// Converts code execution parts into user-readable text blocks.
   static void convertCodeExecutionParts(
     Content content,
     (String, String) codeBlockDelimiter,

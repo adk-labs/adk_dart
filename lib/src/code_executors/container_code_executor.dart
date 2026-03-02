@@ -1,3 +1,6 @@
+/// Container-based code execution implementations.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -6,28 +9,40 @@ import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
+/// Default image tag used by [ContainerCodeExecutor].
 const String defaultContainerImageTag = 'adk-code-executor:latest';
 
+/// Result of executing a command inside a container runtime.
 class DockerExecResult {
+  /// Creates a container exec result.
   DockerExecResult({
     required this.exitCode,
     this.stdout = '',
     this.stderr = '',
   });
 
+  /// Command exit code.
   final int exitCode;
+
+  /// Captured stdout.
   final String stdout;
+
+  /// Captured stderr.
   final String stderr;
 }
 
+/// Runtime abstraction for container lifecycle and exec operations.
 abstract class ContainerRuntimeClient {
+  /// Builds an image from [dockerPath] tagged as [imageTag].
   Future<void> buildImage({
     required String dockerPath,
     required String imageTag,
   });
 
+  /// Starts a container and returns its container ID.
   Future<String> startContainer({required String imageTag});
 
+  /// Executes [command] inside [containerId].
   Future<DockerExecResult> exec({
     required String containerId,
     required List<String> command,
@@ -36,15 +51,20 @@ abstract class ContainerRuntimeClient {
     Duration? timeout,
   });
 
+  /// Stops [containerId].
   Future<void> stopContainer({required String containerId});
 
+  /// Returns whether runtime tooling is available.
   Future<bool> isAvailable();
 }
 
+/// Process runner signature used by [ProcessContainerRuntimeClient].
 typedef DockerProcessRunner =
     Future<ProcessResult> Function(String executable, List<String> arguments);
 
+/// Docker CLI-backed container runtime client.
 class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
+  /// Creates a process-based container runtime client.
   ProcessContainerRuntimeClient({
     this.dockerBinary = 'docker',
     this.host,
@@ -178,22 +198,19 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
 }
 
 class ContainerCodeExecutor extends BaseCodeExecutor {
+  /// Creates a container-backed code executor.
   ContainerCodeExecutor({
     this.baseUrl,
     String? image,
     this.dockerPath,
     bool stateful = false,
     bool optimizeDataFile = false,
-    int errorRetryAttempts = 2,
+    super.errorRetryAttempts = 2,
     ContainerRuntimeClient? runtimeClient,
   }) : image = image ?? defaultContainerImageTag,
        _runtimeClient =
            runtimeClient ?? ProcessContainerRuntimeClient(host: baseUrl),
-       super(
-         stateful: stateful,
-         optimizeDataFile: optimizeDataFile,
-         errorRetryAttempts: errorRetryAttempts,
-       ) {
+       super(stateful: stateful, optimizeDataFile: optimizeDataFile) {
     if ((image == null || image.trim().isEmpty) &&
         (dockerPath == null || dockerPath!.trim().isEmpty)) {
       throw ArgumentError(
@@ -269,6 +286,7 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes a raw command inside the container runtime.
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     try {
       await _ensureContainerReady();
@@ -304,6 +322,7 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes code with temporary input file staging.
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

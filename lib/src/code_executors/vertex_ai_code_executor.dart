@@ -1,3 +1,6 @@
+/// Vertex code interpreter-backed code execution implementation.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -40,7 +43,9 @@ def explore_df(df: pd.DataFrame) -> None:
     print(f'Total rows: {df.shape[0]}\\nTotal columns: {df.shape[1]}\\n\\n{df_info}')
 ''';
 
+/// Client interface for Vertex code interpreter execution.
 abstract class VertexCodeInterpreterClient {
+  /// Executes [code] with optional [inputFiles] and [sessionId].
   Future<Map<String, Object?>> execute({
     required String code,
     List<CodeExecutionFile>? inputFiles,
@@ -48,14 +53,18 @@ abstract class VertexCodeInterpreterClient {
   });
 }
 
+/// Code executor that uses Vertex code interpreter or local fallback.
 class VertexAiCodeExecutor extends BaseCodeExecutor {
+  /// Creates a Vertex AI code executor.
   VertexAiCodeExecutor({this.resourceName, VertexCodeInterpreterClient? client})
     : _client = client;
 
+  /// Optional Vertex resource name.
   final String? resourceName;
   final VertexCodeInterpreterClient? _client;
 
   @override
+  /// Executes a raw command.
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     if (_client != null) {
       final Map<String, Object?> response = await _executeCodeInterpreter(
@@ -79,6 +88,7 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes code with optional input files and execution session.
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

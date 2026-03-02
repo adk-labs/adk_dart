@@ -1,3 +1,6 @@
+/// Agent Engine sandbox-backed code execution implementation.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -6,31 +9,46 @@ import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
+/// One output payload emitted by agent engine sandbox execution.
 class AgentEngineSandboxOutput {
+  /// Creates a sandbox output payload.
   AgentEngineSandboxOutput({this.mimeType, required this.data, this.metadata});
 
+  /// Output MIME type.
   final String? mimeType;
+
+  /// Output data payload.
   final Object data;
+
+  /// Optional output metadata.
   final Map<String, Object?>? metadata;
 }
 
+/// Response payload returned by sandbox execution.
 class AgentEngineSandboxExecutionResponse {
+  /// Creates a sandbox execution response.
   AgentEngineSandboxExecutionResponse({List<AgentEngineSandboxOutput>? outputs})
     : outputs = outputs ?? <AgentEngineSandboxOutput>[];
 
+  /// Emitted outputs.
   final List<AgentEngineSandboxOutput> outputs;
 }
 
+/// Client interface for Agent Engine sandbox APIs.
 abstract class AgentEngineSandboxClient {
+  /// Creates a sandbox resource for [agentEngineResourceName].
   Future<String> createSandbox({required String agentEngineResourceName});
 
+  /// Executes code inside a sandbox and returns outputs.
   Future<AgentEngineSandboxExecutionResponse> executeCode({
     required String sandboxResourceName,
     required Map<String, Object?> inputData,
   });
 }
 
+/// Code executor backed by Agent Engine sandbox APIs.
 class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
+  /// Creates an Agent Engine sandbox code executor.
   AgentEngineSandboxCodeExecutor({
     this.sandboxResourceName,
     String? agentEngineResourceName,
@@ -102,6 +120,7 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes raw command with local Python fallback behavior.
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     final ProcessResult result = await Process.run(
       _pythonBinary(),
@@ -122,6 +141,7 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes code through sandbox APIs or local fallback.
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

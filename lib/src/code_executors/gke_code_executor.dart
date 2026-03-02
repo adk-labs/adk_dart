@@ -1,3 +1,6 @@
+/// GKE-backed code execution models and executor implementation.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -7,33 +10,46 @@ import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
+/// Outcome statuses returned while watching a GKE job.
 enum GkeJobStatus { succeeded, failed, timedOut }
 
+/// Result payload returned by [GkeApiClient.watchJob].
 class GkeJobWatchResult {
+  /// Creates a GKE job watch result.
   GkeJobWatchResult({required this.status, this.logs = '', this.errorMessage});
 
+  /// Final job status.
   final GkeJobStatus status;
+
+  /// Captured logs.
   final String logs;
+
+  /// Optional error message.
   final String? errorMessage;
 }
 
+/// API abstraction for interacting with Kubernetes resources.
 abstract class GkeApiClient {
+  /// Creates a ConfigMap containing source code.
   Future<void> createCodeConfigMap({
     required String namespace,
     required Map<String, Object?> body,
   });
 
+  /// Creates a Job resource and returns its API payload.
   Future<Map<String, Object?>> createJob({
     required String namespace,
     required Map<String, Object?> body,
   });
 
+  /// Patches a ConfigMap resource.
   Future<void> patchConfigMap({
     required String namespace,
     required String name,
     required Map<String, Object?> body,
   });
 
+  /// Watches job status until completion/failure/timeout.
   Future<GkeJobWatchResult> watchJob({
     required String namespace,
     required String jobName,
@@ -41,7 +57,9 @@ abstract class GkeApiClient {
   });
 }
 
+/// Code executor that submits jobs to GKE or falls back locally.
 class GkeCodeExecutor extends BaseCodeExecutor {
+  /// Creates a GKE code executor.
   GkeCodeExecutor({
     this.namespace = 'default',
     this.image = 'python:3.11-slim',
@@ -66,6 +84,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
   final String? kubeconfigContext;
   final GkeApiClient? _apiClient;
 
+  /// Builds a Kubernetes Job manifest for code execution.
   Map<String, Object?> createJobManifest({
     required String jobName,
     required String configMapName,
@@ -137,6 +156,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes a raw command using local Python fallback.
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     final ProcessResult result = await Process.run(
       _pythonBinary(),
@@ -160,6 +180,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
   }
 
   @override
+  /// Executes code through the configured GKE client or local fallback.
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,
