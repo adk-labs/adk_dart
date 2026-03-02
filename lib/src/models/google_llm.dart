@@ -15,16 +15,24 @@ import 'interactions_utils.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Hook for overriding Gemini generation behavior.
 typedef GeminiGenerateHook =
     Stream<LlmResponse> Function(LlmRequest request, bool stream);
+
+/// Invoker hook for Gemini interactions API generation.
 typedef GeminiInteractionsInvoker =
     Stream<LlmResponse> Function(LlmRequest request, {required bool stream});
+
+/// Factory that creates live Gemini session transports.
 typedef GeminiLiveSessionFactory =
     GeminiLiveSession Function(LlmRequest request);
 
+/// Exception thrown when model capacity is exhausted.
 class ResourceExhaustedModelException implements Exception {
+  /// Creates a resource-exhausted exception with [message].
   ResourceExhaustedModelException(this.message);
 
+  /// Error message describing the exhaustion condition.
   final String message;
 
   @override
@@ -33,7 +41,9 @@ class ResourceExhaustedModelException implements Exception {
   }
 }
 
+/// Google Gemini model adapter with REST, interactions, and live support.
 class Gemini extends BaseLlm {
+  /// Creates a Gemini adapter for [model].
   Gemini({
     super.model = 'gemini-2.5-flash',
     this.useInteractionsApi = false,
@@ -49,15 +59,34 @@ class Gemini extends BaseLlm {
     GeminiGenerateHook? generateHook,
   }) : _generateHook = generateHook;
 
+  /// Whether to route requests through the interactions API.
   final bool useInteractionsApi;
+
+  /// Optional default retry options object or JSON-like map.
   final Object? retryOptions;
+
+  /// Optional base URL override for Gemini REST endpoints.
   final String? baseUrl;
+
+  /// Optional speech config used for live connections.
   final Object? speechConfig;
+
+  /// Context cache manager used for cache-aware requests.
   final GeminiContextCacheManager cacheManager;
+
+  /// Optional environment override for API keys and flags.
   final Map<String, String>? environment;
+
+  /// Optional API backend override.
   final GoogleLLMVariant? apiBackendOverride;
+
+  /// Optional interactions invoker override.
   final GeminiInteractionsInvoker? interactionsInvoker;
+
+  /// Optional live session factory override.
   final GeminiLiveSessionFactory? liveSessionFactory;
+
+  /// Optional REST transport override.
   final GeminiRestTransport? restTransport;
   final GeminiGenerateHook? _generateHook;
 
@@ -67,12 +96,14 @@ class Gemini extends BaseLlm {
   GeminiRestTransport get _resolvedRestTransport =>
       restTransport ?? _defaultRestTransport;
 
+  /// Resolved backend variant used for requests.
   GoogleLLMVariant get apiBackend =>
       apiBackendOverride ?? getGoogleLlmVariant(environment: environment);
 
   String get _liveApiVersion =>
       apiBackend == GoogleLLMVariant.vertexAi ? 'v1beta1' : 'v1alpha';
 
+  /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
     return <RegExp>[
       RegExp(r'gemini-.*'),
@@ -84,6 +115,7 @@ class Gemini extends BaseLlm {
     ];
   }
 
+  /// Generates model responses for [request].
   @override
   Stream<LlmResponse> generateContent(
     LlmRequest request, {
@@ -235,6 +267,7 @@ class Gemini extends BaseLlm {
     }
   }
 
+  /// Creates a live-capable connection for [request].
   BaseLlmConnection connect(LlmRequest request) {
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model = prepared.model ?? model;
@@ -1073,4 +1106,5 @@ List<int> _coerceIntList(Object? value) {
   return output;
 }
 
+/// Backward-compatible alias for [Gemini].
 typedef GoogleLlm = Gemini;
