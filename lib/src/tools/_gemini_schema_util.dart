@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+/// Converts [text] to snake_case.
 String toSnakeCase(String text) {
   String value = text.replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '_');
   value = value.replaceAllMapped(
@@ -16,6 +17,7 @@ String toSnakeCase(String text) {
   return value;
 }
 
+/// Resolves local `$ref` entries using schema-level `$defs`.
 Map<String, dynamic> dereferenceSchema(Map<String, dynamic> schema) {
   final Map<String, dynamic> defs = _castMap(schema[r'$defs']);
 
@@ -50,6 +52,7 @@ Map<String, dynamic> dereferenceSchema(Map<String, dynamic> schema) {
   return result;
 }
 
+/// Normalizes schema keys and formats to Gemini-compatible values.
 Map<String, dynamic> sanitizeSchemaFormatsForGemini(
   Map<String, dynamic> schema, {
   bool preserveNullType = false,
@@ -120,6 +123,7 @@ Map<String, dynamic> sanitizeSchemaFormatsForGemini(
   return _castMap(sanitize(schema, preserveNull: preserveNullType));
 }
 
+/// Normalizes the `type` field and ensures required array defaults.
 Map<String, dynamic> sanitizeSchemaType(
   Map<String, dynamic> schema, {
   bool preserveNullType = false,
@@ -153,6 +157,7 @@ Map<String, dynamic> sanitizeSchemaType(
   return schema;
 }
 
+/// Converts an OpenAPI-style schema into a Gemini-ready schema.
 Map<String, dynamic> toGeminiSchema(Map<String, dynamic> openApiSchema) {
   final Map<String, dynamic> dereferenced = dereferenceSchema(openApiSchema);
   return sanitizeSchemaFormatsForGemini(dereferenced);
@@ -165,6 +170,7 @@ Map<String, dynamic> _castMap(Object? value) {
   return <String, dynamic>{};
 }
 
+/// Encodes [schema] to a JSON string.
 String encodeSchemaJson(Map<String, dynamic> schema) {
   return jsonEncode(schema);
 }
