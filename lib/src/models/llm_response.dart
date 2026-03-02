@@ -1,6 +1,8 @@
 import '../types/content.dart';
 
+/// Normalized model response emitted by LLM adapters.
 class LlmResponse {
+  /// Creates an LLM response.
   LlmResponse({
     this.modelVersion,
     this.content,
@@ -22,25 +24,61 @@ class LlmResponse {
     this.interactionId,
   });
 
+  /// Backend model version that produced this response.
   String? modelVersion;
+
+  /// Generated content payload.
   Content? content;
+
+  /// Whether this event is a partial streaming chunk.
   bool? partial;
+
+  /// Whether the model turn has completed.
   bool? turnComplete;
+
+  /// Backend-specific finish reason string.
   String? finishReason;
+
+  /// Backend-specific error code.
   String? errorCode;
+
+  /// Human-readable error message.
   String? errorMessage;
+
+  /// Whether generation was interrupted externally.
   bool? interrupted;
+
+  /// Optional custom metadata attached by middleware.
   Map<String, dynamic>? customMetadata;
+
+  /// Provider usage metadata payload.
   Object? usageMetadata;
+
+  /// Provider input transcription payload.
   Object? inputTranscription;
+
+  /// Provider output transcription payload.
   Object? outputTranscription;
+
+  /// Average log probability for generated tokens.
   double? avgLogprobs;
+
+  /// Provider log-probability detail payload.
   Object? logprobsResult;
+
+  /// Provider cache metadata payload.
   Object? cacheMetadata;
+
+  /// Provider citation metadata payload.
   Object? citationMetadata;
+
+  /// Provider grounding metadata payload.
   Object? groundingMetadata;
+
+  /// Provider interaction identifier for tracing.
   String? interactionId;
 
+  /// Returns a copy of this response with optional overrides.
   LlmResponse copyWith({
     Object? modelVersion = _sentinel,
     Object? content = _sentinel,

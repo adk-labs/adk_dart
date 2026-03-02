@@ -2,16 +2,23 @@ import '../types/content.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Base interface for model adapters used by the runner.
 abstract class BaseLlm {
+  /// Creates an LLM adapter bound to [model].
   BaseLlm({required this.model});
 
+  /// The model identifier sent to the backend.
   String model;
 
+  /// Generates model responses for [request].
+  ///
+  /// When [stream] is true, implementations may emit partial responses.
   Stream<LlmResponse> generateContent(
     LlmRequest request, {
     bool stream = false,
   });
 
+  /// Appends a fallback user turn when [request] has no trailing user content.
   void maybeAppendUserContent(LlmRequest request) {
     if (request.contents.isEmpty) {
       request.contents.add(
