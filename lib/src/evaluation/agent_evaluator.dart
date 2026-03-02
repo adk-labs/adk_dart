@@ -29,9 +29,12 @@ const String _queryColumn = 'query';
 const String _referenceColumn = 'reference';
 const String _expectedToolUseColumn = 'expected_tool_use';
 
+/// Loads a root [BaseAgent] from a module name.
 typedef AgentModuleLoader = Future<BaseAgent> Function(String moduleName);
 
+/// Aggregated metric result for one metric across repeated runs.
 class AgentMetricAggregate {
+  /// Creates an aggregated metric result.
   AgentMetricAggregate({
     required this.metricName,
     required this.threshold,
@@ -39,30 +42,47 @@ class AgentMetricAggregate {
     required this.passed,
   });
 
+  /// The metric identifier.
   final String metricName;
+
+  /// The pass threshold applied to [averageScore].
   final double threshold;
+
+  /// The mean score across runs for this metric.
   final double averageScore;
+
+  /// Whether [averageScore] meets or exceeds [threshold].
   final bool passed;
 }
 
+/// Evaluation summary for a single eval case.
 class AgentEvalCaseSummary {
+  /// Creates an eval case summary.
   AgentEvalCaseSummary({
     required this.evalCaseId,
     required this.metrics,
     required this.passed,
   });
 
+  /// The eval case identifier.
   final String evalCaseId;
+
+  /// Per-metric aggregate results.
   final List<AgentMetricAggregate> metrics;
+
+  /// Whether all metrics in [metrics] passed.
   final bool passed;
 }
 
+/// Utilities for loading eval sets and evaluating agents against them.
 class AgentEvaluator {
+  /// The default number of repeated runs per eval case.
   static const int numRuns = 2;
   static final Map<String, BaseAgent Function()> _registeredAgentModules =
       <String, BaseAgent Function()>{};
   static AgentModuleLoader? _agentModuleLoader;
 
+  /// Registers a root agent factory for [moduleName].
   static void registerAgentModule(
     String moduleName,
     BaseAgent Function() rootAgentFactory,
@@ -74,22 +94,27 @@ class AgentEvaluator {
     _registeredAgentModules[normalized] = rootAgentFactory;
   }
 
+  /// Unregisters a previously registered [moduleName].
   static void unregisterAgentModule(String moduleName) {
     _registeredAgentModules.remove(moduleName.trim());
   }
 
+  /// Clears all registered agent module factories.
   static void clearAgentModules() {
     _registeredAgentModules.clear();
   }
 
+  /// Sets a loader used to resolve [agentModule] values at runtime.
   static void setAgentModuleLoader(AgentModuleLoader loader) {
     _agentModuleLoader = loader;
   }
 
+  /// Clears the configured runtime agent module loader.
   static void clearAgentModuleLoader() {
     _agentModuleLoader = null;
   }
 
+  /// Loads `test_config.json` from the directory containing [testFile].
   static EvalConfig findConfigForTestFile(String testFile) {
     final File file = File(testFile);
     final String testFolder = file.parent.path;
@@ -97,6 +122,11 @@ class AgentEvaluator {
     return getEvaluationCriteriaOrDefault(configPath);
   }
 
+  /// Evaluates all discovered eval set files under [evalDatasetFilePathOrDir].
+  ///
+  /// Returns summaries for all evaluated cases.
+  ///
+  /// Throws a [StateError] when [failOnFailure] is true and any case fails.
   static Future<List<AgentEvalCaseSummary>> evaluate({
     BaseAgent? rootAgent,
     String? agentModule,
@@ -167,6 +197,9 @@ class AgentEvaluator {
     return allSummaries;
   }
 
+  /// Evaluates a single [evalSet] and returns per-case summaries.
+  ///
+  /// Uses [criteria] when provided, otherwise falls back to [evalConfig].
   static Future<List<AgentEvalCaseSummary>> evaluateEvalSet({
     BaseAgent? rootAgent,
     String? agentModule,
@@ -328,6 +361,7 @@ class AgentEvaluator {
     return factory();
   }
 
+  /// Converts a legacy eval dataset file into the modern EvalSet schema.
   static void migrateEvalDataToNewSchema({
     required String oldEvalDataFile,
     required String newEvalDataFile,
@@ -358,6 +392,7 @@ class AgentEvaluator {
     );
   }
 
+  /// Loads an eval set from [evalSetFile] in modern or legacy JSON format.
   static EvalSet loadEvalSetFromFile({
     required String evalSetFile,
     required EvalConfig evalConfig,
