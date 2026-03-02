@@ -1,8 +1,12 @@
+/// CLI environment loading and override helpers.
+library;
+
 import 'dart:collection';
 import 'dart:io';
 
 import '../../utils/env_utils.dart';
 
+/// Environment variable key that disables `.env` loading for CLI runs.
 const String adkDisableLoadDotenvEnvVar = 'ADK_DISABLE_LOAD_DOTENV';
 
 final Set<String> _explicitEnvKeys = Set<String>.from(
@@ -10,6 +14,7 @@ final Set<String> _explicitEnvKeys = Set<String>.from(
 );
 final Map<String, String> _loadedEnv = <String, String>{};
 
+/// Returns an immutable view of effective CLI environment values.
 UnmodifiableMapView<String, String> getCliEnvironment() {
   return UnmodifiableMapView<String, String>(<String, String>{
     ...Platform.environment,
@@ -17,22 +22,29 @@ UnmodifiableMapView<String, String> getCliEnvironment() {
   });
 }
 
+/// Looks up one environment [key] from CLI overrides and process environment.
 String? getCliEnvironmentValue(String key) {
   return _loadedEnv[key] ?? Platform.environment[key];
 }
 
+/// Sets one CLI environment override [key] to [value].
 void setCliEnvironmentValue(String key, String value) {
   _loadedEnv[key] = value;
 }
 
+/// Adds multiple CLI environment overrides from [values].
 void setCliEnvironmentValues(Map<String, String> values) {
   _loadedEnv.addAll(values);
 }
 
+/// Clears all CLI environment overrides.
 void clearCliEnvironmentOverrides() {
   _loadedEnv.clear();
 }
 
+/// Walks upward from [folder] until [filename] is found.
+///
+/// Returns `null` when no matching file exists up to the filesystem root.
 File? walkToRootUntilFound(String folder, String filename) {
   final Directory current = Directory(folder).absolute;
   final File candidate = File(
@@ -49,6 +61,9 @@ File? walkToRootUntilFound(String folder, String filename) {
   return walkToRootUntilFound(parent.path, filename);
 }
 
+/// Loads dotenv variables for [agentName] from [agentParentFolder].
+///
+/// Existing process environment variables are preserved.
 void loadDotenvForAgent(
   String agentName,
   String agentParentFolder, {

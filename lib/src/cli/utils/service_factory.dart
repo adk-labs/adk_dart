@@ -1,3 +1,6 @@
+/// Service factory helpers for CLI runtime storage and backend selection.
+library;
+
 import 'dart:io';
 
 import '../../artifacts/base_artifact_service.dart';
@@ -12,11 +15,19 @@ import '../service_registry.dart';
 import 'dot_adk_folder.dart';
 import 'local_storage.dart';
 
+/// Environment variable that disables local `.adk` storage services.
 const String disableLocalStorageEnv = 'ADK_DISABLE_LOCAL_STORAGE';
+
+/// Environment variable that forces local `.adk` storage services.
 const String forceLocalStorageEnv = 'ADK_FORCE_LOCAL_STORAGE';
+
+/// Cloud Run environment variable used for runtime detection.
 const String cloudRunServiceEnv = 'K_SERVICE';
+
+/// Kubernetes environment variable used for runtime detection.
 const String kubernetesHostEnv = 'KUBERNETES_SERVICE_HOST';
 
+/// Redacts sensitive URI components before writing logs.
 String redactUriForLog(String uri) {
   if (uri.trim().isEmpty) {
     return '<empty>';
@@ -54,16 +65,19 @@ String redactUriForLog(String uri) {
   ).replace(port: parsed.hasPort ? parsed.port : null).toString();
 }
 
+/// Whether the current process appears to be running on Cloud Run.
 bool isCloudRun([Map<String, String>? environment]) {
   final Map<String, String> env = environment ?? Platform.environment;
   return (env[cloudRunServiceEnv] ?? '').isNotEmpty;
 }
 
+/// Whether the current process appears to be running on Kubernetes.
 bool isKubernetes([Map<String, String>? environment]) {
   final Map<String, String> env = environment ?? Platform.environment;
   return (env[kubernetesHostEnv] ?? '').isNotEmpty;
 }
 
+/// Whether [dir] is writable by creating and deleting a probe file.
 bool isDirWritable(Directory dir) {
   if (!dir.existsSync()) {
     return false;
@@ -80,6 +94,9 @@ bool isDirWritable(Directory dir) {
   }
 }
 
+/// Resolves whether local storage should be used for CLI services.
+///
+/// Returns a tuple of `(enabled, warningMessage)`.
 (bool, String?) resolveUseLocalStorage({
   required Directory basePath,
   required bool requested,
@@ -121,6 +138,7 @@ bool isDirWritable(Directory dir) {
   return (true, null);
 }
 
+/// Creates a session service from CLI options and environment context.
 BaseSessionService createSessionServiceFromOptions({
   required Object baseDir,
   String? sessionServiceUri,
@@ -169,6 +187,7 @@ BaseSessionService createSessionServiceFromOptions({
   }
 }
 
+/// Creates a memory service from CLI options and environment context.
 BaseMemoryService createMemoryServiceFromOptions({
   required Object baseDir,
   String? memoryServiceUri,
@@ -195,6 +214,7 @@ BaseMemoryService createMemoryServiceFromOptions({
   return InMemoryMemoryService();
 }
 
+/// Creates an artifact service from CLI options and environment context.
 BaseArtifactService createArtifactServiceFromOptions({
   required Object baseDir,
   String? artifactServiceUri,

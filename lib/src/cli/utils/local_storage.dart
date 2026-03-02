@@ -1,3 +1,6 @@
+/// Local `.adk` storage-backed service factories for CLI runtime.
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -9,8 +12,10 @@ import '../../sessions/session.dart';
 import '../../sessions/sqlite_session_service.dart';
 import 'dot_adk_folder.dart';
 
+/// Internal app key used for CLI built-in agents.
 const String builtInSessionServiceKey = '__adk_built_in_session_service__';
 
+/// Creates a SQLite-backed session service rooted at [baseDir].
 BaseSessionService createLocalDatabaseSessionService({
   required Object baseDir,
 }) {
@@ -19,6 +24,9 @@ BaseSessionService createLocalDatabaseSessionService({
   return SqliteSessionService(manager.sessionDbPath.path);
 }
 
+/// Creates a local session service for CLI usage.
+///
+/// When [perAgent] is `true`, each app uses its own underlying database.
 BaseSessionService createLocalSessionService({
   required Object baseDir,
   bool perAgent = false,
@@ -33,13 +41,16 @@ BaseSessionService createLocalSessionService({
   return createLocalDatabaseSessionService(baseDir: baseDir);
 }
 
+/// Creates a file-backed artifact service rooted at [baseDir].
 BaseArtifactService createLocalArtifactService({required Object baseDir}) {
   final DotAdkFolder manager = DotAdkFolder(baseDir);
   manager.artifactsDir.createSync(recursive: true);
   return FileArtifactService(manager.artifactsDir.path);
 }
 
+/// Routes session operations to per-agent local database services.
 class PerAgentDatabaseSessionService extends BaseSessionService {
+  /// Creates a per-agent database session service.
   PerAgentDatabaseSessionService({
     required Object agentsRoot,
     Map<String, String>? appNameToDir,

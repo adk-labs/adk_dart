@@ -1,3 +1,6 @@
+/// Helpers for deriving initial CLI state values from agent instructions.
+library;
+
 import '../../agents/base_agent.dart';
 import '../../agents/llm_agent.dart';
 
@@ -21,6 +24,9 @@ void _createEmptyState(BaseAgent agent, Map<String, Object?> allState) {
   }
 }
 
+/// Creates an empty state map inferred from [agent] instruction placeholders.
+///
+/// Keys already provided in [initializedStates] are excluded from the result.
 Map<String, Object?> createEmptyState(
   BaseAgent agent, {
   Map<String, Object?>? initializedStates,

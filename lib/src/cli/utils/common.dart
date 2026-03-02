@@ -1,3 +1,7 @@
+/// Shared value/object normalization helpers for CLI internals.
+library;
+
+/// Converts an underscore-separated [value] to lower camel case.
 String toCamelCase(String value) {
   if (value.isEmpty) {
     return value;
@@ -19,10 +23,13 @@ String toCamelCase(String value) {
   return '$head${tail.join()}';
 }
 
+/// Base JSON-serializable model contract used by CLI utility types.
 abstract class CliBaseModel {
+  /// Converts this value into a JSON-compatible map.
   Map<String, Object?> toJson();
 }
 
+/// Normalizes map keys into lower camel case and preserves values.
 Map<String, Object?> normalizeJsonObject(Map<Object?, Object?> input) {
   final Map<String, Object?> normalized = <String, Object?>{};
   for (final MapEntry<Object?, Object?> entry in input.entries) {
