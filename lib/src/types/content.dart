@@ -1,12 +1,21 @@
+/// JSON-compatible map type used across model and tool payloads.
 typedef JsonMap = Map<String, dynamic>;
 
+/// Inline binary payload attached to a [Part].
 class InlineData {
+  /// Creates inline binary data.
   InlineData({required this.mimeType, required this.data, this.displayName});
 
+  /// MIME type for [data].
   String mimeType;
+
+  /// Raw binary bytes.
   List<int> data;
+
+  /// Optional display label.
   String? displayName;
 
+  /// Returns a copy of this inline payload with optional overrides.
   InlineData copyWith({
     String? mimeType,
     List<int>? data,
@@ -22,13 +31,21 @@ class InlineData {
   }
 }
 
+/// File reference payload attached to a [Part].
 class FileData {
+  /// Creates file reference data.
   FileData({required this.fileUri, this.mimeType, this.displayName});
 
+  /// URI for the remote or local file resource.
   String fileUri;
+
+  /// Optional MIME type for the file.
   String? mimeType;
+
+  /// Optional display label.
   String? displayName;
 
+  /// Returns a copy of this file payload with optional overrides.
   FileData copyWith({
     String? fileUri,
     Object? mimeType = _sentinel,
@@ -46,7 +63,9 @@ class FileData {
   }
 }
 
+/// Function-call payload emitted by model responses.
 class FunctionCall {
+  /// Creates a function-call payload.
   FunctionCall({
     required this.name,
     JsonMap? args,
@@ -58,12 +77,22 @@ class FunctionCall {
            ?.map((Map<String, Object?> item) => Map<String, Object?>.from(item))
            .toList(growable: false);
 
+  /// Function name requested by the model.
   String name;
+
+  /// Function arguments payload.
   JsonMap args;
+
+  /// Optional tool-call identifier.
   String? id;
+
+  /// Optional partial argument deltas from streaming calls.
   List<Map<String, Object?>>? partialArgs;
+
+  /// Whether additional streaming call chunks are expected.
   bool? willContinue;
 
+  /// Returns a copy of this function-call payload.
   FunctionCall copyWith({
     String? name,
     JsonMap? args,
@@ -90,14 +119,22 @@ class FunctionCall {
   }
 }
 
+/// Function-response payload sent back to the model.
 class FunctionResponse {
+  /// Creates a function-response payload.
   FunctionResponse({required this.name, JsonMap? response, this.id})
     : response = response ?? <String, dynamic>{};
 
+  /// Function name this response corresponds to.
   String name;
+
+  /// Function response body.
   JsonMap response;
+
+  /// Optional tool-call identifier.
   String? id;
 
+  /// Returns a copy of this function-response payload.
   FunctionResponse copyWith({
     String? name,
     JsonMap? response,
@@ -111,7 +148,9 @@ class FunctionResponse {
   }
 }
 
+/// One multimodal content part within a [Content] turn.
 class Part {
+  /// Creates a content part.
   Part({
     this.text,
     this.thought = false,
@@ -124,6 +163,7 @@ class Part {
     this.codeExecutionResult,
   });
 
+  /// Creates a text [Part].
   factory Part.text(
     String text, {
     bool thought = false,
@@ -138,6 +178,7 @@ class Part {
     );
   }
 
+  /// Creates a function-call [Part].
   factory Part.fromFunctionCall({
     required String name,
     JsonMap? args,
@@ -160,6 +201,7 @@ class Part {
     );
   }
 
+  /// Creates a function-response [Part].
   factory Part.fromFunctionResponse({
     required String name,
     JsonMap? response,
@@ -174,6 +216,7 @@ class Part {
     );
   }
 
+  /// Creates an inline-data [Part].
   factory Part.fromInlineData({
     required String mimeType,
     required List<int> data,
@@ -188,6 +231,7 @@ class Part {
     );
   }
 
+  /// Creates a file-data [Part].
   factory Part.fromFileData({
     required String fileUri,
     String? mimeType,
@@ -202,18 +246,37 @@ class Part {
     );
   }
 
+  /// Optional plain text payload.
   String? text;
+
+  /// Whether this part is model thought text.
   bool thought;
+
+  /// Optional thought signature bytes for traceability.
   List<int>? thoughtSignature;
+
+  /// Optional function-call payload.
   FunctionCall? functionCall;
+
+  /// Optional function-response payload.
   FunctionResponse? functionResponse;
+
+  /// Optional inline binary payload.
   InlineData? inlineData;
+
+  /// Optional file reference payload.
   FileData? fileData;
+
+  /// Optional executable code payload.
   Object? executableCode;
+
+  /// Optional code execution result payload.
   Object? codeExecutionResult;
 
+  /// Whether this part contains non-empty text.
   bool get hasText => text != null && text!.isNotEmpty;
 
+  /// Returns a copy of this part with optional overrides.
   Part copyWith({
     Object? text = _sentinel,
     bool? thought,
@@ -255,22 +318,31 @@ class Part {
   }
 }
 
+/// One conversation turn consisting of a role and [Part] list.
 class Content {
+  /// Creates conversation content.
   Content({this.role, List<Part>? parts}) : parts = parts ?? <Part>[];
 
+  /// Creates a user-text content turn.
   factory Content.userText(String text) {
     return Content(role: 'user', parts: [Part.text(text)]);
   }
 
+  /// Creates a model-text content turn.
   factory Content.modelText(String text) {
     return Content(role: 'model', parts: [Part.text(text)]);
   }
 
+  /// Role for this turn, for example `user` or `model`.
   String? role;
+
+  /// Parts included in this turn.
   List<Part> parts;
 
+  /// Whether this content has no parts.
   bool get isEmpty => parts.isEmpty;
 
+  /// Returns a copy of this content with optional overrides.
   Content copyWith({Object? role = _sentinel, List<Part>? parts}) {
     return Content(
       role: identical(role, _sentinel) ? this.role : role as String?,
