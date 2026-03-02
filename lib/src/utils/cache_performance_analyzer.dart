@@ -3,9 +3,12 @@ import '../models/cache_metadata.dart';
 import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
 
+/// Computes cache effectiveness metrics from persisted session history.
 class CachePerformanceAnalyzer {
+  /// Creates a cache performance analyzer backed by [sessionService].
   CachePerformanceAnalyzer(this.sessionService);
 
+  /// Session service used to read events and cache metadata.
   final BaseSessionService sessionService;
 
   Future<List<CacheMetadata>> _getAgentCacheHistory({
@@ -38,6 +41,7 @@ class CachePerformanceAnalyzer {
     return cacheHistory;
   }
 
+  /// Analyzes cache performance metrics for one [agentName] in a session.
   Future<Map<String, Object?>> analyzeAgentCachePerformance({
     required String sessionId,
     required String userId,
