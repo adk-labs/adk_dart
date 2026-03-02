@@ -1,3 +1,6 @@
+/// SQLite-backed session storage implementation.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -58,9 +61,13 @@ CREATE TABLE IF NOT EXISTS events (
 );
 ''';
 
+/// Session service that stores sessions and events in SQLite.
 class SqliteSessionService extends BaseSessionService {
-  SqliteSessionService(String dbPath) : this._(_resolveStorePath(dbPath), dbPath);
+  /// Creates a session service from a SQLite [dbPath].
+  SqliteSessionService(String dbPath)
+    : this._(_resolveStorePath(dbPath), dbPath);
 
+  /// Internal constructor with resolved path metadata.
   SqliteSessionService._(_ResolvedStorePath resolved, String originalDbPath)
     : _storePath = resolved.path,
       _connectPath = resolved.connectPath,

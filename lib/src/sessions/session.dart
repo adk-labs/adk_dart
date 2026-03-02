@@ -1,6 +1,11 @@
+/// Core session model used across runners and session services.
+library;
+
 import '../events/event.dart';
 
+/// A conversational session containing state and event history.
 class Session {
+  /// Creates a session value.
   Session({
     required this.id,
     required this.appName,
@@ -11,13 +16,25 @@ class Session {
   }) : state = state ?? <String, Object?>{},
        events = events ?? <Event>[];
 
+  /// Unique session identifier.
   String id;
+
+  /// Application name associated with this session.
   String appName;
+
+  /// User identifier associated with this session.
   String userId;
+
+  /// Session-scoped state map, including prefixed app and user entries.
   Map<String, Object?> state;
+
+  /// Chronological event history for this session.
   List<Event> events;
+
+  /// Timestamp of the last update in seconds since epoch.
   double lastUpdateTime;
 
+  /// Returns a deep-copied session with optional field overrides.
   Session copyWith({
     String? id,
     String? appName,

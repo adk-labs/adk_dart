@@ -1,22 +1,35 @@
+/// Base abstractions for session storage services.
+library;
+
 import '../events/event.dart';
 import 'session.dart';
 import 'state.dart';
 
+/// Options for narrowing session retrieval results.
 class GetSessionConfig {
+  /// Creates session query options.
   GetSessionConfig({this.numRecentEvents, this.afterTimestamp});
 
+  /// Maximum number of most recent events to return.
   int? numRecentEvents;
+
+  /// Minimum event timestamp (seconds since epoch) to include.
   double? afterTimestamp;
 }
 
+/// Response model for session list operations.
 class ListSessionsResponse {
+  /// Creates a session list response.
   ListSessionsResponse({List<Session>? sessions})
     : sessions = sessions ?? <Session>[];
 
+  /// Sessions returned by the list query.
   List<Session> sessions;
 }
 
+/// Contract for session lifecycle and event persistence operations.
 abstract class BaseSessionService {
+  /// Creates and returns a new session.
   Future<Session> createSession({
     required String appName,
     required String userId,
@@ -24,6 +37,7 @@ abstract class BaseSessionService {
     String? sessionId,
   });
 
+  /// Returns a single session when it exists, otherwise `null`.
   Future<Session?> getSession({
     required String appName,
     required String userId,
@@ -31,17 +45,20 @@ abstract class BaseSessionService {
     GetSessionConfig? config,
   });
 
+  /// Returns sessions for [appName], optionally scoped to [userId].
   Future<ListSessionsResponse> listSessions({
     required String appName,
     String? userId,
   });
 
+  /// Deletes one session identified by app, user, and session IDs.
   Future<void> deleteSession({
     required String appName,
     required String userId,
     required String sessionId,
   });
 
+  /// Appends [event] to [session] and updates persisted session state.
   Future<Event> appendEvent({
     required Session session,
     required Event event,

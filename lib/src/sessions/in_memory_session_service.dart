@@ -1,3 +1,6 @@
+/// In-memory implementation of the session service contract.
+library;
+
 import '../errors/already_exists_error.dart';
 import '../events/event.dart';
 import '../types/id.dart';
@@ -6,6 +9,7 @@ import 'session.dart';
 import 'session_util.dart';
 import 'state.dart';
 
+/// Session service backed by process-local maps.
 class InMemorySessionService extends BaseSessionService {
   final Map<String, Map<String, Map<String, Session>>> _sessions =
       <String, Map<String, Map<String, Session>>>{};
