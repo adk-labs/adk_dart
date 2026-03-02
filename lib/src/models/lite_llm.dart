@@ -5,15 +5,20 @@ import 'base_llm.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Hook for overriding LiteLLM generation behavior.
 typedef LiteLlmGenerateHook =
     Stream<LlmResponse> Function(LlmRequest request, bool stream);
+
+/// Callback that invokes a LiteLLM-compatible completions endpoint.
 typedef LiteLlmCompletionsInvoker =
     Future<List<Map<String, Object?>>> Function({
       required Map<String, Object?> payload,
       required bool stream,
     });
 
+/// OpenAI-compatible adapter that targets LiteLLM providers.
 class LiteLlm extends BaseLlm {
+  /// Creates a LiteLLM adapter for [model].
   LiteLlm({
     required super.model,
     this.customProvider = '',
@@ -21,14 +26,19 @@ class LiteLlm extends BaseLlm {
     LiteLlmGenerateHook? generateHook,
   }) : _generateHook = generateHook;
 
+  /// Optional explicit provider name override.
   final String customProvider;
   final LiteLlmGenerateHook? _generateHook;
+
+  /// Optional invoker for completions responses.
   final LiteLlmCompletionsInvoker? completionsInvoker;
 
+  /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
     return <RegExp>[RegExp(r'[a-zA-Z0-9._-]+\/[a-zA-Z0-9._:-]+')];
   }
 
+  /// Maps provider-specific finish reasons to ADK finish reason values.
   static String mapFinishReason(Object? finishReason) {
     final String value = '$finishReason'.toLowerCase();
     if (value == 'length') {
@@ -43,6 +53,7 @@ class LiteLlm extends BaseLlm {
     return 'OTHER';
   }
 
+  /// Infers the LiteLLM provider from [model].
   static String getProviderFromModel(String model) {
     if (model.contains('/')) {
       return model.split('/').first.toLowerCase();
@@ -57,6 +68,7 @@ class LiteLlm extends BaseLlm {
     return '';
   }
 
+  /// Builds a LiteLLM/OpenAI-style request payload from [request].
   static Map<String, Object?> buildPayload(
     LlmRequest request, {
     required bool stream,
@@ -106,6 +118,7 @@ class LiteLlm extends BaseLlm {
     return payload;
   }
 
+  /// Parses one LiteLLM completion response into [LlmResponse].
   static LlmResponse parseCompletionResponse(Map<String, Object?> response) {
     final List<Object?> choices =
         (response['choices'] as List<Object?>?) ?? <Object?>[];
@@ -149,6 +162,7 @@ class LiteLlm extends BaseLlm {
     );
   }
 
+  /// Generates model responses using LiteLLM payload/response conventions.
   @override
   Stream<LlmResponse> generateContent(
     LlmRequest request, {
