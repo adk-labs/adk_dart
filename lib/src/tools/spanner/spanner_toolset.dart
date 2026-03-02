@@ -9,9 +9,12 @@ import 'search_tool.dart' as search_tool;
 import 'settings.dart';
 import 'spanner_credentials.dart';
 
+/// The default prefix used to namespace Spanner tool names.
 const String defaultSpannerToolNamePrefix = 'spanner';
 
+/// A [BaseToolset] that exposes Spanner metadata, query, and search tools.
 class SpannerToolset extends BaseToolset {
+  /// Creates a Spanner toolset with optional credentials and feature settings.
   SpannerToolset({
     super.toolFilter,
     SpannerCredentialsConfig? credentialsConfig,
@@ -23,6 +26,7 @@ class SpannerToolset extends BaseToolset {
   final SpannerCredentialsConfig? _credentialsConfig;
   final SpannerToolSettings _toolSettings;
 
+  /// Returns enabled Spanner tools filtered by [readonlyContext].
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     isFeatureEnabled(FeatureName.spannerToolset);
@@ -94,6 +98,7 @@ class SpannerToolset extends BaseToolset {
         .toList(growable: false);
   }
 
+  /// Closes the toolset and releases any retained resources.
   @override
   Future<void> close() async {}
 }
