@@ -12,7 +12,9 @@ Object? _discoveryEngineSearchPlaceholder({required String query}) {
   return null;
 }
 
+/// Request payload for Discovery Engine search.
 class DiscoveryEngineSearchRequest {
+  /// Creates a search request.
   DiscoveryEngineSearchRequest({
     required this.servingConfig,
     required this.query,
@@ -21,30 +23,49 @@ class DiscoveryEngineSearchRequest {
     this.maxResults,
   });
 
+  /// Serving config resource path.
   final String servingConfig;
+
+  /// Search query text.
   final String query;
+
+  /// Optional per-datastore configuration.
   final List<VertexAiSearchDataStoreSpec>? dataStoreSpecs;
+
+  /// Optional filter expression.
   final String? filter;
+
+  /// Optional maximum number of results.
   final int? maxResults;
 }
 
+/// Search result item returned by Discovery Engine.
 class DiscoveryEngineSearchResult {
+  /// Creates a search result item.
   DiscoveryEngineSearchResult({
     required this.title,
     required this.url,
     required this.content,
   });
 
+  /// Result title.
   final String title;
+
+  /// Result URL.
   final String url;
+
+  /// Result content snippet.
   final String content;
 
+  /// Converts this result to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{'title': title, 'url': url, 'content': content};
   }
 }
 
+/// HTTP request model for Discovery Engine API invocations.
 class DiscoveryEngineSearchHttpRequest {
+  /// Creates a Discovery Engine HTTP request.
   DiscoveryEngineSearchHttpRequest({
     required this.method,
     required this.uri,
@@ -57,13 +78,22 @@ class DiscoveryEngineSearchHttpRequest {
            ? const <int>[]
            : List<int>.from(bodyBytes);
 
+  /// HTTP method.
   final String method;
+
+  /// Request URI.
   final Uri uri;
+
+  /// Request headers.
   final Map<String, String> headers;
+
+  /// Request body bytes.
   final List<int> bodyBytes;
 }
 
+/// HTTP response model for Discovery Engine API invocations.
 class DiscoveryEngineSearchHttpResponse {
+  /// Creates a Discovery Engine HTTP response.
   DiscoveryEngineSearchHttpResponse({
     required this.statusCode,
     Map<String, String>? headers,
@@ -75,31 +105,46 @@ class DiscoveryEngineSearchHttpResponse {
            ? const <int>[]
            : List<int>.from(bodyBytes);
 
+  /// HTTP status code.
   final int statusCode;
+
+  /// Response headers.
   final Map<String, String> headers;
+
+  /// Response body bytes.
   final List<int> bodyBytes;
 }
 
+/// Exception thrown when Discovery Engine API interaction fails.
 class DiscoveryEngineSearchApiException implements Exception {
+  /// Creates an API exception with [message].
   DiscoveryEngineSearchApiException(this.message);
 
+  /// Human-readable error message.
   final String message;
 
   @override
   String toString() => message;
 }
 
+/// Pluggable handler for custom Discovery Engine search execution.
 typedef DiscoveryEngineSearchHandler =
     FutureOr<List<DiscoveryEngineSearchResult>> Function(
       DiscoveryEngineSearchRequest request,
     );
+
+/// HTTP transport callback for Discovery Engine API requests.
 typedef DiscoveryEngineSearchHttpRequestProvider =
     Future<DiscoveryEngineSearchHttpResponse> Function(
       DiscoveryEngineSearchHttpRequest request,
     );
+
+/// Access-token provider for Discovery Engine requests.
 typedef DiscoveryEngineSearchAccessTokenProvider = Future<String> Function();
 
+/// Tool that queries Google Discovery Engine search.
 class DiscoveryEngineSearchTool extends FunctionTool {
+  /// Creates a Discovery Engine search tool.
   DiscoveryEngineSearchTool({
     this.dataStoreId,
     this.dataStoreSpecs,
@@ -135,11 +180,22 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     }
   }
 
+  /// Optional legacy datastore id.
   final String? dataStoreId;
+
+  /// Optional datastore specs for multi-store search.
   final List<VertexAiSearchDataStoreSpec>? dataStoreSpecs;
+
+  /// Optional search engine id.
   final String? searchEngineId;
+
+  /// Optional filter expression.
   final String? filter;
+
+  /// Optional maximum number of results.
   final int? maxResults;
+
+  /// Optional custom search handler override.
   final DiscoveryEngineSearchHandler? searchHandler;
   final String _servingConfig;
   final DiscoveryEngineSearchHttpRequestProvider _httpRequestProvider;
@@ -178,6 +234,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     return discoveryEngineSearch(query: rawQuery);
   }
 
+  /// Executes search and returns normalized result payload.
   Future<Map<String, Object?>> discoveryEngineSearch({
     required String query,
   }) async {
@@ -200,10 +257,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
           'results': results.map((e) => e.toJson()).toList(),
         };
       } catch (error) {
-        return <String, Object?>{
-          'status': 'error',
-          'error_message': '$error',
-        };
+        return <String, Object?>{'status': 'error', 'error_message': '$error'};
       }
     }
 
@@ -213,7 +267,8 @@ class DiscoveryEngineSearchTool extends FunctionTool {
       );
       return <String, Object?>{
         'status': 'success',
-        'results': results.map((DiscoveryEngineSearchResult e) => e.toJson())
+        'results': results
+            .map((DiscoveryEngineSearchResult e) => e.toJson())
             .toList(growable: false),
       };
     } on DiscoveryEngineSearchApiException catch (error) {
@@ -236,9 +291,9 @@ class DiscoveryEngineSearchTool extends FunctionTool {
       );
     }
 
-    final Uri uri = Uri.parse(_apiBaseUrl).resolve(
-      '${request.servingConfig}:search',
-    );
+    final Uri uri = Uri.parse(
+      _apiBaseUrl,
+    ).resolve('${request.servingConfig}:search');
     final Map<String, Object?> body = <String, Object?>{
       'query': request.query,
       'contentSearchSpec': <String, Object?>{
@@ -314,8 +369,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
       final Map<String, Object?> chunk = chunkRaw.map(
         (Object? key, Object? value) => MapEntry('$key', value),
       );
-      final Map<String, Object?> metadata =
-          chunk['documentMetadata'] is Map
+      final Map<String, Object?> metadata = chunk['documentMetadata'] is Map
           ? (chunk['documentMetadata'] as Map).map(
               (Object? key, Object? value) => MapEntry('$key', value),
             )
@@ -358,13 +412,13 @@ _defaultDiscoveryEngineHttpRequestProvider(
       httpRequest.add(request.bodyBytes);
     }
     final HttpClientResponse response = await httpRequest.close();
-    final List<int> bodyBytes = await response.fold<List<int>>(
-      <int>[],
-      (List<int> data, List<int> chunk) {
-        data.addAll(chunk);
-        return data;
-      },
-    );
+    final List<int> bodyBytes = await response.fold<List<int>>(<int>[], (
+      List<int> data,
+      List<int> chunk,
+    ) {
+      data.addAll(chunk);
+      return data;
+    });
     final Map<String, String> headers = <String, String>{};
     response.headers.forEach((String name, List<String> values) {
       headers[name] = values.join(', ');
