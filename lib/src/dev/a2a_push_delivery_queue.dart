@@ -1,9 +1,14 @@
+/// Persistent queue storage for deferred A2A push delivery retries.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
+/// Retry and timeout policy for A2A push delivery attempts.
 class A2aPushDeliveryPolicy {
+  /// Creates an A2A push delivery policy.
   const A2aPushDeliveryPolicy({
     this.maxAttempts = 5,
     this.baseDelayMs = 1000,
@@ -11,13 +16,22 @@ class A2aPushDeliveryPolicy {
     this.requestTimeoutMs = 10000,
   });
 
+  /// Maximum number of delivery attempts before dead-lettering.
   final int maxAttempts;
+
+  /// Initial retry delay in milliseconds.
   final int baseDelayMs;
+
+  /// Maximum retry delay in milliseconds.
   final int maxDelayMs;
+
+  /// HTTP request timeout in milliseconds.
   final int requestTimeoutMs;
 }
 
+/// One queued A2A push delivery entry.
 class A2aPushDeliveryEntry {
+  /// Creates a queue entry snapshot.
   const A2aPushDeliveryEntry({
     required this.id,
     required this.appName,
@@ -31,24 +45,45 @@ class A2aPushDeliveryEntry {
     required this.policy,
   });
 
+  /// Primary key in the queue database.
   final int id;
+
+  /// App name associated with the task.
   final String appName;
+
+  /// A2A task identifier.
   final String taskId;
+
+  /// Target callback URL.
   final String targetUrl;
+
+  /// Request headers without authorization.
   final Map<String, String> headers;
+
+  /// Optional authorization header value.
   final String? authHeader;
+
+  /// Full task payload.
   final Map<String, Object?> task;
+
+  /// Incremental task update payload.
   final Map<String, Object?> update;
+
+  /// Number of attempts already performed.
   final int attemptCount;
+
+  /// Retry policy applied to this entry.
   final A2aPushDeliveryPolicy policy;
 }
 
+/// SQLite-backed queue for retrying A2A push notifications.
 class A2aPushDeliveryQueue {
   A2aPushDeliveryQueue._({required sqlite.Database database})
     : _database = database {
     _ensureSchema();
   }
 
+  /// Opens or creates a queue database at [dbPath].
   factory A2aPushDeliveryQueue.open({required String dbPath}) {
     final File file = File(dbPath);
     file.parent.createSync(recursive: true);
@@ -58,6 +93,7 @@ class A2aPushDeliveryQueue {
   final sqlite.Database _database;
   bool _closed = false;
 
+  /// Closes the underlying database.
   void close() {
     if (_closed) {
       return;
@@ -66,6 +102,7 @@ class A2aPushDeliveryQueue {
     _closed = true;
   }
 
+  /// Adds one pending push delivery attempt to the queue.
   void enqueue({
     required String appName,
     required String taskId,
@@ -120,6 +157,7 @@ class A2aPushDeliveryQueue {
     }
   }
 
+  /// Returns due queue entries ordered by next attempt time.
   List<A2aPushDeliveryEntry> readDue({int limit = 64}) {
     if (_closed) {
       return const <A2aPushDeliveryEntry>[];
@@ -152,6 +190,7 @@ class A2aPushDeliveryQueue {
     return rows.map(_rowToEntry).toList(growable: false);
   }
 
+  /// Removes a successfully delivered queue entry by [id].
   void markDelivered(int id) {
     if (_closed) {
       return;
@@ -162,6 +201,7 @@ class A2aPushDeliveryQueue {
     );
   }
 
+  /// Records a failed attempt and schedules retry or dead-letter handling.
   void markFailed(A2aPushDeliveryEntry entry, {required String error}) {
     if (_closed) {
       return;
@@ -226,6 +266,7 @@ class A2aPushDeliveryQueue {
     );
   }
 
+  /// The number of pending entries currently queued.
   int pendingCount() {
     if (_closed) {
       return 0;
@@ -236,6 +277,7 @@ class A2aPushDeliveryQueue {
     return rows.first['count'] as int? ?? 0;
   }
 
+  /// The number of dead-lettered entries.
   int deadLetterCount() {
     if (_closed) {
       return 0;
