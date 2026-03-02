@@ -5,15 +5,20 @@ import 'base_llm.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Callback that invokes Anthropic message APIs and returns raw responses.
 typedef AnthropicApiInvoker =
     Future<List<Map<String, Object?>>> Function({
       required Map<String, Object?> request,
       required bool stream,
     });
+
+/// Hook for overriding Anthropic generation behavior.
 typedef AnthropicGenerateHook =
     Stream<LlmResponse> Function(LlmRequest request, bool stream);
 
+/// Anthropic Claude adapter for ADK model requests.
 class AnthropicLlm extends BaseLlm {
+  /// Creates an Anthropic adapter for [model].
   AnthropicLlm({
     super.model = 'claude-3-5-sonnet-20241022',
     this.maxTokens = 8192,
@@ -21,14 +26,19 @@ class AnthropicLlm extends BaseLlm {
     AnthropicGenerateHook? generateHook,
   }) : _generateHook = generateHook;
 
+  /// Max tokens requested for each Anthropic completion.
   final int maxTokens;
+
+  /// Optional API invoker used for integration tests and custom transports.
   final AnthropicApiInvoker? apiInvoker;
   final AnthropicGenerateHook? _generateHook;
 
+  /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
     return <RegExp>[RegExp(r'claude-.*'), RegExp(r'anthropic\/.*')];
   }
 
+  /// Maps ADK roles to Anthropic message roles.
   static String toClaudeRole(String? role) {
     if (role == 'model' || role == 'assistant') {
       return 'assistant';
@@ -36,6 +46,7 @@ class AnthropicLlm extends BaseLlm {
     return 'user';
   }
 
+  /// Maps Anthropic stop reasons to ADK finish reason strings.
   static String toGoogleFinishReason(String? anthropicStopReason) {
     if (anthropicStopReason == 'end_turn' ||
         anthropicStopReason == 'stop_sequence' ||
@@ -48,11 +59,13 @@ class AnthropicLlm extends BaseLlm {
     return 'FINISH_REASON_UNSPECIFIED';
   }
 
+  /// Whether [part] represents an image payload.
   static bool isImagePart(Part part) {
     final InlineData? inlineData = part.inlineData;
     return inlineData != null && inlineData.mimeType.startsWith('image');
   }
 
+  /// Converts a [Part] into an Anthropic content block.
   static Map<String, Object?> partToMessageBlock(Part part) {
     if (part.text != null) {
       return <String, Object?>{'type': 'text', 'text': part.text};
@@ -66,7 +79,7 @@ class AnthropicLlm extends BaseLlm {
       };
     }
     if (part.functionResponse != null) {
-      final Object? response = part.functionResponse!.response;
+      final Object response = part.functionResponse!.response;
       String content = '';
       if (response is Map && response['content'] is List) {
         final List<String> lines = <String>[];
@@ -80,7 +93,7 @@ class AnthropicLlm extends BaseLlm {
         content = lines.join('\n');
       } else if (response is Map && response['result'] != null) {
         content = '${response['result']}';
-      } else if (response != null) {
+      } else {
         content = '$response';
       }
       return <String, Object?>{
@@ -116,6 +129,7 @@ class AnthropicLlm extends BaseLlm {
     return <String, Object?>{'type': 'text', 'text': _fallbackPartText(part)};
   }
 
+  /// Converts one [Content] into an Anthropic message payload.
   static Map<String, Object?> contentToMessageParam(Content content) {
     final List<Map<String, Object?>> blocks = <Map<String, Object?>>[];
     for (final Part part in content.parts) {
@@ -130,6 +144,7 @@ class AnthropicLlm extends BaseLlm {
     };
   }
 
+  /// Converts one Anthropic content [block] into a [Part].
   static Part contentBlockToPart(Map<String, Object?> block) {
     final String type = '${block['type'] ?? ''}';
     if (type == 'text') {
@@ -148,6 +163,7 @@ class AnthropicLlm extends BaseLlm {
     return Part.text(_fallbackContentBlockText(block));
   }
 
+  /// Converts a function [declaration] to Anthropic tool schema format.
   static Map<String, Object?> functionDeclarationToToolParam(
     FunctionDeclaration declaration,
   ) {
@@ -163,6 +179,7 @@ class AnthropicLlm extends BaseLlm {
     };
   }
 
+  /// Converts an Anthropic message object into [LlmResponse].
   static LlmResponse messageToLlmResponse(Map<String, Object?> message) {
     final List<Object?> contentBlocks =
         (message['content'] as List<Object?>?) ?? <Object?>[];
@@ -194,6 +211,7 @@ class AnthropicLlm extends BaseLlm {
     );
   }
 
+  /// Generates model responses using Anthropic-compatible request/response flow.
   @override
   Stream<LlmResponse> generateContent(
     LlmRequest request, {
@@ -336,4 +354,5 @@ String _fallbackContentBlockText(Map<String, Object?> block) {
   }
 }
 
+/// Backward-compatible alias for [AnthropicLlm].
 typedef Claude = AnthropicLlm;
