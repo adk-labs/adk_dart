@@ -8,24 +8,37 @@ import 'base_llm_connection.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Transcription delta emitted by Gemini live sessions.
 class GeminiTranscriptionEvent {
+  /// Creates a transcription event.
   GeminiTranscriptionEvent({this.text, this.finished = false});
 
+  /// Partial transcription text.
   final String? text;
+
+  /// Whether this transcription segment is finalized.
   final bool finished;
 }
 
+/// Usage metadata payload emitted by Gemini live sessions.
 class GeminiUsageMetadata {
+  /// Creates usage metadata.
   GeminiUsageMetadata({
     this.promptTokenCount,
     this.candidatesTokenCount,
     this.totalTokenCount,
   });
 
+  /// Number of input tokens consumed.
   final int? promptTokenCount;
+
+  /// Number of output tokens produced.
   final int? candidatesTokenCount;
+
+  /// Total number of tokens consumed.
   final int? totalTokenCount;
 
+  /// Converts usage metadata to a JSON-compatible map.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       if (promptTokenCount != null) 'prompt_token_count': promptTokenCount,
@@ -36,14 +49,19 @@ class GeminiUsageMetadata {
   }
 }
 
+/// Tool-call payload emitted by Gemini live sessions.
 class GeminiToolCallPayload {
+  /// Creates a tool-call payload.
   GeminiToolCallPayload({List<FunctionCall>? functionCalls})
     : functionCalls = functionCalls ?? <FunctionCall>[];
 
+  /// Function calls requested by the model.
   final List<FunctionCall> functionCalls;
 }
 
+/// Server-content payload emitted by Gemini live sessions.
 class GeminiServerContentPayload {
+  /// Creates a server-content payload.
   GeminiServerContentPayload({
     this.modelTurn,
     this.interrupted = false,
@@ -53,15 +71,28 @@ class GeminiServerContentPayload {
     this.outputTranscription,
   });
 
+  /// Model turn content emitted by the server.
   final Content? modelTurn;
+
+  /// Whether generation was interrupted.
   final bool interrupted;
+
+  /// Whether the model turn has completed.
   final bool turnComplete;
+
+  /// Whether generation has completed at the server level.
   final bool generationComplete;
+
+  /// Input-side transcription event.
   final GeminiTranscriptionEvent? inputTranscription;
+
+  /// Output-side transcription event.
   final GeminiTranscriptionEvent? outputTranscription;
 }
 
+/// Message envelope emitted by Gemini live sessions.
 class GeminiLiveSessionMessage {
+  /// Creates a live-session message.
   GeminiLiveSessionMessage({
     this.usageMetadata,
     this.serverContent,
@@ -69,30 +100,45 @@ class GeminiLiveSessionMessage {
     this.sessionResumptionUpdate,
   });
 
+  /// Usage metadata update, when available.
   final GeminiUsageMetadata? usageMetadata;
+
+  /// Server-generated content payload, when available.
   final GeminiServerContentPayload? serverContent;
+
+  /// Tool-call payload, when available.
   final GeminiToolCallPayload? toolCall;
+
+  /// Session resumption metadata update, when available.
   final Object? sessionResumptionUpdate;
 }
 
+/// Runtime contract for Gemini live session transports.
 abstract class GeminiLiveSession {
+  /// Sends conversation [turns] to the live session.
   Future<void> sendContent({
     required List<Content> turns,
     required bool turnComplete,
   });
 
+  /// Sends tool response payloads back to the live session.
   Future<void> sendToolResponses({
     required List<FunctionResponse> functionResponses,
   });
 
+  /// Sends realtime binary input [blob] to the live session.
   Future<void> sendRealtimeInput({required RealtimeBlob blob});
 
+  /// Receives live-session messages from the transport.
   Stream<GeminiLiveSessionMessage> receive();
 
+  /// Closes the underlying live session.
   Future<void> close();
 }
 
+/// [BaseLlmConnection] implementation backed by Gemini live/fallback flows.
 class GeminiLlmConnection extends BaseLlmConnection {
+  /// Creates a Gemini LLM connection.
   GeminiLlmConnection({
     required BaseLlm model,
     LlmRequest? initialRequest,
