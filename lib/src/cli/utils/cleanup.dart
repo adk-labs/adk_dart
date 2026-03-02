@@ -1,7 +1,11 @@
+/// Cleanup helpers for async CLI runtime resources.
+library;
+
 import 'dart:async';
 
 import '../../runners/runner.dart';
 
+/// Closes all [runners] and bounds total wait time by [timeout].
 Future<void> closeRunners(
   List<Runner> runners, {
   Duration timeout = const Duration(seconds: 30),
