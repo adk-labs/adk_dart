@@ -3,22 +3,31 @@ import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
+/// Trace-state key-value container.
 class TraceState {
+  /// Creates trace state values.
   const TraceState([Map<String, String>? values])
     : values = values ?? const <String, String>{};
 
+  /// Trace-state entries.
   final Map<String, String> values;
 }
 
+/// Trace flags for span context.
 class TraceFlags {
+  /// Creates trace flags with raw [value].
   const TraceFlags(this.value);
 
+  /// Raw trace flags value.
   final int value;
 
+  /// Sampled trace flag.
   static const TraceFlags sampled = TraceFlags(0x01);
 }
 
+/// Span context identifier fields.
 class SpanContext {
+  /// Creates a span context.
   const SpanContext({
     required this.traceId,
     required this.spanId,
@@ -27,17 +36,31 @@ class SpanContext {
     required this.traceState,
   });
 
+  /// Trace id as integer.
   final int traceId;
+
+  /// Span id as integer.
   final int spanId;
+
+  /// Whether this context is remote.
   final bool isRemote;
+
+  /// Trace flags.
   final TraceFlags traceFlags;
+
+  /// Trace state.
   final TraceState traceState;
 
+  /// 32-character hexadecimal trace id.
   String get traceIdHex => traceId.toRadixString(16).padLeft(32, '0');
+
+  /// 16-character hexadecimal span id.
   String get spanIdHex => spanId.toRadixString(16).padLeft(16, '0');
 }
 
+/// Readable span model used for export and retrieval.
 class ReadableSpan {
+  /// Creates a readable span.
   ReadableSpan({
     required this.name,
     required this.context,
@@ -47,29 +70,48 @@ class ReadableSpan {
     this.endTimeUnixNano,
   }) : attributes = attributes ?? <String, Object?>{};
 
+  /// Span name.
   final String name;
+
+  /// Span context.
   final SpanContext context;
+
+  /// Parent span context, if present.
   final SpanContext? parent;
+
+  /// Span attributes.
   final Map<String, Object?> attributes;
+
+  /// Span start time in Unix nanoseconds.
   final int? startTimeUnixNano;
+
+  /// Span end time in Unix nanoseconds.
   final int? endTimeUnixNano;
 }
 
+/// Export result status.
 enum SpanExportResult { success, failure }
 
+/// Span exporter interface.
 abstract class SpanExporter {
+  /// Exports [spans] and returns export status.
   SpanExportResult export(List<ReadableSpan> spans);
 
+  /// Shuts down exporter resources.
   void shutdown();
 
+  /// Flushes buffered spans before timeout.
   bool forceFlush({int timeoutMillis = 30000});
 }
 
+/// SQLite-backed [SpanExporter] implementation.
 class SqliteSpanExporter implements SpanExporter {
+  /// Creates a SQLite span exporter storing data at [dbPath].
   SqliteSpanExporter({required this.dbPath}) : _storeFile = File(dbPath) {
     _ensureSchema();
   }
 
+  /// SQLite database path.
   final String dbPath;
   final File _storeFile;
   late final sqlite.Database _database = sqlite.sqlite3.open(dbPath);
@@ -233,6 +275,7 @@ class SqliteSpanExporter implements SpanExporter {
     );
   }
 
+  /// Returns all spans in traces associated with [sessionId].
   List<ReadableSpan> getAllSpansForSession(String sessionId) {
     final sqlite.ResultSet rows = _database.select(
       '''
@@ -256,6 +299,7 @@ class SqliteSpanExporter implements SpanExporter {
     return rows.map((sqlite.Row row) => _rowToReadableSpan(row)).toList();
   }
 
+  /// Returns one trace row mapped by [eventId], if available.
   Map<String, Object?>? getTraceByEventId(String eventId) {
     final sqlite.ResultSet rows = _database.select(
       '''
