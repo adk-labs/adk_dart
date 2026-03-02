@@ -1,18 +1,30 @@
+/// Event action models used to carry side-channel run instructions.
+library;
+
 import '../types/content.dart';
 
+/// Compaction summary metadata attached to an event.
 class EventCompaction {
+  /// Creates event compaction metadata.
   EventCompaction({
     required this.startTimestamp,
     required this.endTimestamp,
     required this.compactedContent,
   });
 
+  /// Start timestamp of the compacted range.
   double startTimestamp;
+
+  /// End timestamp of the compacted range.
   double endTimestamp;
+
+  /// Compacted content payload.
   Content compactedContent;
 }
 
+/// Mutable action payload attached to one event.
 class EventActions {
+  /// Creates event actions.
   EventActions({
     this.skipSummarization,
     Map<String, Object?>? stateDelta,
@@ -31,18 +43,40 @@ class EventActions {
        requestedToolConfirmations =
            requestedToolConfirmations ?? <String, Object>{};
 
+  /// Whether this event should be excluded from summarization.
   bool? skipSummarization;
+
+  /// State updates produced by the event.
   Map<String, Object?> stateDelta;
+
+  /// Artifact version deltas produced by the event.
   Map<String, int> artifactDelta;
+
+  /// Optional target agent name for transfer.
   String? transferToAgent;
+
+  /// Whether escalation was requested.
   bool? escalate;
+
+  /// Requested auth configurations keyed by tool/operation.
   Map<String, Object> requestedAuthConfigs;
+
+  /// Requested tool confirmations keyed by tool/operation.
   Map<String, Object> requestedToolConfirmations;
+
+  /// Optional compaction metadata.
   EventCompaction? compaction;
+
+  /// Whether this marks the end of the agent run.
   bool? endOfAgent;
+
+  /// Optional serialized agent state snapshot.
   Map<String, Object?>? agentState;
+
+  /// Optional invocation ID to rewind before replay.
   String? rewindBeforeInvocationId;
 
+  /// Returns copied actions with optional overrides.
   EventActions copyWith({
     Object? skipSummarization = _sentinel,
     Map<String, Object?>? stateDelta,

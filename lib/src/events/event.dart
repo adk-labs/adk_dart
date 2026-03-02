@@ -1,9 +1,14 @@
+/// Event model used by runners, sessions, and streaming APIs.
+library;
+
 import '../models/llm_response.dart';
 import '../types/content.dart';
 import '../types/id.dart';
 import 'event_actions.dart';
 
+/// One runtime event emitted during an invocation.
 class Event extends LlmResponse {
+  /// Creates an event.
   Event({
     required this.invocationId,
     required this.author,
@@ -12,56 +17,50 @@ class Event extends LlmResponse {
     this.branch,
     String? id,
     double? timestamp,
-    String? modelVersion,
-    Content? content,
-    bool? partial,
-    bool? turnComplete,
-    String? finishReason,
-    String? errorCode,
-    String? errorMessage,
-    bool? interrupted,
-    Map<String, dynamic>? customMetadata,
-    Object? usageMetadata,
-    Object? inputTranscription,
-    Object? outputTranscription,
-    double? avgLogprobs,
-    Object? logprobsResult,
-    Object? cacheMetadata,
-    Object? citationMetadata,
-    Object? groundingMetadata,
-    String? interactionId,
+    super.modelVersion,
+    super.content,
+    super.partial,
+    super.turnComplete,
+    super.finishReason,
+    super.errorCode,
+    super.errorMessage,
+    super.interrupted,
+    super.customMetadata,
+    super.usageMetadata,
+    super.inputTranscription,
+    super.outputTranscription,
+    super.avgLogprobs,
+    super.logprobsResult,
+    super.cacheMetadata,
+    super.citationMetadata,
+    super.groundingMetadata,
+    super.interactionId,
   }) : actions = actions ?? EventActions(),
        id = id ?? Event.newId(),
-       timestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch / 1000,
-       super(
-         modelVersion: modelVersion,
-         content: content,
-         partial: partial,
-         turnComplete: turnComplete,
-         finishReason: finishReason,
-         errorCode: errorCode,
-         errorMessage: errorMessage,
-         interrupted: interrupted,
-         customMetadata: customMetadata,
-         usageMetadata: usageMetadata,
-         inputTranscription: inputTranscription,
-         outputTranscription: outputTranscription,
-         avgLogprobs: avgLogprobs,
-         logprobsResult: logprobsResult,
-         cacheMetadata: cacheMetadata,
-         citationMetadata: citationMetadata,
-         groundingMetadata: groundingMetadata,
-         interactionId: interactionId,
-       );
+       timestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch / 1000;
 
+  /// Invocation ID that produced this event.
   String invocationId;
+
+  /// Author label, such as `user`, `model`, or agent name.
   String author;
+
+  /// Side-channel actions associated with this event.
   EventActions actions;
+
+  /// Long-running tool IDs associated with this event.
   Set<String>? longRunningToolIds;
+
+  /// Optional branch identifier for branching conversations.
   String? branch;
+
+  /// Event identifier.
   String id;
+
+  /// Event timestamp in seconds since epoch.
   double timestamp;
 
+  /// Whether this event should be treated as a final user-visible response.
   bool isFinalResponse() {
     if (actions.skipSummarization == true ||
         (longRunningToolIds != null && longRunningToolIds!.isNotEmpty)) {
@@ -73,6 +72,7 @@ class Event extends LlmResponse {
         !hasTrailingCodeExecutionResult();
   }
 
+  /// Returns function-call parts embedded in [content].
   List<FunctionCall> getFunctionCalls() {
     final Content? value = content;
     if (value == null) {
@@ -88,6 +88,7 @@ class Event extends LlmResponse {
     return calls;
   }
 
+  /// Returns function-response parts embedded in [content].
   List<FunctionResponse> getFunctionResponses() {
     final Content? value = content;
     if (value == null) {
@@ -103,6 +104,7 @@ class Event extends LlmResponse {
     return responses;
   }
 
+  /// Whether the last content part is a code-execution result.
   bool hasTrailingCodeExecutionResult() {
     final Content? value = content;
     if (value == null || value.parts.isEmpty) {
