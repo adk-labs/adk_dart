@@ -1,17 +1,28 @@
+/// Memory service contracts for session ingestion and retrieval.
+library;
+
 import '../events/event.dart';
 import '../sessions/session.dart';
 import 'memory_entry.dart';
 
+/// Response model returned by memory search operations.
 class SearchMemoryResponse {
+  /// Creates a memory search response.
   SearchMemoryResponse({List<MemoryEntry>? memories})
     : memories = memories ?? <MemoryEntry>[];
 
+  /// Memories matched for a given query.
   final List<MemoryEntry> memories;
 }
 
+/// Base contract for memory ingestion and search implementations.
 abstract class BaseMemoryService {
+  /// Adds all events from [session] to memory storage.
   Future<void> addSessionToMemory(Session session);
 
+  /// Adds scoped [events] to memory storage.
+  ///
+  /// Default implementation throws [UnsupportedError].
   Future<void> addEventsToMemory({
     required String appName,
     required String userId,
@@ -25,6 +36,9 @@ abstract class BaseMemoryService {
     );
   }
 
+  /// Adds pre-built [memories] directly into storage.
+  ///
+  /// Default implementation throws [UnsupportedError].
   Future<void> addMemory({
     required String appName,
     required String userId,
@@ -37,6 +51,7 @@ abstract class BaseMemoryService {
     );
   }
 
+  /// Searches memory using [query] for one app/user scope.
   Future<SearchMemoryResponse> searchMemory({
     required String appName,
     required String userId,

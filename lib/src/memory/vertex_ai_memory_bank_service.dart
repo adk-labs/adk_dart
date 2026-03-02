@@ -1,3 +1,6 @@
+/// Vertex AI Memory Bank client and memory service implementations.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -52,14 +55,21 @@ Set<String> _getCreateMemoryConfigKeys() {
   return _createMemoryConfigFallbackKeys;
 }
 
+/// One memory row returned by Vertex AI retrieval APIs.
 class VertexAiRetrievedMemory {
+  /// Creates a retrieved memory value.
   VertexAiRetrievedMemory({required this.fact, required this.updateTime});
 
+  /// Memory fact text.
   final String fact;
+
+  /// Update timestamp of this memory.
   final DateTime updateTime;
 }
 
+/// Contract for Memory Bank API client implementations.
 abstract class VertexAiMemoryBankApiClient {
+  /// Generates memories from structured event payloads.
   Future<void> generateFromEvents({
     required String agentEngineId,
     required String appName,
@@ -68,6 +78,7 @@ abstract class VertexAiMemoryBankApiClient {
     required Map<String, Object?> config,
   });
 
+  /// Creates a memory entry directly from a fact string.
   Future<void> createMemory({
     required String agentEngineId,
     required String appName,
@@ -76,6 +87,7 @@ abstract class VertexAiMemoryBankApiClient {
     required Map<String, Object?> config,
   });
 
+  /// Generates memories from direct memory fact strings.
   Future<void> generateFromDirectMemories({
     required String agentEngineId,
     required String appName,
@@ -84,6 +96,7 @@ abstract class VertexAiMemoryBankApiClient {
     required Map<String, Object?> config,
   });
 
+  /// Retrieves memories matching [query].
   Stream<VertexAiRetrievedMemory> retrieve({
     required String agentEngineId,
     required String appName,
@@ -92,6 +105,7 @@ abstract class VertexAiMemoryBankApiClient {
   });
 }
 
+/// Factory signature for creating Memory Bank API clients.
 typedef VertexAiMemoryBankApiClientFactory =
     VertexAiMemoryBankApiClient Function({
       String? project,
@@ -119,8 +133,10 @@ VertexAiMemoryBankApiClient _defaultMemoryBankApiClientFactory({
   );
 }
 
+/// Access-token provider used by HTTP Memory Bank clients.
 typedef VertexAiMemoryBankAccessTokenProvider = Future<String?> Function();
 
+/// URI builder used by HTTP Memory Bank clients.
 typedef VertexAiMemoryBankUriBuilder =
     Uri Function({
       required String operation,
@@ -131,7 +147,9 @@ typedef VertexAiMemoryBankUriBuilder =
       required String? apiKey,
     });
 
+/// HTTP implementation of [VertexAiMemoryBankApiClient].
 class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
+  /// Creates an HTTP Memory Bank API client.
   VertexAiMemoryBankHttpApiClient({
     this.project,
     this.location,
@@ -146,8 +164,13 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
            accessTokenProvider ?? _defaultVertexAiAccessTokenProvider,
        _uriBuilder = uriBuilder ?? _defaultVertexAiMemoryUriBuilder;
 
+  /// Optional Google Cloud project.
   final String? project;
+
+  /// Optional Google Cloud location.
   final String? location;
+
+  /// Optional Express Mode API key.
   final String? apiKey;
   final String _apiVersion;
   final http.Client _httpClient;
@@ -440,6 +463,7 @@ DateTime? _readDateTimeByKeys(Map<String, Object?> json, List<String> keys) {
   return null;
 }
 
+/// In-memory Memory Bank API client used for tests.
 class InMemoryVertexAiMemoryBankApiClient
     implements VertexAiMemoryBankApiClient {
   static final Map<String, List<_StoredMemory>> _storeByScope =
@@ -586,7 +610,9 @@ class _StoredMemory {
   final Map<String, Object?> metadata;
 }
 
+/// Memory service that writes and retrieves memories via Vertex AI.
 class VertexAiMemoryBankService extends BaseMemoryService {
+  /// Creates a memory service backed by Vertex AI Memory Bank.
   VertexAiMemoryBankService({
     String? project,
     String? location,
@@ -703,7 +729,9 @@ class VertexAiMemoryBankService extends BaseMemoryService {
       if (content == null) {
         continue;
       }
-      directEvents.add(<String, Object?>{'content': _contentToVertexJson(content)});
+      directEvents.add(<String, Object?>{
+        'content': _contentToVertexJson(content),
+      });
     }
 
     if (directEvents.isEmpty) {
@@ -1220,7 +1248,8 @@ Map<String, Object?> _partToVertexJson(Part part) {
   if (part.fileData != null) {
     payload['file_data'] = <String, Object?>{
       'file_uri': part.fileData!.fileUri,
-      if (part.fileData!.mimeType != null) 'mime_type': part.fileData!.mimeType!,
+      if (part.fileData!.mimeType != null)
+        'mime_type': part.fileData!.mimeType!,
       if (part.fileData!.displayName != null)
         'display_name': part.fileData!.displayName!,
     };
@@ -1272,7 +1301,9 @@ Map<String, Object?> _normalizeVertexPartPayload(Map<String, Object?> part) {
     );
   }
 
-  final Map<String, Object?> inlineData = _asStringMap(normalized['inline_data']);
+  final Map<String, Object?> inlineData = _asStringMap(
+    normalized['inline_data'],
+  );
   if (inlineData.isNotEmpty) {
     final Object? rawData = inlineData['data'];
     if (rawData is List<int>) {

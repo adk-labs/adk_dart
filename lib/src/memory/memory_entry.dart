@@ -1,6 +1,11 @@
+/// Memory entry model used by memory services.
+library;
+
 import '../types/content.dart';
 
+/// One memory item with content and optional metadata.
 class MemoryEntry {
+  /// Creates a memory entry.
   MemoryEntry({
     required this.content,
     Map<String, Object?>? customMetadata,
@@ -9,12 +14,22 @@ class MemoryEntry {
     this.timestamp,
   }) : customMetadata = customMetadata ?? <String, Object?>{};
 
+  /// Content payload stored in memory.
   Content content;
+
+  /// Provider-specific metadata attached to this memory.
   Map<String, Object?> customMetadata;
+
+  /// Optional memory identifier.
   String? id;
+
+  /// Optional source author.
   String? author;
+
+  /// Optional source timestamp string.
   String? timestamp;
 
+  /// Returns a copied memory entry with optional overrides.
   MemoryEntry copyWith({
     Content? content,
     Map<String, Object?>? customMetadata,

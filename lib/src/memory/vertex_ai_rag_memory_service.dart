@@ -1,3 +1,6 @@
+/// Vertex AI RAG-backed memory service and retrieval models.
+library;
+
 import 'dart:collection';
 import 'dart:convert';
 
@@ -8,13 +11,18 @@ import '_utils.dart';
 import 'base_memory_service.dart';
 import 'memory_entry.dart';
 
+/// One RAG corpus resource reference.
 class VertexRagStoreRagResource {
+  /// Creates a RAG resource descriptor.
   VertexRagStoreRagResource({required this.ragCorpus});
 
+  /// Full corpus resource name.
   final String ragCorpus;
 }
 
+/// RAG store configuration used for retrieval queries.
 class VertexRagStore {
+  /// Creates a RAG store configuration.
   VertexRagStore({
     this.ragResources,
     this.ragCorpora,
@@ -22,38 +30,58 @@ class VertexRagStore {
     this.vectorDistanceThreshold,
   });
 
+  /// Explicit resource descriptors for retrieval.
   final List<VertexRagStoreRagResource>? ragResources;
+
+  /// Optional corpus names for retrieval.
   final List<String>? ragCorpora;
+
+  /// Optional top-K limit.
   final int? similarityTopK;
+
+  /// Optional vector distance threshold.
   final double? vectorDistanceThreshold;
 }
 
+/// One retrieval context returned from Vertex AI RAG.
 class VertexAiRagContext {
+  /// Creates a retrieval context.
   VertexAiRagContext({
     required this.sourceDisplayName,
     required this.text,
     this.vectorDistance,
   });
 
+  /// Source display name attached to the context.
   final String sourceDisplayName;
+
+  /// Retrieved text.
   final String text;
+
+  /// Optional vector distance score.
   final double? vectorDistance;
 }
 
+/// Retrieval result container for RAG contexts.
 class VertexAiRagRetrievalResponse {
+  /// Creates a retrieval response.
   VertexAiRagRetrievalResponse({List<VertexAiRagContext>? contexts})
     : contexts = contexts ?? <VertexAiRagContext>[];
 
+  /// Retrieved contexts.
   final List<VertexAiRagContext> contexts;
 }
 
+/// Client contract for interacting with a RAG backend.
 abstract class VertexAiRagClient {
+  /// Uploads one text document to a RAG corpus.
   Future<void> uploadFile({
     required String corpusName,
     required String text,
     required String displayName,
   });
 
+  /// Executes a retrieval query against configured corpora/resources.
   Future<VertexAiRagRetrievalResponse> retrievalQuery({
     required String text,
     List<VertexRagStoreRagResource>? ragResources,
@@ -63,6 +91,7 @@ abstract class VertexAiRagClient {
   });
 }
 
+/// In-memory RAG client used for local testing.
 class InMemoryVertexAiRagClient implements VertexAiRagClient {
   final Map<String, List<_RagDocument>> _docsByCorpus =
       <String, List<_RagDocument>>{};
@@ -157,7 +186,9 @@ class _RankedContext {
   final double distance;
 }
 
+/// Memory service that stores sessions in a Vertex AI RAG corpus.
 class VertexAiRagMemoryService extends BaseMemoryService {
+  /// Creates a RAG-backed memory service.
   VertexAiRagMemoryService({
     String? ragCorpus,
     int? similarityTopK,

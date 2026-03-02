@@ -1,9 +1,13 @@
+/// In-memory implementation of memory storage and search.
+library;
+
 import '../events/event.dart';
 import '../sessions/session.dart';
 import '_utils.dart';
 import 'base_memory_service.dart';
 import 'memory_entry.dart';
 
+/// Memory service backed by process-local event collections.
 class InMemoryMemoryService extends BaseMemoryService {
   final Map<String, Map<String, List<Event>>> _sessionEventsByUserKey =
       <String, Map<String, List<Event>>>{};
