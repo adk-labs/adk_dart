@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.3.2+1
+
+- Bumped package version to `2026.3.2+1`.
+- Updated release alignment with `adk_dart` `2026.3.2+1`, including latest CLI parity and runtime path-hardening changes from core.
+
 ## 2026.3.2
 
 - Bumped package version to `2026.3.2`.

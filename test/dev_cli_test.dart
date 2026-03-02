@@ -381,6 +381,41 @@ void main() {
       },
     );
 
+    test(
+      'run command resolves dot project path from current directory',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk_cli_run_dot_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+        final Directory originalCwd = Directory.current;
+        addTearDown(() {
+          Directory.current = originalCwd;
+        });
+
+        await createDevProject(projectDirPath: tempDir.path);
+        Directory.current = tempDir;
+
+        final _CapturedSink outCapture = _CapturedSink();
+        final _CapturedSink errCapture = _CapturedSink();
+        final int exitCode = await runAdkCli(
+          <String>['run', '.', '--message', 'hello'],
+          outSink: outCapture.sink,
+          errSink: errCapture.sink,
+        );
+        final String stdoutText = await outCapture.closeAndRead();
+        final String stderrText = await errCapture.closeAndRead();
+
+        expect(exitCode, 0);
+        expect(stdoutText, contains('stub response'));
+        expect(stderrText, isEmpty);
+      },
+    );
+
     test('run command fails when project directory does not exist', () async {
       final _CapturedSink outCapture = _CapturedSink();
       final _CapturedSink errCapture = _CapturedSink();

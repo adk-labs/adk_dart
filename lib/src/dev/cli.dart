@@ -1991,22 +1991,25 @@ EvalStatus _deriveEvalStatusFromMetrics(List<EvalMetricResult> metrics) {
 }
 
 Future<_LoadedCliAgent> _loadAgentForCli(String projectDirPath) async {
-  final Directory agentDir = Directory(projectDirPath).absolute;
+  final Directory requestedDir = Directory(projectDirPath).absolute;
   final FileSystemEntityType entityType = await FileSystemEntity.type(
-    agentDir.path,
+    requestedDir.path,
   );
   if (entityType == FileSystemEntityType.notFound) {
     throw FileSystemException(
       'Project directory does not exist.',
-      agentDir.path,
+      requestedDir.path,
     );
   }
   if (entityType != FileSystemEntityType.directory) {
     throw FileSystemException(
       'Project path is not a directory.',
-      agentDir.path,
+      requestedDir.path,
     );
   }
+  final Directory agentDir = Directory(
+    await requestedDir.resolveSymbolicLinks(),
+  );
 
   await _migrateLegacyProjectToRootAgentYaml(agentDir.path);
 
@@ -2906,22 +2909,25 @@ class _RunCommandContext {
 Future<_RunCommandContext> _loadRunCommandContext(
   ParsedAdkCommand command,
 ) async {
-  final Directory agentDir = Directory(command.projectDir).absolute;
+  final Directory requestedDir = Directory(command.projectDir).absolute;
   final FileSystemEntityType entityType = await FileSystemEntity.type(
-    agentDir.path,
+    requestedDir.path,
   );
   if (entityType == FileSystemEntityType.notFound) {
     throw FileSystemException(
       'Project directory does not exist.',
-      agentDir.path,
+      requestedDir.path,
     );
   }
   if (entityType != FileSystemEntityType.directory) {
     throw FileSystemException(
       'Project path is not a directory.',
-      agentDir.path,
+      requestedDir.path,
     );
   }
+  final Directory agentDir = Directory(
+    await requestedDir.resolveSymbolicLinks(),
+  );
 
   await _migrateLegacyProjectToRootAgentYaml(agentDir.path);
 

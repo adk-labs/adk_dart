@@ -1,5 +1,13 @@
 ## Unreleased
 
+## 2026.3.2+1
+
+- Bumped package release versions using build metadata (`2026.3.2+1`) for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
+- Improved `adk` CLI parity for `run`/`web`/`conformance` flows to better match `adk-python` behavior.
+- Fixed `adk run .` project path resolution when running from the agent directory.
+- Updated conformance client/server wiring (`/apps/.../sessions`, `/run_sse`) and replay validation/report handling, including non-zero exit on test failures.
+- Hardened local `.adk` path handling and project directory validation, with expanded CLI/web regression tests.
+
 ## 2026.3.2
 
 - Bumped package release versions to `2026.3.2`.
