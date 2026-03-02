@@ -12,7 +12,9 @@ import 'nl_planning.dart';
 import 'output_schema_processor.dart';
 import 'request_confirmation.dart';
 
+/// Standard single-agent flow wiring request and response processors.
 class SingleFlow extends BaseLlmFlow {
+  /// Creates a single flow with the default processor pipeline.
   SingleFlow() : super() {
     requestProcessors.addAll(<BaseLlmRequestProcessor>[
       BasicLlmRequestProcessor(),
