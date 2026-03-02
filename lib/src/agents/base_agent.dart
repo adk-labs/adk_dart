@@ -1,3 +1,6 @@
+/// Base contracts and utilities for agent implementations.
+library;
+
 import 'dart:async';
 import 'dart:developer' as developer;
 
@@ -9,10 +12,13 @@ import 'callback_context.dart';
 import 'context.dart';
 import 'invocation_context.dart';
 
+/// Callback signature for agent lifecycle hooks.
 typedef AgentLifecycleCallback =
     FutureOr<Content?> Function(CallbackContext callbackContext);
 
+/// Base class for all agent implementations.
 abstract class BaseAgent {
+  /// Creates a base agent with optional lifecycle callbacks and sub-agents.
   BaseAgent({
     required this.name,
     this.description = '',
@@ -25,14 +31,25 @@ abstract class BaseAgent {
     _validateSubAgentUniqueNames();
   }
 
+  /// Agent name.
   String name;
+
+  /// Human-readable description.
   String description;
+
+  /// Parent agent in the hierarchy, if any.
   BaseAgent? parentAgent;
+
+  /// Child agents that this agent may delegate to.
   List<BaseAgent> subAgents;
 
+  /// Callback(s) invoked before agent execution.
   Object? beforeAgentCallback;
+
+  /// Callback(s) invoked after agent execution.
   Object? afterAgentCallback;
 
+  /// Fields accepted by the default clone update validator.
   static const Set<String> baseCloneUpdateFields = <String>{
     'name',
     'description',
@@ -42,6 +59,7 @@ abstract class BaseAgent {
     'afterAgentCallback',
   };
 
+  /// Loads this agent's serialized state from [context], if present.
   BaseAgentState? loadAgentState(InvocationContext context) {
     final Map<String, Object?>? raw = context.agentStates[name];
     if (raw == null) {
@@ -50,6 +68,7 @@ abstract class BaseAgent {
     return BaseAgentState(data: Map<String, Object?>.from(raw));
   }
 
+  /// Creates an event containing this agent's latest serialized state.
   Event createAgentStateEvent(InvocationContext context) {
     final EventActions actions = EventActions();
     final Map<String, Object?>? state = context.agentStates[name];
@@ -68,6 +87,7 @@ abstract class BaseAgent {
     );
   }
 
+  /// Runs the agent asynchronously with lifecycle callbacks.
   Stream<Event> runAsync(InvocationContext parentContext) async* {
     final InvocationContext context = createInvocationContext(parentContext);
 
@@ -94,6 +114,7 @@ abstract class BaseAgent {
     }
   }
 
+  /// Runs the agent in live mode with lifecycle callbacks.
   Stream<Event> runLive(InvocationContext parentContext) async* {
     final InvocationContext context = createInvocationContext(parentContext);
 
@@ -116,8 +137,12 @@ abstract class BaseAgent {
     }
   }
 
+  /// Runs the agent's async implementation.
   Stream<Event> runAsyncImpl(InvocationContext context);
 
+  /// Runs the agent's live implementation.
+  ///
+  /// The default behavior delegates to [runAsyncImpl].
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     // Default live behavior falls back to non-live execution.
     await for (final Event event in runAsyncImpl(context)) {
@@ -125,10 +150,12 @@ abstract class BaseAgent {
     }
   }
 
+  /// Returns a clone of this agent with optional [update] overrides.
   BaseAgent clone({Map<String, Object?>? update}) {
-    throw UnsupportedError('clone() is not implemented for `${runtimeType}`.');
+    throw UnsupportedError('clone() is not implemented for `$runtimeType`.');
   }
 
+  /// The top-most ancestor in this agent hierarchy.
   BaseAgent get rootAgent {
     BaseAgent current = this;
     while (current.parentAgent != null) {
@@ -137,6 +164,7 @@ abstract class BaseAgent {
     return current;
   }
 
+  /// Finds an agent named [targetName] in this subtree.
   BaseAgent? findAgent(String targetName) {
     if (name == targetName) {
       return this;
@@ -144,6 +172,7 @@ abstract class BaseAgent {
     return findSubAgent(targetName);
   }
 
+  /// Finds a descendant agent named [targetName].
   BaseAgent? findSubAgent(String targetName) {
     for (final BaseAgent subAgent in subAgents) {
       final BaseAgent? found = subAgent.findAgent(targetName);
@@ -154,10 +183,12 @@ abstract class BaseAgent {
     return null;
   }
 
+  /// Creates a child invocation context for this agent.
   InvocationContext createInvocationContext(InvocationContext parentContext) {
     return parentContext.copyWith(agent: this);
   }
 
+  /// Normalizes clone [update] maps into mutable JSON-like maps.
   Map<String, Object?> normalizeCloneUpdate(Map<String, Object?>? update) {
     if (update == null) {
       return <String, Object?>{};
@@ -165,6 +196,7 @@ abstract class BaseAgent {
     return Map<String, Object?>.from(update);
   }
 
+  /// Validates clone-update [update] keys against [allowedFields].
   void validateCloneUpdateFields({
     required Map<String, Object?> update,
     required Set<String> allowedFields,
@@ -181,11 +213,12 @@ abstract class BaseAgent {
         .toSet();
     if (invalidFields.isNotEmpty) {
       throw ArgumentError(
-        'Cannot update nonexistent fields in ${runtimeType}: $invalidFields',
+        'Cannot update nonexistent fields in $runtimeType: $invalidFields',
       );
     }
   }
 
+  /// Reads typed field overrides for clone operations.
   T cloneFieldValue<T>({
     required Map<String, Object?> update,
     required String fieldName,
@@ -197,6 +230,7 @@ abstract class BaseAgent {
     return update[fieldName] as T;
   }
 
+  /// Reads object field overrides while preserving list copy semantics.
   Object? cloneObjectFieldValue({
     required Map<String, Object?> update,
     required String fieldName,
@@ -211,6 +245,7 @@ abstract class BaseAgent {
     return currentValue;
   }
 
+  /// Reads list field overrides for clone operations.
   List<T> cloneListFieldValue<T>({
     required Map<String, Object?> update,
     required String fieldName,
@@ -231,6 +266,7 @@ abstract class BaseAgent {
     return updatedValue;
   }
 
+  /// Resolves cloned sub-agent lists from [update] or existing sub-agents.
   List<BaseAgent> cloneSubAgentsField(Map<String, Object?> update) {
     if (update.containsKey('subAgents')) {
       final Object? updatedValue = update['subAgents'];
@@ -249,6 +285,7 @@ abstract class BaseAgent {
         .toList(growable: true);
   }
 
+  /// Re-links parent pointers for [clonedAgent] and its sub-agents.
   void relinkClonedSubAgents(BaseAgent clonedAgent) {
     for (final BaseAgent subAgent in clonedAgent.subAgents) {
       subAgent.parentAgent = clonedAgent;
@@ -256,10 +293,12 @@ abstract class BaseAgent {
     clonedAgent.parentAgent = null;
   }
 
+  /// Canonical before-agent callbacks.
   List<AgentLifecycleCallback> get canonicalBeforeAgentCallbacks {
     return _coerceAgentCallbacks(beforeAgentCallback);
   }
 
+  /// Canonical after-agent callbacks.
   List<AgentLifecycleCallback> get canonicalAfterAgentCallbacks {
     return _coerceAgentCallbacks(afterAgentCallback);
   }
