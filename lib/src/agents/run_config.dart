@@ -1,18 +1,27 @@
+/// Runtime configuration models used by agent runs.
+library;
+
+/// Streaming transport mode used by a run.
 enum StreamingMode { none, sse, bidi }
 
 final BigInt _pythonSysMaxSize = BigInt.parse('9223372036854775807');
 
+/// Thread-pool configuration for concurrent tool execution.
 class ToolThreadPoolConfig {
+  /// Creates tool thread-pool configuration.
   ToolThreadPoolConfig({this.maxWorkers = 4}) {
     if (maxWorkers < 1) {
       throw ArgumentError.value(maxWorkers, 'maxWorkers', 'Must be >= 1');
     }
   }
 
+  /// Maximum number of worker threads.
   int maxWorkers;
 }
 
+/// Configuration object controlling one agent run behavior.
 class RunConfig {
+  /// Creates a run configuration.
   RunConfig({
     this.supportCfc = false,
     this.streamingMode = StreamingMode.none,
@@ -33,22 +42,52 @@ class RunConfig {
     maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
   }
 
+  /// Whether CFC behavior is enabled.
   bool supportCfc;
+
+  /// Streaming behavior for model responses.
   StreamingMode streamingMode;
+
+  /// Maximum number of model calls allowed in a run.
   int maxLlmCalls;
+
+  /// Optional speech configuration payload.
   Object? speechConfig;
+
+  /// Whether live blobs are persisted.
   bool saveLiveBlob;
+
+  /// Optional tool thread-pool configuration.
   ToolThreadPoolConfig? toolThreadPoolConfig;
+
+  /// Optional requested response modalities.
   List<String>? responseModalities;
+
+  /// Optional output audio transcription config.
   Object? outputAudioTranscription;
+
+  /// Optional input audio transcription config.
   Object? inputAudioTranscription;
+
+  /// Optional realtime input configuration.
   Object? realtimeInputConfig;
+
+  /// Whether affective dialog is enabled.
   bool? enableAffectiveDialog;
+
+  /// Optional proactivity configuration.
   Object? proactivity;
+
+  /// Optional session resumption configuration.
   Object? sessionResumption;
+
+  /// Optional context-window compression configuration.
   Object? contextWindowCompression;
+
+  /// Optional custom metadata forwarded with the run.
   Map<String, dynamic>? customMetadata;
 
+  /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {
     if (BigInt.from(value) == _pythonSysMaxSize) {
       throw ArgumentError.value(
@@ -68,6 +107,7 @@ class RunConfig {
     return value;
   }
 
+  /// Returns a copied run configuration with optional overrides.
   RunConfig copyWith({
     bool? supportCfc,
     StreamingMode? streamingMode,

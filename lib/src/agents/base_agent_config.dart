@@ -1,6 +1,11 @@
+/// Base configuration model for agent definitions.
+library;
+
 import 'common_configs.dart';
 
+/// Common configuration fields shared across agent types.
 class BaseAgentConfig {
+  /// Creates a base agent configuration.
   BaseAgentConfig({
     this.agentClass = 'BaseAgent',
     required this.name,
@@ -14,12 +19,25 @@ class BaseAgentConfig {
        afterAgentCallbacks = afterAgentCallbacks ?? <CodeConfig>[],
        extras = extras ?? <String, Object?>{};
 
+  /// Agent class identifier.
   final String agentClass;
+
+  /// Agent name.
   final String name;
+
+  /// Agent description text.
   final String description;
+
+  /// Child agent references.
   final List<AgentRefConfig> subAgents;
+
+  /// Callbacks executed before `runAsync`.
   final List<CodeConfig> beforeAgentCallbacks;
+
+  /// Callbacks executed after `runAsync`.
   final List<CodeConfig> afterAgentCallbacks;
+
+  /// Unknown or extension fields preserved from source config.
   final Map<String, Object?> extras;
 
   static const Set<String> _knownKeys = <String>{
@@ -35,6 +53,7 @@ class BaseAgentConfig {
     'afterAgentCallbacks',
   };
 
+  /// Creates a config object from JSON.
   factory BaseAgentConfig.fromJson(
     Map<String, Object?> json, {
     bool forbidExtras = false,
@@ -104,6 +123,7 @@ class BaseAgentConfig {
         .toList(growable: false);
   }
 
+  /// Serializes this config object to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'agent_class': agentClass,
