@@ -1,3 +1,6 @@
+/// URL-dispatched session service wrapper with retry support.
+library;
+
 import '../events/event.dart';
 import 'base_session_service.dart';
 import 'in_memory_session_service.dart';
@@ -5,13 +8,17 @@ import 'network_database_session_service.dart';
 import 'session.dart';
 import 'sqlite_session_service.dart';
 
+/// Factory signature for creating session services from database URLs.
 typedef DatabaseSessionServiceFactory =
     BaseSessionService Function(String dbUrl);
 
+/// Resolver signature for dynamically resolving custom session services.
 typedef DatabaseSessionServiceResolver =
     BaseSessionService? Function(String dbUrl);
 
+/// Session service that dispatches to concrete implementations by URL scheme.
 class DatabaseSessionService extends BaseSessionService {
+  /// Creates a database-backed session service from [dbUrl].
   DatabaseSessionService(String dbUrl) : _delegate = _buildDelegate(dbUrl);
 
   final BaseSessionService _delegate;
@@ -20,6 +27,7 @@ class DatabaseSessionService extends BaseSessionService {
   static final List<DatabaseSessionServiceResolver> _customResolvers =
       <DatabaseSessionServiceResolver>[];
 
+  /// Registers a custom [factory] for a database URL [scheme].
   static void registerCustomFactory({
     required String scheme,
     required DatabaseSessionServiceFactory factory,
@@ -28,21 +36,25 @@ class DatabaseSessionService extends BaseSessionService {
     _customFactories[normalizedScheme] = factory;
   }
 
+  /// Unregisters a custom factory for [scheme].
   static bool unregisterCustomFactory(String scheme) {
     final String normalizedScheme = _normalizeScheme(scheme);
     return _customFactories.remove(normalizedScheme) != null;
   }
 
+  /// Registers a custom URL [resolver].
   static void registerCustomResolver(DatabaseSessionServiceResolver resolver) {
     _customResolvers.add(resolver);
   }
 
+  /// Unregisters a previously registered custom [resolver].
   static bool unregisterCustomResolver(
     DatabaseSessionServiceResolver resolver,
   ) {
     return _customResolvers.remove(resolver);
   }
 
+  /// Clears all custom resolvers and factories, intended for tests.
   static void resetCustomResolversAndFactories() {
     _customFactories.clear();
     _customResolvers.clear();
@@ -172,6 +184,7 @@ class DatabaseSessionService extends BaseSessionService {
     );
   }
 
+  /// Appends [event] with stale-session retry handling.
   @override
   Future<Event> appendEvent({required Session session, required Event event}) {
     return _appendEventWithStaleRetry(session: session, event: event);

@@ -1,3 +1,6 @@
+/// Network database-backed session service implementation.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -119,7 +122,9 @@ ON events (app_name, user_id, session_id, timestamp);
 
 enum _NetworkDriver { postgres, mysql }
 
+/// Session service backed by PostgreSQL or MySQL-compatible databases.
 class NetworkDatabaseSessionService extends BaseSessionService {
+  /// Creates a network database session service from [dbUrl].
   NetworkDatabaseSessionService(String dbUrl)
     : _dbUrl = dbUrl.trim(),
       _normalizedDbUrl = _normalizeDbUrl(dbUrl.trim()),
