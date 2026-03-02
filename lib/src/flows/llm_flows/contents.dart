@@ -38,6 +38,7 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 
+/// Builds context contents from [events] with compaction and branch handling.
 List<Content> getContents({
   required String? currentBranch,
   required List<Event> events,
@@ -79,6 +80,7 @@ List<Content> getContents({
   return contents;
 }
 
+/// Returns the current-turn subset of contents for [events].
 List<Content> getCurrentTurnContents({
   required String? currentBranch,
   required List<Event> events,
@@ -100,6 +102,7 @@ List<Content> getCurrentTurnContents({
   return const <Content>[];
 }
 
+/// Inserts instruction contents before trailing user messages.
 void addInstructionsToUserContent(
   LlmRequest llmRequest,
   List<Content> instructionContents,
@@ -128,6 +131,7 @@ void addInstructionsToUserContent(
   );
 }
 
+/// Whether [event] should be included in model context.
 bool shouldIncludeEventInContext(String? currentBranch, Event event) {
   return !containsEmptyContent(event) &&
       isEventBelongsToBranch(currentBranch, event) &&
@@ -137,6 +141,7 @@ bool shouldIncludeEventInContext(String? currentBranch, Event event) {
       !_isRequestInputEvent(event);
 }
 
+/// Whether [event] contains no visible content for model context.
 bool containsEmptyContent(Event event) {
   if (event.actions.compaction != null) {
     return false;
@@ -149,6 +154,7 @@ bool containsEmptyContent(Event event) {
   return content.parts.every(_isPartInvisible);
 }
 
+/// Whether [event] belongs to [invocationBranch] context.
 bool isEventBelongsToBranch(String? invocationBranch, Event event) {
   if (invocationBranch == null || invocationBranch.isEmpty) {
     return true;
