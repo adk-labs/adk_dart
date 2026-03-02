@@ -1331,7 +1331,7 @@ class _ChatExampleViewState extends State<ChatExampleView> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.send),
+                        : Center(child: const Icon(Icons.send)),
                   ),
                 ),
               ],
