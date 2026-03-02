@@ -1,13 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// HTTP response model returned by API Hub request executors.
 class ApiHubHttpResponse {
+  /// Creates an API Hub HTTP response.
   ApiHubHttpResponse({required this.statusCode, required this.body});
 
+  /// HTTP status code.
   final int statusCode;
+
+  /// Response body text.
   final String body;
 }
 
+/// Executes one API Hub HTTP request.
 typedef ApiHubRequestExecutor =
     Future<ApiHubHttpResponse> Function({
       required Uri uri,
@@ -15,26 +21,38 @@ typedef ApiHubRequestExecutor =
       required Map<String, String> headers,
     });
 
+/// Resolves an API Hub access token.
 typedef ApiHubAccessTokenProvider =
     Future<String?> Function({String? serviceAccountJson});
 
+/// Parsed API Hub resource name components.
 class APIHubResourceNames {
+  /// Creates parsed resource names.
   APIHubResourceNames({
     required this.apiResourceName,
     this.apiVersionResourceName,
     this.apiSpecResourceName,
   });
 
+  /// API resource name.
   final String apiResourceName;
+
+  /// API version resource name.
   final String? apiVersionResourceName;
+
+  /// API spec resource name.
   final String? apiSpecResourceName;
 }
 
+/// Base interface for API Hub clients.
 abstract class BaseAPIHubClient {
+  /// Fetches OpenAPI spec content from [resourceName].
   Future<String> getSpecContent(String resourceName);
 }
 
+/// API Hub client used by API Hub tooling.
 class APIHubClient implements BaseAPIHubClient {
+  /// Creates an API Hub client.
   APIHubClient({
     this.accessToken,
     this.serviceAccountJson,
@@ -53,6 +71,7 @@ class APIHubClient implements BaseAPIHubClient {
 
   String? _cachedAccessToken;
 
+  /// Resolves and returns specification content for [path].
   @override
   Future<String> getSpecContent(String path) async {
     final APIHubResourceNames resourceNames = extractResourceName(path);
@@ -95,6 +114,7 @@ class APIHubClient implements BaseAPIHubClient {
     throw ArgumentError('No API Hub resource found in path: {path}');
   }
 
+  /// Lists APIs under [project]/[location].
   Future<List<Map<String, Object?>>> listApis(
     String project,
     String location,
@@ -108,16 +128,19 @@ class APIHubClient implements BaseAPIHubClient {
     ).map((Object? value) => _readMap(value)).toList(growable: false);
   }
 
+  /// Fetches one API resource by [apiResourceName].
   Future<Map<String, Object?>> getApi(String apiResourceName) async {
     final Uri url = Uri.parse('$rootUrl/$apiResourceName');
     return _getJson(url);
   }
 
+  /// Fetches one API version resource by [apiVersionName].
   Future<Map<String, Object?>> getApiVersion(String apiVersionName) async {
     final Uri url = Uri.parse('$rootUrl/$apiVersionName');
     return _getJson(url);
   }
 
+  /// Extracts normalized API Hub resource names from [urlOrPath].
   APIHubResourceNames extractResourceName(String urlOrPath) {
     String path;
     Map<String, List<String>>? queryParams;
