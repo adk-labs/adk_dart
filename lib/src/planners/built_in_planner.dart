@@ -6,11 +6,15 @@ import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'base_planner.dart';
 
+/// Planner that injects a fixed thinking configuration into model requests.
 class BuiltInPlanner extends BasePlanner {
+  /// Creates a planner with a required [thinkingConfig].
   BuiltInPlanner({required this.thinkingConfig});
 
+  /// Thinking config payload applied to outgoing requests.
   final Object thinkingConfig;
 
+  /// Applies planner-owned thinking config to [llmRequest].
   void applyThinkingConfig(LlmRequest llmRequest) {
     if (llmRequest.config.thinkingConfig != null) {
       developer.log(
@@ -21,6 +25,7 @@ class BuiltInPlanner extends BasePlanner {
     llmRequest.config.thinkingConfig = thinkingConfig;
   }
 
+  /// Returns no additional planning instruction.
   @override
   String? buildPlanningInstruction(
     ReadonlyContext readonlyContext,
@@ -29,6 +34,7 @@ class BuiltInPlanner extends BasePlanner {
     return null;
   }
 
+  /// Returns no planner-specific response transformation.
   @override
   List<Part>? processPlanningResponse(
     CallbackContext callbackContext,

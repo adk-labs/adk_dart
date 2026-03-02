@@ -4,13 +4,24 @@ import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'base_planner.dart';
 
+/// Marker used for the planner section in model output.
 const String planningTag = '/*PLANNING*/';
+
+/// Marker used for the replanning section in model output.
 const String replanningTag = '/*REPLANNING*/';
+
+/// Marker used for the reasoning section in model output.
 const String reasoningTag = '/*REASONING*/';
+
+/// Marker used for the action/tool-call section in model output.
 const String actionTag = '/*ACTION*/';
+
+/// Marker used for the final answer section in model output.
 const String finalAnswerTag = '/*FINAL_ANSWER*/';
 
+/// Planner that enforces a Plan-ReAct style prompt/response contract.
 class PlanReActPlanner extends BasePlanner {
+  /// Builds the Plan-ReAct instruction block for [llmRequest].
   @override
   String buildPlanningInstruction(
     ReadonlyContext readonlyContext,
@@ -19,6 +30,7 @@ class PlanReActPlanner extends BasePlanner {
     return _buildNlPlannerInstruction();
   }
 
+  /// Filters and annotates planning response [responseParts].
   @override
   List<Part>? processPlanningResponse(
     CallbackContext callbackContext,
