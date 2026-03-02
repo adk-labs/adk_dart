@@ -20,6 +20,7 @@ import '../cli/service_registry.dart';
 import '../cli/utils/agent_loader.dart';
 import '../cli/utils/base_agent_loader.dart';
 import '../cli/utils/evals.dart' as cli_evals;
+import '../cli/utils/logs.dart' as cli_logs;
 import '../cli/utils/service_factory.dart';
 import '../evaluation/base_eval_service.dart';
 import '../evaluation/conversation_scenarios.dart';
@@ -115,6 +116,7 @@ class ParsedAdkCommand {
       sessionServiceUri = null,
       artifactServiceUri = null,
       memoryServiceUri = null,
+      logLevel = null,
       evalStorageUri = null,
       useLocalStorage = true,
       urlPrefix = null,
@@ -153,6 +155,7 @@ class ParsedAdkCommand {
        port = null,
        host = null,
        allowOrigins = const <String>[],
+       logLevel = null,
        evalStorageUri = null,
        urlPrefix = null,
        traceToCloud = false,
@@ -177,6 +180,7 @@ class ParsedAdkCommand {
     this.sessionServiceUri,
     this.artifactServiceUri,
     this.memoryServiceUri,
+    this.logLevel,
     this.evalStorageUri,
     required this.useLocalStorage,
     this.urlPrefix,
@@ -210,6 +214,7 @@ class ParsedAdkCommand {
   final String? sessionServiceUri;
   final String? artifactServiceUri;
   final String? memoryServiceUri;
+  final String? logLevel;
   final String? evalStorageUri;
   final bool useLocalStorage;
   final String? urlPrefix;
@@ -2547,6 +2552,7 @@ ParsedAdkCommand _parseWebCommand(
   String? sessionServiceUri;
   String? artifactServiceUri;
   String? memoryServiceUri;
+  String? logLevel;
   String? evalStorageUri;
   String? deprecatedSessionDbUrl;
   String? deprecatedArtifactStorageUri;
@@ -2562,6 +2568,7 @@ ParsedAdkCommand _parseWebCommand(
   String? logoText;
   String? logoImageUrl;
   bool autoCreateSession = false;
+  bool verbose = false;
   bool seenProjectDir = false;
 
   for (int i = 0; i < args.length; i += 1) {
@@ -2747,14 +2754,16 @@ ParsedAdkCommand _parseWebCommand(
       continue;
     }
     if (arg == '--log_level' || arg == '--verbosity') {
-      _nextArg(args, i, arg);
+      logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
     if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
       continue;
     }
     if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
       continue;
     }
     if (arg.startsWith('-')) {
@@ -2777,6 +2786,10 @@ ParsedAdkCommand _parseWebCommand(
   final String? normalizedSessionServiceUri = _emptyToNull(sessionServiceUri);
   final String? normalizedArtifactServiceUri = _emptyToNull(artifactServiceUri);
   final String? normalizedMemoryServiceUri = _emptyToNull(memoryServiceUri);
+  final String normalizedLogLevel = _resolveCliLogLevel(
+    explicit: _emptyToNull(logLevel),
+    verbose: verbose,
+  );
   final String? normalizedEvalStorageUri = _emptyToNull(evalStorageUri);
   if (explicitUseLocalStorageFlag &&
       (normalizedSessionServiceUri != null ||
@@ -2796,6 +2809,7 @@ ParsedAdkCommand _parseWebCommand(
     sessionServiceUri: normalizedSessionServiceUri,
     artifactServiceUri: normalizedArtifactServiceUri,
     memoryServiceUri: normalizedMemoryServiceUri,
+    logLevel: normalizedLogLevel,
     evalStorageUri: normalizedEvalStorageUri,
     useLocalStorage: useLocalStorage,
     urlPrefix: _emptyToNull(urlPrefix),
@@ -3323,6 +3337,8 @@ Future<int> _runWebCommand(
   IOSink out,
   IOSink err,
 ) async {
+  cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel ?? 'INFO'));
+
   if (command.usedDeprecatedSessionDbUrl) {
     err.writeln(
       'WARNING: Deprecated option --session_db_url is used. '
@@ -3427,6 +3443,46 @@ Future<int> _runWebCommand(
 
   await runtime.runner.close();
   return 0;
+}
+
+String _resolveCliLogLevel({required String? explicit, required bool verbose}) {
+  final String? normalizedExplicit = explicit == null
+      ? null
+      : _normalizeCliLogLevel(explicit);
+  if (normalizedExplicit != null) {
+    return normalizedExplicit;
+  }
+  if (verbose) {
+    return 'DEBUG';
+  }
+  return 'INFO';
+}
+
+String _normalizeCliLogLevel(String raw) {
+  final String upper = raw.trim().toUpperCase();
+  const Set<String> supported = <String>{
+    'DEBUG',
+    'INFO',
+    'WARNING',
+    'ERROR',
+    'CRITICAL',
+  };
+  if (!supported.contains(upper)) {
+    throw CliUsageError(
+      'Invalid log level: $raw. Supported: DEBUG, INFO, WARNING, ERROR, CRITICAL.',
+    );
+  }
+  return upper;
+}
+
+cli_logs.Level _toCliLogEnum(String logLevel) {
+  return switch (logLevel.toUpperCase()) {
+    'DEBUG' => cli_logs.Level.debug,
+    'INFO' => cli_logs.Level.info,
+    'WARNING' => cli_logs.Level.warning,
+    'ERROR' || 'CRITICAL' => cli_logs.Level.error,
+    _ => cli_logs.Level.info,
+  };
 }
 
 void _writeEventTexts(List<Event> events, {required IOSink out}) {

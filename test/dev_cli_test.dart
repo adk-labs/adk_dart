@@ -204,6 +204,21 @@ void main() {
       expect(command.enableWebUi, isFalse);
     });
 
+    test('parses api_server parity options including log level', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'api_server',
+        '--auto_create_session',
+        '--allow_origins',
+        'https://example.com',
+        '--verbosity=warning',
+      ]);
+
+      expect(command.enableWebUi, isFalse);
+      expect(command.autoCreateSession, isTrue);
+      expect(command.allowOrigins, <String>['https://example.com']);
+      expect(command.logLevel, 'WARNING');
+    });
+
     test('parses parity web options', () {
       final ParsedAdkCommand command = parseAdkCliArgs(<String>[
         'web',
@@ -251,8 +266,36 @@ void main() {
         expect(command.logoText, 'ADK');
         expect(command.logoImageUrl, 'https://example.com/logo.png');
         expect(command.useLocalStorage, isFalse);
+        expect(command.logLevel, 'DEBUG');
       },
     );
+
+    test('parses web log level options and normalizes value', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'web',
+        '--verbosity=warning',
+      ]);
+
+      expect(command.logLevel, 'WARNING');
+    });
+
+    test('web explicit log level takes precedence over verbose flag', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'web',
+        '--verbose',
+        '--log_level',
+        'error',
+      ]);
+
+      expect(command.logLevel, 'ERROR');
+    });
+
+    test('throws usage error for invalid web log level', () {
+      expect(
+        () => parseAdkCliArgs(<String>['web', '--log_level', 'trace']),
+        throwsA(isA<CliUsageError>()),
+      );
+    });
 
     test('throws when web local storage flag is mixed with service URIs', () {
       expect(
