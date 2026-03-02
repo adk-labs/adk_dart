@@ -6,13 +6,18 @@ import 'cache_metadata.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Result returned by cache creation calls.
 class GeminiCreatedCache {
+  /// Creates a cache creation result for [name].
   GeminiCreatedCache({required this.name});
 
+  /// Created cache resource name.
   final String name;
 }
 
+/// Client contract for Gemini context cache operations.
 abstract class GeminiCacheClient {
+  /// Creates a context cache from [contents] and related request metadata.
   Future<GeminiCreatedCache> createCache({
     required String model,
     required List<Content> contents,
@@ -23,14 +28,19 @@ abstract class GeminiCacheClient {
     LlmToolConfig? toolConfig,
   });
 
+  /// Deletes a cache by [cacheName].
   Future<void> deleteCache({required String cacheName});
 }
 
+/// Manages cache metadata and cache lifecycle for Gemini requests.
 class GeminiContextCacheManager {
+  /// Creates a context cache manager.
   const GeminiContextCacheManager({this.cacheClient});
 
+  /// Optional cache client used for create/delete operations.
   final GeminiCacheClient? cacheClient;
 
+  /// Updates [request] cache metadata and applies reusable cached content.
   Future<CacheMetadata?> handleContextCaching(LlmRequest request) async {
     final ContextCacheConfig? cacheConfig = _coerceContextCacheConfig(
       request.cacheConfig,
@@ -99,6 +109,7 @@ class GeminiContextCacheManager {
     return fingerprintOnly;
   }
 
+  /// Copies [cacheMetadata] onto an outgoing model [response].
   void populateCacheMetadataInResponse(
     LlmResponse response,
     CacheMetadata cacheMetadata,
@@ -106,6 +117,7 @@ class GeminiContextCacheManager {
     response.cacheMetadata = cacheMetadata.copyWith();
   }
 
+  /// Activates a fingerprint-only metadata entry with a concrete [cacheName].
   CacheMetadata activateCache({
     required CacheMetadata fingerprintMetadata,
     required String cacheName,
@@ -120,10 +132,12 @@ class GeminiContextCacheManager {
     );
   }
 
+  /// Returns a fingerprint for all cacheable request contents.
   String fingerprintCacheableContents(LlmRequest request) {
     return _generateCacheFingerprint(request, request.contents.length);
   }
 
+  /// Best-effort cache deletion for [cacheName].
   Future<void> cleanupCache(String cacheName) async {
     if (cacheClient == null || cacheName.isEmpty) {
       return;
