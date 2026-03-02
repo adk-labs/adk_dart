@@ -7,7 +7,7 @@ Example app for `flutter_adk`.
 ## Multilingual UI Support
 
 - Supported UI languages: English, Korean, Japanese, Chinese
-- You can switch language from the `Translate (🌐)` icon in the top bar
+- You can switch language from the `Translate` icon in the top bar
 - Selected language is persisted in local storage
 
 ## Included Examples
@@ -27,19 +27,19 @@ Example app for `flutter_adk`.
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partial / caveat
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Partial / caveat
+- `N` Not supported
 
 | Feature | Android | iOS | Web | Linux | macOS | Windows | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Example app UI/routing/chat screen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Flutter shared UI layer |
-| Basic/Transfer/Workflow/Team execution | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | In-memory runtime via `flutter_adk` `adk_core` |
-| MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web may require server CORS setup |
-| Skills (inline `Skill` + `SkillToolset`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | No filesystem requirement |
-| Settings persistence (`shared_preferences`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web uses browser storage |
-| Local-process MCP stdio example | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | This app demonstrates remote HTTP MCP only |
-| Directory skill loading (`loadSkillFromDir`) demo | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | This app demonstrates inline skills only |
+| Example app UI/routing/chat screen | Y | Y | Y | Y | Y | Y | Flutter shared UI layer |
+| Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
+| MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
+| Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
+| Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
+| Local-process MCP stdio example | N | N | N | N | N | N | This app demonstrates remote HTTP MCP only |
+| Directory skill loading (`loadSkillFromDir`) demo | N | N | N | N | N | N | This app demonstrates inline skills only |
 
 ## Run
 

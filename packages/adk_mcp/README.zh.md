@@ -14,19 +14,19 @@
 
 状态说明:
 
-- `✅` 支持
-- `⚠️` 部分支持/环境相关
-- `❌` 不支持
+- `Y` 支持
+- `Partial` 部分支持/环境相关
+- `N` 不支持
 
 | 功能/接口 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 说明 |
 | --- | --- | --- | --- | --- |
-| `McpRemoteClient` (Streamable HTTP) | ✅ | ✅ | ✅ | HTTP/HTTPS 传输 |
-| 协议协商 + JSON-RPC 辅助方法 | ✅ | ✅ | ✅ | 各平台行为一致 |
-| 服务端消息读取 (`readServerMessagesOnce`) | ✅ | ✅ | ✅ | Web 端可能需要 CORS 可用的 MCP 服务端 |
-| `McpStdioClient` | ✅ | ⚠️ | ❌ | Web stub 会抛 `UnsupportedError` |
-| `StdioConnectionParams` + `Process.start` | ✅ | ⚠️ | ❌ | 依赖本地进程能力/策略 |
-| HTTP 会话终止 (`terminateSession`) | ✅ | ✅ | ✅ | 使用 MCP Streamable HTTP DELETE 流程 |
-| 内置凭证/令牌生命周期管理器 | ❌ | ❌ | ❌ | 由调用方自行管理 headers/tokens |
+| `McpRemoteClient` (Streamable HTTP) | Y | Y | Y | HTTP/HTTPS 传输 |
+| 协议协商 + JSON-RPC 辅助方法 | Y | Y | Y | 各平台行为一致 |
+| 服务端消息读取 (`readServerMessagesOnce`) | Y | Y | Y | Web 端可能需要 CORS 可用的 MCP 服务端 |
+| `McpStdioClient` | Y | Partial | N | Web stub 会抛 `UnsupportedError` |
+| `StdioConnectionParams` + `Process.start` | Y | Partial | N | 依赖本地进程能力/策略 |
+| HTTP 会话终止 (`terminateSession`) | Y | Y | Y | 使用 MCP Streamable HTTP DELETE 流程 |
+| 内置凭证/令牌生命周期管理器 | N | N | N | 由调用方自行管理 headers/tokens |
 
 ## 安装
 

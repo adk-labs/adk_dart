@@ -27,27 +27,27 @@ agent = AgentBuilderAssistant.create_agent(
 
 ## Core Features
 
-### 🎯 **Intelligent Agent Design**
+### **Intelligent Agent Design**
 - Analyzes requirements and suggests appropriate agent types
 - Designs multi-agent architectures (Sequential, Parallel, Loop patterns)
 - Provides high-level design confirmation before implementation
 
-### 📝 **Advanced YAML Configuration**
+### **Advanced YAML Configuration**
 - Generates AgentConfig schema-compliant YAML files
 - Supports all agent types: LlmAgent, SequentialAgent, ParallelAgent, LoopAgent
 - Built-in validation with detailed error reporting
 
-### 🛠️ **Multi-File Management**
+### **Multi-File Management**
 - **Read/Write Operations**: Batch processing of multiple files
 - **File Type Separation**: YAML files use validation tools, Python files use generic tools
 - **Backup & Recovery**: Automatic backups before overwriting existing files
 
-### 🗂️ **Project Structure Analysis**
+### **Project Structure Analysis**
 - Explores existing project structures
 - Suggests conventional ADK file organization
 - Provides path recommendations for new components
 
-### 🧭 **Dynamic Path Resolution**
+### **Dynamic Path Resolution**
 - **Session Binding**: Each chat session bound to one root directory
 - **Working Directory**: Automatic detection and context provision
 - **ADK Source Discovery**: Finds ADK installation dynamically (no hardcoded paths)

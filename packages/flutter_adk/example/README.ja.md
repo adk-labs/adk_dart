@@ -7,7 +7,7 @@
 ## 多言語 UI 対応
 
 - 対応言語: English, 한국어, 日本語, 中文
-- 上部の `Translate (🌐)` アイコンで即時切り替え
+- 上部の `Translate` アイコンで即時切り替え
 - 選択言語はローカルストレージに保存
 
 ## 含まれるサンプル
@@ -24,19 +24,19 @@
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partial / caveat
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Partial / caveat
+- `N` Not supported
 
 | Feature | Android | iOS | Web | Linux | macOS | Windows | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Example app UI/routing/chat screen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Flutter shared UI layer |
-| Basic/Transfer/Workflow/Team execution | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | In-memory runtime via `flutter_adk` `adk_core` |
-| MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web may require server CORS setup |
-| Skills (inline) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | No filesystem requirement |
-| Settings persistence (`shared_preferences`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web uses browser storage |
-| Local-process MCP stdio example | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Remote HTTP MCP only |
-| Directory skill loading demo | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Inline skills only |
+| Example app UI/routing/chat screen | Y | Y | Y | Y | Y | Y | Flutter shared UI layer |
+| Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
+| MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
+| Skills (inline) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
+| Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
+| Local-process MCP stdio example | N | N | N | N | N | N | Remote HTTP MCP only |
+| Directory skill loading demo | N | N | N | N | N | N | Inline skills only |
 
 ## 実行
 

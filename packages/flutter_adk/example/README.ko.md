@@ -6,7 +6,7 @@
 
 ## 다국어 지원
 - 지원 언어: English, 한국어, 日本語, 中文
-- 상단 `번역(🌐)` 아이콘에서 즉시 전환할 수 있습니다.
+- 상단 `번역` 아이콘에서 즉시 전환할 수 있습니다.
 - 선택 언어는 로컬 저장소에 유지됩니다.
 
 ## 포함 예제
@@ -25,19 +25,19 @@
 
 상태 표기:
 
-- `✅` 지원
-- `⚠️` 조건부 지원/주의 필요
-- `❌` 미지원
+- `Y` 지원
+- `Partial` 조건부 지원/주의 필요
+- `N` 미지원
 
 | 기능 | Android | iOS | Web | Linux | macOS | Windows | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 예제 앱 UI/라우팅/대화 화면 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Flutter 공통 UI 레이어 |
-| Basic/Transfer/Workflow/Team 실행 경로 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `flutter_adk`의 `adk_core` 기반 in-memory 런타임 |
-| MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web은 서버 CORS 설정이 필요할 수 있음 |
-| Skills (inline `Skill` + `SkillToolset`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 파일시스템 없이 동작 |
-| 설정 저장 (`shared_preferences`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web은 브라우저 저장소 사용 |
-| 로컬 프로세스 기반 MCP stdio 예제 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 본 예제는 원격 HTTP MCP만 다룸 |
-| 디렉토리 기반 스킬 로딩 (`loadSkillFromDir`) 데모 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 예제는 inline skill 데모만 포함 |
+| 예제 앱 UI/라우팅/대화 화면 | Y | Y | Y | Y | Y | Y | Flutter 공통 UI 레이어 |
+| Basic/Transfer/Workflow/Team 실행 경로 | Y | Y | Y | Y | Y | Y | `flutter_adk`의 `adk_core` 기반 in-memory 런타임 |
+| MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web은 서버 CORS 설정이 필요할 수 있음 |
+| Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | 파일시스템 없이 동작 |
+| 설정 저장 (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web은 브라우저 저장소 사용 |
+| 로컬 프로세스 기반 MCP stdio 예제 | N | N | N | N | N | N | 본 예제는 원격 HTTP MCP만 다룸 |
+| 디렉토리 기반 스킬 로딩 (`loadSkillFromDir`) 데모 | N | N | N | N | N | N | 예제는 inline skill 데모만 포함 |
 
 ## 실행
 

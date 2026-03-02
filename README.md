@@ -15,7 +15,7 @@ developer ergonomics.
 
 ---
 
-## 🔥 What's New
+## What's New
 
 - **MCP Protocol Core Package**: Added `packages/adk_mcp` and moved MCP
   streamable HTTP protocol handling into a dedicated package.
@@ -25,7 +25,7 @@ developer ergonomics.
 - **Parity Expansion**: Added broader runtime parity coverage across sessions,
   toolsets, and model/tool integration layers in the `0.1.x` line.
 
-## ✨ Key Features
+## Key Features
 
 - **Code-First Agent Runtime**: Build agents with `BaseAgent`, `LlmAgent`
   (`Agent` alias), and explicit invocation/session context objects.
@@ -40,7 +40,7 @@ developer ergonomics.
 - **Developer CLI + Web UI**: Scaffold projects and run chat/dev server with
   the `adk` CLI (`create`, `run`, `web`, `api_server`).
 
-## 📦 Which Package Should I Use?
+## Which Package Should I Use?
 
 | If you are... | Use this package | Why |
 | --- | --- | --- |
@@ -54,28 +54,47 @@ Quick rule:
 - Choose `adk` only when you want the short package name but same behavior.
 - Choose `flutter_adk` for Flutter app code, especially when Web compatibility matters.
 
-## 🌐 Platform Support Matrix (Current)
+## Design Philosophy
+
+- `adk_dart` is the runtime-parity core package.
+  It preserves ADK SDK concepts and prioritizes broad feature implementation on
+  Dart VM execution paths.
+- `adk` is an ergonomics facade.
+  It does not implement a separate runtime and simply re-exports `adk_dart`
+  under a shorter package name.
+- `flutter_adk` is the Flutter multi-platform layer.
+  It intentionally exposes a web-safe subset (`adk_core`) so one Flutter code
+  path can target Android/iOS/Web/Linux/macOS/Windows with consistent behavior.
+
+Terminology note:
+
+- In this repository, `VM/CLI` means Dart VM processes (CLI tools, server
+  processes, tests, and non-Flutter desktop Dart apps).
+- For Flutter desktop UI apps, prefer `flutter_adk` as the default integration
+  package.
+
+## Platform Support Matrix (Current)
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partially supported / environment dependent
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Partially supported / environment dependent
+- `N` Not supported
 
 | Feature / Surface | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | Notes |
 | --- | --- | --- | --- | --- |
-| Full API surface via `package:adk_dart/adk_dart.dart` | ✅ | ⚠️ | ❌ | Full surface includes `dart:io`, `dart:ffi`, and `dart:mirrors` paths, so Web cannot use this entrypoint directly. |
-| Web-safe API surface via `package:adk_dart/adk_core.dart` | ✅ | ✅ | ✅ | `adk_core` intentionally excludes IO/FFI/mirrors-only APIs. |
-| Agent runtime (`Agent`, `Runner`, workflows) via `adk_core` | ✅ | ✅ | ✅ | In-memory orchestration path is cross-platform. |
-| MCP over Streamable HTTP (`StreamableHTTPConnectionParams`) | ✅ | ✅ | ✅ | Works where HTTP is available (Web may need CORS-compatible MCP server config). |
-| MCP over stdio (`StdioConnectionParams`) | ✅ | ⚠️ | ❌ | Requires local process execution via `dart:io` `Process`; unavailable on Web. |
-| Skills with inline `Skill` + `SkillToolset` | ✅ | ✅ | ✅ | Inline skill definitions are web-safe. |
-| Directory-based skill loading (`loadSkillFromDir`) | ✅ | ⚠️ | ❌ | Uses filesystem APIs; Web path throws `UnsupportedError`. |
-| CLI (`adk create/run/web/api_server/deploy`) | ✅ | ❌ | ❌ | CLI is VM/terminal-only. |
-| Dev web server + A2A serving endpoints | ✅ | ❌ | ❌ | Server hosting path is VM/runtime process oriented. |
-| DB/file-backed services (sqlite/postgres/mysql sessions, file artifacts) | ✅ | ⚠️ | ❌ | Relies on IO/network/file primitives; Flutter runtime support depends on host/platform policies. |
+| Full API surface via `package:adk_dart/adk_dart.dart` | Y | Partial | N | Full surface includes `dart:io`, `dart:ffi`, and `dart:mirrors` paths, so Web cannot use this entrypoint directly. |
+| Web-safe API surface via `package:adk_dart/adk_core.dart` | Y | Y | Y | `adk_core` intentionally excludes IO/FFI/mirrors-only APIs. |
+| Agent runtime (`Agent`, `Runner`, workflows) via `adk_core` | Y | Y | Y | In-memory orchestration path is cross-platform. |
+| MCP over Streamable HTTP (`StreamableHTTPConnectionParams`) | Y | Y | Y | Works where HTTP is available (Web may need CORS-compatible MCP server config). |
+| MCP over stdio (`StdioConnectionParams`) | Y | Partial | N | Requires local process execution via `dart:io` `Process`; unavailable on Web. |
+| Skills with inline `Skill` + `SkillToolset` | Y | Y | Y | Inline skill definitions are web-safe. |
+| Directory-based skill loading (`loadSkillFromDir`) | Y | Partial | N | Uses filesystem APIs; Web path throws `UnsupportedError`. |
+| CLI (`adk create/run/web/api_server/deploy`) | Y | N | N | CLI is VM/terminal-only. |
+| Dev web server + A2A serving endpoints | Y | N | N | Server hosting path is VM/runtime process oriented. |
+| DB/file-backed services (sqlite/postgres/mysql sessions, file artifacts) | Y | Partial | N | Relies on IO/network/file primitives; Flutter runtime support depends on host/platform policies. |
 
-## 📊 Feature Support Matrix (Current)
+## Feature Support Matrix (Current)
 
 This matrix is rebuilt from a fresh source audit plus targeted runtime tests
 (`dev_web_server`, `cli_adk_web_server`, `mcp_http`, `mcp_tooling`,
@@ -83,52 +102,52 @@ This matrix is rebuilt from a fresh source audit plus targeted runtime tests
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partial / integration required
-- `❌` Not supported yet
+- `Y` Supported
+- `Partial` Partial / integration required
+- `N` Not supported yet
 
 ### Supported / Working
 
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| Core runtime | Agent execution (`Runner`, `InMemoryRunner`) | ✅ | Event-driven run / rewind / live paths are implemented and tested. |
-| Sessions | `memory://`, local sqlite, `postgresql://`, `mysql://` session persistence | ✅ | SQLite(local FFI) + network backends are wired through `DatabaseSessionService`; live Postgres/MySQL roundtrip tests are included (env-gated). |
-| Artifacts | `memory://` and local file artifacts | ✅ | Artifact CRUD/version APIs are wired through web + runner flows. |
-| MCP | Streamable HTTP + stdio tool/resource/prompt flows | ✅ | `adk_mcp` + `McpSessionManager` cover initialize/call/pagination/notifications. |
-| CLI | `create`, `run`, `web`, `api_server`, `deploy` | ✅ | Parsed and executed through `lib/src/dev/cli.dart`; `deploy` supports dry-run and real command execution path. |
-| CLI run | `--save_session`, `--resume`, `--replay`, `--message` | ✅ | Session snapshot import/export and replay paths are implemented. |
-| Web server | `/dev-ui` static hosting and config endpoint | ✅ | Bundled UI serving and SPA fallback are implemented. |
-| Web server | `/health`, `/version`, `/list-apps`, `/run`, `/run_sse`, `/run_live` | ✅ | Core dev runtime API works and is covered by web tests. |
-| Web server | Python-style session/memory/artifact routes | ✅ | `/apps/{app}/users/{user}/sessions...` CRUD and artifact routes are implemented. |
-| Web server | Debug/Eval/Trace parity families | ✅ | Includes `/debug/trace/*`, `/apps/{app}/metrics-info`, `/apps/{app}/eval-*`, and event graph endpoints. |
-| Web options | `allow_origins`, `url_prefix`, `reload`, `reload_agents`, logo, telemetry flags | ✅ | Options are parsed and propagated into runtime/web context. |
-| A2A | Agent card endpoints (`/.well-known/agent.json`, `/a2a/<app>/.well-known/agent.json`) | ✅ | Agent card generation/serving works when `--a2a` is enabled. |
-| A2A | RPC routes (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`, `tasks/resubscribe`, push config set/get) | ✅ | JSON-RPC + REST-style task routes are implemented and tested. |
-| A2A | Push callback delivery reliability | ✅ | Push notifications use persistent SQLite queue + retry/backoff + startup/background draining. |
-| Extra plugins | Dynamic plugin loading via class specs | ✅ | Supports built-ins, registered factories, `package:...:Class`, absolute file specs, and dotted class paths. |
-| Telemetry | `SqliteSpanExporter` physical sqlite persistence | ✅ | Spans are persisted in real sqlite tables and are queryable via debug trace endpoints. |
-| Tools runtime | Unified bootstrap registration API | ✅ | `configureToolRuntimeBootstrap(...)` / `resetToolRuntimeBootstrap(...)` provide one-place wiring for BigQuery/Bigtable/Spanner/Toolbox/audio adapters. |
+| Core runtime | Agent execution (`Runner`, `InMemoryRunner`) | Y | Event-driven run / rewind / live paths are implemented and tested. |
+| Sessions | `memory://`, local sqlite, `postgresql://`, `mysql://` session persistence | Y | SQLite(local FFI) + network backends are wired through `DatabaseSessionService`; live Postgres/MySQL roundtrip tests are included (env-gated). |
+| Artifacts | `memory://` and local file artifacts | Y | Artifact CRUD/version APIs are wired through web + runner flows. |
+| MCP | Streamable HTTP + stdio tool/resource/prompt flows | Y | `adk_mcp` + `McpSessionManager` cover initialize/call/pagination/notifications. |
+| CLI | `create`, `run`, `web`, `api_server`, `deploy` | Y | Parsed and executed through `lib/src/dev/cli.dart`; `deploy` supports dry-run and real command execution path. |
+| CLI run | `--save_session`, `--resume`, `--replay`, `--message` | Y | Session snapshot import/export and replay paths are implemented. |
+| Web server | `/dev-ui` static hosting and config endpoint | Y | Bundled UI serving and SPA fallback are implemented. |
+| Web server | `/health`, `/version`, `/list-apps`, `/run`, `/run_sse`, `/run_live` | Y | Core dev runtime API works and is covered by web tests. |
+| Web server | Python-style session/memory/artifact routes | Y | `/apps/{app}/users/{user}/sessions...` CRUD and artifact routes are implemented. |
+| Web server | Debug/Eval/Trace parity families | Y | Includes `/debug/trace/*`, `/apps/{app}/metrics-info`, `/apps/{app}/eval-*`, and event graph endpoints. |
+| Web options | `allow_origins`, `url_prefix`, `reload`, `reload_agents`, logo, telemetry flags | Y | Options are parsed and propagated into runtime/web context. |
+| A2A | Agent card endpoints (`/.well-known/agent.json`, `/a2a/<app>/.well-known/agent.json`) | Y | Agent card generation/serving works when `--a2a` is enabled. |
+| A2A | RPC routes (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`, `tasks/resubscribe`, push config set/get) | Y | JSON-RPC + REST-style task routes are implemented and tested. |
+| A2A | Push callback delivery reliability | Y | Push notifications use persistent SQLite queue + retry/backoff + startup/background draining. |
+| Extra plugins | Dynamic plugin loading via class specs | Y | Supports built-ins, registered factories, `package:...:Class`, absolute file specs, and dotted class paths. |
+| Telemetry | `SqliteSpanExporter` physical sqlite persistence | Y | Spans are persisted in real sqlite tables and are queryable via debug trace endpoints. |
+| Tools runtime | Unified bootstrap registration API | Y | `configureToolRuntimeBootstrap(...)` / `resetToolRuntimeBootstrap(...)` provide one-place wiring for BigQuery/Bigtable/Spanner/Toolbox/audio adapters. |
 
 ### Partial / Not Yet Supported
 
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| Sessions | `mysql://` TLS/SSL transport options | ✅ | Uses `mysql_client_plus`; supports TLS flags (`secure`/`ssl`/`tls`, `sslmode=require`), CA file (`ssl_ca_file`), client cert/key (`ssl_cert_file` + `ssl_key_file`), optional verify toggle (`ssl_verify=false`), and auto secure-retry for auth plugins that require TLS (unless explicitly disabled). |
-| Sessions | `VertexAiSessionService` remote persistence parity | ✅ | Service uses Vertex Session API client paths (`create/get/list/delete`, events append/list) with HTTP transport. |
-| Artifacts | `gs://` default artifact backend | ✅ | `GcsArtifactService` now includes built-in live HTTP/auth providers; custom providers remain optional. |
-| Tools runtime | BigQuery default client | ✅ | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
-| Tools runtime | Bigtable default clients | ✅ | Bundled REST admin/data clients are available by default (token required via credentials/env/gcloud ADC). |
-| Tools runtime | Spanner default client | ✅ | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
-| Tools runtime | Spanner embedder runtime | ✅ | Built-in Vertex AI embedding runtime is available (project/location + token required); custom embedder injection remains optional. |
-| Tools runtime | BigQuery Data Insights default provider | ✅ | Built-in HTTP stream provider is available; injection is optional for customization/tests. |
-| Tools runtime | Discovery Engine search without handler | ✅ | Uses built-in Discovery Engine API HTTP path when `searchHandler` is not provided. |
-| Tools runtime | Toolbox integration without delegate | ✅ | Built-in native toolbox HTTP delegate is available (`/api/toolset/*`, `/api/tool/*/invoke`); custom delegate registration is still supported. |
-| Secrets | Secret Manager access without fetcher | ✅ | Built-in Secret Manager HTTP fetcher is available; injection is optional. |
-| Audio | Speech transcription runtime bootstrap | ⚠️ | Recognizer is still required, but can now be provided per instance or globally via `AudioTranscriber.registerDefaultRecognizer(...)`. |
-| OpenAPI | External multi-file `$ref` resolution | ❌ | Parser throws on external refs (`External references not supported`). |
-| Spanner | PostgreSQL vector/ANN parity | ⚠️ | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |
+| Sessions | `mysql://` TLS/SSL transport options | Y | Uses `mysql_client_plus`; supports TLS flags (`secure`/`ssl`/`tls`, `sslmode=require`), CA file (`ssl_ca_file`), client cert/key (`ssl_cert_file` + `ssl_key_file`), optional verify toggle (`ssl_verify=false`), and auto secure-retry for auth plugins that require TLS (unless explicitly disabled). |
+| Sessions | `VertexAiSessionService` remote persistence parity | Y | Service uses Vertex Session API client paths (`create/get/list/delete`, events append/list) with HTTP transport. |
+| Artifacts | `gs://` default artifact backend | Y | `GcsArtifactService` now includes built-in live HTTP/auth providers; custom providers remain optional. |
+| Tools runtime | BigQuery default client | Y | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
+| Tools runtime | Bigtable default clients | Y | Bundled REST admin/data clients are available by default (token required via credentials/env/gcloud ADC). |
+| Tools runtime | Spanner default client | Y | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
+| Tools runtime | Spanner embedder runtime | Y | Built-in Vertex AI embedding runtime is available (project/location + token required); custom embedder injection remains optional. |
+| Tools runtime | BigQuery Data Insights default provider | Y | Built-in HTTP stream provider is available; injection is optional for customization/tests. |
+| Tools runtime | Discovery Engine search without handler | Y | Uses built-in Discovery Engine API HTTP path when `searchHandler` is not provided. |
+| Tools runtime | Toolbox integration without delegate | Y | Built-in native toolbox HTTP delegate is available (`/api/toolset/*`, `/api/tool/*/invoke`); custom delegate registration is still supported. |
+| Secrets | Secret Manager access without fetcher | Y | Built-in Secret Manager HTTP fetcher is available; injection is optional. |
+| Audio | Speech transcription runtime bootstrap | Partial | Recognizer is still required, but can now be provided per instance or globally via `AudioTranscriber.registerDefaultRecognizer(...)`. |
+| OpenAPI | External multi-file `$ref` resolution | N | Parser throws on external refs (`External references not supported`). |
+| Spanner | PostgreSQL vector/ANN parity | Partial | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |
 
-## 🚀 Installation
+## Installation
 
 ### Stable Release (Recommended)
 
@@ -160,7 +179,7 @@ Then:
 dart pub get
 ```
 
-## 🔐 Gemini API Key Setup
+## Gemini API Key Setup
 
 ADK Dart recommends the following primary environment variable name:
 
@@ -195,7 +214,7 @@ Notes:
 - `adk` CLI loads `.env` automatically unless
   `ADK_DISABLE_LOAD_DOTENV=1` (or `true`) is set.
 
-## 🤖 MCP (Model Context Protocol)
+## MCP (Model Context Protocol)
 
 ADK Dart includes MCP support and now ships protocol primitives as a dedicated
 package:
@@ -206,14 +225,14 @@ package:
 
 For most users, importing `package:adk_dart/adk_dart.dart` is sufficient.
 
-## 📚 Documentation
+## Documentation
 
 - Repository: <https://github.com/adk-labs/adk_dart>
 - API surface entrypoint: [`lib/adk_dart.dart`](lib/adk_dart.dart)
 - Parity status tracker: [`docs/python_parity_status.md`](../docs/python_parity_status.md)
 - Parity manifest: [`docs/python_to_dart_parity_manifest.md`](../docs/python_to_dart_parity_manifest.md)
 
-## 🏁 Feature Highlight
+## Feature Highlight
 
 ### Define a single agent
 
@@ -313,20 +332,20 @@ adk web --port 8000 my_agent
 `adk web` starts a local development server and UI at
 `http://127.0.0.1:8000`.
 
-## 🧪 Test
+## Test
 
 ```bash
 dart test
 dart analyze
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Issues and pull requests are welcome:
 
 - Issues: <https://github.com/adk-labs/adk_dart/issues>
 - Repository: <https://github.com/adk-labs/adk_dart>
 
-## 📄 License
+## License
 
 This project is licensed under Apache 2.0. See [LICENSE](LICENSE).

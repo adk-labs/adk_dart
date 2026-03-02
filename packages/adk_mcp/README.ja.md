@@ -14,19 +14,19 @@
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partial / environment dependent
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Partial / environment dependent
+- `N` Not supported
 
 | Feature / Surface | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | Notes |
 | --- | --- | --- | --- | --- |
-| `McpRemoteClient` (Streamable HTTP) | ✅ | ✅ | ✅ | HTTP/HTTPS transport |
-| Protocol negotiation + JSON-RPC helpers | ✅ | ✅ | ✅ | Same behavior across platforms |
-| Server message loop (`readServerMessagesOnce`) | ✅ | ✅ | ✅ | Web may require CORS-ready MCP server |
-| `McpStdioClient` | ✅ | ⚠️ | ❌ | Web stub throws `UnsupportedError` |
-| `StdioConnectionParams` + `Process.start` | ✅ | ⚠️ | ❌ | Depends on local process policy |
-| HTTP session termination (`terminateSession`) | ✅ | ✅ | ✅ | MCP Streamable HTTP DELETE flow |
-| Built-in credential/token lifecycle manager | ❌ | ❌ | ❌ | Caller manages headers/tokens |
+| `McpRemoteClient` (Streamable HTTP) | Y | Y | Y | HTTP/HTTPS transport |
+| Protocol negotiation + JSON-RPC helpers | Y | Y | Y | Same behavior across platforms |
+| Server message loop (`readServerMessagesOnce`) | Y | Y | Y | Web may require CORS-ready MCP server |
+| `McpStdioClient` | Y | Partial | N | Web stub throws `UnsupportedError` |
+| `StdioConnectionParams` + `Process.start` | Y | Partial | N | Depends on local process policy |
+| HTTP session termination (`terminateSession`) | Y | Y | Y | MCP Streamable HTTP DELETE flow |
+| Built-in credential/token lifecycle manager | N | N | N | Caller manages headers/tokens |
 
 ## Install
 

@@ -12,7 +12,7 @@ It re-exports `adk_dart` so you can use a shorter import path:
 
 ---
 
-## 🔥 What's New
+## What's New
 
 - **Facade Package for ADK Dart**: Keeps the full ADK Dart API while providing
   a shorter package/import name.
@@ -21,14 +21,14 @@ It re-exports `adk_dart` so you can use a shorter import path:
 - **MCP-Ready API Surface**: Includes MCP-enabled types via the upstream
   `adk_dart` export surface.
 
-## ✨ Key Features
+## Key Features
 
 - **Short Import Path**: `import 'package:adk/adk.dart';`
 - **Full API Re-Export**: Access the same agent/runtime/tool APIs from
   `adk_dart`.
 - **CLI Included**: Use `adk create`, `adk run`, `adk web`, `adk api_server`.
 
-## ✅ When To Use `adk`
+## When To Use `adk`
 
 Use `adk` when:
 
@@ -42,50 +42,56 @@ Use another package when:
 - You are writing Flutter app code (especially Web): use `flutter_adk`.
 - You prefer explicit core package naming: use `adk_dart`.
 
-## 🌐 Platform Support Matrix (Current)
+Design intent:
+
+- `adk` exists for naming ergonomics, not runtime divergence.
+- If you need the same VM-first runtime surface as `adk_dart` with a shorter
+  import, `adk` is the right choice.
+
+## Platform Support Matrix (Current)
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partially supported / environment dependent
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Partially supported / environment dependent
+- `N` Not supported
 
 | Feature / Surface | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | Notes |
 | --- | --- | --- | --- | --- |
-| Import via `package:adk/adk.dart` (facade to `adk_dart`) | ✅ | ⚠️ | ❌ | Re-exports `package:adk_dart/adk_dart.dart` (full VM-first surface). |
-| `adk` CLI executable | ✅ | ❌ | ❌ | Terminal/VM-only command entrypoint. |
-| Runtime/tool features through facade (`MCP`, skills, sessions, etc.) | ✅ | ⚠️ | ❌ | Behavior follows `adk_dart` full API surface and its platform constraints. |
-| Web-safe entrypoint from this package | ❌ | ❌ | ❌ | `adk` does not provide `adk_core`; use `flutter_adk` or `adk_dart/adk_core.dart` directly for Web-safe surface. |
+| Import via `package:adk/adk.dart` (facade to `adk_dart`) | Y | Partial | N | Re-exports `package:adk_dart/adk_dart.dart` (full VM-first surface). |
+| `adk` CLI executable | Y | N | N | Terminal/VM-only command entrypoint. |
+| Runtime/tool features through facade (`MCP`, skills, sessions, etc.) | Y | Partial | N | Behavior follows `adk_dart` full API surface and its platform constraints. |
+| Web-safe entrypoint from this package | N | N | N | `adk` does not provide `adk_core`; use `flutter_adk` or `adk_dart/adk_core.dart` directly for Web-safe surface. |
 
-## 📊 Feature Support Matrix (Current)
+## Feature Support Matrix (Current)
 
 This package is a facade. Runtime behavior comes from `adk_dart`, and this
 package mainly provides short import/CLI ergonomics.
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Partial / integration required
-- `❌` Not supported yet
+- `Y` Supported
+- `Partial` Partial / integration required
+- `N` Not supported yet
 
 ### Supported / Working
 
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| Package role | Short import path (`package:adk/adk.dart`) | ✅ | Primary purpose of this package. |
-| API surface | Re-export of `adk_dart` runtime/tooling APIs | ✅ | Uses upstream API surface directly. |
-| CLI | `adk` executable entrypoint forwarding | ✅ | `bin/adk.dart` forwards to upstream CLI. |
-| Runtime parity | Feature behavior aligned with `adk_dart` | ✅ | Same implementation path as upstream package. |
+| Package role | Short import path (`package:adk/adk.dart`) | Y | Primary purpose of this package. |
+| API surface | Re-export of `adk_dart` runtime/tooling APIs | Y | Uses upstream API surface directly. |
+| CLI | `adk` executable entrypoint forwarding | Y | `bin/adk.dart` forwards to upstream CLI. |
+| Runtime parity | Feature behavior aligned with `adk_dart` | Y | Same implementation path as upstream package. |
 
 ### Partial / Not Yet Supported
 
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| Runtime implementation | Independent runtime implementation in this package | ❌ | `adk` does not implement runtime itself; it delegates to `adk_dart`. |
-| Feature divergence | Separate feature set different from `adk_dart` | ❌ | Feature availability follows upstream `adk_dart` status. |
-| Release decoupling | Independent publishability from upstream core | ⚠️ | Depends on availability of matching `adk_dart` hosted versions. |
+| Runtime implementation | Independent runtime implementation in this package | N | `adk` does not implement runtime itself; it delegates to `adk_dart`. |
+| Feature divergence | Separate feature set different from `adk_dart` | N | Feature availability follows upstream `adk_dart` status. |
+| Release decoupling | Independent publishability from upstream core | Partial | Depends on availability of matching `adk_dart` hosted versions. |
 
-## 🚀 Installation
+## Installation
 
 ```bash
 dart pub add adk
@@ -112,7 +118,7 @@ Then:
 dart pub get
 ```
 
-## 🔐 Gemini API Key Setup
+## Gemini API Key Setup
 
 Use `GOOGLE_API_KEY` as the primary key environment variable.
 
@@ -135,13 +141,13 @@ GOOGLE_API_KEY=your_google_api_key
 Detailed runtime behavior and full setup guidance:
 [adk_dart README](https://github.com/adk-labs/adk_dart/blob/main/README.md#-gemini-api-key-setup)
 
-## 📦 Import
+## Import
 
 ```dart
 import 'package:adk/adk.dart';
 ```
 
-## 🏁 Feature Highlight
+## Feature Highlight
 
 ### Define a single agent
 
@@ -161,7 +167,7 @@ class EchoModel extends BaseLlm {
 }
 ```
 
-## 🛠 CLI
+## CLI
 
 Global:
 
@@ -176,11 +182,11 @@ Local package execution:
 dart run adk:adk --help
 ```
 
-## 📚 Related Package
+## Related Package
 
 - Core implementation package: <https://pub.dev/packages/adk_dart>
 - Repository: <https://github.com/adk-labs/adk_dart>
 
-## 📄 License
+## License
 
 This project is licensed under Apache 2.0. See [LICENSE](LICENSE).

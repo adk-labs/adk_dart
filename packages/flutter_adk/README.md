@@ -22,7 +22,7 @@ Flutter facade package for ADK Dart core runtime.
   - macOS
   - Windows
 
-## ✅ When To Use `flutter_adk`
+## When To Use `flutter_adk`
 
 Use `flutter_adk` when:
 
@@ -35,6 +35,13 @@ Use another package when:
 
 - You are building VM/CLI agents, tools, or servers: use `adk_dart` (or `adk`
   for shorter imports).
+
+Design intent:
+
+- `flutter_adk` is not just a wrapper name; it is the Flutter-oriented
+  compatibility layer.
+- It prioritizes consistent multi-platform behavior in Flutter by exposing the
+  web-safe runtime surface (`adk_core`) instead of the full VM-only API set.
 
 ## Usage
 
@@ -57,21 +64,21 @@ void main() {
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Supported with caveats
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Supported with caveats
+- `N` Not supported
 
 | Feature | Android | iOS | Web | Linux | macOS | Windows | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `flutter_adk` single import (`package:flutter_adk/flutter_adk.dart`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Re-exports the Web-safe `adk_core` surface. |
-| Agent runtime (`Agent`, `Runner`, workflows) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | In-memory orchestration path is cross-platform. |
-| `Gemini` model usage | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | Web requires BYOK/CORS/security policy consideration. |
-| MCP Toolset via Streamable HTTP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Works with remote MCP HTTP servers. |
-| MCP Toolset via stdio (`StdioConnectionParams`) | ⚠️ | ⚠️ | ❌ | ✅ | ✅ | ✅ | Web cannot spawn local processes; mobile runtime support can depend on sandbox/process policy. |
-| Skills (`Skill`, `SkillToolset`) with inline definitions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Inline skills are platform-agnostic. |
-| Directory-based skill loading (`loadSkillFromDir`) | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | Web throws `UnsupportedError` for filesystem-based loading. |
-| Plugin channel helper (`FlutterAdk().getPlatformVersion()`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Uses platform channel / browser user-agent path. |
-| VM/CLI tooling (`adk` executable, dev server, CLI deploy path) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Not part of the Flutter package surface. |
+| `flutter_adk` single import (`package:flutter_adk/flutter_adk.dart`) | Y | Y | Y | Y | Y | Y | Re-exports the Web-safe `adk_core` surface. |
+| Agent runtime (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | In-memory orchestration path is cross-platform. |
+| `Gemini` model usage | Y | Y | Partial | Y | Y | Y | Web requires BYOK/CORS/security policy consideration. |
+| MCP Toolset via Streamable HTTP | Y | Y | Y | Y | Y | Y | Works with remote MCP HTTP servers. |
+| MCP Toolset via stdio (`StdioConnectionParams`) | Partial | Partial | N | Y | Y | Y | Web cannot spawn local processes; mobile runtime support can depend on sandbox/process policy. |
+| Skills (`Skill`, `SkillToolset`) with inline definitions | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic. |
+| Directory-based skill loading (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web throws `UnsupportedError` for filesystem-based loading. |
+| Plugin channel helper (`FlutterAdk().getPlatformVersion()`) | Y | Y | Y | Y | Y | Y | Uses platform channel / browser user-agent path. |
+| VM/CLI tooling (`adk` executable, dev server, CLI deploy path) | N | N | N | N | N | N | Not part of the Flutter package surface. |
 
 Reference matrix and rollout notes:
 - `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`

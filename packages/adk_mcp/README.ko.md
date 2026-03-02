@@ -14,19 +14,19 @@
 
 상태 표기:
 
-- `✅` 지원
-- `⚠️` 부분 지원/환경 의존
-- `❌` 미지원
+- `Y` 지원
+- `Partial` 부분 지원/환경 의존
+- `N` 미지원
 
 | 기능/표면 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
 | --- | --- | --- | --- | --- |
-| `McpRemoteClient` (Streamable HTTP) | ✅ | ✅ | ✅ | HTTP/HTTPS 전송 |
-| 프로토콜 버전 협상 + JSON-RPC 헬퍼 | ✅ | ✅ | ✅ | 전 플랫폼 동일 동작 |
-| 서버 메시지 읽기 루프 (`readServerMessagesOnce`) | ✅ | ✅ | ✅ | Web은 CORS 설정된 MCP 서버 필요 |
-| `McpStdioClient` | ✅ | ⚠️ | ❌ | Web에서는 stub가 `UnsupportedError` 발생 |
-| `StdioConnectionParams` + `Process.start` | ✅ | ⚠️ | ❌ | 로컬 프로세스 실행 정책 영향 |
-| HTTP 세션 종료 (`terminateSession`) | ✅ | ✅ | ✅ | MCP Streamable HTTP DELETE 종료 흐름 |
-| 내장 토큰/자격증명 수명주기 매니저 | ❌ | ❌ | ❌ | 호출자가 헤더/토큰 직접 관리 |
+| `McpRemoteClient` (Streamable HTTP) | Y | Y | Y | HTTP/HTTPS 전송 |
+| 프로토콜 버전 협상 + JSON-RPC 헬퍼 | Y | Y | Y | 전 플랫폼 동일 동작 |
+| 서버 메시지 읽기 루프 (`readServerMessagesOnce`) | Y | Y | Y | Web은 CORS 설정된 MCP 서버 필요 |
+| `McpStdioClient` | Y | Partial | N | Web에서는 stub가 `UnsupportedError` 발생 |
+| `StdioConnectionParams` + `Process.start` | Y | Partial | N | 로컬 프로세스 실행 정책 영향 |
+| HTTP 세션 종료 (`terminateSession`) | Y | Y | Y | MCP Streamable HTTP DELETE 종료 흐름 |
+| 내장 토큰/자격증명 수명주기 매니저 | N | N | N | 호출자가 헤더/토큰 직접 관리 |
 
 ## 설치
 

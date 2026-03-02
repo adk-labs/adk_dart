@@ -10,7 +10,7 @@ Flutter で ADK Dart の Web-safe コアランタイムを使うためのファ�
 - Single Flutter import: `package:flutter_adk/flutter_adk.dart`
 - Plugin registration for Android/iOS/Web/Linux/macOS/Windows
 
-## ✅ `flutter_adk` を使うべきケース
+## `flutter_adk` を使うべきケース
 
 `flutter_adk` を選ぶとよい場合:
 
@@ -22,25 +22,31 @@ Flutter で ADK Dart の Web-safe コアランタイムを使うためのファ�
 - VM/CLI のエージェント・ツール・サーバー開発: `adk_dart`
   （短い import が必要なら `adk`）
 
+Design intent:
+
+- `flutter_adk` は単なる名前ラッパーではなく、Flutter 向け互換レイヤーです。
+- フル VM API をそのまま公開するのではなく、Web-safe な `adk_core` 表面を
+  優先し、Flutter マルチプラットフォームでの一貫動作を重視します。
+
 ## Platform Support Matrix (Current)
 
 Status legend:
 
-- `✅` Supported
-- `⚠️` Supported with caveats
-- `❌` Not supported
+- `Y` Supported
+- `Partial` Supported with caveats
+- `N` Not supported
 
 | Feature | Android | iOS | Web | Linux | macOS | Windows | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Single import (`package:flutter_adk/flutter_adk.dart`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Re-exports web-safe `adk_core` |
-| Agent runtime (`Agent`, `Runner`, workflows) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | In-memory path is cross-platform |
-| `Gemini` model usage | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | Consider BYOK/CORS/security on Web |
-| MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Remote MCP HTTP servers |
-| MCP Toolset (stdio) | ⚠️ | ⚠️ | ❌ | ✅ | ✅ | ✅ | Web cannot spawn local processes |
-| Skills (inline) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Inline skills are platform-agnostic |
-| Directory skill loading (`loadSkillFromDir`) | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | Web throws `UnsupportedError` |
-| Plugin helper (`getPlatformVersion`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Platform channel / browser user-agent |
-| VM/CLI tooling (`adk`, dev server, deploy path) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Out of Flutter package scope |
+| Single import (`package:flutter_adk/flutter_adk.dart`) | Y | Y | Y | Y | Y | Y | Re-exports web-safe `adk_core` |
+| Agent runtime (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | In-memory path is cross-platform |
+| `Gemini` model usage | Y | Y | Partial | Y | Y | Y | Consider BYOK/CORS/security on Web |
+| MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Remote MCP HTTP servers |
+| MCP Toolset (stdio) | Partial | Partial | N | Y | Y | Y | Web cannot spawn local processes |
+| Skills (inline) | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic |
+| Directory skill loading (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web throws `UnsupportedError` |
+| Plugin helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | Platform channel / browser user-agent |
+| VM/CLI tooling (`adk`, dev server, deploy path) | N | N | N | N | N | N | Out of Flutter package scope |
 
 ## Usage
 
