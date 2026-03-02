@@ -1,14 +1,19 @@
 import '../../../../auth/auth_credential.dart';
 import 'base_credential_exchanger.dart';
 
+/// Callback used to exchange service-account auth for an access token.
 typedef ServiceAccountTokenResolver =
     Future<String?> Function(ServiceAccountAuth serviceAccount);
 
+/// Exchanges service-account credentials into HTTP bearer credentials.
 class ServiceAccountCredentialExchanger extends BaseAuthCredentialExchanger {
+  /// Creates a service-account exchanger with optional [tokenResolver].
   ServiceAccountCredentialExchanger({this.tokenResolver});
 
+  /// Resolver used to mint or fetch an access token.
   final ServiceAccountTokenResolver? tokenResolver;
 
+  /// Exchanges [authCredential] for [authScheme] using [tokenResolver].
   @override
   Future<AuthCredential?> exchangeCredential(
     Object authScheme, [

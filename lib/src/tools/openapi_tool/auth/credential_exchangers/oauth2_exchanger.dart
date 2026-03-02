@@ -2,7 +2,9 @@ import '../../../../auth/auth_credential.dart';
 import '../../../../auth/auth_schemes.dart';
 import 'base_credential_exchanger.dart';
 
+/// Exchanges OAuth2/OpenID credentials into HTTP bearer credentials.
 class OAuth2CredentialExchanger extends BaseAuthCredentialExchanger {
+  /// Exchanges [authCredential] for [authScheme] when access tokens are present.
   @override
   Future<AuthCredential?> exchangeCredential(
     Object authScheme, [

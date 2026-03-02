@@ -3,7 +3,9 @@ import 'base_credential_exchanger.dart';
 import 'oauth2_exchanger.dart';
 import 'service_account_exchanger.dart';
 
+/// Credential exchanger that delegates by [AuthCredentialType].
 class AutoAuthCredentialExchanger extends BaseAuthCredentialExchanger {
+  /// Creates an auto exchanger with optional [customExchangers].
   AutoAuthCredentialExchanger({
     Map<AuthCredentialType, BaseAuthCredentialExchanger>? customExchangers,
   }) : exchangers = <AuthCredentialType, BaseAuthCredentialExchanger>{
@@ -13,8 +15,10 @@ class AutoAuthCredentialExchanger extends BaseAuthCredentialExchanger {
          ...?customExchangers,
        };
 
+  /// Registered exchangers by credential type.
   final Map<AuthCredentialType, BaseAuthCredentialExchanger> exchangers;
 
+  /// Exchanges [authCredential] using a registered type-specific exchanger.
   @override
   Future<AuthCredential?> exchangeCredential(
     Object authScheme, [
