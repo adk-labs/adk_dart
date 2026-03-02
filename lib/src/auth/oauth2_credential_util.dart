@@ -1,7 +1,12 @@
+/// OAuth2 credential utility helpers.
+library;
+
 import 'auth_credential.dart';
 import 'auth_schemes.dart';
 
+/// OAuth2 session input used for token endpoint requests.
 class OAuth2SessionData {
+  /// Creates OAuth2 session data.
   OAuth2SessionData({
     required this.clientId,
     required this.clientSecret,
@@ -11,21 +16,38 @@ class OAuth2SessionData {
     this.tokenEndpointAuthMethod,
   });
 
+  /// OAuth2 client ID.
   final String clientId;
+
+  /// OAuth2 client secret.
   final String clientSecret;
+
+  /// Space-separated scope string.
   final String scope;
+
+  /// Optional redirect URI.
   final String? redirectUri;
+
+  /// Optional state parameter.
   final String? state;
+
+  /// Optional token-endpoint auth method.
   final String? tokenEndpointAuthMethod;
 }
 
+/// Result of deriving OAuth2 session config from auth metadata.
 class OAuth2SessionResult {
+  /// Creates an OAuth2 session result.
   OAuth2SessionResult({this.session, this.tokenEndpoint});
 
+  /// Derived session payload, if available.
   final OAuth2SessionData? session;
+
+  /// Token endpoint URL, if available.
   final String? tokenEndpoint;
 }
 
+/// Creates OAuth2 session parameters from [authScheme] and [authCredential].
 OAuth2SessionResult createOAuth2Session({
   required Object authScheme,
   required AuthCredential authCredential,
@@ -73,6 +95,7 @@ OAuth2SessionResult createOAuth2Session({
   );
 }
 
+/// Updates [authCredential] in place with exchanged token fields.
 void updateCredentialWithTokens(
   AuthCredential authCredential,
   Map<String, Object?> tokens,

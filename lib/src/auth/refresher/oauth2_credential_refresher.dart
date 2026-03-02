@@ -1,18 +1,26 @@
+/// OAuth2-based credential refresh helpers.
+library;
+
 import '../auth_credential.dart';
 import 'base_credential_refresher.dart';
 
+/// Callback signature for refreshing OAuth2 tokens.
 typedef OAuth2RefreshHandler =
     Future<Map<String, Object?>> Function(
       OAuth2Auth oauth2,
       String? authScheme,
     );
 
+/// Refreshes OAuth2 credentials when tokens are expired.
 class OAuth2CredentialRefresher extends BaseCredentialRefresher {
+  /// Creates an OAuth2 credential refresher.
   OAuth2CredentialRefresher({this.refreshHandler});
 
+  /// Refresh handler implementation.
   final OAuth2RefreshHandler? refreshHandler;
 
   @override
+  /// Returns whether [authCredential] should be refreshed.
   Future<bool> isRefreshNeeded({
     required AuthCredential authCredential,
     String? authScheme,
@@ -44,6 +52,7 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
   }
 
   @override
+  /// Refreshes [authCredential] when a refresh is needed and possible.
   Future<AuthCredential> refresh({
     required AuthCredential authCredential,
     String? authScheme,

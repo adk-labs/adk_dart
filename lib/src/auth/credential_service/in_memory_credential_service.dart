@@ -1,13 +1,18 @@
+/// In-memory credential persistence implementation.
+library;
+
 import '../../agents/callback_context.dart';
 import '../auth_credential.dart';
 import '../auth_tool.dart';
 import 'base_credential_service.dart';
 
+/// Stores credentials in process memory keyed by app and user.
 class InMemoryCredentialService extends BaseCredentialService {
   final Map<String, Map<String, Map<String, AuthCredential>>> _credentials =
       <String, Map<String, Map<String, AuthCredential>>>{};
 
   @override
+  /// Loads a credential copy for [authConfig], if present.
   Future<AuthCredential?> loadCredential(
     AuthConfig authConfig,
     CallbackContext callbackContext,
@@ -17,6 +22,7 @@ class InMemoryCredentialService extends BaseCredentialService {
   }
 
   @override
+  /// Saves a credential copy for [authConfig], when available.
   Future<void> saveCredential(
     AuthConfig authConfig,
     CallbackContext callbackContext,

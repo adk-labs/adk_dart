@@ -1,18 +1,26 @@
+/// OAuth2-based credential exchange helpers.
+library;
+
 import '../auth_credential.dart';
 import 'base_credential_exchanger.dart';
 
+/// Callback signature for OAuth2 token exchange.
 typedef OAuth2ExchangeHandler =
     Future<Map<String, Object?>> Function(
       OAuth2Auth oauth2,
       String? authScheme,
     );
 
+/// Exchanges OAuth2 credentials into token-bearing credentials.
 class OAuth2CredentialExchanger extends BaseCredentialExchanger {
+  /// Creates an OAuth2 credential exchanger.
   OAuth2CredentialExchanger({this.exchangeHandler});
 
+  /// Exchange handler implementation.
   final OAuth2ExchangeHandler? exchangeHandler;
 
   @override
+  /// Exchanges [authCredential] when OAuth2 tokens are missing.
   Future<ExchangeResult> exchange({
     required AuthCredential authCredential,
     String? authScheme,
