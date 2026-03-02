@@ -1,23 +1,39 @@
+/// Agent graph builders used by CLI visualization endpoints.
+library;
+
 import '../agents/base_agent.dart';
 import '../agents/llm_agent.dart';
 import '../tools/base_tool.dart';
 import '../tools/function_tool.dart';
 
+/// Node model used by CLI graph output.
 class AgentGraphNode {
+  /// Creates one graph node with [id], [caption], and [kind].
   AgentGraphNode({required this.id, required this.caption, required this.kind});
 
+  /// Stable node identifier.
   final String id;
+
+  /// Human-readable node label.
   final String caption;
+
+  /// Node category, for example `agent` or `tool`.
   final String kind;
 }
 
+/// Graph model containing agent and tool relationships.
 class AgentGraph {
+  /// Creates a graph with [nodes] and directed [edges].
   AgentGraph({required this.nodes, required this.edges});
 
+  /// All nodes in the graph.
   final List<AgentGraphNode> nodes;
+
+  /// Directed edges represented as `(from, to)` pairs.
   final List<(String, String)> edges;
 }
 
+/// Builds an [AgentGraph] from [rootAgent] and its reachable children/tools.
 Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
   final Map<String, AgentGraphNode> nodes = <String, AgentGraphNode>{};
   final Set<(String, String)> edges = <(String, String)>{};
@@ -60,6 +76,9 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
   );
 }
 
+/// Returns Mermaid flowchart text for the graph rooted at [rootAgent].
+///
+/// Edges in [highlightPairs] are rendered with emphasized connectors.
 Future<String> getAgentGraph(
   BaseAgent rootAgent, {
   Set<(String, String)> highlightPairs = const <(String, String)>{},
