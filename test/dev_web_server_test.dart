@@ -751,7 +751,11 @@ void main() {
         );
         addTearDown(() async {
           if (await sandbox.exists()) {
-            await sandbox.delete(recursive: true);
+            try {
+              await sandbox.delete(recursive: true);
+            } on PathNotFoundException {
+              // Another cleanup path may already remove this sandbox.
+            }
           }
         });
 
@@ -1298,7 +1302,7 @@ void main() {
       expect(createResponse.statusCode, HttpStatus.ok);
 
       final WebSocket socket = await WebSocket.connect(
-        'ws://127.0.0.1:${server.port}/run_live?app_name=test_app&user_id=u1&session_id=$sessionId',
+        'ws://127.0.0.1:${server.port}/run_live?app_name=test_app&user_id=u1&session_id=$sessionId&modalities=TEXT,AUDIO&proactive_audio=true&enable_affective_dialog=true&enable_session_resumption=true',
       );
       addTearDown(() async {
         await socket.close();
@@ -1322,6 +1326,34 @@ void main() {
       final Map<String, dynamic> payload =
           jsonDecode(firstMessage as String) as Map<String, dynamic>;
       expect(payload['author'], isNotNull);
+    });
+
+    test('returns not found for /run when session is missing', () async {
+      final HttpClientRequest runRequest = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/run'),
+      );
+      runRequest.headers.contentType = ContentType.json;
+      runRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': 'missing_session',
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'hello'},
+            ],
+          },
+        }),
+      );
+
+      final HttpClientResponse response = await runRequest.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.notFound);
+      expect(payload['error'], contains('Session not found'));
     });
   });
 }

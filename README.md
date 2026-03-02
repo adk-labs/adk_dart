@@ -334,8 +334,9 @@ void main() {
 ```bash
 dart pub global activate adk_dart
 adk create my_agent
-adk run my_agent
-adk web --port 8000 my_agent
+cd my_agent
+adk run .
+adk web --port 8000 .
 ```
 
 `adk web` starts a local development server and UI at

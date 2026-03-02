@@ -2,19 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 import '../agents/base_agent.dart';
 import '../apps/app.dart';
 import '../auth/credential_service/in_memory_credential_service.dart';
 import '../cli/cli_deploy.dart';
 import '../cli/cli_eval.dart' as cli_eval;
-import '../cli/conformance/_generate_markdown_utils.dart'
-    as conformance_markdown;
-import '../cli/conformance/_generated_file_utils.dart' as conformance_files;
 import '../cli/conformance/adk_web_server_client.dart';
-import '../cli/conformance/cli_record.dart' as conformance_record;
-import '../cli/conformance/cli_test.dart' as conformance_test;
-import '../cli/conformance/test_case.dart';
-import '../cli/plugins/recordings_schema.dart';
 import '../runners/runner.dart';
 import '../events/event.dart';
 import '../sessions/session.dart';
@@ -40,6 +35,7 @@ import '../evaluation/local_eval_service.dart';
 import '../evaluation/local_eval_set_results_manager.dart';
 import '../evaluation/local_eval_sets_manager.dart'
     show LocalEvalSetsManager, loadEvalSetFromFile;
+import '../utils/yaml_utils.dart';
 import 'project.dart';
 import 'runtime.dart';
 import 'web_server.dart';
@@ -521,16 +517,12 @@ class _ParsedConformanceRecordCommand {
   _ParsedConformanceRecordCommand({
     required this.paths,
     required this.baseUri,
-    required this.appName,
     required this.userId,
-    this.sessionId,
   });
 
   final List<String> paths;
   final Uri baseUri;
-  final String appName;
   final String userId;
-  final String? sessionId;
 }
 
 class _ParsedConformanceTestCommand {
@@ -541,7 +533,6 @@ class _ParsedConformanceTestCommand {
     required this.mode,
     required this.generateReport,
     this.reportDir,
-    this.sessionId,
   });
 
   final List<String> paths;
@@ -550,14 +541,79 @@ class _ParsedConformanceTestCommand {
   final String mode;
   final bool generateReport;
   final String? reportDir;
-  final String? sessionId;
 }
 
-class _ResolvedConformanceFiles {
-  _ResolvedConformanceFiles({required this.files, required this.strictFiles});
+class _ConformanceUserMessage {
+  _ConformanceUserMessage({this.text, this.content, this.stateDelta});
 
-  final List<String> files;
-  final Set<String> strictFiles;
+  final String? text;
+  final Map<String, Object?>? content;
+  final Map<String, Object?>? stateDelta;
+}
+
+class _ConformanceTestSpec {
+  _ConformanceTestSpec({
+    required this.description,
+    required this.agent,
+    required this.initialState,
+    required this.userMessages,
+  });
+
+  final String description;
+  final String agent;
+  final Map<String, Object?> initialState;
+  final List<_ConformanceUserMessage> userMessages;
+}
+
+class _ConformanceTestCase {
+  _ConformanceTestCase({
+    required this.category,
+    required this.name,
+    required this.dir,
+    required this.spec,
+  });
+
+  final String category;
+  final String name;
+  final Directory dir;
+  final _ConformanceTestSpec spec;
+}
+
+class _ConformanceCaseResult {
+  _ConformanceCaseResult({
+    required this.category,
+    required this.name,
+    required this.success,
+    this.errorMessage,
+    this.description,
+  });
+
+  final String category;
+  final String name;
+  final bool success;
+  final String? errorMessage;
+  final String? description;
+}
+
+class _ConformanceTestSummary {
+  _ConformanceTestSummary({
+    required this.totalTests,
+    required this.passedTests,
+    required this.failedTests,
+    required this.results,
+  });
+
+  final int totalTests;
+  final int passedTests;
+  final int failedTests;
+  final List<_ConformanceCaseResult> results;
+
+  double get successRate {
+    if (totalTests == 0) {
+      return 0;
+    }
+    return (passedTests / totalTests) * 100;
+  }
 }
 
 Future<int> _runEvalCliCommand(List<String> args, {required IOSink out}) async {
@@ -741,152 +797,840 @@ Future<int> _runConformanceCliCommand(
     case 'record':
       final _ParsedConformanceRecordCommand command =
           _parseConformanceRecordCommand(commandArgs);
-      final _ResolvedConformanceFiles files = await _resolveConformanceFiles(
-        command.paths,
-      );
-      if (files.files.isEmpty) {
-        throw CliUsageError('No conformance test case files were found.');
-      }
-
-      final AdkWebServerClient client = AdkWebServerClient(command.baseUri);
-      int recordedCaseCount = 0;
-      for (final String filePath in files.files) {
-        final List<ConformanceTestCase> testCases =
-            await _readConformanceCasesFromFile(
-              filePath,
-              strict: files.strictFiles.contains(filePath),
-            );
-        if (testCases.isEmpty) {
-          continue;
-        }
-        final List<Map<String, Object?>> recordingsJson =
-            <Map<String, Object?>>[];
-        for (int index = 0; index < testCases.length; index += 1) {
-          final ConformanceTestCase testCase = testCases[index];
-          final String sessionId =
-              command.sessionId ??
-              'conformance_${DateTime.now().millisecondsSinceEpoch}_${index + 1}';
-          final SessionRecording recording = await conformance_record
-              .recordConformanceSession(
-                client: client,
-                appName: command.appName,
-                userId: command.userId,
-                sessionId: sessionId,
-                turns: testCase.turns,
-              );
-          recordingsJson.add(<String, Object?>{
-            'test_case_name': testCase.name,
-            'recording': recording.toJson(),
-          });
-        }
-        if (recordingsJson.isEmpty) {
-          continue;
-        }
-        recordedCaseCount += recordingsJson.length;
-        final String outputPath = '$filePath.recordings.json';
-        await File(outputPath).writeAsString(
-          const JsonEncoder.withIndent('  ').convert(recordingsJson),
-        );
-        out.writeln('Recorded ${recordingsJson.length} case(s): $outputPath');
-      }
-
-      if (recordedCaseCount == 0) {
-        throw CliUsageError('No conformance test cases found to record.');
-      }
-      out.writeln(
-        'Conformance record completed. Cases recorded: $recordedCaseCount',
-      );
+      await _runConformanceRecord(command, out: out);
       return 0;
     case 'test':
       final _ParsedConformanceTestCommand command =
           _parseConformanceTestCommand(commandArgs);
-      if (command.mode != 'replay') {
-        throw CliUsageError(
-          'conformance test currently supports only --mode replay.',
-        );
-      }
-
-      final _ResolvedConformanceFiles files = await _resolveConformanceFiles(
-        command.paths,
+      final _ConformanceTestSummary summary = await _runConformanceTest(
+        command,
+        out: out,
       );
-      if (files.files.isEmpty) {
-        throw CliUsageError('No conformance test case files were found.');
-      }
-
-      final AdkWebServerClient client = AdkWebServerClient(command.baseUri);
-      final List<ConformanceTestResult> results = <ConformanceTestResult>[];
-      int caseCounter = 0;
-      for (final String filePath in files.files) {
-        final List<ConformanceTestCase> testCases =
-            await _readConformanceCasesFromFile(
-              filePath,
-              strict: files.strictFiles.contains(filePath),
-            );
-        for (final ConformanceTestCase testCase in testCases) {
-          caseCounter += 1;
-          String effectiveSessionId =
-              command.sessionId ??
-              'conformance_test_${DateTime.now().millisecondsSinceEpoch}_$caseCounter';
-          try {
-            final Map<String, Object?> created = await client.createSession(
-              userId: command.userId,
-            );
-            effectiveSessionId =
-                _extractSessionIdFromCreateSession(created) ??
-                effectiveSessionId;
-          } on Exception {
-            // Continue with fallback session id if server-side session creation
-            // endpoint is unavailable.
-          }
-          results.add(
-            await conformance_test.runConformanceTestCase(
-              client: client,
-              testCase: testCase,
-              userId: command.userId,
-              sessionId: effectiveSessionId,
-            ),
-          );
-        }
-      }
-
-      if (results.isEmpty) {
-        throw CliUsageError('No conformance test cases were executed.');
-      }
-
-      int passed = 0;
-      int failed = 0;
-      for (final ConformanceTestResult result in results) {
-        if (result.passed) {
-          passed += 1;
-        } else {
-          failed += 1;
-        }
-        out.writeln(
-          '${result.testCase.name}: ${result.passed ? 'passed' : 'failed'}',
-        );
-      }
-      out.writeln('Conformance Summary');
-      out.writeln('  Passed: $passed');
-      out.writeln('  Failed: $failed');
-
-      if (command.generateReport) {
-        final Directory reportDir = Directory(
-          command.reportDir ?? Directory.current.path,
-        ).absolute;
-        await reportDir.create(recursive: true);
-        final String reportFileName =
-            'conformance_report_${DateTime.now().toUtc().toIso8601String().replaceAll(':', '-')}.md';
-        final String reportPath =
-            '${reportDir.path}${Platform.pathSeparator}$reportFileName';
-        await File(
-          reportPath,
-        ).writeAsString(conformance_markdown.generateMarkdownReport(results));
-        out.writeln('Conformance report written to $reportPath');
-      }
-      return failed == 0 ? 0 : 1;
+      return summary.failedTests == 0 ? 0 : 1;
     default:
       throw CliUsageError('Unknown conformance subcommand: $subcommand');
   }
+}
+
+Future<void> _runConformanceRecord(
+  _ParsedConformanceRecordCommand command, {
+  required IOSink out,
+}) async {
+  out.writeln('Generating ADK conformance tests...');
+  final List<_ConformanceTestCase> testCases = await _discoverConformanceCases(
+    command.paths,
+    out: out,
+    replayMode: false,
+  );
+  if (testCases.isEmpty) {
+    out.writeln('No test specs found to process.');
+    out.writeln('Conformance test generation complete!');
+    return;
+  }
+
+  out.writeln('\nProcessing ${testCases.length} test cases...');
+
+  final AdkWebServerClient client = AdkWebServerClient(command.baseUri);
+  try {
+    for (final _ConformanceTestCase testCase in testCases) {
+      try {
+        await _recordConformanceCase(client, testCase, userId: command.userId);
+        out.writeln(
+          'Generated conformance test files for: ${testCase.category}/${testCase.name}',
+        );
+      } on Exception catch (error) {
+        out.writeln(
+          'Failed to generate ${testCase.category}/${testCase.name}: $error',
+        );
+      }
+    }
+  } finally {
+    await client.close();
+  }
+
+  out.writeln('\nConformance test generation complete!');
+}
+
+Future<void> _recordConformanceCase(
+  AdkWebServerClient client,
+  _ConformanceTestCase testCase, {
+  required String userId,
+}) async {
+  final File generatedSessionFile = File(
+    '${testCase.dir.path}${Platform.pathSeparator}generated-session.yaml',
+  );
+  final File generatedRecordingsFile = File(
+    '${testCase.dir.path}${Platform.pathSeparator}generated-recordings.yaml',
+  );
+  if (await generatedSessionFile.exists()) {
+    await generatedSessionFile.delete();
+  }
+  if (await generatedRecordingsFile.exists()) {
+    await generatedRecordingsFile.delete();
+  }
+
+  final Map<String, Object?> session = await client.createSession(
+    appName: testCase.spec.agent,
+    userId: userId,
+    state: testCase.spec.initialState,
+  );
+  final String sessionId =
+      _extractSessionIdFromCreateSession(session) ??
+      (throw StateError('Failed to create session id for conformance record.'));
+
+  final List<Map<String, Object?>> recordedEvents = <Map<String, Object?>>[];
+  final Map<String, String> functionCallNameToId = <String, String>{};
+  for (
+    int userMessageIndex = 0;
+    userMessageIndex < testCase.spec.userMessages.length;
+    userMessageIndex += 1
+  ) {
+    final _ConformanceUserMessage userMessage =
+        testCase.spec.userMessages[userMessageIndex];
+    final Map<String, Object?> stateDelta = <String, Object?>{
+      if (userMessage.stateDelta != null) ...userMessage.stateDelta!,
+      '_adk_recordings_config': <String, Object?>{
+        'dir': testCase.dir.path,
+        'user_message_index': userMessageIndex,
+      },
+    };
+    final List<Map<String, Object?>> events = await client.runAgentSse(
+      appName: testCase.spec.agent,
+      userId: userId,
+      sessionId: sessionId,
+      newMessage: _buildConformanceRunMessage(
+        userMessage,
+        functionCallNameToId,
+      ),
+      stateDelta: stateDelta,
+      streaming: false,
+    );
+    recordedEvents.addAll(events);
+    _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
+  }
+
+  final Map<String, Object?> updatedSession = await client.getSession(
+    appName: testCase.spec.agent,
+    userId: userId,
+    sessionId: sessionId,
+  );
+
+  final Map<String, Object?> sanitizedSession = _sanitizeConformanceSessionMap(
+    updatedSession,
+  );
+  final Map<String, Object?> sanitizedRecordings = <String, Object?>{
+    'events': recordedEvents
+        .map(
+          (Map<String, Object?> event) => _sanitizeConformanceEventMap(event),
+        )
+        .toList(growable: false),
+  };
+  dumpPydanticToYaml(
+    sanitizedSession,
+    generatedSessionFile.path,
+    sortKeys: false,
+  );
+  dumpPydanticToYaml(
+    sanitizedRecordings,
+    generatedRecordingsFile.path,
+    sortKeys: false,
+  );
+}
+
+Object? _buildConformanceRunMessage(
+  _ConformanceUserMessage userMessage,
+  Map<String, String> functionCallNameToId,
+) {
+  if (userMessage.content != null) {
+    final Object? clonedContent = _deepCloneJsonValue(userMessage.content);
+    if (clonedContent is! Map) {
+      return userMessage.content;
+    }
+    final Map<String, Object?> content = clonedContent.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+    if (content['parts'] is! List) {
+      return content;
+    }
+    final List<Object?> parts = List<Object?>.from(content['parts']! as List);
+    if (parts.isEmpty || parts.first is! Map) {
+      return content;
+    }
+    final Map<String, Object?> firstPart = (parts.first as Map).map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+    final Map<String, Object?> functionResponse = _asObjectMap(
+      firstPart['function_response'] ?? firstPart['functionResponse'],
+    );
+    final String? functionName = _emptyToNull(
+      '${functionResponse['name'] ?? ''}',
+    );
+    if (functionName == null) {
+      return content;
+    }
+    final String? functionCallId = functionCallNameToId[functionName];
+    if (functionCallId == null) {
+      throw StateError(
+        'Function response for $functionName does not match any pending function call.',
+      );
+    }
+    functionResponse['id'] = functionCallId;
+    firstPart['function_response'] = functionResponse;
+    firstPart['functionResponse'] = functionResponse;
+    parts[0] = firstPart;
+    content['parts'] = parts;
+    return content;
+  }
+  if (userMessage.text != null) {
+    return userMessage.text;
+  }
+  return '';
+}
+
+Future<_ConformanceTestSummary> _runConformanceTest(
+  _ParsedConformanceTestCommand command, {
+  required IOSink out,
+}) async {
+  out.writeln('==================================================');
+  out.writeln('Running ADK conformance tests in ${command.mode} mode...');
+  out.writeln('==================================================');
+
+  final List<_ConformanceTestCase> testCases = await _discoverConformanceCases(
+    command.paths,
+    out: out,
+    replayMode: command.mode == 'replay',
+  );
+  if (testCases.isEmpty) {
+    out.writeln('No test cases found!');
+    final _ConformanceTestSummary emptySummary = _ConformanceTestSummary(
+      totalTests: 0,
+      passedTests: 0,
+      failedTests: 0,
+      results: <_ConformanceCaseResult>[],
+    );
+    _printConformanceSummary(emptySummary, out: out);
+    return emptySummary;
+  }
+
+  out.writeln(
+    '\nFound ${testCases.length} test cases to run in ${command.mode} mode',
+  );
+
+  final AdkWebServerClient client = AdkWebServerClient(command.baseUri);
+  final List<_ConformanceCaseResult> results = <_ConformanceCaseResult>[];
+  Map<String, Object?> versionData = <String, Object?>{};
+  try {
+    for (final _ConformanceTestCase testCase in testCases) {
+      out.write('Running ${testCase.category}/${testCase.name}...');
+      late final _ConformanceCaseResult result;
+      if (command.mode == 'replay') {
+        result = await _runConformanceReplayCase(
+          client,
+          testCase,
+          userId: command.userId,
+        );
+      } else {
+        result = _ConformanceCaseResult(
+          category: testCase.category,
+          name: testCase.name,
+          success: false,
+          errorMessage: 'Live mode not yet implemented',
+          description: testCase.spec.description,
+        );
+      }
+      results.add(result);
+      if (result.success) {
+        out.writeln(' PASS');
+      } else {
+        out.writeln(' FAIL');
+        if (result.errorMessage != null &&
+            result.errorMessage!.trim().isNotEmpty) {
+          out.writeln('Error: ${result.errorMessage}');
+        }
+      }
+    }
+    try {
+      versionData = await client.getVersionData();
+    } on Exception {
+      versionData = <String, Object?>{};
+    }
+  } finally {
+    await client.close();
+  }
+
+  final int passed = results.where((item) => item.success).length;
+  final _ConformanceTestSummary summary = _ConformanceTestSummary(
+    totalTests: results.length,
+    passedTests: passed,
+    failedTests: results.length - passed,
+    results: results,
+  );
+  _printConformanceSummary(summary, out: out);
+
+  if (command.generateReport) {
+    final String reportPath = await _writeConformanceMarkdownReport(
+      summary,
+      reportDir: command.reportDir,
+      versionData: versionData,
+    );
+    out.writeln('Conformance report written to $reportPath');
+  }
+  return summary;
+}
+
+Future<_ConformanceCaseResult> _runConformanceReplayCase(
+  AdkWebServerClient client,
+  _ConformanceTestCase testCase, {
+  required String userId,
+}) async {
+  final File sessionFile = File(
+    '${testCase.dir.path}${Platform.pathSeparator}generated-session.yaml',
+  );
+  if (!await sessionFile.exists()) {
+    return _ConformanceCaseResult(
+      category: testCase.category,
+      name: testCase.name,
+      success: false,
+      errorMessage: 'No recorded session found for replay comparison',
+      description: testCase.spec.description,
+    );
+  }
+
+  final Map<String, Object?> session = await client.createSession(
+    appName: testCase.spec.agent,
+    userId: userId,
+    state: testCase.spec.initialState,
+  );
+  final String sessionId =
+      _extractSessionIdFromCreateSession(session) ??
+      (throw StateError('Failed to create session id for conformance test.'));
+  final Map<String, String> functionCallNameToId = <String, String>{};
+  try {
+    for (
+      int userMessageIndex = 0;
+      userMessageIndex < testCase.spec.userMessages.length;
+      userMessageIndex += 1
+    ) {
+      final _ConformanceUserMessage userMessage =
+          testCase.spec.userMessages[userMessageIndex];
+      final Map<String, Object?> stateDelta = <String, Object?>{
+        if (userMessage.stateDelta != null) ...userMessage.stateDelta!,
+        '_adk_replay_config': <String, Object?>{
+          'dir': testCase.dir.path,
+          'user_message_index': userMessageIndex,
+        },
+      };
+      final List<Map<String, Object?>> events = await client.runAgentSse(
+        appName: testCase.spec.agent,
+        userId: userId,
+        sessionId: sessionId,
+        newMessage: _buildConformanceRunMessage(
+          userMessage,
+          functionCallNameToId,
+        ),
+        stateDelta: stateDelta,
+        streaming: false,
+      );
+      _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
+    }
+
+    final Map<String, Object?> finalSession = await client.getSession(
+      appName: testCase.spec.agent,
+      userId: userId,
+      sessionId: sessionId,
+    );
+    final Object? recordedRaw = loadYamlFile(sessionFile.path);
+    if (recordedRaw is! Map) {
+      return _ConformanceCaseResult(
+        category: testCase.category,
+        name: testCase.name,
+        success: false,
+        errorMessage: 'Recorded session file format is invalid.',
+        description: testCase.spec.description,
+      );
+    }
+    final Map<String, Object?> recordedSession = recordedRaw.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+
+    final List<Map<String, Object?>> actualEvents = _readMapList(
+      finalSession['events'],
+    );
+    final List<Map<String, Object?>> recordedEvents = _readMapList(
+      recordedSession['events'],
+    );
+    if (actualEvents.length != recordedEvents.length) {
+      return _ConformanceCaseResult(
+        category: testCase.category,
+        name: testCase.name,
+        success: false,
+        errorMessage:
+            'Event count mismatch - Actual: ${actualEvents.length}, Recorded: ${recordedEvents.length}',
+        description: testCase.spec.description,
+      );
+    }
+
+    for (int i = 0; i < actualEvents.length; i += 1) {
+      final Map<String, Object?> normalizedActual =
+          _sanitizeConformanceEventMap(actualEvents[i]);
+      final Map<String, Object?> normalizedRecorded =
+          _sanitizeConformanceEventMap(recordedEvents[i]);
+      if (!_deepMapEquals(normalizedActual, normalizedRecorded)) {
+        return _ConformanceCaseResult(
+          category: testCase.category,
+          name: testCase.name,
+          success: false,
+          errorMessage: _conformanceMismatchMessage(
+            context: 'event $i',
+            actual: normalizedActual,
+            recorded: normalizedRecorded,
+          ),
+          description: testCase.spec.description,
+        );
+      }
+    }
+
+    final Map<String, Object?> normalizedSession =
+        _sanitizeConformanceSessionMap(finalSession);
+    final Map<String, Object?> normalizedRecordedSession =
+        _sanitizeConformanceSessionMap(recordedSession);
+    if (!_deepMapEquals(normalizedSession, normalizedRecordedSession)) {
+      return _ConformanceCaseResult(
+        category: testCase.category,
+        name: testCase.name,
+        success: false,
+        errorMessage: _conformanceMismatchMessage(
+          context: 'session',
+          actual: normalizedSession,
+          recorded: normalizedRecordedSession,
+        ),
+        description: testCase.spec.description,
+      );
+    }
+
+    return _ConformanceCaseResult(
+      category: testCase.category,
+      name: testCase.name,
+      success: true,
+      description: testCase.spec.description,
+    );
+  } on Exception catch (error) {
+    return _ConformanceCaseResult(
+      category: testCase.category,
+      name: testCase.name,
+      success: false,
+      errorMessage: 'Replay verification failed: $error',
+      description: testCase.spec.description,
+    );
+  } finally {
+    try {
+      await client.deleteSession(
+        appName: testCase.spec.agent,
+        userId: userId,
+        sessionId: sessionId,
+      );
+    } on Exception {
+      // Best effort cleanup.
+    }
+  }
+}
+
+void _printConformanceSummary(
+  _ConformanceTestSummary summary, {
+  required IOSink out,
+}) {
+  out.writeln('\n==================================================');
+  out.writeln('CONFORMANCE TEST SUMMARY');
+  out.writeln('==================================================');
+  if (summary.totalTests == 0) {
+    out.writeln('No tests were run.');
+    return;
+  }
+  out.writeln('Total tests: ${summary.totalTests}');
+  out.writeln('Passed: ${summary.passedTests}');
+  out.writeln('Failed: ${summary.failedTests}');
+  out.writeln('Success rate: ${summary.successRate.toStringAsFixed(1)}%');
+
+  if (summary.failedTests == 0) {
+    out.writeln('\nAll tests passed.');
+    return;
+  }
+
+  out.writeln('\nFailed tests:');
+  for (final _ConformanceCaseResult result in summary.results) {
+    if (result.success) {
+      continue;
+    }
+    out.writeln('\n${result.category}/${result.name}');
+    if (result.errorMessage != null && result.errorMessage!.trim().isNotEmpty) {
+      out.writeln(result.errorMessage!);
+    }
+  }
+}
+
+Future<String> _writeConformanceMarkdownReport(
+  _ConformanceTestSummary summary, {
+  required String? reportDir,
+  required Map<String, Object?> versionData,
+}) async {
+  final Directory targetDir = Directory(
+    reportDir ?? Directory.current.path,
+  ).absolute;
+  await targetDir.create(recursive: true);
+  final String serverVersion =
+      _emptyToNull('${versionData['server_version'] ?? ''}') ?? 'unknown';
+  final String reportName =
+      'python_${serverVersion.replaceAll('.', '_')}_report.md';
+  final String outputPath =
+      '${targetDir.path}${Platform.pathSeparator}$reportName';
+
+  final StringBuffer out = StringBuffer();
+  out.writeln('# ADK Conformance Report');
+  out.writeln();
+  if (versionData.isNotEmpty) {
+    out.writeln('## Version');
+    for (final MapEntry<String, Object?> entry in versionData.entries) {
+      out.writeln('- ${entry.key}: ${entry.value}');
+    }
+    out.writeln();
+  }
+  out.writeln('## Summary');
+  out.writeln('- Total: ${summary.totalTests}');
+  out.writeln('- Passed: ${summary.passedTests}');
+  out.writeln('- Failed: ${summary.failedTests}');
+  out.writeln('- Success rate: ${summary.successRate.toStringAsFixed(1)}%');
+  out.writeln();
+  out.writeln('## Results');
+  out.writeln('| Test | Status | Description | Error |');
+  out.writeln('| --- | --- | --- | --- |');
+  for (final _ConformanceCaseResult result in summary.results) {
+    final String testName = '${result.category}/${result.name}';
+    final String status = result.success ? 'PASS' : 'FAIL';
+    final String description = (result.description ?? '').replaceAll(
+      '|',
+      r'\|',
+    );
+    final String error = (result.errorMessage ?? '').replaceAll('|', r'\|');
+    out.writeln('| $testName | $status | $description | $error |');
+  }
+
+  await File(outputPath).writeAsString(out.toString().trimRight());
+  return outputPath;
+}
+
+Object? _deepCloneJsonValue(Object? value) {
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) =>
+          MapEntry('$key', _deepCloneJsonValue(item)),
+    );
+  }
+  if (value is List) {
+    return value
+        .map((Object? item) => _deepCloneJsonValue(item))
+        .toList(growable: false);
+  }
+  return value;
+}
+
+void _updateConformanceFunctionCallNameToIdMap(
+  Iterable<Map<String, Object?>> events,
+  Map<String, String> functionCallNameToId,
+) {
+  for (final Map<String, Object?> event in events) {
+    final Map<String, Object?> content = _asObjectMap(event['content']);
+    final Object? rawParts = content['parts'];
+    if (rawParts is! List) {
+      continue;
+    }
+    for (final Object? rawPart in rawParts) {
+      if (rawPart is! Map) {
+        continue;
+      }
+      final Map<String, Object?> part = rawPart.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final Map<String, Object?> functionCall = _asObjectMap(
+        part['function_call'] ?? part['functionCall'],
+      );
+      final String? name = _emptyToNull('${functionCall['name'] ?? ''}');
+      final String? id = _emptyToNull('${functionCall['id'] ?? ''}');
+      if (name == null || id == null) {
+        continue;
+      }
+      functionCallNameToId[name] = id;
+    }
+  }
+}
+
+Future<List<_ConformanceTestCase>> _discoverConformanceCases(
+  List<String> rawPaths, {
+  required IOSink out,
+  required bool replayMode,
+}) async {
+  final List<String> paths = rawPaths.isEmpty ? <String>['tests'] : rawPaths;
+  final List<_ConformanceTestCase> testCases = <_ConformanceTestCase>[];
+
+  for (final String rawPath in paths) {
+    final String normalized = rawPath.trim();
+    if (normalized.isEmpty) {
+      continue;
+    }
+    final Directory dir = Directory(normalized).absolute;
+    if (!await dir.exists()) {
+      out.writeln('Invalid path: $normalized');
+      continue;
+    }
+
+    await for (final FileSystemEntity entity in dir.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) {
+        continue;
+      }
+      final String fileName = entity.uri.pathSegments.isEmpty
+          ? ''
+          : entity.uri.pathSegments.last;
+      if (fileName != 'spec.yaml') {
+        continue;
+      }
+      final Directory caseDir = entity.parent.absolute;
+      final String category = projectDirName(caseDir.parent.path);
+      final String name = projectDirName(caseDir.path);
+      if (replayMode) {
+        final File recordingsFile = File(
+          '${caseDir.path}${Platform.pathSeparator}generated-recordings.yaml',
+        );
+        if (!await recordingsFile.exists()) {
+          out.writeln('Skipping $category/$name: no recordings');
+          continue;
+        }
+      }
+      try {
+        final _ConformanceTestSpec spec = _loadConformanceSpec(entity.path);
+        testCases.add(
+          _ConformanceTestCase(
+            category: category,
+            name: name,
+            dir: caseDir,
+            spec: spec,
+          ),
+        );
+        if (!replayMode) {
+          out.writeln('Loaded test spec: $category/$name');
+        }
+      } on Exception catch (error) {
+        out.writeln('Failed to load ${entity.path}: $error');
+      }
+    }
+  }
+
+  testCases.sort((a, b) {
+    final int categoryCompare = a.category.compareTo(b.category);
+    if (categoryCompare != 0) {
+      return categoryCompare;
+    }
+    return a.name.compareTo(b.name);
+  });
+  return testCases;
+}
+
+_ConformanceTestSpec _loadConformanceSpec(String specFilePath) {
+  final Object? decoded = loadYamlFile(specFilePath);
+  if (decoded is! Map) {
+    throw const FormatException('spec.yaml must contain a YAML mapping.');
+  }
+  final Map<String, Object?> map = decoded.map(
+    (Object? key, Object? value) => MapEntry('$key', value),
+  );
+  final String description = (map['description'] ?? '').toString();
+  final String agent = (map['agent'] ?? '').toString().trim();
+  if (agent.isEmpty) {
+    throw const FormatException('spec.yaml must include a non-empty `agent`.');
+  }
+
+  final Map<String, Object?> initialState = _asObjectMap(map['initial_state']);
+  final List<_ConformanceUserMessage> userMessages =
+      <_ConformanceUserMessage>[];
+  final Object? rawMessages = map['user_messages'];
+  if (rawMessages is List) {
+    for (int i = 0; i < rawMessages.length; i += 1) {
+      final Object? raw = rawMessages[i];
+      if (raw is! Map) {
+        throw FormatException('user_messages[$i] must be a map.');
+      }
+      final Map<String, Object?> message = raw.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final String? text = _emptyToNull('${message['text'] ?? ''}');
+      final Map<String, Object?>? content = message['content'] is Map
+          ? _asObjectMap(message['content'])
+          : null;
+      final Map<String, Object?>? stateDelta = message['state_delta'] is Map
+          ? _asObjectMap(message['state_delta'])
+          : null;
+      if (text == null && (content == null || content.isEmpty)) {
+        throw FormatException(
+          'user_messages[$i] must have either `text` or `content`.',
+        );
+      }
+      userMessages.add(
+        _ConformanceUserMessage(
+          text: text,
+          content: content,
+          stateDelta: stateDelta,
+        ),
+      );
+    }
+  }
+
+  return _ConformanceTestSpec(
+    description: description,
+    agent: agent,
+    initialState: initialState,
+    userMessages: userMessages,
+  );
+}
+
+Map<String, Object?> _asObjectMap(Object? value) {
+  if (value is! Map) {
+    return <String, Object?>{};
+  }
+  return value.map((Object? key, Object? item) => MapEntry('$key', item));
+}
+
+List<Map<String, Object?>> _readMapList(Object? value) {
+  if (value is! List) {
+    return <Map<String, Object?>>[];
+  }
+  return value
+      .whereType<Map>()
+      .map(
+        (Map item) =>
+            item.map((Object? key, Object? value) => MapEntry('$key', value)),
+      )
+      .toList(growable: false);
+}
+
+Map<String, Object?> _sanitizeConformanceEventMap(Map<String, Object?> event) {
+  final Map<String, Object?> normalized = _deepCopyMap(event);
+  final List<String> eventFieldsToRemove = <String>[
+    'id',
+    'timestamp',
+    'invocation_id',
+    'invocationId',
+    'long_running_tool_ids',
+    'longRunningToolIds',
+  ];
+  for (final String key in eventFieldsToRemove) {
+    normalized.remove(key);
+  }
+
+  final Map<String, Object?> content = _asObjectMap(
+    normalized['content'] ?? normalized['final_response'],
+  );
+  final List<Map<String, Object?>> parts = _readMapList(content['parts']);
+  for (final Map<String, Object?> part in parts) {
+    part.remove('thought_signature');
+    part.remove('thoughtSignature');
+    final Map<String, Object?> functionCall = _asObjectMap(
+      part['function_call'] ?? part['functionCall'],
+    );
+    functionCall.remove('id');
+    if (functionCall.isNotEmpty) {
+      part['function_call'] = functionCall;
+      part['functionCall'] = functionCall;
+    }
+    final Map<String, Object?> functionResponse = _asObjectMap(
+      part['function_response'] ?? part['functionResponse'],
+    );
+    functionResponse.remove('id');
+    if (functionResponse.isNotEmpty) {
+      part['function_response'] = functionResponse;
+      part['functionResponse'] = functionResponse;
+    }
+  }
+  if (parts.isNotEmpty) {
+    content['parts'] = parts;
+    normalized['content'] = content;
+  }
+
+  final Map<String, Object?> actions = _asObjectMap(normalized['actions']);
+  final Map<String, Object?> stateDelta = _asObjectMap(
+    actions['state_delta'] ?? actions['stateDelta'],
+  );
+  stateDelta.remove('_adk_recordings_config');
+  stateDelta.remove('_adk_replay_config');
+  if (stateDelta.isNotEmpty) {
+    actions['state_delta'] = stateDelta;
+    actions['stateDelta'] = stateDelta;
+  } else {
+    actions.remove('state_delta');
+    actions.remove('stateDelta');
+  }
+  actions.remove('requested_auth_configs');
+  actions.remove('requestedAuthConfigs');
+  actions.remove('requested_tool_confirmations');
+  actions.remove('requestedToolConfirmations');
+  if (actions.isNotEmpty) {
+    normalized['actions'] = actions;
+  } else {
+    normalized.remove('actions');
+  }
+  return normalized;
+}
+
+Map<String, Object?> _sanitizeConformanceSessionMap(
+  Map<String, Object?> session,
+) {
+  final Map<String, Object?> normalized = _deepCopyMap(session);
+  normalized.remove('id');
+  normalized.remove('last_update_time');
+  normalized.remove('lastUpdateTime');
+  normalized.remove('events');
+
+  final Map<String, Object?> state = _asObjectMap(normalized['state']);
+  state.remove('_adk_recordings_config');
+  state.remove('_adk_replay_config');
+  if (state.isEmpty) {
+    normalized.remove('state');
+  } else {
+    normalized['state'] = state;
+  }
+  return normalized;
+}
+
+Map<String, Object?> _deepCopyMap(Map<String, Object?> input) {
+  final Object? normalized = _normalizeJsonForStableHash(input);
+  if (normalized is Map<String, Object?>) {
+    return normalized;
+  }
+  if (normalized is Map) {
+    return normalized.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+  }
+  return <String, Object?>{};
+}
+
+bool _deepMapEquals(Map<String, Object?> left, Map<String, Object?> right) {
+  return jsonEncode(_normalizeJsonForStableHash(left)) ==
+      jsonEncode(_normalizeJsonForStableHash(right));
+}
+
+String _conformanceMismatchMessage({
+  required String context,
+  required Map<String, Object?> actual,
+  required Map<String, Object?> recorded,
+}) {
+  final String actualJson = const JsonEncoder.withIndent(
+    '  ',
+  ).convert(_normalizeJsonForStableHash(actual));
+  final String recordedJson = const JsonEncoder.withIndent(
+    '  ',
+  ).convert(_normalizeJsonForStableHash(recorded));
+  return '$context mismatch -\nActual:\n$actualJson\nRecorded:\n$recordedJson';
 }
 
 Future<int> _runMigrateCliCommand(
@@ -1442,12 +2186,10 @@ String _stableScenarioId(ConversationScenario scenario) {
   final String canonical = jsonEncode(
     _normalizeJsonForStableHash(scenario.toJson()),
   );
-  int hash = 0x811c9dc5;
-  for (final int codeUnit in canonical.codeUnits) {
-    hash ^= codeUnit;
-    hash = (hash * 0x01000193) & 0xffffffff;
-  }
-  return hash.toRadixString(16).padLeft(8, '0').substring(0, 8);
+  final String digest = crypto.sha256
+      .convert(utf8.encode(canonical))
+      .toString();
+  return digest.substring(0, 8);
 }
 
 Object? _normalizeJsonForStableHash(Object? value) {
@@ -1473,9 +2215,7 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
 ) {
   final List<String> paths = <String>[];
   String baseUrl = 'http://127.0.0.1:8000';
-  String appName = 'app';
-  String userId = 'test_user';
-  String? sessionId;
+  String userId = 'adk_conformance_test_user';
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
     if (arg == '--base_url') {
@@ -1487,15 +2227,6 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
       baseUrl = arg.substring('--base_url='.length);
       continue;
     }
-    if (arg == '--app_name') {
-      appName = _nextArg(args, i, '--app_name');
-      i += 1;
-      continue;
-    }
-    if (arg.startsWith('--app_name=')) {
-      appName = arg.substring('--app_name='.length);
-      continue;
-    }
     if (arg == '--user_id') {
       userId = _nextArg(args, i, '--user_id');
       i += 1;
@@ -1503,15 +2234,6 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
     }
     if (arg.startsWith('--user_id=')) {
       userId = arg.substring('--user_id='.length);
-      continue;
-    }
-    if (arg == '--session_id') {
-      sessionId = _nextArg(args, i, '--session_id');
-      i += 1;
-      continue;
-    }
-    if (arg.startsWith('--session_id=')) {
-      sessionId = arg.substring('--session_id='.length);
       continue;
     }
     if (arg.startsWith('-')) {
@@ -1522,20 +2244,17 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
   return _ParsedConformanceRecordCommand(
     paths: paths,
     baseUri: Uri.parse(baseUrl),
-    appName: _emptyToNull(appName) ?? 'app',
-    userId: _emptyToNull(userId) ?? 'test_user',
-    sessionId: _emptyToNull(sessionId),
+    userId: _emptyToNull(userId) ?? 'adk_conformance_test_user',
   );
 }
 
 _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
   final List<String> paths = <String>[];
   String baseUrl = 'http://127.0.0.1:8000';
-  String userId = 'test_user';
+  String userId = 'adk_conformance_test_user';
   String mode = 'replay';
   bool generateReport = false;
   String? reportDir;
-  String? sessionId;
 
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
@@ -1579,15 +2298,6 @@ _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
       reportDir = arg.substring('--report_dir='.length);
       continue;
     }
-    if (arg == '--session_id') {
-      sessionId = _nextArg(args, i, '--session_id');
-      i += 1;
-      continue;
-    }
-    if (arg.startsWith('--session_id=')) {
-      sessionId = arg.substring('--session_id='.length);
-      continue;
-    }
     if (arg.startsWith('-')) {
       throw CliUsageError('Unknown option for conformance test: $arg');
     }
@@ -1600,79 +2310,11 @@ _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
   return _ParsedConformanceTestCommand(
     paths: paths,
     baseUri: Uri.parse(baseUrl),
-    userId: _emptyToNull(userId) ?? 'test_user',
+    userId: _emptyToNull(userId) ?? 'adk_conformance_test_user',
     mode: normalizedMode,
     generateReport: generateReport,
     reportDir: _emptyToNull(reportDir),
-    sessionId: _emptyToNull(sessionId),
   );
-}
-
-Future<_ResolvedConformanceFiles> _resolveConformanceFiles(
-  List<String> rawPaths,
-) async {
-  final List<String> inputPaths = rawPaths.isEmpty
-      ? <String>['tests']
-      : rawPaths;
-  final Set<String> files = <String>{};
-  final Set<String> strictFiles = <String>{};
-
-  for (final String rawPath in inputPaths) {
-    final String normalized = rawPath.trim();
-    if (normalized.isEmpty) {
-      continue;
-    }
-    final String absolute = FileSystemEntity.isDirectorySync(normalized)
-        ? Directory(normalized).absolute.path
-        : File(normalized).absolute.path;
-    final FileSystemEntityType type = await FileSystemEntity.type(absolute);
-    if (type == FileSystemEntityType.notFound) {
-      throw CliUsageError('Conformance path not found: $normalized');
-    }
-    if (type == FileSystemEntityType.file) {
-      files.add(absolute);
-      strictFiles.add(absolute);
-      continue;
-    }
-    await for (final FileSystemEntity entity in Directory(
-      absolute,
-    ).list(recursive: true, followLinks: false)) {
-      if (entity is! File) {
-        continue;
-      }
-      if (!entity.path.toLowerCase().endsWith('.json')) {
-        continue;
-      }
-      files.add(entity.absolute.path);
-    }
-  }
-
-  final List<String> sortedFiles = files.toList(growable: false)..sort();
-  return _ResolvedConformanceFiles(
-    files: sortedFiles,
-    strictFiles: strictFiles,
-  );
-}
-
-Future<List<ConformanceTestCase>> _readConformanceCasesFromFile(
-  String filePath, {
-  required bool strict,
-}) async {
-  try {
-    final List<ConformanceTestCase> testCases = await conformance_files
-        .readTestCasesFromFile(filePath);
-    return testCases
-        .where(
-          (ConformanceTestCase testCase) =>
-              testCase.name.trim().isNotEmpty && testCase.turns.isNotEmpty,
-        )
-        .toList(growable: false);
-  } on FormatException {
-    if (strict) {
-      rethrow;
-    }
-    return <ConformanceTestCase>[];
-  }
 }
 
 String? _extractSessionIdFromCreateSession(Map<String, Object?> response) {

@@ -1,16 +1,38 @@
 import 'dart:io';
 
+Directory directoryFromArg(Object value, {required String parameterName}) {
+  if (value is Directory) {
+    return value.absolute;
+  }
+  if (value is String) {
+    return Directory(value).absolute;
+  }
+  throw ArgumentError.value(
+    value,
+    parameterName,
+    'must be a String path or Directory',
+  );
+}
+
+String _ensureTrailingSlash(String path) {
+  return path.endsWith('/') ? path : '$path/';
+}
+
 Directory _resolveAgentDir({
   required Object agentsRoot,
   required String appName,
 }) {
-  final Directory agentsRootDir = Directory('$agentsRoot').absolute;
-  final String rootPath = agentsRootDir.uri.path;
+  final Directory agentsRootDir = directoryFromArg(
+    agentsRoot,
+    parameterName: 'agentsRoot',
+  );
+  final String rootPath = _ensureTrailingSlash(agentsRootDir.uri.path);
   final Directory agentDir = Directory(
     '${agentsRootDir.path}${Platform.pathSeparator}$appName',
   ).absolute;
+  final String agentPath = _ensureTrailingSlash(agentDir.uri.path);
 
-  if (!agentDir.uri.path.startsWith(rootPath)) {
+  if (!agentPath.startsWith(rootPath)) {
     throw ArgumentError.value(
       appName,
       'appName',
@@ -22,7 +44,8 @@ Directory _resolveAgentDir({
 }
 
 class DotAdkFolder {
-  DotAdkFolder(Object agentDir) : _agentDir = Directory('$agentDir').absolute;
+  DotAdkFolder(Object agentDir)
+    : _agentDir = directoryFromArg(agentDir, parameterName: 'agentDir');
 
   final Directory _agentDir;
 

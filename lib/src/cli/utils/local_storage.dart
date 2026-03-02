@@ -43,7 +43,7 @@ class PerAgentDatabaseSessionService extends BaseSessionService {
   PerAgentDatabaseSessionService({
     required Object agentsRoot,
     Map<String, String>? appNameToDir,
-  }) : _agentsRoot = Directory('$agentsRoot').absolute,
+  }) : _agentsRoot = directoryFromArg(agentsRoot, parameterName: 'agentsRoot'),
        _appNameToDir = appNameToDir ?? <String, String>{};
 
   final Directory _agentsRoot;

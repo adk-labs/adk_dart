@@ -31,6 +31,12 @@ void main() {
         isTrue,
       );
       expect(
+        await File(
+          '$projectPath${Platform.pathSeparator}root_agent.yaml',
+        ).exists(),
+        isTrue,
+      );
+      expect(
         await File('$projectPath${Platform.pathSeparator}agent.dart').exists(),
         isTrue,
       );
@@ -42,6 +48,49 @@ void main() {
       final DevProjectConfig config = await loadDevProjectConfig(projectPath);
       expect(config.appName, 'my_agent');
       expect(config.agentName, 'root_agent');
+    });
+
+    test('loads fallback config when adk.json is missing', () async {
+      final String projectPath =
+          '${tempDir.path}${Platform.pathSeparator}fallback_agent';
+      await Directory(projectPath).create(recursive: true);
+
+      final DevProjectConfig config = await loadDevProjectConfig(projectPath);
+
+      expect(config.appName, 'fallback_agent');
+      expect(config.agentName, 'root_agent');
+    });
+
+    test('throws when requireConfigFile is true and adk.json is missing', () {
+      final String projectPath =
+          '${tempDir.path}${Platform.pathSeparator}missing_config_agent';
+
+      return expectLater(
+        loadDevProjectConfig(projectPath, requireConfigFile: true),
+        throwsA(
+          isA<FileSystemException>().having(
+            (FileSystemException error) => error.message,
+            'message',
+            contains('Missing adk.json in project directory.'),
+          ),
+        ),
+      );
+    });
+
+    test('throws when validateProjectDir is true and directory is missing', () {
+      final String projectPath =
+          '${tempDir.path}${Platform.pathSeparator}missing_dir_agent';
+
+      return expectLater(
+        loadDevProjectConfig(projectPath, validateProjectDir: true),
+        throwsA(
+          isA<FileSystemException>().having(
+            (FileSystemException error) => error.message,
+            'message',
+            contains('Project directory does not exist.'),
+          ),
+        ),
+      );
     });
   });
 }

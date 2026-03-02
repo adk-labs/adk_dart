@@ -15,11 +15,16 @@ import 'envs.dart';
 typedef AgentFactory = AgentOrApp Function(String agentName, String agentsDir);
 
 class AgentLoader extends BaseAgentLoader {
-  AgentLoader(this.agentsDir, {Map<String, AgentFactory>? agentFactories})
-    : _agentFactories = agentFactories ?? <String, AgentFactory>{};
+  AgentLoader(
+    this.agentsDir, {
+    Map<String, AgentFactory>? agentFactories,
+    bool enableDevProjectFallback = true,
+  }) : _agentFactories = agentFactories ?? <String, AgentFactory>{},
+       _enableDevProjectFallback = enableDevProjectFallback;
 
   final String agentsDir;
   final Map<String, AgentFactory> _agentFactories;
+  final bool _enableDevProjectFallback;
   final Map<String, AgentOrApp> _agentCache = <String, AgentOrApp>{};
 
   @override
@@ -64,7 +69,8 @@ class AgentLoader extends BaseAgentLoader {
     final File agentDart = File(
       '${agentDir.path}${Platform.pathSeparator}agent.dart',
     );
-    if (adkJson.existsSync() || agentDart.existsSync()) {
+    if (_enableDevProjectFallback &&
+        (adkJson.existsSync() || agentDart.existsSync())) {
       final DevProjectConfig config = _loadDevProjectConfigSync(agentDir.path);
       final DevAgentRuntime runtime = DevAgentRuntime(config: config);
       return runtime.runner.agent;

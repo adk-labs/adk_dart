@@ -5,6 +5,24 @@ import 'package:test/test.dart';
 
 void main() {
   group('DotAdkFolder', () {
+    test('accepts Directory values without stringifying them', () {
+      final Directory temp = Directory.systemTemp.createTempSync(
+        'adk_cli_dot_dir_',
+      );
+      addTearDown(() => temp.deleteSync(recursive: true));
+
+      final DotAdkFolder directFolder = DotAdkFolder(temp);
+      final DotAdkFolder childFolder = dotAdkFolderForAgent(
+        agentsRoot: temp,
+        appName: 'my_agent',
+      );
+
+      expect(directFolder.agentDir.path, equals(temp.absolute.path));
+      expect(directFolder.agentDir.path, isNot(contains("Directory: '")));
+      expect(childFolder.agentDir.path, isNot(contains("Directory: '")));
+      expect(childFolder.agentDir.path, contains('my_agent'));
+    });
+
     test('builds canonical paths', () {
       final Directory temp = Directory.systemTemp.createTempSync(
         'adk_cli_dot_',

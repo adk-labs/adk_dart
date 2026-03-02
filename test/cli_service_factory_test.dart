@@ -7,6 +7,33 @@ void main() {
   group('service factory', () {
     setUp(resetServiceRegistryForTest);
 
+    test(
+      'accepts Directory as baseDir without creating literal Directory paths',
+      () async {
+        final Directory temp = Directory.systemTemp.createTempSync(
+          'adk_cli_sf_',
+        );
+        addTearDown(() => temp.deleteSync(recursive: true));
+
+        final BaseSessionService service = createSessionServiceFromOptions(
+          baseDir: temp,
+          useLocalStorage: true,
+        );
+
+        expect(service, isA<PerAgentDatabaseSessionService>());
+        await service.createSession(appName: 'my_agent', userId: 'user');
+
+        final File expectedDb = File(
+          '${temp.path}${Platform.pathSeparator}my_agent${Platform.pathSeparator}.adk${Platform.pathSeparator}session.db',
+        );
+        expect(expectedDb.existsSync(), isTrue);
+        final Directory suspicious = Directory(
+          '${Directory.current.path}${Platform.pathSeparator}Directory: \'${temp.path}\'${Platform.pathSeparator}my_agent',
+        );
+        expect(suspicious.existsSync(), isFalse);
+      },
+    );
+
     test('falls back to in-memory when local storage disabled', () {
       final Directory temp = Directory.systemTemp.createTempSync('adk_cli_sf_');
       addTearDown(() => temp.deleteSync(recursive: true));

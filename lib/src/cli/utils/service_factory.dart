@@ -9,6 +9,7 @@ import '../../sessions/database_session_service.dart';
 import '../../sessions/in_memory_session_service.dart';
 import '../../utils/env_utils.dart';
 import '../service_registry.dart';
+import 'dot_adk_folder.dart';
 import 'local_storage.dart';
 
 const String disableLocalStorageEnv = 'ADK_DISABLE_LOCAL_STORAGE';
@@ -127,7 +128,10 @@ BaseSessionService createSessionServiceFromOptions({
   Map<String, String>? appNameToDir,
   bool useLocalStorage = true,
 }) {
-  final Directory basePath = Directory('$baseDir').absolute;
+  final Directory basePath = directoryFromArg(
+    baseDir,
+    parameterName: 'baseDir',
+  );
   final ServiceRegistry registry = getServiceRegistry();
 
   final Map<String, Object?> kwargs = <String, Object?>{
@@ -169,7 +173,10 @@ BaseMemoryService createMemoryServiceFromOptions({
   required Object baseDir,
   String? memoryServiceUri,
 }) {
-  final Directory basePath = Directory('$baseDir').absolute;
+  final Directory basePath = directoryFromArg(
+    baseDir,
+    parameterName: 'baseDir',
+  );
   final ServiceRegistry registry = getServiceRegistry();
 
   if (memoryServiceUri != null && memoryServiceUri.isNotEmpty) {
@@ -194,7 +201,10 @@ BaseArtifactService createArtifactServiceFromOptions({
   bool strictUri = false,
   bool useLocalStorage = true,
 }) {
-  final Directory basePath = Directory('$baseDir').absolute;
+  final Directory basePath = directoryFromArg(
+    baseDir,
+    parameterName: 'baseDir',
+  );
   final ServiceRegistry registry = getServiceRegistry();
 
   if (artifactServiceUri != null && artifactServiceUri.isNotEmpty) {

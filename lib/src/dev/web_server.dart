@@ -923,6 +923,13 @@ Future<void> _handleRequests(
           statusCode: HttpStatus.notFound,
           message: error.message,
         );
+      } on SessionNotFoundError catch (error) {
+        await _writeError(
+          request,
+          context,
+          statusCode: HttpStatus.notFound,
+          message: error.message,
+        );
       } catch (_) {
         await _writeError(
           request,
@@ -2643,6 +2650,14 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
       message: error.message,
     );
     return;
+  } on SessionNotFoundError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
   }
 
   await _writeJson(
@@ -2775,10 +2790,29 @@ Future<void> _handleRunLive(
 
   final LiveRequestQueue liveQueue = LiveRequestQueue();
   final Runner runner = await context.getRunner(appName);
+  final bool? proactiveAudio = _readOptionalBoolQuery(
+    request,
+    'proactive_audio',
+  );
+  final bool? enableAffectiveDialog = _readOptionalBoolQuery(
+    request,
+    'enable_affective_dialog',
+  );
+  final bool? enableSessionResumption = _readOptionalBoolQuery(
+    request,
+    'enable_session_resumption',
+  );
   final RunConfig runConfig = RunConfig(
     responseModalities: _parseModalities(
       request.uri.queryParameters['modalities'],
     ),
+    proactivity: proactiveAudio == null
+        ? null
+        : <String, Object?>{'proactiveAudio': proactiveAudio},
+    enableAffectiveDialog: enableAffectiveDialog,
+    sessionResumption: enableSessionResumption == null
+        ? null
+        : <String, Object?>{'transparent': enableSessionResumption},
   );
 
   Future<void> forwardEvents() async {
@@ -3497,6 +3531,28 @@ String _readRequiredQuery(HttpRequest request, String key) {
     throw FormatException('Missing required query parameter: $key');
   }
   return raw.trim();
+}
+
+bool? _readOptionalBoolQuery(HttpRequest request, String key) {
+  final String? raw = request.uri.queryParameters[key];
+  if (raw == null || raw.trim().isEmpty) {
+    return null;
+  }
+  final String normalized = raw.trim().toLowerCase();
+  switch (normalized) {
+    case '1':
+    case 'true':
+    case 'yes':
+    case 'y':
+      return true;
+    case '0':
+    case 'false':
+    case 'no':
+    case 'n':
+      return false;
+    default:
+      throw FormatException('Invalid boolean query parameter for $key: $raw');
+  }
 }
 
 List<String>? _parseModalities(String? raw) {

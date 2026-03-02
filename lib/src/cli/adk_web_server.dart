@@ -42,7 +42,10 @@ class AdkWebServer {
 
   Future<HttpServer> start() async {
     final String projectDir = _resolveProjectDir();
-    final DevProjectConfig config = await loadDevProjectConfig(projectDir);
+    final DevProjectConfig config = await loadDevProjectConfig(
+      projectDir,
+      validateProjectDir: true,
+    );
     final DevAgentRuntime runtime = DevAgentRuntime(config: config);
     final HttpServer server = await startAdkDevWebServer(
       runtime: runtime,

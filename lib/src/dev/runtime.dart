@@ -15,28 +15,11 @@ import 'project.dart';
 const String getCurrentTimeToolName = 'get_current_time';
 
 class DevAgentRuntime {
-  DevAgentRuntime({required this.config})
-    : runner = InMemoryRunner(
-        appName: config.appName,
-        agent: Agent(
-          name: config.agentName,
-          description: config.description,
-          instruction:
-              "You are a helpful assistant that tells the current time in cities. "
-              "Use '$getCurrentTimeToolName' when users ask for the current time.",
-          model: DemoTimeModel(),
-          tools: <Object>[
-            FunctionTool(
-              name: getCurrentTimeToolName,
-              description: 'Returns the current time in a specified city.',
-              func: getCurrentTime,
-            ),
-          ],
-        ),
-      );
+  DevAgentRuntime({required this.config, Runner? runner})
+    : runner = runner ?? _createDemoRunner(config);
 
   final DevProjectConfig config;
-  final InMemoryRunner runner;
+  final Runner runner;
 
   Future<Session> createSession({required String userId, String? sessionId}) {
     return runner.sessionService.createSession(
@@ -107,6 +90,27 @@ class DevAgentRuntime {
         )
         .toList();
   }
+}
+
+Runner _createDemoRunner(DevProjectConfig config) {
+  return InMemoryRunner(
+    appName: config.appName,
+    agent: Agent(
+      name: config.agentName,
+      description: config.description,
+      instruction:
+          "You are a helpful assistant that tells the current time in cities. "
+          "Use '$getCurrentTimeToolName' when users ask for the current time.",
+      model: DemoTimeModel(),
+      tools: <Object>[
+        FunctionTool(
+          name: getCurrentTimeToolName,
+          description: 'Returns the current time in a specified city.',
+          func: getCurrentTime,
+        ),
+      ],
+    ),
+  );
 }
 
 Map<String, Object> getCurrentTime({required String city}) {

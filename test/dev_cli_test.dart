@@ -1,10 +1,56 @@
 import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
 
+import 'package:adk_dart/src/models/base_llm.dart';
+import 'package:adk_dart/src/models/llm_request.dart';
+import 'package:adk_dart/src/models/llm_response.dart';
+import 'package:adk_dart/src/models/registry.dart';
 import 'package:adk_dart/src/dev/cli.dart';
 import 'package:adk_dart/src/dev/project.dart';
+import 'package:adk_dart/src/types/content.dart';
 import 'package:test/test.dart';
 
+class _CapturedSink {
+  _CapturedSink() : _controller = StreamController<List<int>>() {
+    _controller.stream.listen(_bytes.addAll);
+    sink = IOSink(_controller.sink);
+  }
+
+  final StreamController<List<int>> _controller;
+  final List<int> _bytes = <int>[];
+  late final IOSink sink;
+
+  Future<String> closeAndRead() async {
+    await sink.flush();
+    await sink.close();
+    await _controller.done;
+    return utf8.decode(_bytes);
+  }
+}
+
+class _StubGeminiModel extends BaseLlm {
+  _StubGeminiModel({required super.model});
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    yield LlmResponse(content: Content.modelText('stub response'));
+  }
+}
+
 void main() {
+  setUpAll(() {
+    LLMRegistry.clear();
+    LLMRegistry.register(
+      supportedModels: <RegExp>[RegExp(r'gemini-2\.5-flash')],
+      factory: (String model) => _StubGeminiModel(model: model),
+    );
+  });
+  tearDownAll(LLMRegistry.clear);
+
   group('parseAdkCliArgs', () {
     test('parses create command', () {
       final ParsedAdkCommand command = parseAdkCliArgs(<String>[
@@ -34,6 +80,7 @@ void main() {
     test('parses run command save_session and resume options', () {
       final ParsedAdkCommand command = parseAdkCliArgs(<String>[
         'run',
+        '.',
         '--save_session',
         '--resume',
         './saved.session.json',
@@ -45,9 +92,54 @@ void main() {
       expect(command.resumeFilePath, './saved.session.json');
     });
 
+    test('parses run command service URI options', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'run',
+        'my_agent',
+        '--session_service_uri',
+        'memory://',
+        '--artifact_service_uri=memory://',
+        '--memory_service_uri',
+        'memory://',
+      ]);
+
+      expect(command.type, AdkCommandType.run);
+      expect(command.projectDir, 'my_agent');
+      expect(command.sessionServiceUri, 'memory://');
+      expect(command.artifactServiceUri, 'memory://');
+      expect(command.memoryServiceUri, 'memory://');
+      expect(command.useLocalStorage, isTrue);
+    });
+
+    test('throws when run local storage flag is mixed with service URIs', () {
+      expect(
+        () => parseAdkCliArgs(<String>[
+          'run',
+          'my_agent',
+          '--no-use_local_storage',
+          '--session_service_uri',
+          'memory://',
+        ]),
+        throwsA(isA<CliUsageError>()),
+      );
+    });
+
+    test('parses run command session_id alias', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'run',
+        'my_agent',
+        '--session_id',
+        'session_alias',
+      ]);
+
+      expect(command.sessionId, 'session_alias');
+      expect(command.projectDir, 'my_agent');
+    });
+
     test('parses run command replay option', () {
       final ParsedAdkCommand command = parseAdkCliArgs(<String>[
         'run',
+        '.',
         '--replay',
         './input.json',
       ]);
@@ -61,6 +153,7 @@ void main() {
       expect(
         () => parseAdkCliArgs(<String>[
           'run',
+          '.',
           '--resume',
           './saved.session.json',
           '--replay',
@@ -74,11 +167,19 @@ void main() {
       expect(
         () => parseAdkCliArgs(<String>[
           'run',
+          '.',
           '--message',
           'hello',
           '--replay',
           './input.json',
         ]),
+        throwsA(isA<CliUsageError>()),
+      );
+    });
+
+    test('throws when run command is missing project directory', () {
+      expect(
+        () => parseAdkCliArgs(<String>['run', '--save_session']),
         throwsA(isA<CliUsageError>()),
       );
     });
@@ -118,7 +219,6 @@ void main() {
         'memory://',
         '--eval_storage_uri',
         'memory://',
-        '--no-use_local_storage',
         '--auto_create_session',
       ]);
 
@@ -131,9 +231,53 @@ void main() {
       expect(command.artifactServiceUri, 'memory://');
       expect(command.memoryServiceUri, 'memory://');
       expect(command.evalStorageUri, 'memory://');
-      expect(command.useLocalStorage, isFalse);
+      expect(command.useLocalStorage, isTrue);
       expect(command.autoCreateSession, isTrue);
       expect(command.enableWebUi, isTrue);
+    });
+
+    test(
+      'parses web aliases for logo flags and no_use_local_storage and verbose',
+      () {
+        final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+          'web',
+          '--logo-text',
+          'ADK',
+          '--logo-image-url=https://example.com/logo.png',
+          '--no_use_local_storage',
+          '--verbose',
+        ]);
+
+        expect(command.logoText, 'ADK');
+        expect(command.logoImageUrl, 'https://example.com/logo.png');
+        expect(command.useLocalStorage, isFalse);
+      },
+    );
+
+    test('throws when web local storage flag is mixed with service URIs', () {
+      expect(
+        () => parseAdkCliArgs(<String>[
+          'web',
+          '--no_use_local_storage',
+          '--session_service_uri',
+          'memory://',
+        ]),
+        throwsA(isA<CliUsageError>()),
+      );
+    });
+
+    test('parses deprecated web service URI flags and tracks usage', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'web',
+        '--session_db_url',
+        'sqlite:///tmp/session.db',
+        '--artifact_storage_uri=memory://',
+      ]);
+
+      expect(command.sessionServiceUri, 'sqlite:///tmp/session.db');
+      expect(command.artifactServiceUri, 'memory://');
+      expect(command.usedDeprecatedSessionDbUrl, isTrue);
+      expect(command.usedDeprecatedArtifactStorageUri, isTrue);
     });
 
     test('parses web trace/a2a/reload/extra plugin options', () {
@@ -236,6 +380,54 @@ void main() {
         expect(resumeExitCode, 0);
       },
     );
+
+    test('run command fails when project directory does not exist', () async {
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final String missingPath =
+          '${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'adk_cli_missing_${DateTime.now().microsecondsSinceEpoch}';
+
+      final int exitCode = await runAdkCli(
+        <String>['run', missingPath],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 1);
+      expect(stdoutText, isEmpty);
+      expect(stderrText, contains('Project directory does not exist.'));
+    });
+
+    test('run command fails when no root agent is found', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk_cli_missing_agent_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+
+      final int exitCode = await runAdkCli(
+        <String>['run', tempDir.path],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 1);
+      expect(stdoutText, isEmpty);
+      expect(stderrText, contains('No root agent found for'));
+    });
 
     test('run command replays state and queries from input file', () async {
       final Directory tempDir = await Directory.systemTemp.createTemp(

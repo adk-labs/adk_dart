@@ -222,7 +222,7 @@ void main() {
       expect(stderrText, contains('Missing required option --dest_db_url.'));
     });
 
-    test('conformance test rejects unsupported live mode', () async {
+    test('conformance test accepts live mode flag', () async {
       final _CapturedSink outCapture = _CapturedSink();
       final _CapturedSink errCapture = _CapturedSink();
 
@@ -235,12 +235,14 @@ void main() {
       final String stdoutText = await outCapture.closeAndRead();
       final String stderrText = await errCapture.closeAndRead();
 
-      expect(exitCode, 64);
-      expect(stdoutText, isEmpty);
+      expect(exitCode, 0);
       expect(
-        stderrText,
-        contains('conformance test currently supports only --mode replay.'),
+        stdoutText,
+        contains('Running ADK conformance tests in live mode'),
       );
+      expect(stdoutText, contains('No test cases found!'));
+      expect(stdoutText, contains('No tests were run.'));
+      expect(stderrText, isEmpty);
     });
   });
 }
