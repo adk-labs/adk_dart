@@ -43,6 +43,15 @@ Design intent:
 - It prioritizes consistent multi-platform behavior in Flutter by exposing the
   web-safe runtime surface (`adk_core`) instead of the full VM-only API set.
 
+## Package Links
+
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter-focused package
+  for web-safe ADK usage across Flutter platforms.
+- [adk_dart](https://pub.dev/packages/adk_dart): Core runtime package with the
+  full ADK Dart VM/CLI API surface.
+- [adk](https://pub.dev/packages/adk): Short-name facade package that
+  re-exports `adk_dart`.
+
 ## Usage
 
 ```dart

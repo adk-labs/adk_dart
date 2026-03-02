@@ -73,6 +73,15 @@ Terminology note:
 - For Flutter desktop UI apps, prefer `flutter_adk` as the default integration
   package.
 
+## Package Links
+
+- [adk_dart](https://pub.dev/packages/adk_dart): Core ADK Dart runtime package
+  with the full VM/CLI-focused API surface.
+- [adk](https://pub.dev/packages/adk): Short-name facade package that
+  re-exports `adk_dart` for import ergonomics.
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter-focused package
+  that exposes the web-safe ADK surface for multi-platform Flutter apps.
+
 ## Platform Support Matrix (Current)
 
 Status legend:

@@ -44,6 +44,15 @@ ADK Dart는 AI 에이전트 개발/실행을 위한 코드 중심 Dart 프레임
   Flutter가 아닌 Dart 데스크톱 앱)를 의미합니다.
 - Flutter 데스크톱 UI 앱은 기본적으로 `flutter_adk` 사용을 권장합니다.
 
+## 패키지 링크
+
+- [adk_dart](https://pub.dev/packages/adk_dart): ADK Dart 코어 런타임
+  패키지로, 전체 VM/CLI 중심 API 표면을 제공합니다.
+- [adk](https://pub.dev/packages/adk): `adk_dart`를 짧은 이름으로
+  재노출하는 파사드 패키지입니다.
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
+  멀티플랫폼에서 사용할 Web-safe ADK 표면을 제공합니다.
+
 ## 플랫폼 지원 매트릭스 (현재)
 
 상태 표기:

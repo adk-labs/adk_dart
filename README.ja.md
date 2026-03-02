@@ -44,6 +44,15 @@ Quick rule:
 - Flutter デスクトップ UI アプリでは、既定の選択として `flutter_adk` を
   推奨します。
 
+## パッケージリンク
+
+- [adk_dart](https://pub.dev/packages/adk_dart): ADK Dart のコアランタイム
+  パッケージで、VM/CLI のフル API 表面を提供します。
+- [adk](https://pub.dev/packages/adk): `adk_dart` を短い名前で再公開する
+  ファサードパッケージです。
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
+  マルチプラットフォーム向けの Web-safe ADK 表面を提供します。
+
 ## プラットフォーム対応マトリクス (Current)
 
 ステータス:

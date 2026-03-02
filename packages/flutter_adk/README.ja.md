@@ -28,6 +28,15 @@ Design intent:
 - フル VM API をそのまま公開するのではなく、Web-safe な `adk_core` 表面を
   優先し、Flutter マルチプラットフォームでの一貫動作を重視します。
 
+## パッケージリンク
+
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
+  マルチプラットフォームで使う Web-safe ADK 表面を提供します。
+- [adk_dart](https://pub.dev/packages/adk_dart): ADK Dart の VM/CLI
+  フルランタイム API を提供するコアパッケージです。
+- [adk](https://pub.dev/packages/adk): `adk_dart` を短い名前で再公開する
+  ファサードパッケージです。
+
 ## Platform Support Matrix (Current)
 
 Status legend:

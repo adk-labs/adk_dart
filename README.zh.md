@@ -43,6 +43,14 @@ ADK Dart 是一个面向 AI Agent 的代码优先 Dart 框架，
   桌面 Dart 应用）。
 - 对于 Flutter 桌面 UI 应用，默认建议使用 `flutter_adk` 集成。
 
+## 包链接
+
+- [adk_dart](https://pub.dev/packages/adk_dart): ADK Dart 核心运行时包，
+  提供 VM/CLI 全量 API 表面。
+- [adk](https://pub.dev/packages/adk): 以短包名重新导出 `adk_dart` 的 facade 包。
+- [flutter_adk](https://pub.dev/packages/flutter_adk): 面向 Flutter
+  多平台的 Web-safe ADK 接口包。
+
 ## 平台支持矩阵（当前）
 
 状态说明:

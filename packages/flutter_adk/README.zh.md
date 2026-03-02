@@ -28,6 +28,14 @@
 - 它不会直接暴露完整 VM 专用 API，而是优先提供 Web-safe 的 `adk_core`
   运行时接口，以保证 Flutter 多平台行为更一致。
 
+## 包链接
+
+- [flutter_adk](https://pub.dev/packages/flutter_adk): 面向 Flutter
+  多平台的 Web-safe ADK 接口包。
+- [adk_dart](https://pub.dev/packages/adk_dart): 提供 ADK Dart VM/CLI
+  全量运行时 API 的核心包。
+- [adk](https://pub.dev/packages/adk): 以短包名重新导出 `adk_dart` 的 facade 包。
+
 ## 平台支持矩阵（当前）
 
 状态说明:

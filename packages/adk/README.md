@@ -48,6 +48,15 @@ Design intent:
 - If you need the same VM-first runtime surface as `adk_dart` with a shorter
   import, `adk` is the right choice.
 
+## Package Links
+
+- [adk](https://pub.dev/packages/adk): Short-name facade package that exports
+  the ADK Dart API with `package:adk/adk.dart`.
+- [adk_dart](https://pub.dev/packages/adk_dart): Core runtime package that
+  provides the full ADK Dart VM/CLI surface.
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter-focused package
+  for web-safe multi-platform Flutter integration.
+
 ## Platform Support Matrix (Current)
 
 Status legend:

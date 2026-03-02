@@ -28,6 +28,15 @@
 - 也就是说，当你想用更短 import，同时保持与 `adk_dart` 一致的 VM
   优先运行时行为时，选择 `adk`。
 
+## 包链接
+
+- [adk](https://pub.dev/packages/adk): 提供短 import
+  （`package:adk/adk.dart`）的 facade 包。
+- [adk_dart](https://pub.dev/packages/adk_dart): 提供 ADK Dart VM/CLI
+  全量运行时能力的核心包。
+- [flutter_adk](https://pub.dev/packages/flutter_adk): 面向 Flutter
+  多平台的 Web-safe ADK 接口包。
+
 ## 平台支持矩阵（当前）
 
 状态说明:

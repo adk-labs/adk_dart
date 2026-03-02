@@ -29,6 +29,15 @@ Design intent:
 - つまり `adk_dart` と同じ VM 中心ランタイムを、より短い import 名で
   使いたいときの選択肢です。
 
+## パッケージリンク
+
+- [adk](https://pub.dev/packages/adk): 短い import
+  （`package:adk/adk.dart`）を提供するファサードパッケージです。
+- [adk_dart](https://pub.dev/packages/adk_dart): ADK Dart の VM/CLI
+  フルランタイムを提供するコアパッケージです。
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
+  マルチプラットフォーム向けの Web-safe ADK 表面を提供します。
+
 ## Platform Support Matrix (Current)
 
 Status legend:

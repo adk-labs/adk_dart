@@ -28,6 +28,15 @@
 - 즉, `adk_dart`와 동일한 VM 중심 런타임을 더 간결한 패키지명으로 쓰고 싶을 때
   선택하는 패키지입니다.
 
+## 패키지 링크
+
+- [adk](https://pub.dev/packages/adk): 짧은 import 경로
+  (`package:adk/adk.dart`)를 제공하는 파사드 패키지입니다.
+- [adk_dart](https://pub.dev/packages/adk_dart): 전체 ADK Dart VM/CLI
+  런타임을 제공하는 코어 패키지입니다.
+- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
+  멀티플랫폼에서 Web-safe ADK 표면을 제공하는 패키지입니다.
+
 ## 플랫폼 지원 매트릭스 (현재)
 
 상태 표기:
