@@ -11,6 +11,7 @@ const String _apigeeProxyUrlEnv = 'APIGEE_PROXY_URL';
 const String _projectEnv = 'GOOGLE_CLOUD_PROJECT';
 const String _locationEnv = 'GOOGLE_CLOUD_LOCATION';
 
+/// Apigee backend protocol families supported by this adapter.
 enum ApiType {
   unknown('unknown'),
   chatCompletions('chat_completions'),
@@ -20,6 +21,7 @@ enum ApiType {
 
   final String value;
 
+  /// Parses [raw] into an [ApiType], defaulting to [ApiType.unknown].
   static ApiType parse(Object? raw) {
     if (raw == null) {
       return ApiType.unknown;
@@ -37,7 +39,9 @@ enum ApiType {
   }
 }
 
+/// Client contract for Apigee chat-completions calls.
 abstract class ApigeeCompletionsClient {
+  /// Generates content responses using Apigee chat-completions endpoints.
   Stream<LlmResponse> generateContent({
     required LlmRequest request,
     required bool stream,
@@ -46,7 +50,9 @@ abstract class ApigeeCompletionsClient {
   });
 }
 
+/// Apigee model adapter that supports both GenAI and chat-completions flows.
 class ApigeeLlm extends Gemini {
+  /// Creates an Apigee adapter for [model].
   ApigeeLlm({
     required String model,
     this.proxyUrl,
@@ -87,8 +93,13 @@ class ApigeeLlm extends Gemini {
     }
   }
 
+  /// Optional explicit Apigee proxy URL.
   final String? proxyUrl;
+
+  /// Custom headers forwarded to Apigee chat-completions calls.
   final Map<String, String> customHeaders;
+
+  /// Optional custom completions client override.
   final ApigeeCompletionsClient? completionsClient;
   final ApiType _apiType;
 
@@ -98,16 +109,27 @@ class ApigeeLlm extends Gemini {
   String? _project;
   String? _location;
 
+  /// Resolved API type used for this adapter instance.
   ApiType get resolvedApiType => _resolvedApiType;
+
+  /// Whether this adapter targets Vertex AI routing.
   bool get isVertexAi => _isVertexAi;
+
+  /// Resolved API version segment extracted from the model path.
   String get apiVersion => _apiVersion;
+
+  /// Vertex project resolved from environment when using Vertex AI mode.
   String? get project => _project;
+
+  /// Vertex location resolved from environment when using Vertex AI mode.
   String? get location => _location;
 
+  /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
     return <RegExp>[RegExp(r'apigee\/.*')];
   }
 
+  /// Generates responses using Apigee routing and selected API mode.
   @override
   Stream<LlmResponse> generateContent(
     LlmRequest request, {
@@ -145,6 +167,7 @@ class ApigeeLlm extends Gemini {
     yield* super.generateContent(prepared, stream: stream);
   }
 
+  /// Resolves the effective API type for [model] and [configured] value.
   static ApiType _resolveApiType({
     required String model,
     required ApiType configured,
@@ -162,6 +185,7 @@ class ApigeeLlm extends Gemini {
     return ApiType.genai;
   }
 
+  /// Whether [model] should run through Vertex AI endpoints.
   static bool identifyVertexAi({
     required String model,
     required ApiType apiType,
@@ -178,6 +202,7 @@ class ApigeeLlm extends Gemini {
         isEnvEnabled('GOOGLE_GENAI_USE_VERTEXAI', environment: environment);
   }
 
+  /// Extracts API version from [model] when present.
   static String identifyApiVersion(String model) {
     final String normalized = model.replaceFirst(RegExp(r'^apigee/'), '');
     final List<String> segments = normalized.split('/');
@@ -192,12 +217,14 @@ class ApigeeLlm extends Gemini {
     return '';
   }
 
+  /// Extracts the provider model identifier from an Apigee model path.
   static String getModelId(String model) {
     final String normalized = model.replaceFirst(RegExp(r'^apigee/'), '');
     final List<String> segments = normalized.split('/');
     return segments.isEmpty ? model : segments.last;
   }
 
+  /// Whether [model] matches the supported Apigee model path formats.
   static bool validateModelString(String model) {
     if (!model.startsWith('apigee/')) {
       return false;
@@ -219,6 +246,7 @@ class ApigeeLlm extends Gemini {
     return _isKnownProvider(segments[0]) && segments[1].startsWith('v');
   }
 
+  /// Builds an OpenAI-style chat-completions payload from [request].
   static Map<String, Object?> buildChatCompletionsPayload(
     LlmRequest request, {
     required bool stream,
@@ -301,6 +329,7 @@ class ApigeeLlm extends Gemini {
     return payload;
   }
 
+  /// Parses an Apigee chat-completions response into [LlmResponse].
   static LlmResponse parseChatCompletionsResponse(
     Map<String, Object?> response,
   ) {
