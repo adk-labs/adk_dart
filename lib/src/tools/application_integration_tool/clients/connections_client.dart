@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Executes one Application Integration HTTP request.
 typedef ApplicationIntegrationRequestExecutor =
     Future<ApplicationIntegrationHttpResponse> Function({
       required Uri uri,
@@ -9,20 +10,28 @@ typedef ApplicationIntegrationRequestExecutor =
       String? body,
     });
 
+/// Resolves an access token for Application Integration calls.
 typedef ApplicationIntegrationAccessTokenProvider =
     Future<String?> Function({String? serviceAccountJson});
 
+/// HTTP response wrapper for Application Integration requests.
 class ApplicationIntegrationHttpResponse {
+  /// Creates an HTTP response wrapper.
   ApplicationIntegrationHttpResponse({
     required this.statusCode,
     required this.body,
   });
 
+  /// HTTP status code.
   final int statusCode;
+
+  /// Response body.
   final String body;
 }
 
+/// Client for Google Application Integration connector metadata APIs.
 class ConnectionsClient {
+  /// Creates a connections client.
   ConnectionsClient({
     required this.project,
     required this.location,
@@ -53,6 +62,7 @@ class ConnectionsClient {
   final String connectorUrl = 'https://connectors.googleapis.com';
   String? _cachedAccessToken;
 
+  /// Fetches basic connection metadata.
   Future<Map<String, Object?>> getConnectionDetails() async {
     final Uri url = Uri.parse(
       '$connectorUrl/v1/projects/$project/locations/$location/connections/'
@@ -76,6 +86,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Fetches entity schema and supported operations for [entity].
   Future<({Map<String, Object?> schema, List<String> operations})>
   getEntitySchemaAndOperations(String entity) async {
     final Uri url = Uri.parse(
@@ -108,6 +119,7 @@ class ConnectionsClient {
     return (schema: schema, operations: operations);
   }
 
+  /// Fetches action schema metadata for [action].
   Future<Map<String, Object?>> getActionSchema(String action) async {
     final Uri url = Uri.parse(
       '$connectorUrl/v1/projects/$project/locations/$location/connections/'
@@ -136,6 +148,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Base OpenAPI skeleton used for connector tool generation.
   static Map<String, Object?> getConnectorBaseSpec() {
     return <String, Object?>{
       'openapi': '3.0.1',
@@ -265,6 +278,7 @@ class ConnectionsClient {
     };
   }
 
+  /// OpenAPI operation object for connector actions.
   static Map<String, Object?> getActionOperation(
     String action,
     String operation,
@@ -313,6 +327,7 @@ class ConnectionsClient {
     };
   }
 
+  /// OpenAPI operation object for list-entity actions.
   static Map<String, Object?> listOperation(
     String entity, {
     String schemaAsString = '',
@@ -359,6 +374,7 @@ class ConnectionsClient {
     };
   }
 
+  /// OpenAPI operation object for get-entity actions.
   static Map<String, Object?> getOperation(
     String entity, {
     String schemaAsString = '',
@@ -399,6 +415,7 @@ class ConnectionsClient {
     };
   }
 
+  /// OpenAPI operation object for create-entity actions.
   static Map<String, Object?> createOperation(
     String entity, {
     String toolName = '',
@@ -436,6 +453,7 @@ class ConnectionsClient {
     };
   }
 
+  /// OpenAPI operation object for update-entity actions.
   static Map<String, Object?> updateOperation(
     String entity, {
     String toolName = '',
@@ -473,6 +491,7 @@ class ConnectionsClient {
     };
   }
 
+  /// OpenAPI operation object for delete-entity actions.
   static Map<String, Object?> deleteOperation(
     String entity, {
     String toolName = '',
@@ -510,6 +529,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for create-entity operations.
   static Map<String, Object?> createOperationRequest(String entity) {
     return <String, Object?>{
       'type': 'object',
@@ -543,6 +563,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for update-entity operations.
   static Map<String, Object?> updateOperationRequest(String entity) {
     return <String, Object?>{
       'type': 'object',
@@ -581,6 +602,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for get-entity operations.
   static Map<String, Object?> getOperationRequest() {
     return <String, Object?>{
       'type': 'object',
@@ -612,6 +634,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for delete-entity operations.
   static Map<String, Object?> deleteOperationRequest() {
     return <String, Object?>{
       'type': 'object',
@@ -646,6 +669,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for list-entity operations.
   static Map<String, Object?> listOperationRequest() {
     return <String, Object?>{
       'type': 'object',
@@ -685,6 +709,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for action execution.
   static Map<String, Object?> actionRequest(String action) {
     return <String, Object?>{
       'type': 'object',
@@ -718,6 +743,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Response schema for action execution.
   static Map<String, Object?> actionResponse(String action) {
     return <String, Object?>{
       'type': 'object',
@@ -729,6 +755,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Request schema for custom query execution actions.
   static Map<String, Object?> executeCustomQueryRequest() {
     return <String, Object?>{
       'type': 'object',
@@ -764,6 +791,7 @@ class ConnectionsClient {
     };
   }
 
+  /// Converts connector JSON schema payloads to OpenAPI schema objects.
   Map<String, Object?> connectorPayload(Map<String, Object?> jsonSchema) {
     return _convertJsonSchemaToOpenApiSchema(jsonSchema);
   }
