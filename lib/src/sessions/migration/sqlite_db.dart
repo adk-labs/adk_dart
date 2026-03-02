@@ -126,6 +126,7 @@ class SqliteMigrationDatabase {
        _handle = handle,
        _displayPath = displayPath;
 
+  /// Opens a SQLite connection using resolved path and mode options.
   factory SqliteMigrationDatabase.open({
     required String connectPath,
     required String displayPath,
