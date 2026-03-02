@@ -6,11 +6,18 @@ import 'package:http/http.dart' as http;
 
 import 'llm_request.dart';
 
+/// Exception thrown for Gemini REST transport failures.
 class GeminiRestApiException implements Exception {
+  /// Creates a REST API exception.
   GeminiRestApiException(this.statusCode, this.message, {this.responseBody});
 
+  /// HTTP status code associated with the failure.
   final int statusCode;
+
+  /// Human-readable error message.
   final String message;
+
+  /// Optional raw response body.
   final String? responseBody;
 
   @override
@@ -19,7 +26,9 @@ class GeminiRestApiException implements Exception {
   }
 }
 
+/// Transport contract for Gemini REST and interactions endpoints.
 abstract class GeminiRestTransport {
+  /// Calls the non-streaming `generateContent` endpoint.
   Future<Map<String, Object?>> generateContent({
     required String model,
     required String apiKey,
@@ -30,6 +39,7 @@ abstract class GeminiRestTransport {
     HttpRetryOptions? retryOptions,
   });
 
+  /// Calls the streaming `generateContent` endpoint.
   Stream<Map<String, Object?>> streamGenerateContent({
     required String model,
     required String apiKey,
@@ -40,6 +50,7 @@ abstract class GeminiRestTransport {
     HttpRetryOptions? retryOptions,
   });
 
+  /// Calls the non-streaming interactions endpoint.
   Future<Map<String, Object?>> createInteraction({
     required String apiKey,
     required Map<String, Object?> payload,
@@ -53,6 +64,7 @@ abstract class GeminiRestTransport {
     );
   }
 
+  /// Calls the streaming interactions endpoint.
   Stream<Map<String, Object?>> streamCreateInteraction({
     required String apiKey,
     required Map<String, Object?> payload,
@@ -67,14 +79,18 @@ abstract class GeminiRestTransport {
   }
 }
 
+/// HTTP implementation of [GeminiRestTransport].
 class GeminiRestHttpTransport implements GeminiRestTransport {
+  /// Creates an HTTP transport with an optional injected [httpClient].
   GeminiRestHttpTransport({http.Client? httpClient})
     : _httpClient = httpClient ?? http.Client();
 
+  /// Default Gemini API base URL.
   static const String defaultBaseUrl =
       'https://generativelanguage.googleapis.com';
   final http.Client _httpClient;
 
+  /// Sends a non-streaming Gemini generation request.
   @override
   Future<Map<String, Object?>> generateContent({
     required String model,
@@ -100,6 +116,7 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
     );
   }
 
+  /// Sends a streaming Gemini generation request.
   @override
   Stream<Map<String, Object?>> streamGenerateContent({
     required String model,
@@ -126,6 +143,7 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
     );
   }
 
+  /// Sends a non-streaming interactions request.
   @override
   Future<Map<String, Object?>> createInteraction({
     required String apiKey,
@@ -148,6 +166,7 @@ class GeminiRestHttpTransport implements GeminiRestTransport {
     );
   }
 
+  /// Sends a streaming interactions request.
   @override
   Stream<Map<String, Object?>> streamCreateInteraction({
     required String apiKey,
