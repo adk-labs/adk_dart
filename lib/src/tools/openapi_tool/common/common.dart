@@ -1,5 +1,6 @@
 import '../../_gemini_schema_util.dart';
 
+/// Renames reserved identifiers by prefixing [value] with [prefix].
 String renamePythonKeywords(String value, {String prefix = 'param_'}) {
   const Set<String> reserved = <String>{
     'if',
@@ -47,7 +48,9 @@ String renamePythonKeywords(String value, {String prefix = 'param_'}) {
   return value;
 }
 
+/// A normalized parameter model used by OpenAPI tool generation.
 class ApiParameter {
+  /// Creates a normalized API parameter descriptor.
   ApiParameter({
     required this.originalName,
     required this.paramLocation,
@@ -60,23 +63,40 @@ class ApiParameter {
            ? _defaultPyNameFor(originalName, paramLocation)
            : pyName;
 
+  /// The parameter name from the source OpenAPI document.
   final String originalName;
+
+  /// The parameter location such as `path`, `query`, or `body`.
   final String paramLocation;
+
+  /// The parameter JSON schema.
   final Map<String, Object?> paramSchema;
+
+  /// The parameter description.
   final String description;
+
+  /// The generated safe argument name.
   final String pyName;
+
+  /// Whether this parameter is required.
   final bool required;
 
+  /// The Dart type hint string inferred from [paramSchema].
   String get typeHint => TypeHintHelper.getTypeHint(paramSchema);
 
+  /// The Dart type inferred from [paramSchema].
   Type get typeValue => TypeHintHelper.getTypeValue(paramSchema);
 
+  /// A named-argument forwarding snippet.
   String toArgString() => '$pyName: $pyName';
 
+  /// A JSON property snippet for generated argument maps.
   String toDictProperty() => '"$pyName": $pyName';
 
+  /// A Python-style docstring line for this parameter.
   String toPydocString() => PydocHelper.generateParamDoc(this);
 
+  /// Returns a copy with selectively replaced fields.
   ApiParameter copyWith({
     Object? originalName = _sentinel,
     Object? paramLocation = _sentinel,
@@ -125,7 +145,9 @@ class ApiParameter {
   }
 }
 
+/// Type inference helpers for OpenAPI schema fragments.
 class TypeHintHelper {
+  /// Returns a Dart type hint string from OpenAPI [schema].
   static String getTypeHint(Map<String, Object?> schema) {
     final Object? type = schema['type'];
     if (type == 'integer') {
@@ -150,6 +172,7 @@ class TypeHintHelper {
     return 'Object?';
   }
 
+  /// Returns a Dart [Type] from OpenAPI [schema].
   static Type getTypeValue(Map<String, Object?> schema) {
     final Object? type = schema['type'];
     if (type == 'integer') {
@@ -174,12 +197,15 @@ class TypeHintHelper {
   }
 }
 
+/// Helpers that build Python-style docs from OpenAPI metadata.
 class PydocHelper {
+  /// Generates one parameter docstring line for [param].
   static String generateParamDoc(ApiParameter param) {
     final String description = param.description.trim();
     return '${param.pyName} (${param.typeHint}): $description';
   }
 
+  /// Generates a return docstring section from OpenAPI [responses].
   static String generateReturnDoc(Map<String, Object?> responses) {
     final List<MapEntry<String, Object?>> sorted = responses.entries.toList()
       ..sort((MapEntry<String, Object?> a, MapEntry<String, Object?> b) {
