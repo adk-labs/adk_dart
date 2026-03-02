@@ -16,15 +16,19 @@ import 'openapi_spec_parser.dart';
 import 'operation_parser.dart';
 import 'tool_auth_handler.dart';
 
+/// State string returned by auth preparation.
 typedef AuthPreparationState = String;
 
+/// Callback that provides headers from a [ReadonlyContext].
 typedef HeaderProvider = Map<String, String> Function(ReadonlyContext context);
 
+/// Callback that executes an HTTP request with normalized request parameters.
 typedef RestApiRequestExecutor =
     Future<RestApiResponse> Function({
       required Map<String, Object?> requestParams,
     });
 
+/// Converts `snake_case` text to `lowerCamelCase`.
 String snakeToLowerCamel(String snakeCaseString) {
   if (!snakeCaseString.contains('_')) {
     return snakeCaseString;
@@ -43,6 +47,7 @@ String snakeToLowerCamel(String snakeCaseString) {
 }
 
 class RestApiResponse {
+  /// Creates an HTTP response wrapper for REST tool calls.
   RestApiResponse({
     required this.statusCode,
     this.text = '',
@@ -50,15 +55,25 @@ class RestApiResponse {
     Map<String, List<String>>? headers,
   }) : headers = headers ?? <String, List<String>>{};
 
+  /// The HTTP status code.
   final int statusCode;
+
+  /// The raw response body text.
   final String text;
+
+  /// Parsed JSON response payload, when available.
   final Object? jsonData;
+
+  /// The response headers.
   final Map<String, List<String>> headers;
 
+  /// Whether the status code is a 2xx success code.
   bool get isSuccess => statusCode >= 200 && statusCode < 300;
 }
 
+/// A tool that executes one OpenAPI operation as an HTTP request.
 class RestApiTool extends BaseTool {
+  /// Creates a REST API tool for a parsed OpenAPI [operation].
   RestApiTool({
     required String name,
     required String description,
@@ -88,14 +103,22 @@ class RestApiTool extends BaseTool {
     }
   }
 
+  /// The target endpoint for this tool.
   final OperationEndpoint endpoint;
+
+  /// The normalized OpenAPI operation object.
   final Map<String, Object?> operation;
   final RestApiRequestExecutor _requestExecutor;
+
+  /// The credential exchanger used by interactive auth flows.
   final AutoAuthCredentialExchanger credentialExchanger;
 
   late OperationParser _operationParser;
 
+  /// The configured auth scheme for request preparation.
   Object? authScheme;
+
+  /// The configured auth credential for request preparation.
   AuthCredential? authCredential;
 
   final Map<String, String> _defaultHeaders = <String, String>{};
@@ -103,6 +126,7 @@ class RestApiTool extends BaseTool {
   HeaderProvider? _headerProvider;
   String? _credentialKey;
 
+  /// Creates a [RestApiTool] from a typed [ParsedOperation].
   static RestApiTool fromParsedOperation(
     ParsedOperation parsed, {
     Object? sslVerify,
@@ -134,6 +158,7 @@ class RestApiTool extends BaseTool {
     return generated;
   }
 
+  /// Creates a [RestApiTool] from a serialized [ParsedOperation] string.
   static RestApiTool fromParsedOperationStr(String parsedOperationStr) {
     final ParsedOperation operation = parsedOperationFromJsonString(
       parsedOperationStr,
@@ -141,6 +166,7 @@ class RestApiTool extends BaseTool {
     return RestApiTool.fromParsedOperation(operation);
   }
 
+  /// Returns the function declaration schema for this REST operation.
   @override
   FunctionDeclaration? getDeclaration() {
     final Map<String, Object?> schema = _operationParser.getJsonSchema();
@@ -158,6 +184,7 @@ class RestApiTool extends BaseTool {
     );
   }
 
+  /// Configures the auth scheme used for this operation.
   void configureAuthScheme(Object? authScheme) {
     if (authScheme is Map<String, Object?>) {
       this.authScheme = dictToAuthScheme(authScheme);
@@ -172,6 +199,7 @@ class RestApiTool extends BaseTool {
     this.authScheme = authScheme;
   }
 
+  /// Configures the auth credential used for this operation.
   void configureAuthCredential(Object? authCredential) {
     if (authCredential is AuthCredential) {
       this.authCredential = authCredential.copyWith();
@@ -192,14 +220,17 @@ class RestApiTool extends BaseTool {
     this.authCredential = null;
   }
 
+  /// Overrides the key used to store and load exchanged credentials.
   void configureCredentialKey(String? credentialKey) {
     _credentialKey = credentialKey;
   }
 
+  /// Configures TLS certificate verification behavior.
   void configureSslVerify([Object? sslVerify]) {
     _sslVerify = sslVerify;
   }
 
+  /// Sets default headers appended to every outgoing request.
   void setDefaultHeaders(Map<String, String> headers) {
     _defaultHeaders
       ..clear()
@@ -213,6 +244,7 @@ class RestApiTool extends BaseTool {
     return credentialToParam(authScheme, authCredential);
   }
 
+  /// Prepares request parameters from operation [parameters] and [kwargs].
   Map<String, Object?> prepareRequestParams(
     List<ApiParameter> parameters,
     Map<String, Object?> kwargs,
@@ -376,6 +408,7 @@ class RestApiTool extends BaseTool {
     };
   }
 
+  /// Runs the tool with [args] in the provided [toolContext].
   @override
   Future<Object?> run({
     required Map<String, dynamic> args,
@@ -384,6 +417,7 @@ class RestApiTool extends BaseTool {
     return call(args: args, toolContext: toolContext);
   }
 
+  /// Executes the REST operation and returns a structured response payload.
   Future<Map<String, Object?>> call({
     required Map<String, dynamic> args,
     ToolContext? toolContext,
@@ -504,6 +538,7 @@ class RestApiTool extends BaseTool {
     return 'RestApiTool(name="$name", description="$description", endpoint="$endpoint")';
   }
 
+  /// Returns a verbose string including operation and auth configuration.
   String toDetailedString() {
     return 'RestApiTool(name="$name", description="$description", endpoint="$endpoint", '
         'operation="$operation", authScheme="$authScheme", authCredential="$authCredential")';
