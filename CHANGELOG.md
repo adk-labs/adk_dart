@@ -1,5 +1,10 @@
 ## Unreleased
 
+## 2026.3.2
+
+- Bumped package release versions to `2026.3.2`.
+- Updated cross-package dependency alignment (`adk_dart` / `adk` / `adk_mcp` / `flutter_adk`) for the new release.
+
 ## 2026.3.1
 
 - Hardened A2A push callback delivery with a persistent SQLite queue, retry/backoff policy handling, startup/background drain, and dead-letter capture.

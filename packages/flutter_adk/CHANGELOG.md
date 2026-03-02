@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.3.2
+
+- Bumped package version to `2026.3.2`.
+- Updated dependency alignment to `adk_dart: ^2026.3.2`.
+
 ## 2026.3.1
 
 - Initial `flutter_adk` package scaffold added for Android, iOS, Web, Linux, macOS, and Windows.
