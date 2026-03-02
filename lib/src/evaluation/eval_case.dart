@@ -1,10 +1,16 @@
+/// Evaluation case and invocation data models.
+library;
+
 import 'app_details.dart';
 import 'common.dart';
 import 'conversation_scenarios.dart';
 
+/// Canonical JSON map type for evaluation payloads.
 typedef EvalJsonMap = Map<String, Object?>;
 
+/// Intermediate tool-use and response payloads for an invocation.
 class IntermediateData {
+  /// Creates intermediate invocation data.
   IntermediateData({
     List<EvalJsonMap>? toolUses,
     List<EvalJsonMap>? toolResponses,
@@ -13,10 +19,16 @@ class IntermediateData {
        toolResponses = toolResponses ?? <EvalJsonMap>[],
        intermediateResponses = intermediateResponses ?? <InvocationResponse>[];
 
+  /// Tool-call payloads.
   final List<EvalJsonMap> toolUses;
+
+  /// Tool-response payloads.
   final List<EvalJsonMap> toolResponses;
+
+  /// Intermediate model responses.
   final List<InvocationResponse> intermediateResponses;
 
+  /// Creates intermediate data from JSON.
   factory IntermediateData.fromJson(EvalJsonMap json) {
     return IntermediateData(
       toolUses: asEvalJsonList(json['toolUses'] ?? json['tool_uses']),
@@ -32,6 +44,7 @@ class IntermediateData {
     );
   }
 
+  /// Serializes intermediate data to JSON.
   EvalJsonMap toJson() {
     return <String, Object?>{
       'tool_uses': toolUses,
@@ -43,13 +56,19 @@ class IntermediateData {
   }
 }
 
+/// One intermediate model response.
 class InvocationResponse {
+  /// Creates an invocation response.
   InvocationResponse({required this.author, List<EvalJsonMap>? parts})
     : parts = parts ?? <EvalJsonMap>[];
 
+  /// Response author.
   final String author;
+
+  /// Response parts.
   final List<EvalJsonMap> parts;
 
+  /// Creates invocation response from JSON.
   factory InvocationResponse.fromJson(EvalJsonMap json) {
     return InvocationResponse(
       author: asNullableString(json['author']) ?? '',
@@ -57,15 +76,22 @@ class InvocationResponse {
     );
   }
 
+  /// Serializes invocation response to JSON.
   EvalJsonMap toJson() => <String, Object?>{'author': author, 'parts': parts};
 }
 
+/// One invocation event entry.
 class InvocationEvent {
+  /// Creates an invocation event.
   InvocationEvent({required this.author, this.content});
 
+  /// Event author.
   final String author;
+
+  /// Optional content payload.
   final EvalJsonMap? content;
 
+  /// Creates invocation event from JSON.
   factory InvocationEvent.fromJson(EvalJsonMap json) {
     return InvocationEvent(
       author: asNullableString(json['author']) ?? '',
@@ -73,6 +99,7 @@ class InvocationEvent {
     );
   }
 
+  /// Serializes invocation event to JSON.
   EvalJsonMap toJson() {
     return <String, Object?>{
       'author': author,
@@ -81,12 +108,16 @@ class InvocationEvent {
   }
 }
 
+/// Collection of invocation events.
 class InvocationEvents {
+  /// Creates invocation events container.
   InvocationEvents({List<InvocationEvent>? invocationEvents})
     : invocationEvents = invocationEvents ?? <InvocationEvent>[];
 
+  /// Invocation events.
   final List<InvocationEvent> invocationEvents;
 
+  /// Creates invocation events from JSON.
   factory InvocationEvents.fromJson(EvalJsonMap json) {
     return InvocationEvents(
       invocationEvents:
@@ -98,6 +129,7 @@ class InvocationEvents {
     );
   }
 
+  /// Serializes invocation events to JSON.
   EvalJsonMap toJson() {
     return <String, Object?>{
       'invocation_events': invocationEvents
@@ -107,7 +139,9 @@ class InvocationEvents {
   }
 }
 
+/// One invocation inside an eval conversation.
 class Invocation {
+  /// Creates an invocation model.
   Invocation({
     this.invocationId = '',
     required this.userContent,
@@ -118,14 +152,28 @@ class Invocation {
     this.appDetails,
   }) : rubrics = rubrics ?? <EvalJsonMap>[];
 
+  /// Invocation identifier.
   final String invocationId;
+
+  /// User content payload.
   final EvalJsonMap userContent;
+
+  /// Optional final response payload.
   final EvalJsonMap? finalResponse;
+
+  /// Optional intermediate data payload.
   final Object? intermediateData;
+
+  /// Creation timestamp in seconds since epoch.
   final double creationTimestamp;
+
+  /// Invocation rubrics.
   final List<EvalJsonMap> rubrics;
+
+  /// Optional app details metadata.
   final AppDetails? appDetails;
 
+  /// Creates invocation from JSON.
   factory Invocation.fromJson(EvalJsonMap json) {
     if (json.containsKey('query')) {
       final String query = asNullableString(json['query']) ?? '';
@@ -163,6 +211,7 @@ class Invocation {
     );
   }
 
+  /// Serializes invocation to JSON.
   EvalJsonMap toJson() {
     return <String, Object?>{
       'invocation_id': invocationId,
@@ -183,17 +232,25 @@ class Invocation {
   }
 }
 
+/// Session initialization payload used by eval runs.
 class SessionInput {
+  /// Creates session input.
   SessionInput({
     required this.appName,
     required this.userId,
     EvalJsonMap? state,
   }) : state = state ?? <String, Object?>{};
 
+  /// App name for session creation.
   final String appName;
+
+  /// User ID for session creation.
   final String userId;
+
+  /// Initial session state.
   final EvalJsonMap state;
 
+  /// Creates session input from JSON.
   factory SessionInput.fromJson(EvalJsonMap json) {
     return SessionInput(
       appName:
@@ -208,6 +265,7 @@ class SessionInput {
     );
   }
 
+  /// Serializes session input to JSON.
   EvalJsonMap toJson() {
     return <String, Object?>{
       'app_name': appName,
@@ -217,7 +275,9 @@ class SessionInput {
   }
 }
 
+/// One evaluation case definition.
 class EvalCase {
+  /// Creates an eval case.
   EvalCase({
     required this.evalId,
     this.input = '',
@@ -239,17 +299,37 @@ class EvalCase {
     }
   }
 
+  /// Eval case identifier.
   final String evalId;
+
+  /// Primary input text.
   final String input;
+
+  /// Optional expected output.
   final String? expectedOutput;
+
+  /// Optional explicit conversation transcript.
   final List<Invocation>? conversation;
+
+  /// Optional generated conversation scenario.
   final ConversationScenario? conversationScenario;
+
+  /// Optional session initialization payload.
   final SessionInput? sessionInput;
+
+  /// Creation timestamp in seconds since epoch.
   final double creationTimestamp;
+
+  /// Eval rubrics.
   final List<EvalJsonMap> rubrics;
+
+  /// Expected final session state.
   final EvalJsonMap finalSessionState;
+
+  /// Additional case metadata.
   final EvalJsonMap metadata;
 
+  /// Creates an eval case from JSON.
   factory EvalCase.fromJson(EvalJsonMap json) {
     final List<Invocation>? conversation = _readConversation(json);
     final String inferredInput = _inferInput(json, conversation);
@@ -292,6 +372,7 @@ class EvalCase {
     );
   }
 
+  /// Serializes eval case to JSON.
   EvalJsonMap toJson() {
     return <String, Object?>{
       'eval_id': evalId,
@@ -313,6 +394,7 @@ class EvalCase {
   }
 }
 
+/// Returns all tool-call payloads from [intermediateData].
 List<EvalJsonMap> getAllToolCalls(Object? intermediateData) {
   if (intermediateData == null) {
     return <EvalJsonMap>[];
@@ -344,6 +426,7 @@ List<EvalJsonMap> getAllToolCalls(Object? intermediateData) {
   );
 }
 
+/// Returns all tool-response payloads from [intermediateData].
 List<EvalJsonMap> getAllToolResponses(Object? intermediateData) {
   if (intermediateData == null) {
     return <EvalJsonMap>[];
@@ -375,6 +458,7 @@ List<EvalJsonMap> getAllToolResponses(Object? intermediateData) {
   );
 }
 
+/// Returns tool calls paired with optional matching responses.
 List<(EvalJsonMap, EvalJsonMap?)> getAllToolCallsWithResponses(
   Object? intermediateData,
 ) {

@@ -1,6 +1,11 @@
+/// Eval-set model and JSON serialization helpers.
+library;
+
 import 'eval_case.dart';
 
+/// Collection of eval cases executed as one suite.
 class EvalSet {
+  /// Creates an eval set.
   EvalSet({
     required this.evalSetId,
     this.name,
@@ -9,12 +14,22 @@ class EvalSet {
     this.creationTimestamp = 0,
   }) : evalCases = evalCases ?? <EvalCase>[];
 
+  /// Eval-set identifier.
   final String evalSetId;
+
+  /// Optional human-readable name.
   final String? name;
+
+  /// Optional description.
   final String? description;
+
+  /// Eval cases contained in this set.
   List<EvalCase> evalCases;
+
+  /// Creation timestamp in seconds since epoch.
   final double creationTimestamp;
 
+  /// Creates an eval set from JSON.
   factory EvalSet.fromJson(Map<String, Object?> json) {
     final Object? rawCases = json['evalCases'] ?? json['eval_cases'];
     final List<EvalCase> cases = <EvalCase>[];
@@ -37,6 +52,7 @@ class EvalSet {
     );
   }
 
+  /// Serializes this eval set to JSON.
   Map<String, Object?> toJson({bool includeNulls = false}) {
     return <String, Object?>{
       'eval_set_id': evalSetId,

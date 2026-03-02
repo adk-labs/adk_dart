@@ -1,10 +1,17 @@
+/// Evaluation result models used by eval services and CLI output.
+library;
+
 import 'eval_metric.dart';
 
+/// Inference execution status for one eval case.
 enum InferenceStatus { unknown, success, failure }
 
+/// Evaluation pass/fail status.
 enum EvalStatus { passed, failed, notEvaluated }
 
+/// Result of running model inference for an eval case.
 class InferenceResult {
+  /// Creates an inference result.
   InferenceResult({
     required this.appName,
     required this.evalCaseId,
@@ -15,16 +22,31 @@ class InferenceResult {
     this.errorMessage,
   });
 
+  /// Application name used for inference.
   final String appName;
+
+  /// Eval case identifier.
   final String evalCaseId;
+
+  /// Input text sent to the model.
   final String userInput;
+
+  /// Optional model response text.
   final String? responseText;
+
+  /// Optional session identifier used during inference.
   final String? sessionId;
+
+  /// Inference status.
   final InferenceStatus status;
+
+  /// Optional error message.
   final String? errorMessage;
 }
 
+/// One metric evaluation result.
 class EvalMetricResult {
+  /// Creates a metric result.
   EvalMetricResult({
     required this.metric,
     required this.score,
@@ -35,12 +57,22 @@ class EvalMetricResult {
            evalStatus ?? (passed ? EvalStatus.passed : EvalStatus.failed),
        passed = evalStatus == null ? passed : evalStatus == EvalStatus.passed;
 
+  /// Metric identifier.
   final EvalMetric metric;
+
+  /// Metric score value.
   final double score;
+
+  /// Whether this metric passed.
   final bool passed;
+
+  /// Metric evaluation status.
   final EvalStatus evalStatus;
+
+  /// Optional metric detail text.
   final String? detail;
 
+  /// Creates a metric result from JSON.
   factory EvalMetricResult.fromJson(Map<String, Object?> json) {
     final String metricName =
         (json['metric_name'] ?? json['metricName'] ?? json['metric'] ?? '')
@@ -61,6 +93,7 @@ class EvalMetricResult {
     );
   }
 
+  /// Serializes this metric result to JSON.
   Map<String, Object?> toJson() {
     final Map<String, Object?> details = <String, Object?>{};
     if (detail != null) {
@@ -75,7 +108,9 @@ class EvalMetricResult {
   }
 }
 
+/// Aggregated evaluation result for one eval case.
 class EvalCaseResult {
+  /// Creates an eval-case result.
   EvalCaseResult({
     required this.evalCaseId,
     required this.metrics,
@@ -86,14 +121,28 @@ class EvalCaseResult {
     this.evalSetFile,
   });
 
+  /// Eval case identifier.
   final String evalCaseId;
+
+  /// Metric results for this case.
   final List<EvalMetricResult> metrics;
+
+  /// Parent eval set identifier.
   final String evalSetId;
+
+  /// Final evaluation status.
   final EvalStatus finalEvalStatus;
+
+  /// Session ID used for inference.
   final String sessionId;
+
+  /// Optional user ID used for inference.
   final String? userId;
+
+  /// Optional source eval-set file path.
   final String? evalSetFile;
 
+  /// Average score across [metrics].
   double get overallScore {
     if (metrics.isEmpty) {
       return 0;
@@ -105,6 +154,7 @@ class EvalCaseResult {
     return sum / metrics.length;
   }
 
+  /// Creates an eval-case result from JSON.
   factory EvalCaseResult.fromJson(Map<String, Object?> json) {
     final Object? rawMetrics =
         json['metrics'] ??
@@ -135,6 +185,7 @@ class EvalCaseResult {
     );
   }
 
+  /// Serializes this eval-case result to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'eval_id': evalCaseId,
@@ -150,7 +201,9 @@ class EvalCaseResult {
   }
 }
 
+/// Aggregated result for an eval-set execution.
 class EvalSetResult {
+  /// Creates an eval-set result.
   EvalSetResult({
     required this.evalSetResultId,
     this.evalSetResultName,
@@ -159,12 +212,22 @@ class EvalSetResult {
     this.creationTimestamp = 0,
   }) : evalCaseResults = evalCaseResults ?? <EvalCaseResult>[];
 
+  /// Eval-set result identifier.
   final String evalSetResultId;
+
+  /// Optional display name for this result.
   final String? evalSetResultName;
+
+  /// Eval-set identifier.
   final String evalSetId;
+
+  /// Per-case evaluation results.
   final List<EvalCaseResult> evalCaseResults;
+
+  /// Creation timestamp in seconds since epoch.
   final double creationTimestamp;
 
+  /// Creates an eval-set result from JSON.
   factory EvalSetResult.fromJson(Map<String, Object?> json) {
     final List<EvalCaseResult> caseResults = <EvalCaseResult>[];
     final Object? raw = json['evalCaseResults'] ?? json['eval_case_results'];
@@ -191,6 +254,7 @@ class EvalSetResult {
     );
   }
 
+  /// Serializes this eval-set result to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'eval_set_result_id': evalSetResultId,
