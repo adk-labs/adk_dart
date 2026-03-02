@@ -6,43 +6,66 @@ import 'dart:math';
 import '../_google_auth_token.dart';
 import '../../version.dart';
 
+/// Default ADK user-agent string for BigQuery requests.
 const String bigQueryUserAgent = 'adk-bigquery-tool google-adk/$adkVersion';
 
+/// BigQuery dataset identifier with project scope.
 class BigQueryDatasetReference {
+  /// Creates a dataset reference.
   const BigQueryDatasetReference({
     required this.projectId,
     required this.datasetId,
   });
 
+  /// BigQuery project identifier.
   final String projectId;
+
+  /// Dataset identifier.
   final String datasetId;
 }
 
+/// BigQuery table identifier with dataset scope.
 class BigQueryTableReference {
+  /// Creates a table reference.
   const BigQueryTableReference({required this.dataset, required this.tableId});
 
+  /// Parent dataset reference.
   final BigQueryDatasetReference dataset;
+
+  /// Table identifier.
   final String tableId;
 
+  /// Project identifier derived from [dataset].
   String get projectId => dataset.projectId;
 
+  /// Dataset identifier derived from [dataset].
   String get datasetId => dataset.datasetId;
 }
 
+/// Session information returned by query jobs.
 class BigQuerySessionInfo {
+  /// Creates session information.
   const BigQuerySessionInfo({required this.sessionId});
 
+  /// BigQuery session id.
   final String sessionId;
 }
 
+/// Query connection property key-value pair.
 class BigQueryConnectionProperty {
+  /// Creates a connection property.
   const BigQueryConnectionProperty(this.key, this.value);
 
+  /// Property key.
   final String key;
+
+  /// Property value.
   final String value;
 }
 
+/// Configuration options for BigQuery query jobs.
 class BigQueryQueryJobConfig {
+  /// Creates query job configuration.
   const BigQueryQueryJobConfig({
     this.dryRun = false,
     this.createSession = false,
@@ -51,58 +74,88 @@ class BigQueryQueryJobConfig {
     this.maximumBytesBilled,
   });
 
+  /// Whether this query runs in dry-run mode.
   final bool dryRun;
+
+  /// Whether BigQuery should create a reusable session.
   final bool createSession;
+
+  /// Connection properties forwarded to the query configuration.
   final List<BigQueryConnectionProperty> connectionProperties;
+
+  /// Job labels.
   final Map<String, String> labels;
+
+  /// Maximum billed bytes limit.
   final int? maximumBytesBilled;
 }
 
+/// Dataset list item abstraction.
 abstract class BigQueryDatasetListItem {
+  /// Dataset identifier.
   String get datasetId;
 }
 
+/// Table list item abstraction.
 abstract class BigQueryTableListItem {
+  /// Table identifier.
   String get tableId;
 }
 
+/// BigQuery resource metadata abstraction.
 abstract class BigQueryResourceInfo {
+  /// API-style representation of this resource.
   Map<String, Object?> toApiRepr();
 }
 
+/// BigQuery job metadata abstraction.
 abstract class BigQueryJobInfo {
+  /// Raw job properties.
   Map<String, Object?> get properties;
 }
 
+/// BigQuery query job abstraction.
 abstract class BigQueryQueryJob {
+  /// Statement type returned by query statistics.
   String? get statementType;
 
+  /// Destination table for materialized results.
   BigQueryTableReference? get destination;
 
+  /// Session info when session mode is enabled.
   BigQuerySessionInfo? get sessionInfo;
 
+  /// API-style representation of this query job.
   Map<String, Object?> toApiRepr();
 }
 
+/// BigQuery client interface.
 abstract class BigQueryClient {
+  /// Lists datasets in [projectId].
   Iterable<BigQueryDatasetListItem> listDatasets(String projectId);
 
+  /// Gets dataset metadata.
   BigQueryResourceInfo getDataset(BigQueryDatasetReference reference);
 
+  /// Lists tables in [reference].
   Iterable<BigQueryTableListItem> listTables(
     BigQueryDatasetReference reference,
   );
 
+  /// Gets table metadata.
   BigQueryResourceInfo getTable(BigQueryTableReference reference);
 
+  /// Gets job metadata by [jobId].
   BigQueryJobInfo getJob(String jobId);
 
+  /// Submits a query job.
   BigQueryQueryJob query({
     required String query,
     required String project,
     required BigQueryQueryJobConfig jobConfig,
   });
 
+  /// Submits a query and returns rows after completion.
   Iterable<Map<String, Object?>> queryAndWait({
     required String query,
     required String project,
@@ -111,6 +164,7 @@ abstract class BigQueryClient {
   });
 }
 
+/// Factory for creating [BigQueryClient] instances.
 typedef BigQueryClientFactory =
     BigQueryClient Function({
       required String? project,
@@ -121,6 +175,7 @@ typedef BigQueryClientFactory =
 
 BigQueryClientFactory _bigQueryClientFactory = _defaultBigQueryClientFactory;
 
+/// Returns a configured BigQuery client.
 BigQueryClient getBigQueryClient({
   required String? project,
   required Object credentials,
@@ -135,10 +190,14 @@ BigQueryClient getBigQueryClient({
   );
 }
 
+/// Overrides the BigQuery client factory.
+///
+/// This is primarily used by tests.
 void setBigQueryClientFactory(BigQueryClientFactory factory) {
   _bigQueryClientFactory = factory;
 }
 
+/// Restores the default BigQuery client factory.
 void resetBigQueryClientFactory() {
   _bigQueryClientFactory = _defaultBigQueryClientFactory;
 }
