@@ -8,7 +8,9 @@ import '../../tools/tool_context.dart';
 import '../../tools/transfer_to_agent_tool.dart';
 import 'base_llm_flow.dart';
 
+/// Injects transfer instructions/tool declarations into LLM requests.
 class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
+  /// Appends transfer guidance and transfer tool configuration.
   @override
   Stream<Event> runAsync(
     InvocationContext invocationContext,
@@ -46,6 +48,7 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 
+/// Builds one target-agent description block.
 String buildTargetAgentsInfo(BaseAgent targetAgent) {
   return '''
 Agent name: ${targetAgent.name}
@@ -53,8 +56,10 @@ Agent description: ${targetAgent.description}
 ''';
 }
 
+/// Line break token used when composing multi-agent instructions.
 const String lineBreak = '\n';
 
+/// Builds shared transfer instruction text for [targetAgents].
 String buildTransferInstructionBody(
   String toolName,
   List<BaseAgent> targetAgents,
@@ -83,6 +88,7 @@ $formattedAgentNames.
 ''';
 }
 
+/// Builds full transfer instructions for [agent].
 String buildTransferInstructions(
   String toolName,
   LlmAgent agent,
@@ -100,6 +106,7 @@ If neither you nor the other agents are best for the question, transfer to your 
   return instruction;
 }
 
+/// Returns transfer targets allowed for [agent].
 List<BaseAgent> getTransferTargets(LlmAgent agent) {
   final List<BaseAgent> result = <BaseAgent>[];
   result.addAll(agent.subAgents);

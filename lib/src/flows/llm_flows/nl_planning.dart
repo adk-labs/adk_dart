@@ -11,7 +11,9 @@ import '../../planners/plan_re_act_planner.dart';
 import '../../types/content.dart';
 import '../llm_flows/base_llm_flow.dart';
 
+/// Applies planner instructions before model invocation.
 class NlPlanningRequestProcessor extends BaseLlmRequestProcessor {
+  /// Mutates [llmRequest] according to the configured planner.
   @override
   Stream<Event> runAsync(
     InvocationContext invocationContext,
@@ -37,7 +39,9 @@ class NlPlanningRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 
+/// Applies planner postprocessing to model responses.
 class NlPlanningResponseProcessor extends BaseLlmResponseProcessor {
+  /// Postprocesses [llmResponse] and emits planner state events when needed.
   @override
   Stream<Event> runAsync(
     InvocationContext invocationContext,
