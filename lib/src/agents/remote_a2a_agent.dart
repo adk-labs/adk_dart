@@ -1,3 +1,6 @@
+/// Remote A2A agent runtime and transport abstractions.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -13,85 +16,118 @@ import '../types/content.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
 
+/// Well-known path used to discover remote agent cards.
 const String agentCardWellKnownPath = '/.well-known/agent.json';
+
+/// Prefix for A2A metadata keys stored in event metadata.
 const String a2aMetadataPrefix = 'a2a:';
+
+/// Default timeout in seconds for A2A requests.
 const double defaultA2aTimeoutSeconds = 600.0;
 
+/// Error thrown when resolving an agent card fails.
 class AgentCardResolutionError implements Exception {
+  /// Creates an agent-card resolution error.
   AgentCardResolutionError(this.message);
 
+  /// Human-readable error message.
   final String message;
 
   @override
   String toString() => 'AgentCardResolutionError: $message';
 }
 
+/// Base error type for A2A client failures.
 class A2aClientError implements Exception {
+  /// Creates an A2A client error.
   A2aClientError(this.message);
 
+  /// Human-readable error message.
   final String message;
 
   @override
   String toString() => 'A2aClientError: $message';
 }
 
+/// HTTP error type for A2A client failures.
 class A2aClientHttpError extends A2aClientError {
+  /// Creates an HTTP-specific A2A client error.
   A2aClientHttpError(super.message, {this.statusCode});
 
+  /// Optional HTTP status code.
   final int? statusCode;
 
   @override
   String toString() => 'A2aClientHttpError(statusCode: $statusCode): $message';
 }
 
+/// Streaming A2A client event tuple of `(task, update)`.
 typedef A2aClientEvent = (A2aTask, A2aEvent?);
 
+/// Callback that derives request metadata from invocation context.
 typedef A2aRequestMetaProvider =
     Map<String, Object?> Function(
       InvocationContext context,
       A2aMessage request,
     );
 
+/// Mutable per-call context passed to client transports.
 class A2aClientCallContext {
+  /// Creates a call context with optional initial [state].
   A2aClientCallContext({Map<String, Object?>? state})
     : state = state ?? <String, Object?>{};
 
+  /// Transport-scoped mutable state.
   Map<String, Object?> state;
 }
 
+/// Additional request parameters for A2A transport calls.
 class A2aRequestParametersConfig {
+  /// Creates request parameter config.
   A2aRequestParametersConfig({this.requestMetadata, this.clientCallContext});
 
+  /// Optional request metadata.
   Map<String, Object?>? requestMetadata;
+
+  /// Optional transport call context.
   A2aClientCallContext? clientCallContext;
 }
 
+/// Result type returned by before-request interceptors.
 class A2aBeforeRequestResult {
+  /// Creates a continuation result with [request].
   A2aBeforeRequestResult.request(
-    A2aMessage request, {
+    this.request, {
     A2aRequestParametersConfig? parameters,
-  }) : request = request,
-       event = null,
+  }) : event = null,
        parameters = parameters ?? A2aRequestParametersConfig();
 
+  /// Creates a short-circuit result with [event].
   A2aBeforeRequestResult.event(
-    Event event, {
+    this.event, {
     A2aRequestParametersConfig? parameters,
   }) : request = null,
-       event = event,
        parameters = parameters ?? A2aRequestParametersConfig();
 
+  /// Request to send when continuing.
   final A2aMessage? request;
+
+  /// Event to emit when short-circuiting.
   final Event? event;
+
+  /// Updated request parameter config.
   final A2aRequestParametersConfig parameters;
 }
 
+/// Hook invoked before an A2A request is sent.
 typedef A2aBeforeRequestInterceptor =
     FutureOr<A2aBeforeRequestResult> Function(
       InvocationContext context,
       A2aMessage request,
       A2aRequestParametersConfig parameters,
     );
+
+/// Hook invoked after an A2A response is converted into an event.
 typedef A2aAfterRequestInterceptor =
     FutureOr<Event?> Function(
       InvocationContext context,
@@ -99,20 +135,30 @@ typedef A2aAfterRequestInterceptor =
       Event event,
     );
 
+/// Interceptor bundle for before/after A2A request processing.
 class A2aRequestInterceptor {
+  /// Creates an A2A request interceptor bundle.
   A2aRequestInterceptor({this.beforeRequest, this.afterRequest});
 
+  /// Before-request hook.
   final A2aBeforeRequestInterceptor? beforeRequest;
+
+  /// After-request hook.
   final A2aAfterRequestInterceptor? afterRequest;
 }
 
+/// Configuration for [RemoteA2aAgent].
 class A2aRemoteAgentConfig {
+  /// Creates a remote-agent config.
   const A2aRemoteAgentConfig({this.requestInterceptors});
 
+  /// Interceptors applied around transport calls.
   final List<A2aRequestInterceptor>? requestInterceptors;
 }
 
+/// Transport client interface for A2A message exchange.
 abstract class A2aClient {
+  /// Sends [request] and emits streaming transport responses.
   Stream<Object> sendMessage({
     required A2aMessage request,
     Map<String, Object?>? requestMetadata,
@@ -120,11 +166,15 @@ abstract class A2aClient {
   });
 }
 
+/// Factory interface for creating [A2aClient] instances.
 abstract class A2aClientFactory {
+  /// Creates a client for the resolved [agentCard].
   A2aClient create(AgentCard agentCard);
 }
 
+/// Default client factory that creates placeholder transport clients.
 class DefaultA2aClientFactory implements A2aClientFactory {
+  /// Creates a default A2A client factory.
   const DefaultA2aClientFactory();
 
   @override
@@ -151,11 +201,15 @@ class _DefaultA2aClient implements A2aClient {
   }
 }
 
+/// Agent that forwards user/context messages to a remote A2A endpoint.
 class RemoteA2aAgent extends BaseAgent {
+  /// Creates a remote A2A agent.
+  ///
+  /// The [agentCard] accepts an [AgentCard] instance, a URL, or a file path.
   RemoteA2aAgent({
-    required String name,
+    required super.name,
     required Object? agentCard,
-    String description = '',
+    super.description = '',
     HttpClient? httpClient,
     this.timeout = defaultA2aTimeoutSeconds,
     GenAIPartToA2APartConverter genaiPartConverter = convertGenaiPartToA2aPart,
@@ -164,21 +218,14 @@ class RemoteA2aAgent extends BaseAgent {
     this.a2aRequestMetaProvider,
     this.fullHistoryWhenStateless = false,
     this.config = const A2aRemoteAgentConfig(),
-    List<BaseAgent>? subAgents,
-    Object? beforeAgentCallback,
-    Object? afterAgentCallback,
+    super.subAgents,
+    super.beforeAgentCallback,
+    super.afterAgentCallback,
   }) : _genaiPartConverter = genaiPartConverter,
        _a2aPartConverter = a2aPartConverter,
        _a2aClientFactory = a2aClientFactory,
        _httpClient = httpClient,
-       _httpClientNeedsCleanup = httpClient == null,
-       super(
-         name: name,
-         description: description,
-         subAgents: subAgents,
-         beforeAgentCallback: beforeAgentCallback,
-         afterAgentCallback: afterAgentCallback,
-       ) {
+       _httpClientNeedsCleanup = httpClient == null {
     if (agentCard == null) {
       throw ArgumentError('agentCard cannot be null');
     }
@@ -203,11 +250,19 @@ class RemoteA2aAgent extends BaseAgent {
     );
   }
 
+  /// Request timeout in seconds.
   final double timeout;
+
   final GenAIPartToA2APartConverter _genaiPartConverter;
   final A2APartToGenAIPartConverter _a2aPartConverter;
+
+  /// Optional metadata provider for outbound A2A requests.
   final A2aRequestMetaProvider? a2aRequestMetaProvider;
+
+  /// Whether to include full history when remote context IDs are absent.
   final bool fullHistoryWhenStateless;
+
+  /// Interceptor configuration for request/response processing.
   final A2aRemoteAgentConfig config;
 
   AgentCard? _agentCard;
@@ -218,9 +273,13 @@ class RemoteA2aAgent extends BaseAgent {
   bool _httpClientNeedsCleanup;
   bool _isResolved = false;
 
+  /// Resolved remote agent card, when available.
   AgentCard? get resolvedAgentCard => _agentCard;
+
+  /// Whether remote card/client resolution has completed.
   bool get isResolved => _isResolved;
 
+  /// Returns a cloned remote A2A agent with optional field overrides.
   @override
   RemoteA2aAgent clone({Map<String, Object?>? update}) {
     final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
@@ -450,7 +509,7 @@ class RemoteA2aAgent extends BaseAgent {
 
       _isResolved = true;
       developer.log(
-        'Successfully resolved remote A2A agent `${name}`.',
+        'Successfully resolved remote A2A agent `$name`.',
         name: 'adk_dart.remote_a2a_agent',
       );
     } catch (error) {
@@ -733,6 +792,7 @@ class RemoteA2aAgent extends BaseAgent {
     return current;
   }
 
+  /// Sends current conversation context to the remote A2A endpoint.
   @override
   Stream<Event> runAsyncImpl(InvocationContext ctx) async* {
     try {
@@ -869,6 +929,7 @@ class RemoteA2aAgent extends BaseAgent {
     }
   }
 
+  /// Runs live mode using async remote request semantics.
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     await for (final Event event in runAsyncImpl(context)) {
@@ -876,6 +937,7 @@ class RemoteA2aAgent extends BaseAgent {
     }
   }
 
+  /// Closes owned HTTP resources created by this agent.
   Future<void> cleanup() async {
     if (_httpClientNeedsCleanup && _httpClient != null) {
       try {
