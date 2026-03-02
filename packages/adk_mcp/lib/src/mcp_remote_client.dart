@@ -8,25 +8,39 @@ const String _httpHeaderContentType = 'content-type';
 const int _httpStatusMethodNotAllowed = 405;
 const int _httpStatusNotFound = 404;
 
+/// Connection options for an MCP server that supports Streamable HTTP.
 class StreamableHTTPConnectionParams {
+  /// Creates connection options for a Streamable HTTP endpoint.
   StreamableHTTPConnectionParams({
     required this.url,
     Map<String, String>? headers,
   }) : headers = headers ?? <String, String>{};
 
+  /// The MCP server endpoint URL.
   final String url;
+
+  /// Additional HTTP headers sent with every request.
   final Map<String, String> headers;
 }
 
+/// Content returned by [`resources/read`](https://modelcontextprotocol.io/specification/2025-11-05/server/resources#reading-resources).
 class McpResourceContent {
+  /// Creates a parsed resource content item.
   McpResourceContent({this.text, this.blob, this.mimeType});
 
+  /// The UTF-8 text payload, when the resource is text-based.
   final String? text;
+
+  /// The base64-encoded payload, when the resource is binary.
   final String? blob;
+
+  /// The MIME type associated with [text] or [blob].
   final String? mimeType;
 }
 
+/// A server-originated MCP message delivered by this client.
 class McpServerMessage {
+  /// Creates a server message wrapper.
   McpServerMessage({
     required this.url,
     required this.method,
@@ -34,34 +48,63 @@ class McpServerMessage {
     this.id,
   });
 
+  /// The remote endpoint URL that produced this message.
   final String url;
+
+  /// The JSON-RPC method name.
   final String method;
+
+  /// The method parameter object.
   final Map<String, Object?> params;
+
+  /// The JSON-RPC id when this is a request; `null` for notifications.
   final Object? id;
 
+  /// Whether this message is a JSON-RPC notification.
   bool get isNotification => id == null;
+
+  /// Whether this message is a `resources/list_changed` notification.
   bool get isResourceListChangedNotification =>
       method == mcpMethodResourcesListChangedNotification;
+
+  /// Whether this message is a `resources/updated` notification.
   bool get isResourceUpdatedNotification =>
       method == mcpMethodResourcesUpdatedNotification;
+
+  /// Whether this message is a `prompts/list_changed` notification.
   bool get isPromptListChangedNotification =>
       method == mcpMethodPromptsListChangedNotification;
+
+  /// Whether this message is a `tools/list_changed` notification.
   bool get isToolListChangedNotification =>
       method == mcpMethodToolsListChangedNotification;
+
+  /// Whether this message is a `tasks/status` notification.
   bool get isTaskStatusNotification =>
       method == mcpMethodTasksStatusNotification;
+
+  /// Whether this message is a logging message notification.
   bool get isLoggingMessageNotification =>
       method == mcpMethodLoggingMessageNotification;
+
+  /// Whether this message is an elicitation completion notification.
   bool get isElicitationCompleteNotification =>
       method == mcpMethodElicitationCompleteNotification;
 }
 
+/// Handles server notifications and request-shaped messages.
 typedef McpServerMessageHandler = void Function(McpServerMessage message);
+
+/// Handles server-initiated requests and returns the JSON-serializable result.
 typedef McpServerRequestHandler =
     FutureOr<Object?> Function(McpServerMessage request);
+
+/// Builds an HTTP client instance used for MCP requests.
 typedef HttpClientFactory = http.Client Function();
 
+/// JSON-RPC client for MCP servers that expose the Streamable HTTP transport.
 class McpRemoteClient {
+  /// Creates an MCP Streamable HTTP client.
   McpRemoteClient({
     required this.clientInfoName,
     required this.clientInfoVersion,
@@ -77,13 +120,28 @@ class McpRemoteClient {
        clientCapabilities = clientCapabilities ?? const <String, Object?>{},
        _httpClientFactory = httpClientFactory ?? http.Client.new;
 
+  /// Name sent in the MCP `initialize.clientInfo.name` field.
   final String clientInfoName;
+
+  /// Version sent in the MCP `initialize.clientInfo.version` field.
   final String clientInfoVersion;
+
+  /// Callback invoked for server notifications and request-shaped messages.
   final McpServerMessageHandler? onServerMessage;
+
+  /// Callback used to handle server-initiated requests.
   final McpServerRequestHandler? onServerRequest;
+
+  /// Protocol version advertised during initialization.
   final String latestProtocolVersion;
+
+  /// Protocol versions accepted from the server.
   final Set<String> supportedProtocolVersions;
+
+  /// Capabilities advertised by the client during initialization.
   final Map<String, Object?> clientCapabilities;
+
+  /// Timeout for individual HTTP requests.
   final Duration requestTimeout;
   final HttpClientFactory _httpClientFactory;
 
@@ -101,6 +159,7 @@ class McpRemoteClient {
       <String, Map<String, String>>{};
   int _requestSequence = 1;
 
+  /// Whether [connectionParams] targets an `http` or `https` URL.
   bool isRemoteCapable(StreamableHTTPConnectionParams connectionParams) {
     final Uri? uri = Uri.tryParse(connectionParams.url);
     if (uri == null) {
@@ -109,16 +168,19 @@ class McpRemoteClient {
     return uri.scheme == 'http' || uri.scheme == 'https';
   }
 
+  /// Returns the negotiated protocol version for [connectionParams], if any.
   String? negotiatedProtocolVersion(
     StreamableHTTPConnectionParams connectionParams,
   ) {
     return _negotiatedProtocolVersionByUrl[connectionParams.url];
   }
 
+  /// Returns the negotiated MCP session id for [connectionParams], if any.
   String? sessionId(StreamableHTTPConnectionParams connectionParams) {
     return _sessionIdByUrl[connectionParams.url];
   }
 
+  /// Returns a copy of negotiated server capabilities for [connectionParams].
   Map<String, Object?> negotiatedCapabilities(
     StreamableHTTPConnectionParams connectionParams,
   ) {
@@ -143,6 +205,10 @@ class McpRemoteClient {
     return raw is Map;
   }
 
+  /// Initializes the remote MCP session once per endpoint URL.
+  ///
+  /// Throws a [StateError] when the server returns an unsupported or missing
+  /// protocol version.
   Future<void> ensureInitialized(
     StreamableHTTPConnectionParams connectionParams, {
     Map<String, String>? headers,
@@ -229,6 +295,10 @@ class McpRemoteClient {
     }
   }
 
+  /// Sends a JSON-RPC request and returns the decoded `result`.
+  ///
+  /// This method automatically initializes the remote session for every method
+  /// except `initialize`.
   Future<Object?> call({
     required StreamableHTTPConnectionParams connectionParams,
     required String method,
@@ -248,6 +318,7 @@ class McpRemoteClient {
     return response.result;
   }
 
+  /// Calls [call] and optionally suppresses handled errors by returning `null`.
   Future<Object?> tryCall({
     required StreamableHTTPConnectionParams connectionParams,
     required String method,
@@ -280,6 +351,10 @@ class McpRemoteClient {
     }
   }
 
+  /// Collects paginated map results by following each `nextCursor` value.
+  ///
+  /// The method stops when no next cursor is returned, a cursor repeats, or the
+  /// underlying request resolves to `null`.
   Future<List<Map<String, Object?>>> collectPaginatedMaps({
     required StreamableHTTPConnectionParams connectionParams,
     required String method,
@@ -324,6 +399,7 @@ class McpRemoteClient {
     return collected;
   }
 
+  /// Sends a JSON-RPC notification to the server.
   Future<void> notify({
     required StreamableHTTPConnectionParams connectionParams,
     required String method,
@@ -340,6 +416,10 @@ class McpRemoteClient {
     );
   }
 
+  /// Attempts to terminate the current MCP session on the server.
+  ///
+  /// When [allowMethodNotAllowed] is `true`, a `405` response is treated as a
+  /// successful local teardown.
   Future<void> terminateSession({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -385,6 +465,10 @@ class McpRemoteClient {
     }
   }
 
+  /// Opens a single Server-Sent Events stream and yields server messages.
+  ///
+  /// Incoming server requests are handled through [onServerRequest]. Response
+  /// objects are consumed internally and are not yielded.
   Stream<McpServerMessage> readServerMessagesOnce({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -511,6 +595,7 @@ class McpRemoteClient {
     }
   }
 
+  /// Sends a `ping` request to the server.
   Future<Map<String, Object?>> ping({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, Object?> params = const <String, Object?>{},
@@ -524,6 +609,10 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `completion/complete` request.
+  ///
+  /// [ref] identifies the completion target and [argument] provides the value
+  /// to complete.
   Future<Map<String, Object?>> complete({
     required StreamableHTTPConnectionParams connectionParams,
     required Map<String, Object?> ref,
@@ -543,6 +632,9 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `logging/setLevel` request.
+  ///
+  /// Throws an [ArgumentError] when [level] is not in [mcpLoggingLevels].
   Future<Map<String, Object?>> setLoggingLevel({
     required StreamableHTTPConnectionParams connectionParams,
     required String level,
@@ -557,6 +649,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Fetches one page from `resources/list`.
   Future<Map<String, Object?>> listResourcesPage({
     required StreamableHTTPConnectionParams connectionParams,
     String? cursor,
@@ -572,6 +665,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Lists all resources, following pagination automatically.
   Future<List<Map<String, Object?>>> listResources({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -584,6 +678,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Fetches one page from `resources/templates/list`.
   Future<Map<String, Object?>> listResourceTemplatesPage({
     required StreamableHTTPConnectionParams connectionParams,
     String? cursor,
@@ -599,6 +694,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Lists all resource templates, following pagination automatically.
   Future<List<Map<String, Object?>>> listResourceTemplates({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -611,6 +707,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Reads a resource by its MCP URI.
   Future<Map<String, Object?>> readResource({
     required StreamableHTTPConnectionParams connectionParams,
     required String uri,
@@ -624,6 +721,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Subscribes to change notifications for a resource URI.
   Future<Map<String, Object?>> subscribeResource({
     required StreamableHTTPConnectionParams connectionParams,
     required String uri,
@@ -637,6 +735,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Removes a subscription for a resource URI.
   Future<Map<String, Object?>> unsubscribeResource({
     required StreamableHTTPConnectionParams connectionParams,
     required String uri,
@@ -650,6 +749,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Fetches one page from `prompts/list`.
   Future<Map<String, Object?>> listPromptsPage({
     required StreamableHTTPConnectionParams connectionParams,
     String? cursor,
@@ -665,6 +765,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Lists all prompts, following pagination automatically.
   Future<List<Map<String, Object?>>> listPrompts({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -677,6 +778,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Retrieves prompt details by name.
   Future<Map<String, Object?>> getPrompt({
     required StreamableHTTPConnectionParams connectionParams,
     required String name,
@@ -694,6 +796,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Fetches one page from `tools/list`.
   Future<Map<String, Object?>> listToolsPage({
     required StreamableHTTPConnectionParams connectionParams,
     String? cursor,
@@ -709,6 +812,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Lists all tools, following pagination automatically.
   Future<List<Map<String, Object?>>> listTools({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -721,6 +825,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Calls a server tool by [name].
   Future<Map<String, Object?>> callTool({
     required StreamableHTTPConnectionParams connectionParams,
     required String name,
@@ -742,6 +847,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Returns task details for [taskId].
   Future<Map<String, Object?>> getTask({
     required StreamableHTTPConnectionParams connectionParams,
     required String taskId,
@@ -755,6 +861,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Returns the result payload for [taskId].
   Future<Map<String, Object?>> getTaskResult({
     required StreamableHTTPConnectionParams connectionParams,
     required String taskId,
@@ -768,6 +875,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Cancels a task by [taskId].
   Future<Map<String, Object?>> cancelTask({
     required StreamableHTTPConnectionParams connectionParams,
     required String taskId,
@@ -781,6 +889,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Fetches one page from `tasks/list`.
   Future<Map<String, Object?>> listTasksPage({
     required StreamableHTTPConnectionParams connectionParams,
     String? cursor,
@@ -796,6 +905,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Lists all tasks, following pagination automatically.
   Future<List<Map<String, Object?>>> listTasks({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, String>? headers,
@@ -808,6 +918,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `notifications/cancelled` notification for a request id.
   Future<void> notifyCancelledRequest({
     required StreamableHTTPConnectionParams connectionParams,
     required Object requestId,
@@ -827,6 +938,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `notifications/progress` notification.
   Future<void> notifyProgress({
     required StreamableHTTPConnectionParams connectionParams,
     required Object progressToken,
@@ -850,6 +962,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `notifications/roots/list_changed` notification.
   Future<void> notifyRootsListChanged({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, Object?>? meta,
@@ -865,6 +978,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `notifications/tasks/status` notification.
   Future<void> notifyTaskStatus({
     required StreamableHTTPConnectionParams connectionParams,
     required Map<String, Object?> status,
@@ -878,6 +992,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Sends a `notifications/initialized` notification.
   Future<void> sendInitializedNotification({
     required StreamableHTTPConnectionParams connectionParams,
     Map<String, Object?>? meta,
@@ -893,6 +1008,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Clears cached session state for all known remote endpoints.
   void clear() {
     _initializedUrls.clear();
     _initializationTasksByUrl.clear();
@@ -904,6 +1020,7 @@ class McpRemoteClient {
     _requestSequence = 1;
   }
 
+  /// Clears cached session state for a single endpoint.
   void clearConnection(StreamableHTTPConnectionParams connectionParams) {
     _resetRemoteSession(connectionParams.url);
   }
@@ -1478,7 +1595,9 @@ void _validateLoggingLevel(String level) {
   }
 }
 
+/// Thrown when a JSON-RPC response contains an `error` object.
 class McpJsonRpcException extends StateError {
+  /// Creates a JSON-RPC exception for [method].
   McpJsonRpcException({
     required this.method,
     required this.code,
@@ -1487,19 +1606,29 @@ class McpJsonRpcException extends StateError {
          'MCP RPC `$method` failed${code == null ? '' : ' ($code)'}: $message',
        );
 
+  /// The JSON-RPC method that failed.
   final String method;
+
+  /// The JSON-RPC error code, when provided by the server.
   final int? code;
 }
 
+/// Thrown when an HTTP request returns a non-success status code.
 class McpHttpStatusException implements Exception {
+  /// Creates an HTTP status exception.
   McpHttpStatusException({
     required Uri uri,
     required this.statusCode,
     required this.body,
   }) : uri = uri;
 
+  /// The request URI that failed.
   final Uri uri;
+
+  /// The HTTP status code.
   final int statusCode;
+
+  /// The raw response body.
   final String body;
 
   @override
@@ -1508,7 +1637,9 @@ class McpHttpStatusException implements Exception {
   }
 }
 
+/// Signals an error while handling a server-initiated request.
 class McpServerRequestException implements Exception {
+  /// Creates an exception for an incoming server request.
   McpServerRequestException({
     required this.code,
     required this.message,
@@ -1516,9 +1647,16 @@ class McpServerRequestException implements Exception {
     this.data,
   });
 
+  /// The JSON-RPC error code to return.
   final int code;
+
+  /// The error message to return.
   final String message;
+
+  /// The method name associated with the failure, when known.
   final String? method;
+
+  /// Optional JSON-serializable error data.
   final Object? data;
 
   @override
@@ -1552,14 +1690,23 @@ class _McpHttpResponse {
   final Map<String, String> headers;
 }
 
+/// JSON-RPC error code used when a requested method is unavailable.
 const int mcpMethodNotFoundCode = -32601;
+
+/// JSON-RPC server error code used for unhandled request failures.
 const int mcpServerErrorCode = -32000;
+
+/// The most recent MCP protocol version this client advertises by default.
 const String mcpLatestProtocolVersion = '2025-11-25';
+
+/// Protocol versions supported by this client.
 const Set<String> mcpSupportedProtocolVersions = <String>{
   '2025-03-26',
   '2025-06-18',
   '2025-11-25',
 };
+
+/// Valid values for `logging/setLevel`.
 const Set<String> mcpLoggingLevels = <String>{
   'debug',
   'info',
@@ -1570,40 +1717,102 @@ const Set<String> mcpLoggingLevels = <String>{
   'alert',
   'emergency',
 };
+
+/// The `initialize` request method.
 const String mcpMethodInitialize = 'initialize';
+
+/// The `notifications/initialized` notification method.
 const String mcpMethodInitializedNotification = 'notifications/initialized';
+
+/// The `ping` request method.
 const String mcpMethodPing = 'ping';
+
+/// The `notifications/progress` notification method.
 const String mcpMethodProgressNotification = 'notifications/progress';
+
+/// The `resources/list` request method.
 const String mcpMethodResourcesList = 'resources/list';
+
+/// The `resources/templates/list` request method.
 const String mcpMethodResourcesTemplatesList = 'resources/templates/list';
+
+/// The `resources/read` request method.
 const String mcpMethodResourcesRead = 'resources/read';
+
+/// The `resources/subscribe` request method.
 const String mcpMethodResourcesSubscribe = 'resources/subscribe';
+
+/// The `resources/unsubscribe` request method.
 const String mcpMethodResourcesUnsubscribe = 'resources/unsubscribe';
+
+/// The `notifications/resources/list_changed` notification method.
 const String mcpMethodResourcesListChangedNotification =
     'notifications/resources/list_changed';
+
+/// The `notifications/resources/updated` notification method.
 const String mcpMethodResourcesUpdatedNotification =
     'notifications/resources/updated';
+
+/// The `prompts/list` request method.
 const String mcpMethodPromptsList = 'prompts/list';
+
+/// The `prompts/get` request method.
 const String mcpMethodPromptsGet = 'prompts/get';
+
+/// The `notifications/prompts/list_changed` notification method.
 const String mcpMethodPromptsListChangedNotification =
     'notifications/prompts/list_changed';
+
+/// The `tools/list` request method.
 const String mcpMethodToolsList = 'tools/list';
+
+/// The `tools/call` request method.
 const String mcpMethodToolsCall = 'tools/call';
+
+/// The `notifications/tools/list_changed` notification method.
 const String mcpMethodToolsListChangedNotification =
     'notifications/tools/list_changed';
+
+/// The `tasks/get` request method.
 const String mcpMethodTasksGet = 'tasks/get';
+
+/// The `tasks/result` request method.
 const String mcpMethodTasksResult = 'tasks/result';
+
+/// The `tasks/cancel` request method.
 const String mcpMethodTasksCancel = 'tasks/cancel';
+
+/// The `tasks/list` request method.
 const String mcpMethodTasksList = 'tasks/list';
+
+/// The `notifications/tasks/status` notification method.
 const String mcpMethodTasksStatusNotification = 'notifications/tasks/status';
+
+/// The `logging/setLevel` request method.
 const String mcpMethodLoggingSetLevel = 'logging/setLevel';
+
+/// The `notifications/message` notification method.
 const String mcpMethodLoggingMessageNotification = 'notifications/message';
+
+/// The `sampling/createMessage` request method.
 const String mcpMethodSamplingCreateMessage = 'sampling/createMessage';
+
+/// The `completion/complete` request method.
 const String mcpMethodCompletionComplete = 'completion/complete';
+
+/// The `roots/list` request method.
 const String mcpMethodRootsList = 'roots/list';
+
+/// The `notifications/roots/list_changed` notification method.
 const String mcpMethodRootsListChangedNotification =
     'notifications/roots/list_changed';
+
+/// The `elicitation/create` request method.
 const String mcpMethodElicitationCreate = 'elicitation/create';
+
+/// The `notifications/elicitation/complete` notification method.
 const String mcpMethodElicitationCompleteNotification =
     'notifications/elicitation/complete';
+
+/// The `notifications/cancelled` notification method.
 const String mcpMethodCancelledNotification = 'notifications/cancelled';

@@ -8,16 +8,17 @@ import 'package:web/web.dart' as web;
 
 import 'flutter_adk_platform_interface.dart';
 
-/// A web implementation of the FlutterAdkPlatform of the FlutterAdk plugin.
+/// A web implementation of [FlutterAdkPlatform] for the `flutter_adk` plugin.
 class FlutterAdkWeb extends FlutterAdkPlatform {
-  /// Constructs a FlutterAdkWeb
+  /// Creates a [FlutterAdkWeb] platform implementation.
   FlutterAdkWeb();
 
+  /// Registers this class as the active [FlutterAdkPlatform] implementation.
   static void registerWith(Registrar registrar) {
     FlutterAdkPlatform.instance = FlutterAdkWeb();
   }
 
-  /// Returns a [String] containing the version of the platform.
+  /// The browser user agent string for the current web platform.
   @override
   Future<String?> getPlatformVersion() async {
     final version = web.window.navigator.userAgent;

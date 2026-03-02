@@ -15,7 +15,9 @@ import 'mcp_remote_client.dart'
         mcpServerErrorCode,
         mcpSupportedProtocolVersions;
 
+/// Process launch options for an MCP stdio server.
 class StdioConnectionParams {
+  /// Creates options used to start an MCP stdio process.
   StdioConnectionParams({
     required this.command,
     List<String>? arguments,
@@ -26,14 +28,28 @@ class StdioConnectionParams {
     this.connectionId,
   }) : arguments = arguments ?? const <String>[];
 
+  /// The executable to start.
   final String command;
+
+  /// Arguments passed to [command].
   final List<String> arguments;
+
+  /// The working directory for the process, when provided.
   final String? workingDirectory;
+
+  /// Extra environment variables for the process.
   final Map<String, String>? environment;
+
+  /// Whether to inherit the parent process environment.
   final bool includeParentEnvironment;
+
+  /// Whether to spawn the process through a shell.
   final bool runInShell;
+
+  /// Optional stable identifier used in callbacks and logs.
   final String? connectionId;
 
+  /// A stable connection id derived from [connectionId], [command], and args.
   String get resolvedConnectionId {
     if (connectionId != null && connectionId!.trim().isNotEmpty) {
       return connectionId!.trim();
@@ -45,7 +61,9 @@ class StdioConnectionParams {
   }
 }
 
+/// JSON-RPC client for MCP servers that communicate over stdio.
 class McpStdioClient {
+  /// Creates an MCP stdio client.
   McpStdioClient({
     required this.clientInfoName,
     required this.clientInfoVersion,
@@ -60,14 +78,31 @@ class McpStdioClient {
            supportedProtocolVersions ?? mcpSupportedProtocolVersions,
        clientCapabilities = clientCapabilities ?? const <String, Object?>{};
 
+  /// Name sent in the MCP `initialize.clientInfo.name` field.
   final String clientInfoName;
+
+  /// Version sent in the MCP `initialize.clientInfo.version` field.
   final String clientInfoVersion;
+
+  /// Callback invoked for server notifications and request-shaped messages.
   final McpServerMessageHandler? onServerMessage;
+
+  /// Callback used to handle server-initiated requests.
   final McpServerRequestHandler? onServerRequest;
+
+  /// Callback invoked for each stderr line from the stdio process.
   final void Function(String connectionId, String line)? onStderrLine;
+
+  /// Protocol version advertised during initialization.
   final String latestProtocolVersion;
+
+  /// Protocol versions accepted from the server.
   final Set<String> supportedProtocolVersions;
+
+  /// Capabilities advertised by the client during initialization.
   final Map<String, Object?> clientCapabilities;
+
+  /// Timeout for requests awaiting a JSON-RPC response.
   final Duration requestTimeout;
 
   Process? _process;
@@ -85,12 +120,20 @@ class McpStdioClient {
   String? _negotiatedProtocolVersion;
   Map<String, Object?> _negotiatedCapabilities = <String, Object?>{};
 
+  /// Whether a stdio process is currently connected.
   bool get isConnected => _process != null;
+
+  /// Whether the MCP `initialize` handshake has completed.
   bool get isInitialized => _initialized;
+
+  /// The negotiated protocol version, if initialization succeeded.
   String? get negotiatedProtocolVersion => _negotiatedProtocolVersion;
+
+  /// A copy of server capabilities negotiated during initialization.
   Map<String, Object?> get negotiatedCapabilities =>
       Map<String, Object?>.from(_negotiatedCapabilities);
 
+  /// Starts the configured stdio process if it is not already running.
   Future<void> ensureConnected(StdioConnectionParams connectionParams) async {
     if (_process != null) {
       return;
@@ -154,6 +197,10 @@ class McpStdioClient {
     }
   }
 
+  /// Performs the MCP `initialize` handshake once per process lifecycle.
+  ///
+  /// Throws a [StateError] when the server omits or returns an unsupported
+  /// protocol version.
   Future<void> ensureInitialized(StdioConnectionParams connectionParams) async {
     if (_initialized) {
       return;
@@ -214,6 +261,10 @@ class McpStdioClient {
     }
   }
 
+  /// Sends a JSON-RPC request and returns the decoded `result`.
+  ///
+  /// This method initializes the session automatically for every method except
+  /// `initialize`.
   Future<Object?> call({
     required StdioConnectionParams connectionParams,
     required String method,
@@ -231,6 +282,7 @@ class McpStdioClient {
     );
   }
 
+  /// Calls [call] and optionally suppresses handled errors by returning `null`.
   Future<Object?> tryCall({
     required StdioConnectionParams connectionParams,
     required String method,
@@ -261,6 +313,7 @@ class McpStdioClient {
     }
   }
 
+  /// Collects paginated map results by following each `nextCursor` value.
   Future<List<Map<String, Object?>>> collectPaginatedMaps({
     required StdioConnectionParams connectionParams,
     required String method,
@@ -302,6 +355,7 @@ class McpStdioClient {
     return collected;
   }
 
+  /// Sends a JSON-RPC notification to the server.
   Future<void> notify({
     required StdioConnectionParams connectionParams,
     required String method,
@@ -315,6 +369,7 @@ class McpStdioClient {
     });
   }
 
+  /// Sends a `ping` request to the server.
   Future<Map<String, Object?>> ping({
     required StdioConnectionParams connectionParams,
     Map<String, Object?> params = const <String, Object?>{},
@@ -326,6 +381,10 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `completion/complete` request.
+  ///
+  /// [ref] identifies the completion target and [argument] provides the value
+  /// to complete.
   Future<Map<String, Object?>> complete({
     required StdioConnectionParams connectionParams,
     required Map<String, Object?> ref,
@@ -343,6 +402,9 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `logging/setLevel` request.
+  ///
+  /// Throws an [ArgumentError] when [level] is not in [mcpLoggingLevels].
   Future<Map<String, Object?>> setLoggingLevel({
     required StdioConnectionParams connectionParams,
     required String level,
@@ -355,6 +417,7 @@ class McpStdioClient {
     );
   }
 
+  /// Fetches one page from `resources/list`.
   Future<Map<String, Object?>> listResourcesPage({
     required StdioConnectionParams connectionParams,
     String? cursor,
@@ -368,6 +431,7 @@ class McpStdioClient {
     );
   }
 
+  /// Lists all resources, following pagination automatically.
   Future<List<Map<String, Object?>>> listResources({
     required StdioConnectionParams connectionParams,
   }) {
@@ -378,6 +442,7 @@ class McpStdioClient {
     );
   }
 
+  /// Fetches one page from `resources/templates/list`.
   Future<Map<String, Object?>> listResourceTemplatesPage({
     required StdioConnectionParams connectionParams,
     String? cursor,
@@ -391,6 +456,7 @@ class McpStdioClient {
     );
   }
 
+  /// Lists all resource templates, following pagination automatically.
   Future<List<Map<String, Object?>>> listResourceTemplates({
     required StdioConnectionParams connectionParams,
   }) {
@@ -401,6 +467,7 @@ class McpStdioClient {
     );
   }
 
+  /// Reads a resource by its MCP URI.
   Future<Map<String, Object?>> readResource({
     required StdioConnectionParams connectionParams,
     required String uri,
@@ -412,6 +479,7 @@ class McpStdioClient {
     );
   }
 
+  /// Subscribes to change notifications for a resource URI.
   Future<Map<String, Object?>> subscribeResource({
     required StdioConnectionParams connectionParams,
     required String uri,
@@ -423,6 +491,7 @@ class McpStdioClient {
     );
   }
 
+  /// Removes a subscription for a resource URI.
   Future<Map<String, Object?>> unsubscribeResource({
     required StdioConnectionParams connectionParams,
     required String uri,
@@ -434,6 +503,7 @@ class McpStdioClient {
     );
   }
 
+  /// Fetches one page from `prompts/list`.
   Future<Map<String, Object?>> listPromptsPage({
     required StdioConnectionParams connectionParams,
     String? cursor,
@@ -447,6 +517,7 @@ class McpStdioClient {
     );
   }
 
+  /// Lists all prompts, following pagination automatically.
   Future<List<Map<String, Object?>>> listPrompts({
     required StdioConnectionParams connectionParams,
   }) {
@@ -457,6 +528,7 @@ class McpStdioClient {
     );
   }
 
+  /// Retrieves prompt details by name.
   Future<Map<String, Object?>> getPrompt({
     required StdioConnectionParams connectionParams,
     required String name,
@@ -472,6 +544,7 @@ class McpStdioClient {
     );
   }
 
+  /// Fetches one page from `tools/list`.
   Future<Map<String, Object?>> listToolsPage({
     required StdioConnectionParams connectionParams,
     String? cursor,
@@ -485,6 +558,7 @@ class McpStdioClient {
     );
   }
 
+  /// Lists all tools, following pagination automatically.
   Future<List<Map<String, Object?>>> listTools({
     required StdioConnectionParams connectionParams,
   }) {
@@ -495,6 +569,7 @@ class McpStdioClient {
     );
   }
 
+  /// Calls a server tool by [name].
   Future<Map<String, Object?>> callTool({
     required StdioConnectionParams connectionParams,
     required String name,
@@ -514,6 +589,7 @@ class McpStdioClient {
     );
   }
 
+  /// Returns task details for [taskId].
   Future<Map<String, Object?>> getTask({
     required StdioConnectionParams connectionParams,
     required String taskId,
@@ -525,6 +601,7 @@ class McpStdioClient {
     );
   }
 
+  /// Returns the result payload for [taskId].
   Future<Map<String, Object?>> getTaskResult({
     required StdioConnectionParams connectionParams,
     required String taskId,
@@ -536,6 +613,7 @@ class McpStdioClient {
     );
   }
 
+  /// Cancels a task by [taskId].
   Future<Map<String, Object?>> cancelTask({
     required StdioConnectionParams connectionParams,
     required String taskId,
@@ -547,6 +625,7 @@ class McpStdioClient {
     );
   }
 
+  /// Fetches one page from `tasks/list`.
   Future<Map<String, Object?>> listTasksPage({
     required StdioConnectionParams connectionParams,
     String? cursor,
@@ -560,6 +639,7 @@ class McpStdioClient {
     );
   }
 
+  /// Lists all tasks, following pagination automatically.
   Future<List<Map<String, Object?>>> listTasks({
     required StdioConnectionParams connectionParams,
   }) {
@@ -570,6 +650,7 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `notifications/cancelled` notification for a request id.
   Future<void> notifyCancelledRequest({
     required StdioConnectionParams connectionParams,
     required Object requestId,
@@ -587,6 +668,7 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `notifications/progress` notification.
   Future<void> notifyProgress({
     required StdioConnectionParams connectionParams,
     required Object progressToken,
@@ -608,6 +690,7 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `notifications/roots/list_changed` notification.
   Future<void> notifyRootsListChanged({
     required StdioConnectionParams connectionParams,
     Map<String, Object?>? meta,
@@ -621,6 +704,7 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `notifications/tasks/status` notification.
   Future<void> notifyTaskStatus({
     required StdioConnectionParams connectionParams,
     required Map<String, Object?> status,
@@ -632,6 +716,7 @@ class McpStdioClient {
     );
   }
 
+  /// Sends a `notifications/initialized` notification.
   Future<void> sendInitializedNotification({
     required StdioConnectionParams connectionParams,
     Map<String, Object?>? meta,
@@ -659,6 +744,7 @@ class McpStdioClient {
     );
   }
 
+  /// Closes the client and optionally terminates the underlying process.
   Future<void> close({bool killProcess = true}) async {
     _closing = true;
     _initialized = false;

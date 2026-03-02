@@ -1,3 +1,4 @@
+/// APIs for connecting to and interacting with Model Context Protocol servers.
 library;
 
 export 'src/mcp_remote_client.dart';

@@ -9,6 +9,7 @@ class MethodChannelFlutterAdk extends FlutterAdkPlatform {
   @visibleForTesting
   final methodChannel = const MethodChannel('flutter_adk');
 
+  /// The platform version returned by the method channel implementation.
   @override
   Future<String?> getPlatformVersion() async {
     final version = await methodChannel.invokeMethod<String>(
