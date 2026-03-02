@@ -5,13 +5,19 @@ import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
 import 'base_plugin.dart';
 
+/// Response type emitted when this plugin handles a tool failure.
 const String reflectAndRetryResponseType =
     'ERROR_HANDLED_BY_REFLECT_AND_RETRY_PLUGIN';
+
+/// Global scope key used when failure counters are shared process-wide.
 const String globalScopeKey = '__global_reflect_and_retry_scope__';
 
+/// Scope used to track per-tool retry counts.
 enum TrackingScope { invocation, global }
 
+/// Structured tool failure payload returned by reflect-and-retry flows.
 class ToolFailureResponse {
+  /// Creates a tool failure response payload.
   ToolFailureResponse({
     this.responseType = reflectAndRetryResponseType,
     this.errorType = '',
@@ -20,12 +26,22 @@ class ToolFailureResponse {
     this.reflectionGuidance = '',
   });
 
+  /// Response type marker.
   final String responseType;
+
+  /// Error class/type string.
   final String errorType;
+
+  /// Error details string.
   final String errorDetails;
+
+  /// Current retry count.
   final int retryCount;
+
+  /// Guidance for model self-correction.
   final String reflectionGuidance;
 
+  /// Serializes this failure response to JSON.
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'response_type': responseType,
@@ -37,7 +53,9 @@ class ToolFailureResponse {
   }
 }
 
+/// Plugin that provides reflection guidance and bounded retries for tool errors.
 class ReflectAndRetryToolPlugin extends BasePlugin {
+  /// Creates a reflect-and-retry plugin.
   ReflectAndRetryToolPlugin({
     super.name = 'reflect_retry_tool_plugin',
     this.maxRetries = 3,
@@ -45,8 +63,13 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     this.trackingScope = TrackingScope.invocation,
   }) : assert(maxRetries >= 0, 'maxRetries must be non-negative');
 
+  /// Maximum retry attempts allowed per tool.
   final int maxRetries;
+
+  /// Whether to throw when retry limit is exceeded.
   final bool throwExceptionIfRetryExceeded;
+
+  /// Scope used for tracking retry counters.
   final TrackingScope trackingScope;
 
   final Map<String, Map<String, int>> _scopedFailureCounters =
@@ -66,6 +89,7 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     return completer.future;
   }
 
+  /// Intercepts successful tool results and checks for embedded errors.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -92,6 +116,7 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     return null;
   }
 
+  /// Extracts an error object from tool [result], if present.
   Future<Object?> extractErrorFromResult({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,
@@ -101,6 +126,7 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     return null;
   }
 
+  /// Handles tool exceptions and returns retry guidance payloads.
   @override
   Future<Map<String, dynamic>?> onToolErrorCallback({
     required BaseTool tool,

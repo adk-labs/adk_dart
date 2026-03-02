@@ -12,7 +12,9 @@ import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
 
+/// One debug log entry recorded during an invocation.
 class _DebugEntry {
+  /// Creates a debug entry payload.
   _DebugEntry({
     required this.timestamp,
     required this.entryType,
@@ -38,7 +40,9 @@ class _DebugEntry {
   }
 }
 
+/// Accumulated debug state for a single invocation.
 class _InvocationDebugState {
+  /// Creates invocation debug state.
   _InvocationDebugState({
     required this.invocationId,
     required this.sessionId,
@@ -66,7 +70,9 @@ class _InvocationDebugState {
   }
 }
 
+/// Plugin that writes structured invocation debug traces to disk.
 class DebugLoggingPlugin extends BasePlugin {
+  /// Creates a debug logging plugin.
   DebugLoggingPlugin({
     super.name = 'debug_logging_plugin',
     String outputPath = 'adk_debug.yaml',
@@ -188,6 +194,7 @@ class DebugLoggingPlugin extends BasePlugin {
     );
   }
 
+  /// Records the incoming user message.
   @override
   Future<Content?> onUserMessageCallback({
     required InvocationContext invocationContext,
@@ -201,6 +208,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Initializes per-invocation debug state.
   @override
   Future<Content?> beforeRunCallback({
     required InvocationContext invocationContext,
@@ -223,6 +231,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records emitted events into invocation debug state.
   @override
   Future<Event?> onEventCallback({
     required InvocationContext invocationContext,
@@ -255,6 +264,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Flushes invocation debug state to the configured output file.
   @override
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
@@ -295,6 +305,7 @@ class DebugLoggingPlugin extends BasePlugin {
     }
   }
 
+  /// Records agent start.
   @override
   Future<Content?> beforeAgentCallback({
     required BaseAgent agent,
@@ -311,6 +322,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records agent completion.
   @override
   Future<Content?> afterAgentCallback({
     required BaseAgent agent,
@@ -324,6 +336,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records outbound model request details.
   @override
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,
@@ -373,6 +386,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records inbound model response details.
   @override
   Future<LlmResponse?> afterModelCallback({
     required CallbackContext callbackContext,
@@ -396,6 +410,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records model errors.
   @override
   Future<LlmResponse?> onModelErrorCallback({
     required CallbackContext callbackContext,
@@ -415,6 +430,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records tool-call inputs.
   @override
   Future<Map<String, dynamic>?> beforeToolCallback({
     required BaseTool tool,
@@ -434,6 +450,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records tool-call outputs.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -454,6 +471,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Records tool-call errors.
   @override
   Future<Map<String, dynamic>?> onToolErrorCallback({
     required BaseTool tool,

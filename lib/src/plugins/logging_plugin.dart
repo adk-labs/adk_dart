@@ -9,9 +9,12 @@ import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
 
+/// Console logging plugin for invocation, model, and tool lifecycle events.
 class LoggingPlugin extends BasePlugin {
+  /// Creates a logging plugin.
   LoggingPlugin({super.name = 'logging_plugin'});
 
+  /// Logs the incoming user message and invocation context.
   @override
   Future<Content?> onUserMessageCallback({
     required InvocationContext invocationContext,
@@ -30,6 +33,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs invocation start details.
   @override
   Future<Content?> beforeRunCallback({
     required InvocationContext invocationContext,
@@ -40,6 +44,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs each emitted event.
   @override
   Future<Event?> onEventCallback({
     required InvocationContext invocationContext,
@@ -70,6 +75,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs invocation completion details.
   @override
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
@@ -79,6 +85,7 @@ class LoggingPlugin extends BasePlugin {
     _log('Final Agent: ${invocationContext.agent.name}');
   }
 
+  /// Logs agent start.
   @override
   Future<Content?> beforeAgentCallback({
     required BaseAgent agent,
@@ -90,6 +97,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs agent completion.
   @override
   Future<Content?> afterAgentCallback({
     required BaseAgent agent,
@@ -101,6 +109,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs outbound model request details.
   @override
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,
@@ -123,6 +132,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs inbound model response details.
   @override
   Future<LlmResponse?> afterModelCallback({
     required CallbackContext callbackContext,
@@ -148,6 +158,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs tool-call start details.
   @override
   Future<Map<String, dynamic>?> beforeToolCallback({
     required BaseTool tool,
@@ -162,6 +173,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs tool-call completion details.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -177,6 +189,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs model errors.
   @override
   Future<LlmResponse?> onModelErrorCallback({
     required CallbackContext callbackContext,
@@ -189,6 +202,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
+  /// Logs tool-call errors.
   @override
   Future<Map<String, dynamic>?> onToolErrorCallback({
     required BaseTool tool,
