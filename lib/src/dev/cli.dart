@@ -1,3 +1,6 @@
+/// Core CLI command parsing and execution for the `adk` executable.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -42,6 +45,7 @@ import 'project.dart';
 import 'runtime.dart';
 import 'web_server.dart';
 
+/// Usage text printed for `adk --help`.
 const String adkUsage = '''
 Usage: adk <command> [options]
 
@@ -100,18 +104,27 @@ Web options:
   -h, --help            Show this help message.
 ''';
 
+/// Error thrown when CLI arguments do not satisfy command usage.
 class CliUsageError implements Exception {
+  /// Creates a usage error with a human-readable [message].
   CliUsageError(this.message);
 
+  /// Description of the invalid usage condition.
   final String message;
 
   @override
   String toString() => message;
 }
 
+/// Top-level command categories supported by the ADK CLI.
 enum AdkCommandType { create, run, web }
 
+/// Parsed arguments for one ADK CLI invocation.
+///
+/// Use [ParsedAdkCommand.create], [ParsedAdkCommand.run], and
+/// [ParsedAdkCommand.web] to build command-specific values.
 class ParsedAdkCommand {
+  /// Creates parsed arguments for the `create` command.
   ParsedAdkCommand.create({required this.projectDir, this.appName})
     : type = AdkCommandType.create,
       port = null,
@@ -145,6 +158,7 @@ class ParsedAdkCommand {
       enableFeatures = const <String>[],
       disableFeatures = const <String>[];
 
+  /// Creates parsed arguments for the `run` command.
   ParsedAdkCommand.run({
     required this.projectDir,
     this.userId,
@@ -180,6 +194,7 @@ class ParsedAdkCommand {
        usedDeprecatedSessionDbUrl = false,
        usedDeprecatedArtifactStorageUri = false;
 
+  /// Creates parsed arguments for the `web` and `api_server` commands.
   ParsedAdkCommand.web({
     required this.projectDir,
     required this.port,
@@ -250,6 +265,9 @@ class ParsedAdkCommand {
   final List<String> disableFeatures;
 }
 
+/// Parses CLI [args] into a typed [ParsedAdkCommand].
+///
+/// Throws a [CliUsageError] when the command is missing or unknown.
 ParsedAdkCommand parseAdkCliArgs(List<String> args) {
   if (args.isEmpty) {
     throw CliUsageError('Missing command.');
@@ -272,6 +290,10 @@ ParsedAdkCommand parseAdkCliArgs(List<String> args) {
   }
 }
 
+/// Runs the ADK CLI command handler and returns an exit code.
+///
+/// Returns `0` for success, `64` for usage errors, and non-zero runtime exit
+/// codes for command failures.
 Future<int> runAdkCli(
   List<String> args, {
   IOSink? outSink,

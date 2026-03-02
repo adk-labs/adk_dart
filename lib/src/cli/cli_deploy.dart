@@ -1,6 +1,11 @@
+/// Deployment command parsing and execution for `adk deploy`.
+library;
+
 import 'dart:io';
 
+/// Resolved deployment configuration used to build `gcloud` commands.
 class DeployCommand {
+  /// Creates a deployment command payload.
   DeployCommand({
     required this.service,
     required this.project,
@@ -9,16 +14,28 @@ class DeployCommand {
     this.extraArgs = const <String>[],
   });
 
+  /// The service or cluster name to deploy.
   final String service;
+
+  /// The Google Cloud project identifier.
   final String project;
+
+  /// The deployment region.
   final String region;
+
+  /// The container image reference.
   final String image;
+
+  /// Additional raw arguments forwarded to `gcloud`.
   final List<String> extraArgs;
 }
 
+/// Deploy targets supported by the CLI.
 enum DeployTarget { cloudRun, agentEngine, gke }
 
+/// Parsed options for a single `adk deploy` invocation.
 class DeployCliOptions {
+  /// Creates parsed deploy CLI options.
   DeployCliOptions({
     required this.target,
     required this.service,
@@ -29,15 +46,29 @@ class DeployCliOptions {
     required this.dryRun,
   });
 
+  /// The selected deployment backend.
   final DeployTarget target;
+
+  /// The service or cluster name to deploy.
   final String service;
+
+  /// The Google Cloud project identifier.
   final String project;
+
+  /// The deployment region.
   final String region;
+
+  /// The container image reference.
   final String image;
+
+  /// Extra arguments forwarded to `gcloud`.
   final List<String> extraArgs;
+
+  /// Whether command execution is skipped and only printed.
   final bool dryRun;
 }
 
+/// Signature for pluggable command execution in deploy workflows.
 typedef DeployCommandRunner =
     Future<int> Function(
       List<String> command, {
@@ -46,6 +77,7 @@ typedef DeployCommandRunner =
       required Map<String, String> environment,
     });
 
+/// Usage text printed by `adk deploy --help`.
 const String deployUsage = '''
 Usage: adk deploy [options] [-- <gcloud args...>]
 
@@ -59,6 +91,10 @@ Options:
   -h, --help               Show this help message
 ''';
 
+/// Runs the deploy CLI command and returns a process-compatible exit code.
+///
+/// Returns `0` for help and successful dry-runs, `64` for invalid arguments,
+/// and `1` for runtime failures while resolving options.
 Future<int> runDeployCommand(
   List<String> args, {
   IOSink? outSink,

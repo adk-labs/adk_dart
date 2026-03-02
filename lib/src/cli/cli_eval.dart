@@ -1,8 +1,15 @@
+/// Helpers used by CLI evaluation and reporting commands.
+library;
+
 import '../evaluation/eval_metric.dart';
 import '../evaluation/eval_result.dart';
 import '../agents/llm_agent.dart';
 import '../types/content.dart';
 
+/// Default metrics used by CLI evaluation runs.
+///
+/// When [addTrajectoryMetrics] is `true`, trajectory-oriented metrics are
+/// included for compatibility with existing evaluation flows.
 List<EvalMetric> getDefaultMetricInfo({bool addTrajectoryMetrics = false}) {
   final List<EvalMetric> metrics = <EvalMetric>[
     EvalMetric.finalResponseExactMatch,
@@ -15,6 +22,11 @@ List<EvalMetric> getDefaultMetricInfo({bool addTrajectoryMetrics = false}) {
   return metrics;
 }
 
+/// Resolves which eval IDs to run from [evalIds] and [availableEvalIds].
+///
+/// Returns every available eval ID when [evalIds] is empty.
+///
+/// Throws an [ArgumentError] when no IDs in [evalIds] match available IDs.
 List<String> parseAndGetEvalsToRun({
   required String? evalIds,
   required List<String> availableEvalIds,
@@ -38,6 +50,7 @@ List<String> parseAndGetEvalsToRun({
   return selected;
 }
 
+/// Converts [content] into a readable multi-line text form.
 String convertContentToText(Content? content) {
   if (content == null) {
     return '';
@@ -48,12 +61,14 @@ String convertContentToText(Content? content) {
       .join('\n');
 }
 
+/// Converts tool [calls] into one line per function invocation.
 String convertToolCallsToText(List<FunctionCall> calls) {
   return calls
       .map((FunctionCall call) => '${call.name}(${call.args})')
       .join('\n');
 }
 
+/// Formats [result] into a stable human-readable summary block.
 String prettyPrintEvalResult(EvalCaseResult result) {
   final StringBuffer out = StringBuffer();
   out.writeln('EvalCase: ${result.evalCaseId}');
@@ -67,8 +82,10 @@ String prettyPrintEvalResult(EvalCaseResult result) {
   return out.toString().trimRight();
 }
 
+/// Returns [rootAgent] for CLI module compatibility.
 Agent getRootAgentFromModule(Agent rootAgent) => rootAgent;
 
+/// Returns a `reset` callback from [moduleLike] when one is provided.
 Object? tryGetResetFunc(Object? moduleLike) {
   if (moduleLike is Map<String, Object?> && moduleLike['reset'] is Function) {
     return moduleLike['reset'];
