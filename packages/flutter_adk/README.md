@@ -37,9 +37,28 @@ void main() {
 
 ## Platform Scope (Current)
 - `flutter_adk` is a Flutter-focused runtime surface built on top of `adk_core`.
-- It targets single-import usage across Flutter platforms, while leaving VM/CLI-specific APIs outside this package.
-- Platform support and limitations are tracked in:
-  - `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
+- It targets single-import usage across Flutter platforms while leaving VM/CLI-only APIs outside this package.
+
+Status legend:
+
+- `✅` Supported
+- `⚠️` Supported with caveats
+- `❌` Not supported
+
+| Feature | Android | iOS | Web | Linux | macOS | Windows | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `flutter_adk` single import (`package:flutter_adk/flutter_adk.dart`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Re-exports the Web-safe `adk_core` surface. |
+| Agent runtime (`Agent`, `Runner`, workflows) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | In-memory orchestration path is cross-platform. |
+| `Gemini` model usage | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | Web requires BYOK/CORS/security policy consideration. |
+| MCP Toolset via Streamable HTTP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Works with remote MCP HTTP servers. |
+| MCP Toolset via stdio (`StdioConnectionParams`) | ⚠️ | ⚠️ | ❌ | ✅ | ✅ | ✅ | Web cannot spawn local processes; mobile runtime support can depend on sandbox/process policy. |
+| Skills (`Skill`, `SkillToolset`) with inline definitions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Inline skills are platform-agnostic. |
+| Directory-based skill loading (`loadSkillFromDir`) | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | Web throws `UnsupportedError` for filesystem-based loading. |
+| Plugin channel helper (`FlutterAdk().getPlatformVersion()`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Uses platform channel / browser user-agent path. |
+| VM/CLI tooling (`adk` executable, dev server, CLI deploy path) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Not part of the Flutter package surface. |
+
+Reference matrix and rollout notes:
+- `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
 
 ## Limitations
 - Features requiring `dart:io`, `dart:ffi`, or `dart:mirrors` are outside the current `flutter_adk` surface.

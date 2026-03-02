@@ -38,6 +38,27 @@ developer ergonomics.
 - **Developer CLI + Web UI**: Scaffold projects and run chat/dev server with
   the `adk` CLI (`create`, `run`, `web`, `api_server`).
 
+## 🌐 Platform Support Matrix (Current)
+
+Status legend:
+
+- `✅` Supported
+- `⚠️` Partially supported / environment dependent
+- `❌` Not supported
+
+| Feature / Surface | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | Notes |
+| --- | --- | --- | --- | --- |
+| Full API surface via `package:adk_dart/adk_dart.dart` | ✅ | ⚠️ | ❌ | Full surface includes `dart:io`, `dart:ffi`, and `dart:mirrors` paths, so Web cannot use this entrypoint directly. |
+| Web-safe API surface via `package:adk_dart/adk_core.dart` | ✅ | ✅ | ✅ | `adk_core` intentionally excludes IO/FFI/mirrors-only APIs. |
+| Agent runtime (`Agent`, `Runner`, workflows) via `adk_core` | ✅ | ✅ | ✅ | In-memory orchestration path is cross-platform. |
+| MCP over Streamable HTTP (`StreamableHTTPConnectionParams`) | ✅ | ✅ | ✅ | Works where HTTP is available (Web may need CORS-compatible MCP server config). |
+| MCP over stdio (`StdioConnectionParams`) | ✅ | ⚠️ | ❌ | Requires local process execution via `dart:io` `Process`; unavailable on Web. |
+| Skills with inline `Skill` + `SkillToolset` | ✅ | ✅ | ✅ | Inline skill definitions are web-safe. |
+| Directory-based skill loading (`loadSkillFromDir`) | ✅ | ⚠️ | ❌ | Uses filesystem APIs; Web path throws `UnsupportedError`. |
+| CLI (`adk create/run/web/api_server/deploy`) | ✅ | ❌ | ❌ | CLI is VM/terminal-only. |
+| Dev web server + A2A serving endpoints | ✅ | ❌ | ❌ | Server hosting path is VM/runtime process oriented. |
+| DB/file-backed services (sqlite/postgres/mysql sessions, file artifacts) | ✅ | ⚠️ | ❌ | Relies on IO/network/file primitives; Flutter runtime support depends on host/platform policies. |
+
 ## 📊 Feature Support Matrix (Current)
 
 This matrix is rebuilt from a fresh source audit plus targeted runtime tests

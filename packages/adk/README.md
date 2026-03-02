@@ -26,6 +26,21 @@ It re-exports `adk_dart` so you can use a shorter import path:
   `adk_dart`.
 - **CLI Included**: Use `adk create`, `adk run`, `adk web`, `adk api_server`.
 
+## 🌐 Platform Support Matrix (Current)
+
+Status legend:
+
+- `✅` Supported
+- `⚠️` Partially supported / environment dependent
+- `❌` Not supported
+
+| Feature / Surface | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | Notes |
+| --- | --- | --- | --- | --- |
+| Import via `package:adk/adk.dart` (facade to `adk_dart`) | ✅ | ⚠️ | ❌ | Re-exports `package:adk_dart/adk_dart.dart` (full VM-first surface). |
+| `adk` CLI executable | ✅ | ❌ | ❌ | Terminal/VM-only command entrypoint. |
+| Runtime/tool features through facade (`MCP`, skills, sessions, etc.) | ✅ | ⚠️ | ❌ | Behavior follows `adk_dart` full API surface and its platform constraints. |
+| Web-safe entrypoint from this package | ❌ | ❌ | ❌ | `adk` does not provide `adk_core`; use `flutter_adk` or `adk_dart/adk_core.dart` directly for Web-safe surface. |
+
 ## 📊 Feature Support Matrix (Current)
 
 This package is a facade. Runtime behavior comes from `adk_dart`, and this

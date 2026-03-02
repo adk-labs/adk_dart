@@ -8,6 +8,24 @@ It includes:
 - stdio MCP client (`McpStdioClient`)
 - MCP constants, method names, protocol version handling, and JSON-RPC helpers
 
+## Platform Support Matrix (Current)
+
+Status legend:
+
+- `✅` Supported
+- `⚠️` Partially supported / environment dependent
+- `❌` Not supported
+
+| Feature / Surface | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | Notes |
+| --- | --- | --- | --- | --- |
+| `McpRemoteClient` (Streamable HTTP transport) | ✅ | ✅ | ✅ | HTTP/HTTPS only (`StreamableHTTPConnectionParams`). |
+| Protocol negotiation + JSON-RPC helper methods | ✅ | ✅ | ✅ | Same protocol behavior across transports/platforms. |
+| Server message/read loop (`readServerMessagesOnce`) | ✅ | ✅ | ✅ | Web requires CORS-compatible MCP endpoint for browser access. |
+| `McpStdioClient` transport | ✅ | ⚠️ | ❌ | Web uses a stub that throws `UnsupportedError`; non-web requires local process support. |
+| `StdioConnectionParams` process spawn (`Process.start`) | ✅ | ⚠️ | ❌ | Environment-dependent on Flutter runtime/sandbox policies. |
+| HTTP session termination (`terminateSession`) | ✅ | ✅ | ✅ | Uses MCP Streamable HTTP DELETE termination flow. |
+| Built-in credential/token lifecycle manager | ❌ | ❌ | ❌ | Headers/tokens are caller-managed. |
+
 ## Feature Support Matrix (Current)
 
 Status legend:
