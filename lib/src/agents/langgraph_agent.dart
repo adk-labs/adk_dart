@@ -1,3 +1,6 @@
+/// LangGraph-backed agent integration APIs.
+library;
+
 import 'dart:async';
 
 import '../events/event.dart';
@@ -5,11 +8,15 @@ import '../types/content.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
 
+/// Supported LangGraph chat message roles.
 enum LangGraphMessageRole { system, user, assistant }
 
+/// A single message sent to or received from LangGraph.
 class LangGraphMessage {
+  /// Creates a LangGraph message.
   LangGraphMessage({required this.role, required this.content});
 
+  /// Creates a system-role message.
   factory LangGraphMessage.system(String content) {
     return LangGraphMessage(
       role: LangGraphMessageRole.system,
@@ -17,10 +24,12 @@ class LangGraphMessage {
     );
   }
 
+  /// Creates a user-role message.
   factory LangGraphMessage.user(String content) {
     return LangGraphMessage(role: LangGraphMessageRole.user, content: content);
   }
 
+  /// Creates an assistant-role message.
   factory LangGraphMessage.assistant(String content) {
     return LangGraphMessage(
       role: LangGraphMessageRole.assistant,
@@ -28,19 +37,26 @@ class LangGraphMessage {
     );
   }
 
+  /// Message role.
   final LangGraphMessageRole role;
+
+  /// Message text content.
   final String content;
 }
 
+/// Callback that invokes a LangGraph workflow.
 typedef LangGraphInvoker =
     FutureOr<String> Function({
       required List<LangGraphMessage> messages,
       required String threadId,
     });
 
+/// Callback that reports whether a LangGraph thread already has state.
 typedef LangGraphStateChecker = FutureOr<bool> Function(String threadId);
 
+/// Agent that delegates response generation to LangGraph.
 class LangGraphAgent extends BaseAgent {
+  /// Creates a LangGraph agent.
   LangGraphAgent({
     required super.name,
     required this.invokeGraph,
@@ -53,11 +69,19 @@ class LangGraphAgent extends BaseAgent {
     super.afterAgentCallback,
   });
 
+  /// LangGraph invocation callback.
   final LangGraphInvoker invokeGraph;
+
+  /// Optional system instruction injected on fresh graph threads.
   final String instruction;
+
+  /// Whether LangGraph persists conversation state internally.
   final bool hasCheckpointer;
+
+  /// Optional callback to detect existing graph thread state.
   final LangGraphStateChecker? hasExistingGraphState;
 
+  /// Returns a cloned LangGraph agent with optional field overrides.
   @override
   LangGraphAgent clone({Map<String, Object?>? update}) {
     final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
@@ -121,6 +145,7 @@ class LangGraphAgent extends BaseAgent {
     return clonedAgent;
   }
 
+  /// Executes one LangGraph invocation and yields a single model event.
   @override
   Stream<Event> runAsyncImpl(InvocationContext ctx) async* {
     final String threadId = ctx.session.id;
@@ -146,6 +171,7 @@ class LangGraphAgent extends BaseAgent {
     );
   }
 
+  /// Returns LangGraph messages derived from [events].
   List<LangGraphMessage> getMessages(List<Event> events) {
     if (hasCheckpointer) {
       return getLastHumanMessages(events);
@@ -153,6 +179,7 @@ class LangGraphAgent extends BaseAgent {
     return getConversationWithAgent(events);
   }
 
+  /// Returns trailing user messages for checkpointer-enabled graphs.
   List<LangGraphMessage> getLastHumanMessages(List<Event> events) {
     final List<LangGraphMessage> messages = <LangGraphMessage>[];
     for (final Event event in events.reversed) {
@@ -170,6 +197,7 @@ class LangGraphAgent extends BaseAgent {
     return messages.reversed.toList(growable: false);
   }
 
+  /// Returns conversation messages involving the user and this agent.
   List<LangGraphMessage> getConversationWithAgent(List<Event> events) {
     final List<LangGraphMessage> messages = <LangGraphMessage>[];
     for (final Event event in events) {
