@@ -1,8 +1,12 @@
+/// Conformance recording helpers backed by recording plugins.
+library;
+
 import '../plugins/recordings_plugin.dart';
 import '../plugins/recordings_schema.dart';
 import 'adk_web_server_client.dart';
 import 'test_case.dart';
 
+/// Replays [turns] and records resulting replies into a session recording.
 Future<SessionRecording> recordConformanceSession({
   required AdkWebServerClient client,
   required String appName,

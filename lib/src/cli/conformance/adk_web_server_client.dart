@@ -1,17 +1,25 @@
+/// Lightweight HTTP client for ADK web-server conformance flows.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
+/// Minimal ADK web-server API client used by conformance utilities.
 class AdkWebServerClient {
+  /// Creates a client targeting [baseUri].
   AdkWebServerClient(this.baseUri, {HttpClient? httpClient})
     : _httpClient = httpClient ?? HttpClient();
 
+  /// Base URI of the target ADK server.
   final Uri baseUri;
   final HttpClient _httpClient;
 
+  /// Closes the underlying HTTP client.
   Future<void> close() async {
     _httpClient.close(force: true);
   }
 
+  /// Creates a session for [userId], optionally scoped to [appName].
   Future<Map<String, Object?>> createSession({
     required String userId,
     String? appName,
@@ -25,10 +33,14 @@ class AdkWebServerClient {
     return _requestJson(
       'POST',
       '/apps/${Uri.encodeComponent(appName)}/users/${Uri.encodeComponent(userId)}/sessions',
-      <String, Object?>{if (state != null) 'state': state},
+      <String, Object?>{
+        if (state case final Map<String, Object?> nonNullState)
+          'state': nonNullState,
+      },
     );
   }
 
+  /// Fetches session details for [appName], [userId], and [sessionId].
   Future<Map<String, Object?>> getSession({
     required String appName,
     required String userId,
@@ -41,6 +53,7 @@ class AdkWebServerClient {
     );
   }
 
+  /// Deletes a session for [appName], [userId], and [sessionId].
   Future<void> deleteSession({
     required String appName,
     required String userId,
@@ -53,10 +66,12 @@ class AdkWebServerClient {
     );
   }
 
+  /// Returns server version metadata from `/version`.
   Future<Map<String, Object?>> getVersionData() async {
     return _requestJson('GET', '/version', null);
   }
 
+  /// Runs an agent via `/run_sse` and returns decoded event payloads.
   Future<List<Map<String, Object?>>> runAgentSse({
     required String appName,
     required String userId,
@@ -73,8 +88,9 @@ class AdkWebServerClient {
         'app_name': appName,
         'user_id': userId,
         'session_id': sessionId,
-        if (newMessage != null) 'new_message': newMessage,
-        if (stateDelta != null) 'state_delta': stateDelta,
+        if (newMessage case final Object message) 'new_message': message,
+        if (stateDelta case final Map<String, Object?> nonNullStateDelta)
+          'state_delta': nonNullStateDelta,
         'streaming': streaming,
       }),
     );
@@ -112,6 +128,7 @@ class AdkWebServerClient {
     return events;
   }
 
+  /// Sends a user [text] message to a legacy session endpoint.
   Future<Map<String, Object?>> sendMessage({
     required String sessionId,
     required String userId,
@@ -124,6 +141,7 @@ class AdkWebServerClient {
     );
   }
 
+  /// Reads legacy event history for [sessionId] and [userId].
   Future<Map<String, Object?>> getEvents({
     required String sessionId,
     required String userId,

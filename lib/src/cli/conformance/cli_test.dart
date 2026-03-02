@@ -1,7 +1,11 @@
+/// Conformance replay helpers for validating ADK server responses.
+library;
+
 import '_replay_validators.dart';
 import 'adk_web_server_client.dart';
 import 'test_case.dart';
 
+/// Runs one conformance [testCase] against an existing [sessionId].
 Future<ConformanceTestResult> runConformanceTestCase({
   required AdkWebServerClient client,
   required ConformanceTestCase testCase,
@@ -20,6 +24,7 @@ Future<ConformanceTestResult> runConformanceTestCase({
   return validateReplay(testCase, replies);
 }
 
+/// Runs a full conformance suite and returns all case results.
 Future<List<ConformanceTestResult>> runConformanceSuite({
   required AdkWebServerClient client,
   required List<ConformanceTestCase> testCases,
