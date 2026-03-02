@@ -1,3 +1,6 @@
+/// Lightweight SQLite migration utilities used by session migration tooling.
+library;
+
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -23,7 +26,9 @@ const int _sqliteOpenCreate = 0x00000004;
 const int _sqliteOpenUri = 0x00000040;
 const int _sqliteOpenFullMutex = 0x00010000;
 
+/// Parsed and normalized SQLite database URL components.
 class ResolvedSqliteDbUrl {
+  /// Creates a resolved SQLite DB URL descriptor.
   const ResolvedSqliteDbUrl({
     required this.storePath,
     required this.connectPath,
@@ -32,13 +37,23 @@ class ResolvedSqliteDbUrl {
     required this.inMemory,
   });
 
+  /// Canonical path used for display/storage.
   final String storePath;
+
+  /// Path passed directly to sqlite open calls.
   final String connectPath;
+
+  /// Whether `connectPath` should be interpreted as a URI.
   final bool connectUri;
+
+  /// Whether the DB should be opened in read-only mode.
   final bool readOnly;
+
+  /// Whether this configuration targets an in-memory DB.
   final bool inMemory;
 }
 
+/// Resolves a sqlite [dbUrl] string into runtime connection settings.
 ResolvedSqliteDbUrl resolveSqliteDbUrl(
   String dbUrl, {
   String argumentName = 'dbUrl',
@@ -101,6 +116,7 @@ ResolvedSqliteDbUrl resolveSqliteDbUrl(
   );
 }
 
+/// Thin SQLite wrapper used by migration scripts.
 class SqliteMigrationDatabase {
   SqliteMigrationDatabase._({
     required _SqliteBindings bindings,
@@ -169,6 +185,7 @@ class SqliteMigrationDatabase {
   final String _displayPath;
   bool _disposed = false;
 
+  /// Closes this database handle.
   void dispose() {
     if (_disposed) {
       return;
@@ -177,6 +194,7 @@ class SqliteMigrationDatabase {
     _disposed = true;
   }
 
+  /// Executes [sql] with optional positional [params].
   void execute(String sql, [List<Object?> params = const <Object?>[]]) {
     _ensureOpen();
     final _PreparedStatement statement = _prepare(sql);
@@ -194,6 +212,7 @@ class SqliteMigrationDatabase {
     }
   }
 
+  /// Executes a query and returns rows as string-keyed maps.
   List<Map<String, Object?>> query(
     String sql, [
     List<Object?> params = const <Object?>[],
@@ -228,6 +247,7 @@ class SqliteMigrationDatabase {
     }
   }
 
+  /// Runs [action] inside a transaction with rollback on failure.
   void runTransaction(void Function() action) {
     execute('BEGIN');
     bool committed = false;
@@ -244,6 +264,7 @@ class SqliteMigrationDatabase {
     }
   }
 
+  /// Returns whether [tableName] exists.
   bool hasTable(String tableName) {
     final List<Map<String, Object?>> rows = query(
       "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
@@ -252,6 +273,7 @@ class SqliteMigrationDatabase {
     return rows.isNotEmpty;
   }
 
+  /// Returns the column names for [tableName].
   Set<String> tableColumns(String tableName) {
     final List<Map<String, Object?>> rows = query(
       'PRAGMA table_info($tableName)',

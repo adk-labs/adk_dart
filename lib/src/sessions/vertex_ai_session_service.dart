@@ -1,3 +1,6 @@
+/// Vertex AI-backed session service and API client implementations.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -11,34 +14,41 @@ import '../utils/vertex_ai_utils.dart';
 import 'base_session_service.dart';
 import 'session.dart';
 
+/// API client interface for Vertex AI session operations.
 abstract class VertexAiSessionApiClient {
+  /// Creates a session for [userId] under [reasoningEngineId].
   Future<Map<String, Object?>?> createSession({
     required String reasoningEngineId,
     required String userId,
     required Map<String, Object?> config,
   });
 
+  /// Returns a session payload for [sessionId], if present.
   Future<Map<String, Object?>?> getSession({
     required String reasoningEngineId,
     required String sessionId,
   });
 
+  /// Lists session payloads for [reasoningEngineId].
   Stream<Map<String, Object?>> listSessions({
     required String reasoningEngineId,
     String? userId,
   });
 
+  /// Deletes [sessionId] under [reasoningEngineId].
   Future<void> deleteSession({
     required String reasoningEngineId,
     required String sessionId,
   });
 
+  /// Lists event payloads for [sessionId].
   Stream<Map<String, Object?>> listEvents({
     required String reasoningEngineId,
     required String sessionId,
     double? afterTimestamp,
   });
 
+  /// Appends one event payload into [sessionId].
   Future<void> appendEvent({
     required String reasoningEngineId,
     required String sessionId,
@@ -49,6 +59,7 @@ abstract class VertexAiSessionApiClient {
   });
 }
 
+/// Factory signature for creating [VertexAiSessionApiClient] instances.
 typedef VertexAiSessionApiClientFactory =
     VertexAiSessionApiClient Function({
       String? project,
@@ -56,8 +67,10 @@ typedef VertexAiSessionApiClientFactory =
       String? apiKey,
     });
 
+/// Access-token provider signature for Vertex session API calls.
 typedef VertexAiSessionAccessTokenProvider = Future<String?> Function();
 
+/// URI builder signature for Vertex session API operations.
 typedef VertexAiSessionUriBuilder =
     Uri Function({
       required String operation,
@@ -90,6 +103,7 @@ VertexAiSessionApiClient _defaultSessionApiClientFactory({
 }
 
 class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
+  /// Creates an HTTP-based Vertex session API client.
   VertexAiSessionHttpApiClient({
     this.project,
     this.location,
@@ -104,8 +118,13 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
            accessTokenProvider ?? _defaultVertexAiAccessTokenProvider,
        _uriBuilder = uriBuilder ?? _defaultVertexAiSessionUriBuilder;
 
+  /// Optional GCP project for non-express mode.
   final String? project;
+
+  /// Optional GCP location for non-express mode.
   final String? location;
+
+  /// Optional express mode API key.
   final String? apiKey;
   final String _apiVersion;
   final http.Client _httpClient;
@@ -155,13 +174,12 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
         if (userId != null && userId.isNotEmpty) 'filter': 'user_id="$userId"',
         if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
       };
-      final Map<String, Object?> page =
-          await _requestJson(
-            method: 'GET',
-            operation: 'listSessions',
-            reasoningEngineId: reasoningEngineId,
-            queryParameters: query,
-          );
+      final Map<String, Object?> page = await _requestJson(
+        method: 'GET',
+        operation: 'listSessions',
+        reasoningEngineId: reasoningEngineId,
+        queryParameters: query,
+      );
       final List<Object?> rows = _asList(
         page['sessions'] ?? page['items'] ?? page['data'],
       );
@@ -209,14 +227,13 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
               'timestamp>="${DateTime.fromMillisecondsSinceEpoch((afterTimestamp * 1000).round(), isUtc: true).toIso8601String()}"',
         if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
       };
-      final Map<String, Object?> page =
-          await _requestJson(
-            method: 'GET',
-            operation: 'listEvents',
-            reasoningEngineId: reasoningEngineId,
-            sessionId: sessionId,
-            queryParameters: query,
-          );
+      final Map<String, Object?> page = await _requestJson(
+        method: 'GET',
+        operation: 'listEvents',
+        reasoningEngineId: reasoningEngineId,
+        sessionId: sessionId,
+        queryParameters: query,
+      );
       final List<Object?> rows = _asList(
         page['events'] ?? page['items'] ?? page['data'],
       );
@@ -428,6 +445,7 @@ Uri _defaultVertexAiSessionUriBuilder({
 }
 
 class VertexAiSessionService extends BaseSessionService {
+  /// Creates a Vertex AI-backed session service.
   VertexAiSessionService({
     String? project,
     String? location,
@@ -450,8 +468,13 @@ class VertexAiSessionService extends BaseSessionService {
   final String? _expressModeApiKey;
   final VertexAiSessionApiClientFactory _clientFactory;
 
+  /// Project used by this service, when configured.
   String? get project => _project;
+
+  /// Location used by this service, when configured.
   String? get location => _location;
+
+  /// Express mode API key, when configured.
   String? get expressModeApiKey => _expressModeApiKey;
 
   VertexAiSessionApiClient _getApiClient() {
@@ -490,15 +513,14 @@ class VertexAiSessionService extends BaseSessionService {
       throw StateError('Vertex session create response is empty.');
     }
 
-    final String name = _readStringByKeys(created, const <String>['name']) ?? '';
+    final String name =
+        _readStringByKeys(created, const <String>['name']) ?? '';
     final String resolvedId = name.isEmpty ? '' : name.split('/').last;
     final Map<String, Object?> sessionState = _asStringMap(
       created['session_state'],
     );
     final double updateTime =
-        _parseTimestamp(
-          created['update_time'] ?? created['updateTime'],
-        ) ??
+        _parseTimestamp(created['update_time'] ?? created['updateTime']) ??
         (DateTime.now().millisecondsSinceEpoch / 1000);
 
     return Session(
@@ -512,6 +534,7 @@ class VertexAiSessionService extends BaseSessionService {
   }
 
   @override
+  /// Fetches one session and its events for [sessionId].
   Future<Session?> getSession({
     required String appName,
     required String userId,
@@ -555,12 +578,13 @@ class VertexAiSessionService extends BaseSessionService {
         _readStringByKeys(sessionJson, const <String>['user_id', 'userId']) ??
         '';
     if (ownerUserId.isNotEmpty && ownerUserId != userId) {
-      throw ArgumentError('Session $sessionId does not belong to user $userId.');
+      throw ArgumentError(
+        'Session $sessionId does not belong to user $userId.',
+      );
     }
 
     final List<Map<String, Object?>> eventRows =
-        (results[1] as List<Map<String, Object?>>)
-            .toList(growable: false);
+        (results[1] as List<Map<String, Object?>>).toList(growable: false);
     final List<Event> events = eventRows
         .map(_eventFromApiJson)
         .where((Event? event) => event != null)
@@ -592,6 +616,7 @@ class VertexAiSessionService extends BaseSessionService {
   }
 
   @override
+  /// Lists sessions for [appName] and optional [userId].
   Future<ListSessionsResponse> listSessions({
     required String appName,
     String? userId,
@@ -626,6 +651,7 @@ class VertexAiSessionService extends BaseSessionService {
   }
 
   @override
+  /// Deletes [sessionId] from Vertex session storage.
   Future<void> deleteSession({
     required String appName,
     required String userId,
@@ -640,7 +666,11 @@ class VertexAiSessionService extends BaseSessionService {
   }
 
   @override
-  Future<Event> appendEvent({required Session session, required Event event}) async {
+  /// Appends [event] to the remote session and returns [event].
+  Future<Event> appendEvent({
+    required Session session,
+    required Event event,
+  }) async {
     await super.appendEvent(session: session, event: event);
 
     final String reasoningEngineId = _getReasoningEngineId(session.appName);
@@ -678,7 +708,9 @@ class VertexAiSessionService extends BaseSessionService {
       'interrupted': event.interrupted,
       'branch': event.branch,
       'custom_metadata': event.customMetadata,
-      'long_running_tool_ids': event.longRunningToolIds?.toList(growable: false),
+      'long_running_tool_ids': event.longRunningToolIds?.toList(
+        growable: false,
+      ),
       'grounding_metadata': event.groundingMetadata,
     };
     metadata.removeWhere((String _, Object? value) => value == null);
@@ -770,7 +802,8 @@ Map<String, Object?> _partToApiJson(Part part) {
   if (part.fileData != null) {
     payload['file_data'] = <String, Object?>{
       'file_uri': part.fileData!.fileUri,
-      if (part.fileData!.mimeType != null) 'mime_type': part.fileData!.mimeType!,
+      if (part.fileData!.mimeType != null)
+        'mime_type': part.fileData!.mimeType!,
       if (part.fileData!.displayName != null)
         'display_name': part.fileData!.displayName!,
     };
@@ -786,9 +819,13 @@ Map<String, Object?> _partToApiJson(Part part) {
 
 Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
   final String invocationId =
-      _readStringByKeys(apiEvent, const <String>['invocation_id', 'invocationId']) ??
+      _readStringByKeys(apiEvent, const <String>[
+        'invocation_id',
+        'invocationId',
+      ]) ??
       '';
-  final String author = _readStringByKeys(apiEvent, const <String>['author']) ?? '';
+  final String author =
+      _readStringByKeys(apiEvent, const <String>['author']) ?? '';
   final String id =
       _extractEventId(apiEvent) ??
       (invocationId.isNotEmpty ? invocationId : Event.newId());
@@ -797,8 +834,12 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
       (DateTime.now().millisecondsSinceEpoch / 1000);
 
   final Map<String, Object?> actionsJson = _asStringMap(apiEvent['actions']);
-  final Map<String, Object?> metadata = _asStringMap(apiEvent['event_metadata']);
-  final Content? content = _contentFromApiJson(_asStringMap(apiEvent['content']));
+  final Map<String, Object?> metadata = _asStringMap(
+    apiEvent['event_metadata'],
+  );
+  final Content? content = _contentFromApiJson(
+    _asStringMap(apiEvent['content']),
+  );
 
   return Event(
     id: id,
@@ -814,18 +855,25 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
         'transfer_agent',
       ]),
       escalate: _asBool(actionsJson['escalate']),
-      requestedAuthConfigs: _asStrictObjectMap(actionsJson['requested_auth_configs']),
+      requestedAuthConfigs: _asStrictObjectMap(
+        actionsJson['requested_auth_configs'],
+      ),
       requestedToolConfirmations: _asStrictObjectMap(
         actionsJson['requested_tool_confirmations'],
       ),
     ),
-    errorCode: _readStringByKeys(apiEvent, const <String>['error_code', 'errorCode']),
-    errorMessage: _readStringByKeys(
-      apiEvent,
-      const <String>['error_message', 'errorMessage'],
-    ),
+    errorCode: _readStringByKeys(apiEvent, const <String>[
+      'error_code',
+      'errorCode',
+    ]),
+    errorMessage: _readStringByKeys(apiEvent, const <String>[
+      'error_message',
+      'errorMessage',
+    ]),
     partial: _asBool(metadata['partial']),
-    turnComplete: _asBool(metadata['turn_complete'] ?? metadata['turnComplete']),
+    turnComplete: _asBool(
+      metadata['turn_complete'] ?? metadata['turnComplete'],
+    ),
     interrupted: _asBool(metadata['interrupted']),
     branch: _readStringByKeys(metadata, const <String>['branch']),
     customMetadata: _asDynamicMap(metadata['custom_metadata']),
@@ -850,7 +898,9 @@ Content? _contentFromApiJson(Map<String, Object?> json) {
         text: _readStringByKeys(partJson, const <String>['text']),
         thought: _asBool(partJson['thought']) ?? false,
         thoughtSignature: _decodeBytes(partJson['thought_signature']),
-        functionCall: _functionCallFromJson(_asStringMap(partJson['function_call'])),
+        functionCall: _functionCallFromJson(
+          _asStringMap(partJson['function_call']),
+        ),
         functionResponse: _functionResponseFromJson(
           _asStringMap(partJson['function_response']),
         ),
@@ -906,8 +956,10 @@ InlineData? _inlineDataFromJson(Map<String, Object?> json) {
   if (json.isEmpty) {
     return null;
   }
-  final String? mimeType =
-      _readStringByKeys(json, const <String>['mime_type', 'mimeType']);
+  final String? mimeType = _readStringByKeys(json, const <String>[
+    'mime_type',
+    'mimeType',
+  ]);
   if (mimeType == null || mimeType.isEmpty) {
     return null;
   }
@@ -929,8 +981,10 @@ FileData? _fileDataFromJson(Map<String, Object?> json) {
   if (json.isEmpty) {
     return null;
   }
-  final String? fileUri =
-      _readStringByKeys(json, const <String>['file_uri', 'fileUri']);
+  final String? fileUri = _readStringByKeys(json, const <String>[
+    'file_uri',
+    'fileUri',
+  ]);
   if (fileUri == null || fileUri.isEmpty) {
     return null;
   }
@@ -949,10 +1003,13 @@ Map<String, Object?>? _extractSessionFromCreateResponse(
 ) {
   final Map<String, Object?> direct = _asStringMap(response);
   if (_readStringByKeys(direct, const <String>['name']) != null &&
-      (direct.containsKey('session_state') || direct.containsKey('update_time'))) {
+      (direct.containsKey('session_state') ||
+          direct.containsKey('update_time'))) {
     return direct;
   }
-  final Map<String, Object?> nestedResponse = _asStringMap(response['response']);
+  final Map<String, Object?> nestedResponse = _asStringMap(
+    response['response'],
+  );
   if (nestedResponse.isNotEmpty) {
     return nestedResponse;
   }

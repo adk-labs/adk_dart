@@ -1,18 +1,25 @@
+/// Session schema migration orchestration helpers.
+library;
+
 import 'dart:io';
 
 import 'migrate_from_sqlalchemy_pickle.dart';
 import 'schema_check_utils.dart';
 
+/// Migration function signature for source/destination DB URLs.
 typedef MigrationFunction =
     Future<void> Function(String sourceDbUrl, String destDbUrl);
 
+/// Registry of available schema migrations keyed by start version.
 final Map<String, (String endVersion, MigrationFunction migrate)> migrations =
     <String, (String, MigrationFunction)>{
       schemaVersion0Pickle: (schemaVersion1Json, migrateFromSqlalchemyPickle),
     };
 
+/// Latest supported schema version.
 const String latestVersion = latestSchemaVersion;
 
+/// Upgrades [sourceDbUrl] schema into [destDbUrl] using migration steps.
 Future<void> upgrade(String sourceDbUrl, String destDbUrl) async {
   if (sourceDbUrl == destDbUrl) {
     throw StateError(

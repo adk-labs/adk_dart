@@ -1,10 +1,15 @@
+/// Session storage schema v0 models and conversion helpers.
+library;
+
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../sessions/session.dart';
 import '../../types/content.dart';
 import 'shared.dart';
 
+/// Session row model for schema v0.
 class StorageSessionV0 {
+  /// Creates a schema-v0 storage session.
   StorageSessionV0({
     required this.appName,
     required this.userId,
@@ -18,14 +23,28 @@ class StorageSessionV0 {
        updateTime = updateTime ?? DateTime.now().toUtc(),
        storageEvents = storageEvents ?? <StorageEventV0>[];
 
+  /// Application name.
   final String appName;
+
+  /// User ID.
   final String userId;
+
+  /// Session ID.
   final String id;
+
+  /// Session state snapshot.
   final Map<String, Object?> state;
+
+  /// Session creation time.
   final DateTime createTime;
+
+  /// Session update time.
   final DateTime updateTime;
+
+  /// Stored events for this session.
   final List<StorageEventV0> storageEvents;
 
+  /// Creates a schema-v0 storage session from JSON.
   factory StorageSessionV0.fromJson(Map<String, Object?> json) {
     final List<StorageEventV0> events = <StorageEventV0>[];
     final Object? rawEvents = json['storage_events'] ?? json['storageEvents'];
@@ -54,10 +73,12 @@ class StorageSessionV0 {
     );
   }
 
+  /// Returns update timestamp in epoch seconds.
   double getUpdateTimestamp({bool isSqlite = false}) {
     return PreciseTimestamp.toSeconds(updateTime);
   }
 
+  /// Converts this storage model into runtime [Session].
   Session toSession({
     Map<String, Object?>? stateOverride,
     List<Event>? events,
@@ -73,6 +94,7 @@ class StorageSessionV0 {
     );
   }
 
+  /// Serializes this session row to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'app_name': appName,
@@ -88,7 +110,9 @@ class StorageSessionV0 {
   }
 }
 
+/// Event row model for schema v0.
 class StorageEventV0 {
+  /// Creates a schema-v0 storage event.
   StorageEventV0({
     required this.id,
     required this.appName,
@@ -121,35 +145,91 @@ class StorageEventV0 {
   }) : actions = actions ?? EventActions(),
        timestamp = timestamp ?? DateTime.now().toUtc();
 
+  /// Event ID.
   final String id;
+
+  /// Application name.
   final String appName;
+
+  /// User ID.
   final String userId;
+
+  /// Session ID.
   final String sessionId;
+
+  /// Invocation ID.
   final String invocationId;
+
+  /// Author name.
   final String author;
+
+  /// Event actions payload.
   final EventActions actions;
+
+  /// Serialized long-running tool IDs.
   final String? longRunningToolIdsJson;
+
+  /// Branch identifier.
   final String? branch;
+
+  /// Event timestamp.
   final DateTime timestamp;
+
+  /// Event content.
   final Content? content;
+
+  /// Custom metadata.
   final Map<String, dynamic>? customMetadata;
+
+  /// Usage metadata.
   final Object? usageMetadata;
+
+  /// Citation metadata.
   final Object? citationMetadata;
+
+  /// Grounding metadata.
   final Object? groundingMetadata;
+
+  /// Partial-response marker.
   final bool? partial;
+
+  /// Turn completion marker.
   final bool? turnComplete;
+
+  /// Finish reason.
   final String? finishReason;
+
+  /// Error code.
   final String? errorCode;
+
+  /// Error message.
   final String? errorMessage;
+
+  /// Interrupted marker.
   final bool? interrupted;
+
+  /// Input transcription payload.
   final Object? inputTranscription;
+
+  /// Output transcription payload.
   final Object? outputTranscription;
+
+  /// Model version.
   final String? modelVersion;
+
+  /// Average log probabilities.
   final double? avgLogprobs;
+
+  /// Logprobs payload.
   final Object? logprobsResult;
+
+  /// Cache metadata.
   final Object? cacheMetadata;
+
+  /// Interaction identifier.
   final String? interactionId;
 
+  /// Creates a schema-v0 storage event from JSON.
   factory StorageEventV0.fromJson(Map<String, Object?> json) {
     return StorageEventV0(
       id: '${json['id'] ?? ''}',
@@ -195,6 +275,7 @@ class StorageEventV0 {
     );
   }
 
+  /// Creates a schema-v0 storage event from runtime [event].
   factory StorageEventV0.fromEvent({
     required Session session,
     required Event event,
@@ -235,6 +316,7 @@ class StorageEventV0 {
     );
   }
 
+  /// Returns long-running tool IDs parsed from serialized JSON.
   Set<String> get longRunningToolIds {
     final String? raw = longRunningToolIdsJson;
     if (raw == null || raw.isEmpty) {
@@ -247,6 +329,7 @@ class StorageEventV0 {
     return <String>{};
   }
 
+  /// Converts this storage model into runtime [Event].
   Event toEvent() {
     return Event(
       id: id,
@@ -279,6 +362,7 @@ class StorageEventV0 {
     );
   }
 
+  /// Serializes this event row to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'id': id,
@@ -315,7 +399,9 @@ class StorageEventV0 {
   }
 }
 
+/// Application-level state row model for schema v0.
 class StorageAppStateV0 {
+  /// Creates an application-state row.
   StorageAppStateV0({
     required this.appName,
     Map<String, Object?>? state,
@@ -327,6 +413,7 @@ class StorageAppStateV0 {
   final Map<String, Object?> state;
   final DateTime updateTime;
 
+  /// Creates application-state row from JSON.
   factory StorageAppStateV0.fromJson(Map<String, Object?> json) {
     return StorageAppStateV0(
       appName: '${json['app_name'] ?? json['appName'] ?? ''}',
@@ -335,6 +422,7 @@ class StorageAppStateV0 {
     );
   }
 
+  /// Serializes application-state row to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'app_name': appName,
@@ -344,7 +432,9 @@ class StorageAppStateV0 {
   }
 }
 
+/// User-level state row model for schema v0.
 class StorageUserStateV0 {
+  /// Creates a user-state row.
   StorageUserStateV0({
     required this.appName,
     required this.userId,
@@ -358,6 +448,7 @@ class StorageUserStateV0 {
   final Map<String, Object?> state;
   final DateTime updateTime;
 
+  /// Creates user-state row from JSON.
   factory StorageUserStateV0.fromJson(Map<String, Object?> json) {
     return StorageUserStateV0(
       appName: '${json['app_name'] ?? json['appName'] ?? ''}',
@@ -367,6 +458,7 @@ class StorageUserStateV0 {
     );
   }
 
+  /// Serializes user-state row to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'app_name': appName,
