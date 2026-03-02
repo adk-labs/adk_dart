@@ -1,3 +1,6 @@
+/// Invocation-scoped execution context and state containers.
+library;
+
 import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
 import '../events/event.dart';
@@ -14,16 +17,21 @@ import 'base_agent.dart';
 import 'live_request_queue.dart';
 import 'run_config.dart';
 
+/// Error thrown when LLM call count exceeds the configured limit.
 class LlmCallsLimitExceededError implements Exception {
+  /// Creates an LLM call-limit error with [message].
   LlmCallsLimitExceededError(this.message);
 
+  /// Human-readable error message.
   final String message;
 
   @override
   String toString() => 'LlmCallsLimitExceededError: $message';
 }
 
+/// Mutable invocation context shared across agent execution steps.
 class InvocationContext {
+  /// Creates an invocation context for a single run.
   InvocationContext({
     this.artifactService,
     required this.sessionService,
@@ -54,45 +62,95 @@ class InvocationContext {
        endOfAgents = endOfAgents ?? <String, bool>{},
        pluginManager = pluginManager ?? PluginManager();
 
+  /// Artifact service used for persistence and retrieval.
   BaseArtifactService? artifactService;
+
+  /// Session service used for session reads and writes.
   BaseSessionService sessionService;
+
+  /// Memory service backing long-term memory APIs.
   Object? memoryService;
+
+  /// Credential service used for auth token persistence.
   Object? credentialService;
+
+  /// Opaque context-cache configuration payload.
   Object? contextCacheConfig;
 
+  /// Invocation identifier.
   String invocationId;
+
+  /// Branch identifier for branched execution, if any.
   String? branch;
+
+  /// Active agent for this invocation.
   BaseAgent agent;
+
+  /// User-provided content for the current turn.
   Content? userContent;
+
+  /// Backing session object.
   Session session;
 
+  /// Serialized agent states by agent name.
   Map<String, Map<String, Object?>> agentStates;
+
+  /// Per-agent completion markers for resumable flows.
   Map<String, bool> endOfAgents;
+
+  /// Whether the overall invocation has ended.
   bool endInvocation;
 
+  /// Queue used by live-mode request handling.
   LiveRequestQueue? liveRequestQueue;
+
+  /// Active streaming tool handles by function call ID.
   Map<String, ActiveStreamingTool>? activeStreamingTools;
+
+  /// Cached transcription payloads across realtime turns.
   List<Object?>? transcriptionCache;
+
+  /// Opaque live-session resumption handle.
   String? liveSessionResumptionHandle;
+
+  /// Buffered realtime input chunks.
   List<Object?>? inputRealtimeCache;
+
+  /// Buffered realtime output chunks.
   List<Object?>? outputRealtimeCache;
 
+  /// Run configuration options.
   RunConfig? runConfig;
+
+  /// Resumability policy for this invocation.
   ResumabilityConfig? resumabilityConfig;
+
+  /// Event compaction settings for this invocation.
   EventsCompactionConfig? eventsCompactionConfig;
+
+  /// Whether token compaction checks already ran.
   bool tokenCompactionChecked;
 
+  /// Plugin manager used throughout execution.
   PluginManager pluginManager;
+
+  /// Cached canonical tool set, if computed.
   List<BaseTool>? canonicalToolsCache;
 
   int _numberOfLlmCalls = 0;
 
+  /// Whether resumable execution is enabled.
   bool get isResumable => resumabilityConfig?.isResumable ?? false;
 
+  /// The application name for this invocation.
   String get appName => session.appName;
 
+  /// The user ID for this invocation.
   String get userId => session.userId;
 
+  /// Saves an [artifact] to [filename] and returns its version.
+  ///
+  /// Throws a [StateError] when artifact services are unavailable.
   Future<int> saveArtifact({
     required String filename,
     required Part artifact,
@@ -114,6 +172,9 @@ class InvocationContext {
     );
   }
 
+  /// Loads an artifact [filename] and optional [version].
+  ///
+  /// Throws a [StateError] when artifact services are unavailable.
   Future<Part?> loadArtifact({
     required String filename,
     String? sessionId,
@@ -133,6 +194,9 @@ class InvocationContext {
     );
   }
 
+  /// Searches memory with [query].
+  ///
+  /// Throws a [StateError] when memory services are unavailable.
   Future<SearchMemoryResponse> searchMemory({required String query}) async {
     final Object? service = memoryService;
     if (service is! BaseMemoryService) {
@@ -141,6 +205,9 @@ class InvocationContext {
     return service.searchMemory(appName: appName, userId: userId, query: query);
   }
 
+  /// Adds [events] to memory for this or another [sessionId].
+  ///
+  /// Throws a [StateError] when memory services are unavailable.
   Future<void> addEventsToMemory({
     required List<Event> events,
     String? sessionId,
@@ -159,6 +226,9 @@ class InvocationContext {
     );
   }
 
+  /// Adds explicit [memories] to long-term memory.
+  ///
+  /// Throws a [StateError] when memory services are unavailable.
   Future<void> addMemory({
     required List<MemoryEntry> memories,
     Map<String, Object?>? customMetadata,
@@ -175,6 +245,9 @@ class InvocationContext {
     );
   }
 
+  /// Adds the current session transcript to memory.
+  ///
+  /// Throws a [StateError] when memory services are unavailable.
   Future<void> addSessionToMemory() async {
     final Object? service = memoryService;
     if (service is! BaseMemoryService) {
@@ -183,6 +256,9 @@ class InvocationContext {
     await service.addSessionToMemory(session);
   }
 
+  /// Lists artifact filenames for this invocation session.
+  ///
+  /// Throws a [StateError] when artifact services are unavailable.
   Future<List<String>> listArtifacts({String? sessionId}) async {
     final BaseArtifactService? service = artifactService;
     if (service == null) {
@@ -196,6 +272,9 @@ class InvocationContext {
     );
   }
 
+  /// Deletes artifact [filename] from storage.
+  ///
+  /// Throws a [StateError] when artifact services are unavailable.
   Future<void> deleteArtifact({
     required String filename,
     String? sessionId,
@@ -213,6 +292,9 @@ class InvocationContext {
     );
   }
 
+  /// Lists available versions for artifact [filename].
+  ///
+  /// Throws a [StateError] when artifact services are unavailable.
   Future<List<int>> listArtifactVersions({
     required String filename,
     String? sessionId,
@@ -230,6 +312,9 @@ class InvocationContext {
     );
   }
 
+  /// Returns metadata for artifact [filename] and optional [version].
+  ///
+  /// Throws a [StateError] when artifact services are unavailable.
   Future<ArtifactVersion?> getArtifactVersion({
     required String filename,
     String? sessionId,
@@ -249,6 +334,7 @@ class InvocationContext {
     );
   }
 
+  /// Sets or clears serialized state for [agentName].
   void setAgentState(
     String agentName, {
     BaseAgentState? agentState,
@@ -270,6 +356,7 @@ class InvocationContext {
     agentStates.remove(agentName);
   }
 
+  /// Clears cached states for all descendants of [agentName].
   void resetSubAgentStates(String agentName) {
     final BaseAgent? target = agent.findAgent(agentName);
     if (target == null) {
@@ -282,6 +369,7 @@ class InvocationContext {
     }
   }
 
+  /// Rebuilds in-memory agent state from current-invocation events.
   void populateInvocationAgentStates() {
     if (!isResumable) {
       return;
@@ -305,6 +393,9 @@ class InvocationContext {
     }
   }
 
+  /// Increments the LLM call counter and enforces [RunConfig.maxLlmCalls].
+  ///
+  /// Throws an [LlmCallsLimitExceededError] when the limit is exceeded.
   void incrementLlmCallCount() {
     _numberOfLlmCalls += 1;
     final RunConfig? config = runConfig;
@@ -317,6 +408,7 @@ class InvocationContext {
     }
   }
 
+  /// Returns events filtered by invocation and/or branch scopes.
   List<Event> getEvents({
     bool currentInvocation = false,
     bool currentBranch = false,
@@ -333,6 +425,7 @@ class InvocationContext {
     return events.toList();
   }
 
+  /// Whether [event] should pause resumable invocation execution.
   bool shouldPauseInvocation(Event event) {
     if (!isResumable) {
       return false;
@@ -353,6 +446,7 @@ class InvocationContext {
     return false;
   }
 
+  /// Finds the function-call event that matches [functionResponseEvent].
   Event? findMatchingFunctionCall(Event functionResponseEvent) {
     final List<FunctionResponse> responses = functionResponseEvent
         .getFunctionResponses();
@@ -385,6 +479,7 @@ class InvocationContext {
     return null;
   }
 
+  /// Creates a shallow-cloned context with selected overrides.
   InvocationContext copyWith({
     BaseAgent? agent,
     String? branch,
