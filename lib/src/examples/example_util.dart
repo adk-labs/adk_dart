@@ -1,3 +1,6 @@
+/// Utilities for formatting and retrieving few-shot examples.
+library;
+
 import '../sessions/session.dart';
 import '../types/content.dart';
 import 'base_example_provider.dart';
@@ -17,6 +20,7 @@ const String _functionCallSuffix = '\n```\n';
 const String _functionResponsePrefix = '```tool_outputs\n';
 const String _functionResponseSuffix = '\n```\n';
 
+/// Converts [examples] into prompt text consumable by models.
 String convertExamplesToText(List<Example> examples, String? model) {
   final StringBuffer examplesBuffer = StringBuffer();
   for (int i = 0; i < examples.length; i += 1) {
@@ -91,6 +95,7 @@ String convertExamplesToText(List<Example> examples, String? model) {
   return '$_examplesIntro${examplesBuffer.toString()}$_examplesEnd';
 }
 
+/// Returns latest plain user text message from [session].
 String getLatestMessageFromUser(Session session) {
   if (session.events.isEmpty) {
     return '';
@@ -108,6 +113,7 @@ String getLatestMessageFromUser(Session session) {
   return '';
 }
 
+/// Builds a few-shot prompt section from list/provider [examples].
 String buildExampleSi(Object examples, String query, String? model) {
   if (examples is List<Example>) {
     return convertExamplesToText(examples, model);

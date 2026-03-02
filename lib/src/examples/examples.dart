@@ -1,3 +1,6 @@
+/// Public exports for example models, providers, and utilities.
+library;
+
 export 'base_example_provider.dart';
 export 'example.dart';
 export 'example_util.dart';
