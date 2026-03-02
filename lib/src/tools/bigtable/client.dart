@@ -4,51 +4,81 @@ import 'dart:io';
 import '../_google_auth_token.dart';
 import '../../version.dart';
 
+/// Default ADK user-agent string for Bigtable requests.
 const String bigtableUserAgent = 'adk-bigtable-tool google-adk/$adkVersion';
 
+/// Summary of a Bigtable instance.
 class BigtableInstanceSummary {
+  /// Creates an instance summary.
   const BigtableInstanceSummary({required this.instanceId});
 
+  /// Bigtable instance identifier.
   final String instanceId;
 }
 
+/// Result payload for listing Bigtable instances.
 class BigtableInstanceListResult {
+  /// Creates an instance list result.
   const BigtableInstanceListResult({
     required this.instances,
     this.failedLocations = const <String>[],
   });
 
+  /// Listed instances.
   final List<BigtableInstanceSummary> instances;
+
+  /// Locations that failed during listing.
   final List<String> failedLocations;
 }
 
+/// Admin client interface for Bigtable.
 abstract class BigtableAdminClient {
+  /// Lists instances visible to the configured project.
   BigtableInstanceListResult listInstances();
 
+  /// Returns an admin instance handle.
   BigtableAdminInstance instance(String instanceId);
 }
 
+/// Admin instance interface for Bigtable.
 abstract class BigtableAdminInstance {
+  /// Instance identifier.
   String get instanceId;
+
+  /// Human-readable instance name.
   String get displayName;
+
+  /// Raw instance state payload.
   Object? get state;
+
+  /// Raw instance type payload.
   Object? get type;
+
+  /// Instance labels.
   Map<String, Object?> get labels;
 
+  /// Reloads instance metadata.
   void reload();
 
+  /// Lists tables in this instance.
   Iterable<BigtableTableAdmin> listTables();
 
+  /// Returns an admin handle for [tableId].
   BigtableTableAdmin table(String tableId);
 }
 
+/// Admin table interface for Bigtable.
 abstract class BigtableTableAdmin {
+  /// Table identifier.
   String get tableId;
 
+  /// Column family descriptors for this table.
   Map<String, Object?> listColumnFamilies();
 }
 
+/// Data client interface for Bigtable query operations.
 abstract class BigtableDataClient {
+  /// Executes a query in [instanceId].
   BigtableQueryIterator executeQuery({
     required String query,
     required String instanceId,
@@ -57,14 +87,19 @@ abstract class BigtableDataClient {
   });
 }
 
+/// Iterator over Bigtable query rows.
 abstract class BigtableQueryIterator implements Iterable<BigtableQueryRow> {
+  /// Releases underlying resources.
   void close();
 }
 
+/// One Bigtable query row.
 abstract class BigtableQueryRow {
+  /// Row field map.
   Map<String, Object?> get fields;
 }
 
+/// Factory for creating [BigtableAdminClient] instances.
 typedef BigtableAdminClientFactory =
     BigtableAdminClient Function({
       required String project,
@@ -72,6 +107,7 @@ typedef BigtableAdminClientFactory =
       required String userAgent,
     });
 
+/// Factory for creating [BigtableDataClient] instances.
 typedef BigtableDataClientFactory =
     BigtableDataClient Function({
       required String project,
@@ -79,7 +115,9 @@ typedef BigtableDataClientFactory =
       required String userAgent,
     });
 
+/// Exception thrown when Bigtable client factories are not configured.
 class BigtableClientFactoryNotConfiguredException implements Exception {
+  /// Creates this exception.
   BigtableClientFactoryNotConfiguredException({
     required this.target,
     String? message,
@@ -89,9 +127,14 @@ class BigtableClientFactoryNotConfiguredException implements Exception {
                'Call setBigtableClientFactories(...) before invoking Bigtable tools.';
 
   static const String defaultCode = 'BIGTABLE_CLIENT_FACTORY_NOT_CONFIGURED';
+
+  /// Target client category (`admin` or `data`).
   final String target;
+
+  /// Human-readable error message.
   final String message;
 
+  /// Stable error code.
   String get code => defaultCode;
 
   @override
@@ -101,6 +144,7 @@ class BigtableClientFactoryNotConfiguredException implements Exception {
 BigtableAdminClientFactory _adminClientFactory = _defaultAdminClientFactory;
 BigtableDataClientFactory _dataClientFactory = _defaultDataClientFactory;
 
+/// Returns a Bigtable admin client for [project] and [credentials].
 BigtableAdminClient getBigtableAdminClient({
   required String project,
   required Object credentials,
@@ -112,6 +156,7 @@ BigtableAdminClient getBigtableAdminClient({
   );
 }
 
+/// Returns a Bigtable data client for [project] and [credentials].
 BigtableDataClient getBigtableDataClient({
   required String project,
   required Object credentials,
@@ -123,6 +168,9 @@ BigtableDataClient getBigtableDataClient({
   );
 }
 
+/// Overrides Bigtable client factories.
+///
+/// This is primarily used by tests.
 void setBigtableClientFactories({
   BigtableAdminClientFactory? adminClientFactory,
   BigtableDataClientFactory? dataClientFactory,
@@ -135,6 +183,7 @@ void setBigtableClientFactories({
   }
 }
 
+/// Restores default Bigtable client factories.
 void resetBigtableClientFactories() {
   _adminClientFactory = _defaultAdminClientFactory;
   _dataClientFactory = _defaultDataClientFactory;
