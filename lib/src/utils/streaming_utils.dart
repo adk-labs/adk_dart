@@ -2,6 +2,7 @@ import '../features/_feature_registry.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
 
+/// Aggregates streamed [LlmResponse] chunks into coherent final responses.
 class StreamingResponseAggregator {
   String _text = '';
   String _thoughtText = '';
@@ -249,6 +250,7 @@ class StreamingResponseAggregator {
     return true;
   }
 
+  /// Processes one streamed [response] and yields incremental outputs.
   Stream<LlmResponse> processResponse(LlmResponse response) async* {
     _response = response;
     _usageMetadata = response.usageMetadata;
@@ -372,6 +374,7 @@ class StreamingResponseAggregator {
     yield response;
   }
 
+  /// Finalizes aggregation and returns the terminal merged response.
   LlmResponse? close() {
     if (isFeatureEnabled(FeatureName.progressiveSseStreaming)) {
       if (_response == null) {
