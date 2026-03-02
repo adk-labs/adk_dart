@@ -144,6 +144,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
   Future<void>? _initialization;
   Future<void> _lock = Future<void>.value();
 
+  /// Creates and persists a new session for [appName] and [userId].
   @override
   Future<Session> createSession({
     required String appName,
@@ -238,6 +239,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
     });
   }
 
+  /// Loads a session and its events for [sessionId], or returns `null`.
   @override
   Future<Session?> getSession({
     required String appName,
@@ -330,6 +332,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
     });
   }
 
+  /// Lists sessions for [appName], optionally filtered by [userId].
   @override
   Future<ListSessionsResponse> listSessions({
     required String appName,
@@ -410,6 +413,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
     });
   }
 
+  /// Deletes a persisted session identified by [sessionId].
   @override
   Future<void> deleteSession({
     required String appName,
@@ -427,6 +431,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
     });
   }
 
+  /// Appends [event] to [session] and persists derived state updates.
   @override
   Future<Event> appendEvent({required Session session, required Event event}) {
     return _withLock<Event>(() async {
