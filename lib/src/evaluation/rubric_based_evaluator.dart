@@ -9,18 +9,28 @@ import 'evaluator.dart';
 import 'llm_as_judge.dart';
 import 'llm_as_judge_utils.dart';
 
+/// Parsed rubric evaluation response item.
 class RubricResponse {
+  /// Creates a rubric response item.
   RubricResponse({this.propertyText, this.rationale, this.score});
 
+  /// Rubric property text referenced by the model output.
   final String? propertyText;
+
+  /// Model rationale for the verdict.
   final String? rationale;
+
+  /// Parsed numeric score.
   final double? score;
 }
 
+/// Parser interface for converting auto-rater text into rubric responses.
 abstract class AutoRaterResponseParser {
+  /// Parses [autoRaterResponse] into structured rubric responses.
   List<RubricResponse> parse(String autoRaterResponse);
 }
 
+/// Default parser for `Property/Rationale/Verdict` auto-rater output.
 class DefaultAutoRaterResponseParser implements AutoRaterResponseParser {
   static final RegExp _propertyPattern = RegExp(
     r'^Property:\s*(.*)$',
@@ -78,13 +88,16 @@ class DefaultAutoRaterResponseParser implements AutoRaterResponseParser {
   }
 }
 
+/// Aggregator interface for multiple per-invocation samples.
 abstract class PerInvocationResultsAggregator {
+  /// Aggregates [perInvocationSamples] using [threshold].
   PerInvocationResult aggregate(
     List<PerInvocationResult> perInvocationSamples,
     double threshold,
   );
 }
 
+/// Majority-vote aggregator for per-invocation rubric scores.
 class MajorityVotePerInvocationResultsAggregator
     implements PerInvocationResultsAggregator {
   @override
@@ -147,13 +160,16 @@ class _RubricScoreBuckets {
   final List<RubricScore> negatives = <RubricScore>[];
 }
 
+/// Summarizer interface for invocation-level results.
 abstract class InvocationResultsSummarizer {
+  /// Summarizes [perInvocationResults] using [threshold].
   EvaluationResult summarize(
     List<PerInvocationResult> perInvocationResults,
     double threshold,
   );
 }
 
+/// Mean-based summarizer for invocation-level rubric results.
 class MeanInvocationResultsSummarizer implements InvocationResultsSummarizer {
   @override
   EvaluationResult summarize(
@@ -205,14 +221,16 @@ String _normalizeText(String text) {
   return text.toLowerCase().trim();
 }
 
+/// Base evaluator for rubric-driven LLM-as-a-judge metrics.
 abstract class RubricBasedEvaluator extends LlmAsJudge {
+  /// Creates a rubric-based evaluator.
   RubricBasedEvaluator({
     required EvalMetricSpec evalMetric,
     AutoRaterResponseParser? autoRaterResponseParser,
     PerInvocationResultsAggregator? perInvocationResultsAggregator,
     InvocationResultsSummarizer? invocationResultsSummarizer,
     this.rubricType,
-    AutoRaterInvoker? autoRaterInvoker,
+    super.autoRaterInvoker,
   }) : _autoRaterResponseParser =
            autoRaterResponseParser ?? DefaultAutoRaterResponseParser(),
        _perInvocationResultsAggregator =
@@ -221,11 +239,7 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
        _invocationResultsSummarizer =
            invocationResultsSummarizer ?? MeanInvocationResultsSummarizer(),
        _evalMetric = evalMetric,
-       super(
-         evalMetric: evalMetric,
-         expectedInvocationsRequired: false,
-         autoRaterInvoker: autoRaterInvoker,
-       ) {
+       super(evalMetric: evalMetric, expectedInvocationsRequired: false) {
     if (evalMetric.criterion == null) {
       throw ArgumentError(
         '`${evalMetric.metricName}` metric expects a criterion of type '
@@ -241,6 +255,7 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
     _rubrics = _criterion.rubrics;
   }
 
+  /// Optional rubric type filter.
   final String? rubricType;
   final AutoRaterResponseParser _autoRaterResponseParser;
   final PerInvocationResultsAggregator _perInvocationResultsAggregator;
@@ -254,6 +269,7 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
   @override
   Type get criterionType => RubricsBasedCriterion;
 
+  /// Creates the effective rubric set for an invocation.
   void createEffectiveRubricsList(List<EvalJsonMap>? invocationRubrics) {
     final Map<String, Rubric> rubricsById = <String, Rubric>{};
 
@@ -285,6 +301,7 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
     _effectiveRubricsList = rubricsById.values.toList(growable: false);
   }
 
+  /// Returns the effective rubric set for scoring.
   List<Rubric> getEffectiveRubricsList() {
     final List<Rubric>? list = _effectiveRubricsList;
     if (list == null) {
