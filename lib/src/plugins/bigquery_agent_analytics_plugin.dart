@@ -31,7 +31,9 @@ const Map<String, String> _hitlEventMap = <String, String>{
   'adk_request_input': 'HITL_INPUT_REQUEST',
 };
 
+/// Retry policy used by BigQuery event delivery.
 class RetryConfig {
+  /// Creates a retry policy.
   RetryConfig({
     this.maxRetries = 3,
     this.initialDelay = 1.0,
@@ -39,16 +41,26 @@ class RetryConfig {
     this.maxDelay = 10.0,
   });
 
+  /// The maximum number of retry attempts.
   final int maxRetries;
+
+  /// The initial retry delay in seconds.
   final double initialDelay;
+
+  /// The exponential backoff multiplier applied after each retry.
   final double multiplier;
+
+  /// The maximum retry delay in seconds.
   final double maxDelay;
 }
 
+/// Formats raw event content before it is serialized for BigQuery.
 typedef BigQueryContentFormatter =
     Object? Function(Object? content, String eventType);
 
+/// Configuration for [BigQueryAgentAnalyticsPlugin].
 class BigQueryLoggerConfig {
+  /// Creates a BigQuery logging configuration.
   BigQueryLoggerConfig({
     this.enabled = true,
     this.eventAllowlist,
@@ -73,27 +85,66 @@ class BigQueryLoggerConfig {
        retryConfig = retryConfig ?? RetryConfig(),
        customTags = customTags ?? <String, Object?>{};
 
+  /// Whether event logging is enabled.
   bool enabled;
+
+  /// Optional event names to include.
+  ///
+  /// When provided, only listed events are logged.
   List<String>? eventAllowlist;
+
+  /// Optional event names to exclude.
   List<String>? eventDenylist;
+
+  /// The maximum serialized payload length per field.
   int maxContentLength;
+
+  /// The destination table identifier.
   String tableId;
+
+  /// BigQuery clustering fields for table creation workflows.
   List<String> clusteringFields;
+
+  /// Whether multimodal parts are logged separately in `content_parts`.
   bool logMultiModalContent;
+
+  /// Retry settings used by transport layers.
   RetryConfig retryConfig;
+
+  /// The number of rows to buffer before flushing.
   int batchSize;
+
+  /// The periodic flush interval in seconds.
   double batchFlushInterval;
+
+  /// The shutdown flush timeout in seconds.
   double shutdownTimeout;
+
+  /// The maximum number of queued events.
   int queueMaxSize;
+
+  /// Optional payload formatter applied before truncation.
   BigQueryContentFormatter? contentFormatter;
+
+  /// Optional Cloud Storage bucket for overflow or archival integrations.
   String? gcsBucketName;
+
+  /// Optional BigQuery connection identifier for external integrations.
   String? connectionId;
+
+  /// Whether to include session metadata in event attributes.
   bool logSessionMetadata;
+
+  /// Static key-value tags added to each event row.
   Map<String, Object?> customTags;
+
+  /// Whether schema compatibility upgrades are allowed automatically.
   bool autoSchemaUpgrade;
 }
 
+/// Per-event metadata captured in BigQuery rows.
 class EventData {
+  /// Creates event metadata.
   EventData({
     this.spanIdOverride,
     this.parentSpanIdOverride,
@@ -107,29 +158,55 @@ class EventData {
     Map<String, Object?>? extraAttributes,
   }) : extraAttributes = extraAttributes ?? <String, Object?>{};
 
+  /// Explicit span identifier to use for this event.
   final String? spanIdOverride;
+
+  /// Explicit parent span identifier to use for this event.
   final String? parentSpanIdOverride;
+
+  /// End-to-end latency in milliseconds.
   final int? latencyMs;
+
+  /// Time-to-first-token latency in milliseconds.
   final int? timeToFirstTokenMs;
+
+  /// The logical model name associated with this event.
   final String? model;
+
+  /// The provider model version associated with this event.
   final String? modelVersion;
+
+  /// Raw usage metadata emitted by model providers.
   final Object? usageMetadata;
+
+  /// Event status string stored in the `status` column.
   final String status;
+
+  /// Optional error message for failed operations.
   final String? errorMessage;
+
+  /// Additional attributes merged into the row metadata.
   final Map<String, Object?> extraAttributes;
 }
 
+/// Event sink abstraction used by [BigQueryAgentAnalyticsPlugin].
 abstract class BigQueryEventSink {
+  /// Appends one event row.
   Future<void> append(Map<String, Object?> row);
 
+  /// Flushes buffered rows to the destination.
   Future<void> flush();
 
+  /// Closes the sink and releases resources.
   Future<void> close();
 }
 
+/// Async token provider used for BigQuery HTTP authentication.
 typedef BigQueryAccessTokenProvider = Future<String?> Function();
 
+/// [BigQueryEventSink] implementation that writes rows using `insertAll`.
 class BigQueryInsertAllEventSink implements BigQueryEventSink {
+  /// Creates an `insertAll` sink.
   BigQueryInsertAllEventSink({
     required this.projectId,
     required this.datasetId,
@@ -143,10 +220,19 @@ class BigQueryInsertAllEventSink implements BigQueryEventSink {
            accessTokenProvider ?? _defaultBigQueryAccessTokenProvider,
        _ownsHttpClient = httpClient == null;
 
+  /// The Google Cloud project identifier.
   final String projectId;
+
+  /// The BigQuery dataset identifier.
   final String datasetId;
+
+  /// The BigQuery table identifier.
   final String tableId;
+
+  /// Optional API key used when OAuth access token is unavailable.
   final String? apiKey;
+
+  /// The maximum rows sent in a single request.
   final int maxBatchSize;
   final http.Client _httpClient;
   final BigQueryAccessTokenProvider _accessTokenProvider;
@@ -270,9 +356,11 @@ class BigQueryInsertAllEventSink implements BigQueryEventSink {
   }
 }
 
+/// In-memory [BigQueryEventSink] for tests and local inspection.
 class InMemoryBigQueryEventSink implements BigQueryEventSink {
   final List<Map<String, Object?>> _rows = <Map<String, Object?>>[];
 
+  /// Logged rows captured by this sink.
   List<Map<String, Object?>> get rows =>
       List<Map<String, Object?>>.unmodifiable(_rows);
 
@@ -311,13 +399,15 @@ class _PopResult {
   final int? durationMs;
 }
 
-class TraceManager {
+/// Tracks trace and span state across callback boundaries.
+class _TraceManager {
   static final Map<String, List<_SpanRecord>> _spanRecordsByInvocation =
       <String, List<_SpanRecord>>{};
   static final Map<String, String> _rootAgentNameByInvocation =
       <String, String>{};
   static final Random _random = Random();
 
+  /// Initializes trace state for an invocation if missing.
   static void initTrace(CallbackContext callbackContext) {
     _spanRecordsByInvocation.putIfAbsent(
       callbackContext.invocationId,
@@ -329,10 +419,12 @@ class TraceManager {
     );
   }
 
+  /// The trace identifier for the current invocation.
   static String getTraceId(CallbackContext callbackContext) {
     return callbackContext.invocationId;
   }
 
+  /// Pushes a new span and returns its identifier.
   static String pushSpan(CallbackContext callbackContext, String spanName) {
     initTrace(callbackContext);
 
@@ -350,6 +442,7 @@ class TraceManager {
     return spanId;
   }
 
+  /// Pops the current span and returns timing information.
   static _PopResult popSpan(CallbackContext callbackContext) {
     final List<_SpanRecord>? stack =
         _spanRecordsByInvocation[callbackContext.invocationId];
@@ -368,6 +461,7 @@ class TraceManager {
     );
   }
 
+  /// The current span and parent span identifiers.
   static _TracePair getCurrentSpanAndParent(CallbackContext callbackContext) {
     final List<_SpanRecord>? stack =
         _spanRecordsByInvocation[callbackContext.invocationId];
@@ -381,6 +475,7 @@ class TraceManager {
     return _TracePair(spanId: spanId, parentSpanId: parentSpanId);
   }
 
+  /// The current span identifier, if present.
   static String? getCurrentSpanId(CallbackContext callbackContext) {
     final List<_SpanRecord>? stack =
         _spanRecordsByInvocation[callbackContext.invocationId];
@@ -390,6 +485,9 @@ class TraceManager {
     return stack.last.spanId;
   }
 
+  /// Records the first token timestamp for [spanId].
+  ///
+  /// Returns `true` when the timestamp is recorded for the first time.
   static bool recordFirstToken(CallbackContext callbackContext, String spanId) {
     final _SpanRecord? record = _findRecord(callbackContext, spanId);
     if (record == null || record.firstTokenMicros != null) {
@@ -399,6 +497,7 @@ class TraceManager {
     return true;
   }
 
+  /// Elapsed time in milliseconds for [spanId], if available.
   static int? elapsedMs(CallbackContext callbackContext, String spanId) {
     final _SpanRecord? record = _findRecord(callbackContext, spanId);
     if (record == null) {
@@ -408,6 +507,7 @@ class TraceManager {
         .round();
   }
 
+  /// Time-to-first-token in milliseconds for [spanId], if available.
   static int? timeToFirstTokenMs(
     CallbackContext callbackContext,
     String spanId,
@@ -420,10 +520,12 @@ class TraceManager {
     return ((firstTokenMicros - record.startMicros) / 1000).round();
   }
 
+  /// The root agent name associated with the current invocation.
   static String? getRootAgentName(CallbackContext callbackContext) {
     return _rootAgentNameByInvocation[callbackContext.invocationId];
   }
 
+  /// Clears trace state for an invocation.
   static void clear(CallbackContext callbackContext) {
     _spanRecordsByInvocation.remove(callbackContext.invocationId);
     _rootAgentNameByInvocation.remove(callbackContext.invocationId);
@@ -462,7 +564,9 @@ class _TruncateResult {
   final bool isTruncated;
 }
 
+/// Plugin that records ADK runtime events to BigQuery-compatible rows.
 class BigQueryAgentAnalyticsPlugin extends BasePlugin {
+  /// Creates a BigQuery analytics plugin.
   BigQueryAgentAnalyticsPlugin({
     required this.projectId,
     required this.datasetId,
@@ -499,24 +603,38 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     _applyConfigOverrides(configOverrides);
   }
 
+  /// The Google Cloud project identifier.
   final String projectId;
+
+  /// The destination BigQuery dataset identifier.
   final String datasetId;
+
+  /// The target BigQuery region.
   final String location;
+
+  /// Runtime logging configuration.
   final BigQueryLoggerConfig config;
+
+  /// Optional config map used to override [config] fields.
   final Map<String, Object?>? configOverrides;
 
+  /// The destination BigQuery table identifier.
   late final String tableId;
 
   bool _started = false;
   bool _isShuttingDown = false;
   final BigQueryEventSink _sink;
 
+  /// The schema version stored in each event row.
   String get schemaVersion => _schemaVersion;
 
+  /// The row field key used for schema version labels.
   String get schemaVersionLabelKey => _schemaVersionLabelKey;
 
+  /// The configured event sink instance.
   BigQueryEventSink get sink => _sink;
 
+  /// Captured rows when [sink] is [InMemoryBigQueryEventSink].
   List<Map<String, Object?>> get loggedRows {
     final BigQueryEventSink targetSink = _sink;
     if (targetSink is InMemoryBigQueryEventSink) {
@@ -532,6 +650,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     _started = true;
   }
 
+  /// Flushes and closes the sink.
+  ///
+  /// The optional [timeout] parameter is accepted for parity with Python ADK.
   Future<void> shutdown({double? timeout}) async {
     if (_isShuttingDown) {
       return;
@@ -543,6 +664,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     _started = false;
   }
 
+  /// Flushes buffered events to the sink.
   Future<void> flush() async {
     await _sink.flush();
   }
@@ -552,6 +674,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     await shutdown();
   }
 
+  /// Logs incoming user messages before invocation processing.
   @override
   Future<Content?> onUserMessageCallback({
     required InvocationContext invocationContext,
@@ -595,6 +718,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs runtime events emitted during invocation.
   @override
   Future<Event?> onEventCallback({
     required InvocationContext invocationContext,
@@ -670,6 +794,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs invocation start and initializes sink startup state.
   @override
   Future<Content?> beforeRunCallback({
     required InvocationContext invocationContext,
@@ -684,6 +809,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs invocation completion and clears trace state.
   @override
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
@@ -694,18 +820,19 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       );
       await _logEvent('INVOCATION_COMPLETED', callbackContext);
       await flush();
-      TraceManager.clear(callbackContext);
+      _TraceManager.clear(callbackContext);
     });
   }
 
+  /// Logs agent start and pushes an agent span.
   @override
   Future<Content?> beforeAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
   }) async {
     return _safeCallback<Content?>('beforeAgentCallback', () async {
-      TraceManager.initTrace(callbackContext);
-      TraceManager.pushSpan(callbackContext, 'agent');
+      _TraceManager.initTrace(callbackContext);
+      _TraceManager.pushSpan(callbackContext, 'agent');
       await _logEvent(
         'AGENT_STARTING',
         callbackContext,
@@ -715,13 +842,14 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs agent completion and pops the agent span.
   @override
   Future<Content?> afterAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
   }) async {
     return _safeCallback<Content?>('afterAgentCallback', () async {
-      final _PopResult popResult = TraceManager.popSpan(callbackContext);
+      final _PopResult popResult = _TraceManager.popSpan(callbackContext);
       await _logEvent(
         'AGENT_COMPLETED',
         callbackContext,
@@ -735,6 +863,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs model request metadata and pushes an LLM span.
   @override
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,
@@ -773,7 +902,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         attributes['tools'] = llmRequest.toolsDict.keys.toList(growable: false);
       }
 
-      TraceManager.pushSpan(callbackContext, 'llm_request');
+      _TraceManager.pushSpan(callbackContext, 'llm_request');
       await _logEvent(
         'LLM_REQUEST',
         callbackContext,
@@ -787,6 +916,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs model responses and captures latency metrics.
   @override
   Future<LlmResponse?> afterModelCallback({
     required CallbackContext callbackContext,
@@ -815,8 +945,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         ).value;
       }
 
-      String? spanId = TraceManager.getCurrentSpanId(callbackContext);
-      String? parentSpanId = TraceManager.getCurrentSpanAndParent(
+      String? spanId = _TraceManager.getCurrentSpanId(callbackContext);
+      String? parentSpanId = _TraceManager.getCurrentSpanAndParent(
         callbackContext,
       ).parentSpanId;
 
@@ -826,16 +956,16 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
 
       if (llmResponse.partial == true) {
         if (spanId != null) {
-          TraceManager.recordFirstToken(callbackContext, spanId);
-          durationMs = TraceManager.elapsedMs(callbackContext, spanId);
-          tfftMs = TraceManager.timeToFirstTokenMs(callbackContext, spanId);
+          _TraceManager.recordFirstToken(callbackContext, spanId);
+          durationMs = _TraceManager.elapsedMs(callbackContext, spanId);
+          tfftMs = _TraceManager.timeToFirstTokenMs(callbackContext, spanId);
         }
       } else {
         if (spanId != null) {
-          TraceManager.recordFirstToken(callbackContext, spanId);
-          tfftMs = TraceManager.timeToFirstTokenMs(callbackContext, spanId);
+          _TraceManager.recordFirstToken(callbackContext, spanId);
+          tfftMs = _TraceManager.timeToFirstTokenMs(callbackContext, spanId);
         }
-        final _PopResult popResult = TraceManager.popSpan(callbackContext);
+        final _PopResult popResult = _TraceManager.popSpan(callbackContext);
         popped = true;
         durationMs = popResult.durationMs;
         spanId = popResult.spanId ?? spanId;
@@ -860,6 +990,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs model invocation errors.
   @override
   Future<LlmResponse?> onModelErrorCallback({
     required CallbackContext callbackContext,
@@ -867,7 +998,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required Exception error,
   }) async {
     return _safeCallback<LlmResponse?>('onModelErrorCallback', () async {
-      final _PopResult popResult = TraceManager.popSpan(callbackContext);
+      final _PopResult popResult = _TraceManager.popSpan(callbackContext);
       await _logEvent(
         'LLM_ERROR',
         callbackContext,
@@ -882,6 +1013,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs tool start events and pushes a tool span.
   @override
   Future<Map<String, dynamic>?> beforeToolCallback({
     required BaseTool tool,
@@ -893,7 +1025,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         toolArgs,
         config.maxContentLength,
       );
-      TraceManager.pushSpan(toolContext, 'tool');
+      _TraceManager.pushSpan(toolContext, 'tool');
       await _logEvent(
         'TOOL_STARTING',
         toolContext,
@@ -908,6 +1040,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs successful tool completion and span timing.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -920,7 +1053,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         result,
         config.maxContentLength,
       );
-      final _PopResult popResult = TraceManager.popSpan(toolContext);
+      final _PopResult popResult = _TraceManager.popSpan(toolContext);
 
       await _logEvent(
         'TOOL_COMPLETED',
@@ -941,6 +1074,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
+  /// Logs tool execution failures and span timing.
   @override
   Future<Map<String, dynamic>?> onToolErrorCallback({
     required BaseTool tool,
@@ -948,31 +1082,34 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Exception error,
   }) async {
-    return _safeCallback<Map<String, dynamic>?>('onToolErrorCallback', () async {
-      final _TruncateResult args = _recursiveSmartTruncate(
-        toolArgs,
-        config.maxContentLength,
-      );
-      final _PopResult popResult = TraceManager.popSpan(toolContext);
+    return _safeCallback<Map<String, dynamic>?>(
+      'onToolErrorCallback',
+      () async {
+        final _TruncateResult args = _recursiveSmartTruncate(
+          toolArgs,
+          config.maxContentLength,
+        );
+        final _PopResult popResult = _TraceManager.popSpan(toolContext);
 
-      await _logEvent(
-        'TOOL_ERROR',
-        toolContext,
-        rawContent: <String, Object?>{
-          'tool': tool.name,
-          'args': args.value,
-          'tool_origin': _getToolOrigin(tool),
-        },
-        isTruncated: args.isTruncated,
-        eventData: EventData(
-          errorMessage: '$error',
-          latencyMs: popResult.durationMs,
-          spanIdOverride: popResult.spanId,
-          parentSpanIdOverride: popResult.parentSpanId,
-        ),
-      );
-      return null;
-    });
+        await _logEvent(
+          'TOOL_ERROR',
+          toolContext,
+          rawContent: <String, Object?>{
+            'tool': tool.name,
+            'args': args.value,
+            'tool_origin': _getToolOrigin(tool),
+          },
+          isTruncated: args.isTruncated,
+          eventData: EventData(
+            errorMessage: '$error',
+            latencyMs: popResult.durationMs,
+            spanIdOverride: popResult.spanId,
+            parentSpanIdOverride: popResult.parentSpanId,
+          ),
+        );
+        return null;
+      },
+    );
   }
 
   Future<T?> _safeCallback<T>(
@@ -1034,10 +1171,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           )
         : const <Object?>[];
 
-    final _TracePair pair = TraceManager.getCurrentSpanAndParent(
+    final _TracePair pair = _TraceManager.getCurrentSpanAndParent(
       callbackContext,
     );
-    final String traceId = TraceManager.getTraceId(callbackContext);
+    final String traceId = _TraceManager.getTraceId(callbackContext);
     final String? spanId = resolvedEventData.spanIdOverride ?? pair.spanId;
     final String? parentSpanId =
         resolvedEventData.parentSpanIdOverride ?? pair.parentSpanId;
@@ -1093,7 +1230,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     };
 
     attrs['root_agent_name'] =
-        TraceManager.getRootAgentName(callbackContext) ??
+        _TraceManager.getRootAgentName(callbackContext) ??
         callbackContext.invocationContext.agent.rootAgent.name;
 
     if (eventData.model != null) {
@@ -1306,13 +1443,17 @@ List<Object?> _extractContentPartsForLogging(
 }) {
   if (value is Content) {
     return value.parts
-        .map((Part part) => _recursiveSmartTruncate(_partToJson(part), maxLength))
+        .map(
+          (Part part) => _recursiveSmartTruncate(_partToJson(part), maxLength),
+        )
         .map((_TruncateResult result) => result.value)
         .toList(growable: false);
   }
 
   if (value is Part) {
-    return <Object?>[_recursiveSmartTruncate(_partToJson(value), maxLength).value];
+    return <Object?>[
+      _recursiveSmartTruncate(_partToJson(value), maxLength).value,
+    ];
   }
 
   if (value is LlmResponse) {
@@ -1322,7 +1463,9 @@ List<Object?> _extractContentPartsForLogging(
   if (value is LlmRequest) {
     final List<Object?> parts = <Object?>[];
     for (final Content content in value.contents) {
-      parts.addAll(_extractContentPartsForLogging(content, maxLength: maxLength));
+      parts.addAll(
+        _extractContentPartsForLogging(content, maxLength: maxLength),
+      );
     }
     return parts;
   }
@@ -1332,9 +1475,7 @@ List<Object?> _extractContentPartsForLogging(
     final Object? explicitParts = map['content_parts'];
     if (explicitParts is List) {
       return explicitParts
-          .map(
-            (Object? part) => _recursiveSmartTruncate(part, maxLength).value,
-          )
+          .map((Object? part) => _recursiveSmartTruncate(part, maxLength).value)
           .toList(growable: false);
     }
 
@@ -1342,9 +1483,7 @@ List<Object?> _extractContentPartsForLogging(
     final Object? partsRaw = content['parts'];
     if (partsRaw is List) {
       return partsRaw
-          .map(
-            (Object? part) => _recursiveSmartTruncate(part, maxLength).value,
-          )
+          .map((Object? part) => _recursiveSmartTruncate(part, maxLength).value)
           .toList(growable: false);
     }
   }
@@ -1357,9 +1496,7 @@ Map<String, Object?> _toStringObjectMap(Object? value) {
     return value;
   }
   if (value is Map) {
-    return value.map(
-      (Object? key, Object? item) => MapEntry('$key', item),
-    );
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
   }
   return <String, Object?>{};
 }
