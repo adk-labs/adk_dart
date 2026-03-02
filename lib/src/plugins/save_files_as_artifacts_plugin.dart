@@ -3,11 +3,15 @@ import '../artifacts/base_artifact_service.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
 
+/// URI schemes that can be forwarded to model file references.
 const Set<String> _modelAccessibleUriSchemes = <String>{'gs', 'https', 'http'};
 
+/// Saves user inline files as artifacts and replaces them with file references.
 class SaveFilesAsArtifactsPlugin extends BasePlugin {
+  /// Creates a save-files-as-artifacts plugin.
   SaveFilesAsArtifactsPlugin({super.name = 'save_files_as_artifacts_plugin'});
 
+  /// Converts inline file parts in [userMessage] into persisted artifact refs.
   @override
   Future<Content?> onUserMessageCallback({
     required InvocationContext invocationContext,

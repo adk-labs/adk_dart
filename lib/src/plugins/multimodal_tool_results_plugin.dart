@@ -6,6 +6,7 @@ import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
 
+/// State key used to store tool-returned multimodal [Part] values.
 const String partsReturnedByToolsStateKey = 'temp:PARTS_RETURNED_BY_TOOLS_ID';
 
 List<Part>? _extractParts(Object? value) {
@@ -23,9 +24,12 @@ List<Part>? _extractParts(Object? value) {
   return null;
 }
 
+/// Persists multimodal tool results and reattaches them before model calls.
 class MultimodalToolResultsPlugin extends BasePlugin {
+  /// Creates a multimodal tool results plugin.
   MultimodalToolResultsPlugin({super.name = 'multimodal_tool_results_plugin'});
 
+  /// Captures multimodal parts returned by tools in callback state.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -52,6 +56,7 @@ class MultimodalToolResultsPlugin extends BasePlugin {
     return null;
   }
 
+  /// Appends previously captured multimodal parts to the latest user turn.
   @override
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,

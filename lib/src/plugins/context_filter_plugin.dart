@@ -56,7 +56,9 @@ List<int> _getInvocationStartIndices(List<Content> contents) {
   return indices;
 }
 
+/// Trims retained context while preserving function-call/response integrity.
 class ContextFilterPlugin extends BasePlugin {
+  /// Creates a context filter plugin.
   ContextFilterPlugin({
     int? numInvocationsToKeep,
     List<Content> Function(List<Content> contents)? customFilter,
@@ -67,6 +69,7 @@ class ContextFilterPlugin extends BasePlugin {
   final int? _numInvocationsToKeep;
   final List<Content> Function(List<Content> contents)? _customFilter;
 
+  /// Applies configured filtering to [llmRequest] contents.
   @override
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,

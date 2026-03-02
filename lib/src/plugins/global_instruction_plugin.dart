@@ -6,10 +6,13 @@ import '../models/llm_response.dart';
 import '../utils/instructions_utils.dart';
 import 'base_plugin.dart';
 
+/// Produces a global instruction string for each model callback context.
 typedef GlobalInstructionProvider =
     FutureOr<String> Function(CallbackContext readonlyContext);
 
+/// Prepends a global system instruction to outgoing model requests.
 class GlobalInstructionPlugin extends BasePlugin {
+  /// Creates a global instruction plugin.
   GlobalInstructionPlugin({
     String? globalInstruction,
     GlobalInstructionProvider? globalInstructionProvider,
@@ -20,6 +23,7 @@ class GlobalInstructionPlugin extends BasePlugin {
   final String _globalInstruction;
   final GlobalInstructionProvider? _globalInstructionProvider;
 
+  /// Injects a resolved global instruction into [llmRequest].
   @override
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,
