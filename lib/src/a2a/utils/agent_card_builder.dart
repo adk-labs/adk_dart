@@ -1,3 +1,6 @@
+/// Utilities for deriving A2A [AgentCard] metadata from ADK agents.
+library;
+
 import 'dart:async';
 
 import '../../agents/base_agent.dart';
@@ -11,7 +14,9 @@ import '../../tools/example_tool.dart';
 import '../../types/content.dart';
 import '../protocol.dart';
 
+/// Builds protocol-level [AgentCard] objects from runtime agents.
 class AgentCardBuilder {
+  /// Creates an agent-card builder.
   AgentCardBuilder({
     required BaseAgent agent,
     String? rpcUrl,
@@ -34,6 +39,7 @@ class AgentCardBuilder {
   final String _agentVersion;
   final Map<String, SecurityScheme> _securitySchemes;
 
+  /// Builds the final [AgentCard] for the configured agent.
   Future<AgentCard> build() async {
     final List<AgentSkill> primarySkills = await _buildPrimarySkills(_agent);
     final List<AgentSkill> subAgentSkills = await _buildSubAgentSkills(_agent);

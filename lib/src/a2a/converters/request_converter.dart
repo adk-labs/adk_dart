@@ -1,9 +1,14 @@
+/// Converters from A2A request envelopes to runner request payloads.
+library;
+
 import '../../agents/run_config.dart';
 import '../../types/content.dart';
 import '../protocol.dart';
 import 'part_converter.dart';
 
+/// Normalized runner request derived from an A2A request.
 class AgentRunRequest {
+  /// Creates an agent-run request.
   AgentRunRequest({
     this.userId,
     this.sessionId,
@@ -13,14 +18,26 @@ class AgentRunRequest {
     this.runConfig,
   });
 
+  /// User identifier.
   String? userId;
+
+  /// Session identifier.
   String? sessionId;
+
+  /// Invocation identifier.
   String? invocationId;
+
+  /// Incoming user message content.
   Content? newMessage;
+
+  /// Optional state delta applied before execution.
   Map<String, Object?>? stateDelta;
+
+  /// Optional run configuration.
   RunConfig? runConfig;
 }
 
+/// Converter signature from [A2aRequestContext] to [AgentRunRequest].
 typedef A2ARequestToAgentRunRequestConverter =
     AgentRunRequest Function(
       A2aRequestContext request,
@@ -35,6 +52,7 @@ String _getUserId(A2aRequestContext request) {
   return 'A2A_USER_${request.contextId}';
 }
 
+/// Converts an [A2aRequestContext] into an [AgentRunRequest].
 AgentRunRequest convertA2aRequestToAgentRunRequest(
   A2aRequestContext request, {
   A2APartToGenAIPartConverter partConverter = convertA2aPartToGenaiPart,

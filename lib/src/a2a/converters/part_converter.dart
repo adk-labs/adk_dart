@@ -1,23 +1,47 @@
+/// Converters between A2A parts and GenAI [Part] values.
+library;
+
 import 'dart:convert';
 
 import '../../types/content.dart';
 import '../protocol.dart';
 import 'utils.dart';
 
+/// Metadata key for encoded A2A data-part type.
 const String a2aDataPartMetadataTypeKey = 'type';
+
+/// Metadata key marking long-running tool calls.
 const String a2aDataPartMetadataIsLongRunningKey = 'is_long_running';
+
+/// Metadata type value for function-call payloads.
 const String a2aDataPartMetadataTypeFunctionCall = 'function_call';
+
+/// Metadata type value for function-response payloads.
 const String a2aDataPartMetadataTypeFunctionResponse = 'function_response';
+
+/// Metadata type value for code-execution result payloads.
 const String a2aDataPartMetadataTypeCodeExecutionResult =
     'code_execution_result';
+
+/// Metadata type value for executable-code payloads.
 const String a2aDataPartMetadataTypeExecutableCode = 'executable_code';
+
+/// Mime type used for encoded fallback data-part payloads.
 const String a2aDataPartTextMimeType = 'text/plain';
+
+/// Start tag for encoded fallback data-part payloads.
 final List<int> a2aDataPartStartTag = utf8.encode('<a2a_datapart_json>');
+
+/// End tag for encoded fallback data-part payloads.
 final List<int> a2aDataPartEndTag = utf8.encode('</a2a_datapart_json>');
 
+/// Converter signature from [A2aPart] to GenAI part unions.
 typedef A2APartToGenAIPartConverter = Object? Function(A2aPart part);
+
+/// Converter signature from GenAI [Part] to A2A part unions.
 typedef GenAIPartToA2APartConverter = Object? Function(Part part);
 
+/// Converts an [A2aPart] into one or more GenAI [Part] payloads.
 Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
   final A2aPartRoot root = a2aPart.root;
 
@@ -106,6 +130,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
   return null;
 }
 
+/// Converts a GenAI [Part] into one or more [A2aPart] payloads.
 Object? convertGenaiPartToA2aPart(Part part) {
   if (part.text != null) {
     final Map<String, Object?> metadata = <String, Object?>{};

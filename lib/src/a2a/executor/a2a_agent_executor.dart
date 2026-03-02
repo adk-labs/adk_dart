@@ -1,3 +1,6 @@
+/// Execution bridge from A2A requests to ADK runner invocations.
+library;
+
 import 'dart:async';
 
 import '../../agents/invocation_context.dart';
@@ -12,29 +15,43 @@ import '../converters/utils.dart';
 import '../protocol.dart';
 import 'task_result_aggregator.dart';
 
+/// Hook executed before A2A requests are converted and run.
 typedef A2aExecutorBeforeAgentInterceptor =
     FutureOr<A2aRequestContext> Function(A2aRequestContext context);
+
+/// Hook executed after each ADK event is converted to an A2A event.
 typedef A2aExecutorAfterEventInterceptor =
     FutureOr<A2aEvent?> Function(
       A2aExecutorContext executorContext,
       A2aEvent a2aEvent,
       Event adkEvent,
     );
+
+/// Hook executed before emitting the final status update event.
 typedef A2aExecutorAfterAgentInterceptor =
     FutureOr<A2aTaskStatusUpdateEvent> Function(
       A2aExecutorContext executorContext,
       A2aTaskStatusUpdateEvent finalEvent,
     );
 
+/// Interceptor bundle used around executor lifecycle stages.
 class A2aExecuteInterceptor {
+  /// Creates an executor interceptor bundle.
   A2aExecuteInterceptor({this.beforeAgent, this.afterEvent, this.afterAgent});
 
+  /// Pre-run request interceptor.
   final A2aExecutorBeforeAgentInterceptor? beforeAgent;
+
+  /// Per-event post-conversion interceptor.
   final A2aExecutorAfterEventInterceptor? afterEvent;
+
+  /// Final-event interceptor.
   final A2aExecutorAfterAgentInterceptor? afterAgent;
 }
 
+/// Immutable context passed to post-execution interceptors.
 class A2aExecutorContext {
+  /// Creates an executor context.
   A2aExecutorContext({
     required this.appName,
     required this.userId,
@@ -42,19 +59,28 @@ class A2aExecutorContext {
     required this.runner,
   });
 
+  /// Application name.
   final String appName;
+
+  /// User identifier.
   final String userId;
+
+  /// Session identifier.
   final String sessionId;
+
+  /// Runner used for execution.
   final Runner runner;
 }
 
+/// Runtime configuration for [A2aAgentExecutor].
 class A2aAgentExecutorConfig {
+  /// Creates an executor config.
   A2aAgentExecutorConfig({
     A2APartToGenAIPartConverter? a2aPartConverter,
     GenAIPartToA2APartConverter? genAiPartConverter,
     A2ARequestToAgentRunRequestConverter? requestConverter,
     AdkEventToA2AEventsConverter? eventConverter,
-    List<A2aExecuteInterceptor>? executeInterceptors,
+    this.executeInterceptors,
   }) : a2aPartConverter = a2aPartConverter ?? convertA2aPartToGenaiPart,
        genAiPartConverter = genAiPartConverter ?? convertGenaiPartToA2aPart,
        requestConverter =
@@ -81,17 +107,27 @@ class A2aAgentExecutorConfig {
                contextId: contextId,
                partConverter: partConverter,
              );
-           }),
-       executeInterceptors = executeInterceptors;
+           });
 
+  /// Converter from A2A parts to GenAI parts.
   A2APartToGenAIPartConverter a2aPartConverter;
+
+  /// Converter from GenAI parts to A2A parts.
   GenAIPartToA2APartConverter genAiPartConverter;
+
+  /// Converter from request context to runner request.
   A2ARequestToAgentRunRequestConverter requestConverter;
+
+  /// Converter from ADK events to A2A events.
   AdkEventToA2AEventsConverter eventConverter;
+
+  /// Optional execution interceptors.
   List<A2aExecuteInterceptor>? executeInterceptors;
 }
 
+/// Executes A2A requests by delegating to an ADK [Runner].
 class A2aAgentExecutor {
+  /// Creates an A2A executor.
   A2aAgentExecutor({required Object runner, A2aAgentExecutorConfig? config})
     : _runner = runner,
       _config = config ?? A2aAgentExecutorConfig();
@@ -127,6 +163,7 @@ class A2aAgentExecutor {
     );
   }
 
+  /// Attempts to cancel an in-flight A2A task.
   Future<void> cancel(
     A2aRequestContext context,
     A2aEventQueue eventQueue,
@@ -162,6 +199,7 @@ class A2aAgentExecutor {
     }
   }
 
+  /// Executes [context] and emits converted events to [eventQueue].
   Future<void> execute(
     A2aRequestContext context,
     A2aEventQueue eventQueue,

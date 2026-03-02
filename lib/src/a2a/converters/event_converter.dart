@@ -1,3 +1,6 @@
+/// Converters between ADK events and A2A task/message events.
+library;
+
 import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
 import '../../flows/llm_flows/functions.dart';
@@ -6,9 +9,13 @@ import '../protocol.dart';
 import 'part_converter.dart';
 import 'utils.dart';
 
+/// Separator used when composing synthetic artifact IDs.
 const String artifactIdSeparator = '-';
+
+/// Default error message used for failed conversion states.
 const String defaultErrorMessage = 'An error occurred during processing';
 
+/// Converter signature from ADK [Event] to A2A event batches.
 typedef AdkEventToA2AEventsConverter =
     List<A2aEvent> Function(
       Event event,
@@ -57,6 +64,7 @@ Map<String, Object?> _getContextMetadata(
   return metadata;
 }
 
+/// Creates a stable artifact ID from app/session/file/version fields.
 String createArtifactId(
   String appName,
   String userId,
@@ -93,6 +101,7 @@ void _processLongRunningTool(A2aPart a2aPart, Event event) {
       true;
 }
 
+/// Converts an [A2aTask] into an ADK [Event].
 Event convertA2aTaskToEvent(
   A2aTask a2aTask, {
   String? author,
@@ -133,6 +142,7 @@ Event convertA2aTaskToEvent(
   );
 }
 
+/// Converts an [A2aMessage] into an ADK [Event].
 Event convertA2aMessageToEvent(
   A2aMessage a2aMessage, {
   String? author,
@@ -186,6 +196,7 @@ Event convertA2aMessageToEvent(
   );
 }
 
+/// Converts an ADK [Event] into an [A2aMessage], when possible.
 A2aMessage? convertEventToA2aMessage(
   Event event,
   InvocationContext invocationContext, {
@@ -302,6 +313,7 @@ A2aTaskStatusUpdateEvent _createStatusUpdateEvent(
   );
 }
 
+/// Converts an ADK [Event] into one or more A2A events.
 List<A2aEvent> convertEventToA2aEvents(
   Event event,
   InvocationContext invocationContext, {
