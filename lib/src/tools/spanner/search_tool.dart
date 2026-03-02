@@ -223,6 +223,16 @@ String _generateSqlForAnn({
   ''';
 }
 
+/// Executes vector similarity search against a Spanner table.
+///
+/// The [embeddingOptions] map must define exactly one embedding source:
+/// `vertex_ai_embedding_model_name`,
+/// `spanner_googlesql_embedding_model_name`, or
+/// `spanner_postgresql_vertex_ai_embedding_model_endpoint`.
+///
+/// Returns a map with `status: SUCCESS` and `rows` on success.
+/// Returns `status: ERROR` with error details for invalid options or runtime
+/// failures.
 Future<Map<String, Object?>> similaritySearch({
   required String projectId,
   required String instanceId,
@@ -444,6 +454,12 @@ Map<String, Object?> _structuredErrorResult({
   };
 }
 
+/// Executes vector similarity search using [SpannerToolSettings] payload.
+///
+/// The [settings] object can be either [SpannerToolSettings] or a compatible
+/// serialized map containing `vector_store_settings`.
+///
+/// Returns the same success and error payload shape as [similaritySearch].
 Future<Map<String, Object?>> vectorStoreSimilaritySearch({
   required String query,
   required Object credentials,
