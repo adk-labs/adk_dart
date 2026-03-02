@@ -8,11 +8,15 @@ import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
 import '../types/content.dart';
 
+/// Base class for ADK runtime plugins.
 abstract class BasePlugin {
+  /// Creates a plugin with a unique [name].
   BasePlugin({required this.name});
 
+  /// Unique plugin name used for registration and error reporting.
   final String name;
 
+  /// Handles raw user messages before runner processing.
   Future<Content?> onUserMessageCallback({
     required InvocationContext invocationContext,
     required Content userMessage,
@@ -20,12 +24,14 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs before an invocation starts.
   Future<Content?> beforeRunCallback({
     required InvocationContext invocationContext,
   }) async {
     return null;
   }
 
+  /// Handles events emitted during invocation.
   Future<Event?> onEventCallback({
     required InvocationContext invocationContext,
     required Event event,
@@ -33,12 +39,15 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs after an invocation finishes.
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
   }) async {}
 
+  /// Releases plugin resources.
   Future<void> close() async {}
 
+  /// Runs before an agent is invoked.
   Future<Content?> beforeAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
@@ -46,6 +55,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs after an agent completes.
   Future<Content?> afterAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
@@ -53,6 +63,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs before a model request is sent.
   Future<LlmResponse?> beforeModelCallback({
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
@@ -60,6 +71,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs after a model response is received.
   Future<LlmResponse?> afterModelCallback({
     required CallbackContext callbackContext,
     required LlmResponse llmResponse,
@@ -67,6 +79,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Handles model invocation errors.
   Future<LlmResponse?> onModelErrorCallback({
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
@@ -75,6 +88,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs before tool execution.
   Future<Map<String, dynamic>?> beforeToolCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,
@@ -83,6 +97,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Runs after successful tool execution.
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,
@@ -92,6 +107,7 @@ abstract class BasePlugin {
     return null;
   }
 
+  /// Handles tool execution errors.
   Future<Map<String, dynamic>?> onToolErrorCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,

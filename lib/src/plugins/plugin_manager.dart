@@ -9,16 +9,21 @@ import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
 
+/// Exception thrown for plugin manager callback/close failures.
 class PluginManagerException implements Exception {
+  /// Creates a plugin manager exception with [message].
   PluginManagerException(this.message);
 
+  /// Error message describing the plugin manager failure.
   final String message;
 
   @override
   String toString() => 'PluginManagerException: $message';
 }
 
+/// Coordinates plugin registration and callback dispatching.
 class PluginManager {
+  /// Creates a plugin manager with optional initial [plugins].
   PluginManager({List<BasePlugin>? plugins, Duration? closeTimeout})
     : _closeTimeout = closeTimeout ?? const Duration(seconds: 5),
       _plugins = <BasePlugin>[] {
@@ -32,6 +37,7 @@ class PluginManager {
   final Duration _closeTimeout;
   final List<BasePlugin> _plugins;
 
+  /// Registered plugins in execution order.
   List<BasePlugin> get plugins => List<BasePlugin>.unmodifiable(_plugins);
 
   Future<T?> _runCallbacks<T>({
@@ -54,6 +60,9 @@ class PluginManager {
     return null;
   }
 
+  /// Registers [plugin].
+  ///
+  /// Throws an [ArgumentError] if another plugin has the same name.
   void registerPlugin(BasePlugin plugin) {
     if (_plugins.any((BasePlugin item) => item.name == plugin.name)) {
       throw ArgumentError(
@@ -63,6 +72,7 @@ class PluginManager {
     _plugins.add(plugin);
   }
 
+  /// Returns the plugin registered as [pluginName], if present.
   BasePlugin? getPlugin(String pluginName) {
     for (final BasePlugin plugin in _plugins) {
       if (plugin.name == pluginName) {
@@ -72,6 +82,7 @@ class PluginManager {
     return null;
   }
 
+  /// Runs the `onUserMessageCallback` chain.
   Future<Content?> runOnUserMessageCallback({
     required Content userMessage,
     required InvocationContext invocationContext,
@@ -87,6 +98,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `beforeRunCallback` chain.
   Future<Content?> runBeforeRunCallback({
     required InvocationContext invocationContext,
   }) async {
@@ -98,6 +110,7 @@ class PluginManager {
     );
   }
 
+  /// Runs all `afterRunCallback` hooks.
   Future<void> runAfterRunCallback({
     required InvocationContext invocationContext,
   }) async {
@@ -113,6 +126,7 @@ class PluginManager {
     }
   }
 
+  /// Runs the `onEventCallback` chain.
   Future<Event?> runOnEventCallback({
     required InvocationContext invocationContext,
     required Event event,
@@ -128,6 +142,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `beforeAgentCallback` chain.
   Future<Content?> runBeforeAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
@@ -143,6 +158,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `afterAgentCallback` chain.
   Future<Content?> runAfterAgentCallback({
     required BaseAgent agent,
     required CallbackContext callbackContext,
@@ -158,6 +174,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `beforeModelCallback` chain.
   Future<LlmResponse?> runBeforeModelCallback({
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
@@ -173,6 +190,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `afterModelCallback` chain.
   Future<LlmResponse?> runAfterModelCallback({
     required CallbackContext callbackContext,
     required LlmResponse llmResponse,
@@ -188,6 +206,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `onModelErrorCallback` chain.
   Future<LlmResponse?> runOnModelErrorCallback({
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
@@ -205,6 +224,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `beforeToolCallback` chain.
   Future<Map<String, dynamic>?> runBeforeToolCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,
@@ -222,6 +242,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `afterToolCallback` chain.
   Future<Map<String, dynamic>?> runAfterToolCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,
@@ -241,6 +262,7 @@ class PluginManager {
     );
   }
 
+  /// Runs the `onToolErrorCallback` chain.
   Future<Map<String, dynamic>?> runOnToolErrorCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,
@@ -260,6 +282,7 @@ class PluginManager {
     );
   }
 
+  /// Closes all plugins and reports aggregated close failures.
   Future<void> close() async {
     final Map<String, Object> errors = <String, Object>{};
     for (final BasePlugin plugin in _plugins) {
