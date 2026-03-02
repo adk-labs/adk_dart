@@ -11,7 +11,9 @@ import '../../base_toolset.dart';
 import 'openapi_spec_parser.dart';
 import 'rest_api_tool.dart';
 
+/// A toolset that builds [RestApiTool] instances from an OpenAPI spec.
 class OpenAPIToolset extends BaseToolset {
+  /// Creates an OpenAPI toolset from [specDict] or [specStr].
   OpenAPIToolset({
     Map<String, Object?>? specDict,
     String? specStr,
@@ -70,6 +72,7 @@ class OpenAPIToolset extends BaseToolset {
     }
   }
 
+  /// Configures TLS certificate verification for all generated tools.
   void configureSslVerifyAll([Object? sslVerify]) {
     _sslVerify = sslVerify;
     for (final RestApiTool tool in _tools) {
@@ -77,6 +80,7 @@ class OpenAPIToolset extends BaseToolset {
     }
   }
 
+  /// Returns tools filtered by [readonlyContext].
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     return _tools
@@ -84,6 +88,7 @@ class OpenAPIToolset extends BaseToolset {
         .toList(growable: false);
   }
 
+  /// Returns a tool by [toolName], or `null` when no match exists.
   RestApiTool? getTool(String toolName) {
     for (final RestApiTool tool in _tools) {
       if (tool.name == toolName) {
@@ -142,9 +147,11 @@ class OpenAPIToolset extends BaseToolset {
     return tools;
   }
 
+  /// Closes the toolset.
   @override
   Future<void> close() async {}
 
+  /// Returns the auth configuration associated with this toolset.
   @override
   AuthConfig? getAuthConfig() {
     return _authConfig?.copyWith();
