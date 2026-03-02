@@ -1,7 +1,9 @@
 import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
 
+/// Builds and tracks transcription events in live flows.
 class TranscriptionManager {
+  /// Creates an input transcription event for [transcription].
   Future<Event> handleInputTranscription(
     InvocationContext invocationContext,
     Object transcription,
@@ -14,6 +16,7 @@ class TranscriptionManager {
     );
   }
 
+  /// Creates an output transcription event for [transcription].
   Future<Event> handleOutputTranscription(
     InvocationContext invocationContext,
     Object transcription,
@@ -42,6 +45,7 @@ class TranscriptionManager {
     );
   }
 
+  /// Returns transcription counters for [invocationContext].
   Map<String, int> getTranscriptionStats(InvocationContext invocationContext) {
     int inputCount = 0;
     int outputCount = 0;

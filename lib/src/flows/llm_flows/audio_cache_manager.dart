@@ -4,36 +4,56 @@ import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
 import '../../types/content.dart';
 
+/// One cached realtime audio chunk with role and timestamp metadata.
 class RealtimeCacheEntry {
+  /// Creates a realtime cache entry.
   RealtimeCacheEntry({
     required this.role,
     required this.data,
     required this.timestamp,
   });
 
+  /// Speaker role associated with this chunk.
   final String role;
+
+  /// Audio payload for this chunk.
   final InlineData data;
+
+  /// Capture timestamp in Unix seconds.
   final double timestamp;
 }
 
+/// Configuration for [AudioCacheManager].
 class AudioCacheConfig {
+  /// Creates audio cache configuration.
   AudioCacheConfig({
     this.maxCacheSizeBytes = 10 * 1024 * 1024,
     this.maxCacheDurationSeconds = 300.0,
     this.autoFlushThreshold = 100,
   });
 
+  /// Max total cache size in bytes.
   final int maxCacheSizeBytes;
+
+  /// Max cache duration in seconds.
   final double maxCacheDurationSeconds;
+
+  /// Threshold for automatic flush triggers.
   final int autoFlushThreshold;
 }
 
+/// Manages input/output realtime audio caches for live flows.
 class AudioCacheManager {
+  /// Creates an audio cache manager with optional [config].
   AudioCacheManager({AudioCacheConfig? config})
     : config = config ?? AudioCacheConfig();
 
+  /// Active cache configuration.
   final AudioCacheConfig config;
 
+  /// Adds [audioBlob] to the selected cache type.
+  ///
+  /// [cacheType] must be either `input` or `output`.
   void cacheAudio(
     InvocationContext invocationContext,
     InlineData audioBlob, {
@@ -67,6 +87,7 @@ class AudioCacheManager {
     );
   }
 
+  /// Flushes cached audio into artifacts/events and returns emitted events.
   Future<List<Event>> flushCaches(
     InvocationContext invocationContext, {
     bool flushUserAudio = true,
@@ -120,7 +141,7 @@ class AudioCacheManager {
     final int timestamp = (audioCache.first.timestamp * 1000).floor();
     final String extension = mimeType.split('/').last;
     final String filename =
-        'adk_live_audio_storage_${cacheType}_${timestamp}.$extension';
+        'adk_live_audio_storage_${cacheType}_$timestamp.$extension';
 
     final int revisionId = await invocationContext.saveArtifact(
       filename: filename,
@@ -152,6 +173,7 @@ class AudioCacheManager {
     );
   }
 
+  /// Returns aggregate cache statistics for [invocationContext].
   Map<String, int> getCacheStats(InvocationContext invocationContext) {
     final List<RealtimeCacheEntry> inputEntries = _asRealtimeCacheEntries(
       invocationContext.inputRealtimeCache,

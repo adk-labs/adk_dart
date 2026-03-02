@@ -4,23 +4,30 @@ import '../../agents/invocation_context.dart';
 import '../../agents/transcription_entry.dart';
 import '../../types/content.dart';
 
+/// Recognizes text transcripts from raw audio bytes.
 typedef AudioRecognizer = Future<List<String>> Function(List<int> audioData);
 
+/// Converts cached audio/transcription entries into textual [Content] turns.
 class AudioTranscriber {
+  /// Creates an audio transcriber with an optional [recognizer].
   AudioTranscriber({this.recognizer});
 
   static AudioRecognizer? _defaultRecognizer;
 
+  /// Registers the default recognizer used when instance recognizer is absent.
   static void registerDefaultRecognizer(AudioRecognizer recognizer) {
     _defaultRecognizer = recognizer;
   }
 
+  /// Clears the process-wide default recognizer.
   static void clearDefaultRecognizer() {
     _defaultRecognizer = null;
   }
 
+  /// Optional recognizer used by this transcriber.
   final AudioRecognizer? recognizer;
 
+  /// Transcribes cached audio in [invocationContext] into content turns.
   Future<List<Content>> transcribeFile(
     InvocationContext invocationContext,
   ) async {
