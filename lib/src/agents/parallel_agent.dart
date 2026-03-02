@@ -1,3 +1,6 @@
+/// Parallel workflow agent implementations.
+library;
+
 import 'dart:async';
 
 import '../events/event.dart';
@@ -5,7 +8,9 @@ import 'agent_state.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
 
+/// Workflow agent that runs sub-agents concurrently.
 class ParallelAgent extends BaseAgent {
+  /// Creates a parallel agent.
   ParallelAgent({
     required super.name,
     super.description,
@@ -14,6 +19,7 @@ class ParallelAgent extends BaseAgent {
     super.afterAgentCallback,
   });
 
+  /// Returns a cloned parallel agent with optional field overrides.
   @override
   ParallelAgent clone({Map<String, Object?>? update}) {
     final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
@@ -51,6 +57,7 @@ class ParallelAgent extends BaseAgent {
     return clonedAgent;
   }
 
+  /// Runs sub-agents concurrently and merges their emitted events.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     if (subAgents.isEmpty) {
@@ -134,6 +141,7 @@ class ParallelAgent extends BaseAgent {
     }
   }
 
+  /// Runs live mode using async parallel execution semantics.
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     await for (final Event event in runAsyncImpl(context)) {

@@ -1,3 +1,6 @@
+/// Sequential workflow agent implementations.
+library;
+
 import '../events/event.dart';
 import '../tools/base_tool.dart';
 import '../tools/function_tool.dart';
@@ -15,12 +18,16 @@ String _taskCompleted() {
   return 'Task completion signaled.';
 }
 
+/// Serialized resumability state for [SequentialAgent].
 class SequentialAgentState extends BaseAgentState {
+  /// Creates a sequential-agent state snapshot.
   SequentialAgentState({this.currentSubAgent = ''})
     : super(data: <String, Object?>{'current_sub_agent': currentSubAgent});
 
+  /// Sub-agent currently selected for execution.
   final String currentSubAgent;
 
+  /// Creates a typed sequential state from base [state] data.
   factory SequentialAgentState.fromBase(BaseAgentState state) {
     final Map<String, Object?> json = state.toJson();
     return SequentialAgentState(
@@ -29,7 +36,9 @@ class SequentialAgentState extends BaseAgentState {
   }
 }
 
+/// Workflow agent that runs sub-agents one-by-one.
 class SequentialAgent extends BaseAgent {
+  /// Creates a sequential agent.
   SequentialAgent({
     required super.name,
     super.description,
@@ -38,6 +47,7 @@ class SequentialAgent extends BaseAgent {
     super.afterAgentCallback,
   });
 
+  /// Returns a cloned sequential agent with optional field overrides.
   @override
   SequentialAgent clone({Map<String, Object?>? update}) {
     final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
@@ -75,6 +85,7 @@ class SequentialAgent extends BaseAgent {
     return clonedAgent;
   }
 
+  /// Runs sub-agents in sequence with resumability checkpoints.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     if (subAgents.isEmpty) {
@@ -120,6 +131,7 @@ class SequentialAgent extends BaseAgent {
     }
   }
 
+  /// Runs sub-agents in live handoff mode.
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     if (subAgents.isEmpty) {

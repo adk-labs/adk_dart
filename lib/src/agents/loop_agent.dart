@@ -1,9 +1,14 @@
+/// Loop-based workflow agent implementations.
+library;
+
 import '../events/event.dart';
 import 'agent_state.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
 
+/// Serialized resumability state for [LoopAgent].
 class LoopAgentState extends BaseAgentState {
+  /// Creates a loop-agent state snapshot.
   LoopAgentState({this.currentSubAgent = '', this.timesLooped = 0})
     : super(
         data: <String, Object?>{
@@ -12,9 +17,13 @@ class LoopAgentState extends BaseAgentState {
         },
       );
 
+  /// Sub-agent currently selected for execution.
   final String currentSubAgent;
+
+  /// Number of completed loop iterations.
   final int timesLooped;
 
+  /// Creates a typed loop state from base [state] data.
   factory LoopAgentState.fromBase(BaseAgentState state) {
     final Map<String, Object?> json = state.toJson();
     return LoopAgentState(
@@ -24,7 +33,9 @@ class LoopAgentState extends BaseAgentState {
   }
 }
 
+/// Workflow agent that iterates through sub-agents repeatedly.
 class LoopAgent extends BaseAgent {
+  /// Creates a loop agent.
   LoopAgent({
     required super.name,
     super.description,
@@ -34,8 +45,12 @@ class LoopAgent extends BaseAgent {
     this.maxIterations,
   });
 
+  /// Maximum number of loop iterations.
+  ///
+  /// `null` or `0` indicates no iteration limit.
   final int? maxIterations;
 
+  /// Returns a cloned loop agent with optional field overrides.
   @override
   LoopAgent clone({Map<String, Object?>? update}) {
     final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
@@ -81,6 +96,7 @@ class LoopAgent extends BaseAgent {
     return clonedAgent;
   }
 
+  /// Runs sub-agents in repeated loops until completion or stop conditions.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     if (subAgents.isEmpty) {
@@ -152,6 +168,7 @@ class LoopAgent extends BaseAgent {
     }
   }
 
+  /// Runs live mode using async loop execution semantics.
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     await for (final Event event in runAsyncImpl(context)) {
