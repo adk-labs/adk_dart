@@ -3,16 +3,25 @@ import 'dart:io';
 
 import 'setup.dart';
 
+/// Environment key for overriding default Cloud Logging log name.
 const String gcpLogNameEnvVariableName = 'GOOGLE_CLOUD_DEFAULT_LOG_NAME';
+
+/// Default Cloud Logging log name used by ADK telemetry.
 const String defaultGcpLogName = 'adk-otel';
 
+/// Google authentication payload for telemetry exporters.
 class GoogleAuthResult {
+  /// Creates a Google authentication result.
   const GoogleAuthResult({required this.credentials, required this.projectId});
 
+  /// Credential object used by exporters.
   final Object credentials;
+
+  /// Resolved Google Cloud project identifier.
   final String? projectId;
 }
 
+/// Resolver callback that provides [GoogleAuthResult].
 typedef GoogleAuthResolver = GoogleAuthResult Function();
 
 GoogleAuthResolver _googleAuthResolver = _defaultGoogleAuthResolver;
@@ -21,14 +30,21 @@ GoogleAuthResult _defaultGoogleAuthResolver() {
   return const GoogleAuthResult(credentials: Object(), projectId: null);
 }
 
+/// Overrides the Google auth resolver.
+///
+/// This is intended for tests.
 void setGoogleAuthResolverForTest(GoogleAuthResolver resolver) {
   _googleAuthResolver = resolver;
 }
 
+/// Restores the default Google auth resolver.
+///
+/// This is intended for tests.
 void resetGoogleAuthResolverForTest() {
   _googleAuthResolver = _defaultGoogleAuthResolver;
 }
 
+/// Returns telemetry hooks for Google Cloud exporters.
 OTelHooks getGcpExporters({
   bool enableCloudTracing = false,
   bool enableCloudMetrics = false,
@@ -72,6 +88,7 @@ OTelHooks getGcpExporters({
   );
 }
 
+/// Returns a Cloud Trace span exporter hook.
 SpanProcessor getGcpSpanExporter(Object credentials) {
   return BatchSpanProcessor(
     OtlpSpanExporter(
@@ -81,6 +98,7 @@ SpanProcessor getGcpSpanExporter(Object credentials) {
   );
 }
 
+/// Returns a Cloud Monitoring metrics exporter hook.
 MetricReader getGcpMetricsExporter(String projectId) {
   return PeriodicExportingMetricReader(
     CloudMonitoringMetricsExporter(projectId: projectId),
@@ -88,6 +106,7 @@ MetricReader getGcpMetricsExporter(String projectId) {
   );
 }
 
+/// Returns a Cloud Logging exporter hook.
 LogRecordProcessor getGcpLogsExporter(
   String projectId, {
   Map<String, String>? environment,
@@ -99,22 +118,31 @@ LogRecordProcessor getGcpLogsExporter(
   );
 }
 
+/// Cloud Monitoring metrics exporter descriptor.
 class CloudMonitoringMetricsExporter {
+  /// Creates a Cloud Monitoring metrics exporter descriptor.
   const CloudMonitoringMetricsExporter({required this.projectId});
 
+  /// Google Cloud project identifier.
   final String projectId;
 }
 
+/// Cloud Logging exporter descriptor.
 class CloudLoggingExporter {
+  /// Creates a Cloud Logging exporter descriptor.
   const CloudLoggingExporter({
     required this.projectId,
     required this.defaultLogName,
   });
 
+  /// Google Cloud project identifier.
   final String projectId;
+
+  /// Default log name used when writing entries.
   final String defaultLogName;
 }
 
+/// Builds an OpenTelemetry resource enriched with Google Cloud attributes.
 OTelResource getGcpResource({
   String? projectId,
   Map<String, String>? environment,
