@@ -56,6 +56,10 @@ CREATE TABLE IF NOT EXISTS events (
 );
 ''';
 
+/// Migrates a legacy SQLAlchemy-pickle session database into the v1 schema.
+///
+/// Reads from [sourceDbUrl] in read-only mode and writes migrated data to
+/// [destDbUrl], creating destination tables when needed.
 Future<void> migrateFromSqlalchemyPickle(
   String sourceDbUrl,
   String destDbUrl,
