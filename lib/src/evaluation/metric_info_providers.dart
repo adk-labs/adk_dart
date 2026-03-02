@@ -1,5 +1,6 @@
 import 'eval_metrics.dart';
 
+/// Metric metadata provider for tool trajectory evaluation.
 class TrajectoryEvaluatorMetricInfoProvider extends MetricInfoProvider {
   @override
   MetricInfo getMetricInfo() {
@@ -15,9 +16,12 @@ class TrajectoryEvaluatorMetricInfoProvider extends MetricInfoProvider {
   }
 }
 
+/// Metric metadata provider for response evaluation and response matching.
 class ResponseEvaluatorMetricInfoProvider extends MetricInfoProvider {
+  /// Creates a response metric info provider for [metricName].
   ResponseEvaluatorMetricInfoProvider(this.metricName);
 
+  /// Target metric name.
   final String metricName;
 
   @override
@@ -48,6 +52,7 @@ class ResponseEvaluatorMetricInfoProvider extends MetricInfoProvider {
   }
 }
 
+/// Metric metadata provider for safety v1 evaluation.
 class SafetyEvaluatorV1MetricInfoProvider extends MetricInfoProvider {
   @override
   MetricInfo getMetricInfo() {
@@ -62,6 +67,7 @@ class SafetyEvaluatorV1MetricInfoProvider extends MetricInfoProvider {
   }
 }
 
+/// Metric metadata provider for final response match v2 evaluation.
 class FinalResponseMatchV2EvaluatorMetricInfoProvider
     extends MetricInfoProvider {
   @override
@@ -78,6 +84,7 @@ class FinalResponseMatchV2EvaluatorMetricInfoProvider
   }
 }
 
+/// Metric metadata provider for rubric-based final response quality v1.
 class RubricBasedFinalResponseQualityV1EvaluatorMetricInfoProvider
     extends MetricInfoProvider {
   @override
@@ -93,6 +100,7 @@ class RubricBasedFinalResponseQualityV1EvaluatorMetricInfoProvider
   }
 }
 
+/// Metric metadata provider for hallucinations v1 evaluation.
 class HallucinationsV1EvaluatorMetricInfoProvider extends MetricInfoProvider {
   @override
   MetricInfo getMetricInfo() {
@@ -107,6 +115,7 @@ class HallucinationsV1EvaluatorMetricInfoProvider extends MetricInfoProvider {
   }
 }
 
+/// Metric metadata provider for rubric-based tool-use quality v1.
 class RubricBasedToolUseV1EvaluatorMetricInfoProvider
     extends MetricInfoProvider {
   @override
@@ -122,6 +131,7 @@ class RubricBasedToolUseV1EvaluatorMetricInfoProvider
   }
 }
 
+/// Metric metadata provider for per-turn user simulator quality v1.
 class PerTurnUserSimulatorQualityV1MetricInfoProvider
     extends MetricInfoProvider {
   @override
