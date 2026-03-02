@@ -1,25 +1,33 @@
 import '_feature_registry.dart';
 
+/// Callable feature gate bound to a single [FeatureName].
 class FeatureDecorator {
+  /// Creates a decorator for [featureName] at [featureStage].
   const FeatureDecorator._({
     required this.featureName,
     required this.featureStage,
   });
 
+  /// The feature this decorator validates.
   final FeatureName featureName;
+
+  /// The stage used to classify this decorator's feature.
   final FeatureStage featureStage;
 
+  /// Throws a [StateError] when [featureName] is not enabled.
   void checkEnabled({Map<String, String>? environment}) {
     if (!isFeatureEnabled(featureName, environment: environment)) {
       throw StateError('Feature $featureName is not enabled.');
     }
   }
 
+  /// Runs [body] only when [featureName] is enabled.
   T run<T>(T Function() body, {Map<String, String>? environment}) {
     checkEnabled(environment: environment);
     return body();
   }
 
+  /// Runs async [body] only when [featureName] is enabled.
   Future<T> runAsync<T>(
     Future<T> Function() body, {
     Map<String, String>? environment,
@@ -54,6 +62,7 @@ FeatureDecorator _makeFeatureDecorator({
   );
 }
 
+/// Returns a decorator for a work-in-progress [featureName].
 FeatureDecorator workingInProgress(FeatureName featureName) {
   return _makeFeatureDecorator(
     featureName: featureName,
@@ -61,6 +70,7 @@ FeatureDecorator workingInProgress(FeatureName featureName) {
   );
 }
 
+/// Returns a decorator for an experimental [featureName].
 FeatureDecorator experimental(FeatureName featureName) {
   return _makeFeatureDecorator(
     featureName: featureName,
@@ -68,6 +78,7 @@ FeatureDecorator experimental(FeatureName featureName) {
   );
 }
 
+/// Returns a decorator for a stable [featureName].
 FeatureDecorator stable(FeatureName featureName) {
   return _makeFeatureDecorator(
     featureName: featureName,

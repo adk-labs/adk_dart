@@ -1,5 +1,6 @@
 import '../utils/env_utils.dart';
 
+/// Identifiers for runtime-gated ADK features.
 enum FeatureName {
   agentConfig('AGENT_CONFIG'),
   agentState('AGENT_STATE'),
@@ -30,6 +31,7 @@ enum FeatureName {
   final String value;
 }
 
+/// Release stages used by feature-gating decisions.
 enum FeatureStage {
   wip('wip'),
   experimental('experimental'),
@@ -40,13 +42,19 @@ enum FeatureStage {
   final String value;
 }
 
+/// Static configuration for a single feature.
 class FeatureConfig {
+  /// Creates feature configuration for [stage].
   const FeatureConfig(this.stage, {this.defaultOn = false});
 
+  /// The release stage for the feature.
   final FeatureStage stage;
+
+  /// Whether the feature is enabled without explicit overrides.
   final bool defaultOn;
 }
 
+/// Emits user-visible warnings for enabled non-stable features.
 typedef FeatureWarningEmitter = void Function(String message);
 
 final Map<FeatureName, FeatureConfig> _featureRegistry =
@@ -146,14 +154,19 @@ final Set<FeatureName> _warnedFeatures = <FeatureName>{};
 final Map<FeatureName, bool> _featureOverrides = <FeatureName, bool>{};
 FeatureWarningEmitter _featureWarningEmitter = _defaultFeatureWarningEmitter;
 
+/// Returns the registered configuration for [featureName], if any.
 FeatureConfig? getFeatureConfig(FeatureName featureName) {
   return _featureRegistry[featureName];
 }
 
+/// Registers or replaces [featureName] with [config].
 void registerFeature(FeatureName featureName, FeatureConfig config) {
   _featureRegistry[featureName] = config;
 }
 
+/// Overrides whether [featureName] is enabled.
+///
+/// Throws an [ArgumentError] if [featureName] is not registered.
 void overrideFeatureEnabled(FeatureName featureName, bool enabled) {
   final FeatureConfig? config = getFeatureConfig(featureName);
   if (config == null) {
@@ -162,10 +175,17 @@ void overrideFeatureEnabled(FeatureName featureName, bool enabled) {
   _featureOverrides[featureName] = enabled;
 }
 
+/// Removes any explicit enablement override for [featureName].
 void clearFeatureOverride(FeatureName featureName) {
   _featureOverrides.remove(featureName);
 }
 
+/// Whether [featureName] is currently enabled.
+///
+/// This checks explicit overrides first, then environment variables, and
+/// finally the feature's [FeatureConfig.defaultOn] value.
+///
+/// Throws an [ArgumentError] if [featureName] is not registered.
 bool isFeatureEnabled(
   FeatureName featureName, {
   Map<String, String>? environment,
@@ -219,6 +239,11 @@ void _defaultFeatureWarningEmitter(String message) {
   print(message);
 }
 
+/// Runs [body] with a temporary override for [featureName].
+///
+/// The previous override state is restored after [body] returns.
+///
+/// Throws an [ArgumentError] if [featureName] is not registered.
 T withTemporaryFeatureOverride<T>(
   FeatureName featureName,
   bool enabled,
@@ -243,6 +268,11 @@ T withTemporaryFeatureOverride<T>(
   }
 }
 
+/// Runs async [body] with a temporary override for [featureName].
+///
+/// The previous override state is restored after [body] completes.
+///
+/// Throws an [ArgumentError] if [featureName] is not registered.
 Future<T> withTemporaryFeatureOverrideAsync<T>(
   FeatureName featureName,
   bool enabled,
@@ -267,10 +297,14 @@ Future<T> withTemporaryFeatureOverrideAsync<T>(
   }
 }
 
+/// Replaces the warning emitter used for non-stable feature notices.
 void setFeatureWarningEmitter(FeatureWarningEmitter emitter) {
   _featureWarningEmitter = emitter;
 }
 
+/// Resets runtime feature state for test isolation.
+///
+/// When [resetRegistry] is true, restores the initial built-in registry.
 void resetFeatureRegistryForTest({bool resetRegistry = false}) {
   _featureOverrides.clear();
   _warnedFeatures.clear();
@@ -284,6 +318,7 @@ void resetFeatureRegistryForTest({bool resetRegistry = false}) {
     ..addAll(_defaultFeatureRegistry);
 }
 
+/// The current explicit feature overrides.
 Map<FeatureName, bool> getFeatureOverrides() {
   return Map<FeatureName, bool>.unmodifiable(_featureOverrides);
 }
