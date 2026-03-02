@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Loads a YAML (or JSON) file from [filePath].
+///
+/// Throws a [FileSystemException] when the file does not exist.
 Object? loadYamlFile(String filePath) {
   final File file = File(filePath);
   if (!file.existsSync()) {
@@ -9,6 +12,9 @@ Object? loadYamlFile(String filePath) {
   return _decodeYamlOrJson(file.readAsStringSync());
 }
 
+/// Serializes [model] to YAML and writes it to [filePath].
+///
+/// The options mirror the Python helper signature for parity.
 void dumpPydanticToYaml(
   Object model,
   String filePath, {
