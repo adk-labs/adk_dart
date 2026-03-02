@@ -4,13 +4,18 @@ import '../../_gemini_schema_util.dart';
 import '../common/common.dart';
 
 class OperationSignatureParameter {
+  /// Creates a signature entry for a generated operation parameter.
   OperationSignatureParameter({required this.name, required this.annotation});
 
+  /// The generated parameter name.
   final String name;
+
+  /// The inferred Dart type annotation.
   final Type annotation;
 }
 
 class OperationParser {
+  /// Creates an operation parser for an OpenAPI [operation] object.
   OperationParser(Object operation, {bool shouldParse = true})
     : _operation = _parseOperation(operation) {
     if (shouldParse) {
@@ -21,6 +26,7 @@ class OperationParser {
     }
   }
 
+  /// Creates a parser from pre-parsed [params] and [returnValue].
   factory OperationParser.load(
     Object operation,
     List<ApiParameter> params,
@@ -185,6 +191,7 @@ class OperationParser {
     );
   }
 
+  /// Returns the normalized function name for the operation.
   String getFunctionName() {
     final String? operationId = _readString(_operation['operationId']);
     if (operationId == null || operationId.isEmpty) {
@@ -194,24 +201,29 @@ class OperationParser {
     return snake.length > 60 ? snake.substring(0, 60) : snake;
   }
 
+  /// The Dart type hint string for the operation return value.
   String getReturnTypeHint() {
     return _returnValue?.typeHint ?? 'Object?';
   }
 
+  /// The Dart type object for the operation return value.
   Type getReturnTypeValue() {
     return _returnValue?.typeValue ?? Object;
   }
 
+  /// Parsed operation parameters.
   List<ApiParameter> getParameters() {
     return _params
         .map((ApiParameter parameter) => parameter.copyWith())
         .toList();
   }
 
+  /// Parsed operation return value schema.
   ApiParameter? getReturnValue() {
     return _returnValue?.copyWith();
   }
 
+  /// The auth scheme name declared on this operation, when available.
   String getAuthSchemeName() {
     final List<Object?> security = _readList(_operation['security']);
     if (security.isEmpty) {
@@ -224,6 +236,7 @@ class OperationParser {
     return first.keys.first;
   }
 
+  /// A Python-style docstring generated from operation metadata.
   String getPydocString() {
     final List<String> docs = _params
         .map((ApiParameter parameter) => parameter.toPydocString())
@@ -251,6 +264,7 @@ class OperationParser {
     return buffer.toString();
   }
 
+  /// JSON Schema for function declaration parameters.
   Map<String, Object?> getJsonSchema() {
     final Map<String, Object?> properties = <String, Object?>{
       for (final ApiParameter parameter in _params)
@@ -271,6 +285,7 @@ class OperationParser {
     };
   }
 
+  /// Signature parameters for generated call signatures.
   List<OperationSignatureParameter> getSignatureParameters() {
     return _params
         .map(
@@ -282,6 +297,7 @@ class OperationParser {
         .toList();
   }
 
+  /// Type annotations map including a `return` entry.
   Map<String, Object?> getAnnotations() {
     final Map<String, Object?> annotations = <String, Object?>{
       for (final ApiParameter parameter in _params)
