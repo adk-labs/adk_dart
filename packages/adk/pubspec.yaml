@@ -15,7 +15,7 @@ environment:
   sdk: ^3.11.0
 
 dependencies:
-  adk_dart: 2026.3.2
+  adk_dart: ^2026.3.2
 
 dev_dependencies:
   lints: ^6.0.0
