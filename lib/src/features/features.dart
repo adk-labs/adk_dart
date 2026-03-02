@@ -1,3 +1,6 @@
+/// Public feature-flag API surface exports.
+library;
+
 export '_feature_decorator.dart'
     show FeatureDecorator, experimental, stable, workingInProgress;
 export '_feature_registry.dart'

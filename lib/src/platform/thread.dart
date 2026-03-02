@@ -1,5 +1,9 @@
+/// Lightweight threading abstraction used for runtime parity.
+library;
+
 import 'dart:async';
 
+/// Factory signature for creating platform-specific thread wrappers.
 typedef InternalThreadCreator =
     AdkThread Function(
       Function target,
@@ -9,11 +13,14 @@ typedef InternalThreadCreator =
 
 InternalThreadCreator? _internalThreadCreator;
 
+/// Sets a custom internal thread creator for platform overrides.
 void setInternalThreadCreator(InternalThreadCreator? creator) {
   _internalThreadCreator = creator;
 }
 
+/// Async thread-like wrapper around a target function invocation.
 class AdkThread {
+  /// Creates an ADK thread wrapper.
   AdkThread(
     this._target, {
     List<Object?>? args,
@@ -28,9 +35,13 @@ class AdkThread {
   Future<void>? _future;
   bool _completed = false;
 
+  /// Whether the thread has been started.
   bool get isStarted => _future != null;
+
+  /// Whether the thread completed execution.
   bool get isCompleted => _completed;
 
+  /// Starts the thread if it has not started yet.
   void start() {
     if (_future != null) {
       return;
@@ -45,12 +56,14 @@ class AdkThread {
         });
   }
 
+  /// Waits for thread completion, starting it if needed.
   Future<void> join() async {
     start();
     await _future;
   }
 }
 
+/// Creates a new thread wrapper for [target].
 AdkThread createThread(
   Function target, {
   List<Object?> args = const <Object?>[],
