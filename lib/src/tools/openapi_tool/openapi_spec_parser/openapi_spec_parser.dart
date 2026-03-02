@@ -20,16 +20,23 @@ const Set<String> _validSchemaTypes = <String>{
 const Set<String> _schemaContainerKeys = <String>{'schema', 'schemas'};
 
 class OperationEndpoint {
+  /// Creates an HTTP endpoint description for an OpenAPI operation.
   OperationEndpoint({
     required this.baseUrl,
     required this.path,
     required this.method,
   });
 
+  /// The server base URL.
   final String baseUrl;
+
+  /// The path template of the operation.
   final String path;
+
+  /// The HTTP method in lowercase form.
   final String method;
 
+  /// A JSON map representation of this endpoint.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'base_url': baseUrl,
@@ -38,6 +45,7 @@ class OperationEndpoint {
     };
   }
 
+  /// Creates an [OperationEndpoint] from serialized [value].
   factory OperationEndpoint.fromJson(Object? value) {
     final Map<String, Object?> data = _readMap(value);
     return OperationEndpoint(
@@ -50,6 +58,7 @@ class OperationEndpoint {
 }
 
 class ParsedOperation {
+  /// Creates a parsed OpenAPI operation model.
   ParsedOperation({
     required this.name,
     required this.description,
@@ -62,16 +71,34 @@ class ParsedOperation {
     this.additionalContext,
   });
 
+  /// The generated function name for this operation.
   final String name;
+
+  /// The operation description used by tools.
   final String description;
+
+  /// The resolved endpoint metadata.
   final OperationEndpoint endpoint;
+
+  /// The normalized raw operation object from the OpenAPI document.
   final Map<String, Object?> operation;
+
+  /// Parsed input parameters for this operation.
   final List<ApiParameter> parameters;
+
+  /// Parsed return schema for this operation.
   final ApiParameter returnValue;
+
+  /// The resolved authentication scheme, when available.
   final Object? authScheme;
+
+  /// Optional credential instance bound to the operation.
   final AuthCredential? authCredential;
+
+  /// Additional operation context captured during parsing.
   final Object? additionalContext;
 
+  /// A JSON map representation of this parsed operation.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'name': name,
@@ -104,6 +131,7 @@ class ParsedOperation {
     };
   }
 
+  /// Creates a [ParsedOperation] from serialized [value].
   factory ParsedOperation.fromJson(Object? value) {
     final Map<String, Object?> data = _readMap(value);
     final List<ApiParameter> parsedParameters = _readList(
@@ -136,12 +164,14 @@ class ParsedOperation {
 }
 
 class OpenApiSpecParser {
+  /// Parses [openapiSpecDict] into normalized [ParsedOperation] values.
   List<ParsedOperation> parse(Map<String, Object?> openapiSpecDict) {
     final Map<String, Object?> resolved = _resolveReferences(openapiSpecDict);
     final Map<String, Object?> sanitized = _sanitizeSchemaTypes(resolved);
     return _collectOperations(sanitized);
   }
 
+  /// Sanitizes schema `type` values to valid OpenAPI primitive types.
   Map<String, Object?> sanitizeSchemaTypes(Map<String, Object?> openapiSpec) {
     return _sanitizeSchemaTypes(openapiSpec);
   }
@@ -505,6 +535,7 @@ bool _readBool(Object? value) {
   return false;
 }
 
+/// Parses a JSON [source] string into a [ParsedOperation].
 ParsedOperation parsedOperationFromJsonString(String source) {
   final Object? data = jsonDecode(source);
   return ParsedOperation.fromJson(data);
