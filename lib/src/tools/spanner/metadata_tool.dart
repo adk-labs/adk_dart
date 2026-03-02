@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'client.dart';
 
+/// Lists table names in a Spanner database and optional [namedSchema].
+///
+/// Returns `status: SUCCESS` with table names, or `status: ERROR` with details.
 Future<Map<String, Object?>> listTableNames({
   required String projectId,
   required String instanceId,
@@ -29,6 +32,9 @@ Future<Map<String, Object?>> listTableNames({
   }
 }
 
+/// Returns schema details and metadata for [tableName].
+///
+/// This API is supported only for GoogleSQL dialect databases.
 Future<Map<String, Object?>> getTableSchema({
   required String projectId,
   required String instanceId,
@@ -201,6 +207,9 @@ Future<Map<String, Object?>> getTableSchema({
   }
 }
 
+/// Lists index metadata for [tableId].
+///
+/// This API is supported only for GoogleSQL dialect databases.
 Future<Map<String, Object?>> listTableIndexes({
   required String projectId,
   required String instanceId,
@@ -265,6 +274,9 @@ Future<Map<String, Object?>> listTableIndexes({
   }
 }
 
+/// Lists index column metadata for [tableId].
+///
+/// This API is supported only for GoogleSQL dialect databases.
 Future<Map<String, Object?>> listTableIndexColumns({
   required String projectId,
   required String instanceId,
@@ -328,6 +340,9 @@ Future<Map<String, Object?>> listTableIndexColumns({
   }
 }
 
+/// Lists user-defined named schemas in a Spanner database.
+///
+/// This API is supported only for GoogleSQL dialect databases.
 Future<Map<String, Object?>> listNamedSchemas({
   required String projectId,
   required String instanceId,
