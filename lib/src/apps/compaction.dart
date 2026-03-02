@@ -1,3 +1,6 @@
+/// Event compaction helpers for app-level history management.
+library;
+
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../flows/llm_flows/contents.dart' as contents_flow;
@@ -6,18 +9,21 @@ import '../sessions/session.dart';
 import '../types/content.dart';
 import 'app.dart';
 
+/// Whether [config] has token-threshold compaction parameters configured.
 bool hasTokenThresholdConfig(EventsCompactionConfig? config) {
   return config != null &&
       config.tokenThreshold != null &&
       config.eventRetentionSize != null;
 }
 
+/// Whether [config] has sliding-window compaction parameters configured.
 bool hasSlidingWindowConfig(EventsCompactionConfig? config) {
   return config != null &&
       config.compactionInterval > 0 &&
       config.overlapSize >= 0;
 }
 
+/// Runs token-threshold compaction when the configured threshold is exceeded.
 Future<bool> runCompactionForTokenThresholdConfig({
   required EventsCompactionConfig? config,
   required Session session,
@@ -86,6 +92,7 @@ Future<bool> runCompactionForTokenThresholdConfig({
   return true;
 }
 
+/// Runs sliding-window compaction for [app] and [session].
 Future<bool> runCompactionForSlidingWindow({
   required App app,
   required Session session,
@@ -181,6 +188,7 @@ Future<bool> runCompactionForSlidingWindow({
   return true;
 }
 
+/// Returns the latest prompt token count estimate from [events].
 int? latestPromptTokenCount({
   required List<Event> events,
   required String? currentBranch,
@@ -213,6 +221,7 @@ int? latestPromptTokenCount({
   return totalChars ~/ 4;
 }
 
+/// Returns the latest end timestamp among compaction events.
 double latestCompactionEndTimestamp(List<Event> events) {
   double latestEnd = 0.0;
   int latestIndex = -1;
@@ -229,6 +238,7 @@ double latestCompactionEndTimestamp(List<Event> events) {
   return latestEnd;
 }
 
+/// Summarizes [events] using [summarizer] or fallback default summarization.
 Future<Content> summarizeEvents(
   List<Event> events, {
   Object? summarizer,

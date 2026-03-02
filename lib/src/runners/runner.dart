@@ -1,3 +1,6 @@
+/// Runner implementation that orchestrates agent execution.
+library;
+
 import 'dart:async';
 
 import '../agents/base_agent.dart';
@@ -43,15 +46,19 @@ bool _hasNonEmptyTranscriptionText(Object? transcription) {
 }
 
 class SessionNotFoundError implements Exception {
+  /// Creates a session-not-found error with [message].
   SessionNotFoundError(this.message);
 
+  /// Human-readable error message.
   final String message;
 
   @override
   String toString() => 'SessionNotFoundError: $message';
 }
 
+/// Coordinates session lifecycle, plugins, and agent execution.
 class Runner {
+  /// Creates a runner from an [app] or direct [appName]/[agent] pair.
   Runner({
     this.app,
     String? appName,
@@ -164,6 +171,7 @@ class Runner {
     return session;
   }
 
+  /// Convenience wrapper that forwards to [runAsync].
   Stream<Event> run({
     required String userId,
     required String sessionId,
@@ -178,6 +186,7 @@ class Runner {
     );
   }
 
+  /// Executes a single invocation and streams emitted events.
   Stream<Event> runAsync({
     required String userId,
     required String sessionId,
@@ -265,6 +274,7 @@ class Runner {
     }
   }
 
+  /// Rewinds session state and artifact versions to before an invocation.
   Future<void> rewindAsync({
     required String userId,
     required String sessionId,
@@ -416,6 +426,7 @@ class Runner {
     return rewindArtifactDelta;
   }
 
+  /// Executes live bidirectional agent streaming with [liveRequestQueue].
   Stream<Event> runLive({
     required LiveRequestQueue liveRequestQueue,
     String? userId,
@@ -460,6 +471,7 @@ class Runner {
     }
   }
 
+  /// Runs one or more debug user messages and returns collected events.
   Future<List<Event>> runDebug(
     Object userMessages, {
     String userId = 'debug_user_id',
@@ -587,6 +599,7 @@ class Runner {
     return context;
   }
 
+  /// Whether this runner should support invocation resumption.
   bool get resumabilityConfigOrDefault {
     return resumabilityConfig?.isResumable ?? false;
   }
@@ -789,7 +802,10 @@ class Runner {
                     _hasNonEmptyTranscriptionText(event.outputTranscription))) {
               isTranscribing = false;
               if (_shouldAppendEvent(event, isLiveCall)) {
-                await sessionService.appendEvent(session: session, event: event);
+                await sessionService.appendEvent(
+                  session: session,
+                  event: event,
+                );
               }
 
               for (final Event buffered in bufferedEvents) {
@@ -943,27 +959,26 @@ class Runner {
     }
   }
 
+  /// Closes toolsets and plugin manager resources.
   Future<void> close() async {
     await _cleanupToolsets(_collectToolsets(agent));
     await pluginManager.close();
   }
 }
 
+/// Runner wired with in-memory session and artifact services.
 class InMemoryRunner extends Runner {
+  /// Creates an in-memory runner.
   InMemoryRunner({
-    BaseAgent? agent,
+    super.agent,
     String? appName,
-    List<BasePlugin>? plugins,
-    App? app,
-    Duration? pluginCloseTimeout,
+    super.plugins,
+    super.app,
+    super.pluginCloseTimeout,
   }) : super(
-         app: app,
          appName: app == null ? (appName ?? 'InMemoryRunner') : appName,
-         agent: agent,
-         plugins: plugins,
          artifactService: InMemoryArtifactService(),
          sessionService: InMemorySessionService(),
-         pluginCloseTimeout: pluginCloseTimeout,
        );
 }
 

@@ -1,3 +1,6 @@
+/// LLM-backed event summarizer implementation.
+library;
+
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../models/base_llm.dart';
@@ -6,7 +9,9 @@ import '../models/llm_response.dart';
 import '../types/content.dart';
 import 'base_events_summarizer.dart';
 
+/// Summarizes event history into a compaction event using an LLM.
 class LlmEventSummarizer extends BaseEventsSummarizer {
+  /// Creates an LLM event summarizer.
   LlmEventSummarizer({required BaseLlm llm, String? promptTemplate})
     : _llm = llm,
       _promptTemplate = promptTemplate ?? _defaultPromptTemplate;
@@ -21,6 +26,7 @@ class LlmEventSummarizer extends BaseEventsSummarizer {
   final BaseLlm _llm;
   final String _promptTemplate;
 
+  /// Formats [events] into conversation text for prompting.
   String formatEventsForPrompt(List<Event> events) {
     final List<String> history = <String>[];
     for (final Event event in events) {
@@ -38,6 +44,7 @@ class LlmEventSummarizer extends BaseEventsSummarizer {
     return history.join('\n');
   }
 
+  /// Returns a summary compaction event for [events].
   @override
   Future<Event?> maybeSummarizeEvents({required List<Event> events}) async {
     if (events.isEmpty) {
