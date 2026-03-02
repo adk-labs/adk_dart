@@ -8,10 +8,12 @@ import '../tool_context.dart';
 import 'client.dart';
 import 'settings.dart';
 
+/// Default maximum rows returned by [executeSql] when not configured.
 const int defaultMaxExecutedQueryResultRows = 50;
 
 final Object _spannerAnonymousCredentials = Object();
 
+/// Executes a Spanner SQL query and returns a structured status payload.
 Future<Map<String, Object?>> executeSql({
   required String projectId,
   required String instanceId,
@@ -77,6 +79,7 @@ Future<Map<String, Object?>> executeSql({
   }
 }
 
+/// Synchronous embedder callback used by Spanner vector tooling.
 typedef SpannerEmbedder =
     List<List<double>> Function({
       required String vertexAiEmbeddingModelName,
@@ -85,6 +88,7 @@ typedef SpannerEmbedder =
       Object? genAiClient,
     });
 
+/// Asynchronous embedder callback used by Spanner vector tooling.
 typedef SpannerEmbedderAsync =
     Future<List<List<double>>> Function({
       required String vertexAiEmbeddingModelName,
@@ -93,16 +97,22 @@ typedef SpannerEmbedderAsync =
       Object? genAiClient,
     });
 
+/// Exception thrown when no Spanner embedder runtime is configured.
 class SpannerEmbedderNotConfiguredException implements Exception {
+  /// Creates this exception.
   SpannerEmbedderNotConfiguredException([
     this.message =
         'No embedding runtime is configured for adk_dart Spanner tools. '
         'Inject an embedder with setSpannerEmbedders().',
   ]);
 
+  /// Default stable error code.
   static const String defaultCode = 'SPANNER_EMBEDDER_NOT_CONFIGURED';
+
+  /// Human-readable error message.
   final String message;
 
+  /// Stable error code.
   String get code => defaultCode;
 
   @override
@@ -112,6 +122,9 @@ class SpannerEmbedderNotConfiguredException implements Exception {
 SpannerEmbedder _spannerEmbedder = _defaultSpannerEmbedder;
 SpannerEmbedderAsync _spannerEmbedderAsync = _defaultSpannerEmbedderAsync;
 
+/// Overrides Spanner embedders.
+///
+/// This is primarily used by tests and runtime bootstrap.
 void setSpannerEmbedders({
   SpannerEmbedder? embedder,
   SpannerEmbedderAsync? embedderAsync,
@@ -124,11 +137,13 @@ void setSpannerEmbedders({
   }
 }
 
+/// Restores default Spanner embedders.
 void resetSpannerEmbedders() {
   _spannerEmbedder = _defaultSpannerEmbedder;
   _spannerEmbedderAsync = _defaultSpannerEmbedderAsync;
 }
 
+/// Configures Spanner and Pub/Sub runtime factories in one call.
 void configureSpannerPubSubRuntime({
   SpannerClientFactory? spannerClientFactory,
   SpannerEmbedder? spannerEmbedder,
@@ -153,6 +168,7 @@ void configureSpannerPubSubRuntime({
   }
 }
 
+/// Resets Spanner and Pub/Sub runtime overrides.
 Future<void> resetSpannerPubSubRuntime({
   bool cleanupPubSubClients = true,
 }) async {
@@ -164,6 +180,7 @@ Future<void> resetSpannerPubSubRuntime({
   resetSpannerEmbedders();
 }
 
+/// Embeds [contents] using the configured synchronous embedder.
 List<List<double>> embedContents({
   required String vertexAiEmbeddingModelName,
   required List<String> contents,
@@ -187,6 +204,7 @@ List<List<double>> embedContents({
   }
 }
 
+/// Embeds [contents] using the configured asynchronous embedder.
 Future<List<List<double>>> embedContentsAsync({
   required String vertexAiEmbeddingModelName,
   required List<String> contents,
@@ -238,7 +256,9 @@ Future<List<List<double>>> _defaultSpannerEmbedderAsync({
   );
 }
 
+/// Vector store helper for Spanner-backed embedding retrieval.
 class SpannerVectorStore {
+  /// Creates a Spanner vector store helper.
   SpannerVectorStore({
     required SpannerToolSettings settings,
     Object? credentials,
@@ -284,7 +304,10 @@ class SpannerVectorStore {
     }
   }
 
+  /// Default id column name used when primary keys are not configured.
   static const String defaultVectorStoreIdColumnName = 'id';
+
+  /// User-agent suffix added for vector store operations.
   static const String spannerVectorStoreUserAgent = 'adk-spanner-vector-store';
 
   final SpannerToolSettings _settings;
@@ -296,6 +319,7 @@ class SpannerVectorStore {
     return _requireVectorStoreSettings(_settings);
   }
 
+  /// Generates table DDL for the configured vector store.
   String createVectorStoreTableDdl(SpannerDatabaseDialect dialect) {
     final List<String> primaryKeyColumns =
         _vectorStoreSettings.primaryKeyColumns ??
@@ -350,6 +374,7 @@ class SpannerVectorStore {
         ' (\n  $innerDdl\n) PRIMARY KEY($pkStmt)';
   }
 
+  /// Generates ANN vector index DDL for Google Standard SQL.
   String createAnnVectorSearchIndexDdl(SpannerDatabaseDialect dialect) {
     final VectorSearchIndexSettings? indexSettings =
         _vectorStoreSettings.vectorSearchIndexSettings;
@@ -407,6 +432,7 @@ class SpannerVectorStore {
     return statement.trim();
   }
 
+  /// Creates the vector store table.
   Future<void> createVectorStore() async {
     final String ddl = createVectorStoreTableDdl(_database.databaseDialect);
     final SpannerUpdateDdlOperation operation = _database.updateDdl(<String>[
@@ -415,6 +441,7 @@ class SpannerVectorStore {
     await Future<void>.sync(() => operation.result());
   }
 
+  /// Creates the vector search index when configured.
   Future<void> createVectorSearchIndex() async {
     if (_vectorStoreSettings.vectorSearchIndexSettings == null) {
       return;
@@ -426,14 +453,17 @@ class SpannerVectorStore {
     await Future<void>.sync(() => operation.result());
   }
 
+  /// Async wrapper for [createVectorStore].
   Future<void> createVectorStoreAsync() async {
     await createVectorStore();
   }
 
+  /// Async wrapper for [createVectorSearchIndex].
   Future<void> createVectorSearchIndexAsync() async {
     await createVectorSearchIndex();
   }
 
+  /// Splits [contents] and additional values into validated batches.
   Iterable<SpannerContentBatch> prepareAndValidateBatches({
     required Iterable<String> contents,
     required Iterable<Map<String, Object?>>? additionalColumnsValues,
@@ -488,6 +518,7 @@ class SpannerVectorStore {
     }
   }
 
+  /// Adds and embeds [contents] in batches, then upserts rows to Spanner.
   Future<void> addContents({
     required Iterable<String> contents,
     Iterable<Map<String, Object?>>? additionalColumnsValues,
@@ -538,6 +569,7 @@ class SpannerVectorStore {
     }
   }
 
+  /// Async variant of [addContents] using [embedContentsAsync].
   Future<void> addContentsAsync({
     required Iterable<String> contents,
     Iterable<Map<String, Object?>>? additionalColumnsValues,
@@ -589,15 +621,22 @@ class SpannerVectorStore {
   }
 }
 
+/// One prepared batch of contents and additional column values.
 class SpannerContentBatch {
+  /// Creates a content batch.
   SpannerContentBatch({
     required this.contentBatch,
     required this.valueBatch,
     required this.batchIndex,
   });
 
+  /// Content strings for this batch.
   final List<String> contentBatch;
+
+  /// Additional per-row column values for this batch.
   final List<Map<String, Object?>> valueBatch;
+
+  /// Zero-based start index of this batch in the original stream.
   final int batchIndex;
 }
 
