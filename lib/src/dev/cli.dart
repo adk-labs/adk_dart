@@ -36,6 +36,7 @@ import '../evaluation/local_eval_service.dart';
 import '../evaluation/local_eval_set_results_manager.dart';
 import '../evaluation/local_eval_sets_manager.dart'
     show LocalEvalSetsManager, loadEvalSetFromFile;
+import '../features/_feature_registry.dart';
 import '../utils/yaml_utils.dart';
 import 'project.dart';
 import 'runtime.dart';
@@ -65,6 +66,8 @@ Run options:
       --session_service_uri
       --artifact_service_uri
       --memory_service_uri
+      --enable_features  Comma-separated features to force-enable
+      --disable_features Comma-separated features to force-disable
       --use_local_storage / --no_use_local_storage
       --save_session    Save session snapshot on exit
       --resume          Resume from a saved session snapshot json file
@@ -89,6 +92,8 @@ Web options:
       --reload_agents
       --a2a
       --extra_plugins
+      --enable_features  Comma-separated features to force-enable
+      --disable_features Comma-separated features to force-disable
       --logo-text
       --logo-image-url
   -v, --verbose         Enable verbose logging (parsed for parity)
@@ -136,7 +141,9 @@ class ParsedAdkCommand {
       replayFilePath = null,
       message = null,
       usedDeprecatedSessionDbUrl = false,
-      usedDeprecatedArtifactStorageUri = false;
+      usedDeprecatedArtifactStorageUri = false,
+      enableFeatures = const <String>[],
+      disableFeatures = const <String>[];
 
   ParsedAdkCommand.run({
     required this.projectDir,
@@ -150,6 +157,8 @@ class ParsedAdkCommand {
     this.resumeFilePath,
     this.replayFilePath,
     this.message,
+    required this.enableFeatures,
+    required this.disableFeatures,
   }) : type = AdkCommandType.run,
        appName = null,
        port = null,
@@ -196,6 +205,8 @@ class ParsedAdkCommand {
     required this.enableWebUi,
     required this.usedDeprecatedSessionDbUrl,
     required this.usedDeprecatedArtifactStorageUri,
+    required this.enableFeatures,
+    required this.disableFeatures,
   }) : type = AdkCommandType.web,
        appName = null,
        sessionId = null,
@@ -235,6 +246,8 @@ class ParsedAdkCommand {
   final String? message;
   final bool usedDeprecatedSessionDbUrl;
   final bool usedDeprecatedArtifactStorageUri;
+  final List<String> enableFeatures;
+  final List<String> disableFeatures;
 }
 
 ParsedAdkCommand parseAdkCliArgs(List<String> args) {
@@ -401,6 +414,12 @@ Future<int> runAdkCli(
   }
 
   try {
+    _applyFeatureOverridesFromCli(
+      enableFeatures: parsed.enableFeatures,
+      disableFeatures: parsed.disableFeatures,
+      err: err,
+    );
+
     late final int exitCode;
     switch (parsed.type) {
       case AdkCommandType.create:
@@ -2389,6 +2408,8 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
   String? sessionServiceUri;
   String? artifactServiceUri;
   String? memoryServiceUri;
+  final List<String> enableFeatures = <String>[];
+  final List<String> disableFeatures = <String>[];
   String? resumeFilePath;
   String? replayFilePath;
   String? message;
@@ -2451,6 +2472,24 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     }
     if (arg.startsWith('--memory_service_uri=')) {
       memoryServiceUri = arg.substring('--memory_service_uri='.length);
+      continue;
+    }
+    if (arg == '--enable_features') {
+      enableFeatures.add(_nextArg(args, i, '--enable_features'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--enable_features=')) {
+      enableFeatures.add(arg.substring('--enable_features='.length));
+      continue;
+    }
+    if (arg == '--disable_features') {
+      disableFeatures.add(_nextArg(args, i, '--disable_features'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--disable_features=')) {
+      disableFeatures.add(arg.substring('--disable_features='.length));
       continue;
     }
     if (arg == '--use_local_storage') {
@@ -2537,6 +2576,8 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     resumeFilePath: _emptyToNull(resumeFilePath),
     replayFilePath: _emptyToNull(replayFilePath),
     message: _emptyToNull(message),
+    enableFeatures: _normalizeCsvValues(enableFeatures),
+    disableFeatures: _normalizeCsvValues(disableFeatures),
   );
 }
 
@@ -2552,6 +2593,8 @@ ParsedAdkCommand _parseWebCommand(
   String? sessionServiceUri;
   String? artifactServiceUri;
   String? memoryServiceUri;
+  final List<String> enableFeatures = <String>[];
+  final List<String> disableFeatures = <String>[];
   String? logLevel;
   String? evalStorageUri;
   String? deprecatedSessionDbUrl;
@@ -2636,6 +2679,24 @@ ParsedAdkCommand _parseWebCommand(
     }
     if (arg.startsWith('--memory_service_uri=')) {
       memoryServiceUri = arg.substring('--memory_service_uri='.length).trim();
+      continue;
+    }
+    if (arg == '--enable_features') {
+      enableFeatures.add(_nextArg(args, i, '--enable_features').trim());
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--enable_features=')) {
+      enableFeatures.add(arg.substring('--enable_features='.length).trim());
+      continue;
+    }
+    if (arg == '--disable_features') {
+      disableFeatures.add(_nextArg(args, i, '--disable_features').trim());
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--disable_features=')) {
+      disableFeatures.add(arg.substring('--disable_features='.length).trim());
       continue;
     }
     if (arg == '--session_db_url') {
@@ -2825,6 +2886,8 @@ ParsedAdkCommand _parseWebCommand(
     enableWebUi: enableWebUi,
     usedDeprecatedSessionDbUrl: usedDeprecatedSessionDbUrl,
     usedDeprecatedArtifactStorageUri: usedDeprecatedArtifactStorageUri,
+    enableFeatures: _normalizeCsvValues(enableFeatures),
+    disableFeatures: _normalizeCsvValues(disableFeatures),
   );
 }
 
@@ -3483,6 +3546,56 @@ cli_logs.Level _toCliLogEnum(String logLevel) {
     'ERROR' || 'CRITICAL' => cli_logs.Level.error,
     _ => cli_logs.Level.info,
   };
+}
+
+void _applyFeatureOverridesFromCli({
+  required List<String> enableFeatures,
+  required List<String> disableFeatures,
+  required IOSink err,
+}) {
+  if (enableFeatures.isEmpty && disableFeatures.isEmpty) {
+    return;
+  }
+
+  final Map<FeatureName, bool> overrides = <FeatureName, bool>{};
+  for (final String rawFeature in enableFeatures) {
+    final FeatureName? featureName = _featureNameFromCliValue(rawFeature);
+    if (featureName == null) {
+      _writeUnknownFeatureNameWarning(rawFeature, err);
+      continue;
+    }
+    overrides[featureName] = true;
+  }
+  for (final String rawFeature in disableFeatures) {
+    final FeatureName? featureName = _featureNameFromCliValue(rawFeature);
+    if (featureName == null) {
+      _writeUnknownFeatureNameWarning(rawFeature, err);
+      continue;
+    }
+    overrides[featureName] = false;
+  }
+
+  for (final MapEntry<FeatureName, bool> entry in overrides.entries) {
+    overrideFeatureEnabled(entry.key, entry.value);
+  }
+}
+
+FeatureName? _featureNameFromCliValue(String rawFeature) {
+  for (final FeatureName featureName in FeatureName.values) {
+    if (featureName.value == rawFeature) {
+      return featureName;
+    }
+  }
+  return null;
+}
+
+void _writeUnknownFeatureNameWarning(String rawFeature, IOSink err) {
+  final String validNames = FeatureName.values
+      .map((FeatureName featureName) => featureName.value)
+      .join(', ');
+  err.writeln(
+    "WARNING: Unknown feature name '$rawFeature'. Valid names are: $validNames",
+  );
 }
 
 void _writeEventTexts(List<Event> events, {required IOSink out}) {

@@ -8,6 +8,7 @@ import 'package:adk_dart/src/models/llm_response.dart';
 import 'package:adk_dart/src/models/registry.dart';
 import 'package:adk_dart/src/dev/cli.dart';
 import 'package:adk_dart/src/dev/project.dart';
+import 'package:adk_dart/src/features/_feature_registry.dart';
 import 'package:adk_dart/src/types/content.dart';
 import 'package:test/test.dart';
 
@@ -109,6 +110,22 @@ void main() {
       expect(command.artifactServiceUri, 'memory://');
       expect(command.memoryServiceUri, 'memory://');
       expect(command.useLocalStorage, isTrue);
+    });
+
+    test('parses run feature override options', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'run',
+        'my_agent',
+        '--enable_features',
+        'JSON_SCHEMA_FOR_FUNC_DECL,PROGRESSIVE_SSE_STREAMING',
+        '--disable_features=TOOL_CONFIG',
+      ]);
+
+      expect(command.enableFeatures, <String>[
+        'JSON_SCHEMA_FOR_FUNC_DECL',
+        'PROGRESSIVE_SSE_STREAMING',
+      ]);
+      expect(command.disableFeatures, <String>['TOOL_CONFIG']);
     });
 
     test('throws when run local storage flag is mixed with service URIs', () {
@@ -249,6 +266,18 @@ void main() {
       expect(command.useLocalStorage, isTrue);
       expect(command.autoCreateSession, isTrue);
       expect(command.enableWebUi, isTrue);
+    });
+
+    test('parses web feature override options', () {
+      final ParsedAdkCommand command = parseAdkCliArgs(<String>[
+        'web',
+        '--enable_features=JSON_SCHEMA_FOR_FUNC_DECL',
+        '--disable_features',
+        'TOOL_CONFIG',
+      ]);
+
+      expect(command.enableFeatures, <String>['JSON_SCHEMA_FOR_FUNC_DECL']);
+      expect(command.disableFeatures, <String>['TOOL_CONFIG']);
     });
 
     test(
@@ -479,6 +508,70 @@ void main() {
       expect(stdoutText, isEmpty);
       expect(stderrText, contains('Project directory does not exist.'));
     });
+
+    test('run command applies feature overrides from CLI options', () async {
+      resetFeatureRegistryForTest();
+      addTearDown(resetFeatureRegistryForTest);
+
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final String missingPath =
+          '${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'adk_cli_missing_${DateTime.now().microsecondsSinceEpoch}';
+
+      final int exitCode = await runAdkCli(
+        <String>[
+          'run',
+          missingPath,
+          '--enable_features',
+          'JSON_SCHEMA_FOR_FUNC_DECL',
+          '--disable_features',
+          'JSON_SCHEMA_FOR_FUNC_DECL',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 1);
+      expect(stdoutText, isEmpty);
+      expect(stderrText, contains('Project directory does not exist.'));
+      expect(getFeatureOverrides()[FeatureName.jsonSchemaForFuncDecl], isFalse);
+    });
+
+    test(
+      'run command warns on unknown feature names from CLI options',
+      () async {
+        resetFeatureRegistryForTest();
+        addTearDown(resetFeatureRegistryForTest);
+
+        final _CapturedSink outCapture = _CapturedSink();
+        final _CapturedSink errCapture = _CapturedSink();
+        final String missingPath =
+            '${Directory.systemTemp.path}${Platform.pathSeparator}'
+            'adk_cli_missing_${DateTime.now().microsecondsSinceEpoch}';
+
+        final int exitCode = await runAdkCli(
+          <String>['run', missingPath, '--enable_features', 'UNKNOWN_FEATURE'],
+          outSink: outCapture.sink,
+          errSink: errCapture.sink,
+        );
+
+        final String stdoutText = await outCapture.closeAndRead();
+        final String stderrText = await errCapture.closeAndRead();
+
+        expect(exitCode, 1);
+        expect(stdoutText, isEmpty);
+        expect(
+          stderrText,
+          contains("WARNING: Unknown feature name 'UNKNOWN_FEATURE'."),
+        );
+        expect(stderrText, contains('Project directory does not exist.'));
+        expect(getFeatureOverrides(), isEmpty);
+      },
+    );
 
     test('run command fails when no root agent is found', () async {
       final Directory tempDir = await Directory.systemTemp.createTemp(
