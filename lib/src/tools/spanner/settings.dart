@@ -1,15 +1,24 @@
 import '../../features/_feature_registry.dart';
 
+/// The exact nearest-neighbor search algorithm name used by Spanner.
 const String exactNearestNeighbors = 'EXACT_NEAREST_NEIGHBORS';
+
+/// The approximate nearest-neighbor search algorithm name used by Spanner.
 const String approximateNearestNeighbors = 'APPROXIMATE_NEAREST_NEIGHBORS';
 
+/// Supported Spanner tool capabilities.
 enum Capabilities {
+  /// Reads data from Spanner without mutating state.
   dataRead('data_read');
 
   const Capabilities(this.value);
 
+  /// The serialized capability value used in JSON payloads.
   final String value;
 
+  /// Resolves a [Capabilities] value from its serialized [value].
+  ///
+  /// Throws an [ArgumentError] when [value] does not map to a known capability.
   static Capabilities fromValue(String value) {
     for (final Capabilities capability in Capabilities.values) {
       if (capability.value == value) {
@@ -20,14 +29,22 @@ enum Capabilities {
   }
 }
 
+/// Output formats for query execution results.
 enum QueryResultMode {
+  /// Returns query results in the default mode.
   defaultMode('default'),
+
+  /// Returns query results as a list of key-value maps.
   dictList('dict_list');
 
   const QueryResultMode(this.value);
 
+  /// The serialized query mode value used in JSON payloads.
   final String value;
 
+  /// Resolves a [QueryResultMode] value from its serialized [value].
+  ///
+  /// Throws an [ArgumentError] when [value] does not map to a known mode.
   static QueryResultMode fromValue(String value) {
     for (final QueryResultMode mode in QueryResultMode.values) {
       if (mode.value == value) {
@@ -38,13 +55,21 @@ enum QueryResultMode {
   }
 }
 
+/// A table column definition used when provisioning Spanner vector tables.
 class TableColumn {
+  /// Creates a table column definition.
   TableColumn({required this.name, required this.type, this.isNullable = true});
 
+  /// The column name in Spanner.
   final String name;
+
+  /// The Spanner column type string.
   final String type;
+
+  /// Whether this column accepts `NULL` values.
   final bool isNullable;
 
+  /// Creates a [TableColumn] from a serialized [json] object.
   factory TableColumn.fromJson(Map<String, Object?> json) {
     final String name = _readRequiredString(json, const <String>['name']);
     final String type = _readRequiredString(json, const <String>['type']);
@@ -53,6 +78,7 @@ class TableColumn {
     return TableColumn(name: name, type: type, isNullable: isNullable);
   }
 
+  /// A JSON map representation of this table column.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'name': name,
@@ -61,6 +87,9 @@ class TableColumn {
     };
   }
 
+  /// Converts [value] to a [TableColumn] when possible.
+  ///
+  /// Throws an [ArgumentError] when [value] is not convertible.
   static TableColumn fromObject(Object? value) {
     if (value is TableColumn) {
       return value;
@@ -74,7 +103,9 @@ class TableColumn {
   }
 }
 
+/// Index tuning values for Spanner vector search indexes.
 class VectorSearchIndexSettings {
+  /// Creates vector index settings for Spanner.
   VectorSearchIndexSettings({
     required this.indexName,
     this.additionalKeyColumns,
@@ -84,13 +115,25 @@ class VectorSearchIndexSettings {
     this.numBranches,
   });
 
+  /// The index name used for vector search.
   final String indexName;
+
+  /// Additional columns that become part of the index key.
   final List<String>? additionalKeyColumns;
+
+  /// Additional columns stored in the index payload.
   final List<String>? additionalStoringColumns;
+
+  /// The configured tree depth for the index.
   final int treeDepth;
+
+  /// The configured number of leaves for the index.
   final int numLeaves;
+
+  /// The configured branch count for the index, when provided.
   final int? numBranches;
 
+  /// Creates [VectorSearchIndexSettings] from a serialized [json] object.
   factory VectorSearchIndexSettings.fromJson(Map<String, Object?> json) {
     final String indexName = _readRequiredString(json, const <String>[
       'index_name',
@@ -117,6 +160,7 @@ class VectorSearchIndexSettings {
     );
   }
 
+  /// A JSON map representation of these vector index settings.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'index_name': indexName,
@@ -132,6 +176,9 @@ class VectorSearchIndexSettings {
     };
   }
 
+  /// Converts [value] to [VectorSearchIndexSettings] when possible.
+  ///
+  /// Throws an [ArgumentError] when [value] is not convertible.
   static VectorSearchIndexSettings fromObject(Object? value) {
     if (value is VectorSearchIndexSettings) {
       return value;
@@ -145,7 +192,11 @@ class VectorSearchIndexSettings {
   }
 }
 
+/// Configuration for Spanner-backed vector store retrieval.
 class SpannerVectorStoreSettings {
+  /// Creates vector store settings for a Spanner table.
+  ///
+  /// Throws an [ArgumentError] when required values are invalid.
   SpannerVectorStoreSettings({
     required this.projectId,
     required this.instanceId,
@@ -199,24 +250,58 @@ class SpannerVectorStoreSettings {
     }
   }
 
+  /// The Google Cloud project ID that owns the Spanner instance.
   final String projectId;
+
+  /// The Spanner instance ID.
   final String instanceId;
+
+  /// The Spanner database ID.
   final String databaseId;
+
+  /// The table name containing vectorized rows.
   final String tableName;
+
+  /// The column containing source text content.
   final String contentColumn;
+
+  /// The column containing vector embeddings.
   final String embeddingColumn;
+
+  /// The expected embedding vector length.
   final int vectorLength;
+
+  /// The Vertex AI embedding model name used for this store.
   final String vertexAiEmbeddingModelName;
+
+  /// The columns returned for retrieval results.
   final List<String> selectedColumns;
+
+  /// The nearest-neighbor algorithm to use for retrieval.
   final String nearestNeighborsAlgorithm;
+
+  /// The number of nearest results requested from vector search.
   final int topK;
+
+  /// The distance metric used for vector similarity.
   final String distanceType;
+
+  /// The number of leaves to search for approximate nearest neighbors.
   final int? numLeavesToSearch;
+
+  /// Additional SQL filter text applied to vector lookups.
   final String? additionalFilter;
+
+  /// Optional vector index tuning overrides.
   final VectorSearchIndexSettings? vectorSearchIndexSettings;
+
+  /// Optional additional columns to create during table setup.
   final List<TableColumn>? additionalColumnsToSetup;
+
+  /// Optional primary key column names for table setup.
   final List<String>? primaryKeyColumns;
 
+  /// Creates [SpannerVectorStoreSettings] from a serialized [json] object.
   factory SpannerVectorStoreSettings.fromJson(Map<String, Object?> json) {
     return SpannerVectorStoreSettings(
       projectId: _readRequiredString(json, const <String>[
@@ -288,6 +373,7 @@ class SpannerVectorStoreSettings {
     );
   }
 
+  /// A JSON map representation of these vector store settings.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'project_id': projectId,
@@ -315,6 +401,9 @@ class SpannerVectorStoreSettings {
     };
   }
 
+  /// Converts [value] to [SpannerVectorStoreSettings] when possible.
+  ///
+  /// Throws an [ArgumentError] when [value] is not convertible.
   static SpannerVectorStoreSettings fromObject(Object? value) {
     if (value is SpannerVectorStoreSettings) {
       return value;
@@ -338,7 +427,9 @@ class SpannerVectorStoreSettings {
   }
 }
 
+/// Configuration for the Spanner tool runtime.
 class SpannerToolSettings {
+  /// Creates Spanner tool settings.
   SpannerToolSettings({
     List<Capabilities>? capabilities,
     this.maxExecutedQueryResultRows = 50,
@@ -348,15 +439,26 @@ class SpannerToolSettings {
            ? <Capabilities>[Capabilities.dataRead]
            : List<Capabilities>.from(capabilities);
 
+  /// Enabled capabilities for the tool.
   final List<Capabilities> capabilities;
+
+  /// The maximum number of rows returned by executed queries.
   final int maxExecutedQueryResultRows;
+
+  /// The format used to serialize query execution results.
   final QueryResultMode queryResultMode;
+
+  /// Optional vector store settings for retrieval functionality.
   final SpannerVectorStoreSettings? vectorStoreSettings;
 
+  /// Verifies that the Spanner tool settings feature flag is enabled.
   static void ensureFeatureEnabled({Map<String, String>? environment}) {
     isFeatureEnabled(FeatureName.spannerToolSettings, environment: environment);
   }
 
+  /// Creates [SpannerToolSettings] from a serialized [json] object.
+  ///
+  /// Throws an [ArgumentError] when [json] contains unknown fields.
   factory SpannerToolSettings.fromJson(Map<String, Object?> json) {
     ensureFeatureEnabled();
 
@@ -401,6 +503,7 @@ class SpannerToolSettings {
     );
   }
 
+  /// A JSON map representation of these Spanner tool settings.
   Map<String, Object?> toJson() {
     ensureFeatureEnabled();
     return <String, Object?>{
@@ -414,6 +517,7 @@ class SpannerToolSettings {
     };
   }
 
+  /// Converts [value] to [SpannerToolSettings] when possible.
   static SpannerToolSettings fromObject(Object? value) {
     if (value is SpannerToolSettings) {
       return value;
