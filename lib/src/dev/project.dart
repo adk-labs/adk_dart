@@ -3,7 +3,9 @@ import 'dart:io';
 
 const String _configFileName = 'adk.json';
 
+/// Development project metadata used by local ADK tooling.
 class DevProjectConfig {
+  /// Creates an immutable development project configuration.
   const DevProjectConfig({
     required this.appName,
     required this.agentName,
@@ -11,11 +13,19 @@ class DevProjectConfig {
     this.userId = 'user',
   });
 
+  /// The logical application name used for session and runtime routing.
   final String appName;
+
+  /// The root agent name shown in runtime events and UI.
   final String agentName;
+
+  /// The human-readable description of the generated project.
   final String description;
+
+  /// The default user id used by local dev flows.
   final String userId;
 
+  /// A JSON-serializable representation of this configuration.
   Map<String, Object> toJson() {
     return <String, Object>{
       'appName': appName,
@@ -25,6 +35,7 @@ class DevProjectConfig {
     };
   }
 
+  /// A copy of this config with selected fields replaced.
   DevProjectConfig copyWith({
     String? appName,
     String? agentName,
@@ -40,6 +51,9 @@ class DevProjectConfig {
   }
 }
 
+/// The normalized terminal folder name for [path].
+///
+/// Returns `my_agent` when [path] has no usable last segment.
 String projectDirName(String path) {
   final String normalized = path.replaceAll('\\', '/');
   final String trimmed = normalized.endsWith('/')
@@ -53,6 +67,14 @@ String projectDirName(String path) {
   return last;
 }
 
+/// Loads [DevProjectConfig] from [projectDirPath].
+///
+/// Returns fallback metadata when `adk.json` is absent unless
+/// [requireConfigFile] is true.
+///
+/// Throws a [FileSystemException] when [validateProjectDir] is true and
+/// [projectDirPath] does not point to an existing directory.
+/// Throws a [FormatException] when `adk.json` is not a JSON object.
 Future<DevProjectConfig> loadDevProjectConfig(
   String projectDirPath, {
   bool validateProjectDir = false,
@@ -113,6 +135,13 @@ Future<DevProjectConfig> loadDevProjectConfig(
   );
 }
 
+/// Creates a scaffolded ADK development project at [projectDirPath].
+///
+/// Generates `adk.json`, `.env`, `root_agent.yaml`, `agent.dart`, and
+/// `README.md`.
+///
+/// Throws a [FileSystemException] when the target directory exists and is not
+/// empty.
 Future<void> createDevProject({
   required String projectDirPath,
   String? appName,

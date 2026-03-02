@@ -12,9 +12,15 @@ import '../../dev/runtime.dart';
 import 'base_agent_loader.dart';
 import 'envs.dart';
 
+/// Factory signature used to resolve an agent at runtime.
 typedef AgentFactory = AgentOrApp Function(String agentName, String agentsDir);
 
+/// Filesystem-backed loader for ADK agents and apps.
 class AgentLoader extends BaseAgentLoader {
+  /// Creates a loader rooted at [agentsDir].
+  ///
+  /// When [enableDevProjectFallback] is true, directories containing only
+  /// `adk.json` or `agent.dart` are loaded through the dev runtime fallback.
   AgentLoader(
     this.agentsDir, {
     Map<String, AgentFactory>? agentFactories,
@@ -22,11 +28,13 @@ class AgentLoader extends BaseAgentLoader {
   }) : _agentFactories = agentFactories ?? <String, AgentFactory>{},
        _enableDevProjectFallback = enableDevProjectFallback;
 
+  /// Root directory that contains loadable agents.
   final String agentsDir;
   final Map<String, AgentFactory> _agentFactories;
   final bool _enableDevProjectFallback;
   final Map<String, AgentOrApp> _agentCache = <String, AgentOrApp>{};
 
+  /// Loads [agentName] and caches the result for subsequent lookups.
   @override
   AgentOrApp loadAgent(String agentName) {
     final AgentOrApp? cached = _agentCache[agentName];
@@ -91,6 +99,7 @@ class AgentLoader extends BaseAgentLoader {
     );
   }
 
+  /// All loadable agent directory names under [agentsDir].
   @override
   List<String> listAgents() {
     final Directory base = Directory(agentsDir).absolute;
@@ -115,6 +124,9 @@ class AgentLoader extends BaseAgentLoader {
     return names;
   }
 
+  /// Detailed metadata for all loadable agents.
+  ///
+  /// Entries that fail to load are skipped to preserve Python CLI parity.
   @override
   List<Map<String, Object?>> listAgentsDetailed() {
     final List<Map<String, Object?>> appsInfo = <Map<String, Object?>>[];
@@ -181,6 +193,7 @@ class AgentLoader extends BaseAgentLoader {
     return hasComputerUse;
   }
 
+  /// Removes [agentName] from the in-memory loader cache.
   void removeAgentFromCache(String agentName) {
     _agentCache.remove(agentName);
   }

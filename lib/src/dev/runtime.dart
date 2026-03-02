@@ -12,15 +12,24 @@ import '../tools/function_tool.dart';
 import '../types/content.dart';
 import 'project.dart';
 
+/// The demo tool name used by [DemoTimeModel] and dev scaffolds.
 const String getCurrentTimeToolName = 'get_current_time';
 
+/// Runtime wrapper for local ADK development sessions.
 class DevAgentRuntime {
+  /// Creates a dev runtime from [config].
+  ///
+  /// Uses a demo in-memory runner when [runner] is omitted.
   DevAgentRuntime({required this.config, Runner? runner})
     : runner = runner ?? _createDemoRunner(config);
 
+  /// Project metadata used to build this runtime.
   final DevProjectConfig config;
+
+  /// The backing runner used for session and agent execution.
   final Runner runner;
 
+  /// Creates a session for [userId].
   Future<Session> createSession({required String userId, String? sessionId}) {
     return runner.sessionService.createSession(
       appName: runner.appName,
@@ -29,6 +38,7 @@ class DevAgentRuntime {
     );
   }
 
+  /// Creates a session for [userId] with initial [state].
   Future<Session> createSessionWithState({
     required String userId,
     String? sessionId,
@@ -42,6 +52,9 @@ class DevAgentRuntime {
     );
   }
 
+  /// Ensures that [sessionId] exists for [userId].
+  ///
+  /// Creates the session when it does not already exist.
   Future<Session> ensureSession({
     required String userId,
     required String sessionId,
@@ -57,12 +70,14 @@ class DevAgentRuntime {
     return createSession(userId: userId, sessionId: sessionId);
   }
 
+  /// All sessions currently stored for [userId].
   Future<List<Session>> listSessions({required String userId}) async {
     final ListSessionsResponse response = await runner.sessionService
         .listSessions(appName: runner.appName, userId: userId);
     return response.sessions;
   }
 
+  /// The session identified by [sessionId] for [userId], if present.
   Future<Session?> getSession({
     required String userId,
     required String sessionId,
@@ -76,6 +91,7 @@ class DevAgentRuntime {
     );
   }
 
+  /// Sends [message] to [sessionId] for [userId] and returns emitted events.
   Future<List<Event>> sendMessage({
     required String userId,
     required String sessionId,
@@ -113,6 +129,7 @@ Runner _createDemoRunner(DevProjectConfig config) {
   );
 }
 
+/// Returns a serialized current-time payload for [city].
 Map<String, Object> getCurrentTime({required String city}) {
   final DateTime now = DateTime.now();
   return <String, Object>{
@@ -122,7 +139,9 @@ Map<String, Object> getCurrentTime({required String city}) {
   };
 }
 
+/// Lightweight model used by local dev scaffolds before real model setup.
 class DemoTimeModel extends BaseLlm {
+  /// Creates a demo model instance.
   DemoTimeModel() : super(model: 'demo-time-model');
 
   static final RegExp _cityRegExp = RegExp(

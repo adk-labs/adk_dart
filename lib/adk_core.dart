@@ -1,8 +1,10 @@
-// Flutter/Web-safe ADK entrypoint.
-//
-// This surface intentionally excludes APIs that require `dart:io`,
-// `dart:ffi`, `dart:mirrors`, local process execution, or local filesystem
-// access. For the full VM/CLI surface use `package:adk_dart/adk_dart.dart`.
+/// Flutter and Web-safe ADK entrypoint.
+///
+/// This surface intentionally excludes APIs that require `dart:io`,
+/// `dart:ffi`, `dart:mirrors`, local process execution, or local filesystem
+/// access. Use `package:adk_dart/adk_dart.dart` for the full VM and CLI
+/// surface.
+library;
 
 export 'src/agents/agent_state.dart';
 export 'src/agents/base_agent.dart';

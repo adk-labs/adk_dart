@@ -1,3 +1,10 @@
+/// Full ADK Dart API surface for VM and CLI environments.
+///
+/// This library exports the complete server-side SDK, including CLI,
+/// filesystem-backed services, deployment helpers, and integrations that may
+/// rely on `dart:io` or platform-specific capabilities.
+library;
+
 export 'src/agents/agent_state.dart';
 export 'src/agents/active_streaming_tool.dart';
 export 'src/agents/base_agent.dart';
