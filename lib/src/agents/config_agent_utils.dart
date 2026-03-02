@@ -1,3 +1,6 @@
+/// Helpers for building runtime agents from YAML/JSON config files.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,7 +22,10 @@ import 'parallel_agent_config.dart';
 import 'sequential_agent.dart';
 import 'sequential_agent_config.dart';
 
+/// Symbol resolver for fully-qualified names in config references.
 typedef SymbolResolver = Object? Function(String fullyQualifiedName);
+
+/// Factory for custom agent classes loaded from config.
 typedef CustomAgentFactory =
     BaseAgent Function(
       BaseAgentConfig config,
@@ -34,7 +40,9 @@ const Set<String> _builtInAgentClasses = <String>{
   'SequentialAgent',
 };
 
+/// Resolver bundle used while constructing agents from config.
 class AgentConfigResolvers {
+  /// Creates a resolver bundle.
   AgentConfigResolvers({
     this.symbolResolver,
     Map<String, Object?>? symbols,
@@ -43,10 +51,16 @@ class AgentConfigResolvers {
        customAgentFactories =
            customAgentFactories ?? <String, CustomAgentFactory>{};
 
+  /// Optional dynamic symbol resolver.
   final SymbolResolver? symbolResolver;
+
+  /// Static symbol table keyed by fully-qualified names.
   final Map<String, Object?> symbols;
+
+  /// Custom agent factories keyed by class name.
   final Map<String, CustomAgentFactory> customAgentFactories;
 
+  /// Resolves [name] using static symbols first, then [symbolResolver].
   Object? resolveSymbol(String name) {
     if (symbols.containsKey(name)) {
       return symbols[name];
@@ -55,6 +69,7 @@ class AgentConfigResolvers {
   }
 }
 
+/// Builds a root [BaseAgent] from a config file at [configPath].
 BaseAgent fromConfig(String configPath, {AgentConfigResolvers? resolvers}) {
   final String absPath = File(configPath).absolute.path;
   final AgentConfig config = _loadConfigFromPath(absPath);
@@ -80,6 +95,7 @@ AgentConfig _loadConfigFromPath(String configPath) {
   return AgentConfig.fromJson(json);
 }
 
+/// Resolves a fully-qualified symbol [name] using [resolvers].
 Object? resolveFullyQualifiedName(
   String name, {
   required AgentConfigResolvers resolvers,
@@ -91,6 +107,7 @@ Object? resolveFullyQualifiedName(
   return value;
 }
 
+/// Resolves an [AgentRefConfig] into a concrete [BaseAgent].
 BaseAgent resolveAgentReference(
   AgentRefConfig refConfig,
   String referencingAgentConfigAbsPath, {
@@ -116,6 +133,7 @@ BaseAgent resolveAgentReference(
   );
 }
 
+/// Resolves a [CodeConfig] reference, applying configured arguments.
 Object? resolveCodeReference(
   CodeConfig codeConfig, {
   required AgentConfigResolvers resolvers,
@@ -143,6 +161,7 @@ Object? resolveCodeReference(
   return obj;
 }
 
+/// Resolves callback code references into executable callback objects.
 List<Object?> resolveCallbacks(
   List<CodeConfig> callbacksConfig, {
   required AgentConfigResolvers resolvers,
