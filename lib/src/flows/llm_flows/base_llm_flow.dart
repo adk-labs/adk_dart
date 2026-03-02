@@ -26,15 +26,21 @@ import 'audio_cache_manager.dart';
 import 'functions.dart' as flow_functions;
 import 'output_schema_processor.dart' as output_schema;
 
+/// Contract for preprocessing a model request into emitted events.
 abstract class BaseLlmRequestProcessor {
+  /// Runs the processor with [context] and mutable [request].
   Stream<Event> runAsync(InvocationContext context, LlmRequest request);
 }
 
+/// Contract for postprocessing a model response into emitted events.
 abstract class BaseLlmResponseProcessor {
+  /// Runs the processor with [context] and [response].
   Stream<Event> runAsync(InvocationContext context, LlmResponse response);
 }
 
+/// Core LLM flow coordinator for request/response processing and tool loops.
 class BaseLlmFlow {
+  /// Creates a base LLM flow.
   BaseLlmFlow();
 
   final List<BaseLlmRequestProcessor> requestProcessors =
@@ -43,6 +49,7 @@ class BaseLlmFlow {
       <BaseLlmResponseProcessor>[];
   final AudioCacheManager audioCacheManager = AudioCacheManager();
 
+  /// Runs the flow in live mode when a live queue is available.
   Stream<Event> runLive(InvocationContext context) async* {
     final LiveRequestQueue? liveQueue = context.liveRequestQueue;
     if (liveQueue == null) {
@@ -553,6 +560,7 @@ class BaseLlmFlow {
     );
   }
 
+  /// Runs the standard request-response flow until completion.
   Stream<Event> runAsync(InvocationContext context) async* {
     while (true) {
       Event? lastEvent;
@@ -1059,6 +1067,7 @@ class BaseLlmFlow {
     return finalized;
   }
 
+  /// Flushes cached live audio events based on control flags in [response].
   Future<List<Event>> handleControlEventFlush(
     InvocationContext context,
     LlmResponse response,
