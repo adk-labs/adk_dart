@@ -14,15 +14,24 @@ import '../../types/content.dart';
 import '../../types/id.dart';
 import '../../agents/llm_agent.dart';
 
+/// Prefix for ADK-generated client-side function call identifiers.
 const String afFunctionCallIdPrefix = 'adk-';
+
+/// Internal function name used to request credentials.
 const String requestEucFunctionCallName = 'adk_request_credential';
+
+/// Internal function name used to request tool confirmation.
 const String requestConfirmationFunctionCallName = 'adk_request_confirmation';
+
+/// Internal function name used to request additional user input.
 const String requestInputFunctionCallName = 'adk_request_input';
 
+/// Generates a new ADK client function-call identifier.
 String generateClientFunctionCallId() {
   return newAdkId(prefix: afFunctionCallIdPrefix);
 }
 
+/// Populates missing function-call IDs on [modelResponseEvent].
 void populateClientFunctionCallId(Event modelResponseEvent) {
   final List<FunctionCall> calls = modelResponseEvent.getFunctionCalls();
   if (calls.isEmpty) {
@@ -33,6 +42,7 @@ void populateClientFunctionCallId(Event modelResponseEvent) {
   }
 }
 
+/// Removes ADK-generated client IDs from [content] for backend calls.
 void removeClientFunctionCallId(Content? content) {
   if (content == null) {
     return;
@@ -48,6 +58,7 @@ void removeClientFunctionCallId(Content? content) {
   }
 }
 
+/// Returns IDs of long-running tool calls in [functionCalls].
 Set<String> getLongRunningFunctionCalls(
   List<FunctionCall> functionCalls,
   Map<String, BaseTool> toolsDict,
@@ -62,6 +73,7 @@ Set<String> getLongRunningFunctionCalls(
   return ids;
 }
 
+/// Builds an auth request event from [functionResponseEvent], when needed.
 Event? generateAuthEvent(
   InvocationContext invocationContext,
   Event functionResponseEvent,
@@ -90,6 +102,7 @@ Event? generateAuthEvent(
   );
 }
 
+/// Builds an auth request event for [authRequests].
 Event buildAuthRequestEvent(
   InvocationContext invocationContext,
   Map<String, AuthConfig> authRequests, {
@@ -123,6 +136,7 @@ Event buildAuthRequestEvent(
   );
 }
 
+/// Builds a tool-confirmation request event, when requested.
 Event? generateRequestConfirmationEvent(
   InvocationContext invocationContext,
   Event functionCallEvent,
@@ -175,6 +189,7 @@ Event? generateRequestConfirmationEvent(
   );
 }
 
+/// Handles function calls attached to [functionCallEvent].
 Future<Event?> handleFunctionCallsAsync(
   InvocationContext invocationContext,
   Event functionCallEvent,
@@ -192,6 +207,7 @@ Future<Event?> handleFunctionCallsAsync(
   );
 }
 
+/// Handles a list of [functionCalls] and returns a merged response event.
 Future<Event?> handleFunctionCallListAsync(
   InvocationContext invocationContext,
   List<FunctionCall> functionCalls,
@@ -400,6 +416,7 @@ Future<Map<String, dynamic>?> _runOnToolErrorCallbacks({
   return null;
 }
 
+/// Resolves [functionCall] to a tool instance from [toolsDict].
 BaseTool _getTool(FunctionCall functionCall, Map<String, BaseTool> toolsDict) {
   final BaseTool? tool = toolsDict[functionCall.name];
   if (tool == null) {
@@ -411,6 +428,7 @@ BaseTool _getTool(FunctionCall functionCall, Map<String, BaseTool> toolsDict) {
   return tool;
 }
 
+/// Builds a user-role function response event from tool execution output.
 Event _buildResponseEvent({
   required BaseTool tool,
   required Map<String, dynamic> functionResult,
@@ -423,10 +441,7 @@ Event _buildResponseEvent({
     id: toolContext.functionCallId,
   );
   final Part? imagePart = _decodeComputerUseImagePart(tool, functionResult);
-  final List<Part> parts = <Part>[
-    functionResponsePart,
-    if (imagePart != null) imagePart,
-  ];
+  final List<Part> parts = <Part>[functionResponsePart, ?imagePart];
 
   return Event(
     invocationId: invocationContext.invocationId,
@@ -480,6 +495,7 @@ Map<String, dynamic> _normalizeFunctionResult(Object? result) {
   return <String, dynamic>{'result': result};
 }
 
+/// Merges multiple parallel function response events into one event.
 Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
   if (functionResponseEvents.isEmpty) {
     throw ArgumentError('No function response events provided.');
@@ -546,6 +562,7 @@ Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
   return merged;
 }
 
+/// Finds the originating function-call event for the latest response event.
 Event? findMatchingFunctionCall(List<Event> events) {
   if (events.isEmpty) {
     return null;
@@ -574,6 +591,7 @@ Event? findMatchingFunctionCall(List<Event> events) {
   return null;
 }
 
+/// Placeholder tool used to surface missing-tool errors through callbacks.
 class _MissingTool extends BaseTool {
   _MissingTool(String toolName)
     : super(name: toolName, description: 'Tool not found');

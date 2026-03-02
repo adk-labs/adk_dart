@@ -12,7 +12,9 @@ final RegExp _fencedCodePattern = RegExp(
   r'```(?:[a-zA-Z0-9_+\-]+)?\s*\n([\s\S]*?)```',
 );
 
+/// Normalizes code execution results before request submission.
 class CodeExecutionRequestProcessor extends BaseLlmRequestProcessor {
+  /// Rewrites prior code execution result payloads into plain text parts.
   @override
   Stream<Event> runAsync(
     InvocationContext invocationContext,
@@ -43,7 +45,9 @@ class CodeExecutionRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 
+/// Executes fenced code blocks returned by the model.
 class CodeExecutionResponseProcessor extends BaseLlmResponseProcessor {
+  /// Emits execution events and suppresses the original code-only model output.
   @override
   Stream<Event> runAsync(
     InvocationContext invocationContext,
@@ -115,6 +119,7 @@ class CodeExecutionResponseProcessor extends BaseLlmResponseProcessor {
   }
 }
 
+/// Returns the configured agent code executor, if any.
 BaseCodeExecutor? _getCodeExecutor(InvocationContext invocationContext) {
   final Object agent = invocationContext.agent;
   if (agent is! LlmAgent) {
@@ -127,6 +132,7 @@ BaseCodeExecutor? _getCodeExecutor(InvocationContext invocationContext) {
   return null;
 }
 
+/// Extracts the first fenced code block from [content].
 String? _extractFirstCodeBlock(Content content) {
   for (final Part part in content.parts) {
     final String? text = part.text;
@@ -145,6 +151,7 @@ String? _extractFirstCodeBlock(Content content) {
   return null;
 }
 
+/// Formats execution [result] into a readable text block.
 String _formatExecutionResult(Object result) {
   if (result is Map) {
     final Object? exitCode = result['exitCode'] ?? result['exit_code'];
