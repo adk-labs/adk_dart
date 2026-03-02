@@ -5,40 +5,69 @@ import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
 
+/// Span attribute writer abstraction used by telemetry helpers.
 abstract class SpanAttributeWriter {
+  /// Sets one span attribute.
   void setAttribute(String key, Object? value);
 }
 
+/// Completion-details event payload for experimental semconv logging.
 class CompletionDetailsLogRecord {
+  /// Creates a completion-details log record.
   CompletionDetailsLogRecord({
     required this.eventName,
     this.body,
     Map<String, Object?>? attributes,
   }) : attributes = attributes ?? <String, Object?>{};
 
+  /// Event name.
   final String eventName;
+
+  /// Structured event body.
   final Object? body;
+
+  /// Event attributes.
   final Map<String, Object?> attributes;
 }
 
+/// Logger abstraction for completion-details events.
 abstract class CompletionDetailsLogger {
+  /// Emits a completion-details [record].
   void emitCompletionDetailsLog(CompletionDetailsLogRecord record);
 }
 
+/// Environment key enabling experimental GenAI semconv mode.
 const String otelSemconvStabilityOptIn = 'OTEL_SEMCONV_STABILITY_OPT_IN';
+
+/// Environment key controlling content capture mode.
 const String otelInstrumentationGenaiCaptureMessageContent =
     'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT';
 
+/// Key for input message attributes.
 const String genAiInputMessages = 'gen_ai.input.messages';
+
+/// Key for output message attributes.
 const String genAiOutputMessages = 'gen_ai.output.messages';
+
+/// Key for finish reason attributes.
 const String genAiResponseFinishReasons = 'gen_ai.response.finish_reasons';
+
+/// Key for system instruction attributes.
 const String genAiSystemInstructions = 'gen_ai.system.instructions';
+
+/// Key for input token usage.
 const String genAiUsageInputTokens = 'gen_ai.usage.input_tokens';
+
+/// Key for output token usage.
 const String genAiUsageOutputTokens = 'gen_ai.usage.output_tokens';
+
+/// Key for tool definition attributes.
 const String genAiToolDefinitions = 'gen_ai.tool_definitions';
 
+/// Tool definition type for function tools.
 const String functionToolDefinitionType = 'function';
 
+/// Whether experimental GenAI semantic conventions are enabled.
 bool isExperimentalSemconv({Map<String, String>? environment}) {
   final Map<String, String> env = environment ?? Platform.environment;
   final String? optIns = env[otelSemconvStabilityOptIn];
@@ -54,12 +83,14 @@ bool isExperimentalSemconv({Map<String, String>? environment}) {
   return false;
 }
 
+/// Content capture mode resolved from environment.
 String getContentCapturingMode({Map<String, String>? environment}) {
   final Map<String, String> env = environment ?? Platform.environment;
   return (env[otelInstrumentationGenaiCaptureMessageContent] ?? '')
       .toUpperCase();
 }
 
+/// Extracts operation-details attributes from an LLM request.
 Future<void> setOperationDetailsAttributesFromRequest(
   Map<String, Object?> operationDetailsAttributes,
   LlmRequest llmRequest,
@@ -83,6 +114,7 @@ Future<void> setOperationDetailsAttributesFromRequest(
   operationDetailsAttributes[genAiToolDefinitions] = toolDefinitions;
 }
 
+/// Copies common operation-details attributes.
 void setOperationDetailsCommonAttributes(
   Map<String, Object?> operationDetailsCommonAttributes,
   Map<String, Object?> attributes,
@@ -90,6 +122,7 @@ void setOperationDetailsCommonAttributes(
   operationDetailsCommonAttributes.addAll(attributes);
 }
 
+/// Extracts operation-details attributes from an LLM response.
 void setOperationDetailsAttributesFromResponse(
   LlmResponse llmResponse,
   Map<String, Object?> operationDetailsAttributes,
@@ -131,6 +164,7 @@ void setOperationDetailsAttributesFromResponse(
   }
 }
 
+/// Emits completion-details logs and mirrors attributes to span data.
 void maybeLogCompletionDetails(
   SpanAttributeWriter? span,
   CompletionDetailsLogger otelLogger,
