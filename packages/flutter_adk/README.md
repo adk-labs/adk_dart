@@ -22,6 +22,20 @@ Flutter facade package for ADK Dart core runtime.
   - macOS
   - Windows
 
+## ✅ When To Use `flutter_adk`
+
+Use `flutter_adk` when:
+
+- You are building a Flutter app and want one import that works across mobile,
+  desktop, and web.
+- You want the web-safe ADK runtime surface (`adk_core`) without pulling in
+  VM-only APIs by default.
+
+Use another package when:
+
+- You are building VM/CLI agents, tools, or servers: use `adk_dart` (or `adk`
+  for shorter imports).
+
 ## Usage
 
 ```dart

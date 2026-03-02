@@ -28,6 +28,20 @@ It re-exports `adk_dart` so you can use a shorter import path:
   `adk_dart`.
 - **CLI Included**: Use `adk create`, `adk run`, `adk web`, `adk api_server`.
 
+## ✅ When To Use `adk`
+
+Use `adk` when:
+
+- You are on Dart VM/CLI and want a shorter import path:
+  `package:adk/adk.dart`.
+- You want the same runtime behavior as `adk_dart` with package-name
+  ergonomics.
+
+Use another package when:
+
+- You are writing Flutter app code (especially Web): use `flutter_adk`.
+- You prefer explicit core package naming: use `adk_dart`.
+
 ## 🌐 Platform Support Matrix (Current)
 
 Status legend:

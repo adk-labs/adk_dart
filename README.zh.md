@@ -13,6 +13,20 @@ ADK Dart 是一个面向 AI Agent 的代码优先 Dart 框架，
 - Function/OpenAPI/Google API/MCP 工具生态
 - `adk` CLI (`create`, `run`, `web`, `api_server`, `deploy`)
 
+## 📦 该选哪个包？
+
+| 你的场景 | 推荐包 | 原因 |
+| --- | --- | --- |
+| 在 Dart VM/CLI（服务端、工具、测试、完整运行时 API）开发 Agent | `adk_dart` | 主包，提供 ADK Dart 完整运行时能力 |
+| 仍在 VM/CLI，但希望更短的 import 路径 | `adk` | `adk_dart` 的 facade 包（`package:adk/adk.dart`） |
+| 开发 Flutter 应用（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | 基于 `adk_core` 的 Flutter/Web-safe 接口，单一 import 更易用 |
+
+快速选择规则:
+
+- 默认选 `adk_dart`
+- 仅想要短包名且行为保持一致时选 `adk`
+- Flutter 应用代码（尤其包含 Web）选 `flutter_adk`
+
 ## 平台支持矩阵（当前）
 
 状态说明:

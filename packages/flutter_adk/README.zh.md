@@ -10,6 +10,18 @@
 - Flutter 单一 import：`package:flutter_adk/flutter_adk.dart`
 - 覆盖 Android/iOS/Web/Linux/macOS/Windows 插件注册
 
+## ✅ 什么时候用 `flutter_adk`？
+
+建议选择 `flutter_adk` 的场景:
+
+- 在 Flutter 应用中希望用单一 import 覆盖移动端/桌面端/Web
+- 希望默认使用 Web-safe 的 `adk_core` 接口，而不是直接引入 VM 专用 API
+
+建议用其他包的场景:
+
+- 开发 VM/CLI Agent、工具或服务端: `adk_dart`
+  （若只想要更短 import 可用 `adk`）
+
 ## 平台支持矩阵（当前）
 
 状态说明:

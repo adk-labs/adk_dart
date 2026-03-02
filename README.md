@@ -40,6 +40,20 @@ developer ergonomics.
 - **Developer CLI + Web UI**: Scaffold projects and run chat/dev server with
   the `adk` CLI (`create`, `run`, `web`, `api_server`).
 
+## 📦 Which Package Should I Use?
+
+| If you are... | Use this package | Why |
+| --- | --- | --- |
+| Building Dart agents on VM/CLI (server, tooling, tests, full runtime APIs) | `adk_dart` | Primary package with the full ADK Dart runtime surface. |
+| Building Dart agents on VM/CLI but prefer a short import path | `adk` | Facade package that re-exports `adk_dart` (`package:adk/adk.dart`). |
+| Building a Flutter app (Android/iOS/Web/Linux/macOS/Windows) | `flutter_adk` | Flutter-focused, web-safe surface via `adk_core` with single-import ergonomics. |
+
+Quick rule:
+
+- Choose `adk_dart` by default.
+- Choose `adk` only when you want the short package name but same behavior.
+- Choose `flutter_adk` for Flutter app code, especially when Web compatibility matters.
+
 ## 🌐 Platform Support Matrix (Current)
 
 Status legend:

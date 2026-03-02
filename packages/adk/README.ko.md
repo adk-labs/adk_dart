@@ -10,6 +10,18 @@
 - `adk_dart` API 재노출
 - `adk` CLI 엔트리포인트 제공
 
+## ✅ 언제 `adk`를 쓰면 좋나요?
+
+`adk`를 선택하세요:
+
+- Dart VM/CLI 환경에서 짧은 import(`package:adk/adk.dart`)를 원할 때
+- `adk_dart`와 동일 동작을 유지하면서 패키지 이름만 간결하게 쓰고 싶을 때
+
+다른 패키지를 선택하세요:
+
+- Flutter 앱 코드(특히 Web 포함): `flutter_adk`
+- 코어 패키지명을 명시적으로 쓰고 싶다면: `adk_dart`
+
 ## 플랫폼 지원 매트릭스 (현재)
 
 상태 표기:

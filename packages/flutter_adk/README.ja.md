@@ -10,6 +10,18 @@ Flutter で ADK Dart の Web-safe コアランタイムを使うためのファ�
 - Single Flutter import: `package:flutter_adk/flutter_adk.dart`
 - Plugin registration for Android/iOS/Web/Linux/macOS/Windows
 
+## ✅ `flutter_adk` を使うべきケース
+
+`flutter_adk` を選ぶとよい場合:
+
+- Flutter アプリでモバイル/デスクトップ/Web を単一 import で扱いたい
+- VM 専用 API を既定で含めず、Web-safe な `adk_core` 表面を使いたい
+
+別パッケージを選ぶ場合:
+
+- VM/CLI のエージェント・ツール・サーバー開発: `adk_dart`
+  （短い import が必要なら `adk`）
+
 ## Platform Support Matrix (Current)
 
 Status legend:

@@ -13,6 +13,20 @@ ADK Dart는 AI 에이전트 개발/실행을 위한 코드 중심 Dart 프레임
 - Function/OpenAPI/Google API/MCP 도구 통합
 - `adk` CLI (`create`, `run`, `web`, `api_server`, `deploy`)
 
+## 📦 어떤 패키지를 써야 하나요?
+
+| 이런 경우 | 권장 패키지 | 이유 |
+| --- | --- | --- |
+| Dart VM/CLI 환경(서버, 도구, 테스트, 전체 런타임 API)에서 에이전트 개발 | `adk_dart` | ADK Dart의 전체 런타임 표면을 제공하는 기본 패키지 |
+| VM/CLI 환경이지만 import 경로를 짧게 쓰고 싶음 | `adk` | `adk_dart`를 재노출하는 파사드 (`package:adk/adk.dart`) |
+| Flutter 앱(Android/iOS/Web/Linux/macOS/Windows) 개발 | `flutter_adk` | `adk_core` 기반의 Flutter/Web-safe 표면을 단일 import로 제공 |
+
+빠른 선택 기준:
+
+- 기본값은 `adk_dart`
+- 동작은 같고 이름만 짧게 쓰려면 `adk`
+- Flutter 앱 코드(특히 Web 포함)면 `flutter_adk`
+
 ## 플랫폼 지원 매트릭스 (현재)
 
 상태 표기:

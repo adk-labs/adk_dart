@@ -10,6 +10,18 @@
 - `adk_dart` API re-export
 - `adk` CLI entrypoint
 
+## ✅ `adk` を使うべきケース
+
+`adk` を選ぶとよい場合:
+
+- Dart VM/CLI 環境で短い import（`package:adk/adk.dart`）を使いたい
+- `adk_dart` と同じ挙動を保ったままパッケージ名を短くしたい
+
+別パッケージを選ぶ場合:
+
+- Flutter アプリコード（特に Web 対応）: `flutter_adk`
+- コア名を明示して使いたい: `adk_dart`
+
 ## Platform Support Matrix (Current)
 
 Status legend:

@@ -10,6 +10,18 @@
 - 重新导出 `adk_dart` API
 - 提供 `adk` CLI 入口
 
+## ✅ 什么时候用 `adk`？
+
+建议选择 `adk` 的场景:
+
+- 在 Dart VM/CLI 环境中希望使用更短 import（`package:adk/adk.dart`）
+- 希望保持与 `adk_dart` 完全一致的行为，只是包名更简洁
+
+建议用其他包的场景:
+
+- Flutter 应用代码（尤其包含 Web）: `flutter_adk`
+- 希望显式使用核心包名: `adk_dart`
+
 ## 平台支持矩阵（当前）
 
 状态说明:
