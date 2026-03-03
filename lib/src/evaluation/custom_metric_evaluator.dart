@@ -5,6 +5,7 @@ import 'eval_case.dart';
 import 'eval_metrics.dart';
 import 'evaluator.dart';
 
+/// Signature for externally registered custom metric evaluators.
 typedef CustomMetricFunction =
     FutureOr<EvaluationResult> Function(
       EvalMetricSpec evalMetric,
@@ -16,10 +17,12 @@ typedef CustomMetricFunction =
 final Map<String, CustomMetricFunction> _customMetricRegistry =
     <String, CustomMetricFunction>{};
 
+/// Registers a custom metric function at [path].
 void registerCustomMetricFunction(String path, CustomMetricFunction function) {
   _customMetricRegistry[path] = function;
 }
 
+/// Removes a previously registered custom metric function at [path].
 void unregisterCustomMetricFunction(String path) {
   _customMetricRegistry.remove(path);
 }
@@ -35,7 +38,9 @@ CustomMetricFunction _getMetricFunction(String customFunctionPath) {
   return metricFunction;
 }
 
+/// Evaluator that delegates scoring to a registered custom metric function.
 class CustomMetricEvaluator extends Evaluator {
+  /// Creates a custom metric evaluator from [evalMetric] and function path.
   CustomMetricEvaluator({
     required EvalMetricSpec evalMetric,
     required String customFunctionPath,
@@ -46,6 +51,7 @@ class CustomMetricEvaluator extends Evaluator {
   final CustomMetricFunction _metricFunction;
 
   @override
+  /// Evaluates invocations using the custom metric callback.
   Future<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,

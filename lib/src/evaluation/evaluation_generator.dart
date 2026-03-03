@@ -13,18 +13,28 @@ import 'simulation/user_simulator_provider.dart';
 import '_retry_options_utils.dart';
 import 'request_intercepter_plugin.dart';
 
+/// Author value used for synthetic user events.
 const String userAuthor = 'user';
+
+/// Fallback author label for agent-generated events.
 const String defaultAuthor = 'agent';
 
+/// Generated responses for one [EvalCase] across repeated runs.
 class EvalCaseResponses {
+  /// Creates generated responses for one eval case.
   EvalCaseResponses({required this.evalCase, List<List<Invocation>>? responses})
     : responses = responses ?? <List<Invocation>>[];
 
+  /// Source eval case.
   final EvalCase evalCase;
+
+  /// Repeated invocation trajectories produced for the case.
   final List<List<Invocation>> responses;
 }
 
+/// Generates inference trajectories from eval sets.
 class EvaluationGenerator {
+  /// Runs [evalSet] against [rootAgent] and returns generated trajectories.
   static Future<List<EvalCaseResponses>> generateResponses({
     required EvalSet evalSet,
     required BaseAgent rootAgent,
@@ -151,6 +161,7 @@ class EvaluationGenerator {
     }
   }
 
+  /// Runs one user invocation and yields normalized user/agent events.
   static Stream<Event> _generateInferencesForSingleUserInvocation({
     required InMemoryRunner runner,
     required String userId,
@@ -175,6 +186,7 @@ class EvaluationGenerator {
     }
   }
 
+  /// Collects initial user messages from an [EvalCase].
   static List<Content> _collectUserMessages(EvalCase evalCase) {
     if (evalCase.conversation != null && evalCase.conversation!.isNotEmpty) {
       return evalCase.conversation!.map((Invocation invocation) {
@@ -192,6 +204,7 @@ class EvaluationGenerator {
     return <Content>[];
   }
 
+  /// Converts raw runner events into eval [Invocation] objects.
   static List<Invocation> convertEventsToEvalInvocations(
     List<Event> events, {
     Map<String, AppDetails>? appDetailsPerInvocation,

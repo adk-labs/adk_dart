@@ -12,6 +12,7 @@ import 'safety_evaluator.dart';
 import 'simulation/per_turn_user_simulator_quality_v1.dart';
 import 'trajectory_evaluator.dart';
 
+/// Creates an [Evaluator] instance for one metric specification.
 typedef EvaluatorFactory = Evaluator Function(EvalMetricSpec evalMetric);
 
 class _RegistryEntry {
@@ -21,9 +22,14 @@ class _RegistryEntry {
   final MetricInfo metricInfo;
 }
 
+/// Registry mapping metric names to evaluator factories and metadata.
 class MetricEvaluatorRegistry {
   final Map<String, _RegistryEntry> _registry = <String, _RegistryEntry>{};
 
+  /// Returns an evaluator for [evalMetric].
+  ///
+  /// If [EvalMetricSpec.customFunctionPath] is set, this returns a
+  /// [CustomMetricEvaluator].
   Evaluator getEvaluator(EvalMetricSpec evalMetric) {
     final _RegistryEntry? entry = _registry[evalMetric.metricName];
     if (entry == null) {
@@ -40,6 +46,7 @@ class MetricEvaluatorRegistry {
     return entry.factory(evalMetric);
   }
 
+  /// Registers an evaluator factory for one metric.
   void registerEvaluator({
     required MetricInfo metricInfo,
     required EvaluatorFactory evaluatorFactory,
@@ -50,6 +57,7 @@ class MetricEvaluatorRegistry {
     );
   }
 
+  /// Returns metadata for all registered metrics.
   List<MetricInfo> getRegisteredMetrics() {
     return _registry.values.map((_RegistryEntry entry) {
       return MetricInfo.fromJson(entry.metricInfo.toJson());
@@ -57,6 +65,7 @@ class MetricEvaluatorRegistry {
   }
 }
 
+/// Builds the default evaluator registry with all prebuilt metrics.
 MetricEvaluatorRegistry getDefaultMetricEvaluatorRegistry() {
   final MetricEvaluatorRegistry registry = MetricEvaluatorRegistry();
 
@@ -117,5 +126,6 @@ MetricEvaluatorRegistry getDefaultMetricEvaluatorRegistry() {
   return registry;
 }
 
+/// Shared default evaluator registry instance.
 final MetricEvaluatorRegistry defaultMetricEvaluatorRegistry =
     getDefaultMetricEvaluatorRegistry();
