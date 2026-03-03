@@ -2,18 +2,19 @@ import 'dart:io';
 
 import 'llama_index_retrieval.dart';
 
+/// Retrieval tool that indexes local files under a directory.
 class FilesRetrieval extends LlamaIndexRetrieval {
+  /// Creates a file-backed retrieval tool.
   FilesRetrieval({
-    required String name,
-    required String description,
+    required super.name,
+    required super.description,
     required this.inputDir,
     BaseRetriever? retriever,
   }) : super(
-         name: name,
-         description: description,
          retriever: retriever ?? _InMemoryFileRetriever.fromDirectory(inputDir),
        );
 
+  /// Directory scanned to build the in-memory retrieval index.
   final String inputDir;
 }
 

@@ -5,15 +5,21 @@ import '../../utils/model_name_utils.dart';
 import '../tool_context.dart';
 import 'base_retrieval_tool.dart';
 
+/// Vertex AI RAG resource reference.
 class VertexAiRagResource {
+  /// Creates a Vertex AI RAG resource reference.
   VertexAiRagResource({required this.path});
 
+  /// Resource path in Vertex AI RAG.
   final String path;
 
+  /// Encodes this resource for request metadata.
   Map<String, Object?> toJson() => <String, Object?>{'path': path};
 }
 
+/// Store-level RAG query configuration used by [VertexAiRagRetrieval].
 class VertexAiRagStore {
+  /// Creates Vertex AI RAG store configuration.
   VertexAiRagStore({
     this.ragCorpora,
     this.ragResources,
@@ -21,11 +27,19 @@ class VertexAiRagStore {
     this.vectorDistanceThreshold,
   });
 
+  /// Optional RAG corpora names.
   final List<String>? ragCorpora;
+
+  /// Optional explicit RAG resources.
   final List<VertexAiRagResource>? ragResources;
+
+  /// Optional top-K similarity limit.
   final int? similarityTopK;
+
+  /// Optional vector-distance filter threshold.
   final double? vectorDistanceThreshold;
 
+  /// Encodes this configuration for metadata transport.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       if (ragCorpora != null) 'rag_corpora': ragCorpora,
@@ -38,9 +52,11 @@ class VertexAiRagStore {
   }
 
   @override
+  /// Returns JSON-encoded store configuration.
   String toString() => jsonEncode(toJson());
 }
 
+/// Callback signature for live Vertex AI RAG querying.
 typedef VertexAiRagQueryHandler =
     Future<List<String>> Function({
       required String text,
@@ -50,7 +66,9 @@ typedef VertexAiRagQueryHandler =
       double? vectorDistanceThreshold,
     });
 
+/// Retrieval tool that integrates with Vertex AI RAG.
 class VertexAiRagRetrieval extends BaseRetrievalTool {
+  /// Creates a Vertex AI RAG retrieval tool.
   VertexAiRagRetrieval({
     required super.name,
     required super.description,
@@ -69,11 +87,15 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
        _modelIdCheckDisabledResolver =
            modelIdCheckDisabledResolver ?? isGeminiModelIdCheckDisabled;
 
+  /// Configured Vertex AI RAG store metadata.
   final VertexAiRagStore vertexRagStore;
+
+  /// Optional handler for explicit tool-call query execution.
   final VertexAiRagQueryHandler? queryHandler;
   final bool Function() _modelIdCheckDisabledResolver;
 
   @override
+  /// Injects RAG labels for Gemini 2+ requests before model execution.
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
@@ -94,6 +116,7 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
   }
 
   @override
+  /// Executes retrieval through [queryHandler] when provided.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
