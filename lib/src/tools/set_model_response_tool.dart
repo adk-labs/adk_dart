@@ -1,3 +1,6 @@
+/// Tool used to set final structured model responses.
+library;
+
 import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';

@@ -1,3 +1,6 @@
+/// Toolset that materializes tools from MCP server connections.
+library;
+
 import '../../agents/readonly_context.dart';
 import '../base_tool.dart';
 import '../base_toolset.dart';

@@ -1,3 +1,6 @@
+/// Retriever adapters that emulate llama-index style behavior.
+library;
+
 import '../tool_context.dart';
 import 'base_retrieval_tool.dart';
 

@@ -1,3 +1,6 @@
+/// Vertex AI RAG retrieval tool and configuration models.
+library;
+
 import 'dart:convert';
 
 import '../../models/llm_request.dart';

@@ -1,3 +1,6 @@
+/// File-backed retrieval tool built on in-memory indexing.
+library;
+
 import 'dart:io';
 
 import 'llama_index_retrieval.dart';

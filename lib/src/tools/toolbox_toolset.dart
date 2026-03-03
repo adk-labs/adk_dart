@@ -1,3 +1,6 @@
+/// Toolbox integration toolset and delegate contracts.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

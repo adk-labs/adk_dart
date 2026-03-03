@@ -1,3 +1,6 @@
+/// Built-in URL context retrieval tool wiring.
+library;
+
 import '../models/llm_request.dart';
 import '../utils/model_name_utils.dart';
 import 'base_tool.dart';

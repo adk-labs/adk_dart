@@ -1,3 +1,6 @@
+/// CrewAI adapter tool and configuration models.
+library;
+
 import '../models/llm_request.dart';
 import 'function_tool.dart';
 import 'tool_configs.dart';

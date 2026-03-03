@@ -1,3 +1,6 @@
+/// Credential models and resolution helpers for Google-backed tools.
+library;
+
 import 'dart:convert';
 
 import '../auth/auth_credential.dart';

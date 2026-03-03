@@ -1,3 +1,6 @@
+/// Few-shot example injection tool for prompt conditioning.
+library;
+
 import '../examples/example.dart';
 import '../examples/example_util.dart' as example_util;
 import '../models/llm_request.dart';

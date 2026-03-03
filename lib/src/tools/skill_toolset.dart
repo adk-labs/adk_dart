@@ -1,3 +1,6 @@
+/// Toolset that exposes local skill loading and execution tools.
+library;
+
 import 'dart:convert';
 import 'dart:developer' as developer;
 

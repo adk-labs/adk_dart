@@ -1,3 +1,6 @@
+/// Google auth-token extraction and refresh helpers.
+library;
+
 import 'dart:convert';
 
 import 'package:googleapis_auth/auth_io.dart' as auth;

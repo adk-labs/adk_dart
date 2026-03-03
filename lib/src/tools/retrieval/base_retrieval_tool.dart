@@ -1,3 +1,6 @@
+/// Base contracts for query-driven retrieval tools.
+library;
+
 import '../../models/llm_request.dart';
 import '../base_tool.dart';
 

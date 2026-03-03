@@ -1,3 +1,6 @@
+/// Tool that retrieves persisted memories for the active user.
+library;
+
 import '../memory/memory_entry.dart';
 import '../models/llm_request.dart';
 import 'base_tool.dart';

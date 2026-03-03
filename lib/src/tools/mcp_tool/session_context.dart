@@ -1,3 +1,6 @@
+/// Generic lazy session lifecycle container for MCP resources.
+library;
+
 import 'dart:async';
 
 /// Lifecycle helper that lazily starts and closes session resources.

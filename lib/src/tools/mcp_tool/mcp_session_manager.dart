@@ -1,3 +1,6 @@
+/// MCP session lifecycle management and descriptor caching.
+library;
+
 import 'dart:async';
 
 import 'package:adk_mcp/adk_mcp.dart'

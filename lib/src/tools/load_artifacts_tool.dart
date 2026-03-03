@@ -1,3 +1,6 @@
+/// Tool that loads stored artifacts into model-visible context.
+library;
+
 import 'dart:convert';
 
 import '../models/llm_request.dart';

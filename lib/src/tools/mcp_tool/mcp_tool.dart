@@ -1,3 +1,6 @@
+/// MCP tool wrappers and normalized descriptor models.
+library;
+
 import 'dart:convert';
 
 import '../../agents/readonly_context.dart';

@@ -1,3 +1,6 @@
+/// Discovery Engine search tool and request/response models.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

@@ -1,3 +1,6 @@
+/// Google access-token discovery helpers for tool integrations.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -41,10 +44,7 @@ Future<String?> _resolveFromGcloud({required List<String> scopes}) async {
     'auth',
     'application-default',
     'print-access-token',
-    if (scopes.isNotEmpty) ...<String>[
-      '--scopes',
-      scopes.join(','),
-    ],
+    if (scopes.isNotEmpty) ...<String>['--scopes', scopes.join(',')],
   ];
   try {
     final ProcessResult result = await Process.run(

@@ -1,3 +1,6 @@
+/// Vertex AI Search built-in retrieval tool helpers.
+library;
+
 import 'dart:convert';
 
 import '../models/llm_request.dart';

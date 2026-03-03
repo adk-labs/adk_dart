@@ -1,3 +1,6 @@
+/// Internal tool that preloads memory snippets into prompts.
+library;
+
 import '../memory/memory_entry.dart';
 import '../models/llm_request.dart';
 import 'base_tool.dart';

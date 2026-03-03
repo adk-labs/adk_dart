@@ -1,3 +1,6 @@
+/// Artifact service adapter that forwards calls through [ToolContext].
+library;
+
 import '../artifacts/base_artifact_service.dart';
 import '../types/content.dart';
 import 'tool_context.dart';

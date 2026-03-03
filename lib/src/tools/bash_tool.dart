@@ -1,3 +1,6 @@
+/// Bash execution tool and command-policy models.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

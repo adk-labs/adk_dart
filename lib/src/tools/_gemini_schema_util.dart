@@ -1,3 +1,6 @@
+/// JSON-schema normalization helpers used by Gemini tool declarations.
+library;
+
 import 'dart:convert';
 
 /// Converts [text] to snake_case.
