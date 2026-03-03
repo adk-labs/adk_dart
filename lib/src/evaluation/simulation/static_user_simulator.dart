@@ -5,9 +5,12 @@ import '../eval_config.dart';
 import '../evaluator.dart';
 import 'user_simulator.dart';
 
+/// Static list of expected user-side invocations.
 typedef StaticConversation = List<Invocation>;
 
+/// Replays a fixed conversation as simulator output.
 class StaticUserSimulator extends UserSimulator<BaseUserSimulatorConfig> {
+  /// Creates a simulator that replays [staticConversation] in order.
   StaticUserSimulator({required this.staticConversation})
     : _invocationIdx = 0,
       super(
@@ -15,10 +18,12 @@ class StaticUserSimulator extends UserSimulator<BaseUserSimulatorConfig> {
         configDecoder: (BaseUserSimulatorConfig config) => config,
       );
 
+  /// Ordered scripted user invocations.
   final StaticConversation staticConversation;
   int _invocationIdx;
 
   @override
+  /// Returns the next scripted user message, or stop when exhausted.
   Future<NextUserMessage> getNextUserMessage(List<Event> events) async {
     if (_invocationIdx >= staticConversation.length) {
       return NextUserMessage(status: Status.stopSignalDetected);
@@ -32,6 +37,7 @@ class StaticUserSimulator extends UserSimulator<BaseUserSimulatorConfig> {
   }
 
   @override
+  /// Returns `null` because static simulation does not provide extra scoring.
   Evaluator? getSimulationEvaluator() => null;
 }
 

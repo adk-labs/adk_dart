@@ -1,7 +1,9 @@
 import '../../errors/not_found_error.dart';
 import '../common.dart';
 
+/// Describes one behavior pattern for a simulated user persona.
 class UserBehavior {
+  /// Creates one user behavior definition.
   UserBehavior({
     required this.name,
     required this.description,
@@ -10,11 +12,19 @@ class UserBehavior {
   }) : behaviorInstructions = behaviorInstructions ?? <String>[],
        violationRubrics = violationRubrics ?? <String>[];
 
+  /// Behavior name.
   final String name;
+
+  /// Behavior description.
   final String description;
+
+  /// Instructions used when generating user messages.
   final List<String> behaviorInstructions;
+
+  /// Rubric identifiers that indicate violation of this behavior.
   final List<String> violationRubrics;
 
+  /// Decodes a behavior definition from JSON.
   factory UserBehavior.fromJson(EvalJson json) {
     return UserBehavior(
       name: asNullableString(json['name']) ?? '',
@@ -28,6 +38,7 @@ class UserBehavior {
     );
   }
 
+  /// Returns bullet-formatted behavior instructions.
   String getBehaviorInstructionsStr() {
     return behaviorInstructions.map((String i) => '  * $i').join('\n');
   }
@@ -36,6 +47,7 @@ class UserBehavior {
     return violationRubrics.map((String i) => '  * $i').join('\n');
   }
 
+  /// Encodes this behavior for persistence.
   EvalJson toJson() {
     return <String, Object?>{
       'name': name,
@@ -46,17 +58,25 @@ class UserBehavior {
   }
 }
 
+/// Defines a reusable user persona composed of multiple behaviors.
 class UserPersona {
+  /// Creates a user persona.
   UserPersona({
     required this.id,
     required this.description,
     List<UserBehavior>? behaviors,
   }) : behaviors = behaviors ?? <UserBehavior>[];
 
+  /// Persona identifier.
   final String id;
+
+  /// Persona description.
   final String description;
+
+  /// Behavior definitions included in this persona.
   final List<UserBehavior> behaviors;
 
+  /// Decodes a persona from JSON.
   factory UserPersona.fromJson(EvalJson json) {
     return UserPersona(
       id: asNullableString(json['id']) ?? '',
@@ -67,6 +87,7 @@ class UserPersona {
     );
   }
 
+  /// Encodes this persona for persistence.
   EvalJson toJson() {
     return <String, Object?>{
       'id': id,
@@ -76,9 +97,13 @@ class UserPersona {
   }
 }
 
+/// Registry of named personas available to simulators.
 class UserPersonaRegistry {
   final Map<String, UserPersona> _registry = <String, UserPersona>{};
 
+  /// Returns a registered persona by [personaId].
+  ///
+  /// Throws [NotFoundError] when the id is unknown.
   UserPersona getPersona(String personaId) {
     final UserPersona? persona = _registry[personaId];
     if (persona == null) {
@@ -87,10 +112,12 @@ class UserPersonaRegistry {
     return persona;
   }
 
+  /// Registers or replaces a persona entry.
   void registerPersona(String personaId, UserPersona userPersona) {
     _registry[personaId] = userPersona;
   }
 
+  /// Returns all registered personas.
   List<UserPersona> getRegisteredPersonas() {
     return _registry.values.map((UserPersona p) => p).toList();
   }

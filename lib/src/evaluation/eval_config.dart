@@ -4,20 +4,27 @@ import 'dart:io';
 import '../agents/common_configs.dart';
 import 'eval_metrics.dart';
 
+/// Base configuration payload for user simulator implementations.
 class BaseUserSimulatorConfig {
+  /// Creates a user simulator config.
   BaseUserSimulatorConfig({Map<String, Object?>? values})
     : values = values ?? <String, Object?>{};
 
+  /// Raw configuration values.
   final Map<String, Object?> values;
 
+  /// Decodes config values from JSON.
   factory BaseUserSimulatorConfig.fromJson(Map<String, Object?> json) {
     return BaseUserSimulatorConfig(values: json);
   }
 
+  /// Encodes this config for persistence.
   Map<String, Object?> toJson() => Map<String, Object?>.from(values);
 }
 
+/// Declares one custom metric implementation used during evaluation.
 class CustomMetricConfig {
+  /// Creates a custom metric configuration.
   CustomMetricConfig({
     required this.codeConfig,
     this.metricInfo,
@@ -30,10 +37,16 @@ class CustomMetricConfig {
     }
   }
 
+  /// Code loading configuration for the custom metric function.
   final CodeConfig codeConfig;
+
+  /// Optional metric metadata exposed to tooling and reports.
   final MetricInfo? metricInfo;
+
+  /// Optional human-readable description.
   final String description;
 
+  /// Decodes a custom metric configuration from JSON.
   factory CustomMetricConfig.fromJson(Map<String, Object?> json) {
     return CustomMetricConfig(
       codeConfig: CodeConfig.fromJson(
@@ -48,6 +61,7 @@ class CustomMetricConfig {
     );
   }
 
+  /// Encodes this configuration for persistence.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'code_config': codeConfig.toJson(),
@@ -57,18 +71,25 @@ class CustomMetricConfig {
   }
 }
 
+/// Top-level evaluation configuration loaded from disk or defaults.
 class EvalConfig {
+  /// Creates an evaluation configuration.
   EvalConfig({
     Map<String, Object?>? criteria,
-    Map<String, CustomMetricConfig>? customMetrics,
+    this.customMetrics,
     this.userSimulatorConfig,
-  }) : criteria = criteria ?? <String, Object?>{},
-       customMetrics = customMetrics;
+  }) : criteria = criteria ?? <String, Object?>{};
 
+  /// Criterion config keyed by metric name.
   final Map<String, Object?> criteria;
+
+  /// Optional custom metric definitions keyed by metric name.
   final Map<String, CustomMetricConfig>? customMetrics;
+
+  /// Optional user simulator configuration.
   final BaseUserSimulatorConfig? userSimulatorConfig;
 
+  /// Decodes an evaluation configuration from JSON.
   factory EvalConfig.fromJson(Map<String, Object?> json) {
     final Map<String, Object?> rawCriteria = _castJsonMap(json['criteria']);
     final Map<String, Object?> rawCustomMetrics = _castJsonMap(
@@ -96,6 +117,7 @@ class EvalConfig {
     );
   }
 
+  /// Encodes this configuration for persistence.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'criteria': criteria,
@@ -117,6 +139,7 @@ final EvalConfig _defaultEvalConfig = EvalConfig(
   },
 );
 
+/// Loads evaluation config from [evalConfigFilePath] or returns defaults.
 EvalConfig getEvaluationCriteriaOrDefault(String? evalConfigFilePath) {
   if (evalConfigFilePath != null && evalConfigFilePath.isNotEmpty) {
     final File file = File(evalConfigFilePath);
@@ -130,6 +153,7 @@ EvalConfig getEvaluationCriteriaOrDefault(String? evalConfigFilePath) {
   return _defaultEvalConfig;
 }
 
+/// Converts [evalConfig] criteria into normalized metric specs.
 List<EvalMetricSpec> getEvalMetricsFromConfig(EvalConfig evalConfig) {
   final List<EvalMetricSpec> results = <EvalMetricSpec>[];
   evalConfig.criteria.forEach((String metricName, Object? criterionValue) {

@@ -4,12 +4,18 @@ import 'llm_backed_user_simulator.dart';
 import 'static_user_simulator.dart';
 import 'user_simulator.dart';
 
+/// Selects the appropriate simulator implementation for an eval case.
 class UserSimulatorProvider {
+  /// Creates a simulator provider with optional shared config.
   UserSimulatorProvider({BaseUserSimulatorConfig? userSimulatorConfig})
     : _userSimulatorConfig = userSimulatorConfig ?? BaseUserSimulatorConfig();
 
   final BaseUserSimulatorConfig _userSimulatorConfig;
 
+  /// Builds a simulator for [evalCase].
+  ///
+  /// Static conversations use [StaticUserSimulator]. Scenario-based
+  /// simulations use [LlmBackedUserSimulator].
   UserSimulator provide(EvalCase evalCase) {
     if (evalCase.conversation == null) {
       if (evalCase.conversationScenario == null) {
