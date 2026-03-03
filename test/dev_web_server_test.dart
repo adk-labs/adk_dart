@@ -1355,6 +1355,48 @@ void main() {
       expect(response.statusCode, HttpStatus.notFound);
       expect(payload['error'], contains('Session not found'));
     });
+
+    test(
+      'auto-creates missing session for /run when request enables it',
+      () async {
+        const String sessionId = 'missing_session_autocreate';
+        final HttpClientRequest runRequest = await client.postUrl(
+          Uri.parse('http://127.0.0.1:${server.port}/run'),
+        );
+        runRequest.headers.contentType = ContentType.json;
+        runRequest.write(
+          jsonEncode(<String, Object>{
+            'app_name': 'test_app',
+            'user_id': 'u1',
+            'session_id': sessionId,
+            'auto_create_session': true,
+            'new_message': <String, Object>{
+              'role': 'user',
+              'parts': <Object>[
+                <String, Object>{'text': 'hello'},
+              ],
+            },
+          }),
+        );
+
+        final HttpClientResponse runResponse = await runRequest.close();
+        final List<dynamic> runEvents =
+            jsonDecode(await utf8.decoder.bind(runResponse).join())
+                as List<dynamic>;
+
+        expect(runResponse.statusCode, HttpStatus.ok);
+        expect(runEvents, isNotEmpty);
+
+        final HttpClientRequest sessionRequest = await client.getUrl(
+          Uri.parse(
+            'http://127.0.0.1:${server.port}/apps/test_app/users/u1/sessions/$sessionId',
+          ),
+        );
+        final HttpClientResponse sessionResponse = await sessionRequest.close();
+        await utf8.decoder.bind(sessionResponse).join();
+        expect(sessionResponse.statusCode, HttpStatus.ok);
+      },
+    );
   });
 }
 

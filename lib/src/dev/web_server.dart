@@ -2641,9 +2641,14 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
   final Runner runner = await context.getRunner(runRequest.appName);
+  final bool shouldAutoCreateSession =
+      runRequest.autoCreateSession ?? runner.autoCreateSession;
 
   final List<Event> events;
   try {
+    if (shouldAutoCreateSession) {
+      await _ensureSessionExists(context, runRequest);
+    }
     events = await runner
         .runAsync(
           userId: runRequest.userId,
@@ -2695,6 +2700,37 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
   );
 }
 
+Future<void> _ensureSessionExists(
+  _AdkDevWebContext context,
+  _RunRequest runRequest,
+) async {
+  final Session? existing = await context.sessionService.getSession(
+    appName: runRequest.appName,
+    userId: runRequest.userId,
+    sessionId: runRequest.sessionId,
+  );
+  if (existing != null) {
+    return;
+  }
+
+  try {
+    await context.sessionService.createSession(
+      appName: runRequest.appName,
+      userId: runRequest.userId,
+      sessionId: runRequest.sessionId,
+    );
+  } on Exception {
+    final Session? created = await context.sessionService.getSession(
+      appName: runRequest.appName,
+      userId: runRequest.userId,
+      sessionId: runRequest.sessionId,
+    );
+    if (created == null) {
+      rethrow;
+    }
+  }
+}
+
 Future<void> _handleRunSse(
   HttpRequest request,
   _AdkDevWebContext context,
@@ -2702,8 +2738,12 @@ Future<void> _handleRunSse(
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
   final Runner runner = await context.getRunner(runRequest.appName);
+  final bool shouldAutoCreateSession =
+      runRequest.autoCreateSession ?? runner.autoCreateSession;
 
-  if (!runner.autoCreateSession) {
+  if (shouldAutoCreateSession) {
+    await _ensureSessionExists(context, runRequest);
+  } else {
     final Session? session = await context.sessionService.getSession(
       appName: runRequest.appName,
       userId: runRequest.userId,
@@ -3533,6 +3573,10 @@ _RunRequest _parseRunRequest(
     sessionId: sessionId,
     newMessage: newMessage,
     streaming: payload['streaming'] as bool? ?? false,
+    autoCreateSession: _readOptionalBool(payload, const <String>[
+      'auto_create_session',
+      'autoCreateSession',
+    ]),
     stateDelta: _readObjectMap(payload, const <String>[
       'state_delta',
       'stateDelta',
@@ -3542,6 +3586,40 @@ _RunRequest _parseRunRequest(
       'invocationId',
     ]),
   );
+}
+
+bool? _readOptionalBool(Map<String, dynamic> payload, List<String> keys) {
+  for (final String key in keys) {
+    if (!payload.containsKey(key)) {
+      continue;
+    }
+    final Object? raw = payload[key];
+    if (raw == null) {
+      return null;
+    }
+    if (raw is bool) {
+      return raw;
+    }
+    if (raw is num) {
+      return raw != 0;
+    }
+    if (raw is String) {
+      final String normalized = raw.trim().toLowerCase();
+      switch (normalized) {
+        case '1':
+        case 'true':
+        case 'yes':
+        case 'y':
+          return true;
+        case '0':
+        case 'false':
+        case 'no':
+        case 'n':
+          return false;
+      }
+    }
+  }
+  return null;
 }
 
 String _readRequiredQuery(HttpRequest request, String key) {
@@ -5525,6 +5603,7 @@ class _RunRequest {
     required this.sessionId,
     required this.newMessage,
     required this.streaming,
+    required this.autoCreateSession,
     required this.stateDelta,
     required this.invocationId,
   });
@@ -5543,6 +5622,9 @@ class _RunRequest {
 
   /// Whether streaming output is requested.
   final bool streaming;
+
+  /// Optional per-request override for auto-creating sessions.
+  final bool? autoCreateSession;
 
   /// Optional state delta to apply before execution.
   final Map<String, Object?>? stateDelta;

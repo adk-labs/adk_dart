@@ -3586,17 +3586,47 @@ Future<int> _runWebCommand(
     command.projectDir,
     validateProjectDir: true,
   );
-  final DevProjectConfig config = command.userId == null
-      ? loadedConfig
-      : loadedConfig.copyWith(userId: command.userId);
-  final DevAgentRuntime runtime = DevAgentRuntime(config: config);
+  final _LoadedCliAgent loadedAgent = await _loadAgentForCli(
+    command.projectDir,
+  );
+  final Directory requestedDir = Directory(command.projectDir).absolute;
+  final String agentFolderName = projectDirName(requestedDir.path);
+  final DevProjectConfig config = DevProjectConfig(
+    appName: loadedAgent.appName,
+    agentName: loadedAgent.rootAgent.name,
+    description: loadedAgent.rootAgent.description,
+    userId: command.userId ?? loadedConfig.userId,
+  );
+  final DevAgentRuntime runtime = DevAgentRuntime(
+    config: config,
+    runner: Runner(
+      appName: loadedAgent.appName,
+      agent: loadedAgent.rootAgent,
+      sessionService: createSessionServiceFromOptions(
+        baseDir: loadedAgent.agentsParentDirPath,
+        sessionServiceUri: command.sessionServiceUri,
+        appNameToDir: <String, String>{loadedAgent.appName: agentFolderName},
+        useLocalStorage: command.useLocalStorage,
+      ),
+      artifactService: createArtifactServiceFromOptions(
+        baseDir: requestedDir.path,
+        artifactServiceUri: command.artifactServiceUri,
+        useLocalStorage: command.useLocalStorage,
+      ),
+      memoryService: createMemoryServiceFromOptions(
+        baseDir: loadedAgent.agentsParentDirPath,
+        memoryServiceUri: command.memoryServiceUri,
+      ),
+      credentialService: InMemoryCredentialService(),
+    ),
+  );
 
   final HttpServer server;
   try {
     server = await startAdkDevWebServer(
       runtime: runtime,
       project: config,
-      agentsDir: command.projectDir,
+      agentsDir: loadedAgent.agentsParentDirPath,
       port: command.port!,
       host: command.host!,
       allowOrigins: command.allowOrigins,
