@@ -1,9 +1,13 @@
+/// Human-readable log formatters for A2A requests and responses.
+library;
+
 import 'dart:convert';
 
 import '../protocol.dart';
 
 const String _newLine = '\n';
 
+/// The summarized log line for an A2A message [part].
 String buildMessagePartLog(A2aPart part) {
   final A2aPartRoot root = part.root;
   String content;
@@ -44,6 +48,7 @@ String buildMessagePartLog(A2aPart part) {
   return content;
 }
 
+/// The multi-line debug log payload for an outbound A2A [request].
 String buildA2aRequestLog(A2aMessage request) {
   final List<String> messagePartsLogs = <String>[];
   for (int i = 0; i < request.parts.length; i += 1) {
@@ -74,6 +79,7 @@ ${messagePartsLogs.isEmpty ? 'No parts' : messagePartsLogs.join(_newLine)}
 ''';
 }
 
+/// The multi-line debug log payload for an inbound A2A [response].
 String buildA2aResponseLog(Object response) {
   final List<String> resultDetails = <String>[];
   String statusMessageSection = 'None';

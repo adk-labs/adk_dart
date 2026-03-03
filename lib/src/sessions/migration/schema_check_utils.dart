@@ -1,12 +1,26 @@
+/// Schema detection helpers for ADK SQLite session migration workflows.
+library;
+
 import 'dart:io';
 
 import 'sqlite_db.dart';
 
+/// The metadata key used to store session schema version values.
 const String schemaVersionKey = 'schema_version';
+
+/// The legacy schema version that stores event payloads in pickled form.
 const String schemaVersion0Pickle = '0';
+
+/// The schema version that stores event payloads as JSON structures.
 const String schemaVersion1Json = '1';
+
+/// The latest schema version supported by this migration implementation.
 const String latestSchemaVersion = schemaVersion1Json;
 
+/// The synchronous-driver variant of [dbUrl].
+///
+/// SQLAlchemy URLs such as `sqlite+aiosqlite://...` are rewritten to use only
+/// the base dialect while non-URL inputs are returned unchanged.
 String toSyncUrl(String dbUrl) {
   if (!dbUrl.contains('://')) {
     return dbUrl;
@@ -24,6 +38,9 @@ String toSyncUrl(String dbUrl) {
   return '$dialect://$rest';
 }
 
+/// The filesystem path resolved from [dbUrl] when it targets SQLite.
+///
+/// Non-SQLite URLs are returned unchanged.
 String resolveDbPath(String dbUrl) {
   final String normalized = dbUrl.trim();
   if (normalized.isEmpty) {
@@ -39,10 +56,15 @@ String resolveDbPath(String dbUrl) {
   ).storePath;
 }
 
+/// The detected schema version from an open SQLite [db] connection.
 String getDbSchemaVersionFromConnection(SqliteMigrationDatabase db) {
   return _getSchemaVersionImpl(db);
 }
 
+/// The detected schema version from decoded session store [decoded] data.
+///
+/// This inspects metadata, top-level schema fields, and event payload shapes
+/// to infer whether the payload matches pickled (`0`) or JSON (`1`) storage.
 String getDbSchemaVersionFromDecoded(Object? decoded) {
   if (decoded is! Map) {
     return latestSchemaVersion;
@@ -76,6 +98,9 @@ String getDbSchemaVersionFromDecoded(Object? decoded) {
   return latestSchemaVersion;
 }
 
+/// The detected schema version for the database URL [dbUrl].
+///
+/// Returns [latestSchemaVersion] when the database file does not exist.
 Future<String> getDbSchemaVersion(String dbUrl) async {
   final String normalizedUrl = toSyncUrl(dbUrl.trim());
   final ResolvedSqliteDbUrl resolved = resolveSqliteDbUrl(

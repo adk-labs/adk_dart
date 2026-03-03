@@ -313,6 +313,10 @@ Future<int> _defaultDeployRunner(
   return exitCode;
 }
 
+/// The resolved Google Cloud project ID for deployment.
+///
+/// [projectInOption] takes precedence over `GOOGLE_CLOUD_PROJECT`.
+/// Throws a [StateError] when neither source provides a value.
 String resolveProject(String? projectInOption, {Map<String, String>? env}) {
   final String? fromOption = projectInOption?.trim();
   if (fromOption != null && fromOption.isNotEmpty) {
@@ -326,6 +330,9 @@ String resolveProject(String? projectInOption, {Map<String, String>? env}) {
   return fromEnv;
 }
 
+/// Validates raw `gcloud` passthrough [args].
+///
+/// Throws an [ArgumentError] when an argument contains newline characters.
 void validateGcloudExtraArgs(List<String> args) {
   for (final String arg in args) {
     if (arg.contains('\n') || arg.contains('\r')) {
@@ -334,6 +341,7 @@ void validateGcloudExtraArgs(List<String> args) {
   }
 }
 
+/// The `gcloud run deploy` command built from [command].
 List<String> toCloudRun(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   return <String>[
@@ -351,6 +359,7 @@ List<String> toCloudRun(DeployCommand command) {
   ];
 }
 
+/// The `gcloud alpha ai reasoning-engines deploy` command from [command].
 List<String> toAgentEngine(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   return <String>[
@@ -369,6 +378,7 @@ List<String> toAgentEngine(DeployCommand command) {
   ];
 }
 
+/// The `gcloud container clusters get-credentials` command from [command].
 List<String> toGke(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   return <String>[
