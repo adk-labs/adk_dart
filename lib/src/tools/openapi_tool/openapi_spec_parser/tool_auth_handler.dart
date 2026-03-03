@@ -9,6 +9,7 @@ import '../../tool_context.dart';
 import '../auth/credential_exchangers/auto_auth_credential_exchanger.dart';
 import '../auth/credential_exchangers/base_credential_exchanger.dart';
 
+/// Result of auth preparation for one tool invocation.
 class AuthPreparationResult {
   /// Creates a result object for tool auth preparation state.
   AuthPreparationResult({
@@ -27,6 +28,7 @@ class AuthPreparationResult {
   final AuthCredential? authCredential;
 }
 
+/// Credential cache backed by [ToolContext.state].
 class ToolContextCredentialStore {
   /// Creates a credential store backed by [toolContext] state.
   ToolContextCredentialStore({required this.toolContext});
@@ -119,6 +121,7 @@ class ToolContextCredentialStore {
   }
 }
 
+/// Coordinates credential lookup, exchange, refresh, and auth prompting.
 class ToolAuthHandler {
   /// Creates a tool auth handler for the provided context and credentials.
   ToolAuthHandler(

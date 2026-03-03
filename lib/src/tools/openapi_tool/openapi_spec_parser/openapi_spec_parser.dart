@@ -19,6 +19,7 @@ const Set<String> _validSchemaTypes = <String>{
 
 const Set<String> _schemaContainerKeys = <String>{'schema', 'schemas'};
 
+/// Endpoint metadata resolved from an OpenAPI path/method entry.
 class OperationEndpoint {
   /// Creates an HTTP endpoint description for an OpenAPI operation.
   OperationEndpoint({
@@ -57,6 +58,7 @@ class OperationEndpoint {
   }
 }
 
+/// Fully parsed OpenAPI operation model used to build ADK tools.
 class ParsedOperation {
   /// Creates a parsed OpenAPI operation model.
   ParsedOperation({
@@ -163,6 +165,7 @@ class ParsedOperation {
   }
 }
 
+/// Parser that converts OpenAPI documents into [ParsedOperation] entries.
 class OpenApiSpecParser {
   /// Parses [openapiSpecDict] into normalized [ParsedOperation] values.
   List<ParsedOperation> parse(Map<String, Object?> openapiSpecDict) {

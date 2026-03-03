@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../_gemini_schema_util.dart';
 import '../common/common.dart';
 
+/// Generated signature metadata for one parsed operation parameter.
 class OperationSignatureParameter {
   /// Creates a signature entry for a generated operation parameter.
   OperationSignatureParameter({required this.name, required this.annotation});
@@ -14,6 +15,7 @@ class OperationSignatureParameter {
   final Type annotation;
 }
 
+/// Extracts function metadata, parameters, and schemas from one operation.
 class OperationParser {
   /// Creates an operation parser for an OpenAPI [operation] object.
   OperationParser(Object operation, {bool shouldParse = true})
