@@ -1,3 +1,6 @@
+/// Sampling contracts used by optimizers for train and validation scoring.
+library;
+
 import '../agents/llm_agent.dart';
 import 'data_types.dart';
 

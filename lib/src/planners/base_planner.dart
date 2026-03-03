@@ -1,3 +1,6 @@
+/// Base contracts for planner components that shape LLM planning behavior.
+library;
+
 import '../agents/callback_context.dart';
 import '../agents/readonly_context.dart';
 import '../models/llm_request.dart';

@@ -1,3 +1,6 @@
+/// Compatibility planner models and heuristic planning implementation.
+library;
+
 /// Legacy utility planner retained for compatibility with early adk_dart APIs.
 ///
 /// For Python parity planners, use `BuiltInPlanner` or `PlanReActPlanner`.

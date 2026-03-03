@@ -1,3 +1,6 @@
+/// Built-in planner implementation for request-level thinking configuration.
+library;
+
 import 'dart:developer' as developer;
 
 import '../agents/callback_context.dart';

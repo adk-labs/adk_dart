@@ -1,3 +1,6 @@
+/// Contracts for optimizer implementations that improve agent behavior.
+library;
+
 import '../agents/llm_agent.dart';
 import 'data_types.dart';
 import 'sampler.dart';

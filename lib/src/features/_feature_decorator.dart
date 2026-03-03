@@ -1,3 +1,6 @@
+/// Decorators that gate execution behind runtime feature flags.
+library;
+
 import '_feature_registry.dart';
 
 /// Callable feature gate bound to a single [FeatureName].

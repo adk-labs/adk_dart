@@ -1,3 +1,6 @@
+/// Feature registry models and helpers for runtime feature gating.
+library;
+
 import '../utils/env_utils.dart';
 
 /// Identifiers for runtime-gated ADK features.

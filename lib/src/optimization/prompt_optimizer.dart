@@ -1,3 +1,6 @@
+/// Lightweight prompt normalization utilities for deterministic optimization.
+library;
+
 /// Represents the outcome of a lightweight prompt optimization pass.
 class PromptOptimizationResult {
   /// Creates a prompt optimization result.

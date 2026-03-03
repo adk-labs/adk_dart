@@ -1,3 +1,6 @@
+/// Iterative prompt-optimization implementation powered by an LLM.
+library;
+
 import 'dart:math';
 
 import '../agents/llm_agent.dart';

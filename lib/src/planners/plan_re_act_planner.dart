@@ -1,3 +1,6 @@
+/// Plan-ReAct planner that structures thought, action, and answer sections.
+library;
+
 import '../agents/callback_context.dart';
 import '../agents/readonly_context.dart';
 import '../models/llm_request.dart';

@@ -1,3 +1,6 @@
+/// Data models used by optimizer sampling and ranking workflows.
+library;
+
 import '../agents/llm_agent.dart';
 
 /// Holds metric scores produced by one optimizer sampling pass.
