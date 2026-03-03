@@ -12,6 +12,7 @@ import 'strategies/tool_spec_mock_strategy.dart';
 import 'tool_connection_analyzer.dart';
 import 'tool_connection_map.dart';
 
+/// Factory signature for creating mock strategies per configuration.
 typedef SimulatorStrategyFactory =
     simulator_strategies.BaseMockStrategy Function(
       simulator_config.MockStrategy mockStrategyType,
@@ -36,7 +37,9 @@ simulator_strategies.BaseMockStrategy _createMockStrategy(
   throw ArgumentError('Unknown mock strategy type: $mockStrategyType');
 }
 
+/// Applies injection rules and mock strategies for tool simulation.
 class AgentSimulatorEngine {
+  /// Creates an agent simulator engine with optional test seams.
   AgentSimulatorEngine(
     simulator_config.AgentSimulatorConfig config, {
     ToolConnectionAnalyzer? analyzer,
@@ -65,6 +68,9 @@ class AgentSimulatorEngine {
   ToolConnectionMap? _toolConnectionMap;
   final Map<String, Object?> _stateStore = <String, Object?>{};
 
+  /// Simulates a tool invocation and returns a mocked response.
+  ///
+  /// Returns `null` when no simulation is configured for [tool].
   Future<Map<String, Object?>?> simulate(
     BaseTool tool,
     Map<String, Object?> args,

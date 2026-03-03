@@ -1,19 +1,26 @@
 import '../../models/llm_request.dart';
 
+/// Error payload returned when an injected failure is triggered.
 class InjectedError {
+  /// Creates an injected error configuration.
   InjectedError({
     required this.injectedHttpErrorCode,
     required this.errorMessage,
   });
 
+  /// HTTP-style error code used in simulated responses.
   int injectedHttpErrorCode;
+
+  /// Human-readable simulated error message.
   String errorMessage;
 
+  /// Encodes this injected error to JSON.
   Map<String, Object?> toJson() => <String, Object?>{
     'injected_http_error_code': injectedHttpErrorCode,
     'error_message': errorMessage,
   };
 
+  /// Decodes an injected error from JSON.
   factory InjectedError.fromJson(Map<String, Object?> json) {
     final Object? code = json['injected_http_error_code'];
     return InjectedError(
@@ -23,7 +30,9 @@ class InjectedError {
   }
 }
 
+/// Rule that probabilistically injects latency, errors, or mock responses.
 class InjectionConfig {
+  /// Creates one injection configuration.
   InjectionConfig({
     this.injectionProbability = 1.0,
     this.matchArgs,
@@ -54,13 +63,25 @@ class InjectionConfig {
     }
   }
 
+  /// Probability in `[0, 1]` that this injection applies.
   double injectionProbability;
+
+  /// Optional argument subset that must match before injecting.
   Map<String, Object?>? matchArgs;
+
+  /// Artificial delay in seconds before returning simulated output.
   double injectedLatencySeconds;
+
+  /// Optional random seed applied when this injection is evaluated.
   int? randomSeed;
+
+  /// Optional injected error payload.
   InjectedError? injectedError;
+
+  /// Optional injected success payload.
   Map<String, Object?>? injectedResponse;
 
+  /// Encodes this injection config to JSON.
   Map<String, Object?> toJson() => <String, Object?>{
     'injection_probability': injectionProbability,
     'match_args': matchArgs == null
@@ -74,6 +95,7 @@ class InjectionConfig {
         : Map<String, Object?>.from(injectedResponse!),
   };
 
+  /// Decodes an injection config from JSON.
   factory InjectionConfig.fromJson(Map<String, Object?> json) {
     Map<String, Object?>? matchArgs;
     final Object? rawMatchArgs = json['match_args'];
@@ -122,9 +144,15 @@ class InjectionConfig {
   }
 }
 
+/// Mock strategy used when no injection config matches.
 enum MockStrategy {
+  /// No fallback strategy is configured.
   mockStrategyUnspecified,
+
+  /// Uses tool-schema-guided LLM simulation.
   mockStrategyToolSpec,
+
+  /// Uses tracing-based simulation.
   mockStrategyTracing,
 }
 
@@ -165,7 +193,9 @@ int _mockStrategyToJson(MockStrategy value) {
   }
 }
 
+/// Simulation settings for one tool.
 class ToolSimulationConfig {
+  /// Creates simulation settings for one tool.
   ToolSimulationConfig({
     required this.toolName,
     List<InjectionConfig>? injectionConfigs,
@@ -183,10 +213,16 @@ class ToolSimulationConfig {
     }
   }
 
+  /// Target tool name.
   String toolName;
+
+  /// Ordered injection rules applied to this tool.
   List<InjectionConfig> injectionConfigs;
+
+  /// Fallback strategy used when no injection triggers.
   MockStrategy mockStrategyType;
 
+  /// Encodes this tool simulation config to JSON.
   Map<String, Object?> toJson() => <String, Object?>{
     'tool_name': toolName,
     'injection_configs': injectionConfigs
@@ -195,6 +231,7 @@ class ToolSimulationConfig {
     'mock_strategy_type': _mockStrategyToJson(mockStrategyType),
   };
 
+  /// Decodes a tool simulation config from JSON.
   factory ToolSimulationConfig.fromJson(Map<String, Object?> json) {
     final List<InjectionConfig> configs = <InjectionConfig>[];
     final Object? rawConfigs = json['injection_configs'];
@@ -220,15 +257,16 @@ class ToolSimulationConfig {
   }
 }
 
+/// Top-level configuration for the agent simulator subsystem.
 class AgentSimulatorConfig {
+  /// Creates an agent simulator configuration.
   AgentSimulatorConfig({
-    required List<ToolSimulationConfig> toolSimulationConfigs,
+    required this.toolSimulationConfigs,
     this.simulationModel = 'gemini-2.5-flash',
     GenerateContentConfig? simulationModelConfiguration,
     this.tracingPath,
     this.environmentData,
-  }) : toolSimulationConfigs = toolSimulationConfigs,
-       simulationModelConfiguration =
+  }) : simulationModelConfiguration =
            simulationModelConfiguration ?? GenerateContentConfig() {
     if (toolSimulationConfigs.isEmpty) {
       throw ArgumentError('toolSimulationConfigs must be provided.');
@@ -242,12 +280,22 @@ class AgentSimulatorConfig {
     }
   }
 
+  /// Per-tool simulation settings.
   List<ToolSimulationConfig> toolSimulationConfigs;
+
+  /// Model used for LLM-backed simulation strategies.
   String simulationModel;
+
+  /// Model configuration passed to simulation strategies.
   GenerateContentConfig simulationModelConfiguration;
+
+  /// Optional path to tracing data used by tracing strategies.
   String? tracingPath;
+
+  /// Optional environment data injected into simulation prompts.
   String? environmentData;
 
+  /// Encodes this simulator configuration to JSON.
   Map<String, Object?> toJson() => <String, Object?>{
     'tool_simulation_configs': toolSimulationConfigs
         .map((ToolSimulationConfig config) => config.toJson())
@@ -264,6 +312,7 @@ class AgentSimulatorConfig {
     'environment_data': environmentData,
   };
 
+  /// Decodes an agent simulator config from JSON.
   factory AgentSimulatorConfig.fromJson(Map<String, Object?> json) {
     final List<ToolSimulationConfig> configs = <ToolSimulationConfig>[];
     final Object? rawConfigs = json['tool_simulation_configs'];

@@ -9,6 +9,7 @@ import '../../tools/base_tool.dart';
 import '../../types/content.dart';
 import 'tool_connection_map.dart';
 
+/// Prompt template used to infer tool-state dependencies.
 const String toolConnectionAnalysisPromptTemplate = '''
   You are an expert software architect analyzing a set of tools to understand
   stateful dependencies. Your task is to identify parameters that act as
@@ -53,7 +54,9 @@ const String toolConnectionAnalysisPromptTemplate = '''
   Your response must start with '{' and end with '}'.
 ''';
 
+/// Infers stateful parameter relationships between tool schemas.
 class ToolConnectionAnalyzer {
+  /// Creates a tool connection analyzer.
   ToolConnectionAnalyzer({
     required this.llmName,
     GenerateContentConfig? llmConfig,
@@ -65,6 +68,7 @@ class ToolConnectionAnalyzer {
   final GenerateContentConfig llmConfig;
   final BaseLlm _llm;
 
+  /// Analyzes [tools] and returns a stateful-parameter connection map.
   Future<ToolConnectionMap> analyze(List<BaseTool> tools) async {
     final List<Map<String, Object?>> toolSchemas = <Map<String, Object?>>[];
     for (final BaseTool tool in tools) {

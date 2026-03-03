@@ -9,6 +9,7 @@ import '../../../types/content.dart';
 import '../tool_connection_map.dart';
 import 'base.dart';
 
+/// Prompt template for tool-schema-guided mock response generation.
 const String toolSpecMockPromptTemplate = '''
 You are a stateful tool simulator. Your task is to generate a realistic JSON response for a tool call, maintaining consistency based on a shared state.
 
@@ -58,17 +59,22 @@ Object? _findValueByKey(Object? data, String targetKey) {
 }
 
 class ToolSpecMockStrategy extends BaseMockStrategy {
+  /// Creates a tool-spec mock strategy.
   ToolSpecMockStrategy({
     required this.llmName,
     required this.llmConfig,
     BaseLlm? llm,
   }) : _llm = llm ?? LLMRegistry.newLlm(llmName);
 
+  /// Model name used for simulation.
   final String llmName;
+
+  /// Model configuration used for simulation.
   final GenerateContentConfig llmConfig;
   final BaseLlm _llm;
 
   @override
+  /// Generates a simulated JSON response for [tool] using schema prompts.
   Future<Map<String, Object?>> mock(
     BaseTool tool,
     Map<String, Object?> args,
