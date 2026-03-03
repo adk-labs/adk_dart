@@ -1,3 +1,6 @@
+/// Toolset that exposes Data Agent APIs through Google tools.
+library;
+
 import '../../agents/readonly_context.dart';
 import '../../features/_feature_registry.dart';
 import '../base_tool.dart';

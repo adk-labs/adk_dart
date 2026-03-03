@@ -1,3 +1,6 @@
+/// Tool-schema guided mock strategy for agent simulator responses.
+library;
+
 import 'dart:convert';
 
 import '../../../models/base_llm.dart';

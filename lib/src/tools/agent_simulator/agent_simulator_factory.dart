@@ -1,3 +1,6 @@
+/// Factory helpers that build callbacks and plugins for simulation.
+library;
+
 import '../../tools/base_tool.dart';
 import 'agent_simulator_config.dart';
 import 'agent_simulator_engine.dart';

@@ -1,3 +1,6 @@
+/// Analyzer that infers stateful connections across tool schemas.
+library;
+
 import 'dart:convert';
 import 'dart:developer' as developer;
 

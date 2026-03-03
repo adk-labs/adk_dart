@@ -1,3 +1,6 @@
+/// Connections API client models for Application Integration.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

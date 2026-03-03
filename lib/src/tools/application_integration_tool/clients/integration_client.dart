@@ -1,3 +1,6 @@
+/// Client that discovers Application Integration definitions and resources.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

@@ -1,3 +1,6 @@
+/// Toolset that adapts base computer interfaces into ADK tools.
+library;
+
 import 'dart:async';
 import 'dart:developer' as developer;
 

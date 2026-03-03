@@ -1,3 +1,6 @@
+/// Base strategy contracts for agent simulator mock responses.
+library;
+
 import '../../../models/llm_request.dart';
 import '../../../tools/base_tool.dart';
 import '../tool_connection_map.dart';

@@ -1,3 +1,6 @@
+/// Plugin that intercepts tool calls and serves simulated outputs.
+library;
+
 import '../../plugins/base_plugin.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/tool_context.dart';

@@ -1,3 +1,6 @@
+/// Tool wrapper for invoking Application Integration connector operations.
+library;
+
 import '../../auth/auth_credential.dart';
 import '../../features/_feature_registry.dart';
 import '../../models/llm_request.dart';

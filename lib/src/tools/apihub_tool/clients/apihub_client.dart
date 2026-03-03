@@ -1,3 +1,6 @@
+/// API Hub HTTP client models and resource resolution helpers.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

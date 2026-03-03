@@ -1,3 +1,6 @@
+/// Configuration models for Data Agent tool behavior.
+library;
+
 import '../../features/_feature_registry.dart';
 
 /// Configuration values for Data Agent tool behavior.

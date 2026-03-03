@@ -1,3 +1,6 @@
+/// Engine that simulates tool invocations using configurable strategies.
+library;
+
 import 'dart:developer' as developer;
 import 'dart:math' as math;
 

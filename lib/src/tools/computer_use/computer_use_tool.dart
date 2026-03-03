@@ -1,3 +1,6 @@
+/// Function-tool adapter for computer-use actions.
+library;
+
 import 'dart:convert';
 
 import '../../models/llm_request.dart';

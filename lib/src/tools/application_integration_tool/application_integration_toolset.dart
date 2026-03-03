@@ -1,3 +1,6 @@
+/// Toolset that maps Application Integration resources to ADK tools.
+library;
+
 import 'dart:convert';
 
 import '../../agents/readonly_context.dart';

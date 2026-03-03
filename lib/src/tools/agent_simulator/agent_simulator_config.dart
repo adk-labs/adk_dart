@@ -1,3 +1,6 @@
+/// Configuration models for simulated tool behavior.
+library;
+
 import '../../models/llm_request.dart';
 
 /// Error payload returned when an injected failure is triggered.

@@ -1,3 +1,6 @@
+/// Toolset that loads API Hub APIs and surfaces them as ADK tools.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

@@ -1,3 +1,6 @@
+/// Secret Manager helpers for API Hub authentication flows.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
