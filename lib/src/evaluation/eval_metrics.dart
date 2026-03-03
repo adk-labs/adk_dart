@@ -1,3 +1,6 @@
+/// Metric specifications and canonical metric identifiers.
+library;
+
 import 'common.dart';
 import 'eval_case.dart';
 import 'eval_result.dart';

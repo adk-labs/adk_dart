@@ -1,3 +1,6 @@
+/// Abstractions for storing and mutating evaluation set definitions.
+library;
+
 import 'eval_case.dart';
 import 'eval_set.dart';
 

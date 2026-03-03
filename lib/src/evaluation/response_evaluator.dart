@@ -1,3 +1,6 @@
+/// Final-response scoring evaluator implementations.
+library;
+
 import 'conversation_scenarios.dart';
 import 'common.dart';
 import 'eval_case.dart';

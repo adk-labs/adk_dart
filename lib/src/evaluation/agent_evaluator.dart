@@ -1,3 +1,6 @@
+/// High-level agent evaluation orchestration utilities.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

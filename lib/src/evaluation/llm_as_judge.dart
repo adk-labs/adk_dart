@@ -1,3 +1,6 @@
+/// Shared judge-model evaluation workflow and scoring helpers.
+library;
+
 import '../models/base_llm.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';

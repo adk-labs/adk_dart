@@ -1,3 +1,6 @@
+/// Core evaluator result models and aggregation interface.
+library;
+
 import 'conversation_scenarios.dart';
 import 'eval_case.dart';
 import 'eval_metrics.dart';

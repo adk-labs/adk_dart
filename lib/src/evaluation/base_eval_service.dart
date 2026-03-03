@@ -1,3 +1,6 @@
+/// Base contracts for inference and metric evaluation services.
+library;
+
 import 'eval_case.dart';
 import 'eval_metric.dart';
 import 'eval_result.dart';

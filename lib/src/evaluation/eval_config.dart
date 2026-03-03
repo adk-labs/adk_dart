@@ -1,3 +1,6 @@
+/// Configuration models for evaluation and user-simulator execution.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

@@ -1,3 +1,6 @@
+/// Registry wiring for prebuilt metric evaluators.
+library;
+
 import '../errors/not_found_error.dart';
 import 'custom_metric_evaluator.dart';
 import 'eval_metrics.dart';

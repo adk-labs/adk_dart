@@ -1,3 +1,6 @@
+/// Tool-trajectory scoring evaluator implementations.
+library;
+
 import 'dart:convert';
 
 import 'conversation_scenarios.dart';

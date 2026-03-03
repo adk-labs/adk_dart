@@ -1,3 +1,6 @@
+/// Local in-memory implementation of [BaseEvalService].
+library;
+
 import '../agents/base_agent.dart';
 import '../events/event.dart';
 import '../runners/runner.dart';

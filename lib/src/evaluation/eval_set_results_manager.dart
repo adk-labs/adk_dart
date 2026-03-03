@@ -1,3 +1,6 @@
+/// Abstractions for persisting evaluation execution results.
+library;
+
 import 'eval_result.dart';
 
 /// Persists and reads stored eval set execution results.
