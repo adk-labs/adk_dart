@@ -1,7 +1,11 @@
+/// Authentication tool payload models and helper key builders.
+library;
+
 import 'dart:convert';
 
 import 'auth_credential.dart';
 
+/// The prefix used for deterministic toolset credential identifiers.
 const String toolsetAuthCredentialIdPrefix = '_adk_toolset_auth_';
 
 /// Authentication payload used during credential request/exchange flows.
@@ -68,6 +72,8 @@ String _buildCredentialKey({
 
 /// Session state key used by auth preprocessors and credential manager.
 String authResponseStateKey(String credentialKey) => 'auth:$credentialKey';
+
+/// Session state key used for transient auth flow state.
 String authTemporaryStateKey(String credentialKey) => 'temp:$credentialKey';
 
 /// Function-call-scoped auth request arguments.

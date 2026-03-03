@@ -1,5 +1,9 @@
+/// Builders for [FunctionDeclaration] values from schema/spec inputs.
+library;
+
 import '../models/llm_request.dart';
 
+/// The [FunctionDeclaration] built from explicit JSON schema arguments.
 FunctionDeclaration buildFunctionDeclarationWithJsonSchema({
   required String name,
   String? description,
@@ -19,6 +23,7 @@ FunctionDeclaration buildFunctionDeclarationWithJsonSchema({
   );
 }
 
+/// The [FunctionDeclaration] built from a Python-style tool [spec] map.
 FunctionDeclaration buildFunctionDeclarationFromSpec(
   Map<String, Object?> spec, {
   List<String>? ignoreParams,

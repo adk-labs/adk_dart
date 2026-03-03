@@ -1,7 +1,11 @@
+/// Helpers for deriving function declarations from tool-like inputs.
+library;
+
 import '../models/llm_request.dart';
 import 'base_tool.dart';
 import '_function_tool_declarations.dart';
 
+/// The mapping from Python-style type names to JSON schema types.
 final Map<String, String> pyTypeToSchemaType = <String, String>{
   'str': 'string',
   'int': 'integer',
@@ -19,6 +23,7 @@ final Map<String, String> pyTypeToSchemaType = <String, String>{
   'any': 'TYPE_UNSPECIFIED',
 };
 
+/// The [FunctionDeclaration] converted from [func] and optional schema hints.
 FunctionDeclaration buildFunctionDeclaration(
   Object func, {
   List<String>? ignoreParams,
@@ -73,6 +78,7 @@ FunctionDeclaration buildFunctionDeclaration(
   );
 }
 
+/// Compatibility alias for [buildFunctionDeclaration].
 FunctionDeclaration fromFunctionWithOptions(
   Object func, {
   List<String>? ignoreParams,

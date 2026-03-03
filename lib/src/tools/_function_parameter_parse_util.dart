@@ -1,3 +1,7 @@
+/// JSON schema inference helpers for function tool parameters.
+library;
+
+/// The JSON schema type inferred from runtime [value].
 String? jsonSchemaTypeForValue(Object? value) {
   if (value == null) {
     return 'null';
@@ -23,6 +27,7 @@ String? jsonSchemaTypeForValue(Object? value) {
   return null;
 }
 
+/// The [jsonSchema] with tuple `unevaluatedItems: false` parity behavior.
 Map<String, dynamic> addUnevaluatedItemsToFixedLenTupleSchema(
   Map<String, dynamic> jsonSchema,
 ) {
@@ -37,6 +42,7 @@ Map<String, dynamic> addUnevaluatedItemsToFixedLenTupleSchema(
   return jsonSchema;
 }
 
+/// Whether [defaultValue] is compatible with [annotation].
 bool isDefaultValueCompatible(Object? defaultValue, Object? annotation) {
   if (annotation == null) {
     return true;
@@ -61,6 +67,7 @@ bool isDefaultValueCompatible(Object? defaultValue, Object? annotation) {
   return true;
 }
 
+/// The parsed JSON schema entry for a parameter [name].
 Map<String, dynamic> parseParameterSchema({
   required String name,
   Object? annotation,

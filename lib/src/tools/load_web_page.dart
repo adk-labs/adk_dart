@@ -1,3 +1,6 @@
+/// Web page fetching and text extraction utilities for tool execution.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -6,6 +9,9 @@ import 'dart:typed_data';
 const Duration _defaultLoadWebPageTimeout = Duration(seconds: 10);
 const int _defaultLoadWebPageMaxResponseBytes = 1024 * 1024;
 
+/// The extracted readable text for [url] or an error message string.
+///
+/// Only HTTP/HTTPS URLs are supported.
 Future<String> loadWebPage(
   String url, {
   Duration timeout = _defaultLoadWebPageTimeout,

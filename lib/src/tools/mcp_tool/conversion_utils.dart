@@ -1,6 +1,10 @@
+/// Conversion helpers between ADK tool metadata and MCP schema shape.
+library;
+
 import '../../models/llm_request.dart';
 import '../base_tool.dart';
 
+/// The MCP tool descriptor map converted from ADK [tool].
 Map<String, Object?> adkToMcpToolType(BaseTool tool) {
   final FunctionDeclaration? declaration = tool.getDeclaration();
   final Map<String, Object?> inputSchema = declaration == null
@@ -13,6 +17,7 @@ Map<String, Object?> adkToMcpToolType(BaseTool tool) {
   };
 }
 
+/// The JSON schema converted from Gemini schema format [geminiSchema].
 Map<String, Object?> geminiToJsonSchema(Map<String, dynamic> geminiSchema) {
   return _convertSchemaNode(geminiSchema);
 }

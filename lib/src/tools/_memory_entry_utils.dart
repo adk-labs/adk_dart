@@ -1,5 +1,9 @@
+/// Helpers for extracting renderable text from memory entries.
+library;
+
 import '../memory/memory_entry.dart';
 
+/// The concatenated text from all text parts in [memory].
 String extractText(MemoryEntry memory, {String splitter = ' '}) {
   if (memory.content.parts.isEmpty) {
     return '';

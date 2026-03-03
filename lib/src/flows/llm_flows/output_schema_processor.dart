@@ -38,6 +38,7 @@ class OutputSchemaRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 
+/// The serialized response payload from `set_model_response` tool output.
 String? getStructuredModelResponse(Event functionResponseEvent) {
   for (final FunctionResponse functionResponse
       in functionResponseEvent.getFunctionResponses()) {
@@ -48,6 +49,7 @@ String? getStructuredModelResponse(Event functionResponseEvent) {
   return null;
 }
 
+/// The final model-text event built from [jsonResponse].
 Event createFinalModelResponseEvent(
   InvocationContext invocationContext,
   String jsonResponse,
