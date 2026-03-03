@@ -158,6 +158,11 @@ import 'package:adk/adk.dart';
 
 ## Feature Highlight
 
+Runnable feature-highlight sample (Google Search single agent + coordinator
+multi-agent):
+
+- `example/feature_highlight_agents.dart`
+
 ### Define a single agent
 
 ```dart
