@@ -11,20 +11,28 @@ import 'eval_rubrics.dart';
 import 'evaluator.dart';
 import 'llm_as_judge_utils.dart';
 
+/// Function signature used to invoke the auto-rater model.
 typedef AutoRaterInvoker =
     Future<LlmResponse> Function({
       required String prompt,
       required JudgeModelOptions judgeModelOptions,
     });
 
+/// Parsed scoring output from one auto-rater response.
 class AutoRaterScore {
+  /// Creates an auto-rater score payload.
   AutoRaterScore({this.score, this.rubricScores});
 
+  /// Scalar score assigned by the auto-rater.
   final double? score;
+
+  /// Optional rubric-level scores from the auto-rater response.
   final List<RubricScore>? rubricScores;
 }
 
+/// Base evaluator that delegates scoring to a judge LLM.
 abstract class LlmAsJudge extends Evaluator {
+  /// Creates a judge-based evaluator from [evalMetric].
   LlmAsJudge({
     required EvalMetricSpec evalMetric,
     required this.expectedInvocationsRequired,
@@ -47,7 +55,10 @@ abstract class LlmAsJudge extends Evaluator {
   late final JudgeModelOptions _judgeModelOptions;
   late final BaseLlm _judgeModel;
 
+  /// Criterion used to interpret judge scores.
   BaseCriterion get criterion => _criterion;
+
+  /// Judge model settings used for auto-rater requests.
   JudgeModelOptions get judgeModelOptions => _judgeModelOptions;
 
   Future<LlmResponse> _invokeAutoRater(String prompt) async {
@@ -82,22 +93,27 @@ abstract class LlmAsJudge extends Evaluator {
     return LLMRegistry.newLlm(_judgeModelOptions.judgeModel);
   }
 
+  /// Formats the prompt sent to the auto-rater model.
   String formatAutoRaterPrompt(
     Invocation actualInvocation,
     Invocation? expectedInvocation,
   );
 
+  /// Converts one auto-rater response into score data.
   AutoRaterScore convertAutoRaterResponseToScore(LlmResponse autoRaterResponse);
 
+  /// Aggregates repeated samples for a single invocation.
   PerInvocationResult aggregatePerInvocationSamples(
     List<PerInvocationResult> perInvocationSamples,
   );
 
+  /// Aggregates invocation-level scores into a final evaluation result.
   EvaluationResult aggregateInvocationResults(
     List<PerInvocationResult> perInvocationResults,
   );
 
   @override
+  /// Evaluates actual invocations by prompting a judge model per invocation.
   Future<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,

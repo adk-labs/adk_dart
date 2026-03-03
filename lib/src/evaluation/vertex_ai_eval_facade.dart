@@ -18,26 +18,35 @@ Platform.environment['GOOGLE_CLOUD_LOCATION'] = <LOCATION>
 Platform.environment['GOOGLE_CLOUD_PROJECT'] = <PROJECT ID>
 ''';
 
+/// Summary metric returned by Vertex AI Eval.
 class VertexAiEvalSummaryMetric {
+  /// Creates a summary metric payload.
   VertexAiEvalSummaryMetric({this.meanScore});
 
+  /// Mean score produced for the evaluated dataset.
   final double? meanScore;
 }
 
+/// Output payload returned by a Vertex AI Eval invocation.
 class VertexAiEvalOutput {
+  /// Creates a Vertex AI Eval output payload.
   VertexAiEvalOutput({List<VertexAiEvalSummaryMetric>? summaryMetrics})
     : summaryMetrics = summaryMetrics ?? <VertexAiEvalSummaryMetric>[];
 
+  /// Summary metrics returned by Vertex AI Eval.
   final List<VertexAiEvalSummaryMetric> summaryMetrics;
 }
 
+/// Function signature that performs a Vertex AI Eval request.
 typedef VertexAiEvalInvoker =
     Future<VertexAiEvalOutput> Function({
       required List<Map<String, String?>> dataset,
       required List<String> metrics,
     });
 
+/// Evaluator facade that scores invocations through Vertex AI Eval semantics.
 class VertexAiEvalFacade extends Evaluator {
+  /// Creates a Vertex AI Eval facade.
   VertexAiEvalFacade({
     required double threshold,
     required String metricName,
@@ -54,6 +63,7 @@ class VertexAiEvalFacade extends Evaluator {
   final VertexAiEvalInvoker _evalInvoker;
 
   @override
+  /// Evaluates each invocation by calling the configured eval invoker.
   Future<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,
