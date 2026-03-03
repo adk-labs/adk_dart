@@ -1,3 +1,6 @@
+/// Shared utility and helper APIs for ADK runtime behavior.
+library;
+
 import '../features/_feature_registry.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';

@@ -1,3 +1,6 @@
+/// Shared utility and helper APIs for ADK runtime behavior.
+library;
+
 import 'env_utils.dart';
 
 /// Callback for handling emitted feature warnings.

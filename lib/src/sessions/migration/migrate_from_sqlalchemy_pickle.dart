@@ -1,3 +1,6 @@
+/// Shared utility and helper APIs for ADK runtime behavior.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';

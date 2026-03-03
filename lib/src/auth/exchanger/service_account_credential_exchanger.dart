@@ -1,3 +1,6 @@
+/// Shared utility and helper APIs for ADK runtime behavior.
+library;
+
 import '../auth_credential.dart';
 import 'base_credential_exchanger.dart';
 

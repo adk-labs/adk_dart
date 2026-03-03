@@ -1,3 +1,6 @@
+/// Shared utility and helper APIs for ADK runtime behavior.
+library;
+
 import '../agents/context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/readonly_context.dart';

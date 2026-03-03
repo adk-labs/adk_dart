@@ -1,3 +1,6 @@
+/// Shared utility and helper APIs for ADK runtime behavior.
+library;
+
 import '../events/event.dart';
 import '../models/cache_metadata.dart';
 import '../sessions/base_session_service.dart';
