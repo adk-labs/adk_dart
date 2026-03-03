@@ -10,7 +10,13 @@ import '../tools/_google_access_token.dart';
 import 'base_artifact_service.dart';
 
 /// Runtime mode for [GcsArtifactService].
-enum GcsArtifactMode { inMemory, live }
+enum GcsArtifactMode {
+  /// Uses an in-memory map for artifact objects.
+  inMemory,
+
+  /// Uses live Google Cloud Storage HTTP APIs.
+  live,
+}
 
 /// Low-level HTTP request model used by GCS artifact operations.
 class GcsArtifactHttpRequest {
@@ -160,6 +166,7 @@ class GcsArtifactService extends BaseArtifactService {
     return '${_getBlobPrefix(appName, userId, filename, sessionId)}/$version';
   }
 
+  /// Saves [artifact] to GCS and returns the newly created version number.
   @override
   Future<int> saveArtifact({
     required String appName,
@@ -189,6 +196,9 @@ class GcsArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Loads an artifact payload by [filename] and optional [version].
+  ///
+  /// Returns `null` when the artifact or version does not exist.
   @override
   Future<Part?> loadArtifact({
     required String appName,
@@ -215,6 +225,7 @@ class GcsArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Lists artifact keys available to [userId] and optional [sessionId].
   @override
   Future<List<String>> listArtifactKeys({
     required String appName,
@@ -235,6 +246,7 @@ class GcsArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Deletes all stored versions for [filename] when present.
   @override
   Future<void> deleteArtifact({
     required String appName,
@@ -258,6 +270,7 @@ class GcsArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Lists available version numbers for [filename].
   @override
   Future<List<int>> listVersions({
     required String appName,
@@ -281,6 +294,7 @@ class GcsArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Lists full version metadata records for [filename].
   @override
   Future<List<ArtifactVersion>> listArtifactVersions({
     required String appName,
@@ -304,6 +318,7 @@ class GcsArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Returns metadata for one artifact version, or `null` when missing.
   @override
   Future<ArtifactVersion?> getArtifactVersion({
     required String appName,
