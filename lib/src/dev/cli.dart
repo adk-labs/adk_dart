@@ -1207,6 +1207,12 @@ Future<_ConformanceTestSummary> _runConformanceTest(
           testCase,
           userId: command.userId,
         );
+      } else if (command.mode == 'live') {
+        result = await _runConformanceLiveCase(
+          client,
+          testCase,
+          userId: command.userId,
+        );
       } else {
         result = _ConformanceCaseResult(
           category: testCase.category,
@@ -1254,6 +1260,67 @@ Future<_ConformanceTestSummary> _runConformanceTest(
     out.writeln('Conformance report written to $reportPath');
   }
   return summary;
+}
+
+Future<_ConformanceCaseResult> _runConformanceLiveCase(
+  AdkWebServerClient client,
+  _ConformanceTestCase testCase, {
+  required String userId,
+}) async {
+  final Map<String, Object?> session = await client.createSession(
+    appName: testCase.spec.agent,
+    userId: userId,
+    state: testCase.spec.initialState,
+  );
+  final String sessionId =
+      _extractSessionIdFromCreateSession(session) ??
+      (throw StateError('Failed to create session id for conformance test.'));
+  final Map<String, String> functionCallNameToId = <String, String>{};
+  try {
+    for (final _ConformanceUserMessage userMessage
+        in testCase.spec.userMessages) {
+      final Map<String, Object?> stateDelta = <String, Object?>{
+        if (userMessage.stateDelta != null) ...userMessage.stateDelta!,
+      };
+      final List<Map<String, Object?>> events = await client.runAgentSse(
+        appName: testCase.spec.agent,
+        userId: userId,
+        sessionId: sessionId,
+        newMessage: _buildConformanceRunMessage(
+          userMessage,
+          functionCallNameToId,
+        ),
+        stateDelta: stateDelta.isEmpty ? null : stateDelta,
+        streaming: false,
+      );
+      _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
+    }
+
+    return _ConformanceCaseResult(
+      category: testCase.category,
+      name: testCase.name,
+      success: true,
+      description: testCase.spec.description,
+    );
+  } on Exception catch (error) {
+    return _ConformanceCaseResult(
+      category: testCase.category,
+      name: testCase.name,
+      success: false,
+      errorMessage: 'Live execution failed: $error',
+      description: testCase.spec.description,
+    );
+  } finally {
+    try {
+      await client.deleteSession(
+        appName: testCase.spec.agent,
+        userId: userId,
+        sessionId: sessionId,
+      );
+    } on Exception {
+      // Best effort cleanup.
+    }
+  }
 }
 
 Future<_ConformanceCaseResult> _runConformanceReplayCase(

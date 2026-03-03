@@ -1,5 +1,10 @@
 ## Unreleased
 
+## 2026.3.2+3
+
+- Implemented `adk conformance test --mode live` execution path so discovered conformance specs are run against the target ADK server instead of returning a placeholder failure.
+- Added live-mode CLI regression coverage with an in-process ADK web server and a real `spec.yaml` case.
+
 ## 2026.3.2+2
 
 - Fixed `adk web`/`adk api_server` project loading to use the same agent-root resolution path as `adk run`, preventing unintended fallback to demo-time responses.

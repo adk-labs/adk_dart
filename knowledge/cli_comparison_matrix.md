@@ -27,7 +27,7 @@ Status legend:
 | `eval_set create` | Y | Partial | N | N | N | `adk_dart` now exposes `adk eval_set create` with local/GCS manager wiring. |
 | `eval_set add_eval_case` | Y | Partial | N | N | N | `adk_dart` now exposes `adk eval_set add_eval_case` (JSON scenarios/session input). |
 | `conformance record` | Y | Partial | N | N | N | `adk_dart` now exposes `adk conformance record`, currently JSON-file workflow (not Python's YAML pipeline parity yet). |
-| `conformance test` | Y | Partial | N | N | N | `adk_dart` now exposes `adk conformance test` replay mode + optional markdown report generation. |
+| `conformance test` | Y | Partial | N | N | N | `adk_dart` now exposes `adk conformance test` replay/live modes + optional markdown report generation. |
 | `migrate session` | Y | Y | N | N | N | `adk_dart` now exposes `adk migrate session --source_db_url --dest_db_url`. |
 
 ## Source of Truth (code references)

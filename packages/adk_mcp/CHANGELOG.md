@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.3.2+3
+
+- Bumped package version to `2026.3.2+3`.
+- Synced MCP package release with the `adk_dart` `2026.3.2+3` rollout.
+
 ## 2026.3.2+2
 
 - Bumped package version to `2026.3.2+2`.
