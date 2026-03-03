@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.3.2+2
+
+- Bumped package version to `2026.3.2+2`.
+- Synced facade release with `adk_dart` `2026.3.2+2`, including web/api_server project loading parity and `/run` auto session-create request behavior.
+
 ## 2026.3.2+1
 
 - Bumped package version to `2026.3.2+1`.

@@ -1,5 +1,12 @@
 ## Unreleased
 
+## 2026.3.2+2
+
+- Fixed `adk web`/`adk api_server` project loading to use the same agent-root resolution path as `adk run`, preventing unintended fallback to demo-time responses.
+- Added `/run` request support for per-request `auto_create_session`/`autoCreateSession` overrides and automatic missing-session creation when enabled.
+- Added regression coverage for `/run` auto-session creation and verified search-grounding tool wrapping parity (`VertexAiSearchTool` -> `DiscoveryEngineSearchTool`) in multi-tool bypass mode.
+- Completed Effective Dart API doc-comment coverage for public declarations across `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk` (`lib` surfaces).
+
 ## 2026.3.2+1
 
 - Bumped package release versions using build metadata (`2026.3.2+1`) for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
