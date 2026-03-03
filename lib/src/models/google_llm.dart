@@ -1,3 +1,6 @@
+/// Gemini and Google-hosted model adapter implementations.
+library;
+
 import 'dart:convert';
 
 import '../types/content.dart';

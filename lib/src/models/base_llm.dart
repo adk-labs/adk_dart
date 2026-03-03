@@ -1,3 +1,6 @@
+/// Base model adapter contract for ADK language model integrations.
+library;
+
 import '../types/content.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';

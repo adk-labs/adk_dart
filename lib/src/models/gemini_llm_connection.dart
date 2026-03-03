@@ -1,3 +1,6 @@
+/// Gemini live-session connection adapters and event models.
+library;
+
 import 'dart:async';
 
 import '../types/content.dart';

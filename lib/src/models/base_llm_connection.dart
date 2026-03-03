@@ -1,3 +1,6 @@
+/// Realtime model connection interfaces and payload models.
+library;
+
 import '../types/content.dart';
 import 'llm_response.dart';
 

@@ -1,3 +1,6 @@
+/// Model request payload and tool declaration schemas.
+library;
+
 import 'dart:developer' as developer;
 
 import '../tools/base_tool.dart';

@@ -1,3 +1,6 @@
+/// Gemma model adapter built on top of Gemini request semantics.
+library;
+
 import 'dart:convert';
 import 'dart:developer' as developer;
 

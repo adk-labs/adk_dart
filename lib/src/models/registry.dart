@@ -1,3 +1,6 @@
+/// Registry for resolving model IDs to concrete adapter implementations.
+library;
+
 import 'anthropic_llm.dart';
 import 'apigee_llm.dart';
 import 'base_llm.dart';

@@ -1,3 +1,6 @@
+/// Normalized model response payload definitions.
+library;
+
 import '../types/content.dart';
 
 /// Normalized model response emitted by LLM adapters.

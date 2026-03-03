@@ -1,3 +1,6 @@
+/// Apigee-hosted Gemini adapter and protocol selection helpers.
+library;
+
 import 'dart:convert';
 
 import '../types/content.dart';

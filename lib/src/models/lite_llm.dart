@@ -1,3 +1,6 @@
+/// LiteLLM-compatible OpenAI-style model adapter.
+library;
+
 import 'dart:convert';
 
 import '../types/content.dart';

@@ -1,3 +1,6 @@
+/// Anthropic Claude model adapter integration.
+library;
+
 import 'dart:convert';
 
 import '../types/content.dart';

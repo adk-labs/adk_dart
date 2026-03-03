@@ -1,3 +1,6 @@
+/// Conversion helpers between ADK content and Gemini interactions payloads.
+library;
+
 import 'dart:convert';
 
 import '../types/content.dart';
