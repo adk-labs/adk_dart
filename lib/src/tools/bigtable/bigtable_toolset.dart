@@ -1,3 +1,6 @@
+/// Bigtable toolset assembly and configuration helpers.
+library;
+
 import '../../agents/readonly_context.dart';
 import '../../features/_feature_registry.dart';
 import '../base_tool.dart';
@@ -8,6 +11,7 @@ import 'metadata_tool.dart' as metadata_tool;
 import 'query_tool.dart' as query_tool;
 import 'settings.dart';
 
+/// Default name prefix assigned to Bigtable tools.
 const String defaultBigtableToolNamePrefix = 'bigtable';
 
 /// Toolset that exposes Bigtable operations as ADK tools.

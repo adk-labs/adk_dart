@@ -1,11 +1,18 @@
+/// Bigtable SQL query execution helpers for tool integration.
+library;
+
 import 'dart:convert';
 
 import '../tool_context.dart';
 import 'client.dart';
 import 'settings.dart';
 
+/// Fallback row cap when tool settings do not provide a valid limit.
 const int defaultMaxExecutedQueryResultRows = 50;
 
+/// Executes SQL [query] against a Bigtable [instanceId].
+///
+/// The response may include `result_is_likely_truncated` when row limits apply.
 Future<Map<String, Object?>> executeSql({
   required String projectId,
   required String instanceId,

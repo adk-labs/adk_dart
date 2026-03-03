@@ -1,6 +1,12 @@
+/// Credential helpers for Pub/Sub tool authentication.
+library;
+
 import '../_google_credentials.dart';
 
+/// Cache key for Pub/Sub OAuth tokens.
 const String pubsubTokenCacheKey = 'pubsub_token_cache';
+
+/// Default OAuth scopes used by Pub/Sub tools.
 const List<String> pubsubDefaultScope = <String>[
   'https://www.googleapis.com/auth/pubsub',
 ];

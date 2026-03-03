@@ -1,3 +1,6 @@
+/// Google Maps grounding tool definitions and aliases.
+library;
+
 import '../models/llm_request.dart';
 import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
@@ -46,5 +49,8 @@ class GoogleMapsGroundingTool extends BaseTool {
   }
 }
 
+/// Shared singleton instance of [GoogleMapsGroundingTool].
 final GoogleMapsGroundingTool googleMapsGrounding = GoogleMapsGroundingTool();
+
+/// Backward-compatible alias for [googleMapsGrounding].
 final GoogleMapsGroundingTool google_maps_grounding = googleMapsGrounding;

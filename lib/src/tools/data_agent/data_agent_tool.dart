@@ -1,3 +1,6 @@
+/// Data Agent API integration helpers for tool-call workflows.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,8 +9,11 @@ import '../_google_credentials.dart';
 import '../tool_context.dart';
 import 'config.dart';
 
+/// Base REST endpoint for Data Agent API calls.
 const String dataAgentBaseUrl =
     'https://geminidataanalytics.googleapis.com/v1beta';
+
+/// Client identifier value sent in Data Agent request headers.
 const String dataAgentClientId = 'GOOGLE_ADK';
 
 /// Performs a Data Agent HTTP GET request.

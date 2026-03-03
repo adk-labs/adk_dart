@@ -1,6 +1,12 @@
+/// Credential helpers for Data Agent tool authentication.
+library;
+
 import '../_google_credentials.dart';
 
+/// Cache key for Data Agent OAuth tokens.
 const String dataAgentTokenCacheKey = 'data_agent_token_cache';
+
+/// Default OAuth scopes used by Data Agent tools.
 const List<String> dataAgentDefaultScope = <String>[
   'https://www.googleapis.com/auth/bigquery',
 ];

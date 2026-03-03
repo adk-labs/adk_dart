@@ -1,5 +1,9 @@
+/// Bigtable metadata operations exposed as tool-call functions.
+library;
+
 import 'client.dart';
 
+/// Lists Bigtable instance IDs for [projectId].
 Future<Map<String, Object?>> listInstances({
   required String projectId,
   required Object credentials,
@@ -19,6 +23,7 @@ Future<Map<String, Object?>> listInstances({
   }
 }
 
+/// Gets metadata for one Bigtable [instanceId].
 Future<Map<String, Object?>> getInstanceInfo({
   required String projectId,
   required String instanceId,
@@ -46,6 +51,7 @@ Future<Map<String, Object?>> getInstanceInfo({
   }
 }
 
+/// Lists table IDs in [instanceId].
 Future<Map<String, Object?>> listTables({
   required String projectId,
   required String instanceId,
@@ -67,6 +73,7 @@ Future<Map<String, Object?>> listTables({
   }
 }
 
+/// Gets metadata for table [tableId] in [instanceId].
 Future<Map<String, Object?>> getTableInfo({
   required String projectId,
   required String instanceId,

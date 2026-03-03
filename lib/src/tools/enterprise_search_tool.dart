@@ -1,3 +1,6 @@
+/// Enterprise web search grounding tool definitions.
+library;
+
 import '../models/llm_request.dart';
 import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
@@ -48,6 +51,9 @@ class EnterpriseWebSearchTool extends BaseTool {
   }
 }
 
+/// Shared singleton instance of [EnterpriseWebSearchTool].
 final EnterpriseWebSearchTool enterpriseWebSearchTool =
     EnterpriseWebSearchTool();
+
+/// Backward-compatible alias for [enterpriseWebSearchTool].
 final EnterpriseWebSearchTool enterprise_web_search = enterpriseWebSearchTool;

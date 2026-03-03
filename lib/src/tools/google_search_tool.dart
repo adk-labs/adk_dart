@@ -1,3 +1,6 @@
+/// Google Search grounding tool definitions and aliases.
+library;
+
 import '../models/llm_request.dart';
 import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
@@ -65,5 +68,8 @@ class GoogleSearchTool extends BaseTool {
   }
 }
 
+/// Shared singleton instance of [GoogleSearchTool].
 final GoogleSearchTool googleSearch = GoogleSearchTool();
+
+/// Backward-compatible alias for [googleSearch].
 final GoogleSearchTool google_search = googleSearch;

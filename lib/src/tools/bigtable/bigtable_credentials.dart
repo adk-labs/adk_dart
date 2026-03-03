@@ -1,6 +1,12 @@
+/// Credential helpers for Bigtable tool authentication.
+library;
+
 import '../_google_credentials.dart';
 
+/// Cache key for Bigtable OAuth tokens.
 const String bigtableTokenCacheKey = 'bigtable_token_cache';
+
+/// Default OAuth scopes used by Bigtable tools.
 const List<String> bigtableDefaultScope = <String>[
   'https://www.googleapis.com/auth/bigtable.admin',
   'https://www.googleapis.com/auth/bigtable.data',

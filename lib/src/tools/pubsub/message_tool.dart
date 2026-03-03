@@ -1,9 +1,13 @@
+/// Pub/Sub message operations exposed as tool-call functions.
+library;
+
 import 'dart:convert';
 
 import '../tool_context.dart';
 import 'client.dart';
 import 'config.dart';
 
+/// Publishes [message] to [topicName].
 Future<Map<String, Object?>> publishMessage({
   required String topicName,
   required String message,
@@ -44,6 +48,9 @@ String _decodeMessageData(List<int> data) {
   }
 }
 
+/// Pulls up to [maxMessages] from [subscriptionName].
+///
+/// When [autoAck] is true, all received messages are acknowledged.
 Future<Map<String, Object?>> pullMessages({
   required String subscriptionName,
   required Object credentials,
@@ -94,6 +101,7 @@ Future<Map<String, Object?>> pullMessages({
   }
 }
 
+/// Acknowledges [ackIds] on [subscriptionName].
 Future<Map<String, Object?>> acknowledgeMessages({
   required String subscriptionName,
   required List<String> ackIds,

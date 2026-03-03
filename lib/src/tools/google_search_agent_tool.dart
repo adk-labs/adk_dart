@@ -1,8 +1,12 @@
+/// Google Search agent factory and wrapper tool definitions.
+library;
+
 import '../agents/llm_agent.dart';
 import '../models/base_llm.dart';
 import 'agent_tool.dart';
 import 'google_search_tool.dart';
 
+/// The [LlmAgent] configured to use [googleSearch] for retrieval tasks.
 LlmAgent createGoogleSearchAgent(Object model) {
   if (model is! String && model is! BaseLlm) {
     throw ArgumentError('model must be String or BaseLlm.');
