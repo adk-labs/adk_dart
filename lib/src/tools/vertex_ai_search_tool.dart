@@ -5,17 +5,23 @@ import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// One Vertex AI Search data store reference.
 class VertexAiSearchDataStoreSpec {
+  /// Creates a data store specification.
   VertexAiSearchDataStoreSpec({required this.dataStore});
 
+  /// Fully qualified data store resource name.
   final String dataStore;
 
+  /// Encodes this spec for retrieval configuration.
   Map<String, Object?> toJson() {
     return <String, Object?>{'data_store': dataStore};
   }
 }
 
+/// Retrieval configuration used by [VertexAiSearchTool].
 class VertexAiSearchConfig {
+  /// Creates a Vertex AI Search retrieval configuration.
   VertexAiSearchConfig({
     this.datastore,
     this.dataStoreSpecs,
@@ -24,12 +30,22 @@ class VertexAiSearchConfig {
     this.maxResults,
   });
 
+  /// Optional single data store identifier.
   final String? datastore;
+
+  /// Optional list of data store specs.
   final List<VertexAiSearchDataStoreSpec>? dataStoreSpecs;
+
+  /// Optional search engine identifier.
   final String? engine;
+
+  /// Optional filter expression.
   final String? filter;
+
+  /// Optional maximum number of results.
   final int? maxResults;
 
+  /// Encodes this configuration for retrieval declarations.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       if (datastore != null) 'datastore': datastore,
@@ -42,7 +58,9 @@ class VertexAiSearchConfig {
   }
 }
 
+/// Built-in retrieval tool wrapper for Vertex AI Search.
 class VertexAiSearchTool extends BaseTool {
+  /// Creates a Vertex AI Search tool configuration.
   VertexAiSearchTool({
     this.dataStoreId,
     this.dataStoreSpecs,
@@ -75,6 +93,7 @@ class VertexAiSearchTool extends BaseTool {
   final bool bypassMultiToolsLimit;
   final bool Function() _modelIdCheckDisabledResolver;
 
+  /// Builds retrieval config to inject into model requests.
   VertexAiSearchConfig buildVertexAiSearchConfig(ToolContext toolContext) {
     return VertexAiSearchConfig(
       datastore: dataStoreId,
@@ -86,6 +105,7 @@ class VertexAiSearchTool extends BaseTool {
   }
 
   @override
+  /// Returns `null` because retrieval executes through model-side tooling.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -94,6 +114,7 @@ class VertexAiSearchTool extends BaseTool {
   }
 
   @override
+  /// Injects Vertex AI Search retrieval declarations into [llmRequest].
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
