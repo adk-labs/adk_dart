@@ -36,6 +36,7 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Saves [artifact] in memory and returns the next version number.
   Future<int> saveArtifact({
     required String appName,
     required String userId,
@@ -78,6 +79,9 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Loads one artifact version from memory.
+  ///
+  /// Returns the latest version when [version] is omitted.
   Future<Part?> loadArtifact({
     required String appName,
     required String userId,
@@ -110,6 +114,7 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Lists artifact keys visible in the user or session scope.
   Future<List<String>> listArtifactKeys({
     required String appName,
     required String userId,
@@ -134,6 +139,7 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Deletes all stored versions for [filename] in memory.
   Future<void> deleteArtifact({
     required String appName,
     required String userId,
@@ -150,6 +156,7 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Lists stored version numbers for [filename].
   Future<List<int>> listVersions({
     required String appName,
     required String userId,
@@ -168,6 +175,7 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Lists metadata snapshots for all versions of [filename].
   Future<List<ArtifactVersion>> listArtifactVersions({
     required String appName,
     required String userId,
@@ -191,6 +199,9 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   @override
+  /// Returns metadata for one stored artifact version.
+  ///
+  /// Returns the latest version when [version] is omitted.
   Future<ArtifactVersion?> getArtifactVersion({
     required String appName,
     required String userId,
