@@ -6,10 +6,13 @@ import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Policy controlling which bash commands may be executed.
 class BashToolPolicy {
+  /// Creates a bash policy with allowed command prefixes.
   BashToolPolicy({List<String>? allowedCommandPrefixes})
     : allowedCommandPrefixes = allowedCommandPrefixes ?? <String>['*'];
 
+  /// Allowed command prefixes. `*` allows all commands.
   final List<String> allowedCommandPrefixes;
 }
 
@@ -30,7 +33,9 @@ String? _validateCommand(String command, BashToolPolicy policy) {
   return 'Command blocked. Permitted prefixes are: $allowed';
 }
 
+/// Tool that executes bash commands after explicit user confirmation.
 class ExecuteBashTool extends BaseTool {
+  /// Creates a bash execution tool.
   ExecuteBashTool({Directory? workspace, BashToolPolicy? policy})
     : _workspace = workspace ?? Directory.current,
       _policy = policy ?? BashToolPolicy(),
@@ -45,6 +50,7 @@ class ExecuteBashTool extends BaseTool {
   final BashToolPolicy _policy;
 
   @override
+  /// Returns the command-only function declaration schema.
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
@@ -63,6 +69,7 @@ class ExecuteBashTool extends BaseTool {
   }
 
   @override
+  /// Executes one bash command when policy and confirmation checks pass.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
