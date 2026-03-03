@@ -5,7 +5,9 @@ const List<String> pubsubDefaultScope = <String>[
   'https://www.googleapis.com/auth/pubsub',
 ];
 
+/// Google credential config specialized for Pub/Sub tool usage.
 class PubSubCredentialsConfig extends BaseGoogleCredentialsConfig {
+  /// Creates Pub/Sub credential configuration with default scopes.
   PubSubCredentialsConfig({
     super.credentials,
     super.externalAccessTokenKey,

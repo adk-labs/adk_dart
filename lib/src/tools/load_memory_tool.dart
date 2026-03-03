@@ -3,7 +3,9 @@ import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Tool that queries memory entries for the current user.
 class LoadMemoryTool extends BaseTool {
+  /// Creates a load-memory tool.
   LoadMemoryTool()
     : super(
         name: 'load_memory',
@@ -11,6 +13,7 @@ class LoadMemoryTool extends BaseTool {
       );
 
   @override
+  /// Returns the query-only function declaration schema.
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
@@ -26,6 +29,7 @@ class LoadMemoryTool extends BaseTool {
   }
 
   @override
+  /// Loads memories matching the provided `query` argument.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -47,6 +51,7 @@ class LoadMemoryTool extends BaseTool {
   }
 
   @override
+  /// Appends instructions describing when to call `load_memory`.
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

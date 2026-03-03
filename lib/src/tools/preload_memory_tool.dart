@@ -3,7 +3,9 @@ import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Internal tool that preloads relevant memories into prompt instructions.
 class PreloadMemoryTool extends BaseTool {
+  /// Creates a preload-memory tool.
   PreloadMemoryTool()
     : super(
         name: 'preload_memory',
@@ -11,6 +13,7 @@ class PreloadMemoryTool extends BaseTool {
       );
 
   @override
+  /// Returns `null` because this tool is not directly model-invokable.
   FunctionDeclaration? getDeclaration() {
     // This tool is executed internally during request preprocessing and is not
     // intended for direct model function-calling.
@@ -18,6 +21,7 @@ class PreloadMemoryTool extends BaseTool {
   }
 
   @override
+  /// Returns a no-op success payload.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -26,6 +30,7 @@ class PreloadMemoryTool extends BaseTool {
   }
 
   @override
+  /// Appends relevant past-conversation context into [llmRequest].
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

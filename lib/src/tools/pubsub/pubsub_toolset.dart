@@ -8,7 +8,9 @@ import 'config.dart';
 import 'message_tool.dart' as message_tool;
 import 'pubsub_credentials.dart';
 
+/// Toolset exposing publish/pull/ack Pub/Sub operations.
 class PubSubToolset extends BaseToolset {
+  /// Creates a Pub/Sub toolset.
   PubSubToolset({
     super.toolFilter,
     PubSubCredentialsConfig? credentialsConfig,
@@ -20,6 +22,7 @@ class PubSubToolset extends BaseToolset {
   final PubSubToolConfig _toolSettings;
 
   @override
+  /// Returns Pub/Sub tools filtered by the current context.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     isFeatureEnabled(FeatureName.pubsubToolset);
 
@@ -50,6 +53,7 @@ class PubSubToolset extends BaseToolset {
   }
 
   @override
+  /// Cleans up shared Pub/Sub client resources.
   Future<void> close() async {
     await cleanupClients();
   }

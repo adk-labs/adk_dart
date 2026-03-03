@@ -1,14 +1,19 @@
 import '../../features/_feature_registry.dart';
 
+/// Runtime configuration for Pub/Sub-backed tools.
 class PubSubToolConfig {
+  /// Creates a Pub/Sub tool configuration.
   PubSubToolConfig({this.projectId});
 
+  /// Optional GCP project id override.
   final String? projectId;
 
+  /// Ensures the Pub/Sub tool config feature flag is enabled.
   static void ensureFeatureEnabled({Map<String, String>? environment}) {
     isFeatureEnabled(FeatureName.pubsubToolConfig, environment: environment);
   }
 
+  /// Decodes Pub/Sub config from JSON.
   factory PubSubToolConfig.fromJson(Map<String, Object?> json) {
     ensureFeatureEnabled();
 
@@ -27,6 +32,7 @@ class PubSubToolConfig {
     return PubSubToolConfig(projectId: projectId);
   }
 
+  /// Encodes this config for persistence.
   Map<String, Object?> toJson() {
     ensureFeatureEnabled();
     return <String, Object?>{
@@ -34,6 +40,7 @@ class PubSubToolConfig {
     };
   }
 
+  /// Coerces supported object types into [PubSubToolConfig].
   static PubSubToolConfig fromObject(Object? value) {
     if (value is PubSubToolConfig) {
       return value;
