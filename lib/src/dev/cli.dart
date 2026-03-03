@@ -1218,7 +1218,7 @@ Future<_ConformanceTestSummary> _runConformanceTest(
           category: testCase.category,
           name: testCase.name,
           success: false,
-          errorMessage: 'Live mode not yet implemented',
+          errorMessage: 'Unsupported conformance mode: ${command.mode}',
           description: testCase.spec.description,
         );
       }
