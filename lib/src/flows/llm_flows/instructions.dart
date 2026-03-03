@@ -1,3 +1,6 @@
+/// LLM flow pipeline components and processors.
+library;
+
 import '../../agents/base_agent.dart';
 import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
@@ -69,8 +72,8 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
     InvocationContext invocationContext,
   ) async {
     final ReadonlyContext readonlyContext = ReadonlyContext(invocationContext);
-    final (String rawInstruction, bool bypassStateInjection) =
-        await agent.canonicalInstruction(readonlyContext);
+    final (String rawInstruction, bool bypassStateInjection) = await agent
+        .canonicalInstruction(readonlyContext);
     if (bypassStateInjection) {
       return rawInstruction;
     }

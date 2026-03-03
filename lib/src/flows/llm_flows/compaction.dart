@@ -1,3 +1,6 @@
+/// LLM flow pipeline components and processors.
+library;
+
 import '../../agents/invocation_context.dart';
 import '../../apps/compaction.dart' as app_compaction;
 import '../../events/event.dart';

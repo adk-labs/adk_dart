@@ -1,3 +1,6 @@
+/// LLM flow pipeline components and processors.
+library;
+
 import 'dart:typed_data';
 
 import '../../agents/invocation_context.dart';

@@ -1,3 +1,6 @@
+/// LLM flow processor that handles transfer-to-agent actions.
+library;
+
 import '../../agents/base_agent.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';

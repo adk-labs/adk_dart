@@ -1,3 +1,6 @@
+/// LLM flow pipeline components and processors.
+library;
+
 import 'agent_transfer.dart';
 import 'single_flow.dart';
 

@@ -1,3 +1,6 @@
+/// LLM flow pipeline components and processors.
+library;
+
 import '../../auth/auth_preprocessor.dart';
 import 'base_llm_flow.dart';
 import 'basic.dart';
