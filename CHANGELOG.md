@@ -1,5 +1,10 @@
 ## Unreleased
 
+## 2026.3.2+4
+
+- Added Python-style positional deploy target support: `adk deploy cloud_run|agent_engine|gke` in addition to `--target`.
+- Added deploy CLI regression coverage for positional target parsing and execution.
+
 ## 2026.3.2+3
 
 - Implemented `adk conformance test --mode live` execution path so discovered conformance specs are run against the target ADK server instead of returning a placeholder failure.

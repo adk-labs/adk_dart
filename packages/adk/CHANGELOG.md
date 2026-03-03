@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.3.2+4
+
+- Bumped package version to `2026.3.2+4`.
+- Synced facade release with `adk_dart` `2026.3.2+4`, including positional deploy target parity updates.
+
 ## 2026.3.2+3
 
 - Bumped package version to `2026.3.2+3`.

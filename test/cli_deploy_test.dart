@@ -123,6 +123,32 @@ void main() {
       expect(stderrText, isEmpty);
     });
 
+    test('supports python-style positional deploy target', () async {
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+
+      final int exitCode = await runDeployCommand(
+        const <String>[
+          'agent_engine',
+          '--dry-run',
+          '--project=proj-abc',
+          '--',
+          '--verbosity=debug',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+        environment: <String, String>{},
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 0);
+      expect(stdoutText, contains('gcloud alpha ai reasoning-engines deploy'));
+      expect(stdoutText, contains('--verbosity=debug'));
+      expect(stderrText, isEmpty);
+    });
+
     test('returns usage error for invalid target', () async {
       final _CapturedSink outCapture = _CapturedSink();
       final _CapturedSink errCapture = _CapturedSink();

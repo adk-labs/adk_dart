@@ -20,9 +20,9 @@ Status legend:
 | `run` | Y | Y | Y | N | N | Go has launcher packages but no `adkgo run` command in current CLI. |
 | `web` | Y | Y | Y | N | Partial | Java supports `web` via Maven plugin goal; Go has web launcher package, not `adkgo web`. |
 | `api_server` | Y | Partial | Y | N | Partial | `adk_dart` is `web` alias with UI off; Java web server exposes APIs via plugin-run server. |
-| `deploy cloud_run` | Y | Partial | Y | Y | N | `adk_dart` uses `adk deploy --target cloud_run`; Go uses `adkgo deploy cloudrun`. |
-| `deploy agent_engine` | Y | Partial | N | N | N | `adk_dart` supports target switch; JS/Go/Java CLI surfaces do not expose dedicated command. |
-| `deploy gke` | Y | Partial | N | N | N | `adk_dart` supports target switch; JS/Go/Java CLI surfaces do not expose dedicated command. |
+| `deploy cloud_run` | Y | Y | Y | Y | N | `adk_dart` supports both `adk deploy cloud_run` and `adk deploy --target cloud_run`; Go uses `adkgo deploy cloudrun`. |
+| `deploy agent_engine` | Y | Y | N | N | N | `adk_dart` supports both positional target (`adk deploy agent_engine`) and `--target` form. |
+| `deploy gke` | Y | Y | N | N | N | `adk_dart` supports both positional target (`adk deploy gke`) and `--target` form. |
 | `eval` | Y | Partial | N | N | N | `adk_dart` now exposes `adk eval`; supports eval-set id/file execution and summary output, but still differs from Python's full config/metric surface. |
 | `eval_set create` | Y | Partial | N | N | N | `adk_dart` now exposes `adk eval_set create` with local/GCS manager wiring. |
 | `eval_set add_eval_case` | Y | Partial | N | N | N | `adk_dart` now exposes `adk eval_set add_eval_case` (JSON scenarios/session input). |

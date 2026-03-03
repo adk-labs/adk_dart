@@ -79,7 +79,7 @@ typedef DeployCommandRunner =
 
 /// Usage text printed by `adk deploy --help`.
 const String deployUsage = '''
-Usage: adk deploy [options] [-- <gcloud args...>]
+Usage: adk deploy [target] [options] [-- <gcloud args...>]
 
 Options:
       --target             Deploy target: cloud_run | agent_engine | gke (default: cloud_run)
@@ -150,6 +150,8 @@ DeployCliOptions _parseDeployOptions(
   required Map<String, String> env,
 }) {
   String targetRaw = 'cloud_run';
+  bool targetExplicitlySet = false;
+  bool positionalTargetConsumed = false;
   String service = 'adk-service';
   String? project;
   String region = 'us-central1';
@@ -170,11 +172,13 @@ DeployCliOptions _parseDeployOptions(
     }
     if (arg == '--target') {
       targetRaw = _nextArg(args, i, '--target');
+      targetExplicitlySet = true;
       i += 1;
       continue;
     }
     if (arg.startsWith('--target=')) {
       targetRaw = arg.substring('--target='.length);
+      targetExplicitlySet = true;
       continue;
     }
     if (arg == '--service') {
@@ -216,6 +220,19 @@ DeployCliOptions _parseDeployOptions(
     if (arg == '--dry-run') {
       dryRun = true;
       continue;
+    }
+
+    if (!arg.startsWith('-') &&
+        !targetExplicitlySet &&
+        !positionalTargetConsumed) {
+      try {
+        _parseDeployTarget(arg);
+        targetRaw = arg;
+        positionalTargetConsumed = true;
+        continue;
+      } on ArgumentError {
+        // Forward unknown positional values as raw gcloud arguments.
+      }
     }
     extraArgs.add(arg);
   }
