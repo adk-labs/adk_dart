@@ -7,8 +7,13 @@ import 'base_tool.dart';
 import 'base_toolset.dart';
 import 'tool_context.dart';
 
+/// Returns an auth token value for a toolbox credential key.
 typedef AuthTokenGetter = String Function();
+
+/// Computes a bound parameter value at invocation time.
 typedef BoundParamProvider = Object? Function();
+
+/// Creates a toolbox delegate used by [ToolboxToolset].
 typedef ToolboxToolsetDelegateFactory =
     ToolboxToolsetDelegate Function({
       required String serverUrl,
@@ -23,11 +28,14 @@ typedef ToolboxToolsetDelegateFactory =
 
 /// Delegate contract for toolbox SDK integrations.
 abstract class ToolboxToolsetDelegate {
+  /// Returns toolbox tools available in the current context.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext});
 
+  /// Releases delegate resources.
   Future<void> close();
 }
 
+/// Toolset that exposes tools from a Toolbox server endpoint.
 class ToolboxToolset extends BaseToolset {
   static ToolboxToolsetDelegateFactory? _defaultDelegateFactory;
 
@@ -44,6 +52,7 @@ class ToolboxToolset extends BaseToolset {
     _defaultDelegateFactory = null;
   }
 
+  /// Creates a toolbox toolset that fetches tools from [serverUrl].
   ToolboxToolset({
     required this.serverUrl,
     this.toolsetName,
@@ -67,13 +76,28 @@ class ToolboxToolset extends BaseToolset {
              additionalOptions: additionalOptions,
            );
 
+  /// Base URL of the toolbox server.
   final String serverUrl;
+
+  /// Optional toolbox toolset namespace.
   final String? toolsetName;
+
+  /// Optional allowlist of tool names to expose.
   final List<String>? toolNames;
+
+  /// Optional auth-token providers keyed by auth scheme name.
   final Map<String, AuthTokenGetter>? authTokenGetters;
+
+  /// Optional bound parameters injected on each invocation.
   final Map<String, Object?>? boundParams;
+
+  /// Optional credentials object passed to custom delegates.
   final Object? credentials;
+
+  /// Optional extra HTTP headers.
   final Map<String, String>? additionalHeaders;
+
+  /// Optional extra transport options.
   final Map<String, Object?>? additionalOptions;
 
   final ToolboxToolsetDelegate _delegate;
@@ -131,11 +155,13 @@ class ToolboxToolset extends BaseToolset {
   }
 
   @override
+  /// Returns toolbox tools provided by the configured delegate.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     return _delegate.getTools(readonlyContext: readonlyContext);
   }
 
   @override
+  /// Closes the underlying toolbox delegate.
   Future<void> close() async {
     await _delegate.close();
   }
