@@ -73,13 +73,18 @@ List<String> _toPosixSegments(String value) {
   return segments;
 }
 
+/// Normalized artifact location under a resolved scope directory.
 class _ResolvedArtifactPath {
+  /// Creates a resolved artifact path record.
   _ResolvedArtifactPath({
     required this.artifactDir,
     required this.relativePath,
   });
 
+  /// Directory that stores one artifact and its `versions` folder.
   final Directory artifactDir;
+
+  /// Relative path under the scope root.
   final String relativePath;
 }
 
@@ -198,7 +203,9 @@ String? _relativePosixPath(Directory root, Directory child) {
   return relative;
 }
 
+/// On-disk metadata stored per artifact version.
 class _FileArtifactMetadata {
+  /// Creates file artifact metadata.
   _FileArtifactMetadata({
     required this.fileName,
     required this.version,
@@ -207,12 +214,22 @@ class _FileArtifactMetadata {
     this.mimeType,
   });
 
+  /// Original logical filename provided to the service.
   final String fileName;
+
+  /// Artifact version number.
   final int version;
+
+  /// Canonical payload URI for this artifact version.
   final String canonicalUri;
+
+  /// MIME type when content is binary.
   final String? mimeType;
+
+  /// Caller-provided metadata payload.
   final Map<String, Object?> customMetadata;
 
+  /// Serializes this metadata object to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'file_name': fileName,
@@ -223,6 +240,7 @@ class _FileArtifactMetadata {
     };
   }
 
+  /// Parses metadata from a JSON string, returning `null` on parse errors.
   static _FileArtifactMetadata? fromJsonString(String jsonString) {
     try {
       final Object? decoded = jsonDecode(jsonString);
@@ -348,6 +366,7 @@ class FileArtifactService extends BaseArtifactService {
     return candidatePath.startsWith(rootPath);
   }
 
+  /// Saves [artifact] as a new version and returns the created version number.
   @override
   Future<int> saveArtifact({
     required String appName,
@@ -410,6 +429,9 @@ class FileArtifactService extends BaseArtifactService {
     return nextVersion;
   }
 
+  /// Loads an artifact payload by [filename] and optional [version].
+  ///
+  /// Returns `null` when the artifact or version does not exist.
   @override
   Future<Part?> loadArtifact({
     required String appName,
@@ -482,6 +504,7 @@ class FileArtifactService extends BaseArtifactService {
     return Part.text(contentPath.readAsStringSync(encoding: utf8));
   }
 
+  /// Lists artifact keys available to [userId] and optional [sessionId].
   @override
   Future<List<String>> listArtifactKeys({
     required String appName,
@@ -523,6 +546,7 @@ class FileArtifactService extends BaseArtifactService {
     return sorted;
   }
 
+  /// Deletes all stored versions for [filename] when present.
   @override
   Future<void> deleteArtifact({
     required String appName,
@@ -540,6 +564,7 @@ class FileArtifactService extends BaseArtifactService {
     }
   }
 
+  /// Lists available version numbers for [filename].
   @override
   Future<List<int>> listVersions({
     required String appName,
@@ -555,6 +580,7 @@ class FileArtifactService extends BaseArtifactService {
     return _listVersionsOnDisk(artifactDir);
   }
 
+  /// Lists full version metadata records for [filename].
   @override
   Future<List<ArtifactVersion>> listArtifactVersions({
     required String appName,
@@ -587,6 +613,7 @@ class FileArtifactService extends BaseArtifactService {
     return result;
   }
 
+  /// Returns metadata for one artifact version, or `null` when missing.
   @override
   Future<ArtifactVersion?> getArtifactVersion({
     required String appName,
@@ -627,6 +654,7 @@ class FileArtifactService extends BaseArtifactService {
     );
   }
 
+  /// Builds an [ArtifactVersion] from filesystem data and optional [metadata].
   ArtifactVersion _buildArtifactVersion({
     required String userId,
     required String? sessionId,
