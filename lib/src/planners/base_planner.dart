@@ -3,6 +3,7 @@ import '../agents/readonly_context.dart';
 import '../models/llm_request.dart';
 import '../types/content.dart';
 
+/// Defines planner hooks that can adjust model requests and responses.
 abstract class BasePlanner {
   /// Builds system instruction appended to LLM request for planning.
   String? buildPlanningInstruction(

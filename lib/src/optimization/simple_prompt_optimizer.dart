@@ -26,7 +26,9 @@ Focus on clarity, structure, and providing actionable guidance for the agent.
 **Output only the new, full, improved agent prompt. Do not add any other text, explanations, or markdown formatting.**
 ''';
 
+/// Configuration for [SimplePromptOptimizer].
 class SimplePromptOptimizerConfig {
+  /// Creates prompt-optimizer settings.
   SimplePromptOptimizerConfig({
     this.optimizerModel = 'gemini-2.5-flash',
     GenerateContentConfig? modelConfiguration,
@@ -41,14 +43,23 @@ class SimplePromptOptimizerConfig {
              },
            );
 
+  /// Model instance or model name used to generate improved prompts.
   final Object optimizerModel;
+
+  /// LLM generation configuration used by the optimizer model.
   final GenerateContentConfig modelConfiguration;
+
+  /// Number of candidate-improvement iterations to attempt.
   final int numIterations;
+
+  /// Number of train examples sampled per scoring pass.
   final int batchSize;
 }
 
+/// Iteratively improves an agent instruction using LLM-generated rewrites.
 class SimplePromptOptimizer
     extends AgentOptimizer<UnstructuredSamplingResult, BaseAgentWithScores> {
+  /// Creates a simple prompt optimizer.
   SimplePromptOptimizer(this._config, {Random? random})
     : _random = random ?? Random(),
       _llm = _resolveLlm(_config.optimizerModel);
@@ -232,6 +243,7 @@ class SimplePromptOptimizer
   }
 
   @override
+  /// Optimizes [initialAgent] instructions using train and validation splits.
   Future<OptimizerResult<BaseAgentWithScores>> optimize(
     Agent initialAgent,
     Sampler<UnstructuredSamplingResult> sampler,
