@@ -2,6 +2,7 @@ import '../models/llm_request.dart';
 import 'function_tool.dart';
 import 'tool_context.dart';
 
+/// Built-in function implementation that requests agent transfer.
 Object? transferToAgent(Map<String, dynamic> args, ToolContext toolContext) {
   final String? agentName =
       args['agent_name'] as String? ?? args['agentName'] as String?;
@@ -12,7 +13,9 @@ Object? transferToAgent(Map<String, dynamic> args, ToolContext toolContext) {
   return null;
 }
 
+/// Function tool that lets agents transfer execution to peer agents.
 class TransferToAgentTool extends FunctionTool {
+  /// Creates a transfer tool constrained to [agentNames].
   TransferToAgentTool({required List<String> agentNames})
     : _agentNames = List<String>.from(agentNames),
       super(
@@ -25,6 +28,7 @@ class TransferToAgentTool extends FunctionTool {
   final List<String> _agentNames;
 
   @override
+  /// Returns declaration schema restricted to configured agent names.
   FunctionDeclaration? getDeclaration() {
     final FunctionDeclaration? declaration = super.getDeclaration();
     if (declaration == null) {

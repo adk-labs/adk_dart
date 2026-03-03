@@ -1,16 +1,24 @@
 import 'dart:convert';
 
+/// One recorded user/assistant turn for CLI replay workflows.
 class RecordingTurn {
+  /// Creates a recording turn entry.
   RecordingTurn({
     required this.userText,
     this.replyText,
     Map<String, Object?>? metadata,
   }) : metadata = metadata ?? <String, Object?>{};
 
+  /// User input text.
   final String userText;
+
+  /// Assistant reply text, when captured.
   final String? replyText;
+
+  /// Additional structured metadata.
   final Map<String, Object?> metadata;
 
+  /// Encodes this turn for persistence.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'user_text': userText,
@@ -19,6 +27,7 @@ class RecordingTurn {
     };
   }
 
+  /// Decodes a recording turn from JSON.
   factory RecordingTurn.fromJson(Map<String, Object?> json) {
     return RecordingTurn(
       userText: '${json['user_text'] ?? ''}',
@@ -32,7 +41,9 @@ class RecordingTurn {
   }
 }
 
+/// Full session recording used by CLI record/replay plugins.
 class SessionRecording {
+  /// Creates a session recording.
   SessionRecording({
     required this.appName,
     required this.userId,
@@ -40,11 +51,19 @@ class SessionRecording {
     List<RecordingTurn>? turns,
   }) : turns = turns ?? <RecordingTurn>[];
 
+  /// Application name.
   final String appName;
+
+  /// User identifier.
   final String userId;
+
+  /// Session identifier.
   final String sessionId;
+
+  /// Recorded turns in chronological order.
   final List<RecordingTurn> turns;
 
+  /// Encodes this recording for persistence.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'app_name': appName,
@@ -54,6 +73,7 @@ class SessionRecording {
     };
   }
 
+  /// Decodes a session recording from JSON.
   factory SessionRecording.fromJson(Map<String, Object?> json) {
     return SessionRecording(
       appName: '${json['app_name'] ?? ''}',
@@ -74,5 +94,6 @@ class SessionRecording {
     );
   }
 
+  /// Encodes this recording as pretty-printed JSON text.
   String toJsonString() => const JsonEncoder.withIndent('  ').convert(toJson());
 }

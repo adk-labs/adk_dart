@@ -3,7 +3,9 @@ import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Built-in URL context retrieval tool for supported Gemini models.
 class UrlContextTool extends BaseTool {
+  /// Creates a URL context tool.
   UrlContextTool({bool Function()? modelIdCheckDisabledResolver})
     : _modelIdCheckDisabledResolver =
           modelIdCheckDisabledResolver ?? isGeminiModelIdCheckDisabled,
@@ -12,6 +14,7 @@ class UrlContextTool extends BaseTool {
   final bool Function() _modelIdCheckDisabledResolver;
 
   @override
+  /// Returns `null` because execution is handled as a built-in retrieval tool.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -20,6 +23,7 @@ class UrlContextTool extends BaseTool {
   }
 
   @override
+  /// Adds URL context built-in tool declaration to [llmRequest].
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
@@ -46,4 +50,5 @@ class UrlContextTool extends BaseTool {
   }
 }
 
+/// Shared URL context tool instance.
 final UrlContextTool urlContext = UrlContextTool();

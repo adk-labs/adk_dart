@@ -4,7 +4,9 @@ import 'auth_credential.dart';
 
 const String toolsetAuthCredentialIdPrefix = '_adk_toolset_auth_';
 
+/// Authentication payload used during credential request/exchange flows.
 class AuthConfig {
+  /// Creates an auth configuration payload.
   AuthConfig({
     required this.authScheme,
     this.rawAuthCredential,
@@ -17,11 +19,19 @@ class AuthConfig {
              rawAuthCredential: rawAuthCredential,
            );
 
+  /// Serialized auth scheme descriptor.
   final String authScheme;
+
+  /// Raw user-provided auth credential.
   AuthCredential? rawAuthCredential;
+
+  /// Exchanged credential ready for tool execution.
   AuthCredential? exchangedAuthCredential;
+
+  /// Stable key used to store auth responses in session state.
   String credentialKey;
 
+  /// Returns a copy with optional field overrides.
   AuthConfig copyWith({
     String? authScheme,
     Object? rawAuthCredential = _sentinel,
@@ -60,12 +70,18 @@ String _buildCredentialKey({
 String authResponseStateKey(String credentialKey) => 'auth:$credentialKey';
 String authTemporaryStateKey(String credentialKey) => 'temp:$credentialKey';
 
+/// Function-call-scoped auth request arguments.
 class AuthToolArguments {
+  /// Creates auth tool arguments.
   AuthToolArguments({required this.functionCallId, required this.authConfig});
 
+  /// Function call identifier requesting authentication.
   final String functionCallId;
+
+  /// Auth configuration for the request.
   final AuthConfig authConfig;
 
+  /// Encodes this payload for transport.
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'function_call_id': functionCallId,
