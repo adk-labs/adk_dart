@@ -5,7 +5,9 @@ import '../auth/auth_tool.dart';
 import '../auth/credential_manager.dart';
 import 'tool_context.dart';
 
+/// OAuth credential payload used by Google-backed tools.
 class GoogleOAuthCredential {
+  /// Creates a Google OAuth credential payload.
   GoogleOAuthCredential({
     required this.accessToken,
     this.refreshToken,
@@ -16,14 +18,28 @@ class GoogleOAuthCredential {
     this.expiresIn,
   }) : scopes = scopes ?? <String>[];
 
+  /// Access token used for authenticated requests.
   final String accessToken;
+
+  /// Optional refresh token.
   final String? refreshToken;
+
+  /// Optional OAuth client id.
   final String? clientId;
+
+  /// Optional OAuth client secret.
   final String? clientSecret;
+
+  /// Optional granted scopes.
   final List<String> scopes;
+
+  /// Optional epoch seconds when token expires.
   final int? expiresAt;
+
+  /// Optional token lifetime in seconds.
   final int? expiresIn;
 
+  /// Decodes a credential payload from JSON.
   factory GoogleOAuthCredential.fromJson(Map<String, Object?> json) {
     return GoogleOAuthCredential(
       accessToken: (json['access_token'] ?? '') as String,
@@ -40,6 +56,7 @@ class GoogleOAuthCredential {
     );
   }
 
+  /// Encodes this credential payload for persistence.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'access_token': accessToken,
@@ -53,7 +70,9 @@ class GoogleOAuthCredential {
   }
 }
 
+/// Shared configuration for acquiring Google access credentials.
 class BaseGoogleCredentialsConfig {
+  /// Creates a base Google credential configuration.
   BaseGoogleCredentialsConfig({
     this.credentials,
     this.externalAccessTokenKey,
@@ -65,11 +84,22 @@ class BaseGoogleCredentialsConfig {
     _validate();
   }
 
+  /// Optional inline credentials object.
   final Object? credentials;
+
+  /// Optional state key for externally provided access token.
   final String? externalAccessTokenKey;
+
+  /// Optional OAuth client id.
   String? clientId;
+
+  /// Optional OAuth client secret.
   String? clientSecret;
+
+  /// Optional OAuth scopes.
   List<String>? scopes;
+
+  /// Optional cache key for persisted tokens.
   final String? tokenCacheKey;
 
   void _validate() {
@@ -113,11 +143,15 @@ class BaseGoogleCredentialsConfig {
   }
 }
 
+/// Resolves valid Google credentials for tool execution.
 class GoogleCredentialsManager {
+  /// Creates a Google credentials manager.
   GoogleCredentialsManager(this.credentialsConfig);
 
+  /// Credential acquisition configuration.
   final BaseGoogleCredentialsConfig credentialsConfig;
 
+  /// Returns valid credentials for the current [toolContext].
   Future<Object?> getValidCredentials(ToolContext toolContext) async {
     if (credentialsConfig.externalAccessTokenKey != null) {
       final Object? token =

@@ -15,14 +15,21 @@ const Set<String> excludedComputerMethods = <String>{
   'close',
 };
 
+/// Adapter output used to replace generated computer-use tools.
 class ComputerUseToolAdapter {
+  /// Creates a computer-use tool adapter output.
   ComputerUseToolAdapter({required this.name, required this.func});
 
+  /// Replacement tool name.
   final String name;
+
+  /// Replacement tool function.
   final Function func;
 }
 
+/// Toolset that surfaces [BaseComputer] actions as ADK tools.
 class ComputerUseToolset extends BaseToolset {
+  /// Creates a computer-use toolset for [computer].
   ComputerUseToolset({required BaseComputer computer})
     : _computer = computer,
       super();
@@ -39,6 +46,7 @@ class ComputerUseToolset extends BaseToolset {
     _initialized = true;
   }
 
+  /// Adapts one generated computer-use tool in [llmRequest].
   static Future<void> adaptComputerUseTool({
     required String methodName,
     required FutureOr<Object> Function(Function original) adapterFunc,
@@ -94,6 +102,7 @@ class ComputerUseToolset extends BaseToolset {
   }
 
   @override
+  /// Returns generated computer-use tools, initializing lazily.
   Future<List<ComputerUseTool>> getTools({
     ReadonlyContext? readonlyContext,
   }) async {
@@ -212,11 +221,13 @@ class ComputerUseToolset extends BaseToolset {
   }
 
   @override
+  /// Closes the underlying computer backend.
   Future<void> close() async {
     await _computer.close();
   }
 
   @override
+  /// Injects computer-use tools and environment metadata into [llmRequest].
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
