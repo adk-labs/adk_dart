@@ -10,12 +10,14 @@ const String dataAgentBaseUrl =
     'https://geminidataanalytics.googleapis.com/v1beta';
 const String dataAgentClientId = 'GOOGLE_ADK';
 
+/// Performs a Data Agent HTTP GET request.
 typedef DataAgentHttpGet =
     Future<Map<String, Object?>> Function({
       required Uri uri,
       required Map<String, String> headers,
     });
 
+/// Performs a Data Agent streaming POST request and returns raw lines.
 typedef DataAgentStreamPost =
     Future<List<String>> Function({
       required Uri uri,
@@ -23,6 +25,7 @@ typedef DataAgentStreamPost =
       required Map<String, String> headers,
     });
 
+/// Lists accessible data agents for [projectId].
 Future<Map<String, Object?>> listAccessibleDataAgents({
   required String projectId,
   required Object credentials,
@@ -46,6 +49,7 @@ Future<Map<String, Object?>> listAccessibleDataAgents({
   }
 }
 
+/// Fetches metadata for a single data agent resource.
 Future<Map<String, Object?>> getDataAgentInfo({
   required String dataAgentName,
   required Object credentials,
@@ -66,6 +70,7 @@ Future<Map<String, Object?>> getDataAgentInfo({
   }
 }
 
+/// Sends [query] to a data agent chat endpoint and returns normalized output.
 Future<Map<String, Object?>> askDataAgent({
   required String dataAgentName,
   required String query,
