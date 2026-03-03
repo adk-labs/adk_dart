@@ -8,6 +8,7 @@ import '../openapi_tool/auth/auth_helpers.dart';
 import '../openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 import '../tool_context.dart';
 
+/// Executes one Google API HTTP request.
 typedef GoogleApiRequestExecutor =
     Future<Map<String, Object?>> Function({
       required String method,
@@ -16,7 +17,9 @@ typedef GoogleApiRequestExecutor =
       Object? body,
     });
 
+/// Immutable description of one Google API operation.
 class GoogleApiOperation {
+  /// Creates a Google API operation descriptor.
   GoogleApiOperation({
     required this.operationId,
     required this.method,
@@ -27,16 +30,31 @@ class GoogleApiOperation {
     this.requestBodySchema,
   }) : parameters = parameters ?? <Map<String, Object?>>[];
 
+  /// Original operation identifier from the discovery spec.
   final String operationId;
+
+  /// HTTP method name.
   final String method;
+
+  /// REST path template.
   final String path;
+
+  /// Optional short operation summary.
   final String summary;
+
+  /// Optional detailed operation description.
   final String description;
+
+  /// Operation parameter definitions.
   final List<Map<String, Object?>> parameters;
+
+  /// Optional JSON schema for request body payload.
   final Map<String, Object?>? requestBodySchema;
 
+  /// Sanitized ADK declaration name derived from [operationId].
   String get declarationName => _sanitizeName(operationId);
 
+  /// Converts this operation into an ADK [FunctionDeclaration].
   FunctionDeclaration toDeclaration() {
     final Map<String, Object?> properties = <String, Object?>{};
     final List<String> required = <String>[];
@@ -65,7 +83,9 @@ class GoogleApiOperation {
   }
 }
 
+/// Tool wrapper for invoking Google APIs from discovery/OpenAPI metadata.
 class GoogleApiTool extends BaseTool {
+  /// Creates a tool directly from a [GoogleApiOperation].
   GoogleApiTool({
     required GoogleApiOperation operation,
     required String baseUrl,
@@ -87,6 +107,7 @@ class GoogleApiTool extends BaseTool {
              : operation.description,
        );
 
+  /// Creates a tool that delegates to an existing [RestApiTool].
   GoogleApiTool.fromRestApiTool(
     RestApiTool restApiTool, {
     String? clientId,
@@ -123,6 +144,7 @@ class GoogleApiTool extends BaseTool {
   AuthCredential? _authCredential;
   Object? _authScheme;
 
+  /// Current auth credential used when executing requests.
   AuthCredential? get authCredential => _authCredential;
 
   set authCredential(AuthCredential? value) {
@@ -130,6 +152,7 @@ class GoogleApiTool extends BaseTool {
     _restApiTool?.configureAuthCredential(value);
   }
 
+  /// Current auth scheme used when executing requests.
   Object? get authScheme => _authScheme;
 
   set authScheme(Object? value) {
@@ -138,6 +161,7 @@ class GoogleApiTool extends BaseTool {
   }
 
   @override
+  /// Returns function declaration metadata for this tool.
   FunctionDeclaration? getDeclaration() {
     final RestApiTool? delegate = _restApiTool;
     if (delegate != null) {
@@ -147,6 +171,7 @@ class GoogleApiTool extends BaseTool {
   }
 
   @override
+  /// Executes the configured operation or delegated Rest API tool.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -174,6 +199,7 @@ class GoogleApiTool extends BaseTool {
     );
   }
 
+  /// Configures OAuth client credentials for delegated auth flows.
   void configureAuth(String clientId, String clientSecret) {
     authCredential = AuthCredential(
       authType: AuthCredentialType.openIdConnect,
@@ -181,12 +207,14 @@ class GoogleApiTool extends BaseTool {
     );
   }
 
+  /// Configures service-account auth for delegated auth flows.
   void configureSaAuth(ServiceAccountAuth serviceAccount) {
     final binding = serviceAccountSchemeCredential(serviceAccount);
     authScheme = binding.authScheme;
     authCredential = binding.authCredential;
   }
 
+  /// Sets default headers applied to outgoing requests.
   void setDefaultHeaders(Map<String, String> headers) {
     final RestApiTool? delegate = _restApiTool;
     if (delegate != null) {

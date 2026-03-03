@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Fetches a Google Discovery document for one API name/version pair.
 typedef GoogleDiscoverySpecFetcher =
     Future<Map<String, Object?>> Function(String apiName, String apiVersion);
 
+/// Converts Google Discovery specs into OpenAPI 3.0 documents.
 class GoogleApiToOpenApiConverter {
+  /// Creates a converter for [apiName] and [apiVersion].
   GoogleApiToOpenApiConverter(
     this.apiName,
     this.apiVersion, {
@@ -15,7 +18,10 @@ class GoogleApiToOpenApiConverter {
            ? null
            : Map<String, Object?>.from(discoverySpec);
 
+  /// Google API name.
   final String apiName;
+
+  /// Google API version.
   final String apiVersion;
   final GoogleDiscoverySpecFetcher? _specFetcher;
   Map<String, Object?>? _googleApiSpec;
@@ -30,6 +36,7 @@ class GoogleApiToOpenApiConverter {
     },
   };
 
+  /// Loads the Google API discovery specification when not preloaded.
   Future<void> fetchGoogleApiSpec() async {
     if (_googleApiSpec != null) {
       return;
@@ -39,6 +46,7 @@ class GoogleApiToOpenApiConverter {
     _googleApiSpec = await fetcher(apiName, apiVersion);
   }
 
+  /// Converts the loaded discovery document into OpenAPI format.
   Future<Map<String, Object?>> convert() async {
     await fetchGoogleApiSpec();
     final Map<String, Object?> spec = _googleApiSpec!;
@@ -158,7 +166,9 @@ class GoogleApiToOpenApiConverter {
           final List<String> required = <String>[];
           for (final MapEntry<String, Object?> entry in properties.entries) {
             final Map<String, Object?> propertyDef = _readMap(entry.value);
-            final Map<String, Object?> value = _convertSchemaObject(propertyDef);
+            final Map<String, Object?> value = _convertSchemaObject(
+              propertyDef,
+            );
             converted[entry.key] = value;
             if (_readBool(propertyDef['required'])) {
               required.add(entry.key);
@@ -378,9 +388,7 @@ Future<Map<String, Object?>> _defaultGoogleDiscoverySpecFetcher(
     if (decoded is! Map) {
       throw StateError('Google discovery response is malformed.');
     }
-    return decoded.map(
-      (Object? key, Object? value) => MapEntry('$key', value),
-    );
+    return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
   } finally {
     client.close(force: true);
   }
