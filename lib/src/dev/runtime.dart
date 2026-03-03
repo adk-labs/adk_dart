@@ -1,3 +1,6 @@
+/// Development runtime utilities and demo model implementations.
+library;
+
 import 'dart:math';
 
 import '../agents/llm_agent.dart';

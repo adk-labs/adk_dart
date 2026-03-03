@@ -1,3 +1,6 @@
+/// Process entrypoint for launching the ADK CLI executable.
+library;
+
 import 'dart:io';
 
 import 'cli_tools_click.dart' as cli_tools_click;

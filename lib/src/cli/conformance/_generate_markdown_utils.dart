@@ -1,3 +1,6 @@
+/// Markdown reporting helpers for CLI conformance runs.
+library;
+
 import 'test_case.dart';
 
 String generateMarkdownReport(List<ConformanceTestResult> results) {

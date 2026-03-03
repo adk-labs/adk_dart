@@ -1,3 +1,6 @@
+/// Replay cursor helpers for recorded CLI sessions.
+library;
+
 import 'recordings_schema.dart';
 
 /// Cursor-based helper for replaying recorded CLI turns.

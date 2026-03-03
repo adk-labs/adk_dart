@@ -1,3 +1,6 @@
+/// Helpers for reading and writing `.adk` workspace directories.
+library;
+
 import 'dart:io';
 
 Directory directoryFromArg(Object value, {required String parameterName}) {

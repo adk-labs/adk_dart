@@ -1,3 +1,6 @@
+/// File serialization helpers for generated conformance test cases.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

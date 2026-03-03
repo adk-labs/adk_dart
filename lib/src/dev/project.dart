@@ -1,3 +1,6 @@
+/// Development project metadata models and serialization helpers.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

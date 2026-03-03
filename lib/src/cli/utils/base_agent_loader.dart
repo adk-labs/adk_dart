@@ -1,3 +1,6 @@
+/// Base contracts and conversion helpers for CLI agent loaders.
+library;
+
 import '../../agents/base_agent.dart';
 import '../../apps/app.dart';
 

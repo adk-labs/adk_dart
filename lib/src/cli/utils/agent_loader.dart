@@ -1,3 +1,6 @@
+/// Filesystem-backed loader for CLI agent and app discovery.
+library;
+
 import 'dart:io';
 import 'dart:convert';
 

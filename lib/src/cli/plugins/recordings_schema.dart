@@ -1,3 +1,6 @@
+/// Data models for CLI session recordings.
+library;
+
 import 'dart:convert';
 
 /// One recorded user/assistant turn for CLI replay workflows.

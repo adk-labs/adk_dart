@@ -1,3 +1,6 @@
+/// In-memory recording manager for CLI sessions and turns.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

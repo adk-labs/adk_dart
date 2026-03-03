@@ -1,3 +1,6 @@
+/// Validators for replayed CLI conformance turns.
+library;
+
 import 'test_case.dart';
 
 ConformanceTurnResult validateTurn(ConformanceTurn turn, String actualReply) {

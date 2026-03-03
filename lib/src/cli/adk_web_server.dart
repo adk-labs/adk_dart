@@ -1,3 +1,6 @@
+/// Wrapper for starting and stopping the ADK development web server.
+library;
+
 import 'dart:io';
 
 import '../dev/project.dart';

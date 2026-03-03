@@ -1,3 +1,6 @@
+/// Utility exports shared across CLI commands.
+library;
+
 export 'agent_change_handler.dart';
 export 'agent_loader.dart';
 export 'base_agent_loader.dart';
