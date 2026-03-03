@@ -1,3 +1,6 @@
+/// Plugin hooks and implementations for ADK runtime pipelines.
+library;
+
 import 'dart:io';
 
 import '../agents/callback_context.dart';
