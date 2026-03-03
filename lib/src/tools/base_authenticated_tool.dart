@@ -1,3 +1,6 @@
+/// Base abstractions for tools that require authenticated credentials.
+library;
+
 import '../auth/auth_credential.dart';
 import '../auth/auth_tool.dart';
 import '../auth/credential_manager.dart';

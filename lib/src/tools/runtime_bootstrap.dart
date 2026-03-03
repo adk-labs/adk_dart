@@ -1,3 +1,6 @@
+/// Bootstrap helpers for registering runtime tool integration adapters.
+library;
+
 import '../flows/llm_flows/audio_transcriber.dart';
 import 'bigquery/client.dart';
 import 'bigtable/client.dart';

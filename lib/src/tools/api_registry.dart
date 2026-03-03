@@ -1,3 +1,6 @@
+/// API Registry-backed MCP tool discovery and loading helpers.
+library;
+
 import '../agents/readonly_context.dart';
 import 'base_toolset.dart';
 import 'mcp_tool/mcp_session_manager.dart';

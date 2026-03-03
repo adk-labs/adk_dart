@@ -1,3 +1,6 @@
+/// Base abstractions for grouped tool providers.
+library;
+
 import '../agents/readonly_context.dart';
 import '../auth/auth_tool.dart';
 import '../models/llm_request.dart';

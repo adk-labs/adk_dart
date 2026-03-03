@@ -1,3 +1,6 @@
+/// Tool helpers for agent-to-agent transfer actions.
+library;
+
 import '../models/llm_request.dart';
 import 'function_tool.dart';
 import 'tool_context.dart';

@@ -1,3 +1,6 @@
+/// Tool adapter for delegating execution to nested agents.
+library;
+
 import 'dart:convert';
 
 import '../agents/base_agent.dart';

@@ -1,3 +1,6 @@
+/// Google-credential-aware function tool wrappers.
+library;
+
 import 'dart:async';
 
 import 'function_tool.dart';

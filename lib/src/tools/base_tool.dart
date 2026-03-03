@@ -1,3 +1,6 @@
+/// Core abstractions for runtime-executable tools.
+library;
+
 import '../models/llm_request.dart';
 import 'tool_context.dart';
 

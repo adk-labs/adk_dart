@@ -1,3 +1,6 @@
+/// Authenticated wrapper for function-based tools.
+library;
+
 import '../auth/auth_credential.dart';
 import '../auth/auth_tool.dart';
 import '../models/llm_request.dart';

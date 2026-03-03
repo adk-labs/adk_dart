@@ -1,3 +1,6 @@
+/// Long-running tool wrappers and declaration adjustments.
+library;
+
 import '../models/llm_request.dart';
 import 'function_tool.dart';
 

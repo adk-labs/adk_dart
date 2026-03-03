@@ -1,3 +1,6 @@
+/// Function-backed tool wrappers for runtime invocation.
+library;
+
 import 'dart:async';
 
 import '../models/llm_request.dart';
