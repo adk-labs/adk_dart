@@ -122,20 +122,30 @@ Future<HttpServer> startAdkDevWebServer({
   return server;
 }
 
+/// Parsed extra plugin spec from CLI input.
 class _ExtraPluginSpec {
+  /// Creates an extra plugin spec.
   _ExtraPluginSpec({required this.raw, required this.normalizedName});
 
+  /// Raw plugin string from CLI.
   final String raw;
+
+  /// Normalized plugin key used for built-in matching.
   final String normalizedName;
 }
 
+/// Eval manager dependencies used by web server endpoints.
 class _EvalManagers {
+  /// Creates eval manager dependencies.
   _EvalManagers({
     required this.evalSetsManager,
     required this.evalSetResultsManager,
   });
 
+  /// Eval set CRUD manager.
   final EvalSetsManager evalSetsManager;
+
+  /// Eval result persistence manager.
   final EvalSetResultsManager evalSetResultsManager;
 }
 
@@ -212,7 +222,9 @@ String _resolveEvalLocalBaseDir({
   return candidate;
 }
 
+/// Per-server runtime context for request handling.
 class _AdkDevWebContext {
+  /// Creates a web server runtime context.
   _AdkDevWebContext({
     required this.runtime,
     required this.project,
@@ -282,6 +294,7 @@ class _AdkDevWebContext {
   bool _a2aPushDrainInProgress = false;
   static const int _a2aPushDrainBatchSize = 64;
 
+  /// Creates and wires context dependencies from CLI/runtime options.
   static Future<_AdkDevWebContext> create({
     required DevAgentRuntime runtime,
     required DevProjectConfig project,
@@ -3838,13 +3851,18 @@ Future<List<BasePlugin>> _instantiateExtraPlugins(
   return plugins;
 }
 
+/// Resolved target class and candidate libraries for dynamic plugin loading.
 class _DynamicPluginTarget {
+  /// Creates a dynamic plugin lookup target.
   _DynamicPluginTarget({
     required this.className,
     required this.libraryCandidates,
   });
 
+  /// Plugin class name to instantiate.
   final String className;
+
+  /// Candidate library URIs where [className] may be declared.
   final List<Uri> libraryCandidates;
 }
 
@@ -4327,27 +4345,41 @@ String? _extractA2aScopedAppName(String routedPath) {
   return null;
 }
 
+/// Parsed A2A RPC route data extracted from HTTP path/method.
 class _A2aRpcRoute {
+  /// Creates parsed A2A RPC route metadata.
   _A2aRpcRoute({
     required this.appName,
     this.methodFromPath,
     this.taskIdFromPath,
   });
 
+  /// Target app name.
   final String appName;
+
+  /// Optional RPC method inferred from route suffix.
   final String? methodFromPath;
+
+  /// Optional task id inferred from task-scoped routes.
   final String? taskIdFromPath;
 }
 
+/// Result bundle for one A2A execution step.
 class _A2aExecutionResult {
+  /// Creates an A2A execution result bundle.
   _A2aExecutionResult({
     required this.message,
     required this.task,
     required this.updates,
   });
 
+  /// Message payload returned to the caller.
   final Map<String, Object?> message;
+
+  /// Task snapshot payload.
   final Map<String, Object?> task;
+
+  /// Ordered task update payloads.
   final List<Map<String, Object?>> updates;
 }
 
@@ -4979,7 +5011,9 @@ Map<String, Object?> _a2aEventToJson(A2aEvent event) {
   return <String, Object?>{'kind': 'unknown'};
 }
 
+/// Resolved push-delivery target for A2A background updates.
 class _A2aPushTarget {
+  /// Creates an A2A push delivery target.
   const _A2aPushTarget({
     required this.uri,
     required this.headers,
@@ -4987,9 +5021,16 @@ class _A2aPushTarget {
     required this.policy,
   });
 
+  /// Destination webhook URI.
   final Uri uri;
+
+  /// Additional HTTP headers.
   final Map<String, String> headers;
+
+  /// Optional `Authorization` header value.
   final String? authHeader;
+
+  /// Retry and timeout policy for delivery.
   final A2aPushDeliveryPolicy policy;
 }
 
@@ -5475,7 +5516,9 @@ Map<String, Object?> _toObjectMap(Object? value) {
   return <String, Object?>{};
 }
 
+/// Parsed request payload for the `/run` endpoint.
 class _RunRequest {
+  /// Creates a normalized run request payload.
   _RunRequest({
     required this.appName,
     required this.userId,
@@ -5486,11 +5529,24 @@ class _RunRequest {
     required this.invocationId,
   });
 
+  /// App name to execute.
   final String appName;
+
+  /// User id for session lookup.
   final String userId;
+
+  /// Session id to continue or create.
   final String sessionId;
+
+  /// New incoming user/model content.
   final Content? newMessage;
+
+  /// Whether streaming output is requested.
   final bool streaming;
+
+  /// Optional state delta to apply before execution.
   final Map<String, Object?>? stateDelta;
+
+  /// Optional invocation id override.
   final String? invocationId;
 }
