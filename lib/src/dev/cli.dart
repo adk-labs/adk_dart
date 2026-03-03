@@ -117,7 +117,16 @@ class CliUsageError implements Exception {
 }
 
 /// Top-level command categories supported by the ADK CLI.
-enum AdkCommandType { create, run, web }
+enum AdkCommandType {
+  /// `adk create`.
+  create,
+
+  /// `adk run`.
+  run,
+
+  /// `adk web` and `adk api_server`.
+  web,
+}
 
 /// Parsed arguments for one ADK CLI invocation.
 ///
@@ -473,21 +482,33 @@ Future<int> runAdkCli(
   }
 }
 
+/// CLI selection target for one eval source and optional case ids.
 class _EvalSelection {
+  /// Creates an eval selection descriptor.
   _EvalSelection({required this.source, required this.evalCaseIds});
 
+  /// Eval set id or file path.
   final String source;
+
+  /// Selected eval case ids within [source].
   final Set<String> evalCaseIds;
 }
 
+/// Resolved eval target after loading/expanding selections.
 class _EvalTarget {
+  /// Creates a resolved eval target.
   _EvalTarget({required this.evalSetId, required this.evalCaseIds});
 
+  /// Eval set identifier.
   final String evalSetId;
+
+  /// Selected eval case ids within [evalSetId].
   final Set<String> evalCaseIds;
 }
 
+/// Parsed arguments for `adk eval`.
 class _ParsedEvalCliCommand {
+  /// Creates parsed `eval` command arguments.
   _ParsedEvalCliCommand({
     required this.agentPath,
     required this.selections,
@@ -497,15 +518,28 @@ class _ParsedEvalCliCommand {
     this.logLevel,
   });
 
+  /// Agent directory path.
   final String agentPath;
+
+  /// Eval source selections to run.
   final List<_EvalSelection> selections;
+
+  /// Optional eval config file path.
   final String? configFilePath;
+
+  /// Whether to print detailed per-case output.
   final bool printDetailedResults;
+
+  /// Optional eval storage backend URI.
   final String? evalStorageUri;
+
+  /// Optional log verbosity level.
   final String? logLevel;
 }
 
+/// Parsed arguments for `adk eval_set create`.
 class _ParsedEvalSetCreateCommand {
+  /// Creates parsed `eval_set create` command arguments.
   _ParsedEvalSetCreateCommand({
     required this.agentPath,
     required this.evalSetId,
@@ -513,13 +547,22 @@ class _ParsedEvalSetCreateCommand {
     this.logLevel,
   });
 
+  /// Agent directory path.
   final String agentPath;
+
+  /// New eval set identifier.
   final String evalSetId;
+
+  /// Optional eval storage backend URI.
   final String? evalStorageUri;
+
+  /// Optional log verbosity level.
   final String? logLevel;
 }
 
+/// Parsed arguments for `adk eval_set add_eval_case`.
 class _ParsedEvalSetAddEvalCaseCommand {
+  /// Creates parsed `eval_set add_eval_case` command arguments.
   _ParsedEvalSetAddEvalCaseCommand({
     required this.agentPath,
     required this.evalSetId,
@@ -529,49 +572,81 @@ class _ParsedEvalSetAddEvalCaseCommand {
     this.logLevel,
   });
 
+  /// Agent directory path.
   final String agentPath;
+
+  /// Target eval set identifier.
   final String evalSetId;
+
+  /// Scenario definitions input file path.
   final String scenariosFilePath;
+
+  /// Session input transcript file path.
   final String sessionInputFilePath;
+
+  /// Optional eval storage backend URI.
   final String? evalStorageUri;
+
+  /// Optional log verbosity level.
   final String? logLevel;
 }
 
+/// Helper container for eval set/result manager dependencies.
 class _EvalManagers {
+  /// Creates eval manager dependencies.
   _EvalManagers({
     required this.evalSetsManager,
     required this.evalSetResultsManager,
   });
 
+  /// Eval set CRUD manager.
   final EvalSetsManager evalSetsManager;
+
+  /// Eval result persistence manager.
   final EvalSetResultsManager evalSetResultsManager;
 }
 
+/// Loaded CLI agent bundle with path metadata.
 class _LoadedCliAgent {
+  /// Creates a loaded agent bundle.
   _LoadedCliAgent({
     required this.rootAgent,
     required this.appName,
     required this.agentsParentDirPath,
   });
 
+  /// Root agent instance.
   final BaseAgent rootAgent;
+
+  /// Logical app name used by runner/session services.
   final String appName;
+
+  /// Parent directory containing loadable agents.
   final String agentsParentDirPath;
 }
 
+/// Parsed arguments for `adk conformance record`.
 class _ParsedConformanceRecordCommand {
+  /// Creates parsed `conformance record` command arguments.
   _ParsedConformanceRecordCommand({
     required this.paths,
     required this.baseUri,
     required this.userId,
   });
 
+  /// Input file or directory paths.
   final List<String> paths;
+
+  /// Base conformance server URI.
   final Uri baseUri;
+
+  /// User identifier for test sessions.
   final String userId;
 }
 
+/// Parsed arguments for `adk conformance test`.
 class _ParsedConformanceTestCommand {
+  /// Creates parsed `conformance test` command arguments.
   _ParsedConformanceTestCommand({
     required this.paths,
     required this.baseUri,
@@ -581,23 +656,43 @@ class _ParsedConformanceTestCommand {
     this.reportDir,
   });
 
+  /// Input file or directory paths.
   final List<String> paths;
+
+  /// Base conformance server URI.
   final Uri baseUri;
+
+  /// User identifier for test sessions.
   final String userId;
+
+  /// Conformance mode (`recorded` or other supported values).
   final String mode;
+
+  /// Whether to generate report output.
   final bool generateReport;
+
+  /// Optional report output directory.
   final String? reportDir;
 }
 
+/// Normalized user message payload in conformance specs.
 class _ConformanceUserMessage {
+  /// Creates a conformance user message descriptor.
   _ConformanceUserMessage({this.text, this.content, this.stateDelta});
 
+  /// Plain-text user message.
   final String? text;
+
+  /// Structured content payload.
   final Map<String, Object?>? content;
+
+  /// Optional state delta to inject before sending.
   final Map<String, Object?>? stateDelta;
 }
 
+/// Parsed conformance test specification.
 class _ConformanceTestSpec {
+  /// Creates a conformance test specification.
   _ConformanceTestSpec({
     required this.description,
     required this.agent,
@@ -605,13 +700,22 @@ class _ConformanceTestSpec {
     required this.userMessages,
   });
 
+  /// Human-readable test description.
   final String description;
+
+  /// Target agent name.
   final String agent;
+
+  /// Initial state for the test session.
   final Map<String, Object?> initialState;
+
+  /// Ordered user messages for the test.
   final List<_ConformanceUserMessage> userMessages;
 }
 
+/// Concrete conformance test case loaded from disk.
 class _ConformanceTestCase {
+  /// Creates a concrete conformance test case.
   _ConformanceTestCase({
     required this.category,
     required this.name,
@@ -619,13 +723,22 @@ class _ConformanceTestCase {
     required this.spec,
   });
 
+  /// Category/group name.
   final String category;
+
+  /// Case name.
   final String name;
+
+  /// Case directory location.
   final Directory dir;
+
+  /// Parsed test specification.
   final _ConformanceTestSpec spec;
 }
 
+/// Result of running a single conformance case.
 class _ConformanceCaseResult {
+  /// Creates a conformance case result.
   _ConformanceCaseResult({
     required this.category,
     required this.name,
@@ -634,14 +747,25 @@ class _ConformanceCaseResult {
     this.description,
   });
 
+  /// Category/group name.
   final String category;
+
+  /// Case name.
   final String name;
+
+  /// Whether the case passed.
   final bool success;
+
+  /// Optional failure message.
   final String? errorMessage;
+
+  /// Optional human-readable description.
   final String? description;
 }
 
+/// Aggregated summary for a conformance test run.
 class _ConformanceTestSummary {
+  /// Creates a conformance run summary.
   _ConformanceTestSummary({
     required this.totalTests,
     required this.passedTests,
@@ -649,11 +773,19 @@ class _ConformanceTestSummary {
     required this.results,
   });
 
+  /// Total executed cases.
   final int totalTests;
+
+  /// Number of passed cases.
   final int passedTests;
+
+  /// Number of failed cases.
   final int failedTests;
+
+  /// Per-case execution results.
   final List<_ConformanceCaseResult> results;
 
+  /// Success rate in percentage.
   double get successRate {
     if (totalTests == 0) {
       return 0;
@@ -2993,15 +3125,22 @@ Future<int> _runCreateCommand(ParsedAdkCommand command, IOSink out) async {
   return 0;
 }
 
+/// Runtime context for executing `adk run`.
 class _RunCommandContext {
+  /// Creates run command runtime context.
   _RunCommandContext({
     required this.runtime,
     required this.userId,
     required this.rootAgentName,
   });
 
+  /// Runtime wrapper combining config and runner.
   final DevAgentRuntime runtime;
+
+  /// User id used for the run session.
   final String userId;
+
+  /// Root agent name used for prompt output.
   final String rootAgentName;
 }
 
@@ -3231,12 +3370,18 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
   return 0;
 }
 
+/// Parsed replay payload for `adk run --replay`.
 class _ReplayInput {
+  /// Creates replay input with [state] and ordered [queries].
   _ReplayInput({required this.state, required this.queries});
 
+  /// Initial session state snapshot.
   final Map<String, Object?> state;
+
+  /// Ordered replay query list.
   final List<String> queries;
 
+  /// Parses replay input from JSON.
   factory _ReplayInput.fromJson(Map<String, Object?> json) {
     final Map<String, Object?> state = <String, Object?>{};
     final Object? rawState = json['state'];
