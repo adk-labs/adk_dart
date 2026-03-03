@@ -1,3 +1,6 @@
+/// Prompt templates for LLM-backed user simulator generation.
+library;
+
 import 'user_simulator_personas.dart';
 
 const String _defaultUserSimulatorInstructionsTemplate = '''
@@ -74,6 +77,7 @@ This persona behaves in the following ways:
 {{ conversation_history }}
 ''';
 
+/// Whether [templateStr] is valid for the required placeholder parameters.
 bool isValidUserSimulatorTemplate(
   String templateStr, {
   required List<String> requiredParams,
@@ -132,6 +136,7 @@ String _getUserSimulatorInstructionsTemplate({
   return customInstructions;
 }
 
+/// The rendered prompt used by the LLM-backed user simulator.
 String getLlmBackedUserSimulatorPrompt({
   required String conversationPlan,
   required String conversationHistory,

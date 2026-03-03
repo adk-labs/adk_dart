@@ -6,6 +6,7 @@ import '../models/llm_response.dart';
 import '../plugins/base_plugin.dart';
 import '../types/id.dart';
 
+/// The metadata/state key used to correlate model responses with requests.
 const String llmRequestIdKey = '__llm_request_key__';
 
 /// Plugin that captures model requests for evaluation workflows.
@@ -54,6 +55,9 @@ class RequestIntercepterPlugin extends BasePlugin {
     return null;
   }
 
+  /// The captured request associated with [llmResponse], if present.
+  ///
+  /// The request is removed from the cache after retrieval.
   LlmRequest? getModelRequest(LlmResponse llmResponse) {
     final Object? requestId = llmResponse.customMetadata?[llmRequestIdKey];
     if (requestId is! String) {

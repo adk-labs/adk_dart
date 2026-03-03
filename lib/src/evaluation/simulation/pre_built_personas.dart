@@ -337,6 +337,7 @@ final UserPersona _legacyDefaultGoalOrientedPersona = UserPersona(
   behaviors: <UserBehavior>[_advanceGoalOriented],
 );
 
+/// The registry pre-populated with built-in user simulator personas.
 UserPersonaRegistry getDefaultPersonaRegistry() {
   final UserPersonaRegistry registry = UserPersonaRegistry();
   registry.registerPersona(_expertPersona.id, _expertPersona);

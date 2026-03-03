@@ -1,3 +1,6 @@
+/// Helpers for exposing ADK agents through the A2A application protocol.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -42,6 +45,10 @@ Future<AgentCard?> _loadAgentCard(Object? agentCard) async {
   );
 }
 
+/// The A2A application wrapper for [agent].
+///
+/// When [agentCard] is not provided, this generates one from [agent] and the
+/// supplied network endpoint fields.
 Future<A2aApplication> toA2a(
   BaseAgent agent, {
   String host = 'localhost',

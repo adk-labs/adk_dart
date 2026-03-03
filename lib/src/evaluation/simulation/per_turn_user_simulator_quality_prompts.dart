@@ -1,3 +1,6 @@
+/// Prompt templates for per-turn user simulator quality evaluation.
+library;
+
 import 'user_simulator_personas.dart';
 
 const String _latestTurnUserSimulatorEvaluatorPromptTemplate = '''
@@ -177,6 +180,7 @@ The Evaluation Criteria above already specify how to evaluate whether the Genera
 {{ generated_user_response }}
 ''';
 
+/// The rendered evaluator prompt for one simulated user turn.
 String getPerTurnUserSimulatorQualityPrompt({
   required String conversationPlan,
   required String conversationHistory,

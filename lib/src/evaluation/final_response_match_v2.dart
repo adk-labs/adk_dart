@@ -49,6 +49,9 @@ The answer should be a json alone which follows the json structure below:
 Answer with assertiveness:
 ''';
 
+/// The normalized [Label] extracted from auto-rater [response] text.
+///
+/// Returns [Label.notFound] when no recognized validity label is present.
 Label parseCritique(String response) {
   final RegExp labelValidExp = RegExp(
     r'"is_the_agent_response_valid"\s*:\s*\[*\s*"?([^"\]\s,\}]+)"?\s*\]*',

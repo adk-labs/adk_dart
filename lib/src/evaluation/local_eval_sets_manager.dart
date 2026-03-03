@@ -1,3 +1,6 @@
+/// Filesystem-backed loading and conversion helpers for local eval sets.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +12,9 @@ import 'eval_sets_manager_utils.dart';
 
 const String _evalSetFileExtension = '.evalset.json';
 
+/// The [EvalSet] loaded from [evalSetFilePath].
+///
+/// Supports both modern map-based schema and legacy list-based schema.
 EvalSet loadEvalSetFromFile(String evalSetFilePath, String evalSetId) {
   final String content = File(evalSetFilePath).readAsStringSync();
   final Object? decoded = jsonDecode(content);
@@ -21,6 +27,7 @@ EvalSet loadEvalSetFromFile(String evalSetFilePath, String evalSetId) {
   throw ArgumentError('Unsupported eval set format in `$evalSetFilePath`.');
 }
 
+/// The modern [EvalSet] converted from legacy [oldFormat] entries.
 EvalSet convertEvalSetToModernSchema(
   String evalSetId,
   List<dynamic> oldFormat,

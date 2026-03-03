@@ -1,7 +1,14 @@
+/// Migration helpers for SQLAlchemy SQLite session stores.
+library;
+
 import 'migrate_from_sqlalchemy_pickle.dart';
 import 'schema_check_utils.dart';
 import 'sqlite_db.dart';
 
+/// Migrates a SQLAlchemy-backed SQLite DB into ADK SQLite format.
+///
+/// This keeps parity with Python behavior by dropping
+/// `adk_internal_metadata` after migration.
 Future<void> migrateFromSqlalchemySqlite(
   String sourceDbUrl,
   String destDbPath,

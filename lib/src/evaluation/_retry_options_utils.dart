@@ -1,8 +1,12 @@
+/// Retry defaults for evaluation-related model requests.
+library;
+
 import '../agents/callback_context.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../plugins/base_plugin.dart';
 
+/// The HTTP status codes considered retryable by default.
 const List<int> retryHttpStatusCodes = <int>[
   408, // Request timeout.
   429, // Too many requests.
@@ -12,6 +16,7 @@ const List<int> retryHttpStatusCodes = <int>[
   504, // Gateway timeout.
 ];
 
+/// The default HTTP retry strategy for evaluator model calls.
 final HttpRetryOptions defaultHttpRetryOptions = HttpRetryOptions(
   attempts: 7,
   initialDelay: 5.0,
@@ -20,6 +25,7 @@ final HttpRetryOptions defaultHttpRetryOptions = HttpRetryOptions(
   httpStatusCodes: retryHttpStatusCodes,
 );
 
+/// Adds [defaultHttpRetryOptions] when [llmRequest] has no retry settings.
 void addDefaultRetryOptionsIfNotPresent(LlmRequest llmRequest) {
   llmRequest.config.httpOptions ??= HttpOptions();
   llmRequest.config.httpOptions!.retryOptions ??= defaultHttpRetryOptions;
