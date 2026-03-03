@@ -201,6 +201,7 @@ Future<Map<String, Object?>> executeSql({
   );
 }
 
+/// Signature for SQL execution callbacks used by BigQuery query tools.
 typedef ExecuteSqlTool =
     Future<Map<String, Object?>> Function({
       required String projectId,

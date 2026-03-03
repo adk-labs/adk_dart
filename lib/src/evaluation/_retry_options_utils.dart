@@ -25,6 +25,7 @@ void addDefaultRetryOptionsIfNotPresent(LlmRequest llmRequest) {
   llmRequest.config.httpOptions!.retryOptions ??= defaultHttpRetryOptions;
 }
 
+/// Plugin that ensures default retry options on outgoing model requests.
 class EnsureRetryOptionsPlugin extends BasePlugin {
   EnsureRetryOptionsPlugin() : super(name: 'ensure_retry_options_plugin');
 

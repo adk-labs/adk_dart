@@ -291,6 +291,7 @@ _FileArtifactMetadata? _readMetadata(File path) {
   return _FileArtifactMetadata.fromJsonString(path.readAsStringSync());
 }
 
+/// File-system-backed artifact service for persisting session artifacts.
 class FileArtifactService extends BaseArtifactService {
   /// Creates a file artifact service rooted at [rootDir].
   FileArtifactService(Object rootDir)

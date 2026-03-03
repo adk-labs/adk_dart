@@ -7,6 +7,7 @@ import '../openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 import '../openapi_tool/openapi_spec_parser/tool_auth_handler.dart';
 import '../tool_context.dart';
 
+/// Tool that invokes an Application Integration connector operation.
 class IntegrationConnectorTool extends BaseTool {
   IntegrationConnectorTool({
     required super.name,

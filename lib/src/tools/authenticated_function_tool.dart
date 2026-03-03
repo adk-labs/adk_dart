@@ -5,6 +5,7 @@ import 'base_authenticated_tool.dart';
 import 'function_tool.dart';
 import 'tool_context.dart';
 
+/// Authenticated tool wrapper around a function tool delegate.
 class AuthenticatedFunctionTool extends BaseAuthenticatedTool {
   AuthenticatedFunctionTool({
     required Function func,

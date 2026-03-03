@@ -200,6 +200,7 @@ Verdict: yes
 ## Output
 ''';
 
+/// Evaluator for rubric-based final response quality.
 class RubricBasedFinalResponseQualityV1Evaluator extends RubricBasedEvaluator {
   RubricBasedFinalResponseQualityV1Evaluator(
     EvalMetricSpec evalMetric, {

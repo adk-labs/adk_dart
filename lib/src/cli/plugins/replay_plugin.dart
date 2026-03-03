@@ -1,5 +1,6 @@
 import 'recordings_schema.dart';
 
+/// Cursor-based helper for replaying recorded CLI turns.
 class ReplayPlugin {
   ReplayPlugin(this.recording);
 

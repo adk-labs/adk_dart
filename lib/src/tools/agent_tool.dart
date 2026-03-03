@@ -9,6 +9,7 @@ import '../types/content.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Tool adapter that executes another agent as a tool call.
 class AgentTool extends BaseTool {
   AgentTool({
     required this.agent,

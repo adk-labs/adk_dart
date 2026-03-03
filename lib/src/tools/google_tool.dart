@@ -4,6 +4,7 @@ import 'function_tool.dart';
 import 'tool_context.dart';
 import '_google_credentials.dart';
 
+/// Function tool that resolves Google credentials before invocation.
 class GoogleTool extends FunctionTool {
   GoogleTool({
     required Function func,

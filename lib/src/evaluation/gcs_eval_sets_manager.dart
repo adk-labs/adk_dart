@@ -9,6 +9,7 @@ import 'gcs_storage_store.dart';
 const String _evalSetsDir = 'evals/eval_sets';
 const String _evalSetFileExtension = '.evalset.json';
 
+/// Cloud Storage-backed eval set manager.
 class GcsEvalSetsManager extends EvalSetsManager {
   GcsEvalSetsManager({required this.bucketName, GcsStorageStore? storageStore})
     : _storageStore = storageStore ?? FileSystemGcsStorageStore();

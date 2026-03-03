@@ -74,6 +74,7 @@ EvalSet convertEvalSetToModernSchema(
   );
 }
 
+/// Filesystem-backed eval set manager for local projects.
 class LocalEvalSetsManager extends EvalSetsManager {
   LocalEvalSetsManager(this._agentsDir);
 

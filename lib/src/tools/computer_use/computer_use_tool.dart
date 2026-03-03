@@ -5,6 +5,7 @@ import '../function_tool.dart';
 import '../tool_context.dart';
 import 'base_computer.dart';
 
+/// Function tool wrapper for computer-use actions with screen metadata.
 class ComputerUseTool extends FunctionTool {
   ComputerUseTool({
     required super.func,

@@ -5,6 +5,7 @@ import 'eval_metrics.dart';
 import 'eval_result.dart';
 import 'evaluator.dart';
 
+/// Evaluator for safety policy adherence metrics.
 class SafetyEvaluatorV1 extends Evaluator {
   SafetyEvaluatorV1(this._evalMetric);
 

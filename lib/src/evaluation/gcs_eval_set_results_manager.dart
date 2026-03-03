@@ -9,6 +9,7 @@ import 'gcs_storage_store.dart';
 const String _evalHistoryDir = 'evals/eval_history';
 const String _evalSetResultFileExtension = '.evalset_result.json';
 
+/// Cloud Storage-backed eval result manager.
 class GcsEvalSetResultsManager extends EvalSetResultsManager {
   GcsEvalSetResultsManager({
     required this.bucketName,

@@ -5,6 +5,7 @@ const List<String> bigqueryDefaultScope = <String>[
   'https://www.googleapis.com/auth/bigquery',
 ];
 
+/// Credential configuration for BigQuery tools.
 class BigQueryCredentialsConfig extends BaseGoogleCredentialsConfig {
   BigQueryCredentialsConfig({
     super.credentials,

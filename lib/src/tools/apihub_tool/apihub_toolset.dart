@@ -12,6 +12,7 @@ import '../base_toolset.dart';
 import '../openapi_tool/openapi_spec_parser/openapi_toolset.dart';
 import 'clients/apihub_client.dart';
 
+/// Toolset that loads API Hub APIs and exposes them as tools.
 class APIHubToolset extends BaseToolset {
   APIHubToolset({
     required String apihubResourceName,

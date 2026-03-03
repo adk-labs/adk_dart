@@ -3,6 +3,7 @@ import 'eval_case.dart';
 import 'eval_set.dart';
 import 'eval_sets_manager.dart';
 
+/// In-memory eval set manager implementation.
 class InMemoryEvalSetsManager extends EvalSetsManager {
   final Map<String, Map<String, EvalSet>> _evalSets =
       <String, Map<String, EvalSet>>{};

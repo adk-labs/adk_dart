@@ -2,6 +2,7 @@ import '../artifacts/base_artifact_service.dart';
 import '../types/content.dart';
 import 'tool_context.dart';
 
+/// Artifact service that forwards operations to a tool context.
 class ForwardingArtifactService extends BaseArtifactService {
   ForwardingArtifactService(this.toolContext);
 

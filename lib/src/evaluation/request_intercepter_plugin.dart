@@ -8,6 +8,7 @@ import '../types/id.dart';
 
 const String llmRequestIdKey = '__llm_request_key__';
 
+/// Plugin that captures model requests for evaluation workflows.
 class RequestIntercepterPlugin extends BasePlugin {
   RequestIntercepterPlugin({
     String name = 'request_intercepter_plugin',

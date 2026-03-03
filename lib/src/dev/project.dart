@@ -201,6 +201,7 @@ String _agentTemplate() {
   return '''
 import 'package:adk_dart/adk_dart.dart';
 
+/// Example echo model used in generated starter projects.
 class EchoModel extends BaseLlm {
   EchoModel() : super(model: 'echo');
 

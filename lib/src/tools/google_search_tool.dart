@@ -3,6 +3,7 @@ import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Tool wrapper for Google Search grounding.
 class GoogleSearchTool extends BaseTool {
   GoogleSearchTool({
     this.bypassMultiToolsLimit = false,

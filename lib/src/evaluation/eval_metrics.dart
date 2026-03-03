@@ -101,6 +101,7 @@ class JudgeModelOptions {
   }
 }
 
+/// Base criterion definition for evaluation thresholds and metadata.
 class BaseCriterion {
   /// Creates a base criterion.
   BaseCriterion({required this.threshold, Map<String, Object?>? extra})
@@ -344,6 +345,7 @@ extension MatchTypeX on MatchType {
   }
 }
 
+/// Criterion configuration for LLM-backed user simulator metrics.
 class LlmBackedUserSimulatorCriterion extends LlmAsAJudgeCriterion {
   /// Creates an LLM-backed user simulator criterion.
   LlmBackedUserSimulatorCriterion({

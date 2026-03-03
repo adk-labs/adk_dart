@@ -46,6 +46,7 @@ String snakeToLowerCamel(String snakeCaseString) {
   }).join();
 }
 
+/// Container for normalized REST API responses.
 class RestApiResponse {
   /// Creates an HTTP response wrapper for REST tool calls.
   RestApiResponse({

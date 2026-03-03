@@ -43,6 +43,7 @@ Directory _resolveAgentDir({
   return agentDir;
 }
 
+/// Helper for reading and writing files under the `.adk` folder.
 class DotAdkFolder {
   DotAdkFolder(Object agentDir)
     : _agentDir = directoryFromArg(agentDir, parameterName: 'agentDir');

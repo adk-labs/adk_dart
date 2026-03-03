@@ -7,6 +7,7 @@ import 'config.dart';
 import 'credentials.dart';
 import 'data_agent_tool.dart' as data_agent_tool;
 
+/// Toolset that exposes Data Agent capabilities as tools.
 class DataAgentToolset extends BaseToolset {
   DataAgentToolset({
     super.toolFilter,

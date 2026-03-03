@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'connections_client.dart';
 
+/// Client for listing and resolving Application Integration resources.
 class IntegrationClient {
   IntegrationClient({
     required this.project,

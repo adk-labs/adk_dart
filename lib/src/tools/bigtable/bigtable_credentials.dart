@@ -6,6 +6,7 @@ const List<String> bigtableDefaultScope = <String>[
   'https://www.googleapis.com/auth/bigtable.data',
 ];
 
+/// Credential configuration for Bigtable tools.
 class BigtableCredentialsConfig extends BaseGoogleCredentialsConfig {
   BigtableCredentialsConfig({
     super.credentials,

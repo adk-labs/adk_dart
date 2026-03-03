@@ -10,6 +10,7 @@ import 'settings.dart';
 
 const String defaultBigtableToolNamePrefix = 'bigtable';
 
+/// Toolset that exposes Bigtable operations as ADK tools.
 class BigtableToolset extends BaseToolset {
   BigtableToolset({
     super.toolFilter,

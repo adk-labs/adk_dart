@@ -7,6 +7,7 @@ import 'config.dart';
 
 const String gdaClientId = 'GOOGLE_ADK';
 
+/// Signature for stream providers used by BigQuery insights tools.
 typedef BigQueryInsightsStreamProvider =
     Future<Stream<String>> Function({
       required Uri url,
@@ -249,9 +250,7 @@ Map<String, Object?> _handleTextResponse(Map<String, Object?> response) {
       .where((Object? value) => value != null)
       .map((Object? part) => '$part')
       .join();
-  return <String, Object?>{
-    'Answer': answer,
-  };
+  return <String, Object?>{'Answer': answer};
 }
 
 Map<String, Object?> _handleSchemaResponse(Map<String, Object?> response) {
@@ -423,15 +422,11 @@ Future<Stream<String>> _defaultInsightsStreamProvider({
     final HttpClientResponse response = await request.close();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final String body = await utf8.decodeStream(response);
-      throw HttpException(
-        'POST $url failed (${response.statusCode}): $body',
-      );
+      throw HttpException('POST $url failed (${response.statusCode}): $body');
     }
 
     final String body = await utf8.decodeStream(response);
-    return Stream<String>.fromIterable(
-      const LineSplitter().convert(body),
-    );
+    return Stream<String>.fromIterable(const LineSplitter().convert(body));
   } finally {
     client.close(force: true);
   }

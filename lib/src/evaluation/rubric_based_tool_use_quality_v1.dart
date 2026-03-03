@@ -98,6 +98,7 @@ REMEMBER: Your answer will help improve the AI agent. It is important to determi
 IMPORTANT: Make sure for each of the property listed, follow the example steps and output "Property: ..." on a new line and "Verdict: ..." on another new line.
 ''';
 
+/// Evaluator for rubric-based tool-use quality.
 class RubricBasedToolUseV1Evaluator extends RubricBasedEvaluator {
   RubricBasedToolUseV1Evaluator(
     EvalMetricSpec evalMetric, {

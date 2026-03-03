@@ -183,6 +183,7 @@ class _EvaluationStep {
   final String nlResponse;
 }
 
+/// Evaluator for hallucination metrics using LLM-judge prompts.
 class HallucinationsV1Evaluator extends Evaluator {
   HallucinationsV1Evaluator(
     EvalMetricSpec evalMetric, {

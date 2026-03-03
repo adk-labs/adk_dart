@@ -13,6 +13,7 @@ import '../llm_as_judge.dart';
 import '../llm_as_judge_utils.dart';
 import 'per_turn_user_simulator_quality_prompts.dart';
 
+/// Evaluator for per-turn user simulator response quality.
 class PerTurnUserSimulatorQualityV1 extends Evaluator {
   PerTurnUserSimulatorQualityV1(
     EvalMetricSpec evalMetric, {

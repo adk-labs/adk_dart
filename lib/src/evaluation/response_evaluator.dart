@@ -6,6 +6,7 @@ import 'eval_result.dart';
 import 'evaluator.dart';
 import 'final_response_match_v1.dart';
 
+/// Evaluator for final-response matching metrics.
 class ResponseEvaluator extends Evaluator {
   ResponseEvaluator({
     double? threshold,

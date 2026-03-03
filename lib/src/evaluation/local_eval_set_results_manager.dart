@@ -9,6 +9,7 @@ import 'eval_set_results_manager_utils.dart';
 const String _adkEvalHistoryDir = '.adk/eval_history';
 const String _evalSetResultFileExtension = '.evalset_result.json';
 
+/// Filesystem-backed eval result manager for local history.
 class LocalEvalSetResultsManager extends EvalSetResultsManager {
   LocalEvalSetResultsManager(this._agentsDir);
 

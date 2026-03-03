@@ -6,6 +6,7 @@ import 'eval_metrics.dart';
 import 'eval_result.dart';
 import 'evaluator.dart';
 
+/// Evaluator for tool-trajectory quality metrics.
 class TrajectoryEvaluator extends Evaluator {
   TrajectoryEvaluator({double? threshold, EvalMetricSpec? evalMetric}) {
     if (threshold != null && evalMetric != null) {

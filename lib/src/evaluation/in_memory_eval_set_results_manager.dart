@@ -3,6 +3,7 @@ import 'eval_result.dart';
 import 'eval_set_results_manager.dart';
 import 'eval_set_results_manager_utils.dart';
 
+/// In-memory eval result manager implementation.
 class InMemoryEvalSetResultsManager extends EvalSetResultsManager {
   final Map<String, Map<String, EvalSetResult>> _resultsByApp =
       <String, Map<String, EvalSetResult>>{};

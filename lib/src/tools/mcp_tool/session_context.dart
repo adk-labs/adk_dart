@@ -1,5 +1,6 @@
 import 'dart:async';
 
+/// Lifecycle helper that lazily starts and closes session resources.
 class SessionContext<T> {
   SessionContext({
     required Future<T> Function() startSession,

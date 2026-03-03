@@ -1,5 +1,6 @@
 import '../../features/_feature_registry.dart';
 
+/// Configuration values for Bigtable tool behavior.
 class BigtableToolSettings {
   BigtableToolSettings({this.maxQueryResultRows = 50});
 

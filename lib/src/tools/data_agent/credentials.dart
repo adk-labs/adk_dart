@@ -5,6 +5,7 @@ const List<String> dataAgentDefaultScope = <String>[
   'https://www.googleapis.com/auth/bigquery',
 ];
 
+/// Credential configuration for Data Agent tools.
 class DataAgentCredentialsConfig extends BaseGoogleCredentialsConfig {
   DataAgentCredentialsConfig({
     super.credentials,

@@ -197,6 +197,7 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
   }
 }
 
+/// Container-backed code executor that runs snippets in Docker.
 class ContainerCodeExecutor extends BaseCodeExecutor {
   /// Creates a container-backed code executor.
   ContainerCodeExecutor({

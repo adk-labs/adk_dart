@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'recordings_schema.dart';
 
+/// In-memory manager for CLI session recordings.
 class RecordingsPlugin {
   RecordingsPlugin({List<SessionRecording>? recordings})
     : _recordings = recordings ?? <SessionRecording>[];

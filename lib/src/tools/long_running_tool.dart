@@ -1,6 +1,7 @@
 import '../models/llm_request.dart';
 import 'function_tool.dart';
 
+/// Function tool marked as long-running for runtime scheduling.
 class LongRunningFunctionTool extends FunctionTool {
   LongRunningFunctionTool({
     required super.func,

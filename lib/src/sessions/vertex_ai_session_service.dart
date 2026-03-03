@@ -102,6 +102,7 @@ VertexAiSessionApiClient _defaultSessionApiClientFactory({
   );
 }
 
+/// HTTP client for Vertex AI session APIs.
 class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
   /// Creates an HTTP-based Vertex session API client.
   VertexAiSessionHttpApiClient({
@@ -444,6 +445,7 @@ Uri _defaultVertexAiSessionUriBuilder({
   );
 }
 
+/// Session service implementation backed by Vertex AI.
 class VertexAiSessionService extends BaseSessionService {
   /// Creates a Vertex AI-backed session service.
   VertexAiSessionService({

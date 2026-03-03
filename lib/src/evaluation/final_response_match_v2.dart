@@ -88,6 +88,7 @@ Label parseCritique(String response) {
   return Label.notFound;
 }
 
+/// LLM-as-a-judge evaluator for semantic final-response matching.
 class FinalResponseMatchV2Evaluator extends LlmAsJudge {
   FinalResponseMatchV2Evaluator(
     this._evalMetric, {

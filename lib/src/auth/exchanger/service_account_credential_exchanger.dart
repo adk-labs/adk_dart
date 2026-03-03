@@ -1,6 +1,7 @@
 import '../auth_credential.dart';
 import 'base_credential_exchanger.dart';
 
+/// Callback signature for exchanging service-account credentials.
 typedef ServiceAccountExchangeHandler =
     Future<AuthCredential?> Function(
       ServiceAccountAuth serviceAccount,

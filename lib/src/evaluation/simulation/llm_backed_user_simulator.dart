@@ -18,6 +18,7 @@ import 'user_simulator_personas.dart';
 const String _authorUser = 'user';
 const String _stopSignal = '</finished>';
 
+/// Configuration for an LLM-backed user simulator.
 class LlmBackedUserSimulatorConfig extends BaseUserSimulatorConfig {
   LlmBackedUserSimulatorConfig({
     this.model = 'gemini-2.5-flash',
@@ -92,6 +93,7 @@ class LlmBackedUserSimulatorConfig extends BaseUserSimulatorConfig {
   }
 }
 
+/// User simulator implementation driven by an LLM.
 class LlmBackedUserSimulator
     extends UserSimulator<LlmBackedUserSimulatorConfig> {
   LlmBackedUserSimulator({

@@ -1,5 +1,6 @@
 import '../../features/_feature_registry.dart';
 
+/// Configuration values for Data Agent tool behavior.
 class DataAgentToolConfig {
   DataAgentToolConfig({this.maxQueryResultRows = 50});
 

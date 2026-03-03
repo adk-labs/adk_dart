@@ -9,6 +9,7 @@ import 'data_insights_tool.dart' as data_insights_tool;
 import 'metadata_tool.dart' as metadata_tool;
 import 'query_tool.dart' as query_tool;
 
+/// Toolset that exposes BigQuery query, metadata, and insights tools.
 class BigQueryToolset extends BaseToolset {
   BigQueryToolset({
     super.toolFilter,

@@ -14,6 +14,7 @@ import 'clients/connections_client.dart';
 import 'clients/integration_client.dart';
 import 'integration_connector_tool.dart';
 
+/// Toolset that discovers Application Integration connectors.
 class ApplicationIntegrationToolset extends BaseToolset {
   ApplicationIntegrationToolset({
     required this.project,

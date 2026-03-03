@@ -58,6 +58,7 @@ Object? _findValueByKey(Object? data, String targetKey) {
   return null;
 }
 
+/// Mock strategy that synthesizes tool outputs from tool specs.
 class ToolSpecMockStrategy extends BaseMockStrategy {
   /// Creates a tool-spec mock strategy.
   ToolSpecMockStrategy({

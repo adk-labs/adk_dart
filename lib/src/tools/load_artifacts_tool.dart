@@ -17,6 +17,7 @@ const Set<String> _textLikeMimeTypes = <String>{
   'application/xml',
 };
 
+/// Tool that loads saved artifacts into the current turn.
 class LoadArtifactsTool extends BaseTool {
   LoadArtifactsTool()
     : super(

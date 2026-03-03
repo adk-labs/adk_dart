@@ -10,6 +10,7 @@ import '../openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 import 'google_api_tool.dart';
 import 'googleapi_to_openapi_converter.dart';
 
+/// Toolset that converts Google Discovery APIs into executable tools.
 class GoogleApiToolset extends BaseToolset {
   GoogleApiToolset(
     this.apiName,
@@ -148,11 +149,15 @@ RestApiRequestExecutor _wrapGoogleApiRequestExecutor(
         if (entry.value != null) entry.key: '${entry.value}',
     };
 
-    final Map<String, Object?> cookieParams = _readMap(requestParams['cookies']);
+    final Map<String, Object?> cookieParams = _readMap(
+      requestParams['cookies'],
+    );
     if (cookieParams.isNotEmpty) {
       final String cookieHeader = cookieParams.entries
           .where((MapEntry<String, Object?> entry) => entry.value != null)
-          .map((MapEntry<String, Object?> entry) => '${entry.key}=${entry.value}')
+          .map(
+            (MapEntry<String, Object?> entry) => '${entry.key}=${entry.value}',
+          )
           .join('; ');
       if (cookieHeader.isNotEmpty) {
         headers['cookie'] = cookieHeader;
@@ -175,15 +180,15 @@ RestApiRequestExecutor _wrapGoogleApiRequestExecutor(
       body: body,
     );
 
-    final int statusCode = _readInt(response['status']) ??
-        _readInt(response['statusCode']) ??
-        500;
+    final int statusCode =
+        _readInt(response['status']) ?? _readInt(response['statusCode']) ?? 500;
     final Object? bodyPayload = response.containsKey('body')
         ? response['body']
         : response['data'];
 
-    final Map<String, List<String>> responseHeaders =
-        _normalizeResponseHeaders(response['headers']);
+    final Map<String, List<String>> responseHeaders = _normalizeResponseHeaders(
+      response['headers'],
+    );
 
     Object? jsonBody;
     String textBody = '';
