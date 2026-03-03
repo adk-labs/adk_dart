@@ -1,3 +1,6 @@
+/// Evaluation trajectory generation helpers for eval sets.
+library;
+
 import '../agents/base_agent.dart';
 import '../events/event.dart';
 import '../models/llm_request.dart';

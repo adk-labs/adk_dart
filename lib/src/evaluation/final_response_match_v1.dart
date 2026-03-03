@@ -1,3 +1,6 @@
+/// ROUGE-based final response matching evaluators.
+library;
+
 import 'conversation_scenarios.dart';
 import 'common.dart';
 import 'eval_case.dart';

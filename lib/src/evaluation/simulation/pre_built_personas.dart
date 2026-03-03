@@ -1,3 +1,6 @@
+/// Prebuilt persona presets for user simulator behaviors.
+library;
+
 import 'user_simulator_personas.dart';
 
 final UserBehavior _advanceDetailOriented = UserBehavior(

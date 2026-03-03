@@ -1,3 +1,6 @@
+/// Static conversation simulator for deterministic evaluation.
+library;
+
 import '../../events/event.dart';
 import '../../types/content.dart';
 import '../eval_case.dart';

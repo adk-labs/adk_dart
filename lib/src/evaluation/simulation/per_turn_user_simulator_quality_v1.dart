@@ -1,3 +1,6 @@
+/// Per-turn quality metric for LLM-backed user simulation.
+library;
+
 import '../../models/base_llm.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';

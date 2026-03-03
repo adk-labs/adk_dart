@@ -1,3 +1,6 @@
+/// Hallucination-detection evaluator driven by LLM judges.
+library;
+
 import 'dart:convert';
 
 import '../models/base_llm.dart';

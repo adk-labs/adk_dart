@@ -1,3 +1,6 @@
+/// Vertex AI Eval facade used by evaluation metrics.
+library;
+
 import 'dart:io';
 import 'dart:math' as math;
 

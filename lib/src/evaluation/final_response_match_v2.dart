@@ -1,3 +1,6 @@
+/// LLM-judge final response matching evaluator implementations.
+library;
+
 import '../models/llm_response.dart';
 import '../types/content.dart';
 import 'eval_case.dart';

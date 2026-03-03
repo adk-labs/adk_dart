@@ -1,3 +1,6 @@
+/// Persona and behavior models for user simulation.
+library;
+
 import '../../errors/not_found_error.dart';
 import '../common.dart';
 

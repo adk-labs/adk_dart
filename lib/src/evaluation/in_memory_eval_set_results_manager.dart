@@ -1,3 +1,6 @@
+/// In-memory evaluation result persistence for tests and local runs.
+library;
+
 import '../errors/not_found_error.dart';
 import 'eval_result.dart';
 import 'eval_set_results_manager.dart';

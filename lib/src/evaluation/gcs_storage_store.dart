@@ -1,3 +1,6 @@
+/// GCS-like storage abstractions for evaluation persistence.
+library;
+
 import 'dart:io';
 
 /// Minimal storage abstraction for GCS-like text object operations.

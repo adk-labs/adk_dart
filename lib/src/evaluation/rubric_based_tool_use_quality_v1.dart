@@ -1,3 +1,6 @@
+/// Rubric-based tool-use quality metric implementation.
+library;
+
 import 'eval_case.dart';
 import 'eval_metrics.dart';
 import 'eval_rubrics.dart';

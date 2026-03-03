@@ -1,3 +1,6 @@
+/// Filesystem-backed evaluation result persistence.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

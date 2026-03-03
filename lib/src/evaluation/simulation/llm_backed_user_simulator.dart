@@ -1,3 +1,6 @@
+/// LLM-backed user simulator for evaluation conversations.
+library;
+
 import '../../events/event.dart';
 import '../../models/base_llm.dart';
 import '../../models/google_llm.dart';

@@ -1,3 +1,6 @@
+/// Cloud Storage-backed evaluation result persistence.
+library;
+
 import 'dart:convert';
 
 import '../errors/not_found_error.dart';

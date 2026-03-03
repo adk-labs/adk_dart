@@ -1,3 +1,6 @@
+/// Custom metric evaluator registration and execution helpers.
+library;
+
 import 'dart:async';
 
 import 'conversation_scenarios.dart';

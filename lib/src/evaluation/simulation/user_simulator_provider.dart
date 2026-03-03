@@ -1,3 +1,6 @@
+/// Provider that selects user simulator implementations.
+library;
+
 import '../eval_case.dart';
 import '../eval_config.dart';
 import 'llm_backed_user_simulator.dart';

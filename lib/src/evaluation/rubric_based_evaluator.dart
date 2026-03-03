@@ -1,3 +1,6 @@
+/// Shared rubric-based evaluator contracts and orchestration helpers.
+library;
+
 import 'dart:developer' as developer;
 
 import '../models/llm_response.dart';

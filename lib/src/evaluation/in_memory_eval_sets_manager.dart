@@ -1,3 +1,6 @@
+/// In-memory evaluation set persistence for tests and local runs.
+library;
+
 import '../errors/not_found_error.dart';
 import 'eval_case.dart';
 import 'eval_set.dart';

@@ -1,3 +1,6 @@
+/// Cloud Storage-backed evaluation set persistence.
+library;
+
 import 'dart:convert';
 
 import 'eval_case.dart';

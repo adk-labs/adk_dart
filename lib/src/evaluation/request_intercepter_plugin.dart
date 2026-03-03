@@ -1,3 +1,6 @@
+/// Plugin that records model requests for evaluation workflows.
+library;
+
 import 'dart:collection';
 
 import '../agents/callback_context.dart';

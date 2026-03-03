@@ -1,3 +1,6 @@
+/// User simulator contracts and shared payload models.
+library;
+
 import '../../events/event.dart';
 import '../../types/content.dart';
 import '../common.dart';

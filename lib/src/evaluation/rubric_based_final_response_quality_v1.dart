@@ -1,3 +1,6 @@
+/// Rubric-based final-response quality metric implementation.
+library;
+
 import 'app_details.dart';
 import 'eval_case.dart';
 import 'eval_metrics.dart';
