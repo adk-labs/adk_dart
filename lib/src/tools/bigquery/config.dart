@@ -1,8 +1,14 @@
 import '../../features/_feature_registry.dart';
 
+/// Write-permission mode for BigQuery mutating operations.
 enum WriteMode {
+  /// Blocks all mutating statements.
   blocked('blocked'),
+
+  /// Allows writes only behind additional safeguards.
   protected('protected'),
+
+  /// Allows mutating statements.
   allowed('allowed');
 
   const WriteMode(this.value);
@@ -25,7 +31,9 @@ enum WriteMode {
   }
 }
 
+/// Runtime configuration for BigQuery-backed tools.
 class BigQueryToolConfig {
+  /// Creates a BigQuery tool configuration.
   BigQueryToolConfig({
     this.writeMode = WriteMode.blocked,
     this.maximumBytesBilled,
@@ -55,10 +63,12 @@ class BigQueryToolConfig {
   final String? location;
   final Map<String, String>? jobLabels;
 
+  /// Ensures the BigQuery tool config feature flag is enabled.
   static void ensureFeatureEnabled({Map<String, String>? environment}) {
     isFeatureEnabled(FeatureName.bigQueryToolConfig, environment: environment);
   }
 
+  /// Decodes BigQuery config values from JSON.
   factory BigQueryToolConfig.fromJson(Map<String, Object?> json) {
     ensureFeatureEnabled();
 
@@ -132,6 +142,7 @@ class BigQueryToolConfig {
     );
   }
 
+  /// Encodes this config for persistence.
   Map<String, Object?> toJson() {
     ensureFeatureEnabled();
 
@@ -149,6 +160,7 @@ class BigQueryToolConfig {
     };
   }
 
+  /// Returns a copy with optional field overrides.
   BigQueryToolConfig copyWith({
     WriteMode? writeMode,
     Object? maximumBytesBilled = _sentinel,
@@ -179,6 +191,7 @@ class BigQueryToolConfig {
     );
   }
 
+  /// Coerces supported object types into [BigQueryToolConfig].
   static BigQueryToolConfig fromObject(Object? value) {
     if (value is BigQueryToolConfig) {
       return value;

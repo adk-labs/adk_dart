@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../../_google_access_token.dart';
 
+/// Fetches a secret payload from Secret Manager.
 typedef SecretManagerSecretFetcher =
     Future<String> Function({
       required String resourceName,
@@ -24,7 +25,9 @@ void resetSecretManagerSecretFetcher() {
   _secretManagerSecretFetcher = _defaultSecretManagerSecretFetcher;
 }
 
+/// Small client for resolving Secret Manager secret values.
 class SecretManagerClient {
+  /// Creates a secret manager client.
   SecretManagerClient({this.serviceAccountJson, this.authToken}) {
     if (serviceAccountJson != null && serviceAccountJson!.isNotEmpty) {
       try {
@@ -35,9 +38,13 @@ class SecretManagerClient {
     }
   }
 
+  /// Optional service-account JSON used to exchange access tokens.
   final String? serviceAccountJson;
+
+  /// Optional pre-resolved auth token.
   final String? authToken;
 
+  /// Resolves the secret text stored at [resourceName].
   Future<String> getSecret(String resourceName) async {
     final String resolvedAuthToken = await _resolveAuthToken(
       serviceAccountJson: serviceAccountJson,
@@ -174,8 +181,8 @@ Future<String?> _resolveServiceAccountToken(String? serviceAccountJson) async {
 
   final http.Client client = http.Client();
   try {
-    final auth.AccessCredentials credentials =
-        await auth.obtainAccessCredentialsViaServiceAccount(
+    final auth.AccessCredentials credentials = await auth
+        .obtainAccessCredentialsViaServiceAccount(
           serviceAccountCredentials,
           const <String>['https://www.googleapis.com/auth/cloud-platform'],
           client,

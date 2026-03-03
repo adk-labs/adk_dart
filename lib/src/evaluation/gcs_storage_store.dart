@@ -1,18 +1,26 @@
 import 'dart:io';
 
+/// Minimal storage abstraction for GCS-like text object operations.
 abstract class GcsStorageStore {
+  /// Returns whether [bucketName] exists.
   Future<bool> bucketExists(String bucketName);
 
+  /// Returns whether [blobName] exists in [bucketName].
   Future<bool> blobExists(String bucketName, String blobName);
 
+  /// Downloads text contents for [blobName], or `null` if absent.
   Future<String?> downloadText(String bucketName, String blobName);
 
+  /// Uploads [contents] to [blobName] in [bucketName].
   Future<void> uploadText(String bucketName, String blobName, String contents);
 
+  /// Lists blob names in [bucketName], optionally filtered by [prefix].
   Future<List<String>> listBlobNames(String bucketName, {String? prefix});
 }
 
+/// Filesystem-backed fake implementation of [GcsStorageStore] for local use.
 class FileSystemGcsStorageStore implements GcsStorageStore {
+  /// Creates a fake GCS store rooted at [rootDirectory].
   FileSystemGcsStorageStore({String? rootDirectory})
     : _rootDirectory = rootDirectory ?? '.adk/fake_gcs';
 
