@@ -4,6 +4,7 @@ library;
 import 'client.dart';
 import 'config.dart';
 
+/// Lists dataset ids available in [projectId].
 Future<Object> listDatasetIds({
   required String projectId,
   required Object credentials,
@@ -32,6 +33,7 @@ Future<Object> listDatasetIds({
   }
 }
 
+/// Returns dataset metadata for [datasetId].
 Future<Map<String, Object?>> getDatasetInfo({
   required String projectId,
   required String datasetId,
@@ -62,6 +64,7 @@ Future<Map<String, Object?>> getDatasetInfo({
   }
 }
 
+/// Lists table ids in [datasetId].
 Future<Object> listTableIds({
   required String projectId,
   required String datasetId,
@@ -93,6 +96,7 @@ Future<Object> listTableIds({
   }
 }
 
+/// Returns table metadata for [tableId].
 Future<Map<String, Object?>> getTableInfo({
   required String projectId,
   required String datasetId,
@@ -130,6 +134,7 @@ Future<Map<String, Object?>> getTableInfo({
   }
 }
 
+/// Returns job metadata for [jobId].
 Future<Map<String, Object?>> getJobInfo({
   required String projectId,
   required String jobId,

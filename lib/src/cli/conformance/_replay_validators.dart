@@ -3,6 +3,7 @@ library;
 
 import 'test_case.dart';
 
+/// Validates one replayed turn by matching expected text against [actualReply].
 ConformanceTurnResult validateTurn(ConformanceTurn turn, String actualReply) {
   final String expected = turn.expectedReplyContains.trim().toLowerCase();
   final String actual = actualReply.toLowerCase();
@@ -13,6 +14,7 @@ ConformanceTurnResult validateTurn(ConformanceTurn turn, String actualReply) {
   );
 }
 
+/// Validates all replay [replies] for the supplied [testCase].
 ConformanceTestResult validateReplay(
   ConformanceTestCase testCase,
   List<String> replies,

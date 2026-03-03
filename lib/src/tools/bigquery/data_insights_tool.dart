@@ -8,6 +8,7 @@ import '../../auth/auth_credential.dart';
 import '../_google_credentials.dart';
 import 'config.dart';
 
+/// API client identifier sent to the Gemini Data Analytics endpoint.
 const String gdaClientId = 'GOOGLE_ADK';
 
 /// Signature for stream providers used by BigQuery insights tools.
@@ -21,6 +22,7 @@ typedef BigQueryInsightsStreamProvider =
 BigQueryInsightsStreamProvider _insightsStreamProvider =
     _defaultInsightsStreamProvider;
 
+/// Executes a BigQuery Data Insights request for [userQueryWithContext].
 Future<Map<String, Object?>> askDataInsights({
   required String projectId,
   required String userQueryWithContext,
@@ -435,12 +437,14 @@ Future<Stream<String>> _defaultInsightsStreamProvider({
   }
 }
 
+/// Replaces the streaming provider used by [askDataInsights].
 void setBigQueryInsightsStreamProvider(
   BigQueryInsightsStreamProvider provider,
 ) {
   _insightsStreamProvider = provider;
 }
 
+/// Restores the default BigQuery insights streaming provider.
 void resetBigQueryInsightsStreamProvider() {
   _insightsStreamProvider = _defaultInsightsStreamProvider;
 }

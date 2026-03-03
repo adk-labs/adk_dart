@@ -8,6 +8,7 @@ import '../tool_context.dart';
 import 'client.dart';
 import 'config.dart';
 
+/// State key used to persist BigQuery protected-session metadata.
 const String bigQuerySessionInfoKey = 'bigquery_session_info';
 
 Future<Map<String, Object?>> _executeSql({
@@ -185,6 +186,7 @@ Future<Map<String, Object?>> _executeSql({
   }
 }
 
+/// Executes [query] against BigQuery using normalized [settings].
 Future<Map<String, Object?>> executeSql({
   required String projectId,
   required String query,
@@ -215,11 +217,13 @@ typedef ExecuteSqlTool =
       bool dryRun,
     });
 
+/// Returns an [ExecuteSqlTool] adapter bound to [settings].
 ExecuteSqlTool getExecuteSql(BigQueryToolConfig settings) {
   settings;
   return executeSql;
 }
 
+/// Runs `AI.FORECAST` over [historyData] and returns forecast rows.
 Future<Map<String, Object?>> forecast({
   required String projectId,
   required String historyData,
@@ -286,6 +290,7 @@ Future<Map<String, Object?>> forecast({
   );
 }
 
+/// Builds a temporary contribution-analysis model and returns insights.
 Future<Map<String, Object?>> analyzeContribution({
   required String projectId,
   required String inputData,
@@ -386,6 +391,7 @@ Future<Map<String, Object?>> analyzeContribution({
   }
 }
 
+/// Builds a temporary ARIMA model and returns anomaly detection results.
 Future<Map<String, Object?>> detectAnomalies({
   required String projectId,
   required String historyData,

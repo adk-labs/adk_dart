@@ -10,10 +10,12 @@ import '../auth/auth_credential.dart';
 import '_google_access_token.dart';
 import '_google_credentials.dart';
 
+/// Default OAuth scope used when exchanging service account credentials.
 const List<String> cloudPlatformScope = <String>[
   'https://www.googleapis.com/auth/cloud-platform',
 ];
 
+/// Attempts to extract a Google access token from [credentials].
 String? tryExtractGoogleAccessToken(Object? credentials) {
   if (credentials == null) {
     return null;
@@ -79,6 +81,7 @@ String? tryExtractGoogleAccessToken(Object? credentials) {
   return null;
 }
 
+/// Resolves a Google access token from [credentials] or ambient defaults.
 Future<String> resolveGoogleAccessToken({
   required Object? credentials,
   List<String> scopes = const <String>[],

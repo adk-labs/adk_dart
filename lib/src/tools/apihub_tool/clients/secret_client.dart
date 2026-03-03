@@ -20,10 +20,12 @@ typedef SecretManagerSecretFetcher =
 SecretManagerSecretFetcher _secretManagerSecretFetcher =
     _defaultSecretManagerSecretFetcher;
 
+/// Overrides the secret fetcher used by [SecretManagerClient].
 void setSecretManagerSecretFetcher(SecretManagerSecretFetcher fetcher) {
   _secretManagerSecretFetcher = fetcher;
 }
 
+/// Restores the default Secret Manager fetcher implementation.
 void resetSecretManagerSecretFetcher() {
   _secretManagerSecretFetcher = _defaultSecretManagerSecretFetcher;
 }

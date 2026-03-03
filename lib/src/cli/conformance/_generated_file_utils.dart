@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'test_case.dart';
 
+/// Writes [testCases] as formatted JSON to [filePath].
 Future<void> writeTestCasesToFile(
   String filePath,
   List<ConformanceTestCase> testCases,
@@ -30,6 +31,9 @@ Future<void> writeTestCasesToFile(
   await file.writeAsString(const JsonEncoder.withIndent('  ').convert(json));
 }
 
+/// Reads conformance test cases from [filePath].
+///
+/// Returns an empty list when the file does not exist.
 Future<List<ConformanceTestCase>> readTestCasesFromFile(String filePath) async {
   final File file = File(filePath);
   if (!await file.exists()) {

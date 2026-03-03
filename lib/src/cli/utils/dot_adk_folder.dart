@@ -3,6 +3,9 @@ library;
 
 import 'dart:io';
 
+/// Coerces [value] to an absolute [Directory].
+///
+/// The [value] can be a [Directory] or a string path.
 Directory directoryFromArg(Object value, {required String parameterName}) {
   if (value is Directory) {
     return value.absolute;
@@ -48,23 +51,29 @@ Directory _resolveAgentDir({
 
 /// Helper for reading and writing files under the `.adk` folder.
 class DotAdkFolder {
+  /// Creates a `.adk` folder helper scoped to [agentDir].
   DotAdkFolder(Object agentDir)
     : _agentDir = directoryFromArg(agentDir, parameterName: 'agentDir');
 
   final Directory _agentDir;
 
+  /// The absolute agent directory this helper points to.
   Directory get agentDir => _agentDir;
 
+  /// The `.adk` directory under [agentDir].
   Directory get dotAdkDir =>
       Directory('${_agentDir.path}${Platform.pathSeparator}.adk');
 
+  /// The artifacts directory under `.adk`.
   Directory get artifactsDir =>
       Directory('${dotAdkDir.path}${Platform.pathSeparator}artifacts');
 
+  /// The SQLite session database path under `.adk`.
   File get sessionDbPath =>
       File('${dotAdkDir.path}${Platform.pathSeparator}session.db');
 }
 
+/// Returns a [DotAdkFolder] resolved from [agentsRoot] and [appName].
 DotAdkFolder dotAdkFolderForAgent({
   required Object agentsRoot,
   required String appName,

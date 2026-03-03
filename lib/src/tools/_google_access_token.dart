@@ -11,6 +11,7 @@ const List<String> _googleAccessTokenEnvKeys = <String>[
   'ACCESS_TOKEN',
 ];
 
+/// Resolves a Google Cloud access token from environment or runtime sources.
 Future<String> resolveDefaultGoogleAccessToken({
   List<String> scopes = const <String>[],
 }) async {

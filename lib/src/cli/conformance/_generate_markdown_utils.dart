@@ -3,6 +3,7 @@ library;
 
 import 'test_case.dart';
 
+/// Builds a markdown report from conformance [results].
 String generateMarkdownReport(List<ConformanceTestResult> results) {
   final StringBuffer out = StringBuffer();
   out.writeln('# ADK Conformance Report');
