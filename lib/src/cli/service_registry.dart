@@ -163,6 +163,7 @@ void loadServicesModule(String agentsDir) {
   }
 }
 
+/// Built-in service registration helpers attached to [ServiceRegistry].
 extension on ServiceRegistry {
   void _registerBuiltinServices() {
     registerSessionService('memory', (
