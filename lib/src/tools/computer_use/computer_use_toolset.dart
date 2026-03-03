@@ -9,6 +9,7 @@ import '../tool_context.dart';
 import 'base_computer.dart';
 import 'computer_use_tool.dart';
 
+/// Base-computer methods that are intentionally excluded from tool adaptation.
 const Set<String> excludedComputerMethods = <String>{
   'screen_size',
   'environment',

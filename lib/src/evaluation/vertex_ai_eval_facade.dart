@@ -7,6 +7,7 @@ import 'eval_result.dart';
 import 'evaluator.dart';
 import 'llm_as_judge_utils.dart';
 
+/// Guidance appended to errors when Vertex AI project/location is missing.
 const String errorMessageSuffix = '''
 You should specify both project id and location. This metric uses Vertex Gen AI
 Eval SDK, and it requires google cloud credentials.
