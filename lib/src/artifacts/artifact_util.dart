@@ -1,3 +1,6 @@
+/// Artifact URI parsing and conversion helpers.
+library;
+
 import '../types/content.dart';
 
 /// Parsed components of an `artifact://` URI.

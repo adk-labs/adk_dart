@@ -1,3 +1,6 @@
+/// Web-safe skill parsing and registry runtime.
+library;
+
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 final RegExp _skillNamePattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');

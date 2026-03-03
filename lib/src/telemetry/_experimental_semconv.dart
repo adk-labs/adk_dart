@@ -1,3 +1,6 @@
+/// Experimental OpenTelemetry semantic-convention helpers for GenAI traces.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

@@ -1,3 +1,6 @@
+/// Skill discovery, parsing, and registry runtime for Dart and Flutter.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

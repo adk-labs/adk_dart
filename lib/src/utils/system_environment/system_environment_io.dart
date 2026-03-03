@@ -1,3 +1,6 @@
+/// IO-backed system environment helpers.
+library;
+
 import 'dart:io';
 
 Map<String, String> readSystemEnvironmentImpl() {

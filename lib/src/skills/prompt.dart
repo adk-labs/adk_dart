@@ -1,3 +1,6 @@
+/// Skill-prompt compatibility exports and deprecated constants.
+library;
+
 import '../tools/skill_toolset.dart' show defaultSkillSystemInstruction;
 
 export 'skill.dart' show formatSkillsAsXml;

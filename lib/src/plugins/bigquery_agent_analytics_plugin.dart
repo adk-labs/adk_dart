@@ -1,3 +1,6 @@
+/// BigQuery analytics plugin and event-delivery support types.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';

@@ -1,3 +1,6 @@
+/// Platform-conditional system environment and runtime version helpers.
+library;
+
 import 'system_environment_stub.dart'
     if (dart.library.io) 'system_environment_io.dart';
 

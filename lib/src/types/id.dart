@@ -1,3 +1,6 @@
+/// Helpers for generating ADK-scoped unique identifiers.
+library;
+
 import 'dart:math';
 
 final Random _random = Random();

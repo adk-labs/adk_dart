@@ -1,3 +1,6 @@
+/// Gemini context-cache lifecycle management helpers.
+library;
+
 import 'dart:convert';
 
 import '../agents/context_cache_config.dart';
