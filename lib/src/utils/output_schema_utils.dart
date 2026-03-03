@@ -1,7 +1,13 @@
+/// Capability checks for structured output schema support.
+library;
+
 import '../models/base_llm.dart';
 import 'model_name_utils.dart';
 import 'variant_utils.dart';
 
+/// Whether [model] can use output schema together with tool calling.
+///
+/// This requires Vertex AI variant and Gemini 2+ models.
 bool canUseOutputSchemaWithTools(
   Object model, {
   Map<String, String>? environment,

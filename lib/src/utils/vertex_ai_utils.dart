@@ -1,6 +1,14 @@
+/// Vertex AI environment and credential helper utilities.
+library;
+
 import 'env_utils.dart';
 import 'system_environment/system_environment.dart';
 
+/// The Express Mode API key resolved from explicit args or environment.
+///
+/// Returns `null` when Vertex AI mode is not enabled.
+/// Throws an [ArgumentError] when both project/location and explicit
+/// [expressModeApiKey] are provided.
 String? getExpressModeApiKey({
   String? project,
   String? location,

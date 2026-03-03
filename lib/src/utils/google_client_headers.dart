@@ -1,5 +1,9 @@
+/// Header helpers for Google API client tracking metadata.
+library;
+
 import 'client_labels_utils.dart';
 
+/// The standard tracking headers for the current runtime context.
 Map<String, String> getTrackingHeaders({Map<String, String>? environment}) {
   final List<String> labels = getClientLabels(environment: environment);
   final String headerValue = labels.join(' ');
@@ -9,6 +13,9 @@ Map<String, String> getTrackingHeaders({Map<String, String>? environment}) {
   };
 }
 
+/// The [headers] map merged with SDK tracking header values.
+///
+/// Existing header tokens are preserved and deduplicated.
 Map<String, String> mergeTrackingHeaders(
   Map<String, String>? headers, {
   Map<String, String>? environment,

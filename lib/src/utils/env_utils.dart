@@ -1,5 +1,11 @@
+/// Environment variable parsing helpers.
+library;
+
 import 'system_environment/system_environment.dart';
 
+/// Whether [envVarName] is enabled in [environment].
+///
+/// Values `true` and `1` are treated as enabled after lowercase conversion.
 bool isEnvEnabled(
   String envVarName, {
   String defaultValue = '0',

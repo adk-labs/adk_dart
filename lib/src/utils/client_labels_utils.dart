@@ -1,3 +1,6 @@
+/// Client label helpers used to populate API telemetry headers.
+library;
+
 import 'dart:async';
 
 import 'system_environment/system_environment.dart';
@@ -10,6 +13,7 @@ const String _agentEngineTelemetryEnvVariableName =
     'GOOGLE_CLOUD_AGENT_ENGINE_ID';
 const Object _labelContextKey = Object();
 
+/// The default client label used by evaluation API calls.
 const String evalClientLabel = 'google-adk-eval/$adkVersion';
 
 List<String> _getDefaultLabels({Map<String, String>? environment}) {
@@ -24,6 +28,10 @@ List<String> _getDefaultLabels({Map<String, String>? environment}) {
   return <String>[frameworkLabel, languageLabel];
 }
 
+/// Runs [operation] with a temporary custom [clientLabel] bound to this zone.
+///
+/// Throws an [ArgumentError] when a custom label already exists in the current
+/// zone scope.
 T clientLabelContext<T>(String clientLabel, T Function() operation) {
   final String? currentClientLabel = Zone.current[_labelContextKey] as String?;
   if (currentClientLabel != null) {
@@ -37,6 +45,10 @@ T clientLabelContext<T>(String clientLabel, T Function() operation) {
   );
 }
 
+/// The client labels for request headers in the current execution context.
+///
+/// This always includes framework and language labels, and appends the
+/// zone-scoped custom label when [clientLabelContext] was used.
 List<String> getClientLabels({Map<String, String>? environment}) {
   final List<String> labels = _getDefaultLabels(environment: environment);
   final String? currentClientLabel = Zone.current[_labelContextKey] as String?;

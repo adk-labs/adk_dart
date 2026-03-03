@@ -1,3 +1,6 @@
+/// Template expansion helpers for agent instruction text.
+library;
+
 import '../agents/invocation_context.dart';
 import '../agents/readonly_context.dart';
 import '../sessions/state.dart';
@@ -6,6 +9,10 @@ import '../types/content.dart';
 final RegExp _templatePattern = RegExp(r'{+[^{}]*}+');
 final RegExp _identifierPattern = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 
+/// The [template] string with session-state placeholders resolved.
+///
+/// Supports optional placeholders (`{name?}`) and artifact placeholders
+/// (`{artifact.filename}`).
 Future<String> injectSessionState(
   String template,
   ReadonlyContext readonlyContext,
@@ -100,6 +107,9 @@ String _artifactToString(Part artifact) {
   return '';
 }
 
+/// Whether [varName] is a valid state key reference.
+///
+/// Supported forms are `name`, `app:name`, `user:name`, and `temp:name`.
 bool isValidStateName(String varName) {
   final List<String> parts = varName.split(':');
   if (parts.length == 1) {

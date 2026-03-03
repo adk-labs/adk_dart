@@ -1,3 +1,6 @@
+/// Console-friendly rendering helpers for agent events.
+library;
+
 import '../events/event.dart';
 import '../types/content.dart';
 
@@ -36,6 +39,10 @@ String _codeOutput(Object? codeExecutionResult) {
   return 'result';
 }
 
+/// Prints a readable representation of [event] to the configured output sink.
+///
+/// When [verbose] is `true`, this includes tool calls, tool responses, code
+/// execution markers, and media placeholders.
 void printEvent(
   Event event, {
   bool verbose = false,

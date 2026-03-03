@@ -1,8 +1,12 @@
+/// Model-name normalization helpers for Google model identifiers.
+library;
+
 import 'env_utils.dart';
 
 const String _disableGeminiModelIdCheckEnvVar =
     'ADK_DISABLE_GEMINI_MODEL_ID_CHECK';
 
+/// Whether Gemini model ID validation is disabled by environment override.
 bool isGeminiModelIdCheckDisabled({Map<String, String>? environment}) {
   return isEnvEnabled(
     _disableGeminiModelIdCheckEnvVar,
@@ -10,6 +14,9 @@ bool isGeminiModelIdCheckDisabled({Map<String, String>? environment}) {
   );
 }
 
+/// The canonical model name extracted from [modelString].
+///
+/// This strips known Vertex AI, Apigee, and `models/` path prefixes.
 String extractModelName(String modelString) {
   final RegExp vertexPath = RegExp(
     r'^projects/[^/]+/locations/[^/]+/publishers/[^/]+/models/(.+)$',
@@ -30,6 +37,7 @@ String extractModelName(String modelString) {
   return modelString;
 }
 
+/// Whether [modelString] represents a Gemini model.
 bool isGeminiModel(String? modelString) {
   if (modelString == null || modelString.isEmpty) {
     return false;
@@ -37,6 +45,7 @@ bool isGeminiModel(String? modelString) {
   return extractModelName(modelString).startsWith('gemini-');
 }
 
+/// Whether [modelString] represents a Gemini 1.x model.
 bool isGemini1Model(String? modelString) {
   if (modelString == null || modelString.isEmpty) {
     return false;
@@ -44,6 +53,7 @@ bool isGemini1Model(String? modelString) {
   return RegExp(r'^gemini-1\.\d+').hasMatch(extractModelName(modelString));
 }
 
+/// Whether [modelString] represents Gemini major version 2 or later.
 bool isGemini2OrAbove(String? modelString) {
   if (modelString == null || modelString.isEmpty) {
     return false;
