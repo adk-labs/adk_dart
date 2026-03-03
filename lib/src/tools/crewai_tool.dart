@@ -3,13 +3,20 @@ import 'function_tool.dart';
 import 'tool_configs.dart';
 import 'tool_context.dart';
 
+/// Resolves a CrewAI tool path to an executable function.
 typedef CrewaiToolResolver = Function Function(String toolPath);
+
+/// Resolves a JSON schema for a CrewAI tool runner.
 typedef CrewaiSchemaResolver =
     Map<String, dynamic>? Function(Function toolRunner);
+
+/// Resolves mandatory argument names for a CrewAI tool runner.
 typedef CrewaiMandatoryArgsResolver =
     List<String> Function(Function toolRunner);
 
+/// Configuration model for [CrewaiTool].
 class CrewaiToolConfig extends BaseToolConfig {
+  /// Creates a CrewAI tool configuration.
   CrewaiToolConfig({
     required this.tool,
     this.name = '',
@@ -17,12 +24,19 @@ class CrewaiToolConfig extends BaseToolConfig {
     super.extras,
   });
 
+  /// Path used by the resolver to locate the CrewAI tool.
   final String tool;
+
+  /// Optional override name for the ADK tool.
   final String name;
+
+  /// Optional description for the ADK tool.
   final String description;
 }
 
+/// Adapter that exposes CrewAI tools through ADK [FunctionTool].
 class CrewaiTool extends FunctionTool {
+  /// Creates a CrewAI tool adapter.
   CrewaiTool({
     required Function toolRunner,
     required List<String> mandatoryArgs,
@@ -41,6 +55,7 @@ class CrewaiTool extends FunctionTool {
   final Map<String, dynamic>? _parametersJsonSchema;
 
   @override
+  /// Validates mandatory args before invoking the wrapped tool function.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -64,6 +79,7 @@ class CrewaiTool extends FunctionTool {
   }
 
   @override
+  /// Returns the configured schema override when available.
   FunctionDeclaration? getDeclaration() {
     final Map<String, dynamic>? schema = _parametersJsonSchema;
     if (schema != null) {
@@ -76,6 +92,7 @@ class CrewaiTool extends FunctionTool {
     return super.getDeclaration();
   }
 
+  /// Builds a [CrewaiTool] from serialized config values.
   static CrewaiTool fromConfig(
     ToolArgsConfig config, {
     required CrewaiToolResolver resolveTool,

@@ -6,19 +6,26 @@ import 'base_tool.dart';
 import 'tool_configs.dart';
 import 'tool_context.dart';
 
+/// Configuration model for [ExampleTool].
 class ExampleToolConfig extends BaseToolConfig {
+  /// Creates an example-tool configuration.
   ExampleToolConfig({required this.examples, super.extras});
 
+  /// Example dataset used to build prompt instructions.
   final Object examples;
 }
 
+/// Tool that injects few-shot examples into model instructions.
 class ExampleTool extends BaseTool {
+  /// Creates an example tool from [examples].
   ExampleTool(this.examples)
     : super(name: 'example_tool', description: 'example tool');
 
+  /// Example dataset source.
   final Object examples;
 
   @override
+  /// Returns `null` because this tool mutates prompt context only.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -27,6 +34,7 @@ class ExampleTool extends BaseTool {
   }
 
   @override
+  /// Appends example-driven system instructions for the current user query.
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
@@ -44,6 +52,7 @@ class ExampleTool extends BaseTool {
     ]);
   }
 
+  /// Builds an [ExampleTool] from serialized config values.
   static ExampleTool fromConfig(ToolArgsConfig config) {
     final Object? examples = config['examples'];
     if (examples is List) {

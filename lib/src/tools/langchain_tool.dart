@@ -3,11 +3,16 @@ import 'function_tool.dart';
 import 'tool_configs.dart';
 import 'tool_context.dart';
 
+/// Resolves a LangChain tool path to an executable function.
 typedef LangchainToolResolver = Function Function(String toolPath);
+
+/// Resolves an optional JSON schema for a LangChain tool runner.
 typedef LangchainSchemaResolver =
     Map<String, dynamic>? Function(Function toolRunner);
 
+/// Configuration model for [LangchainTool].
 class LangchainToolConfig extends BaseToolConfig {
+  /// Creates a LangChain tool configuration.
   LangchainToolConfig({
     required this.tool,
     this.name = '',
@@ -15,12 +20,19 @@ class LangchainToolConfig extends BaseToolConfig {
     super.extras,
   });
 
+  /// Path used by the resolver to locate the LangChain tool.
   final String tool;
+
+  /// Optional override name for the ADK tool.
   final String name;
+
+  /// Optional description for the ADK tool.
   final String description;
 }
 
+/// Adapter that exposes LangChain tools through ADK [FunctionTool].
 class LangchainTool extends FunctionTool {
+  /// Creates a LangChain tool adapter.
   LangchainTool({
     required Function toolRunner,
     String? name,
@@ -36,6 +48,7 @@ class LangchainTool extends FunctionTool {
   final Map<String, dynamic>? _parametersJsonSchema;
 
   @override
+  /// Removes `run_manager` arg before invoking the wrapped tool function.
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -46,6 +59,7 @@ class LangchainTool extends FunctionTool {
   }
 
   @override
+  /// Returns the configured schema override when available.
   FunctionDeclaration? getDeclaration() {
     final Map<String, dynamic>? schema = _parametersJsonSchema;
     if (schema != null) {
@@ -58,6 +72,7 @@ class LangchainTool extends FunctionTool {
     return super.getDeclaration();
   }
 
+  /// Builds a [LangchainTool] from serialized config values.
   static LangchainTool fromConfig(
     ToolArgsConfig config, {
     required LangchainToolResolver resolveTool,
