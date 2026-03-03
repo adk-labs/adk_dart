@@ -1,3 +1,6 @@
+/// Service-account credential exchanger for OpenAPI tools.
+library;
+
 import '../../../../auth/auth_credential.dart';
 import 'base_credential_exchanger.dart';
 

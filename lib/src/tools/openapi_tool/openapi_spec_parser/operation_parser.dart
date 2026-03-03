@@ -1,3 +1,6 @@
+/// Parser for OpenAPI operation signatures, schemas, and parameters.
+library;
+
 import 'dart:convert';
 
 import '../../_gemini_schema_util.dart';

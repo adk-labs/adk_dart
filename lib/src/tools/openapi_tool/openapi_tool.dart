@@ -1,3 +1,6 @@
+/// Public exports for OpenAPI tools, auth, and parser packages.
+library;
+
 export 'auth/auth.dart';
 export 'common/common.dart';
 export 'openapi_spec_parser/openapi_spec_parser_package.dart';

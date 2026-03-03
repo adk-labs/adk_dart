@@ -1,3 +1,6 @@
+/// Public exports for OpenAPI parsing and tool-building components.
+library;
+
 export 'openapi_spec_parser.dart';
 export 'openapi_toolset.dart';
 export 'operation_parser.dart';

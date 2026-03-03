@@ -1,3 +1,6 @@
+/// Shared OpenAPI parsing utilities and identifier normalization helpers.
+library;
+
 import '../../_gemini_schema_util.dart';
 
 /// Renames reserved identifiers by prefixing [value] with [prefix].

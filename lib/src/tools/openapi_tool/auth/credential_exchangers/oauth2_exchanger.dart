@@ -1,3 +1,6 @@
+/// OAuth2/OpenID credential exchanger for OpenAPI tools.
+library;
+
 import '../../../../auth/auth_credential.dart';
 import '../../../../auth/auth_schemes.dart';
 import 'base_credential_exchanger.dart';

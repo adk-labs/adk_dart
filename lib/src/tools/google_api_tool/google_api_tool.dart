@@ -1,3 +1,6 @@
+/// Google API operation models and executable tool wrappers.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

@@ -1,3 +1,6 @@
+/// Toolset that builds executable tools from Google Discovery APIs.
+library;
+
 import 'dart:convert';
 
 import '../../agents/readonly_context.dart';

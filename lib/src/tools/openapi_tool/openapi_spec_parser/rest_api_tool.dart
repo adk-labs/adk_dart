@@ -1,3 +1,6 @@
+/// REST API tool wrapper built from parsed OpenAPI operations.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

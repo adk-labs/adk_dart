@@ -1,3 +1,6 @@
+/// Public exports for OpenAPI auth credential exchangers.
+library;
+
 export 'auto_auth_credential_exchanger.dart';
 export 'base_credential_exchanger.dart';
 export 'oauth2_exchanger.dart';

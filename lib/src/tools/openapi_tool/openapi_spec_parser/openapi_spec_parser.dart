@@ -1,3 +1,6 @@
+/// OpenAPI specification parser and endpoint metadata models.
+library;
+
 import 'dart:convert';
 
 import '../../_gemini_schema_util.dart';

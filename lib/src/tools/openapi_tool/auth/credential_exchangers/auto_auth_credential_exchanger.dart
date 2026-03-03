@@ -1,3 +1,6 @@
+/// Credential exchanger that delegates to type-specific exchangers.
+library;
+
 import '../../../../auth/auth_credential.dart';
 import 'base_credential_exchanger.dart';
 import 'oauth2_exchanger.dart';

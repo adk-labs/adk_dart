@@ -1,3 +1,6 @@
+/// Preconfigured Google API toolset wrappers for common services.
+library;
+
 import '../../auth/auth_credential.dart';
 import 'google_api_tool.dart';
 import 'google_api_toolset.dart';

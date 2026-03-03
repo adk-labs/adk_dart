@@ -1,3 +1,6 @@
+/// Converter from Google Discovery specs to OpenAPI documents.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

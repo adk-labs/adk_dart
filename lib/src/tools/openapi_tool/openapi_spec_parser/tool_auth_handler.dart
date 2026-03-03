@@ -1,3 +1,6 @@
+/// Auth preparation and refresh handling for OpenAPI tool invocations.
+library;
+
 import 'dart:convert';
 
 import '../../../auth/auth_credential.dart';

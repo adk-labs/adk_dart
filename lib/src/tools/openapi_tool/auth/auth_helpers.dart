@@ -1,3 +1,6 @@
+/// Helpers that bind auth schemes and credentials to OpenAPI operations.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

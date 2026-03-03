@@ -1,3 +1,6 @@
+/// Base contracts and errors for auth credential exchangers.
+library;
+
 import '../../../../auth/auth_credential.dart';
 
 /// Error thrown when required auth credentials are missing.

@@ -1,3 +1,6 @@
+/// Toolset that turns OpenAPI specs into executable REST tools.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
