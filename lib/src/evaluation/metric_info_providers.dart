@@ -1,3 +1,6 @@
+/// Shared evaluation models and utility helpers.
+library;
+
 import 'eval_metrics.dart';
 
 /// Metric metadata provider for tool trajectory evaluation.

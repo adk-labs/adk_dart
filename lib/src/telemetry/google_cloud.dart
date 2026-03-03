@@ -1,3 +1,6 @@
+/// Telemetry configuration, exporters, and tracing helpers.
+library;
+
 import 'dart:developer' as developer;
 import 'dart:io';
 

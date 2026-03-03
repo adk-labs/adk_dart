@@ -1,3 +1,6 @@
+/// Telemetry configuration, exporters, and tracing helpers.
+library;
+
 import 'dart:io';
 
 /// Environment key for the base OTLP endpoint.

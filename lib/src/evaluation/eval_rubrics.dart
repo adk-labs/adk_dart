@@ -1,3 +1,6 @@
+/// Shared evaluation models and utility helpers.
+library;
+
 import 'common.dart';
 
 /// Rubric body content used by LLM-as-judge criteria.

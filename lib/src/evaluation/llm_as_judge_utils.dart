@@ -1,3 +1,6 @@
+/// Shared evaluation models and utility helpers.
+library;
+
 import 'dart:convert';
 
 import 'app_details.dart';

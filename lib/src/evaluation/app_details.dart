@@ -1,3 +1,6 @@
+/// Shared evaluation models and utility helpers.
+library;
+
 import 'common.dart';
 
 /// Per-agent metadata captured during one invocation.

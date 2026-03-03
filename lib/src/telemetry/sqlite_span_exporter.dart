@@ -1,3 +1,6 @@
+/// Telemetry configuration, exporters, and tracing helpers.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

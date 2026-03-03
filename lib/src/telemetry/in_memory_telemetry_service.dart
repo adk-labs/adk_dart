@@ -1,3 +1,6 @@
+/// Telemetry configuration, exporters, and tracing helpers.
+library;
+
 import '../types/id.dart';
 import 'base_telemetry_service.dart';
 

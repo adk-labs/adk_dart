@@ -1,3 +1,6 @@
+/// Shared evaluation models and utility helpers.
+library;
+
 import 'common.dart';
 import 'simulation/pre_built_personas.dart';
 import 'simulation/user_simulator_personas.dart';
