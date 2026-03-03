@@ -1,3 +1,6 @@
+/// Spanner REST client contracts and model types.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

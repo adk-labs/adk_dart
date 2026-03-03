@@ -1,3 +1,6 @@
+/// BigQuery SQL execution helpers for ADK tool handlers.
+library;
+
 import 'dart:convert';
 import 'dart:math';
 

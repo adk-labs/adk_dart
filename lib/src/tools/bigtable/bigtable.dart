@@ -1,3 +1,6 @@
+/// Public exports for Bigtable tool modules.
+library;
+
 export 'bigtable_credentials.dart';
 export 'bigtable_toolset.dart';
 export 'client.dart';

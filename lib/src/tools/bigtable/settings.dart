@@ -1,3 +1,6 @@
+/// Bigtable tool settings and JSON decoding helpers.
+library;
+
 import '../../features/_feature_registry.dart';
 
 /// Configuration values for Bigtable tool behavior.

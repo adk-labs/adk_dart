@@ -1,3 +1,6 @@
+/// Runtime configuration model for Pub/Sub toolsets.
+library;
+
 import '../../features/_feature_registry.dart';
 
 /// Runtime configuration for Pub/Sub-backed tools.

@@ -1,3 +1,6 @@
+/// BigQuery metadata query helpers used by tool handlers.
+library;
+
 import 'client.dart';
 import 'config.dart';
 

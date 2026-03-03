@@ -1,3 +1,6 @@
+/// Pub/Sub client contracts and REST request implementations.
+library;
+
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';

@@ -1,3 +1,6 @@
+/// Spanner SQL query helpers used by tool callbacks.
+library;
+
 import '../tool_context.dart';
 import 'settings.dart';
 import 'utils.dart' as utils;

@@ -1,3 +1,6 @@
+/// Credential defaults and cache keys for Spanner tools.
+library;
+
 import '../_google_credentials.dart';
 
 /// Token cache key used for Spanner credential refresh flow.

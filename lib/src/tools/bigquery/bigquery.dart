@@ -1,3 +1,6 @@
+/// Public exports for BigQuery tool modules.
+library;
+
 export 'bigquery_credentials.dart';
 export 'bigquery_toolset.dart';
 export 'client.dart';

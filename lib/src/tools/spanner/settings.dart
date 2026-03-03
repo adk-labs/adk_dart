@@ -1,3 +1,6 @@
+/// Spanner tool settings, capabilities, and validation helpers.
+library;
+
 import '../../features/_feature_registry.dart';
 
 /// The exact nearest-neighbor search algorithm name used by Spanner.

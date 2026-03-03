@@ -1,3 +1,6 @@
+/// Bigtable REST client models and request helpers.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

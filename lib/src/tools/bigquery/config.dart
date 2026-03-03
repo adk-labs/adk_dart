@@ -1,3 +1,6 @@
+/// BigQuery tool configuration models and parsing helpers.
+library;
+
 import '../../features/_feature_registry.dart';
 
 /// Write-permission mode for BigQuery mutating operations.

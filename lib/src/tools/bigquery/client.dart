@@ -1,3 +1,6 @@
+/// BigQuery REST client models and request helpers.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

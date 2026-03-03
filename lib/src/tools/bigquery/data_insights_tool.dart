@@ -1,3 +1,6 @@
+/// BigQuery Data Insights API wrappers and stream helpers.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

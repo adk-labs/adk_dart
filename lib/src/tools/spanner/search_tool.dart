@@ -1,3 +1,6 @@
+/// Spanner vector-search helpers and query builders.
+library;
+
 import 'dart:convert';
 
 import 'client.dart';

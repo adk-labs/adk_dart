@@ -1,3 +1,6 @@
+/// Spanner metadata helper functions for table discovery.
+library;
+
 import 'dart:convert';
 
 import 'client.dart';

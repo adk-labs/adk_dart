@@ -1,3 +1,6 @@
+/// Credential defaults and cache keys for BigQuery tool access.
+library;
+
 import '../_google_credentials.dart';
 
 const String bigqueryTokenCacheKey = 'bigquery_token_cache';

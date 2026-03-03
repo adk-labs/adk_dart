@@ -1,3 +1,6 @@
+/// Public exports for Spanner tool modules.
+library;
+
 export 'client.dart';
 export 'metadata_tool.dart';
 export 'query_tool.dart';
