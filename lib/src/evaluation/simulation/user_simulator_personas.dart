@@ -46,6 +46,7 @@ class UserBehavior {
     return behaviorInstructions.map((String i) => '  * $i').join('\n');
   }
 
+  /// Returns bullet-formatted violation rubric identifiers.
   String getViolationRubricsStr() {
     return violationRubrics.map((String i) => '  * $i').join('\n');
   }

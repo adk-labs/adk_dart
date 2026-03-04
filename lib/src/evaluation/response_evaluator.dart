@@ -11,6 +11,7 @@ import 'final_response_match_v1.dart';
 
 /// Evaluator for final-response matching metrics.
 class ResponseEvaluator extends Evaluator {
+  /// Creates a response evaluator from threshold values or [evalMetric].
   ResponseEvaluator({
     double? threshold,
     String? metricName,

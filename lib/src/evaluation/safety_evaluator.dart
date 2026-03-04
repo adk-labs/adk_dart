@@ -10,6 +10,7 @@ import 'evaluator.dart';
 
 /// Evaluator for safety policy adherence metrics.
 class SafetyEvaluatorV1 extends Evaluator {
+  /// Creates a safety evaluator using [_evalMetric].
   SafetyEvaluatorV1(this._evalMetric);
 
   final EvalMetricSpec _evalMetric;

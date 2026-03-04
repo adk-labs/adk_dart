@@ -103,6 +103,7 @@ IMPORTANT: Make sure for each of the property listed, follow the example steps a
 
 /// Evaluator for rubric-based tool-use quality.
 class RubricBasedToolUseV1Evaluator extends RubricBasedEvaluator {
+  /// Creates a rubric-based tool-use evaluator from [evalMetric].
   RubricBasedToolUseV1Evaluator(
     EvalMetricSpec evalMetric, {
     AutoRaterInvoker? autoRaterInvoker,

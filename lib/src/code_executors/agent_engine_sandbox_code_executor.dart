@@ -95,6 +95,7 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
     );
   }
 
+  /// Sandbox resource name used for execution requests.
   String? sandboxResourceName;
   final AgentEngineSandboxClient? _sandboxClient;
   String? _agentEngineResourceName;

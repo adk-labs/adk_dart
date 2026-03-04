@@ -188,6 +188,7 @@ class _EvaluationStep {
 
 /// Evaluator for hallucination metrics using LLM-judge prompts.
 class HallucinationsV1Evaluator extends Evaluator {
+  /// Creates a hallucination evaluator from [evalMetric].
   HallucinationsV1Evaluator(
     EvalMetricSpec evalMetric, {
     BaseLlm Function(String model)? llmFactory,
@@ -215,7 +216,10 @@ class HallucinationsV1Evaluator extends Evaluator {
   late final JudgeModelOptions _judgeModelOptions;
   late final BaseLlm _judgeModel;
 
+  /// Prompt used to segment model responses into atomic statements.
   String segmenterPrompt = _hallucinationsV1SegmenterPrompt;
+
+  /// Prompt used to classify each statement against context.
   String sentenceValidatorPrompt = _hallucinationsV1ValidatorPrompt;
 
   @override

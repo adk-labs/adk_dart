@@ -11,6 +11,7 @@ import 'evaluator.dart';
 
 /// Evaluator for tool-trajectory quality metrics.
 class TrajectoryEvaluator extends Evaluator {
+  /// Creates a trajectory evaluator from [threshold] or [evalMetric].
   TrajectoryEvaluator({double? threshold, EvalMetricSpec? evalMetric}) {
     if (threshold != null && evalMetric != null) {
       throw ArgumentError(

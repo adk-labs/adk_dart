@@ -18,6 +18,7 @@ import 'per_turn_user_simulator_quality_prompts.dart';
 
 /// Evaluator for per-turn user simulator response quality.
 class PerTurnUserSimulatorQualityV1 extends Evaluator {
+  /// Creates a per-turn simulator-quality evaluator from [evalMetric].
   PerTurnUserSimulatorQualityV1(
     EvalMetricSpec evalMetric, {
     BaseLlm Function(String model)? llmFactory,

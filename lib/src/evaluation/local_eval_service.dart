@@ -13,6 +13,7 @@ import 'eval_result.dart';
 
 /// Local evaluation service that runs eval cases with an in-memory runner.
 class LocalEvalService extends BaseEvalService {
+  /// Creates a local eval service bound to [rootAgent].
   LocalEvalService({required BaseAgent rootAgent, String appName = 'eval_app'})
     : _runner = InMemoryRunner(agent: rootAgent, appName: appName);
 

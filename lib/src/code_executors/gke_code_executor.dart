@@ -73,14 +73,31 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     GkeApiClient? apiClient,
   }) : _apiClient = apiClient;
 
+  /// Kubernetes namespace where jobs are created.
   final String namespace;
+
+  /// Container image used for execution jobs.
   final String image;
+
+  /// Timeout in seconds applied to job execution.
   final int timeoutSeconds;
+
+  /// Requested CPU resources for the job container.
   final String cpuRequested;
+
+  /// Requested memory resources for the job container.
   final String memRequested;
+
+  /// CPU limit for the job container.
   final String cpuLimit;
+
+  /// Memory limit for the job container.
   final String memLimit;
+
+  /// Optional kubeconfig path used by external clients.
   final String? kubeconfigPath;
+
+  /// Optional kubeconfig context used by external clients.
   final String? kubeconfigContext;
   final GkeApiClient? _apiClient;
 
@@ -300,6 +317,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     }
   }
 
+  /// Builds a ConfigMap payload containing [code] under `code.py`.
   Map<String, Object?> createCodeConfigMapBody(String name, String code) {
     return <String, Object?>{
       'metadata': <String, Object?>{'name': name},
@@ -307,6 +325,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     };
   }
 
+  /// Builds a patch payload that adds an owner reference to a ConfigMap.
   Map<String, Object?> addOwnerReferencePatch({
     required String ownerApiVersion,
     required String ownerKind,

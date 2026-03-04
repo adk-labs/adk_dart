@@ -75,7 +75,10 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
              return Process.run(executable, arguments);
            });
 
+  /// Docker CLI binary used for runtime commands.
   final String dockerBinary;
+
+  /// Optional Docker host passed as `-H`.
   final String? host;
   final DockerProcessRunner _processRunner;
 
@@ -230,8 +233,13 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     }
   }
 
+  /// Optional Docker host URL passed to the runtime client.
   final String? baseUrl;
+
+  /// Docker image tag used for code execution.
   final String image;
+
+  /// Optional Docker build context path for custom images.
   final String? dockerPath;
   final ContainerRuntimeClient _runtimeClient;
 
@@ -277,6 +285,7 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     }
   }
 
+  /// Stops and clears the currently running container, if present.
   Future<void> closeContainer() async {
     final String? containerId = _containerId;
     _containerId = null;

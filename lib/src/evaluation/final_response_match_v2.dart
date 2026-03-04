@@ -96,6 +96,7 @@ Label parseCritique(String response) {
 
 /// LLM-as-a-judge evaluator for semantic final-response matching.
 class FinalResponseMatchV2Evaluator extends LlmAsJudge {
+  /// Creates an LLM-judge evaluator for semantic response matching.
   FinalResponseMatchV2Evaluator(
     this._evalMetric, {
     AutoRaterInvoker? autoRaterInvoker,

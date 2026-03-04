@@ -14,6 +14,7 @@ const String _evalSetResultFileExtension = '.evalset_result.json';
 
 /// Filesystem-backed eval result manager for local history.
 class LocalEvalSetResultsManager extends EvalSetResultsManager {
+  /// Creates a local eval result manager rooted at [_agentsDir].
   LocalEvalSetResultsManager(this._agentsDir);
 
   final String _agentsDir;

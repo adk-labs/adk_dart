@@ -205,6 +205,7 @@ Verdict: yes
 
 /// Evaluator for rubric-based final response quality.
 class RubricBasedFinalResponseQualityV1Evaluator extends RubricBasedEvaluator {
+  /// Creates a rubric-based final-response evaluator from [evalMetric].
   RubricBasedFinalResponseQualityV1Evaluator(
     EvalMetricSpec evalMetric, {
     AutoRaterInvoker? autoRaterInvoker,

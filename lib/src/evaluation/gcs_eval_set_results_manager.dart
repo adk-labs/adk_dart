@@ -14,16 +14,20 @@ const String _evalSetResultFileExtension = '.evalset_result.json';
 
 /// Cloud Storage-backed eval result manager.
 class GcsEvalSetResultsManager extends EvalSetResultsManager {
+  /// Creates a Cloud Storage-backed eval result manager.
   GcsEvalSetResultsManager({
     required this.bucketName,
     GcsStorageStore? storageStore,
   }) : _storageStore = storageStore ?? FileSystemGcsStorageStore();
 
+  /// Cloud Storage bucket name used for eval result blobs.
   final String bucketName;
   final GcsStorageStore _storageStore;
 
+  /// Returns the eval-history directory prefix for [appName].
   String getEvalHistoryDir(String appName) => '$appName/$_evalHistoryDir';
 
+  /// Returns the blob path for one eval set result id.
   String getEvalSetResultBlobName(String appName, String evalSetResultId) {
     return '${getEvalHistoryDir(appName)}/'
         '$evalSetResultId$_evalSetResultFileExtension';

@@ -10,4 +10,5 @@ export 'skill.dart' show formatSkillsAsXml;
   'Import it from tools.skill_toolset instead.',
 )
 // ignore: constant_identifier_names
+/// Backward-compatible alias for [defaultSkillSystemInstruction].
 const String DEFAULT_SKILL_SYSTEM_INSTRUCTION = defaultSkillSystemInstruction;

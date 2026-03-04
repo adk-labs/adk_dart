@@ -46,10 +46,15 @@ class BaseLlmFlow {
   /// Creates a base LLM flow.
   BaseLlmFlow();
 
+  /// Request processors applied before model generation.
   final List<BaseLlmRequestProcessor> requestProcessors =
       <BaseLlmRequestProcessor>[];
+
+  /// Response processors applied after model generation.
   final List<BaseLlmResponseProcessor> responseProcessors =
       <BaseLlmResponseProcessor>[];
+
+  /// Cache manager used for live audio blob handling.
   final AudioCacheManager audioCacheManager = AudioCacheManager();
 
   /// Runs the flow in live mode when a live queue is available.

@@ -34,7 +34,11 @@ class AgentCardBuilder {
   final BaseAgent _agent;
   final String _rpcUrl;
   final AgentCapabilities _capabilities;
+
+  /// Optional documentation URL included in the generated card.
   final String? docUrl;
+
+  /// Optional provider metadata included in the generated card.
   final AgentProvider? provider;
   final String _agentVersion;
   final Map<String, SecurityScheme> _securitySchemes;

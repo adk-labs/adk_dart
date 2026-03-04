@@ -51,6 +51,7 @@ abstract class LlmAsJudge extends Evaluator {
     _judgeModel = _setupAutoRater();
   }
 
+  /// Whether this evaluator requires expected invocations.
   final bool expectedInvocationsRequired;
   final AutoRaterInvoker? _autoRaterInvoker;
 

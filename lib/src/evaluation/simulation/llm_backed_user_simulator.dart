@@ -23,6 +23,7 @@ const String _stopSignal = '</finished>';
 
 /// Configuration for an LLM-backed user simulator.
 class LlmBackedUserSimulatorConfig extends BaseUserSimulatorConfig {
+  /// Creates configuration for an LLM-backed user simulator.
   LlmBackedUserSimulatorConfig({
     this.model = 'gemini-2.5-flash',
     GenerateContentConfig? modelConfiguration,
@@ -54,11 +55,19 @@ class LlmBackedUserSimulatorConfig extends BaseUserSimulatorConfig {
     }
   }
 
+  /// Model id used to generate simulated user turns.
   final String model;
+
+  /// Generation configuration used for simulator requests.
   final GenerateContentConfig modelConfiguration;
+
+  /// Maximum number of simulator invocations before stopping.
   final int maxAllowedInvocations;
+
+  /// Optional custom instruction template for turn generation.
   final String? customInstructions;
 
+  /// Builds a simulator config from [config].
   factory LlmBackedUserSimulatorConfig.fromBase(
     BaseUserSimulatorConfig config,
   ) {
@@ -99,6 +108,7 @@ class LlmBackedUserSimulatorConfig extends BaseUserSimulatorConfig {
 /// User simulator implementation driven by an LLM.
 class LlmBackedUserSimulator
     extends UserSimulator<LlmBackedUserSimulatorConfig> {
+  /// Creates an LLM-backed simulator for [conversationScenario].
   LlmBackedUserSimulator({
     required BaseUserSimulatorConfig config,
     required ConversationScenario conversationScenario,
@@ -120,6 +130,7 @@ class LlmBackedUserSimulator
   late final BaseLlm _llm;
   int _invocationCount;
 
+  /// Converts conversation [events] to plain transcript text.
   String summarizeConversation(List<Event> events) {
     final List<String> rewrittenDialogue = <String>[];
     for (final Event event in events) {
@@ -137,6 +148,7 @@ class LlmBackedUserSimulator
     return rewrittenDialogue.join('\n\n');
   }
 
+  /// Produces the next simulator message from [rewrittenDialogue].
   Future<String> getLlmResponse(String rewrittenDialogue) async {
     if (_invocationCount == 0) {
       return _conversationScenario.startingPrompt;

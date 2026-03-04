@@ -10,6 +10,7 @@ import 'evaluator.dart';
 
 /// Evaluator that scores final responses with ROUGE-style matching.
 class RougeEvaluator extends Evaluator {
+  /// Creates a ROUGE evaluator using [_evalMetric].
   RougeEvaluator(this._evalMetric);
 
   final EvalMetricSpec _evalMetric;

@@ -14,6 +14,7 @@ const String llmRequestIdKey = '__llm_request_key__';
 
 /// Plugin that captures model requests for evaluation workflows.
 class RequestIntercepterPlugin extends BasePlugin {
+  /// Creates a request-capture plugin with bounded cache size.
   RequestIntercepterPlugin({
     String name = 'request_intercepter_plugin',
     int maxCachedRequests = 1000,

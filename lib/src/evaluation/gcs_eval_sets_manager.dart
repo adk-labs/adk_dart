@@ -14,18 +14,23 @@ const String _evalSetFileExtension = '.evalset.json';
 
 /// Cloud Storage-backed eval set manager.
 class GcsEvalSetsManager extends EvalSetsManager {
+  /// Creates a Cloud Storage-backed eval set manager.
   GcsEvalSetsManager({required this.bucketName, GcsStorageStore? storageStore})
     : _storageStore = storageStore ?? FileSystemGcsStorageStore();
 
+  /// Cloud Storage bucket name used for eval set blobs.
   final String bucketName;
   final GcsStorageStore _storageStore;
 
+  /// Returns the eval-set directory prefix for [appName].
   String getEvalSetsDir(String appName) => '$appName/$_evalSetsDir';
 
+  /// Returns the blob path for one eval set id.
   String getEvalSetBlobName(String appName, String evalSetId) {
     return '${getEvalSetsDir(appName)}/$evalSetId$_evalSetFileExtension';
   }
 
+  /// Validates identifier format for user-facing ids.
   void validateId({required String idName, required String idValue}) {
     final RegExp pattern = RegExp(r'^[a-zA-Z0-9_]+$');
     if (!pattern.hasMatch(idValue)) {

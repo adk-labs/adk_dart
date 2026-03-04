@@ -409,8 +409,13 @@ class StorageAppStateV0 {
   }) : state = state ?? <String, Object?>{},
        updateTime = updateTime ?? DateTime.now().toUtc();
 
+  /// App name that owns this persisted state row.
   final String appName;
+
+  /// Persisted application state payload.
   final Map<String, Object?> state;
+
+  /// Last update timestamp.
   final DateTime updateTime;
 
   /// Creates application-state row from JSON.
@@ -443,9 +448,16 @@ class StorageUserStateV0 {
   }) : state = state ?? <String, Object?>{},
        updateTime = updateTime ?? DateTime.now().toUtc();
 
+  /// App name that owns this persisted state row.
   final String appName;
+
+  /// User id for this persisted state row.
   final String userId;
+
+  /// Persisted user state payload.
   final Map<String, Object?> state;
+
+  /// Last update timestamp.
   final DateTime updateTime;
 
   /// Creates user-state row from JSON.
