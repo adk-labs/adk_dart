@@ -15,6 +15,17 @@ import 'dot_adk_folder.dart';
 /// Internal app key used for CLI built-in agents.
 const String builtInSessionServiceKey = '__adk_built_in_session_service__';
 
+bool _isAbsolutePath(String path) {
+  final String normalized = path.trim();
+  if (normalized.isEmpty) {
+    return false;
+  }
+  if (normalized.startsWith('/') || normalized.startsWith(r'\')) {
+    return true;
+  }
+  return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(normalized);
+}
+
 /// Creates a SQLite-backed session service rooted at [baseDir].
 BaseSessionService createLocalDatabaseSessionService({
   required Object baseDir,
@@ -88,6 +99,10 @@ class PerAgentDatabaseSessionService extends BaseSessionService {
       final BaseSessionService created;
       if (key == builtInSessionServiceKey) {
         created = createLocalDatabaseSessionService(baseDir: _agentsRoot.path);
+      } else if (_isAbsolutePath(key)) {
+        // appNameToDir entries may already be absolute paths (for example from
+        // web server directory discovery); avoid prefixing agentsRoot again.
+        created = createLocalDatabaseSessionService(baseDir: key);
       } else {
         final DotAdkFolder folder = dotAdkFolderForAgent(
           agentsRoot: _agentsRoot.path,
