@@ -189,6 +189,7 @@ class McpRemoteClient {
     );
   }
 
+  /// Whether [capabilityName] was negotiated for [connectionParams].
   bool hasNegotiatedCapability(
     StreamableHTTPConnectionParams connectionParams,
     String capabilityName,
