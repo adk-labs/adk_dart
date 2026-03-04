@@ -52,9 +52,16 @@ class ConnectionsClient {
        _pollInterval = pollInterval ?? const Duration(seconds: 1),
        _sleeper = sleeper ?? Future<void>.delayed;
 
+  /// Google Cloud project id.
   final String project;
+
+  /// Google Cloud location id.
   final String location;
+
+  /// Connection id or name.
   final String connection;
+
+  /// Optional service-account JSON used for token resolution.
   final String? serviceAccountJson;
 
   final ApplicationIntegrationRequestExecutor _requestExecutor;
@@ -62,6 +69,7 @@ class ConnectionsClient {
   final Duration _pollInterval;
   final Future<void> Function(Duration duration) _sleeper;
 
+  /// Base URL for Connector APIs.
   final String connectorUrl = 'https://connectors.googleapis.com';
   String? _cachedAccessToken;
 
@@ -935,6 +943,7 @@ class ConnectionsClient {
   }
 }
 
+/// Default HTTP executor used by [ConnectionsClient].
 Future<ApplicationIntegrationHttpResponse>
 defaultApplicationIntegrationRequestExecutor({
   required Uri uri,
@@ -961,6 +970,7 @@ defaultApplicationIntegrationRequestExecutor({
   }
 }
 
+/// Default access-token provider used by [ConnectionsClient].
 Future<String?> defaultApplicationIntegrationAccessTokenProvider({
   String? serviceAccountJson,
 }) async {

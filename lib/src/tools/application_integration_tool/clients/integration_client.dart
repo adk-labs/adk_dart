@@ -8,6 +8,7 @@ import 'connections_client.dart';
 
 /// Client for listing and resolving Application Integration resources.
 class IntegrationClient {
+  /// Creates an integration metadata client.
   IntegrationClient({
     required this.project,
     required this.location,
@@ -35,14 +36,31 @@ class IntegrationClient {
        _pollInterval = pollInterval ?? const Duration(seconds: 1),
        _sleeper = sleeper ?? Future<void>.delayed;
 
+  /// Google Cloud project id.
   final String project;
+
+  /// Google Cloud location id.
   final String location;
+
+  /// Optional connection template override.
   final String? connectionTemplateOverride;
+
+  /// Optional integration resource name.
   final String? integration;
+
+  /// Trigger ids used for integration-mode requests.
   final List<String> triggers;
+
+  /// Optional connection name used for connector-mode requests.
   final String? connection;
+
+  /// Requested entity operations by entity name.
   final Map<String, List<String>> entityOperations;
+
+  /// Requested connector actions.
   final List<String> actions;
+
+  /// Optional service-account JSON used for token resolution.
   final String? serviceAccountJson;
 
   final ApplicationIntegrationRequestExecutor _requestExecutor;
@@ -54,6 +72,7 @@ class IntegrationClient {
   String? _cachedAccessToken;
   String? _quotaProjectId;
 
+  /// Generates an OpenAPI spec for the configured integration triggers.
   Future<Map<String, Object?>> getOpenApiSpecForIntegration() async {
     try {
       final String integrationName = integration ?? '';
@@ -119,6 +138,7 @@ class IntegrationClient {
     }
   }
 
+  /// Generates an OpenAPI spec for connector entities and [actions].
   Future<Map<String, Object?>> getOpenApiSpecForConnection({
     String toolName = '',
     String toolInstructions = '',

@@ -19,6 +19,7 @@ import 'integration_connector_tool.dart';
 
 /// Toolset that discovers Application Integration connectors.
 class ApplicationIntegrationToolset extends BaseToolset {
+  /// Creates an Application Integration toolset.
   ApplicationIntegrationToolset({
     required this.project,
     required this.location,
@@ -62,19 +63,46 @@ class ApplicationIntegrationToolset extends BaseToolset {
     _prepareFuture = _prepareToolset();
   }
 
+  /// Google Cloud project id.
   final String project;
+
+  /// Google Cloud location id.
   final String location;
+
+  /// Optional connection template override.
   final String? connectionTemplateOverride;
+
+  /// Optional integration resource name.
   final String? integration;
+
+  /// Trigger ids used for integration-mode spec generation.
   final List<String> triggers;
+
+  /// Optional connection name used for connector-mode spec generation.
   final String? connection;
+
+  /// Requested entity operations by entity name.
   final Map<String, List<String>> entityOperations;
+
+  /// Requested connector actions.
   final List<String> actions;
+
+  /// Additional tool instructions injected into generated operations.
   final String toolInstructions;
+
+  /// Optional service-account JSON string.
   final String? serviceAccountJson;
+
+  /// Optional auth scheme used for connector tool overrides.
   final AuthScheme? authScheme;
+
+  /// Optional auth credential used for connector tool overrides.
   final AuthCredential? authCredential;
+
+  /// Optional preconfigured integration client.
   final IntegrationClient? integrationClient;
+
+  /// Optional preconfigured connections client.
   final ConnectionsClient? connectionsClient;
 
   final AuthConfig? _authConfig;

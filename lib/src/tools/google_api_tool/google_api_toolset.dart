@@ -15,6 +15,7 @@ import 'googleapi_to_openapi_converter.dart';
 
 /// Toolset that converts Google Discovery APIs into executable tools.
 class GoogleApiToolset extends BaseToolset {
+  /// Creates a Google API toolset for [apiName] and [apiVersion].
   GoogleApiToolset(
     this.apiName,
     this.apiVersion, {
@@ -30,15 +31,34 @@ class GoogleApiToolset extends BaseToolset {
     this.requestExecutor,
   }) : additionalHeaders = additionalHeaders ?? <String, String>{};
 
+  /// Google API short name used by the Discovery API.
   final String apiName;
+
+  /// Google API version string used by the Discovery API.
   final String apiVersion;
+
+  /// OAuth client id used for interactive auth flows.
   String? clientId;
+
+  /// OAuth client secret used for interactive auth flows.
   String? clientSecret;
+
+  /// Optional service-account auth override.
   ServiceAccountAuth? serviceAccount;
+
+  /// Extra headers added to outgoing HTTP requests.
   final Map<String, String> additionalHeaders;
+
+  /// Optional preloaded Discovery specification.
   final Map<String, Object?>? discoverySpec;
+
+  /// Optional preloaded OpenAPI specification.
   final Map<String, Object?>? openApiSpec;
+
+  /// Optional custom Discovery specification fetcher.
   final GoogleDiscoverySpecFetcher? specFetcher;
+
+  /// Optional custom request executor for generated tools.
   final GoogleApiRequestExecutor? requestExecutor;
 
   OpenAPIToolset? _openApiToolset;
@@ -75,15 +95,18 @@ class GoogleApiToolset extends BaseToolset {
     return tools;
   }
 
+  /// Replaces the tool filter used to select generated tools.
   void setToolFilter(Object filter) {
     toolFilter = filter;
   }
 
+  /// Configures OAuth client credentials for generated tools.
   void configureAuth(String clientId, String clientSecret) {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
   }
 
+  /// Configures service-account auth for generated tools.
   void configureSaAuth(ServiceAccountAuth serviceAccount) {
     this.serviceAccount = serviceAccount;
   }

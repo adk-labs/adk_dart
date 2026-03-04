@@ -12,6 +12,7 @@ import '../tool_context.dart';
 
 /// Tool that invokes an Application Integration connector operation.
 class IntegrationConnectorTool extends BaseTool {
+  /// Creates a connector tool wrapper around [restApiTool].
   IntegrationConnectorTool({
     required super.name,
     required super.description,
@@ -26,6 +27,7 @@ class IntegrationConnectorTool extends BaseTool {
     this.authCredential,
   }) : _restApiTool = restApiTool;
 
+  /// Declaration fields removed from model-facing schema.
   static const List<String> excludeFields = <String>[
     'connection_name',
     'service_name',
@@ -36,6 +38,7 @@ class IntegrationConnectorTool extends BaseTool {
     'dynamic_auth_config',
   ];
 
+  /// Declaration fields treated as optional regardless of source schema.
   static const List<String> optionalFields = <String>[
     'page_size',
     'page_token',
@@ -44,15 +47,30 @@ class IntegrationConnectorTool extends BaseTool {
     'sort_by_columns',
   ];
 
+  /// Connection resource name.
   final String connectionName;
+
+  /// Connector host value.
   final String connectionHost;
+
+  /// Service directory name for the connection.
   final String connectionServiceName;
+
+  /// Optional entity name for entity operations.
   final String? entity;
+
+  /// Optional operation name for entity operations.
   final String? operation;
+
+  /// Optional action name for action operations.
   final String? action;
 
   final RestApiTool _restApiTool;
+
+  /// Optional auth scheme override for this connector tool.
   final Object? authScheme;
+
+  /// Optional auth credential override for this connector tool.
   final AuthCredential? authCredential;
 
   @override

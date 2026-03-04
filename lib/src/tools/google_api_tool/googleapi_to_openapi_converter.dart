@@ -365,6 +365,7 @@ class GoogleApiToOpenApiConverter {
     return schema;
   }
 
+  /// Returns the converted OpenAPI specification as formatted JSON.
   String saveOpenApiSpec() {
     return const JsonEncoder.withIndent('  ').convert(_openApiSpec);
   }

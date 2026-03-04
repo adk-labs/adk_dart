@@ -150,6 +150,7 @@ class GoogleApiTool extends BaseTool {
   /// Current auth credential used when executing requests.
   AuthCredential? get authCredential => _authCredential;
 
+  /// Updates the auth credential used when executing requests.
   set authCredential(AuthCredential? value) {
     _authCredential = value;
     _restApiTool?.configureAuthCredential(value);
@@ -158,6 +159,7 @@ class GoogleApiTool extends BaseTool {
   /// Current auth scheme used when executing requests.
   Object? get authScheme => _authScheme;
 
+  /// Updates the auth scheme used when executing requests.
   set authScheme(Object? value) {
     _authScheme = value;
     _restApiTool?.configureAuthScheme(value);
