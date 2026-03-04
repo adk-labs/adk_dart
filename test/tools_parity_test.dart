@@ -50,7 +50,7 @@ void main() {
           ),
           throwsA(
             isA<StateError>().having(
-              (StateError error) => '${error.message}',
+              (StateError error) => error.message,
               'message',
               contains('callable failed for seoul'),
             ),
@@ -59,6 +59,27 @@ void main() {
         expect(callCount, 1);
       },
     );
+
+    test('injects tool context using custom parameter names', () async {
+      final Context toolContext = await _newToolContext();
+
+      String greet({required String city, required ToolContext ctx}) {
+        return '${ctx.userId}:$city';
+      }
+
+      final FunctionTool tool = FunctionTool(
+        func: greet,
+        name: 'greet_tool',
+        toolContextParamNames: <String>['ctx'],
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'city': 'seoul'},
+        toolContext: toolContext,
+      );
+
+      expect(result, 'user_1:seoul');
+    });
   });
 
   group('LongRunningFunctionTool', () {

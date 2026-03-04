@@ -22,13 +22,23 @@ class FunctionTool extends BaseTool {
     String? name,
     String? description,
     this.requireConfirmation = false,
-  }) : super(name: name ?? 'function_tool', description: description ?? '');
+    List<String>? toolContextParamNames,
+  }) : toolContextParamNames = _normalizeToolContextParamNames(
+         toolContextParamNames,
+       ),
+       super(name: name ?? 'function_tool', description: description ?? '');
 
   /// Target function invoked when the tool is called.
   final Function func;
 
   /// Confirmation policy for this tool call.
   final Object requireConfirmation;
+
+  /// Named parameter candidates used for [ToolContext] injection.
+  ///
+  /// The default name is `toolContext`; additional custom names can be
+  /// provided to align with user-defined function signatures.
+  final List<String> toolContextParamNames;
 
   @override
   /// Returns a simple declaration derived from [name] and [description].
@@ -107,21 +117,17 @@ class FunctionTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext? toolContext,
   }) async {
+    final List<Map<Symbol, Object?>> toolContextNamedVariants =
+        _toolContextNamedVariants(toolContext);
     final List<InvocationPlan> plans = <InvocationPlan>[
-      InvocationPlan(
-        positional: const <Object?>[],
-        named: <Symbol, Object?>{
-          ..._namedArgs(args),
-          if (toolContext != null) #toolContext: toolContext,
-        },
-      ),
+      for (final Map<Symbol, Object?> variant in toolContextNamedVariants)
+        InvocationPlan(
+          positional: const <Object?>[],
+          named: <Symbol, Object?>{..._namedArgs(args), ...variant},
+        ),
       InvocationPlan(positional: const <Object?>[], named: _namedArgs(args)),
-      InvocationPlan(
-        positional: args.values.toList(),
-        named: toolContext == null
-            ? const <Symbol, Object?>{}
-            : <Symbol, Object?>{#toolContext: toolContext},
-      ),
+      for (final Map<Symbol, Object?> variant in toolContextNamedVariants)
+        InvocationPlan(positional: args.values.toList(), named: variant),
       InvocationPlan(positional: args.values.toList()),
       InvocationPlan(
         positional: toolContext == null
@@ -171,10 +177,36 @@ class FunctionTool extends BaseTool {
     };
   }
 
+  List<Map<Symbol, Object?>> _toolContextNamedVariants(
+    ToolContext? toolContext,
+  ) {
+    if (toolContext == null) {
+      return const <Map<Symbol, Object?>>[];
+    }
+    return <Map<Symbol, Object?>>[
+      for (final String name in toolContextParamNames)
+        <Symbol, Object?>{Symbol(name): toolContext},
+    ];
+  }
+
   bool _isInvocationShapeError(Object error) {
     return error is NoSuchMethodError ||
         error is ArgumentError ||
         error is TypeError;
+  }
+
+  static List<String> _normalizeToolContextParamNames(List<String>? names) {
+    final List<String> candidates = <String>['toolContext', ...?names];
+    final Set<String> seen = <String>{};
+    final List<String> normalized = <String>[];
+    for (final String name in candidates) {
+      final String trimmed = name.trim();
+      if (trimmed.isEmpty || !seen.add(trimmed)) {
+        continue;
+      }
+      normalized.add(trimmed);
+    }
+    return normalized;
   }
 }
 
