@@ -91,6 +91,7 @@ class FastApiApp {
     return server.start();
   }
 
+  /// Stops the running server instance, if one has been started.
   Future<void> stop() async {
     await _server?.stop();
     _server = null;

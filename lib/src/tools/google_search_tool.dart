@@ -8,6 +8,7 @@ import 'tool_context.dart';
 
 /// Tool wrapper for Google Search grounding.
 class GoogleSearchTool extends BaseTool {
+  /// Creates a Google Search grounding tool wrapper.
   GoogleSearchTool({
     this.bypassMultiToolsLimit = false,
     this.model,
@@ -16,7 +17,10 @@ class GoogleSearchTool extends BaseTool {
            modelIdCheckDisabledResolver ?? isGeminiModelIdCheckDisabled,
        super(name: 'google_search', description: 'google_search');
 
+  /// Whether Gemini 1.x multi-tool constraints are bypassed.
   final bool bypassMultiToolsLimit;
+
+  /// Optional model override injected into outgoing requests.
   final String? model;
   final bool Function() _modelIdCheckDisabledResolver;
 

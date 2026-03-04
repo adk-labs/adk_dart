@@ -8,14 +8,17 @@ import 'recordings_schema.dart';
 
 /// In-memory manager for CLI session recordings.
 class RecordingsPlugin {
+  /// Creates a recording manager backed by [recordings].
   RecordingsPlugin({List<SessionRecording>? recordings})
     : _recordings = recordings ?? <SessionRecording>[];
 
   final List<SessionRecording> _recordings;
 
+  /// Immutable view of loaded session recordings.
   List<SessionRecording> get recordings =>
       List<SessionRecording>.unmodifiable(_recordings);
 
+  /// Starts a new recording session and appends it to [recordings].
   SessionRecording startSession({
     required String appName,
     required String userId,
@@ -30,6 +33,7 @@ class RecordingsPlugin {
     return recording;
   }
 
+  /// Appends one recorded [turn] to the session identified by [sessionId].
   void appendTurn({required String sessionId, required RecordingTurn turn}) {
     final SessionRecording recording = _recordings.firstWhere(
       (SessionRecording candidate) => candidate.sessionId == sessionId,
@@ -38,10 +42,12 @@ class RecordingsPlugin {
     recording.turns.add(turn);
   }
 
+  /// Removes all loaded recordings.
   void clear() {
     _recordings.clear();
   }
 
+  /// Persists all recordings as formatted JSON at [filePath].
   Future<void> saveToFile(String filePath) async {
     final File file = File(filePath);
     file.parent.createSync(recursive: true);
@@ -51,6 +57,9 @@ class RecordingsPlugin {
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(json));
   }
 
+  /// Loads recordings from [filePath] when the file exists.
+  ///
+  /// Returns an empty plugin when the file is absent.
   static Future<RecordingsPlugin> loadFromFile(String filePath) async {
     final File file = File(filePath);
     if (!await file.exists()) {

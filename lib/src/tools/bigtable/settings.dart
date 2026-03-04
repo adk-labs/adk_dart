@@ -5,10 +5,13 @@ import '../../features/_feature_registry.dart';
 
 /// Configuration values for Bigtable tool behavior.
 class BigtableToolSettings {
+  /// Creates Bigtable tool settings.
   BigtableToolSettings({this.maxQueryResultRows = 50});
 
+  /// Maximum rows returned from Bigtable queries.
   final int maxQueryResultRows;
 
+  /// Ensures the Bigtable settings feature flag is enabled.
   static void ensureFeatureEnabled({Map<String, String>? environment}) {
     isFeatureEnabled(
       FeatureName.bigtableToolSettings,
@@ -16,6 +19,7 @@ class BigtableToolSettings {
     );
   }
 
+  /// Decodes settings from JSON.
   factory BigtableToolSettings.fromJson(Map<String, Object?> json) {
     ensureFeatureEnabled();
 
@@ -39,11 +43,13 @@ class BigtableToolSettings {
     return BigtableToolSettings(maxQueryResultRows: maxRows);
   }
 
+  /// Encodes settings to JSON.
   Map<String, Object?> toJson() {
     ensureFeatureEnabled();
     return <String, Object?>{'max_query_result_rows': maxQueryResultRows};
   }
 
+  /// Coerces supported object types into [BigtableToolSettings].
   static BigtableToolSettings fromObject(Object? value) {
     if (value is BigtableToolSettings) {
       return value;

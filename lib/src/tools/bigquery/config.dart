@@ -16,8 +16,10 @@ enum WriteMode {
 
   const WriteMode(this.value);
 
+  /// Serialized value used in JSON and environment config.
   final String value;
 
+  /// Coerces supported values into a [WriteMode].
   static WriteMode fromObject(Object? value) {
     if (value is WriteMode) {
       return value;
@@ -58,12 +60,25 @@ class BigQueryToolConfig {
     }
   }
 
+  /// Write guard mode used for mutating SQL statements.
   final WriteMode writeMode;
+
+  /// Maximum billed bytes per query job.
   final int? maximumBytesBilled;
+
+  /// Maximum rows returned from tool responses.
   final int maxQueryResultRows;
+
+  /// Application name sent in BigQuery job metadata.
   final String? applicationName;
+
+  /// Optional compute project id override for query jobs.
   final String? computeProjectId;
+
+  /// Optional BigQuery location override.
   final String? location;
+
+  /// Optional labels attached to submitted jobs.
   final Map<String, String>? jobLabels;
 
   /// Ensures the BigQuery tool config feature flag is enabled.

@@ -239,38 +239,103 @@ class ParsedAdkCommand {
        replayFilePath = null,
        message = null;
 
+  /// Parsed command type.
   final AdkCommandType type;
+
+  /// Project directory passed on the command line.
   final String projectDir;
+
+  /// App name when a command targets a specific app.
   final String? appName;
+
+  /// HTTP port for web and API server commands.
   final int? port;
+
+  /// Host interface for web and API server commands.
   final InternetAddress? host;
+
+  /// User id override used by runtime services.
   final String? userId;
+
+  /// Allowed CORS origins for HTTP server commands.
   final List<String> allowOrigins;
+
+  /// Session service URI override.
   final String? sessionServiceUri;
+
+  /// Artifact service URI override.
   final String? artifactServiceUri;
+
+  /// Memory service URI override.
   final String? memoryServiceUri;
+
+  /// Log level override.
   final String? logLevel;
+
+  /// Evaluation storage URI override.
   final String? evalStorageUri;
+
+  /// Whether local storage-backed services are enabled.
   final bool useLocalStorage;
+
+  /// URL prefix used when the app is mounted under a path.
   final String? urlPrefix;
+
+  /// Whether trace data is exported to Google Cloud.
   final bool traceToCloud;
+
+  /// Whether OpenTelemetry data is exported to Google Cloud.
   final bool otelToCloud;
+
+  /// Whether file-watcher based hot reload is enabled.
   final bool reload;
+
+  /// Whether A2A endpoint support is enabled.
   final bool a2a;
+
+  /// Whether runtime agent definitions can be reloaded.
   final bool reloadAgents;
+
+  /// Extra plugin specs passed from the command line.
   final List<String> extraPlugins;
+
+  /// Optional logo text for the web UI.
   final String? logoText;
+
+  /// Optional logo image URL for the web UI.
   final String? logoImageUrl;
+
+  /// Whether missing sessions are created automatically.
   final bool autoCreateSession;
+
+  /// Whether the web UI is served.
   final bool enableWebUi;
+
+  /// Existing session id used by CLI run mode.
   final String? sessionId;
+
+  /// Whether CLI run mode persists a recording at exit.
   final bool saveSession;
+
+  /// Input path for resuming a saved recording.
   final String? resumeFilePath;
+
+  /// Input path for replaying a recording.
   final String? replayFilePath;
+
+  /// Initial message passed to non-interactive run mode.
   final String? message;
+
+  /// Whether deprecated `--session_db_url` was used.
   final bool usedDeprecatedSessionDbUrl;
+
+  /// Whether deprecated `--artifact_storage_uri` was used.
   final bool usedDeprecatedArtifactStorageUri;
+
+  /// Feature flags forced to enabled.
   final List<String> enableFeatures;
+
+  /// Feature flags forced to disabled.
   final List<String> disableFeatures;
 }
 

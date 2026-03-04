@@ -5,14 +5,18 @@ import '../../features/_feature_registry.dart';
 
 /// Configuration values for Data Agent tool behavior.
 class DataAgentToolConfig {
+  /// Creates Data Agent tool configuration.
   DataAgentToolConfig({this.maxQueryResultRows = 50});
 
+  /// Maximum rows returned from Data Agent queries.
   final int maxQueryResultRows;
 
+  /// Ensures the Data Agent tool config feature flag is enabled.
   static void ensureFeatureEnabled({Map<String, String>? environment}) {
     isFeatureEnabled(FeatureName.dataAgentToolConfig, environment: environment);
   }
 
+  /// Decodes Data Agent configuration from JSON.
   factory DataAgentToolConfig.fromJson(Map<String, Object?> json) {
     ensureFeatureEnabled();
 
@@ -35,11 +39,13 @@ class DataAgentToolConfig {
     return DataAgentToolConfig(maxQueryResultRows: maxRows);
   }
 
+  /// Encodes this config for persistence.
   Map<String, Object?> toJson() {
     ensureFeatureEnabled();
     return <String, Object?>{'max_query_result_rows': maxQueryResultRows};
   }
 
+  /// Coerces supported object types into [DataAgentToolConfig].
   static DataAgentToolConfig fromObject(Object? value) {
     if (value is DataAgentToolConfig) {
       return value;
