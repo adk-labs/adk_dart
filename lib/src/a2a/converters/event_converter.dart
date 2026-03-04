@@ -198,8 +198,8 @@ Event convertA2aMessageToEvent(
 
 /// Converts an ADK [Event] into an [A2aMessage], when possible.
 A2aMessage? convertEventToA2aMessage(
-  Event event,
-  InvocationContext invocationContext, {
+  Event event, {
+  InvocationContext? invocationContext,
   A2aRole role = A2aRole.agent,
   GenAIPartToA2APartConverter partConverter = convertGenaiPartToA2aPart,
 }) {
@@ -331,7 +331,7 @@ List<A2aEvent> convertEventToA2aEvents(
 
   final A2aMessage? message = convertEventToA2aMessage(
     event,
-    invocationContext,
+    invocationContext: invocationContext,
     partConverter: partConverter,
   );
   if (message != null) {

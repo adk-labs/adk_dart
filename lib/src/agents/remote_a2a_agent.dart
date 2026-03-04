@@ -538,7 +538,7 @@ class RemoteA2aAgent extends BaseAgent {
 
     final A2aMessage? message = convertEventToA2aMessage(
       ctx.session.events.last,
-      ctx,
+      invocationContext: ctx,
       role: A2aRole.user,
       partConverter: _genaiPartConverter,
     );

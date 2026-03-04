@@ -47,19 +47,33 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
 
   if (root is A2aTextPart) {
     final Object? rawThought = root.metadata[getAdkMetadataKey('thought')];
+    final List<int>? thoughtSignature = _parseThoughtSignature(
+      root.metadata[getAdkMetadataKey('thought_signature')],
+    );
     bool thought = false;
     if (rawThought is bool) {
       thought = rawThought;
     } else if (rawThought is String) {
       thought = rawThought.toLowerCase() == 'true';
     }
-    return Part.text(root.text, thought: thought);
+    return Part.text(
+      root.text,
+      thought: thought,
+      thoughtSignature: thoughtSignature,
+    );
   }
 
   if (root is A2aFilePart) {
     final A2aFile file = root.file;
+    final String? displayName = _parseDisplayName(
+      root.metadata[getAdkMetadataKey('display_name')],
+    );
     if (file is A2aFileWithUri) {
-      return Part.fromFileData(fileUri: file.uri, mimeType: file.mimeType);
+      return Part.fromFileData(
+        fileUri: file.uri,
+        mimeType: file.mimeType,
+        displayName: displayName,
+      );
     }
     if (file is A2aFileWithBytes) {
       List<int> bytes;
@@ -71,6 +85,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
       return Part.fromInlineData(
         mimeType: file.mimeType ?? 'application/octet-stream',
         data: bytes,
+        displayName: displayName,
       );
     }
     return null;
@@ -84,8 +99,16 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
       final String name = '${root.data['name'] ?? ''}';
       final Map<String, dynamic> args = _asMap(root.data['args']);
       final String? id = root.data['id'] as String?;
+      final List<int>? thoughtSignature = _parseThoughtSignature(
+        root.data['thought_signature'] ?? root.data['thoughtSignature'],
+      );
       if (name.isNotEmpty) {
-        return Part.fromFunctionCall(name: name, args: args, id: id);
+        return Part.fromFunctionCall(
+          name: name,
+          args: args,
+          id: id,
+          thoughtSignature: thoughtSignature,
+        );
       }
     }
 
@@ -93,12 +116,19 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
       final String name = '${root.data['name'] ?? ''}';
       final Map<String, dynamic> response = _asMap(root.data['response']);
       final String? id = root.data['id'] as String?;
+      final List<int>? thoughtSignature = _parseThoughtSignature(
+        root.data['thought_signature'] ?? root.data['thoughtSignature'],
+      );
       if (name.isNotEmpty) {
-        return Part.fromFunctionResponse(
+        final Part converted = Part.fromFunctionResponse(
           name: name,
           response: response,
           id: id,
         );
+        if (thoughtSignature != null) {
+          return converted.copyWith(thoughtSignature: thoughtSignature);
+        }
+        return converted;
       }
     }
 
@@ -137,12 +167,27 @@ Object? convertGenaiPartToA2aPart(Part part) {
     if (part.thought) {
       metadata[getAdkMetadataKey('thought')] = true;
     }
+    final String? thoughtSignature = _serializeThoughtSignature(
+      part.thoughtSignature,
+    );
+    if (thoughtSignature != null) {
+      metadata[getAdkMetadataKey('thought_signature')] = thoughtSignature;
+    }
     return A2aPart.text(part.text!, metadata: metadata);
   }
 
   if (part.fileData != null) {
     final FileData file = part.fileData!;
-    return A2aPart.fileUri(file.fileUri, mimeType: file.mimeType);
+    final Map<String, Object?> metadata = <String, Object?>{};
+    final String? displayName = file.displayName;
+    if (displayName != null && displayName.isNotEmpty) {
+      metadata[getAdkMetadataKey('display_name')] = displayName;
+    }
+    return A2aPart.fileUri(
+      file.fileUri,
+      mimeType: file.mimeType,
+      metadata: metadata.isEmpty ? null : metadata,
+    );
   }
 
   if (part.inlineData != null) {
@@ -173,11 +218,16 @@ Object? convertGenaiPartToA2aPart(Part part) {
 
   if (part.functionCall != null) {
     final FunctionCall call = part.functionCall!;
+    final String? thoughtSignature = _serializeThoughtSignature(
+      part.thoughtSignature,
+    );
     return A2aPart.data(
       <String, Object?>{
         'name': call.name,
         'args': Map<String, Object?>.from(call.args),
         if (call.id != null) 'id': call.id,
+        if (thoughtSignature case final String value)
+          'thought_signature': value,
       },
       metadata: <String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
@@ -188,11 +238,16 @@ Object? convertGenaiPartToA2aPart(Part part) {
 
   if (part.functionResponse != null) {
     final FunctionResponse response = part.functionResponse!;
+    final String? thoughtSignature = _serializeThoughtSignature(
+      part.thoughtSignature,
+    );
     return A2aPart.data(
       <String, Object?>{
         'name': response.name,
         'response': Map<String, Object?>.from(response.response),
         if (response.id != null) 'id': response.id,
+        if (thoughtSignature case final String value)
+          'thought_signature': value,
       },
       metadata: <String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
@@ -222,6 +277,52 @@ Object? convertGenaiPartToA2aPart(Part part) {
   }
 
   return null;
+}
+
+String? _parseDisplayName(Object? value) {
+  if (value is! String) {
+    return null;
+  }
+  final String trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  return trimmed;
+}
+
+List<int>? _parseThoughtSignature(Object? value) {
+  if (value is List) {
+    final List<int> bytes = <int>[];
+    for (final Object? item in value) {
+      if (item is num) {
+        bytes.add(item.toInt());
+      }
+    }
+    if (bytes.isNotEmpty) {
+      return bytes;
+    }
+  }
+
+  if (value is String) {
+    final String trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    try {
+      return base64Decode(trimmed);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+String? _serializeThoughtSignature(List<int>? thoughtSignature) {
+  if (thoughtSignature == null || thoughtSignature.isEmpty) {
+    return null;
+  }
+  return base64Encode(thoughtSignature);
 }
 
 Map<String, dynamic> _asMap(Object? value) {

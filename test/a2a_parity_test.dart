@@ -107,6 +107,76 @@ void main() {
         expect(update.status.state, A2aTaskState.authRequired);
       },
     );
+
+    test('function-call thought signature survives A2A roundtrip', () {
+      final Part part = Part.fromFunctionCall(
+        name: 'my_tool',
+        args: <String, dynamic>{'city': 'seoul'},
+        id: 'call_42',
+        thoughtSignature: <int>[1, 2, 3, 4],
+      );
+
+      final Object? converted = convertGenaiPartToA2aPart(part);
+      expect(converted, isA<A2aPart>());
+      final A2aPart a2aPart = converted! as A2aPart;
+      expect(a2aPart.dataPart?.data['thought_signature'], isA<String>());
+
+      final Object? roundtrip = convertA2aPartToGenaiPart(a2aPart);
+      expect(roundtrip, isA<Part>());
+      final Part convertedBack = roundtrip! as Part;
+      expect(convertedBack.functionCall?.name, 'my_tool');
+      expect(convertedBack.functionCall?.id, 'call_42');
+      expect(convertedBack.thoughtSignature, <int>[1, 2, 3, 4]);
+    });
+
+    test('file display name survives A2A roundtrip', () {
+      final Part filePart = Part.fromFileData(
+        fileUri: 'gs://bucket/path/report.csv',
+        mimeType: 'text/csv',
+        displayName: 'report.csv',
+      );
+      final Object? convertedFile = convertGenaiPartToA2aPart(filePart);
+      expect(convertedFile, isA<A2aPart>());
+      final A2aPart a2aFilePart = convertedFile! as A2aPart;
+      expect(
+        a2aFilePart.root.metadata[getAdkMetadataKey('display_name')],
+        'report.csv',
+      );
+
+      final Object? fileRoundtrip = convertA2aPartToGenaiPart(a2aFilePart);
+      expect(fileRoundtrip, isA<Part>());
+      expect((fileRoundtrip! as Part).fileData?.displayName, 'report.csv');
+
+      final Part inlinePart = Part.fromInlineData(
+        mimeType: 'image/png',
+        data: <int>[7, 8, 9],
+        displayName: 'plot.png',
+      );
+      final Object? convertedInline = convertGenaiPartToA2aPart(inlinePart);
+      expect(convertedInline, isA<A2aPart>());
+      final A2aPart a2aInlinePart = convertedInline! as A2aPart;
+      expect(
+        a2aInlinePart.root.metadata[getAdkMetadataKey('display_name')],
+        'plot.png',
+      );
+
+      final Object? inlineRoundtrip = convertA2aPartToGenaiPart(a2aInlinePart);
+      expect(inlineRoundtrip, isA<Part>());
+      expect((inlineRoundtrip! as Part).inlineData?.displayName, 'plot.png');
+    });
+
+    test('convertEventToA2aMessage works without invocation context', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        content: Content.modelText('hello'),
+      );
+
+      final A2aMessage? message = convertEventToA2aMessage(event);
+      expect(message, isNotNull);
+      expect(message!.parts, isNotEmpty);
+      expect(message.parts.first.textPart?.text, 'hello');
+    });
   });
 
   group('a2a executor', () {
