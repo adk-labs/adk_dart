@@ -2731,6 +2731,40 @@ Future<void> _ensureSessionExists(
   }
 }
 
+/// Returns true when this `/run_sse` request is resuming a paused tool call.
+bool isFunctionResumeRequest({
+  required String? invocationId,
+  required Content? newMessage,
+}) {
+  if (invocationId == null || invocationId.trim().isEmpty) {
+    return false;
+  }
+  final Content? message = newMessage;
+  if (message == null || message.parts.isEmpty) {
+    return false;
+  }
+  for (final Part part in message.parts) {
+    if (part.functionResponse != null) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Expands one streamed event into content/action events when needed.
+List<Event> buildSseEventsForRun(Event event, {required bool isResumeRequest}) {
+  final bool hasArtifactDelta = event.actions.artifactDelta.isNotEmpty;
+  final bool hasContentParts = event.content?.parts.isNotEmpty ?? false;
+  if (!hasArtifactDelta || !hasContentParts || isResumeRequest) {
+    return <Event>[event];
+  }
+  final Event contentEvent = event.copyWith(
+    actions: event.actions.copyWith(artifactDelta: <String, int>{}),
+  );
+  final Event artifactEvent = event.copyWith(content: null);
+  return <Event>[contentEvent, artifactEvent];
+}
+
 Future<void> _handleRunSse(
   HttpRequest request,
   _AdkDevWebContext context,
@@ -2770,6 +2804,10 @@ Future<void> _handleRunSse(
   );
   response.headers.set('Cache-Control', 'no-cache');
   response.headers.set('Connection', 'keep-alive');
+  final bool resumeRequest = isFunctionResumeRequest(
+    invocationId: runRequest.invocationId,
+    newMessage: runRequest.newMessage,
+  );
 
   try {
     await for (final Event event in runner.runAsync(
@@ -2791,19 +2829,10 @@ Future<void> _handleRunSse(
         event: event,
       );
 
-      final List<Event> eventsToStream = <Event>[event];
-      final bool hasArtifactDelta = event.actions.artifactDelta.isNotEmpty;
-      final bool hasContentParts = (event.content?.parts.isNotEmpty ?? false);
-      if (hasArtifactDelta && hasContentParts) {
-        final Event contentEvent = event.copyWith(
-          actions: event.actions.copyWith(artifactDelta: <String, int>{}),
-        );
-        final Event artifactEvent = event.copyWith(content: null);
-        eventsToStream
-          ..clear()
-          ..add(contentEvent)
-          ..add(artifactEvent);
-      }
+      final List<Event> eventsToStream = buildSseEventsForRun(
+        event,
+        isResumeRequest: resumeRequest,
+      );
 
       for (final Event streamEvent in eventsToStream) {
         final String data = jsonEncode(

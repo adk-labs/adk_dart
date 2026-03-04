@@ -49,6 +49,7 @@ class CodeExecutionInput {
     required this.code,
     List<CodeExecutionFile>? inputFiles,
     this.executionId,
+    this.executeType,
   }) : inputFiles = inputFiles ?? <CodeExecutionFile>[];
 
   /// Source code to execute.
@@ -59,6 +60,11 @@ class CodeExecutionInput {
 
   /// Optional execution/session identifier.
   String? executionId;
+
+  /// Optional execution mode hint understood by specific executors.
+  ///
+  /// For example, GKE executors may annotate jobs with this value.
+  String? executeType;
 }
 
 /// Normalized code execution result payload.

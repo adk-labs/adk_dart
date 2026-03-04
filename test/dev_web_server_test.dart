@@ -2,11 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:adk_dart/adk_dart.dart';
 import 'package:adk_dart/src/dev/project.dart';
 import 'package:adk_dart/src/dev/runtime.dart';
 import 'package:adk_dart/src/dev/web_server.dart';
-import 'package:adk_dart/src/plugins/base_plugin.dart';
-import 'package:adk_dart/src/cli/service_registry.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:test/test.dart';
 
@@ -1397,6 +1396,66 @@ void main() {
         expect(sessionResponse.statusCode, HttpStatus.ok);
       },
     );
+  });
+
+  group('run_sse event splitting helpers', () {
+    test('splits artifactDelta into content/action events by default', () {
+      final Event event = Event(
+        invocationId: 'inv_split',
+        author: 'root_agent',
+        content: Content.modelText('done'),
+        actions: EventActions(artifactDelta: <String, int>{'plot.png': 1}),
+      );
+
+      final List<Event> streamed = buildSseEventsForRun(
+        event,
+        isResumeRequest: false,
+      );
+
+      expect(streamed, hasLength(2));
+      expect(streamed.first.content?.parts.single.text, 'done');
+      expect(streamed.first.actions.artifactDelta, isEmpty);
+      expect(streamed.last.content, isNull);
+      expect(streamed.last.actions.artifactDelta, <String, int>{'plot.png': 1});
+    });
+
+    test('keeps artifactDelta on resume requests with function responses', () {
+      final Content resumeMessage = Content(
+        role: 'user',
+        parts: <Part>[
+          Part.fromFunctionResponse(
+            name: requestConfirmationFunctionCallName,
+            id: 'fc_1',
+            response: <String, Object?>{'confirmed': true},
+          ),
+        ],
+      );
+      expect(
+        isFunctionResumeRequest(
+          invocationId: 'inv_resume',
+          newMessage: resumeMessage,
+        ),
+        isTrue,
+      );
+
+      final Event event = Event(
+        invocationId: 'inv_resume',
+        author: 'root_agent',
+        content: Content.modelText('done'),
+        actions: EventActions(artifactDelta: <String, int>{'plot.png': 1}),
+      );
+
+      final List<Event> streamed = buildSseEventsForRun(
+        event,
+        isResumeRequest: true,
+      );
+
+      expect(streamed, hasLength(1));
+      expect(streamed.single.content?.parts.single.text, 'done');
+      expect(streamed.single.actions.artifactDelta, <String, int>{
+        'plot.png': 1,
+      });
+    });
   });
 }
 

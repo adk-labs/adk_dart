@@ -106,7 +106,9 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     required String jobName,
     required String configMapName,
     required InvocationContext invocationContext,
+    String? executeType,
   }) {
+    final String? normalizedExecuteType = executeType?.trim();
     return <String, Object?>{
       'apiVersion': 'batch/v1',
       'kind': 'Job',
@@ -114,6 +116,8 @@ class GkeCodeExecutor extends BaseCodeExecutor {
         'name': jobName,
         'annotations': <String, Object?>{
           'adk.agent.google.com/invocation-id': invocationContext.invocationId,
+          if (normalizedExecuteType != null && normalizedExecuteType.isNotEmpty)
+            'adk.agent.google.com/execute-type': normalizedExecuteType,
         },
       },
       'spec': <String, Object?>{
@@ -220,6 +224,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
             jobName: jobName,
             configMapName: configMapName,
             invocationContext: invocationContext,
+            executeType: codeExecutionInput.executeType,
           ),
         );
 

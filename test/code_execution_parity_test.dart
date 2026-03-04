@@ -597,9 +597,13 @@ void main() {
         jobName: 'job1',
         configMapName: 'cfg1',
         invocationContext: invocationContext,
+        executeType: 'python',
       );
 
       expect(manifest['kind'], 'Job');
+      final Map metadata = manifest['metadata'] as Map;
+      final Map annotations = metadata['annotations'] as Map;
+      expect(annotations['adk.agent.google.com/execute-type'], 'python');
       final Map spec = manifest['spec'] as Map;
       final Map template = spec['template'] as Map;
       final Map podSpec = template['spec'] as Map;
@@ -620,13 +624,21 @@ void main() {
 
       final CodeExecutionResult result = await executor.executeCode(
         invocationContext,
-        CodeExecutionInput(code: 'print(42)'),
+        CodeExecutionInput(code: 'print(42)', executeType: 'python'),
       );
 
       expect(result.stdout, 'job logs');
       expect(apiClient.createdConfigMap, isNotNull);
       expect(apiClient.createdJob, isNotNull);
       expect(apiClient.patchedConfigMapName, isNotNull);
+      final Map<String, Object?> jobEnvelope = apiClient.createdJob!;
+      final Map<String, Object?> body =
+          jobEnvelope['body'] as Map<String, Object?>;
+      final Map<String, Object?> metadata =
+          body['metadata'] as Map<String, Object?>;
+      final Map<String, Object?> annotations =
+          metadata['annotations'] as Map<String, Object?>;
+      expect(annotations['adk.agent.google.com/execute-type'], 'python');
     });
 
     test('gke executor maps failed and timeout watch statuses', () async {
