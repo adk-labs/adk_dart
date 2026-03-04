@@ -9,11 +9,13 @@ import 'exchanger/oauth2_credential_exchanger.dart';
 
 /// Internal auth orchestration helper mirroring Python ADK behavior.
 class AuthHandler {
+  /// Creates an auth flow coordinator for [authConfig].
   AuthHandler({
     required this.authConfig,
     OAuth2CredentialExchanger? oauth2Exchanger,
   }) : _oauth2Exchanger = oauth2Exchanger ?? OAuth2CredentialExchanger();
 
+  /// Auth configuration currently being orchestrated.
   final AuthConfig authConfig;
   final OAuth2CredentialExchanger _oauth2Exchanger;
 

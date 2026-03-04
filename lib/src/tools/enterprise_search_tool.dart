@@ -8,6 +8,7 @@ import 'tool_context.dart';
 
 /// Tool wrapper for enterprise web search grounding.
 class EnterpriseWebSearchTool extends BaseTool {
+  /// Creates an enterprise web search grounding tool wrapper.
   EnterpriseWebSearchTool()
     : super(
         name: 'enterprise_web_search',

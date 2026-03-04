@@ -14,6 +14,7 @@ const List<String> bigtableDefaultScope = <String>[
 
 /// Credential configuration for Bigtable tools.
 class BigtableCredentialsConfig extends BaseGoogleCredentialsConfig {
+  /// Creates Bigtable credential configuration.
   BigtableCredentialsConfig({
     super.credentials,
     super.externalAccessTokenKey,

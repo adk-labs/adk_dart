@@ -22,6 +22,7 @@ const Set<String> _textLikeMimeTypes = <String>{
 
 /// Tool that loads saved artifacts into the current turn.
 class LoadArtifactsTool extends BaseTool {
+  /// Creates a tool that loads saved artifacts into the current request.
   LoadArtifactsTool()
     : super(
         name: 'load_artifacts',

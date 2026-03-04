@@ -13,8 +13,10 @@ typedef ServiceAccountExchangeHandler =
 
 /// Optional exchanger hook for service-account based auth credentials.
 class ServiceAccountCredentialExchanger extends BaseCredentialExchanger {
+  /// Creates a service-account credential exchanger.
   ServiceAccountCredentialExchanger({this.exchangeHandler});
 
+  /// Optional callback that performs the credential exchange.
   final ServiceAccountExchangeHandler? exchangeHandler;
 
   @override

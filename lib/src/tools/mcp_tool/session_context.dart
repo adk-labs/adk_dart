@@ -5,6 +5,7 @@ import 'dart:async';
 
 /// Lifecycle helper that lazily starts and closes session resources.
 class SessionContext<T> {
+  /// Creates a session lifecycle context.
   SessionContext({
     required Future<T> Function() startSession,
     Future<void> Function(T session)? closeSession,
@@ -14,14 +15,18 @@ class SessionContext<T> {
 
   final Future<T> Function() _startSession;
   final Future<void> Function(T session)? _closeSession;
+
+  /// Timeout applied when starting sessions.
   final Duration timeout;
 
   Future<T>? _starting;
   T? _session;
   bool _closed = false;
 
+  /// Current started session, if any.
   T? get session => _session;
 
+  /// Starts the session lazily and returns the shared instance.
   Future<T> start() async {
     if (_session != null) {
       return _session as T;
@@ -51,6 +56,7 @@ class SessionContext<T> {
     return completer.future;
   }
 
+  /// Closes the started session and marks this context as closed.
   Future<void> close() async {
     _closed = true;
     final T? created = _session;

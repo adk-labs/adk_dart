@@ -14,6 +14,7 @@ import 'query_tool.dart' as query_tool;
 
 /// Toolset that exposes BigQuery query, metadata, and insights tools.
 class BigQueryToolset extends BaseToolset {
+  /// Creates a BigQuery toolset with optional credential and tool settings.
   BigQueryToolset({
     super.toolFilter,
     BigQueryCredentialsConfig? credentialsConfig,

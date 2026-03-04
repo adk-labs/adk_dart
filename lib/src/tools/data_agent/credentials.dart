@@ -13,6 +13,7 @@ const List<String> dataAgentDefaultScope = <String>[
 
 /// Credential configuration for Data Agent tools.
 class DataAgentCredentialsConfig extends BaseGoogleCredentialsConfig {
+  /// Creates Data Agent credential configuration.
   DataAgentCredentialsConfig({
     super.credentials,
     super.externalAccessTokenKey,

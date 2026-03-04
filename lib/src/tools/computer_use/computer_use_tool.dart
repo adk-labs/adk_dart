@@ -10,6 +10,7 @@ import 'base_computer.dart';
 
 /// Function tool wrapper for computer-use actions with screen metadata.
 class ComputerUseTool extends FunctionTool {
+  /// Creates a computer-use tool that normalizes virtual coordinates.
   ComputerUseTool({
     required super.func,
     required this.screenSize,
@@ -28,7 +29,10 @@ class ComputerUseTool extends FunctionTool {
     }
   }
 
+  /// Physical screen size in pixels.
   final (int, int) screenSize;
+
+  /// Virtual coordinate space exposed to the model.
   final (int, int) virtualScreenSize;
 
   int _normalizeX(Object? x) {

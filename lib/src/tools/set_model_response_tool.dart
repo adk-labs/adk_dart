@@ -7,6 +7,7 @@ import 'tool_context.dart';
 
 /// Tool used when output schema must coexist with other tools.
 class SetModelResponseTool extends BaseTool {
+  /// Creates a tool that captures the final structured model response.
   SetModelResponseTool(this.outputSchema)
     : super(
         name: 'set_model_response',
@@ -14,6 +15,7 @@ class SetModelResponseTool extends BaseTool {
             'Set the final structured model response. Use this for the final answer.',
       );
 
+  /// Output schema used to build the tool declaration parameters.
   final Object outputSchema;
 
   @override

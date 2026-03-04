@@ -67,7 +67,10 @@ class ToolConnectionAnalyzer {
   }) : llmConfig = llmConfig ?? GenerateContentConfig(),
        _llm = llm ?? LLMRegistry.newLlm(llmName);
 
+  /// Model id used for analysis requests.
   final String llmName;
+
+  /// Generation config used for analysis requests.
   final GenerateContentConfig llmConfig;
   final BaseLlm _llm;
 

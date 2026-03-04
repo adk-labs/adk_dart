@@ -8,6 +8,7 @@ import 'tool_context.dart';
 
 /// Tool wrapper for Google Maps grounding.
 class GoogleMapsGroundingTool extends BaseTool {
+  /// Creates a Google Maps grounding tool wrapper.
   GoogleMapsGroundingTool()
     : super(name: 'google_maps', description: 'google_maps');
 

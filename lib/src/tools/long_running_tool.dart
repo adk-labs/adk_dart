@@ -6,6 +6,7 @@ import 'function_tool.dart';
 
 /// Function tool marked as long-running for runtime scheduling.
 class LongRunningFunctionTool extends FunctionTool {
+  /// Creates a function tool flagged as long-running.
   LongRunningFunctionTool({
     required super.func,
     super.name,

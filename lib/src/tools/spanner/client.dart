@@ -122,6 +122,7 @@ class SpannerClientFactoryNotConfiguredException implements Exception {
         'Call setSpannerClientFactory(...) before invoking Spanner tools.',
   ]);
 
+  /// Stable machine-readable error code.
   static const String defaultCode = 'SPANNER_CLIENT_FACTORY_NOT_CONFIGURED';
 
   /// Human-readable error message.

@@ -129,6 +129,7 @@ class BigtableClientFactoryNotConfiguredException implements Exception {
            'Bigtable $target client factory is not configured in adk_dart. '
                'Call setBigtableClientFactories(...) before invoking Bigtable tools.';
 
+  /// Stable machine-readable error code.
   static const String defaultCode = 'BIGTABLE_CLIENT_FACTORY_NOT_CONFIGURED';
 
   /// Target client category (`admin` or `data`).

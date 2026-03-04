@@ -88,11 +88,22 @@ class VertexAiSearchTool extends BaseTool {
     }
   }
 
+  /// Data store identifier used for retrieval requests.
   final String? dataStoreId;
+
+  /// Explicit data store specs used with search engine mode.
   final List<VertexAiSearchDataStoreSpec>? dataStoreSpecs;
+
+  /// Search engine identifier used for retrieval requests.
   final String? searchEngineId;
+
+  /// Optional filter expression applied to retrieval.
   final String? filter;
+
+  /// Maximum number of retrieval results.
   final int? maxResults;
+
+  /// Whether Gemini 1.x multi-tool constraints are bypassed.
   final bool bypassMultiToolsLimit;
   final bool Function() _modelIdCheckDisabledResolver;
 

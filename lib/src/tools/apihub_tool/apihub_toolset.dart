@@ -17,6 +17,7 @@ import 'clients/apihub_client.dart';
 
 /// Toolset that loads API Hub APIs and exposes them as tools.
 class APIHubToolset extends BaseToolset {
+  /// Creates an API Hub-backed OpenAPI toolset.
   APIHubToolset({
     required String apihubResourceName,
     String? accessToken,
@@ -48,7 +49,10 @@ class APIHubToolset extends BaseToolset {
     }
   }
 
+  /// Toolset name override used for generated OpenAPI tools.
   String name;
+
+  /// Toolset description override used for generated OpenAPI tools.
   String description;
 
   final String _apihubResourceName;

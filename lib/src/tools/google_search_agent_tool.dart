@@ -28,5 +28,6 @@ When given a search query, use the `google_search` tool to find the related info
 
 /// Agent tool preconfigured with Google Search capabilities.
 class GoogleSearchAgentTool extends AgentTool {
+  /// Creates an [AgentTool] preconfigured for a Google Search agent.
   GoogleSearchAgentTool({required LlmAgent agent}) : super(agent: agent);
 }

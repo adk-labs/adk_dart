@@ -65,8 +65,13 @@ class APIHubClient implements BaseAPIHubClient {
        _accessTokenProvider =
            accessTokenProvider ?? _defaultApiHubAccessTokenProvider;
 
+  /// Base URL for API Hub REST endpoints.
   final String rootUrl = 'https://apihub.googleapis.com/v1';
+
+  /// Optional static access token for API Hub requests.
   final String? accessToken;
+
+  /// Optional service-account JSON used for token resolution.
   final String? serviceAccountJson;
 
   final ApiHubRequestExecutor _requestExecutor;

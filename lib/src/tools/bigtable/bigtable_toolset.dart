@@ -16,6 +16,7 @@ const String defaultBigtableToolNamePrefix = 'bigtable';
 
 /// Toolset that exposes Bigtable operations as ADK tools.
 class BigtableToolset extends BaseToolset {
+  /// Creates a Bigtable toolset with optional credential and tool settings.
   BigtableToolset({
     super.toolFilter,
     BigtableCredentialsConfig? credentialsConfig,

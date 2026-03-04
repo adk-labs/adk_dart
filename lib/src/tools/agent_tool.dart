@@ -14,14 +14,20 @@ import 'tool_context.dart';
 
 /// Tool adapter that executes another agent as a tool call.
 class AgentTool extends BaseTool {
+  /// Creates a tool wrapper that delegates execution to [agent].
   AgentTool({
     required this.agent,
     this.skipSummarization = false,
     this.includePlugins = true,
   }) : super(name: agent.name, description: agent.description);
 
+  /// Agent invoked by this tool.
   final BaseAgent agent;
+
+  /// Whether model-side summarization is skipped after tool execution.
   final bool skipSummarization;
+
+  /// Whether parent runner plugins are inherited by the child runner.
   final bool includePlugins;
 
   @override
