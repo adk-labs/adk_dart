@@ -1,5 +1,11 @@
 ## Unreleased
 
+## 2026.3.6
+
+- Bumped package release versions to `2026.3.6` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
+- Fixed nested `.adk/session.db` path creation when app directory mappings resolve to absolute agent paths.
+- Applied the March Python parity batch covering temp-scoped session state visibility, `listAgents()` agent filtering, `gen_ai.agent.version` telemetry, LiteLLM `reasoning` parsing, and Bigtable cluster metadata tools.
+
 ## 2026.3.2+4
 
 - Added Python-style positional deploy target support: `adk deploy cloud_run|agent_engine|gke` in addition to `--target`.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.3.6
+
+- Bumped package version to `2026.3.6`.
+- Updated dependency alignment to `adk_dart: ^2026.3.6`.
+- Synced facade release with `adk_dart` `2026.3.6`, including the latest local session-path fix and March Python parity updates.
+
 ## 2026.3.2+4
 
 - Bumped package version to `2026.3.2+4`.

@@ -1,1 +1,8 @@
-Directory: '
+.adk/
+Users/
+doc/
+knowledge/
+packages/
+reports/
+test_app/
+tool/
