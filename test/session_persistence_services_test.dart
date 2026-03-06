@@ -235,6 +235,15 @@ void main() {
         ),
       );
       await service.appendEvent(session: created, event: event);
+      expect(created.state['score'], 99);
+      expect(created.state['${State.userPrefix}tier'], 'gold');
+      expect(created.state['${State.tempPrefix}scratch'], 'tmp');
+      expect(
+        created.events.single.actions.stateDelta.containsKey(
+          '${State.tempPrefix}scratch',
+        ),
+        isFalse,
+      );
 
       final RandomAccessFile sqliteFile = await File(dbPath).open();
       final List<int> header = await sqliteFile.read(16);
@@ -252,6 +261,12 @@ void main() {
       expect(loaded.state['score'], 99);
       expect(loaded.state['${State.userPrefix}tier'], 'gold');
       expect(loaded.state.containsKey('${State.tempPrefix}scratch'), isFalse);
+      expect(
+        loaded.events.single.actions.stateDelta.containsKey(
+          '${State.tempPrefix}scratch',
+        ),
+        isFalse,
+      );
       expect(loaded.events.first.content?.parts.first.text, 'hello');
     });
 
@@ -1276,6 +1291,64 @@ CREATE TABLE events (
           sessionId: session.id,
         );
         expect(deleted, isNull);
+      },
+    );
+
+    test(
+      'keeps temp state local while omitting it from remote persistence',
+      () async {
+        final _FakeVertexAiSessionApiClient fakeClient =
+            _FakeVertexAiSessionApiClient();
+        final VertexAiSessionService service = VertexAiSessionService(
+          clientFactory: ({String? project, String? location, String? apiKey}) {
+            return fakeClient;
+          },
+        );
+        final Session session = await service.createSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+        );
+
+        await service.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'inv_vertex_temp',
+            author: 'agent',
+            actions: EventActions(
+              stateDelta: <String, Object?>{
+                'k': 'v',
+                '${State.tempPrefix}scratch': 'visible-now',
+              },
+            ),
+          ),
+        );
+
+        expect(session.state['k'], 'v');
+        expect(session.state['${State.tempPrefix}scratch'], 'visible-now');
+        expect(
+          session.events.single.actions.stateDelta.containsKey(
+            '${State.tempPrefix}scratch',
+          ),
+          isFalse,
+        );
+
+        final Session? reloaded = await service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(reloaded, isNotNull);
+        expect(reloaded!.state['k'], 'v');
+        expect(
+          reloaded.state.containsKey('${State.tempPrefix}scratch'),
+          isFalse,
+        );
+        expect(
+          reloaded.events.single.actions.stateDelta.containsKey(
+            '${State.tempPrefix}scratch',
+          ),
+          isFalse,
+        );
       },
     );
 

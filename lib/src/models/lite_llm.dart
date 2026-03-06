@@ -134,6 +134,15 @@ class LiteLlm extends BaseLlm {
         ? 'model'
         : '${message['role'] ?? 'model'}';
     final List<Part> parts = <Part>[];
+    final Set<String> reasoningTexts = <String>{};
+    for (final String field in const <String>[
+      'reasoning_content',
+      'reasoning',
+    ]) {
+      parts.addAll(
+        _extractReasoningParts(message[field], reasoningTexts: reasoningTexts),
+      );
+    }
     final Object? contentRaw = message['content'];
     if (contentRaw is String && contentRaw.isNotEmpty) {
       parts.add(Part.text(contentRaw));
@@ -214,6 +223,43 @@ class LiteLlm extends BaseLlm {
     }
     return '';
   }
+}
+
+List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {
+  final Set<String> seen = reasoningTexts ?? <String>{};
+  final List<Part> parts = <Part>[];
+
+  void addThought(Object? value) {
+    if (value is! String) {
+      return;
+    }
+    final String text = value.trim();
+    if (text.isEmpty || !seen.add(text)) {
+      return;
+    }
+    parts.add(Part.text(text, thought: true));
+  }
+
+  if (raw is String) {
+    addThought(raw);
+    return parts;
+  }
+  if (raw is List) {
+    for (final Object? item in raw) {
+      if (item is Map) {
+        addThought(item['text']);
+        addThought(item['content']);
+      } else {
+        addThought(item);
+      }
+    }
+    return parts;
+  }
+  if (raw is Map) {
+    addThought(raw['text']);
+    addThought(raw['content']);
+  }
+  return parts;
 }
 
 List<Map<String, Object?>> _contentToMessages(Content content) {

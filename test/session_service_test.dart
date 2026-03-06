@@ -47,26 +47,44 @@ void main() {
       expect(loaded.state['user:tier'], 'pro');
     });
 
-    test('appendEvent updates state and drops temp keys', () async {
-      final InMemorySessionService service = InMemorySessionService();
-      final Session session = await service.createSession(
-        appName: 'my_app',
-        userId: 'user_1',
-      );
+    test(
+      'appendEvent keeps temp keys visible during invocation without persisting them',
+      () async {
+        final InMemorySessionService service = InMemorySessionService();
+        final Session session = await service.createSession(
+          appName: 'my_app',
+          userId: 'user_1',
+        );
 
-      final Event event = Event(
-        invocationId: 'inv_1',
-        author: 'agent',
-        actions: EventActions(
-          stateDelta: <String, Object?>{'x': 1, 'temp:transient': 'ignore'},
-        ),
-      );
+        final Event event = Event(
+          invocationId: 'inv_1',
+          author: 'agent',
+          actions: EventActions(
+            stateDelta: <String, Object?>{'x': 1, 'temp:transient': 'ignore'},
+          ),
+        );
 
-      await service.appendEvent(session: session, event: event);
+        await service.appendEvent(session: session, event: event);
 
-      expect(session.state['x'], 1);
-      expect(session.state.containsKey('temp:transient'), isFalse);
-      expect(session.events, hasLength(1));
-    });
+        expect(session.state['x'], 1);
+        expect(session.state['temp:transient'], 'ignore');
+        expect(session.events, hasLength(1));
+        expect(
+          session.events.single.actions.stateDelta.containsKey(
+            'temp:transient',
+          ),
+          isFalse,
+        );
+
+        final Session? reloaded = await service.getSession(
+          appName: 'my_app',
+          userId: 'user_1',
+          sessionId: session.id,
+        );
+        expect(reloaded, isNotNull);
+        expect(reloaded!.state['x'], 1);
+        expect(reloaded.state.containsKey('temp:transient'), isFalse);
+      },
+    );
   });
 }

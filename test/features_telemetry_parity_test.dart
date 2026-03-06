@@ -424,6 +424,7 @@ void main() {
           invocationSpan.attributes['gen_ai.operation.name'],
           'invoke_agent',
         );
+        expect(invocationSpan.attributes['gen_ai.agent.version'], adkVersion);
         expect(invocationSpan.attributes['gen_ai.conversation.id'], 's-2');
         tracer.endCurrentSpan();
 
@@ -445,6 +446,7 @@ void main() {
           inferenceSpan.attributes['gen_ai.operation.name'],
           'generate_content',
         );
+        expect(inferenceSpan.attributes['gen_ai.agent.version'], adkVersion);
         expect(
           inferenceSpan.attributes['gen_ai.input.messages'],
           isA<String>(),

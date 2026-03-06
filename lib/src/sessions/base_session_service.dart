@@ -70,21 +70,34 @@ abstract class BaseSessionService {
       return event;
     }
 
-    final Event trimmed = _trimTempDeltaState(event);
-    _updateSessionState(session: session, event: trimmed);
-    session.events.add(trimmed);
-    return trimmed;
+    _updateSessionState(session: session, event: event);
+    final Event persisted = eventForPersistence(event);
+    session.events.add(persisted);
+    return persisted;
   }
 
-  Event _trimTempDeltaState(Event event) {
+  /// Returns the persistable form of [event].
+  ///
+  /// Transient `temp:` keys stay visible in the live session state during the
+  /// current invocation, but must not be written into stored event history.
+  Event eventForPersistence(Event event) {
     if (event.actions.stateDelta.isEmpty) {
       return event;
     }
 
-    event.actions.stateDelta.removeWhere(
-      (String key, Object? _) => key.startsWith(State.tempPrefix),
+    final bool hasTempKeys = event.actions.stateDelta.keys.any(
+      (String key) => key.startsWith(State.tempPrefix),
     );
-    return event;
+    if (!hasTempKeys) {
+      return event;
+    }
+
+    final Map<String, Object?> persistedDelta = Map<String, Object?>.from(
+      event.actions.stateDelta,
+    )..removeWhere((String key, Object? _) => key.startsWith(State.tempPrefix));
+    return event.copyWith(
+      actions: event.actions.copyWith(stateDelta: persistedDelta),
+    );
   }
 
   void _updateSessionState({required Session session, required Event event}) {
@@ -93,9 +106,6 @@ abstract class BaseSessionService {
     }
 
     event.actions.stateDelta.forEach((String key, Object? value) {
-      if (key.startsWith(State.tempPrefix)) {
-        return;
-      }
       session.state[key] = value;
     });
   }

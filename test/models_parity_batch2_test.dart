@@ -614,6 +614,38 @@ void main() {
       expect(parsed.content?.parts.single.text, 'ok');
     });
 
+    test('parses reasoning_content and reasoning fields as thought parts', () {
+      final LlmResponse parsed = LiteLlm.parseCompletionResponse(
+        <String, Object?>{
+          'model': 'openai/gpt-4o-mini',
+          'choices': <Object?>[
+            <String, Object?>{
+              'finish_reason': 'stop',
+              'message': <String, Object?>{
+                'role': 'assistant',
+                'reasoning_content': 'legacy-thought',
+                'reasoning': 'new-thought',
+                'content': 'final-answer',
+              },
+            },
+          ],
+          'usage': <String, Object?>{
+            'prompt_tokens': 1,
+            'completion_tokens': 2,
+            'total_tokens': 3,
+          },
+        },
+      );
+
+      expect(parsed.content?.parts, hasLength(3));
+      expect(parsed.content?.parts[0].text, 'legacy-thought');
+      expect(parsed.content?.parts[0].thought, isTrue);
+      expect(parsed.content?.parts[1].text, 'new-thought');
+      expect(parsed.content?.parts[1].thought, isTrue);
+      expect(parsed.content?.parts[2].text, 'final-answer');
+      expect(parsed.content?.parts[2].thought, isFalse);
+    });
+
     test('enforces strict OpenAI schema for structured outputs', () {
       final LlmRequest request = LlmRequest(
         model: 'openai/gpt-4o-mini',

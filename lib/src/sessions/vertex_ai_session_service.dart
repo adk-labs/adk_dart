@@ -673,6 +673,7 @@ class VertexAiSessionService extends BaseSessionService {
     required Session session,
     required Event event,
   }) async {
+    final Event persistedEvent = eventForPersistence(event);
     await super.appendEvent(session: session, event: event);
 
     final String reasoningEngineId = _getReasoningEngineId(session.appName);
@@ -684,7 +685,9 @@ class VertexAiSessionService extends BaseSessionService {
     }
     final Map<String, Object?> actions = <String, Object?>{
       'skip_summarization': event.actions.skipSummarization,
-      'state_delta': Map<String, Object?>.from(event.actions.stateDelta),
+      'state_delta': Map<String, Object?>.from(
+        persistedEvent.actions.stateDelta,
+      ),
       'artifact_delta': Map<String, int>.from(event.actions.artifactDelta),
       'transfer_agent': event.actions.transferToAgent,
       'escalate': event.actions.escalate,
@@ -721,12 +724,12 @@ class VertexAiSessionService extends BaseSessionService {
     await apiClient.appendEvent(
       reasoningEngineId: reasoningEngineId,
       sessionId: session.id,
-      author: event.author,
-      invocationId: event.invocationId,
-      timestamp: event.timestamp,
+      author: persistedEvent.author,
+      invocationId: persistedEvent.invocationId,
+      timestamp: persistedEvent.timestamp,
       config: config,
     );
-    return event;
+    return persistedEvent;
   }
 
   String _getReasoningEngineId(String appName) {

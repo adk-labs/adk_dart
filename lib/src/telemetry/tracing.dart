@@ -15,6 +15,7 @@ import '../models/llm_response.dart';
 import '../tools/base_tool.dart';
 import '../types/content.dart';
 import '../utils/model_name_utils.dart';
+import '../version.dart';
 import 'base_telemetry_service.dart';
 import '_experimental_semconv.dart' as experimental_semconv;
 
@@ -227,6 +228,7 @@ void traceAgentInvocation(
     ..setAttribute('gen_ai.operation.name', 'invoke_agent')
     ..setAttribute('gen_ai.agent.description', agent.description)
     ..setAttribute('gen_ai.agent.name', agent.name)
+    ..setAttribute('gen_ai.agent.version', adkVersion)
     ..setAttribute('gen_ai.conversation.id', ctx.session.id);
 }
 
@@ -938,6 +940,7 @@ Map<String, Object?> _buildCommonInferenceAttributes(
 ) {
   return <String, Object?>{
     'gen_ai.agent.name': invocationContext.agent.name,
+    'gen_ai.agent.version': adkVersion,
     'gen_ai.conversation.id': invocationContext.session.id,
     'user.id': invocationContext.session.userId,
     'gcp.vertex.agent.event_id': modelResponseEvent.id,

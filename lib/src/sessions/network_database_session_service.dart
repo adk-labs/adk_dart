@@ -440,9 +440,9 @@ class NetworkDatabaseSessionService extends BaseSessionService {
         return event;
       }
 
-      _trimTempDeltaState(event);
+      final Event persistedEvent = eventForPersistence(event);
       final SessionStateDelta delta = extractStateDelta(
-        event.actions.stateDelta,
+        persistedEvent.actions.stateDelta,
       );
 
       await _withTransaction<void>((_NetworkDbExecutor db) async {
@@ -522,7 +522,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
             session.id,
             event.invocationId,
             event.timestamp,
-            jsonEncode(encodeEventData(event)),
+            jsonEncode(encodeEventData(persistedEvent)),
           ],
         );
       });
@@ -680,15 +680,6 @@ class NetworkDatabaseSessionService extends BaseSessionService {
       'ON DUPLICATE KEY UPDATE '
       'state=VALUES(state), update_time=VALUES(update_time)',
       <Object?>[appName, userId, jsonEncode(state), updateTime],
-    );
-  }
-
-  void _trimTempDeltaState(Event event) {
-    if (event.actions.stateDelta.isEmpty) {
-      return;
-    }
-    event.actions.stateDelta.removeWhere(
-      (String key, Object? _) => key.startsWith(State.tempPrefix),
     );
   }
 }

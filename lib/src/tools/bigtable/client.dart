@@ -68,6 +68,12 @@ abstract class BigtableAdminInstance {
 
   /// Returns an admin handle for [tableId].
   BigtableTableAdmin table(String tableId);
+
+  /// Lists clusters in this instance.
+  Iterable<BigtableClusterAdmin> listClusters();
+
+  /// Returns an admin handle for [clusterId].
+  BigtableClusterAdmin cluster(String clusterId);
 }
 
 /// Admin table interface for Bigtable.
@@ -77,6 +83,27 @@ abstract class BigtableTableAdmin {
 
   /// Column family descriptors for this table.
   Map<String, Object?> listColumnFamilies();
+}
+
+/// Admin cluster interface for Bigtable.
+abstract class BigtableClusterAdmin {
+  /// Cluster identifier.
+  String get clusterId;
+
+  /// Cluster location resource name.
+  String get location;
+
+  /// Raw cluster state payload.
+  Object? get state;
+
+  /// Raw serve nodes payload.
+  Object? get serveNodes;
+
+  /// Raw default storage type payload.
+  Object? get defaultStorageType;
+
+  /// Reloads cluster metadata.
+  void reload();
 }
 
 /// Data client interface for Bigtable query operations.
@@ -557,6 +584,49 @@ class _RestBigtableAdminInstance implements BigtableAdminInstance {
       tableId: tableId,
     );
   }
+
+  @override
+  Iterable<BigtableClusterAdmin> listClusters() sync* {
+    String? pageToken;
+    do {
+      final Map<String, Object?> payload = api.requestJson(
+        method: 'GET',
+        baseUrl: _RestBigtableApiClient._adminBaseUrl,
+        path: '$_instancePath/clusters',
+        queryParameters: <String, String>{
+          if (pageToken != null && pageToken.isNotEmpty) 'pageToken': pageToken,
+        },
+      );
+      for (final Map<String, Object?> item in _listOfMaps(
+        payload['clusters'],
+      )) {
+        final String name = _string(item['name']) ?? '';
+        final String clusterId = name.split('/').isEmpty
+            ? ''
+            : name.split('/').last;
+        if (clusterId.isNotEmpty) {
+          yield _RestBigtableClusterAdmin(
+            api: api,
+            project: project,
+            instanceId: instanceId,
+            clusterId: clusterId,
+            payload: item,
+          );
+        }
+      }
+      pageToken = _string(payload['nextPageToken']);
+    } while (pageToken != null && pageToken.isNotEmpty);
+  }
+
+  @override
+  BigtableClusterAdmin cluster(String clusterId) {
+    return _RestBigtableClusterAdmin(
+      api: api,
+      project: project,
+      instanceId: instanceId,
+      clusterId: clusterId,
+    );
+  }
 }
 
 class _RestBigtableTableAdmin implements BigtableTableAdmin {
@@ -591,6 +661,70 @@ class _RestBigtableTableAdmin implements BigtableTableAdmin {
       );
     }
     return _map(_payload['columnFamilies']);
+  }
+}
+
+class _RestBigtableClusterAdmin implements BigtableClusterAdmin {
+  _RestBigtableClusterAdmin({
+    required this.api,
+    required this.project,
+    required this.instanceId,
+    required this.clusterId,
+    Map<String, Object?>? payload,
+  }) : _payload = payload ?? <String, Object?>{};
+
+  final _RestBigtableApiClient api;
+  final String project;
+  final String instanceId;
+  @override
+  final String clusterId;
+
+  Map<String, Object?> _payload;
+
+  String get _clusterPath =>
+      '/v2/projects/${Uri.encodeComponent(project)}'
+      '/instances/${Uri.encodeComponent(instanceId)}'
+      '/clusters/${Uri.encodeComponent(clusterId)}';
+
+  @override
+  String get location {
+    if (_payload.isEmpty) {
+      reload();
+    }
+    return _string(_payload['location']) ?? '';
+  }
+
+  @override
+  Object? get state {
+    if (_payload.isEmpty) {
+      reload();
+    }
+    return _payload['state'];
+  }
+
+  @override
+  Object? get serveNodes {
+    if (_payload.isEmpty) {
+      reload();
+    }
+    return _payload['serveNodes'];
+  }
+
+  @override
+  Object? get defaultStorageType {
+    if (_payload.isEmpty) {
+      reload();
+    }
+    return _payload['defaultStorageType'];
+  }
+
+  @override
+  void reload() {
+    _payload = api.requestJson(
+      method: 'GET',
+      baseUrl: _RestBigtableApiClient._adminBaseUrl,
+      path: _clusterPath,
+    );
   }
 }
 

@@ -133,6 +133,16 @@ class _FakeBigtableAdminInstance implements BigtableAdminInstance {
   BigtableTableAdmin table(String tableId) {
     return _FakeBigtableTableAdmin(tableId);
   }
+
+  @override
+  Iterable<BigtableClusterAdmin> listClusters() sync* {
+    yield _FakeBigtableClusterAdmin('cluster');
+  }
+
+  @override
+  BigtableClusterAdmin cluster(String clusterId) {
+    return _FakeBigtableClusterAdmin(clusterId);
+  }
 }
 
 class _FakeBigtableTableAdmin implements BigtableTableAdmin {
@@ -143,6 +153,28 @@ class _FakeBigtableTableAdmin implements BigtableTableAdmin {
 
   @override
   Map<String, Object?> listColumnFamilies() => <String, Object?>{};
+}
+
+class _FakeBigtableClusterAdmin implements BigtableClusterAdmin {
+  _FakeBigtableClusterAdmin(this.clusterId);
+
+  @override
+  final String clusterId;
+
+  @override
+  String get location => 'projects/project/locations/us-central1-b';
+
+  @override
+  Object? get state => 'ready';
+
+  @override
+  Object? get serveNodes => 3;
+
+  @override
+  Object? get defaultStorageType => 'SSD';
+
+  @override
+  void reload() {}
 }
 
 class _FakeBigtableDataClient implements BigtableDataClient {

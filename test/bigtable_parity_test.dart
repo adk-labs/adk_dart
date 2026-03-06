@@ -19,6 +19,38 @@ class _FakeBigtableTable implements BigtableTableAdmin {
   }
 }
 
+class _FakeBigtableCluster implements BigtableClusterAdmin {
+  _FakeBigtableCluster({
+    required this.clusterId,
+    required this.location,
+    required this.state,
+    required this.serveNodes,
+    required this.defaultStorageType,
+  });
+
+  @override
+  final String clusterId;
+
+  @override
+  final String location;
+
+  @override
+  final Object? state;
+
+  @override
+  final Object? serveNodes;
+
+  @override
+  final Object? defaultStorageType;
+
+  int reloadCount = 0;
+
+  @override
+  void reload() {
+    reloadCount += 1;
+  }
+}
+
 class _FakeBigtableInstance implements BigtableAdminInstance {
   _FakeBigtableInstance({
     required this.instanceId,
@@ -27,7 +59,9 @@ class _FakeBigtableInstance implements BigtableAdminInstance {
     required this.type,
     required this.labels,
     List<BigtableTableAdmin>? tables,
-  }) : _tables = tables ?? <BigtableTableAdmin>[];
+    List<BigtableClusterAdmin>? clusters,
+  }) : _tables = tables ?? <BigtableTableAdmin>[],
+       _clusters = clusters ?? <BigtableClusterAdmin>[];
 
   @override
   final String instanceId;
@@ -45,6 +79,7 @@ class _FakeBigtableInstance implements BigtableAdminInstance {
   final Map<String, Object?> labels;
 
   final List<BigtableTableAdmin> _tables;
+  final List<BigtableClusterAdmin> _clusters;
   int reloadCount = 0;
 
   @override
@@ -62,6 +97,19 @@ class _FakeBigtableInstance implements BigtableAdminInstance {
     return _tables.firstWhere(
       (BigtableTableAdmin table) => table.tableId == tableId,
       orElse: () => throw StateError('Unknown table: $tableId'),
+    );
+  }
+
+  @override
+  Iterable<BigtableClusterAdmin> listClusters() {
+    return _clusters;
+  }
+
+  @override
+  BigtableClusterAdmin cluster(String clusterId) {
+    return _clusters.firstWhere(
+      (BigtableClusterAdmin cluster) => cluster.clusterId == clusterId,
+      orElse: () => throw StateError('Unknown cluster: $clusterId'),
     );
   }
 }
@@ -222,6 +270,15 @@ void main() {
         state: 'READY',
         type: 'PRODUCTION',
         labels: <String, Object?>{'env': 'dev'},
+        clusters: <BigtableClusterAdmin>[
+          _FakeBigtableCluster(
+            clusterId: 'cluster-a',
+            location: 'projects/project1/locations/us-central1-b',
+            state: 'READY',
+            serveNodes: 3,
+            defaultStorageType: 'SSD',
+          ),
+        ],
         tables: <BigtableTableAdmin>[
           _FakeBigtableTable(
             tableId: 'users',
@@ -270,6 +327,31 @@ void main() {
       );
       expect(tables['status'], 'SUCCESS');
       expect(tables['results'], <String>['users', 'orders']);
+
+      final Map<String, Object?> clusters = await listClusters(
+        projectId: 'project1',
+        instanceId: 'inst1',
+        credentials: Object(),
+      );
+      expect(clusters['status'], 'SUCCESS');
+      expect(clusters['results'], <String>['cluster-a']);
+
+      final Map<String, Object?> clusterInfo = await getClusterInfo(
+        projectId: 'project1',
+        instanceId: 'inst1',
+        clusterId: 'cluster-a',
+        credentials: Object(),
+      );
+      expect(clusterInfo['status'], 'SUCCESS');
+      expect(
+        (clusterInfo['results'] as Map)['location'],
+        'projects/project1/locations/us-central1-b',
+      );
+      expect((clusterInfo['results'] as Map)['serve_nodes'], 3);
+      expect(
+        ((instance.cluster('cluster-a') as _FakeBigtableCluster).reloadCount),
+        1,
+      );
 
       final Map<String, Object?> tableInfo = await getTableInfo(
         projectId: 'project1',
@@ -416,6 +498,8 @@ void main() {
         'list_instances',
         'get_instance_info',
         'list_tables',
+        'list_clusters',
+        'get_cluster_info',
         'get_table_info',
         'execute_sql',
       });

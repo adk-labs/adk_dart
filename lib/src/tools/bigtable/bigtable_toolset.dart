@@ -52,6 +52,18 @@ class BigtableToolset extends BaseToolset {
         toolSettings: _toolSettings,
       ),
       GoogleTool(
+        func: metadata_tool.listClusters,
+        name: 'list_clusters',
+        credentialsConfig: _credentialsConfig,
+        toolSettings: _toolSettings,
+      ),
+      GoogleTool(
+        func: metadata_tool.getClusterInfo,
+        name: 'get_cluster_info',
+        credentialsConfig: _credentialsConfig,
+        toolSettings: _toolSettings,
+      ),
+      GoogleTool(
         func: metadata_tool.getTableInfo,
         name: 'get_table_info',
         credentialsConfig: _credentialsConfig,

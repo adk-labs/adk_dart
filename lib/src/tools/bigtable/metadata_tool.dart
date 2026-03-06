@@ -73,6 +73,59 @@ Future<Map<String, Object?>> listTables({
   }
 }
 
+/// Lists cluster IDs in [instanceId].
+Future<Map<String, Object?>> listClusters({
+  required String projectId,
+  required String instanceId,
+  required Object credentials,
+}) async {
+  try {
+    final BigtableAdminClient btClient = getBigtableAdminClient(
+      project: projectId,
+      credentials: credentials,
+    );
+    final BigtableAdminInstance instance = btClient.instance(instanceId);
+    final List<String> clusterIds = instance
+        .listClusters()
+        .map((BigtableClusterAdmin cluster) => cluster.clusterId)
+        .toList(growable: false);
+    return <String, Object?>{'status': 'SUCCESS', 'results': clusterIds};
+  } catch (error) {
+    return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
+  }
+}
+
+/// Gets metadata for cluster [clusterId] in [instanceId].
+Future<Map<String, Object?>> getClusterInfo({
+  required String projectId,
+  required String instanceId,
+  required String clusterId,
+  required Object credentials,
+}) async {
+  try {
+    final BigtableAdminClient btClient = getBigtableAdminClient(
+      project: projectId,
+      credentials: credentials,
+    );
+    final BigtableAdminInstance instance = btClient.instance(instanceId);
+    final BigtableClusterAdmin cluster = instance.cluster(clusterId);
+    cluster.reload();
+
+    final Map<String, Object?> clusterInfo = <String, Object?>{
+      'project_id': projectId,
+      'instance_id': instance.instanceId,
+      'cluster_id': cluster.clusterId,
+      'location': cluster.location,
+      'state': cluster.state,
+      'serve_nodes': cluster.serveNodes,
+      'default_storage_type': cluster.defaultStorageType,
+    };
+    return <String, Object?>{'status': 'SUCCESS', 'results': clusterInfo};
+  } catch (error) {
+    return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
+  }
+}
+
 /// Gets metadata for table [tableId] in [instanceId].
 Future<Map<String, Object?>> getTableInfo({
   required String projectId,

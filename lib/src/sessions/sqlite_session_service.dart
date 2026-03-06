@@ -373,9 +373,9 @@ class SqliteSessionService extends BaseSessionService {
         return event;
       }
 
-      _trimTempDeltaState(event);
+      final Event persistedEvent = eventForPersistence(event);
       final SessionStateDelta delta = extractStateDelta(
-        event.actions.stateDelta,
+        persistedEvent.actions.stateDelta,
       );
 
       _withDatabase<void>((_SqliteDatabase db) {
@@ -454,7 +454,7 @@ class SqliteSessionService extends BaseSessionService {
               session.id,
               event.invocationId,
               event.timestamp,
-              jsonEncode(_eventToJson(event)),
+              jsonEncode(_eventToJson(persistedEvent)),
             ],
           );
         });
@@ -597,15 +597,6 @@ class SqliteSessionService extends BaseSessionService {
       return <String, Object?>{};
     }
     return _decodeJsonMap(rows.first['state']);
-  }
-
-  void _trimTempDeltaState(Event event) {
-    if (event.actions.stateDelta.isEmpty) {
-      return;
-    }
-    event.actions.stateDelta.removeWhere(
-      (String key, Object? _) => key.startsWith(State.tempPrefix),
-    );
   }
 }
 

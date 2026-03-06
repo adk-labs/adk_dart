@@ -110,6 +110,11 @@ class AgentLoader extends BaseAgentLoader {
       return <String>[];
     }
 
+    if (_isSingleAppRoot(base)) {
+      final String singleRootName = _singleRootAgentName(base);
+      return singleRootName.isEmpty ? <String>[] : <String>[singleRootName];
+    }
+
     final List<String> names = <String>[];
     for (final FileSystemEntity entity in base.listSync(followLinks: false)) {
       if (entity is! Directory) {
@@ -119,6 +124,9 @@ class AgentLoader extends BaseAgentLoader {
           ? ''
           : entity.uri.pathSegments[entity.uri.pathSegments.length - 2];
       if (name.isEmpty || name.startsWith('.') || name == '__pycache__') {
+        continue;
+      }
+      if (!_isLoadableAgentDirectory(entity)) {
         continue;
       }
       names.add(name);
@@ -199,6 +207,27 @@ class AgentLoader extends BaseAgentLoader {
   /// Removes [agentName] from the in-memory loader cache.
   void removeAgentFromCache(String agentName) {
     _agentCache.remove(agentName);
+  }
+
+  bool _isLoadableAgentDirectory(Directory dir) {
+    final String path = dir.path;
+    final String sep = Platform.pathSeparator;
+    if (File('$path${sep}root_agent.yaml').existsSync()) {
+      return true;
+    }
+    if (!_enableDevProjectFallback) {
+      return false;
+    }
+    return File('$path${sep}agent.dart').existsSync() ||
+        File('$path${sep}adk.json').existsSync();
+  }
+
+  String _singleRootAgentName(Directory dir) {
+    final File adkJson = File('${dir.path}${Platform.pathSeparator}adk.json');
+    if (adkJson.existsSync()) {
+      return _loadDevProjectConfigSync(dir.path).appName;
+    }
+    return projectDirName(dir.path);
   }
 }
 
