@@ -1,0 +1,8 @@
+.dart_tool/
+.metadata
+build/
+coverage/
+doc/api/
+flutter_adk.iml
+pubspec.lock
+pubspec_overrides.yaml
