@@ -19,6 +19,12 @@ const Set<String> _allowedFrontmatterKeys = <String>{
   'compatibility',
 };
 
+/// Metadata value allowed in skill frontmatter.
+typedef SkillMetadataValue = Object?;
+
+/// Resource payload allowed in skill references/assets.
+typedef SkillResourceData = Object;
+
 /// Minimal shape shared by all skill descriptors.
 abstract class SkillDescriptor {
   /// Creates a skill descriptor.
@@ -40,13 +46,13 @@ class Frontmatter implements SkillDescriptor {
     this.license,
     String? compatibility,
     this.allowedTools,
-    Map<String, String>? metadata,
+    Map<String, SkillMetadataValue>? metadata,
     Map<String, Object?>? extraFields,
   }) : name = _validateName(name),
        description = _validateDescription(description),
        compatibility = _validateCompatibility(compatibility),
-       metadata = Map<String, String>.unmodifiable(
-         metadata ?? <String, String>{},
+       metadata = Map<String, SkillMetadataValue>.unmodifiable(
+         _cloneMetadataMap(metadata ?? <String, SkillMetadataValue>{}),
        ),
        extraFields = Map<String, Object?>.unmodifiable(
          extraFields ?? <String, Object?>{},
@@ -111,8 +117,8 @@ class Frontmatter implements SkillDescriptor {
   /// Optional allowed-tools selector expression.
   final String? allowedTools;
 
-  /// Free-form string metadata map.
-  final Map<String, String> metadata;
+  /// Free-form metadata map.
+  final Map<String, SkillMetadataValue> metadata;
 
   /// Unknown frontmatter fields preserved when allowed.
   final Map<String, Object?> extraFields;
@@ -133,7 +139,7 @@ class Frontmatter implements SkillDescriptor {
       result[byAlias ? 'allowed-tools' : 'allowed_tools'] = allowedTools;
     }
     if (metadata.isNotEmpty) {
-      result['metadata'] = Map<String, String>.from(metadata);
+      result['metadata'] = _cloneMetadataMap(metadata);
     }
     if (extraFields.isNotEmpty) {
       for (final MapEntry<String, Object?> entry in extraFields.entries) {
@@ -184,20 +190,21 @@ class Frontmatter implements SkillDescriptor {
     return value;
   }
 
-  static Map<String, String> _readMetadata(Object? value) {
+  static Map<String, SkillMetadataValue> _readMetadata(Object? value) {
     if (value == null) {
-      return <String, String>{};
+      return <String, SkillMetadataValue>{};
     }
     if (value is! Map) {
       throw ArgumentError('metadata must be a mapping');
     }
-    final Map<String, String> metadata = <String, String>{};
+    final Map<String, SkillMetadataValue> metadata =
+        <String, SkillMetadataValue>{};
     for (final MapEntry<Object?, Object?> entry in value.entries) {
       final Object? key = entry.key;
       if (key is! String) {
         throw ArgumentError('metadata keys must be strings');
       }
-      metadata[key] = '${entry.value ?? ''}';
+      metadata[key] = _normalizeMetadataValue(entry.value);
     }
     return metadata;
   }
@@ -219,31 +226,49 @@ class Script {
 class Resources {
   /// Creates grouped skill resources.
   Resources({
-    Map<String, String>? references,
-    Map<String, String>? assets,
+    Map<String, SkillResourceData>? references,
+    Map<String, SkillResourceData>? assets,
     Map<String, Script>? scripts,
-  }) : references = Map<String, String>.unmodifiable(
-         references ?? <String, String>{},
+  }) : references = Map<String, SkillResourceData>.unmodifiable(
+         _normalizeResourceMap(references ?? <String, SkillResourceData>{}),
        ),
-       assets = Map<String, String>.unmodifiable(assets ?? <String, String>{}),
+       assets = Map<String, SkillResourceData>.unmodifiable(
+         _normalizeResourceMap(assets ?? <String, SkillResourceData>{}),
+       ),
        scripts = Map<String, Script>.unmodifiable(
          scripts ?? <String, Script>{},
        );
 
-  /// Markdown/text references bundled with the skill.
-  final Map<String, String> references;
+  /// Text or binary references bundled with the skill.
+  final Map<String, SkillResourceData> references;
 
-  /// Static assets bundled with the skill.
-  final Map<String, String> assets;
+  /// Static text or binary assets bundled with the skill.
+  final Map<String, SkillResourceData> assets;
 
   /// Executable scripts bundled with the skill.
   final Map<String, Script> scripts;
 
   /// Returns one reference by [referenceId], if present.
-  String? getReference(String referenceId) => references[referenceId];
+  String? getReference(String referenceId) =>
+      _readTextResource(references[referenceId]);
+
+  /// Returns one binary reference by [referenceId], if present.
+  List<int>? getReferenceBytes(String referenceId) =>
+      _readBinaryResource(references[referenceId]);
 
   /// Returns one asset by [assetId], if present.
-  String? getAsset(String assetId) => assets[assetId];
+  String? getAsset(String assetId) => _readTextResource(assets[assetId]);
+
+  /// Returns one binary asset by [assetId], if present.
+  List<int>? getAssetBytes(String assetId) =>
+      _readBinaryResource(assets[assetId]);
+
+  /// Returns one raw reference payload by [referenceId], if present.
+  SkillResourceData? getReferenceData(String referenceId) =>
+      references[referenceId];
+
+  /// Returns one raw asset payload by [assetId], if present.
+  SkillResourceData? getAssetData(String assetId) => assets[assetId];
 
   /// Returns one script by [scriptId], if present.
   Script? getScript(String scriptId) => scripts[scriptId];
@@ -271,7 +296,7 @@ class Skill implements SkillDescriptor {
     String? license,
     String? compatibility,
     String? allowedTools,
-    Map<String, String>? metadata,
+    Map<String, SkillMetadataValue>? metadata,
   }) : frontmatter =
            frontmatter ??
            Frontmatter(
@@ -372,13 +397,13 @@ Skill loadSkillFromDir(String skillDirPath) {
     );
   }
 
-  final Map<String, String> references = _loadDir(
+  final Map<String, SkillResourceData> references = _loadResourceDir(
     Directory(_join(skillDir.path, 'references')),
   );
-  final Map<String, String> assets = _loadDir(
+  final Map<String, SkillResourceData> assets = _loadResourceDir(
     Directory(_join(skillDir.path, 'assets')),
   );
-  final Map<String, String> rawScripts = _loadDir(
+  final Map<String, String> rawScripts = _loadScriptDir(
     Directory(_join(skillDir.path, 'scripts')),
   );
   final Map<String, Script> scripts = <String, Script>{};
@@ -541,8 +566,8 @@ _ParsedSkillMd _parseSkillMd(Directory skillDir) {
   return _ParsedSkillMd(frontmatter: parsed, body: body);
 }
 
-Map<String, String> _loadDir(Directory directory) {
-  final Map<String, String> files = <String, String>{};
+Map<String, SkillResourceData> _loadResourceDir(Directory directory) {
+  final Map<String, SkillResourceData> files = <String, SkillResourceData>{};
   if (!directory.existsSync()) {
     return files;
   }
@@ -563,11 +588,31 @@ Map<String, String> _loadDir(Directory directory) {
       continue;
     }
     final String relativePath = normalizedPath.substring(basePath.length + 1);
+    final List<int> bytes = entity.readAsBytesSync();
+    if (_shouldTreatAsBinaryResource(relativePath, bytes)) {
+      files[relativePath] = List<int>.from(bytes);
+      continue;
+    }
     try {
-      files[relativePath] = utf8.decode(
-        entity.readAsBytesSync(),
-        allowMalformed: false,
-      );
+      files[relativePath] = utf8.decode(bytes, allowMalformed: false);
+    } on FormatException {
+      files[relativePath] = List<int>.from(bytes);
+    }
+  }
+  return files;
+}
+
+Map<String, String> _loadScriptDir(Directory directory) {
+  final Map<String, String> files = <String, String>{};
+  final Map<String, SkillResourceData> raw = _loadResourceDir(directory);
+  for (final MapEntry<String, SkillResourceData> entry in raw.entries) {
+    if (entry.value is String) {
+      files[entry.key] = entry.value as String;
+      continue;
+    }
+    final List<int> bytes = entry.value as List<int>;
+    try {
+      files[entry.key] = utf8.decode(bytes, allowMalformed: false);
     } on FormatException {
       continue;
     }
@@ -616,6 +661,82 @@ Object? _yamlToObject(Object? value) {
     return value.map(_yamlToObject).toList(growable: false);
   }
   return value;
+}
+
+Map<String, SkillMetadataValue> _cloneMetadataMap(
+  Map<String, SkillMetadataValue> metadata,
+) {
+  return metadata.map(
+    (String key, SkillMetadataValue value) =>
+        MapEntry<String, SkillMetadataValue>(
+          key,
+          _normalizeMetadataValue(value),
+        ),
+  );
+}
+
+Object? _normalizeMetadataValue(Object? value) {
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry<String, Object?>(
+        key.toString(),
+        _normalizeMetadataValue(item),
+      ),
+    );
+  }
+  if (value is List) {
+    return value
+        .map<Object?>((Object? item) => _normalizeMetadataValue(item))
+        .toList(growable: false);
+  }
+  return value;
+}
+
+Map<String, SkillResourceData> _normalizeResourceMap(
+  Map<String, SkillResourceData> resources,
+) {
+  return resources.map(
+    (String key, SkillResourceData value) =>
+        MapEntry<String, SkillResourceData>(
+          key,
+          _normalizeResourceValue(value),
+        ),
+  );
+}
+
+SkillResourceData _normalizeResourceValue(Object? value) {
+  if (value is String) {
+    return value;
+  }
+  if (value is List<int>) {
+    return List<int>.from(value);
+  }
+  if (value is List) {
+    final List<int> bytes = value
+        .map<int>((Object? item) {
+          if (item is! int) {
+            throw ArgumentError('resource values must be String or List<int>');
+          }
+          return item;
+        })
+        .toList(growable: false);
+    return bytes;
+  }
+  throw ArgumentError('resource values must be String or List<int>');
+}
+
+String? _readTextResource(Object? value) => value is String ? value : null;
+
+List<int>? _readBinaryResource(Object? value) {
+  if (value is List<int>) {
+    return List<int>.from(value);
+  }
+  if (value is List) {
+    return value
+        .map<int>((Object? item) => item as int)
+        .toList(growable: false);
+  }
+  return null;
 }
 
 File? _findSkillMd(Directory skillDir) {
@@ -683,3 +804,34 @@ String _formatSkillError(Object error) {
 }
 
 String _normalizePath(String path) => path.replaceAll('\\', '/');
+
+const Set<String> _textSkillResourceExtensions = <String>{
+  '.bash',
+  '.csv',
+  '.dart',
+  '.html',
+  '.htm',
+  '.js',
+  '.json',
+  '.md',
+  '.py',
+  '.sh',
+  '.sql',
+  '.svg',
+  '.toml',
+  '.ts',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+};
+
+bool _shouldTreatAsBinaryResource(String relativePath, List<int> bytes) {
+  final String lower = relativePath.toLowerCase();
+  for (final String extension in _textSkillResourceExtensions) {
+    if (lower.endsWith(extension)) {
+      return false;
+    }
+  }
+  return true;
+}

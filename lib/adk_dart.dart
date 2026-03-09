@@ -235,7 +235,7 @@ export 'src/optimization/sampler.dart';
 export 'src/optimization/simple_prompt_optimizer.dart';
 
 export 'src/runners/runner.dart';
-export 'src/skills/skill.dart';
+export 'src/skills/skill_runtime.dart';
 export 'src/skills/models.dart';
 export 'src/skills/prompt.dart';
 export 'src/skills/_utils.dart';

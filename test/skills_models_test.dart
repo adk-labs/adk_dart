@@ -20,7 +20,10 @@ void main() {
         license: 'Apache 2.0',
         compatibility: 'test',
         allowedTools: 'test',
-        metadata: <String, String>{'key': 'value'},
+        metadata: <String, Object?>{
+          'key': 'value',
+          'tools': <String>['tool_a', 'tool_b'],
+        },
       );
 
       expect(frontmatter.name, 'test-skill');
@@ -28,7 +31,8 @@ void main() {
       expect(frontmatter.license, 'Apache 2.0');
       expect(frontmatter.compatibility, 'test');
       expect(frontmatter.allowedTools, 'test');
-      expect(frontmatter.metadata, <String, String>{'key': 'value'});
+      expect(frontmatter.metadata['key'], 'value');
+      expect(frontmatter.metadata['tools'], <String>['tool_a', 'tool_b']);
     });
 
     test('allows extra fields through fromMap', () {
@@ -171,19 +175,27 @@ void main() {
   group('Resource models', () {
     test('resources getters and listing', () {
       final Resources resources = Resources(
-        references: <String, String>{'ref1': 'ref content'},
-        assets: <String, String>{'asset1': 'asset content'},
+        references: <String, Object>{
+          'ref1': 'ref content',
+          'ref2': <int>[1, 2, 3],
+        },
+        assets: <String, Object>{
+          'asset1': 'asset content',
+          'asset2': <int>[4, 5],
+        },
         scripts: <String, Script>{'script1': Script(src: "print('hello')")},
       );
 
       expect(resources.getReference('ref1'), 'ref content');
       expect(resources.getAsset('asset1'), 'asset content');
+      expect(resources.getReferenceBytes('ref2'), <int>[1, 2, 3]);
+      expect(resources.getAssetBytes('asset2'), <int>[4, 5]);
       expect(resources.getScript('script1')?.src, "print('hello')");
       expect(resources.getReference('ref2'), isNull);
       expect(resources.getAsset('asset2'), isNull);
       expect(resources.getScript('script2'), isNull);
-      expect(resources.listReferences(), <String>['ref1']);
-      expect(resources.listAssets(), <String>['asset1']);
+      expect(resources.listReferences(), <String>['ref1', 'ref2']);
+      expect(resources.listAssets(), <String>['asset1', 'asset2']);
       expect(resources.listScripts(), <String>['script1']);
     });
 

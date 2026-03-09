@@ -3,7 +3,7 @@ library;
 
 import '../tools/skill_toolset.dart' show defaultSkillSystemInstruction;
 
-export 'skill.dart' show formatSkillsAsXml;
+export 'skill_runtime.dart' show formatSkillsAsXml;
 
 @Deprecated(
   'Importing DEFAULT_SKILL_SYSTEM_INSTRUCTION from skills.prompt is deprecated. '

@@ -57,6 +57,47 @@ Test instructions
       expect(skill.resources.getScript('script1.sh')?.src, 'echo hello');
     });
 
+    test(
+      'loadSkillFromDir preserves metadata lists and binary assets',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk-skill-test-',
+        );
+        addTearDown(() => tempDir.delete(recursive: true));
+
+        final Directory skillDir = Directory(
+          _join(tempDir.path, 'binary-skill'),
+        );
+        skillDir.createSync(recursive: true);
+
+        _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+---
+name: binary-skill
+description: Binary test
+metadata:
+  adk_additional_tools:
+    - extra_tool
+---
+Binary instructions
+''');
+        final File binaryAsset = File(_join(skillDir.path, 'assets/file.pdf'));
+        binaryAsset.parent.createSync(recursive: true);
+        binaryAsset.writeAsBytesSync(<int>[37, 80, 68, 70]);
+
+        final Skill skill = loadSkillFromDir(skillDir.path);
+        expect(skill.frontmatter.metadata['adk_additional_tools'], <String>[
+          'extra_tool',
+        ]);
+        expect(skill.resources.getAsset('file.pdf'), isNull);
+        expect(skill.resources.getAssetBytes('file.pdf'), <int>[
+          37,
+          80,
+          68,
+          70,
+        ]);
+      },
+    );
+
     test('loadSkillFromDir supports allowed-tools yaml key', () async {
       final Directory tempDir = await Directory.systemTemp.createTemp(
         'adk-skill-test-',

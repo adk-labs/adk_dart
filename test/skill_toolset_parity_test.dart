@@ -32,6 +32,37 @@ Skill _sampleSkill() {
   );
 }
 
+Skill _skillWithAdditionalTool() {
+  return Skill(
+    frontmatter: Frontmatter(
+      name: 'dynamic-skill',
+      description: 'Unlocks an additional tool after activation',
+      metadata: <String, Object?>{
+        'adk_additional_tools': <String>['extra_tool'],
+      },
+    ),
+    instructions: 'Load me before using the extra tool.',
+    resources: Resources(
+      references: <String, Object>{'guide.md': 'dynamic guide'},
+    ),
+  );
+}
+
+Skill _binarySkill() {
+  return Skill(
+    frontmatter: Frontmatter(
+      name: 'binary-skill',
+      description: 'Contains a binary asset',
+    ),
+    instructions: 'Use the binary asset when needed.',
+    resources: Resources(
+      assets: <String, Object>{
+        'document.pdf': <int>[37, 80, 68, 70],
+      },
+    ),
+  );
+}
+
 class _FakeCodeExecutor extends BaseCodeExecutor {
   _FakeCodeExecutor(this.result);
 
@@ -51,6 +82,31 @@ class _FakeCodeExecutor extends BaseCodeExecutor {
   ) async {
     lastCode = codeExecutionInput.code;
     return result;
+  }
+}
+
+class _FakeAdditionalTool extends BaseTool {
+  _FakeAdditionalTool()
+    : super(name: 'extra_tool', description: 'Extra tool exposed by skill');
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    return FunctionDeclaration(
+      name: name,
+      description: description,
+      parameters: <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{},
+      },
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return <String, Object?>{'status': 'ok'};
   }
 }
 
@@ -116,6 +172,36 @@ void main() {
       expect(frontmatter['description'], 'Helpful specialized workflow');
       expect(frontmatter['x-extra'], 'custom');
     });
+
+    test(
+      'load_skill records activated skill state for dynamic tool resolution',
+      () async {
+        final Context toolContext = _newToolContext();
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_skillWithAdditionalTool()],
+          additionalTools: <BaseTool>[_FakeAdditionalTool()],
+        );
+        final BaseTool loadTool = (await toolset.getTools())[1];
+
+        await loadTool.run(
+          args: <String, dynamic>{'name': 'dynamic-skill'},
+          toolContext: toolContext,
+        );
+
+        final List<Object?> activated = List<Object?>.from(
+          toolContext.state['_adk_activated_skill_root'] as List,
+        );
+        expect(activated, <String>['dynamic-skill']);
+
+        final List<BaseTool> resolved = await toolset.getTools(
+          readonlyContext: ReadonlyContext(toolContext.invocationContext),
+        );
+        expect(
+          resolved.map((BaseTool tool) => tool.name),
+          contains('extra_tool'),
+        );
+      },
+    );
 
     test('load_skill returns missing/not-found errors', () async {
       final SkillToolset toolset = SkillToolset(
@@ -185,6 +271,29 @@ void main() {
           Map<String, Object?>.from(script! as Map)['content'],
           'echo setup',
         );
+      },
+    );
+
+    test(
+      'load_skill_resource returns binary status for binary assets',
+      () async {
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_binarySkill()],
+        );
+        final BaseTool resourceTool = (await toolset.getTools())[2];
+
+        final Object? asset = await resourceTool.run(
+          args: <String, dynamic>{
+            'skill_name': 'binary-skill',
+            'path': 'assets/document.pdf',
+          },
+          toolContext: _newToolContext(),
+        );
+        final Map<String, Object?> payload = Map<String, Object?>.from(
+          asset! as Map,
+        );
+        expect(payload['status'], contains('Binary file detected'));
+        expect(payload.containsKey('content'), isFalse);
       },
     );
 
@@ -293,6 +402,47 @@ void main() {
         expect(instruction, contains('run_skill_script'));
         expect(instruction, contains('<available_skills>'));
         expect(instruction, contains('my-skill'));
+      },
+    );
+
+    test(
+      'load_skill_resource injects binary content into outgoing llm request',
+      () async {
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_binarySkill()],
+        );
+        final BaseTool resourceTool = (await toolset.getTools())[2];
+        final LlmRequest request = LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[
+            Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  name: 'load_skill_resource',
+                  response: <String, Object?>{
+                    'skill_name': 'binary-skill',
+                    'path': 'assets/document.pdf',
+                    'status':
+                        'Binary file detected. The runtime will attach it to the next model request.',
+                  },
+                ),
+              ],
+            ),
+          ],
+        );
+
+        await resourceTool.processLlmRequest(
+          toolContext: _newToolContext(),
+          llmRequest: request,
+        );
+
+        expect(request.contents, hasLength(2));
+        final Content appended = request.contents.last;
+        expect(appended.role, 'user');
+        expect(appended.parts.first.text, contains('assets/document.pdf'));
+        expect(appended.parts.last.inlineData?.mimeType, 'application/pdf');
+        expect(appended.parts.last.inlineData?.data, <int>[37, 80, 68, 70]);
       },
     );
   });

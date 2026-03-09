@@ -9,12 +9,15 @@ import '../code_executors/base_code_executor.dart';
 import '../code_executors/code_execution_utils.dart';
 import '../models/llm_request.dart';
 import '../skills/skill_runtime.dart';
+import '../types/content.dart';
 import 'base_tool.dart';
 import 'base_toolset.dart';
 import 'tool_context.dart';
 
 const int _defaultScriptTimeout = 300;
 const int _maxSkillPayloadBytes = 16 * 1024 * 1024;
+const String _binaryFileDetectedMsg =
+    'Binary file detected. The runtime will attach it to the next model request.';
 
 /// Default system instruction injected when skill tools are enabled.
 const String defaultSkillSystemInstruction =
@@ -76,6 +79,10 @@ class _LoadSkillTool extends BaseTool {
 
   final SkillToolset _toolset;
 
+  String _activationStateKey(String agentName) {
+    return '_adk_activated_skill_$agentName';
+  }
+
   @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
@@ -113,6 +120,18 @@ class _LoadSkillTool extends BaseTool {
         'error': "Skill '${skillName.trim()}' not found.",
         'error_code': 'SKILL_NOT_FOUND',
       };
+    }
+
+    final String stateKey = _activationStateKey(toolContext.agentName);
+    final List<Object?> activated = List<Object?>.from(
+      toolContext.state[stateKey] as List? ?? const <Object?>[],
+    );
+    final List<String> activatedSkillNames = activated
+        .whereType<String>()
+        .toList(growable: true);
+    if (!activatedSkillNames.contains(skill.name)) {
+      activatedSkillNames.add(skill.name);
+      toolContext.state[stateKey] = activatedSkillNames;
     }
 
     return <String, Object?>{
@@ -187,13 +206,13 @@ class _LoadSkillResourceTool extends BaseTool {
       };
     }
 
-    String? content;
+    Object? content;
     if (resourcePath.startsWith('references/')) {
       final String referenceName = resourcePath.substring('references/'.length);
-      content = skill.resources.getReference(referenceName);
+      content = skill.resources.getReferenceData(referenceName);
     } else if (resourcePath.startsWith('assets/')) {
       final String assetName = resourcePath.substring('assets/'.length);
-      content = skill.resources.getAsset(assetName);
+      content = skill.resources.getAssetData(assetName);
     } else if (resourcePath.startsWith('scripts/')) {
       final String scriptName = resourcePath.substring('scripts/'.length);
       final Script? script = skill.resources.getScript(scriptName);
@@ -215,11 +234,83 @@ class _LoadSkillResourceTool extends BaseTool {
       };
     }
 
+    if (content is List<int>) {
+      return <String, Object?>{
+        'skill_name': skillName,
+        'path': resourcePath,
+        'status': _binaryFileDetectedMsg,
+      };
+    }
+
     return <String, Object?>{
       'skill_name': skillName,
       'path': resourcePath,
       'content': content,
     };
+  }
+
+  @override
+  Future<void> processLlmRequest({
+    required ToolContext toolContext,
+    required LlmRequest llmRequest,
+  }) async {
+    await super.processLlmRequest(
+      toolContext: toolContext,
+      llmRequest: llmRequest,
+    );
+
+    if (llmRequest.contents.isEmpty) {
+      return;
+    }
+
+    for (final Part part in llmRequest.contents.last.parts) {
+      final FunctionResponse? functionResponse = part.functionResponse;
+      if (functionResponse == null || functionResponse.name != name) {
+        continue;
+      }
+      final Map<String, dynamic> response = functionResponse.response;
+      if (response['status'] != _binaryFileDetectedMsg) {
+        continue;
+      }
+
+      final String? skillName = response['skill_name'] as String?;
+      final String? resourcePath = response['path'] as String?;
+      if (skillName == null || resourcePath == null) {
+        continue;
+      }
+
+      final Skill? skill = _toolset._getSkill(skillName);
+      if (skill == null) {
+        continue;
+      }
+
+      List<int>? bytes;
+      if (resourcePath.startsWith('references/')) {
+        bytes = skill.resources.getReferenceBytes(
+          resourcePath.substring('references/'.length),
+        );
+      } else if (resourcePath.startsWith('assets/')) {
+        bytes = skill.resources.getAssetBytes(
+          resourcePath.substring('assets/'.length),
+        );
+      }
+      if (bytes == null) {
+        continue;
+      }
+
+      llmRequest.contents.add(
+        Content(
+          role: 'user',
+          parts: <Part>[
+            Part.text("The content of binary file '$resourcePath' is:"),
+            Part.fromInlineData(
+              mimeType: _guessMimeType(resourcePath),
+              data: bytes,
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
 
@@ -335,15 +426,15 @@ class _SkillScriptCodeExecutor {
       return null;
     }
 
-    final Map<String, String> files = <String, String>{};
+    final Map<String, Object> files = <String, Object>{};
     for (final String referenceName in skill.resources.listReferences()) {
-      final String? content = skill.resources.getReference(referenceName);
+      final Object? content = skill.resources.getReferenceData(referenceName);
       if (content != null) {
         files['references/$referenceName'] = content;
       }
     }
     for (final String assetName in skill.resources.listAssets()) {
-      final String? content = skill.resources.getAsset(assetName);
+      final Object? content = skill.resources.getAssetData(assetName);
       if (content != null) {
         files['assets/$assetName'] = content;
       }
@@ -356,8 +447,12 @@ class _SkillScriptCodeExecutor {
     }
 
     int totalSize = 0;
-    for (final String value in files.values) {
-      totalSize += value.codeUnits.length;
+    for (final Object value in files.values) {
+      if (value is String) {
+        totalSize += value.codeUnits.length;
+      } else if (value is List<int>) {
+        totalSize += value.length;
+      }
     }
     if (totalSize > _maxSkillPayloadBytes) {
       developer.log(
@@ -568,6 +663,7 @@ class SkillToolset extends BaseToolset {
   /// Creates a toolset that exposes skill discovery/loading/script tools.
   SkillToolset({
     required List<Skill> skills,
+    List<BaseTool>? additionalTools,
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
   }) : _codeExecutor = codeExecutor,
@@ -588,17 +684,25 @@ class SkillToolset extends BaseToolset {
       _LoadSkillResourceTool(this),
       _RunSkillScriptTool(this),
     ];
+    _providedToolsByName = <String, BaseTool>{
+      for (final BaseTool tool in additionalTools ?? const <BaseTool>[])
+        tool.name: tool,
+    };
   }
 
   late final Map<String, Skill> _skills;
   late final List<BaseTool> _tools;
+  late final Map<String, BaseTool> _providedToolsByName;
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
 
   @override
   /// Returns skill tools filtered by [toolFilter], if configured.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
-    return _tools
+    final List<BaseTool> dynamicTools = await _resolveAdditionalToolsFromState(
+      readonlyContext,
+    );
+    return <BaseTool>[..._tools, ...dynamicTools]
         .where((BaseTool tool) => isToolSelected(tool, readonlyContext))
         .toList(growable: false);
   }
@@ -606,6 +710,72 @@ class SkillToolset extends BaseToolset {
   Skill? _getSkill(String name) => _skills[name];
 
   List<Skill> _listSkills() => _skills.values.toList(growable: false);
+
+  Future<List<BaseTool>> _resolveAdditionalToolsFromState(
+    ReadonlyContext? readonlyContext,
+  ) async {
+    if (readonlyContext == null) {
+      return const <BaseTool>[];
+    }
+
+    final String stateKey = '_adk_activated_skill_${readonlyContext.agentName}';
+    final List<Object?> activated = List<Object?>.from(
+      readonlyContext.state[stateKey] as List? ?? const <Object?>[],
+    );
+    if (activated.isEmpty) {
+      return const <BaseTool>[];
+    }
+
+    final Set<String> additionalToolNames = <String>{};
+    for (final Object? skillName in activated) {
+      if (skillName is! String) {
+        continue;
+      }
+      final Skill? skill = _skills[skillName];
+      if (skill == null) {
+        continue;
+      }
+      final Object? metadataValue =
+          skill.frontmatter.metadata['adk_additional_tools'];
+      if (metadataValue is String && metadataValue.isNotEmpty) {
+        additionalToolNames.add(metadataValue);
+        continue;
+      }
+      if (metadataValue is List) {
+        for (final Object? item in metadataValue) {
+          if (item is String && item.isNotEmpty) {
+            additionalToolNames.add(item);
+          }
+        }
+      }
+    }
+
+    if (additionalToolNames.isEmpty) {
+      return const <BaseTool>[];
+    }
+
+    final Set<String> existingToolNames = _tools
+        .map((BaseTool tool) => tool.name)
+        .toSet();
+    final List<BaseTool> resolved = <BaseTool>[];
+    final List<String> sortedNames = additionalToolNames.toList()..sort();
+    for (final String toolName in sortedNames) {
+      final BaseTool? tool = _providedToolsByName[toolName];
+      if (tool == null) {
+        continue;
+      }
+      if (existingToolNames.contains(tool.name)) {
+        developer.log(
+          "Tool name collision: tool '${tool.name}' already exists.",
+          name: 'adk_dart.skill_toolset',
+        );
+        continue;
+      }
+      resolved.add(tool);
+      existingToolNames.add(tool.name);
+    }
+    return resolved;
+  }
 
   @override
   /// Appends skill guidance and catalog XML to [llmRequest].
@@ -626,6 +796,29 @@ class SkillToolset extends BaseToolset {
     ];
     llmRequest.appendInstructions(instructions);
   }
+}
+
+const Map<String, String> _skillResourceMimeTypes = <String, String>{
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.json': 'application/json',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.txt': 'text/plain',
+  '.wav': 'audio/wav',
+};
+
+String _guessMimeType(String path) {
+  final String normalized = path.toLowerCase();
+  for (final MapEntry<String, String> entry
+      in _skillResourceMimeTypes.entries) {
+    if (normalized.endsWith(entry.key)) {
+      return entry.value;
+    }
+  }
+  return 'application/octet-stream';
 }
 
 int? _toInt(Object? value) {
