@@ -15,6 +15,107 @@ class _FinalTextModel extends BaseLlm {
   }
 }
 
+class _RecordingRunner extends InMemoryRunner {
+  _RecordingRunner({
+    required super.agent,
+    required super.appName,
+    required Stream<Event> Function({
+      required String userId,
+      required String sessionId,
+      String? invocationId,
+      Content? newMessage,
+      Map<String, Object?>? stateDelta,
+      RunConfig? runConfig,
+    })
+    eventFactory,
+  }) : _eventFactory = eventFactory;
+
+  final Stream<Event> Function({
+    required String userId,
+    required String sessionId,
+    String? invocationId,
+    Content? newMessage,
+    Map<String, Object?>? stateDelta,
+    RunConfig? runConfig,
+  })
+  _eventFactory;
+
+  int runAsyncCalls = 0;
+  String? lastUserId;
+  String? lastSessionId;
+  String? lastInvocationId;
+  Content? lastNewMessage;
+
+  @override
+  Stream<Event> runAsync({
+    required String userId,
+    required String sessionId,
+    String? invocationId,
+    Content? newMessage,
+    Map<String, Object?>? stateDelta,
+    RunConfig? runConfig,
+  }) {
+    runAsyncCalls += 1;
+    lastUserId = userId;
+    lastSessionId = sessionId;
+    lastInvocationId = invocationId;
+    lastNewMessage = newMessage;
+    return _eventFactory(
+      userId: userId,
+      sessionId: sessionId,
+      invocationId: invocationId,
+      newMessage: newMessage,
+      stateDelta: stateDelta,
+      runConfig: runConfig,
+    );
+  }
+}
+
+Event _modelEvent({
+  String invocationId = 'invocation_1',
+  String author = 'root_agent',
+  String text = 'done',
+}) {
+  return Event(
+    invocationId: invocationId,
+    author: author,
+    content: Content.modelText(text),
+  );
+}
+
+A2aTask _requiredTask({
+  required String taskId,
+  required String contextId,
+  required A2aTaskState state,
+}) {
+  return A2aTask(
+    id: taskId,
+    contextId: contextId,
+    status: A2aTaskStatus(
+      state: state,
+      message: A2aMessage(
+        messageId: 'task_$taskId',
+        role: A2aRole.agent,
+        parts: <A2aPart>[A2aPart.text('Need a function response.')],
+      ),
+    ),
+  );
+}
+
+A2aPart _functionResponsePart({
+  String name = 'my_tool',
+  String id = 'call_1',
+  Map<String, Object?> response = const <String, Object?>{'ok': true},
+}) {
+  return A2aPart.data(
+    <String, Object?>{'name': name, 'response': response, 'id': id},
+    metadata: <String, Object?>{
+      getAdkMetadataKey(a2aDataPartMetadataTypeKey):
+          a2aDataPartMetadataTypeFunctionResponse,
+    },
+  );
+}
+
 void main() {
   group('a2a converters', () {
     test('context id and metadata key helpers', () {
@@ -304,5 +405,246 @@ void main() {
         'intercepted final',
       );
     });
+
+    test(
+      'resume without function response stays input_required and skips runner',
+      () async {
+        final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+        final _RecordingRunner runner = _RecordingRunner(
+          agent: agent,
+          appName: 'app',
+          eventFactory:
+              ({
+                required String userId,
+                required String sessionId,
+                String? invocationId,
+                Content? newMessage,
+                Map<String, Object?>? stateDelta,
+                RunConfig? runConfig,
+              }) => Stream<Event>.value(_modelEvent()),
+        );
+        final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+        final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+        await executor.execute(
+          A2aRequestContext(
+            taskId: 'task_resume_input',
+            contextId: 'ctx_resume_input',
+            currentTask: _requiredTask(
+              taskId: 'task_resume_input',
+              contextId: 'ctx_resume_input',
+              state: A2aTaskState.inputRequired,
+            ),
+            message: A2aMessage(
+              messageId: 'msg_resume_input',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('plain user text')],
+            ),
+          ),
+          eventQueue,
+        );
+
+        expect(runner.runAsyncCalls, 0);
+        final List<A2aTaskStatusUpdateEvent> updates = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .toList();
+        expect(updates, hasLength(1));
+        final A2aTaskStatusUpdateEvent finalEvent = updates.single;
+        expect(finalEvent.finalEvent, isTrue);
+        expect(finalEvent.status.state, A2aTaskState.inputRequired);
+        expect(
+          finalEvent.status.message?.parts.single.textPart?.text,
+          'It was not provided a function response for the function call.',
+        );
+        expect(finalEvent.metadata[getAdkMetadataKey('app_name')], 'app');
+        expect(
+          finalEvent.metadata[getAdkMetadataKey('user_id')],
+          'A2A_USER_ctx_resume_input',
+        );
+        expect(
+          finalEvent.metadata[getAdkMetadataKey('session_id')],
+          'ctx_resume_input',
+        );
+        expect(
+          finalEvent.metadata[getAdkMetadataKey('agent_executor_v2')],
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'resume without function response stays auth_required and skips runner',
+      () async {
+        final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+        final _RecordingRunner runner = _RecordingRunner(
+          agent: agent,
+          appName: 'app',
+          eventFactory:
+              ({
+                required String userId,
+                required String sessionId,
+                String? invocationId,
+                Content? newMessage,
+                Map<String, Object?>? stateDelta,
+                RunConfig? runConfig,
+              }) => Stream<Event>.value(_modelEvent()),
+        );
+        final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+        final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+        await executor.execute(
+          A2aRequestContext(
+            taskId: 'task_resume_auth',
+            contextId: 'ctx_resume_auth',
+            currentTask: _requiredTask(
+              taskId: 'task_resume_auth',
+              contextId: 'ctx_resume_auth',
+              state: A2aTaskState.authRequired,
+            ),
+            message: A2aMessage(
+              messageId: 'msg_resume_auth',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('plain user text')],
+            ),
+          ),
+          eventQueue,
+        );
+
+        expect(runner.runAsyncCalls, 0);
+        final A2aTaskStatusUpdateEvent finalEvent = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .single;
+        expect(finalEvent.finalEvent, isTrue);
+        expect(finalEvent.status.state, A2aTaskState.authRequired);
+        expect(
+          finalEvent.status.message?.parts.single.textPart?.text,
+          'It was not provided a function response for the function call.',
+        );
+      },
+    );
+
+    test('resume with function response proceeds to runner', () async {
+      final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+      final _RecordingRunner runner = _RecordingRunner(
+        agent: agent,
+        appName: 'app',
+        eventFactory:
+            ({
+              required String userId,
+              required String sessionId,
+              String? invocationId,
+              Content? newMessage,
+              Map<String, Object?>? stateDelta,
+              RunConfig? runConfig,
+            }) => Stream<Event>.value(
+              _modelEvent(invocationId: invocationId ?? 'resume_invocation'),
+            ),
+      );
+      final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+      final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+      await executor.execute(
+        A2aRequestContext(
+          taskId: 'task_resume_ok',
+          contextId: 'ctx_resume_ok',
+          currentTask: _requiredTask(
+            taskId: 'task_resume_ok',
+            contextId: 'ctx_resume_ok',
+            state: A2aTaskState.inputRequired,
+          ),
+          message: A2aMessage(
+            messageId: 'msg_resume_ok',
+            role: A2aRole.user,
+            parts: <A2aPart>[_functionResponsePart()],
+          ),
+        ),
+        eventQueue,
+      );
+
+      expect(runner.runAsyncCalls, 1);
+      expect(runner.lastUserId, 'A2A_USER_ctx_resume_ok');
+      expect(runner.lastSessionId, 'ctx_resume_ok');
+      final List<A2aTaskStatusUpdateEvent> updates = eventQueue.events
+          .whereType<A2aTaskStatusUpdateEvent>()
+          .toList();
+      expect(
+        updates.any(
+          (A2aTaskStatusUpdateEvent event) =>
+              !event.finalEvent && event.status.state == A2aTaskState.working,
+        ),
+        isTrue,
+      );
+      expect(
+        updates.any(
+          (A2aTaskStatusUpdateEvent event) =>
+              event.finalEvent && event.status.state == A2aTaskState.completed,
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'executor includes invocation metadata on working and final events',
+      () async {
+        final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+        final _RecordingRunner runner = _RecordingRunner(
+          agent: agent,
+          appName: 'app',
+          eventFactory:
+              ({
+                required String userId,
+                required String sessionId,
+                String? invocationId,
+                Content? newMessage,
+                Map<String, Object?>? stateDelta,
+                RunConfig? runConfig,
+              }) => Stream<Event>.value(
+                _modelEvent(invocationId: invocationId ?? 'invocation_meta'),
+              ),
+        );
+        final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+        final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+        await executor.execute(
+          A2aRequestContext(
+            taskId: 'task_meta',
+            contextId: 'ctx_meta',
+            message: A2aMessage(
+              messageId: 'msg_meta',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('hello')],
+            ),
+          ),
+          eventQueue,
+        );
+
+        final A2aTaskStatusUpdateEvent workingEvent = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .firstWhere(
+              (A2aTaskStatusUpdateEvent event) =>
+                  !event.finalEvent &&
+                  event.status.state == A2aTaskState.working,
+            );
+        final A2aTaskStatusUpdateEvent finalEvent = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .firstWhere((A2aTaskStatusUpdateEvent event) => event.finalEvent);
+
+        for (final A2aTaskStatusUpdateEvent event in <A2aTaskStatusUpdateEvent>[
+          workingEvent,
+          finalEvent,
+        ]) {
+          expect(event.metadata[getAdkMetadataKey('app_name')], 'app');
+          expect(
+            event.metadata[getAdkMetadataKey('user_id')],
+            'A2A_USER_ctx_meta',
+          );
+          expect(event.metadata[getAdkMetadataKey('session_id')], 'ctx_meta');
+          expect(
+            event.metadata[getAdkMetadataKey('agent_executor_v2')],
+            isTrue,
+          );
+        }
+      },
+    );
   });
 }

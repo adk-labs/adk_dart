@@ -274,25 +274,30 @@ class A2aAgentExecutor {
       pluginManager: runner.pluginManager,
     );
 
+    final A2aExecutorContext executorContext = A2aExecutorContext(
+      appName: runner.appName,
+      userId: runRequest.userId!,
+      sessionId: runRequest.sessionId!,
+      runner: runner,
+    );
+
+    final A2aTaskStatusUpdateEvent? missingUserInputEvent = _handleUserInput(
+      context,
+      executorContext,
+    );
+    if (missingUserInputEvent != null) {
+      await eventQueue.enqueueEvent(missingUserInputEvent);
+      return;
+    }
+
     await eventQueue.enqueueEvent(
       A2aTaskStatusUpdateEvent(
         taskId: context.taskId,
         contextId: context.contextId,
         finalEvent: false,
         status: A2aTaskStatus(state: A2aTaskState.working),
-        metadata: <String, Object?>{
-          getAdkMetadataKey('app_name'): runner.appName,
-          getAdkMetadataKey('user_id'): runRequest.userId,
-          getAdkMetadataKey('session_id'): runRequest.sessionId,
-        },
+        metadata: _getInvocationMetadata(executorContext),
       ),
-    );
-
-    final A2aExecutorContext executorContext = A2aExecutorContext(
-      appName: runner.appName,
-      userId: runRequest.userId!,
-      sessionId: runRequest.sessionId!,
-      runner: runner,
     );
 
     final TaskResultAggregator taskResultAggregator = TaskResultAggregator();
@@ -364,6 +369,8 @@ class A2aAgentExecutor {
         ),
       );
     }
+
+    finalEvent.metadata = _getInvocationMetadata(executorContext);
 
     finalEvent = await _executeAfterAgentInterceptors(
       executorContext,
@@ -467,5 +474,66 @@ class A2aAgentExecutor {
       );
     }
     return current;
+  }
+
+  Map<String, Object?> _getInvocationMetadata(
+    A2aExecutorContext executorContext,
+  ) {
+    return <String, Object?>{
+      getAdkMetadataKey('app_name'): executorContext.appName,
+      getAdkMetadataKey('user_id'): executorContext.userId,
+      getAdkMetadataKey('session_id'): executorContext.sessionId,
+      getAdkMetadataKey('agent_executor_v2'): true,
+    };
+  }
+
+  A2aTaskStatusUpdateEvent? _handleUserInput(
+    A2aRequestContext context,
+    A2aExecutorContext executorContext,
+  ) {
+    final A2aTask? currentTask = context.currentTask;
+    final A2aTaskState? state = currentTask?.status.state;
+    if (state != A2aTaskState.inputRequired &&
+        state != A2aTaskState.authRequired) {
+      return null;
+    }
+
+    final A2aMessage? message = context.message;
+    if (message == null || _hasFunctionResponsePart(message) == false) {
+      return A2aTaskStatusUpdateEvent(
+        taskId: context.taskId,
+        contextId: context.contextId,
+        finalEvent: true,
+        metadata: _getInvocationMetadata(executorContext),
+        status: A2aTaskStatus(
+          state: state!,
+          message: A2aMessage(
+            messageId: 'a2a_missing_function_response_${newUuid()}',
+            role: A2aRole.agent,
+            parts: <A2aPart>[
+              A2aPart.text(
+                'It was not provided a function response for the function call.',
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return null;
+  }
+
+  bool _hasFunctionResponsePart(A2aMessage message) {
+    for (final A2aPart a2aPart in message.parts) {
+      final A2aDataPart? dataPart = a2aPart.dataPart;
+      if (dataPart == null) {
+        continue;
+      }
+      if (dataPart.metadata[getAdkMetadataKey(a2aDataPartMetadataTypeKey)] ==
+          a2aDataPartMetadataTypeFunctionResponse) {
+        return true;
+      }
+    }
+    return false;
   }
 }
