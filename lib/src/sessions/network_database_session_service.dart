@@ -10,6 +10,7 @@ import 'package:postgres/postgres.dart' as pg;
 
 import '../errors/already_exists_error.dart';
 import '../events/event.dart';
+import '../platform/time.dart';
 import '../types/id.dart';
 import 'base_session_service.dart';
 import 'schemas/v1.dart' show decodeEventData, encodeEventData;
@@ -159,7 +160,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
           (sessionId != null && sessionId.trim().isNotEmpty)
           ? sessionId.trim()
           : newAdkId(prefix: 'session_');
-      final double now = DateTime.now().millisecondsSinceEpoch / 1000;
+      final double now = getTime();
 
       return _withTransaction<Session>((_NetworkDbExecutor db) async {
         final List<Map<String, Object?>> existing = await db.query(

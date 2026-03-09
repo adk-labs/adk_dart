@@ -8,6 +8,7 @@ import 'dart:io';
 import '../agents/base_agent.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
+import '../errors/tool_execution_error.dart';
 import '../events/event.dart';
 import '../models/google_llm.dart';
 import '../models/llm_request.dart';
@@ -237,6 +238,7 @@ void traceToolCall(
   BaseTool tool,
   Map<String, Object?> args,
   Event? functionResponseEvent, {
+  Object? error,
   TraceSpanRecord? span,
   Map<String, String>? environment,
 }) {
@@ -249,6 +251,14 @@ void traceToolCall(
     ..setAttribute('gen_ai.tool.type', tool.runtimeType.toString())
     ..setAttribute('gcp.vertex.agent.llm_request', '{}')
     ..setAttribute('gcp.vertex.agent.llm_response', '{}');
+
+  if (error != null) {
+    final String errorType =
+        error is ToolExecutionError && error.errorType != null
+        ? error.errorType!
+        : error.runtimeType.toString();
+    targetSpan.setAttribute('error.type', errorType);
+  }
 
   if (_shouldAddRequestResponseToSpans(environment: environment)) {
     targetSpan.setAttribute(

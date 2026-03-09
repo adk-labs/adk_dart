@@ -3,6 +3,7 @@ library;
 
 import '../errors/already_exists_error.dart';
 import '../events/event.dart';
+import '../platform/time.dart';
 import '../types/id.dart';
 import 'base_session_service.dart';
 import 'session.dart';
@@ -65,7 +66,7 @@ class InMemorySessionService extends BaseSessionService {
       appName: appName,
       userId: userId,
       state: deltas.session,
-      lastUpdateTime: DateTime.now().millisecondsSinceEpoch / 1000,
+      lastUpdateTime: getTime(),
     );
 
     _sessions

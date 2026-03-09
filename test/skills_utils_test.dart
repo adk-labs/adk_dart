@@ -225,6 +225,44 @@ Body
       expect(validateSkillDir(skillDir.path), isEmpty);
     });
 
+    test('listSkillsInDir returns only valid skills', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk-skill-test-',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      final Directory validDir = Directory(
+        _join(tempDir.path, 'weather-skill'),
+      );
+      validDir.createSync(recursive: true);
+      _writeFile(_join(validDir.path, 'SKILL.md'), '''
+---
+name: weather-skill
+description: Reads weather data
+---
+Weather instructions
+''');
+
+      final Directory invalidDir = Directory(_join(tempDir.path, 'bad-skill'));
+      invalidDir.createSync(recursive: true);
+      _writeFile(_join(invalidDir.path, 'SKILL.md'), '''
+---
+name: renamed-skill
+description: Invalid skill
+---
+Bad instructions
+''');
+
+      final Directory missingManifest = Directory(
+        _join(tempDir.path, 'no-manifest'),
+      );
+      missingManifest.createSync(recursive: true);
+
+      final Map<String, Frontmatter> skills = listSkillsInDir(tempDir.path);
+      expect(skills.keys, <String>['weather-skill']);
+      expect(skills['weather-skill']?.description, 'Reads weather data');
+    });
+
     test('validateSkillDir reports missing directory', () {
       final List<String> problems = validateSkillDir(
         _join(
@@ -322,28 +360,30 @@ Body content
       expect(properties.license, 'MIT');
     });
 
-    test('loadSkillFromDir surfaces filesystem read errors from resources', () async {
-      if (Platform.isWindows) {
-        markTestSkipped('permission test is Unix-specific');
-        return;
-      }
-
-      final Directory tempDir = await Directory.systemTemp.createTemp(
-        'adk-skill-test-',
-      );
-      addTearDown(() async {
-        final File blocked = File(
-          _join(_join(tempDir.path, 'my-skill'), 'references/blocked.md'),
-        );
-        if (await blocked.exists()) {
-          await Process.run('chmod', <String>['644', blocked.path]);
+    test(
+      'loadSkillFromDir surfaces filesystem read errors from resources',
+      () async {
+        if (Platform.isWindows) {
+          markTestSkipped('permission test is Unix-specific');
+          return;
         }
-        await tempDir.delete(recursive: true);
-      });
 
-      final Directory skillDir = Directory(_join(tempDir.path, 'my-skill'));
-      skillDir.createSync(recursive: true);
-      _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk-skill-test-',
+        );
+        addTearDown(() async {
+          final File blocked = File(
+            _join(_join(tempDir.path, 'my-skill'), 'references/blocked.md'),
+          );
+          if (await blocked.exists()) {
+            await Process.run('chmod', <String>['644', blocked.path]);
+          }
+          await tempDir.delete(recursive: true);
+        });
+
+        final Directory skillDir = Directory(_join(tempDir.path, 'my-skill'));
+        skillDir.createSync(recursive: true);
+        _writeFile(_join(skillDir.path, 'SKILL.md'), '''
 ---
 name: my-skill
 description: A skill
@@ -351,18 +391,25 @@ description: A skill
 Body
 ''');
 
-      final String blockedPath = _join(skillDir.path, 'references/blocked.md');
-      _writeFile(blockedPath, 'secret');
-      final ProcessResult chmodResult = await Process.run('chmod', <String>[
-        '000',
-        blockedPath,
-      ]);
-      if (chmodResult.exitCode != 0) {
-        markTestSkipped('chmod is unavailable in current environment');
-        return;
-      }
+        final String blockedPath = _join(
+          skillDir.path,
+          'references/blocked.md',
+        );
+        _writeFile(blockedPath, 'secret');
+        final ProcessResult chmodResult = await Process.run('chmod', <String>[
+          '000',
+          blockedPath,
+        ]);
+        if (chmodResult.exitCode != 0) {
+          markTestSkipped('chmod is unavailable in current environment');
+          return;
+        }
 
-      expect(() => loadSkillFromDir(skillDir.path), throwsA(isA<FileSystemException>()));
-    });
+        expect(
+          () => loadSkillFromDir(skillDir.path),
+          throwsA(isA<FileSystemException>()),
+        );
+      },
+    );
   });
 }

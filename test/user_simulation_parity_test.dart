@@ -21,6 +21,22 @@ class _FakeLlm extends BaseLlm {
   }
 }
 
+class _StreamingFakeLlm extends BaseLlm {
+  _StreamingFakeLlm({required this.responses}) : super(model: 'fake-model');
+
+  final Queue<LlmResponse> responses;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    while (responses.isNotEmpty) {
+      yield responses.removeFirst();
+    }
+  }
+}
+
 void main() {
   group('user simulator contracts', () {
     test('NextUserMessage enforces message iff success', () {
@@ -293,6 +309,52 @@ void main() {
         const <Event>[],
       );
       expect(second.status, Status.turnLimitReached);
+    });
+
+    test('ignores null and empty streamed chunks before final text', () async {
+      final Queue<LlmResponse> responses = Queue<LlmResponse>.from(
+        <LlmResponse>[
+          LlmResponse(),
+          LlmResponse(
+            content: Content(role: 'model', parts: <Part>[]),
+          ),
+          LlmResponse(
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.text('', thought: false),
+                Part.text('internal', thought: true),
+                Part.text('Final answer'),
+              ],
+            ),
+            turnComplete: true,
+          ),
+        ],
+      );
+      final LlmBackedUserSimulator simulator = LlmBackedUserSimulator(
+        config: LlmBackedUserSimulatorConfig(maxAllowedInvocations: 10),
+        conversationScenario: ConversationScenario(
+          startingPrompt: 'Start here.',
+          conversationPlan: 'Get a clean answer.',
+        ),
+        llmFactory: (String _) => _StreamingFakeLlm(responses: responses),
+      );
+
+      final NextUserMessage first = await simulator.getNextUserMessage(
+        const <Event>[],
+      );
+      expect(first.status, Status.success);
+      expect(first.userMessage?.parts.single.text, 'Start here.');
+
+      final NextUserMessage second = await simulator.getNextUserMessage(<Event>[
+        Event(
+          invocationId: 'inv-sim',
+          author: 'agent',
+          content: Content.modelText('How can I help?'),
+        ),
+      ]);
+      expect(second.status, Status.success);
+      expect(second.userMessage?.parts.single.text, 'Final answer');
     });
 
     test('simulation evaluator is provided', () {

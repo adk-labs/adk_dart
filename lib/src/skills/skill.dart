@@ -454,6 +454,47 @@ Frontmatter readSkillProperties(String skillDirPath) {
   return Frontmatter.fromMap(parsed.frontmatter);
 }
 
+/// Lists valid skills in a base directory keyed by directory name.
+Map<String, Frontmatter> listSkillsInDir(String skillsBasePath) {
+  final Directory baseDir = Directory(skillsBasePath);
+  if (!baseDir.existsSync() ||
+      baseDir.statSync().type != FileSystemEntityType.directory) {
+    return <String, Frontmatter>{};
+  }
+
+  final List<FileSystemEntity> entries = baseDir.listSync(followLinks: false)
+    ..sort((FileSystemEntity a, FileSystemEntity b) {
+      return a.path.compareTo(b.path);
+    });
+
+  final Map<String, Frontmatter> skills = <String, Frontmatter>{};
+  for (final FileSystemEntity entry in entries) {
+    if (FileSystemEntity.typeSync(entry.path, followLinks: true) !=
+        FileSystemEntityType.directory) {
+      continue;
+    }
+
+    final String skillId = _basename(entry.path);
+    try {
+      final Frontmatter frontmatter = readSkillProperties(entry.path);
+      if (skillId != frontmatter.name) {
+        throw ArgumentError(
+          "Skill name '${frontmatter.name}' does not match directory "
+          "name '$skillId'.",
+        );
+      }
+      skills[skillId] = frontmatter;
+    } catch (error) {
+      stderr.writeln(
+        "Skipping invalid skill '$skillId' in directory "
+        "'${baseDir.path}': ${_formatSkillError(error)}",
+      );
+    }
+  }
+
+  return skills;
+}
+
 class _ParsedSkillMd {
   _ParsedSkillMd({required this.frontmatter, required this.body});
 

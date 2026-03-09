@@ -90,6 +90,7 @@ export 'src/cli/utils/state.dart' show createEmptyState;
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
+export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
@@ -221,6 +222,8 @@ export 'src/plugins/reflect_retry_tool_plugin.dart';
 export 'src/plugins/save_files_as_artifacts_plugin.dart';
 export 'src/platform/runtime_environment.dart';
 export 'src/platform/thread.dart';
+export 'src/platform/time.dart';
+export 'src/platform/uuid.dart';
 export 'src/planners/base_planner.dart';
 export 'src/planners/built_in_planner.dart';
 export 'src/planners/plan_re_act_planner.dart';

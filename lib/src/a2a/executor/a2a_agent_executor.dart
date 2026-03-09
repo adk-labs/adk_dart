@@ -6,6 +6,7 @@ import 'dart:async';
 import '../../agents/invocation_context.dart';
 import '../../agents/run_config.dart';
 import '../../events/event.dart';
+import '../../platform/uuid.dart';
 import '../../runners/runner.dart';
 import '../../sessions/session.dart';
 import '../converters/event_converter.dart';
@@ -183,7 +184,7 @@ class A2aAgentExecutor {
           status: A2aTaskStatus(
             state: A2aTaskState.failed,
             message: A2aMessage(
-              messageId: 'a2a_cancel_${DateTime.now().microsecondsSinceEpoch}',
+              messageId: 'a2a_cancel_${newUuid()}',
               role: A2aRole.agent,
               parts: <A2aPart>[A2aPart.text('Task cancellation requested.')],
             ),
@@ -234,7 +235,7 @@ class A2aAgentExecutor {
           status: A2aTaskStatus(
             state: A2aTaskState.failed,
             message: A2aMessage(
-              messageId: 'a2a_failure_${DateTime.now().microsecondsSinceEpoch}',
+              messageId: 'a2a_failure_${newUuid()}',
               role: A2aRole.agent,
               parts: <A2aPart>[A2aPart.text('$error')],
             ),
@@ -256,8 +257,7 @@ class A2aAgentExecutor {
     );
 
     final Session session = await _prepareSession(context, runRequest, runner);
-    runRequest.invocationId ??=
-        'a2a_invocation_${DateTime.now().microsecondsSinceEpoch}';
+    runRequest.invocationId ??= 'a2a_invocation_${newUuid()}';
 
     final InvocationContext invocationContext = InvocationContext(
       artifactService: runner.artifactService,
@@ -341,7 +341,7 @@ class A2aAgentExecutor {
           contextId: context.contextId,
           lastChunk: true,
           artifact: A2aArtifact(
-            artifactId: 'a2a_artifact_${DateTime.now().microsecondsSinceEpoch}',
+            artifactId: 'a2a_artifact_${newUuid()}',
             parts: taskResultAggregator.taskStatusMessage!.parts,
           ),
         ),

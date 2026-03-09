@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import '../errors/already_exists_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../platform/time.dart';
 import '../types/content.dart';
 import '../types/id.dart';
 import 'base_session_service.dart';
@@ -144,7 +145,7 @@ class SqliteSessionService extends BaseSessionService {
           ? sessionId.trim()
           : newAdkId(prefix: 'session_');
       final SessionStateDelta deltas = extractStateDelta(state);
-      final double now = DateTime.now().millisecondsSinceEpoch / 1000;
+      final double now = getTime();
 
       return _withDatabase<Session>((_SqliteDatabase db) {
         final List<Map<String, Object?>> existing = db.query(

@@ -118,6 +118,34 @@ void main() {
     );
   });
 
+  group('platform time/uuid parity', () {
+    tearDown(() {
+      resetIdProvider();
+      resetTimeProvider();
+    });
+
+    test('providers drive runtime ids and timestamps', () async {
+      final List<String> ids = <String>['evt-fixed', 'session-fixed'];
+      setIdProvider(() => ids.removeAt(0));
+      setTimeProvider(() => 123.456);
+
+      final Event event = Event(invocationId: 'inv-fixed', author: 'tester');
+      expect(event.id, 'evt_evt-fixed');
+      expect(event.timestamp, 123.456);
+      expect(
+        getUtcNow(),
+        DateTime.fromMicrosecondsSinceEpoch(123456000, isUtc: true),
+      );
+
+      final Session session = await InMemorySessionService().createSession(
+        appName: 'app',
+        userId: 'user',
+      );
+      expect(session.id, 'session_session-fixed');
+      expect(session.lastUpdateTime, 123.456);
+    });
+  });
+
   group('telemetry setup/google cloud/sqlite parity', () {
     setUp(() {
       resetOtelProvidersForTest();
@@ -370,6 +398,23 @@ void main() {
         environment: <String, String>{adkCaptureMessageContentInSpans: '0'},
       );
       expect(span.attributes['gcp.vertex.agent.data'], '{}');
+    });
+
+    test('traceToolCall records semantic error.type for tool failures', () {
+      final TraceSpanRecord span = tracer.startAsCurrentSpan('root');
+
+      traceToolCall(
+        _FakeTool(),
+        <String, Object?>{'city': 'Seoul'},
+        null,
+        span: span,
+        error: ToolExecutionError(
+          'tool timed out',
+          type: ToolErrorType.requestTimeout,
+        ),
+      );
+
+      expect(span.attributes['error.type'], 'REQUEST_TIMEOUT');
     });
 
     test(

@@ -3,6 +3,7 @@ library;
 
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
+import '../../platform/time.dart';
 import '../../sessions/session.dart';
 import '../../types/content.dart';
 import 'shared.dart';
@@ -19,8 +20,8 @@ class StorageSessionV0 {
     DateTime? updateTime,
     List<StorageEventV0>? storageEvents,
   }) : state = state ?? <String, Object?>{},
-       createTime = createTime ?? DateTime.now().toUtc(),
-       updateTime = updateTime ?? DateTime.now().toUtc(),
+       createTime = createTime ?? getUtcNow(),
+       updateTime = updateTime ?? getUtcNow(),
        storageEvents = storageEvents ?? <StorageEventV0>[];
 
   /// Application name.
@@ -143,7 +144,7 @@ class StorageEventV0 {
     this.cacheMetadata,
     this.interactionId,
   }) : actions = actions ?? EventActions(),
-       timestamp = timestamp ?? DateTime.now().toUtc();
+       timestamp = timestamp ?? getUtcNow();
 
   /// Event ID.
   final String id;
@@ -407,7 +408,7 @@ class StorageAppStateV0 {
     Map<String, Object?>? state,
     DateTime? updateTime,
   }) : state = state ?? <String, Object?>{},
-       updateTime = updateTime ?? DateTime.now().toUtc();
+       updateTime = updateTime ?? getUtcNow();
 
   /// App name that owns this persisted state row.
   final String appName;
@@ -446,7 +447,7 @@ class StorageUserStateV0 {
     Map<String, Object?>? state,
     DateTime? updateTime,
   }) : state = state ?? <String, Object?>{},
-       updateTime = updateTime ?? DateTime.now().toUtc();
+       updateTime = updateTime ?? getUtcNow();
 
   /// App name that owns this persisted state row.
   final String appName;
@@ -814,7 +815,7 @@ DateTime _parseDateTime(Object? value) {
       return PreciseTimestamp.fromSeconds(asDouble);
     }
   }
-  return DateTime.now().toUtc();
+  return getUtcNow();
 }
 
 double _asDouble(Object? value) {

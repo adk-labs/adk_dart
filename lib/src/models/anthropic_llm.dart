@@ -68,6 +68,16 @@ class AnthropicLlm extends BaseLlm {
     return inlineData != null && inlineData.mimeType.startsWith('image');
   }
 
+  /// Whether [part] represents a PDF payload.
+  static bool isPdfPart(Part part) {
+    final InlineData? inlineData = part.inlineData;
+    if (inlineData == null) {
+      return false;
+    }
+    return inlineData.mimeType.split(';').first.trim().toLowerCase() ==
+        'application/pdf';
+  }
+
   /// Converts a [Part] into an Anthropic content block.
   static Map<String, Object?> partToMessageBlock(Part part) {
     if (part.text != null) {
@@ -116,6 +126,16 @@ class AnthropicLlm extends BaseLlm {
         },
       };
     }
+    if (isPdfPart(part)) {
+      return <String, Object?>{
+        'type': 'document',
+        'source': <String, Object?>{
+          'type': 'base64',
+          'media_type': part.inlineData!.mimeType,
+          'data': base64Encode(part.inlineData!.data),
+        },
+      };
+    }
     if (part.executableCode != null) {
       return <String, Object?>{
         'type': 'text',
@@ -136,7 +156,7 @@ class AnthropicLlm extends BaseLlm {
   static Map<String, Object?> contentToMessageParam(Content content) {
     final List<Map<String, Object?>> blocks = <Map<String, Object?>>[];
     for (final Part part in content.parts) {
-      if (content.role != 'user' && isImagePart(part)) {
+      if (content.role != 'user' && (isImagePart(part) || isPdfPart(part))) {
         continue;
       }
       blocks.add(partToMessageBlock(part));

@@ -535,6 +535,39 @@ void main() {
       expect('${block['text']}', contains('gs://bucket/sample.csv'));
     });
 
+    test(
+      'pdf inline data maps to document blocks and assistant turns skip it',
+      () {
+        final Map<String, Object?> block = AnthropicLlm.partToMessageBlock(
+          Part.fromInlineData(
+            mimeType: 'application/pdf; charset=binary',
+            data: <int>[1, 2, 3],
+            displayName: 'sample.pdf',
+          ),
+        );
+        expect(block['type'], 'document');
+        expect(
+          (block['source'] as Map<String, Object?>)['media_type'],
+          contains('application/pdf'),
+        );
+
+        final Map<String, Object?> assistantMessage =
+            AnthropicLlm.contentToMessageParam(
+              Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromInlineData(
+                    mimeType: 'application/pdf',
+                    data: <int>[7, 8, 9],
+                  ),
+                ],
+              ),
+            );
+        expect(assistantMessage['role'], 'assistant');
+        expect(assistantMessage['content'], isEmpty);
+      },
+    );
+
     test('message response parser produces llm response with usage', () {
       final LlmResponse response = AnthropicLlm.messageToLlmResponse(
         <String, Object?>{

@@ -4,6 +4,7 @@ library;
 import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
 import '../../flows/llm_flows/functions.dart';
+import '../../platform/uuid.dart';
 import '../../types/content.dart';
 import '../protocol.dart';
 import 'part_converter.dart';
@@ -132,8 +133,7 @@ Event convertA2aTaskToEvent(
   }
 
   final String invocationId =
-      invocationContext?.invocationId ??
-      'a2a_invocation_${DateTime.now().microsecondsSinceEpoch}';
+      invocationContext?.invocationId ?? 'a2a_invocation_${newUuid()}';
 
   return Event(
     invocationId: invocationId,
@@ -150,8 +150,7 @@ Event convertA2aMessageToEvent(
   A2APartToGenAIPartConverter partConverter = convertA2aPartToGenaiPart,
 }) {
   final String invocationId =
-      invocationContext?.invocationId ??
-      'a2a_invocation_${DateTime.now().microsecondsSinceEpoch}';
+      invocationContext?.invocationId ?? 'a2a_invocation_${newUuid()}';
 
   if (a2aMessage.parts.isEmpty) {
     return Event(
@@ -230,7 +229,7 @@ A2aMessage? convertEventToA2aMessage(
   }
 
   return A2aMessage(
-    messageId: 'a2a_msg_${DateTime.now().microsecondsSinceEpoch}',
+    messageId: 'a2a_msg_${newUuid()}',
     role: role,
     parts: outputParts,
   );
@@ -259,7 +258,7 @@ A2aTaskStatusUpdateEvent _createErrorStatusEvent(
     status: A2aTaskStatus(
       state: A2aTaskState.failed,
       message: A2aMessage(
-        messageId: 'a2a_err_${DateTime.now().microsecondsSinceEpoch}',
+        messageId: 'a2a_err_${newUuid()}',
         role: A2aRole.agent,
         parts: <A2aPart>[A2aPart.text(message)],
         metadata: event.errorCode == null

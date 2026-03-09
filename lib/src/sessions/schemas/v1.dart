@@ -2,6 +2,7 @@
 library;
 
 import '../../events/event.dart';
+import '../../platform/time.dart';
 import '../../sessions/session.dart';
 import 'shared.dart';
 import 'v0.dart';
@@ -44,8 +45,8 @@ class StorageSessionV1 {
     DateTime? updateTime,
     List<StorageEventV1>? storageEvents,
   }) : state = state ?? <String, Object?>{},
-       createTime = createTime ?? DateTime.now().toUtc(),
-       updateTime = updateTime ?? DateTime.now().toUtc(),
+       createTime = createTime ?? getUtcNow(),
+       updateTime = updateTime ?? getUtcNow(),
        storageEvents = storageEvents ?? <StorageEventV1>[];
 
   /// Application name.
@@ -145,7 +146,7 @@ class StorageEventV1 {
     required this.invocationId,
     DateTime? timestamp,
     Map<String, Object?>? eventData,
-  }) : timestamp = timestamp ?? DateTime.now().toUtc(),
+  }) : timestamp = timestamp ?? getUtcNow(),
        eventData = eventData ?? <String, Object?>{};
 
   /// Event ID.
@@ -280,5 +281,5 @@ DateTime _parseDateTime(Object? value) {
       return PreciseTimestamp.fromSeconds(asDouble);
     }
   }
-  return DateTime.now().toUtc();
+  return getUtcNow();
 }

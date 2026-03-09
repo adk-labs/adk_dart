@@ -26,6 +26,7 @@ export 'src/artifacts/in_memory_artifact_service.dart';
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
+export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
@@ -51,6 +52,9 @@ export 'src/sessions/state.dart';
 
 export 'src/telemetry/base_telemetry_service.dart';
 export 'src/telemetry/in_memory_telemetry_service.dart';
+
+export 'src/platform/time.dart';
+export 'src/platform/uuid.dart';
 
 export 'src/tools/base_tool.dart';
 export 'src/tools/function_tool.dart';

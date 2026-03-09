@@ -2,6 +2,7 @@
 library;
 
 import '../models/llm_response.dart';
+import '../platform/time.dart';
 import '../types/content.dart';
 import '../types/id.dart';
 import 'event_actions.dart';
@@ -37,7 +38,7 @@ class Event extends LlmResponse {
     super.interactionId,
   }) : actions = actions ?? EventActions(),
        id = id ?? Event.newId(),
-       timestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch / 1000;
+       timestamp = timestamp ?? getTime();
 
   /// Invocation ID that produced this event.
   String invocationId;

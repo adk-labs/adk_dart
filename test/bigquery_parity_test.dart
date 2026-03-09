@@ -263,6 +263,36 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('job labels enforce count and reserved-prefix guardrails', () {
+      final Map<String, String> tooManyLabels = <String, String>{
+        for (int index = 0; index < 21; index++) 'k$index': 'v$index',
+      };
+
+      expect(
+        () => BigQueryToolConfig(jobLabels: tooManyLabels),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message.toString(),
+            'message',
+            contains('Only up to 20 job labels can be provided'),
+          ),
+        ),
+      );
+
+      expect(
+        () => BigQueryToolConfig(
+          jobLabels: <String, String>{'adk-bigquery-owner': 'agent'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message.toString(),
+            'message',
+            contains('reserved for internal usage'),
+          ),
+        ),
+      );
+    });
   });
 
   group('bigquery metadata parity', () {

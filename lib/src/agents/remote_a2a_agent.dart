@@ -12,6 +12,7 @@ import '../a2a/logs/log_utils.dart';
 import '../a2a/protocol.dart';
 import '../events/event.dart';
 import '../flows/llm_flows/functions.dart';
+import '../platform/uuid.dart';
 import '../types/content.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
@@ -1046,8 +1047,7 @@ bool _isTruthy(Object? value) {
 }
 
 String _newMessageId() {
-  final int micros = DateTime.now().microsecondsSinceEpoch;
-  return 'a2a_msg_$micros';
+  return 'a2a_msg_${newUuid()}';
 }
 
 Map<String, Object?> _a2aMessageToJson(A2aMessage? message) {

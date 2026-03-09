@@ -2,4 +2,8 @@
 library;
 
 export 'skill.dart'
-    show loadSkillFromDir, readSkillProperties, validateSkillDir;
+    show
+        listSkillsInDir,
+        loadSkillFromDir,
+        readSkillProperties,
+        validateSkillDir;

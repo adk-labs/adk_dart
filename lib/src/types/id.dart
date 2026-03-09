@@ -1,14 +1,7 @@
 /// Helpers for generating ADK-scoped unique identifiers.
 library;
 
-import 'dart:math';
-
-final Random _random = Random();
-const int _kUint32MaxExclusive = 0x100000000; // 2^32
+import '../platform/uuid.dart';
 
 /// Returns a new identifier prefixed by [prefix].
-String newAdkId({String prefix = ''}) {
-  final int ts = DateTime.now().microsecondsSinceEpoch;
-  final int nonce = _random.nextInt(_kUint32MaxExclusive);
-  return '$prefix$ts$nonce';
-}
+String newAdkId({String prefix = ''}) => '$prefix${newUuid()}';

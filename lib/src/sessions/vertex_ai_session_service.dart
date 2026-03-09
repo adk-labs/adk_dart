@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../platform/time.dart';
 import '../types/content.dart';
 import '../utils/vertex_ai_utils.dart';
 import 'base_session_service.dart';
@@ -523,7 +524,7 @@ class VertexAiSessionService extends BaseSessionService {
     );
     final double updateTime =
         _parseTimestamp(created['update_time'] ?? created['updateTime']) ??
-        (DateTime.now().millisecondsSinceEpoch / 1000);
+        getTime();
 
     return Session(
       id: resolvedId,
@@ -834,9 +835,7 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
   final String id =
       _extractEventId(apiEvent) ??
       (invocationId.isNotEmpty ? invocationId : Event.newId());
-  final double timestamp =
-      _parseTimestamp(apiEvent['timestamp']) ??
-      (DateTime.now().millisecondsSinceEpoch / 1000);
+  final double timestamp = _parseTimestamp(apiEvent['timestamp']) ?? getTime();
 
   final Map<String, Object?> actionsJson = _asStringMap(apiEvent['actions']);
   final Map<String, Object?> metadata = _asStringMap(

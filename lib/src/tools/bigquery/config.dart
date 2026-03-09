@@ -241,9 +241,18 @@ class BigQueryToolConfig {
     if (labels == null) {
       return;
     }
+    if (labels.length > 20) {
+      throw ArgumentError('Only up to 20 job labels can be provided');
+    }
     for (final String key in labels.keys) {
       if (key.isEmpty) {
         throw ArgumentError('Label keys cannot be empty.');
+      }
+      if (key.startsWith('adk-bigquery-')) {
+        throw ArgumentError(
+          'Label key cannot start with "adk-bigquery-" as it is reserved '
+          'for internal usage, found "$key".',
+        );
       }
     }
   }
