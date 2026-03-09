@@ -117,6 +117,41 @@ A2aPart _functionResponsePart({
 }
 
 void main() {
+  group('a2a platform helpers', () {
+    tearDown(() {
+      resetTimeProvider();
+    });
+
+    test('task status timestamps use the platform time provider', () {
+      setTimeProvider(() => 123.456);
+
+      final A2aTaskStatus status = A2aTaskStatus(state: A2aTaskState.working);
+
+      expect(
+        status.timestamp,
+        DateTime.fromMicrosecondsSinceEpoch(
+          123456000,
+          isUtc: true,
+        ).toIso8601String(),
+      );
+    });
+
+    test('local a2a messages use the platform time provider', () {
+      setTimeProvider(() => 456.789);
+
+      final A2AMessage message = A2AMessage(
+        fromAgent: 'planner',
+        toAgent: 'worker',
+        content: 'run tool',
+      );
+
+      expect(
+        message.timestamp,
+        DateTime.fromMicrosecondsSinceEpoch(456789000, isUtc: true),
+      );
+    });
+  });
+
   group('a2a converters', () {
     test('context id and metadata key helpers', () {
       expect(getAdkMetadataKey('hello'), 'adk_hello');

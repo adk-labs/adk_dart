@@ -1,6 +1,8 @@
 /// In-memory message model for A2A router flows.
 library;
 
+import '../platform/time.dart';
+
 /// A routed message exchanged between two local agents.
 class A2AMessage {
   /// Creates an A2A message.
@@ -9,7 +11,7 @@ class A2AMessage {
     required this.toAgent,
     required this.content,
     DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now().toUtc();
+  }) : timestamp = timestamp ?? getUtcNow();
 
   /// Sender agent name.
   final String fromAgent;

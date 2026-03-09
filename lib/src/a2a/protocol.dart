@@ -3,6 +3,8 @@ library;
 
 import 'dart:async';
 
+import '../platform/time.dart';
+
 /// Message author role in the A2A protocol.
 enum A2aRole { user, agent }
 
@@ -211,7 +213,7 @@ class A2aArtifact {
 class A2aTaskStatus {
   /// Creates a task status snapshot.
   A2aTaskStatus({required this.state, this.message, String? timestamp})
-    : timestamp = timestamp ?? DateTime.now().toUtc().toIso8601String();
+    : timestamp = timestamp ?? getUtcNow().toIso8601String();
 
   /// Current task state.
   A2aTaskState state;
