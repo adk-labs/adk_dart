@@ -12,6 +12,9 @@ import '../../version.dart';
 /// Default ADK user-agent string for BigQuery requests.
 const String bigQueryUserAgent = 'adk-bigquery-tool google-adk/$adkVersion';
 
+/// Default ADK user-agent string for Dataplex catalog requests.
+const String dataplexUserAgent = 'adk-dataplex-tool google-adk/$adkVersion';
+
 /// BigQuery dataset identifier with project scope.
 class BigQueryDatasetReference {
   /// Creates a dataset reference.
@@ -132,6 +135,65 @@ abstract class BigQueryQueryJob {
   Map<String, Object?> toApiRepr();
 }
 
+/// One Dataplex catalog search result projected into ADK fields.
+class DataplexSearchEntryResult {
+  /// Creates a Dataplex catalog search result.
+  const DataplexSearchEntryResult({
+    required this.name,
+    required this.displayName,
+    required this.entryType,
+    required this.updateTime,
+    required this.linkedResource,
+    required this.description,
+    required this.location,
+  });
+
+  /// Dataplex entry resource name.
+  final String name;
+
+  /// Human-readable display name.
+  final String displayName;
+
+  /// Entry type identifier.
+  final String entryType;
+
+  /// Update timestamp string returned by Dataplex.
+  final String updateTime;
+
+  /// Linked BigQuery resource path.
+  final String linkedResource;
+
+  /// Entry description.
+  final String description;
+
+  /// Entry location.
+  final String location;
+
+  /// Encodes this result into the public tool payload shape.
+  Map<String, Object?> toApiRepr() {
+    return <String, Object?>{
+      'name': name,
+      'display_name': displayName,
+      'entry_type': entryType,
+      'update_time': updateTime,
+      'linked_resource': linkedResource,
+      'description': description,
+      'location': location,
+    };
+  }
+}
+
+/// Dataplex catalog client interface.
+abstract class DataplexCatalogClient {
+  /// Searches catalog entries under [name] using [query].
+  Iterable<DataplexSearchEntryResult> searchEntries({
+    required String name,
+    required String query,
+    int pageSize = 10,
+    bool semanticSearch = true,
+  });
+}
+
 /// BigQuery client interface.
 abstract class BigQueryClient {
   /// Lists datasets in [projectId].
@@ -177,6 +239,15 @@ typedef BigQueryClientFactory =
     });
 
 BigQueryClientFactory _bigQueryClientFactory = _defaultBigQueryClientFactory;
+DataplexCatalogClientFactory _dataplexCatalogClientFactory =
+    _defaultDataplexCatalogClientFactory;
+
+/// Factory for creating [DataplexCatalogClient] instances.
+typedef DataplexCatalogClientFactory =
+    DataplexCatalogClient Function({
+      required Object credentials,
+      required List<String> userAgent,
+    });
 
 /// Returns a configured BigQuery client.
 BigQueryClient getBigQueryClient({
@@ -203,6 +274,27 @@ void setBigQueryClientFactory(BigQueryClientFactory factory) {
 /// Restores the default BigQuery client factory.
 void resetBigQueryClientFactory() {
   _bigQueryClientFactory = _defaultBigQueryClientFactory;
+}
+
+/// Returns a configured Dataplex catalog client.
+DataplexCatalogClient getDataplexCatalogClient({
+  required Object credentials,
+  Object? userAgent,
+}) {
+  return _dataplexCatalogClientFactory(
+    credentials: credentials,
+    userAgent: _resolveDataplexUserAgents(userAgent),
+  );
+}
+
+/// Overrides the Dataplex catalog client factory.
+void setDataplexCatalogClientFactory(DataplexCatalogClientFactory factory) {
+  _dataplexCatalogClientFactory = factory;
+}
+
+/// Restores the default Dataplex catalog client factory.
+void resetDataplexCatalogClientFactory() {
+  _dataplexCatalogClientFactory = _defaultDataplexCatalogClientFactory;
 }
 
 BigQueryClient _defaultBigQueryClientFactory({
@@ -241,10 +333,48 @@ List<String> _resolveUserAgents(Object? userAgent) {
   return userAgents;
 }
 
+List<String> _resolveDataplexUserAgents(Object? userAgent) {
+  final List<String> userAgents = <String>[dataplexUserAgent];
+  if (userAgent is String) {
+    final String trimmed = userAgent.trim();
+    if (trimmed.isNotEmpty) {
+      userAgents.add(trimmed);
+    }
+    return userAgents;
+  }
+
+  if (userAgent is Iterable) {
+    for (final Object? value in userAgent) {
+      final String text = '$value'.trim();
+      if (text.isNotEmpty) {
+        userAgents.add(text);
+      }
+    }
+  }
+
+  return userAgents;
+}
+
 const List<String> _bigQueryScopes = <String>[
   'https://www.googleapis.com/auth/bigquery',
   'https://www.googleapis.com/auth/cloud-platform',
 ];
+
+const List<String> _dataplexScopes = <String>[
+  'https://www.googleapis.com/auth/dataplex',
+  'https://www.googleapis.com/auth/cloud-platform',
+];
+
+class DataplexCatalogApiException implements Exception {
+  /// Creates a Dataplex API exception.
+  DataplexCatalogApiException(this.message);
+
+  /// Human-readable error details.
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class _RestBigQueryClient implements BigQueryClient {
   _RestBigQueryClient({
@@ -931,4 +1061,182 @@ String? _string(Object? value) {
   }
   final String text = '$value'.trim();
   return text.isEmpty ? null : text;
+}
+
+DataplexCatalogClient _defaultDataplexCatalogClientFactory({
+  required Object credentials,
+  required List<String> userAgent,
+}) {
+  return _RestDataplexCatalogClient(
+    credentials: credentials,
+    userAgents: userAgent,
+  );
+}
+
+class _RestDataplexCatalogClient implements DataplexCatalogClient {
+  _RestDataplexCatalogClient({
+    required this.credentials,
+    required this.userAgents,
+  });
+
+  static const String _baseApiUrl = 'https://dataplex.googleapis.com';
+
+  final Object credentials;
+  final List<String> userAgents;
+
+  @override
+  Iterable<DataplexSearchEntryResult> searchEntries({
+    required String name,
+    required String query,
+    int pageSize = 10,
+    bool semanticSearch = true,
+  }) sync* {
+    final Uri uri = Uri.parse(
+      '$_baseApiUrl/v1/${Uri.encodeFull(name)}:searchEntries',
+    );
+    final String accessToken = _resolveAccessTokenSync(
+      credentials: credentials,
+      scopes: _dataplexScopes,
+      serviceName: 'Dataplex',
+    );
+    final Map<String, Object?> requestBody = <String, Object?>{
+      'query': query,
+      'pageSize': pageSize,
+      'semanticSearch': semanticSearch,
+    };
+
+    final List<String> args = <String>[
+      '-sS',
+      '-X',
+      'POST',
+      uri.toString(),
+      '-H',
+      'Authorization: Bearer $accessToken',
+      '-H',
+      'Accept: application/json',
+      if (userAgents.isNotEmpty) ...<String>[
+        '-H',
+        'User-Agent: ${userAgents.join(' ')}',
+      ],
+      '-H',
+      'Content-Type: application/json',
+      '--data-binary',
+      jsonEncode(requestBody),
+      '-w',
+      '\n%{http_code}',
+    ];
+
+    final ProcessResult result = Process.runSync('curl', args);
+    if (result.exitCode != 0) {
+      throw DataplexCatalogApiException(
+        'request failed to execute curl command: ${result.stderr}',
+      );
+    }
+
+    final String responseText = '${result.stdout}';
+    final int separator = responseText.lastIndexOf('\n');
+    final String bodyText = separator < 0
+        ? ''
+        : responseText.substring(0, separator);
+    final String statusText = separator < 0
+        ? responseText.trim()
+        : responseText.substring(separator + 1).trim();
+    final int statusCode = int.tryParse(statusText) ?? 0;
+
+    if (statusCode < 200 || statusCode >= 300) {
+      throw DataplexCatalogApiException('$statusCode $bodyText');
+    }
+
+    if (bodyText.trim().isEmpty) {
+      return;
+    }
+
+    final Object? decoded = jsonDecode(bodyText);
+    if (decoded is! Map) {
+      throw DataplexCatalogApiException(
+        'Dataplex API response is not a JSON object.',
+      );
+    }
+
+    final List<Map<String, Object?>> results = _listOfMaps(decoded['results']);
+    for (final Map<String, Object?> resultItem in results) {
+      final Map<String, Object?> entry = _map(resultItem['dataplexEntry']);
+      final Map<String, Object?> source = _map(entry['entrySource']);
+      yield DataplexSearchEntryResult(
+        name: _string(entry['name']) ?? '',
+        displayName: _string(source['displayName']) ?? '',
+        entryType: _string(entry['entryType']) ?? '',
+        updateTime: _string(entry['updateTime']) ?? '',
+        linkedResource: _string(source['resource']) ?? '',
+        description: _string(source['description']) ?? '',
+        location: _string(source['location']) ?? '',
+      );
+    }
+  }
+}
+
+String _resolveAccessTokenSync({
+  required Object credentials,
+  required List<String> scopes,
+  required String serviceName,
+}) {
+  final String? explicit = tryExtractGoogleAccessToken(credentials);
+  if (explicit != null && explicit.isNotEmpty) {
+    return explicit;
+  }
+
+  const List<String> envKeys = <String>[
+    'GOOGLE_OAUTH_ACCESS_TOKEN',
+    'GOOGLE_ACCESS_TOKEN',
+    'ACCESS_TOKEN',
+  ];
+  for (final String key in envKeys) {
+    final String value = (Platform.environment[key] ?? '').trim();
+    if (value.isNotEmpty) {
+      return value;
+    }
+  }
+
+  final ProcessResult gcloud = Process.runSync('gcloud', <String>[
+    'auth',
+    'application-default',
+    'print-access-token',
+    '--scopes',
+    scopes.join(','),
+  ]);
+  if (gcloud.exitCode == 0) {
+    final String token = '${gcloud.stdout}'.trim();
+    if (token.isNotEmpty) {
+      return token;
+    }
+  }
+
+  final ProcessResult metadata = Process.runSync('curl', <String>[
+    '-sS',
+    '-H',
+    'Metadata-Flavor: Google',
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+  ]);
+  if (metadata.exitCode == 0) {
+    final String text = '${metadata.stdout}'.trim();
+    if (text.isNotEmpty) {
+      try {
+        final Object? decoded = jsonDecode(text);
+        if (decoded is Map && decoded['access_token'] != null) {
+          final String token = '${decoded['access_token']}'.trim();
+          if (token.isNotEmpty) {
+            return token;
+          }
+        }
+      } on FormatException {
+        // Ignore malformed metadata response.
+      }
+    }
+  }
+
+  throw StateError(
+    'Unable to resolve $serviceName access token. '
+    'Provide oauth2 credentials, set GOOGLE_OAUTH_ACCESS_TOKEN, '
+    'or login with `gcloud auth application-default login`.',
+  );
 }

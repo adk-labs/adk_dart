@@ -11,6 +11,7 @@ import 'config.dart';
 import 'data_insights_tool.dart' as data_insights_tool;
 import 'metadata_tool.dart' as metadata_tool;
 import 'query_tool.dart' as query_tool;
+import 'search_tool.dart' as search_tool;
 
 /// Toolset that exposes BigQuery query, metadata, and insights tools.
 class BigQueryToolset extends BaseToolset {
@@ -87,6 +88,12 @@ class BigQueryToolset extends BaseToolset {
       GoogleTool(
         func: data_insights_tool.askDataInsights,
         name: 'ask_data_insights',
+        credentialsConfig: _credentialsConfig,
+        toolSettings: _toolSettings,
+      ),
+      GoogleTool(
+        func: search_tool.searchCatalog,
+        name: 'search_catalog',
         credentialsConfig: _credentialsConfig,
         toolSettings: _toolSettings,
       ),

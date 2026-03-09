@@ -9,6 +9,7 @@ const String bigqueryTokenCacheKey = 'bigquery_token_cache';
 /// Default OAuth scopes required for BigQuery operations.
 const List<String> bigqueryDefaultScope = <String>[
   'https://www.googleapis.com/auth/bigquery',
+  'https://www.googleapis.com/auth/dataplex',
 ];
 
 /// Credential configuration for BigQuery tools.

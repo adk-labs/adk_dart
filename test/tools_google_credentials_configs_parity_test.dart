@@ -9,7 +9,10 @@ void main() {
         clientSecret: 'csec',
       );
       expect(config.tokenCacheKey, bigqueryTokenCacheKey);
-      expect(config.scopes, bigqueryDefaultScope);
+      expect(config.scopes, <String>[
+        'https://www.googleapis.com/auth/bigquery',
+        'https://www.googleapis.com/auth/dataplex',
+      ]);
     });
 
     test('BigtableCredentialsConfig sets default scope and cache key', () {

@@ -4,6 +4,7 @@ import 'package:adk_dart/src/tools/bigquery/data_insights_tool.dart'
 import 'package:adk_dart/src/tools/bigquery/metadata_tool.dart'
     as bigquery_metadata;
 import 'package:adk_dart/src/tools/bigquery/query_tool.dart' as query_tool;
+import 'package:adk_dart/src/tools/bigquery/search_tool.dart' as search_tool;
 import 'package:adk_dart/src/tools/bigquery/bigquery_toolset.dart'
     as bigquery_toolset;
 import 'package:test/test.dart';
@@ -59,6 +60,31 @@ class _FakeQueryJob implements BigQueryQueryJob {
 
   @override
   Map<String, Object?> toApiRepr() => Map<String, Object?>.from(_apiRepr);
+}
+
+class _FakeDataplexCatalogClient implements DataplexCatalogClient {
+  List<DataplexSearchEntryResult> results = <DataplexSearchEntryResult>[];
+  Object? error;
+  final List<Map<String, Object?>> searchCalls = <Map<String, Object?>>[];
+
+  @override
+  Iterable<DataplexSearchEntryResult> searchEntries({
+    required String name,
+    required String query,
+    int pageSize = 10,
+    bool semanticSearch = true,
+  }) sync* {
+    searchCalls.add(<String, Object?>{
+      'name': name,
+      'query': query,
+      'page_size': pageSize,
+      'semantic_search': semanticSearch,
+    });
+    if (error != null) {
+      throw error!;
+    }
+    yield* results;
+  }
 }
 
 class _FakeBigQueryClient implements BigQueryClient {
@@ -216,6 +242,7 @@ Context _newToolContext({Map<String, Object?>? state}) {
 void main() {
   tearDown(() {
     resetBigQueryClientFactory();
+    resetDataplexCatalogClientFactory();
     data_insights_tool.resetBigQueryInsightsStreamProvider();
   });
 
@@ -397,6 +424,142 @@ void main() {
       expect(payload['status'], 'ERROR');
       expect('${payload['error_details']}', contains('bigquery unavailable'));
     });
+  });
+
+  group('bigquery search catalog parity', () {
+    test('searchCatalog builds semantic query and maps results', () async {
+      final _FakeDataplexCatalogClient client = _FakeDataplexCatalogClient()
+        ..results = <DataplexSearchEntryResult>[
+          const DataplexSearchEntryResult(
+            name: 'entry1',
+            displayName: 'Cust Table',
+            entryType: 'TABLE',
+            updateTime: '2026-01-14T05:00:00Z',
+            linkedResource:
+                '//bigquery.googleapis.com/projects/p/datasets/d/tables/t1',
+            description: 'Table 1',
+            location: 'us',
+          ),
+        ];
+
+      setDataplexCatalogClientFactory(({
+        required Object credentials,
+        required List<String> userAgent,
+      }) {
+        expect(credentials, 'creds');
+        expect(userAgent, <String>[
+          dataplexUserAgent,
+          'test-app',
+          'search_catalog',
+        ]);
+        return client;
+      });
+
+      final Map<String, Object?> result = await search_tool.searchCatalog(
+        prompt: 'customer data',
+        projectId: 'test-project',
+        credentials: 'creds',
+        settings: BigQueryToolConfig(applicationName: 'test-app'),
+        location: 'us',
+      );
+
+      expect(result['status'], 'SUCCESS');
+      final List<Object?> results = result['results']! as List<Object?>;
+      expect(results, hasLength(1));
+      expect(
+        (results.single as Map<String, Object?>)['display_name'],
+        'Cust Table',
+      );
+
+      expect(client.searchCalls, hasLength(1));
+      expect(
+        client.searchCalls.single['name'],
+        'projects/test-project/locations/us',
+      );
+      expect(
+        client.searchCalls.single['query'],
+        '(customer data) AND projectid="test-project" AND system=BIGQUERY',
+      );
+      expect(client.searchCalls.single['semantic_search'], isTrue);
+    });
+
+    test(
+      'searchCatalog applies project dataset type filters and error handling',
+      () async {
+        final _FakeDataplexCatalogClient client = _FakeDataplexCatalogClient()
+          ..error = DataplexCatalogApiException('400 Invalid query');
+
+        setDataplexCatalogClientFactory(({
+          required Object credentials,
+          required List<String> userAgent,
+        }) {
+          return client;
+        });
+
+        final Map<String, Object?> result = await search_tool.searchCatalog(
+          prompt: 'inventory',
+          projectId: 'main-project',
+          credentials: 'creds',
+          settings: BigQueryToolConfig(location: 'eu'),
+          projectIdsFilter: <String>['proj1', 'proj2'],
+          datasetIdsFilter: <String>['dsetA'],
+          typesFilter: <String>['TABLE', 'DATASET'],
+        );
+
+        expect(result['status'], 'ERROR');
+        expect(
+          '${result['error_details']}',
+          contains('Dataplex API Error: 400 Invalid query'),
+        );
+        expect(client.searchCalls, hasLength(1));
+        expect(
+          client.searchCalls.single['name'],
+          'projects/main-project/locations/eu',
+        );
+        expect(
+          '${client.searchCalls.single['query']}',
+          contains('(projectid="proj1" OR projectid="proj2")'),
+        );
+        expect(
+          '${client.searchCalls.single['query']}',
+          contains(
+            '(linked_resource:"//bigquery.googleapis.com/projects/proj1/datasets/dsetA/*" OR linked_resource:"//bigquery.googleapis.com/projects/proj2/datasets/dsetA/*")',
+          ),
+        );
+        expect(
+          '${client.searchCalls.single['query']}',
+          contains('(type="TABLE" OR type="DATASET")'),
+        );
+      },
+    );
+
+    test(
+      'searchCatalog validates missing project id before factory call',
+      () async {
+        bool called = false;
+        setDataplexCatalogClientFactory(({
+          required Object credentials,
+          required List<String> userAgent,
+        }) {
+          called = true;
+          return _FakeDataplexCatalogClient();
+        });
+
+        final Map<String, Object?> result = await search_tool.searchCatalog(
+          prompt: 'test',
+          projectId: '',
+          credentials: 'creds',
+          settings: BigQueryToolConfig(location: 'us'),
+        );
+
+        expect(result['status'], 'ERROR');
+        expect(
+          '${result['error_details']}',
+          contains('project_id must be provided'),
+        );
+        expect(called, isFalse);
+      },
+    );
   });
 
   group('bigquery execute_sql parity', () {
@@ -872,6 +1035,7 @@ void main() {
         'analyze_contribution',
         'detect_anomalies',
         'ask_data_insights',
+        'search_catalog',
       });
 
       final bigquery_toolset.BigQueryToolset filtered =
