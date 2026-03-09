@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../tools/_google_access_token.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 import 'package:yaml/yaml.dart';
 
@@ -520,11 +521,343 @@ Map<String, Frontmatter> listSkillsInDir(String skillsBasePath) {
   return skills;
 }
 
+/// Minimal storage interface used for GCS-backed skill loading.
+abstract class SkillGcsStore {
+  /// Lists blob names in [bucketName], optionally filtered by [prefix].
+  Future<List<String>> listBlobNames(String bucketName, {String? prefix});
+
+  /// Downloads raw blob bytes, or `null` when the blob is missing.
+  Future<List<int>?> downloadBlob(String bucketName, String blobName);
+}
+
+/// Live Google Cloud Storage implementation for [SkillGcsStore].
+class LiveSkillGcsStore implements SkillGcsStore {
+  /// Creates a live store using Google Cloud Storage JSON APIs.
+  LiveSkillGcsStore({
+    Uri? apiBaseUri,
+    Future<String> Function()? accessTokenProvider,
+  }) : _apiBaseUri = apiBaseUri ?? Uri.parse('https://storage.googleapis.com'),
+       _accessTokenProvider = accessTokenProvider;
+
+  final Uri _apiBaseUri;
+  final Future<String> Function()? _accessTokenProvider;
+
+  @override
+  Future<List<String>> listBlobNames(
+    String bucketName, {
+    String? prefix,
+  }) async {
+    final List<String> blobNames = <String>[];
+    String? pageToken;
+    do {
+      final Uri uri = _buildUri(
+        pathSegments: <String>['storage', 'v1', 'b', bucketName, 'o'],
+        queryParameters: <String, String>{
+          if ((prefix ?? '').isNotEmpty) 'prefix': prefix!,
+          if ((pageToken ?? '').isNotEmpty) 'pageToken': pageToken!,
+        },
+      );
+      final _GcsJsonResponse response = await _requestJson(uri);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException(
+          'Failed to list skill blobs from gs://$bucketName/${prefix ?? ''} '
+          '(HTTP ${response.statusCode}).',
+          uri: uri,
+        );
+      }
+      final Object? items = response.body['items'];
+      if (items is List) {
+        for (final Object? item in items) {
+          if (item is! Map) {
+            continue;
+          }
+          final Object? name = item['name'];
+          if (name is String && name.isNotEmpty) {
+            blobNames.add(name);
+          }
+        }
+      }
+      final Object? next = response.body['nextPageToken'];
+      pageToken = next is String && next.isNotEmpty ? next : null;
+    } while (pageToken != null);
+    blobNames.sort();
+    return blobNames;
+  }
+
+  @override
+  Future<List<int>?> downloadBlob(String bucketName, String blobName) async {
+    final Uri uri = _buildUri(
+      pathSegments: <String>['storage', 'v1', 'b', bucketName, 'o', blobName],
+      queryParameters: const <String, String>{'alt': 'media'},
+    );
+    final _GcsRawResponse response = await _request(uri);
+    if (response.statusCode == 404) {
+      return null;
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(
+        'Failed to download skill blob gs://$bucketName/$blobName '
+        '(HTTP ${response.statusCode}).',
+        uri: uri,
+      );
+    }
+    return response.bodyBytes;
+  }
+
+  Uri _buildUri({
+    required List<String> pathSegments,
+    Map<String, String>? queryParameters,
+  }) {
+    final String base = _apiBaseUri.toString().replaceFirst(RegExp(r'/+$'), '');
+    final String path = pathSegments
+        .where((String segment) => segment.isNotEmpty)
+        .map(Uri.encodeComponent)
+        .join('/');
+    final Uri uri = Uri.parse('$base/$path');
+    if (queryParameters == null || queryParameters.isEmpty) {
+      return uri;
+    }
+    return uri.replace(
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        ...queryParameters,
+      },
+    );
+  }
+
+  Future<_GcsJsonResponse> _requestJson(Uri uri) async {
+    final _GcsRawResponse response = await _request(uri);
+    final Map<String, Object?> decoded = _decodeJsonObject(response.bodyBytes);
+    return _GcsJsonResponse(
+      statusCode: response.statusCode,
+      headers: response.headers,
+      body: decoded,
+    );
+  }
+
+  Future<_GcsRawResponse> _request(Uri uri) async {
+    final HttpClient client = HttpClient();
+    try {
+      final HttpClientRequest request = await client.getUrl(uri);
+      request.headers.set(
+        'Authorization',
+        'Bearer ${await _resolveAccessToken()}',
+      );
+      final HttpClientResponse response = await request.close();
+      final List<int> bodyBytes = await response.fold<List<int>>(<int>[], (
+        List<int> previous,
+        List<int> element,
+      ) {
+        previous.addAll(element);
+        return previous;
+      });
+      final Map<String, String> headers = <String, String>{};
+      response.headers.forEach((String name, List<String> values) {
+        if (values.isNotEmpty) {
+          headers[name] = values.join(',');
+        }
+      });
+      return _GcsRawResponse(
+        statusCode: response.statusCode,
+        headers: headers,
+        bodyBytes: bodyBytes,
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<String> _resolveAccessToken() async {
+    if (_accessTokenProvider != null) {
+      return _accessTokenProvider();
+    }
+    return resolveDefaultGoogleAccessToken(
+      scopes: const <String>[
+        'https://www.googleapis.com/auth/devstorage.read_only',
+      ],
+    );
+  }
+}
+
+/// Lists valid skills from a GCS bucket prefix keyed by skill ID.
+Future<Map<String, Frontmatter>> listSkillsInGcsDir(
+  String bucketName, {
+  String skillsBasePath = '',
+  SkillGcsStore? storageStore,
+}) async {
+  final SkillGcsStore store = storageStore ?? LiveSkillGcsStore();
+  final String basePrefix = _normalizeGcsPrefix(skillsBasePath);
+  final List<String> blobNames = await store.listBlobNames(
+    bucketName,
+    prefix: basePrefix,
+  );
+
+  final Map<String, Frontmatter> skills = <String, Frontmatter>{};
+  for (final String blobName in blobNames) {
+    final String? skillId = _skillIdForManifestBlob(
+      blobName,
+      basePrefix: basePrefix,
+    );
+    if (skillId == null) {
+      continue;
+    }
+
+    final List<int>? bytes = await store.downloadBlob(bucketName, blobName);
+    if (bytes == null) {
+      continue;
+    }
+
+    try {
+      final _ParsedSkillMd parsed = _parseSkillMdContent(
+        _decodeSkillText(bytes),
+      );
+      final Frontmatter frontmatter = Frontmatter.fromMap(parsed.frontmatter);
+      if (skillId != frontmatter.name) {
+        throw ArgumentError(
+          "Skill name '${frontmatter.name}' does not match directory name '$skillId'.",
+        );
+      }
+      skills[skillId] = frontmatter;
+    } catch (error) {
+      stderr.writeln(
+        "Skipping invalid skill '$skillId' in bucket '$bucketName': "
+        '${_formatSkillError(error)}',
+      );
+    }
+  }
+
+  return skills;
+}
+
+/// Loads a complete skill from a GCS bucket prefix.
+Future<Skill> loadSkillFromGcsDir(
+  String bucketName,
+  String skillId, {
+  String skillsBasePath = '',
+  SkillGcsStore? storageStore,
+}) async {
+  final SkillGcsStore store = storageStore ?? LiveSkillGcsStore();
+  final String basePrefix = _normalizeGcsPrefix(skillsBasePath);
+  final String normalizedSkillId = skillId.trim().replaceAll(
+    RegExp(r'^/+|/+$'),
+    '',
+  );
+  final String skillDirPrefix = '$basePrefix$normalizedSkillId/';
+  final String? manifestBlobName = await _findSkillManifestBlob(
+    bucketName,
+    skillDirPrefix,
+    store,
+  );
+  if (manifestBlobName == null) {
+    throw FileSystemException(
+      'SKILL.md not found at gs://$bucketName/${skillDirPrefix}SKILL.md',
+      'gs://$bucketName/${skillDirPrefix}SKILL.md',
+    );
+  }
+
+  final List<int>? manifestBytes = await store.downloadBlob(
+    bucketName,
+    manifestBlobName,
+  );
+  if (manifestBytes == null) {
+    throw FileSystemException(
+      'SKILL.md not found at gs://$bucketName/$manifestBlobName',
+      'gs://$bucketName/$manifestBlobName',
+    );
+  }
+
+  final _ParsedSkillMd parsed = _parseSkillMdContent(
+    _decodeSkillText(manifestBytes),
+  );
+  final Frontmatter frontmatter = Frontmatter.fromMap(parsed.frontmatter);
+  final String expectedSkillName = _basename(skillId);
+  if (expectedSkillName != frontmatter.name) {
+    throw ArgumentError(
+      "Skill name '${frontmatter.name}' does not match directory name "
+      "'$expectedSkillName'.",
+    );
+  }
+
+  final List<String> blobNames = await store.listBlobNames(
+    bucketName,
+    prefix: skillDirPrefix,
+  );
+  final Map<String, SkillResourceData> references =
+      <String, SkillResourceData>{};
+  final Map<String, SkillResourceData> assets = <String, SkillResourceData>{};
+  final Map<String, Script> scripts = <String, Script>{};
+  for (final String blobName in blobNames) {
+    if (blobName == manifestBlobName) {
+      continue;
+    }
+    final String relativePath = blobName.substring(skillDirPrefix.length);
+    if (relativePath.isEmpty) {
+      continue;
+    }
+    final List<int>? bytes = await store.downloadBlob(bucketName, blobName);
+    if (bytes == null) {
+      continue;
+    }
+    if (relativePath.startsWith('references/')) {
+      final String resourceId = relativePath.substring('references/'.length);
+      references[resourceId] = _decodeSkillResource(resourceId, bytes);
+      continue;
+    }
+    if (relativePath.startsWith('assets/')) {
+      final String resourceId = relativePath.substring('assets/'.length);
+      assets[resourceId] = _decodeSkillResource(resourceId, bytes);
+      continue;
+    }
+    if (relativePath.startsWith('scripts/')) {
+      final String scriptId = relativePath.substring('scripts/'.length);
+      try {
+        scripts[scriptId] = Script(src: _decodeSkillText(bytes));
+      } on FormatException {
+        continue;
+      }
+    }
+  }
+
+  return Skill(
+    frontmatter: frontmatter,
+    instructions: parsed.body,
+    resources: Resources(
+      references: references,
+      assets: assets,
+      scripts: scripts,
+    ),
+  );
+}
+
 class _ParsedSkillMd {
   _ParsedSkillMd({required this.frontmatter, required this.body});
 
   final Map<String, Object?> frontmatter;
   final String body;
+}
+
+class _GcsRawResponse {
+  _GcsRawResponse({
+    required this.statusCode,
+    required this.headers,
+    required this.bodyBytes,
+  });
+
+  final int statusCode;
+  final Map<String, String> headers;
+  final List<int> bodyBytes;
+}
+
+class _GcsJsonResponse {
+  _GcsJsonResponse({
+    required this.statusCode,
+    required this.headers,
+    required this.body,
+  });
+
+  final int statusCode;
+  final Map<String, String> headers;
+  final Map<String, Object?> body;
 }
 
 _ParsedSkillMd _parseSkillMd(Directory skillDir) {
@@ -550,6 +883,23 @@ _ParsedSkillMd _parseSkillMd(Directory skillDir) {
   }
 
   final String content = skillMd.readAsStringSync();
+  if (!content.startsWith('---')) {
+    throw FormatException('SKILL.md must start with YAML frontmatter (---)');
+  }
+
+  final int closingIndex = content.indexOf('---', 3);
+  if (closingIndex < 0) {
+    throw FormatException('SKILL.md frontmatter not properly closed with ---');
+  }
+
+  final String frontmatterText = content.substring(3, closingIndex);
+  final String body = content.substring(closingIndex + 3).trim();
+
+  final Map<String, Object?> parsed = _parseYamlMapping(frontmatterText);
+  return _ParsedSkillMd(frontmatter: parsed, body: body);
+}
+
+_ParsedSkillMd _parseSkillMdContent(String content) {
   if (!content.startsWith('---')) {
     throw FormatException('SKILL.md must start with YAML frontmatter (---)');
   }
@@ -804,6 +1154,93 @@ String _formatSkillError(Object error) {
 }
 
 String _normalizePath(String path) => path.replaceAll('\\', '/');
+
+String _normalizeGcsPrefix(String value) {
+  final String trimmed = value.trim().replaceAll('\\', '/');
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  final String normalized = trimmed
+      .replaceFirst(RegExp(r'^/+'), '')
+      .replaceFirst(RegExp(r'/+$'), '');
+  if (normalized.isEmpty) {
+    return '';
+  }
+  return '$normalized/';
+}
+
+String? _skillIdForManifestBlob(String blobName, {required String basePrefix}) {
+  if (!blobName.startsWith(basePrefix)) {
+    return null;
+  }
+  final String relative = blobName.substring(basePrefix.length);
+  final List<String> parts = relative.split('/');
+  if (parts.length != 2) {
+    return null;
+  }
+  final String manifestName = parts[1];
+  if (manifestName != 'SKILL.md' && manifestName != 'skill.md') {
+    return null;
+  }
+  return parts.first;
+}
+
+Future<String?> _findSkillManifestBlob(
+  String bucketName,
+  String skillDirPrefix,
+  SkillGcsStore store,
+) async {
+  for (final String candidate in <String>[
+    '${skillDirPrefix}SKILL.md',
+    '${skillDirPrefix}skill.md',
+  ]) {
+    final List<int>? bytes = await store.downloadBlob(bucketName, candidate);
+    if (bytes != null) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+String _decodeSkillText(List<int> bytes) {
+  try {
+    return utf8.decode(bytes, allowMalformed: false);
+  } on FormatException {
+    throw FormatException('Skill content is not valid UTF-8 text.');
+  }
+}
+
+SkillResourceData _decodeSkillResource(String relativePath, List<int> bytes) {
+  if (_shouldTreatAsBinaryResource(relativePath, bytes)) {
+    return List<int>.from(bytes);
+  }
+  try {
+    return utf8.decode(bytes, allowMalformed: false);
+  } on FormatException {
+    return List<int>.from(bytes);
+  }
+}
+
+Map<String, Object?> _decodeJsonObject(List<int> bodyBytes) {
+  if (bodyBytes.isEmpty) {
+    return <String, Object?>{};
+  }
+  final String text = utf8.decode(bodyBytes, allowMalformed: true).trim();
+  if (text.isEmpty) {
+    return <String, Object?>{};
+  }
+  try {
+    final Object? decoded = jsonDecode(text);
+    if (decoded is! Map) {
+      return <String, Object?>{};
+    }
+    return decoded.map(
+      (Object? key, Object? value) => MapEntry<String, Object?>('$key', value),
+    );
+  } on FormatException {
+    return <String, Object?>{};
+  }
+}
 
 const Set<String> _textSkillResourceExtensions = <String>{
   '.bash',

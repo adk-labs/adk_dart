@@ -406,6 +406,63 @@ Map<String, Frontmatter> listSkillsInDir(String skillsBasePath) {
   return <String, Frontmatter>{};
 }
 
+/// Web stub for GCS-backed skill storage.
+abstract class SkillGcsStore {
+  /// Lists blob names in [bucketName], optionally filtered by [prefix].
+  Future<List<String>> listBlobNames(String bucketName, {String? prefix});
+
+  /// Downloads raw blob bytes, or `null` when the blob is missing.
+  Future<List<int>?> downloadBlob(String bucketName, String blobName);
+}
+
+/// Web stub for live GCS-backed skill storage.
+class LiveSkillGcsStore implements SkillGcsStore {
+  /// Creates an unsupported live store on Web.
+  LiveSkillGcsStore({
+    Uri? apiBaseUri,
+    Future<String> Function()? accessTokenProvider,
+  });
+
+  @override
+  Future<List<String>> listBlobNames(String bucketName, {String? prefix}) {
+    throw UnsupportedError(
+      'LiveSkillGcsStore is not supported on this platform.',
+    );
+  }
+
+  @override
+  Future<List<int>?> downloadBlob(String bucketName, String blobName) {
+    throw UnsupportedError(
+      'LiveSkillGcsStore is not supported on this platform.',
+    );
+  }
+}
+
+/// Throws because GCS-backed skill loading is unsupported on Web.
+Future<Map<String, Frontmatter>> listSkillsInGcsDir(
+  String bucketName, {
+  String skillsBasePath = '',
+  Object? storageStore,
+}) {
+  throw UnsupportedError(
+    'listSkillsInGcsDir is not supported on this platform. '
+    'Use inline Skill definitions instead.',
+  );
+}
+
+/// Throws because GCS-backed skill loading is unsupported on Web.
+Future<Skill> loadSkillFromGcsDir(
+  String bucketName,
+  String skillId, {
+  String skillsBasePath = '',
+  Object? storageStore,
+}) {
+  throw UnsupportedError(
+    'loadSkillFromGcsDir is not supported on this platform. '
+    'Use inline Skill definitions instead.',
+  );
+}
+
 String _escapeXml(String value) {
   return value
       .replaceAll('&', '&amp;')

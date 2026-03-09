@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
@@ -24,6 +25,36 @@ Matcher _throwsArgumentMessage(String messageFragment) {
       contains(messageFragment),
     ),
   );
+}
+
+class _FakeSkillGcsStore implements SkillGcsStore {
+  _FakeSkillGcsStore(this._buckets);
+
+  final Map<String, Map<String, List<int>>> _buckets;
+
+  @override
+  Future<List<int>?> downloadBlob(String bucketName, String blobName) async {
+    final Map<String, List<int>> bucket =
+        _buckets[bucketName] ?? const <String, List<int>>{};
+    final List<int>? bytes = bucket[blobName];
+    return bytes == null ? null : List<int>.from(bytes);
+  }
+
+  @override
+  Future<List<String>> listBlobNames(
+    String bucketName, {
+    String? prefix,
+  }) async {
+    final Map<String, List<int>> bucket =
+        _buckets[bucketName] ?? const <String, List<int>>{};
+    final String effectivePrefix = prefix ?? '';
+    final List<String> names =
+        bucket.keys
+            .where((String name) => name.startsWith(effectivePrefix))
+            .toList()
+          ..sort();
+    return names;
+  }
 }
 
 void main() {
@@ -302,6 +333,79 @@ Bad instructions
       final Map<String, Frontmatter> skills = listSkillsInDir(tempDir.path);
       expect(skills.keys, <String>['weather-skill']);
       expect(skills['weather-skill']?.description, 'Reads weather data');
+    });
+
+    test('listSkillsInGcsDir returns only valid skills', () async {
+      final _FakeSkillGcsStore store = _FakeSkillGcsStore(
+        <String, Map<String, List<int>>>{
+          'skills-bucket': <String, List<int>>{
+            'skills/weather-skill/SKILL.md': utf8.encode('''
+---
+name: weather-skill
+description: Reads weather data
+---
+Weather instructions
+'''),
+            'skills/bad-skill/SKILL.md': utf8.encode('''
+---
+name: renamed-skill
+description: Invalid skill
+---
+Bad instructions
+'''),
+          },
+        },
+      );
+
+      final Map<String, Frontmatter> skills = await listSkillsInGcsDir(
+        'skills-bucket',
+        skillsBasePath: 'skills',
+        storageStore: store,
+      );
+      expect(skills.keys, <String>['weather-skill']);
+      expect(skills['weather-skill']?.description, 'Reads weather data');
+    });
+
+    test('loadSkillFromGcsDir loads text and binary resources', () async {
+      final _FakeSkillGcsStore store = _FakeSkillGcsStore(
+        <String, Map<String, List<int>>>{
+          'skills-bucket': <String, List<int>>{
+            'skills/weather-skill/SKILL.md': utf8.encode('''
+---
+name: weather-skill
+description: Reads weather data
+metadata:
+  adk_additional_tools:
+    - extra_tool
+---
+Weather instructions
+'''),
+            'skills/weather-skill/references/guide.md': utf8.encode('guide'),
+            'skills/weather-skill/assets/template.txt': utf8.encode('template'),
+            'skills/weather-skill/assets/file.pdf': <int>[37, 80, 68, 70],
+            'skills/weather-skill/scripts/setup.sh': utf8.encode('echo setup'),
+            'skills/weather-skill/scripts/binary.bin': <int>[0, 159, 146, 150],
+          },
+        },
+      );
+
+      final Skill skill = await loadSkillFromGcsDir(
+        'skills-bucket',
+        'weather-skill',
+        skillsBasePath: 'skills',
+        storageStore: store,
+      );
+
+      expect(skill.name, 'weather-skill');
+      expect(skill.instructions, 'Weather instructions');
+      expect(skill.frontmatter.metadata['adk_additional_tools'], <String>[
+        'extra_tool',
+      ]);
+      expect(skill.resources.getReference('guide.md'), 'guide');
+      expect(skill.resources.getAsset('template.txt'), 'template');
+      expect(skill.resources.getAssetBytes('file.pdf'), <int>[37, 80, 68, 70]);
+      expect(skill.resources.getScript('setup.sh')?.src, 'echo setup');
+      expect(skill.resources.getScript('binary.bin'), isNull);
     });
 
     test('validateSkillDir reports missing directory', () {
