@@ -230,6 +230,7 @@ export 'src/planners/plan_re_act_planner.dart';
 export 'src/planners/rule_based_planner.dart';
 export 'src/optimization/agent_optimizer.dart';
 export 'src/optimization/data_types.dart';
+export 'src/optimization/gepa_root_agent_prompt_optimizer.dart';
 export 'src/optimization/prompt_optimizer.dart';
 export 'src/optimization/sampler.dart';
 export 'src/optimization/simple_prompt_optimizer.dart';
