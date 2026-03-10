@@ -314,6 +314,87 @@ void main() {
     );
 
     test(
+      'resumable app stays paused when a long-running call is followed by a function response',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('unexpected continuation')),
+          ],
+        );
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final App app = App(
+          name: 'resumable_app',
+          rootAgent: agent,
+          resumabilityConfig: ResumabilityConfig(isResumable: true),
+        );
+        final Runner runner = Runner(
+          app: app,
+          sessionService: InMemorySessionService(),
+        );
+
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: 'session_pause_after_response',
+        );
+        await runner.sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'invocation_pause',
+            author: 'user',
+            content: Content.userText('start'),
+          ),
+        );
+        await runner.sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'invocation_pause',
+            author: 'root_agent',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'lookup_weather',
+                  id: 'call_pause',
+                  args: <String, dynamic>{'city': 'Seoul'},
+                ),
+              ],
+            ),
+            longRunningToolIds: <String>{'call_pause'},
+          ),
+        );
+        await runner.sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'invocation_pause',
+            author: 'root_agent',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  name: 'lookup_weather',
+                  id: 'call_pause',
+                  response: <String, dynamic>{'pending': true},
+                ),
+              ],
+            ),
+          ),
+        );
+
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            invocationId: 'invocation_pause',
+          ),
+        );
+
+        expect(events, isEmpty);
+        expect(model.requests, isEmpty);
+      },
+    );
+
+    test(
       'run-level custom metadata is re-applied to plugin modified events',
       () async {
         final MockModel model = MockModel(
@@ -351,36 +432,41 @@ void main() {
       },
     );
 
-    test('after_run callback runs even when before_run short-circuits', () async {
-      final MockModel model = MockModel(
-        responses: <LlmResponse>[LlmResponse(content: Content.modelText('unused'))],
-      );
-      final Agent agent = Agent(name: 'root_agent', model: model);
-      final _EarlyExitPlugin plugin = _EarlyExitPlugin();
-      final InMemoryRunner runner = InMemoryRunner(
-        agent: agent,
-        plugins: <BasePlugin>[plugin],
-      );
+    test(
+      'after_run callback runs even when before_run short-circuits',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('unused')),
+          ],
+        );
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final _EarlyExitPlugin plugin = _EarlyExitPlugin();
+        final InMemoryRunner runner = InMemoryRunner(
+          agent: agent,
+          plugins: <BasePlugin>[plugin],
+        );
 
-      final Session session = await runner.sessionService.createSession(
-        appName: runner.appName,
-        userId: 'user_1',
-        sessionId: 'session_early_exit_after_run',
-      );
-
-      final List<Event> events = await _collect(
-        runner.runAsync(
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
           userId: 'user_1',
-          sessionId: session.id,
-          newMessage: Content.userText('hi'),
-        ),
-      );
+          sessionId: 'session_early_exit_after_run',
+        );
 
-      expect(events, hasLength(1));
-      expect(events.first.content?.parts.first.text, 'early exit');
-      expect(plugin.afterRunCalls, 1);
-      expect(model.requests, isEmpty);
-    });
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content.userText('hi'),
+          ),
+        );
+
+        expect(events, hasLength(1));
+        expect(events.first.content?.parts.first.text, 'early exit');
+        expect(plugin.afterRunCalls, 1);
+        expect(model.requests, isEmpty);
+      },
+    );
 
     test('throws SessionNotFoundError when session is missing', () async {
       final MockModel model = MockModel(

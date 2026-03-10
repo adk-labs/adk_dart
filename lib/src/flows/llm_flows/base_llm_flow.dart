@@ -601,9 +601,13 @@ class BaseLlmFlow {
       currentBranch: true,
     );
 
-    if (context.isResumable &&
+    final bool shouldPauseForLongRunning =
+        context.isResumable &&
         events.isNotEmpty &&
-        context.shouldPauseInvocation(events.last)) {
+        (context.shouldPauseInvocation(events.last) ||
+            (events.length > 1 &&
+                context.shouldPauseInvocation(events[events.length - 2])));
+    if (shouldPauseForLongRunning) {
       return;
     }
 

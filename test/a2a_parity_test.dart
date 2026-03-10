@@ -83,6 +83,57 @@ Event _modelEvent({
   );
 }
 
+Event _longRunningFunctionCallEvent({
+  String invocationId = 'invocation_1',
+  String author = 'root_agent',
+  String toolName = 'wait_for_input',
+  String toolId = 'call_1',
+  Map<String, Object?> args = const <String, Object?>{'step': 'resume'},
+  bool partial = false,
+}) {
+  return Event(
+    invocationId: invocationId,
+    author: author,
+    partial: partial,
+    longRunningToolIds: <String>{toolId},
+    content: Content(
+      role: 'model',
+      parts: <Part>[
+        Part.fromFunctionCall(
+          name: toolName,
+          id: toolId,
+          args: Map<String, dynamic>.from(args),
+        ),
+      ],
+    ),
+  );
+}
+
+Event _longRunningFunctionResponseEvent({
+  String invocationId = 'invocation_1',
+  String author = 'root_agent',
+  String toolName = 'wait_for_input',
+  String toolId = 'call_1',
+  Map<String, Object?> response = const <String, Object?>{'pending': true},
+  bool partial = false,
+}) {
+  return Event(
+    invocationId: invocationId,
+    author: author,
+    partial: partial,
+    content: Content(
+      role: 'model',
+      parts: <Part>[
+        Part.fromFunctionResponse(
+          name: toolName,
+          id: toolId,
+          response: Map<String, dynamic>.from(response),
+        ),
+      ],
+    ),
+  );
+}
+
 A2aTask _requiredTask({
   required String taskId,
   required String contextId,
@@ -679,6 +730,199 @@ void main() {
             isTrue,
           );
         }
+      },
+    );
+
+    test(
+      'long-running function calls become a final input_required event',
+      () async {
+        final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+        final _RecordingRunner runner = _RecordingRunner(
+          agent: agent,
+          appName: 'app',
+          eventFactory:
+              ({
+                required String userId,
+                required String sessionId,
+                String? invocationId,
+                Content? newMessage,
+                Map<String, Object?>? stateDelta,
+                RunConfig? runConfig,
+              }) => Stream<Event>.value(
+                _longRunningFunctionCallEvent(
+                  invocationId: invocationId ?? 'invocation_long_running',
+                ),
+              ),
+        );
+        final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+        final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+        await executor.execute(
+          A2aRequestContext(
+            taskId: 'task_long_running',
+            contextId: 'ctx_long_running',
+            message: A2aMessage(
+              messageId: 'msg_long_running',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('start')],
+            ),
+          ),
+          eventQueue,
+        );
+
+        expect(
+          eventQueue.events.whereType<A2aTaskArtifactUpdateEvent>(),
+          isEmpty,
+        );
+        final List<A2aTaskStatusUpdateEvent> updates = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .toList();
+        expect(updates, hasLength(3));
+        final A2aTaskStatusUpdateEvent finalEvent = updates.last;
+        expect(finalEvent.finalEvent, isTrue);
+        expect(finalEvent.status.state, A2aTaskState.inputRequired);
+        expect(finalEvent.status.message?.parts, hasLength(1));
+        final A2aDataPart? dataPart =
+            finalEvent.status.message?.parts.single.dataPart;
+        expect(dataPart, isNotNull);
+        expect(dataPart?.data['name'], 'wait_for_input');
+        expect(
+          dataPart?.metadata[getAdkMetadataKey(a2aDataPartMetadataTypeKey)],
+          a2aDataPartMetadataTypeFunctionCall,
+        );
+        expect(
+          dataPart?.metadata[getAdkMetadataKey(
+            a2aDataPartMetadataIsLongRunningKey,
+          )],
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'credential long-running calls become auth_required final events',
+      () async {
+        final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+        final _RecordingRunner runner = _RecordingRunner(
+          agent: agent,
+          appName: 'app',
+          eventFactory:
+              ({
+                required String userId,
+                required String sessionId,
+                String? invocationId,
+                Content? newMessage,
+                Map<String, Object?>? stateDelta,
+                RunConfig? runConfig,
+              }) => Stream<Event>.value(
+                _longRunningFunctionCallEvent(
+                  invocationId: invocationId ?? 'invocation_auth_long_running',
+                  toolName: requestEucFunctionCallName,
+                ),
+              ),
+        );
+        final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+        final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+        await executor.execute(
+          A2aRequestContext(
+            taskId: 'task_auth_long_running',
+            contextId: 'ctx_auth_long_running',
+            message: A2aMessage(
+              messageId: 'msg_auth_long_running',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('start')],
+            ),
+          ),
+          eventQueue,
+        );
+
+        final A2aTaskStatusUpdateEvent finalEvent = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .last;
+        expect(finalEvent.finalEvent, isTrue);
+        expect(finalEvent.status.state, A2aTaskState.authRequired);
+        expect(
+          finalEvent.status.message?.parts.single.dataPart?.data['name'],
+          requestEucFunctionCallName,
+        );
+      },
+    );
+
+    test(
+      'long-running function responses are removed from intermediate events and preserved in the final event',
+      () async {
+        final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+        final _RecordingRunner runner = _RecordingRunner(
+          agent: agent,
+          appName: 'app',
+          eventFactory:
+              ({
+                required String userId,
+                required String sessionId,
+                String? invocationId,
+                Content? newMessage,
+                Map<String, Object?>? stateDelta,
+                RunConfig? runConfig,
+              }) => Stream<Event>.fromIterable(<Event>[
+                _longRunningFunctionCallEvent(
+                  invocationId: invocationId ?? 'invocation_lrf_response',
+                ),
+                _longRunningFunctionResponseEvent(
+                  invocationId: invocationId ?? 'invocation_lrf_response',
+                ),
+              ]),
+        );
+        final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
+        final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
+
+        await executor.execute(
+          A2aRequestContext(
+            taskId: 'task_lrf_response',
+            contextId: 'ctx_lrf_response',
+            message: A2aMessage(
+              messageId: 'msg_lrf_response',
+              role: A2aRole.user,
+              parts: <A2aPart>[A2aPart.text('start')],
+            ),
+          ),
+          eventQueue,
+        );
+
+        final List<A2aTaskStatusUpdateEvent> updates = eventQueue.events
+            .whereType<A2aTaskStatusUpdateEvent>()
+            .toList();
+        expect(updates, hasLength(3));
+        final A2aTaskStatusUpdateEvent workingEvent = updates.firstWhere(
+          (A2aTaskStatusUpdateEvent event) =>
+              !event.finalEvent && event.status.state == A2aTaskState.working,
+        );
+        expect(workingEvent.status.message, isNull);
+
+        final A2aTaskStatusUpdateEvent finalEvent = updates.last;
+        expect(finalEvent.finalEvent, isTrue);
+        expect(finalEvent.status.state, A2aTaskState.inputRequired);
+        expect(finalEvent.status.message?.parts, hasLength(2));
+        expect(
+          finalEvent
+              .status
+              .message
+              ?.parts
+              .first
+              .dataPart
+              ?.metadata[getAdkMetadataKey(a2aDataPartMetadataTypeKey)],
+          a2aDataPartMetadataTypeFunctionCall,
+        );
+        expect(
+          finalEvent
+              .status
+              .message
+              ?.parts
+              .last
+              .dataPart
+              ?.metadata[getAdkMetadataKey(a2aDataPartMetadataTypeKey)],
+          a2aDataPartMetadataTypeFunctionResponse,
+        );
       },
     );
   });

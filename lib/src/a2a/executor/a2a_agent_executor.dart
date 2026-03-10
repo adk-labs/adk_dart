@@ -10,6 +10,7 @@ import '../../platform/uuid.dart';
 import '../../runners/runner.dart';
 import '../../sessions/session.dart';
 import '../converters/event_converter.dart';
+import '../converters/long_running_functions.dart';
 import '../converters/part_converter.dart';
 import '../converters/request_converter.dart';
 import '../converters/utils.dart';
@@ -301,6 +302,9 @@ class A2aAgentExecutor {
     );
 
     final TaskResultAggregator taskResultAggregator = TaskResultAggregator();
+    final LongRunningFunctions longRunningFunctions = LongRunningFunctions(
+      partConverter: _config.genAiPartConverter,
+    );
     final bool resumable = runner.resumabilityConfig?.isResumable ?? false;
     final String? invocationIdForRunAsync = resumable
         ? runRequest.invocationId
@@ -314,8 +318,9 @@ class A2aAgentExecutor {
       stateDelta: runRequest.stateDelta,
       runConfig: runRequest.runConfig,
     )) {
+      final Event processedEvent = longRunningFunctions.processEvent(adkEvent);
       final List<A2aEvent> a2aEvents = _config.eventConverter(
-        adkEvent,
+        processedEvent,
         invocationContext,
         context.taskId,
         context.contextId,
@@ -326,7 +331,7 @@ class A2aAgentExecutor {
         final A2aEvent? interceptedEvent = await _executeAfterEventInterceptors(
           a2aEvent: a2aEvent,
           executorContext: executorContext,
-          adkEvent: adkEvent,
+          adkEvent: processedEvent,
         );
         if (interceptedEvent == null) {
           continue;
@@ -337,7 +342,24 @@ class A2aAgentExecutor {
     }
 
     A2aTaskStatusUpdateEvent finalEvent;
-    if (taskResultAggregator.taskState == A2aTaskState.working &&
+    final A2aTaskStatusUpdateEvent? longRunningFinalEvent = longRunningFunctions
+        .createLongRunningFunctionCallEvent(
+          taskId: context.taskId,
+          contextId: context.contextId,
+        );
+    if (taskResultAggregator.taskState == A2aTaskState.failed) {
+      finalEvent = A2aTaskStatusUpdateEvent(
+        taskId: context.taskId,
+        contextId: context.contextId,
+        finalEvent: true,
+        status: A2aTaskStatus(
+          state: taskResultAggregator.taskState,
+          message: taskResultAggregator.taskStatusMessage,
+        ),
+      );
+    } else if (longRunningFinalEvent != null) {
+      finalEvent = longRunningFinalEvent;
+    } else if (taskResultAggregator.taskState == A2aTaskState.working &&
         taskResultAggregator.taskStatusMessage != null &&
         taskResultAggregator.taskStatusMessage!.parts.isNotEmpty) {
       await eventQueue.enqueueEvent(
