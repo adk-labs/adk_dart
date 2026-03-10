@@ -34,6 +34,27 @@ const Map<String, String> _hitlEventMap = <String, String>{
   'adk_request_input': 'HITL_INPUT_REQUEST',
 };
 
+const List<String> _analyticsViewEventTypes = <String>[
+  'INVOCATION_STARTING',
+  'INVOCATION_COMPLETED',
+  'AGENT_STARTING',
+  'AGENT_COMPLETED',
+  'LLM_REQUEST',
+  'LLM_RESPONSE',
+  'LLM_ERROR',
+  'TOOL_STARTING',
+  'TOOL_COMPLETED',
+  'TOOL_ERROR',
+  'STATE_DELTA',
+  'USER_MESSAGE_RECEIVED',
+  'HITL_CREDENTIAL_REQUEST',
+  'HITL_CREDENTIAL_REQUEST_COMPLETED',
+  'HITL_CONFIRMATION_REQUEST',
+  'HITL_CONFIRMATION_REQUEST_COMPLETED',
+  'HITL_INPUT_REQUEST',
+  'HITL_INPUT_REQUEST_COMPLETED',
+];
+
 /// Retry policy used by BigQuery event delivery.
 class RetryConfig {
   /// Creates a retry policy.
@@ -61,6 +82,10 @@ class RetryConfig {
 typedef BigQueryContentFormatter =
     Object? Function(Object? content, String eventType);
 
+/// Executes generated analytics view SQL statements.
+typedef BigQueryAnalyticsViewExecutor =
+    Future<void> Function(List<String> statements);
+
 /// Configuration for [BigQueryAgentAnalyticsPlugin].
 class BigQueryLoggerConfig {
   /// Creates a BigQuery logging configuration.
@@ -83,6 +108,7 @@ class BigQueryLoggerConfig {
     this.logSessionMetadata = true,
     Map<String, Object?>? customTags,
     this.autoSchemaUpgrade = true,
+    this.createViews = true,
   }) : clusteringFields =
            clusteringFields ?? <String>['event_type', 'agent', 'user_id'],
        retryConfig = retryConfig ?? RetryConfig(),
@@ -143,12 +169,16 @@ class BigQueryLoggerConfig {
 
   /// Whether schema compatibility upgrades are allowed automatically.
   bool autoSchemaUpgrade;
+
+  /// Whether per-event analytics views should be created.
+  bool createViews;
 }
 
 /// Per-event metadata captured in BigQuery rows.
 class EventData {
   /// Creates event metadata.
   EventData({
+    this.traceIdOverride,
     this.spanIdOverride,
     this.parentSpanIdOverride,
     this.latencyMs,
@@ -160,6 +190,9 @@ class EventData {
     this.errorMessage,
     Map<String, Object?>? extraAttributes,
   }) : extraAttributes = extraAttributes ?? <String, Object?>{};
+
+  /// Explicit trace identifier to use for this event.
+  final String? traceIdOverride;
 
   /// Explicit span identifier to use for this event.
   final String? spanIdOverride;
@@ -583,6 +616,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     String? apiKey,
     http.Client? httpClient,
     BigQueryAccessTokenProvider? accessTokenProvider,
+    BigQueryAnalyticsViewExecutor? analyticsViewExecutor,
   }) : config = config ?? BigQueryLoggerConfig(),
        _sink =
            sink ??
@@ -601,6 +635,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
                        : () async => accessToken,
                  )
                : InMemoryBigQueryEventSink()),
+       _analyticsViewExecutor = analyticsViewExecutor,
        super(name: 'bigquery_agent_analytics') {
     this.tableId = tableId ?? this.config.tableId;
     _applyConfigOverrides(configOverrides);
@@ -626,7 +661,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
 
   bool _started = false;
   bool _isShuttingDown = false;
+  bool _viewsCreated = false;
   final BigQueryEventSink _sink;
+  final BigQueryAnalyticsViewExecutor? _analyticsViewExecutor;
 
   /// The schema version stored in each event row.
   String get schemaVersion => _schemaVersion;
@@ -651,6 +688,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       return;
     }
     _started = true;
+    if (config.createViews && !_viewsCreated) {
+      await createAnalyticsViews();
+    }
   }
 
   /// Flushes and closes the sink.
@@ -670,6 +710,16 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   /// Flushes buffered events to the sink.
   Future<void> flush() async {
     await _sink.flush();
+  }
+
+  /// Creates or refreshes analytics views for the configured event types.
+  Future<void> createAnalyticsViews() async {
+    final BigQueryAnalyticsViewExecutor? executor = _analyticsViewExecutor;
+    if (executor == null) {
+      return;
+    }
+    await executor(_buildAnalyticsViewStatements());
+    _viewsCreated = true;
   }
 
   @override
@@ -1177,7 +1227,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     final _TracePair pair = _TraceManager.getCurrentSpanAndParent(
       callbackContext,
     );
-    final String traceId = _TraceManager.getTraceId(callbackContext);
+    final String traceId =
+        resolvedEventData.traceIdOverride ??
+        _TraceManager.getTraceId(callbackContext);
     final String? spanId = resolvedEventData.spanIdOverride ?? pair.spanId;
     final String? parentSpanId =
         resolvedEventData.parentSpanIdOverride ?? pair.parentSpanId;
@@ -1222,6 +1274,44 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     };
 
     await _sink.append(row);
+  }
+
+  List<String> _buildAnalyticsViewStatements() {
+    return _analyticsViewEventTypes
+        .map(_buildAnalyticsViewStatement)
+        .toList(growable: false);
+  }
+
+  String _buildAnalyticsViewStatement(String eventType) {
+    final String viewName = 'v_${eventType.toLowerCase()}';
+    final String escapedEventType = eventType.replaceAll("'", "\\'");
+    return '''
+CREATE OR REPLACE VIEW `$projectId.$datasetId.$viewName` AS
+SELECT
+  timestamp,
+  event_type,
+  agent,
+  session_id,
+  invocation_id,
+  user_id,
+  trace_id,
+  span_id,
+  parent_span_id,
+  content,
+  content_parts,
+  attributes,
+  latency_ms,
+  status,
+  error_message,
+  is_truncated,
+  sdk_version,
+  project_id,
+  dataset_id,
+  table_id,
+  location
+FROM `$projectId.$datasetId.$tableId`
+WHERE event_type = '$escapedEventType'
+'''.trim();
   }
 
   Map<String, Object?> _enrichAttributes({
@@ -1337,6 +1427,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         case 'log_session_metadata':
           if (entry.value is bool) {
             config.logSessionMetadata = entry.value as bool;
+          }
+        case 'create_views':
+          if (entry.value is bool) {
+            config.createViews = entry.value as bool;
           }
       }
     }

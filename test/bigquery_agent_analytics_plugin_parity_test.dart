@@ -368,7 +368,7 @@ void main() {
         datasetId: 'dataset',
         sink: sink,
         config: BigQueryLoggerConfig(
-          contentFormatter: (Object? _, String __) {
+          contentFormatter: (Object? _, String _) {
             throw StateError('formatter failed');
           },
         ),
@@ -388,6 +388,72 @@ void main() {
 
       expect(sink.rows, hasLength(1));
       expect(sink.rows.first['event_type'], 'LLM_REQUEST');
+    });
+
+    test('creates analytics views on startup when enabled', () async {
+      final List<List<String>> capturedStatements = <List<String>>[];
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: InMemoryBigQueryEventSink(),
+        analyticsViewExecutor: (List<String> statements) async {
+          capturedStatements.add(List<String>.from(statements));
+        },
+      );
+
+      await plugin.beforeRunCallback(
+        invocationContext: _newInvocationContext(invocationId: 'inv_views'),
+      );
+
+      expect(capturedStatements, hasLength(1));
+      expect(
+        capturedStatements.single.first,
+        contains('CREATE OR REPLACE VIEW `project.dataset.v_invocation_starting`'),
+      );
+      expect(
+        capturedStatements.single.last,
+        contains("WHERE event_type = 'HITL_INPUT_REQUEST_COMPLETED'"),
+      );
+    });
+
+    test('create views can be disabled via config override', () async {
+      int createCalls = 0;
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: InMemoryBigQueryEventSink(),
+        analyticsViewExecutor: (List<String> statements) async {
+          createCalls += 1;
+        },
+        configOverrides: <String, Object?>{'create_views': false},
+      );
+
+      await plugin.beforeRunCallback(
+        invocationContext: _newInvocationContext(invocationId: 'inv_no_views'),
+      );
+
+      expect(createCalls, 0);
+    });
+
+    test('manual analytics view refresh replays generated statements', () async {
+      final List<List<String>> capturedStatements = <List<String>>[];
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: InMemoryBigQueryEventSink(),
+        analyticsViewExecutor: (List<String> statements) async {
+          capturedStatements.add(List<String>.from(statements));
+        },
+      );
+
+      await plugin.beforeRunCallback(
+        invocationContext: _newInvocationContext(invocationId: 'inv_refresh'),
+      );
+      await plugin.createAnalyticsViews();
+
+      expect(capturedStatements, hasLength(2));
+      expect(capturedStatements[0], isNotEmpty);
+      expect(capturedStatements[1], equals(capturedStatements[0]));
     });
   });
 }
