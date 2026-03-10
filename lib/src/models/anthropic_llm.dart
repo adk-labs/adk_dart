@@ -1,12 +1,23 @@
 /// Anthropic Claude model adapter integration.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
 import '../types/content.dart';
+import '../utils/system_environment/system_environment.dart';
+import '../version.dart';
 import 'base_llm.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
+
+const String _anthropicApiKeyEnv = 'ANTHROPIC_API_KEY';
+const String _anthropicBaseUrlEnv = 'ANTHROPIC_BASE_URL';
+const String _anthropicVersionEnv = 'ANTHROPIC_VERSION';
+const String _defaultAnthropicBaseUrl = 'https://api.anthropic.com/v1';
+const String _defaultAnthropicVersion = '2023-06-01';
 
 /// Callback that invokes Anthropic message APIs and returns raw responses.
 typedef AnthropicApiInvoker =
@@ -15,9 +26,238 @@ typedef AnthropicApiInvoker =
       required bool stream,
     });
 
+/// Callback that streams raw Anthropic SSE event payloads.
+typedef AnthropicStreamInvoker =
+    Stream<Map<String, Object?>> Function({
+      required Map<String, Object?> request,
+    });
+
 /// Hook for overriding Anthropic generation behavior.
 typedef AnthropicGenerateHook =
     Stream<LlmResponse> Function(LlmRequest request, bool stream);
+
+/// Transport abstraction for Anthropic Messages API calls.
+abstract class AnthropicRestTransport {
+  /// Executes a non-streaming messages request.
+  Future<Map<String, Object?>> createMessage({
+    required Map<String, Object?> request,
+    required String apiKey,
+    required String baseUrl,
+    required String apiVersion,
+    required Map<String, String> headers,
+  });
+
+  /// Executes a streaming messages request.
+  Stream<Map<String, Object?>> streamMessage({
+    required Map<String, Object?> request,
+    required String apiKey,
+    required String baseUrl,
+    required String apiVersion,
+    required Map<String, String> headers,
+  });
+}
+
+/// Anthropic API exception with HTTP and body context.
+class AnthropicApiException implements Exception {
+  /// Creates an Anthropic API exception.
+  AnthropicApiException(this.statusCode, this.message, {this.responseBody});
+
+  /// HTTP status code.
+  final int statusCode;
+
+  /// Human-readable error message.
+  final String message;
+
+  /// Raw response body if available.
+  final String? responseBody;
+
+  @override
+  String toString() {
+    return 'AnthropicApiException($statusCode): $message';
+  }
+}
+
+/// Default HTTP-backed transport for the Anthropic Messages API.
+class AnthropicRestHttpTransport implements AnthropicRestTransport {
+  /// Creates an HTTP transport.
+  AnthropicRestHttpTransport({http.Client? httpClient})
+    : _httpClient = httpClient ?? http.Client(),
+      _ownsHttpClient = httpClient == null;
+
+  final http.Client _httpClient;
+  final bool _ownsHttpClient;
+
+  @override
+  Future<Map<String, Object?>> createMessage({
+    required Map<String, Object?> request,
+    required String apiKey,
+    required String baseUrl,
+    required String apiVersion,
+    required Map<String, String> headers,
+  }) async {
+    final Uri uri = Uri.parse(_messagesEndpoint(baseUrl));
+    final http.Response response = await _httpClient.post(
+      uri,
+      headers: _buildHeaders(
+        apiKey: apiKey,
+        apiVersion: apiVersion,
+        headers: headers,
+      ),
+      body: jsonEncode(request),
+    );
+    if (response.statusCode >= 400) {
+      throw AnthropicApiException(
+        response.statusCode,
+        _extractErrorMessage(response.body),
+        responseBody: response.body,
+      );
+    }
+    return _decodeJsonObject(response.body);
+  }
+
+  @override
+  Stream<Map<String, Object?>> streamMessage({
+    required Map<String, Object?> request,
+    required String apiKey,
+    required String baseUrl,
+    required String apiVersion,
+    required Map<String, String> headers,
+  }) async* {
+    final http.Request httpRequest =
+        http.Request('POST', Uri.parse(_messagesEndpoint(baseUrl)))
+          ..headers.addAll(
+            _buildHeaders(
+              apiKey: apiKey,
+              apiVersion: apiVersion,
+              headers: headers,
+            ),
+          )
+          ..body = jsonEncode(request);
+
+    final http.StreamedResponse response = await _httpClient.send(httpRequest);
+    if (response.statusCode >= 400) {
+      final String body = await _readStreamedBody(response);
+      throw AnthropicApiException(
+        response.statusCode,
+        _extractErrorMessage(body),
+        responseBody: body,
+      );
+    }
+
+    final StringBuffer dataBuffer = StringBuffer();
+    bool sawRecognizedSseField = false;
+    bool sawUnexpectedContent = false;
+    bool emittedChunks = false;
+    bool isFirstLine = true;
+    final StringBuffer unexpectedPreview = StringBuffer();
+    final Stream<String> lines = response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+
+    await for (final String rawLine in lines) {
+      String line = rawLine;
+      if (isFirstLine) {
+        line = _stripUtf8Bom(line);
+        isFirstLine = false;
+      }
+
+      if (line.isEmpty) {
+        final Map<String, Object?>? parsed = _decodeSseData(
+          dataBuffer.toString(),
+        );
+        dataBuffer.clear();
+        if (parsed != null) {
+          emittedChunks = true;
+          yield parsed;
+        }
+        continue;
+      }
+
+      if (line.startsWith(':')) {
+        continue;
+      }
+
+      final _SseField? field = _parseSseField(line);
+      if (field == null) {
+        sawUnexpectedContent = true;
+        _appendSseUnexpectedLine(unexpectedPreview, line);
+        continue;
+      }
+
+      switch (field.name) {
+        case 'event':
+        case 'id':
+        case 'retry':
+          sawRecognizedSseField = true;
+          break;
+        case 'data':
+          sawRecognizedSseField = true;
+          dataBuffer.writeln(field.value);
+          break;
+        default:
+          sawUnexpectedContent = true;
+          _appendSseUnexpectedLine(unexpectedPreview, line);
+          break;
+      }
+    }
+
+    final Map<String, Object?>? parsed = _decodeSseData(dataBuffer.toString());
+    if (parsed != null) {
+      emittedChunks = true;
+      yield parsed;
+    }
+
+    if (!emittedChunks && sawUnexpectedContent && !sawRecognizedSseField) {
+      throw AnthropicApiException(
+        500,
+        'Anthropic SSE response is not a valid event stream.',
+        responseBody: unexpectedPreview.toString().trimRight(),
+      );
+    }
+  }
+
+  Future<String> _readStreamedBody(http.StreamedResponse response) async {
+    final List<int> bytes = await response.stream.toBytes();
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  Map<String, String> _buildHeaders({
+    required String apiKey,
+    required String apiVersion,
+    required Map<String, String> headers,
+  }) {
+    return <String, String>{
+      'content-type': 'application/json',
+      'accept': 'application/json, text/event-stream',
+      'anthropic-version': apiVersion,
+      'x-api-key': apiKey,
+      'user-agent': 'adk-dart/$adkVersion',
+      ...headers,
+    };
+  }
+
+  String _messagesEndpoint(String baseUrl) {
+    final String normalized = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    return '$normalized/messages';
+  }
+
+  /// Closes the owned HTTP client.
+  void close() {
+    if (_ownsHttpClient) {
+      _httpClient.close();
+    }
+  }
+}
+
+class _AnthropicToolUseAccumulator {
+  _AnthropicToolUseAccumulator({required this.id, required this.name});
+
+  final String id;
+  final String name;
+  String argsJson = '';
+}
 
 /// Anthropic Claude adapter for ADK model requests.
 class AnthropicLlm extends BaseLlm {
@@ -26,15 +266,32 @@ class AnthropicLlm extends BaseLlm {
     super.model = 'claude-3-5-sonnet-20241022',
     this.maxTokens = 8192,
     this.apiInvoker,
+    this.streamInvoker,
+    this.environment,
+    this.baseUrl,
+    this.apiVersion,
+    AnthropicRestTransport? restTransport,
     AnthropicGenerateHook? generateHook,
-  }) : _generateHook = generateHook;
+  }) : _generateHook = generateHook,
+       _restTransport = restTransport;
 
   /// Max tokens requested for each Anthropic completion.
   final int maxTokens;
 
   /// Optional API invoker used for integration tests and custom transports.
   final AnthropicApiInvoker? apiInvoker;
+  final AnthropicStreamInvoker? streamInvoker;
+  final Map<String, String>? environment;
+  final String? baseUrl;
+  final String? apiVersion;
   final AnthropicGenerateHook? _generateHook;
+  final AnthropicRestTransport? _restTransport;
+
+  late final AnthropicRestTransport _defaultRestTransport =
+      AnthropicRestHttpTransport();
+
+  AnthropicRestTransport get _resolvedRestTransport =>
+      _restTransport ?? _defaultRestTransport;
 
   /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
@@ -105,7 +362,12 @@ class AnthropicLlm extends BaseLlm {
         }
         content = lines.join('\n');
       } else if (response is Map && response['result'] != null) {
-        content = '${response['result']}';
+        final Object result = response['result'] as Object;
+        if (result is Map || result is List) {
+          content = jsonEncode(result);
+        } else {
+          content = '$result';
+        }
       } else {
         content = '$response';
       }
@@ -243,14 +505,21 @@ class AnthropicLlm extends BaseLlm {
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model ??= model;
     maybeAppendUserContent(prepared);
+    prepared.config.httpOptions ??= HttpOptions();
+    final Map<String, Object?> anthropicRequest = _buildAnthropicRequest(
+      prepared,
+      stream: stream,
+    );
 
-    if (apiInvoker != null) {
+    if (!stream && apiInvoker != null) {
       final List<Map<String, Object?>> messages = await apiInvoker!(
-        request: _buildAnthropicRequest(prepared, stream: stream),
+        request: anthropicRequest,
         stream: stream,
       );
       for (final Map<String, Object?> message in messages) {
-        yield messageToLlmResponse(message);
+        yield messageToLlmResponse(
+          message,
+        ).copyWith(modelVersion: prepared.model, turnComplete: true);
       }
       return;
     }
@@ -260,12 +529,31 @@ class AnthropicLlm extends BaseLlm {
       return;
     }
 
-    final String text = _extractUserText(prepared);
-    yield LlmResponse(
-      modelVersion: prepared.model,
-      content: Content.modelText('Anthropic response: $text'),
-      turnComplete: true,
-    );
+    if (stream) {
+      final Stream<Map<String, Object?>> rawStream = streamInvoker != null
+          ? streamInvoker!(request: anthropicRequest)
+          : _resolvedRestTransport.streamMessage(
+              request: anthropicRequest,
+              apiKey: _resolveApiKey(),
+              baseUrl: _resolveBaseUrl(),
+              apiVersion: _resolveApiVersion(prepared),
+              headers: _resolveHeaders(prepared),
+            );
+      yield* _streamAnthropicResponses(rawStream, prepared);
+      return;
+    }
+
+    final Map<String, Object?> message = await _resolvedRestTransport
+        .createMessage(
+          request: anthropicRequest,
+          apiKey: _resolveApiKey(),
+          baseUrl: _resolveBaseUrl(),
+          apiVersion: _resolveApiVersion(prepared),
+          headers: _resolveHeaders(prepared),
+        );
+    yield messageToLlmResponse(
+      message,
+    ).copyWith(modelVersion: prepared.model, turnComplete: true);
   }
 
   Map<String, Object?> _buildAnthropicRequest(
@@ -288,29 +576,301 @@ class AnthropicLlm extends BaseLlm {
     return <String, Object?>{
       'model': request.model,
       'max_tokens': maxTokens,
-      'stream': stream,
+      if (stream) 'stream': true,
       if ((request.config.systemInstruction ?? '').isNotEmpty)
         'system': request.config.systemInstruction,
       'messages': messages,
       if (tools.isNotEmpty) 'tools': tools,
+      if (request.toolsDict.isNotEmpty)
+        'tool_choice': <String, Object?>{'type': 'auto'},
     };
   }
 
-  String _extractUserText(LlmRequest request) {
-    for (int i = request.contents.length - 1; i >= 0; i -= 1) {
-      final Content content = request.contents[i];
-      if (content.role != 'user') {
-        continue;
-      }
-      for (int j = content.parts.length - 1; j >= 0; j -= 1) {
-        final String? text = content.parts[j].text;
-        if (text != null && text.isNotEmpty) {
-          return text;
-        }
+  Stream<LlmResponse> _streamAnthropicResponses(
+    Stream<Map<String, Object?>> rawStream,
+    LlmRequest request,
+  ) async* {
+    final Map<int, StringBuffer> textBlocks = <int, StringBuffer>{};
+    final Map<int, _AnthropicToolUseAccumulator> toolUseBlocks =
+        <int, _AnthropicToolUseAccumulator>{};
+    int inputTokens = 0;
+    int outputTokens = 0;
+    String? finishReason;
+
+    await for (final Map<String, Object?> event in rawStream) {
+      final String type = '${event['type'] ?? ''}';
+      switch (type) {
+        case 'message_start':
+          final Map<String, Object?> message = _mapOf(event['message']);
+          final Map<String, Object?> usage = _mapOf(message['usage']);
+          inputTokens = _intValue(usage['input_tokens']);
+          outputTokens = _intValue(usage['output_tokens']);
+          break;
+        case 'content_block_start':
+          final int index = _intValue(event['index']);
+          final Map<String, Object?> block = _mapOf(event['content_block']);
+          final String blockType = '${block['type'] ?? ''}';
+          if (blockType == 'text') {
+            textBlocks[index] = StringBuffer('${block['text'] ?? ''}');
+          } else if (blockType == 'tool_use') {
+            toolUseBlocks[index] = _AnthropicToolUseAccumulator(
+              id: '${block['id'] ?? ''}',
+              name: '${block['name'] ?? ''}',
+            );
+          }
+          break;
+        case 'content_block_delta':
+          final int index = _intValue(event['index']);
+          final Map<String, Object?> delta = _mapOf(event['delta']);
+          final String deltaType = '${delta['type'] ?? ''}';
+          if (deltaType == 'text_delta') {
+            final String text = '${delta['text'] ?? ''}';
+            if (text.isEmpty) {
+              continue;
+            }
+            final StringBuffer buffer = textBlocks.putIfAbsent(
+              index,
+              StringBuffer.new,
+            );
+            buffer.write(text);
+            yield LlmResponse(
+              modelVersion: request.model,
+              content: Content(role: 'model', parts: <Part>[Part.text(text)]),
+              partial: true,
+              turnComplete: false,
+            );
+          } else if (deltaType == 'input_json_delta') {
+            final _AnthropicToolUseAccumulator? tool = toolUseBlocks[index];
+            if (tool == null) {
+              continue;
+            }
+            tool.argsJson += '${delta['partial_json'] ?? ''}';
+          }
+          break;
+        case 'message_delta':
+          final Map<String, Object?> delta = _mapOf(event['delta']);
+          finishReason = toGoogleFinishReason(delta['stop_reason'] as String?);
+          final Map<String, Object?> usage = _mapOf(event['usage']);
+          outputTokens = _intValue(
+            usage['output_tokens'],
+            fallback: outputTokens,
+          );
+          break;
+        case 'message_stop':
+        case 'content_block_stop':
+          break;
       }
     }
-    return '';
+
+    final List<Part> parts = <Part>[];
+    final List<int> indices = <int>{
+      ...textBlocks.keys,
+      ...toolUseBlocks.keys,
+    }.toList()..sort();
+    for (final int index in indices) {
+      final StringBuffer? text = textBlocks[index];
+      if (text != null && text.isNotEmpty) {
+        parts.add(Part.text(text.toString()));
+      }
+      final _AnthropicToolUseAccumulator? tool = toolUseBlocks[index];
+      if (tool != null) {
+        parts.add(
+          Part.fromFunctionCall(
+            name: tool.name,
+            id: tool.id,
+            args: _decodeToolArgs(tool.argsJson),
+          ),
+        );
+      }
+    }
+
+    yield LlmResponse(
+      modelVersion: request.model,
+      content: Content(role: 'model', parts: parts),
+      usageMetadata: <String, Object?>{
+        'prompt_token_count': inputTokens,
+        'candidates_token_count': outputTokens,
+        'total_token_count': inputTokens + outputTokens,
+      },
+      finishReason: finishReason,
+      partial: false,
+      turnComplete: true,
+    );
   }
+
+  Map<String, dynamic> _decodeToolArgs(String jsonText) {
+    if (jsonText.trim().isEmpty) {
+      return <String, dynamic>{};
+    }
+    final Object? decoded = jsonDecode(jsonText);
+    if (decoded is Map) {
+      return decoded.cast<String, dynamic>();
+    }
+    return <String, dynamic>{};
+  }
+
+  String _resolveApiKey() {
+    final String? value =
+        (environment ?? readSystemEnvironment())[_anthropicApiKeyEnv];
+    if (value == null || value.isEmpty) {
+      throw StateError(
+        'AnthropicLlm.generateContent requires ANTHROPIC_API_KEY to be set.',
+      );
+    }
+    return value;
+  }
+
+  String _resolveBaseUrl() {
+    return baseUrl ??
+        (environment ?? readSystemEnvironment())[_anthropicBaseUrlEnv] ??
+        _defaultAnthropicBaseUrl;
+  }
+
+  String _resolveApiVersion(LlmRequest request) {
+    return apiVersion ??
+        request.config.httpOptions?.apiVersion ??
+        (environment ?? readSystemEnvironment())[_anthropicVersionEnv] ??
+        _defaultAnthropicVersion;
+  }
+
+  Map<String, String> _resolveHeaders(LlmRequest request) {
+    return Map<String, String>.from(
+      request.config.httpOptions?.headers ?? const <String, String>{},
+    );
+  }
+}
+
+Map<String, Object?> _decodeJsonObject(String body) {
+  final String normalized = body.trim();
+  if (normalized.isEmpty) {
+    throw AnthropicApiException(
+      500,
+      'Anthropic API response body is empty.',
+      responseBody: body,
+    );
+  }
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(normalized);
+  } on FormatException {
+    throw AnthropicApiException(
+      500,
+      'Anthropic API response is not valid JSON.',
+      responseBody: body,
+    );
+  }
+  if (decoded is! Map) {
+    throw AnthropicApiException(
+      500,
+      'Anthropic API response is not a JSON object.',
+      responseBody: body,
+    );
+  }
+  return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
+}
+
+Map<String, Object?> _mapOf(Object? value) {
+  if (value is Map) {
+    return value.map((Object? key, Object? nested) => MapEntry('$key', nested));
+  }
+  return const <String, Object?>{};
+}
+
+int _intValue(Object? value, {int fallback = 0}) {
+  return (value as num?)?.toInt() ?? fallback;
+}
+
+Map<String, Object?>? _decodeSseData(String rawData) {
+  final String data = rawData.trim();
+  if (data.isEmpty || data == '[DONE]') {
+    return null;
+  }
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(data);
+  } on FormatException {
+    throw AnthropicApiException(
+      500,
+      'Anthropic SSE event contains malformed JSON.',
+      responseBody: data,
+    );
+  }
+  if (decoded is! Map) {
+    throw AnthropicApiException(
+      500,
+      'Anthropic SSE event is not a JSON object.',
+      responseBody: data,
+    );
+  }
+  return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
+}
+
+_SseField? _parseSseField(String line) {
+  final int separatorIndex = line.indexOf(':');
+  if (separatorIndex < 0) {
+    return _SseField(name: line, value: '');
+  }
+  final String name = line.substring(0, separatorIndex);
+  if (name.isEmpty) {
+    return null;
+  }
+  String value = line.substring(separatorIndex + 1);
+  if (value.startsWith(' ')) {
+    value = value.substring(1);
+  }
+  return _SseField(name: name, value: value);
+}
+
+String _stripUtf8Bom(String value) {
+  if (value.startsWith('\ufeff')) {
+    return value.substring(1);
+  }
+  return value;
+}
+
+void _appendSseUnexpectedLine(StringBuffer preview, String line) {
+  const int maxPreviewLength = 2048;
+  if (preview.length >= maxPreviewLength) {
+    return;
+  }
+  final String trimmedLine = line.trimRight();
+  if (trimmedLine.isEmpty) {
+    return;
+  }
+  if (preview.isNotEmpty) {
+    preview.writeln();
+  }
+  if (preview.length + trimmedLine.length > maxPreviewLength) {
+    preview.write(trimmedLine.substring(0, maxPreviewLength - preview.length));
+    return;
+  }
+  preview.write(trimmedLine);
+}
+
+String _extractErrorMessage(String body) {
+  try {
+    final Map<String, Object?> decoded = _decodeJsonObject(body);
+    final Map<String, Object?> error = _mapOf(decoded['error']);
+    final String message = '${error['message'] ?? decoded['message'] ?? ''}'
+        .trim();
+    if (message.isNotEmpty) {
+      return message;
+    }
+  } on Object {
+    // Fall back to the raw body below.
+  }
+  final String trimmed = body.trim();
+  if (trimmed.isNotEmpty) {
+    return trimmed;
+  }
+  return 'Anthropic API request failed.';
+}
+
+class _SseField {
+  _SseField({required this.name, required this.value});
+
+  final String name;
+  final String value;
 }
 
 String _fallbackPartText(Part part) {

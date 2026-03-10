@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:adk_dart/adk_dart.dart';
@@ -581,6 +582,44 @@ void main() {
       expect(response.content?.parts.single.text, 'hello');
       expect(response.finishReason, 'STOP');
       expect(response.usageMetadata, isNotNull);
+    });
+
+    test('structured tool results are serialized as JSON content', () {
+      final Map<String, Object?> mapBlock = AnthropicLlm.partToMessageBlock(
+        Part.fromFunctionResponse(
+          name: 'search',
+          id: 'tool_1',
+          response: <String, dynamic>{
+            'result': <String, Object?>{
+              'results': <Object?>[
+                <String, Object?>{'id': 1, 'tags': <String>['a', 'b']},
+              ],
+              'has_more': false,
+            },
+          },
+        ),
+      );
+      expect(mapBlock['type'], 'tool_result');
+      expect(
+        jsonDecode('${mapBlock['content']}'),
+        <String, Object?>{
+          'results': <Object?>[
+            <String, Object?>{'id': 1, 'tags': <String>['a', 'b']},
+          ],
+          'has_more': false,
+        },
+      );
+
+      final Map<String, Object?> listBlock = AnthropicLlm.partToMessageBlock(
+        Part.fromFunctionResponse(
+          name: 'list_tool',
+          id: 'tool_2',
+          response: <String, dynamic>{
+            'result': <Object?>[],
+          },
+        ),
+      );
+      expect(listBlock['content'], '[]');
     });
 
     test('unknown inbound content blocks are preserved as text', () {
