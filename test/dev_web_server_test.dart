@@ -413,6 +413,166 @@ void main() {
       expect(task['status'], isA<Map>());
     });
 
+    test(
+      'reuses stored a2a currentTask on message/send resume requests',
+      () async {
+        final _A2aResumeProbeAgent agent = _A2aResumeProbeAgent(
+          name: 'root_agent',
+        );
+        final DevAgentRuntime a2aRuntime = DevAgentRuntime(
+          config: config,
+          runner: InMemoryRunner(appName: 'test_app', agent: agent),
+        );
+        final HttpServer a2aServer = await startAdkDevWebServer(
+          runtime: a2aRuntime,
+          project: config,
+          port: 0,
+          a2a: true,
+        );
+        addTearDown(() async {
+          await a2aServer.close(force: true);
+          await a2aRuntime.runner.close();
+        });
+
+        final HttpClient a2aClient = HttpClient();
+        addTearDown(() => a2aClient.close(force: true));
+
+        const String taskId = 'task_resume_probe';
+
+        final HttpClientRequest firstSendRequest = await a2aClient.postUrl(
+          Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+        );
+        firstSendRequest.headers.contentType = ContentType.json;
+        firstSendRequest.write(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': 'rpc-a2a-resume-1',
+            'method': 'message/send',
+            'params': <String, Object?>{
+              'message': <String, Object?>{
+                'messageId': 'msg-a2a-resume-1',
+                'role': 'user',
+                'taskId': taskId,
+                'parts': <Object>[
+                  <String, Object?>{'kind': 'text', 'text': 'start'},
+                ],
+              },
+            },
+          }),
+        );
+        final HttpClientResponse firstSendResponse = await firstSendRequest
+            .close();
+        final Map<String, dynamic> firstPayload =
+            jsonDecode(await utf8.decoder.bind(firstSendResponse).join())
+                as Map<String, dynamic>;
+
+        expect(firstSendResponse.statusCode, HttpStatus.ok);
+        expect(agent.runCount, 1);
+        expect(firstPayload['jsonrpc'], '2.0');
+
+        final HttpClientRequest firstGetRequest = await a2aClient.postUrl(
+          Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+        );
+        firstGetRequest.headers.contentType = ContentType.json;
+        firstGetRequest.write(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': 'rpc-a2a-resume-get-1',
+            'method': 'tasks/get',
+            'params': <String, Object?>{'taskId': taskId},
+          }),
+        );
+        final HttpClientResponse firstGetResponse = await firstGetRequest
+            .close();
+        final Map<String, dynamic> firstGetPayload =
+            jsonDecode(await utf8.decoder.bind(firstGetResponse).join())
+                as Map<String, dynamic>;
+        final Map<String, dynamic> firstTask =
+            firstGetPayload['result'] as Map<String, dynamic>;
+        final String contextId =
+            '${firstTask['contextId'] ?? firstTask['context_id'] ?? ''}';
+
+        expect(firstGetResponse.statusCode, HttpStatus.ok);
+        expect(
+          (firstTask['status'] as Map<String, dynamic>)['state'],
+          'input_required',
+        );
+        expect(contextId, isNotEmpty);
+
+        final HttpClientRequest secondSendRequest = await a2aClient.postUrl(
+          Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+        );
+        secondSendRequest.headers.contentType = ContentType.json;
+        secondSendRequest.write(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': 'rpc-a2a-resume-2',
+            'method': 'message/send',
+            'params': <String, Object?>{
+              'message': <String, Object?>{
+                'messageId': 'msg-a2a-resume-2',
+                'role': 'user',
+                'taskId': taskId,
+                'parts': <Object>[
+                  <String, Object?>{'kind': 'text', 'text': 'continue'},
+                ],
+              },
+            },
+          }),
+        );
+        final HttpClientResponse secondSendResponse = await secondSendRequest
+            .close();
+        final Map<String, dynamic> secondPayload =
+            jsonDecode(await utf8.decoder.bind(secondSendResponse).join())
+                as Map<String, dynamic>;
+        final Map<String, dynamic> secondResult =
+            secondPayload['result'] as Map<String, dynamic>;
+        final List<Object?> secondParts =
+            secondResult['parts'] as List<Object?>? ?? const <Object?>[];
+        final Map<String, dynamic> secondTextPart =
+            secondParts.single as Map<String, dynamic>;
+
+        expect(secondSendResponse.statusCode, HttpStatus.ok);
+        expect(agent.runCount, 1);
+        expect(
+          secondResult['contextId'] ?? secondResult['context_id'],
+          contextId,
+        );
+        expect(secondTextPart['kind'], 'text');
+        expect(
+          secondTextPart['text'],
+          'It was not provided a function response for the function call.',
+        );
+
+        final HttpClientRequest secondGetRequest = await a2aClient.postUrl(
+          Uri.parse('http://127.0.0.1:${a2aServer.port}/a2a/test_app'),
+        );
+        secondGetRequest.headers.contentType = ContentType.json;
+        secondGetRequest.write(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': 'rpc-a2a-resume-get-2',
+            'method': 'tasks/get',
+            'params': <String, Object?>{'taskId': taskId},
+          }),
+        );
+        final HttpClientResponse secondGetResponse = await secondGetRequest
+            .close();
+        final Map<String, dynamic> secondGetPayload =
+            jsonDecode(await utf8.decoder.bind(secondGetResponse).join())
+                as Map<String, dynamic>;
+        final Map<String, dynamic> secondTask =
+            secondGetPayload['result'] as Map<String, dynamic>;
+
+        expect(secondGetResponse.statusCode, HttpStatus.ok);
+        expect(secondTask['contextId'] ?? secondTask['context_id'], contextId);
+        expect(
+          (secondTask['status'] as Map<String, dynamic>)['state'],
+          'input_required',
+        );
+      },
+    );
+
     test('supports a2a streaming, push config, and resubscribe routes', () async {
       final DevAgentRuntime a2aRuntime = DevAgentRuntime(config: config);
       final HttpServer a2aServer = await startAdkDevWebServer(
@@ -1493,4 +1653,46 @@ class _FactoryLoadedPlugin extends BasePlugin {
   }
 
   static int instances = 0;
+}
+
+class _A2aResumeProbeAgent extends BaseAgent {
+  _A2aResumeProbeAgent({required super.name});
+
+  static const String _longRunningToolId = 'call_resume_probe';
+  int runCount = 0;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    runCount += 1;
+
+    if (runCount == 1) {
+      yield Event(
+        invocationId: context.invocationId,
+        author: name,
+        branch: context.branch,
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'wait_for_input',
+              id: _longRunningToolId,
+              args: <String, Object?>{'step': 'resume'},
+            ),
+          ],
+        ),
+        longRunningToolIds: <String>{_longRunningToolId},
+      );
+      return;
+    }
+
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      branch: context.branch,
+      content: Content.modelText('continued without function response'),
+    );
+  }
+
+  @override
+  Stream<Event> runLiveImpl(InvocationContext context) async* {}
 }

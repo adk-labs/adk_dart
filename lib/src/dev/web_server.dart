@@ -5028,11 +5028,21 @@ Future<_A2aExecutionResult> _executeA2aMessageSend(
     );
   }
 
+  final String requestedTaskId = (message.taskId ?? '').trim();
+  final Map<String, Object?>? storedTask = requestedTaskId.isEmpty
+      ? null
+      : context.readA2aTask(appName, requestedTaskId);
+  final A2aTask? currentTask = storedTask == null
+      ? null
+      : _a2aTaskFromJson(_toDynamicMap(storedTask));
+
   final String contextId = (message.contextId ?? '').trim().isNotEmpty
       ? message.contextId!.trim()
+      : (currentTask?.contextId.trim().isNotEmpty ?? false)
+      ? currentTask!.contextId.trim()
       : 'a2a_ctx_${DateTime.now().microsecondsSinceEpoch}';
-  final String taskId = (message.taskId ?? '').trim().isNotEmpty
-      ? message.taskId!.trim()
+  final String taskId = requestedTaskId.isNotEmpty
+      ? requestedTaskId
       : 'a2a_task_${DateTime.now().microsecondsSinceEpoch}';
 
   message.contextId = contextId;
@@ -5042,7 +5052,12 @@ Future<_A2aExecutionResult> _executeA2aMessageSend(
   final A2aAgentExecutor executor = A2aAgentExecutor(runner: runner);
   final InMemoryA2aEventQueue eventQueue = InMemoryA2aEventQueue();
   await executor.execute(
-    A2aRequestContext(taskId: taskId, contextId: contextId, message: message),
+    A2aRequestContext(
+      taskId: taskId,
+      contextId: contextId,
+      message: message,
+      currentTask: currentTask,
+    ),
     eventQueue,
   );
   await eventQueue.close();
@@ -5075,9 +5090,11 @@ Future<_A2aExecutionResult> _executeA2aMessageSend(
 
   final Map<String, Object?> status = _toObjectMap(task['status']);
   final Map<String, Object?> statusMessage = _toObjectMap(status['message']);
-  final Map<String, Object?> messageResult = statusMessage.isNotEmpty
-      ? statusMessage
-      : _a2aFallbackMessage(task);
+  final Map<String, Object?> messageResult = _ensureA2aMessageIdentity(
+    statusMessage.isNotEmpty ? statusMessage : _a2aFallbackMessage(task),
+    taskId: taskId,
+    contextId: contextId,
+  );
 
   return _A2aExecutionResult(
     message: messageResult,
@@ -5417,6 +5434,91 @@ Map<String, Object?> _a2aFallbackMessage(Map<String, Object?> task) {
   );
 }
 
+Map<String, Object?> _ensureA2aMessageIdentity(
+  Map<String, Object?> message, {
+  required String taskId,
+  required String contextId,
+}) {
+  final Map<String, Object?> normalized = Map<String, Object?>.from(message);
+  final String currentTaskId =
+      '${normalized['taskId'] ?? normalized['task_id'] ?? ''}'.trim();
+  final String currentContextId =
+      '${normalized['contextId'] ?? normalized['context_id'] ?? ''}'.trim();
+  if (currentTaskId.isEmpty && taskId.isNotEmpty) {
+    normalized['taskId'] = taskId;
+    normalized['task_id'] = taskId;
+  }
+  if (currentContextId.isEmpty && contextId.isNotEmpty) {
+    normalized['contextId'] = contextId;
+    normalized['context_id'] = contextId;
+  }
+  return normalized;
+}
+
+A2aTask _a2aTaskFromJson(Map<String, dynamic> json) {
+  final String taskId = _readString(json, const <String>[
+    'id',
+    'taskId',
+    'task_id',
+  ]);
+  final String contextId = _readString(json, const <String>[
+    'contextId',
+    'context_id',
+  ]);
+  final List<A2aMessage> history = json['history'] is List
+      ? (json['history'] as List<Object?>)
+            .whereType<Map>()
+            .map((Map value) => _a2aMessageFromJson(_toDynamicMap(value)))
+            .toList(growable: false)
+      : const <A2aMessage>[];
+  final List<A2aArtifact> artifacts = json['artifacts'] is List
+      ? (json['artifacts'] as List<Object?>)
+            .whereType<Map>()
+            .map((Map value) => _a2aArtifactFromJson(_toDynamicMap(value)))
+            .toList(growable: false)
+      : const <A2aArtifact>[];
+  return A2aTask(
+    id: taskId,
+    contextId: contextId,
+    status: _a2aTaskStatusFromJson(_toDynamicMap(json['status'])),
+    history: history,
+    artifacts: artifacts,
+    metadata: _toObjectMap(json['metadata']),
+  );
+}
+
+A2aTaskStatus _a2aTaskStatusFromJson(Map<String, dynamic> json) {
+  return A2aTaskStatus(
+    state: _a2aTaskStateFromWire(
+      _readString(json, const <String>['state'], fallback: 'completed'),
+    ),
+    message: json['message'] is Map
+        ? _a2aMessageFromJson(_toDynamicMap(json['message']))
+        : null,
+    timestamp: _nullableString(json, const <String>['timestamp']),
+  );
+}
+
+A2aTaskState _a2aTaskStateFromWire(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'submitted':
+      return A2aTaskState.submitted;
+    case 'working':
+      return A2aTaskState.working;
+    case 'input_required':
+    case 'inputrequired':
+      return A2aTaskState.inputRequired;
+    case 'auth_required':
+    case 'authrequired':
+      return A2aTaskState.authRequired;
+    case 'failed':
+      return A2aTaskState.failed;
+    case 'completed':
+      return A2aTaskState.completed;
+  }
+  return A2aTaskState.completed;
+}
+
 Map<String, Object?> _a2aTaskStatusToJson(A2aTaskStatus status) {
   return <String, Object?>{
     'state': _a2aTaskStateToWire(status.state),
@@ -5451,6 +5553,17 @@ Map<String, Object?> _a2aArtifactToJson(A2aArtifact artifact) {
         .map<Map<String, Object?>>(_a2aPartToJson)
         .toList(growable: false),
   };
+}
+
+A2aArtifact _a2aArtifactFromJson(Map<String, dynamic> json) {
+  return A2aArtifact(
+    artifactId: _readString(json, const <String>[
+      'artifactId',
+      'artifact_id',
+      'id',
+    ]),
+    parts: _a2aPartsFromJson(json['parts']),
+  );
 }
 
 Map<String, Object?> _a2aMessageToJson(A2aMessage message) {
