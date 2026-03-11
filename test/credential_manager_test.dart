@@ -34,6 +34,20 @@ Matcher _throwsArgumentMessage(String messageFragment) {
   );
 }
 
+class _FixedAuthProvider extends BaseAuthProvider {
+  _FixedAuthProvider(this.credential);
+
+  final AuthCredential? credential;
+
+  @override
+  Future<AuthCredential?> getAuthCredential(
+    AuthConfig authConfig,
+    Context context,
+  ) async {
+    return credential;
+  }
+}
+
 void main() {
   group('AuthConfig', () {
     test('credential key is stable for the same payload', () {
@@ -106,6 +120,69 @@ void main() {
       final AuthConfig storedConfig = stored as AuthConfig;
       expect(storedConfig.authScheme, authConfig.authScheme);
       expect(storedConfig.credentialKey, authConfig.credentialKey);
+    });
+
+    test('uses registered auth provider before standard retrieval flow', () async {
+      final Context context = _newContext();
+      final AuthCredential provided = AuthCredential(
+        authType: AuthCredentialType.apiKey,
+        apiKey: 'provided-key',
+      );
+      final AuthConfig authConfig = AuthConfig(authScheme: 'custom_provider');
+      final CredentialManager manager = CredentialManager(
+        authConfig: authConfig,
+      );
+
+      manager.registerAuthProvider(
+        'custom_provider',
+        _FixedAuthProvider(provided),
+      );
+
+      final AuthCredential? credential = await manager.getAuthCredential(
+        context,
+      );
+      expect(credential?.apiKey, 'provided-key');
+    });
+
+    test('throws when auth provider returns null', () async {
+      final Context context = _newContext();
+      final CredentialManager manager = CredentialManager(
+        authConfig: AuthConfig(authScheme: 'custom_provider'),
+      );
+      manager.registerAuthProvider(
+        'custom_provider',
+        _FixedAuthProvider(null),
+      );
+
+      expect(
+        () => manager.getAuthCredential(context),
+        _throwsArgumentMessage('AuthProvider did not return a credential.'),
+      );
+    });
+
+    test('stores consent credential and returns null for provider auth uri', () async {
+      final Context context = _newContext();
+      final AuthConfig authConfig = AuthConfig(authScheme: 'oauth_provider');
+      final CredentialManager manager = CredentialManager(
+        authConfig: authConfig,
+      );
+      final AuthCredential provided = AuthCredential(
+        authType: AuthCredentialType.oauth2,
+        oauth2: OAuth2Auth(authUri: 'https://auth.example.com/authorize'),
+      );
+      manager.registerAuthProvider(
+        'oauth_provider',
+        _FixedAuthProvider(provided),
+      );
+
+      final AuthCredential? credential = await manager.getAuthCredential(
+        context,
+      );
+      expect(credential, isNull);
+      expect(
+        authConfig.exchangedAuthCredential?.oauth2?.authUri,
+        'https://auth.example.com/authorize',
+      );
     });
 
     test('loads credential from credential service', () async {

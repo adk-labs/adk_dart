@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import '../errors/already_exists_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../events/ui_widget.dart';
 import '../platform/time.dart';
 import '../types/content.dart';
 import '../types/id.dart';
@@ -983,6 +984,10 @@ Map<String, Object?> _eventActionsToJson(EventActions actions) {
       'requestedAuthConfigs': actions.requestedAuthConfigs,
     if (actions.requestedToolConfirmations.isNotEmpty)
       'requestedToolConfirmations': actions.requestedToolConfirmations,
+    if (actions.renderUiWidgets.isNotEmpty)
+      'renderUiWidgets': actions.renderUiWidgets
+          .map((widget) => widget.toJson())
+          .toList(growable: false),
     if (actions.compaction != null)
       'compaction': <String, Object?>{
         'startTimestamp': actions.compaction!.startTimestamp,
@@ -1020,11 +1025,26 @@ EventActions _eventActionsFromJson(Map<String, Object?> json) {
     requestedToolConfirmations: _castObjectMap(
       json['requestedToolConfirmations'],
     ),
+    renderUiWidgets: _castObjectList(
+      json['renderUiWidgets'],
+    ).map(_uiWidgetFromJson).toList(growable: false),
     compaction: compaction,
     endOfAgent: json['endOfAgent'] as bool?,
     agentState: _castMap(json['agentState']),
     rewindBeforeInvocationId: json['rewindBeforeInvocationId'] as String?,
   );
+}
+
+UiWidget _uiWidgetFromJson(Object? value) {
+  if (value is Map<String, Object?>) {
+    return UiWidget.fromJson(value);
+  }
+  if (value is Map) {
+    return UiWidget.fromJson(
+      value.map((Object? key, Object? item) => MapEntry('$key', item)),
+    );
+  }
+  return UiWidget(id: '', provider: '');
 }
 
 Map<String, Object?> _contentToJson(Content content) {
@@ -1183,6 +1203,13 @@ Map<String, int> _castIntMap(Object? value) {
     });
   }
   return map;
+}
+
+List<Object?> _castObjectList(Object? value) {
+  if (value is List) {
+    return List<Object?>.from(value);
+  }
+  return const <Object?>[];
 }
 
 Map<String, Object> _castObjectMap(Object? value) {

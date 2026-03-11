@@ -718,7 +718,18 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     if (executor == null) {
       return;
     }
-    await executor(_buildAnalyticsViewStatements());
+    try {
+      await executor(_buildAnalyticsViewStatements());
+    } on Object catch (error) {
+      if (_isConcurrentViewConflict(error)) {
+        stderr.writeln(
+          'BigQuery analytics views were updated concurrently; skipping duplicate refresh.',
+        );
+        _viewsCreated = true;
+        return;
+      }
+      rethrow;
+    }
     _viewsCreated = true;
   }
 
@@ -1372,6 +1383,14 @@ WHERE event_type = '$escapedEventType'
       return null;
     }
     return latency;
+  }
+
+  bool _isConcurrentViewConflict(Object error) {
+    final String message = '$error'.toLowerCase();
+    return message.contains('conflict') ||
+        message.contains('already exists') ||
+        message.contains('status code 409') ||
+        message.contains('http 409');
   }
 
   void _applyConfigOverrides(Map<String, Object?>? overrides) {

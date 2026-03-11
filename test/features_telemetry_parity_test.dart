@@ -366,13 +366,19 @@ void main() {
       final LlmRequest request = LlmRequest(
         model: 'gemini-2.5-flash',
         contents: <Content>[Content.userText('hello')],
-        config: GenerateContentConfig(topP: 0.8, maxOutputTokens: 128),
+        config: GenerateContentConfig(
+          topP: 0.8,
+          maxOutputTokens: 128,
+          thinkingConfig: <String, Object?>{'budget': 10},
+        ),
       );
       final LlmResponse response = LlmResponse(
         finishReason: 'STOP',
         usageMetadata: <String, Object?>{
           'promptTokenCount': 3,
           'candidatesTokenCount': 7,
+          'thoughtsTokenCount': 5,
+          'systemInstructionTokens': 2,
         },
       );
 
@@ -383,6 +389,18 @@ void main() {
       ]);
       expect(span.attributes['gen_ai.request.top_p'], 0.8);
       expect(span.attributes['gen_ai.request.max_tokens'], 128);
+      expect(
+        span.attributes['gen_ai.usage.experimental.reasoning_tokens_limit'],
+        10,
+      );
+      expect(
+        span.attributes['gen_ai.usage.experimental.reasoning_tokens'],
+        5,
+      );
+      expect(
+        span.attributes['gen_ai.usage.experimental.system_instruction_tokens'],
+        2,
+      );
 
       traceSendData(context, 'evt-2', <Content>[
         Content.userText('payload'),

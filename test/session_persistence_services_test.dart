@@ -270,6 +270,55 @@ void main() {
       expect(loaded.events.first.content?.parts.first.text, 'hello');
     });
 
+    test('persists renderUiWidgets in sqlite event actions', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_widgets_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/widgets.db',
+      );
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_widget',
+          author: 'agent',
+          actions: EventActions(
+            renderUiWidgets: <UiWidget>[
+              UiWidget(
+                id: 'call_widget',
+                provider: 'mcp',
+                payload: <String, Object?>{'resource_uri': 'ui://widget/echo'},
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final Session? loaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.events, hasLength(1));
+      expect(loaded.events.single.actions.renderUiWidgets, hasLength(1));
+      expect(loaded.events.single.actions.renderUiWidgets.single.id, 'call_widget');
+      expect(
+        loaded.events.single.actions.renderUiWidgets.single.payload['resource_uri'],
+        'ui://widget/echo',
+      );
+    });
+
     test('enforces stale-session protection when appending events', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_sqlite_stale_check_',
@@ -1351,6 +1400,54 @@ CREATE TABLE events (
         );
       },
     );
+
+    test('persists renderUiWidgets through vertex ai event payloads', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return fakeClient;
+        },
+      );
+      final Session session = await service.createSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+      );
+
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_vertex_widget',
+          author: 'agent',
+          actions: EventActions(
+            renderUiWidgets: <UiWidget>[
+              UiWidget(
+                id: 'call_vertex_widget',
+                provider: 'mcp',
+                payload: <String, Object?>{'resource_uri': 'ui://widget/vertex'},
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final Session? reloaded = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events, hasLength(1));
+      expect(reloaded.events.single.actions.renderUiWidgets, hasLength(1));
+      expect(
+        reloaded.events.single.actions.renderUiWidgets.single.provider,
+        'mcp',
+      );
+      expect(
+        reloaded.events.single.actions.renderUiWidgets.single.payload['resource_uri'],
+        'ui://widget/vertex',
+      );
+    });
 
     test('returns null for missing session id', () async {
       final _FakeVertexAiSessionApiClient fakeClient =

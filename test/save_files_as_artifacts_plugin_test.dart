@@ -166,4 +166,44 @@ void main() {
       expect(keys.single, 'artifact_inv_save_files_0');
     },
   );
+
+  test('writes pending artifact delta to state then event actions', () async {
+    final InMemoryArtifactService artifacts = InMemoryArtifactService();
+    final SaveFilesAsArtifactsPlugin plugin = SaveFilesAsArtifactsPlugin();
+    final InvocationContext invocationContext = _newContext(
+      artifactService: artifacts,
+    );
+    final Content message = Content(
+      role: 'user',
+      parts: <Part>[
+        Part.fromInlineData(
+          mimeType: 'application/pdf',
+          data: <int>[1, 2, 3],
+          displayName: 'blob.pdf',
+        ),
+      ],
+    );
+
+    await plugin.onUserMessageCallback(
+      invocationContext: invocationContext,
+      userMessage: message,
+    );
+
+    expect(
+      invocationContext.session.state['save_files_as_artifacts_plugin:pending_delta'],
+      <String, int>{'blob.pdf': 0},
+    );
+
+    final Context callbackContext = Context(invocationContext);
+    await plugin.beforeAgentCallback(
+      agent: invocationContext.agent,
+      callbackContext: callbackContext,
+    );
+
+    expect(callbackContext.actions.artifactDelta, <String, int>{'blob.pdf': 0});
+    expect(
+      invocationContext.session.state['save_files_as_artifacts_plugin:pending_delta'],
+      <String, int>{},
+    );
+  });
 }

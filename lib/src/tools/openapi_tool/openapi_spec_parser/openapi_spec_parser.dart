@@ -170,6 +170,12 @@ class ParsedOperation {
 
 /// Parser that converts OpenAPI documents into [ParsedOperation] entries.
 class OpenApiSpecParser {
+  /// Creates an OpenAPI parser.
+  OpenApiSpecParser({this.preservePropertyNames = false});
+
+  /// Whether parameter/property names should keep their source casing.
+  final bool preservePropertyNames;
+
   /// Parses [openapiSpecDict] into normalized [ParsedOperation] values.
   List<ParsedOperation> parse(Map<String, Object?> openapiSpecDict) {
     final Map<String, Object?> resolved = _resolveReferences(openapiSpecDict);
@@ -250,7 +256,10 @@ class OpenApiSpecParser {
           method: method,
         );
 
-        final OperationParser parser = OperationParser(normalizedOperation);
+        final OperationParser parser = OperationParser(
+          normalizedOperation,
+          preservePropertyNames: preservePropertyNames,
+        );
 
         final String localSchemeName = parser.getAuthSchemeName();
         final String? authSchemeName = localSchemeName.isNotEmpty

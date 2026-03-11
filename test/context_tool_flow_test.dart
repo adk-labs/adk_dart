@@ -126,6 +126,41 @@ void main() {
       expect(context.actions.requestedAuthConfigs['call_3'], authPayload);
     });
 
+    test('renderUiWidget throws when functionCallId is missing', () {
+      final Context context = _newContext();
+      expect(
+        () => context.renderUiWidget(
+          UiWidget(id: 'widget-1', provider: 'mcp'),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('requires functionCallId'),
+          ),
+        ),
+      );
+    });
+
+    test('renderUiWidget appends widget action under tool context', () {
+      final Context context = _newContext(functionCallId: 'call_4');
+      context.renderUiWidget(
+        UiWidget(
+          id: 'call_4',
+          provider: 'mcp',
+          payload: <String, Object?>{'resource_uri': 'ui://widget'},
+        ),
+      );
+
+      expect(context.actions.renderUiWidgets, hasLength(1));
+      expect(context.actions.renderUiWidgets.single.id, 'call_4');
+      expect(context.actions.renderUiWidgets.single.provider, 'mcp');
+      expect(
+        context.actions.renderUiWidgets.single.payload['resource_uri'],
+        'ui://widget',
+      );
+    });
+
     test(
       'saveCredential/loadCredential roundtrip via credential service',
       () async {

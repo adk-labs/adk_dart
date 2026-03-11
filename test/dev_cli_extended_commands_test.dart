@@ -201,6 +201,69 @@ void main() {
       expect(exitCode, 0);
     });
 
+    test('optimize command runs GEPA optimizer with local eval sampler', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk_cli_optimize_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      await createDevProject(projectDirPath: tempDir.path);
+
+      final String appName = projectDirName(tempDir.path);
+      final File evalSetFile = File(
+        '${tempDir.path}${Platform.pathSeparator}optimize_set.evalset.json',
+      );
+      await evalSetFile.writeAsString('''
+{
+  "eval_set_id": "optimize_set",
+  "eval_cases": [
+    {
+      "eval_id": "case1",
+      "input": "hello",
+      "expected_output": "stub response"
+    }
+  ]
+}
+''');
+
+      final File samplerConfigFile = File(
+        '${tempDir.path}${Platform.pathSeparator}sampler_config.json',
+      );
+      await samplerConfigFile.writeAsString(jsonEncode(<String, Object?>{
+        'app_name': appName,
+        'train_eval_set': 'optimize_set',
+        'eval_config': <String, Object?>{
+          'criteria': <String, Object?>{
+            'final_response_match_v2': 1.0,
+          },
+        },
+      }));
+
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final int exitCode = await runAdkCli(
+        <String>[
+          'optimize',
+          tempDir.path,
+          '--sampler_config_file_path',
+          samplerConfigFile.path,
+          '--print_detailed_results',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 0);
+      expect(stdoutText, contains('Optimized root agent instructions'));
+      expect(stdoutText, contains('Detailed GEPA optimization metrics'));
+      expect(stderrText, isEmpty);
+    });
+
     test('migrate session validates required options', () async {
       final _CapturedSink outCapture = _CapturedSink();
       final _CapturedSink errCapture = _CapturedSink();

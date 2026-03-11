@@ -157,14 +157,20 @@ class LiteLlm extends BaseLlm {
     }
 
     final Map<String, Object?> usage = _asMap(response['usage']);
+    final String finishReason = mapFinishReason(first['finish_reason']);
+    final String? errorMessage = _finishReasonToErrorMessage(finishReason);
     return LlmResponse(
       modelVersion: response['model'] as String?,
       content: Content(role: role, parts: parts),
-      finishReason: mapFinishReason(first['finish_reason']),
+      finishReason: finishReason,
+      errorCode: errorMessage == null ? null : finishReason,
+      errorMessage: errorMessage,
       usageMetadata: <String, Object?>{
         'prompt_token_count': usage['prompt_tokens'] ?? 0,
         'candidates_token_count': usage['completion_tokens'] ?? 0,
         'total_token_count': usage['total_tokens'] ?? 0,
+        if (_reasoningTokens(usage) != null)
+          'thoughts_token_count': _reasoningTokens(usage),
       },
       customMetadata: <String, dynamic>{
         'id': response['id'],
@@ -223,6 +229,21 @@ class LiteLlm extends BaseLlm {
     }
     return '';
   }
+}
+
+String? _finishReasonToErrorMessage(String finishReason) {
+  if (finishReason == 'STOP') {
+    return null;
+  }
+  if (finishReason == 'MAX_TOKENS') {
+    return 'Maximum tokens reached';
+  }
+  return 'Finished with $finishReason';
+}
+
+Object? _reasoningTokens(Map<String, Object?> usage) {
+  final Map<String, Object?> details = _asMap(usage['completion_tokens_details']);
+  return details['reasoning_tokens'] ?? details['reasoningTokens'];
 }
 
 List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {

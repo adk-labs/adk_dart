@@ -3,6 +3,7 @@ library;
 
 import '../events/event_actions.dart';
 import '../events/event.dart';
+import '../events/ui_widget.dart';
 import '../auth/auth_credential.dart';
 import '../auth/auth_handler.dart';
 import '../auth/auth_tool.dart';
@@ -202,5 +203,18 @@ class Context extends ReadonlyContext {
       return;
     }
     _eventActions.requestedAuthConfigs[callId] = authConfig;
+  }
+
+  /// Requests client-side rendering of [widget] for the current tool call.
+  ///
+  /// Throws a [StateError] when this context is not bound to a tool call.
+  void renderUiWidget(UiWidget widget) {
+    final String? callId = functionCallId;
+    if (callId == null || callId.isEmpty) {
+      throw StateError(
+        'renderUiWidget requires functionCallId. This method can only be used in a tool context.',
+      );
+    }
+    _eventActions.renderUiWidgets.add(widget);
   }
 }

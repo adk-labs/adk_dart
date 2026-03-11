@@ -3303,6 +3303,9 @@ Map<String, Object?> _eventToLegacyJson(Event event) {
       'rewindBeforeInvocationId': event.actions.rewindBeforeInvocationId,
       'stateDelta': event.actions.stateDelta,
       'artifactDelta': event.actions.artifactDelta,
+      'renderUiWidgets': event.actions.renderUiWidgets
+          .map((widget) => widget.toJson())
+          .toList(growable: false),
     },
   };
 }

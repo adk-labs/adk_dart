@@ -683,7 +683,39 @@ void main() {
         },
       );
       expect(parsed.finishReason, 'MAX_TOKENS');
+      expect(parsed.errorCode, 'MAX_TOKENS');
+      expect(parsed.errorMessage, 'Maximum tokens reached');
       expect(parsed.content?.parts.single.text, 'ok');
+    });
+
+    test('captures reasoning token usage metadata', () {
+      final LlmResponse parsed = LiteLlm.parseCompletionResponse(
+        <String, Object?>{
+          'model': 'openai/gpt-4o-mini',
+          'choices': <Object?>[
+            <String, Object?>{
+              'finish_reason': 'stop',
+              'message': <String, Object?>{
+                'role': 'assistant',
+                'content': 'ok',
+              },
+            },
+          ],
+          'usage': <String, Object?>{
+            'prompt_tokens': 1,
+            'completion_tokens': 2,
+            'total_tokens': 3,
+            'completion_tokens_details': <String, Object?>{
+              'reasoning_tokens': 5,
+            },
+          },
+        },
+      );
+
+      expect(parsed.usageMetadata, isA<Map<String, Object?>>());
+      final Map<String, Object?> usage =
+          parsed.usageMetadata! as Map<String, Object?>;
+      expect(usage['thoughts_token_count'], 5);
     });
 
     test('parses reasoning_content and reasoning fields as thought parts', () {

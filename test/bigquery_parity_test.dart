@@ -966,6 +966,7 @@ void main() {
         required Map<String, String> headers,
       }) async {
         expect(url.toString(), contains('geminidataanalytics.googleapis.com'));
+        expect(url.path, '/v1beta/projects/project1/locations/global:chat');
         expect(headers['Authorization'], startsWith('Bearer token_'));
 
         return Stream<String>.fromIterable(<String>[

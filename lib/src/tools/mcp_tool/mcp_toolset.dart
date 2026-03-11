@@ -60,6 +60,7 @@ class McpToolset extends BaseToolset {
                   'outputSchema',
                   'output_schema',
                 ]),
+                meta: _readObjectMap(descriptor['meta']),
               ),
               connectionParams: connectionParams,
               sessionManager: manager,
@@ -109,6 +110,18 @@ Map<String, dynamic> _readSchema(
     }
   }
   return <String, dynamic>{};
+}
+
+Map<String, Object?> _readObjectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return Map<String, Object?>.from(value);
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? mapKey, Object? mapValue) => MapEntry('$mapKey', mapValue),
+    );
+  }
+  return <String, Object?>{};
 }
 
 String _readString(Object? value) {

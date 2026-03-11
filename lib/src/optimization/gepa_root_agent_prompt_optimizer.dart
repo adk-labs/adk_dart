@@ -36,6 +36,83 @@ class GepaRootAgentPromptOptimizerConfig {
              },
            );
 
+  /// Parses one optimizer config payload from JSON.
+  factory GepaRootAgentPromptOptimizerConfig.fromJson(
+    Map<String, Object?> json,
+  ) {
+    final Map<String, Object?> modelConfig = _asObjectMap(
+      json['modelConfiguration'] ?? json['model_configuration'],
+    );
+    return GepaRootAgentPromptOptimizerConfig(
+      optimizerModel:
+          json['optimizerModel'] ??
+          json['optimizer_model'] ??
+          'gemini-2.5-flash',
+      modelConfiguration: modelConfig.isEmpty
+          ? null
+          : GenerateContentConfig(
+              systemInstruction: _emptyToNull(
+                '${modelConfig['systemInstruction'] ?? modelConfig['system_instruction'] ?? ''}',
+              ),
+              temperature: _asDoubleOrNull(modelConfig['temperature']),
+              topP: _asDoubleOrNull(modelConfig['topP'] ?? modelConfig['top_p']),
+              topK: _asIntOrNull(modelConfig['topK'] ?? modelConfig['top_k']),
+              maxOutputTokens: _asIntOrNull(
+                modelConfig['maxOutputTokens'] ??
+                    modelConfig['max_output_tokens'],
+              ),
+              stopSequences: _asStringList(
+                    modelConfig['stopSequences'] ??
+                        modelConfig['stop_sequences'],
+                  ) ??
+                  <String>[],
+              frequencyPenalty: _asDoubleOrNull(
+                modelConfig['frequencyPenalty'] ??
+                    modelConfig['frequency_penalty'],
+              ),
+              presencePenalty: _asDoubleOrNull(
+                modelConfig['presencePenalty'] ??
+                    modelConfig['presence_penalty'],
+              ),
+              seed: _asIntOrNull(modelConfig['seed']),
+              candidateCount: _asIntOrNull(
+                modelConfig['candidateCount'] ??
+                    modelConfig['candidate_count'],
+              ),
+              responseLogprobs: _asBoolOrNull(
+                modelConfig['responseLogprobs'] ??
+                    modelConfig['response_logprobs'],
+              ),
+              logprobs: _asIntOrNull(modelConfig['logprobs']),
+              thinkingConfig:
+                  modelConfig['thinkingConfig'] ?? modelConfig['thinking_config'],
+              responseSchema:
+                  modelConfig['responseSchema'] ??
+                  modelConfig['response_schema'],
+              responseJsonSchema:
+                  modelConfig['responseJsonSchema'] ??
+                  modelConfig['response_json_schema'],
+              responseMimeType: _emptyToNull(
+                '${modelConfig['responseMimeType'] ?? modelConfig['response_mime_type'] ?? ''}',
+              ),
+              cachedContent: _emptyToNull(
+                '${modelConfig['cachedContent'] ?? modelConfig['cached_content'] ?? ''}',
+              ),
+              labels: _asStringStringMap(modelConfig['labels']),
+            ),
+      maxMetricCalls: _asIntOrNull(
+            json['maxMetricCalls'] ?? json['max_metric_calls'],
+          ) ??
+          100,
+      reflectionMinibatchSize: _asIntOrNull(
+            json['reflectionMinibatchSize'] ??
+                json['reflection_minibatch_size'],
+          ) ??
+          3,
+      runDir: _emptyToNull('${json['runDir'] ?? json['run_dir'] ?? ''}'),
+    );
+  }
+
   /// Model instance or model name used to generate reflective prompt updates.
   final Object optimizerModel;
 
@@ -50,6 +127,51 @@ class GepaRootAgentPromptOptimizerConfig {
 
   /// Optional directory to persist optimization artifacts.
   final String? runDir;
+
+  /// Serializes this config to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'optimizer_model': optimizerModel is String ? optimizerModel : '$optimizerModel',
+      'model_configuration': <String, Object?>{
+        if (modelConfiguration.systemInstruction != null)
+          'system_instruction': modelConfiguration.systemInstruction,
+        if (modelConfiguration.temperature != null)
+          'temperature': modelConfiguration.temperature,
+        if (modelConfiguration.topP != null) 'top_p': modelConfiguration.topP,
+        if (modelConfiguration.topK != null) 'top_k': modelConfiguration.topK,
+        if (modelConfiguration.maxOutputTokens != null)
+          'max_output_tokens': modelConfiguration.maxOutputTokens,
+        if (modelConfiguration.stopSequences.isNotEmpty)
+          'stop_sequences': modelConfiguration.stopSequences,
+        if (modelConfiguration.frequencyPenalty != null)
+          'frequency_penalty': modelConfiguration.frequencyPenalty,
+        if (modelConfiguration.presencePenalty != null)
+          'presence_penalty': modelConfiguration.presencePenalty,
+        if (modelConfiguration.seed != null) 'seed': modelConfiguration.seed,
+        if (modelConfiguration.candidateCount != null)
+          'candidate_count': modelConfiguration.candidateCount,
+        if (modelConfiguration.responseLogprobs != null)
+          'response_logprobs': modelConfiguration.responseLogprobs,
+        if (modelConfiguration.logprobs != null)
+          'logprobs': modelConfiguration.logprobs,
+        if (modelConfiguration.thinkingConfig != null)
+          'thinking_config': modelConfiguration.thinkingConfig,
+        if (modelConfiguration.responseSchema != null)
+          'response_schema': modelConfiguration.responseSchema,
+        if (modelConfiguration.responseJsonSchema != null)
+          'response_json_schema': modelConfiguration.responseJsonSchema,
+        if (modelConfiguration.responseMimeType != null)
+          'response_mime_type': modelConfiguration.responseMimeType,
+        if (modelConfiguration.cachedContent != null)
+          'cached_content': modelConfiguration.cachedContent,
+        if (modelConfiguration.labels.isNotEmpty)
+          'labels': modelConfiguration.labels,
+      },
+      'max_metric_calls': maxMetricCalls,
+      'reflection_minibatch_size': reflectionMinibatchSize,
+      if (runDir != null) 'run_dir': runDir,
+    };
+  }
 }
 
 /// Final GEPA optimization result including raw run metadata.
@@ -79,6 +201,77 @@ class _ScoredPromptCandidate {
   final double validationScore;
   final List<String> reflectionBatch;
   final List<Map<String, Object?>> reflectionDataset;
+}
+
+Map<String, Object?> _asObjectMap(Object? value) {
+  if (value is Map) {
+    return value.map((Object? key, Object? item) => MapEntry('$key', item));
+  }
+  return <String, Object?>{};
+}
+
+List<String>? _asStringList(Object? value) {
+  if (value is! List) {
+    return null;
+  }
+  final List<String> items = value
+      .map((Object? item) => '$item'.trim())
+      .where((String item) => item.isNotEmpty)
+      .toList(growable: false);
+  return items.isEmpty ? null : items;
+}
+
+Map<String, String>? _asStringStringMap(Object? value) {
+  if (value is! Map) {
+    return null;
+  }
+  final Map<String, String> result = <String, String>{};
+  value.forEach((Object? key, Object? item) {
+    result['$key'] = '$item';
+  });
+  return result.isEmpty ? null : result;
+}
+
+int? _asIntOrNull(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse('$value');
+}
+
+double? _asDoubleOrNull(Object? value) {
+  if (value is double) {
+    return value;
+  }
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse('$value');
+}
+
+bool? _asBoolOrNull(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  final String lower = '$value'.trim().toLowerCase();
+  if (lower == 'true') {
+    return true;
+  }
+  if (lower == 'false') {
+    return false;
+  }
+  return null;
+}
+
+String? _emptyToNull(String? value) {
+  if (value == null) {
+    return null;
+  }
+  final String trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }
 
 /// GEPA-style optimizer that improves only the root agent prompt.

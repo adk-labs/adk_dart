@@ -287,6 +287,48 @@ void main() {
       expect(parser.getSignatureParameters(), hasLength(2));
       expect(parser.getAnnotations()['return'], bool);
     });
+
+    test('preserves original property names when requested', () {
+      final OperationParser parser = OperationParser(
+        <String, Object?>{
+          'operationId': 'calendar.get',
+          'parameters': <Object?>[
+            <String, Object?>{
+              'name': 'calendarId',
+              'in': 'path',
+              'required': true,
+              'schema': <String, Object?>{'type': 'string'},
+            },
+          ],
+          'requestBody': <String, Object?>{
+            'content': <String, Object?>{
+              'application/json': <String, Object?>{
+                'schema': <String, Object?>{
+                  'type': 'object',
+                  'properties': <String, Object?>{
+                    'firstName': <String, Object?>{'type': 'string'},
+                    'class': <String, Object?>{'type': 'string'},
+                  },
+                },
+              },
+            },
+          },
+          'responses': <String, Object?>{
+            '200': <String, Object?>{'description': 'ok'},
+          },
+        },
+        preservePropertyNames: true,
+      );
+
+      final List<ApiParameter> parameters = parser.getParameters();
+      expect(parameters[0].pyName, 'calendarId');
+      expect(parameters[1].pyName, 'firstName');
+      expect(parameters[2].pyName, 'param_class');
+      expect(
+        (parser.getJsonSchema()['properties'] as Map<String, Object?>).keys,
+        containsAll(<String>['calendarId', 'firstName', 'param_class']),
+      );
+    });
   });
 
   group('openapi toolset parity', () {
@@ -361,6 +403,70 @@ paths:
       expect(authConfig, isNotNull);
       expect(authConfig!.credentialKey, 'stable_key');
       expect(authConfig.rawAuthCredential?.apiKey, 'token');
+    });
+
+    test('preserves property names when configured', () async {
+      final Map<String, Object?> spec = <String, Object?>{
+        'openapi': '3.0.0',
+        'servers': <Object?>[
+          <String, Object?>{'url': 'https://example.com/v1'},
+        ],
+        'paths': <String, Object?>{
+          '/users/{userId}': <String, Object?>{
+            'post': <String, Object?>{
+              'operationId': 'users.create',
+              'parameters': <Object?>[
+                <String, Object?>{
+                  'name': 'userId',
+                  'in': 'path',
+                  'required': true,
+                  'schema': <String, Object?>{'type': 'string'},
+                },
+              ],
+              'requestBody': <String, Object?>{
+                'content': <String, Object?>{
+                  'application/json': <String, Object?>{
+                    'schema': <String, Object?>{
+                      'type': 'object',
+                      'properties': <String, Object?>{
+                        'firstName': <String, Object?>{'type': 'string'},
+                      },
+                    },
+                  },
+                },
+              },
+              'responses': <String, Object?>{
+                '200': <String, Object?>{'description': 'ok'},
+              },
+            },
+          },
+        },
+      };
+
+      final OpenAPIToolset preserved = OpenAPIToolset(
+        specDict: spec,
+        preservePropertyNames: true,
+      );
+      final OpenAPIToolset normalized = OpenAPIToolset(specDict: spec);
+
+      final RestApiTool? preservedTool = preserved.getTool('users_create');
+      final RestApiTool? normalizedTool = normalized.getTool('users_create');
+      expect(preservedTool, isNotNull);
+      expect(normalizedTool, isNotNull);
+
+      final Map<String, Object?> preservedSchema =
+          preservedTool!.getDeclaration()!.parameters.cast<String, Object?>();
+      final Map<String, Object?> normalizedSchema =
+          normalizedTool!.getDeclaration()!.parameters.cast<String, Object?>();
+
+      expect(
+        (preservedSchema['properties'] as Map<String, Object?>).keys,
+        containsAll(<String>['userId', 'firstName']),
+      );
+      expect(
+        (normalizedSchema['properties'] as Map<String, Object?>).keys,
+        containsAll(<String>['user_id', 'first_name']),
+      );
     });
   });
 }

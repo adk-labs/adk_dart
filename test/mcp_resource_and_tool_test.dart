@@ -136,6 +136,50 @@ void main() {
     expect(map['x_api_key'], 'k1');
   });
 
+  test('McpTool emits MCP UI widget metadata when tool declares app resource', () async {
+    final StreamableHTTPConnectionParams params =
+        StreamableHTTPConnectionParams(url: 'https://mcp.exec');
+    McpSessionManager.instance.registerToolExecutor(
+      connectionParams: params,
+      toolName: 'echo_widget',
+      executor: (Map<String, dynamic> args, {Map<String, String>? headers}) {
+        return <String, Object?>{'ok': true};
+      },
+    );
+
+    final Context context = await _newContext(functionCallId: 'call_widget');
+    final McpTool tool = McpTool(
+      mcpTool: McpBaseTool(
+        name: 'echo_widget',
+        description: 'echo widget',
+        meta: <String, Object?>{
+          'ui': <String, Object?>{
+            'resourceUri': 'ui://widget/echo',
+            'visibility': <String>['app'],
+          },
+        },
+      ),
+      connectionParams: params,
+      sessionManager: McpSessionManager.instance,
+    );
+
+    final Object? result = await tool.run(
+      args: <String, dynamic>{'q': 'hello'},
+      toolContext: context,
+    );
+
+    expect((result as Map<String, Object?>)['ok'], isTrue);
+    expect(tool.visibility, <String>['app']);
+    expect(tool.mcpAppResourceUri, 'ui://widget/echo');
+    expect(context.actions.renderUiWidgets, hasLength(1));
+    final UiWidget widget = context.actions.renderUiWidgets.single;
+    expect(widget.id, 'call_widget');
+    expect(widget.provider, 'mcp');
+    expect(widget.payload['resource_uri'], 'ui://widget/echo');
+    expect(widget.payload['tool_args'], <String, Object?>{'q': 'hello'});
+    expect(widget.payload['tool'], isA<Map<String, Object?>>());
+  });
+
   test('McpTool requests confirmation when required', () async {
     final StreamableHTTPConnectionParams params =
         StreamableHTTPConnectionParams(url: 'https://mcp.confirm');

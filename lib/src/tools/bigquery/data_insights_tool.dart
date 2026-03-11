@@ -50,7 +50,7 @@ Future<Map<String, Object?>> askDataInsights({
     };
 
     final Uri uri = Uri.parse(
-      'https://geminidataanalytics.googleapis.com/v1alpha/projects/'
+      'https://geminidataanalytics.googleapis.com/v1beta/projects/'
       '$projectId/locations/global:chat',
     );
 

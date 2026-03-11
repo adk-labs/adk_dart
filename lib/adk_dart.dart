@@ -57,8 +57,10 @@ export 'src/artifacts/in_memory_artifact_service.dart';
 export 'src/auth/auth_credential.dart';
 export 'src/auth/auth_handler.dart';
 export 'src/auth/auth_preprocessor.dart';
+export 'src/auth/auth_provider_registry.dart';
 export 'src/auth/auth_schemes.dart';
 export 'src/auth/auth_tool.dart';
+export 'src/auth/base_auth_provider.dart';
 export 'src/auth/credential_manager.dart';
 export 'src/auth/oauth2_credential_util.dart';
 export 'src/auth/oauth2_discovery.dart';
@@ -94,6 +96,7 @@ export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
+export 'src/events/ui_widget.dart';
 
 export 'src/evaluation/base_eval_service.dart';
 export 'src/evaluation/agent_evaluator.dart';
@@ -231,6 +234,7 @@ export 'src/planners/rule_based_planner.dart';
 export 'src/optimization/agent_optimizer.dart';
 export 'src/optimization/data_types.dart';
 export 'src/optimization/gepa_root_agent_prompt_optimizer.dart';
+export 'src/optimization/local_eval_sampler.dart';
 export 'src/optimization/prompt_optimizer.dart';
 export 'src/optimization/sampler.dart';
 export 'src/optimization/simple_prompt_optimizer.dart';

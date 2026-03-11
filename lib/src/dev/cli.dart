@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as crypto;
 
 import '../agents/base_agent.dart';
+import '../agents/llm_agent.dart';
 import '../apps/app.dart';
 import '../auth/credential_service/in_memory_credential_service.dart';
 import '../cli/cli_deploy.dart';
@@ -40,6 +41,8 @@ import '../evaluation/local_eval_set_results_manager.dart';
 import '../evaluation/local_eval_sets_manager.dart'
     show LocalEvalSetsManager, loadEvalSetFromFile;
 import '../features/_feature_registry.dart';
+import '../optimization/gepa_root_agent_prompt_optimizer.dart';
+import '../optimization/local_eval_sampler.dart';
 import '../utils/yaml_utils.dart';
 import 'project.dart';
 import 'runtime.dart';
@@ -56,6 +59,7 @@ Commands:
   deploy                Deploy app using gcloud command execution.
   eval                  Evaluate an agent against eval sets.
   eval_set              Manage eval sets.
+  optimize              Optimize root agent instructions with GEPA.
   conformance           Conformance record/test helpers.
   migrate session       Migrate session DB schema.
   api_server [project_dir]
@@ -473,6 +477,32 @@ Future<int> runAdkCli(
     }
   }
 
+  if (args.first == 'optimize') {
+    try {
+      return await _runOptimizeCliCommand(
+        args.skip(1).toList(growable: false),
+        out: out,
+      );
+    } on CliUsageError catch (error) {
+      err.writeln(error.message);
+      err.writeln('');
+      err.writeln(adkUsage);
+      return 64;
+    } on FileSystemException catch (error) {
+      err.writeln('Filesystem error: $error');
+      return 1;
+    } on FormatException catch (error) {
+      err.writeln('Config parse error: $error');
+      return 1;
+    } on StateError catch (error) {
+      err.writeln('Runtime error: $error');
+      return 1;
+    } on ArgumentError catch (error) {
+      err.writeln('Argument error: $error');
+      return 1;
+    }
+  }
+
   if (args.first == 'migrate') {
     try {
       return await _runMigrateCliCommand(
@@ -600,6 +630,33 @@ class _ParsedEvalCliCommand {
 
   /// Optional log verbosity level.
   final String? logLevel;
+}
+
+/// Parsed arguments for `adk optimize`.
+class _ParsedOptimizeCliCommand {
+  /// Creates parsed `optimize` command arguments.
+  _ParsedOptimizeCliCommand({
+    required this.agentPath,
+    required this.samplerConfigFilePath,
+    this.optimizerConfigFilePath,
+    required this.printDetailedResults,
+    required this.logLevel,
+  });
+
+  /// Agent directory path.
+  final String agentPath;
+
+  /// Local eval sampler config file path.
+  final String samplerConfigFilePath;
+
+  /// Optional GEPA optimizer config file path.
+  final String? optimizerConfigFilePath;
+
+  /// Whether to print detailed optimizer output.
+  final bool printDetailedResults;
+
+  /// Log level applied while optimizing.
+  final String logLevel;
 }
 
 /// Parsed arguments for `adk eval_set create`.
@@ -938,6 +995,70 @@ Future<int> _runEvalCliCommand(List<String> args, {required IOSink out}) async {
       out.writeln(cli_eval.prettyPrintEvalResult(result));
     }
   }
+  return 0;
+}
+
+Future<int> _runOptimizeCliCommand(
+  List<String> args, {
+  required IOSink out,
+}) async {
+  final _ParsedOptimizeCliCommand command = _parseOptimizeCliCommand(args);
+  cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel));
+
+  final _LoadedCliAgent loadedAgent = await _loadAgentForCli(command.agentPath);
+  final LocalEvalSamplerConfig samplerConfig = LocalEvalSamplerConfig.fromJson(
+    await _readJsonObjectFile(
+      command.samplerConfigFilePath,
+      label: 'sampler config file',
+    ),
+  );
+  if (samplerConfig.appName != loadedAgent.appName) {
+    throw CliUsageError(
+      'App name in the agent path (${loadedAgent.appName}) does not match '
+      'the app name in the sampler config file (${samplerConfig.appName}).',
+    );
+  }
+
+  final GepaRootAgentPromptOptimizerConfig optimizerConfig =
+      command.optimizerConfigFilePath == null
+      ? GepaRootAgentPromptOptimizerConfig()
+      : GepaRootAgentPromptOptimizerConfig.fromJson(
+          await _readJsonObjectFile(
+            command.optimizerConfigFilePath!,
+            label: 'optimizer config file',
+          ),
+        );
+
+  final LocalEvalSampler sampler = await LocalEvalSampler.create(
+    config: samplerConfig,
+    evalSetsManager: LocalEvalSetsManager(loadedAgent.agentsParentDirPath),
+  );
+  final GepaRootAgentPromptOptimizer optimizer =
+      GepaRootAgentPromptOptimizer(optimizerConfig);
+  final GepaRootAgentPromptOptimizerResult result = await optimizer.optimize(
+    loadedAgent.rootAgent as Agent,
+    sampler,
+  );
+  final int bestIdx = _bestOptimizedAgentIndex(result);
+
+  out.writeln('=' * 80);
+  out.writeln('Optimized root agent instructions:');
+  out.writeln('-' * 80);
+  out.writeln(result.optimizedAgents[bestIdx].optimizedAgent.instruction);
+
+  if (command.printDetailedResults) {
+    out.writeln('=' * 80);
+    final Map<String, Object?>? gepaResult = result.gepaResult;
+    if (gepaResult == null || gepaResult.isEmpty) {
+      out.writeln('Detailed GEPA optimization metrics are not available.');
+    } else {
+      out.writeln('Detailed GEPA optimization metrics:');
+      out.writeln('-' * 80);
+      out.writeln(const JsonEncoder.withIndent('  ').convert(gepaResult));
+    }
+  }
+
+  out.writeln('=' * 80);
   return 0;
 }
 
@@ -2073,6 +2194,82 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
   );
 }
 
+_ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
+  String? samplerConfigFilePath;
+  String? optimizerConfigFilePath;
+  String? logLevel;
+  bool printDetailedResults = false;
+  final List<String> positionals = <String>[];
+
+  for (int i = 0; i < args.length; i += 1) {
+    final String arg = args[i];
+    if (arg == '--sampler_config_file_path') {
+      samplerConfigFilePath = _nextArg(args, i, '--sampler_config_file_path');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--sampler_config_file_path=')) {
+      samplerConfigFilePath =
+          arg.substring('--sampler_config_file_path='.length);
+      continue;
+    }
+    if (arg == '--optimizer_config_file_path') {
+      optimizerConfigFilePath = _nextArg(
+        args,
+        i,
+        '--optimizer_config_file_path',
+      );
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--optimizer_config_file_path=')) {
+      optimizerConfigFilePath =
+          arg.substring('--optimizer_config_file_path='.length);
+      continue;
+    }
+    if (arg == '--print_detailed_results') {
+      printDetailedResults = true;
+      continue;
+    }
+    if (arg == '--log_level') {
+      logLevel = _nextArg(args, i, '--log_level');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--log_level=')) {
+      logLevel = arg.substring('--log_level='.length);
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      throw CliUsageError('Unknown option for optimize: $arg');
+    }
+    positionals.add(arg);
+  }
+
+  if (positionals.isEmpty) {
+    throw CliUsageError('Missing optimize agent directory path.');
+  }
+  if (positionals.length > 1) {
+    throw CliUsageError('optimize accepts only one agent directory path.');
+  }
+  if (_emptyToNull(samplerConfigFilePath) == null) {
+    throw CliUsageError(
+      'Missing required option --sampler_config_file_path.',
+    );
+  }
+
+  return _ParsedOptimizeCliCommand(
+    agentPath: positionals.single,
+    samplerConfigFilePath: samplerConfigFilePath!.trim(),
+    optimizerConfigFilePath: _emptyToNull(optimizerConfigFilePath),
+    printDetailedResults: printDetailedResults,
+    logLevel: _resolveCliLogLevel(
+      explicit: _emptyToNull(logLevel),
+      verbose: false,
+    ),
+  );
+}
+
 _EvalSelection _parseEvalSelection(String rawValue) {
   final String value = rawValue.trim();
   if (value.isEmpty) {
@@ -2338,6 +2535,28 @@ Future<_LoadedCliAgent> _loadAgentForCli(String projectDirPath) async {
     appName: appName,
     agentsParentDirPath: agentsParentDir.path,
   );
+}
+
+int _bestOptimizedAgentIndex(GepaRootAgentPromptOptimizerResult result) {
+  if (result.optimizedAgents.isEmpty) {
+    return 0;
+  }
+  final Object? rawBestIdx = result.gepaResult?['best_idx'];
+  if (rawBestIdx is int &&
+      rawBestIdx >= 0 &&
+      rawBestIdx < result.optimizedAgents.length) {
+    return rawBestIdx;
+  }
+  int bestIndex = 0;
+  double bestScore = result.optimizedAgents.first.overallScore ?? 0.0;
+  for (int i = 1; i < result.optimizedAgents.length; i += 1) {
+    final double score = result.optimizedAgents[i].overallScore ?? 0.0;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
 }
 
 _ParsedEvalSetCreateCommand _parseEvalSetCreateCommand(List<String> args) {

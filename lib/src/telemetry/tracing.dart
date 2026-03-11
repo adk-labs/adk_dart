@@ -375,6 +375,15 @@ void traceCallLlm(
   if (maxOutputTokens != null) {
     targetSpan.setAttribute('gen_ai.request.max_tokens', maxOutputTokens);
   }
+  final Object? thinkingBudget = _thinkingBudgetValue(
+    llmRequest.config.thinkingConfig,
+  );
+  if (thinkingBudget is num) {
+    targetSpan.setAttribute(
+      'gen_ai.usage.experimental.reasoning_tokens_limit',
+      thinkingBudget,
+    );
+  }
 
   _setUsageMetadataAttributes(targetSpan, llmResponse.usageMetadata);
 
@@ -918,12 +927,32 @@ void _setUsageMetadataAttributes(TraceSpanRecord span, Object? usageMetadata) {
       usage['prompt_token_count'] ?? usage['promptTokenCount'];
   final Object? candidatesTokenCount =
       usage['candidates_token_count'] ?? usage['candidatesTokenCount'];
+  final Object? reasoningTokens =
+      usage['thoughts_token_count'] ??
+      usage['thoughtsTokenCount'] ??
+      usage['reasoning_tokens'] ??
+      usage['reasoningTokens'];
+  final Object? systemInstructionTokens =
+      usage['system_instruction_tokens'] ??
+      usage['systemInstructionTokens'];
 
   if (promptTokenCount is num) {
     span.setAttribute('gen_ai.usage.input_tokens', promptTokenCount);
   }
   if (candidatesTokenCount is num) {
     span.setAttribute('gen_ai.usage.output_tokens', candidatesTokenCount);
+  }
+  if (reasoningTokens is num) {
+    span.setAttribute(
+      'gen_ai.usage.experimental.reasoning_tokens',
+      reasoningTokens,
+    );
+  }
+  if (systemInstructionTokens is num) {
+    span.setAttribute(
+      'gen_ai.usage.experimental.system_instruction_tokens',
+      systemInstructionTokens,
+    );
   }
 }
 
@@ -940,6 +969,25 @@ Map<String, Object?>? _usageMetadataAsMap(Object? usageMetadata) {
     return usageMetadata.map(
       (Object? key, Object? value) => MapEntry<String, Object?>('$key', value),
     );
+  }
+  return null;
+}
+
+Object? _thinkingBudgetValue(Object? thinkingConfig) {
+  if (thinkingConfig is Map<String, Object?>) {
+    return thinkingConfig['thinking_budget'] ??
+        thinkingConfig['thinkingBudget'] ??
+        thinkingConfig['budget'];
+  }
+  if (thinkingConfig is Map<String, dynamic>) {
+    return thinkingConfig['thinking_budget'] ??
+        thinkingConfig['thinkingBudget'] ??
+        thinkingConfig['budget'];
+  }
+  if (thinkingConfig is Map) {
+    return thinkingConfig['thinking_budget'] ??
+        thinkingConfig['thinkingBudget'] ??
+        thinkingConfig['budget'];
   }
   return null;
 }

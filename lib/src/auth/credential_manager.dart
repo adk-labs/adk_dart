@@ -3,7 +3,9 @@ library;
 
 import '../agents/context.dart';
 import 'auth_credential.dart';
+import 'auth_provider_registry.dart';
 import 'auth_tool.dart';
+import 'base_auth_provider.dart';
 import 'credential_service/base_credential_service.dart';
 import 'exchanger/base_credential_exchanger.dart';
 import 'exchanger/credential_exchanger_registry.dart';
@@ -18,9 +20,11 @@ class CredentialManager {
   /// Creates a credential manager for [authConfig].
   CredentialManager({
     required AuthConfig authConfig,
+    AuthProviderRegistry? authProviderRegistry,
     CredentialExchangerRegistry? exchangerRegistry,
     CredentialRefresherRegistry? refresherRegistry,
   }) : _authConfig = authConfig,
+       _authProviderRegistry = authProviderRegistry ?? AuthProviderRegistry(),
        _exchangerRegistry = exchangerRegistry ?? CredentialExchangerRegistry(),
        _refresherRegistry = refresherRegistry ?? CredentialRefresherRegistry() {
     if (exchangerRegistry == null) {
@@ -49,8 +53,17 @@ class CredentialManager {
   }
 
   final AuthConfig _authConfig;
+  final AuthProviderRegistry _authProviderRegistry;
   final CredentialExchangerRegistry _exchangerRegistry;
   final CredentialRefresherRegistry _refresherRegistry;
+
+  /// Registers a provider for [authSchemeType].
+  void registerAuthProvider(
+    Object authSchemeType,
+    BaseAuthProvider provider,
+  ) {
+    _authProviderRegistry.register(authSchemeType, provider);
+  }
 
   /// Registers an exchanger for [credentialType].
   void registerCredentialExchanger(
@@ -75,6 +88,28 @@ class CredentialManager {
 
   /// Resolves an auth credential for the active request context.
   Future<AuthCredential?> getAuthCredential(Context context) async {
+    final BaseAuthProvider? provider = _authProviderRegistry.getProvider(
+      _authConfig.authScheme,
+    );
+    if (provider != null) {
+      final AuthCredential? providedCredential = await provider
+          .getAuthCredential(_authConfig, context);
+      if (providedCredential == null) {
+        throw ArgumentError('AuthProvider did not return a credential.');
+      }
+
+      final OAuth2Auth? oauth2 = providedCredential.oauth2;
+      final bool needsUserConsent =
+          oauth2 != null &&
+          (oauth2.accessToken == null || oauth2.accessToken!.isEmpty) &&
+          (oauth2.authUri?.isNotEmpty ?? false);
+      if (needsUserConsent) {
+        _authConfig.exchangedAuthCredential = providedCredential.copyWith();
+        return null;
+      }
+      return providedCredential.copyWith();
+    }
+
     _validateCredentialConfig();
 
     if (_isCredentialReady()) {

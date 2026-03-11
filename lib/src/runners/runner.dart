@@ -165,11 +165,13 @@ class Runner {
   Future<Session> _getOrCreateSession({
     required String userId,
     required String sessionId,
+    GetSessionConfig? getSessionConfig,
   }) async {
     Session? session = await sessionService.getSession(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
+      config: getSessionConfig,
     );
 
     if (session == null) {
@@ -224,6 +226,7 @@ class Runner {
     final Session session = await _getOrCreateSession(
       userId: userId,
       sessionId: sessionId,
+      getSessionConfig: config.getSessionConfig,
     );
 
     if (invocationId == null && newMessage == null) {
@@ -298,10 +301,13 @@ class Runner {
     required String userId,
     required String sessionId,
     required String rewindBeforeInvocationId,
+    RunConfig? runConfig,
   }) async {
+    final RunConfig config = runConfig ?? RunConfig();
     final Session session = await _getOrCreateSession(
       userId: userId,
       sessionId: sessionId,
+      getSessionConfig: config.getSessionConfig,
     );
 
     int rewindEventIndex = -1;
@@ -469,7 +475,11 @@ class Runner {
           'Either session or both userId and sessionId are required.',
         );
       }
-      session = await _getOrCreateSession(userId: userId, sessionId: sessionId);
+      session = await _getOrCreateSession(
+        userId: userId,
+        sessionId: sessionId,
+        getSessionConfig: config.getSessionConfig,
+      );
     }
 
     final InvocationContext context = _newInvocationContext(
@@ -498,10 +508,12 @@ class Runner {
     RunConfig? runConfig,
     bool quiet = false,
   }) async {
+    final RunConfig config = runConfig ?? RunConfig();
     Session? session = await sessionService.getSession(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
+      config: config.getSessionConfig,
     );
 
     session ??= await sessionService.createSession(
@@ -534,7 +546,7 @@ class Runner {
         userId: userId,
         sessionId: session.id,
         newMessage: Content.userText(message),
-        runConfig: runConfig,
+        runConfig: config,
       )) {
         events.add(event);
       }

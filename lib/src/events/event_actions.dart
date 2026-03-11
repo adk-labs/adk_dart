@@ -2,6 +2,7 @@
 library;
 
 import '../types/content.dart';
+import 'ui_widget.dart';
 
 /// Compaction summary metadata attached to an event.
 class EventCompaction {
@@ -37,11 +38,13 @@ class EventActions {
     this.endOfAgent,
     this.agentState,
     this.rewindBeforeInvocationId,
+    List<UiWidget>? renderUiWidgets,
   }) : stateDelta = stateDelta ?? <String, Object?>{},
        artifactDelta = artifactDelta ?? <String, int>{},
        requestedAuthConfigs = requestedAuthConfigs ?? <String, Object>{},
        requestedToolConfirmations =
-           requestedToolConfirmations ?? <String, Object>{};
+           requestedToolConfirmations ?? <String, Object>{},
+       renderUiWidgets = renderUiWidgets ?? <UiWidget>[];
 
   /// Whether this event should be excluded from summarization.
   bool? skipSummarization;
@@ -76,6 +79,9 @@ class EventActions {
   /// Optional invocation ID to rewind before replay.
   String? rewindBeforeInvocationId;
 
+  /// UI widgets that the client should render for this event.
+  List<UiWidget> renderUiWidgets;
+
   /// Returns copied actions with optional overrides.
   EventActions copyWith({
     Object? skipSummarization = _sentinel,
@@ -89,6 +95,7 @@ class EventActions {
     Object? endOfAgent = _sentinel,
     Object? agentState = _sentinel,
     Object? rewindBeforeInvocationId = _sentinel,
+    List<UiWidget>? renderUiWidgets,
   }) {
     return EventActions(
       skipSummarization: identical(skipSummarization, _sentinel)
@@ -122,6 +129,11 @@ class EventActions {
       rewindBeforeInvocationId: identical(rewindBeforeInvocationId, _sentinel)
           ? this.rewindBeforeInvocationId
           : rewindBeforeInvocationId as String?,
+      renderUiWidgets:
+          renderUiWidgets ??
+          this.renderUiWidgets
+              .map((UiWidget widget) => widget.copyWith())
+              .toList(growable: false),
     );
   }
 }

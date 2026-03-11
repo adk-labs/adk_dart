@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../events/ui_widget.dart';
 import '../platform/time.dart';
 import '../types/content.dart';
 import '../utils/vertex_ai_utils.dart';
@@ -698,6 +699,9 @@ class VertexAiSessionService extends BaseSessionService {
       'requested_tool_confirmations': Map<String, Object>.from(
         event.actions.requestedToolConfirmations,
       ),
+      'render_ui_widgets': event.actions.renderUiWidgets
+          .map((UiWidget widget) => widget.toJson())
+          .toList(growable: false),
     };
     actions.removeWhere((String _, Object? value) => value == null);
     config['actions'] = actions;
@@ -865,6 +869,9 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
       requestedToolConfirmations: _asStrictObjectMap(
         actionsJson['requested_tool_confirmations'],
       ),
+      renderUiWidgets: _asList(
+        actionsJson['render_ui_widgets'],
+      ).map(_uiWidgetFromApiJson).toList(growable: false),
     ),
     errorCode: _readStringByKeys(apiEvent, const <String>[
       'error_code',
@@ -1087,6 +1094,18 @@ Map<String, Object> _asStrictObjectMap(Object? value) {
     }
   });
   return out;
+}
+
+UiWidget _uiWidgetFromApiJson(Object? value) {
+  if (value is Map<String, Object?>) {
+    return UiWidget.fromJson(value);
+  }
+  if (value is Map) {
+    return UiWidget.fromJson(
+      value.map((Object? key, Object? item) => MapEntry('$key', item)),
+    );
+  }
+  return UiWidget(id: '', provider: '');
 }
 
 Set<String>? _asStringSet(Object? value) {

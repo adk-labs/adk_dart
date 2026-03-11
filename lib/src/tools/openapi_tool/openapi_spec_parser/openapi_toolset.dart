@@ -29,6 +29,7 @@ class OpenAPIToolset extends BaseToolset {
     Object? sslVerify,
     HeaderProvider? headerProvider,
     RestApiRequestExecutor? requestExecutor,
+    this.preservePropertyNames = false,
   }) : _headerProvider = headerProvider,
        _sslVerify = sslVerify,
        _requestExecutor = requestExecutor,
@@ -54,6 +55,7 @@ class OpenAPIToolset extends BaseToolset {
   final HeaderProvider? _headerProvider;
   final AuthConfig? _authConfig;
   final RestApiRequestExecutor? _requestExecutor;
+  final bool preservePropertyNames;
 
   Object? _sslVerify;
   late final List<RestApiTool> _tools;
@@ -133,7 +135,9 @@ class OpenAPIToolset extends BaseToolset {
   }
 
   List<RestApiTool> _parse(Map<String, Object?> openapiSpecDict) {
-    final List<ParsedOperation> operations = OpenApiSpecParser().parse(
+    final List<ParsedOperation> operations = OpenApiSpecParser(
+      preservePropertyNames: preservePropertyNames,
+    ).parse(
       openapiSpecDict,
     );
 

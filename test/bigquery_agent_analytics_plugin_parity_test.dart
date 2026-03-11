@@ -455,5 +455,25 @@ void main() {
       expect(capturedStatements[0], isNotEmpty);
       expect(capturedStatements[1], equals(capturedStatements[0]));
     });
+
+    test('treats concurrent analytics view conflicts as non-fatal', () async {
+      int createCalls = 0;
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: InMemoryBigQueryEventSink(),
+        analyticsViewExecutor: (List<String> statements) async {
+          createCalls += 1;
+          throw StateError('HTTP 409 Conflict');
+        },
+      );
+
+      await plugin.beforeRunCallback(
+        invocationContext: _newInvocationContext(invocationId: 'inv_conflict'),
+      );
+      await plugin.createAnalyticsViews();
+
+      expect(createCalls, 2);
+    });
   });
 }

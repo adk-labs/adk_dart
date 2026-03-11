@@ -21,8 +21,11 @@ class OperationSignatureParameter {
 /// Extracts function metadata, parameters, and schemas from one operation.
 class OperationParser {
   /// Creates an operation parser for an OpenAPI [operation] object.
-  OperationParser(Object operation, {bool shouldParse = true})
-    : _operation = _parseOperation(operation) {
+  OperationParser(
+    Object operation, {
+    bool shouldParse = true,
+    this.preservePropertyNames = false,
+  }) : _operation = _parseOperation(operation) {
     if (shouldParse) {
       _processOperationParameters();
       _processRequestBody();
@@ -49,8 +52,16 @@ class OperationParser {
   }
 
   final Map<String, Object?> _operation;
+  final bool preservePropertyNames;
   final List<ApiParameter> _params = <ApiParameter>[];
   ApiParameter? _returnValue;
+
+  String _pyNameFor(String originalName) {
+    if (!preservePropertyNames) {
+      return '';
+    }
+    return renamePythonKeywords(originalName);
+  }
 
   void _processOperationParameters() {
     final List<Object?> parameters = _readList(_operation['parameters']);
@@ -78,6 +89,7 @@ class OperationParser {
           paramLocation: location,
           paramSchema: schema,
           description: description,
+          pyName: _pyNameFor(originalName),
           required: required,
         ),
       );
@@ -117,6 +129,7 @@ class OperationParser {
               paramLocation: 'body',
               paramSchema: property,
               description: _readString(property['description']) ?? description,
+              pyName: _pyNameFor(entry.key),
               required: requiredNames.contains(entry.key),
             ),
           );

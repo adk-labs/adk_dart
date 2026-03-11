@@ -5,7 +5,7 @@ import 'dart:convert';
 
 import '../../agents/readonly_context.dart';
 import '../../auth/auth_credential.dart';
-import '../../auth/auth_tool.dart';
+import '../../events/ui_widget.dart';
 import '../../models/llm_request.dart';
 import '../base_authenticated_tool.dart';
 import '../tool_context.dart';
@@ -23,8 +23,10 @@ class McpBaseTool {
     this.description = '',
     Map<String, dynamic>? inputSchema,
     Map<String, dynamic>? outputSchema,
+    Map<String, Object?>? meta,
   }) : inputSchema = inputSchema ?? <String, dynamic>{},
-       outputSchema = outputSchema ?? <String, dynamic>{};
+       outputSchema = outputSchema ?? <String, dynamic>{},
+       meta = meta ?? <String, Object?>{};
 
   /// Tool name returned by MCP tool discovery.
   final String name;
@@ -37,6 +39,20 @@ class McpBaseTool {
 
   /// Output JSON schema emitted by this tool.
   final Map<String, dynamic> outputSchema;
+
+  /// Optional MCP metadata attached to the tool descriptor.
+  final Map<String, Object?> meta;
+
+  /// Serializes this descriptor to a JSON-compatible map.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'name': name,
+      'description': description,
+      'inputSchema': Map<String, dynamic>.from(inputSchema),
+      'outputSchema': Map<String, dynamic>.from(outputSchema),
+      if (meta.isNotEmpty) 'meta': Map<String, Object?>.from(meta),
+    };
+  }
 }
 
 /// Auth-aware MCP tool wrapper that delegates calls through [McpSessionManager].
@@ -46,7 +62,7 @@ class McpTool extends BaseAuthenticatedTool {
     required McpBaseTool mcpTool,
     required McpConnectionParams connectionParams,
     required McpSessionManager sessionManager,
-    AuthConfig? authConfig,
+    super.authConfig,
     Object requireConfirmation = false,
     this.headerProvider,
   }) : _mcpTool = mcpTool,
@@ -56,7 +72,6 @@ class McpTool extends BaseAuthenticatedTool {
        super(
          name: mcpTool.name,
          description: mcpTool.description,
-         authConfig: authConfig,
        );
 
   final McpBaseTool _mcpTool;
@@ -69,6 +84,34 @@ class McpTool extends BaseAuthenticatedTool {
 
   /// Raw MCP tool descriptor used by this wrapper.
   McpBaseTool get rawMcpTool => _mcpTool;
+
+  /// Visibility hints declared on the MCP tool metadata.
+  List<String> get visibility {
+    final Object? ui = _mcpTool.meta['ui'];
+    if (ui is Map) {
+      final Object? value = ui['visibility'];
+      if (value is List) {
+        return value.map((Object? item) => '$item').toList(growable: false);
+      }
+    }
+    return const <String>[];
+  }
+
+  /// MCP App UI resource URI, when declared by the tool metadata.
+  String? get mcpAppResourceUri {
+    final Object? ui = _mcpTool.meta['ui'];
+    if (ui is Map) {
+      final Object? value = ui['resourceUri'];
+      if (value is String && value.startsWith('ui://')) {
+        return value;
+      }
+    }
+    final Object? flat = _mcpTool.meta['ui/resourceUri'];
+    if (flat is String && flat.startsWith('ui://')) {
+      return flat;
+    }
+    return null;
+  }
 
   @override
   /// Returns a function declaration using MCP input schema as parameters.
@@ -121,6 +164,20 @@ class McpTool extends BaseAuthenticatedTool {
       args: args,
       headers: headers.isEmpty ? null : headers,
     );
+    final String? resourceUri = mcpAppResourceUri;
+    if (resourceUri != null) {
+      toolContext.renderUiWidget(
+        UiWidget(
+          id: toolContext.functionCallId!,
+          provider: 'mcp',
+          payload: <String, Object?>{
+            'resource_uri': resourceUri,
+            'tool': _mcpTool.toJson(),
+            'tool_args': Map<String, Object?>.from(args),
+          },
+        ),
+      );
+    }
     return response;
   }
 

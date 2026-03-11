@@ -1,6 +1,8 @@
 /// Runtime configuration models used by agent runs.
 library;
 
+import '../sessions/base_session_service.dart';
+
 /// Streaming transport mode used by a run.
 enum StreamingMode { none, sse, bidi }
 
@@ -38,6 +40,7 @@ class RunConfig {
     this.sessionResumption,
     this.contextWindowCompression,
     this.customMetadata,
+    this.getSessionConfig,
   }) {
     maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
   }
@@ -87,6 +90,9 @@ class RunConfig {
   /// Optional custom metadata forwarded with the run.
   Map<String, dynamic>? customMetadata;
 
+  /// Optional filter passed to session-service `getSession()` calls.
+  GetSessionConfig? getSessionConfig;
+
   /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {
     if (BigInt.from(value) == _pythonSysMaxSize) {
@@ -124,6 +130,7 @@ class RunConfig {
     Object? sessionResumption = _sentinel,
     Object? contextWindowCompression = _sentinel,
     Map<String, dynamic>? customMetadata,
+    Object? getSessionConfig = _sentinel,
   }) {
     return RunConfig(
       supportCfc: supportCfc ?? this.supportCfc,
@@ -171,6 +178,14 @@ class RunConfig {
           (this.customMetadata == null
               ? null
               : Map<String, dynamic>.from(this.customMetadata!)),
+      getSessionConfig: identical(getSessionConfig, _sentinel)
+          ? (this.getSessionConfig == null
+                ? null
+                : GetSessionConfig(
+                    numRecentEvents: this.getSessionConfig!.numRecentEvents,
+                    afterTimestamp: this.getSessionConfig!.afterTimestamp,
+                  ))
+          : getSessionConfig as GetSessionConfig?,
     );
   }
 }

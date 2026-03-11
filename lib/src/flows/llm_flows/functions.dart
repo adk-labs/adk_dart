@@ -526,6 +526,9 @@ Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
     mergedActions.requestedToolConfirmations.addAll(
       event.actions.requestedToolConfirmations,
     );
+    mergedActions.renderUiWidgets.addAll(
+      event.actions.renderUiWidgets.map((widget) => widget.copyWith()),
+    );
 
     if (event.actions.transferToAgent != null) {
       mergedActions.transferToAgent = event.actions.transferToAgent;
