@@ -2925,6 +2925,11 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
     }
     paths.add(arg);
   }
+  if (paths.isNotEmpty &&
+      streamingMode == null &&
+      _looksLikeConformanceStreamingMode(paths.last)) {
+    streamingMode = _parseConformanceStreamingMode(paths.removeLast());
+  }
   return _ParsedConformanceRecordCommand(
     paths: paths,
     baseUri: Uri.parse(baseUrl),
@@ -3019,6 +3024,11 @@ _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
     reportDir: _emptyToNull(reportDir),
     streamingMode: streamingMode,
   );
+}
+
+bool _looksLikeConformanceStreamingMode(String value) {
+  final String normalized = value.trim().toLowerCase();
+  return normalized == 'none' || normalized == 'sse';
 }
 
 StreamingMode _parseConformanceStreamingMode(String value) {

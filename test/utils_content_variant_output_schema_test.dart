@@ -82,6 +82,10 @@ void main() {
         ),
         isFalse,
       );
+      expect(
+        canUseOutputSchemaWithTools(LiteLlm(model: 'openai/gpt-4o-mini')),
+        isTrue,
+      );
     });
   });
 }

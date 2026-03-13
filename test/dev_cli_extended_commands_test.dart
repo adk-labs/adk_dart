@@ -566,6 +566,85 @@ user_messages:
       expect(stderrText, isEmpty);
     });
 
+    test('conformance record accepts positional streaming mode', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk_cli_conformance_record_positional_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final Directory caseDir = Directory(
+        '${tempDir.path}${Platform.pathSeparator}core${Platform.pathSeparator}smoke_case',
+      );
+      await caseDir.create(recursive: true);
+      final File specFile = File(
+        '${caseDir.path}${Platform.pathSeparator}spec.yaml',
+      );
+      await specFile.writeAsString('''
+description: smoke positional record case
+agent: test_app
+initial_state: {}
+user_messages:
+  - text: hello
+''');
+
+      final DevProjectConfig config = const DevProjectConfig(
+        appName: 'test_app',
+        agentName: 'root_agent',
+        description: 'test',
+      );
+      final DevAgentRuntime runtime = DevAgentRuntime(config: config);
+      final HttpServer server = await startAdkDevWebServer(
+        runtime: runtime,
+        project: config,
+        port: 0,
+        autoCreateSession: true,
+      );
+      addTearDown(() async {
+        await server.close(force: true);
+        await runtime.runner.close();
+      });
+
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final int exitCode = await runAdkCli(
+        <String>[
+          'conformance',
+          'record',
+          tempDir.path,
+          'sse',
+          '--base_url',
+          'http://127.0.0.1:${server.port}',
+          '--user_id',
+          'u1',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 0);
+      expect(stdoutText, contains('streaming mode sse'));
+      expect(
+        File(
+          '${caseDir.path}${Platform.pathSeparator}generated-session-sse.yaml',
+        ).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(
+          '${caseDir.path}${Platform.pathSeparator}generated-recordings-sse.yaml',
+        ).existsSync(),
+        isTrue,
+      );
+      expect(stderrText, isEmpty);
+    });
+
     test(
       'conformance replay reuses recorded llm and tool interactions',
       () async {

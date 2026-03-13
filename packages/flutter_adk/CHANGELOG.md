@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Synced facade release notes with the latest unreleased `adk_dart` parity work, including skills/API Registry/A2A runtime alignment, Anthropic and BigQuery parity updates, and CLI conformance improvements.
+
 ## 2026.3.6
 
 - Bumped package version to `2026.3.6`.
