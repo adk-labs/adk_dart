@@ -1281,7 +1281,6 @@ Future<void> _recordConformanceCase(
       _extractSessionIdFromCreateSession(session) ??
       (throw StateError('Failed to create session id for conformance record.'));
 
-  final List<Map<String, Object?>> recordedEvents = <Map<String, Object?>>[];
   final Map<String, String> functionCallNameToId = <String, String>{};
   for (
     int userMessageIndex = 0;
@@ -1309,7 +1308,6 @@ Future<void> _recordConformanceCase(
       stateDelta: stateDelta,
       streaming: streamingMode == StreamingMode.sse,
     );
-    recordedEvents.addAll(events);
     _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
   }
 
@@ -1321,22 +1319,11 @@ Future<void> _recordConformanceCase(
 
   final Map<String, Object?> sanitizedSession = _sanitizeConformanceSessionMap(
     updatedSession,
+    keepEvents: true,
   );
-  final Map<String, Object?> sanitizedRecordings = <String, Object?>{
-    'events': recordedEvents
-        .map(
-          (Map<String, Object?> event) => _sanitizeConformanceEventMap(event),
-        )
-        .toList(growable: false),
-  };
   dumpPydanticToYaml(
     sanitizedSession,
     generatedSessionFile.path,
-    sortKeys: false,
-  );
-  dumpPydanticToYaml(
-    sanitizedRecordings,
-    generatedRecordingsFile.path,
     sortKeys: false,
   );
 }
@@ -2079,6 +2066,8 @@ Map<String, Object?> _sanitizeConformanceEventMap(Map<String, Object?> event) {
     'timestamp',
     'invocation_id',
     'invocationId',
+    'session_id',
+    'sessionId',
     'long_running_tool_ids',
     'longRunningToolIds',
   ];
@@ -2097,6 +2086,16 @@ Map<String, Object?> _sanitizeConformanceEventMap(Map<String, Object?> event) {
       part['function_call'] ?? part['functionCall'],
     );
     functionCall.remove('id');
+    final List<Map<String, Object?>> partialArgs = _readMapList(
+      functionCall['partial_args'] ?? functionCall['partialArgs'],
+    );
+    if (partialArgs.isEmpty) {
+      functionCall.remove('partial_args');
+      functionCall.remove('partialArgs');
+    } else {
+      functionCall['partial_args'] = partialArgs;
+      functionCall['partialArgs'] = partialArgs;
+    }
     if (functionCall.isNotEmpty) {
       part['function_call'] = functionCall;
       part['functionCall'] = functionCall;
@@ -2141,13 +2140,20 @@ Map<String, Object?> _sanitizeConformanceEventMap(Map<String, Object?> event) {
 }
 
 Map<String, Object?> _sanitizeConformanceSessionMap(
-  Map<String, Object?> session,
-) {
+  Map<String, Object?> session, {
+  bool keepEvents = false,
+}) {
   final Map<String, Object?> normalized = _deepCopyMap(session);
   normalized.remove('id');
   normalized.remove('last_update_time');
   normalized.remove('lastUpdateTime');
-  normalized.remove('events');
+  if (keepEvents) {
+    normalized['events'] = _readMapList(
+      normalized['events'],
+    ).map(_sanitizeConformanceEventMap).toList(growable: false);
+  } else {
+    normalized.remove('events');
+  }
 
   final Map<String, Object?> state = _asObjectMap(normalized['state']);
   state.remove('_adk_recordings_config');

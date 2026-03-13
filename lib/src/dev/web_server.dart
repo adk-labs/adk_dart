@@ -20,6 +20,8 @@ import '../cli/utils/agent_loader.dart';
 import '../cli/utils/base_agent_loader.dart';
 import '../cli/utils/evals.dart' as cli_evals;
 import '../cli/service_registry.dart';
+import '../cli/plugins/conformance_recordings_plugin.dart';
+import '../cli/plugins/conformance_replay_plugin.dart';
 import '../cli/utils/service_factory.dart';
 import '../evaluation/base_eval_service.dart';
 import '../evaluation/eval_case.dart';
@@ -431,6 +433,7 @@ class _AdkDevWebContext {
       extraPluginSpecs,
       baseDir: agentsDir,
     );
+    _appendBuiltinConformancePlugins(extraPlugins);
     final Object loaded;
     try {
       loaded = agentLoader.loadAgent(appName);
@@ -471,6 +474,18 @@ class _AdkDevWebContext {
       plugins: extraPlugins,
       autoCreateSession: autoCreateSession,
     );
+  }
+
+  void _appendBuiltinConformancePlugins(List<BasePlugin> plugins) {
+    final Set<String> existing = plugins
+        .map((BasePlugin plugin) => plugin.name)
+        .toSet();
+    if (!existing.contains('adk_conformance_recordings')) {
+      plugins.add(ConformanceRecordingsPlugin());
+    }
+    if (!existing.contains('adk_conformance_replay')) {
+      plugins.add(ConformanceReplayPlugin());
+    }
   }
 
   List<String> listAppNames() {

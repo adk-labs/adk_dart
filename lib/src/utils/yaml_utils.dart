@@ -122,7 +122,7 @@ class _YamlEncoder {
         continue;
       }
       if (entryValue is String && _isMultilineString(entryValue)) {
-        out.writeln('${' ' * level}$key: |');
+        out.writeln('${' ' * level}$key: ${_literalIndicator(entryValue)}');
         for (final String line in const LineSplitter().convert(entryValue)) {
           out.writeln('${' ' * (level + indent)}$line');
         }
@@ -142,7 +142,7 @@ class _YamlEncoder {
         continue;
       }
       if (item is String && _isMultilineString(item)) {
-        out.writeln('${' ' * level}- |');
+        out.writeln('${' ' * level}- ${_literalIndicator(item)}');
         for (final String line in const LineSplitter().convert(item)) {
           out.writeln('${' ' * (level + indent)}$line');
         }
@@ -155,6 +155,10 @@ class _YamlEncoder {
 
   bool _isMultilineString(String value) {
     return value.contains('\n') || value.contains('"') || value.contains("'");
+  }
+
+  String _literalIndicator(String value) {
+    return value.endsWith('\n') ? '|' : '|-';
   }
 
   String _encodeScalar(Object? value) {
@@ -189,7 +193,14 @@ class _SimpleYamlDecoder {
     final List<_YamlLine> lines = <_YamlLine>[];
     for (String line in const LineSplitter().convert(source)) {
       final String stripped = line.trimRight();
-      if (stripped.trim().isEmpty || stripped.trimLeft().startsWith('#')) {
+      final String trimmed = stripped.trim();
+      if (trimmed.isEmpty) {
+        lines.add(
+          _YamlLine(indent: line.length - line.trimLeft().length, text: ''),
+        );
+        continue;
+      }
+      if (stripped.trimLeft().startsWith('#')) {
         continue;
       }
       final int indent = stripped.length - stripped.trimLeft().length;
@@ -199,10 +210,13 @@ class _SimpleYamlDecoder {
   }
 
   _ParseResult _parseBlock(List<_YamlLine> lines, int index, int indent) {
+    while (index < lines.length && lines[index].isBlank) {
+      index += 1;
+    }
     if (index >= lines.length) {
       return _ParseResult(<String, Object?>{}, index);
     }
-    if (lines[index].text.startsWith('- ')) {
+    if (_isListItemLine(lines[index].text)) {
       return _parseList(lines, index, indent);
     }
     return _parseMap(lines, index, indent);
@@ -213,10 +227,14 @@ class _SimpleYamlDecoder {
     int cursor = index;
     while (cursor < lines.length) {
       final _YamlLine line = lines[cursor];
+      if (line.isBlank) {
+        cursor += 1;
+        continue;
+      }
       if (line.indent < indent) {
         break;
       }
-      if (line.indent != indent || line.text.startsWith('- ')) {
+      if (line.indent != indent || _isListItemLine(line.text)) {
         break;
       }
       final int split = line.text.indexOf(':');
@@ -259,14 +277,20 @@ class _SimpleYamlDecoder {
     int cursor = index;
     while (cursor < lines.length) {
       final _YamlLine line = lines[cursor];
+      if (line.isBlank) {
+        cursor += 1;
+        continue;
+      }
       if (line.indent < indent) {
         break;
       }
-      if (line.indent != indent || !line.text.startsWith('- ')) {
+      if (line.indent != indent || !_isListItemLine(line.text)) {
         break;
       }
 
-      final String itemText = line.text.substring(2).trim();
+      final String itemText = line.text == '-'
+          ? ''
+          : line.text.substring(2).trim();
       cursor += 1;
       if (itemText.isEmpty) {
         if (cursor < lines.length && lines[cursor].indent > indent) {
@@ -327,7 +351,7 @@ class _SimpleYamlDecoder {
 
         if (cursor < lines.length &&
             lines[cursor].indent > indent &&
-            !lines[cursor].text.startsWith('- ')) {
+            !_isListItemLine(lines[cursor].text)) {
           final _ParseResult rest = _parseMap(
             lines,
             cursor,
@@ -345,6 +369,10 @@ class _SimpleYamlDecoder {
       values.add(_parseScalar(itemText));
     }
     return _ParseResult(values, cursor);
+  }
+
+  bool _isListItemLine(String text) {
+    return text == '-' || text.startsWith('- ');
   }
 
   bool _isLiteralBlockScalarIndicator(String text) {
@@ -376,6 +404,11 @@ class _SimpleYamlDecoder {
     int cursor = index;
     while (cursor < lines.length) {
       final _YamlLine line = lines[cursor];
+      if (line.isBlank) {
+        values.add('');
+        cursor += 1;
+        continue;
+      }
       if (line.indent <= parentIndent) {
         break;
       }
@@ -433,6 +466,8 @@ class _YamlLine {
 
   final int indent;
   final String text;
+
+  bool get isBlank => text.isEmpty;
 }
 
 class _ParseResult {

@@ -17,8 +17,10 @@ import '../../auth/auth_tool.dart';
 import '../../auth/credential_manager.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
+import '../../cli/plugins/conformance_recordings_schema.dart';
 import '../../models/base_llm.dart';
 import '../../models/base_llm_connection.dart';
+import '../../models/conformance_replay_llm.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../tools/base_tool.dart';
@@ -1103,6 +1105,27 @@ class BaseLlmFlow {
 
   BaseLlm _getLlm(InvocationContext context) {
     final LlmAgent agent = context.agent as LlmAgent;
+    final Object? rawConfig = context.session.state['_adk_replay_config'];
+    if (rawConfig is Map) {
+      final ConformanceJson config = rawConfig is Map<String, Object?>
+          ? rawConfig
+          : asConformanceObjectMap(rawConfig);
+      context.session.state['_adk_replay_config'] = config;
+      final int userMessageIndex = asConformanceInt(
+        config['user_message_index'],
+      );
+      final Object? rawReplayIndexes = config['_adk_replay_indexes'];
+      final ConformanceJson replayIndexes =
+          rawReplayIndexes is Map<String, Object?>
+          ? rawReplayIndexes
+          : asConformanceObjectMap(rawReplayIndexes);
+      final String replayKey = '${agent.name}::$userMessageIndex';
+      final int currentReplayIndex = asConformanceInt(replayIndexes[replayKey]);
+      config['current_replay_index'] = currentReplayIndex;
+      replayIndexes[replayKey] = currentReplayIndex + 1;
+      config['_adk_replay_indexes'] = replayIndexes;
+      return ConformanceReplayLlm(config: config, agentName: agent.name);
+    }
     return agent.canonicalModel;
   }
 

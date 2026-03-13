@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:adk_dart/src/agents/llm_agent.dart';
 import 'package:adk_dart/src/dev/cli.dart';
 import 'package:adk_dart/src/dev/project.dart';
 import 'package:adk_dart/src/dev/runtime.dart';
@@ -10,7 +11,10 @@ import 'package:adk_dart/src/models/base_llm.dart';
 import 'package:adk_dart/src/models/llm_request.dart';
 import 'package:adk_dart/src/models/llm_response.dart';
 import 'package:adk_dart/src/models/registry.dart';
+import 'package:adk_dart/src/runners/runner.dart';
+import 'package:adk_dart/src/tools/function_tool.dart';
 import 'package:adk_dart/src/types/content.dart';
+import 'package:adk_dart/src/utils/yaml_utils.dart';
 import 'package:test/test.dart';
 
 class _CapturedSink {
@@ -41,6 +45,90 @@ class _StubGeminiModel extends BaseLlm {
   }) async* {
     yield LlmResponse(content: Content.modelText('stub response'));
   }
+}
+
+class _ReplayProbeState {
+  bool failModel = false;
+  bool failTool = false;
+  int toolRuns = 0;
+}
+
+class _ReplayProbeModel extends BaseLlm {
+  _ReplayProbeModel(this.state) : super(model: 'replay-probe-model');
+
+  final _ReplayProbeState state;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    if (state.failModel) {
+      throw StateError('model should not run during conformance replay');
+    }
+
+    final FunctionResponse? toolResponse = _lastToolResponse(request);
+    if (toolResponse != null && toolResponse.name == 'probe_tool') {
+      yield LlmResponse(
+        content: Content.modelText(
+          'probe:${toolResponse.response['value'] ?? 'missing'}',
+        ),
+      );
+      return;
+    }
+
+    yield LlmResponse(
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part.fromFunctionCall(
+            name: 'probe_tool',
+            args: <String, Object?>{'query': _lastUserText(request) ?? ''},
+          ),
+        ],
+      ),
+    );
+  }
+
+  FunctionResponse? _lastToolResponse(LlmRequest request) {
+    for (final Content content in request.contents.reversed) {
+      for (final Part part in content.parts.reversed) {
+        if (part.functionResponse != null) {
+          return part.functionResponse;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _lastUserText(LlmRequest request) {
+    for (final Content content in request.contents.reversed) {
+      if (content.role != 'user') {
+        continue;
+      }
+      for (final Part part in content.parts.reversed) {
+        final String? text = part.text;
+        if (text != null && text.trim().isNotEmpty) {
+          return text.trim();
+        }
+      }
+    }
+    return null;
+  }
+}
+
+Map<String, Object?> _runReplayProbeTool(
+  _ReplayProbeState state, {
+  String? query,
+}) {
+  if (state.failTool) {
+    throw StateError('tool should not run during conformance replay');
+  }
+  state.toolRuns += 1;
+  return <String, Object?>{
+    'value': 'tool-${state.toolRuns}',
+    'query': query ?? '',
+  };
 }
 
 void main() {
@@ -477,5 +565,133 @@ user_messages:
       );
       expect(stderrText, isEmpty);
     });
+
+    test(
+      'conformance replay reuses recorded llm and tool interactions',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk_cli_conformance_replay_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+
+        final Directory caseDir = Directory(
+          '${tempDir.path}${Platform.pathSeparator}core${Platform.pathSeparator}replay_case',
+        );
+        await caseDir.create(recursive: true);
+        await File(
+          '${caseDir.path}${Platform.pathSeparator}spec.yaml',
+        ).writeAsString('''
+description: replay smoke case
+agent: test_app
+initial_state: {}
+user_messages:
+  - text: hello
+''');
+
+        final _ReplayProbeState probeState = _ReplayProbeState();
+        final _ReplayProbeModel probeModel = _ReplayProbeModel(probeState);
+        final Agent agent = Agent(
+          name: 'root_agent',
+          description: 'test',
+          instruction: 'Use probe_tool when the user says hello.',
+          model: probeModel,
+          tools: <Object>[
+            FunctionTool(
+              name: 'probe_tool',
+              description: 'Returns a probe payload.',
+              func: ({String? query}) =>
+                  _runReplayProbeTool(probeState, query: query),
+            ),
+          ],
+        );
+        final DevProjectConfig config = const DevProjectConfig(
+          appName: 'test_app',
+          agentName: 'root_agent',
+          description: 'test',
+        );
+        final DevAgentRuntime runtime = DevAgentRuntime(
+          config: config,
+          runner: InMemoryRunner(appName: config.appName, agent: agent),
+        );
+        final HttpServer server = await startAdkDevWebServer(
+          runtime: runtime,
+          project: config,
+          port: 0,
+          autoCreateSession: true,
+        );
+        addTearDown(() async {
+          await server.close(force: true);
+          await runtime.runner.close();
+        });
+
+        final int recordExitCode = await runAdkCli(<String>[
+          'conformance',
+          'record',
+          tempDir.path,
+          '--base_url',
+          'http://127.0.0.1:${server.port}',
+          '--user_id',
+          'u1',
+        ]);
+        expect(recordExitCode, 0);
+
+        final File recordingsFile = File(
+          '${caseDir.path}${Platform.pathSeparator}generated-recordings.yaml',
+        );
+        expect(await recordingsFile.exists(), isTrue);
+        final Object? recordingsRaw = loadYamlFile(recordingsFile.path);
+        expect(recordingsRaw, isA<Map>());
+        final Map<String, Object?> recordings = (recordingsRaw as Map).map(
+          (Object? key, Object? value) => MapEntry('$key', value),
+        );
+        expect(recordings['recordings'], isA<List>());
+
+        probeState.failModel = true;
+        probeState.failTool = true;
+
+        final _CapturedSink outCapture = _CapturedSink();
+        final _CapturedSink errCapture = _CapturedSink();
+        final int replayExitCode = await runAdkCli(
+          <String>[
+            'conformance',
+            'test',
+            tempDir.path,
+            '--mode',
+            'replay',
+            '--base_url',
+            'http://127.0.0.1:${server.port}',
+            '--user_id',
+            'u1',
+          ],
+          outSink: outCapture.sink,
+          errSink: errCapture.sink,
+        );
+
+        final String stdoutText = await outCapture.closeAndRead();
+        final String stderrText = await errCapture.closeAndRead();
+        expect(replayExitCode, 0);
+        expect(
+          stdoutText,
+          contains(
+            'Found 1 test cases to run in replay mode for streaming mode none.',
+          ),
+        );
+        expect(
+          stdoutText,
+          contains(
+            'Found 1 test cases to run in replay mode for streaming mode sse.',
+          ),
+        );
+        expect(
+          RegExp(r'Running core/replay_case\.\.\. PASS').allMatches(stdoutText),
+          hasLength(2),
+        );
+        expect(stderrText, isEmpty);
+      },
+    );
   });
 }
