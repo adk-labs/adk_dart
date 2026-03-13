@@ -201,22 +201,24 @@ void main() {
       expect(exitCode, 0);
     });
 
-    test('optimize command runs GEPA optimizer with local eval sampler', () async {
-      final Directory tempDir = await Directory.systemTemp.createTemp(
-        'adk_cli_optimize_',
-      );
-      addTearDown(() async {
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
-        }
-      });
-      await createDevProject(projectDirPath: tempDir.path);
+    test(
+      'optimize command runs GEPA optimizer with local eval sampler',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk_cli_optimize_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+        await createDevProject(projectDirPath: tempDir.path);
 
-      final String appName = projectDirName(tempDir.path);
-      final File evalSetFile = File(
-        '${tempDir.path}${Platform.pathSeparator}optimize_set.evalset.json',
-      );
-      await evalSetFile.writeAsString('''
+        final String appName = projectDirName(tempDir.path);
+        final File evalSetFile = File(
+          '${tempDir.path}${Platform.pathSeparator}optimize_set.evalset.json',
+        );
+        await evalSetFile.writeAsString('''
 {
   "eval_set_id": "optimize_set",
   "eval_cases": [
@@ -229,40 +231,41 @@ void main() {
 }
 ''');
 
-      final File samplerConfigFile = File(
-        '${tempDir.path}${Platform.pathSeparator}sampler_config.json',
-      );
-      await samplerConfigFile.writeAsString(jsonEncode(<String, Object?>{
-        'app_name': appName,
-        'train_eval_set': 'optimize_set',
-        'eval_config': <String, Object?>{
-          'criteria': <String, Object?>{
-            'final_response_match_v2': 1.0,
-          },
-        },
-      }));
+        final File samplerConfigFile = File(
+          '${tempDir.path}${Platform.pathSeparator}sampler_config.json',
+        );
+        await samplerConfigFile.writeAsString(
+          jsonEncode(<String, Object?>{
+            'app_name': appName,
+            'train_eval_set': 'optimize_set',
+            'eval_config': <String, Object?>{
+              'criteria': <String, Object?>{'final_response_match_v2': 1.0},
+            },
+          }),
+        );
 
-      final _CapturedSink outCapture = _CapturedSink();
-      final _CapturedSink errCapture = _CapturedSink();
-      final int exitCode = await runAdkCli(
-        <String>[
-          'optimize',
-          tempDir.path,
-          '--sampler_config_file_path',
-          samplerConfigFile.path,
-          '--print_detailed_results',
-        ],
-        outSink: outCapture.sink,
-        errSink: errCapture.sink,
-      );
-      final String stdoutText = await outCapture.closeAndRead();
-      final String stderrText = await errCapture.closeAndRead();
+        final _CapturedSink outCapture = _CapturedSink();
+        final _CapturedSink errCapture = _CapturedSink();
+        final int exitCode = await runAdkCli(
+          <String>[
+            'optimize',
+            tempDir.path,
+            '--sampler_config_file_path',
+            samplerConfigFile.path,
+            '--print_detailed_results',
+          ],
+          outSink: outCapture.sink,
+          errSink: errCapture.sink,
+        );
+        final String stdoutText = await outCapture.closeAndRead();
+        final String stderrText = await errCapture.closeAndRead();
 
-      expect(exitCode, 0);
-      expect(stdoutText, contains('Optimized root agent instructions'));
-      expect(stdoutText, contains('Detailed GEPA optimization metrics'));
-      expect(stderrText, isEmpty);
-    });
+        expect(exitCode, 0);
+        expect(stdoutText, contains('Optimized root agent instructions'));
+        expect(stdoutText, contains('Detailed GEPA optimization metrics'));
+        expect(stderrText, isEmpty);
+      },
+    );
 
     test('migrate session validates required options', () async {
       final _CapturedSink outCapture = _CapturedSink();
@@ -306,6 +309,8 @@ void main() {
         contains('Running ADK conformance tests in live mode'),
       );
       expect(stdoutText, contains('No test cases found!'));
+      expect(stdoutText, contains('STREAMING MODE: none'));
+      expect(stdoutText, contains('STREAMING MODE: sse'));
       expect(stdoutText, contains('No tests were run.'));
       expect(stderrText, isEmpty);
     });
@@ -374,8 +379,102 @@ user_messages:
       final String stderrText = await errCapture.closeAndRead();
 
       expect(exitCode, 0);
-      expect(stdoutText, contains('Found 1 test cases to run in live mode'));
-      expect(stdoutText, contains('Running core/smoke_case... PASS'));
+      expect(
+        stdoutText,
+        contains(
+          'Found 1 test cases to run in live mode for streaming mode none.',
+        ),
+      );
+      expect(
+        stdoutText,
+        contains(
+          'Found 1 test cases to run in live mode for streaming mode sse.',
+        ),
+      );
+      expect(
+        RegExp(r'Running core/smoke_case\.\.\. PASS').allMatches(stdoutText),
+        hasLength(2),
+      );
+      expect(stderrText, isEmpty);
+    });
+
+    test('conformance record writes sse fixtures when requested', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk_cli_conformance_record_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final Directory caseDir = Directory(
+        '${tempDir.path}${Platform.pathSeparator}core${Platform.pathSeparator}smoke_case',
+      );
+      await caseDir.create(recursive: true);
+      final File specFile = File(
+        '${caseDir.path}${Platform.pathSeparator}spec.yaml',
+      );
+      await specFile.writeAsString('''
+description: smoke record case
+agent: test_app
+initial_state: {}
+user_messages:
+  - text: hello
+''');
+
+      final DevProjectConfig config = const DevProjectConfig(
+        appName: 'test_app',
+        agentName: 'root_agent',
+        description: 'test',
+      );
+      final DevAgentRuntime runtime = DevAgentRuntime(config: config);
+      final HttpServer server = await startAdkDevWebServer(
+        runtime: runtime,
+        project: config,
+        port: 0,
+        autoCreateSession: true,
+      );
+      addTearDown(() async {
+        await server.close(force: true);
+        await runtime.runner.close();
+      });
+
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final int exitCode = await runAdkCli(
+        <String>[
+          'conformance',
+          'record',
+          tempDir.path,
+          '--base_url',
+          'http://127.0.0.1:${server.port}',
+          '--user_id',
+          'u1',
+          '--streaming_mode',
+          'sse',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+
+      expect(exitCode, 0);
+      expect(stdoutText, contains('streaming mode sse'));
+      expect(
+        File(
+          '${caseDir.path}${Platform.pathSeparator}generated-session-sse.yaml',
+        ).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(
+          '${caseDir.path}${Platform.pathSeparator}generated-recordings-sse.yaml',
+        ).existsSync(),
+        isTrue,
+      );
       expect(stderrText, isEmpty);
     });
   });

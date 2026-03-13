@@ -9,6 +9,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import '../agents/base_agent.dart';
 import '../agents/llm_agent.dart';
+import '../agents/run_config.dart' show StreamingMode;
 import '../apps/app.dart';
 import '../auth/credential_service/in_memory_credential_service.dart';
 import '../cli/cli_deploy.dart';
@@ -754,6 +755,7 @@ class _ParsedConformanceRecordCommand {
     required this.paths,
     required this.baseUri,
     required this.userId,
+    this.streamingMode,
   });
 
   /// Input file or directory paths.
@@ -764,6 +766,9 @@ class _ParsedConformanceRecordCommand {
 
   /// User identifier for test sessions.
   final String userId;
+
+  /// Optional streaming mode override.
+  final StreamingMode? streamingMode;
 }
 
 /// Parsed arguments for `adk conformance test`.
@@ -776,6 +781,7 @@ class _ParsedConformanceTestCommand {
     required this.mode,
     required this.generateReport,
     this.reportDir,
+    this.streamingMode,
   });
 
   /// Input file or directory paths.
@@ -795,7 +801,15 @@ class _ParsedConformanceTestCommand {
 
   /// Optional report output directory.
   final String? reportDir;
+
+  /// Optional streaming mode override.
+  final StreamingMode? streamingMode;
 }
+
+const List<StreamingMode> _supportedConformanceStreamingModes = <StreamingMode>[
+  StreamingMode.none,
+  StreamingMode.sse,
+];
 
 /// Normalized user message payload in conformance specs.
 class _ConformanceUserMessage {
@@ -893,6 +907,7 @@ class _ConformanceTestSummary {
     required this.passedTests,
     required this.failedTests,
     required this.results,
+    required this.streamingMode,
   });
 
   /// Total executed cases.
@@ -906,6 +921,9 @@ class _ConformanceTestSummary {
 
   /// Per-case execution results.
   final List<_ConformanceCaseResult> results;
+
+  /// Streaming mode used for this run.
+  final StreamingMode streamingMode;
 
   /// Success rate in percentage.
   double get successRate {
@@ -1033,8 +1051,9 @@ Future<int> _runOptimizeCliCommand(
     config: samplerConfig,
     evalSetsManager: LocalEvalSetsManager(loadedAgent.agentsParentDirPath),
   );
-  final GepaRootAgentPromptOptimizer optimizer =
-      GepaRootAgentPromptOptimizer(optimizerConfig);
+  final GepaRootAgentPromptOptimizer optimizer = GepaRootAgentPromptOptimizer(
+    optimizerConfig,
+  );
   final GepaRootAgentPromptOptimizerResult result = await optimizer.optimize(
     loadedAgent.rootAgent as Agent,
     sampler,
@@ -1166,11 +1185,16 @@ Future<int> _runConformanceCliCommand(
     case 'test':
       final _ParsedConformanceTestCommand command =
           _parseConformanceTestCommand(commandArgs);
-      final _ConformanceTestSummary summary = await _runConformanceTest(
+      final List<_ConformanceTestSummary> summaries = await _runConformanceTest(
         command,
         out: out,
       );
-      return summary.failedTests == 0 ? 0 : 1;
+      final int failedTests = summaries.fold<int>(
+        0,
+        (int total, _ConformanceTestSummary summary) =>
+            total + summary.failedTests,
+      );
+      return failedTests == 0 ? 0 : 1;
     default:
       throw CliUsageError('Unknown conformance subcommand: $subcommand');
   }
@@ -1185,6 +1209,7 @@ Future<void> _runConformanceRecord(
     command.paths,
     out: out,
     replayMode: false,
+    streamingMode: command.streamingMode ?? StreamingMode.none,
   );
   if (testCases.isEmpty) {
     out.writeln('No test specs found to process.');
@@ -1195,17 +1220,30 @@ Future<void> _runConformanceRecord(
   out.writeln('\nProcessing ${testCases.length} test cases...');
 
   final AdkWebServerClient client = AdkWebServerClient(command.baseUri);
+  final List<StreamingMode> modesToRecord = command.streamingMode == null
+      ? _supportedConformanceStreamingModes
+      : <StreamingMode>[command.streamingMode!];
   try {
-    for (final _ConformanceTestCase testCase in testCases) {
-      try {
-        await _recordConformanceCase(client, testCase, userId: command.userId);
-        out.writeln(
-          'Generated conformance test files for: ${testCase.category}/${testCase.name}',
-        );
-      } on Exception catch (error) {
-        out.writeln(
-          'Failed to generate ${testCase.category}/${testCase.name}: $error',
-        );
+    for (final StreamingMode streamingMode in modesToRecord) {
+      out.writeln(
+        '\nRecording conformance fixtures for streaming mode ${_conformanceStreamingModeName(streamingMode)}...',
+      );
+      for (final _ConformanceTestCase testCase in testCases) {
+        try {
+          await _recordConformanceCase(
+            client,
+            testCase,
+            userId: command.userId,
+            streamingMode: streamingMode,
+          );
+          out.writeln(
+            'Generated conformance test files for: ${testCase.category}/${testCase.name} (${_conformanceStreamingModeName(streamingMode)})',
+          );
+        } on Exception catch (error) {
+          out.writeln(
+            'Failed to generate ${testCase.category}/${testCase.name} (${_conformanceStreamingModeName(streamingMode)}): $error',
+          );
+        }
       }
     }
   } finally {
@@ -1219,12 +1257,13 @@ Future<void> _recordConformanceCase(
   AdkWebServerClient client,
   _ConformanceTestCase testCase, {
   required String userId,
+  required StreamingMode streamingMode,
 }) async {
   final File generatedSessionFile = File(
-    '${testCase.dir.path}${Platform.pathSeparator}generated-session.yaml',
+    '${testCase.dir.path}${Platform.pathSeparator}${_conformanceSessionFileName(streamingMode)}',
   );
   final File generatedRecordingsFile = File(
-    '${testCase.dir.path}${Platform.pathSeparator}generated-recordings.yaml',
+    '${testCase.dir.path}${Platform.pathSeparator}${_conformanceRecordingsFileName(streamingMode)}',
   );
   if (await generatedSessionFile.exists()) {
     await generatedSessionFile.delete();
@@ -1256,6 +1295,7 @@ Future<void> _recordConformanceCase(
       '_adk_recordings_config': <String, Object?>{
         'dir': testCase.dir.path,
         'user_message_index': userMessageIndex,
+        'streaming_mode': _conformanceStreamingModeName(streamingMode),
       },
     };
     final List<Map<String, Object?>> events = await client.runAgentSse(
@@ -1267,7 +1307,7 @@ Future<void> _recordConformanceCase(
         functionCallNameToId,
       ),
       stateDelta: stateDelta,
-      streaming: false,
+      streaming: streamingMode == StreamingMode.sse,
     );
     recordedEvents.addAll(events);
     _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
@@ -1351,7 +1391,7 @@ Object? _buildConformanceRunMessage(
   return '';
 }
 
-Future<_ConformanceTestSummary> _runConformanceTest(
+Future<List<_ConformanceTestSummary>> _runConformanceTest(
   _ParsedConformanceTestCommand command, {
   required IOSink out,
 }) async {
@@ -1359,65 +1399,88 @@ Future<_ConformanceTestSummary> _runConformanceTest(
   out.writeln('Running ADK conformance tests in ${command.mode} mode...');
   out.writeln('==================================================');
 
-  final List<_ConformanceTestCase> testCases = await _discoverConformanceCases(
-    command.paths,
-    out: out,
-    replayMode: command.mode == 'replay',
-  );
-  if (testCases.isEmpty) {
-    out.writeln('No test cases found!');
-    final _ConformanceTestSummary emptySummary = _ConformanceTestSummary(
-      totalTests: 0,
-      passedTests: 0,
-      failedTests: 0,
-      results: <_ConformanceCaseResult>[],
-    );
-    _printConformanceSummary(emptySummary, out: out);
-    return emptySummary;
-  }
-
-  out.writeln(
-    '\nFound ${testCases.length} test cases to run in ${command.mode} mode',
-  );
+  final List<StreamingMode> modesToRun = command.streamingMode == null
+      ? _supportedConformanceStreamingModes
+      : <StreamingMode>[command.streamingMode!];
 
   final AdkWebServerClient client = AdkWebServerClient(command.baseUri);
-  final List<_ConformanceCaseResult> results = <_ConformanceCaseResult>[];
+  final List<_ConformanceTestSummary> summaries = <_ConformanceTestSummary>[];
   Map<String, Object?> versionData = <String, Object?>{};
   try {
-    for (final _ConformanceTestCase testCase in testCases) {
-      out.write('Running ${testCase.category}/${testCase.name}...');
-      late final _ConformanceCaseResult result;
-      if (command.mode == 'replay') {
-        result = await _runConformanceReplayCase(
-          client,
-          testCase,
-          userId: command.userId,
+    for (final StreamingMode streamingMode in modesToRun) {
+      final List<_ConformanceTestCase> testCases =
+          await _discoverConformanceCases(
+            command.paths,
+            out: out,
+            replayMode: command.mode == 'replay',
+            streamingMode: streamingMode,
+          );
+      if (testCases.isEmpty) {
+        out.writeln('No test cases found!');
+        final _ConformanceTestSummary emptySummary = _ConformanceTestSummary(
+          totalTests: 0,
+          passedTests: 0,
+          failedTests: 0,
+          results: <_ConformanceCaseResult>[],
+          streamingMode: streamingMode,
         );
-      } else if (command.mode == 'live') {
-        result = await _runConformanceLiveCase(
-          client,
-          testCase,
-          userId: command.userId,
-        );
-      } else {
-        result = _ConformanceCaseResult(
-          category: testCase.category,
-          name: testCase.name,
-          success: false,
-          errorMessage: 'Unsupported conformance mode: ${command.mode}',
-          description: testCase.spec.description,
-        );
+        summaries.add(emptySummary);
+        continue;
       }
-      results.add(result);
-      if (result.success) {
-        out.writeln(' PASS');
-      } else {
-        out.writeln(' FAIL');
-        if (result.errorMessage != null &&
-            result.errorMessage!.trim().isNotEmpty) {
-          out.writeln('Error: ${result.errorMessage}');
+
+      out.writeln(
+        '\nFound ${testCases.length} test cases to run in ${command.mode} mode for streaming mode ${_conformanceStreamingModeName(streamingMode)}.',
+      );
+
+      final List<_ConformanceCaseResult> results = <_ConformanceCaseResult>[];
+      for (final _ConformanceTestCase testCase in testCases) {
+        out.write('Running ${testCase.category}/${testCase.name}...');
+        late final _ConformanceCaseResult result;
+        if (command.mode == 'replay') {
+          result = await _runConformanceReplayCase(
+            client,
+            testCase,
+            userId: command.userId,
+            streamingMode: streamingMode,
+          );
+        } else if (command.mode == 'live') {
+          result = await _runConformanceLiveCase(
+            client,
+            testCase,
+            userId: command.userId,
+            streamingMode: streamingMode,
+          );
+        } else {
+          result = _ConformanceCaseResult(
+            category: testCase.category,
+            name: testCase.name,
+            success: false,
+            errorMessage: 'Unsupported conformance mode: ${command.mode}',
+            description: testCase.spec.description,
+          );
+        }
+        results.add(result);
+        if (result.success) {
+          out.writeln(' PASS');
+        } else {
+          out.writeln(' FAIL');
+          if (result.errorMessage != null &&
+              result.errorMessage!.trim().isNotEmpty) {
+            out.writeln('Error: ${result.errorMessage}');
+          }
         }
       }
+
+      final int passed = results.where((item) => item.success).length;
+      summaries.add(
+        _ConformanceTestSummary(
+          totalTests: results.length,
+          passedTests: passed,
+          failedTests: results.length - passed,
+          results: results,
+          streamingMode: streamingMode,
+        ),
+      );
     }
     try {
       versionData = await client.getVersionData();
@@ -1428,30 +1491,24 @@ Future<_ConformanceTestSummary> _runConformanceTest(
     await client.close();
   }
 
-  final int passed = results.where((item) => item.success).length;
-  final _ConformanceTestSummary summary = _ConformanceTestSummary(
-    totalTests: results.length,
-    passedTests: passed,
-    failedTests: results.length - passed,
-    results: results,
-  );
-  _printConformanceSummary(summary, out: out);
+  _printConformanceSummary(summaries, out: out);
 
   if (command.generateReport) {
     final String reportPath = await _writeConformanceMarkdownReport(
-      summary,
+      summaries,
       reportDir: command.reportDir,
       versionData: versionData,
     );
     out.writeln('Conformance report written to $reportPath');
   }
-  return summary;
+  return summaries;
 }
 
 Future<_ConformanceCaseResult> _runConformanceLiveCase(
   AdkWebServerClient client,
   _ConformanceTestCase testCase, {
   required String userId,
+  required StreamingMode streamingMode,
 }) async {
   final Map<String, Object?> session = await client.createSession(
     appName: testCase.spec.agent,
@@ -1477,7 +1534,7 @@ Future<_ConformanceCaseResult> _runConformanceLiveCase(
           functionCallNameToId,
         ),
         stateDelta: stateDelta.isEmpty ? null : stateDelta,
-        streaming: false,
+        streaming: streamingMode == StreamingMode.sse,
       );
       _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
     }
@@ -1513,9 +1570,10 @@ Future<_ConformanceCaseResult> _runConformanceReplayCase(
   AdkWebServerClient client,
   _ConformanceTestCase testCase, {
   required String userId,
+  required StreamingMode streamingMode,
 }) async {
   final File sessionFile = File(
-    '${testCase.dir.path}${Platform.pathSeparator}generated-session.yaml',
+    '${testCase.dir.path}${Platform.pathSeparator}${_conformanceSessionFileName(streamingMode)}',
   );
   if (!await sessionFile.exists()) {
     return _ConformanceCaseResult(
@@ -1549,6 +1607,7 @@ Future<_ConformanceCaseResult> _runConformanceReplayCase(
         '_adk_replay_config': <String, Object?>{
           'dir': testCase.dir.path,
           'user_message_index': userMessageIndex,
+          'streaming_mode': _conformanceStreamingModeName(streamingMode),
         },
       };
       final List<Map<String, Object?>> events = await client.runAgentSse(
@@ -1560,7 +1619,7 @@ Future<_ConformanceCaseResult> _runConformanceReplayCase(
           functionCallNameToId,
         ),
         stateDelta: stateDelta,
-        streaming: false,
+        streaming: streamingMode == StreamingMode.sse,
       );
       _updateConformanceFunctionCallNameToIdMap(events, functionCallNameToId);
     }
@@ -1667,40 +1726,45 @@ Future<_ConformanceCaseResult> _runConformanceReplayCase(
 }
 
 void _printConformanceSummary(
-  _ConformanceTestSummary summary, {
+  List<_ConformanceTestSummary> summaries, {
   required IOSink out,
 }) {
-  out.writeln('\n==================================================');
-  out.writeln('CONFORMANCE TEST SUMMARY');
-  out.writeln('==================================================');
-  if (summary.totalTests == 0) {
-    out.writeln('No tests were run.');
-    return;
-  }
-  out.writeln('Total tests: ${summary.totalTests}');
-  out.writeln('Passed: ${summary.passedTests}');
-  out.writeln('Failed: ${summary.failedTests}');
-  out.writeln('Success rate: ${summary.successRate.toStringAsFixed(1)}%');
-
-  if (summary.failedTests == 0) {
-    out.writeln('\nAll tests passed.');
-    return;
-  }
-
-  out.writeln('\nFailed tests:');
-  for (final _ConformanceCaseResult result in summary.results) {
-    if (result.success) {
+  for (final _ConformanceTestSummary summary in summaries) {
+    out.writeln('\n==================================================');
+    out.writeln(
+      'CONFORMANCE TEST SUMMARY FOR STREAMING MODE: ${_conformanceStreamingModeName(summary.streamingMode)}',
+    );
+    out.writeln('==================================================');
+    if (summary.totalTests == 0) {
+      out.writeln('No tests were run.');
       continue;
     }
-    out.writeln('\n${result.category}/${result.name}');
-    if (result.errorMessage != null && result.errorMessage!.trim().isNotEmpty) {
-      out.writeln(result.errorMessage!);
+    out.writeln('Total tests: ${summary.totalTests}');
+    out.writeln('Passed: ${summary.passedTests}');
+    out.writeln('Failed: ${summary.failedTests}');
+    out.writeln('Success rate: ${summary.successRate.toStringAsFixed(1)}%');
+
+    if (summary.failedTests == 0) {
+      out.writeln('\nAll tests passed.');
+      continue;
+    }
+
+    out.writeln('\nFailed tests:');
+    for (final _ConformanceCaseResult result in summary.results) {
+      if (result.success) {
+        continue;
+      }
+      out.writeln('\n${result.category}/${result.name}');
+      if (result.errorMessage != null &&
+          result.errorMessage!.trim().isNotEmpty) {
+        out.writeln(result.errorMessage!);
+      }
     }
   }
 }
 
 Future<String> _writeConformanceMarkdownReport(
-  _ConformanceTestSummary summary, {
+  List<_ConformanceTestSummary> summaries, {
   required String? reportDir,
   required Map<String, Object?> versionData,
 }) async {
@@ -1726,23 +1790,86 @@ Future<String> _writeConformanceMarkdownReport(
     out.writeln();
   }
   out.writeln('## Summary');
-  out.writeln('- Total: ${summary.totalTests}');
-  out.writeln('- Passed: ${summary.passedTests}');
-  out.writeln('- Failed: ${summary.failedTests}');
-  out.writeln('- Success rate: ${summary.successRate.toStringAsFixed(1)}%');
+  out.writeln('| Streaming Mode | Total | Passed | Failed | Success Rate |');
+  out.writeln('| --- | --- | --- | --- | --- |');
+  for (final _ConformanceTestSummary summary in summaries) {
+    out.writeln(
+      '| ${_conformanceStreamingModeName(summary.streamingMode)} | ${summary.totalTests} | ${summary.passedTests} | ${summary.failedTests} | ${summary.successRate.toStringAsFixed(1)}% |',
+    );
+  }
   out.writeln();
   out.writeln('## Results');
-  out.writeln('| Test | Status | Description | Error |');
-  out.writeln('| --- | --- | --- | --- |');
-  for (final _ConformanceCaseResult result in summary.results) {
-    final String testName = '${result.category}/${result.name}';
-    final String status = result.success ? 'PASS' : 'FAIL';
-    final String description = (result.description ?? '').replaceAll(
-      '|',
-      r'\|',
+  final List<String> modeNames = summaries
+      .map(
+        (_ConformanceTestSummary summary) =>
+            _conformanceStreamingModeName(summary.streamingMode),
+      )
+      .toList(growable: false);
+  final Map<String, Map<String, _ConformanceCaseResult>> byCase =
+      <String, Map<String, _ConformanceCaseResult>>{};
+  for (final _ConformanceTestSummary summary in summaries) {
+    final String modeName = _conformanceStreamingModeName(
+      summary.streamingMode,
     );
-    final String error = (result.errorMessage ?? '').replaceAll('|', r'\|');
-    out.writeln('| $testName | $status | $description | $error |');
+    for (final _ConformanceCaseResult result in summary.results) {
+      final String testName = '${result.category}/${result.name}';
+      byCase.putIfAbsent(
+        testName,
+        () => <String, _ConformanceCaseResult>{},
+      )[modeName] = result;
+    }
+  }
+  out.writeln('| Test | Description | ${modeNames.join(' | ')} |');
+  out.writeln(
+    '| --- | --- | ${List<String>.filled(modeNames.length, '---').join(' | ')} |',
+  );
+  final List<String> sortedCaseNames = byCase.keys.toList()..sort();
+  for (final String testName in sortedCaseNames) {
+    final Map<String, _ConformanceCaseResult> resultsByMode = byCase[testName]!;
+    final String description = (resultsByMode.values.first.description ?? '')
+        .replaceAll('|', r'\|');
+    final List<String> statuses = modeNames
+        .map((String modeName) {
+          final _ConformanceCaseResult? result = resultsByMode[modeName];
+          if (result == null) {
+            return 'N/A';
+          }
+          return result.success ? 'PASS' : 'FAIL';
+        })
+        .toList(growable: false);
+    out.writeln('| $testName | $description | ${statuses.join(' | ')} |');
+  }
+
+  final bool hasFailures = summaries.any(
+    (_ConformanceTestSummary summary) => summary.failedTests > 0,
+  );
+  if (hasFailures) {
+    out.writeln();
+    out.writeln('## Failed Test Details');
+    for (final _ConformanceTestSummary summary in summaries) {
+      final String modeName = _conformanceStreamingModeName(
+        summary.streamingMode,
+      );
+      for (final _ConformanceCaseResult result in summary.results) {
+        if (result.success) {
+          continue;
+        }
+        out.writeln();
+        out.writeln('### ${result.category}/${result.name} ($modeName)');
+        if (result.description != null &&
+            result.description!.trim().isNotEmpty) {
+          out.writeln();
+          out.writeln('Description: ${result.description}');
+        }
+        if (result.errorMessage != null &&
+            result.errorMessage!.trim().isNotEmpty) {
+          out.writeln();
+          out.writeln('```');
+          out.writeln(result.errorMessage!.replaceAll('```', r'\`\`\`'));
+          out.writeln('```');
+        }
+      }
+    }
   }
 
   await File(outputPath).writeAsString(out.toString().trimRight());
@@ -1798,6 +1925,7 @@ Future<List<_ConformanceTestCase>> _discoverConformanceCases(
   List<String> rawPaths, {
   required IOSink out,
   required bool replayMode,
+  required StreamingMode streamingMode,
 }) async {
   final List<String> paths = rawPaths.isEmpty ? <String>['tests'] : rawPaths;
   final List<_ConformanceTestCase> testCases = <_ConformanceTestCase>[];
@@ -1831,7 +1959,7 @@ Future<List<_ConformanceTestCase>> _discoverConformanceCases(
       final String name = projectDirName(caseDir.path);
       if (replayMode) {
         final File recordingsFile = File(
-          '${caseDir.path}${Platform.pathSeparator}generated-recordings.yaml',
+          '${caseDir.path}${Platform.pathSeparator}${_conformanceRecordingsFileName(streamingMode)}',
         );
         if (!await recordingsFile.exists()) {
           out.writeln('Skipping $category/$name: no recordings');
@@ -2209,8 +2337,9 @@ _ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
       continue;
     }
     if (arg.startsWith('--sampler_config_file_path=')) {
-      samplerConfigFilePath =
-          arg.substring('--sampler_config_file_path='.length);
+      samplerConfigFilePath = arg.substring(
+        '--sampler_config_file_path='.length,
+      );
       continue;
     }
     if (arg == '--optimizer_config_file_path') {
@@ -2223,8 +2352,9 @@ _ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
       continue;
     }
     if (arg.startsWith('--optimizer_config_file_path=')) {
-      optimizerConfigFilePath =
-          arg.substring('--optimizer_config_file_path='.length);
+      optimizerConfigFilePath = arg.substring(
+        '--optimizer_config_file_path='.length,
+      );
       continue;
     }
     if (arg == '--print_detailed_results') {
@@ -2253,9 +2383,7 @@ _ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
     throw CliUsageError('optimize accepts only one agent directory path.');
   }
   if (_emptyToNull(samplerConfigFilePath) == null) {
-    throw CliUsageError(
-      'Missing required option --sampler_config_file_path.',
-    );
+    throw CliUsageError('Missing required option --sampler_config_file_path.');
   }
 
   return _ParsedOptimizeCliCommand(
@@ -2748,6 +2876,7 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
   final List<String> paths = <String>[];
   String baseUrl = 'http://127.0.0.1:8000';
   String userId = 'adk_conformance_test_user';
+  StreamingMode? streamingMode;
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
     if (arg == '--base_url') {
@@ -2768,6 +2897,23 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
       userId = arg.substring('--user_id='.length);
       continue;
     }
+    if (arg == '--streaming_mode' || arg == '--streaming-mode') {
+      streamingMode = _parseConformanceStreamingMode(_nextArg(args, i, arg));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--streaming_mode=')) {
+      streamingMode = _parseConformanceStreamingMode(
+        arg.substring('--streaming_mode='.length),
+      );
+      continue;
+    }
+    if (arg.startsWith('--streaming-mode=')) {
+      streamingMode = _parseConformanceStreamingMode(
+        arg.substring('--streaming-mode='.length),
+      );
+      continue;
+    }
     if (arg.startsWith('-')) {
       throw CliUsageError('Unknown option for conformance record: $arg');
     }
@@ -2777,6 +2923,7 @@ _ParsedConformanceRecordCommand _parseConformanceRecordCommand(
     paths: paths,
     baseUri: Uri.parse(baseUrl),
     userId: _emptyToNull(userId) ?? 'adk_conformance_test_user',
+    streamingMode: streamingMode,
   );
 }
 
@@ -2787,6 +2934,7 @@ _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
   String mode = 'replay';
   bool generateReport = false;
   String? reportDir;
+  StreamingMode? streamingMode;
 
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
@@ -2821,6 +2969,23 @@ _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
       generateReport = true;
       continue;
     }
+    if (arg == '--streaming_mode' || arg == '--streaming-mode') {
+      streamingMode = _parseConformanceStreamingMode(_nextArg(args, i, arg));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--streaming_mode=')) {
+      streamingMode = _parseConformanceStreamingMode(
+        arg.substring('--streaming_mode='.length),
+      );
+      continue;
+    }
+    if (arg.startsWith('--streaming-mode=')) {
+      streamingMode = _parseConformanceStreamingMode(
+        arg.substring('--streaming-mode='.length),
+      );
+      continue;
+    }
     if (arg == '--report_dir') {
       reportDir = _nextArg(args, i, '--report_dir');
       i += 1;
@@ -2846,7 +3011,42 @@ _ParsedConformanceTestCommand _parseConformanceTestCommand(List<String> args) {
     mode: normalizedMode,
     generateReport: generateReport,
     reportDir: _emptyToNull(reportDir),
+    streamingMode: streamingMode,
   );
+}
+
+StreamingMode _parseConformanceStreamingMode(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'none':
+      return StreamingMode.none;
+    case 'sse':
+      return StreamingMode.sse;
+    default:
+      throw CliUsageError('Invalid conformance streaming mode: $value');
+  }
+}
+
+String _conformanceStreamingModeName(StreamingMode mode) {
+  switch (mode) {
+    case StreamingMode.none:
+      return 'none';
+    case StreamingMode.sse:
+      return 'sse';
+    case StreamingMode.bidi:
+      return 'bidi';
+  }
+}
+
+String _conformanceSessionFileName(StreamingMode mode) {
+  return mode == StreamingMode.sse
+      ? 'generated-session-sse.yaml'
+      : 'generated-session.yaml';
+}
+
+String _conformanceRecordingsFileName(StreamingMode mode) {
+  return mode == StreamingMode.sse
+      ? 'generated-recordings-sse.yaml'
+      : 'generated-recordings.yaml';
 }
 
 String? _extractSessionIdFromCreateSession(Map<String, Object?> response) {

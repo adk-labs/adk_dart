@@ -452,15 +452,14 @@ class AnthropicLlm extends BaseLlm {
   static Map<String, Object?> functionDeclarationToToolParam(
     FunctionDeclaration declaration,
   ) {
+    final Map<String, Object?> inputSchema = declaration.parameters.isEmpty
+        ? <String, Object?>{'type': 'object', 'properties': <String, Object?>{}}
+        : _deepCopyJsonMap(declaration.parameters);
+    _updateTypeStrings(inputSchema);
     return <String, Object?>{
       'name': declaration.name,
       'description': declaration.description,
-      'input_schema': declaration.parameters.isEmpty
-          ? <String, Object?>{
-              'type': 'object',
-              'properties': <String, Object?>{},
-            }
-          : declaration.parameters,
+      'input_schema': inputSchema,
     };
   }
 
@@ -737,6 +736,97 @@ class AnthropicLlm extends BaseLlm {
     return Map<String, String>.from(
       request.config.httpOptions?.headers ?? const <String, String>{},
     );
+  }
+}
+
+Map<String, Object?> _deepCopyJsonMap(Map<String, Object?> source) {
+  final Object? cloned = _deepCopyJsonValue(source);
+  if (cloned is Map<String, Object?>) {
+    return cloned;
+  }
+  if (cloned is Map) {
+    return cloned.map((Object? key, Object? value) => MapEntry('$key', value));
+  }
+  return <String, Object?>{};
+}
+
+Object? _deepCopyJsonValue(Object? value) {
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry('$key', _deepCopyJsonValue(item)),
+    );
+  }
+  if (value is List) {
+    return value
+        .map((Object? item) => _deepCopyJsonValue(item))
+        .toList(growable: false);
+  }
+  return value;
+}
+
+void _updateTypeStrings(Object? value) {
+  if (value is List) {
+    for (final Object? item in value) {
+      _updateTypeStrings(item);
+    }
+    return;
+  }
+  if (value is! Map) {
+    return;
+  }
+
+  final Object? schemaType = value['type'];
+  if (schemaType is String) {
+    value['type'] = schemaType.toLowerCase();
+  }
+
+  for (final String dictKey in const <String>[
+    r'$defs',
+    'defs',
+    'dependentSchemas',
+    'patternProperties',
+    'properties',
+  ]) {
+    final Object? childDict = value[dictKey];
+    if (childDict is! Map) {
+      continue;
+    }
+    for (final Object? childValue in childDict.values) {
+      _updateTypeStrings(childValue);
+    }
+  }
+
+  for (final String singleKey in const <String>[
+    'additionalProperties',
+    'additional_properties',
+    'contains',
+    'else',
+    'if',
+    'items',
+    'not',
+    'propertyNames',
+    'then',
+    'unevaluatedProperties',
+  ]) {
+    final Object? childValue = value[singleKey];
+    if (childValue is Map || childValue is List) {
+      _updateTypeStrings(childValue);
+    }
+  }
+
+  for (final String listKey in const <String>[
+    'allOf',
+    'all_of',
+    'anyOf',
+    'any_of',
+    'oneOf',
+    'one_of',
+    'prefixItems',
+  ]) {
+    final Object? childList = value[listKey];
+    if (childList is List) {
+      _updateTypeStrings(childList);
+    }
   }
 }
 

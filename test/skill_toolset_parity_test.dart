@@ -110,6 +110,26 @@ class _FakeAdditionalTool extends BaseTool {
   }
 }
 
+class _FakeAdditionalToolset extends BaseToolset {
+  _FakeAdditionalToolset(this.tools);
+
+  final List<BaseTool> tools;
+  int getToolsWithPrefixCalls = 0;
+
+  @override
+  Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
+    return tools;
+  }
+
+  @override
+  Future<List<BaseTool>> getToolsWithPrefix({
+    ReadonlyContext? readonlyContext,
+  }) async {
+    getToolsWithPrefixCalls += 1;
+    return super.getToolsWithPrefix(readonlyContext: readonlyContext);
+  }
+}
+
 void main() {
   group('SkillToolset parity', () {
     test('rejects duplicate skill names', () {
@@ -200,6 +220,36 @@ void main() {
           resolved.map((BaseTool tool) => tool.name),
           contains('extra_tool'),
         );
+      },
+    );
+
+    test(
+      'resolves activated additional tools from provided toolsets',
+      () async {
+        final Context toolContext = _newToolContext();
+        final _FakeAdditionalToolset providedToolset = _FakeAdditionalToolset(
+          <BaseTool>[_FakeAdditionalTool()],
+        );
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_skillWithAdditionalTool()],
+          additionalTools: <Object>[providedToolset],
+        );
+        final BaseTool loadTool = (await toolset.getTools())[1];
+
+        await loadTool.run(
+          args: <String, dynamic>{'name': 'dynamic-skill'},
+          toolContext: toolContext,
+        );
+
+        final List<BaseTool> resolved = await toolset.getTools(
+          readonlyContext: ReadonlyContext(toolContext.invocationContext),
+        );
+
+        expect(
+          resolved.map((BaseTool tool) => tool.name),
+          contains('extra_tool'),
+        );
+        expect(providedToolset.getToolsWithPrefixCalls, 1);
       },
     );
 

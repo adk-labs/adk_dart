@@ -67,6 +67,7 @@ class GeminiServerContentPayload {
   /// Creates a server-content payload.
   GeminiServerContentPayload({
     this.modelTurn,
+    this.groundingMetadata,
     this.interrupted = false,
     this.turnComplete = false,
     this.generationComplete = false,
@@ -76,6 +77,9 @@ class GeminiServerContentPayload {
 
   /// Model turn content emitted by the server.
   final Content? modelTurn;
+
+  /// Provider grounding metadata associated with this server payload.
+  final Object? groundingMetadata;
 
   /// Whether generation was interrupted.
   final bool interrupted;
@@ -375,6 +379,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
         _responses.add(
           LlmResponse(
             content: content.copyWith(),
+            groundingMetadata: serverContent.groundingMetadata,
             interrupted: serverContent.interrupted,
             partial: true,
           ),
@@ -384,10 +389,18 @@ class GeminiLlmConnection extends BaseLlmConnection {
         _responses.add(
           LlmResponse(
             content: content.copyWith(),
+            groundingMetadata: serverContent.groundingMetadata,
             interrupted: serverContent.interrupted,
           ),
         );
       }
+    } else if (serverContent.groundingMetadata != null) {
+      _responses.add(
+        LlmResponse(
+          groundingMetadata: serverContent.groundingMetadata,
+          interrupted: serverContent.interrupted,
+        ),
+      );
     }
 
     _processTranscription(

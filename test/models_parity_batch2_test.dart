@@ -307,6 +307,141 @@ void main() {
         await connection.close();
       },
     );
+
+    test(
+      'emits standalone grounding metadata from live server content',
+      () async {
+        final _FakeLiveSession session = _FakeLiveSession();
+        final GeminiLlmConnection connection = GeminiLlmConnection(
+          model: Gemini(),
+          liveSession: session,
+        );
+        final List<LlmResponse> responses = <LlmResponse>[];
+        final StreamSubscription<LlmResponse> sub = connection.receive().listen(
+          responses.add,
+        );
+
+        await connection.sendContent(Content.userText('hello'));
+        session.controller.add(
+          GeminiLiveSessionMessage(
+            serverContent: GeminiServerContentPayload(
+              groundingMetadata: <String, Object?>{
+                'searchEntryPoint': <String, Object?>{
+                  'renderedContent': '<p>Google</p>',
+                },
+              },
+            ),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(responses, hasLength(1));
+        expect(responses.single.groundingMetadata, isA<Map<String, Object?>>());
+        expect(responses.single.content, isNull);
+
+        await sub.cancel();
+        await connection.close();
+      },
+    );
+
+    test('preserves grounding metadata attached to live content', () async {
+      final _FakeLiveSession session = _FakeLiveSession();
+      final GeminiLlmConnection connection = GeminiLlmConnection(
+        model: Gemini(),
+        liveSession: session,
+      );
+      final List<LlmResponse> responses = <LlmResponse>[];
+      final StreamSubscription<LlmResponse> sub = connection.receive().listen(
+        responses.add,
+      );
+
+      await connection.sendContent(Content.userText('hello'));
+      session.controller.add(
+        GeminiLiveSessionMessage(
+          serverContent: GeminiServerContentPayload(
+            modelTurn: Content.modelText('response text'),
+            groundingMetadata: <String, Object?>{
+              'searchEntryPoint': <String, Object?>{
+                'renderedContent': '<p>Google</p>',
+              },
+            },
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(responses, hasLength(1));
+      expect(responses.single.content?.parts.single.text, 'response text');
+      expect(responses.single.groundingMetadata, isA<Map<String, Object?>>());
+
+      await sub.cancel();
+      await connection.close();
+    });
+
+    test(
+      'preserves grounding metadata after live tool call and audio payload',
+      () async {
+        final _FakeLiveSession session = _FakeLiveSession();
+        final GeminiLlmConnection connection = GeminiLlmConnection(
+          model: Gemini(),
+          liveSession: session,
+        );
+        final List<LlmResponse> responses = <LlmResponse>[];
+        final StreamSubscription<LlmResponse> sub = connection.receive().listen(
+          responses.add,
+        );
+
+        await connection.sendContent(Content.userText('hello'));
+        session.controller.add(
+          GeminiLiveSessionMessage(
+            toolCall: GeminiToolCallPayload(
+              functionCalls: <FunctionCall>[
+                FunctionCall(
+                  name: 'enterprise_web_search',
+                  args: <String, Object?>{'query': 'Google stock price today'},
+                ),
+              ],
+            ),
+          ),
+        );
+        session.controller.add(
+          GeminiLiveSessionMessage(
+            serverContent: GeminiServerContentPayload(
+              modelTurn: Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromInlineData(
+                    mimeType: 'audio/pcm',
+                    data: <int>[0, 255],
+                  ),
+                ],
+              ),
+              groundingMetadata: <String, Object?>{
+                'searchEntryPoint': <String, Object?>{
+                  'renderedContent': '<p>Google</p>',
+                },
+              },
+            ),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(responses, hasLength(2));
+        expect(
+          responses.first.content?.parts.single.functionCall?.name,
+          'enterprise_web_search',
+        );
+        expect(responses.first.groundingMetadata, isNull);
+        expect(
+          responses.last.content?.parts.single.inlineData?.mimeType,
+          'audio/pcm',
+        );
+        expect(responses.last.groundingMetadata, isA<Map<String, Object?>>());
+
+        await sub.cancel();
+        await connection.close();
+      },
+    );
   });
 
   group('google llm parity', () {
@@ -520,6 +655,74 @@ void main() {
       expect(message['role'], 'user');
     });
 
+    test('function declaration tool params lowercase nested schema types', () {
+      final Map<String, Object?> toolParam =
+          AnthropicLlm.functionDeclarationToToolParam(
+            FunctionDeclaration(
+              name: 'validate_payload',
+              description: 'Validates a payload with schema combinators.',
+              parameters: <String, Object?>{
+                'type': 'OBJECT',
+                'properties': <String, Object?>{
+                  'choice': <String, Object?>{
+                    'oneOf': <Object?>[
+                      <String, Object?>{'type': 'STRING'},
+                      <String, Object?>{'type': 'INTEGER'},
+                    ],
+                  },
+                  'config': <String, Object?>{
+                    'allOf': <Object?>[
+                      <String, Object?>{
+                        'type': 'OBJECT',
+                        'properties': <String, Object?>{
+                          'enabled': <String, Object?>{'type': 'BOOLEAN'},
+                        },
+                      },
+                    ],
+                  },
+                  'metadata': <String, Object?>{
+                    'type': 'OBJECT',
+                    'additionalProperties': <String, Object?>{'type': 'STRING'},
+                  },
+                  'blocked': <String, Object?>{
+                    'not': <String, Object?>{'type': 'NULL'},
+                  },
+                },
+              },
+            ),
+          );
+
+      final Map<String, Object?> inputSchema =
+          toolParam['input_schema']! as Map<String, Object?>;
+      expect(inputSchema['type'], 'object');
+      final Map<String, Object?> choice =
+          (inputSchema['properties'] as Map<String, Object?>)['choice']
+              as Map<String, Object?>;
+      expect(choice['oneOf'], <Object?>[
+        <String, Object?>{'type': 'string'},
+        <String, Object?>{'type': 'integer'},
+      ]);
+      final Map<String, Object?> config =
+          (inputSchema['properties'] as Map<String, Object?>)['config']
+              as Map<String, Object?>;
+      expect((config['allOf'] as List).single, <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'enabled': <String, Object?>{'type': 'boolean'},
+        },
+      });
+      final Map<String, Object?> metadata =
+          (inputSchema['properties'] as Map<String, Object?>)['metadata']
+              as Map<String, Object?>;
+      expect(metadata['additionalProperties'], <String, Object?>{
+        'type': 'string',
+      });
+      final Map<String, Object?> blocked =
+          (inputSchema['properties'] as Map<String, Object?>)['blocked']
+              as Map<String, Object?>;
+      expect(blocked['not'], <String, Object?>{'type': 'null'});
+    });
+
     test('unknown outbound part is converted to text fallback', () {
       final Map<String, Object?> block = AnthropicLlm.partToMessageBlock(
         Part.fromFileData(
@@ -592,7 +795,10 @@ void main() {
           response: <String, dynamic>{
             'result': <String, Object?>{
               'results': <Object?>[
-                <String, Object?>{'id': 1, 'tags': <String>['a', 'b']},
+                <String, Object?>{
+                  'id': 1,
+                  'tags': <String>['a', 'b'],
+                },
               ],
               'has_more': false,
             },
@@ -600,23 +806,21 @@ void main() {
         ),
       );
       expect(mapBlock['type'], 'tool_result');
-      expect(
-        jsonDecode('${mapBlock['content']}'),
-        <String, Object?>{
-          'results': <Object?>[
-            <String, Object?>{'id': 1, 'tags': <String>['a', 'b']},
-          ],
-          'has_more': false,
-        },
-      );
+      expect(jsonDecode('${mapBlock['content']}'), <String, Object?>{
+        'results': <Object?>[
+          <String, Object?>{
+            'id': 1,
+            'tags': <String>['a', 'b'],
+          },
+        ],
+        'has_more': false,
+      });
 
       final Map<String, Object?> listBlock = AnthropicLlm.partToMessageBlock(
         Part.fromFunctionResponse(
           name: 'list_tool',
           id: 'tool_2',
-          response: <String, dynamic>{
-            'result': <Object?>[],
-          },
+          response: <String, dynamic>{'result': <Object?>[]},
         ),
       );
       expect(listBlock['content'], '[]');
@@ -689,28 +893,22 @@ void main() {
     });
 
     test('captures reasoning token usage metadata', () {
-      final LlmResponse parsed = LiteLlm.parseCompletionResponse(
-        <String, Object?>{
-          'model': 'openai/gpt-4o-mini',
-          'choices': <Object?>[
-            <String, Object?>{
-              'finish_reason': 'stop',
-              'message': <String, Object?>{
-                'role': 'assistant',
-                'content': 'ok',
-              },
-            },
-          ],
-          'usage': <String, Object?>{
-            'prompt_tokens': 1,
-            'completion_tokens': 2,
-            'total_tokens': 3,
-            'completion_tokens_details': <String, Object?>{
-              'reasoning_tokens': 5,
-            },
+      final LlmResponse
+      parsed = LiteLlm.parseCompletionResponse(<String, Object?>{
+        'model': 'openai/gpt-4o-mini',
+        'choices': <Object?>[
+          <String, Object?>{
+            'finish_reason': 'stop',
+            'message': <String, Object?>{'role': 'assistant', 'content': 'ok'},
           },
+        ],
+        'usage': <String, Object?>{
+          'prompt_tokens': 1,
+          'completion_tokens': 2,
+          'total_tokens': 3,
+          'completion_tokens_details': <String, Object?>{'reasoning_tokens': 5},
         },
-      );
+      });
 
       expect(parsed.usageMetadata, isA<Map<String, Object?>>());
       final Map<String, Object?> usage =
@@ -832,6 +1030,79 @@ void main() {
           payload['response_format'] as Map<String, Object?>;
       expect(responseFormat['type'], 'json_object');
       expect(responseFormat['response_schema'], isA<Map<String, Object?>>());
+    });
+
+    test('preserves thought signature on tool call round trip', () {
+      final List<int> thoughtSignature = <int>[1, 2, 3, 4];
+      final Map<String, Object?> payload = LiteLlm.buildPayload(
+        LlmRequest(
+          model: 'vertex_ai/gemini-2.5-pro',
+          contents: <Content>[
+            Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'load_skill',
+                  args: <String, dynamic>{'skill': 'my_skill'},
+                  id: 'call_rt',
+                ).copyWith(thoughtSignature: thoughtSignature),
+              ],
+            ),
+          ],
+        ),
+        stream: false,
+      );
+
+      final Map<String, Object?> message =
+          (payload['messages'] as List<Object?>).single as Map<String, Object?>;
+      final Map<String, Object?> toolCall =
+          (message['tool_calls'] as List<Object?>).single
+              as Map<String, Object?>;
+      expect(toolCall['provider_specific_fields'], <String, Object?>{
+        'thought_signature': base64Encode(thoughtSignature),
+      });
+      expect(toolCall['extra_content'], <String, Object?>{
+        'google': <String, Object?>{
+          'thought_signature': base64Encode(thoughtSignature),
+        },
+      });
+
+      final LlmResponse parsed = LiteLlm.parseCompletionResponse(
+        <String, Object?>{
+          'model': 'vertex_ai/gemini-2.5-pro',
+          'choices': <Object?>[
+            <String, Object?>{
+              'finish_reason': 'tool_calls',
+              'message': <String, Object?>{
+                'role': 'assistant',
+                'tool_calls': <Object?>[
+                  <String, Object?>{
+                    'id': 'call_rt',
+                    'type': 'function',
+                    'function': <String, Object?>{
+                      'name': 'load_skill',
+                      'arguments': '{"skill":"my_skill"}',
+                    },
+                    'extra_content': <String, Object?>{
+                      'google': <String, Object?>{
+                        'thought_signature': base64Encode(thoughtSignature),
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          'usage': <String, Object?>{
+            'prompt_tokens': 0,
+            'completion_tokens': 0,
+            'total_tokens': 0,
+          },
+        },
+      );
+
+      expect(parsed.content?.parts.single.functionCall?.name, 'load_skill');
+      expect(parsed.content?.parts.single.thoughtSignature, thoughtSignature);
     });
   });
 }

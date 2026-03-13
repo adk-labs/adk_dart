@@ -663,7 +663,7 @@ class SkillToolset extends BaseToolset {
   /// Creates a toolset that exposes skill discovery/loading/script tools.
   SkillToolset({
     required List<Skill> skills,
-    List<BaseTool>? additionalTools,
+    List<Object>? additionalTools,
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
   }) : _codeExecutor = codeExecutor,
@@ -684,15 +684,27 @@ class SkillToolset extends BaseToolset {
       _LoadSkillResourceTool(this),
       _RunSkillScriptTool(this),
     ];
-    _providedToolsByName = <String, BaseTool>{
-      for (final BaseTool tool in additionalTools ?? const <BaseTool>[])
-        tool.name: tool,
-    };
+    _providedToolsByName = <String, BaseTool>{};
+    _providedToolsets = <BaseToolset>[];
+    for (final Object toolUnion in additionalTools ?? const <Object>[]) {
+      if (toolUnion is BaseToolset) {
+        _providedToolsets.add(toolUnion);
+        continue;
+      }
+      if (toolUnion is BaseTool) {
+        _providedToolsByName[toolUnion.name] = toolUnion;
+        continue;
+      }
+      throw ArgumentError(
+        'SkillToolset.additionalTools only supports BaseTool and BaseToolset values.',
+      );
+    }
   }
 
   late final Map<String, Skill> _skills;
   late final List<BaseTool> _tools;
   late final Map<String, BaseTool> _providedToolsByName;
+  late final List<BaseToolset> _providedToolsets;
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
 
@@ -754,13 +766,27 @@ class SkillToolset extends BaseToolset {
       return const <BaseTool>[];
     }
 
+    final Map<String, BaseTool> candidateTools = <String, BaseTool>{
+      ..._providedToolsByName,
+    };
+    if (_providedToolsets.isNotEmpty) {
+      for (final BaseToolset toolset in _providedToolsets) {
+        final List<BaseTool> provided = await toolset.getToolsWithPrefix(
+          readonlyContext: readonlyContext,
+        );
+        for (final BaseTool tool in provided) {
+          candidateTools[tool.name] = tool;
+        }
+      }
+    }
+
     final Set<String> existingToolNames = _tools
         .map((BaseTool tool) => tool.name)
         .toSet();
     final List<BaseTool> resolved = <BaseTool>[];
     final List<String> sortedNames = additionalToolNames.toList()..sort();
     for (final String toolName in sortedNames) {
-      final BaseTool? tool = _providedToolsByName[toolName];
+      final BaseTool? tool = candidateTools[toolName];
       if (tool == null) {
         continue;
       }

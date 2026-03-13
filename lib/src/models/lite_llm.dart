@@ -19,6 +19,8 @@ typedef LiteLlmCompletionsInvoker =
       required bool stream,
     });
 
+const String _thoughtSignatureSeparator = '__thought__';
+
 /// OpenAI-compatible adapter that targets LiteLLM providers.
 class LiteLlm extends BaseLlm {
   /// Creates a LiteLLM adapter for [model].
@@ -152,8 +154,7 @@ class LiteLlm extends BaseLlm {
         (message['tool_calls'] as List<Object?>?) ?? <Object?>[];
     for (final Object? call in toolCalls) {
       final Map<String, Object?> callMap = _asMap(call);
-      final Map<String, Object?> function = _asMap(callMap['function']);
-      parts.add(_parseFunctionCall(function, callMap['id']));
+      parts.add(_parseFunctionCall(callMap));
     }
 
     final Map<String, Object?> usage = _asMap(response['usage']);
@@ -242,7 +243,9 @@ String? _finishReasonToErrorMessage(String finishReason) {
 }
 
 Object? _reasoningTokens(Map<String, Object?> usage) {
-  final Map<String, Object?> details = _asMap(usage['completion_tokens_details']);
+  final Map<String, Object?> details = _asMap(
+    usage['completion_tokens_details'],
+  );
   return details['reasoning_tokens'] ?? details['reasoningTokens'];
 }
 
@@ -300,14 +303,26 @@ List<Map<String, Object?>> _contentToMessages(Content content) {
       continue;
     }
     if (part.functionCall != null) {
-      toolCalls.add(<String, Object?>{
+      final Map<String, Object?> toolCall = <String, Object?>{
         'id': part.functionCall!.id ?? 'call_${part.functionCall!.name}',
         'type': 'function',
         'function': <String, Object?>{
           'name': part.functionCall!.name,
           'arguments': jsonEncode(part.functionCall!.args),
         },
-      });
+      };
+      final String? thoughtSignature = _encodeThoughtSignature(
+        part.thoughtSignature,
+      );
+      if (thoughtSignature != null) {
+        toolCall['provider_specific_fields'] = <String, Object?>{
+          'thought_signature': thoughtSignature,
+        };
+        toolCall['extra_content'] = <String, Object?>{
+          'google': <String, Object?>{'thought_signature': thoughtSignature},
+        };
+      }
+      toolCalls.add(toolCall);
       continue;
     }
     if (part.text != null && part.text!.isNotEmpty) {
@@ -352,7 +367,8 @@ List<Map<String, Object?>> _contentToMessages(Content content) {
   return output;
 }
 
-Part _parseFunctionCall(Map<String, Object?> function, Object? id) {
+Part _parseFunctionCall(Map<String, Object?> callMap) {
+  final Map<String, Object?> function = _asMap(callMap['function']);
   final String name = '${function['name'] ?? ''}';
   final String argumentsRaw = '${function['arguments'] ?? '{}'}';
   Map<String, dynamic> parsedArgs = <String, dynamic>{};
@@ -364,8 +380,19 @@ Part _parseFunctionCall(Map<String, Object?> function, Object? id) {
   } catch (_) {
     parsedArgs = <String, dynamic>{};
   }
-  final String? callId = id == null ? null : '$id';
-  return Part.fromFunctionCall(name: name, args: parsedArgs, id: callId);
+  final String? callId = callMap['id'] == null ? null : '${callMap['id']}';
+  final Part part = Part.fromFunctionCall(
+    name: name,
+    args: parsedArgs,
+    id: callId,
+  );
+  final List<int>? thoughtSignature = _extractThoughtSignatureFromToolCall(
+    callMap,
+  );
+  if (thoughtSignature == null) {
+    return part;
+  }
+  return part.copyWith(thoughtSignature: thoughtSignature);
 }
 
 Map<String, Object?> _asMap(Object? value) {
@@ -502,4 +529,84 @@ Map<String, Object?>? _asObjectMap(Object? value) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
   }
   return null;
+}
+
+String? _encodeThoughtSignature(List<int>? thoughtSignature) {
+  if (thoughtSignature == null || thoughtSignature.isEmpty) {
+    return null;
+  }
+  return base64Encode(thoughtSignature);
+}
+
+List<int>? _extractThoughtSignatureFromToolCall(Map<String, Object?> toolCall) {
+  final Map<String, Object?> extraContent = _asMap(toolCall['extra_content']);
+  final Map<String, Object?> googleExtra = _asMap(extraContent['google']);
+  final List<int>? fromExtra = _decodeThoughtSignature(
+    googleExtra['thought_signature'],
+  );
+  if (fromExtra != null) {
+    return fromExtra;
+  }
+
+  final Map<String, Object?> providerFields = _asMap(
+    toolCall['provider_specific_fields'],
+  );
+  final List<int>? fromProvider = _decodeThoughtSignature(
+    providerFields['thought_signature'],
+  );
+  if (fromProvider != null) {
+    return fromProvider;
+  }
+
+  final Map<String, Object?> function = _asMap(toolCall['function']);
+  final Map<String, Object?> functionProviderFields = _asMap(
+    function['provider_specific_fields'],
+  );
+  final List<int>? fromFunctionProvider = _decodeThoughtSignature(
+    functionProviderFields['thought_signature'],
+  );
+  if (fromFunctionProvider != null) {
+    return fromFunctionProvider;
+  }
+
+  final String? toolCallId = toolCall['id'] == null
+      ? null
+      : '${toolCall['id']}';
+  if (toolCallId != null && toolCallId.contains(_thoughtSignatureSeparator)) {
+    final List<String> parts = toolCallId.split(_thoughtSignatureSeparator);
+    if (parts.length >= 2) {
+      return _decodeThoughtSignature(
+        parts.sublist(1).join(_thoughtSignatureSeparator),
+      );
+    }
+  }
+
+  return null;
+}
+
+List<int>? _decodeThoughtSignature(Object? value) {
+  if (value is List<int>) {
+    return List<int>.from(value);
+  }
+  if (value is List) {
+    final List<int> bytes = <int>[];
+    for (final Object? item in value) {
+      if (item is num) {
+        bytes.add(item.toInt());
+      }
+    }
+    return bytes.isEmpty ? null : bytes;
+  }
+  if (value is! String || value.isEmpty) {
+    return null;
+  }
+  try {
+    return base64Decode(value);
+  } catch (_) {
+    try {
+      return base64Url.decode(base64Url.normalize(value));
+    } catch (_) {
+      return null;
+    }
+  }
 }
