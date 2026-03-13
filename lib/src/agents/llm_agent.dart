@@ -86,6 +86,7 @@ class LlmAgent extends BaseAgent {
   /// Creates an LLM agent.
   LlmAgent({
     required super.name,
+    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallback,
@@ -216,6 +217,11 @@ class LlmAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'name',
         currentValue: name,
+      ),
+      version: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'version',
+        currentValue: version,
       ),
       description: cloneFieldValue<String>(
         update: cloneUpdate,

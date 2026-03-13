@@ -59,6 +59,7 @@ class LangGraphAgent extends BaseAgent {
   /// Creates a LangGraph agent.
   LangGraphAgent({
     required super.name,
+    super.version,
     required this.invokeGraph,
     this.instruction = '',
     this.hasCheckpointer = false,
@@ -102,6 +103,11 @@ class LangGraphAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'name',
         currentValue: name,
+      ),
+      version: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'version',
+        currentValue: version,
       ),
       invokeGraph: cloneFieldValue<LangGraphInvoker>(
         update: cloneUpdate,

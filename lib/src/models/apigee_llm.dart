@@ -366,10 +366,16 @@ class ApigeeLlm extends Gemini {
     }
 
     final Map<String, Object?> usage = _asMap(response['usage']);
+    final Map<String, Object?> completionTokenDetails = _asMap(
+      usage['completion_tokens_details'],
+    );
+    final Object? reasoningTokens = completionTokenDetails['reasoning_tokens'];
     final Map<String, Object?> usageMetadata = <String, Object?>{
       'prompt_token_count': usage['prompt_tokens'] ?? 0,
       'candidates_token_count': usage['completion_tokens'] ?? 0,
       'total_token_count': usage['total_tokens'] ?? 0,
+      if (reasoningTokens != null && reasoningTokens != 0)
+        'thoughts_token_count': reasoningTokens,
     };
 
     return LlmResponse(

@@ -9,6 +9,7 @@ class SequentialAgentConfig extends BaseAgentConfig {
   SequentialAgentConfig({
     super.agentClass = 'SequentialAgent',
     required super.name,
+    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallbacks,
@@ -28,6 +29,7 @@ class SequentialAgentConfig extends BaseAgentConfig {
           (json['agentClass'] as String?) ??
           'SequentialAgent',
       name: base.name,
+      version: base.version,
       description: base.description,
       subAgents: base.subAgents,
       beforeAgentCallbacks: base.beforeAgentCallbacks,

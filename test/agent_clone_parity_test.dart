@@ -6,6 +6,7 @@ void main() {
     test('clones LlmAgent and applies updated name', () {
       final LlmAgent original = LlmAgent(
         name: 'llm_agent',
+        version: '1.0.0',
         description: 'An LLM agent',
         instruction: 'You are a helpful assistant.',
       );
@@ -15,6 +16,7 @@ void main() {
       );
 
       expect(cloned.name, 'cloned_llm_agent');
+      expect(cloned.version, '1.0.0');
       expect(cloned.description, 'An LLM agent');
       expect(cloned.instruction, 'You are a helpful assistant.');
       expect(cloned.parentAgent, isNull);
@@ -22,7 +24,23 @@ void main() {
       expect(cloned, isA<LlmAgent>());
 
       expect(original.name, 'llm_agent');
+      expect(original.version, '1.0.0');
       expect(original.instruction, 'You are a helpful assistant.');
+    });
+
+    test('clone update can override version', () {
+      final LlmAgent original = LlmAgent(
+        name: 'llm_agent',
+        version: '1.0.0',
+        instruction: 'You are a helpful assistant.',
+      );
+
+      final LlmAgent cloned = original.clone(
+        update: <String, Object?>{'version': '2.0.0'},
+      );
+
+      expect(cloned.version, '2.0.0');
+      expect(original.version, '1.0.0');
     });
 
     test('deep-clones subAgents and re-links parent', () {
@@ -247,9 +265,10 @@ void main() {
     });
 
     test('shallow-copies list fields that are not updated', () {
-      final AgentLifecycleCallback callback = (CallbackContext context) {
+      Future<Content?> callback(CallbackContext context) async {
         return null;
-      };
+      }
+
       final Object tool = Object();
 
       final LlmAgent original = LlmAgent(

@@ -16,6 +16,7 @@ void main() {
     test('LlmAgentConfig normalizes legacy model mapping', () {
       final LlmAgentConfig config = LlmAgentConfig.fromJson(<String, Object?>{
         'name': 'root',
+        'version': '1.2.3',
         'instruction': 'hello',
         'model': <String, Object?>{'name': 'models.make'},
       });
@@ -23,6 +24,8 @@ void main() {
       expect(config.model, isNull);
       expect(config.modelCode, isNotNull);
       expect(config.modelCode!.name, 'models.make');
+      expect(config.version, '1.2.3');
+      expect(config.toJson()['version'], '1.2.3');
     });
 
     test('LlmAgentConfig rejects model and model_code together', () {
@@ -115,6 +118,7 @@ instruction: child instruction
       final File root = File('${dir.path}/root.yaml');
       await root.writeAsString('''
 name: root
+version: "2026.03"
 instruction: root instruction
 sub_agents:
   - config_path: child.yaml
@@ -123,6 +127,7 @@ sub_agents:
       final BaseAgent agent = fromConfig(root.path);
       expect(agent, isA<LlmAgent>());
       expect(agent.name, 'root');
+      expect(agent.version, '2026.03');
       expect(agent.subAgents, hasLength(1));
       expect(agent.subAgents.single.name, 'child');
     });
@@ -223,7 +228,7 @@ name: custom_symbol_root
         resolvers: AgentConfigResolvers(
           symbols: <String, Object?>{
             'my.pkg.CustomAgent':
-                (BaseAgentConfig config, String _, AgentConfigResolvers __) =>
+                (BaseAgentConfig config, String _, AgentConfigResolvers _) =>
                     ParallelAgent(name: config.name),
           },
         ),

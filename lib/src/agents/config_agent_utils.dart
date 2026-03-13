@@ -288,6 +288,7 @@ BaseAgent _buildLoopAgent(
   );
   return LoopAgent(
     name: config.name,
+    version: config.version,
     description: config.description,
     subAgents: args.subAgents,
     beforeAgentCallback: args.beforeAgentCallbacks,
@@ -308,6 +309,7 @@ BaseAgent _buildParallelAgent(
   );
   return ParallelAgent(
     name: config.name,
+    version: config.version,
     description: config.description,
     subAgents: args.subAgents,
     beforeAgentCallback: args.beforeAgentCallbacks,
@@ -327,6 +329,7 @@ BaseAgent _buildSequentialAgent(
   );
   return SequentialAgent(
     name: config.name,
+    version: config.version,
     description: config.description,
     subAgents: args.subAgents,
     beforeAgentCallback: args.beforeAgentCallbacks,
@@ -356,6 +359,7 @@ BaseAgent _buildLlmAgent(
 
   return LlmAgent(
     name: config.name,
+    version: config.version,
     description: config.description,
     subAgents: args.subAgents,
     beforeAgentCallback: args.beforeAgentCallbacks,

@@ -9,6 +9,7 @@ class BaseAgentConfig {
   BaseAgentConfig({
     this.agentClass = 'BaseAgent',
     required this.name,
+    this.version = '',
     this.description = '',
     List<AgentRefConfig>? subAgents,
     List<CodeConfig>? beforeAgentCallbacks,
@@ -24,6 +25,9 @@ class BaseAgentConfig {
 
   /// Agent name.
   final String name;
+
+  /// Agent version string.
+  final String version;
 
   /// Agent description text.
   final String description;
@@ -44,6 +48,7 @@ class BaseAgentConfig {
     'agent_class',
     'agentClass',
     'name',
+    'version',
     'description',
     'sub_agents',
     'subAgents',
@@ -79,6 +84,7 @@ class BaseAgentConfig {
           (json['agentClass'] as String?) ??
           'BaseAgent',
       name: name,
+      version: (json['version'] ?? '') as String,
       description: (json['description'] ?? '') as String,
       subAgents: _decodeAgentRefs(json['sub_agents'] ?? json['subAgents']),
       beforeAgentCallbacks: _decodeCodeConfigs(
@@ -128,6 +134,7 @@ class BaseAgentConfig {
     return <String, Object?>{
       'agent_class': agentClass,
       'name': name,
+      if (version.isNotEmpty) 'version': version,
       if (description.isNotEmpty) 'description': description,
       if (subAgents.isNotEmpty)
         'sub_agents': subAgents.map((AgentRefConfig e) => e.toJson()).toList(),

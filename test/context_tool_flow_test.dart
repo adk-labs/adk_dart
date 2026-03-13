@@ -126,17 +126,25 @@ void main() {
       expect(context.actions.requestedAuthConfigs['call_3'], authPayload);
     });
 
-    test('renderUiWidget throws when functionCallId is missing', () {
+    test('renderUiWidget appends widget action without tool context', () {
       final Context context = _newContext();
+      context.renderUiWidget(UiWidget(id: 'widget-1', provider: 'mcp'));
+
+      expect(context.actions.renderUiWidgets, hasLength(1));
+      expect(context.actions.renderUiWidgets.single.id, 'widget-1');
+    });
+
+    test('renderUiWidget rejects duplicate ids in one action batch', () {
+      final Context context = _newContext();
+      context.renderUiWidget(UiWidget(id: 'widget-1', provider: 'mcp'));
+
       expect(
-        () => context.renderUiWidget(
-          UiWidget(id: 'widget-1', provider: 'mcp'),
-        ),
+        () => context.renderUiWidget(UiWidget(id: 'widget-1', provider: 'mcp')),
         throwsA(
           isA<StateError>().having(
             (StateError error) => error.message,
             'message',
-            contains('requires functionCallId'),
+            contains("UI widget with ID 'widget-1' already exists"),
           ),
         ),
       );

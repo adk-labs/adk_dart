@@ -38,6 +38,7 @@ class LoopAgent extends BaseAgent {
   /// Creates a loop agent.
   LoopAgent({
     required super.name,
+    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallback,
@@ -68,6 +69,11 @@ class LoopAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'name',
         currentValue: name,
+      ),
+      version: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'version',
+        currentValue: version,
       ),
       description: cloneFieldValue<String>(
         update: cloneUpdate,

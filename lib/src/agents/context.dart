@@ -205,14 +205,17 @@ class Context extends ReadonlyContext {
     _eventActions.requestedAuthConfigs[callId] = authConfig;
   }
 
-  /// Requests client-side rendering of [widget] for the current tool call.
+  /// Requests client-side rendering of [widget].
   ///
-  /// Throws a [StateError] when this context is not bound to a tool call.
+  /// Throws a [StateError] when a widget with the same id is already present in
+  /// the current event actions.
   void renderUiWidget(UiWidget widget) {
-    final String? callId = functionCallId;
-    if (callId == null || callId.isEmpty) {
+    final bool duplicate = _eventActions.renderUiWidgets.any(
+      (UiWidget existingWidget) => existingWidget.id == widget.id,
+    );
+    if (duplicate) {
       throw StateError(
-        'renderUiWidget requires functionCallId. This method can only be used in a tool context.',
+        "UI widget with ID '${widget.id}' already exists in the current event actions.",
       );
     }
     _eventActions.renderUiWidgets.add(widget);

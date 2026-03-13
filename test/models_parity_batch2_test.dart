@@ -600,6 +600,9 @@ void main() {
             'prompt_tokens': 1,
             'completion_tokens': 2,
             'total_tokens': 3,
+            'completion_tokens_details': <String, Object?>{
+              'reasoning_tokens': 4,
+            },
           },
         },
       );
@@ -607,6 +610,11 @@ void main() {
       expect(response.finishReason, 'STOP');
       expect(response.content?.parts.length, 2);
       expect(response.usageMetadata, isNotNull);
+      expect(
+        (response.usageMetadata!
+            as Map<String, Object?>)['thoughts_token_count'],
+        4,
+      );
     });
 
     test(

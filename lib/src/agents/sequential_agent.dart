@@ -41,6 +41,7 @@ class SequentialAgent extends BaseAgent {
   /// Creates a sequential agent.
   SequentialAgent({
     required super.name,
+    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallback,
@@ -62,6 +63,11 @@ class SequentialAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'name',
         currentValue: name,
+      ),
+      version: cloneFieldValue<String>(
+        update: cloneUpdate,
+        fieldName: 'version',
+        currentValue: version,
       ),
       description: cloneFieldValue<String>(
         update: cloneUpdate,

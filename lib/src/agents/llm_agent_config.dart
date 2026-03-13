@@ -11,6 +11,7 @@ class LlmAgentConfig extends BaseAgentConfig {
   LlmAgentConfig({
     super.agentClass = 'LlmAgent',
     required super.name,
+    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallbacks,
@@ -160,6 +161,7 @@ class LlmAgentConfig extends BaseAgentConfig {
           (normalized['agentClass'] as String?) ??
           'LlmAgent',
       name: base.name,
+      version: base.version,
       description: base.description,
       subAgents: base.subAgents,
       beforeAgentCallbacks: base.beforeAgentCallbacks,
