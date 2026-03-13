@@ -6,7 +6,9 @@ import 'dart:convert';
 import '../../agents/readonly_context.dart';
 import '../../auth/auth_credential.dart';
 import '../../events/ui_widget.dart';
+import '../../features/_feature_registry.dart';
 import '../../models/llm_request.dart';
+import '../_function_tool_declarations.dart';
 import '../base_authenticated_tool.dart';
 import '../tool_context.dart';
 import 'mcp_session_manager.dart';
@@ -69,10 +71,7 @@ class McpTool extends BaseAuthenticatedTool {
        _connectionParams = connectionParams,
        _sessionManager = sessionManager,
        _requireConfirmation = requireConfirmation,
-       super(
-         name: mcpTool.name,
-         description: mcpTool.description,
-       );
+       super(name: mcpTool.name, description: mcpTool.description);
 
   final McpBaseTool _mcpTool;
   final McpConnectionParams _connectionParams;
@@ -116,6 +115,16 @@ class McpTool extends BaseAuthenticatedTool {
   @override
   /// Returns a function declaration using MCP input schema as parameters.
   FunctionDeclaration? getDeclaration() {
+    if (isFeatureEnabled(FeatureName.jsonSchemaForFuncDecl)) {
+      return buildFunctionDeclarationWithJsonSchema(
+        name: name,
+        description: description,
+        parametersJsonSchema: Map<String, dynamic>.from(_mcpTool.inputSchema),
+        responseJsonSchema: _mcpTool.outputSchema.isEmpty
+            ? null
+            : Map<String, dynamic>.from(_mcpTool.outputSchema),
+      );
+    }
     return FunctionDeclaration(
       name: name,
       description: description,
