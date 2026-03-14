@@ -1,8 +1,11 @@
 ## Unreleased
 
+## 2026.3.13
+
+- Bumped package release versions to `2026.3.13` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
 - Expanded the post-`2026.3.6` Python parity rollout across skills runtime/GCS loading, API Registry discovery, A2A resume and long-running execution, Anthropic runtime transport/streaming, GEPA root-agent optimization, and BigQuery analytics view automation.
 - Added March 10-12 parity updates covering auth provider registry resolution, MCP UI widget actions, optimize CLI/local eval sampling, OpenAPI/artifact ordering fixes, Gemini live grounding metadata, LiteLLM thought signatures, and conformance SSE record/test flows.
-- Aligned remaining tail behavior for agent version propagation/telemetry, context UI widget handling, Apigee reasoning token usage parsing, LiteLLM output-schema-with-tools support, and positional `adk conformance record <path> [none|sse]` parsing.
+- Aligned tail parity for agent version propagation and telemetry, context UI widget handling, Apigee reasoning token usage parsing, LiteLLM output schema with tools, positional `adk conformance record <path> [none|sse]` parsing, and MCP schema-aware function declarations.
 
 ## 2026.3.6
 

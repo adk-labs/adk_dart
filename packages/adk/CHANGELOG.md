@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Synced facade release notes with the latest unreleased `adk_dart` parity work, including skills/API Registry/A2A runtime alignment, Anthropic and BigQuery parity updates, and CLI conformance improvements.
+## 2026.3.13
+
+- Bumped package version to `2026.3.13`.
+- Updated dependency alignment to `adk_dart: ^2026.3.13`.
+- Synced facade release with the latest `adk_dart` parity work, including skills/API Registry/A2A runtime alignment, Anthropic and BigQuery parity updates, and CLI conformance/MCP schema improvements.
 
 ## 2026.3.6
 
