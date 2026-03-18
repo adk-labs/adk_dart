@@ -202,11 +202,43 @@ void main() {
           metrics.map((MetricInfo value) => value.metricName),
           contains(PrebuiltMetricNames.responseMatchScore),
         );
+        expect(
+          metrics.map((MetricInfo value) => value.metricName),
+          containsAll(<String>[
+            PrebuiltMetricNames.multiTurnTaskSuccessV1,
+            PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
+            PrebuiltMetricNames.multiTurnToolUseQualityV1,
+          ]),
+        );
 
         final Evaluator evaluator = registry.getEvaluator(
           EvalMetricSpec(metricName: PrebuiltMetricNames.responseMatchScore),
         );
         expect(evaluator, isA<ResponseEvaluator>());
+        expect(
+          registry.getEvaluator(
+            EvalMetricSpec(
+              metricName: PrebuiltMetricNames.multiTurnTaskSuccessV1,
+            ),
+          ),
+          isA<MultiTurnTaskSuccessV1Evaluator>(),
+        );
+        expect(
+          registry.getEvaluator(
+            EvalMetricSpec(
+              metricName: PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
+            ),
+          ),
+          isA<MultiTurnTrajectoryQualityV1Evaluator>(),
+        );
+        expect(
+          registry.getEvaluator(
+            EvalMetricSpec(
+              metricName: PrebuiltMetricNames.multiTurnToolUseQualityV1,
+            ),
+          ),
+          isA<MultiTurnToolUseQualityV1Evaluator>(),
+        );
       },
     );
 

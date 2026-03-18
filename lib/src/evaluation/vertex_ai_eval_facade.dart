@@ -199,6 +199,127 @@ class VertexAiEvalFacade extends Evaluator {
   }
 }
 
+/// Multi-turn Vertex AI Eval facade that scores only the final turn.
+class MultiTurnVertexAiEvalFacade extends Evaluator {
+  /// Creates a multi-turn Vertex AI Eval facade.
+  MultiTurnVertexAiEvalFacade({
+    required double threshold,
+    required String metricName,
+    VertexAiEvalInvoker? evalInvoker,
+  }) : _threshold = threshold,
+       _metricName = metricName,
+       _evalInvoker = evalInvoker ?? VertexAiEvalFacade._defaultPerformEval;
+
+  final double _threshold;
+  final String _metricName;
+  final VertexAiEvalInvoker _evalInvoker;
+
+  @override
+  Future<EvaluationResult> evaluateInvocations({
+    required List<Invocation> actualInvocations,
+    List<Invocation>? expectedInvocations,
+    ConversationScenario? conversationScenario,
+  }) async {
+    if (actualInvocations.isEmpty) {
+      return EvaluationResult();
+    }
+    final List<Invocation?> expected =
+        expectedInvocations ??
+        List<Invocation?>.filled(actualInvocations.length, null);
+    final List<PerInvocationResult> perInvocationResults =
+        <PerInvocationResult>[];
+
+    for (int index = 0; index < actualInvocations.length - 1; index += 1) {
+      perInvocationResults.add(
+        PerInvocationResult(
+          actualInvocation: actualInvocations[index],
+          expectedInvocation: index < expected.length ? expected[index] : null,
+          score: null,
+          evalStatus: EvalStatus.notEvaluated,
+        ),
+      );
+    }
+
+    final Invocation actual = actualInvocations.last;
+    final Invocation? expectedInvocation = expected.isEmpty ? null : expected.last;
+    final Map<String, String?> row = <String, String?>{
+      'prompt': _serializeConversation(
+        actualInvocations,
+        conversationScenario: conversationScenario,
+      ),
+      'reference': expectedInvocation == null
+          ? null
+          : getTextFromContent(expectedInvocation.finalResponse) ?? '',
+      'response': getTextFromContent(actual.finalResponse) ?? '',
+    };
+
+    final VertexAiEvalOutput evalOutput = await _evalInvoker(
+      dataset: <Map<String, String?>>[row],
+      metrics: <String>[_metricName],
+    );
+    final double? score = _extractScore(evalOutput);
+    if (score == null) {
+      return EvaluationResult();
+    }
+
+    perInvocationResults.add(
+      PerInvocationResult(
+        actualInvocation: actual,
+        expectedInvocation: expectedInvocation,
+        score: score,
+        evalStatus: _getEvalStatus(score),
+      ),
+    );
+
+    return EvaluationResult(
+      overallScore: score,
+      overallEvalStatus: _getEvalStatus(score),
+      perInvocationResults: perInvocationResults,
+    );
+  }
+
+  double? _extractScore(VertexAiEvalOutput output) {
+    if (output.summaryMetrics.isEmpty) {
+      return null;
+    }
+    final double? mean = output.summaryMetrics.first.meanScore;
+    if (mean == null || mean.isNaN) {
+      return null;
+    }
+    return mean;
+  }
+
+  EvalStatus _getEvalStatus(double? score) {
+    if (score == null) {
+      return EvalStatus.notEvaluated;
+    }
+    return score >= _threshold ? EvalStatus.passed : EvalStatus.failed;
+  }
+}
+
+String _serializeConversation(
+  List<Invocation> actualInvocations, {
+  ConversationScenario? conversationScenario,
+}) {
+  final StringBuffer buffer = StringBuffer();
+  if (conversationScenario != null) {
+    buffer.writeln('Scenario: ${conversationScenario.startingPrompt}');
+    buffer.writeln('Plan: ${conversationScenario.conversationPlan}');
+  }
+  for (final Invocation invocation in actualInvocations) {
+    final String userText = getTextFromContent(invocation.userContent) ?? '';
+    final String responseText =
+        getTextFromContent(invocation.finalResponse) ?? '';
+    if (userText.isNotEmpty) {
+      buffer.writeln('User: $userText');
+    }
+    if (responseText.isNotEmpty) {
+      buffer.writeln('Agent: $responseText');
+    }
+  }
+  return buffer.toString().trim();
+}
+
 double _tokenOverlap(String reference, String response) {
   final Set<String> referenceTokens = _tokenize(reference).toSet();
   final Set<String> responseTokens = _tokenize(response).toSet();

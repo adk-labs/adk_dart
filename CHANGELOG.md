@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Closed the latest four-day parity tail by adding MCP sampling callback/capability wiring across `adk_mcp`, `McpSessionManager`, and `McpToolset`, with HTTP integration coverage.
+- Added multi-turn evaluation metric support for task success, trajectory quality, and tool-use quality, including registry/metric-info wiring and regression tests.
+
 ## 2026.3.13
 
 - Bumped package release versions to `2026.3.13` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.

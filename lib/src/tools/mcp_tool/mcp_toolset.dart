@@ -19,13 +19,27 @@ class McpToolset extends BaseToolset {
     super.toolFilter,
     super.toolNamePrefix,
     this.headerProvider,
-  });
+    this.samplingCallback,
+    Map<String, Object?>? samplingCapabilities,
+  }) : samplingCapabilities = samplingCapabilities ?? <String, Object?>{} {
+    McpSessionManager.instance.configureConnection(
+      connectionParams: connectionParams,
+      samplingCallback: samplingCallback,
+      samplingCapabilities: this.samplingCapabilities,
+    );
+  }
 
   /// MCP transport parameters for this toolset.
   final McpConnectionParams connectionParams;
 
   /// Optional callback for injecting request headers dynamically.
   final McpHeaderProvider? headerProvider;
+
+  /// Optional callback used to answer MCP `sampling/createMessage` requests.
+  final McpSamplingCallback? samplingCallback;
+
+  /// Optional MCP client capabilities advertised for sampling support.
+  final Map<String, Object?> samplingCapabilities;
 
   @override
   /// Returns filtered MCP tools discovered from cache or remote server.

@@ -201,7 +201,10 @@ class McpStdioClient {
   ///
   /// Throws a [StateError] when the server omits or returns an unsupported
   /// protocol version.
-  Future<void> ensureInitialized(StdioConnectionParams connectionParams) async {
+  Future<void> ensureInitialized(
+    StdioConnectionParams connectionParams, {
+    Map<String, Object?>? clientCapabilitiesOverride,
+  }) async {
     if (_initialized) {
       return;
     }
@@ -219,7 +222,7 @@ class McpStdioClient {
           method: 'initialize',
           params: <String, Object?>{
             'protocolVersion': latestProtocolVersion,
-            'capabilities': clientCapabilities,
+            'capabilities': clientCapabilitiesOverride ?? clientCapabilities,
             'clientInfo': <String, Object?>{
               'name': clientInfoName,
               'version': clientInfoVersion,

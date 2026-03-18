@@ -229,5 +229,81 @@ void main() {
       expect(result.overallEvalStatus, EvalStatus.notEvaluated);
       expect(result.perInvocationResults.single.evalStatus, EvalStatus.failed);
     });
+
+    test('multi-turn evaluators score only the final turn', () async {
+      final List<String> seenMetrics = <String>[];
+      Future<VertexAiEvalOutput> evalInvoker({
+        required List<Map<String, String?>> dataset,
+        required List<String> metrics,
+      }) async {
+        seenMetrics.addAll(metrics);
+        expect(dataset, hasLength(1));
+        expect(dataset.single['prompt'], contains('User: turn 1'));
+        expect(dataset.single['prompt'], contains('User: turn 2'));
+        expect(dataset.single['response'], 'response 2');
+        return VertexAiEvalOutput(
+          summaryMetrics: <VertexAiEvalSummaryMetric>[
+            VertexAiEvalSummaryMetric(meanScore: 0.8),
+          ],
+        );
+      }
+
+      final List<Invocation> actualInvocations = <Invocation>[
+        _invocation(userText: 'turn 1', modelText: 'response 1'),
+        _invocation(userText: 'turn 2', modelText: 'response 2'),
+      ];
+      final List<Invocation> expectedInvocations = <Invocation>[
+        _invocation(userText: 'turn 1', modelText: 'expected 1'),
+        _invocation(userText: 'turn 2', modelText: 'expected 2'),
+      ];
+
+      final EvaluationResult taskSuccess =
+          await MultiTurnTaskSuccessV1Evaluator(
+            evalMetric: EvalMetricSpec(
+              metricName: PrebuiltMetricNames.multiTurnTaskSuccessV1,
+              threshold: 0.7,
+            ),
+            evalInvoker: evalInvoker,
+          ).evaluateInvocations(
+            actualInvocations: actualInvocations,
+            expectedInvocations: expectedInvocations,
+          );
+
+      expect(taskSuccess.overallScore, 0.8);
+      expect(taskSuccess.perInvocationResults, hasLength(2));
+      expect(
+        taskSuccess.perInvocationResults.first.evalStatus,
+        EvalStatus.notEvaluated,
+      );
+      expect(
+        taskSuccess.perInvocationResults.last.evalStatus,
+        EvalStatus.passed,
+      );
+
+      await MultiTurnTrajectoryQualityV1Evaluator(
+        evalMetric: EvalMetricSpec(
+          metricName: PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
+          threshold: 0.7,
+        ),
+        evalInvoker: evalInvoker,
+      ).evaluateInvocations(actualInvocations: actualInvocations);
+
+      await MultiTurnToolUseQualityV1Evaluator(
+        evalMetric: EvalMetricSpec(
+          metricName: PrebuiltMetricNames.multiTurnToolUseQualityV1,
+          threshold: 0.7,
+        ),
+        evalInvoker: evalInvoker,
+      ).evaluateInvocations(actualInvocations: actualInvocations);
+
+      expect(
+        seenMetrics,
+        containsAll(<String>[
+          PrebuiltMetricNames.multiTurnTaskSuccessV1,
+          PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
+          PrebuiltMetricNames.multiTurnToolUseQualityV1,
+        ]),
+      );
+    });
   });
 }

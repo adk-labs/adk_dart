@@ -213,6 +213,7 @@ class McpRemoteClient {
   Future<void> ensureInitialized(
     StreamableHTTPConnectionParams connectionParams, {
     Map<String, String>? headers,
+    Map<String, Object?>? clientCapabilitiesOverride,
   }) async {
     if (!isRemoteCapable(connectionParams)) {
       return;
@@ -235,7 +236,7 @@ class McpRemoteClient {
         method: 'initialize',
         params: <String, Object?>{
           'protocolVersion': latestProtocolVersion,
-          'capabilities': clientCapabilities,
+          'capabilities': clientCapabilitiesOverride ?? clientCapabilities,
           'clientInfo': <String, Object?>{
             'name': clientInfoName,
             'version': clientInfoVersion,
@@ -1618,10 +1619,10 @@ class McpJsonRpcException extends StateError {
 class McpHttpStatusException implements Exception {
   /// Creates an HTTP status exception.
   McpHttpStatusException({
-    required Uri uri,
+    required this.uri,
     required this.statusCode,
     required this.body,
-  }) : uri = uri;
+  });
 
   /// The request URI that failed.
   final Uri uri;

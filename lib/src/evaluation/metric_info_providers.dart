@@ -70,6 +70,53 @@ class SafetyEvaluatorV1MetricInfoProvider extends MetricInfoProvider {
   }
 }
 
+/// Metric metadata provider for multi-turn task success v1.
+class MultiTurnTaskSuccessV1MetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.multiTurnTaskSuccessV1,
+      description:
+          'Evaluates whether the agent achieves the overall goal of a '
+          'multi-turn conversation.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: 1.0),
+      ),
+    );
+  }
+}
+
+/// Metric metadata provider for multi-turn trajectory quality v1.
+class MultiTurnTrajectoryQualityV1MetricInfoProvider
+    extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
+      description:
+          'Evaluates the overall conversation trajectory in a multi-turn run.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: 1.0),
+      ),
+    );
+  }
+}
+
+/// Metric metadata provider for multi-turn tool use quality v1.
+class MultiTurnToolUseQualityV1MetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.multiTurnToolUseQualityV1,
+      description:
+          'Evaluates tool usage quality across a full multi-turn conversation.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: 1.0),
+      ),
+    );
+  }
+}
+
 /// Metric metadata provider for final response match v2 evaluation.
 class FinalResponseMatchV2EvaluatorMetricInfoProvider
     extends MetricInfoProvider {

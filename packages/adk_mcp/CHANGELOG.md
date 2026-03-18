@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added MCP client capability override support during initialization.
+- Added ADK-facing sampling callback/capability wiring coverage through the `adk_dart` MCP toolset stack.
+
 ## 2026.3.13
 
 - Bumped package version to `2026.3.13`.

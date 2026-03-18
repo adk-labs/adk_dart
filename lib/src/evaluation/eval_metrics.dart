@@ -40,6 +40,17 @@ class PrebuiltMetricNames {
   /// Per-turn user simulator quality metric version 1.
   static const String perTurnUserSimulatorQualityV1 =
       'per_turn_user_simulator_quality_v1';
+
+  /// Multi-turn task success metric version 1.
+  static const String multiTurnTaskSuccessV1 = 'multi_turn_task_success_v1';
+
+  /// Multi-turn trajectory quality metric version 1.
+  static const String multiTurnTrajectoryQualityV1 =
+      'multi_turn_trajectory_quality_v1';
+
+  /// Multi-turn tool use quality metric version 1.
+  static const String multiTurnToolUseQualityV1 =
+      'multi_turn_tool_use_quality_v1';
 }
 
 /// Enum wrapper for built-in metric identifiers.
@@ -56,7 +67,12 @@ enum PrebuiltMetrics {
   rubricBasedToolUseQualityV1(PrebuiltMetricNames.rubricBasedToolUseQualityV1),
   perTurnUserSimulatorQualityV1(
     PrebuiltMetricNames.perTurnUserSimulatorQualityV1,
-  );
+  ),
+  multiTurnTaskSuccessV1(PrebuiltMetricNames.multiTurnTaskSuccessV1),
+  multiTurnTrajectoryQualityV1(
+    PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
+  ),
+  multiTurnToolUseQualityV1(PrebuiltMetricNames.multiTurnToolUseQualityV1);
 
   /// Creates a built-in metric enum value.
   const PrebuiltMetrics(this.value);

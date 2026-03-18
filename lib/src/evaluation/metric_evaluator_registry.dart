@@ -8,6 +8,9 @@ import 'evaluator.dart';
 import 'final_response_match_v2.dart';
 import 'hallucinations_v1.dart';
 import 'metric_info_providers.dart';
+import 'multi_turn_task_success_evaluator.dart';
+import 'multi_turn_tool_use_quality_evaluator.dart';
+import 'multi_turn_trajectory_quality_evaluator.dart';
 import 'response_evaluator.dart';
 import 'rubric_based_final_response_quality_v1.dart';
 import 'rubric_based_tool_use_quality_v1.dart';
@@ -95,6 +98,22 @@ MetricEvaluatorRegistry getDefaultMetricEvaluatorRegistry() {
     metricInfo: SafetyEvaluatorV1MetricInfoProvider().getMetricInfo(),
     evaluatorFactory: (EvalMetricSpec evalMetric) =>
         SafetyEvaluatorV1(evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: MultiTurnTaskSuccessV1MetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        MultiTurnTaskSuccessV1Evaluator(evalMetric: evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: MultiTurnTrajectoryQualityV1MetricInfoProvider()
+        .getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        MultiTurnTrajectoryQualityV1Evaluator(evalMetric: evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: MultiTurnToolUseQualityV1MetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        MultiTurnToolUseQualityV1Evaluator(evalMetric: evalMetric),
   );
   registry.registerEvaluator(
     metricInfo: FinalResponseMatchV2EvaluatorMetricInfoProvider()

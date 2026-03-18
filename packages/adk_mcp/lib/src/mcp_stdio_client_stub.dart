@@ -122,7 +122,10 @@ class McpStdioClient {
   }
 
   /// Throws [UnsupportedError] on this platform.
-  Future<void> ensureInitialized(StdioConnectionParams connectionParams) {
+  Future<void> ensureInitialized(
+    StdioConnectionParams connectionParams, {
+    Map<String, Object?>? clientCapabilitiesOverride,
+  }) {
     throw UnsupportedError(_unsupportedMessage);
   }
 

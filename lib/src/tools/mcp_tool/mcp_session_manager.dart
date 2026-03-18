@@ -8,9 +8,11 @@ import 'package:adk_mcp/adk_mcp.dart'
         McpRemoteClient,
         McpResourceContent,
         McpServerMessage,
+        McpServerRequestException,
         McpStdioClient,
         StdioConnectionParams,
         StreamableHTTPConnectionParams,
+        mcpMethodSamplingCreateMessage,
         mcpMethodNotFoundCode;
 
 import '../../version.dart';
@@ -34,26 +36,36 @@ typedef McpToolExecutor =
       Map<String, String>? headers,
     });
 
+/// Callback invoked when an MCP server requests client-side sampling.
+typedef McpSamplingCallback =
+    FutureOr<Object?> Function(
+      List<Map<String, Object?>> messages, {
+      Map<String, Object?>? params,
+    });
+
 /// Central registry and transport manager for MCP sessions.
 class McpSessionManager {
   /// Creates an MCP session manager singleton.
-  McpSessionManager._()
-    : _remoteClient = McpRemoteClient(
-        clientInfoName: 'adk_dart',
-        clientInfoVersion: adkVersion,
-        onServerMessage: _handleServerMessage,
-      ),
-      _stdioClient = McpStdioClient(
-        clientInfoName: 'adk_dart',
-        clientInfoVersion: adkVersion,
-        onServerMessage: _handleServerMessage,
-      );
+  McpSessionManager._() {
+    _remoteClient = McpRemoteClient(
+      clientInfoName: 'adk_dart',
+      clientInfoVersion: adkVersion,
+      onServerMessage: _handleServerMessage,
+      onServerRequest: _handleServerRequest,
+    );
+    _stdioClient = McpStdioClient(
+      clientInfoName: 'adk_dart',
+      clientInfoVersion: adkVersion,
+      onServerMessage: _handleServerMessage,
+      onServerRequest: _handleServerRequest,
+    );
+  }
 
   /// Shared process-wide session manager instance.
   static final McpSessionManager instance = McpSessionManager._();
 
-  final McpRemoteClient _remoteClient;
-  final McpStdioClient _stdioClient;
+  late final McpRemoteClient _remoteClient;
+  late final McpStdioClient _stdioClient;
 
   final Map<String, List<BaseTool>> _toolsByUrl = <String, List<BaseTool>>{};
   final Map<String, Map<String, List<McpResourceContent>>> _resourcesByUrl =
@@ -62,6 +74,31 @@ class McpSessionManager {
       <String, Map<String, McpToolExecutor>>{};
   final Map<String, List<Map<String, Object?>>> _remoteToolDescriptorsByUrl =
       <String, List<Map<String, Object?>>>{};
+  final Map<String, McpSamplingCallback> _samplingCallbacksByUrl =
+      <String, McpSamplingCallback>{};
+  final Map<String, Map<String, Object?>> _samplingCapabilitiesByUrl =
+      <String, Map<String, Object?>>{};
+
+  /// Configures per-connection MCP client-side sampling support.
+  void configureConnection({
+    required McpConnectionParams connectionParams,
+    McpSamplingCallback? samplingCallback,
+    Map<String, Object?>? samplingCapabilities,
+  }) {
+    final String key = _connectionKey(connectionParams);
+    if (samplingCallback == null) {
+      _samplingCallbacksByUrl.remove(key);
+    } else {
+      _samplingCallbacksByUrl[key] = samplingCallback;
+    }
+    if (samplingCapabilities == null || samplingCapabilities.isEmpty) {
+      _samplingCapabilitiesByUrl.remove(key);
+    } else {
+      _samplingCapabilitiesByUrl[key] = Map<String, Object?>.from(
+        samplingCapabilities,
+      );
+    }
+  }
 
   /// Registers local [tools] for the given MCP [connectionParams].
   void registerTools({
@@ -455,11 +492,18 @@ class McpSessionManager {
       if (!_remoteClient.isRemoteCapable(connectionParams)) {
         return;
       }
-      await _remoteClient.ensureInitialized(connectionParams, headers: headers);
+      await _remoteClient.ensureInitialized(
+        connectionParams,
+        headers: headers,
+        clientCapabilitiesOverride: _clientCapabilitiesFor(connectionParams),
+      );
       return;
     }
     if (connectionParams is StdioConnectionParams) {
-      await _stdioClient.ensureInitialized(connectionParams);
+      await _stdioClient.ensureInitialized(
+        connectionParams,
+        clientCapabilitiesOverride: _clientCapabilitiesFor(connectionParams),
+      );
       return;
     }
     throw ArgumentError(
@@ -578,8 +622,32 @@ class McpSessionManager {
     _resourcesByUrl.clear();
     _executorsByUrl.clear();
     _remoteToolDescriptorsByUrl.clear();
+    _samplingCallbacksByUrl.clear();
+    _samplingCapabilitiesByUrl.clear();
     _remoteClient.clear();
     unawaited(_stdioClient.close());
+  }
+
+  FutureOr<Object?> _handleServerRequest(McpServerMessage message) {
+    if (message.method == mcpMethodSamplingCreateMessage) {
+      final McpSamplingCallback? callback = _samplingCallbacksByUrl[message.url];
+      if (callback != null) {
+        final List<Map<String, Object?>> messages = _asObjectList(
+          message.params['messages'],
+        ).map(_asStringObjectMap).toList(growable: false);
+        return callback(
+          messages,
+          params: Map<String, Object?>.from(message.params),
+        );
+      }
+    }
+    if (message.method == 'ping') {
+      return const <String, Object?>{};
+    }
+    throw McpServerRequestException(
+      code: mcpMethodNotFoundCode,
+      message: 'Unsupported server request method: ${message.method}',
+    );
   }
 
   static void _handleServerMessage(McpServerMessage message) {
@@ -646,6 +714,22 @@ class McpSessionManager {
       }
     }
     return parsed;
+  }
+
+  Map<String, Object?> _clientCapabilitiesFor(
+    McpConnectionParams connectionParams,
+  ) {
+    final String key = _connectionKey(connectionParams);
+    if (!_samplingCallbacksByUrl.containsKey(key)) {
+      return const <String, Object?>{};
+    }
+    final Map<String, Object?>? samplingCapabilities =
+        _samplingCapabilitiesByUrl[key];
+    return <String, Object?>{
+      'sampling': samplingCapabilities == null
+          ? <String, Object?>{}
+          : Map<String, Object?>.from(samplingCapabilities),
+    };
   }
 }
 
