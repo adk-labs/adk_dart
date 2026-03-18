@@ -34,7 +34,10 @@ Future<Map<String, Object?>> executeSql({
       credentials: credentials,
     );
     final SpannerInstance instance = spannerClient.instance(instanceId);
-    final SpannerDatabase database = instance.database(databaseId);
+    final SpannerDatabase database = instance.database(
+      databaseId,
+      databaseRole: settings.databaseRole,
+    );
 
     if (database.databaseDialect == SpannerDatabaseDialect.postgresql) {
       return <String, Object?>{

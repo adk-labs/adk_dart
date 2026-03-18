@@ -209,7 +209,6 @@ class RemoteA2aAgent extends BaseAgent {
   /// The [agentCard] accepts an [AgentCard] instance, a URL, or a file path.
   RemoteA2aAgent({
     required super.name,
-    super.version,
     required Object? agentCard,
     super.description = '',
     HttpClient? httpClient,
@@ -318,11 +317,6 @@ class RemoteA2aAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'name',
         currentValue: name,
-      ),
-      version: cloneFieldValue<String>(
-        update: cloneUpdate,
-        fieldName: 'version',
-        currentValue: version,
       ),
       agentCard: clonedAgentCard,
       description: cloneFieldValue<String>(

@@ -216,7 +216,7 @@ class _FakeSpannerClient implements SpannerClient {
 
 class _FakeSpannerInstance implements SpannerInstance {
   @override
-  SpannerDatabase database(String databaseId) {
+  SpannerDatabase database(String databaseId, {String? databaseRole}) {
     return _FakeSpannerDatabase();
   }
 

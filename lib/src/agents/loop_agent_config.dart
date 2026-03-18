@@ -9,7 +9,6 @@ class LoopAgentConfig extends BaseAgentConfig {
   LoopAgentConfig({
     super.agentClass = 'LoopAgent',
     required super.name,
-    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallbacks,
@@ -48,7 +47,6 @@ class LoopAgentConfig extends BaseAgentConfig {
           (json['agentClass'] as String?) ??
           'LoopAgent',
       name: base.name,
-      version: base.version,
       description: base.description,
       subAgents: base.subAgents,
       beforeAgentCallbacks: base.beforeAgentCallbacks,

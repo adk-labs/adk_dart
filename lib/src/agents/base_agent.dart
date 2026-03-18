@@ -21,7 +21,6 @@ abstract class BaseAgent {
   /// Creates a base agent with optional lifecycle callbacks and sub-agents.
   BaseAgent({
     required this.name,
-    this.version = '',
     this.description = '',
     List<BaseAgent>? subAgents,
     this.beforeAgentCallback,
@@ -38,9 +37,6 @@ abstract class BaseAgent {
   /// Human-readable description.
   String description;
 
-  /// Agent version used for runtime metadata and telemetry.
-  String version;
-
   /// Parent agent in the hierarchy, if any.
   BaseAgent? parentAgent;
 
@@ -56,7 +52,6 @@ abstract class BaseAgent {
   /// Fields accepted by the default clone update validator.
   static const Set<String> baseCloneUpdateFields = <String>{
     'name',
-    'version',
     'description',
     'parentAgent',
     'subAgents',

@@ -355,9 +355,15 @@ void main() {
         timestamp: first.timestamp + 1,
         actions: EventActions(stateDelta: <String, Object?>{'b': 2}),
       );
-      expect(
+      await expectLater(
         () => service.appendEvent(session: original, event: staleAppend),
-        throwsA(isA<StateError>()),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('modified in storage'),
+          ),
+        ),
       );
 
       final Session? loaded = await service.getSession(
@@ -369,6 +375,54 @@ void main() {
       expect(loaded!.events, hasLength(1));
       expect(loaded.state['a'], 1);
       expect(loaded.state.containsKey('b'), isFalse);
+    });
+
+    test('markerless sessions allow timestamp drift when storage revision matches', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_markerless_current_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/markerless_current.db',
+      );
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+
+      final Event first = Event(
+        invocationId: 'inv_marker_1',
+        author: 'agent',
+        timestamp: session.lastUpdateTime + 10,
+      );
+      await service.appendEvent(session: session, event: first);
+
+      session.storageUpdateMarker = null;
+      session.lastUpdateTime -= 0.0001;
+
+      final Event second = Event(
+        invocationId: 'inv_marker_2',
+        author: 'agent',
+        timestamp: first.timestamp + 10,
+      );
+      await service.appendEvent(session: session, event: second);
+
+      final Session? loaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(loaded, isNotNull);
+      expect(
+        loaded!.events.map((Event event) => event.invocationId).toList(),
+        <String>['inv_marker_1', 'inv_marker_2'],
+      );
     });
 
     test('applies GetSessionConfig filters for persisted events', () async {
@@ -1222,7 +1276,7 @@ CREATE TABLE events (
       },
     );
 
-    test('reloads stale session and appends event successfully', () async {
+    test('rejects stale session append when storage has moved on', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_db_service_stale_reload_',
       );
@@ -1255,13 +1309,22 @@ CREATE TABLE events (
         ),
       );
 
-      await service.appendEvent(
-        session: original,
-        event: Event(
-          invocationId: 'inv_db_stale_2',
-          author: 'agent',
-          timestamp: original.lastUpdateTime + 20,
-          actions: EventActions(stateDelta: <String, Object?>{'k2': 'v2'}),
+      await expectLater(
+        () => service.appendEvent(
+          session: original,
+          event: Event(
+            invocationId: 'inv_db_stale_2',
+            author: 'agent',
+            timestamp: original.lastUpdateTime + 20,
+            actions: EventActions(stateDelta: <String, Object?>{'k2': 'v2'}),
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('modified in storage'),
+          ),
         ),
       );
 
@@ -1271,9 +1334,9 @@ CREATE TABLE events (
         sessionId: original.id,
       );
       expect(reloaded, isNotNull);
-      expect(reloaded!.events, hasLength(2));
+      expect(reloaded!.events, hasLength(1));
       expect(reloaded.state['k1'], 'v1');
-      expect(reloaded.state['k2'], 'v2');
+      expect(reloaded.state.containsKey('k2'), isFalse);
     });
   });
 
@@ -1447,6 +1510,87 @@ CREATE TABLE events (
         reloaded.events.single.actions.renderUiWidgets.single.payload['resource_uri'],
         'ui://widget/vertex',
       );
+    });
+
+    test('round-trips usage metadata through vertex custom metadata storage', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return fakeClient;
+        },
+      );
+      final Session session = await service.createSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+      );
+
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_vertex_usage',
+          author: 'model',
+          usageMetadata: <String, Object?>{
+            'prompt_token_count': 150,
+            'candidates_token_count': 50,
+            'total_token_count': 200,
+          },
+        ),
+      );
+
+      final Session? reloaded = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events.single.usageMetadata, <String, Object?>{
+        'prompt_token_count': 150,
+        'candidates_token_count': 50,
+        'total_token_count': 200,
+      });
+      expect(reloaded.events.single.customMetadata, isNull);
+    });
+
+    test('preserves custom metadata while stripping internal usage metadata keys', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return fakeClient;
+        },
+      );
+      final Session session = await service.createSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+      );
+
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_vertex_usage_meta',
+          author: 'model',
+          usageMetadata: <String, Object?>{
+            'prompt_token_count': 300,
+            'total_token_count': 400,
+          },
+          customMetadata: <String, dynamic>{'my_key': 'my_value'},
+        ),
+      );
+
+      final Session? reloaded = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events.single.usageMetadata, <String, Object?>{
+        'prompt_token_count': 300,
+        'total_token_count': 400,
+      });
+      expect(reloaded.events.single.customMetadata, <String, dynamic>{
+        'my_key': 'my_value',
+      });
     });
 
     test('returns null for missing session id', () async {

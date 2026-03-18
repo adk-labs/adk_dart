@@ -19,6 +19,9 @@ import 'session.dart';
 import 'session_util.dart';
 import 'state.dart';
 
+const String _staleSessionErrorMessage =
+    'The provided session was modified in storage. Reload the session and retry.';
+
 const String _appStatesTableSchema = '''
 CREATE TABLE IF NOT EXISTS app_states (
     app_name TEXT PRIMARY KEY,
@@ -210,6 +213,7 @@ class SqliteSessionService extends BaseSessionService {
           ),
           events: <Event>[],
           lastUpdateTime: now,
+          storageUpdateMarker: _storageUpdateMarker(now),
         );
       });
     });
@@ -237,6 +241,9 @@ class SqliteSessionService extends BaseSessionService {
           rows.first['state'],
         );
         final double lastUpdateTime = _asDouble(rows.first['update_time']);
+        final String? storageUpdateMarker = _storageUpdateMarker(
+          rows.first['update_time'],
+        );
 
         final List<Object?> eventParams = <Object?>[appName, userId, sessionId];
         final StringBuffer eventQuery = StringBuffer(
@@ -283,6 +290,7 @@ class SqliteSessionService extends BaseSessionService {
           ),
           events: events,
           lastUpdateTime: lastUpdateTime,
+          storageUpdateMarker: storageUpdateMarker,
         );
       });
     });
@@ -341,6 +349,7 @@ class SqliteSessionService extends BaseSessionService {
                 ),
                 events: <Event>[],
                 lastUpdateTime: _asDouble(row['update_time']),
+                storageUpdateMarker: _storageUpdateMarker(row['update_time']),
               );
             })
             .toList(growable: false);
@@ -393,11 +402,21 @@ class SqliteSessionService extends BaseSessionService {
           final double storedLastUpdateTime = _asDouble(
             rows.first['update_time'],
           );
-          if (storedLastUpdateTime > session.lastUpdateTime) {
-            throw StateError(
-              'The provided session has stale lastUpdateTime. Reload the session and retry.',
-            );
+          final String? storedUpdateMarker = _storageUpdateMarker(
+            rows.first['update_time'],
+          );
+          if (session.storageUpdateMarker != null) {
+            if (session.storageUpdateMarker != storedUpdateMarker) {
+              throw StateError(_staleSessionErrorMessage);
+            }
+            session.lastUpdateTime = storedLastUpdateTime;
+          } else if (storedLastUpdateTime > session.lastUpdateTime) {
+            if (!_sessionMatchesStorageRevision(db, session: session)) {
+              throw StateError(_staleSessionErrorMessage);
+            }
+            session.lastUpdateTime = storedLastUpdateTime;
           }
+          session.storageUpdateMarker = storedUpdateMarker;
 
           if (delta.app.isNotEmpty) {
             _upsertAppState(
@@ -463,6 +482,7 @@ class SqliteSessionService extends BaseSessionService {
       });
 
       session.lastUpdateTime = event.timestamp;
+      session.storageUpdateMarker = _storageUpdateMarker(event.timestamp);
       final Event appended = await super.appendEvent(
         session: session,
         event: event,
@@ -508,6 +528,40 @@ class SqliteSessionService extends BaseSessionService {
     } finally {
       db.dispose();
     }
+  }
+
+  bool _sessionMatchesStorageRevision(
+    _SqliteDatabase db, {
+    required Session session,
+  }) {
+    if (session.events.isEmpty) {
+      final List<Map<String, Object?>> rows = db.query(
+        'SELECT id FROM events WHERE app_name=? AND user_id=? AND session_id=? LIMIT 1',
+        <Object?>[session.appName, session.userId, session.id],
+      );
+      return rows.isEmpty;
+    }
+
+    final List<Map<String, Object?>> rows = db.query(
+      'SELECT id FROM events '
+      'WHERE app_name=? AND user_id=? AND session_id=? '
+      'ORDER BY timestamp DESC, id DESC LIMIT 1',
+      <Object?>[session.appName, session.userId, session.id],
+    );
+    if (rows.isEmpty) {
+      return false;
+    }
+    return '${rows.first['id'] ?? ''}' == session.events.last.id;
+  }
+
+  String? _storageUpdateMarker(Object? rawValue) {
+    if (rawValue == null) {
+      return null;
+    }
+    if (rawValue is DateTime) {
+      return rawValue.toUtc().toIso8601String();
+    }
+    return '$rawValue';
   }
 
   void _ensureWritableParentDirectory() {

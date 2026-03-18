@@ -484,7 +484,6 @@ void main() {
           invocationSpan.attributes['gen_ai.operation.name'],
           'invoke_agent',
         );
-        expect(invocationSpan.attributes['gen_ai.agent.version'], 'agent-v1');
         expect(invocationSpan.attributes['gen_ai.conversation.id'], 's-2');
         tracer.endCurrentSpan();
 
@@ -506,7 +505,6 @@ void main() {
           inferenceSpan.attributes['gen_ai.operation.name'],
           'generate_content',
         );
-        expect(inferenceSpan.attributes['gen_ai.agent.version'], 'agent-v1');
         expect(
           inferenceSpan.attributes['gen_ai.input.messages'],
           isA<String>(),
@@ -534,8 +532,7 @@ void main() {
 }
 
 class _FakeAgent extends BaseAgent {
-  _FakeAgent()
-    : super(name: 'fake_agent', version: 'agent-v1', description: 'fake');
+  _FakeAgent() : super(name: 'fake_agent', description: 'fake');
 
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {}

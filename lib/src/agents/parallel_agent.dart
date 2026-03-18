@@ -13,7 +13,6 @@ class ParallelAgent extends BaseAgent {
   /// Creates a parallel agent.
   ParallelAgent({
     required super.name,
-    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallback,
@@ -35,11 +34,6 @@ class ParallelAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'name',
         currentValue: name,
-      ),
-      version: cloneFieldValue<String>(
-        update: cloneUpdate,
-        fieldName: 'version',
-        currentValue: version,
       ),
       description: cloneFieldValue<String>(
         update: cloneUpdate,

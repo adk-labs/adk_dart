@@ -437,6 +437,7 @@ class SpannerToolSettings {
     List<Capabilities>? capabilities,
     this.maxExecutedQueryResultRows = 50,
     this.queryResultMode = QueryResultMode.defaultMode,
+    this.databaseRole,
     this.vectorStoreSettings,
   }) : capabilities = capabilities == null
            ? <Capabilities>[Capabilities.dataRead]
@@ -450,6 +451,9 @@ class SpannerToolSettings {
 
   /// The format used to serialize query execution results.
   final QueryResultMode queryResultMode;
+
+  /// Optional database role used when opening the target database.
+  final String? databaseRole;
 
   /// Optional vector store settings for retrieval functionality.
   final SpannerVectorStoreSettings? vectorStoreSettings;
@@ -471,6 +475,8 @@ class SpannerToolSettings {
       'maxExecutedQueryResultRows',
       'query_result_mode',
       'queryResultMode',
+      'database_role',
+      'databaseRole',
       'vector_store_settings',
       'vectorStoreSettings',
     };
@@ -499,6 +505,10 @@ class SpannerToolSettings {
             ]),
           ) ??
           QueryResultMode.defaultMode,
+      databaseRole: _readString(json, const <String>[
+        'database_role',
+        'databaseRole',
+      ]),
       vectorStoreSettings: _readObject(json, const <String>[
         'vector_store_settings',
         'vectorStoreSettings',
@@ -515,6 +525,7 @@ class SpannerToolSettings {
           .toList(growable: false),
       'max_executed_query_result_rows': maxExecutedQueryResultRows,
       'query_result_mode': queryResultMode.value,
+      if (databaseRole != null) 'database_role': databaseRole,
       if (vectorStoreSettings != null)
         'vector_store_settings': vectorStoreSettings!.toJson(),
     };

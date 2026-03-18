@@ -87,7 +87,7 @@ class LiteLlm extends BaseLlm {
       });
     }
     for (final Content content in request.contents) {
-      messages.addAll(_contentToMessages(content));
+      messages.addAll(_contentToMessages(content, model: request.model ?? ''));
     }
 
     final Map<String, Object?> payload = <String, Object?>{
@@ -138,6 +138,7 @@ class LiteLlm extends BaseLlm {
     final List<Part> parts = <Part>[];
     final Set<String> reasoningTexts = <String>{};
     for (final String field in const <String>[
+      'thinking_blocks',
       'reasoning_content',
       'reasoning',
     ]) {
@@ -253,6 +254,27 @@ List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {
   final Set<String> seen = reasoningTexts ?? <String>{};
   final List<Part> parts = <Part>[];
 
+  if (_isThinkingBlocksFormat(raw)) {
+    for (final Object? item in raw as List<Object?>) {
+      final Map<String, Object?> block = _asMap(item);
+      if ('${block['type'] ?? ''}' == 'redacted') {
+        continue;
+      }
+      final String text = '${block['thinking'] ?? ''}'.trim();
+      if (text.isEmpty || !seen.add(text)) {
+        continue;
+      }
+      parts.add(
+        Part.text(text, thought: true).copyWith(
+          thoughtSignature: block['signature'] == null
+              ? null
+              : utf8.encode('${block['signature']}'),
+        ),
+      );
+    }
+    return parts;
+  }
+
   void addThought(Object? value) {
     if (value is! String) {
       return;
@@ -286,12 +308,37 @@ List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {
   return parts;
 }
 
-List<Map<String, Object?>> _contentToMessages(Content content) {
+bool _isThinkingBlocksFormat(Object? value) {
+  if (value is! List || value.isEmpty) {
+    return false;
+  }
+  final Object? first = value.first;
+  return first is Map && first.containsKey('signature');
+}
+
+bool _isAnthropicModel(String model) {
+  final String lower = model.toLowerCase();
+  if (lower.startsWith('anthropic/')) {
+    return true;
+  }
+  if (lower.startsWith('bedrock/')) {
+    final String modelPart = lower.split('/').skip(1).join('/');
+    return modelPart.contains('anthropic') || modelPart.contains('claude');
+  }
+  if (lower.startsWith('vertex_ai/')) {
+    final String modelPart = lower.split('/').skip(1).join('/');
+    return modelPart.contains('claude');
+  }
+  return false;
+}
+
+List<Map<String, Object?>> _contentToMessages(Content content, {String model = ''}) {
   final String role = content.role == 'model' ? 'assistant' : '${content.role}';
   final List<Map<String, Object?>> output = <Map<String, Object?>>[];
   final List<Map<String, Object?>> toolResponses = <Map<String, Object?>>[];
   final List<Map<String, Object?>> toolCalls = <Map<String, Object?>>[];
   final List<Map<String, Object?>> parts = <Map<String, Object?>>[];
+  final List<Part> reasoningParts = <Part>[];
 
   for (final Part part in content.parts) {
     if (part.functionResponse != null) {
@@ -325,6 +372,10 @@ List<Map<String, Object?>> _contentToMessages(Content content) {
       toolCalls.add(toolCall);
       continue;
     }
+    if (part.thought && part.text != null && part.text!.isNotEmpty) {
+      reasoningParts.add(part);
+      continue;
+    }
     if (part.text != null && part.text!.isNotEmpty) {
       parts.add(<String, Object?>{'type': 'text', 'text': part.text});
       continue;
@@ -350,6 +401,39 @@ List<Map<String, Object?>> _contentToMessages(Content content) {
   }
 
   final Map<String, Object?> message = <String, Object?>{'role': role};
+  if (_isAnthropicModel(model) && reasoningParts.isNotEmpty) {
+    final List<Map<String, Object?>> thinkingBlocks = reasoningParts
+        .where((Part part) => part.thoughtSignature != null && part.text != null)
+        .map(
+          (Part part) => <String, Object?>{
+            'type': 'thinking',
+            'thinking': part.text!,
+            'signature': utf8.decode(part.thoughtSignature!),
+          },
+        )
+        .toList(growable: false);
+    if (thinkingBlocks.isNotEmpty) {
+      message['thinking_blocks'] = thinkingBlocks;
+    } else {
+      final String reasoningText = reasoningParts
+          .map((Part part) => part.text)
+          .whereType<String>()
+          .where((String text) => text.isNotEmpty)
+          .join('\n');
+      if (reasoningText.isNotEmpty) {
+        message['reasoning_content'] = reasoningText;
+      }
+    }
+  } else if (reasoningParts.isNotEmpty) {
+    final String reasoningText = reasoningParts
+        .map((Part part) => part.text)
+        .whereType<String>()
+        .where((String text) => text.isNotEmpty)
+        .join('\n');
+    if (reasoningText.isNotEmpty) {
+      message['reasoning_content'] = reasoningText;
+    }
+  }
   if (toolCalls.isNotEmpty) {
     message['tool_calls'] = toolCalls;
     if (parts.isEmpty) {

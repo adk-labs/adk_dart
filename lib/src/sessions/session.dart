@@ -13,6 +13,7 @@ class Session {
     Map<String, Object?>? state,
     List<Event>? events,
     this.lastUpdateTime = 0,
+    this.storageUpdateMarker,
   }) : state = state ?? <String, Object?>{},
        events = events ?? <Event>[];
 
@@ -34,6 +35,9 @@ class Session {
   /// Timestamp of the last update in seconds since epoch.
   double lastUpdateTime;
 
+  /// Exact storage revision marker used for stale-writer detection.
+  String? storageUpdateMarker;
+
   /// Returns a deep-copied session with optional field overrides.
   Session copyWith({
     String? id,
@@ -42,6 +46,7 @@ class Session {
     Map<String, Object?>? state,
     List<Event>? events,
     double? lastUpdateTime,
+    Object? storageUpdateMarker = _sessionSentinel,
   }) {
     return Session(
       id: id ?? this.id,
@@ -50,6 +55,11 @@ class Session {
       state: state ?? Map<String, Object?>.from(this.state),
       events: events ?? this.events.map((event) => event.copyWith()).toList(),
       lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
+      storageUpdateMarker: identical(storageUpdateMarker, _sessionSentinel)
+          ? this.storageUpdateMarker
+          : storageUpdateMarker as String?,
     );
   }
 }
+
+const Object _sessionSentinel = Object();

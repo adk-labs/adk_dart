@@ -9,7 +9,6 @@ class ParallelAgentConfig extends BaseAgentConfig {
   ParallelAgentConfig({
     super.agentClass = 'ParallelAgent',
     required super.name,
-    super.version,
     super.description,
     super.subAgents,
     super.beforeAgentCallbacks,
@@ -29,7 +28,6 @@ class ParallelAgentConfig extends BaseAgentConfig {
           (json['agentClass'] as String?) ??
           'ParallelAgent',
       name: base.name,
-      version: base.version,
       description: base.description,
       subAgents: base.subAgents,
       beforeAgentCallbacks: base.beforeAgentCallbacks,

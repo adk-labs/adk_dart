@@ -84,6 +84,21 @@ typedef VertexAiSessionUriBuilder =
       required String? apiKey,
     });
 
+const String _compactionCustomMetadataKey = '_compaction';
+const String _usageMetadataCustomMetadataKey = '_usage_metadata';
+
+void _setInternalCustomMetadata({
+  required Map<String, Object?> metadata,
+  required String key,
+  required Map<String, Object?> value,
+}) {
+  final Map<String, Object?> customMetadata = _asObjectMap(
+    metadata['custom_metadata'],
+  );
+  customMetadata[key] = Map<String, Object?>.from(value);
+  metadata['custom_metadata'] = customMetadata;
+}
+
 VertexAiSessionApiClient _defaultSessionApiClientFactory({
   String? project,
   String? location,
@@ -723,6 +738,34 @@ class VertexAiSessionService extends BaseSessionService {
       ),
       'grounding_metadata': event.groundingMetadata,
     };
+    if (event.actions.compaction != null) {
+      _setInternalCustomMetadata(
+        metadata: metadata,
+        key: _compactionCustomMetadataKey,
+        value: <String, Object?>{
+          'start_timestamp': event.actions.compaction!.startTimestamp,
+          'end_timestamp': event.actions.compaction!.endTimestamp,
+          'compacted_content': _contentToApiJson(
+            event.actions.compaction!.compactedContent,
+          ),
+        },
+      );
+    }
+    if (event.usageMetadata is Map<String, Object?>) {
+      _setInternalCustomMetadata(
+        metadata: metadata,
+        key: _usageMetadataCustomMetadataKey,
+        value: Map<String, Object?>.from(event.usageMetadata! as Map),
+      );
+    } else if (event.usageMetadata is Map) {
+      _setInternalCustomMetadata(
+        metadata: metadata,
+        key: _usageMetadataCustomMetadataKey,
+        value: (event.usageMetadata! as Map).map(
+          (Object? key, Object? value) => MapEntry('$key', value),
+        ),
+      );
+    }
     metadata.removeWhere((String _, Object? value) => value == null);
     config['event_metadata'] = metadata;
 
@@ -848,6 +891,27 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
   final Content? content = _contentFromApiJson(
     _asStringMap(apiEvent['content']),
   );
+  final Map<String, dynamic> customMetadata = _asDynamicMap(
+    metadata['custom_metadata'],
+  );
+  final Map<String, Object?> compactionMetadataRaw = _asObjectMap(
+    customMetadata.remove(_compactionCustomMetadataKey),
+  );
+  final Map<String, Object?> usageMetadataRaw = _asObjectMap(
+    customMetadata.remove(_usageMetadataCustomMetadataKey),
+  );
+  final Map<String, Object?>? compactionMetadata = compactionMetadataRaw.isEmpty
+      ? null
+      : compactionMetadataRaw;
+  final Map<String, Object?>? usageMetadata = usageMetadataRaw.isEmpty
+      ? null
+      : usageMetadataRaw;
+  final EventCompaction? compaction = _compactionFromApiJson(
+    compactionMetadata,
+  );
+  final Map<String, dynamic>? userCustomMetadata = customMetadata.isEmpty
+      ? null
+      : customMetadata;
 
   return Event(
     id: id,
@@ -872,6 +936,7 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
       renderUiWidgets: _asList(
         actionsJson['render_ui_widgets'],
       ).map(_uiWidgetFromApiJson).toList(growable: false),
+      compaction: compaction,
     ),
     errorCode: _readStringByKeys(apiEvent, const <String>[
       'error_code',
@@ -887,9 +952,35 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
     ),
     interrupted: _asBool(metadata['interrupted']),
     branch: _readStringByKeys(metadata, const <String>['branch']),
-    customMetadata: _asDynamicMap(metadata['custom_metadata']),
+    customMetadata: userCustomMetadata,
     groundingMetadata: metadata['grounding_metadata'],
     longRunningToolIds: _asStringSet(metadata['long_running_tool_ids']),
+    usageMetadata: usageMetadata,
+  );
+}
+
+EventCompaction? _compactionFromApiJson(Map<String, Object?>? json) {
+  if (json == null || json.isEmpty) {
+    return null;
+  }
+  final Content? compactedContent = _contentFromApiJson(
+    _asStringMap(json['compacted_content']),
+  );
+  final double? startTimestamp = _asDouble(
+    json['start_timestamp'] ?? json['startTimestamp'],
+  );
+  final double? endTimestamp = _asDouble(
+    json['end_timestamp'] ?? json['endTimestamp'],
+  );
+  if (compactedContent == null ||
+      startTimestamp == null ||
+      endTimestamp == null) {
+    return null;
+  }
+  return EventCompaction(
+    startTimestamp: startTimestamp,
+    endTimestamp: endTimestamp,
+    compactedContent: compactedContent,
   );
 }
 
@@ -1147,6 +1238,16 @@ bool? _asBool(Object? value) {
     if (value.toLowerCase() == 'false') {
       return false;
     }
+  }
+  return null;
+}
+
+double? _asDouble(Object? value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  if (value is String && value.isNotEmpty) {
+    return double.tryParse(value);
   }
   return null;
 }

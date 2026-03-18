@@ -23,12 +23,14 @@ class _FakeSpannerInstance implements SpannerInstance {
   _FakeSpannerInstance({required this.databases});
 
   final Map<String, _FakeSpannerDatabase> databases;
+  String? lastDatabaseRole;
 
   @override
   bool exists() => true;
 
   @override
-  SpannerDatabase database(String databaseId) {
+  SpannerDatabase database(String databaseId, {String? databaseRole}) {
+    lastDatabaseRole = databaseRole;
     final _FakeSpannerDatabase? database = databases[databaseId];
     if (database == null) {
       throw StateError('Unknown database: $databaseId');
@@ -282,6 +284,14 @@ void main() {
       expect(settings.queryResultMode, QueryResultMode.dictList);
       expect(settings.capabilities, <Capabilities>[Capabilities.dataRead]);
 
+      final SpannerToolSettings roleSettings = SpannerToolSettings.fromJson(
+        <String, Object?>{
+          'database_role': 'analytics_reader',
+        },
+      );
+      expect(roleSettings.databaseRole, 'analytics_reader');
+      expect(roleSettings.toJson()['database_role'], 'analytics_reader');
+
       expect(
         () => SpannerToolSettings.fromJson(<String, Object?>{
           'unknown_field': true,
@@ -516,10 +526,12 @@ void main() {
         settings: SpannerToolSettings(
           maxExecutedQueryResultRows: 5,
           queryResultMode: QueryResultMode.dictList,
+          databaseRole: 'analytics_reader',
         ),
         toolContext: _newToolContext(),
       );
       expect((dictResult['rows'] as List).first, <String, Object?>{'count': 1});
+      expect(client.instances['inst']!.lastDatabaseRole, 'analytics_reader');
     });
   });
 

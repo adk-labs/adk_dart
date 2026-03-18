@@ -13,7 +13,7 @@ void main() {
       expect(config.root, isA<LlmAgentConfig>());
     });
 
-    test('LlmAgentConfig normalizes legacy model mapping', () {
+    test('LlmAgentConfig ignores legacy version while normalizing model mapping', () {
       final LlmAgentConfig config = LlmAgentConfig.fromJson(<String, Object?>{
         'name': 'root',
         'version': '1.2.3',
@@ -24,8 +24,7 @@ void main() {
       expect(config.model, isNull);
       expect(config.modelCode, isNotNull);
       expect(config.modelCode!.name, 'models.make');
-      expect(config.version, '1.2.3');
-      expect(config.toJson()['version'], '1.2.3');
+      expect(config.toJson().containsKey('version'), isFalse);
     });
 
     test('LlmAgentConfig rejects model and model_code together', () {
@@ -118,7 +117,6 @@ instruction: child instruction
       final File root = File('${dir.path}/root.yaml');
       await root.writeAsString('''
 name: root
-version: "2026.03"
 instruction: root instruction
 sub_agents:
   - config_path: child.yaml
@@ -127,7 +125,6 @@ sub_agents:
       final BaseAgent agent = fromConfig(root.path);
       expect(agent, isA<LlmAgent>());
       expect(agent.name, 'root');
-      expect(agent.version, '2026.03');
       expect(agent.subAgents, hasLength(1));
       expect(agent.subAgents.single.name, 'child');
     });

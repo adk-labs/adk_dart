@@ -41,7 +41,7 @@ abstract class SpannerInstance {
   bool exists();
 
   /// Returns a database handle for [databaseId].
-  SpannerDatabase database(String databaseId);
+  SpannerDatabase database(String databaseId, {String? databaseRole});
 }
 
 /// Database interface for Cloud Spanner.
@@ -386,11 +386,12 @@ class _RestSpannerInstance implements SpannerInstance {
   }
 
   @override
-  SpannerDatabase database(String databaseId) {
+  SpannerDatabase database(String databaseId, {String? databaseRole}) {
     return _RestSpannerDatabase(
       client: client,
       instanceId: instanceId,
       databaseId: databaseId,
+      databaseRole: databaseRole,
     );
   }
 }
@@ -400,11 +401,13 @@ class _RestSpannerDatabase implements SpannerDatabase {
     required this.client,
     required this.instanceId,
     required this.databaseId,
+    this.databaseRole,
   });
 
   final _RestSpannerClient client;
   final String instanceId;
   final String databaseId;
+  final String? databaseRole;
 
   Map<String, Object?> _metadata = <String, Object?>{};
 
@@ -480,6 +483,7 @@ class _RestSpannerDatabase implements SpannerDatabase {
       client: client,
       databaseName: _databaseName,
       multiUse: multiUse,
+      databaseRole: databaseRole,
     );
   }
 
@@ -518,11 +522,13 @@ class _RestSpannerSnapshot implements SpannerSnapshot {
     required this.client,
     required this.databaseName,
     required this.multiUse,
+    required this.databaseRole,
   });
 
   final _RestSpannerClient client;
   final String databaseName;
   final bool multiUse;
+  final String? databaseRole;
 
   String? _sessionName;
 
@@ -566,6 +572,10 @@ class _RestSpannerSnapshot implements SpannerSnapshot {
     final Map<String, Object?> payload = client.requestJson(
       method: 'POST',
       path: '/v1/$databaseName/sessions',
+      queryParameters:
+          databaseRole == null || databaseRole!.isEmpty
+          ? null
+          : <String, String>{'databaseRole': databaseRole!},
       body: const <String, Object?>{},
       acceptedStatusCodes: const <int>{200},
     );
