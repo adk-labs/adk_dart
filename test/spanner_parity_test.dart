@@ -1,4 +1,5 @@
 import 'package:adk_dart/adk_dart.dart';
+import 'package:adk_dart/src/tools/spanner/admin_tool.dart' as spanner_admin;
 import 'package:test/test.dart';
 
 class _FakeSpannerClient implements SpannerClient {
@@ -16,6 +17,86 @@ class _FakeSpannerClient implements SpannerClient {
       throw StateError('Unknown instance: $instanceId');
     }
     return instance;
+  }
+}
+
+class _FakeSpannerAdminClient implements SpannerAdminClient {
+  _FakeSpannerAdminClient({
+    List<String>? instanceIds,
+    Map<String, Map<String, Object?>>? instancesById,
+    List<String>? instanceConfigIds,
+    Map<String, Map<String, Object?>>? instanceConfigsById,
+    Map<String, List<String>>? databasesByInstanceId,
+  }) : instanceIds = instanceIds ?? <String>[],
+       instancesById = instancesById ?? <String, Map<String, Object?>>{},
+       instanceConfigIds = instanceConfigIds ?? <String>[],
+       instanceConfigsById =
+           instanceConfigsById ?? <String, Map<String, Object?>>{},
+       databasesByInstanceId =
+           databasesByInstanceId ?? <String, List<String>>{};
+
+  final List<String> instanceIds;
+  final Map<String, Map<String, Object?>> instancesById;
+  final List<String> instanceConfigIds;
+  final Map<String, Map<String, Object?>> instanceConfigsById;
+  final Map<String, List<String>> databasesByInstanceId;
+  final List<Map<String, Object?>> createInstanceCalls =
+      <Map<String, Object?>>[];
+  final List<Map<String, Object?>> createDatabaseCalls =
+      <Map<String, Object?>>[];
+
+  @override
+  String userAgent = '';
+
+  @override
+  Future<void> createDatabase({
+    required String instanceId,
+    required String databaseId,
+  }) async {
+    createDatabaseCalls.add(<String, Object?>{
+      'instance_id': instanceId,
+      'database_id': databaseId,
+    });
+  }
+
+  @override
+  Future<void> createInstance({
+    required String instanceId,
+    required String configId,
+    required String displayName,
+    int nodes = 1,
+  }) async {
+    createInstanceCalls.add(<String, Object?>{
+      'instance_id': instanceId,
+      'config_id': configId,
+      'display_name': displayName,
+      'nodes': nodes,
+    });
+  }
+
+  @override
+  Map<String, Object?> getInstance(String instanceId) {
+    return Map<String, Object?>.from(instancesById[instanceId]!);
+  }
+
+  @override
+  Map<String, Object?> getInstanceConfig(String configId) {
+    return Map<String, Object?>.from(instanceConfigsById[configId]!);
+  }
+
+  @override
+  Iterable<String> listDatabases(String instanceId) sync* {
+    yield* databasesByInstanceId[instanceId] ?? const <String>[];
+  }
+
+  @override
+  Iterable<String> listInstanceConfigs() sync* {
+    yield* instanceConfigIds;
+  }
+
+  @override
+  Iterable<String> listInstances() sync* {
+    yield* instanceIds;
   }
 }
 
@@ -223,6 +304,7 @@ Context _newToolContext({Map<String, Object?>? state}) {
 
 void main() {
   tearDown(() {
+    resetSpannerAdminClientFactory();
     resetSpannerClientFactory();
     resetSpannerEmbedders();
   });
@@ -285,9 +367,7 @@ void main() {
       expect(settings.capabilities, <Capabilities>[Capabilities.dataRead]);
 
       final SpannerToolSettings roleSettings = SpannerToolSettings.fromJson(
-        <String, Object?>{
-          'database_role': 'analytics_reader',
-        },
+        <String, Object?>{'database_role': 'analytics_reader'},
       );
       expect(roleSettings.databaseRole, 'analytics_reader');
       expect(roleSettings.toJson()['database_role'], 'analytics_reader');
@@ -310,6 +390,16 @@ void main() {
         credentials: <String, Object?>{'access_token': 'token'},
       );
       expect(client.userAgent, contains('adk-spanner-tool'));
+    });
+
+    test('default admin factory provides a concrete runtime client', () {
+      resetSpannerAdminClientFactory();
+
+      final SpannerAdminClient client = getSpannerAdminClient(
+        project: 'p',
+        credentials: <String, Object?>{'access_token': 'token'},
+      );
+      expect(client.userAgent, contains('adk-spanner-admin-tool'));
     });
   });
 
@@ -898,6 +988,119 @@ void main() {
 
   group('spanner vector store and toolset parity', () {
     test(
+      'admin tools return success payloads and preserve request args',
+      () async {
+        final _FakeSpannerAdminClient adminClient = _FakeSpannerAdminClient(
+          instanceIds: <String>['inst1'],
+          instancesById: <String, Map<String, Object?>>{
+            'inst1': <String, Object?>{
+              'instance_id': 'inst1',
+              'display_name': 'Primary',
+              'config': 'projects/p/instanceConfigs/regional-us-central1',
+              'node_count': 1,
+              'processing_units': 1000,
+              'labels': <String, Object?>{'env': 'prod'},
+            },
+          },
+          instanceConfigIds: <String>['regional-us-central1'],
+          instanceConfigsById: <String, Map<String, Object?>>{
+            'regional-us-central1': <String, Object?>{
+              'name': 'projects/p/instanceConfigs/regional-us-central1',
+              'display_name': 'us-central1',
+              'replicas': <Object?>[
+                <String, Object?>{
+                  'location': 'us-central1',
+                  'type': 'READ_WRITE',
+                  'default_leader_location': true,
+                },
+              ],
+              'labels': <String, Object?>{},
+            },
+          },
+          databasesByInstanceId: <String, List<String>>{
+            'inst1': <String>['db1', 'db2'],
+          },
+        );
+        setSpannerAdminClientFactory(({
+          required String project,
+          required Object credentials,
+        }) {
+          expect(project, 'p');
+          expect(credentials, isA<Object>());
+          return adminClient;
+        });
+
+        final Map<String, Object?> instances = await spanner_admin
+            .listInstances(projectId: 'p', credentials: Object());
+        expect(instances['status'], 'SUCCESS');
+        expect(instances['results'], <String>['inst1']);
+
+        final Map<String, Object?> instance = await spanner_admin.getInstance(
+          projectId: 'p',
+          instanceId: 'inst1',
+          credentials: Object(),
+        );
+        expect(instance['status'], 'SUCCESS');
+        expect(
+          Map<String, Object?>.from(
+            instance['results']! as Map,
+          )['display_name'],
+          'Primary',
+        );
+
+        final Map<String, Object?> configs = await spanner_admin
+            .listInstanceConfigs(projectId: 'p', credentials: Object());
+        expect(configs['results'], <String>['regional-us-central1']);
+
+        final Map<String, Object?> config = await spanner_admin
+            .getInstanceConfig(
+              projectId: 'p',
+              configId: 'regional-us-central1',
+              credentials: Object(),
+            );
+        expect(config['status'], 'SUCCESS');
+
+        final Map<String, Object?> databases = await spanner_admin
+            .listDatabases(
+              projectId: 'p',
+              instanceId: 'inst1',
+              credentials: Object(),
+            );
+        expect(databases['results'], <String>['db1', 'db2']);
+
+        final Map<String, Object?> createDb = await spanner_admin
+            .createDatabase(
+              projectId: 'p',
+              instanceId: 'inst1',
+              databaseId: 'db3',
+              credentials: Object(),
+            );
+        expect(createDb['status'], 'SUCCESS');
+        expect(adminClient.createDatabaseCalls.single, <String, Object?>{
+          'instance_id': 'inst1',
+          'database_id': 'db3',
+        });
+
+        final Map<String, Object?> createInst = await spanner_admin
+            .createInstance(
+              projectId: 'p',
+              instanceId: 'inst2',
+              configId: 'regional-us-central1',
+              displayName: 'Replica',
+              credentials: Object(),
+              nodes: 3,
+            );
+        expect(createInst['status'], 'SUCCESS');
+        expect(adminClient.createInstanceCalls.single, <String, Object?>{
+          'instance_id': 'inst2',
+          'config_id': 'regional-us-central1',
+          'display_name': 'Replica',
+          'nodes': 3,
+        });
+      },
+    );
+
+    test(
       'vector store builds ddl and inserts embedded content batches',
       () async {
         final _FakeSpannerDatabase database = _FakeSpannerDatabase(
@@ -1111,5 +1314,19 @@ void main() {
         );
       },
     );
+
+    test('admin toolset returns expected tools', () async {
+      final SpannerAdminToolset toolset = SpannerAdminToolset();
+      final List<BaseTool> tools = await toolset.getTools();
+      expect(tools.map((BaseTool tool) => tool.name).toSet(), <String>{
+        'list_instances',
+        'get_instance',
+        'create_database',
+        'list_databases',
+        'create_instance',
+        'list_instance_configs',
+        'get_instance_config',
+      });
+    });
   });
 }

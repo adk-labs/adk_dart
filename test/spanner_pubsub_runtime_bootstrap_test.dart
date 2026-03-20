@@ -11,6 +11,41 @@ class _RuntimeFakeSpannerClient implements SpannerClient {
   }
 }
 
+class _RuntimeFakeSpannerAdminClient implements SpannerAdminClient {
+  @override
+  Future<void> createDatabase({
+    required String instanceId,
+    required String databaseId,
+  }) async {}
+
+  @override
+  Future<void> createInstance({
+    required String instanceId,
+    required String configId,
+    required String displayName,
+    int nodes = 1,
+  }) async {}
+
+  @override
+  Map<String, Object?> getInstance(String instanceId) => <String, Object?>{};
+
+  @override
+  Map<String, Object?> getInstanceConfig(String configId) =>
+      <String, Object?>{};
+
+  @override
+  Iterable<String> listDatabases(String instanceId) sync* {}
+
+  @override
+  Iterable<String> listInstanceConfigs() sync* {}
+
+  @override
+  Iterable<String> listInstances() sync* {}
+
+  @override
+  String userAgent = '';
+}
+
 class _RuntimeFakePublisherClient implements PubSubPublisherClient {
   int closeCount = 0;
 
@@ -64,12 +99,19 @@ void main() {
 
   test('configure and reset helpers wire runtime factories together', () async {
     final _RuntimeFakeSpannerClient spannerClient = _RuntimeFakeSpannerClient();
+    final _RuntimeFakeSpannerAdminClient spannerAdminClient =
+        _RuntimeFakeSpannerAdminClient();
     final _RuntimeFakePublisherClient publisherClient =
         _RuntimeFakePublisherClient();
     final _RuntimeFakeSubscriberClient subscriberClient =
         _RuntimeFakeSubscriberClient();
 
     configureSpannerPubSubRuntime(
+      spannerAdminClientFactory:
+          ({required String project, required Object credentials}) {
+            expect(project, 'proj-1');
+            return spannerAdminClient;
+          },
       spannerClientFactory:
           ({required String project, required Object credentials}) {
             expect(project, 'proj-1');
@@ -107,8 +149,14 @@ void main() {
       project: 'proj-1',
       credentials: Object(),
     );
+    final SpannerAdminClient resolvedSpannerAdminClient = getSpannerAdminClient(
+      project: 'proj-1',
+      credentials: Object(),
+    );
     expect(identical(resolvedSpannerClient, spannerClient), isTrue);
     expect(resolvedSpannerClient.userAgent, spannerUserAgent);
+    expect(identical(resolvedSpannerAdminClient, spannerAdminClient), isTrue);
+    expect(resolvedSpannerAdminClient.userAgent, spannerAdminUserAgent);
 
     final PubSubPublisherClient resolvedPublisher = await getPublisherClient(
       credentials: <String, Object?>{'access_token': 'token-1'},
@@ -140,11 +188,20 @@ void main() {
       project: 'proj-1',
       credentials: <String, Object?>{'access_token': 'token-reset'},
     );
+    final SpannerAdminClient defaultSpannerAdminClient = getSpannerAdminClient(
+      project: 'proj-1',
+      credentials: <String, Object?>{'access_token': 'token-reset'},
+    );
     expect(
       defaultSpannerClient.runtimeType.toString().toLowerCase(),
       contains('spanner'),
     );
     expect(defaultSpannerClient.userAgent, spannerUserAgent);
+    expect(
+      defaultSpannerAdminClient.runtimeType.toString().toLowerCase(),
+      contains('spanner'),
+    );
+    expect(defaultSpannerAdminClient.userAgent, spannerAdminUserAgent);
     expect(
       () => embedContents(
         vertexAiEmbeddingModelName: 'text-embedding-005',

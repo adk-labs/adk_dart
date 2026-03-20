@@ -23,6 +23,7 @@ enum FeatureName {
   pubsubToolConfig('PUBSUB_TOOL_CONFIG'),
   pubsubToolset('PUBSUB_TOOLSET'),
   skillToolset('SKILL_TOOLSET'),
+  spannerAdminToolset('SPANNER_ADMIN_TOOLSET'),
   spannerToolset('SPANNER_TOOLSET'),
   spannerToolSettings('SPANNER_TOOL_SETTINGS'),
   spannerVectorStore('SPANNER_VECTOR_STORE'),
@@ -128,6 +129,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.skillToolset: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.spannerAdminToolset: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),

@@ -356,6 +356,12 @@ class AnthropicLlm extends BaseLlm {
         for (final Object? item in response['content'] as List<Object?>) {
           if (item is Map && item['type'] == 'text' && item['text'] is String) {
             lines.add(item['text'] as String);
+          } else if (item is Map || item is List) {
+            try {
+              lines.add(jsonEncode(item));
+            } catch (_) {
+              lines.add('$item');
+            }
           } else if (item != null) {
             lines.add('$item');
           }
@@ -367,6 +373,12 @@ class AnthropicLlm extends BaseLlm {
           content = jsonEncode(result);
         } else {
           content = '$result';
+        }
+      } else if (response is Map || response is List) {
+        try {
+          content = jsonEncode(response);
+        } catch (_) {
+          content = '$response';
         }
       } else {
         content = '$response';

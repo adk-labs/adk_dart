@@ -4,6 +4,7 @@ library;
 import '../flows/llm_flows/audio_transcriber.dart';
 import 'bigquery/client.dart';
 import 'bigtable/client.dart';
+import 'spanner/admin_tool.dart';
 import 'spanner/client.dart';
 import 'spanner/utils.dart';
 import 'toolbox_toolset.dart';
@@ -16,6 +17,7 @@ void configureToolRuntimeBootstrap({
   BigQueryClientFactory? bigQueryClientFactory,
   BigtableAdminClientFactory? bigtableAdminClientFactory,
   BigtableDataClientFactory? bigtableDataClientFactory,
+  SpannerAdminClientFactory? spannerAdminClientFactory,
   SpannerClientFactory? spannerClientFactory,
   SpannerEmbedder? spannerEmbedder,
   SpannerEmbedderAsync? spannerEmbedderAsync,
@@ -33,6 +35,9 @@ void configureToolRuntimeBootstrap({
   }
   if (spannerClientFactory != null) {
     setSpannerClientFactory(spannerClientFactory);
+  }
+  if (spannerAdminClientFactory != null) {
+    setSpannerAdminClientFactory(spannerAdminClientFactory);
   }
   if (spannerEmbedder != null || spannerEmbedderAsync != null) {
     setSpannerEmbedders(
@@ -53,6 +58,7 @@ void resetToolRuntimeBootstrap({
   bool resetBigQuery = true,
   bool resetBigtable = true,
   bool resetSpannerClient = true,
+  bool resetSpannerAdminClient = true,
   bool resetSpannerEmbeddersRuntime = true,
   bool clearToolboxDelegate = true,
   bool clearDefaultAudioRecognizer = true,
@@ -65,6 +71,9 @@ void resetToolRuntimeBootstrap({
   }
   if (resetSpannerClient) {
     resetSpannerClientFactory();
+  }
+  if (resetSpannerAdminClient) {
+    resetSpannerAdminClientFactory();
   }
   if (resetSpannerEmbeddersRuntime) {
     resetSpannerEmbedders();

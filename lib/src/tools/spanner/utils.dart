@@ -8,6 +8,7 @@ import 'dart:io';
 import '../_google_auth_token.dart';
 import '../pubsub/client.dart' as pubsub;
 import '../tool_context.dart';
+import 'admin_tool.dart';
 import 'client.dart';
 import 'settings.dart';
 
@@ -151,6 +152,7 @@ void resetSpannerEmbedders() {
 
 /// Configures Spanner and Pub/Sub runtime factories in one call.
 void configureSpannerPubSubRuntime({
+  SpannerAdminClientFactory? spannerAdminClientFactory,
   SpannerClientFactory? spannerClientFactory,
   SpannerEmbedder? spannerEmbedder,
   SpannerEmbedderAsync? spannerEmbedderAsync,
@@ -159,6 +161,9 @@ void configureSpannerPubSubRuntime({
 }) {
   if (spannerClientFactory != null) {
     setSpannerClientFactory(spannerClientFactory);
+  }
+  if (spannerAdminClientFactory != null) {
+    setSpannerAdminClientFactory(spannerAdminClientFactory);
   }
   if (spannerEmbedder != null || spannerEmbedderAsync != null) {
     setSpannerEmbedders(
@@ -182,6 +187,7 @@ Future<void> resetSpannerPubSubRuntime({
     await pubsub.cleanupClients();
   }
   pubsub.resetPubSubClientFactories();
+  resetSpannerAdminClientFactory();
   resetSpannerClientFactory();
   resetSpannerEmbedders();
 }

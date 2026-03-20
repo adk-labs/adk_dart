@@ -856,6 +856,41 @@ void main() {
       );
       expect(response.content?.parts.last.text, 'raw-non-map-block');
     });
+
+    test('serializes arbitrary dict payloads in tool result content', () {
+      final Map<String, Object?> block = AnthropicLlm.partToMessageBlock(
+        Part.fromFunctionResponse(
+          name: 'lookup',
+          id: 'tool_3',
+          response: <String, dynamic>{
+            'content': <Object?>[
+              <String, Object?>{
+                'type': 'json',
+                'payload': <String, Object?>{'id': 7, 'ok': true},
+              },
+            ],
+          },
+        ),
+      );
+
+      expect(block['type'], 'tool_result');
+      expect(block['content'], '{"type":"json","payload":{"id":7,"ok":true}}');
+
+      final Map<String, Object?> rawMapBlock = AnthropicLlm.partToMessageBlock(
+        Part.fromFunctionResponse(
+          name: 'lookup',
+          id: 'tool_4',
+          response: <String, dynamic>{
+            'status': 'ok',
+            'payload': <String, Object?>{'id': 9},
+          },
+        ),
+      );
+      expect(jsonDecode('${rawMapBlock['content']}'), <String, Object?>{
+        'status': 'ok',
+        'payload': <String, Object?>{'id': 9},
+      });
+    });
   });
 
   group('lite llm parity', () {
@@ -956,78 +991,88 @@ void main() {
       expect(parsed.content?.parts[2].thought, isFalse);
     });
 
-    test('parses anthropic thinking_blocks as thought parts with signatures', () {
-      final LlmResponse parsed = LiteLlm.parseCompletionResponse(
-        <String, Object?>{
-          'model': 'anthropic/claude-4-sonnet',
-          'choices': <Object?>[
-            <String, Object?>{
-              'finish_reason': 'stop',
-              'message': <String, Object?>{
-                'role': 'assistant',
-                'thinking_blocks': <Object?>[
-                  <String, Object?>{
-                    'type': 'thinking',
-                    'thinking': 'step 1',
-                    'signature': 'sig_one',
-                  },
-                  <String, Object?>{
-                    'type': 'redacted',
-                    'thinking': 'hidden',
-                    'signature': 'sig_two',
-                  },
-                ],
-                'content': 'done',
+    test(
+      'parses anthropic thinking_blocks as thought parts with signatures',
+      () {
+        final LlmResponse parsed = LiteLlm.parseCompletionResponse(
+          <String, Object?>{
+            'model': 'anthropic/claude-4-sonnet',
+            'choices': <Object?>[
+              <String, Object?>{
+                'finish_reason': 'stop',
+                'message': <String, Object?>{
+                  'role': 'assistant',
+                  'thinking_blocks': <Object?>[
+                    <String, Object?>{
+                      'type': 'thinking',
+                      'thinking': 'step 1',
+                      'signature': 'sig_one',
+                    },
+                    <String, Object?>{
+                      'type': 'redacted',
+                      'thinking': 'hidden',
+                      'signature': 'sig_two',
+                    },
+                  ],
+                  'content': 'done',
+                },
               },
+            ],
+            'usage': <String, Object?>{
+              'prompt_tokens': 1,
+              'completion_tokens': 2,
+              'total_tokens': 3,
             },
-          ],
-          'usage': <String, Object?>{
-            'prompt_tokens': 1,
-            'completion_tokens': 2,
-            'total_tokens': 3,
           },
-        },
-      );
+        );
 
-      expect(parsed.content?.parts, hasLength(2));
-      expect(parsed.content?.parts.first.text, 'step 1');
-      expect(parsed.content?.parts.first.thought, isTrue);
-      expect(parsed.content?.parts.first.thoughtSignature, utf8.encode('sig_one'));
-      expect(parsed.content?.parts.last.text, 'done');
-    });
+        expect(parsed.content?.parts, hasLength(2));
+        expect(parsed.content?.parts.first.text, 'step 1');
+        expect(parsed.content?.parts.first.thought, isTrue);
+        expect(
+          parsed.content?.parts.first.thoughtSignature,
+          utf8.encode('sig_one'),
+        );
+        expect(parsed.content?.parts.last.text, 'done');
+      },
+    );
 
-    test('builds anthropic thinking_blocks from thought parts with signatures', () {
-      final Map<String, Object?> payload = LiteLlm.buildPayload(
-        LlmRequest(
-          model: 'anthropic/claude-4-sonnet',
-          contents: <Content>[
-            Content(
-              role: 'model',
-              parts: <Part>[
-                Part.text(
-                  'Let me reason...',
-                  thought: true,
-                ).copyWith(thoughtSignature: utf8.encode('sig_round_trip')),
-                Part.text('Final answer'),
-              ],
-            ),
-          ],
-        ),
-        stream: false,
-      );
+    test(
+      'builds anthropic thinking_blocks from thought parts with signatures',
+      () {
+        final Map<String, Object?> payload = LiteLlm.buildPayload(
+          LlmRequest(
+            model: 'anthropic/claude-4-sonnet',
+            contents: <Content>[
+              Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.text(
+                    'Let me reason...',
+                    thought: true,
+                  ).copyWith(thoughtSignature: utf8.encode('sig_round_trip')),
+                  Part.text('Final answer'),
+                ],
+              ),
+            ],
+          ),
+          stream: false,
+        );
 
-      final Map<String, Object?> message =
-          (payload['messages'] as List<Object?>).single as Map<String, Object?>;
-      expect(message['thinking_blocks'], <Object?>[
-        <String, Object?>{
-          'type': 'thinking',
-          'thinking': 'Let me reason...',
-          'signature': 'sig_round_trip',
-        },
-      ]);
-      expect(message['content'], 'Final answer');
-      expect(message.containsKey('reasoning_content'), isFalse);
-    });
+        final Map<String, Object?> message =
+            (payload['messages'] as List<Object?>).single
+                as Map<String, Object?>;
+        expect(message['thinking_blocks'], <Object?>[
+          <String, Object?>{
+            'type': 'thinking',
+            'thinking': 'Let me reason...',
+            'signature': 'sig_round_trip',
+          },
+        ]);
+        expect(message['content'], 'Final answer');
+        expect(message.containsKey('reasoning_content'), isFalse);
+      },
+    );
 
     test('enforces strict OpenAI schema for structured outputs', () {
       final LlmRequest request = LlmRequest(

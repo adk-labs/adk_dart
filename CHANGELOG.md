@@ -1,5 +1,8 @@
 ## Unreleased
 
+- Added March 18-19 parity coverage for the experimental `SpannerAdminToolset`, including admin client/runtime factories, bootstrap wiring, and regression tests.
+- Added `environment_simulation` rename-compatible exports and factory aliases on top of the existing agent simulator runtime.
+- Hardened Anthropic tool-result serialization so arbitrary map/list payloads are emitted as JSON instead of lossy stringified Dart map text.
 - Closed the latest four-day parity tail by adding MCP sampling callback/capability wiring across `adk_mcp`, `McpSessionManager`, and `McpToolset`, with HTTP integration coverage.
 - Added multi-turn evaluation metric support for task success, trajectory quality, and tool-use quality, including registry/metric-info wiring and regression tests.
 

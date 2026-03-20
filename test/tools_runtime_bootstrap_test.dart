@@ -214,6 +214,41 @@ class _FakeSpannerClient implements SpannerClient {
   String userAgent = '';
 }
 
+class _FakeSpannerAdminClient implements SpannerAdminClient {
+  @override
+  Future<void> createDatabase({
+    required String instanceId,
+    required String databaseId,
+  }) async {}
+
+  @override
+  Future<void> createInstance({
+    required String instanceId,
+    required String configId,
+    required String displayName,
+    int nodes = 1,
+  }) async {}
+
+  @override
+  Map<String, Object?> getInstance(String instanceId) => <String, Object?>{};
+
+  @override
+  Map<String, Object?> getInstanceConfig(String configId) =>
+      <String, Object?>{};
+
+  @override
+  Iterable<String> listDatabases(String instanceId) sync* {}
+
+  @override
+  Iterable<String> listInstanceConfigs() sync* {}
+
+  @override
+  Iterable<String> listInstances() sync* {}
+
+  @override
+  String userAgent = '';
+}
+
 class _FakeSpannerInstance implements SpannerInstance {
   @override
   SpannerDatabase database(String databaseId, {String? databaseRole}) {
@@ -345,6 +380,10 @@ void main() {
               }) {
                 return _FakeBigtableDataClient();
               },
+          spannerAdminClientFactory:
+              ({required String project, required Object credentials}) {
+                return _FakeSpannerAdminClient();
+              },
           spannerClientFactory:
               ({required String project, required Object credentials}) {
                 return _FakeSpannerClient();
@@ -385,8 +424,14 @@ void main() {
           project: 'project',
           credentials: Object(),
         );
+        final SpannerAdminClient spannerAdminClient = getSpannerAdminClient(
+          project: 'project',
+          credentials: Object(),
+        );
         expect(spannerClient, isA<_FakeSpannerClient>());
         expect(spannerClient.userAgent, spannerUserAgent);
+        expect(spannerAdminClient, isA<_FakeSpannerAdminClient>());
+        expect(spannerAdminClient.userAgent, spannerAdminUserAgent);
 
         final ToolboxToolset toolbox = ToolboxToolset(
           serverUrl: 'http://toolbox',
@@ -447,6 +492,10 @@ void main() {
             }) {
               return _FakeBigtableDataClient();
             },
+        spannerAdminClientFactory:
+            ({required String project, required Object credentials}) {
+              return _FakeSpannerAdminClient();
+            },
         spannerClientFactory:
             ({required String project, required Object credentials}) {
               return _FakeSpannerClient();
@@ -491,8 +540,16 @@ void main() {
         project: 'project',
         credentials: <String, Object?>{'access_token': 'token'},
       );
+      final SpannerAdminClient spannerAdminClient = getSpannerAdminClient(
+        project: 'project',
+        credentials: <String, Object?>{'access_token': 'token'},
+      );
       expect(
         spannerClient.runtimeType.toString().toLowerCase(),
+        contains('spanner'),
+      );
+      expect(
+        spannerAdminClient.runtimeType.toString().toLowerCase(),
         contains('spanner'),
       );
       expect(

@@ -1,6 +1,8 @@
 /// Public exports for Spanner tool modules.
 library;
 
+export 'admin_tool.dart';
+export 'admin_toolset.dart';
 export 'client.dart';
 export 'metadata_tool.dart';
 export 'query_tool.dart';
