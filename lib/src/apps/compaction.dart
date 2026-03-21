@@ -23,6 +23,77 @@ bool hasSlidingWindowConfig(EventsCompactionConfig? config) {
       config.overlapSize >= 0;
 }
 
+Set<String> _eventFunctionCallIds(Event event) {
+  return event
+      .getFunctionCalls()
+      .map((FunctionCall call) => call.id)
+      .whereType<String>()
+      .toSet();
+}
+
+Set<String> _eventFunctionResponseIds(Event event) {
+  return event
+      .getFunctionResponses()
+      .map((FunctionResponse response) => response.id)
+      .whereType<String>()
+      .toSet();
+}
+
+Set<String> _pendingFunctionCallIds(List<Event> events) {
+  final Set<String> callIds = <String>{};
+  final Set<String> responseIds = <String>{};
+  for (final Event event in events) {
+    callIds.addAll(_eventFunctionCallIds(event));
+    responseIds.addAll(_eventFunctionResponseIds(event));
+  }
+  return callIds.difference(responseIds);
+}
+
+bool _hasPendingFunctionCall(Event event, Set<String> pendingIds) {
+  final Set<String> callIds = _eventFunctionCallIds(event);
+  if (callIds.isEmpty || pendingIds.isEmpty) {
+    return false;
+  }
+  return callIds.intersection(pendingIds).isNotEmpty;
+}
+
+List<Event> _truncateEventsBeforePendingFunctionCall(
+  List<Event> events,
+  Set<String> pendingIds,
+) {
+  for (int index = 0; index < events.length; index += 1) {
+    if (_hasPendingFunctionCall(events[index], pendingIds)) {
+      return events.take(index).toList(growable: false);
+    }
+  }
+  return events;
+}
+
+int _safeTokenCompactionSplitIndex({
+  required List<Event> candidateEvents,
+  required int eventRetentionSize,
+}) {
+  final int initialSplit = candidateEvents.length - eventRetentionSize;
+  if (initialSplit <= 0) {
+    return 0;
+  }
+
+  final Set<String> unmatchedResponseIds = <String>{};
+  int bestSplit = 0;
+
+  for (int i = candidateEvents.length - 1; i >= 0; i -= 1) {
+    unmatchedResponseIds.addAll(_eventFunctionResponseIds(candidateEvents[i]));
+    unmatchedResponseIds.removeAll(_eventFunctionCallIds(candidateEvents[i]));
+
+    if (unmatchedResponseIds.isEmpty && i <= initialSplit) {
+      bestSplit = i;
+      break;
+    }
+  }
+
+  return bestSplit;
+}
+
 /// Runs token-threshold compaction when the configured threshold is exceeded.
 Future<bool> runCompactionForTokenThresholdConfig({
   required EventsCompactionConfig? config,
@@ -57,15 +128,25 @@ Future<bool> runCompactionForTokenThresholdConfig({
     return false;
   }
 
-  final int splitIndex = candidates.length - config.eventRetentionSize!;
+  final int splitIndex = config.eventRetentionSize == 0
+      ? candidates.length
+      : _safeTokenCompactionSplitIndex(
+          candidateEvents: candidates,
+          eventRetentionSize: config.eventRetentionSize!,
+        );
   if (splitIndex <= 0) {
     return false;
   }
 
-  final List<Event> eventsToCompact = candidates
+  List<Event> eventsToCompact = candidates
       .take(splitIndex)
       .map((Event event) => event.copyWith())
       .toList(growable: false);
+  final Set<String> pendingIds = _pendingFunctionCallIds(session.events);
+  eventsToCompact = _truncateEventsBeforePendingFunctionCall(
+    eventsToCompact,
+    pendingIds,
+  );
   if (eventsToCompact.isEmpty) {
     return false;
   }

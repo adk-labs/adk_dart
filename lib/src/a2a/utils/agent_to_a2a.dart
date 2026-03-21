@@ -56,6 +56,7 @@ Future<A2aApplication> toA2a(
   String protocol = 'http',
   Object? agentCard,
   Runner? runner,
+  A2aApplicationLifespan? lifespan,
 }) async {
   final Runner resolvedRunner =
       runner ?? InMemoryRunner(agent: agent, appName: agent.name);
@@ -74,5 +75,6 @@ Future<A2aApplication> toA2a(
     agentCard: finalCard,
     executor: executor,
     taskStore: <String, A2aTask>{},
+    lifespan: lifespan,
   );
 }

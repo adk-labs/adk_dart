@@ -381,10 +381,7 @@ void main() {
         result! as Map,
       );
       expect(payload['status'], 'error');
-      expect(
-        payload['error_message'],
-        contains('token resolution failed'),
-      );
+      expect(payload['error_message'], contains('token resolution failed'));
     });
 
     test(
@@ -396,40 +393,39 @@ void main() {
           filter: 'lang = "en"',
           maxResults: 2,
           accessTokenProvider: () async => 'token-1',
-          httpRequestProvider: (
-            DiscoveryEngineSearchHttpRequest request,
-          ) async {
-            capturedRequest = request;
-            final Map<String, Object?> response = <String, Object?>{
-              'results': <Object?>[
-                <String, Object?>{
-                  'chunk': <String, Object?>{
-                    'content': 'chunk-content-1',
-                    'documentMetadata': <String, Object?>{
-                      'title': 'Doc 1',
-                      'uri': 'https://fallback.example/doc1',
-                      'structData': <String, Object?>{
-                        'uri': 'https://preferred.example/doc1',
+          httpRequestProvider:
+              (DiscoveryEngineSearchHttpRequest request) async {
+                capturedRequest = request;
+                final Map<String, Object?> response = <String, Object?>{
+                  'results': <Object?>[
+                    <String, Object?>{
+                      'chunk': <String, Object?>{
+                        'content': 'chunk-content-1',
+                        'documentMetadata': <String, Object?>{
+                          'title': 'Doc 1',
+                          'uri': 'https://fallback.example/doc1',
+                          'structData': <String, Object?>{
+                            'uri': 'https://preferred.example/doc1',
+                          },
+                        },
                       },
                     },
-                  },
-                },
-                <String, Object?>{
-                  'chunk': <String, Object?>{
-                    'content': 'chunk-content-2',
-                    'documentMetadata': <String, Object?>{
-                      'title': 'Doc 2',
-                      'uri': 'https://example/doc2',
+                    <String, Object?>{
+                      'chunk': <String, Object?>{
+                        'content': 'chunk-content-2',
+                        'documentMetadata': <String, Object?>{
+                          'title': 'Doc 2',
+                          'uri': 'https://example/doc2',
+                        },
+                      },
                     },
-                  },
-                },
-              ],
-            };
-            return DiscoveryEngineSearchHttpResponse(
-              statusCode: 200,
-              bodyBytes: utf8.encode(jsonEncode(response)),
-            );
-          },
+                  ],
+                };
+                return DiscoveryEngineSearchHttpResponse(
+                  statusCode: 200,
+                  bodyBytes: utf8.encode(jsonEncode(response)),
+                );
+              },
         );
 
         final Object? result = await tool.run(
@@ -440,9 +436,9 @@ void main() {
         expect(capturedRequest.method, 'POST');
         expect(capturedRequest.uri.toString(), contains(':search'));
         expect(capturedRequest.headers['Authorization'], 'Bearer token-1');
-        final Map<String, Object?> requestBody = (jsonDecode(
-          utf8.decode(capturedRequest.bodyBytes),
-        ) as Map).cast<String, Object?>();
+        final Map<String, Object?> requestBody =
+            (jsonDecode(utf8.decode(capturedRequest.bodyBytes)) as Map)
+                .cast<String, Object?>();
         expect(requestBody['query'], 'raw query');
         expect(
           ((requestBody['contentSearchSpec'] as Map)['searchResultMode']),
@@ -455,7 +451,9 @@ void main() {
           result! as Map,
         );
         expect(payload['status'], 'success');
-        final List<Object?> rows = List<Object?>.from(payload['results'] as List);
+        final List<Object?> rows = List<Object?>.from(
+          payload['results'] as List,
+        );
         expect(rows, hasLength(2));
         final Map<String, Object?> first = Map<String, Object?>.from(
           rows.first! as Map,
@@ -465,5 +463,128 @@ void main() {
         expect(first['content'], 'chunk-content-1');
       },
     );
+
+    test(
+      'DiscoveryEngineSearchTool falls back to DOCUMENTS for structured datastores',
+      () async {
+        final List<Map<String, Object?>> requestBodies =
+            <Map<String, Object?>>[];
+        final DiscoveryEngineSearchTool tool = DiscoveryEngineSearchTool(
+          dataStoreId: 'projects/p/locations/l/collections/c/dataStores/d',
+          accessTokenProvider: () async => 'token-1',
+          httpRequestProvider: (DiscoveryEngineSearchHttpRequest request) async {
+            final Map<String, Object?> requestBody =
+                (jsonDecode(utf8.decode(request.bodyBytes)) as Map)
+                    .cast<String, Object?>();
+            requestBodies.add(requestBody);
+            if (requestBodies.length == 1) {
+              return DiscoveryEngineSearchHttpResponse(
+                statusCode: 400,
+                bodyBytes: utf8.encode(
+                  'structured datastore requires search_result_mode DOCUMENTS',
+                ),
+              );
+            }
+            return DiscoveryEngineSearchHttpResponse(
+              statusCode: 200,
+              bodyBytes: utf8.encode(
+                jsonEncode(<String, Object?>{
+                  'results': <Object?>[
+                    <String, Object?>{
+                      'document': <String, Object?>{
+                        'structData': <String, Object?>{
+                          'title': 'Structured Doc',
+                          'uri': 'https://example/doc',
+                          'city': 'Seoul',
+                        },
+                      },
+                    },
+                  ],
+                }),
+              ),
+            );
+          },
+        );
+
+        final Map<String, Object?> payload = Map<String, Object?>.from(
+          (await tool.run(
+                args: <String, dynamic>{'query': 'structured'},
+                toolContext: _newToolContext(),
+              ))
+              as Map,
+        );
+
+        expect(requestBodies, hasLength(2));
+        expect(
+          (requestBodies.first['contentSearchSpec'] as Map)['searchResultMode'],
+          'CHUNKS',
+        );
+        expect(
+          (requestBodies.last['contentSearchSpec'] as Map)['searchResultMode'],
+          'DOCUMENTS',
+        );
+        expect(payload['status'], 'success');
+        final Map<String, Object?> row = Map<String, Object?>.from(
+          (payload['results'] as List).single as Map,
+        );
+        expect(row['title'], 'Structured Doc');
+        expect(row['url'], 'https://example/doc');
+        expect(row['content'], '{"city":"Seoul"}');
+      },
+    );
+
+    test('DiscoveryEngineSearchTool respects explicit document mode', () async {
+      late Map<String, Object?> requestBody;
+      final DiscoveryEngineSearchTool tool = DiscoveryEngineSearchTool(
+        dataStoreId: 'projects/p/locations/l/collections/c/dataStores/d',
+        searchResultMode: SearchResultMode.documents,
+        accessTokenProvider: () async => 'token-1',
+        httpRequestProvider: (DiscoveryEngineSearchHttpRequest request) async {
+          requestBody = (jsonDecode(utf8.decode(request.bodyBytes)) as Map)
+              .cast<String, Object?>();
+          return DiscoveryEngineSearchHttpResponse(
+            statusCode: 200,
+            bodyBytes: utf8.encode(
+              jsonEncode(<String, Object?>{
+                'results': <Object?>[
+                  <String, Object?>{
+                    'document': <String, Object?>{
+                      'derivedStructData': <String, Object?>{
+                        'title': 'Doc title',
+                        'link': 'https://example/doc',
+                        'snippets': <Object?>[
+                          <String, Object?>{'snippet': 'first snippet'},
+                          <String, Object?>{'snippet': 'second snippet'},
+                        ],
+                      },
+                    },
+                  },
+                ],
+              }),
+            ),
+          );
+        },
+      );
+
+      final Map<String, Object?> payload = Map<String, Object?>.from(
+        (await tool.run(
+              args: <String, dynamic>{'query': 'document mode'},
+              toolContext: _newToolContext(),
+            ))
+            as Map,
+      );
+
+      expect(
+        (requestBody['contentSearchSpec'] as Map)['searchResultMode'],
+        'DOCUMENTS',
+      );
+      expect(payload['status'], 'success');
+      final Map<String, Object?> row = Map<String, Object?>.from(
+        (payload['results'] as List).single as Map,
+      );
+      expect(row['title'], 'Doc title');
+      expect(row['url'], 'https://example/doc');
+      expect(row['content'], 'first snippet\nsecond snippet');
+    });
   });
 }

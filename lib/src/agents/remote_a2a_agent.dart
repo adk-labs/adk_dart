@@ -656,8 +656,8 @@ class RemoteA2aAgent extends BaseAgent {
           }
         } else if (update is A2aTaskStatusUpdateEvent &&
             update.status.message != null) {
-          event = convertA2aMessageToEvent(
-            update.status.message!,
+          event = convertA2aStatusUpdateToEvent(
+            update,
             author: name,
             invocationContext: ctx,
             partConverter: _a2aPartConverter,
@@ -671,8 +671,8 @@ class RemoteA2aAgent extends BaseAgent {
           }
         } else if (update is A2aTaskArtifactUpdateEvent &&
             (!update.append || update.lastChunk)) {
-          event = convertA2aTaskToEvent(
-            task,
+          event = convertA2aArtifactUpdateToEvent(
+            update,
             author: name,
             invocationContext: ctx,
             partConverter: _a2aPartConverter,

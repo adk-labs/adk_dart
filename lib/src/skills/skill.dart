@@ -5,10 +5,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../tools/_google_access_token.dart';
+import '../features/_feature_registry.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 import 'package:yaml/yaml.dart';
 
 final RegExp _skillNamePattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
+final RegExp _skillNameSnakeOrKebabPattern = RegExp(
+  r'^([a-z0-9]+(-[a-z0-9]+)*|[a-z0-9]+(_[a-z0-9]+)*)$',
+);
 
 const Set<String> _allowedFrontmatterKeys = <String>{
   'name',
@@ -155,10 +159,21 @@ class Frontmatter implements SkillDescriptor {
     if (normalized.length > 64) {
       throw ArgumentError('name must be at most 64 characters');
     }
-    if (!_skillNamePattern.hasMatch(normalized)) {
+    final bool allowSnakeCase = isFeatureEnabled(
+      FeatureName.snakeCaseSkillName,
+    );
+    final RegExp pattern = allowSnakeCase
+        ? _skillNameSnakeOrKebabPattern
+        : _skillNamePattern;
+    if (!pattern.hasMatch(normalized)) {
       throw ArgumentError(
-        'name must be lowercase kebab-case (a-z, 0-9, hyphens), '
-        'with no leading, trailing, or consecutive hyphens',
+        allowSnakeCase
+            ? 'name must be lowercase kebab-case (a-z, 0-9, hyphens) or '
+                  'snake_case (a-z, 0-9, underscores), with no leading, '
+                  'trailing, or consecutive delimiters. Mixing hyphens and '
+                  'underscores is not allowed.'
+            : 'name must be lowercase kebab-case (a-z, 0-9, hyphens), '
+                  'with no leading, trailing, or consecutive hyphens',
       );
     }
     return normalized;

@@ -364,6 +364,116 @@ void main() {
       expect(message!.parts, isNotEmpty);
       expect(message.parts.first.textPart?.text, 'hello');
     });
+
+    test('message conversion round-trips EventActions through metadata', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        actions: EventActions(
+          skipSummarization: true,
+          transferToAgent: 'planner',
+          stateDelta: <String, Object?>{'city': 'seoul'},
+        ),
+        content: Content.modelText('hello'),
+      );
+
+      final A2aMessage? message = convertEventToA2aMessage(event);
+      expect(message, isNotNull);
+      expect(message!.metadata[getAdkMetadataKey('actions')], isA<Map>());
+
+      final Event roundtrip = convertA2aMessageToEvent(message);
+      expect(roundtrip.actions.skipSummarization, isTrue);
+      expect(roundtrip.actions.transferToAgent, 'planner');
+      expect(roundtrip.actions.stateDelta['city'], 'seoul');
+    });
+
+    test(
+      'status update conversion merges actions from event and message metadata',
+      () {
+        final A2aTaskStatusUpdateEvent update = A2aTaskStatusUpdateEvent(
+          taskId: 'task_1',
+          metadata: <String, Object?>{
+            getAdkMetadataKey('actions'): <String, Object?>{
+              'requestedToolConfirmations': <String, Object?>{
+                'tool': <String, Object?>{'required': true},
+              },
+            },
+          },
+          status: A2aTaskStatus(
+            state: A2aTaskState.working,
+            message: A2aMessage(
+              messageId: 'msg_1',
+              role: A2aRole.agent,
+              metadata: <String, Object?>{
+                getAdkMetadataKey('actions'): <String, Object?>{
+                  'transferToAgent': 'planner',
+                  'stateDelta': <String, Object?>{'city': 'seoul'},
+                },
+              },
+              parts: <A2aPart>[A2aPart.text('hello')],
+            ),
+          ),
+        );
+
+        final Event event = convertA2aStatusUpdateToEvent(update);
+        expect(event.actions.transferToAgent, 'planner');
+        expect(event.actions.stateDelta['city'], 'seoul');
+        expect(
+          event.actions.requestedToolConfirmations['tool'],
+          isA<Map<String, Object?>>(),
+        );
+      },
+    );
+
+    test(
+      'artifact update conversion preserves metadata actions and partial flag',
+      () {
+        final A2aTaskArtifactUpdateEvent update = A2aTaskArtifactUpdateEvent(
+          taskId: 'task_1',
+          lastChunk: false,
+          artifact: A2aArtifact(
+            artifactId: 'artifact_1',
+            metadata: <String, Object?>{
+              getAdkMetadataKey('actions'): <String, Object?>{
+                'endOfAgent': true,
+              },
+            },
+            parts: <A2aPart>[A2aPart.text('artifact text')],
+          ),
+        );
+
+        final Event event = convertA2aArtifactUpdateToEvent(update);
+        expect(event.partial, isTrue);
+        expect(event.actions.endOfAgent, isTrue);
+        expect(event.content?.parts.single.text, 'artifact text');
+      },
+    );
+  });
+
+  group('a2a app wrapper', () {
+    test('toA2a stores and runs lifecycle callbacks', () async {
+      final Agent agent = Agent(name: 'root_agent', model: _FinalTextModel());
+      final List<String> lifecycle = <String>[];
+      final A2aApplication app = await toA2a(
+        agent,
+        lifespan: A2aApplicationLifespan(
+          onStart: (A2aApplication app) {
+            lifecycle.add('start:${app.agentCard.name}');
+          },
+          onStop: (A2aApplication app) {
+            lifecycle.add('stop:${app.agentCard.name}');
+          },
+        ),
+      );
+
+      await app.start();
+      await app.shutdown();
+
+      expect(lifecycle, <String>[
+        'start:${app.agentCard.name}',
+        'stop:${app.agentCard.name}',
+      ]);
+    });
   });
 
   group('a2a executor', () {

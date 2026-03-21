@@ -215,4 +215,148 @@ void main() {
       );
     },
   );
+
+  test('token compaction skips events with pending function calls', () async {
+    final InMemorySessionService sessionService = InMemorySessionService();
+    final Session session = await sessionService.createSession(
+      appName: 'app',
+      userId: 'u_pending',
+      sessionId: 's_pending',
+    );
+
+    session.events.addAll(<Event>[
+      Event(
+        invocationId: 'inv_1',
+        author: 'user',
+        timestamp: 1.0,
+        content: Content.userText('message 1'),
+      ),
+      Event(
+        invocationId: 'inv_1',
+        author: 'root_agent',
+        timestamp: 2.0,
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'wait_for_input',
+              id: 'call_1',
+              args: <String, Object?>{'step': 'resume'},
+            ),
+          ],
+        ),
+      ),
+      Event(
+        invocationId: 'inv_2',
+        author: 'user',
+        timestamp: 3.0,
+        content: Content.userText('message 2'),
+        usageMetadata: <String, Object?>{'prompt_token_count': 100},
+      ),
+    ]);
+
+    final bool compacted = await runCompactionForTokenThresholdConfig(
+      config: EventsCompactionConfig(
+        tokenThreshold: 10,
+        eventRetentionSize: 0,
+        summarizer: (List<Event> events) =>
+            Content.modelText('summary ${events.length}'),
+      ),
+      session: session,
+      sessionService: sessionService,
+      agentName: 'root_agent',
+      currentBranch: null,
+    );
+
+    expect(compacted, isTrue);
+    final Event compactionEvent = session.events.last;
+    expect(compactionEvent.actions.compaction, isNotNull);
+    expect(compactionEvent.actions.compaction!.startTimestamp, 1.0);
+    expect(compactionEvent.actions.compaction!.endTimestamp, 1.0);
+    expect(
+      compactionEvent.actions.compaction!.compactedContent.parts.first.text,
+      'summary 1',
+    );
+  });
+
+  test(
+    'token compaction keeps tool call with retained function response',
+    () async {
+      final InMemorySessionService sessionService = InMemorySessionService();
+      final Session session = await sessionService.createSession(
+        appName: 'app',
+        userId: 'u_response',
+        sessionId: 's_response',
+      );
+
+      session.events.addAll(<Event>[
+        Event(
+          invocationId: 'inv_1',
+          author: 'user',
+          timestamp: 1.0,
+          content: Content.userText('message 1'),
+        ),
+        Event(
+          invocationId: 'inv_1',
+          author: 'root_agent',
+          timestamp: 2.0,
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.fromFunctionCall(
+                name: 'lookup',
+                id: 'call_1',
+                args: <String, Object?>{'city': 'seoul'},
+              ),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv_1',
+          author: 'root_agent',
+          timestamp: 3.0,
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: 'lookup',
+                id: 'call_1',
+                response: <String, Object?>{'ok': true},
+              ),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv_2',
+          author: 'user',
+          timestamp: 4.0,
+          content: Content.userText('message 2'),
+          usageMetadata: <String, Object?>{'prompt_token_count': 100},
+        ),
+      ]);
+
+      final bool compacted = await runCompactionForTokenThresholdConfig(
+        config: EventsCompactionConfig(
+          tokenThreshold: 10,
+          eventRetentionSize: 2,
+          summarizer: (List<Event> events) =>
+              Content.modelText('summary ${events.length}'),
+        ),
+        session: session,
+        sessionService: sessionService,
+        agentName: 'root_agent',
+        currentBranch: null,
+      );
+
+      expect(compacted, isTrue);
+      final Event compactionEvent = session.events.last;
+      expect(compactionEvent.actions.compaction, isNotNull);
+      expect(compactionEvent.actions.compaction!.startTimestamp, 1.0);
+      expect(compactionEvent.actions.compaction!.endTimestamp, 1.0);
+      expect(
+        compactionEvent.actions.compaction!.compactedContent.parts.first.text,
+        'summary 1',
+      );
+    },
+  );
 }

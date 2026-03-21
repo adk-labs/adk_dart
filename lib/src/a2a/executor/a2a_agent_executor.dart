@@ -370,6 +370,9 @@ class A2aAgentExecutor {
           artifact: A2aArtifact(
             artifactId: 'a2a_artifact_${newUuid()}',
             parts: taskResultAggregator.taskStatusMessage!.parts,
+            metadata: Map<String, Object?>.from(
+              taskResultAggregator.taskStatusMessage!.metadata,
+            ),
           ),
         ),
       );

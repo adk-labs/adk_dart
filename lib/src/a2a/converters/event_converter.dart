@@ -1,8 +1,11 @@
 /// Converters between ADK events and A2A task/message events.
 library;
 
+import 'dart:convert';
+
 import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
+import '../../events/event_actions.dart';
 import '../../flows/llm_flows/functions.dart';
 import '../../platform/uuid.dart';
 import '../../types/content.dart';
@@ -27,10 +30,82 @@ typedef AdkEventToA2AEventsConverter =
     );
 
 Object _serializeMetadataValue(Object value) {
+  if (value is EventActions) {
+    return eventActionsToJson(value);
+  }
   if (value is Map || value is List || value is num || value is bool) {
     return value;
   }
   return '$value';
+}
+
+Object? _parseAdkMetadataValue(Object? value) {
+  if (value is! String) {
+    return value;
+  }
+  try {
+    return jsonDecode(value);
+  } on FormatException {
+    return value;
+  }
+}
+
+EventActions _extractEventActions(Map<String, Object?>? metadata) {
+  if (metadata == null || metadata.isEmpty) {
+    return EventActions();
+  }
+  final Object? rawActions = metadata[getAdkMetadataKey('actions')];
+  final Object? parsedActions = _parseAdkMetadataValue(rawActions);
+  final Map<String, Object?>? actionMap = parsedActions is Map<String, Object?>
+      ? Map<String, Object?>.from(parsedActions)
+      : parsedActions is Map
+      ? parsedActions.map(
+          (Object? key, Object? value) =>
+              MapEntry<String, Object?>('$key', value),
+        )
+      : null;
+  if (actionMap == null) {
+    return EventActions();
+  }
+  return eventActionsFromJson(actionMap);
+}
+
+Map<String, Object?> _mergeTopLevelMaps(
+  Map<String, Object?> base,
+  Map<String, Object?> update,
+) {
+  final Map<String, Object?> merged = <String, Object?>{...base};
+  update.forEach((String key, Object? value) {
+    if (merged[key] is Map && value is Map) {
+      merged[key] = <String, Object?>{
+        ...(merged[key] as Map).map(
+          (Object? nestedKey, Object? nestedValue) =>
+              MapEntry<String, Object?>('$nestedKey', nestedValue),
+        ),
+        ...value.map(
+          (Object? nestedKey, Object? nestedValue) =>
+              MapEntry<String, Object?>('$nestedKey', nestedValue),
+        ),
+      };
+      return;
+    }
+    merged[key] = value;
+  });
+  return merged;
+}
+
+EventActions _mergeEventActions(EventActions base, EventActions update) {
+  return eventActionsFromJson(
+    _mergeTopLevelMaps(eventActionsToJson(base), eventActionsToJson(update)),
+  );
+}
+
+Map<String, Object?> _actionsToA2aMetadata(EventActions actions) {
+  final Map<String, Object?> serialized = eventActionsToJson(actions);
+  if (serialized.isEmpty) {
+    return <String, Object?>{};
+  }
+  return <String, Object?>{getAdkMetadataKey('actions'): serialized};
 }
 
 Map<String, Object?> _getContextMetadata(
@@ -109,36 +184,69 @@ Event convertA2aTaskToEvent(
   InvocationContext? invocationContext,
   A2APartToGenAIPartConverter partConverter = convertA2aPartToGenaiPart,
 }) {
-  A2aMessage? message;
+  final String invocationId =
+      invocationContext?.invocationId ?? 'a2a_invocation_${newUuid()}';
+  final List<Part> outputParts = <Part>[];
+  final Set<String> longRunningToolIds = <String>{};
+  EventActions actions = _extractEventActions(a2aTask.metadata);
+
   if (a2aTask.artifacts.isNotEmpty) {
-    message = A2aMessage(
-      messageId: '',
-      role: A2aRole.agent,
-      parts: List<A2aPart>.from(a2aTask.artifacts.last.parts),
-    );
-  } else if (a2aTask.status.message != null &&
-      a2aTask.status.message!.parts.isNotEmpty) {
-    message = a2aTask.status.message;
-  } else if (a2aTask.history.isNotEmpty) {
-    message = a2aTask.history.last;
+    for (final A2aArtifact artifact in a2aTask.artifacts) {
+      actions = _mergeEventActions(
+        actions,
+        _extractEventActions(artifact.metadata),
+      );
+      final A2aMessage artifactMessage = A2aMessage(
+        messageId: '',
+        role: A2aRole.agent,
+        parts: List<A2aPart>.from(artifact.parts),
+      );
+      final Event converted = convertA2aMessageToEvent(
+        artifactMessage,
+        author: author,
+        invocationContext: invocationContext,
+        partConverter: partConverter,
+      );
+      outputParts.addAll(converted.content?.parts ?? const <Part>[]);
+      longRunningToolIds.addAll(
+        converted.longRunningToolIds ?? const <String>{},
+      );
+      actions = _mergeEventActions(actions, converted.actions);
+    }
   }
 
-  if (message != null) {
-    return convertA2aMessageToEvent(
-      message,
+  if (a2aTask.status.message != null &&
+      a2aTask.status.message!.parts.isNotEmpty) {
+    final Event converted = convertA2aMessageToEvent(
+      a2aTask.status.message!,
       author: author,
       invocationContext: invocationContext,
       partConverter: partConverter,
     );
+    outputParts.addAll(converted.content?.parts ?? const <Part>[]);
+    longRunningToolIds.addAll(converted.longRunningToolIds ?? const <String>{});
+    actions = _mergeEventActions(actions, converted.actions);
+  } else if (outputParts.isEmpty && a2aTask.history.isNotEmpty) {
+    final Event converted = convertA2aMessageToEvent(
+      a2aTask.history.last,
+      author: author,
+      invocationContext: invocationContext,
+      partConverter: partConverter,
+    );
+    outputParts.addAll(converted.content?.parts ?? const <Part>[]);
+    longRunningToolIds.addAll(converted.longRunningToolIds ?? const <String>{});
+    actions = _mergeEventActions(actions, converted.actions);
   }
-
-  final String invocationId =
-      invocationContext?.invocationId ?? 'a2a_invocation_${newUuid()}';
 
   return Event(
     invocationId: invocationId,
     author: author ?? 'a2a_agent',
     branch: invocationContext?.branch,
+    actions: actions,
+    longRunningToolIds: longRunningToolIds.isEmpty ? null : longRunningToolIds,
+    content: outputParts.isEmpty
+        ? null
+        : Content(role: 'model', parts: outputParts),
   );
 }
 
@@ -151,12 +259,14 @@ Event convertA2aMessageToEvent(
 }) {
   final String invocationId =
       invocationContext?.invocationId ?? 'a2a_invocation_${newUuid()}';
+  final EventActions actions = _extractEventActions(a2aMessage.metadata);
 
   if (a2aMessage.parts.isEmpty) {
     return Event(
       invocationId: invocationId,
       author: author ?? 'a2a_agent',
       branch: invocationContext?.branch,
+      actions: actions,
       content: Content(role: 'model', parts: <Part>[]),
     );
   }
@@ -190,9 +300,60 @@ Event convertA2aMessageToEvent(
     invocationId: invocationId,
     author: author ?? 'a2a_agent',
     branch: invocationContext?.branch,
+    actions: actions,
     longRunningToolIds: longRunningToolIds.isEmpty ? null : longRunningToolIds,
     content: Content(role: 'model', parts: outputParts),
   );
+}
+
+/// Converts an [A2aTaskStatusUpdateEvent] into an ADK [Event].
+Event convertA2aStatusUpdateToEvent(
+  A2aTaskStatusUpdateEvent a2aStatusUpdate, {
+  String? author,
+  InvocationContext? invocationContext,
+  A2APartToGenAIPartConverter partConverter = convertA2aPartToGenaiPart,
+}) {
+  final A2aMessage? message = a2aStatusUpdate.status.message;
+  final Event converted = message == null
+      ? Event(
+          invocationId:
+              invocationContext?.invocationId ?? 'a2a_invocation_${newUuid()}',
+          author: author ?? 'a2a_agent',
+          branch: invocationContext?.branch,
+        )
+      : convertA2aMessageToEvent(
+          message,
+          author: author,
+          invocationContext: invocationContext,
+          partConverter: partConverter,
+        );
+  return converted.copyWith(
+    actions: _mergeEventActions(
+      _extractEventActions(a2aStatusUpdate.metadata),
+      converted.actions,
+    ),
+  );
+}
+
+/// Converts an [A2aTaskArtifactUpdateEvent] into an ADK [Event].
+Event convertA2aArtifactUpdateToEvent(
+  A2aTaskArtifactUpdateEvent a2aArtifactUpdate, {
+  String? author,
+  InvocationContext? invocationContext,
+  A2APartToGenAIPartConverter partConverter = convertA2aPartToGenaiPart,
+}) {
+  final Event converted = convertA2aMessageToEvent(
+    A2aMessage(
+      messageId: '',
+      role: A2aRole.agent,
+      parts: List<A2aPart>.from(a2aArtifactUpdate.artifact.parts),
+      metadata: Map<String, Object?>.from(a2aArtifactUpdate.artifact.metadata),
+    ),
+    author: author,
+    invocationContext: invocationContext,
+    partConverter: partConverter,
+  );
+  return converted.copyWith(partial: !a2aArtifactUpdate.lastChunk);
 }
 
 /// Converts an ADK [Event] into an [A2aMessage], when possible.
@@ -232,6 +393,7 @@ A2aMessage? convertEventToA2aMessage(
     messageId: 'a2a_msg_${newUuid()}',
     role: role,
     parts: outputParts,
+    metadata: _actionsToA2aMetadata(event.actions),
   );
 }
 

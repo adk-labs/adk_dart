@@ -13,6 +13,10 @@ Matcher _throwsArgumentMessage(String messageFragment) {
 
 void main() {
   group('Frontmatter model', () {
+    tearDown(() {
+      clearFeatureOverride(FeatureName.snakeCaseSkillName);
+    });
+
     test('stores valid fields', () {
       final Frontmatter frontmatter = Frontmatter(
         name: 'test-skill',
@@ -120,6 +124,26 @@ void main() {
       expect(
         () => Frontmatter(name: 'my_skill', description: 'desc'),
         _throwsArgumentMessage('lowercase kebab-case'),
+      );
+    });
+
+    test('accepts snake_case name when feature is enabled', () {
+      overrideFeatureEnabled(FeatureName.snakeCaseSkillName, true);
+
+      final Frontmatter frontmatter = Frontmatter(
+        name: 'my_skill_2',
+        description: 'desc',
+      );
+
+      expect(frontmatter.name, 'my_skill_2');
+    });
+
+    test('rejects mixed snake_case and kebab-case when feature is enabled', () {
+      overrideFeatureEnabled(FeatureName.snakeCaseSkillName, true);
+
+      expect(
+        () => Frontmatter(name: 'my-skill_name', description: 'desc'),
+        _throwsArgumentMessage('snake_case'),
       );
     });
 

@@ -15,6 +15,24 @@ Object? _discoveryEngineSearchPlaceholder({required String query}) {
   return null;
 }
 
+final RegExp _structuredStoreErrorPattern = RegExp(
+  r'search_result_mode.*DOCUMENTS',
+  caseSensitive: false,
+);
+
+/// Search result mode for Discovery Engine content search.
+enum SearchResultMode {
+  /// Results as chunks.
+  chunks('CHUNKS'),
+
+  /// Results as documents.
+  documents('DOCUMENTS');
+
+  const SearchResultMode(this.value);
+
+  final String value;
+}
+
 /// Request payload for Discovery Engine search.
 class DiscoveryEngineSearchRequest {
   /// Creates a search request.
@@ -154,6 +172,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     this.searchEngineId,
     this.filter,
     this.maxResults,
+    SearchResultMode? searchResultMode,
     this.searchHandler,
     DiscoveryEngineSearchHttpRequestProvider? httpRequestProvider,
     DiscoveryEngineSearchAccessTokenProvider? accessTokenProvider,
@@ -165,6 +184,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
        _accessTokenProvider =
            accessTokenProvider ?? _defaultDiscoveryEngineAccessTokenProvider,
        _apiBaseUrl = apiBaseUrl,
+       _searchResultMode = searchResultMode,
        super(
          func: _discoveryEngineSearchPlaceholder,
          name: 'discovery_engine_search',
@@ -204,6 +224,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
   final DiscoveryEngineSearchHttpRequestProvider _httpRequestProvider;
   final DiscoveryEngineSearchAccessTokenProvider _accessTokenProvider;
   final String _apiBaseUrl;
+  SearchResultMode? _searchResultMode;
 
   static const String _defaultDiscoveryEngineApiBaseUrl =
       'https://discoveryengine.googleapis.com/v1beta';
@@ -265,9 +286,29 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     }
 
     try {
-      final List<DiscoveryEngineSearchResult> results = await _searchWithApi(
-        request,
-      );
+      late List<DiscoveryEngineSearchResult> results;
+      if (_searchResultMode != null) {
+        results = await _searchWithApi(
+          request,
+          searchResultMode: _searchResultMode!,
+        );
+      } else {
+        try {
+          results = await _searchWithApi(
+            request,
+            searchResultMode: SearchResultMode.chunks,
+          );
+        } on DiscoveryEngineSearchApiException catch (error) {
+          if (!_structuredStoreErrorPattern.hasMatch(error.message)) {
+            rethrow;
+          }
+          _searchResultMode = SearchResultMode.documents;
+          results = await _searchWithApi(
+            request,
+            searchResultMode: SearchResultMode.documents,
+          );
+        }
+      }
       return <String, Object?>{
         'status': 'success',
         'results': results
@@ -280,8 +321,9 @@ class DiscoveryEngineSearchTool extends FunctionTool {
   }
 
   Future<List<DiscoveryEngineSearchResult>> _searchWithApi(
-    DiscoveryEngineSearchRequest request,
-  ) async {
+    DiscoveryEngineSearchRequest request, {
+    required SearchResultMode searchResultMode,
+  }) async {
     final String accessToken;
     try {
       accessToken = await _accessTokenProvider();
@@ -299,13 +341,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     ).resolve('${request.servingConfig}:search');
     final Map<String, Object?> body = <String, Object?>{
       'query': request.query,
-      'contentSearchSpec': <String, Object?>{
-        'searchResultMode': 'CHUNKS',
-        'chunkSpec': <String, Object?>{
-          'numPreviousChunks': 0,
-          'numNextChunks': 0,
-        },
-      },
+      'contentSearchSpec': _buildContentSearchSpec(searchResultMode),
       if (request.dataStoreSpecs != null)
         'dataStoreSpecs': request.dataStoreSpecs!
             .map((VertexAiSearchDataStoreSpec item) => item.toJson())
@@ -365,38 +401,130 @@ class DiscoveryEngineSearchTool extends FunctionTool {
       final Map<String, Object?> item = rawItem.map(
         (Object? key, Object? value) => MapEntry('$key', value),
       );
-      final Object? chunkRaw = item['chunk'];
-      if (chunkRaw is! Map) {
-        continue;
+      final DiscoveryEngineSearchResult? parsed =
+          searchResultMode == SearchResultMode.documents
+          ? _parseDocumentResult(item)
+          : _parseChunkResult(item);
+      if (parsed != null) {
+        results.add(parsed);
       }
-      final Map<String, Object?> chunk = chunkRaw.map(
-        (Object? key, Object? value) => MapEntry('$key', value),
-      );
-      final Map<String, Object?> metadata = chunk['documentMetadata'] is Map
-          ? (chunk['documentMetadata'] as Map).map(
-              (Object? key, Object? value) => MapEntry('$key', value),
-            )
-          : <String, Object?>{};
-      String title = '${metadata['title'] ?? ''}';
-      String uriValue = '${metadata['uri'] ?? ''}';
-      final Object? structDataRaw = metadata['structData'];
-      if (structDataRaw is Map && structDataRaw.containsKey('uri')) {
-        final Object? structUri = structDataRaw['uri'];
-        if (structUri != null && '$structUri'.isNotEmpty) {
-          uriValue = '$structUri';
-        }
-      }
-
-      results.add(
-        DiscoveryEngineSearchResult(
-          title: title,
-          url: uriValue,
-          content: '${chunk['content'] ?? ''}',
-        ),
-      );
     }
 
     return results;
+  }
+
+  Map<String, Object?> _buildContentSearchSpec(SearchResultMode mode) {
+    if (mode == SearchResultMode.documents) {
+      return <String, Object?>{'searchResultMode': mode.value};
+    }
+    return <String, Object?>{
+      'searchResultMode': mode.value,
+      'chunkSpec': <String, Object?>{
+        'numPreviousChunks': 0,
+        'numNextChunks': 0,
+      },
+    };
+  }
+
+  DiscoveryEngineSearchResult? _parseChunkResult(Map<String, Object?> item) {
+    final Object? chunkRaw = item['chunk'];
+    if (chunkRaw is! Map) {
+      return null;
+    }
+    final Map<String, Object?> chunk = chunkRaw.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+    final Map<String, Object?> metadata = chunk['documentMetadata'] is Map
+        ? (chunk['documentMetadata'] as Map).map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          )
+        : <String, Object?>{};
+    String title = '${metadata['title'] ?? ''}';
+    String uriValue = '${metadata['uri'] ?? ''}';
+    final Object? structDataRaw = metadata['structData'];
+    if (structDataRaw is Map && structDataRaw.containsKey('uri')) {
+      final Object? structUri = structDataRaw['uri'];
+      if (structUri != null && '$structUri'.isNotEmpty) {
+        uriValue = '$structUri';
+      }
+    }
+
+    return DiscoveryEngineSearchResult(
+      title: title,
+      url: uriValue,
+      content: '${chunk['content'] ?? ''}',
+    );
+  }
+
+  DiscoveryEngineSearchResult? _parseDocumentResult(Map<String, Object?> item) {
+    final Object? documentRaw = item['document'];
+    if (documentRaw is! Map) {
+      return null;
+    }
+    final Map<String, Object?> document = documentRaw.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+
+    String title = '';
+    String uriValue = '';
+    String content = '';
+
+    final Object? structDataRaw = document['structData'];
+    if (structDataRaw is Map) {
+      final Map<String, Object?> structData = structDataRaw.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final Map<String, Object?> contentData = Map<String, Object?>.from(
+        structData,
+      );
+      title = '${contentData.remove('title') ?? ''}';
+      final Object? preferredUri =
+          contentData.remove('uri') ?? contentData.remove('link');
+      uriValue = preferredUri == null ? '' : '$preferredUri';
+      content = jsonEncode(contentData);
+    } else {
+      final Object? derivedRaw = document['derivedStructData'];
+      if (derivedRaw is Map) {
+        final Map<String, Object?> derived = derivedRaw.map(
+          (Object? key, Object? value) => MapEntry('$key', value),
+        );
+        title = '${derived['title'] ?? ''}';
+        uriValue = '${derived['link'] ?? ''}';
+        final List<String> snippets = <String>[];
+        final Object? snippetsRaw = derived['snippets'];
+        if (snippetsRaw is List) {
+          for (final Object? snippet in snippetsRaw) {
+            if (snippet is Map) {
+              final Object? text = snippet['snippet'];
+              if (text != null && '$text'.isNotEmpty) {
+                snippets.add('$text');
+                continue;
+              }
+            }
+            if (snippet != null) {
+              snippets.add('$snippet');
+            }
+          }
+        }
+        if (snippets.isNotEmpty) {
+          content = snippets.join('\n');
+        } else {
+          final Object? answersRaw = derived['extractiveAnswers'];
+          if (answersRaw is List) {
+            content = answersRaw
+                .where((Object? answer) => answer != null)
+                .map((Object? answer) => '$answer')
+                .join('\n');
+          }
+        }
+      }
+    }
+
+    return DiscoveryEngineSearchResult(
+      title: title,
+      url: uriValue,
+      content: content,
+    );
   }
 }
 

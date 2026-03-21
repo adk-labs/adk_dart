@@ -199,14 +199,21 @@ class A2aMessage {
 /// Artifact payload produced by a task.
 class A2aArtifact {
   /// Creates an artifact envelope.
-  A2aArtifact({required this.artifactId, List<A2aPart>? parts})
-    : parts = parts ?? <A2aPart>[];
+  A2aArtifact({
+    required this.artifactId,
+    List<A2aPart>? parts,
+    Map<String, Object?>? metadata,
+  }) : parts = parts ?? <A2aPart>[],
+       metadata = metadata ?? <String, Object?>{};
 
   /// Artifact identifier.
   String artifactId;
 
   /// Artifact part payloads.
   List<A2aPart> parts;
+
+  /// Artifact metadata.
+  Map<String, Object?> metadata;
 }
 
 /// Status snapshot for an A2A task.
@@ -643,6 +650,7 @@ class A2aApplication {
     required this.agentCard,
     required this.executor,
     required this.taskStore,
+    this.lifespan,
   });
 
   /// Agent card exposed to callers.
@@ -653,4 +661,37 @@ class A2aApplication {
 
   /// In-memory task store keyed by task ID.
   Map<String, A2aTask> taskStore;
+
+  /// Optional lifecycle callbacks for host startup/shutdown hooks.
+  A2aApplicationLifespan? lifespan;
+
+  /// Runs the configured startup callback, if any.
+  Future<void> start() async {
+    final FutureOr<void> Function(A2aApplication app)? onStart =
+        lifespan?.onStart;
+    if (onStart != null) {
+      await Future<void>.value(onStart(this));
+    }
+  }
+
+  /// Runs the configured shutdown callback, if any.
+  Future<void> shutdown() async {
+    final FutureOr<void> Function(A2aApplication app)? onStop =
+        lifespan?.onStop;
+    if (onStop != null) {
+      await Future<void>.value(onStop(this));
+    }
+  }
+}
+
+/// Optional lifecycle callbacks for host-managed A2A applications.
+class A2aApplicationLifespan {
+  /// Creates lifecycle callbacks.
+  const A2aApplicationLifespan({this.onStart, this.onStop});
+
+  /// Invoked when the host starts the application.
+  final FutureOr<void> Function(A2aApplication app)? onStart;
+
+  /// Invoked when the host stops the application.
+  final FutureOr<void> Function(A2aApplication app)? onStop;
 }

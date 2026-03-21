@@ -16,14 +16,17 @@ enum FeatureName {
   computerUse('COMPUTER_USE'),
   dataAgentToolConfig('DATA_AGENT_TOOL_CONFIG'),
   dataAgentToolset('DATA_AGENT_TOOLSET'),
+  environmentSimulation('ENVIRONMENT_SIMULATION'),
   gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
   googleCredentialsConfig('GOOGLE_CREDENTIALS_CONFIG'),
   googleTool('GOOGLE_TOOL'),
   jsonSchemaForFuncDecl('JSON_SCHEMA_FOR_FUNC_DECL'),
+  pluggableAuth('PLUGGABLE_AUTH'),
   progressiveSseStreaming('PROGRESSIVE_SSE_STREAMING'),
   pubsubToolConfig('PUBSUB_TOOL_CONFIG'),
   pubsubToolset('PUBSUB_TOOLSET'),
   skillToolset('SKILL_TOOLSET'),
+  snakeCaseSkillName('SNAKE_CASE_SKILL_NAME'),
   spannerAdminToolset('SPANNER_ADMIN_TOOLSET'),
   spannerToolset('SPANNER_TOOLSET'),
   spannerToolSettings('SPANNER_TOOL_SETTINGS'),
@@ -108,6 +111,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: true,
       ),
+      FeatureName.environmentSimulation: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.gcpIamConnectorAuth: const FeatureConfig(
         FeatureStage.experimental,
       ),
@@ -120,6 +127,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.jsonSchemaForFuncDecl: const FeatureConfig(FeatureStage.wip),
+      FeatureName.pluggableAuth: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.progressiveSseStreaming: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
@@ -135,6 +146,9 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       FeatureName.skillToolset: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
+      ),
+      FeatureName.snakeCaseSkillName: const FeatureConfig(
+        FeatureStage.experimental,
       ),
       FeatureName.spannerAdminToolset: const FeatureConfig(
         FeatureStage.experimental,
