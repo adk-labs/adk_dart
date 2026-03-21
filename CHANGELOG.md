@@ -1,10 +1,17 @@
 ## Unreleased
 
+## 2026.3.21
+
+- Bumped package release versions to `2026.3.21` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
+- Added latest parity coverage for session persistence and storage safety, including stricter stale-session detection, Vertex AI session metadata round-tripping, LiteLLM Anthropic thinking-block support, and Spanner `database_role` propagation.
 - Added March 18-19 parity coverage for the experimental `SpannerAdminToolset`, including admin client/runtime factories, bootstrap wiring, and regression tests.
 - Added `environment_simulation` rename-compatible exports and factory aliases on top of the existing agent simulator runtime.
 - Hardened Anthropic tool-result serialization so arbitrary map/list payloads are emitted as JSON instead of lossy stringified Dart map text.
 - Closed the latest four-day parity tail by adding MCP sampling callback/capability wiring across `adk_mcp`, `McpSessionManager`, and `McpToolset`, with HTTP integration coverage.
 - Added multi-turn evaluation metric support for task success, trajectory quality, and tool-use quality, including registry/metric-info wiring and regression tests.
+- Added Slack runner, Agent Registry integration, and GCP IAM connector compatibility surfaces to close remaining 3/19 runtime gaps.
+- Added latest ref parity updates for A2A action-metadata round-tripping, `toA2a(..., lifespan: ...)`, compaction safety around pending function calls, structured Discovery Engine datastore fallback, and feature-gated `snake_case` skill names.
+- Added import-path compatibility exports for CrewAI and LangChain integrations under `src/integrations/...`.
 
 ## 2026.3.13
 

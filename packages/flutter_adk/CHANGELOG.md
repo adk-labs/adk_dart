@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2026.3.21
+
+- Bumped package version to `2026.3.21`.
+- Updated dependency alignment to `adk_dart: ^2026.3.21`.
+- Synced facade release with the latest `adk_dart` parity work, including session/storage parity, `SpannerAdminToolset`, `environment_simulation`, evaluation metric expansion, Slack/Agent Registry/IAM integration surfaces, and the latest A2A/Discovery Engine/skills compatibility updates.
+
 ## 2026.3.13
 
 - Bumped package version to `2026.3.13`.

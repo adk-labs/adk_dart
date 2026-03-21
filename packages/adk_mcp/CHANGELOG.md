@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+## 2026.3.21
+
+- Bumped package version to `2026.3.21`.
 - Added MCP client capability override support during initialization.
 - Added ADK-facing sampling callback/capability wiring coverage through the `adk_dart` MCP toolset stack.
+- Synced MCP package release with the `adk_dart` `2026.3.21` rollout.
 
 ## 2026.3.13
 
