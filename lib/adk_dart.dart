@@ -74,6 +74,10 @@ export 'src/auth/exchanger/service_account_credential_exchanger.dart';
 export 'src/auth/refresher/base_credential_refresher.dart';
 export 'src/auth/refresher/credential_refresher_registry.dart';
 export 'src/auth/refresher/oauth2_credential_refresher.dart';
+export 'src/integrations/_iam_connectors/gcp_auth_provider.dart';
+export 'src/integrations/_iam_connectors/gcp_iam_connector_auth.dart';
+export 'src/integrations/agent_registry/agent_registry.dart';
+export 'src/integrations/slack/slack_runner.dart';
 
 export 'src/cli/__init__.dart' hide main;
 export 'src/cli/adk_web_server.dart';

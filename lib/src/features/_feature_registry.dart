@@ -16,6 +16,7 @@ enum FeatureName {
   computerUse('COMPUTER_USE'),
   dataAgentToolConfig('DATA_AGENT_TOOL_CONFIG'),
   dataAgentToolset('DATA_AGENT_TOOLSET'),
+  gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
   googleCredentialsConfig('GOOGLE_CREDENTIALS_CONFIG'),
   googleTool('GOOGLE_TOOL'),
   jsonSchemaForFuncDecl('JSON_SCHEMA_FOR_FUNC_DECL'),
@@ -106,6 +107,9 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       FeatureName.dataAgentToolset: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
+      ),
+      FeatureName.gcpIamConnectorAuth: const FeatureConfig(
+        FeatureStage.experimental,
       ),
       FeatureName.googleCredentialsConfig: const FeatureConfig(
         FeatureStage.experimental,

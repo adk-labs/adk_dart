@@ -2,6 +2,9 @@
 library;
 
 import '../agents/context.dart';
+import '../features/_feature_registry.dart';
+import '../integrations/_iam_connectors/gcp_auth_provider.dart';
+import '../integrations/_iam_connectors/gcp_iam_connector_auth.dart';
 import 'auth_credential.dart';
 import 'auth_provider_registry.dart';
 import 'auth_tool.dart';
@@ -27,6 +30,14 @@ class CredentialManager {
        _authProviderRegistry = authProviderRegistry ?? AuthProviderRegistry(),
        _exchangerRegistry = exchangerRegistry ?? CredentialExchangerRegistry(),
        _refresherRegistry = refresherRegistry ?? CredentialRefresherRegistry() {
+    if (authProviderRegistry == null &&
+        isFeatureEnabled(FeatureName.gcpIamConnectorAuth)) {
+      _authProviderRegistry.register(
+        ManagedAuthSchemeType.gcpIamConnectorAuth.name,
+        GcpAuthProvider(),
+      );
+    }
+
     if (exchangerRegistry == null) {
       final OAuth2CredentialExchanger oauth2Exchanger =
           OAuth2CredentialExchanger();
@@ -58,10 +69,7 @@ class CredentialManager {
   final CredentialRefresherRegistry _refresherRegistry;
 
   /// Registers a provider for [authSchemeType].
-  void registerAuthProvider(
-    Object authSchemeType,
-    BaseAuthProvider provider,
-  ) {
+  void registerAuthProvider(Object authSchemeType, BaseAuthProvider provider) {
     _authProviderRegistry.register(authSchemeType, provider);
   }
 

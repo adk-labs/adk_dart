@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:adk_dart/adk_dart.dart';
-import 'package:adk_dart/src/auth/auth_provider_registry.dart';
-import 'package:adk_dart/src/auth/base_auth_provider.dart';
 import 'package:test/test.dart';
 
 class _SchemeA {}
@@ -45,6 +43,21 @@ void main() {
 
       final String serializedScheme = jsonEncode(
         SecurityScheme(type: AuthSchemeType.oauth2).toJson(),
+      );
+      expect(registry.getProvider(serializedScheme), same(provider));
+    });
+
+    test('matches serialized GCP IAM connector auth payloads by type', () {
+      final AuthProviderRegistry registry = AuthProviderRegistry();
+      final _StubAuthProvider provider = _StubAuthProvider(null);
+
+      registry.register(
+        ManagedAuthSchemeType.gcpIamConnectorAuth.name,
+        provider,
+      );
+
+      final String serializedScheme = jsonEncode(
+        GcpIamConnectorAuth(connectorName: 'projects/p/connectors/c1').toJson(),
       );
       expect(registry.getProvider(serializedScheme), same(provider));
     });

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -122,37 +124,37 @@ void main() {
       expect(storedConfig.credentialKey, authConfig.credentialKey);
     });
 
-    test('uses registered auth provider before standard retrieval flow', () async {
-      final Context context = _newContext();
-      final AuthCredential provided = AuthCredential(
-        authType: AuthCredentialType.apiKey,
-        apiKey: 'provided-key',
-      );
-      final AuthConfig authConfig = AuthConfig(authScheme: 'custom_provider');
-      final CredentialManager manager = CredentialManager(
-        authConfig: authConfig,
-      );
+    test(
+      'uses registered auth provider before standard retrieval flow',
+      () async {
+        final Context context = _newContext();
+        final AuthCredential provided = AuthCredential(
+          authType: AuthCredentialType.apiKey,
+          apiKey: 'provided-key',
+        );
+        final AuthConfig authConfig = AuthConfig(authScheme: 'custom_provider');
+        final CredentialManager manager = CredentialManager(
+          authConfig: authConfig,
+        );
 
-      manager.registerAuthProvider(
-        'custom_provider',
-        _FixedAuthProvider(provided),
-      );
+        manager.registerAuthProvider(
+          'custom_provider',
+          _FixedAuthProvider(provided),
+        );
 
-      final AuthCredential? credential = await manager.getAuthCredential(
-        context,
-      );
-      expect(credential?.apiKey, 'provided-key');
-    });
+        final AuthCredential? credential = await manager.getAuthCredential(
+          context,
+        );
+        expect(credential?.apiKey, 'provided-key');
+      },
+    );
 
     test('throws when auth provider returns null', () async {
       final Context context = _newContext();
       final CredentialManager manager = CredentialManager(
         authConfig: AuthConfig(authScheme: 'custom_provider'),
       );
-      manager.registerAuthProvider(
-        'custom_provider',
-        _FixedAuthProvider(null),
-      );
+      manager.registerAuthProvider('custom_provider', _FixedAuthProvider(null));
 
       expect(
         () => manager.getAuthCredential(context),
@@ -160,30 +162,64 @@ void main() {
       );
     });
 
-    test('stores consent credential and returns null for provider auth uri', () async {
-      final Context context = _newContext();
-      final AuthConfig authConfig = AuthConfig(authScheme: 'oauth_provider');
-      final CredentialManager manager = CredentialManager(
-        authConfig: authConfig,
-      );
-      final AuthCredential provided = AuthCredential(
-        authType: AuthCredentialType.oauth2,
-        oauth2: OAuth2Auth(authUri: 'https://auth.example.com/authorize'),
-      );
-      manager.registerAuthProvider(
-        'oauth_provider',
-        _FixedAuthProvider(provided),
-      );
+    test(
+      'registers GCP IAM connector auth provider when feature is enabled',
+      () async {
+        overrideFeatureEnabled(FeatureName.gcpIamConnectorAuth, true);
+        addTearDown(() {
+          clearFeatureOverride(FeatureName.gcpIamConnectorAuth);
+        });
+        final Context context = _newContext();
+        final CredentialManager manager = CredentialManager(
+          authConfig: AuthConfig(
+            authScheme: jsonEncode(
+              GcpIamConnectorAuth(
+                connectorName: 'projects/p/connectors/c1',
+              ).toJson(),
+            ),
+          ),
+        );
 
-      final AuthCredential? credential = await manager.getAuthCredential(
-        context,
-      );
-      expect(credential, isNull);
-      expect(
-        authConfig.exchangedAuthCredential?.oauth2?.authUri,
-        'https://auth.example.com/authorize',
-      );
-    });
+        expect(
+          () => manager.getAuthCredential(context),
+          throwsA(
+            isA<UnsupportedError>().having(
+              (UnsupportedError error) => error.message,
+              'message',
+              contains('not yet implemented'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'stores consent credential and returns null for provider auth uri',
+      () async {
+        final Context context = _newContext();
+        final AuthConfig authConfig = AuthConfig(authScheme: 'oauth_provider');
+        final CredentialManager manager = CredentialManager(
+          authConfig: authConfig,
+        );
+        final AuthCredential provided = AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(authUri: 'https://auth.example.com/authorize'),
+        );
+        manager.registerAuthProvider(
+          'oauth_provider',
+          _FixedAuthProvider(provided),
+        );
+
+        final AuthCredential? credential = await manager.getAuthCredential(
+          context,
+        );
+        expect(credential, isNull);
+        expect(
+          authConfig.exchangedAuthCredential?.oauth2?.authUri,
+          'https://auth.example.com/authorize',
+        );
+      },
+    );
 
     test('loads credential from credential service', () async {
       final InMemoryCredentialService service = InMemoryCredentialService();
