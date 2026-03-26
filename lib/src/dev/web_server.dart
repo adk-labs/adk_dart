@@ -998,6 +998,17 @@ Future<void> _handleRequest(
     return;
   }
 
+  if (_shouldBlockCrossOriginRequest(request, context)) {
+    await _writeText(
+      request,
+      context,
+      statusCode: HttpStatus.forbidden,
+      text: 'Forbidden: origin not allowed',
+      includeCorsHeaders: false,
+    );
+    return;
+  }
+
   if (context.a2a &&
       request.method == 'GET' &&
       (routedPath == '/.well-known/agent.json' ||
@@ -2879,6 +2890,23 @@ Future<void> _handleRunLive(
   final String userId = _readRequiredQuery(request, 'user_id');
   final String sessionId = _readRequiredQuery(request, 'session_id');
 
+  final String? wsOrigin = _firstHeaderValue(request, 'origin');
+  if (wsOrigin != null &&
+      !_isRequestOriginAllowed(
+        origin: wsOrigin,
+        request: request,
+        allowOrigins: context.allowOrigins,
+      )) {
+    await _writeText(
+      request,
+      context,
+      statusCode: HttpStatus.forbidden,
+      text: 'Forbidden: origin not allowed',
+      includeCorsHeaders: false,
+    );
+    return;
+  }
+
   final Session? session = await context.sessionService.getSession(
     appName: appName,
     userId: userId,
@@ -3137,15 +3165,32 @@ Future<void> _writeJson(
   await response.close();
 }
 
+Future<void> _writeText(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String text,
+  int statusCode = HttpStatus.ok,
+  bool includeCorsHeaders = true,
+}) async {
+  final HttpResponse response = request.response;
+  if (includeCorsHeaders) {
+    _setCorsHeaders(request, response, context);
+  }
+  response.statusCode = statusCode;
+  response.headers.contentType = ContentType.text;
+  response.write(text);
+  await response.close();
+}
+
 void _setCorsHeaders(
   HttpRequest request,
   HttpResponse response,
   _AdkDevWebContext context,
 ) {
-  if (context.allowOrigins.isEmpty) {
+  if (context.allowOrigins.contains('*')) {
     response.headers.set('Access-Control-Allow-Origin', '*');
   } else {
-    final String? origin = request.headers.value('origin');
+    final String? origin = _firstHeaderValue(request, 'origin');
     if (origin != null && _originAllowed(origin, context.allowOrigins)) {
       response.headers.set('Access-Control-Allow-Origin', origin);
       response.headers.set('Vary', 'Origin');
@@ -3164,6 +3209,9 @@ void _setCorsHeaders(
 
 bool _originAllowed(String origin, List<String> allowOrigins) {
   for (final String allowed in allowOrigins) {
+    if (allowed == '*') {
+      return true;
+    }
     if (allowed == origin) {
       return true;
     }
@@ -3173,12 +3221,110 @@ bool _originAllowed(String origin, List<String> allowOrigins) {
         continue;
       }
       final RegExp regex = RegExp(pattern);
-      if (regex.hasMatch(origin)) {
+      final Match? match = regex.matchAsPrefix(origin);
+      if (match != null && match.end == origin.length) {
         return true;
       }
     }
   }
   return false;
+}
+
+const Set<String> _safeHttpMethods = <String>{'GET', 'HEAD', 'OPTIONS'};
+
+bool _shouldBlockCrossOriginRequest(
+  HttpRequest request,
+  _AdkDevWebContext context,
+) {
+  if (_safeHttpMethods.contains(request.method.toUpperCase())) {
+    return false;
+  }
+  final String? origin = _firstHeaderValue(request, 'origin');
+  if (origin == null) {
+    return false;
+  }
+  return !_isRequestOriginAllowed(
+    origin: origin,
+    request: request,
+    allowOrigins: context.allowOrigins,
+  );
+}
+
+bool _isRequestOriginAllowed({
+  required String origin,
+  required HttpRequest request,
+  required List<String> allowOrigins,
+}) {
+  if (allowOrigins.isNotEmpty && _originAllowed(origin, allowOrigins)) {
+    return true;
+  }
+  final String? requestOrigin = _getRequestOrigin(request);
+  return requestOrigin != null && requestOrigin == origin;
+}
+
+String? _getRequestOrigin(HttpRequest request) {
+  final String? forwarded = _firstHeaderValue(request, 'forwarded');
+  if (forwarded != null) {
+    String? proto;
+    String? host;
+    for (final String element in forwarded.split(';')) {
+      final int separator = element.indexOf('=');
+      if (separator <= 0) {
+        continue;
+      }
+      final String name = element.substring(0, separator).trim().toLowerCase();
+      final String value = _stripOptionalQuotes(
+        element.substring(separator + 1).trim(),
+      );
+      if (name == 'proto') {
+        proto = value;
+      } else if (name == 'host') {
+        host = value;
+      }
+    }
+    if (proto != null && host != null) {
+      return '${_normalizeOriginScheme(proto)}://$host';
+    }
+  }
+
+  final String host =
+      _firstHeaderValue(request, 'x-forwarded-host') ??
+      _firstHeaderValue(request, 'host') ??
+      request.requestedUri.authority;
+  if (host.isEmpty) {
+    return null;
+  }
+
+  final String scheme =
+      _firstHeaderValue(request, 'x-forwarded-proto') ??
+      request.requestedUri.scheme;
+  return '${_normalizeOriginScheme(scheme)}://$host';
+}
+
+String? _firstHeaderValue(HttpRequest request, String headerName) {
+  final List<String>? values = request.headers[headerName];
+  if (values == null || values.isEmpty) {
+    return null;
+  }
+  return values.first.split(',').first.trim();
+}
+
+String _normalizeOriginScheme(String scheme) {
+  switch (scheme.toLowerCase()) {
+    case 'ws':
+      return 'http';
+    case 'wss':
+      return 'https';
+    default:
+      return scheme.toLowerCase();
+  }
+}
+
+String _stripOptionalQuotes(String value) {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.substring(1, value.length - 1);
+  }
+  return value;
 }
 
 String? _stripPrefix(String path, String? urlPrefix) {

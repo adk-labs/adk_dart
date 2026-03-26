@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:test/test.dart';
 
 class _FakeVertexAiSessionApiClient implements VertexAiSessionApiClient {
@@ -168,6 +169,22 @@ Future<void> _ensureDatabasePortReachableOrSkip({
   }
 }
 
+String? _readSqliteIndexSql(String dbPath, String indexName) {
+  final sqlite.Database database = sqlite.sqlite3.open(dbPath);
+  try {
+    final rows = database.select(
+      'SELECT sql FROM sqlite_master WHERE type = ? AND name = ?',
+      <Object?>['index', indexName],
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return '${rows.first['sql'] ?? ''}';
+  } finally {
+    database.close();
+  }
+}
+
 void main() {
   group('InMemorySessionService', () {
     test('appendEvent returns event when session does not exist', () async {
@@ -197,6 +214,77 @@ void main() {
   });
 
   group('SqliteSessionService', () {
+    test('creates latest events lookup index for new sqlite stores', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_index_create_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final String dbPath = '${dir.path}/sessions.db';
+      final SqliteSessionService service = SqliteSessionService(dbPath);
+      await service.createSession(appName: 'app', userId: 'u1');
+
+      final String? indexSql = _readSqliteIndexSql(
+        dbPath,
+        'idx_events_app_user_session_ts',
+      );
+      expect(indexSql, isNotNull);
+      expect(
+        indexSql,
+        contains('ON events (app_name, user_id, session_id, timestamp DESC)'),
+      );
+    });
+
+    test(
+      'recreates missing events lookup index for existing sqlite stores',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_sqlite_index_recreate_',
+        );
+        addTearDown(() async {
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
+
+        final String dbPath = '${dir.path}/sessions.db';
+        final SqliteSessionService service = SqliteSessionService(dbPath);
+        await service.createSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: 's1',
+        );
+
+        final sqlite.Database database = sqlite.sqlite3.open(dbPath);
+        try {
+          database.execute('DROP INDEX idx_events_app_user_session_ts');
+        } finally {
+          database.close();
+        }
+        expect(
+          _readSqliteIndexSql(dbPath, 'idx_events_app_user_session_ts'),
+          isNull,
+        );
+
+        final SqliteSessionService reopened = SqliteSessionService(dbPath);
+        final Session? session = await reopened.getSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: 's1',
+        );
+
+        expect(session, isNotNull);
+        expect(
+          _readSqliteIndexSql(dbPath, 'idx_events_app_user_session_ts'),
+          isNotNull,
+        );
+      },
+    );
+
     test('persists sessions and events to disk', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_sqlite_service_',
@@ -312,9 +400,18 @@ void main() {
       expect(loaded, isNotNull);
       expect(loaded!.events, hasLength(1));
       expect(loaded.events.single.actions.renderUiWidgets, hasLength(1));
-      expect(loaded.events.single.actions.renderUiWidgets.single.id, 'call_widget');
       expect(
-        loaded.events.single.actions.renderUiWidgets.single.payload['resource_uri'],
+        loaded.events.single.actions.renderUiWidgets.single.id,
+        'call_widget',
+      );
+      expect(
+        loaded
+            .events
+            .single
+            .actions
+            .renderUiWidgets
+            .single
+            .payload['resource_uri'],
         'ui://widget/echo',
       );
     });
@@ -377,53 +474,56 @@ void main() {
       expect(loaded.state.containsKey('b'), isFalse);
     });
 
-    test('markerless sessions allow timestamp drift when storage revision matches', () async {
-      final Directory dir = await Directory.systemTemp.createTemp(
-        'adk_sqlite_markerless_current_',
-      );
-      addTearDown(() async {
-        if (await dir.exists()) {
-          await dir.delete(recursive: true);
-        }
-      });
+    test(
+      'markerless sessions allow timestamp drift when storage revision matches',
+      () async {
+        final Directory dir = await Directory.systemTemp.createTemp(
+          'adk_sqlite_markerless_current_',
+        );
+        addTearDown(() async {
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        });
 
-      final SqliteSessionService service = SqliteSessionService(
-        '${dir.path}/markerless_current.db',
-      );
-      final Session session = await service.createSession(
-        appName: 'app',
-        userId: 'u1',
-        sessionId: 's1',
-      );
+        final SqliteSessionService service = SqliteSessionService(
+          '${dir.path}/markerless_current.db',
+        );
+        final Session session = await service.createSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: 's1',
+        );
 
-      final Event first = Event(
-        invocationId: 'inv_marker_1',
-        author: 'agent',
-        timestamp: session.lastUpdateTime + 10,
-      );
-      await service.appendEvent(session: session, event: first);
+        final Event first = Event(
+          invocationId: 'inv_marker_1',
+          author: 'agent',
+          timestamp: session.lastUpdateTime + 10,
+        );
+        await service.appendEvent(session: session, event: first);
 
-      session.storageUpdateMarker = null;
-      session.lastUpdateTime -= 0.0001;
+        session.storageUpdateMarker = null;
+        session.lastUpdateTime -= 0.0001;
 
-      final Event second = Event(
-        invocationId: 'inv_marker_2',
-        author: 'agent',
-        timestamp: first.timestamp + 10,
-      );
-      await service.appendEvent(session: session, event: second);
+        final Event second = Event(
+          invocationId: 'inv_marker_2',
+          author: 'agent',
+          timestamp: first.timestamp + 10,
+        );
+        await service.appendEvent(session: session, event: second);
 
-      final Session? loaded = await service.getSession(
-        appName: 'app',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(loaded, isNotNull);
-      expect(
-        loaded!.events.map((Event event) => event.invocationId).toList(),
-        <String>['inv_marker_1', 'inv_marker_2'],
-      );
-    });
+        final Session? loaded = await service.getSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(loaded, isNotNull);
+        expect(
+          loaded!.events.map((Event event) => event.invocationId).toList(),
+          <String>['inv_marker_1', 'inv_marker_2'],
+        );
+      },
+    );
 
     test('applies GetSessionConfig filters for persisted events', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
@@ -1487,7 +1587,9 @@ CREATE TABLE events (
               UiWidget(
                 id: 'call_vertex_widget',
                 provider: 'mcp',
-                payload: <String, Object?>{'resource_uri': 'ui://widget/vertex'},
+                payload: <String, Object?>{
+                  'resource_uri': 'ui://widget/vertex',
+                },
               ),
             ],
           ),
@@ -1507,91 +1609,103 @@ CREATE TABLE events (
         'mcp',
       );
       expect(
-        reloaded.events.single.actions.renderUiWidgets.single.payload['resource_uri'],
+        reloaded
+            .events
+            .single
+            .actions
+            .renderUiWidgets
+            .single
+            .payload['resource_uri'],
         'ui://widget/vertex',
       );
     });
 
-    test('round-trips usage metadata through vertex custom metadata storage', () async {
-      final _FakeVertexAiSessionApiClient fakeClient =
-          _FakeVertexAiSessionApiClient();
-      final VertexAiSessionService service = VertexAiSessionService(
-        clientFactory: ({String? project, String? location, String? apiKey}) {
-          return fakeClient;
-        },
-      );
-      final Session session = await service.createSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-      );
-
-      await service.appendEvent(
-        session: session,
-        event: Event(
-          invocationId: 'inv_vertex_usage',
-          author: 'model',
-          usageMetadata: <String, Object?>{
-            'prompt_token_count': 150,
-            'candidates_token_count': 50,
-            'total_token_count': 200,
+    test(
+      'round-trips usage metadata through vertex custom metadata storage',
+      () async {
+        final _FakeVertexAiSessionApiClient fakeClient =
+            _FakeVertexAiSessionApiClient();
+        final VertexAiSessionService service = VertexAiSessionService(
+          clientFactory: ({String? project, String? location, String? apiKey}) {
+            return fakeClient;
           },
-        ),
-      );
+        );
+        final Session session = await service.createSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+        );
 
-      final Session? reloaded = await service.getSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(reloaded, isNotNull);
-      expect(reloaded!.events.single.usageMetadata, <String, Object?>{
-        'prompt_token_count': 150,
-        'candidates_token_count': 50,
-        'total_token_count': 200,
-      });
-      expect(reloaded.events.single.customMetadata, isNull);
-    });
+        await service.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'inv_vertex_usage',
+            author: 'model',
+            usageMetadata: <String, Object?>{
+              'prompt_token_count': 150,
+              'candidates_token_count': 50,
+              'total_token_count': 200,
+            },
+          ),
+        );
 
-    test('preserves custom metadata while stripping internal usage metadata keys', () async {
-      final _FakeVertexAiSessionApiClient fakeClient =
-          _FakeVertexAiSessionApiClient();
-      final VertexAiSessionService service = VertexAiSessionService(
-        clientFactory: ({String? project, String? location, String? apiKey}) {
-          return fakeClient;
-        },
-      );
-      final Session session = await service.createSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-      );
+        final Session? reloaded = await service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(reloaded, isNotNull);
+        expect(reloaded!.events.single.usageMetadata, <String, Object?>{
+          'prompt_token_count': 150,
+          'candidates_token_count': 50,
+          'total_token_count': 200,
+        });
+        expect(reloaded.events.single.customMetadata, isNull);
+      },
+    );
 
-      await service.appendEvent(
-        session: session,
-        event: Event(
-          invocationId: 'inv_vertex_usage_meta',
-          author: 'model',
-          usageMetadata: <String, Object?>{
-            'prompt_token_count': 300,
-            'total_token_count': 400,
+    test(
+      'preserves custom metadata while stripping internal usage metadata keys',
+      () async {
+        final _FakeVertexAiSessionApiClient fakeClient =
+            _FakeVertexAiSessionApiClient();
+        final VertexAiSessionService service = VertexAiSessionService(
+          clientFactory: ({String? project, String? location, String? apiKey}) {
+            return fakeClient;
           },
-          customMetadata: <String, dynamic>{'my_key': 'my_value'},
-        ),
-      );
+        );
+        final Session session = await service.createSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+        );
 
-      final Session? reloaded = await service.getSession(
-        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(reloaded, isNotNull);
-      expect(reloaded!.events.single.usageMetadata, <String, Object?>{
-        'prompt_token_count': 300,
-        'total_token_count': 400,
-      });
-      expect(reloaded.events.single.customMetadata, <String, dynamic>{
-        'my_key': 'my_value',
-      });
-    });
+        await service.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'inv_vertex_usage_meta',
+            author: 'model',
+            usageMetadata: <String, Object?>{
+              'prompt_token_count': 300,
+              'total_token_count': 400,
+            },
+            customMetadata: <String, dynamic>{'my_key': 'my_value'},
+          ),
+        );
+
+        final Session? reloaded = await service.getSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(reloaded, isNotNull);
+        expect(reloaded!.events.single.usageMetadata, <String, Object?>{
+          'prompt_token_count': 300,
+          'total_token_count': 400,
+        });
+        expect(reloaded.events.single.customMetadata, <String, dynamic>{
+          'my_key': 'my_value',
+        });
+      },
+    );
 
     test('returns null for missing session id', () async {
       final _FakeVertexAiSessionApiClient fakeClient =

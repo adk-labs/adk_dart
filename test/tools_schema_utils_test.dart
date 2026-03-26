@@ -95,5 +95,34 @@ void main() {
         'object',
       );
     });
+
+    test('explicit json schema preserves nested required fields', () {
+      final FunctionDeclaration declaration =
+          buildFunctionDeclarationWithJsonSchema(
+            name: 'search',
+            parametersJsonSchema: <String, dynamic>{
+              'type': 'object',
+              'properties': <String, dynamic>{
+                'request': <String, dynamic>{
+                  'type': 'object',
+                  'properties': <String, dynamic>{
+                    'query': <String, dynamic>{'type': 'string'},
+                    'max_results': <String, dynamic>{'type': 'integer'},
+                    'filter': <String, dynamic>{'type': 'string'},
+                  },
+                  'required': <String>['query', 'max_results'],
+                },
+              },
+              'required': <String>['request'],
+            },
+          );
+
+      expect(declaration.parameters['required'], <String>['request']);
+      final Map<String, dynamic> requestSchema =
+          (declaration.parameters['properties']
+                  as Map<String, dynamic>)['request']
+              as Map<String, dynamic>;
+      expect(requestSchema['required'], <String>['query', 'max_results']);
+    });
   });
 }

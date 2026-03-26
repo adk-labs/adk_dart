@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS events (
 );
 ''';
 
+const String _eventsLookupIndexSchema = '''
+CREATE INDEX IF NOT EXISTS idx_events_app_user_session_ts
+ON events (app_name, user_id, session_id, timestamp DESC);
+''';
+
 /// Session service that stores sessions and events in SQLite.
 class SqliteSessionService extends BaseSessionService {
   /// Creates a session service from a SQLite [dbPath].
@@ -577,6 +582,7 @@ class SqliteSessionService extends BaseSessionService {
     db.execute(_userStatesTableSchema);
     db.execute(_sessionsTableSchema);
     db.execute(_eventsTableSchema);
+    db.execute(_eventsLookupIndexSchema);
   }
 
   void _runTransaction(_SqliteDatabase db, void Function() action) {
