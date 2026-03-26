@@ -19,6 +19,83 @@ final RegExp _structuredStoreErrorPattern = RegExp(
   r'search_result_mode.*DOCUMENTS',
   caseSensitive: false,
 );
+const String _defaultDiscoveryEngineApiHost = 'discoveryengine.googleapis.com';
+const String _globalDiscoveryEngineLocation = 'global';
+final RegExp _resourceLocationPattern = RegExp(
+  r'/locations/([a-z0-9-]+)(?:/|$)',
+  caseSensitive: false,
+);
+final RegExp _validLocationPattern = RegExp(r'^[a-z0-9-]+$');
+
+String _normalizeLocation(String location, {required String locationType}) {
+  final String normalized = location.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    throw ArgumentError('$locationType must not be empty if specified.');
+  }
+  if (!_validLocationPattern.hasMatch(normalized)) {
+    throw ArgumentError(
+      '$locationType must contain only letters, digits, and hyphens.',
+    );
+  }
+  return normalized;
+}
+
+String? _extractResourceLocation(String resourceId) {
+  if (!resourceId.toLowerCase().contains('/locations/')) {
+    return null;
+  }
+  final Match? match = _resourceLocationPattern.firstMatch(resourceId);
+  if (match == null || match.groupCount < 1 || match.group(1) == null) {
+    throw ArgumentError(
+      'Invalid location in data_store_id or search_engine_id.',
+    );
+  }
+  return _normalizeLocation(match.group(1)!, locationType: 'resource location');
+}
+
+String _resolveLocation({
+  required String resourceId,
+  required String? location,
+}) {
+  final String? inferredLocation = _extractResourceLocation(resourceId);
+  if (location != null) {
+    final String normalized = _normalizeLocation(
+      location,
+      locationType: 'location',
+    );
+    if (inferredLocation != null && inferredLocation != normalized) {
+      throw ArgumentError(
+        'location must match the location in data_store_id or '
+        'search_engine_id.',
+      );
+    }
+    return normalized;
+  }
+  return inferredLocation ?? _globalDiscoveryEngineLocation;
+}
+
+String _resolveApiBaseUrl({
+  required String resourceId,
+  required String apiBaseUrl,
+  required String? location,
+}) {
+  final String resolvedLocation = _resolveLocation(
+    resourceId: resourceId,
+    location: location,
+  );
+  if (resolvedLocation == _globalDiscoveryEngineLocation) {
+    return apiBaseUrl;
+  }
+
+  final Uri baseUri = Uri.parse(apiBaseUrl);
+  if (baseUri.host != _defaultDiscoveryEngineApiHost) {
+    return apiBaseUrl;
+  }
+
+  return baseUri
+      .replace(host: '$resolvedLocation-$_defaultDiscoveryEngineApiHost')
+      .toString();
+}
 
 /// Search result mode for Discovery Engine content search.
 enum SearchResultMode {
@@ -172,6 +249,7 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     this.searchEngineId,
     this.filter,
     this.maxResults,
+    this.location,
     SearchResultMode? searchResultMode,
     this.searchHandler,
     DiscoveryEngineSearchHttpRequestProvider? httpRequestProvider,
@@ -183,7 +261,6 @@ class DiscoveryEngineSearchTool extends FunctionTool {
            httpRequestProvider ?? _defaultDiscoveryEngineHttpRequestProvider,
        _accessTokenProvider =
            accessTokenProvider ?? _defaultDiscoveryEngineAccessTokenProvider,
-       _apiBaseUrl = apiBaseUrl,
        _searchResultMode = searchResultMode,
        super(
          func: _discoveryEngineSearchPlaceholder,
@@ -201,6 +278,11 @@ class DiscoveryEngineSearchTool extends FunctionTool {
         'search_engine_id must be specified if data_store_specs is specified.',
       );
     }
+    _apiBaseUrl = _resolveApiBaseUrl(
+      resourceId: dataStoreId ?? searchEngineId ?? '',
+      apiBaseUrl: apiBaseUrl,
+      location: location,
+    );
   }
 
   /// Optional legacy datastore id.
@@ -218,12 +300,15 @@ class DiscoveryEngineSearchTool extends FunctionTool {
   /// Optional maximum number of results.
   final int? maxResults;
 
+  /// Optional endpoint location override.
+  final String? location;
+
   /// Optional custom search handler override.
   final DiscoveryEngineSearchHandler? searchHandler;
   final String _servingConfig;
   final DiscoveryEngineSearchHttpRequestProvider _httpRequestProvider;
   final DiscoveryEngineSearchAccessTokenProvider _accessTokenProvider;
-  final String _apiBaseUrl;
+  late final String _apiBaseUrl;
   SearchResultMode? _searchResultMode;
 
   static const String _defaultDiscoveryEngineApiBaseUrl =

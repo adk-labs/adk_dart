@@ -298,6 +298,95 @@ void main() {
     });
 
     test(
+      'DiscoveryEngineSearchTool infers regional endpoint from resource id',
+      () async {
+        late DiscoveryEngineSearchHttpRequest capturedRequest;
+        final DiscoveryEngineSearchTool tool = DiscoveryEngineSearchTool(
+          dataStoreId:
+              'projects/test/locations/eu/collections/default_collection/dataStores/search_docs',
+          accessTokenProvider: () async => 'token-eu',
+          httpRequestProvider:
+              (DiscoveryEngineSearchHttpRequest request) async {
+                capturedRequest = request;
+                return DiscoveryEngineSearchHttpResponse(
+                  statusCode: 200,
+                  bodyBytes: utf8.encode(jsonEncode(<String, Object?>{})),
+                );
+              },
+        );
+
+        await tool.run(
+          args: <String, dynamic>{'query': 'regional'},
+          toolContext: _newToolContext(),
+        );
+
+        expect(capturedRequest.uri.host, 'eu-discoveryengine.googleapis.com');
+      },
+    );
+
+    test(
+      'DiscoveryEngineSearchTool uses explicit location override for ids without location',
+      () async {
+        late DiscoveryEngineSearchHttpRequest capturedRequest;
+        final DiscoveryEngineSearchTool tool = DiscoveryEngineSearchTool(
+          dataStoreId: 'search_docs',
+          location: 'us',
+          accessTokenProvider: () async => 'token-us',
+          httpRequestProvider:
+              (DiscoveryEngineSearchHttpRequest request) async {
+                capturedRequest = request;
+                return DiscoveryEngineSearchHttpResponse(
+                  statusCode: 200,
+                  bodyBytes: utf8.encode(jsonEncode(<String, Object?>{})),
+                );
+              },
+        );
+
+        await tool.run(
+          args: <String, dynamic>{'query': 'override'},
+          toolContext: _newToolContext(),
+        );
+
+        expect(capturedRequest.uri.host, 'us-discoveryengine.googleapis.com');
+      },
+    );
+
+    test('DiscoveryEngineSearchTool rejects mismatched location override', () {
+      expect(
+        () => DiscoveryEngineSearchTool(
+          dataStoreId:
+              'projects/test/locations/us/collections/default_collection/dataStores/search_docs',
+          location: 'eu',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('DiscoveryEngineSearchTool rejects empty or invalid locations', () {
+      expect(
+        () => DiscoveryEngineSearchTool(
+          dataStoreId: 'search_docs',
+          location: ' ',
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => DiscoveryEngineSearchTool(
+          dataStoreId: 'search_docs',
+          location: 'attacker.com#',
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => DiscoveryEngineSearchTool(
+          dataStoreId:
+              'projects/test/locations/attacker.com#/collections/default_collection/dataStores/search_docs',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
       'DiscoveryEngineSearchTool executes injected handler and formats output',
       () async {
         late DiscoveryEngineSearchRequest capturedRequest;

@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS events (
 ''';
 
 const String _postgresCreateEventsLookupIndex = '''
-CREATE INDEX IF NOT EXISTS idx_events_lookup
-ON events (app_name, user_id, session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_events_app_user_session_ts
+ON events (app_name, user_id, session_id, timestamp DESC);
 ''';
 
 const String _mysqlCreateAppStatesTable = '''
@@ -120,8 +120,8 @@ CREATE TABLE IF NOT EXISTS events (
 ''';
 
 const String _mysqlCreateEventsLookupIndex = '''
-CREATE INDEX idx_events_lookup
-ON events (app_name, user_id, session_id, timestamp);
+CREATE INDEX idx_events_app_user_session_ts
+ON events (app_name, user_id, session_id, timestamp DESC);
 ''';
 
 enum _NetworkDriver { postgres, mysql }

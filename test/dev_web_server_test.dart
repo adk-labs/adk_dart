@@ -1444,6 +1444,83 @@ void main() {
       );
     });
 
+    test('does not emit wildcard CORS headers by default', () async {
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/health'),
+      );
+      request.headers.set('origin', 'https://example.com');
+
+      final HttpClientResponse response = await request.close();
+      await utf8.decoder.bind(response).join();
+
+      expect(response.headers.value('access-control-allow-origin'), isNull);
+    });
+
+    test('rejects cross-origin POST by default', () async {
+      final HttpClientRequest request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/api/sessions'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.headers.set('origin', 'https://evil.com');
+      request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+      final HttpClientResponse response = await request.close();
+      final String body = await utf8.decoder.bind(response).join();
+
+      expect(response.statusCode, HttpStatus.forbidden);
+      expect(body, 'Forbidden: origin not allowed');
+    });
+
+    test('allows same-origin POST by default', () async {
+      final HttpClientRequest request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/api/sessions'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.headers.set('origin', 'http://127.0.0.1:${server.port}');
+      request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+      final HttpClientResponse response = await request.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(payload['session'], isA<Map<String, dynamic>>());
+    });
+
+    test('allows configured cross-origin POST', () async {
+      final DevAgentRuntime corsRuntime = DevAgentRuntime(config: config);
+      final HttpServer corsServer = await startAdkDevWebServer(
+        runtime: corsRuntime,
+        project: config,
+        port: 0,
+        allowOrigins: const <String>['https://example.com'],
+      );
+      addTearDown(() async {
+        await corsServer.close(force: true);
+        await corsRuntime.runner.close();
+      });
+
+      final HttpClient corsClient = HttpClient();
+      addTearDown(() => corsClient.close(force: true));
+
+      final HttpClientRequest request = await corsClient.postUrl(
+        Uri.parse('http://127.0.0.1:${corsServer.port}/api/sessions'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.headers.set('origin', 'https://example.com');
+      request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+      final HttpClientResponse response = await request.close();
+      await utf8.decoder.bind(response).join();
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(
+        response.headers.value('access-control-allow-origin'),
+        'https://example.com',
+      );
+    });
+
     test('supports run_live websocket stream', () async {
       final String sessionId =
           's_live_${DateTime.now().microsecondsSinceEpoch}';
@@ -1485,6 +1562,31 @@ void main() {
       final Map<String, dynamic> payload =
           jsonDecode(firstMessage as String) as Map<String, dynamic>;
       expect(payload['author'], isNotNull);
+    });
+
+    test('rejects cross-origin run_live websocket upgrades', () async {
+      final String sessionId =
+          's_live_blocked_${DateTime.now().microsecondsSinceEpoch}';
+      final HttpClientRequest createRequest = await client.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/apps/test_app/users/u1/sessions',
+        ),
+      );
+      createRequest.headers.contentType = ContentType.json;
+      createRequest.write(
+        jsonEncode(<String, Object>{'session_id': sessionId}),
+      );
+      final HttpClientResponse createResponse = await createRequest.close();
+      await utf8.decoder.bind(createResponse).join();
+      expect(createResponse.statusCode, HttpStatus.ok);
+
+      await expectLater(
+        () => WebSocket.connect(
+          'ws://127.0.0.1:${server.port}/run_live?app_name=test_app&user_id=u1&session_id=$sessionId&modalities=TEXT',
+          headers: <String, dynamic>{'origin': 'https://evil.com'},
+        ),
+        throwsA(isA<WebSocketException>()),
+      );
     });
 
     test('returns not found for /run when session is missing', () async {
