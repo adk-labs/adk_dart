@@ -1,6 +1,7 @@
 /// Shared utility and helper APIs for ADK runtime behavior.
 library;
 
+import '../flows/llm_flows/functions.dart' as flow_functions;
 import '../features/_feature_registry.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
@@ -134,6 +135,11 @@ class StreamingResponseAggregator {
   }
 
   void _processStreamingFunctionCall(FunctionCall functionCall, Part part) {
+    if ((functionCall.id ?? '').isEmpty && (_currentFcId ?? '').isEmpty) {
+      final String generatedId = flow_functions.generateClientFunctionCallId();
+      functionCall.id = generatedId;
+      _currentFcId = generatedId;
+    }
     if (functionCall.name.isNotEmpty) {
       _currentFcName = functionCall.name;
     }
@@ -180,6 +186,9 @@ class StreamingResponseAggregator {
 
     if (functionCall.name.isEmpty) {
       return;
+    }
+    if ((functionCall.id ?? '').isEmpty) {
+      functionCall.id = flow_functions.generateClientFunctionCallId();
     }
 
     _flushTextBufferToSequence();
@@ -280,8 +289,30 @@ class StreamingResponseAggregator {
       _finishReason = response.finishReason;
     }
 
+    final List<Part> parts = response.content?.parts ?? const <Part>[];
+    for (final Part part in parts) {
+      final FunctionCall? functionCall = part.functionCall;
+      if (functionCall == null) {
+        continue;
+      }
+      if ((functionCall.id ?? '').isNotEmpty) {
+        continue;
+      }
+      if (_isStreamingFunctionCall(functionCall)) {
+        if ((_currentFcId ?? '').isEmpty) {
+          final String generatedId = flow_functions
+              .generateClientFunctionCallId();
+          functionCall.id = generatedId;
+          _currentFcId = generatedId;
+        }
+        continue;
+      }
+      if (functionCall.name.isNotEmpty) {
+        functionCall.id = flow_functions.generateClientFunctionCallId();
+      }
+    }
+
     if (isFeatureEnabled(FeatureName.progressiveSseStreaming)) {
-      final List<Part> parts = response.content?.parts ?? const <Part>[];
       for (final Part part in parts) {
         if (part.text != null) {
           if (_currentTextBuffer.isNotEmpty &&
@@ -310,7 +341,6 @@ class StreamingResponseAggregator {
       return;
     }
 
-    final List<Part> parts = response.content?.parts ?? const <Part>[];
     if (parts.isNotEmpty && parts.first.text != null) {
       final Part first = parts.first;
       final String text = first.text ?? '';

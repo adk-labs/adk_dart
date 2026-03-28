@@ -295,6 +295,7 @@ export 'src/tools/agent_simulator/strategies/base.dart';
 export 'src/tools/agent_simulator/strategies/tool_spec_mock_strategy.dart';
 export 'src/tools/agent_simulator/tool_connection_analyzer.dart';
 export 'src/tools/agent_simulator/tool_connection_map.dart';
+export 'src/tools/environment/environment.dart';
 export 'src/tools/environment_simulation/environment_simulation.dart';
 export 'src/tools/environment_simulation/environment_simulation_config.dart';
 export 'src/tools/environment_simulation/environment_simulation_engine.dart';

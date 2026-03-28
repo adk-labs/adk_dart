@@ -7,12 +7,14 @@ import 'dart:io';
 import '../../a2a/protocol.dart';
 import '../../agents/readonly_context.dart';
 import '../../agents/remote_a2a_agent.dart';
+import '../../tools/base_tool.dart';
 import '../../tools/_google_access_token.dart';
 import '../../tools/mcp_tool/mcp_session_manager.dart';
 import '../../tools/mcp_tool/mcp_toolset.dart';
 
 const String _agentRegistryBaseUrl =
     'https://agentregistry.googleapis.com/v1alpha';
+const String _gcpMcpServerDestinationIdKey = 'gcp.mcp.server.destination.id';
 
 /// Supported Agent Registry protocol types.
 enum AgentRegistryProtocolType {
@@ -55,6 +57,34 @@ typedef AgentRegistryHttpGetProvider =
 /// Function that resolves auth headers for Agent Registry and downstream calls.
 typedef AgentRegistryAuthHeadersProvider =
     Future<Map<String, String>> Function();
+
+class _AgentRegistrySingleMcpToolset extends McpToolset {
+  _AgentRegistrySingleMcpToolset({
+    required this.destinationResourceId,
+    required super.connectionParams,
+    super.toolNamePrefix,
+    super.headerProvider,
+  });
+
+  final String? destinationResourceId;
+
+  @override
+  Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
+    final List<BaseTool> tools = await super.getTools(
+      readonlyContext: readonlyContext,
+    );
+    if (destinationResourceId == null || destinationResourceId!.isEmpty) {
+      return tools;
+    }
+
+    for (final BaseTool tool in tools) {
+      tool.customMetadata ??= <String, dynamic>{};
+      tool.customMetadata![_gcpMcpServerDestinationIdKey] =
+          destinationResourceId;
+    }
+    return tools;
+  }
+}
 
 /// Client for interacting with Google Cloud Agent Registry.
 class AgentRegistry {
@@ -114,6 +144,10 @@ class AgentRegistry {
     final Map<String, Object?> serverDetails = await getMcpServer(
       mcpServerName,
     );
+    final String? mcpServerId = switch (serverDetails['mcpServerId']) {
+      final String value when value.trim().isNotEmpty => value,
+      _ => null,
+    };
     final String prefix = _cleanName(
       _readString(serverDetails['displayName']).isEmpty
           ? mcpServerName
@@ -129,7 +163,8 @@ class AgentRegistry {
       );
     }
 
-    return McpToolset(
+    return _AgentRegistrySingleMcpToolset(
+      destinationResourceId: mcpServerId,
       connectionParams: StreamableHTTPConnectionParams(
         url: endpointUri,
         headers: await _authHeadersProvider(),

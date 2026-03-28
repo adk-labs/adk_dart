@@ -297,6 +297,10 @@ void main() {
           third.last.content?.parts.first.functionCall?.name,
           'get_weather',
         );
+        expect(
+          third.last.content?.parts.first.functionCall?.id,
+          startsWith('adk-'),
+        );
         expect(aggregator.close(), isNull);
       },
     );
@@ -368,6 +372,7 @@ void main() {
       expect(merged.content!.parts.first.text, 'Hello ');
       expect(merged.content!.parts[1].functionCall?.name, 'lookup_city');
       expect(merged.content!.parts[1].functionCall?.args['city'], 'Seoul');
+      expect(merged.content!.parts[1].functionCall?.id, startsWith('adk-'));
     });
 
     test(

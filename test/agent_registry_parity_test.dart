@@ -1,6 +1,18 @@
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
+class _RegistryTool extends BaseTool {
+  _RegistryTool() : super(name: 'echo', description: 'Echo tool');
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return <String, Object?>{'status': 'ok'};
+  }
+}
+
 void main() {
   group('AgentRegistry parity', () {
     test('throws when projectId or location is missing', () {
@@ -48,6 +60,7 @@ void main() {
     });
 
     test('builds MCP toolset with cleaned prefix and auth headers', () async {
+      McpSessionManager.instance.clear();
       final List<Uri> requestedUris = <Uri>[];
       final AgentRegistry registry = AgentRegistry(
         projectId: 'test-project',
@@ -60,6 +73,7 @@ void main() {
                 statusCode: 200,
                 body: <String, Object?>{
                   'displayName': 'Test Prefix',
+                  'mcpServerId': 'mcp-123',
                   'interfaces': <Map<String, Object?>>[
                     <String, Object?>{
                       'url': 'https://mcp.example.com',
@@ -77,6 +91,11 @@ void main() {
       );
       final StreamableHTTPConnectionParams params =
           toolset.connectionParams as StreamableHTTPConnectionParams;
+      McpSessionManager.instance.registerTools(
+        connectionParams: params,
+        tools: <BaseTool>[_RegistryTool()],
+      );
+      final List<BaseTool> resolvedTools = await toolset.getTools();
 
       expect(
         requestedUris.single.toString(),
@@ -85,6 +104,10 @@ void main() {
       expect(toolset.toolNamePrefix, 'Test_Prefix');
       expect(params.url, 'https://mcp.example.com');
       expect(params.headers, containsPair('Authorization', 'Bearer token'));
+      expect(
+        resolvedTools.single.customMetadata?['gcp.mcp.server.destination.id'],
+        'mcp-123',
+      );
     });
 
     test('builds fallback RemoteA2aAgent from registry metadata', () async {

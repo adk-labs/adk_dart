@@ -739,7 +739,15 @@ Future<List<BaseTool>> _convertToolUnionToTools(
   }
 
   if (toolUnion is BaseToolset) {
-    return toolUnion.getToolsWithPrefix(readonlyContext: context);
+    try {
+      return await toolUnion.getToolsWithPrefix(readonlyContext: context);
+    } catch (error) {
+      developer.log(
+        'Failed to get tools from toolset ${toolUnion.runtimeType}: $error',
+        name: 'adk_dart.agents',
+      );
+      return const <BaseTool>[];
+    }
   }
 
   throw ArgumentError(
