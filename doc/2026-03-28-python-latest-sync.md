@@ -42,9 +42,19 @@
   - Python upstream `fe418171`는 streaming function call 처리 중 ID가 비어 있을 때 ADK 쪽에서 ID를 생성하도록 수정됐다.
   - Dart 런타임은 최종 event finalize 단계에서 ID를 채우는 경로가 있었지만, aggregator 자체를 직접 쓰는 경로에서는 parity gap이 남아 있었다.
 
+5. Agent loader discovery and validation parity
+- 작업 내용
+  - `AgentLoader.listAgents()`가 non-hidden 디렉터리만 나열하고, agent definition 유효성 검사는 load 단계에서만 하도록 바꿨다.
+  - `loadAgent()`에 agent name validation을 추가해서 `.` / `/` / 공백 / `-` / 상대경로 형태 이름을 거부하고, 실제 단일 앱 alias 또는 하위 디렉터리가 존재하는 경우에만 로드를 허용하도록 보강했다.
+  - single-app root alias가 `listAgentsDetailed()`에서도 같은 해석 규칙을 쓰도록 경로 판별 로직을 공통화했다.
+  - directory listing, load rejection, single-app alias metadata를 고정하는 회귀 테스트를 추가했다.
+- 작업 이유
+  - Python upstream `50209549`는 `list_agents()`를 단순 directory discovery로 바꾸고, load 가능 여부 판단은 실제 로드 경로로 미뤘다.
+  - Python upstream `116f75d2`는 agent name validation을 추가해 임의 module/path import를 막았다.
+  - Dart는 review 시점까지 discovery와 validation이 섞여 있었고, single-app root에서 임의 alias를 허용하는 gap이 남아 있었다.
+
 직접 포팅하지 않은 항목
 
-- `agent_loader` 변경: 이번 Python 배치의 directory filtering / 실패 항목 skip 동작은 Dart에 이미 들어와 있어서 코드 변경 없이 유지했다.
 - `database_session_service`의 concurrent insert patch: Dart SQLite / network DB 구현은 이미 state row upsert 기반이라, Python patch가 막는 중복 state insert race를 구조적으로 흡수하고 있었다.
 - release workflow / version bump / docs tooling 변경: Dart 저장소의 릴리스 체계와 직접 연결되지 않아 포팅 대상에서 제외했다.
 - `tools.environment` README 샘플 문서: Dart는 별도 contributing sample 디렉터리 대신 `example/` 예제로 대응했다.
@@ -58,4 +68,4 @@
   - `test/llm_agent_toolset_parity_test.dart`
   - `test/agent_registry_parity_test.dart`
   - `test/utils_missing_parity_test.dart`
-
+  - `test/cli_agent_loader_test.dart`

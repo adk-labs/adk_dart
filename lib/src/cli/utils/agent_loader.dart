@@ -20,6 +20,8 @@ typedef AgentFactory = AgentOrApp Function(String agentName, String agentsDir);
 
 /// Filesystem-backed loader for ADK agents and apps.
 class AgentLoader extends BaseAgentLoader {
+  static final RegExp _validAgentNameRegExp = RegExp(r'^[a-zA-Z0-9_]+$');
+
   /// Creates a loader rooted at [agentsDir].
   ///
   /// When [enableDevProjectFallback] is true, directories containing only
@@ -51,58 +53,45 @@ class AgentLoader extends BaseAgentLoader {
   }
 
   AgentOrApp _performLoad(String agentName) {
-    final String normalized = agentName.startsWith('__')
-        ? agentName.substring(2)
-        : agentName;
-
     final AgentFactory? customFactory = _agentFactories[agentName];
     if (customFactory != null) {
       return customFactory(agentName, agentsDir);
     }
 
-    final Directory baseDir = Directory(agentsDir).absolute;
-    Directory agentDir = Directory(
-      '${baseDir.path}${Platform.pathSeparator}$normalized',
-    ).absolute;
-    String agentParentForEnv = baseDir.path;
-    if (_isSingleAppRoot(baseDir)) {
-      final bool looksLikeSingleAppAlias =
-          projectDirName(baseDir.path) == normalized || !agentDir.existsSync();
-      if (looksLikeSingleAppAlias) {
-        agentDir = baseDir;
-        agentParentForEnv = baseDir.parent.path;
-      }
-    }
+    final _ResolvedAgentTarget target = _resolveAgentTarget(agentName);
 
-    loadDotenvForAgent(normalized, agentParentForEnv);
+    loadDotenvForAgent(target.normalizedName, target.agentParentForEnv);
 
     final File rootAgentYaml = File(
-      '${agentDir.path}${Platform.pathSeparator}root_agent.yaml',
+      '${target.agentDir.path}${Platform.pathSeparator}root_agent.yaml',
     );
     if (rootAgentYaml.existsSync()) {
       return config_agent_utils.fromConfig(rootAgentYaml.path);
     }
 
     final File adkJson = File(
-      '${agentDir.path}${Platform.pathSeparator}adk.json',
+      '${target.agentDir.path}${Platform.pathSeparator}adk.json',
     );
     final File agentDart = File(
-      '${agentDir.path}${Platform.pathSeparator}agent.dart',
+      '${target.agentDir.path}${Platform.pathSeparator}agent.dart',
     );
     if (_enableDevProjectFallback &&
         (adkJson.existsSync() || agentDart.existsSync())) {
-      final DevProjectConfig config = _loadDevProjectConfigSync(agentDir.path);
+      final DevProjectConfig config = _loadDevProjectConfigSync(
+        target.agentDir.path,
+      );
       final DevAgentRuntime runtime = DevAgentRuntime(config: config);
       return runtime.runner.agent;
     }
 
     throw StateError(
       "No root agent found for '$agentName'. Expected either "
-      "'$normalized/root_agent.yaml' or '$normalized/agent.dart' under $agentsDir.",
+      "'${target.normalizedName}/root_agent.yaml' or "
+      "'${target.normalizedName}/agent.dart' under $agentsDir.",
     );
   }
 
-  /// All loadable agent directory names under [agentsDir].
+  /// All visible agent directory names under [agentsDir].
   @override
   List<String> listAgents() {
     final Directory base = Directory(agentsDir).absolute;
@@ -124,9 +113,6 @@ class AgentLoader extends BaseAgentLoader {
           ? ''
           : entity.uri.pathSegments[entity.uri.pathSegments.length - 2];
       if (name.isEmpty || name.startsWith('.') || name == '__pycache__') {
-        continue;
-      }
-      if (!_isLoadableAgentDirectory(entity)) {
         continue;
       }
       names.add(name);
@@ -162,9 +148,7 @@ class AgentLoader extends BaseAgentLoader {
   }
 
   String _determineAgentLanguage(String agentName) {
-    final Directory basePath = Directory(
-      '${Directory(agentsDir).absolute.path}${Platform.pathSeparator}$agentName',
-    );
+    final Directory basePath = _resolveAgentTarget(agentName).agentDir;
 
     if (File(
       '${basePath.path}${Platform.pathSeparator}root_agent.yaml',
@@ -209,26 +193,104 @@ class AgentLoader extends BaseAgentLoader {
     _agentCache.remove(agentName);
   }
 
-  bool _isLoadableAgentDirectory(Directory dir) {
-    final String path = dir.path;
-    final String sep = Platform.pathSeparator;
-    if (File('$path${sep}root_agent.yaml').existsSync()) {
-      return true;
+  _ResolvedAgentTarget _resolveAgentTarget(String agentName) {
+    final String normalized = _normalizeAgentName(agentName);
+    _validateAgentName(agentName, normalized);
+
+    final Directory baseDir = Directory(agentsDir).absolute;
+    if (_isSingleAppRoot(baseDir)) {
+      return _ResolvedAgentTarget(
+        normalizedName: normalized,
+        agentDir: baseDir,
+        agentParentForEnv: baseDir.parent.path,
+      );
     }
-    if (!_enableDevProjectFallback) {
-      return false;
+
+    return _ResolvedAgentTarget(
+      normalizedName: normalized,
+      agentDir: _agentDirectory(baseDir, normalized),
+      agentParentForEnv: baseDir.path,
+    );
+  }
+
+  void _validateAgentName(String agentName, String normalized) {
+    if (!_validAgentNameRegExp.hasMatch(normalized)) {
+      throw ArgumentError.value(
+        agentName,
+        'agentName',
+        'Agent names must use letters, digits, and underscores only.',
+      );
     }
-    return File('$path${sep}agent.dart').existsSync() ||
-        File('$path${sep}adk.json').existsSync();
+
+    final Directory baseDir = Directory(agentsDir).absolute;
+    if (_isSingleAppRoot(baseDir)) {
+      if (_allowedSingleRootNames(baseDir).contains(normalized)) {
+        return;
+      }
+      throw ArgumentError.value(
+        agentName,
+        'agentName',
+        'Agent not found in single-app root ${baseDir.path}.',
+      );
+    }
+
+    final Directory agentDir = _agentDirectory(baseDir, normalized);
+    if (agentDir.existsSync()) {
+      return;
+    }
+    throw ArgumentError.value(
+      agentName,
+      'agentName',
+      'No matching directory exists in ${agentDir.path}.',
+    );
+  }
+
+  String _normalizeAgentName(String agentName) {
+    return agentName.startsWith('__') ? agentName.substring(2) : agentName;
+  }
+
+  Directory _agentDirectory(Directory baseDir, String normalized) {
+    return Directory(
+      '${baseDir.path}${Platform.pathSeparator}$normalized',
+    ).absolute;
+  }
+
+  Set<String> _allowedSingleRootNames(Directory dir) {
+    final Set<String> names = <String>{projectDirName(dir.path)};
+    final String? alias = _singleRootConfiguredAlias(dir);
+    if (alias != null && alias.isNotEmpty) {
+      names.add(alias);
+    }
+    return names;
+  }
+
+  String? _singleRootConfiguredAlias(Directory dir) {
+    final File adkJson = File('${dir.path}${Platform.pathSeparator}adk.json');
+    if (!adkJson.existsSync()) {
+      return null;
+    }
+    try {
+      return _loadDevProjectConfigSync(dir.path).appName;
+    } on Object {
+      return null;
+    }
   }
 
   String _singleRootAgentName(Directory dir) {
-    final File adkJson = File('${dir.path}${Platform.pathSeparator}adk.json');
-    if (adkJson.existsSync()) {
-      return _loadDevProjectConfigSync(dir.path).appName;
-    }
-    return projectDirName(dir.path);
+    return _singleRootConfiguredAlias(dir) ?? projectDirName(dir.path);
   }
+}
+
+final class _ResolvedAgentTarget {
+  const _ResolvedAgentTarget({
+    required this.normalizedName,
+    required this.agentDir,
+    required this.agentParentForEnv,
+  });
+
+  final String normalizedName;
+  final Directory agentDir;
+  final String agentParentForEnv;
 }
 
 bool _isSingleAppRoot(Directory dir) {
