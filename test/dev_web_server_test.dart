@@ -9,6 +9,8 @@ import 'package:adk_dart/src/dev/web_server.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:test/test.dart';
 
+String appInfoTool({required String text}) => text;
+
 void main() {
   group('startAdkDevWebServer', () {
     late HttpServer server;
@@ -1119,6 +1121,13 @@ void main() {
         ),
         isTrue,
       );
+      final Map<String, dynamic> app = apps
+          .cast<Map<String, dynamic>>()
+          .firstWhere(
+            (Map<String, dynamic> value) => value['name'] == 'test_app',
+          );
+      expect(app['rootAgentName'], isA<String>());
+      expect(app['isComputerUse'], isFalse);
     });
 
     test('serves metrics info endpoint', () async {
@@ -1133,6 +1142,89 @@ void main() {
       expect(response.statusCode, HttpStatus.ok);
       expect(payload['metrics_info'], isA<List<dynamic>>());
       expect((payload['metrics_info'] as List<dynamic>).isNotEmpty, isTrue);
+    });
+
+    test('serves app info endpoint with nested llm agents and tools', () async {
+      runtime.runner.agent = LlmAgent(
+        name: 'root_info_agent',
+        description: 'root info description',
+        instruction: 'root instruction',
+        tools: <Object>[appInfoTool],
+        subAgents: <BaseAgent>[
+          LlmAgent(
+            name: 'sub_info_agent',
+            description: 'sub info description',
+            instruction: 'sub instruction',
+            tools: <Object>[
+              FunctionTool(
+                func: ({required String text}) => text,
+                name: 'sub_tool',
+                description: 'sub tool description',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/app-info'),
+      );
+      final HttpClientResponse response = await request.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(payload['name'], 'test_app');
+      expect(payload['rootAgentName'], 'root_info_agent');
+      expect(payload['description'], 'root info description');
+      expect(payload['language'], 'dart');
+      final Map<String, dynamic> agents =
+          payload['agents'] as Map<String, dynamic>;
+      expect(
+        agents.keys,
+        containsAll(<String>['root_info_agent', 'sub_info_agent']),
+      );
+
+      final Map<String, dynamic> rootInfo =
+          agents['root_info_agent'] as Map<String, dynamic>;
+      expect(rootInfo['instruction'], 'root instruction');
+      expect(rootInfo['subAgents'], <String>['sub_info_agent']);
+      final List<dynamic> rootTools = rootInfo['tools'] as List<dynamic>;
+      expect(rootTools, hasLength(1));
+      expect(
+        ((rootTools.first as Map<String, dynamic>)['functionDeclarations']
+                as List<dynamic>)
+            .first['name'],
+        'appInfoTool',
+      );
+
+      final Map<String, dynamic> subInfo =
+          agents['sub_info_agent'] as Map<String, dynamic>;
+      expect(subInfo['instruction'], 'sub instruction');
+      expect(subInfo['subAgents'], isEmpty);
+      final List<dynamic> subTools = subInfo['tools'] as List<dynamic>;
+      expect(
+        ((subTools.first as Map<String, dynamic>)['functionDeclarations']
+                as List<dynamic>)
+            .first['name'],
+        'sub_tool',
+      );
+    });
+
+    test('returns bad request for non-llm app info roots', () async {
+      runtime.runner.agent = SequentialAgent(name: 'workflow_agent');
+
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/app-info'),
+      );
+      final HttpClientResponse response = await request.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      expect(payload['error'], 'Root agent is not an LlmAgent');
     });
 
     test('creates and lists eval sets via web routes', () async {

@@ -29,6 +29,11 @@ class AuthProviderRegistry {
     return null;
   }
 
+  /// Clears all registered providers.
+  void clear() {
+    _providers.clear();
+  }
+
   Object _normalizeRegistrationKey(Object authSchemeType) {
     if (authSchemeType is Type) {
       return authSchemeType;

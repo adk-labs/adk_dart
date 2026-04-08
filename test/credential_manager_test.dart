@@ -37,9 +37,16 @@ Matcher _throwsArgumentMessage(String messageFragment) {
 }
 
 class _FixedAuthProvider extends BaseAuthProvider {
-  _FixedAuthProvider(this.credential);
+  _FixedAuthProvider(
+    this.credential, {
+    this.supportedSchemes = const <Object>[],
+  });
 
   final AuthCredential? credential;
+  final Iterable<Object> supportedSchemes;
+
+  @override
+  Iterable<Object> get supportedAuthSchemes => supportedSchemes;
 
   @override
   Future<AuthCredential?> getAuthCredential(
@@ -51,6 +58,10 @@ class _FixedAuthProvider extends BaseAuthProvider {
 }
 
 void main() {
+  tearDown(() {
+    CredentialManager.clearGlobalAuthProvidersForTest();
+  });
+
   group('AuthConfig', () {
     test('credential key is stable for the same payload', () {
       final AuthCredential raw = AuthCredential(
@@ -220,6 +231,28 @@ void main() {
         );
       },
     );
+
+    test('uses globally registered auth providers for new managers', () async {
+      final Context context = _newContext();
+      final CredentialManager manager = CredentialManager(
+        authConfig: AuthConfig(authScheme: 'global_provider'),
+      );
+      CredentialManager.registerGlobalAuthProvider(
+        _FixedAuthProvider(
+          AuthCredential(
+            authType: AuthCredentialType.apiKey,
+            apiKey: 'global-key',
+          ),
+          supportedSchemes: const <Object>['global_provider'],
+        ),
+      );
+
+      final AuthCredential? credential = await manager.getAuthCredential(
+        context,
+      );
+
+      expect(credential?.apiKey, 'global-key');
+    });
 
     test('loads credential from credential service', () async {
       final InMemoryCredentialService service = InMemoryCredentialService();

@@ -12,6 +12,7 @@ import '../a2a/protocol.dart';
 import '../a2a/utils/agent_card_builder.dart';
 import '../agents/base_agent.dart';
 import '../agents/live_request_queue.dart';
+import '../agents/llm_agent.dart';
 import '../agents/run_config.dart';
 import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
@@ -41,6 +42,7 @@ import '../errors/not_found_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../memory/base_memory_service.dart';
+import '../models/llm_request.dart';
 import '../plugins/base_plugin.dart';
 import '../plugins/context_filter_plugin.dart';
 import '../plugins/debug_logging_plugin.dart';
@@ -58,6 +60,10 @@ import '../telemetry/setup.dart';
 import '../telemetry/sqlite_span_exporter.dart';
 import '../types/content.dart';
 import '../version.dart';
+import '../tools/_automatic_function_calling_util.dart';
+import '../tools/base_tool.dart';
+import '../tools/base_toolset.dart';
+import '../tools/computer_use/computer_use_toolset.dart';
 import 'a2a_push_delivery_queue.dart';
 import 'project.dart';
 import 'runtime.dart';
@@ -509,12 +515,13 @@ class _AdkDevWebContext {
         .toSet();
 
     if (!knownNames.contains(defaultAppName)) {
+      final BaseAgent defaultRootAgent = runtime.runner.agent;
       details.add(<String, Object?>{
         'name': defaultAppName,
-        'root_agent_name': runtime.config.agentName,
-        'description': runtime.config.description,
+        'root_agent_name': defaultRootAgent.name,
+        'description': defaultRootAgent.description,
         'language': 'dart',
-        'is_computer_use': false,
+        'is_computer_use': _isComputerUseAgent(defaultRootAgent),
       });
     }
 
@@ -872,6 +879,25 @@ class _AdkDevWebContext {
   int _toUnixNano(double seconds) {
     return (seconds * 1000000000).round();
   }
+
+  BaseAgent getRootAgent(String appName) {
+    final String resolvedAppName = appName.trim().isEmpty
+        ? defaultAppName
+        : appName.trim();
+
+    try {
+      final Object loaded = agentLoader.loadAgent(resolvedAppName);
+      if (loaded is App) {
+        return loaded.rootAgent;
+      }
+      return asBaseAgent(loaded);
+    } on StateError {
+      if (resolvedAppName != defaultAppName) {
+        rethrow;
+      }
+      return runtime.runner.agent;
+    }
+  }
 }
 
 Map<String, Object?> _traceFromEvent({
@@ -1107,7 +1133,9 @@ Future<void> _handleRequest(
       await _writeJson(
         request,
         context,
-        payload: <String, Object?>{'apps': context.listAppDetails()},
+        payload: <String, Object?>{
+          'apps': context.listAppDetails().map(_serializeAppSummary).toList(),
+        },
       );
     } else {
       await _writeJson(request, context, payload: context.listAppNames());
@@ -1206,6 +1234,12 @@ Future<bool> _handlePythonStyleRoutes(
   }
 
   final String appName = segments[1];
+  if (segments.length == 3 &&
+      segments[2] == 'app-info' &&
+      request.method == 'GET') {
+    await _handleGetAppInfo(request, context, appName: appName);
+    return true;
+  }
   if (await _handleEvalRoutes(request, context, segments, appName: appName)) {
     return true;
   }
@@ -1488,6 +1522,229 @@ bool _isEvalSetCollection(String value) {
 
 bool _isEvalResultCollection(String value) {
   return value == 'eval-results' || value == 'eval_results';
+}
+
+Map<String, Object?> _serializeAppSummary(Map<String, Object?> detail) {
+  return <String, Object?>{
+    'name': detail['name'],
+    'rootAgentName': detail['root_agent_name'] ?? detail['rootAgentName'],
+    'description': detail['description'],
+    'language': detail['language'],
+    'isComputerUse':
+        detail['is_computer_use'] ?? detail['isComputerUse'] ?? false,
+  };
+}
+
+Future<void> _handleGetAppInfo(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+}) async {
+  final BaseAgent rootAgent;
+  try {
+    rootAgent = context.getRootAgent(appName);
+  } on ArgumentError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '${error.message}',
+    );
+    return;
+  } on StateError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
+  }
+
+  if (rootAgent is! LlmAgent) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: 'Root agent is not an LlmAgent',
+    );
+    return;
+  }
+
+  final Map<String, Object?> appInfo = await _buildAppInfoPayload(
+    context,
+    appName: appName,
+    rootAgent: rootAgent,
+  );
+  await _writeJson(request, context, payload: appInfo);
+}
+
+Future<Map<String, Object?>> _buildAppInfoPayload(
+  _AdkDevWebContext context, {
+  required String appName,
+  required LlmAgent rootAgent,
+}) async {
+  Map<String, Object?>? summary;
+  for (final Map<String, Object?> detail in context.listAppDetails()) {
+    if (detail['name'] == appName) {
+      summary = detail;
+      break;
+    }
+  }
+
+  return <String, Object?>{
+    'name': appName,
+    'rootAgentName': rootAgent.name,
+    'description': rootAgent.description,
+    'language': summary?['language'] ?? 'dart',
+    'isComputerUse':
+        summary?['is_computer_use'] ?? _isComputerUseAgent(rootAgent),
+    'agents': await _collectAgentInfo(rootAgent),
+  };
+}
+
+Future<Map<String, Object?>> _collectAgentInfo(LlmAgent rootAgent) async {
+  final Map<String, Object?> agents = <String, Object?>{};
+
+  Future<void> traverse(LlmAgent agent) async {
+    if (agents.containsKey(agent.name)) {
+      return;
+    }
+
+    final List<String> subAgentNames = <String>[];
+    for (final BaseAgent subAgent in agent.subAgents) {
+      if (subAgent is! LlmAgent) {
+        continue;
+      }
+      subAgentNames.add(subAgent.name);
+      await traverse(subAgent);
+    }
+
+    agents[agent.name] = <String, Object?>{
+      'name': agent.name,
+      'description': agent.description,
+      'instruction': agent.instruction is String ? agent.instruction : '',
+      'tools': await _serializeAgentTools(agent.tools),
+      'subAgents': subAgentNames,
+    };
+  }
+
+  await traverse(rootAgent);
+  return agents;
+}
+
+Future<List<Map<String, Object?>>> _serializeAgentTools(
+  List<Object> toolUnions,
+) async {
+  final List<Map<String, Object?>> tools = <Map<String, Object?>>[];
+  for (final Object toolUnion in toolUnions) {
+    final List<FunctionDeclaration> declarations =
+        await _extractFunctionDeclarations(toolUnion);
+    if (declarations.isEmpty) {
+      continue;
+    }
+    tools.add(<String, Object?>{
+      'functionDeclarations': declarations
+          .map(_serializeFunctionDeclaration)
+          .toList(growable: false),
+    });
+  }
+  return tools;
+}
+
+Future<List<FunctionDeclaration>> _extractFunctionDeclarations(
+  Object toolUnion,
+) async {
+  if (toolUnion is BaseTool) {
+    final FunctionDeclaration? declaration = toolUnion.getDeclaration();
+    return declaration == null
+        ? const <FunctionDeclaration>[]
+        : <FunctionDeclaration>[declaration.copyWith()];
+  }
+
+  if (toolUnion is BaseToolset) {
+    final List<FunctionDeclaration> declarations = <FunctionDeclaration>[];
+    try {
+      final List<BaseTool> tools = await toolUnion.getTools();
+      for (final BaseTool tool in tools) {
+        final FunctionDeclaration? declaration = tool.getDeclaration();
+        if (declaration != null) {
+          declarations.add(declaration.copyWith());
+        }
+      }
+    } catch (_) {
+      return const <FunctionDeclaration>[];
+    }
+    return declarations;
+  }
+
+  if (toolUnion is FunctionDeclaration) {
+    return <FunctionDeclaration>[toolUnion.copyWith()];
+  }
+
+  if (toolUnion is Function) {
+    return <FunctionDeclaration>[
+      FunctionDeclaration(
+        name: _inferFunctionToolName(toolUnion),
+        parameters: <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{},
+        },
+      ),
+    ];
+  }
+
+  if (toolUnion is Map<String, Object?> || toolUnion is String) {
+    return <FunctionDeclaration>[buildFunctionDeclaration(toolUnion)];
+  }
+
+  return const <FunctionDeclaration>[];
+}
+
+Map<String, Object?> _serializeFunctionDeclaration(
+  FunctionDeclaration declaration,
+) {
+  return <String, Object?>{
+    'name': declaration.name,
+    'description': declaration.description,
+    'parameters': declaration.parameters,
+  };
+}
+
+String _inferFunctionToolName(Function function) {
+  try {
+    final ClosureMirror mirror = reflect(function) as ClosureMirror;
+    final String reflected = MirrorSystem.getName(mirror.function.simpleName);
+    if (reflected.isNotEmpty && !reflected.startsWith('<')) {
+      return reflected;
+    }
+  } catch (_) {
+    // Fall back to string parsing below.
+  }
+
+  final Match? quotedName = RegExp(r"'([^']+)'").firstMatch('$function');
+  if (quotedName != null) {
+    final String name = quotedName.group(1) ?? '';
+    if (name.isNotEmpty) {
+      return name;
+    }
+  }
+
+  return 'tool_${function.hashCode.toUnsigned(32).toRadixString(16)}';
+}
+
+bool _isComputerUseAgent(BaseAgent agent) {
+  final dynamic dynamicAgent = agent;
+  if (dynamicAgent.tools is! List<Object>) {
+    return false;
+  }
+
+  for (final Object tool in dynamicAgent.tools as List<Object>) {
+    if (tool is ComputerUseToolset) {
+      return true;
+    }
+  }
+  return false;
 }
 
 Future<void> _handleGetTraceByEventId(

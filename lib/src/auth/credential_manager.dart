@@ -20,6 +20,21 @@ import 'refresher/oauth2_credential_refresher.dart';
 
 /// Manages credential acquisition, exchange, refresh, and persistence.
 class CredentialManager {
+  static final AuthProviderRegistry _sharedAuthProviderRegistry =
+      AuthProviderRegistry();
+
+  /// Registers [provider] globally for each supported auth scheme.
+  static void registerGlobalAuthProvider(BaseAuthProvider provider) {
+    for (final Object schemeType in provider.supportedAuthSchemes) {
+      _sharedAuthProviderRegistry.register(schemeType, provider);
+    }
+  }
+
+  /// Clears globally registered auth providers used by tests.
+  static void clearGlobalAuthProvidersForTest() {
+    _sharedAuthProviderRegistry.clear();
+  }
+
   /// Creates a credential manager for [authConfig].
   CredentialManager({
     required AuthConfig authConfig,
@@ -96,9 +111,9 @@ class CredentialManager {
 
   /// Resolves an auth credential for the active request context.
   Future<AuthCredential?> getAuthCredential(Context context) async {
-    final BaseAuthProvider? provider = _authProviderRegistry.getProvider(
-      _authConfig.authScheme,
-    );
+    final BaseAuthProvider? provider =
+        _authProviderRegistry.getProvider(_authConfig.authScheme) ??
+        _sharedAuthProviderRegistry.getProvider(_authConfig.authScheme);
     if (provider != null) {
       final AuthCredential? providedCredential = await provider
           .getAuthCredential(_authConfig, context);

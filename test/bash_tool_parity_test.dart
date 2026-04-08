@@ -22,6 +22,22 @@ void main() {
       );
     });
 
+    test('blocks configured shell metacharacters', () async {
+      final ExecuteBashTool tool = ExecuteBashTool(
+        policy: BashToolPolicy(blockedOperators: const <String>['&&']),
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'command': 'echo hello && pwd'},
+        toolContext: _toolContext(confirmed: true),
+      );
+
+      expect(
+        (result! as Map<String, Object?>)['error'],
+        'Command contains blocked operator: &&',
+      );
+    });
+
     test('requests confirmation before execution', () async {
       final ExecuteBashTool tool = ExecuteBashTool();
       final Context context = _toolContext();
@@ -71,6 +87,23 @@ void main() {
       expect(payload['returncode'], 0);
       expect('${payload['stdout']}', 'hello');
       expect(File('${workspace.path}/output.txt').existsSync(), isTrue);
+    });
+
+    test('applies configurable timeout and placeholder outputs', () async {
+      final ExecuteBashTool tool = ExecuteBashTool(
+        policy: BashToolPolicy(timeoutSeconds: 0),
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'command': 'sleep 1'},
+        toolContext: _toolContext(confirmed: true),
+      );
+
+      final Map<String, Object?> payload = result! as Map<String, Object?>;
+      expect(payload['error'], 'Command timed out after 0 seconds.');
+      expect(payload['stdout'], '<no stdout captured>');
+      expect(payload['stderr'], '<no stderr captured>');
+      expect(payload['returncode'], -1);
     });
   });
 }

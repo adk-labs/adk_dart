@@ -7,6 +7,9 @@ import 'auth_tool.dart';
 
 /// Abstract provider that resolves credentials for a custom auth scheme.
 abstract class BaseAuthProvider {
+  /// Scheme identifiers supported by this provider for global registration.
+  Iterable<Object> get supportedAuthSchemes => const <Object>[];
+
   /// Returns an auth credential for [authConfig] in [context], or `null`.
   Future<AuthCredential?> getAuthCredential(
     AuthConfig authConfig,

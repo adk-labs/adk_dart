@@ -329,11 +329,15 @@ class _SkillScriptCodeExecutor {
     required Skill skill,
     required String scriptPath,
     required Map<String, Object?> scriptArgs,
+    required Map<String, Object?> shortOptions,
+    required List<Object?> positionalArgs,
   }) async {
     final String? code = _buildWrapperCode(
       skill: skill,
       scriptPath: scriptPath,
       scriptArgs: scriptArgs,
+      shortOptions: shortOptions,
+      positionalArgs: positionalArgs,
     );
     if (code == null) {
       final String extMsg = scriptPath.contains('.')
@@ -414,6 +418,8 @@ class _SkillScriptCodeExecutor {
     required Skill skill,
     required String scriptPath,
     required Map<String, Object?> scriptArgs,
+    required Map<String, Object?> shortOptions,
+    required List<Object?> positionalArgs,
   }) {
     final String normalizedScriptPath = scriptPath.startsWith('scripts/')
         ? scriptPath
@@ -489,6 +495,14 @@ class _SkillScriptCodeExecutor {
         argv.add('--$key');
         argv.add('$value');
       });
+      shortOptions.forEach((String key, Object? value) {
+        argv.add('-$key');
+        argv.add('$value');
+      });
+      if (positionalArgs.isNotEmpty) {
+        argv.add('--');
+        argv.addAll(positionalArgs.map((Object? value) => '$value'));
+      }
       lines.addAll(<String>[
         '      sys.argv = ${jsonEncode(argv)}',
         '      try:',
@@ -503,6 +517,14 @@ class _SkillScriptCodeExecutor {
         command.add('--$key');
         command.add('$value');
       });
+      shortOptions.forEach((String key, Object? value) {
+        command.add('-$key');
+        command.add('$value');
+      });
+      if (positionalArgs.isNotEmpty) {
+        command.add('--');
+        command.addAll(positionalArgs.map((Object? value) => '$value'));
+      }
       lines.addAll(<String>[
         '      try:',
         '        _r = subprocess.run(',
@@ -565,7 +587,18 @@ class _RunSkillScriptTool extends BaseTool {
           'args': <String, Object?>{
             'type': 'object',
             'description':
-                'Optional arguments to pass to the script as key-value pairs.',
+                "Optional arguments to pass as long options (e.g., {'n': 5} becomes --n 5).",
+          },
+          'short_options': <String, Object?>{
+            'type': 'object',
+            'description':
+                "Optional SHORT options to pass (e.g., {'n': 5} becomes -n 5).",
+          },
+          'positional_args': <String, Object?>{
+            'type': 'array',
+            'items': <String, Object?>{'type': 'string'},
+            'description':
+                "Optional list of positional arguments in exact order (e.g., ['input.txt', 'output.txt']).",
           },
         },
         'required': <String>['skill_name', 'script_path'],
@@ -581,12 +614,29 @@ class _RunSkillScriptTool extends BaseTool {
     final Object? rawSkillName = args['skill_name'];
     final Object? rawScriptPath = args['script_path'];
     final Object? rawScriptArgs = args['args'] ?? <String, Object?>{};
+    final Object? rawShortOptions =
+        args['short_options'] ?? <String, Object?>{};
+    final Object? rawPositionalArgs = args['positional_args'] ?? <Object?>[];
 
     if (rawScriptArgs is! Map) {
       return <String, Object?>{
         'error':
             "'args' must be a JSON object (key-value pairs), got ${rawScriptArgs.runtimeType}.",
         'error_code': 'INVALID_ARGS_TYPE',
+      };
+    }
+    if (rawShortOptions is! Map) {
+      return <String, Object?>{
+        'error':
+            "'short_options' must be a JSON object (key-value pairs), got ${rawShortOptions.runtimeType}.",
+        'error_code': 'INVALID_SHORT_OPTIONS_TYPE',
+      };
+    }
+    if (rawPositionalArgs is! List) {
+      return <String, Object?>{
+        'error':
+            "'positional_args' must be a JSON array (list), got ${rawPositionalArgs.runtimeType}.",
+        'error_code': 'INVALID_POSITIONAL_ARGS_TYPE',
       };
     }
 
@@ -654,6 +704,10 @@ class _RunSkillScriptTool extends BaseTool {
       scriptArgs: rawScriptArgs.map(
         (Object? key, Object? value) => MapEntry('$key', value),
       ),
+      shortOptions: rawShortOptions.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      ),
+      positionalArgs: List<Object?>.from(rawPositionalArgs),
     );
   }
 }

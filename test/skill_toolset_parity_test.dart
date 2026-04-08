@@ -434,6 +434,87 @@ void main() {
     });
 
     test(
+      'run_skill_script materializes short options and positional args',
+      () async {
+        final _FakeCodeExecutor fakeExecutor = _FakeCodeExecutor(
+          CodeExecutionResult(
+            stdout:
+                '{"__shell_result__":true,"stdout":"done","stderr":"","returncode":0}',
+            stderr: '',
+            exitCode: 0,
+          ),
+        );
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_sampleSkill()],
+          codeExecutor: fakeExecutor,
+        );
+        final BaseTool runTool = (await toolset.getTools())[3];
+
+        final Object? result = await runTool.run(
+          args: <String, Object?>{
+            'skill_name': 'my-skill',
+            'script_path': 'scripts/setup.sh',
+            'args': <String, Object?>{'name': 'dart'},
+            'short_options': <String, Object?>{'n': 5},
+            'positional_args': <String>['input.txt', 'output.txt'],
+          },
+          toolContext: _newToolContext(),
+        );
+
+        final Map<String, Object?> payload = Map<String, Object?>.from(
+          result! as Map,
+        );
+        expect(payload['status'], 'success');
+        expect(fakeExecutor.lastCode, contains('--name'));
+        expect(fakeExecutor.lastCode, contains('-n'));
+        expect(fakeExecutor.lastCode, contains('"--"'));
+        expect(fakeExecutor.lastCode, contains('input.txt'));
+        expect(fakeExecutor.lastCode, contains('output.txt'));
+      },
+    );
+
+    test(
+      'run_skill_script validates short_options and positional_args types',
+      () async {
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_sampleSkill()],
+          codeExecutor: _FakeCodeExecutor(
+            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+          ),
+        );
+        final BaseTool runTool = (await toolset.getTools())[3];
+
+        final Object? invalidShortOptions = await runTool.run(
+          args: <String, Object?>{
+            'skill_name': 'my-skill',
+            'script_path': 'scripts/setup.sh',
+            'short_options': <String>['n'],
+          },
+          toolContext: _newToolContext(),
+        );
+        expect(
+          Map<String, Object?>.from(invalidShortOptions! as Map)['error_code'],
+          'INVALID_SHORT_OPTIONS_TYPE',
+        );
+
+        final Object? invalidPositionalArgs = await runTool.run(
+          args: <String, Object?>{
+            'skill_name': 'my-skill',
+            'script_path': 'scripts/setup.sh',
+            'positional_args': <String, Object?>{'file': 'input.txt'},
+          },
+          toolContext: _newToolContext(),
+        );
+        expect(
+          Map<String, Object?>.from(
+            invalidPositionalArgs! as Map,
+          )['error_code'],
+          'INVALID_POSITIONAL_ARGS_TYPE',
+        );
+      },
+    );
+
+    test(
       'processLlmRequest appends default system instruction and skills xml',
       () async {
         final SkillToolset toolset = SkillToolset(
