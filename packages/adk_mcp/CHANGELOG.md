@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 2026.4.17
+
+- Bumped package version to `2026.4.17`.
+- Synced MCP package release with the `adk_dart` `2026.4.17` rollout.
+
 ## 2026.3.21
 
 - Bumped package version to `2026.3.21`.

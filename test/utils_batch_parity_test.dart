@@ -133,7 +133,7 @@ description: |
     });
 
     test('version constant matches python baseline', () {
-      expect(adkVersion, '1.25.1');
+      expect(adkVersion, '1.31.0');
     });
   });
 }

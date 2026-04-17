@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2026.4.17
+
+- Bumped package version to `2026.4.17`.
+- Updated dependency alignment to `adk_dart: ^2026.4.17`.
+- Synced facade release with `adk_dart` `2026.4.17`, including the `1.31.0` ADK baseline update and latest live/runtime parity fixes.
+
 ## 2026.3.21
 
 - Bumped package version to `2026.3.21`.

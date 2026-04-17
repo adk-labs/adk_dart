@@ -1,5 +1,11 @@
 ## Unreleased
 
+## 2026.4.17
+
+- Bumped package release versions to `2026.4.17` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
+- Updated the exported ADK runtime baseline version to `1.31.0` to match the current `adk-python` main baseline.
+- Rolled the release forward with the latest live runtime parity fixes, including reconnect control-flow hardening, `goAway` surfacing, and remaining session/runtime parity closures.
+
 ## 2026.3.21
 
 - Bumped package release versions to `2026.3.21` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
