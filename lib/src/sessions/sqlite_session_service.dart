@@ -997,6 +997,9 @@ Map<String, Object?> _eventToJson(Event event) {
       'groundingMetadata': event.groundingMetadata,
     if (event.interactionId != null) 'interactionId': event.interactionId,
     if (event.liveSessionId != null) 'liveSessionId': event.liveSessionId,
+    if (event.liveSessionResumptionUpdate != null)
+      'liveSessionResumptionUpdate': event.liveSessionResumptionUpdate,
+    if (event.goAway != null) 'goAway': event.goAway,
   };
 }
 
@@ -1030,6 +1033,8 @@ Event _eventFromJson(Map<String, Object?> json) {
     groundingMetadata: json['groundingMetadata'],
     interactionId: json['interactionId'] as String?,
     liveSessionId: json['liveSessionId'] as String?,
+    liveSessionResumptionUpdate: json['liveSessionResumptionUpdate'],
+    goAway: json['goAway'],
   );
 }
 

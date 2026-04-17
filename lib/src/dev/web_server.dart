@@ -3738,6 +3738,8 @@ Map<String, Object?> _eventToApiJson(
     'cacheMetadata': snake['cache_metadata'],
     'interactionId': snake['interaction_id'],
     'liveSessionId': snake['live_session_id'],
+    'liveSessionResumptionUpdate': snake['live_session_resumption_update'],
+    'goAway': snake['go_away'],
   };
 }
 

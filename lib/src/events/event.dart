@@ -37,6 +37,8 @@ class Event extends LlmResponse {
     super.groundingMetadata,
     super.interactionId,
     super.liveSessionId,
+    super.liveSessionResumptionUpdate,
+    super.goAway,
   }) : actions = actions ?? EventActions(),
        id = id ?? Event.newId(),
        timestamp = timestamp ?? getTime();
@@ -143,6 +145,8 @@ class Event extends LlmResponse {
     Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
     Object? liveSessionId = _sentinel,
+    Object? liveSessionResumptionUpdate = _sentinel,
+    Object? goAway = _sentinel,
   }) {
     return Event(
       invocationId: identical(invocationId, _sentinel)
@@ -219,6 +223,11 @@ class Event extends LlmResponse {
       liveSessionId: identical(liveSessionId, _sentinel)
           ? this.liveSessionId
           : liveSessionId as String?,
+      liveSessionResumptionUpdate:
+          identical(liveSessionResumptionUpdate, _sentinel)
+          ? this.liveSessionResumptionUpdate
+          : liveSessionResumptionUpdate,
+      goAway: identical(goAway, _sentinel) ? this.goAway : goAway,
     );
   }
 

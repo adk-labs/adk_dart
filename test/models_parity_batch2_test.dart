@@ -361,6 +361,54 @@ void main() {
       },
     );
 
+    test('emits live resumption and goAway control responses', () async {
+      final _FakeLiveSession session = _FakeLiveSession();
+      final GeminiLlmConnection connection = GeminiLlmConnection(
+        model: Gemini(),
+        liveSession: session,
+      );
+      final List<LlmResponse> responses = <LlmResponse>[];
+      final StreamSubscription<LlmResponse> sub = connection.receive().listen(
+        responses.add,
+      );
+
+      await connection.sendContent(Content.userText('hello'));
+      session.controller.add(
+        GeminiLiveSessionMessage(
+          sessionResumptionUpdate: <String, Object?>{
+            'new_handle': 'resume-handle',
+          },
+        ),
+      );
+      session.controller.add(
+        GeminiLiveSessionMessage(
+          goAway: <String, Object?>{'reason': 'server_restart'},
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        responses.any(
+          (LlmResponse response) =>
+              response.liveSessionResumptionUpdate is Map &&
+              (response.liveSessionResumptionUpdate as Map)['new_handle'] ==
+                  'resume-handle',
+        ),
+        isTrue,
+      );
+      expect(
+        responses.any(
+          (LlmResponse response) =>
+              response.goAway is Map &&
+              (response.goAway as Map)['reason'] == 'server_restart',
+        ),
+        isTrue,
+      );
+
+      await sub.cancel();
+      await connection.close();
+    });
+
     test('preserves grounding metadata attached to live content', () async {
       final _FakeLiveSession session = _FakeLiveSession();
       final GeminiLlmConnection connection = GeminiLlmConnection(

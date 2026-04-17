@@ -105,6 +105,7 @@ class GeminiLiveSessionMessage {
     this.serverContent,
     this.toolCall,
     this.sessionResumptionUpdate,
+    this.goAway,
   });
 
   /// Usage metadata update, when available.
@@ -118,6 +119,9 @@ class GeminiLiveSessionMessage {
 
   /// Session resumption metadata update, when available.
   final Object? sessionResumptionUpdate;
+
+  /// Go-away control payload requesting client reconnection.
+  final Object? goAway;
 }
 
 /// Runtime contract for Gemini live session transports.
@@ -314,13 +318,9 @@ class GeminiLlmConnection extends BaseLlmConnection {
         if (_closed) {
           return;
         }
-        _responses.add(
-          LlmResponse(
-            errorCode: 'live_session_error',
-            errorMessage: '$error',
-            interrupted: true,
-            liveSessionId: _liveSession.liveSessionId,
-          ),
+        _responses.addError(
+          RecoverableLiveConnectionException(error),
+          stackTrace,
         );
       },
       cancelOnError: false,
@@ -368,9 +368,16 @@ class GeminiLlmConnection extends BaseLlmConnection {
     if (message.sessionResumptionUpdate != null) {
       _responses.add(
         LlmResponse(
-          customMetadata: <String, dynamic>{
-            'live_session_resumption_update': message.sessionResumptionUpdate,
-          },
+          liveSessionResumptionUpdate: message.sessionResumptionUpdate,
+          liveSessionId: _liveSession?.liveSessionId,
+        ),
+      );
+    }
+
+    if (message.goAway != null) {
+      _responses.add(
+        LlmResponse(
+          goAway: message.goAway,
           liveSessionId: _liveSession?.liveSessionId,
         ),
       );

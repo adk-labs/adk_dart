@@ -72,6 +72,54 @@
 - 이번 배치 변경은 대부분 “모델 응답 -> 이벤트 -> 저장 -> API”처럼 여러 계층을 가로지른다.
 - 단일 단위 테스트만 있으면 중간 계층 누락을 놓치기 쉬워서, 기능별로 서로 다른 계층의 회귀를 따로 고정했다.
 
+## 작업 단위 6. live session resumption / `goAway` / reconnect parity
+
+작업 내용
+- `LlmResponse`, `Event`에 `liveSessionResumptionUpdate`, `goAway` 필드를 추가했다.
+- `GeminiLlmConnection` live receive 경로가 resumption update와 `goAway`를 제어 응답으로 그대로 내보내도록 수정했다.
+- `BaseLlmFlow.runLive()`에 재연결 루프를 추가해서 recoverable live disconnect와 `goAway` 이후 재접속을 처리하도록 맞췄다.
+- live session resumption handle이 이미 있으면 reconnect 시 history를 다시 보내지 않도록 조정했다.
+- resumption update만 있는 응답도 control event로 surface해서 상위 호출자가 관찰하고 저장할 수 있게 했다.
+
+작업 이유
+- upstream Python은 live reconnect, resumption handle 갱신, `go_away` 제어 메시지 처리를 이미 런타임 의미로 사용하고 있다.
+- 기존 Dart 구현은 handle을 메모리에만 갱신하거나 live 종료로 흘려보내서, reconnect 전략과 세션 복구 가시성이 Python보다 약했다.
+- 이 레이어를 맞춰야 live transfer, reconnect, session persistence가 같은 의미를 가진다.
+
+## 작업 단위 7. live input transcription author parity
+
+작업 내용
+- `BaseLlmFlow`가 `inputTranscription` 응답을 사용자 발화로 분류하도록 author 결정 규칙을 수정했다.
+- live handoff/history 재구성 테스트에 input transcription author 회귀 케이스를 추가했다.
+
+작업 이유
+- upstream은 live input transcription을 `user` authored event로 다루도록 수정했다.
+- 기존 Dart 구현은 `content.role == user`인 경우에만 사용자 이벤트로 취급해서, content 없는 transcription 제어 응답을 현재 agent authored event로 잘못 저장할 수 있었다.
+- 이 차이는 transfer/current-turn history 계산에서 직접 드러나는 동작 차이라 parity 대상으로 봐야 한다.
+
+## 작업 단위 8. plugin `onEventCallback` 저장 순서 parity
+
+작업 내용
+- `Runner`에서 plugin `onEventCallback`을 session append 이전에 실행하도록 순서를 조정했다.
+- plugin이 수정한 event를 yield와 persistence가 동일하게 사용하도록 output event 조립 경로를 분리했다.
+- run-level custom metadata 재적용이 plugin 수정 이벤트에도 유지되도록 보정했다.
+
+작업 이유
+- upstream은 plugin callback 결과가 스트림에만 보이고 세션에는 빠지는 문제를 이미 수정했다.
+- 기존 Dart 구현은 callback 이후 yield되는 event와 append된 event가 달라질 수 있어서, 재로드 후 상태와 실시간 관찰 결과가 불일치했다.
+- plugin 기반 analytics/metadata 확장에서는 저장본과 전송본이 같아야 후속 분석과 replay가 안정적이다.
+
+## 작업 단위 9. live control field 저장/API 전파 보강
+
+작업 내용
+- schema v0, sqlite event JSON, dev web server event JSON에 `liveSessionResumptionUpdate`, `goAway`를 추가했다.
+- session migration / sqlite persistence 테스트에 live control field roundtrip 검증을 넣었다.
+
+작업 이유
+- live control 필드를 모델 응답에서만 들고 있으면 reconnect 디버깅, 세션 재생, API 관찰 시점에 정보가 끊긴다.
+- upstream parity는 “응답 수신 -> 이벤트 생성 -> 저장 -> API 노출” 전체 경로가 연결되어야 의미가 있다.
+- 저장 계층과 API 계층을 같이 맞춰야 이전에 수정한 runtime parity가 실제 운영 경로에서도 유지된다.
+
 ## 이번 배치에서 직접 포팅하지 않은 항목
 
 다음 upstream 변경은 신규 서브시스템 또는 외부 연동 범위가 커서 이번 parity 배치에서는 제외했다.
@@ -94,7 +142,11 @@
   - 기존 info-level lint만 잔존
 - 통과 테스트
   - `dart test test/skill_toolset_parity_test.dart test/models_parity_batch2_test.dart test/workflow_agents_test.dart test/contents_live_session_parity_test.dart test/live_session_event_parity_test.dart test/session_migration_parity_test.dart`
-  - `dart test test/session_persistence_services_test.dart --plain-name "persists liveSessionId in sqlite event payload"`
+  - `dart test test/llm_flow_live_modules_parity_test.dart`
+  - `dart test test/models_parity_batch2_test.dart`
+  - `dart test test/runner_flow_test.dart`
+  - `dart test test/session_migration_parity_test.dart`
+  - `dart test test/session_persistence_services_test.dart`
   - `dart test test/dev_web_server_test.dart --plain-name "rejects python-style session routes with path traversal ids"`
   - `dart test test/dev_web_server_test.dart --plain-name "rejects run payloads with path traversal session ids"`
   - `dart test test/dev_web_server_test.dart --plain-name "rejects run_live websocket ids with path traversal"`

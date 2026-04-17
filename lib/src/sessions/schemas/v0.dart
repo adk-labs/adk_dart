@@ -144,6 +144,8 @@ class StorageEventV0 {
     this.cacheMetadata,
     this.interactionId,
     this.liveSessionId,
+    this.liveSessionResumptionUpdate,
+    this.goAway,
   }) : actions = actions ?? EventActions(),
        timestamp = timestamp ?? getUtcNow();
 
@@ -234,6 +236,12 @@ class StorageEventV0 {
   /// Live session identifier.
   final String? liveSessionId;
 
+  /// Live session resumption control payload.
+  final Object? liveSessionResumptionUpdate;
+
+  /// Live go-away control payload.
+  final Object? goAway;
+
   /// Creates a schema-v0 storage event from JSON.
   factory StorageEventV0.fromJson(Map<String, Object?> json) {
     return StorageEventV0(
@@ -279,6 +287,10 @@ class StorageEventV0 {
           ?.toString(),
       liveSessionId: (json['live_session_id'] ?? json['liveSessionId'])
           ?.toString(),
+      liveSessionResumptionUpdate:
+          json['live_session_resumption_update'] ??
+          json['liveSessionResumptionUpdate'],
+      goAway: json['go_away'] ?? json['goAway'],
     );
   }
 
@@ -321,6 +333,8 @@ class StorageEventV0 {
       cacheMetadata: event.cacheMetadata,
       interactionId: event.interactionId,
       liveSessionId: event.liveSessionId,
+      liveSessionResumptionUpdate: event.liveSessionResumptionUpdate,
+      goAway: event.goAway,
     );
   }
 
@@ -368,6 +382,8 @@ class StorageEventV0 {
       cacheMetadata: cacheMetadata,
       interactionId: interactionId,
       liveSessionId: liveSessionId,
+      liveSessionResumptionUpdate: liveSessionResumptionUpdate,
+      goAway: goAway,
     );
   }
 
@@ -405,6 +421,9 @@ class StorageEventV0 {
       if (cacheMetadata != null) 'cache_metadata': cacheMetadata,
       if (interactionId != null) 'interaction_id': interactionId,
       if (liveSessionId != null) 'live_session_id': liveSessionId,
+      if (liveSessionResumptionUpdate != null)
+        'live_session_resumption_update': liveSessionResumptionUpdate,
+      if (goAway != null) 'go_away': goAway,
     };
   }
 }

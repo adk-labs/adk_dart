@@ -4,6 +4,26 @@ library;
 import '../types/content.dart';
 import 'llm_response.dart';
 
+/// Recoverable failure raised by live connections when reconnection is possible.
+class RecoverableLiveConnectionException implements Exception {
+  /// Creates a recoverable live connection exception.
+  RecoverableLiveConnectionException(this.cause, {this.code});
+
+  /// Underlying failure object from the transport layer.
+  final Object cause;
+
+  /// Optional backend-specific status or close code.
+  final int? code;
+
+  @override
+  String toString() {
+    if (code == null) {
+      return 'RecoverableLiveConnectionException: $cause';
+    }
+    return 'RecoverableLiveConnectionException(code: $code, cause: $cause)';
+  }
+}
+
 /// Binary payload sent over realtime model transports.
 class RealtimeBlob {
   /// Creates a realtime blob with [mimeType] and binary [data].

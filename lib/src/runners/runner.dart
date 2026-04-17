@@ -45,6 +45,21 @@ bool _hasNonEmptyTranscriptionText(Object? transcription) {
   return false;
 }
 
+bool _isEmptyEventActions(EventActions actions) {
+  return actions.skipSummarization == null &&
+      actions.stateDelta.isEmpty &&
+      actions.artifactDelta.isEmpty &&
+      actions.transferToAgent == null &&
+      actions.escalate == null &&
+      actions.requestedAuthConfigs.isEmpty &&
+      actions.requestedToolConfirmations.isEmpty &&
+      actions.compaction == null &&
+      actions.endOfAgent == null &&
+      actions.agentState == null &&
+      actions.rewindBeforeInvocationId == null &&
+      actions.renderUiWidgets.isEmpty;
+}
+
 /// Error thrown when a requested session cannot be found.
 class SessionNotFoundError implements Exception {
   /// Creates a session-not-found error with [message].
@@ -816,6 +831,16 @@ class Runner {
 
       await for (final Event event in execute(invocationContext)) {
         _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
+        final Event? modified = await invocationContext.pluginManager
+            .runOnEventCallback(
+              invocationContext: invocationContext,
+              event: event,
+            );
+        final Event outputEvent = _buildOutputEvent(
+          originalEvent: event,
+          modifiedEvent: modified,
+          runConfig: invocationContext.runConfig,
+        );
 
         if (isLiveCall) {
           if (event.partial == true && _isTranscription(event)) {
@@ -823,7 +848,7 @@ class Runner {
           }
 
           if (isTranscribing && _isToolCallOrResponse(event)) {
-            bufferedEvents.add(event);
+            bufferedEvents.add(outputEvent);
             continue;
           }
 
@@ -832,10 +857,10 @@ class Runner {
                 (_hasNonEmptyTranscriptionText(event.inputTranscription) ||
                     _hasNonEmptyTranscriptionText(event.outputTranscription))) {
               isTranscribing = false;
-              if (_shouldAppendEvent(event, isLiveCall)) {
+              if (_shouldAppendEvent(outputEvent, isLiveCall)) {
                 await sessionService.appendEvent(
                   session: session,
-                  event: event,
+                  event: outputEvent,
                 );
               }
 
@@ -849,33 +874,88 @@ class Runner {
                 yield buffered;
               }
               bufferedEvents.clear();
-            } else if (_shouldAppendEvent(event, isLiveCall)) {
-              await sessionService.appendEvent(session: session, event: event);
+            } else if (_shouldAppendEvent(outputEvent, isLiveCall)) {
+              await sessionService.appendEvent(
+                session: session,
+                event: outputEvent,
+              );
             }
           }
         } else if (event.partial != true &&
-            _shouldAppendEvent(event, isLiveCall)) {
-          await sessionService.appendEvent(session: session, event: event);
+            _shouldAppendEvent(outputEvent, isLiveCall)) {
+          await sessionService.appendEvent(
+            session: session,
+            event: outputEvent,
+          );
         }
 
-        final Event? modified = await invocationContext.pluginManager
-            .runOnEventCallback(
-              invocationContext: invocationContext,
-              event: event,
-            );
-
-        if (modified != null) {
-          _applyRunConfigCustomMetadata(modified, invocationContext.runConfig);
-          yield modified;
-        } else {
-          yield event;
-        }
+        yield outputEvent;
       }
     }
 
     await invocationContext.pluginManager.runAfterRunCallback(
       invocationContext: invocationContext,
     );
+  }
+
+  Event _buildOutputEvent({
+    required Event originalEvent,
+    required Event? modifiedEvent,
+    required RunConfig? runConfig,
+  }) {
+    if (modifiedEvent == null) {
+      return originalEvent;
+    }
+
+    final Event outputEvent = originalEvent.copyWith(
+      author: modifiedEvent.author.isEmpty
+          ? originalEvent.author
+          : modifiedEvent.author,
+      actions: _isEmptyEventActions(modifiedEvent.actions)
+          ? originalEvent.actions.copyWith()
+          : modifiedEvent.actions.copyWith(),
+      longRunningToolIds: modifiedEvent.longRunningToolIds == null
+          ? (originalEvent.longRunningToolIds == null
+                ? null
+                : Set<String>.from(originalEvent.longRunningToolIds!))
+          : Set<String>.from(modifiedEvent.longRunningToolIds!),
+      branch: modifiedEvent.branch ?? originalEvent.branch,
+      modelVersion: modifiedEvent.modelVersion ?? originalEvent.modelVersion,
+      content: modifiedEvent.content?.copyWith() ?? originalEvent.content,
+      partial: modifiedEvent.partial ?? originalEvent.partial,
+      turnComplete: modifiedEvent.turnComplete ?? originalEvent.turnComplete,
+      finishReason: modifiedEvent.finishReason ?? originalEvent.finishReason,
+      errorCode: modifiedEvent.errorCode ?? originalEvent.errorCode,
+      errorMessage: modifiedEvent.errorMessage ?? originalEvent.errorMessage,
+      interrupted: modifiedEvent.interrupted ?? originalEvent.interrupted,
+      customMetadata: modifiedEvent.customMetadata == null
+          ? (originalEvent.customMetadata == null
+                ? null
+                : Map<String, dynamic>.from(originalEvent.customMetadata!))
+          : Map<String, dynamic>.from(modifiedEvent.customMetadata!),
+      usageMetadata: modifiedEvent.usageMetadata ?? originalEvent.usageMetadata,
+      inputTranscription:
+          modifiedEvent.inputTranscription ?? originalEvent.inputTranscription,
+      outputTranscription:
+          modifiedEvent.outputTranscription ??
+          originalEvent.outputTranscription,
+      avgLogprobs: modifiedEvent.avgLogprobs ?? originalEvent.avgLogprobs,
+      logprobsResult:
+          modifiedEvent.logprobsResult ?? originalEvent.logprobsResult,
+      cacheMetadata: modifiedEvent.cacheMetadata ?? originalEvent.cacheMetadata,
+      citationMetadata:
+          modifiedEvent.citationMetadata ?? originalEvent.citationMetadata,
+      groundingMetadata:
+          modifiedEvent.groundingMetadata ?? originalEvent.groundingMetadata,
+      interactionId: modifiedEvent.interactionId ?? originalEvent.interactionId,
+      liveSessionId: modifiedEvent.liveSessionId ?? originalEvent.liveSessionId,
+      liveSessionResumptionUpdate:
+          modifiedEvent.liveSessionResumptionUpdate ??
+          originalEvent.liveSessionResumptionUpdate,
+      goAway: modifiedEvent.goAway ?? originalEvent.goAway,
+    );
+    _applyRunConfigCustomMetadata(outputEvent, runConfig);
+    return outputEvent;
   }
 
   BaseAgent _findAgentToRun(Session session, BaseAgent rootAgent) {

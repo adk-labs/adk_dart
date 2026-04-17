@@ -26,6 +26,8 @@ class LlmResponse {
     this.groundingMetadata,
     this.interactionId,
     this.liveSessionId,
+    this.liveSessionResumptionUpdate,
+    this.goAway,
   });
 
   /// Backend model version that produced this response.
@@ -85,6 +87,12 @@ class LlmResponse {
   /// Provider live-session identifier for bidi/live runs.
   String? liveSessionId;
 
+  /// Provider session-resumption control payload for live reconnects.
+  Object? liveSessionResumptionUpdate;
+
+  /// Provider go-away control payload for live reconnects.
+  Object? goAway;
+
   /// Returns a copy of this response with optional overrides.
   LlmResponse copyWith({
     Object? modelVersion = _sentinel,
@@ -106,6 +114,8 @@ class LlmResponse {
     Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
     Object? liveSessionId = _sentinel,
+    Object? liveSessionResumptionUpdate = _sentinel,
+    Object? goAway = _sentinel,
   }) {
     return LlmResponse(
       modelVersion: identical(modelVersion, _sentinel)
@@ -165,6 +175,11 @@ class LlmResponse {
       liveSessionId: identical(liveSessionId, _sentinel)
           ? this.liveSessionId
           : liveSessionId as String?,
+      liveSessionResumptionUpdate:
+          identical(liveSessionResumptionUpdate, _sentinel)
+          ? this.liveSessionResumptionUpdate
+          : liveSessionResumptionUpdate,
+      goAway: identical(goAway, _sentinel) ? this.goAway : goAway,
     );
   }
 }

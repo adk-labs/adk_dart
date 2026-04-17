@@ -429,6 +429,17 @@ void main() {
         expect(events.first.customMetadata, isNotNull);
         expect(events.first.customMetadata!['plugin'], 'yes');
         expect(events.first.customMetadata!['run'], 'override');
+
+        final Session? reloaded = await runner.sessionService.getSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: session.id,
+        );
+        expect(reloaded, isNotNull);
+        expect(reloaded!.events, hasLength(2));
+        expect(reloaded.events.last.customMetadata, isNotNull);
+        expect(reloaded.events.last.customMetadata!['plugin'], 'yes');
+        expect(reloaded.events.last.customMetadata!['run'], 'override');
       },
     );
 

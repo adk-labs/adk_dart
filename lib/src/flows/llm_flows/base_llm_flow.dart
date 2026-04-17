@@ -43,6 +43,15 @@ abstract class BaseLlmResponseProcessor {
   Stream<Event> runAsync(InvocationContext context, LlmResponse response);
 }
 
+const int _defaultMaxReconnectAttempts = 5;
+const Object _liveSendCanceled = Object();
+
+class _LiveReconnectRequested implements Exception {
+  _LiveReconnectRequested([this.reason]);
+
+  final Object? reason;
+}
+
 /// Core LLM flow coordinator for request/response processing and tool loops.
 class BaseLlmFlow {
   /// Creates a base LLM flow.
@@ -85,48 +94,85 @@ class BaseLlmFlow {
       return;
     }
 
-    _applyLiveSessionResumptionHandle(context, request);
-
-    final BaseLlmConnection connection = _connectLive(llm, request);
-    Future<void>? sendTask;
-    Future<void>? closeTask;
-    Future<void> closeConnectionOnce() {
-      closeTask ??= connection.close();
-      return closeTask!;
-    }
-
+    int reconnectAttempts = 0;
     try {
-      if (request.contents.isNotEmpty) {
-        await connection.sendHistory(
-          request.contents
-              .map((Content content) => content.copyWith())
-              .toList(growable: false),
-        );
-      }
+      while (true) {
+        _applyLiveSessionResumptionHandle(context, request);
 
-      sendTask = _sendToModel(
-        connection,
-        context,
-        closeConnection: closeConnectionOnce,
-      );
-      await for (final Event event in _receiveFromModel(
-        connection,
-        context,
-        request,
-      )) {
-        yield event;
-        if (event.getFunctionResponses().isNotEmpty && event.content != null) {
-          context.liveRequestQueue?.sendContent(event.content!.copyWith());
+        final BaseLlmConnection connection = _connectLive(llm, request);
+        final Completer<void> stopSending = Completer<void>();
+        Future<void>? sendTask;
+        Future<void>? closeTask;
+        bool closedByClient = false;
+
+        Future<void> closeConnectionOnce() {
+          closeTask ??= connection.close();
+          return closeTask!;
+        }
+
+        try {
+          if (request.contents.isNotEmpty &&
+              !_hasLiveSessionResumptionHandle(context)) {
+            await connection.sendHistory(
+              request.contents
+                  .map((Content content) => content.copyWith())
+                  .toList(growable: false),
+            );
+          }
+
+          sendTask = _sendToModel(
+            connection,
+            context,
+            closeConnection: closeConnectionOnce,
+            cancelSignal: stopSending.future,
+            onTerminalClose: () {
+              closedByClient = true;
+            },
+          );
+          await for (final Event event in _receiveFromModel(
+            connection,
+            context,
+            request,
+          )) {
+            reconnectAttempts = 0;
+            yield event;
+            if (event.getFunctionResponses().isNotEmpty &&
+                event.content != null) {
+              context.liveRequestQueue?.sendContent(event.content!.copyWith());
+            }
+          }
+
+          if (closedByClient) {
+            return;
+          }
+          if (!_canRetryLiveConnection(context, reconnectAttempts)) {
+            return;
+          }
+          reconnectAttempts += 1;
+        } on _LiveReconnectRequested {
+          if (!_canRetryLiveConnection(context, reconnectAttempts)) {
+            rethrow;
+          }
+          reconnectAttempts += 1;
+        } on RecoverableLiveConnectionException catch (error, stackTrace) {
+          if (!_canRetryLiveConnection(context, reconnectAttempts)) {
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+          reconnectAttempts += 1;
+        } finally {
+          if (!stopSending.isCompleted) {
+            stopSending.complete();
+          }
+          if (sendTask != null) {
+            try {
+              await sendTask;
+            } catch (_) {}
+          }
+          await closeConnectionOnce();
         }
       }
     } finally {
       context.liveRequestQueue?.close();
-      if (sendTask != null) {
-        try {
-          await sendTask;
-        } catch (_) {}
-      }
-      await closeConnectionOnce();
     }
   }
 
@@ -202,6 +248,8 @@ class BaseLlmFlow {
     BaseLlmConnection connection,
     InvocationContext context, {
     required Future<void> Function() closeConnection,
+    required Future<void> cancelSignal,
+    void Function()? onTerminalClose,
   }) async {
     while (true) {
       final LiveRequestQueue? liveQueue = context.liveRequestQueue;
@@ -209,11 +257,19 @@ class BaseLlmFlow {
         return;
       }
 
-      final LiveRequest liveRequest = await liveQueue.get();
+      final Object next = await Future.any<Object>(<Future<Object>>[
+        liveQueue.get(),
+        cancelSignal.then<Object>((_) => _liveSendCanceled),
+      ]);
+      if (identical(next, _liveSendCanceled)) {
+        return;
+      }
+      final LiveRequest liveRequest = next as LiveRequest;
       _fanOutLiveRequest(context, liveRequest);
 
       await Future<void>.delayed(Duration.zero);
       if (liveRequest.close) {
+        onTerminalClose?.call();
         await closeConnection();
         return;
       }
@@ -265,12 +321,23 @@ class BaseLlmFlow {
     LlmRequest request,
   ) async* {
     await for (final LlmResponse response in connection.receive()) {
+      _updateLiveSessionResumptionHandle(
+        context,
+        response.liveSessionResumptionUpdate,
+      );
       _maybeUpdateLiveSessionResumptionHandle(context, response.customMetadata);
+      if (response.goAway != null) {
+        throw _LiveReconnectRequested(response.goAway);
+      }
 
       final Event modelResponseEvent = Event(
         id: Event.newId(),
         invocationId: context.invocationId,
-        author: response.content?.role == 'user' ? 'user' : context.agent.name,
+        author:
+            response.inputTranscription != null ||
+                response.content?.role == 'user'
+            ? 'user'
+            : context.agent.name,
         branch: context.branch,
       );
 
@@ -316,7 +383,16 @@ class BaseLlmFlow {
         response.turnComplete != true &&
         response.inputTranscription == null &&
         response.outputTranscription == null &&
-        response.usageMetadata == null) {
+        response.usageMetadata == null &&
+        response.liveSessionResumptionUpdate == null) {
+      return;
+    }
+
+    if (response.liveSessionResumptionUpdate != null) {
+      modelResponseEvent.liveSessionResumptionUpdate =
+          response.liveSessionResumptionUpdate;
+      modelResponseEvent.liveSessionId = response.liveSessionId;
+      yield modelResponseEvent;
       return;
     }
 
@@ -471,6 +547,36 @@ class BaseLlmFlow {
     request.liveConnectConfig.sessionResumption = mutable;
   }
 
+  bool _hasLiveSessionResumptionHandle(InvocationContext context) {
+    final String? handle = context.liveSessionResumptionHandle;
+    return handle != null && handle.isNotEmpty;
+  }
+
+  bool _canRetryLiveConnection(
+    InvocationContext context,
+    int reconnectAttempts,
+  ) {
+    return _hasLiveSessionResumptionHandle(context) &&
+        reconnectAttempts < _defaultMaxReconnectAttempts;
+  }
+
+  void _updateLiveSessionResumptionHandle(
+    InvocationContext context,
+    Object? update,
+  ) {
+    if (update is String && update.isNotEmpty) {
+      context.liveSessionResumptionHandle = update;
+      return;
+    }
+    if (update is Map) {
+      final Object? handle =
+          update['new_handle'] ?? update['newHandle'] ?? update['handle'];
+      if (handle is String && handle.isNotEmpty) {
+        context.liveSessionResumptionHandle = handle;
+      }
+    }
+  }
+
   void _maybeUpdateLiveSessionResumptionHandle(
     InvocationContext context,
     Map<String, dynamic>? metadata,
@@ -482,16 +588,8 @@ class BaseLlmFlow {
     final Object? update =
         metadata['live_session_resumption_update'] ??
         metadata['liveSessionResumptionUpdate'];
-    if (update is String && update.isNotEmpty) {
-      context.liveSessionResumptionHandle = update;
-      return;
-    }
-    if (update is Map) {
-      final Object? handle =
-          update['new_handle'] ?? update['newHandle'] ?? update['handle'];
-      if (handle is String && handle.isNotEmpty) {
-        context.liveSessionResumptionHandle = handle;
-      }
+    if (update != null) {
+      _updateLiveSessionResumptionHandle(context, update);
       return;
     }
 
@@ -1068,6 +1166,8 @@ class BaseLlmFlow {
       groundingMetadata: response.groundingMetadata,
       interactionId: response.interactionId,
       liveSessionId: response.liveSessionId,
+      liveSessionResumptionUpdate: response.liveSessionResumptionUpdate,
+      goAway: response.goAway,
     );
 
     if (finalized.content != null) {

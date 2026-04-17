@@ -25,7 +25,9 @@ class _FakeLiveConnection extends BaseLlmConnection {
   final StreamController<LlmResponse> _responses =
       StreamController<LlmResponse>();
 
+  Future<void> Function(List<Content> history)? onSendHistory;
   Future<void> Function(Content content)? onSendContent;
+  void Function()? onReceiveSubscribed;
   int closeCount = 0;
 
   @override
@@ -33,6 +35,9 @@ class _FakeLiveConnection extends BaseLlmConnection {
     historySent.addAll(
       history.map((Content content) => content.copyWith()).toList(),
     );
+    if (onSendHistory != null) {
+      await onSendHistory!(history);
+    }
   }
 
   @override
@@ -51,11 +56,20 @@ class _FakeLiveConnection extends BaseLlmConnection {
   }
 
   @override
-  Stream<LlmResponse> receive() => _responses.stream;
+  Stream<LlmResponse> receive() {
+    onReceiveSubscribed?.call();
+    return _responses.stream;
+  }
 
   void emit(LlmResponse response) {
     if (!_responses.isClosed) {
       _responses.add(response);
+    }
+  }
+
+  void emitError(Object error, [StackTrace? stackTrace]) {
+    if (!_responses.isClosed) {
+      _responses.addError(error, stackTrace);
     }
   }
 
@@ -79,14 +93,32 @@ class _NonIdempotentCloseConnection extends _FakeLiveConnection {
 }
 
 class _LiveConnectModel extends BaseLlm {
-  _LiveConnectModel({required this.connection}) : super(model: 'live-connect');
+  _LiveConnectModel({
+    _FakeLiveConnection? connection,
+    List<_FakeLiveConnection>? connections,
+  }) : _connections =
+           connections ??
+           <_FakeLiveConnection>[
+             if (connection != null)
+               connection
+             else
+               throw ArgumentError.notNull('connection'),
+           ],
+       super(model: 'live-connect');
 
-  final _FakeLiveConnection connection;
-  LlmRequest? connectedRequest;
+  final List<_FakeLiveConnection> _connections;
+  final List<LlmRequest> connectedRequests = <LlmRequest>[];
+  int _connectIndex = 0;
+
+  LlmRequest? get connectedRequest =>
+      connectedRequests.isEmpty ? null : connectedRequests.last;
 
   BaseLlmConnection connect(LlmRequest request) {
-    connectedRequest = request.sanitizedForModelCall();
-    return connection;
+    connectedRequests.add(request.sanitizedForModelCall());
+    if (_connectIndex >= _connections.length) {
+      throw StateError('No fake live connections remaining.');
+    }
+    return _connections[_connectIndex++];
   }
 
   @override
@@ -382,10 +414,8 @@ void main() {
         connection.onSendContent = (Content content) async {
           connection.emit(
             LlmResponse(
-              customMetadata: <String, dynamic>{
-                'live_session_resumption_update': <String, Object?>{
-                  'new_handle': 'updated-handle',
-                },
+              liveSessionResumptionUpdate: <String, Object?>{
+                'new_handle': 'updated-handle',
               },
             ),
           );
@@ -422,14 +452,22 @@ void main() {
             .runLive(context)
             .toList();
 
-        expect(connection.historySent, isNotEmpty);
-        expect(connection.historySent.first.parts.first.text, 'history');
+        expect(connection.historySent, isEmpty);
         expect(connection.contentsSent, hasLength(1));
         expect(connection.contentsSent.first.parts.first.text, 'live input');
         expect(
           events.any(
             (Event event) =>
                 event.content?.parts.first.text?.contains('live:ok') == true,
+          ),
+          isTrue,
+        );
+        expect(
+          events.any(
+            (Event event) =>
+                event.liveSessionResumptionUpdate is Map &&
+                (event.liveSessionResumptionUpdate as Map)['new_handle'] ==
+                    'updated-handle',
           ),
           isTrue,
         );
@@ -447,6 +485,83 @@ void main() {
         final Map<dynamic, dynamic> sessionResumptionMap =
             sessionResumption as Map<dynamic, dynamic>;
         expect(sessionResumptionMap['handle'], 'resume-token');
+        expect(sessionResumptionMap['transparent'], isTrue);
+      },
+    );
+
+    test(
+      'BaseLlmFlow live mode reconnects on goAway and skips resumed history',
+      () async {
+        final _FakeLiveConnection firstConnection = _FakeLiveConnection();
+        final _FakeLiveConnection secondConnection = _FakeLiveConnection();
+        final _LiveConnectModel model = _LiveConnectModel(
+          connections: <_FakeLiveConnection>[firstConnection, secondConnection],
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_reconnect',
+          events: <Event>[
+            Event(
+              invocationId: 'inv_live_reconnect',
+              author: 'user',
+              content: Content.userText('history'),
+            ),
+          ],
+        );
+        context.liveRequestQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('live input'));
+
+        firstConnection.onSendContent = (Content _) async {
+          firstConnection.emit(
+            LlmResponse(
+              liveSessionResumptionUpdate: <String, Object?>{
+                'new_handle': 'resumed-handle',
+              },
+            ),
+          );
+          firstConnection.emit(
+            LlmResponse(goAway: <String, Object?>{'reason': 'server_restart'}),
+          );
+        };
+        secondConnection.onReceiveSubscribed = () {
+          secondConnection.emit(
+            LlmResponse(content: Content.modelText('reconnected ok')),
+          );
+          Future<void>.microtask(() {
+            context.liveRequestQueue?.close();
+          });
+        };
+
+        final List<Event> events = await BaseLlmFlow()
+            .runLive(context)
+            .toList();
+
+        expect(firstConnection.historySent, isNotEmpty);
+        expect(secondConnection.historySent, isEmpty);
+        expect(
+          events.any(
+            (Event event) =>
+                event.liveSessionResumptionUpdate is Map &&
+                (event.liveSessionResumptionUpdate as Map)['new_handle'] ==
+                    'resumed-handle',
+          ),
+          isTrue,
+        );
+        expect(
+          events.any(
+            (Event event) =>
+                event.content?.parts.first.text == 'reconnected ok',
+          ),
+          isTrue,
+        );
+        expect(model.connectedRequests, hasLength(2));
+        final Object? sessionResumption =
+            model.connectedRequests.last.liveConnectConfig.sessionResumption;
+        expect(sessionResumption, isA<Map>());
+        final Map<dynamic, dynamic> sessionResumptionMap =
+            sessionResumption as Map<dynamic, dynamic>;
+        expect(sessionResumptionMap['handle'], 'resumed-handle');
         expect(sessionResumptionMap['transparent'], isTrue);
       },
     );
@@ -471,6 +586,45 @@ void main() {
         await BaseLlmFlow().runLive(context).toList();
 
         expect(connection.closeCount, 1);
+      },
+    );
+
+    test(
+      'BaseLlmFlow live mode treats input transcription as user-authored',
+      () async {
+        final _FakeLiveConnection connection = _FakeLiveConnection();
+        connection.onSendContent = (Content _) async {
+          connection.emit(
+            LlmResponse(
+              inputTranscription: <String, Object?>{
+                'text': 'heard',
+                'finished': false,
+              },
+              partial: true,
+            ),
+          );
+        };
+
+        final _LiveConnectModel model = _LiveConnectModel(
+          connection: connection,
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_input_transcription_author',
+        );
+        context.liveRequestQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('say hello'))
+          ..close();
+
+        final List<Event> events = await BaseLlmFlow()
+            .runLive(context)
+            .toList();
+        final Event inputEvent = events.firstWhere(
+          (Event event) => event.inputTranscription != null,
+        );
+
+        expect(inputEvent.author, 'user');
       },
     );
   });
