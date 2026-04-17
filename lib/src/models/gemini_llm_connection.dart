@@ -122,6 +122,9 @@ class GeminiLiveSessionMessage {
 
 /// Runtime contract for Gemini live session transports.
 abstract class GeminiLiveSession {
+  /// Provider live session identifier, when available.
+  String? get liveSessionId => null;
+
   /// Sends conversation [turns] to the live session.
   Future<void> sendContent({
     required List<Content> turns,
@@ -316,6 +319,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
             errorCode: 'live_session_error',
             errorMessage: '$error',
             interrupted: true,
+            liveSessionId: _liveSession.liveSessionId,
           ),
         );
       },
@@ -334,6 +338,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
         LlmResponse(
           usageMetadata: usageMetadata.toJson(),
           modelVersion: _modelVersion,
+          liveSessionId: _liveSession?.liveSessionId,
         ),
       );
     }
@@ -355,6 +360,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
       _responses.add(
         LlmResponse(
           content: Content(role: 'model', parts: parts),
+          liveSessionId: _liveSession?.liveSessionId,
         ),
       );
     }
@@ -365,6 +371,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
           customMetadata: <String, dynamic>{
             'live_session_resumption_update': message.sessionResumptionUpdate,
           },
+          liveSessionId: _liveSession?.liveSessionId,
         ),
       );
     }
@@ -382,6 +389,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
             groundingMetadata: serverContent.groundingMetadata,
             interrupted: serverContent.interrupted,
             partial: true,
+            liveSessionId: _liveSession?.liveSessionId,
           ),
         );
       } else {
@@ -391,6 +399,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
             content: content.copyWith(),
             groundingMetadata: serverContent.groundingMetadata,
             interrupted: serverContent.interrupted,
+            liveSessionId: _liveSession?.liveSessionId,
           ),
         );
       }
@@ -399,6 +408,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
         LlmResponse(
           groundingMetadata: serverContent.groundingMetadata,
           interrupted: serverContent.interrupted,
+          liveSessionId: _liveSession?.liveSessionId,
         ),
       );
     }
@@ -422,14 +432,23 @@ class GeminiLlmConnection extends BaseLlmConnection {
     if (serverContent.turnComplete) {
       _flushTextIfPresent();
       _responses.add(
-        LlmResponse(turnComplete: true, interrupted: serverContent.interrupted),
+        LlmResponse(
+          turnComplete: true,
+          interrupted: serverContent.interrupted,
+          liveSessionId: _liveSession?.liveSessionId,
+        ),
       );
       return;
     }
 
     if (serverContent.interrupted) {
       _flushTextIfPresent();
-      _responses.add(LlmResponse(interrupted: true));
+      _responses.add(
+        LlmResponse(
+          interrupted: true,
+          liveSessionId: _liveSession?.liveSessionId,
+        ),
+      );
     }
   }
 
@@ -455,6 +474,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
           outputTranscription: !isInput
               ? <String, Object?>{'text': event.text!, 'finished': false}
               : null,
+          liveSessionId: _liveSession?.liveSessionId,
         ),
       );
     }
@@ -476,6 +496,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
                 'text': _inputTranscriptionText,
                 'finished': true,
               },
+              liveSessionId: _liveSession?.liveSessionId,
             ),
           );
           _inputTranscriptionText = '';
@@ -492,6 +513,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
                 'text': _outputTranscriptionText,
                 'finished': true,
               },
+              liveSessionId: _liveSession?.liveSessionId,
             ),
           );
           _outputTranscriptionText = '';
@@ -504,7 +526,12 @@ class GeminiLlmConnection extends BaseLlmConnection {
     if (_textBuffer.isEmpty) {
       return;
     }
-    _responses.add(LlmResponse(content: Content.modelText(_textBuffer)));
+    _responses.add(
+      LlmResponse(
+        content: Content.modelText(_textBuffer),
+        liveSessionId: _liveSession?.liveSessionId,
+      ),
+    );
     _textBuffer = '';
   }
 }

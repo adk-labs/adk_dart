@@ -1067,6 +1067,7 @@ class BaseLlmFlow {
       citationMetadata: response.citationMetadata,
       groundingMetadata: response.groundingMetadata,
       interactionId: response.interactionId,
+      liveSessionId: response.liveSessionId,
     );
 
     if (finalized.content != null) {

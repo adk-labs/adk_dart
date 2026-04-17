@@ -36,6 +36,7 @@ class Event extends LlmResponse {
     super.citationMetadata,
     super.groundingMetadata,
     super.interactionId,
+    super.liveSessionId,
   }) : actions = actions ?? EventActions(),
        id = id ?? Event.newId(),
        timestamp = timestamp ?? getTime();
@@ -141,6 +142,7 @@ class Event extends LlmResponse {
     Object? citationMetadata = _sentinel,
     Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
+    Object? liveSessionId = _sentinel,
   }) {
     return Event(
       invocationId: identical(invocationId, _sentinel)
@@ -214,6 +216,9 @@ class Event extends LlmResponse {
       interactionId: identical(interactionId, _sentinel)
           ? this.interactionId
           : interactionId as String?,
+      liveSessionId: identical(liveSessionId, _sentinel)
+          ? this.liveSessionId
+          : liveSessionId as String?,
     );
   }
 

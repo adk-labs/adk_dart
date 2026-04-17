@@ -1248,7 +1248,7 @@ Future<bool> _handlePythonStyleRoutes(
     return false;
   }
 
-  final String userId = segments[3];
+  final String userId = _validatePathIdentifier(segments[3], 'user_id');
 
   if (segments[4] == 'memory' &&
       segments.length == 5 &&
@@ -1288,7 +1288,7 @@ Future<bool> _handlePythonStyleRoutes(
     return false;
   }
 
-  final String sessionId = segments[5];
+  final String sessionId = _validatePathIdentifier(segments[5], 'session_id');
   if (segments.length == 6) {
     if (request.method == 'GET') {
       await _handleGetSession(
@@ -1982,11 +1982,16 @@ Future<void> _handleAddSessionToEvalSet(
     'user_id',
     'userId',
   ], required: true);
+  final String validatedSessionId = _validatePathIdentifier(
+    sessionId,
+    'session_id',
+  );
+  final String validatedUserId = _validatePathIdentifier(userId, 'user_id');
 
   final Session? session = await context.sessionService.getSession(
     appName: appName,
-    userId: userId,
-    sessionId: sessionId,
+    userId: validatedUserId,
+    sessionId: validatedSessionId,
   );
   if (session == null) {
     await _writeError(
@@ -2335,10 +2340,13 @@ Future<void> _handleLegacyCreateSession(
   _AdkDevWebContext context,
 ) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
-  final String userId = _readString(payload, const <String>[
-    'userId',
+  final String userId = _validatePathIdentifier(
+    _readString(payload, const <String>[
+      'userId',
+      'user_id',
+    ], fallback: context.defaultUserId),
     'user_id',
-  ], fallback: context.defaultUserId);
+  );
   final Session session = await context.sessionService.createSession(
     appName: context.defaultAppName,
     userId: userId,
@@ -2358,8 +2366,10 @@ Future<void> _handleLegacyListSessions(
   HttpRequest request,
   _AdkDevWebContext context,
 ) async {
-  final String userId =
-      request.uri.queryParameters['userId'] ?? context.defaultUserId;
+  final String userId = _validatePathIdentifier(
+    request.uri.queryParameters['userId'] ?? context.defaultUserId,
+    'user_id',
+  );
   final ListSessionsResponse sessions = await context.sessionService
       .listSessions(appName: context.defaultAppName, userId: userId);
 
@@ -2380,10 +2390,17 @@ Future<void> _handleLegacyPostMessage(
   required String sessionId,
 }) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
-  final String userId = _readString(payload, const <String>[
-    'userId',
+  final String userId = _validatePathIdentifier(
+    _readString(payload, const <String>[
+      'userId',
+      'user_id',
+    ], fallback: context.defaultUserId),
     'user_id',
-  ], fallback: context.defaultUserId);
+  );
+  final String validatedSessionId = _validatePathIdentifier(
+    sessionId,
+    'session_id',
+  );
   final String text = _readString(payload, const <String>[
     'text',
   ], fallback: '').trim();
@@ -2402,7 +2419,7 @@ Future<void> _handleLegacyPostMessage(
   final List<Event> events = await runner
       .runAsync(
         userId: userId,
-        sessionId: sessionId,
+        sessionId: validatedSessionId,
         newMessage: Content.userText(text),
       )
       .toList();
@@ -2410,7 +2427,7 @@ Future<void> _handleLegacyPostMessage(
     context.recordTraceEvent(
       appName: context.defaultAppName,
       userId: userId,
-      sessionId: sessionId,
+      sessionId: validatedSessionId,
       event: event,
     );
   }
@@ -2424,7 +2441,7 @@ Future<void> _handleLegacyPostMessage(
     request,
     context,
     payload: <String, Object?>{
-      'sessionId': sessionId,
+      'sessionId': validatedSessionId,
       'userId': userId,
       'events': events.map<Map<String, Object?>>(_eventToLegacyJson).toList(),
       if (reply.isNotEmpty) 'reply': reply,
@@ -2437,12 +2454,18 @@ Future<void> _handleLegacyGetEvents(
   _AdkDevWebContext context, {
   required String sessionId,
 }) async {
-  final String userId =
-      request.uri.queryParameters['userId'] ?? context.defaultUserId;
+  final String userId = _validatePathIdentifier(
+    request.uri.queryParameters['userId'] ?? context.defaultUserId,
+    'user_id',
+  );
+  final String validatedSessionId = _validatePathIdentifier(
+    sessionId,
+    'session_id',
+  );
   final Session? session = await context.sessionService.getSession(
     appName: context.defaultAppName,
     userId: userId,
-    sessionId: sessionId,
+    sessionId: validatedSessionId,
   );
 
   if (session == null) {
@@ -2525,6 +2548,9 @@ Future<void> _handleCreateSession(
     'session_id',
     'sessionId',
   ]);
+  final String? validatedRequestedSessionId = requestedSessionId == null
+      ? null
+      : _validatePathIdentifier(requestedSessionId, 'session_id');
   final Map<String, Object?>? state = _readObjectMap(payload, const <String>[
     'state',
   ]);
@@ -2532,7 +2558,7 @@ Future<void> _handleCreateSession(
   final Session session = await context.sessionService.createSession(
     appName: appName,
     userId: userId,
-    sessionId: requestedSessionId,
+    sessionId: validatedRequestedSessionId,
     state: state,
   );
 
@@ -2657,10 +2683,13 @@ Future<void> _handlePatchMemory(
   required String userId,
 }) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
-  final String sessionId = _readString(payload, const <String>[
+  final String sessionId = _validatePathIdentifier(
+    _readString(payload, const <String>[
+      'session_id',
+      'sessionId',
+    ], required: true),
     'session_id',
-    'sessionId',
-  ], required: true);
+  );
 
   final Session? session = await context.sessionService.getSession(
     appName: appName,
@@ -3144,8 +3173,14 @@ Future<void> _handleRunLive(
   _AdkDevWebContext context,
 ) async {
   final String appName = _readRequiredQuery(request, 'app_name');
-  final String userId = _readRequiredQuery(request, 'user_id');
-  final String sessionId = _readRequiredQuery(request, 'session_id');
+  final String userId = _validatePathIdentifier(
+    _readRequiredQuery(request, 'user_id'),
+    'user_id',
+  );
+  final String sessionId = _validatePathIdentifier(
+    _readRequiredQuery(request, 'session_id'),
+    'session_id',
+  );
 
   final String? wsOrigin = _firstHeaderValue(request, 'origin');
   if (wsOrigin != null &&
@@ -3702,6 +3737,7 @@ Map<String, Object?> _eventToApiJson(
     'logprobsResult': snake['logprobs_result'],
     'cacheMetadata': snake['cache_metadata'],
     'interactionId': snake['interaction_id'],
+    'liveSessionId': snake['live_session_id'],
   };
 }
 
@@ -4001,6 +4037,11 @@ _RunRequest _parseRunRequest(
     'session_id',
     'sessionId',
   ], required: true);
+  final String validatedUserId = _validatePathIdentifier(userId, 'user_id');
+  final String validatedSessionId = _validatePathIdentifier(
+    sessionId,
+    'session_id',
+  );
 
   final Object? messageRaw = payload['new_message'] ?? payload['newMessage'];
   Content? newMessage;
@@ -4019,8 +4060,8 @@ _RunRequest _parseRunRequest(
 
   return _RunRequest(
     appName: appName,
-    userId: userId,
-    sessionId: sessionId,
+    userId: validatedUserId,
+    sessionId: validatedSessionId,
     newMessage: newMessage,
     streaming: payload['streaming'] as bool? ?? false,
     autoCreateSession: _readOptionalBool(payload, const <String>[
@@ -4078,6 +4119,17 @@ String _readRequiredQuery(HttpRequest request, String key) {
     throw FormatException('Missing required query parameter: $key');
   }
   return raw.trim();
+}
+
+String _validatePathIdentifier(String value, String fieldName) {
+  final String trimmed = value.trim();
+  if (trimmed == '.' ||
+      trimmed == '..' ||
+      trimmed.contains('/') ||
+      trimmed.contains(r'\')) {
+    throw FormatException('Invalid $fieldName: path traversal is not allowed.');
+  }
+  return trimmed;
 }
 
 bool? _readOptionalBoolQuery(HttpRequest request, String key) {

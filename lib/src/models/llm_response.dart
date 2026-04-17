@@ -25,6 +25,7 @@ class LlmResponse {
     this.citationMetadata,
     this.groundingMetadata,
     this.interactionId,
+    this.liveSessionId,
   });
 
   /// Backend model version that produced this response.
@@ -81,6 +82,9 @@ class LlmResponse {
   /// Provider interaction identifier for tracing.
   String? interactionId;
 
+  /// Provider live-session identifier for bidi/live runs.
+  String? liveSessionId;
+
   /// Returns a copy of this response with optional overrides.
   LlmResponse copyWith({
     Object? modelVersion = _sentinel,
@@ -101,6 +105,7 @@ class LlmResponse {
     Object? citationMetadata = _sentinel,
     Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
+    Object? liveSessionId = _sentinel,
   }) {
     return LlmResponse(
       modelVersion: identical(modelVersion, _sentinel)
@@ -157,6 +162,9 @@ class LlmResponse {
       interactionId: identical(interactionId, _sentinel)
           ? this.interactionId
           : interactionId as String?,
+      liveSessionId: identical(liveSessionId, _sentinel)
+          ? this.liveSessionId
+          : liveSessionId as String?,
     );
   }
 }

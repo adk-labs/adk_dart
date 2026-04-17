@@ -221,6 +221,7 @@ void main() {
             'renderedContent': '<div>grounded</div>',
           },
         },
+        liveSessionId: 'live_session_1',
       );
 
       final StorageEventV0 v0 = StorageEventV0.fromEvent(
@@ -241,6 +242,7 @@ void main() {
       expect(v0Roundtrip.content?.parts[1].functionCall?.willContinue, isFalse);
       expect(v0Roundtrip.content?.parts[1].thoughtSignature, <int>[7, 8, 9]);
       expect(v0Roundtrip.groundingMetadata, isA<Map<String, Object?>>());
+      expect(v0Roundtrip.liveSessionId, 'live_session_1');
       expect(v0Roundtrip.actions.stateDelta['k'], 'v');
 
       final StorageEventV1 v1 = StorageEventV1.fromEvent(
@@ -261,6 +263,7 @@ void main() {
       expect(v1Roundtrip.content?.parts[1].functionCall?.willContinue, isFalse);
       expect(v1Roundtrip.content?.parts[1].thoughtSignature, <int>[7, 8, 9]);
       expect(v1Roundtrip.groundingMetadata, isA<Map<String, Object?>>());
+      expect(v1Roundtrip.liveSessionId, 'live_session_1');
       expect(v1Roundtrip.actions.stateDelta['k'], 'v');
       expect(v1.eventData['invocation_id'], original.invocationId);
     });

@@ -538,6 +538,29 @@ void main() {
       ]);
     });
 
+    test('preserves sub-agent state when paused', () async {
+      final _PauseOnceAgent pauser = _PauseOnceAgent(name: 'pauser');
+      final LoopAgent loop = LoopAgent(
+        name: 'loop',
+        subAgents: <BaseAgent>[pauser],
+        maxIterations: 2,
+      );
+      final InvocationContext context = await _newContext(
+        agent: loop,
+        resumable: true,
+      );
+
+      context.agentStates[pauser.name] = <String, Object?>{
+        'some_key': 'some_value',
+      };
+
+      await loop.runAsync(context).drain<void>();
+
+      expect(context.agentStates[pauser.name], <String, Object?>{
+        'some_key': 'some_value',
+      });
+    });
+
     test('runLive falls back to async execution', () async {
       final LoopAgent loop = LoopAgent(
         name: 'loop',

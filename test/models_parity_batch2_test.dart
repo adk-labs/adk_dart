@@ -33,6 +33,8 @@ class _FakeGeminiCacheClient implements GeminiCacheClient {
 class _FakeLiveSession implements GeminiLiveSession {
   final StreamController<GeminiLiveSessionMessage> controller =
       StreamController<GeminiLiveSessionMessage>();
+  @override
+  String? get liveSessionId => 'test-session-id';
   List<Content>? lastSentTurns;
   bool? lastTurnComplete;
   List<FunctionResponse>? lastFunctionResponses;
@@ -300,6 +302,21 @@ void main() {
         );
         expect(
           responses.any((LlmResponse r) => r.inputTranscription != null),
+          isTrue,
+        );
+        expect(
+          responses.every(
+            (LlmResponse response) =>
+                response.liveSessionId == null ||
+                response.liveSessionId == 'test-session-id',
+          ),
+          isTrue,
+        );
+        expect(
+          responses.any(
+            (LlmResponse response) =>
+                response.liveSessionId == 'test-session-id',
+          ),
           isTrue,
         );
 

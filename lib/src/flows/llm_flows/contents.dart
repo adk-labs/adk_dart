@@ -290,6 +290,9 @@ List<Event> _filterRewoundEvents(List<Event> events) {
 }
 
 bool _isOtherAgentReply(String currentAgentName, Event event) {
+  if (event.liveSessionId != null && event.liveSessionId!.isNotEmpty) {
+    return event.author != 'user';
+  }
   return currentAgentName.isNotEmpty &&
       event.author != currentAgentName &&
       event.author != 'user';

@@ -143,6 +143,7 @@ class StorageEventV0 {
     this.logprobsResult,
     this.cacheMetadata,
     this.interactionId,
+    this.liveSessionId,
   }) : actions = actions ?? EventActions(),
        timestamp = timestamp ?? getUtcNow();
 
@@ -230,6 +231,9 @@ class StorageEventV0 {
   /// Interaction identifier.
   final String? interactionId;
 
+  /// Live session identifier.
+  final String? liveSessionId;
+
   /// Creates a schema-v0 storage event from JSON.
   factory StorageEventV0.fromJson(Map<String, Object?> json) {
     return StorageEventV0(
@@ -273,6 +277,8 @@ class StorageEventV0 {
       cacheMetadata: json['cache_metadata'] ?? json['cacheMetadata'],
       interactionId: (json['interaction_id'] ?? json['interactionId'])
           ?.toString(),
+      liveSessionId: (json['live_session_id'] ?? json['liveSessionId'])
+          ?.toString(),
     );
   }
 
@@ -314,6 +320,7 @@ class StorageEventV0 {
       logprobsResult: event.logprobsResult,
       cacheMetadata: event.cacheMetadata,
       interactionId: event.interactionId,
+      liveSessionId: event.liveSessionId,
     );
   }
 
@@ -360,6 +367,7 @@ class StorageEventV0 {
       logprobsResult: logprobsResult,
       cacheMetadata: cacheMetadata,
       interactionId: interactionId,
+      liveSessionId: liveSessionId,
     );
   }
 
@@ -396,6 +404,7 @@ class StorageEventV0 {
       if (logprobsResult != null) 'logprobs_result': logprobsResult,
       if (cacheMetadata != null) 'cache_metadata': cacheMetadata,
       if (interactionId != null) 'interaction_id': interactionId,
+      if (liveSessionId != null) 'live_session_id': liveSessionId,
     };
   }
 }

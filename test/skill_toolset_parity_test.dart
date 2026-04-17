@@ -176,7 +176,7 @@ void main() {
       final BaseTool loadTool = (await toolset.getTools())[1];
 
       final Object? result = await loadTool.run(
-        args: <String, dynamic>{'name': 'my-skill'},
+        args: <String, dynamic>{'skill_name': 'my-skill'},
         toolContext: _newToolContext(),
       );
 
@@ -204,7 +204,7 @@ void main() {
         final BaseTool loadTool = (await toolset.getTools())[1];
 
         await loadTool.run(
-          args: <String, dynamic>{'name': 'dynamic-skill'},
+          args: <String, dynamic>{'skill_name': 'dynamic-skill'},
           toolContext: toolContext,
         );
 
@@ -237,7 +237,7 @@ void main() {
         final BaseTool loadTool = (await toolset.getTools())[1];
 
         await loadTool.run(
-          args: <String, dynamic>{'name': 'dynamic-skill'},
+          args: <String, dynamic>{'skill_name': 'dynamic-skill'},
           toolContext: toolContext,
         );
 
@@ -266,10 +266,10 @@ void main() {
       final Map<String, Object?> missingPayload = Map<String, Object?>.from(
         missing! as Map,
       );
-      expect(missingPayload['error_code'], 'MISSING_SKILL_NAME');
+      expect(missingPayload['error_code'], 'INVALID_ARGUMENTS');
 
       final Object? notFound = await loadTool.run(
-        args: <String, dynamic>{'name': 'unknown-skill'},
+        args: <String, dynamic>{'skill_name': 'unknown-skill'},
         toolContext: _newToolContext(),
       );
       final Map<String, Object?> notFoundPayload = Map<String, Object?>.from(
@@ -289,7 +289,7 @@ void main() {
         final Object? reference = await resourceTool.run(
           args: <String, dynamic>{
             'skill_name': 'my-skill',
-            'path': 'references/guide.md',
+            'file_path': 'references/guide.md',
           },
           toolContext: _newToolContext(),
         );
@@ -301,7 +301,7 @@ void main() {
         final Object? asset = await resourceTool.run(
           args: <String, dynamic>{
             'skill_name': 'my-skill',
-            'path': 'assets/template.txt',
+            'file_path': 'assets/template.txt',
           },
           toolContext: _newToolContext(),
         );
@@ -313,7 +313,7 @@ void main() {
         final Object? script = await resourceTool.run(
           args: <String, dynamic>{
             'skill_name': 'my-skill',
-            'path': 'scripts/setup.sh',
+            'file_path': 'scripts/setup.sh',
           },
           toolContext: _newToolContext(),
         );
@@ -335,7 +335,7 @@ void main() {
         final Object? asset = await resourceTool.run(
           args: <String, dynamic>{
             'skill_name': 'binary-skill',
-            'path': 'assets/document.pdf',
+            'file_path': 'assets/document.pdf',
           },
           toolContext: _newToolContext(),
         );
@@ -356,7 +356,7 @@ void main() {
       final Object? invalidPath = await resourceTool.run(
         args: <String, dynamic>{
           'skill_name': 'my-skill',
-          'path': 'other/file.txt',
+          'file_path': 'other/file.txt',
         },
         toolContext: _newToolContext(),
       );
@@ -368,7 +368,7 @@ void main() {
       final Object? missingResource = await resourceTool.run(
         args: <String, dynamic>{
           'skill_name': 'my-skill',
-          'path': 'references/missing.md',
+          'file_path': 'references/missing.md',
         },
         toolContext: _newToolContext(),
       );
@@ -389,7 +389,7 @@ void main() {
         final Object? result = await runTool.run(
           args: <String, Object?>{
             'skill_name': 'my-skill',
-            'script_path': 'scripts/setup.sh',
+            'file_path': 'scripts/setup.sh',
           },
           toolContext: _newToolContext(),
         );
@@ -418,7 +418,7 @@ void main() {
       final Object? result = await runTool.run(
         args: <String, Object?>{
           'skill_name': 'my-skill',
-          'script_path': 'scripts/setup.sh',
+          'file_path': 'scripts/setup.sh',
           'args': <String, Object?>{'name': 'dart'},
         },
         toolContext: _newToolContext(),
@@ -428,6 +428,7 @@ void main() {
       );
       expect(payload['status'], 'success');
       expect(payload['stdout'], 'done');
+      expect(payload['file_path'], 'scripts/setup.sh');
       expect(fakeExecutor.lastCode, contains('scripts/setup.sh'));
       expect(fakeExecutor.lastCode, contains('--name'));
       expect(fakeExecutor.lastCode, contains('dart'));
@@ -453,7 +454,7 @@ void main() {
         final Object? result = await runTool.run(
           args: <String, Object?>{
             'skill_name': 'my-skill',
-            'script_path': 'scripts/setup.sh',
+            'file_path': 'scripts/setup.sh',
             'args': <String, Object?>{'name': 'dart'},
             'short_options': <String, Object?>{'n': 5},
             'positional_args': <String>['input.txt', 'output.txt'],
@@ -473,46 +474,151 @@ void main() {
       },
     );
 
+    test('run_skill_script validates args and related option types', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        codeExecutor: _FakeCodeExecutor(
+          CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+        ),
+      );
+      final BaseTool runTool = (await toolset.getTools())[3];
+
+      final Object? invalidShortOptions = await runTool.run(
+        args: <String, Object?>{
+          'skill_name': 'my-skill',
+          'file_path': 'scripts/setup.sh',
+          'short_options': <String>['n'],
+        },
+        toolContext: _newToolContext(),
+      );
+      expect(
+        Map<String, Object?>.from(invalidShortOptions! as Map)['error_code'],
+        'INVALID_ARGUMENTS',
+      );
+
+      final Object? invalidPositionalArgs = await runTool.run(
+        args: <String, Object?>{
+          'skill_name': 'my-skill',
+          'file_path': 'scripts/setup.sh',
+          'positional_args': <String, Object?>{'file': 'input.txt'},
+        },
+        toolContext: _newToolContext(),
+      );
+      expect(
+        Map<String, Object?>.from(invalidPositionalArgs! as Map)['error_code'],
+        'INVALID_ARGUMENTS',
+      );
+
+      final Object? invalidArgs = await runTool.run(
+        args: <String, Object?>{
+          'skill_name': 'my-skill',
+          'file_path': 'scripts/setup.sh',
+          'args': 'bad-args',
+        },
+        toolContext: _newToolContext(),
+      );
+      expect(
+        Map<String, Object?>.from(invalidArgs! as Map)['error_code'],
+        'INVALID_ARGUMENTS',
+      );
+    });
+
     test(
-      'run_skill_script validates short_options and positional_args types',
+      'run_skill_script accepts list args and rejects extra option groups',
       () async {
+        final _FakeCodeExecutor fakeExecutor = _FakeCodeExecutor(
+          CodeExecutionResult(
+            stdout:
+                '{"__shell_result__":true,"stdout":"done","stderr":"","returncode":0}',
+            stderr: '',
+            exitCode: 0,
+          ),
+        );
         final SkillToolset toolset = SkillToolset(
           skills: <Skill>[_sampleSkill()],
-          codeExecutor: _FakeCodeExecutor(
-            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
-          ),
+          codeExecutor: fakeExecutor,
         );
         final BaseTool runTool = (await toolset.getTools())[3];
 
-        final Object? invalidShortOptions = await runTool.run(
+        final Object? success = await runTool.run(
           args: <String, Object?>{
             'skill_name': 'my-skill',
-            'script_path': 'scripts/setup.sh',
-            'short_options': <String>['n'],
+            'file_path': 'scripts/setup.sh',
+            'args': <String>['-n', '5', 'input.txt'],
           },
           toolContext: _newToolContext(),
         );
+        expect(Map<String, Object?>.from(success! as Map)['status'], 'success');
         expect(
-          Map<String, Object?>.from(invalidShortOptions! as Map)['error_code'],
-          'INVALID_SHORT_OPTIONS_TYPE',
+          fakeExecutor.lastCode,
+          contains('["bash","scripts/setup.sh","-n","5","input.txt"]'),
         );
 
-        final Object? invalidPositionalArgs = await runTool.run(
+        final Object? invalid = await runTool.run(
           args: <String, Object?>{
             'skill_name': 'my-skill',
-            'script_path': 'scripts/setup.sh',
-            'positional_args': <String, Object?>{'file': 'input.txt'},
+            'file_path': 'scripts/setup.sh',
+            'args': <String>['arg1', 'arg2'],
+            'short_options': <String, Object?>{'v': true},
+            'positional_args': <String>['pos1'],
           },
           toolContext: _newToolContext(),
         );
+        final Map<String, Object?> invalidPayload = Map<String, Object?>.from(
+          invalid! as Map,
+        );
+        expect(invalidPayload['error_code'], 'INVALID_ARGUMENTS');
         expect(
-          Map<String, Object?>.from(
-            invalidPositionalArgs! as Map,
-          )['error_code'],
-          'INVALID_POSITIONAL_ARGS_TYPE',
+          '${invalidPayload['error']}',
+          contains("Cannot specify 'short_options' or 'positional_args'"),
         );
       },
     );
+
+    test('supports legacy skill tool argument aliases', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        codeExecutor: _FakeCodeExecutor(
+          CodeExecutionResult(
+            stdout:
+                '{"__shell_result__":true,"stdout":"done","stderr":"","returncode":0}',
+            stderr: '',
+            exitCode: 0,
+          ),
+        ),
+      );
+      final List<BaseTool> tools = await toolset.getTools();
+
+      final Object? loadResult = await tools[1].run(
+        args: <String, Object?>{'name': 'my-skill'},
+        toolContext: _newToolContext(),
+      );
+      expect(
+        Map<String, Object?>.from(loadResult! as Map)['skill_name'],
+        'my-skill',
+      );
+
+      final Object? resourceResult = await tools[2].run(
+        args: <String, Object?>{
+          'skill_name': 'my-skill',
+          'path': 'references/guide.md',
+        },
+        toolContext: _newToolContext(),
+      );
+      expect(
+        Map<String, Object?>.from(resourceResult! as Map)['file_path'],
+        'references/guide.md',
+      );
+
+      final Object? runResult = await tools[3].run(
+        args: <String, Object?>{
+          'skill_name': 'my-skill',
+          'script_path': 'scripts/setup.sh',
+        },
+        toolContext: _newToolContext(),
+      );
+      expect(Map<String, Object?>.from(runResult! as Map)['status'], 'success');
+    });
 
     test(
       'processLlmRequest appends default system instruction and skills xml',
@@ -553,9 +659,9 @@ void main() {
                   name: 'load_skill_resource',
                   response: <String, Object?>{
                     'skill_name': 'binary-skill',
-                    'path': 'assets/document.pdf',
+                    'file_path': 'assets/document.pdf',
                     'status':
-                        'Binary file detected. The runtime will attach it to the next model request.',
+                        'Binary file detected. The content has been injected into the conversation history for you to analyze.',
                   },
                 ),
               ],

@@ -16,8 +16,10 @@ import 'tool_context.dart';
 
 const int _defaultScriptTimeout = 300;
 const int _maxSkillPayloadBytes = 16 * 1024 * 1024;
-const String _binaryFileDetectedMsg =
+const String _legacyBinaryFileDetectedMsg =
     'Binary file detected. The runtime will attach it to the next model request.';
+const String _binaryFileDetectedMsg =
+    'Binary file detected. The content has been injected into the conversation history for you to analyze.';
 
 /// Default system instruction injected when skill tools are enabled.
 const String defaultSkillSystemInstruction =
@@ -31,7 +33,7 @@ Skills are folders of instructions and resources that extend your capabilities f
 
 This is very important:
 
-1. If a skill seems relevant to the current user query, you MUST use the `load_skill` tool with `name="<SKILL_NAME>"` to read its full instructions before proceeding.
+1. If a skill seems relevant to the current user query, you MUST use the `load_skill` tool with `skill_name="<SKILL_NAME>"` to read its full instructions before proceeding.
 2. Once you have read the instructions, follow them exactly as documented before replying to the user. For example, If the instruction lists multiple steps, please make sure you complete all of them in order.
 3. The `load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). Do NOT use other tools to access these files.
 """;
@@ -91,12 +93,12 @@ class _LoadSkillTool extends BaseTool {
       parameters: <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{
-          'name': <String, Object?>{
+          'skill_name': <String, Object?>{
             'type': 'string',
             'description': 'The name of the skill to load.',
           },
         },
-        'required': <String>['name'],
+        'required': <String>['skill_name'],
       },
     );
   }
@@ -106,11 +108,11 @@ class _LoadSkillTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
-    final Object? skillName = args['name'];
+    final Object? skillName = args['skill_name'] ?? args['name'];
     if (skillName is! String || skillName.trim().isEmpty) {
       return <String, Object?>{
-        'error': 'Skill name is required.',
-        'error_code': 'MISSING_SKILL_NAME',
+        'error': "Argument 'skill_name' is required.",
+        'error_code': 'INVALID_ARGUMENTS',
       };
     }
 
@@ -123,9 +125,10 @@ class _LoadSkillTool extends BaseTool {
     }
 
     final String stateKey = _activationStateKey(toolContext.agentName);
-    final List<Object?> activated = List<Object?>.from(
-      toolContext.state[stateKey] as List? ?? const <Object?>[],
-    );
+    final Object? rawActivated = toolContext.state[stateKey];
+    final List<Object?> activated = rawActivated is List
+        ? List<Object?>.from(rawActivated)
+        : <Object?>[];
     final List<String> activatedSkillNames = activated
         .whereType<String>()
         .toList(growable: true);
@@ -164,13 +167,13 @@ class _LoadSkillResourceTool extends BaseTool {
             'type': 'string',
             'description': 'The name of the skill.',
           },
-          'path': <String, Object?>{
+          'file_path': <String, Object?>{
             'type': 'string',
             'description':
                 "The relative path to the resource (e.g., 'references/my_doc.md', 'assets/template.txt', or 'scripts/setup.sh').",
           },
         },
-        'required': <String>['skill_name', 'path'],
+        'required': <String>['skill_name', 'file_path'],
       },
     );
   }
@@ -181,23 +184,24 @@ class _LoadSkillResourceTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final Object? rawSkillName = args['skill_name'];
-    final Object? rawPath = args['path'];
+    final Object? rawPath = args['file_path'] ?? args['path'];
 
+    final List<String> errors = <String>[];
     if (rawSkillName is! String || rawSkillName.trim().isEmpty) {
-      return <String, Object?>{
-        'error': 'Skill name is required.',
-        'error_code': 'MISSING_SKILL_NAME',
-      };
+      errors.add("Argument 'skill_name' is required.");
     }
     if (rawPath is! String || rawPath.trim().isEmpty) {
+      errors.add("Argument 'file_path' is required.");
+    }
+    if (errors.isNotEmpty) {
       return <String, Object?>{
-        'error': 'Resource path is required.',
-        'error_code': 'MISSING_RESOURCE_PATH',
+        'error': errors.join('\n'),
+        'error_code': 'INVALID_ARGUMENTS',
       };
     }
 
-    final String skillName = rawSkillName.trim();
-    final String resourcePath = rawPath.trim();
+    final String skillName = (rawSkillName as String).trim();
+    final String resourcePath = (rawPath as String).trim();
     final Skill? skill = _toolset._getSkill(skillName);
     if (skill == null) {
       return <String, Object?>{
@@ -237,14 +241,14 @@ class _LoadSkillResourceTool extends BaseTool {
     if (content is List<int>) {
       return <String, Object?>{
         'skill_name': skillName,
-        'path': resourcePath,
+        'file_path': resourcePath,
         'status': _binaryFileDetectedMsg,
       };
     }
 
     return <String, Object?>{
       'skill_name': skillName,
-      'path': resourcePath,
+      'file_path': resourcePath,
       'content': content,
     };
   }
@@ -269,12 +273,15 @@ class _LoadSkillResourceTool extends BaseTool {
         continue;
       }
       final Map<String, dynamic> response = functionResponse.response;
-      if (response['status'] != _binaryFileDetectedMsg) {
+      final Object? status = response['status'];
+      if (status != _binaryFileDetectedMsg &&
+          status != _legacyBinaryFileDetectedMsg) {
         continue;
       }
 
       final String? skillName = response['skill_name'] as String?;
-      final String? resourcePath = response['path'] as String?;
+      final String? resourcePath =
+          response['file_path'] as String? ?? response['path'] as String?;
       if (skillName == null || resourcePath == null) {
         continue;
       }
@@ -328,7 +335,7 @@ class _SkillScriptCodeExecutor {
     required ToolContext toolContext,
     required Skill skill,
     required String scriptPath,
-    required Map<String, Object?> scriptArgs,
+    required Object? scriptArgs,
     required Map<String, Object?> shortOptions,
     required List<Object?> positionalArgs,
   }) async {
@@ -390,7 +397,7 @@ class _SkillScriptCodeExecutor {
 
       return <String, Object?>{
         'skill_name': skill.name,
-        'script_path': scriptPath,
+        'file_path': scriptPath,
         'stdout': stdout,
         'stderr': stderr,
         'status': status,
@@ -417,7 +424,7 @@ class _SkillScriptCodeExecutor {
   String? _buildWrapperCode({
     required Skill skill,
     required String scriptPath,
-    required Map<String, Object?> scriptArgs,
+    required Object? scriptArgs,
     required Map<String, Object?> shortOptions,
     required List<Object?> positionalArgs,
   }) {
@@ -491,17 +498,23 @@ class _SkillScriptCodeExecutor {
 
     if (extension == 'py') {
       final List<String> argv = <String>[normalizedScriptPath];
-      scriptArgs.forEach((String key, Object? value) {
-        argv.add('--$key');
-        argv.add('$value');
-      });
-      shortOptions.forEach((String key, Object? value) {
-        argv.add('-$key');
-        argv.add('$value');
-      });
-      if (positionalArgs.isNotEmpty) {
-        argv.add('--');
-        argv.addAll(positionalArgs.map((Object? value) => '$value'));
+      if (scriptArgs is List) {
+        argv.addAll(scriptArgs.map((Object? value) => '$value'));
+      } else {
+        final Map<String, Object?> longOptions =
+            scriptArgs as Map<String, Object?>? ?? <String, Object?>{};
+        longOptions.forEach((String key, Object? value) {
+          argv.add('--$key');
+          argv.add('$value');
+        });
+        shortOptions.forEach((String key, Object? value) {
+          argv.add('-$key');
+          argv.add('$value');
+        });
+        if (positionalArgs.isNotEmpty) {
+          argv.add('--');
+          argv.addAll(positionalArgs.map((Object? value) => '$value'));
+        }
       }
       lines.addAll(<String>[
         '      sys.argv = ${jsonEncode(argv)}',
@@ -513,17 +526,23 @@ class _SkillScriptCodeExecutor {
       ]);
     } else {
       final List<String> command = <String>['bash', normalizedScriptPath];
-      scriptArgs.forEach((String key, Object? value) {
-        command.add('--$key');
-        command.add('$value');
-      });
-      shortOptions.forEach((String key, Object? value) {
-        command.add('-$key');
-        command.add('$value');
-      });
-      if (positionalArgs.isNotEmpty) {
-        command.add('--');
-        command.addAll(positionalArgs.map((Object? value) => '$value'));
+      if (scriptArgs is List) {
+        command.addAll(scriptArgs.map((Object? value) => '$value'));
+      } else {
+        final Map<String, Object?> longOptions =
+            scriptArgs as Map<String, Object?>? ?? <String, Object?>{};
+        longOptions.forEach((String key, Object? value) {
+          command.add('--$key');
+          command.add('$value');
+        });
+        shortOptions.forEach((String key, Object? value) {
+          command.add('-$key');
+          command.add('$value');
+        });
+        if (positionalArgs.isNotEmpty) {
+          command.add('--');
+          command.addAll(positionalArgs.map((Object? value) => '$value'));
+        }
       }
       lines.addAll(<String>[
         '      try:',
@@ -542,7 +561,7 @@ class _SkillScriptCodeExecutor {
         '        print(_json.dumps({',
         "            '__shell_result__': True,",
         "            'stdout': _e.stdout or '',",
-        "            'stderr': 'Timed out after $_scriptTimeout s',",
+        "            'stderr': 'Timed out after ${_scriptTimeout}s',",
         "            'returncode': -1,",
         '        }))',
       ]);
@@ -579,29 +598,35 @@ class _RunSkillScriptTool extends BaseTool {
             'type': 'string',
             'description': 'The name of the skill.',
           },
-          'script_path': <String, Object?>{
+          'file_path': <String, Object?>{
             'type': 'string',
             'description':
                 "The relative path to the script (e.g., 'scripts/setup.py').",
           },
           'args': <String, Object?>{
-            'type': 'object',
+            'anyOf': <Object?>[
+              <String, Object?>{'type': 'object'},
+              <String, Object?>{
+                'type': 'array',
+                'items': <String, Object?>{'type': 'string'},
+              },
+            ],
             'description':
-                "Optional arguments to pass as long options (e.g., {'n': 5} becomes --n 5).",
+                "Optional arguments to pass to the script as key-value pairs (long options) or as a list of strings. If specified as a list, it is treated as the complete list of arguments, and 'short_options' and 'positional_args' must not be provided.",
           },
           'short_options': <String, Object?>{
             'type': 'object',
             'description':
-                "Optional SHORT options to pass (e.g., {'n': 5} becomes -n 5).",
+                "Optional short options (single hyphen) to pass to the script as key-value pairs. Must not be provided if 'args' is a list.",
           },
           'positional_args': <String, Object?>{
             'type': 'array',
             'items': <String, Object?>{'type': 'string'},
             'description':
-                "Optional list of positional arguments in exact order (e.g., ['input.txt', 'output.txt']).",
+                "Optional positional arguments to pass to the script. Must not be provided if 'args' is a list.",
           },
         },
-        'required': <String>['skill_name', 'script_path'],
+        'required': <String>['skill_name', 'file_path'],
       },
     );
   }
@@ -612,49 +637,51 @@ class _RunSkillScriptTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final Object? rawSkillName = args['skill_name'];
-    final Object? rawScriptPath = args['script_path'];
-    final Object? rawScriptArgs = args['args'] ?? <String, Object?>{};
-    final Object? rawShortOptions =
-        args['short_options'] ?? <String, Object?>{};
-    final Object? rawPositionalArgs = args['positional_args'] ?? <Object?>[];
+    final Object? rawScriptPath = args['file_path'] ?? args['script_path'];
+    final Object? rawScriptArgs = args['args'];
+    final Object? rawShortOptions = args['short_options'];
+    final Object? rawPositionalArgs = args['positional_args'];
 
-    if (rawScriptArgs is! Map) {
-      return <String, Object?>{
-        'error':
-            "'args' must be a JSON object (key-value pairs), got ${rawScriptArgs.runtimeType}.",
-        'error_code': 'INVALID_ARGS_TYPE',
-      };
-    }
-    if (rawShortOptions is! Map) {
-      return <String, Object?>{
-        'error':
-            "'short_options' must be a JSON object (key-value pairs), got ${rawShortOptions.runtimeType}.",
-        'error_code': 'INVALID_SHORT_OPTIONS_TYPE',
-      };
-    }
-    if (rawPositionalArgs is! List) {
-      return <String, Object?>{
-        'error':
-            "'positional_args' must be a JSON array (list), got ${rawPositionalArgs.runtimeType}.",
-        'error_code': 'INVALID_POSITIONAL_ARGS_TYPE',
-      };
-    }
-
+    final List<String> errors = <String>[];
     if (rawSkillName is! String || rawSkillName.trim().isEmpty) {
-      return <String, Object?>{
-        'error': 'Skill name is required.',
-        'error_code': 'MISSING_SKILL_NAME',
-      };
+      errors.add("Argument 'skill_name' is required.");
     }
     if (rawScriptPath is! String || rawScriptPath.trim().isEmpty) {
+      errors.add("Argument 'file_path' is required.");
+    }
+    if (rawScriptArgs != null &&
+        rawScriptArgs is! Map &&
+        rawScriptArgs is! List) {
+      errors.add(
+        "'args' must be a JSON object (dict) or a list of strings, got ${rawScriptArgs.runtimeType}.",
+      );
+    }
+    if (rawShortOptions != null && rawShortOptions is! Map) {
+      errors.add(
+        "'short_options' must be a JSON object (dict), got ${rawShortOptions.runtimeType}.",
+      );
+    }
+    if (rawPositionalArgs != null && rawPositionalArgs is! List) {
+      errors.add(
+        "'positional_args' must be a list of strings, got ${rawPositionalArgs.runtimeType}.",
+      );
+    }
+    if (rawScriptArgs is List &&
+        ((rawShortOptions is Map && rawShortOptions.isNotEmpty) ||
+            (rawPositionalArgs is List && rawPositionalArgs.isNotEmpty))) {
+      errors.add(
+        "Cannot specify 'short_options' or 'positional_args' when 'args' is a list.",
+      );
+    }
+    if (errors.isNotEmpty) {
       return <String, Object?>{
-        'error': 'Script path is required.',
-        'error_code': 'MISSING_SCRIPT_PATH',
+        'error': errors.join('\n'),
+        'error_code': 'INVALID_ARGUMENTS',
       };
     }
 
-    final String skillName = rawSkillName.trim();
-    final String scriptPath = rawScriptPath.trim();
+    final String skillName = (rawSkillName as String).trim();
+    final String scriptPath = (rawScriptPath as String).trim();
     final Skill? skill = _toolset._getSkill(skillName);
     if (skill == null) {
       return <String, Object?>{
@@ -701,13 +728,21 @@ class _RunSkillScriptTool extends BaseTool {
       toolContext: toolContext,
       skill: skill,
       scriptPath: scriptPath,
-      scriptArgs: rawScriptArgs.map(
-        (Object? key, Object? value) => MapEntry('$key', value),
-      ),
-      shortOptions: rawShortOptions.map(
-        (Object? key, Object? value) => MapEntry('$key', value),
-      ),
-      positionalArgs: List<Object?>.from(rawPositionalArgs),
+      scriptArgs: rawScriptArgs is Map
+          ? rawScriptArgs.map(
+              (Object? key, Object? value) => MapEntry('$key', value),
+            )
+          : rawScriptArgs is List
+          ? List<Object?>.from(rawScriptArgs)
+          : null,
+      shortOptions: rawShortOptions is Map
+          ? rawShortOptions.map(
+              (Object? key, Object? value) => MapEntry('$key', value),
+            )
+          : <String, Object?>{},
+      positionalArgs: rawPositionalArgs is List
+          ? List<Object?>.from(rawPositionalArgs)
+          : <Object?>[],
     );
   }
 }
@@ -785,9 +820,10 @@ class SkillToolset extends BaseToolset {
     }
 
     final String stateKey = '_adk_activated_skill_${readonlyContext.agentName}';
-    final List<Object?> activated = List<Object?>.from(
-      readonlyContext.state[stateKey] as List? ?? const <Object?>[],
-    );
+    final Object? rawActivated = readonlyContext.state[stateKey];
+    final List<Object?> activated = rawActivated is List
+        ? List<Object?>.from(rawActivated)
+        : <Object?>[];
     if (activated.isEmpty) {
       return const <BaseTool>[];
     }

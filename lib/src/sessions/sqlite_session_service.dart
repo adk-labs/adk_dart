@@ -996,6 +996,7 @@ Map<String, Object?> _eventToJson(Event event) {
     if (event.groundingMetadata != null)
       'groundingMetadata': event.groundingMetadata,
     if (event.interactionId != null) 'interactionId': event.interactionId,
+    if (event.liveSessionId != null) 'liveSessionId': event.liveSessionId,
   };
 }
 
@@ -1028,6 +1029,7 @@ Event _eventFromJson(Map<String, Object?> json) {
     citationMetadata: json['citationMetadata'],
     groundingMetadata: json['groundingMetadata'],
     interactionId: json['interactionId'] as String?,
+    liveSessionId: json['liveSessionId'] as String?,
   );
 }
 

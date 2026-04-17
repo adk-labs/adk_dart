@@ -149,12 +149,14 @@ class LoopAgent extends BaseAgent {
         }
       }
 
-      startIndex = 0;
-      timesLooped += 1;
-      context.resetSubAgentStates(name);
+      if (!pauseInvocation) {
+        startIndex = 0;
+        timesLooped += 1;
+        context.resetSubAgentStates(name);
 
-      if (context.endInvocation) {
-        return;
+        if (context.endInvocation) {
+          return;
+        }
       }
     }
 

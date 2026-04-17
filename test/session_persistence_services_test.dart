@@ -416,6 +416,43 @@ void main() {
       );
     });
 
+    test('persists liveSessionId in sqlite event payload', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_live_session_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/live_session.db',
+      );
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_live_session',
+          author: 'agent',
+          liveSessionId: 'live_session_1',
+          content: Content.modelText('hello'),
+        ),
+      );
+
+      final Session? loaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.events, hasLength(1));
+      expect(loaded.events.single.liveSessionId, 'live_session_1');
+    });
+
     test('enforces stale-session protection when appending events', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_sqlite_stale_check_',

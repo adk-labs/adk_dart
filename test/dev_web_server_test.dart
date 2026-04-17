@@ -1656,6 +1656,22 @@ void main() {
       expect(payload['author'], isNotNull);
     });
 
+    test('rejects python-style session routes with path traversal ids', () async {
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/apps/test_app/users/u1/sessions/%5Cbad',
+        ),
+      );
+
+      final HttpClientResponse response = await request.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      expect(payload['error'], contains('Invalid session_id'));
+    });
+
     test('rejects cross-origin run_live websocket upgrades', () async {
       final String sessionId =
           's_live_blocked_${DateTime.now().microsecondsSinceEpoch}';
@@ -1676,6 +1692,43 @@ void main() {
         () => WebSocket.connect(
           'ws://127.0.0.1:${server.port}/run_live?app_name=test_app&user_id=u1&session_id=$sessionId&modalities=TEXT',
           headers: <String, dynamic>{'origin': 'https://evil.com'},
+        ),
+        throwsA(isA<WebSocketException>()),
+      );
+    });
+
+    test('rejects run payloads with path traversal session ids', () async {
+      final HttpClientRequest runRequest = await client.postUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/run'),
+      );
+      runRequest.headers.contentType = ContentType.json;
+      runRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': '../bad_session',
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'hello'},
+            ],
+          },
+        }),
+      );
+
+      final HttpClientResponse response = await runRequest.close();
+      final Map<String, dynamic> payload =
+          jsonDecode(await utf8.decoder.bind(response).join())
+              as Map<String, dynamic>;
+
+      expect(response.statusCode, HttpStatus.badRequest);
+      expect(payload['error'], contains('Invalid session_id'));
+    });
+
+    test('rejects run_live websocket ids with path traversal', () async {
+      await expectLater(
+        () => WebSocket.connect(
+          'ws://127.0.0.1:${server.port}/run_live?app_name=test_app&user_id=../u1&session_id=s_live_blocked&modalities=TEXT',
         ),
         throwsA(isA<WebSocketException>()),
       );
