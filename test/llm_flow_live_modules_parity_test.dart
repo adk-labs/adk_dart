@@ -73,6 +73,12 @@ class _FakeLiveConnection extends BaseLlmConnection {
     }
   }
 
+  Future<void> finish() async {
+    if (!_responses.isClosed) {
+      await _responses.close();
+    }
+  }
+
   @override
   Future<void> close() async {
     closeCount += 1;
@@ -551,6 +557,14 @@ void main() {
         expect(
           events.any(
             (Event event) =>
+                event.goAway is Map &&
+                (event.goAway as Map)['reason'] == 'server_restart',
+          ),
+          isTrue,
+        );
+        expect(
+          events.any(
+            (Event event) =>
                 event.content?.parts.first.text == 'reconnected ok',
           ),
           isTrue,
@@ -563,6 +577,53 @@ void main() {
             sessionResumption as Map<dynamic, dynamic>;
         expect(sessionResumptionMap['handle'], 'resumed-handle');
         expect(sessionResumptionMap['transparent'], isTrue);
+      },
+    );
+
+    test(
+      'BaseLlmFlow live mode does not reconnect on clean EOF with resumption handle',
+      () async {
+        final _FakeLiveConnection firstConnection = _FakeLiveConnection();
+        final _FakeLiveConnection secondConnection = _FakeLiveConnection();
+        final _LiveConnectModel model = _LiveConnectModel(
+          connections: <_FakeLiveConnection>[firstConnection, secondConnection],
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_clean_eof',
+        );
+        context.liveRequestQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('live input'));
+
+        firstConnection.onSendContent = (Content _) async {
+          firstConnection.emit(
+            LlmResponse(
+              liveSessionResumptionUpdate: <String, Object?>{
+                'new_handle': 'resume-after-eof',
+              },
+            ),
+          );
+          Future<void>.microtask(() {
+            firstConnection.finish();
+          });
+        };
+
+        final List<Event> events = await BaseLlmFlow()
+            .runLive(context)
+            .toList();
+
+        expect(
+          events.any(
+            (Event event) =>
+                event.liveSessionResumptionUpdate is Map &&
+                (event.liveSessionResumptionUpdate as Map)['new_handle'] ==
+                    'resume-after-eof',
+          ),
+          isTrue,
+        );
+        expect(model.connectedRequests, hasLength(1));
+        expect(secondConnection.contentsSent, isEmpty);
       },
     );
 

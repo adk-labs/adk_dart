@@ -145,10 +145,7 @@ class BaseLlmFlow {
           if (closedByClient) {
             return;
           }
-          if (!_canRetryLiveConnection(context, reconnectAttempts)) {
-            return;
-          }
-          reconnectAttempts += 1;
+          return;
         } on _LiveReconnectRequested {
           if (!_canRetryLiveConnection(context, reconnectAttempts)) {
             rethrow;
@@ -326,9 +323,7 @@ class BaseLlmFlow {
         response.liveSessionResumptionUpdate,
       );
       _maybeUpdateLiveSessionResumptionHandle(context, response.customMetadata);
-      if (response.goAway != null) {
-        throw _LiveReconnectRequested(response.goAway);
-      }
+      final bool reconnectRequested = response.goAway != null;
 
       final Event modelResponseEvent = Event(
         id: Event.newId(),
@@ -361,6 +356,10 @@ class BaseLlmFlow {
         }
         yield event;
       }
+
+      if (reconnectRequested) {
+        throw _LiveReconnectRequested(response.goAway);
+      }
     }
   }
 
@@ -384,16 +383,27 @@ class BaseLlmFlow {
         response.inputTranscription == null &&
         response.outputTranscription == null &&
         response.usageMetadata == null &&
-        response.liveSessionResumptionUpdate == null) {
+        response.liveSessionResumptionUpdate == null &&
+        response.goAway == null) {
       return;
     }
 
-    if (response.liveSessionResumptionUpdate != null) {
-      modelResponseEvent.liveSessionResumptionUpdate =
-          response.liveSessionResumptionUpdate;
-      modelResponseEvent.liveSessionId = response.liveSessionId;
-      yield modelResponseEvent;
-      return;
+    if (response.liveSessionResumptionUpdate != null ||
+        response.goAway != null) {
+      yield modelResponseEvent.copyWith(
+        liveSessionResumptionUpdate: response.liveSessionResumptionUpdate,
+        goAway: response.goAway,
+        liveSessionId: response.liveSessionId,
+      );
+      if (response.content == null &&
+          response.errorCode == null &&
+          response.interrupted != true &&
+          response.turnComplete != true &&
+          response.inputTranscription == null &&
+          response.outputTranscription == null &&
+          response.usageMetadata == null) {
+        return;
+      }
     }
 
     if (response.inputTranscription != null) {

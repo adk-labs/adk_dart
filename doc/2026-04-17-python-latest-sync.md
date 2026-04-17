@@ -120,6 +120,18 @@
 - upstream parity는 “응답 수신 -> 이벤트 생성 -> 저장 -> API 노출” 전체 경로가 연결되어야 의미가 있다.
 - 저장 계층과 API 계층을 같이 맞춰야 이전에 수정한 runtime parity가 실제 운영 경로에서도 유지된다.
 
+## 작업 단위 10. `goAway` surface 및 clean EOF reconnect guard
+
+작업 내용
+- live flow가 `goAway` 응답을 reconnect 전에 control event로 먼저 yield하도록 수정했다.
+- resumption handle이 있어도 receive stream이 정상 종료된 경우에는 자동 reconnect하지 않도록 정리했다.
+- live flow 테스트에 `goAway` event surface 검증과 clean EOF non-reconnect 회귀 케이스를 추가했다.
+
+작업 이유
+- 기존 보완만으로는 `goAway` 필드가 타입과 저장 계층에는 존재해도 실제 live runtime에서는 throw가 먼저 일어나 이벤트가 surface되지 않았다.
+- 또한 정상 EOF와 recoverable disconnect를 구분하지 않으면 resumption handle이 있는 세션에서 불필요한 재접속 루프가 발생할 수 있다.
+- 이 두 건은 테스트 통과 여부보다 실제 live session 의미론에 직접 영향을 주는 런타임 버그라서 같은 sync 배치에서 닫는 편이 맞다.
+
 ## 이번 배치에서 직접 포팅하지 않은 항목
 
 다음 upstream 변경은 신규 서브시스템 또는 외부 연동 범위가 커서 이번 parity 배치에서는 제외했다.
@@ -147,6 +159,7 @@
   - `dart test test/runner_flow_test.dart`
   - `dart test test/session_migration_parity_test.dart`
   - `dart test test/session_persistence_services_test.dart`
+  - `dart test test/llm_flow_live_modules_parity_test.dart` (`goAway` surface / clean EOF non-reconnect 회귀 포함)
   - `dart test test/dev_web_server_test.dart --plain-name "rejects python-style session routes with path traversal ids"`
   - `dart test test/dev_web_server_test.dart --plain-name "rejects run payloads with path traversal session ids"`
   - `dart test test/dev_web_server_test.dart --plain-name "rejects run_live websocket ids with path traversal"`
