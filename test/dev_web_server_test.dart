@@ -11,6 +11,25 @@ import 'package:test/test.dart';
 
 String appInfoTool({required String text}) => text;
 
+class _CaptureLiveConfigAgent extends BaseAgent {
+  _CaptureLiveConfigAgent({required super.name});
+
+  RunConfig? seenRunConfig;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {}
+
+  @override
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    seenRunConfig = context.runConfig?.copyWith();
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('live ok'),
+    );
+  }
+}
+
 void main() {
   group('startAdkDevWebServer', () {
     late HttpServer server;
@@ -1654,6 +1673,60 @@ void main() {
       final Map<String, dynamic> payload =
           jsonDecode(firstMessage as String) as Map<String, dynamic>;
       expect(payload['author'], isNotNull);
+    });
+
+    test('maps save_live_blob query onto runLive RunConfig', () async {
+      final _CaptureLiveConfigAgent agent = _CaptureLiveConfigAgent(
+        name: 'root_agent',
+      );
+      final InMemoryRunner liveRunner = InMemoryRunner(
+        appName: 'test_app',
+        agent: agent,
+      );
+      final DevAgentRuntime liveRuntime = DevAgentRuntime(
+        config: config,
+        runner: liveRunner,
+      );
+      final HttpServer liveServer = await startAdkDevWebServer(
+        runtime: liveRuntime,
+        project: config,
+        port: 0,
+      );
+      addTearDown(() async {
+        await liveServer.close(force: true);
+        await liveRunner.close();
+      });
+
+      final HttpClient liveClient = HttpClient();
+      addTearDown(() => liveClient.close(force: true));
+
+      final String sessionId =
+          's_live_blob_${DateTime.now().microsecondsSinceEpoch}';
+      final HttpClientRequest createRequest = await liveClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${liveServer.port}/apps/test_app/users/u1/sessions',
+        ),
+      );
+      createRequest.headers.contentType = ContentType.json;
+      createRequest.write(
+        jsonEncode(<String, Object>{'session_id': sessionId}),
+      );
+      final HttpClientResponse createResponse = await createRequest.close();
+      await utf8.decoder.bind(createResponse).join();
+      expect(createResponse.statusCode, HttpStatus.ok);
+
+      final WebSocket socket = await WebSocket.connect(
+        'ws://127.0.0.1:${liveServer.port}/run_live?app_name=test_app&user_id=u1&session_id=$sessionId&modalities=TEXT&save_live_blob=true',
+      );
+      addTearDown(() async {
+        await socket.close();
+      });
+
+      final dynamic firstMessage = await socket.first.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(firstMessage, isA<String>());
+      expect(agent.seenRunConfig?.saveLiveBlob, isTrue);
     });
 
     test('rejects python-style session routes with path traversal ids', () async {

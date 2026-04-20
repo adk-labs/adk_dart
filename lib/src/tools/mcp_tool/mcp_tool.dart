@@ -167,12 +167,17 @@ class McpTool extends BaseAuthenticatedTool {
       );
     }
 
-    final Object? response = await _sessionManager.callTool(
-      connectionParams: _connectionParams,
-      toolName: _mcpTool.name,
-      args: args,
-      headers: headers.isEmpty ? null : headers,
-    );
+    final Object? response;
+    try {
+      response = await _sessionManager.callTool(
+        connectionParams: _connectionParams,
+        toolName: _mcpTool.name,
+        args: args,
+        headers: headers.isEmpty ? null : headers,
+      );
+    } catch (error) {
+      return <String, Object?>{'error': '$error'};
+    }
     final String? resourceUri = mcpAppResourceUri;
     if (resourceUri != null) {
       toolContext.renderUiWidget(

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -31,6 +34,26 @@ class _NoopModel extends BaseLlm {
     LlmRequest request, {
     bool stream = false,
   }) async* {}
+}
+
+Future<void> _respondJsonRpc(
+  HttpRequest request, {
+  required Object? id,
+  Object? result,
+  Map<String, Object?>? error,
+  Map<String, String>? headers,
+}) async {
+  request.response.statusCode = HttpStatus.ok;
+  request.response.headers.contentType = ContentType.json;
+  headers?.forEach(request.response.headers.set);
+  request.response.write(
+    jsonEncode(<String, Object?>{
+      'jsonrpc': '2.0',
+      if (id case final Object responseId) 'id': responseId,
+      if (error != null) 'error': error else 'result': result,
+    }),
+  );
+  await request.response.close();
 }
 
 void main() {
@@ -135,6 +158,199 @@ void main() {
     expect((map['args'] as Map<String, dynamic>)['q'], 'hello');
     expect(map['x_api_key'], 'k1');
   });
+
+  test(
+    'McpTool turns local executor failures into structured error payloads',
+    () async {
+      final StreamableHTTPConnectionParams params =
+          StreamableHTTPConnectionParams(url: 'https://mcp.exec.fail');
+      McpSessionManager.instance.registerToolExecutor(
+        connectionParams: params,
+        toolName: 'explode',
+        executor: (Map<String, dynamic> args, {Map<String, String>? headers}) {
+          throw StateError('boom');
+        },
+      );
+
+      final McpTool tool = McpTool(
+        mcpTool: McpBaseTool(name: 'explode', description: 'explode'),
+        connectionParams: params,
+        sessionManager: McpSessionManager.instance,
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{},
+        toolContext: await _newContext(),
+      );
+
+      expect(result, isA<Map<String, Object?>>());
+      expect((result! as Map<String, Object?>)['error'], contains('boom'));
+    },
+  );
+
+  test(
+    'McpToolset uses invocation-scoped credentials for remote descriptor discovery',
+    () async {
+      final HttpServer server = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() async => server.close(force: true));
+
+      String? toolsListAuthorization;
+      server.listen((HttpRequest request) async {
+        final String body = await utf8.decoder.bind(request).join();
+        final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+          (Object? key, Object? value) => MapEntry('$key', value),
+        );
+        final Object? id = rpc['id'];
+        final String method = '${rpc['method'] ?? ''}';
+
+        switch (method) {
+          case 'initialize':
+            await _respondJsonRpc(
+              request,
+              id: id,
+              result: <String, Object?>{
+                'protocolVersion': '2025-11-25',
+                'capabilities': <String, Object?>{'tools': <String, Object?>{}},
+              },
+              headers: <String, String>{'MCP-Session-Id': 'session-auth'},
+            );
+            return;
+          case 'notifications/initialized':
+            request.response.statusCode = HttpStatus.accepted;
+            await request.response.close();
+            return;
+          case 'tools/list':
+            toolsListAuthorization = request.headers.value('authorization');
+            await _respondJsonRpc(
+              request,
+              id: id,
+              result: <String, Object?>{
+                'tools': <Map<String, Object?>>[
+                  <String, Object?>{
+                    'name': 'remote_echo',
+                    'description': 'echo',
+                  },
+                ],
+              },
+            );
+            return;
+          default:
+            await _respondJsonRpc(
+              request,
+              id: id,
+              error: <String, Object?>{
+                'code': -32601,
+                'message': 'Method not found: $method',
+              },
+            );
+        }
+      });
+
+      final AuthConfig authConfig = AuthConfig(
+        authScheme: 'oauth2_authorization_code',
+        credentialKey: 'mcp-toolset-auth',
+      );
+      final InvocationContext invocationContext = InvocationContext(
+        invocationId: 'inv_mcp_auth',
+        agent: Agent(name: 'root', model: _NoopModel()),
+        session: Session(id: 's_mcp_auth', appName: 'app', userId: 'user'),
+        sessionService: InMemorySessionService(),
+        credentialByKey: <String, AuthCredential>{
+          authConfig.credentialKey: AuthCredential(
+            authType: AuthCredentialType.oauth2,
+            oauth2: OAuth2Auth(accessToken: 'token-123'),
+          ),
+        },
+      );
+
+      final McpToolset toolset = McpToolset(
+        connectionParams: StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        ),
+        authConfig: authConfig,
+      );
+
+      final List<BaseTool> tools = await toolset.getTools(
+        readonlyContext: ReadonlyContext(invocationContext),
+      );
+
+      expect(tools.map((BaseTool tool) => tool.name), <String>['remote_echo']);
+      expect(toolsListAuthorization, 'Bearer token-123');
+    },
+  );
+
+  test(
+    'McpTool turns remote JSON-RPC failures into structured error payloads',
+    () async {
+      final HttpServer server = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() async => server.close(force: true));
+
+      server.listen((HttpRequest request) async {
+        final String body = await utf8.decoder.bind(request).join();
+        final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+          (Object? key, Object? value) => MapEntry('$key', value),
+        );
+        final Object? id = rpc['id'];
+        final String method = '${rpc['method'] ?? ''}';
+
+        switch (method) {
+          case 'initialize':
+            await _respondJsonRpc(
+              request,
+              id: id,
+              result: <String, Object?>{
+                'protocolVersion': '2025-11-25',
+                'capabilities': <String, Object?>{'tools': <String, Object?>{}},
+              },
+              headers: <String, String>{'MCP-Session-Id': 'session-error'},
+            );
+            return;
+          case 'notifications/initialized':
+            request.response.statusCode = HttpStatus.accepted;
+            await request.response.close();
+            return;
+          case 'tools/call':
+            await _respondJsonRpc(
+              request,
+              id: id,
+              error: <String, Object?>{'code': 403, 'message': 'Forbidden'},
+            );
+            return;
+          default:
+            await _respondJsonRpc(
+              request,
+              id: id,
+              error: <String, Object?>{
+                'code': -32601,
+                'message': 'Method not found: $method',
+              },
+            );
+        }
+      });
+
+      final McpTool tool = McpTool(
+        mcpTool: McpBaseTool(name: 'remote_echo', description: 'echo'),
+        connectionParams: StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        ),
+        sessionManager: McpSessionManager.instance,
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'q': 'hello'},
+        toolContext: await _newContext(),
+      );
+
+      expect(result, isA<Map<String, Object?>>());
+      expect((result! as Map<String, Object?>)['error'], contains('Forbidden'));
+    },
+  );
 
   test(
     'McpTool emits MCP UI widget metadata when tool declares app resource',

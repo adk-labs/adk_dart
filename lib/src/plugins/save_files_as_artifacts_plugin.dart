@@ -15,7 +15,13 @@ const String _pendingDeltaStateSuffix = ':pending_delta';
 /// Saves user inline files as artifacts and replaces them with file references.
 class SaveFilesAsArtifactsPlugin extends BasePlugin {
   /// Creates a save-files-as-artifacts plugin.
-  SaveFilesAsArtifactsPlugin({super.name = 'save_files_as_artifacts_plugin'});
+  SaveFilesAsArtifactsPlugin({
+    super.name = 'save_files_as_artifacts_plugin',
+    this.attachFileReference = true,
+  });
+
+  /// Whether to attach model-readable file references after saving artifacts.
+  final bool attachFileReference;
 
   /// Converts inline file parts in [userMessage] into persisted artifact refs.
   @override
@@ -61,15 +67,17 @@ class SaveFilesAsArtifactsPlugin extends BasePlugin {
 
         newParts.add(Part.text('[Uploaded Artifact: "$displayName"]'));
 
-        final Part? filePart = await _buildFileReferencePart(
-          invocationContext: invocationContext,
-          filename: fileName,
-          version: version,
-          mimeType: inlineData.mimeType,
-          displayName: displayName,
-        );
-        if (filePart != null) {
-          newParts.add(filePart);
+        if (attachFileReference) {
+          final Part? filePart = await _buildFileReferencePart(
+            invocationContext: invocationContext,
+            filename: fileName,
+            version: version,
+            mimeType: inlineData.mimeType,
+            displayName: displayName,
+          );
+          if (filePart != null) {
+            newParts.add(filePart);
+          }
         }
         pendingDelta[fileName] = version;
 

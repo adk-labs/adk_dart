@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
@@ -145,6 +146,27 @@ void main() {
         contains('outside the working directory'),
       );
       await toolset.close();
+    });
+
+    test('LocalEnvironment accepts path-like Uri and File inputs', () async {
+      final Directory workspace = await Directory.systemTemp.createTemp(
+        'environment_toolset_pathlike_',
+      );
+      addTearDown(() => workspace.delete(recursive: true));
+
+      final LocalEnvironment environment = LocalEnvironment(
+        workingDirectory: workspace,
+      );
+      final Uri nestedFile = Uri.file(
+        '${workspace.path}${Platform.pathSeparator}nested${Platform.pathSeparator}hello.txt',
+      );
+
+      await environment.writeFile(nestedFile, 'hello');
+      final List<int> bytes = await environment.readFile(
+        File.fromUri(nestedFile),
+      );
+
+      expect(utf8.decode(bytes), 'hello');
     });
   });
 }

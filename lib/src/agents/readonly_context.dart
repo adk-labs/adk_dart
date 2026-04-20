@@ -3,6 +3,7 @@ library;
 
 import 'dart:collection';
 
+import '../auth/auth_credential.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
 import 'invocation_context.dart';
@@ -42,4 +43,9 @@ class ReadonlyContext {
 
   /// Optional run configuration for this invocation.
   RunConfig? get runConfig => _invocationContext.runConfig;
+
+  /// Returns an invocation-scoped credential for [key], if available.
+  AuthCredential? getCredential(String key) {
+    return _invocationContext.credentialByKey[key];
+  }
 }

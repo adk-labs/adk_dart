@@ -819,7 +819,7 @@ class BaseLlmFlow {
         continue;
       }
 
-      final AuthConfig? authConfig = toolUnion.getAuthConfig();
+      final AuthConfig? authConfig = toolUnion.getAuthConfig()?.copyWith();
       if (authConfig == null) {
         continue;
       }
@@ -835,7 +835,8 @@ class BaseLlmFlow {
       }
 
       if (credential != null) {
-        authConfig.exchangedAuthCredential = credential;
+        context.credentialByKey[authConfig.credentialKey] = credential
+            .copyWith();
         continue;
       }
 

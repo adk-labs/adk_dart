@@ -3225,6 +3225,8 @@ Future<void> _handleRunLive(
     request,
     'enable_session_resumption',
   );
+  final bool saveLiveBlob =
+      _readOptionalBoolQuery(request, 'save_live_blob') ?? false;
   final RunConfig runConfig = RunConfig(
     responseModalities: _parseModalities(
       request.uri.queryParameters['modalities'],
@@ -3236,6 +3238,7 @@ Future<void> _handleRunLive(
     sessionResumption: enableSessionResumption == null
         ? null
         : <String, Object?>{'transparent': enableSessionResumption},
+    saveLiveBlob: saveLiveBlob,
   );
 
   Future<void> forwardEvents() async {

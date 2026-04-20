@@ -1,7 +1,11 @@
 /// Toolset that materializes tools from MCP server connections.
 library;
 
+import 'dart:convert';
+
 import '../../agents/readonly_context.dart';
+import '../../auth/auth_credential.dart';
+import '../../auth/auth_tool.dart';
 import '../base_tool.dart';
 import '../base_toolset.dart';
 import 'mcp_session_manager.dart';
@@ -18,6 +22,7 @@ class McpToolset extends BaseToolset {
     required this.connectionParams,
     super.toolFilter,
     super.toolNamePrefix,
+    this.authConfig,
     this.headerProvider,
     this.samplingCallback,
     Map<String, Object?>? samplingCapabilities,
@@ -32,6 +37,9 @@ class McpToolset extends BaseToolset {
   /// MCP transport parameters for this toolset.
   final McpConnectionParams connectionParams;
 
+  /// Optional auth configuration used for MCP tool discovery and calls.
+  final AuthConfig? authConfig;
+
   /// Optional callback for injecting request headers dynamically.
   final McpHeaderProvider? headerProvider;
 
@@ -45,6 +53,7 @@ class McpToolset extends BaseToolset {
   /// Returns filtered MCP tools discovered from cache or remote server.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     final McpSessionManager manager = McpSessionManager.instance;
+    final Map<String, String>? headers = _buildHeaders(readonlyContext);
 
     List<BaseTool> tools = manager.getTools(connectionParams);
     if (tools.isEmpty) {
@@ -52,6 +61,7 @@ class McpToolset extends BaseToolset {
           .listRemoteToolDescriptors(
             connectionParams: connectionParams,
             forceRefresh: true,
+            headers: headers,
           );
 
       tools = descriptors
@@ -78,6 +88,7 @@ class McpToolset extends BaseToolset {
               ),
               connectionParams: connectionParams,
               sessionManager: manager,
+              authConfig: authConfig?.copyWith(),
               headerProvider: headerProvider,
             );
           })
@@ -106,6 +117,70 @@ class McpToolset extends BaseToolset {
       resourceName: resourceName,
     );
   }
+
+  @override
+  AuthConfig? getAuthConfig() => authConfig?.copyWith();
+
+  Map<String, String>? _buildHeaders(ReadonlyContext? readonlyContext) {
+    final Map<String, String> headers = <String, String>{};
+    final AuthCredential? credential = authConfig == null
+        ? null
+        : readonlyContext?.getCredential(authConfig!.credentialKey) ??
+              authConfig!.exchangedAuthCredential;
+    headers.addAll(_headersFromCredential(credential));
+    if (readonlyContext != null && headerProvider != null) {
+      headers.addAll(headerProvider!(readonlyContext));
+    }
+    return headers.isEmpty ? null : headers;
+  }
+}
+
+Map<String, String> _headersFromCredential(AuthCredential? credential) {
+  if (credential == null) {
+    return <String, String>{};
+  }
+  switch (credential.authType) {
+    case AuthCredentialType.apiKey:
+      if (credential.apiKey == null || credential.apiKey!.isEmpty) {
+        return <String, String>{};
+      }
+      return <String, String>{'x-api-key': credential.apiKey!};
+    case AuthCredentialType.http:
+      return _headersFromHttp(credential.http);
+    case AuthCredentialType.oauth2:
+    case AuthCredentialType.openIdConnect:
+      final String? accessToken = credential.oauth2?.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        return <String, String>{};
+      }
+      return <String, String>{'Authorization': 'Bearer $accessToken'};
+    case AuthCredentialType.serviceAccount:
+      return <String, String>{};
+  }
+}
+
+Map<String, String> _headersFromHttp(HttpAuth? http) {
+  if (http == null) {
+    return <String, String>{};
+  }
+  final Map<String, String> headers = <String, String>{
+    ...http.additionalHeaders,
+  };
+  final String scheme = http.scheme.trim().toLowerCase();
+  final HttpCredentials credentials = http.credentials;
+  if (scheme == 'bearer' && credentials.token != null) {
+    headers['Authorization'] = 'Bearer ${credentials.token}';
+  } else if (scheme == 'basic' &&
+      credentials.username != null &&
+      credentials.password != null) {
+    final String encoded = base64Encode(
+      utf8.encode('${credentials.username}:${credentials.password}'),
+    );
+    headers['Authorization'] = 'Basic $encoded';
+  } else if (credentials.token != null && credentials.token!.isNotEmpty) {
+    headers['Authorization'] = '${http.scheme} ${credentials.token}';
+  }
+  return headers;
 }
 
 Map<String, dynamic> _readSchema(

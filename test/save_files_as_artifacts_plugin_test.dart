@@ -138,6 +138,43 @@ void main() {
   );
 
   test(
+    'can skip attaching file references while still saving artifacts',
+    () async {
+      final _AccessibleArtifactService artifacts = _AccessibleArtifactService();
+      final SaveFilesAsArtifactsPlugin plugin = SaveFilesAsArtifactsPlugin(
+        attachFileReference: false,
+      );
+      final InvocationContext context = _newContext(artifactService: artifacts);
+      final Content message = Content(
+        role: 'user',
+        parts: <Part>[
+          Part.fromInlineData(
+            mimeType: 'application/pdf',
+            data: <int>[7, 8],
+            displayName: 'doc.pdf',
+          ),
+        ],
+      );
+
+      final Content? output = await plugin.onUserMessageCallback(
+        invocationContext: context,
+        userMessage: message,
+      );
+
+      expect(output, isNotNull);
+      expect(output!.parts, hasLength(1));
+      expect(output.parts.single.text, '[Uploaded Artifact: "doc.pdf"]');
+
+      final List<String> keys = await artifacts.listArtifactKeys(
+        appName: context.appName,
+        userId: context.userId,
+        sessionId: context.session.id,
+      );
+      expect(keys, contains('doc.pdf'));
+    },
+  );
+
+  test(
     'generates fallback artifact filename when display name is absent',
     () async {
       final InMemoryArtifactService artifacts = InMemoryArtifactService();
@@ -190,7 +227,9 @@ void main() {
     );
 
     expect(
-      invocationContext.session.state['save_files_as_artifacts_plugin:pending_delta'],
+      invocationContext
+          .session
+          .state['save_files_as_artifacts_plugin:pending_delta'],
       <String, int>{'blob.pdf': 0},
     );
 
@@ -202,7 +241,9 @@ void main() {
 
     expect(callbackContext.actions.artifactDelta, <String, int>{'blob.pdf': 0});
     expect(
-      invocationContext.session.state['save_files_as_artifacts_plugin:pending_delta'],
+      invocationContext
+          .session
+          .state['save_files_as_artifacts_plugin:pending_delta'],
       <String, int>{},
     );
   });

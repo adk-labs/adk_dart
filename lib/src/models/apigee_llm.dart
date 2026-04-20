@@ -13,6 +13,7 @@ import 'llm_response.dart';
 const String _apigeeProxyUrlEnv = 'APIGEE_PROXY_URL';
 const String _projectEnv = 'GOOGLE_CLOUD_PROJECT';
 const String _locationEnv = 'GOOGLE_CLOUD_LOCATION';
+const String _refusalPrefix = '[[REFUSAL]]: ';
 
 /// Apigee backend protocol families supported by this adapter.
 enum ApiType {
@@ -352,6 +353,13 @@ class ApigeeLlm extends Gemini {
     if (contentRaw is String && contentRaw.isNotEmpty) {
       parts.add(Part.text(contentRaw));
     }
+    final String refusal = '${message['refusal'] ?? ''}'.trim();
+    if (refusal.isNotEmpty) {
+      final String merged = parts.isEmpty
+          ? '$_refusalPrefix$refusal'
+          : '${parts.removeLast().text}\n$_refusalPrefix$refusal';
+      parts.add(Part.text(merged));
+    }
 
     final List<Object?> toolCalls =
         (message['tool_calls'] as List<Object?>?) ?? <Object?>[];
@@ -399,6 +407,7 @@ class ApigeeLlm extends Gemini {
     final List<Map<String, Object?>> toolResponses = <Map<String, Object?>>[];
     final List<Map<String, Object?>> toolCalls = <Map<String, Object?>>[];
     final List<Map<String, Object?>> contentParts = <Map<String, Object?>>[];
+    final List<String> refusals = <String>[];
 
     for (final Part part in content.parts) {
       if (part.functionResponse != null) {
@@ -421,7 +430,16 @@ class ApigeeLlm extends Gemini {
         continue;
       }
       if (part.text != null && part.text!.isNotEmpty) {
-        contentParts.add(<String, Object?>{'type': 'text', 'text': part.text});
+        final ({String? content, String? refusal}) split = _splitRefusalText(
+          part.text!,
+        );
+        if (split.content case final String text when text.isNotEmpty) {
+          contentParts.add(<String, Object?>{'type': 'text', 'text': text});
+        }
+        if (split.refusal case final String refusalText
+            when refusalText.isNotEmpty) {
+          refusals.add(refusalText);
+        }
         continue;
       }
       if (part.inlineData != null) {
@@ -445,6 +463,9 @@ class ApigeeLlm extends Gemini {
     }
 
     final Map<String, Object?> message = <String, Object?>{'role': role};
+    if (refusals.isNotEmpty) {
+      message['refusal'] = refusals.join('\n');
+    }
     if (toolCalls.isNotEmpty) {
       message['tool_calls'] = toolCalls;
       if (contentParts.isEmpty) {
@@ -509,6 +530,25 @@ class ApigeeLlm extends Gemini {
       return 'SAFETY';
     }
     return 'FINISH_REASON_UNSPECIFIED';
+  }
+
+  static ({String? content, String? refusal}) _splitRefusalText(String text) {
+    if (text.startsWith(_refusalPrefix)) {
+      return (content: null, refusal: text.substring(_refusalPrefix.length));
+    }
+
+    final String separator = '\n$_refusalPrefix';
+    final int index = text.indexOf(separator);
+    if (index < 0) {
+      return (content: text, refusal: null);
+    }
+
+    final String content = text.substring(0, index);
+    final String refusal = text.substring(index + separator.length);
+    return (
+      content: content.isEmpty ? null : content,
+      refusal: refusal.isEmpty ? null : refusal,
+    );
   }
 
   String _extractUserText(LlmRequest request) {

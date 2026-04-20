@@ -638,6 +638,29 @@ void main() {
       expect(payload['tools'], isA<List<Object?>>());
     });
 
+    test('chat completions payload separates refusal text from content', () {
+      final LlmRequest request = LlmRequest(
+        model: 'gpt-4o-mini',
+        contents: <Content>[
+          Content(
+            role: 'model',
+            parts: <Part>[
+              Part.text('visible answer\n[[REFUSAL]]: blocked policy detail'),
+            ],
+          ),
+        ],
+      );
+
+      final Map<String, Object?> payload =
+          ApigeeLlm.buildChatCompletionsPayload(request, stream: false);
+      final List<Object?> messages = payload['messages']! as List<Object?>;
+      final Map<String, Object?> message =
+          messages.single as Map<String, Object?>;
+
+      expect(message['content'], 'visible answer');
+      expect(message['refusal'], 'blocked policy detail');
+    });
+
     test('chat completions response parser maps text/tool calls/usage', () {
       final LlmResponse response = ApigeeLlm.parseChatCompletionsResponse(
         <String, Object?>{
@@ -680,6 +703,30 @@ void main() {
             as Map<String, Object?>)['thoughts_token_count'],
         4,
       );
+    });
+
+    test('chat completions response parser preserves refusal text marker', () {
+      final LlmResponse response = ApigeeLlm.parseChatCompletionsResponse(
+        <String, Object?>{
+          'model': 'gpt-4o-mini',
+          'choices': <Object?>[
+            <String, Object?>{
+              'finish_reason': 'content_filter',
+              'message': <String, Object?>{
+                'role': 'assistant',
+                'content': 'answer',
+                'refusal': 'policy blocked',
+              },
+            },
+          ],
+        },
+      );
+
+      expect(
+        response.content?.parts.single.text,
+        'answer\n[[REFUSAL]]: policy blocked',
+      );
+      expect(response.finishReason, 'SAFETY');
     });
 
     test(

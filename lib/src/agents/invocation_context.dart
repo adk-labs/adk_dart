@@ -3,6 +3,7 @@ library;
 
 import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
+import '../auth/auth_credential.dart';
 import '../events/event.dart';
 import '../memory/base_memory_service.dart';
 import '../memory/memory_entry.dart';
@@ -58,9 +59,11 @@ class InvocationContext {
     this.tokenCompactionChecked = false,
     PluginManager? pluginManager,
     this.canonicalToolsCache,
+    Map<String, AuthCredential>? credentialByKey,
   }) : agentStates = agentStates ?? <String, Map<String, Object?>>{},
        endOfAgents = endOfAgents ?? <String, bool>{},
-       pluginManager = pluginManager ?? PluginManager();
+       pluginManager = pluginManager ?? PluginManager(),
+       credentialByKey = credentialByKey ?? <String, AuthCredential>{};
 
   /// Artifact service used for persistence and retrieval.
   BaseArtifactService? artifactService;
@@ -136,6 +139,9 @@ class InvocationContext {
 
   /// Cached canonical tool set, if computed.
   List<BaseTool>? canonicalToolsCache;
+
+  /// Resolved credentials for this invocation keyed by auth credential key.
+  Map<String, AuthCredential> credentialByKey;
 
   int _numberOfLlmCalls = 0;
 
@@ -529,6 +535,10 @@ class InvocationContext {
       canonicalToolsCache: canonicalToolsCache == null
           ? null
           : List<BaseTool>.from(canonicalToolsCache!),
+      credentialByKey: credentialByKey.map(
+        (String key, AuthCredential value) =>
+            MapEntry<String, AuthCredential>(key, value.copyWith()),
+      ),
     ).._numberOfLlmCalls = _numberOfLlmCalls;
   }
 }

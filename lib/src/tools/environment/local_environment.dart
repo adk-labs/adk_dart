@@ -57,21 +57,21 @@ class LocalEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<List<int>> readFile(String path) async {
+  Future<List<int>> readFile(Object path) async {
     await initialize();
     return _resolveFile(path).readAsBytes();
   }
 
   @override
-  Future<void> writeFile(String path, String content) async {
+  Future<void> writeFile(Object path, String content) async {
     await initialize();
     final File file = _resolveFile(path);
     await file.parent.create(recursive: true);
     await file.writeAsString(content, flush: true);
   }
 
-  File _resolveFile(String path) {
-    final String input = path.trim();
+  File _resolveFile(Object path) {
+    final String input = _stringifyPath(path).trim();
     if (input.isEmpty) {
       throw ArgumentError('Path is required.');
     }
@@ -87,7 +87,10 @@ class LocalEnvironment extends BaseEnvironment {
         ? rootPath
         : '$rootPath${Platform.pathSeparator}';
     if (resolvedPath != rootPath && !resolvedPath.startsWith(rootPrefix)) {
-      throw FileSystemException('Path is outside the working directory.', path);
+      throw FileSystemException(
+        'Path is outside the working directory.',
+        input,
+      );
     }
 
     return File(resolvedPath);
@@ -96,5 +99,21 @@ class LocalEnvironment extends BaseEnvironment {
   bool _looksLikeAbsolutePath(String path) {
     return path.startsWith(Platform.pathSeparator) ||
         RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+  }
+
+  String _stringifyPath(Object path) {
+    if (path is String) {
+      return path;
+    }
+    if (path is Uri) {
+      if (!path.hasScheme || path.scheme == 'file') {
+        return File.fromUri(path).path;
+      }
+      return path.toString();
+    }
+    if (path is FileSystemEntity) {
+      return path.path;
+    }
+    return '$path';
   }
 }

@@ -144,6 +144,44 @@ class _MalformedAuthToolset extends BaseToolset {
   }
 }
 
+class _FixedCredentialProvider extends BaseAuthProvider {
+  @override
+  Iterable<Object> get supportedAuthSchemes => const <Object>[
+    'custom_provider',
+  ];
+
+  @override
+  Future<AuthCredential?> getAuthCredential(
+    AuthConfig authConfig,
+    Context context,
+  ) async {
+    return AuthCredential(authType: AuthCredentialType.apiKey, apiKey: 'k1');
+  }
+}
+
+class _ScopedCredentialToolset extends BaseToolset {
+  bool getToolsCalled = false;
+  final AuthConfig authConfig = AuthConfig(
+    authScheme: 'custom_provider',
+    credentialKey: 'toolset-auth-scoped',
+  );
+  AuthCredential? seenCredential;
+
+  @override
+  Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
+    getToolsCalled = true;
+    seenCredential = readonlyContext
+        ?.getCredential(authConfig.credentialKey)
+        ?.copyWith();
+    return <BaseTool>[];
+  }
+
+  @override
+  AuthConfig? getAuthConfig() {
+    return authConfig;
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) => stream.toList();
 
 void main() {
@@ -297,7 +335,9 @@ void main() {
       final bool hasDynamicInstructionInContents = request.contents.any((
         Content content,
       ) {
-        return content.parts.any((Part part) => part.text == 'dynamic instruction');
+        return content.parts.any(
+          (Part part) => part.text == 'dynamic instruction',
+        );
       });
       expect(hasDynamicInstructionInContents, isTrue);
     },
@@ -428,6 +468,43 @@ void main() {
         ),
         isEmpty,
       );
+    },
+  );
+
+  test(
+    'toolset auth keeps shared auth config clean and exposes invocation-scoped credential to getTools',
+    () async {
+      addTearDown(CredentialManager.clearGlobalAuthProvidersForTest);
+      CredentialManager.registerGlobalAuthProvider(_FixedCredentialProvider());
+
+      final _CaptureModel model = _CaptureModel();
+      final _ScopedCredentialToolset toolset = _ScopedCredentialToolset();
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[toolset],
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 's_toolset_auth_scoped',
+      );
+
+      await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hello'),
+        ),
+      );
+
+      expect(model.callCount, 1);
+      expect(toolset.getToolsCalled, isTrue);
+      expect(toolset.seenCredential?.apiKey, 'k1');
+      expect(toolset.authConfig.exchangedAuthCredential, isNull);
     },
   );
 

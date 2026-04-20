@@ -48,8 +48,8 @@ abstract class BaseEnvironment {
   });
 
   /// Reads bytes from a file relative to [workingDirectory].
-  Future<List<int>> readFile(String path);
+  Future<List<int>> readFile(Object path);
 
   /// Writes [content] to a file relative to [workingDirectory].
-  Future<void> writeFile(String path, String content);
+  Future<void> writeFile(Object path, String content);
 }
