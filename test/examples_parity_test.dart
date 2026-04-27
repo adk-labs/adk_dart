@@ -99,6 +99,27 @@ void main() {
       expect(fromProvider, equals(fromList));
     });
 
+    test('convertExamplesToText keeps Python function argument rendering', () {
+      final Example example = Example(
+        input: Content.userText('quote test'),
+        output: <Content>[
+          Content(
+            role: 'model',
+            parts: <Part>[
+              Part.fromFunctionCall(
+                name: 'quote',
+                args: <String, dynamic>{'value': "O'Reilly"},
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final String text = convertExamplesToText(<Example>[example], null);
+
+      expect(text, contains("quote(value='O'Reilly')"));
+    });
+
     test('getLatestMessageFromUser follows user-last-message rule', () {
       final Session session = Session(
         id: 's1',

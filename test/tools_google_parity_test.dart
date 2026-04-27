@@ -16,6 +16,52 @@ Context _newToolContext({String? functionCallId, Map<String, Object?>? state}) {
   return Context(invocationContext, functionCallId: functionCallId);
 }
 
+class _GroundingSearchModel extends BaseLlm {
+  _GroundingSearchModel() : super(model: 'search-model');
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    yield LlmResponse(
+      content: Content.modelText('search result'),
+      groundingMetadata: <String, Object?>{
+        'webSearchQueries': <String>['test query'],
+      },
+    );
+  }
+}
+
+class _RootSearchModel extends BaseLlm {
+  _RootSearchModel() : super(model: 'root-model');
+
+  int callCount = 0;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    callCount += 1;
+    if (callCount == 1) {
+      yield LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'google_search_agent',
+              args: <String, dynamic>{'request': 'test query'},
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    yield LlmResponse(content: Content.modelText('final answer'));
+  }
+}
+
 void main() {
   group('google tools parity', () {
     test('GoogleSearchTool configures Gemini 2 requests', () async {
@@ -119,10 +165,57 @@ void main() {
     test('createGoogleSearchAgent returns search-only agent tooling', () {
       final LlmAgent agent = createGoogleSearchAgent('gemini-2.5-flash');
       expect(agent.name, 'google_search_agent');
+      expect(
+        agent.instruction,
+        startsWith('\n        You are a specialized Google search agent.'),
+      );
       expect(agent.tools.whereType<GoogleSearchTool>().isNotEmpty, isTrue);
       final GoogleSearchAgentTool tool = GoogleSearchAgentTool(agent: agent);
       expect(tool.name, 'google_search_agent');
     });
+
+    test(
+      'GoogleSearchAgentTool propagates grounding metadata to final response',
+      () async {
+        final Agent searchAgent = Agent(
+          name: 'google_search_agent',
+          model: _GroundingSearchModel(),
+          disallowTransferToParent: true,
+          disallowTransferToPeers: true,
+        );
+        final Agent rootAgent = Agent(
+          name: 'root_agent',
+          model: _RootSearchModel(),
+          tools: <Object>[GoogleSearchAgentTool(agent: searchAgent)],
+          disallowTransferToParent: true,
+          disallowTransferToPeers: true,
+        );
+        final InMemoryRunner runner = InMemoryRunner(agent: rootAgent);
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'u1',
+          sessionId: 's_google_grounding',
+        );
+
+        final List<Event> events = await runner
+            .runAsync(
+              userId: 'u1',
+              sessionId: session.id,
+              newMessage: Content.userText('search'),
+            )
+            .toList();
+
+        final Event finalEvent = events.lastWhere((Event event) {
+          final Content? content = event.content;
+          return content != null &&
+              content.parts.isNotEmpty &&
+              content.parts.first.text == 'final answer';
+        });
+        expect(finalEvent.groundingMetadata, <String, Object?>{
+          'webSearchQueries': <String>['test query'],
+        });
+      },
+    );
 
     test('BaseGoogleCredentialsConfig validates mutually exclusive fields', () {
       expect(

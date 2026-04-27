@@ -152,7 +152,6 @@ void main() {
         'load_skill',
         'load_skill_resource',
         'run_skill_script',
-        'run_skill_inline_script',
       ]);
     });
 
@@ -526,33 +525,6 @@ void main() {
       );
     });
 
-    test('run_skill_inline_script executes configured code executor', () async {
-      final _FakeCodeExecutor fakeExecutor = _FakeCodeExecutor(
-        CodeExecutionResult(stdout: 'inline done', stderr: '', exitCode: 0),
-      );
-      final SkillToolset toolset = SkillToolset(
-        skills: <Skill>[_sampleSkill()],
-        codeExecutor: fakeExecutor,
-      );
-      final BaseTool runTool = (await toolset.getTools())[4];
-
-      final Object? result = await runTool.run(
-        args: <String, Object?>{
-          'script_content': 'print("inline done")',
-          'language': 'python',
-        },
-        toolContext: _newToolContext(),
-      );
-
-      final Map<String, Object?> payload = Map<String, Object?>.from(
-        result! as Map,
-      );
-      expect(payload['status'], 'success');
-      expect(payload['stdout'], 'inline done');
-      expect(fakeExecutor.lastCode, 'print("inline done")');
-      expect(fakeExecutor.lastExecuteType, 'python');
-    });
-
     test(
       'run_skill_script accepts list args and rejects extra option groups',
       () async {
@@ -667,6 +639,7 @@ void main() {
         expect(instruction, isNotNull);
         expect(instruction!, contains("You can use specialized 'skills'"));
         expect(instruction, contains('run_skill_script'));
+        expect(instruction, isNot(contains('run_skill_inline_script')));
         expect(instruction, contains('<available_skills>'));
         expect(instruction, contains('my-skill'));
       },

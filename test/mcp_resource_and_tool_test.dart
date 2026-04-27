@@ -101,6 +101,10 @@ void main() {
         contains('You have a list of MCP resources'),
       );
       expect(
+        request.config.systemInstruction,
+        contains('["docs://guide"]\n\nWhen the user asks'),
+      );
+      expect(
         request.contents.any((Content c) {
           return c.parts.any(
             (Part p) =>

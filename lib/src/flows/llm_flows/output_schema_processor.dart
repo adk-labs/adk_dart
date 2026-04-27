@@ -46,7 +46,11 @@ String? getStructuredModelResponse(Event functionResponseEvent) {
   for (final FunctionResponse functionResponse
       in functionResponseEvent.getFunctionResponses()) {
     if (functionResponse.name == 'set_model_response') {
-      return jsonEncode(functionResponse.response);
+      Object? response = functionResponse.response;
+      if (response is Map && response.containsKey('result')) {
+        response = response['result'];
+      }
+      return jsonEncode(response);
     }
   }
   return null;

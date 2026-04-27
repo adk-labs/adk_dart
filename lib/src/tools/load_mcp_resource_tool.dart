@@ -77,11 +77,12 @@ NOTE: Call when you need access to resources.''',
     if (resourceNames.isNotEmpty) {
       llmRequest.appendInstructions(<String>[
         '''You have a list of MCP resources:
-${jsonEncode(resourceNames)}
+${_jsonDumpsStringList(resourceNames)}
 
 When the user asks questions about any of the resources, you should call the
 `load_mcp_resource` function to load the resource. Always call load_mcp_resource
-before answering questions related to the resources.''',
+before answering questions related to the resources.
+''',
       ]);
     }
 
@@ -152,4 +153,8 @@ before answering questions related to the resources.''',
     }
     return Part.text('[Unknown content type for $resourceName]');
   }
+}
+
+String _jsonDumpsStringList(List<String> values) {
+  return '[${values.map(jsonEncode).join(', ')}]';
 }

@@ -19,6 +19,7 @@ class AgentTool extends BaseTool {
     required this.agent,
     this.skipSummarization = false,
     this.includePlugins = true,
+    this.propagateGroundingMetadata = false,
   }) : super(name: agent.name, description: agent.description);
 
   /// Agent invoked by this tool.
@@ -29,6 +30,9 @@ class AgentTool extends BaseTool {
 
   /// Whether parent runner plugins are inherited by the child runner.
   final bool includePlugins;
+
+  /// Whether child grounding metadata is made available to the parent response.
+  final bool propagateGroundingMetadata;
 
   @override
   FunctionDeclaration? getDeclaration() {
@@ -81,6 +85,7 @@ class AgentTool extends BaseTool {
     );
 
     Content? lastContent;
+    Object? lastGroundingMetadata;
     await for (final Event event in runner.runAsync(
       userId: session.userId,
       sessionId: session.id,
@@ -92,9 +97,16 @@ class AgentTool extends BaseTool {
       if (event.content != null) {
         lastContent = event.content;
       }
+      if (event.groundingMetadata != null) {
+        lastGroundingMetadata = event.groundingMetadata;
+      }
     }
 
     await runner.close();
+
+    if (propagateGroundingMetadata && lastGroundingMetadata != null) {
+      toolContext.state['temp:_adk_grounding_metadata'] = lastGroundingMetadata;
+    }
 
     if (lastContent == null || lastContent.parts.isEmpty) {
       return '';

@@ -100,7 +100,7 @@ void _moveSystemInstructionToInitialUserMessage(LlmRequest llmRequest) {
     role: 'user',
     parts: <Part>[Part.text(systemInstruction)],
   );
-  if (llmRequest.contents.isEmpty ||
+  if (llmRequest.contents.isNotEmpty &&
       !_contentEquals(llmRequest.contents.first, instructionContent)) {
     llmRequest.contents = <Content>[instructionContent, ...llmRequest.contents];
   }
@@ -202,9 +202,13 @@ String _buildGemmaFunctionSystemInstruction(
       .map((FunctionDeclaration declaration) {
         final Map<String, Object?> value = <String, Object?>{
           'name': declaration.name,
-          'description': declaration.description,
-          'parameters': declaration.parameters,
         };
+        if (declaration.description.isNotEmpty) {
+          value['description'] = declaration.description;
+        }
+        if (declaration.parameters.isNotEmpty) {
+          value['parameters'] = declaration.parameters;
+        }
         return jsonEncode(value);
       })
       .toList(growable: false);

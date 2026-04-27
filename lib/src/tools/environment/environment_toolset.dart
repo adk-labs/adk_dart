@@ -13,8 +13,8 @@ import 'base_environment.dart';
 
 const int _defaultTimeoutSeconds = 30;
 const int _maxOutputChars = 30000;
-const String _environmentInstructionTemplate = '''
-Your environment is at {working_dir}/
+const String _environmentInstructionTemplate =
+    '''Your environment is at {working_dir}/
 
 # Environment Rules
 

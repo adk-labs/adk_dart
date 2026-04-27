@@ -10,9 +10,11 @@ import 'invocation_context.dart';
 import 'llm_agent.dart';
 
 const String _taskCompletedToolName = 'task_completed';
-const String _taskCompletedInstruction = '''
-If you finished the user's request according to its description, call the task_completed function to exit so the next agents can take over. When calling this function, do not generate any text other than the function call.
-''';
+const String _taskCompletedInstruction =
+    "If you finished the user's request\n"
+    '          according to its description, call the task_completed function\n'
+    '          to exit so the next agents can take over. When calling this function,\n'
+    '          do not generate any text other than the function call.';
 
 String _taskCompleted() {
   return 'Task completion signaled.';
@@ -162,9 +164,7 @@ class SequentialAgent extends BaseAgent {
       if (currentInstruction is! String) {
         continue;
       }
-      final String separator = currentInstruction.isEmpty ? '' : '\n';
-      subAgent.instruction =
-          '$currentInstruction$separator$_taskCompletedInstruction';
+      subAgent.instruction = '$currentInstruction$_taskCompletedInstruction';
     }
   }
 

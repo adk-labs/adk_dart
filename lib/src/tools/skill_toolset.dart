@@ -36,11 +36,8 @@ This is very important:
 1. If a skill seems relevant to the current user query, you MUST use the `load_skill` tool with `skill_name="<SKILL_NAME>"` to read its full instructions before proceeding.
 2. Once you have read the instructions, follow them exactly as documented before replying to the user. For example, If the instruction lists multiple steps, please make sure you complete all of them in order.
 3. The `load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). Do NOT use other tools to access these files.
+4. Use `run_skill_script` to run scripts from a skill's `scripts/` directory. Use `load_skill_resource` to view script content first if needed.
 """;
-
-const String _runSkillScriptInstruction =
-    "4. Use `run_skill_script` to run scripts from a skill's `scripts/` directory. Use `load_skill_resource` to view script content first if needed.\n"
-    "5. Use `run_skill_inline_script` only for short, ad-hoc scripts derived from loaded skill instructions or resources.";
 
 class _ListSkillsTool extends BaseTool {
   _ListSkillsTool(this._toolset)
@@ -740,112 +737,6 @@ class _RunSkillScriptTool extends BaseTool {
   }
 }
 
-class _RunSkillInlineScriptTool extends BaseTool {
-  _RunSkillInlineScriptTool(this._toolset)
-    : super(
-        name: 'run_skill_inline_script',
-        description:
-            'Executes a short inline script using the configured code executor.',
-      );
-
-  final SkillToolset _toolset;
-
-  @override
-  FunctionDeclaration? getDeclaration() {
-    return FunctionDeclaration(
-      name: name,
-      description: description,
-      parameters: <String, Object?>{
-        'type': 'object',
-        'properties': <String, Object?>{
-          'script_content': <String, Object?>{
-            'type': 'string',
-            'description': 'The inline script source code to execute.',
-          },
-          'language': <String, Object?>{
-            'type': 'string',
-            'description':
-                "Optional execution language hint, for example 'python', 'bash', or 'javascript'.",
-          },
-          'execute_type': <String, Object?>{
-            'type': 'string',
-            'description':
-                'Optional executor-specific mode hint. Defaults to language when provided.',
-          },
-        },
-        'required': <String>['script_content'],
-      },
-    );
-  }
-
-  @override
-  Future<Object?> run({
-    required Map<String, dynamic> args,
-    required ToolContext toolContext,
-  }) async {
-    final Object? rawScriptContent =
-        args['script_content'] ?? args['code'] ?? args['script'];
-    if (rawScriptContent is! String || rawScriptContent.trim().isEmpty) {
-      return <String, Object?>{
-        'error': "Argument 'script_content' is required.",
-        'error_code': 'INVALID_ARGUMENTS',
-      };
-    }
-
-    final BaseCodeExecutor? codeExecutor = _resolveCodeExecutor(
-      _toolset._codeExecutor,
-      toolContext,
-    );
-    if (codeExecutor == null) {
-      return <String, Object?>{
-        'error':
-            'No code executor configured. A code executor is required to run inline scripts.',
-        'error_code': 'NO_CODE_EXECUTOR',
-      };
-    }
-
-    final String? executeType =
-        (args['execute_type'] ?? args['executeType'] ?? args['language'])
-            ?.toString();
-    try {
-      final CodeExecutionResult result = await codeExecutor.executeCode(
-        toolContext.invocationContext,
-        CodeExecutionInput(
-          code: rawScriptContent,
-          executeType: executeType == null || executeType.trim().isEmpty
-              ? null
-              : executeType.trim(),
-        ),
-      );
-      String status = 'success';
-      if (result.exitCode != 0 || result.timedOut) {
-        status = 'error';
-      } else if (result.stderr.isNotEmpty && result.stdout.isEmpty) {
-        status = 'error';
-      } else if (result.stderr.isNotEmpty) {
-        status = 'warning';
-      }
-      return <String, Object?>{
-        'stdout': result.stdout,
-        'stderr': result.stderr,
-        'status': status,
-      };
-    } catch (error, stackTrace) {
-      developer.log(
-        'Error executing inline skill script',
-        name: 'adk_dart.skill_toolset',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      return <String, Object?>{
-        'error':
-            'Failed to execute inline script: ${error.runtimeType}: $error',
-        'error_code': 'EXECUTION_ERROR',
-      };
-    }
-  }
-}
-
 /// Toolset exposing skill-discovery, loading, and script-execution tools.
 class SkillToolset extends BaseToolset {
   /// Creates a toolset that exposes skill discovery/loading/script tools.
@@ -871,7 +762,6 @@ class SkillToolset extends BaseToolset {
       _LoadSkillTool(this),
       _LoadSkillResourceTool(this),
       _RunSkillScriptTool(this),
-      _RunSkillInlineScriptTool(this),
     ];
     _providedToolsByName = <String, BaseTool>{};
     _providedToolsets = <BaseToolset>[];
@@ -999,15 +889,8 @@ class SkillToolset extends BaseToolset {
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
-    final bool includeRunSkillScriptLine = _tools.any(
-      (BaseTool tool) =>
-          tool.name == 'run_skill_script' && isToolSelected(tool, null),
-    );
-    final String systemInstruction = includeRunSkillScriptLine
-        ? '$defaultSkillSystemInstruction\n$_runSkillScriptInstruction'
-        : defaultSkillSystemInstruction;
     final List<String> instructions = <String>[
-      systemInstruction,
+      defaultSkillSystemInstruction,
       formatSkillsAsXml(_listSkills()),
     ];
     llmRequest.appendInstructions(instructions);

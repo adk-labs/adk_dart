@@ -46,12 +46,12 @@ class ExampleTool extends BaseTool {
     final String? query = userContent?.parts.isNotEmpty == true
         ? userContent!.parts.first.text
         : null;
-    if (query == null || query.trim().isEmpty) {
+    if (query == null || query.isEmpty) {
       return;
     }
 
     llmRequest.appendInstructions(<String>[
-      example_util.buildExampleSi(examples, query.trim(), llmRequest.model),
+      example_util.buildExampleSi(examples, query, llmRequest.model),
     ]);
   }
 

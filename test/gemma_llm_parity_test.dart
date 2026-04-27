@@ -52,8 +52,46 @@ void main() {
           capturedRequest!.contents.first.parts.first.text,
           contains('Original system instruction'),
         );
+        expect(
+          capturedRequest!.contents.first.parts.first.text,
+          contains(
+            '{"name":"lookup_weather","description":"Lookup weather data.","parameters":',
+          ),
+        );
       },
     );
+
+    test('omits null-like declaration fields from Gemma tool prompt', () async {
+      LlmRequest? capturedRequest;
+      final GemmaLlm model = GemmaLlm(
+        generateHook: (LlmRequest request, bool stream) async* {
+          capturedRequest = request;
+          yield LlmResponse(content: Content.modelText('plain response'));
+        },
+      );
+
+      await model
+          .generateContent(
+            LlmRequest(
+              contents: <Content>[Content.userText('Hello')],
+              config: GenerateContentConfig(
+                tools: <ToolDeclaration>[
+                  ToolDeclaration(
+                    functionDeclarations: <FunctionDeclaration>[
+                      FunctionDeclaration(name: 'no_schema'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList();
+
+      final String prompt = capturedRequest!.contents.first.parts.first.text!;
+      expect(prompt, contains('{"name":"no_schema"}'));
+      expect(prompt, isNot(contains('"description":""')));
+      expect(prompt, isNot(contains('"parameters":{}')));
+    });
 
     test('extracts function call JSON from response text', () async {
       final GemmaLlm model = GemmaLlm(

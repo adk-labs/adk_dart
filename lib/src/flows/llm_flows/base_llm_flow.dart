@@ -1101,7 +1101,7 @@ class BaseLlmFlow {
           llmResponse: response,
         );
     if (pluginOverride != null) {
-      return pluginOverride;
+      return _maybeAddGroundingMetadata(context, response, pluginOverride);
     }
 
     for (final AfterModelCallback callback
@@ -1110,11 +1110,37 @@ class BaseLlmFlow {
         callback(callbackContext, response),
       );
       if (altered != null) {
-        return altered;
+        return _maybeAddGroundingMetadata(context, response, altered);
       }
     }
 
-    return null;
+    return _maybeAddGroundingMetadata(context, response);
+  }
+
+  Future<LlmResponse?> _maybeAddGroundingMetadata(
+    InvocationContext context,
+    LlmResponse response, [
+    LlmResponse? override,
+  ]) async {
+    final LlmAgent agent = context.agent as LlmAgent;
+    List<BaseTool>? tools = context.canonicalToolsCache;
+    if (tools == null) {
+      tools = await agent.canonicalTools(ReadonlyContext(context));
+      context.canonicalToolsCache = tools;
+    }
+    if (!tools.any((BaseTool tool) => tool.name == 'google_search_agent')) {
+      return override;
+    }
+
+    final Object? groundingMetadata =
+        context.session.state['temp:_adk_grounding_metadata'];
+    if (groundingMetadata == null) {
+      return override;
+    }
+
+    final LlmResponse target = override ?? response;
+    target.groundingMetadata = groundingMetadata;
+    return target;
   }
 
   Future<LlmResponse?> _handleModelErrorCallbacks(

@@ -55,7 +55,7 @@ String convertExamplesToText(List<Example> examples, String? model) {
           final List<String> args = <String>[];
           functionCall.args.forEach((String key, dynamic value) {
             if (value is String) {
-              args.add("$key='${_escapeSingleQuotes(value)}'");
+              args.add("$key='$value'");
             } else {
               args.add('$key=$value');
             }
@@ -123,8 +123,4 @@ String buildExampleSi(Object examples, String query, String? model) {
   }
 
   throw ArgumentError('Invalid example configuration');
-}
-
-String _escapeSingleQuotes(String value) {
-  return value.replaceAll("'", r"\'");
 }

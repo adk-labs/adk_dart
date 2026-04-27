@@ -77,16 +77,13 @@ web UI).''',
     final List<String> artifactNames = await toolContext.listArtifacts();
     if (artifactNames.isNotEmpty) {
       llmRequest.appendInstructions(<String>[
-        '''
-You have a list of artifacts:
-${jsonEncode(artifactNames)}
-
-When the user asks questions about any of the artifacts, you should call the
-`load_artifacts` function to load the artifact. Always call load_artifacts
-before answering questions related to the artifacts, regardless of whether the
-artifacts have been loaded before. Do not depend on prior answers about the
-artifacts.
-''',
+        'You have a list of artifacts:\n'
+            '  ${_jsonDumpsStringList(artifactNames)}\n\n'
+            '  When the user asks questions about any of the artifacts, you should call the\n'
+            '  `load_artifacts` function to load the artifact. Always call load_artifacts\n'
+            '  before answering questions related to the artifacts, regardless of whether the\n'
+            '  artifacts have been loaded before. Do not depend on prior answers about the\n'
+            '  artifacts.\n',
       ]);
     }
 
@@ -139,6 +136,10 @@ List<String> _coerceArtifactNames(Object? value) {
     return artifactNames;
   }
   return const <String>[];
+}
+
+String _jsonDumpsStringList(List<String> values) {
+  return '[${values.map(jsonEncode).join(', ')}]';
 }
 
 Part _asSafePart(Part artifact, String artifactName) {

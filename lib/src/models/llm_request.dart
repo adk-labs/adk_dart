@@ -620,17 +620,58 @@ class LlmRequest {
           continue;
         }
 
-        nonTextIndex += 1;
-        textParts.add('[Reference to non-text content: ref_$nonTextIndex]');
-        userContents.add(
-          Content(
-            role: 'user',
-            parts: <Part>[
-              Part.text('Referenced content: ref_$nonTextIndex'),
-              part.copyWith(),
-            ],
-          ),
-        );
+        final InlineData? inlineData = part.inlineData;
+        if (inlineData != null) {
+          final String referenceId = 'inline_data_$nonTextIndex';
+          nonTextIndex += 1;
+          final List<String> displayInfo = <String>[
+            if ((inlineData.displayName ?? '').isNotEmpty)
+              "'${inlineData.displayName}'",
+            if (inlineData.mimeType.isNotEmpty) 'type: ${inlineData.mimeType}',
+          ];
+          final String displayText = displayInfo.isEmpty
+              ? ''
+              : ' (${displayInfo.join(', ')})';
+          textParts.add(
+            '[Reference to inline binary data: $referenceId$displayText]',
+          );
+          userContents.add(
+            Content(
+              role: 'user',
+              parts: <Part>[
+                Part.text('Referenced inline data: $referenceId'),
+                part.copyWith(),
+              ],
+            ),
+          );
+          continue;
+        }
+
+        final FileData? fileData = part.fileData;
+        if (fileData != null) {
+          final String referenceId = 'file_data_$nonTextIndex';
+          nonTextIndex += 1;
+          final List<String> displayInfo = <String>[
+            if ((fileData.displayName ?? '').isNotEmpty)
+              "'${fileData.displayName}'",
+            if (fileData.fileUri.isNotEmpty) 'URI: ${fileData.fileUri}',
+            if ((fileData.mimeType ?? '').isNotEmpty)
+              'type: ${fileData.mimeType}',
+          ];
+          final String displayText = displayInfo.isEmpty
+              ? ''
+              : ' (${displayInfo.join(', ')})';
+          textParts.add('[Reference to file data: $referenceId$displayText]');
+          userContents.add(
+            Content(
+              role: 'user',
+              parts: <Part>[
+                Part.text('Referenced file data: $referenceId'),
+                part.copyWith(),
+              ],
+            ),
+          );
+        }
       }
 
       if (textParts.isNotEmpty) {

@@ -47,6 +47,10 @@ void main() {
           'WriteFile',
         ]);
         expect(request.config.systemInstruction, contains(workspace.path));
+        expect(
+          request.config.systemInstruction,
+          startsWith('Your environment is at '),
+        );
         await toolset.close();
       },
     );

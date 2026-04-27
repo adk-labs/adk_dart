@@ -17,11 +17,12 @@ LlmAgent createGoogleSearchAgent(Object model) {
     model: model,
     description:
         'An agent for performing Google search using the `google_search` tool',
-    instruction: '''
-You are a specialized Google search agent.
-
-When given a search query, use the `google_search` tool to find the related information.
-''',
+    instruction:
+        '\n'
+        '        You are a specialized Google search agent.\n'
+        '\n'
+        '        When given a search query, use the `google_search` tool to find the related information.\n'
+        '      ',
     tools: <Object>[googleSearch],
   );
 }
@@ -29,5 +30,6 @@ When given a search query, use the `google_search` tool to find the related info
 /// Agent tool preconfigured with Google Search capabilities.
 class GoogleSearchAgentTool extends AgentTool {
   /// Creates an [AgentTool] preconfigured for a Google Search agent.
-  GoogleSearchAgentTool({required LlmAgent agent}) : super(agent: agent);
+  GoogleSearchAgentTool({required LlmAgent agent})
+    : super(agent: agent, propagateGroundingMetadata: true);
 }

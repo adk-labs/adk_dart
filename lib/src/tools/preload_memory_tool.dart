@@ -66,8 +66,7 @@ class PreloadMemoryTool extends BaseTool {
     }
 
     llmRequest.appendInstructions(<String>[
-      '''
-The following content is from your previous conversations with the user.
+      '''The following content is from your previous conversations with the user.
 They may be useful for answering the user's current query.
 <PAST_CONVERSATIONS>
 $memoryText
@@ -85,9 +84,15 @@ String _memoryAsText(MemoryEntry memory) {
   if (text.isEmpty) {
     return '';
   }
-  final String author = memory.author ?? 'memory';
   if (memory.timestamp != null && memory.timestamp!.isNotEmpty) {
-    return 'Time: ${memory.timestamp}\n$author: $text';
+    final String timeText = 'Time: ${memory.timestamp}';
+    if (memory.author != null && memory.author!.isNotEmpty) {
+      return '$timeText\n${memory.author}: $text';
+    }
+    return '$timeText\n$text';
   }
-  return '$author: $text';
+  if (memory.author != null && memory.author!.isNotEmpty) {
+    return '${memory.author}: $text';
+  }
+  return text;
 }
