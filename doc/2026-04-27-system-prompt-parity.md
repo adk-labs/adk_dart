@@ -36,6 +36,11 @@ Reference baseline:
 - Work: Updated Gemma function declaration serialization to omit empty/null-like fields and matched Python's behavior for moving system instructions into initial user content only when request contents exist.
 - Reason: Gemma does not receive native tool declarations or system instructions, so these transformed prompts are the model-visible contract for tool calling.
 
+### 7. LiteLLM Fallback User Prompt
+
+- Work: Added the Python LiteLLM fallback that inserts `Handle the requests as specified in the System Instruction.` into an empty user turn before generation.
+- Reason: LiteLLM/OpenAI-style providers need a non-empty user message even when the task is fully expressed by system instructions. Without this fallback, Dart could send a different prompt shape than Python.
+
 ## Reviewed With No Code Change
 
 - Identity instruction: already matches `You are an agent. Your internal name is "...".`
@@ -50,3 +55,5 @@ Reference baseline:
 
 - Passed: `dart analyze lib/src/agents/sequential_agent.dart lib/src/examples/example_util.dart lib/src/flows/llm_flows/base_llm_flow.dart lib/src/flows/llm_flows/output_schema_processor.dart lib/src/models/gemma_llm.dart lib/src/models/llm_request.dart lib/src/tools/agent_tool.dart lib/src/tools/environment/environment_toolset.dart lib/src/tools/example_tool.dart lib/src/tools/google_search_agent_tool.dart lib/src/tools/load_artifacts_tool.dart lib/src/tools/load_mcp_resource_tool.dart lib/src/tools/preload_memory_tool.dart lib/src/tools/skill_toolset.dart test/environment_toolset_parity_test.dart test/examples_parity_test.dart test/gemma_llm_parity_test.dart test/mcp_resource_and_tool_test.dart test/system_prompt_parity_test.dart test/skill_toolset_parity_test.dart test/tools_google_parity_test.dart test/tools_memory_artifacts_test.dart`
 - Passed: `dart test test/system_prompt_parity_test.dart test/skill_toolset_parity_test.dart test/tools_google_parity_test.dart test/flow_processors_parity_test.dart test/tools_memory_artifacts_test.dart test/environment_toolset_parity_test.dart test/mcp_resource_and_tool_test.dart test/examples_parity_test.dart test/gemma_llm_parity_test.dart test/workflow_agents_test.dart`
+- Follow-up passed: `dart analyze lib/src/models/lite_llm.dart test/models_parity_batch2_test.dart`
+- Follow-up passed: `dart test test/models_parity_batch2_test.dart`

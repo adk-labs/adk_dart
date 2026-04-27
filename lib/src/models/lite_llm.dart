@@ -20,6 +20,8 @@ typedef LiteLlmCompletionsInvoker =
     });
 
 const String _thoughtSignatureSeparator = '__thought__';
+const String _systemInstructionFallbackText =
+    'Handle the requests as specified in the System Instruction.';
 
 /// OpenAI-compatible adapter that targets LiteLLM providers.
 class LiteLlm extends BaseLlm {
@@ -191,6 +193,7 @@ class LiteLlm extends BaseLlm {
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model ??= model;
     maybeAppendUserContent(prepared);
+    _appendFallbackUserContentIfMissing(prepared);
 
     if (completionsInvoker != null) {
       final List<Map<String, Object?>> responses = await completionsInvoker!(
@@ -231,6 +234,38 @@ class LiteLlm extends BaseLlm {
     }
     return '';
   }
+}
+
+bool _partHasPayload(Part part) {
+  if (part.text != null && part.text!.isNotEmpty) {
+    return true;
+  }
+  if (part.inlineData != null && part.inlineData!.data.isNotEmpty) {
+    return true;
+  }
+  if (part.fileData != null && part.fileData!.fileUri.isNotEmpty) {
+    return true;
+  }
+  if (part.functionResponse != null) {
+    return true;
+  }
+  return false;
+}
+
+void _appendFallbackUserContentIfMissing(LlmRequest request) {
+  for (int i = request.contents.length - 1; i >= 0; i -= 1) {
+    final Content content = request.contents[i];
+    if (content.role != 'user') {
+      continue;
+    }
+    if (content.parts.any(_partHasPayload)) {
+      return;
+    }
+    content.parts.add(Part.text(_systemInstructionFallbackText));
+    return;
+  }
+
+  request.contents.add(Content.userText(_systemInstructionFallbackText));
 }
 
 String? _finishReasonToErrorMessage(String finishReason) {

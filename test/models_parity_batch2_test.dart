@@ -1088,6 +1088,37 @@ void main() {
   });
 
   group('lite llm parity', () {
+    test(
+      'adds fallback text to empty user content before generation',
+      () async {
+        LlmRequest? captured;
+        final LiteLlm model = LiteLlm(
+          model: 'openai/gpt-4o-mini',
+          generateHook: (LlmRequest request, bool stream) async* {
+            captured = request;
+            yield LlmResponse(content: Content.modelText('ok'));
+          },
+        );
+
+        await model
+            .generateContent(
+              LlmRequest(
+                model: 'openai/gpt-4o-mini',
+                contents: <Content>[Content(role: 'user', parts: <Part>[])],
+                config: GenerateContentConfig(systemInstruction: 'Follow.'),
+              ),
+            )
+            .toList();
+
+        expect(captured, isNotNull);
+        expect(captured!.contents.last.role, 'user');
+        expect(
+          captured!.contents.last.parts.single.text,
+          'Handle the requests as specified in the System Instruction.',
+        );
+      },
+    );
+
     test('payload and parser map openai-style schema', () {
       final LlmRequest request = LlmRequest(
         model: 'openai/gpt-4o-mini',
