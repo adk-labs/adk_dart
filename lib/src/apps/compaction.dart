@@ -6,6 +6,7 @@ import '../events/event_actions.dart';
 import '../flows/llm_flows/contents.dart' as contents_flow;
 import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
+import '../telemetry/tracing.dart' as tracing;
 import '../types/content.dart';
 import 'app.dart';
 
@@ -151,23 +152,13 @@ Future<bool> runCompactionForTokenThresholdConfig({
     return false;
   }
 
-  final Content compacted = await summarizeEvents(
-    eventsToCompact,
-    summarizer: config.summarizer,
-  );
-
-  final Event compactionEvent = Event(
-    invocationId: 'compaction_${DateTime.now().microsecondsSinceEpoch}',
+  final Event compactionEvent = await _createCompactionEventWithTrace(
+    session: session,
+    config: config,
+    eventsToCompact: eventsToCompact,
+    trigger: 'token_threshold',
     author: agentName,
     branch: currentBranch,
-    actions: EventActions(
-      skipSummarization: true,
-      compaction: EventCompaction(
-        startTimestamp: eventsToCompact.first.timestamp,
-        endTimestamp: eventsToCompact.last.timestamp,
-        compactedContent: compacted,
-      ),
-    ),
   );
   await sessionService.appendEvent(session: session, event: compactionEvent);
   return true;
@@ -248,25 +239,106 @@ Future<bool> runCompactionForSlidingWindow({
     return false;
   }
 
-  final Content compacted = await summarizeEvents(
-    eventsToCompact,
-    summarizer: config.summarizer,
-  );
-
-  final Event compactionEvent = Event(
-    invocationId: 'compaction_${DateTime.now().microsecondsSinceEpoch}',
+  final Event compactionEvent = await _createCompactionEventWithTrace(
+    session: session,
+    config: config,
+    eventsToCompact: eventsToCompact,
+    trigger: 'sliding_window',
     author: app.rootAgent.name,
-    actions: EventActions(
-      skipSummarization: true,
-      compaction: EventCompaction(
-        startTimestamp: eventsToCompact.first.timestamp,
-        endTimestamp: eventsToCompact.last.timestamp,
-        compactedContent: compacted,
-      ),
-    ),
   );
   await sessionService.appendEvent(session: session, event: compactionEvent);
   return true;
+}
+
+Future<Event> _createCompactionEventWithTrace({
+  required Session session,
+  required EventsCompactionConfig config,
+  required List<Event> eventsToCompact,
+  required String trigger,
+  required String author,
+  String? branch,
+}) {
+  return tracing.tracer.inSpanAsync<Event>(
+    'compact_events $trigger',
+    (tracing.TraceSpanRecord span) async {
+      final Content compacted = await summarizeEvents(
+        eventsToCompact,
+        summarizer: config.summarizer,
+      );
+      final Event compactionEvent = Event(
+        invocationId: 'compaction_${DateTime.now().microsecondsSinceEpoch}',
+        author: author,
+        branch: branch,
+        actions: EventActions(
+          skipSummarization: true,
+          compaction: EventCompaction(
+            startTimestamp: eventsToCompact.first.timestamp,
+            endTimestamp: eventsToCompact.last.timestamp,
+            compactedContent: compacted,
+          ),
+        ),
+      );
+      span.setAttributes(_buildCompactionResultAttributes(compactionEvent));
+      return compactionEvent;
+    },
+    attributes: _buildCompactionAttributes(
+      sessionId: session.id,
+      trigger: trigger,
+      summarizerType: _summarizerType(config.summarizer),
+      eventCount: eventsToCompact.length,
+      tokenThreshold: config.tokenThreshold,
+      eventRetentionSize: config.eventRetentionSize,
+      compactionInterval: config.compactionInterval,
+      overlapSize: config.overlapSize,
+    ),
+  );
+}
+
+Map<String, Object?> _buildCompactionAttributes({
+  required String sessionId,
+  required String trigger,
+  required String summarizerType,
+  required int eventCount,
+  int? tokenThreshold,
+  int? eventRetentionSize,
+  int? compactionInterval,
+  int? overlapSize,
+}) {
+  final Map<String, Object?> attributes = <String, Object?>{
+    'gen_ai.operation.name': 'compact_events',
+    'gen_ai.conversation.id': sessionId,
+    'gen_ai.compaction.trigger': trigger,
+    'gen_ai.compaction.summarizer_type': summarizerType,
+    'gen_ai.compaction.event_count': eventCount,
+    'gen_ai.compaction.compaction_interval': compactionInterval,
+    'gen_ai.compaction.overlap_size': overlapSize,
+  };
+  if (tokenThreshold != null) {
+    attributes['gen_ai.compaction.token_threshold'] = tokenThreshold;
+  }
+  if (eventRetentionSize != null) {
+    attributes['gen_ai.compaction.event_retention_size'] = eventRetentionSize;
+  }
+  return attributes;
+}
+
+Map<String, Object?> _buildCompactionResultAttributes(Event event) {
+  final EventCompaction? compaction = event.actions.compaction;
+  if (compaction == null) {
+    return const <String, Object?>{};
+  }
+  return <String, Object?>{
+    'gen_ai.compaction.result_event_id': event.id,
+    'gen_ai.compaction.start_timestamp': compaction.startTimestamp,
+    'gen_ai.compaction.end_timestamp': compaction.endTimestamp,
+  };
+}
+
+String _summarizerType(Object? summarizer) {
+  if (summarizer == null) {
+    return 'default';
+  }
+  return summarizer.runtimeType.toString();
 }
 
 /// Returns the latest prompt token count estimate from [events].

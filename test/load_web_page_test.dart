@@ -82,6 +82,12 @@ void main() {
       final String loopback = await loadWebPage('http://127.0.0.1/');
       expect(loopback, contains('local or private address'));
 
+      final String documentation = await loadWebPage('http://192.0.2.1/');
+      expect(documentation, contains('local or private address'));
+
+      final String uniqueLocalIpv6 = await loadWebPage('http://[fc00::1]/');
+      expect(uniqueLocalIpv6, contains('local or private address'));
+
       final String file = await loadWebPage('file:///etc/passwd');
       expect(file, contains('only http and https URLs are supported'));
     });

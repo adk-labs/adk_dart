@@ -1232,6 +1232,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         normalizedContent = formatter(normalizedContent, eventType);
       } catch (error) {
         stderr.writeln('Content formatter failed: $error');
+        // Fail closed so a masking/formatting error cannot leak raw content.
+        normalizedContent = null;
       }
     }
 

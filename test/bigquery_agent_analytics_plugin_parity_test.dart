@@ -388,6 +388,8 @@ void main() {
 
       expect(sink.rows, hasLength(1));
       expect(sink.rows.first['event_type'], 'LLM_REQUEST');
+      expect(sink.rows.first['content'], isNull);
+      expect(sink.rows.first['content_parts'], isEmpty);
     });
 
     test('creates analytics views on startup when enabled', () async {
@@ -408,7 +410,9 @@ void main() {
       expect(capturedStatements, hasLength(1));
       expect(
         capturedStatements.single.first,
-        contains('CREATE OR REPLACE VIEW `project.dataset.v_invocation_starting`'),
+        contains(
+          'CREATE OR REPLACE VIEW `project.dataset.v_invocation_starting`',
+        ),
       );
       expect(
         capturedStatements.single.last,
@@ -435,26 +439,30 @@ void main() {
       expect(createCalls, 0);
     });
 
-    test('manual analytics view refresh replays generated statements', () async {
-      final List<List<String>> capturedStatements = <List<String>>[];
-      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
-        projectId: 'project',
-        datasetId: 'dataset',
-        sink: InMemoryBigQueryEventSink(),
-        analyticsViewExecutor: (List<String> statements) async {
-          capturedStatements.add(List<String>.from(statements));
-        },
-      );
+    test(
+      'manual analytics view refresh replays generated statements',
+      () async {
+        final List<List<String>> capturedStatements = <List<String>>[];
+        final BigQueryAgentAnalyticsPlugin plugin =
+            BigQueryAgentAnalyticsPlugin(
+              projectId: 'project',
+              datasetId: 'dataset',
+              sink: InMemoryBigQueryEventSink(),
+              analyticsViewExecutor: (List<String> statements) async {
+                capturedStatements.add(List<String>.from(statements));
+              },
+            );
 
-      await plugin.beforeRunCallback(
-        invocationContext: _newInvocationContext(invocationId: 'inv_refresh'),
-      );
-      await plugin.createAnalyticsViews();
+        await plugin.beforeRunCallback(
+          invocationContext: _newInvocationContext(invocationId: 'inv_refresh'),
+        );
+        await plugin.createAnalyticsViews();
 
-      expect(capturedStatements, hasLength(2));
-      expect(capturedStatements[0], isNotEmpty);
-      expect(capturedStatements[1], equals(capturedStatements[0]));
-    });
+        expect(capturedStatements, hasLength(2));
+        expect(capturedStatements[0], isNotEmpty);
+        expect(capturedStatements[1], equals(capturedStatements[0]));
+      },
+    );
 
     test('treats concurrent analytics view conflicts as non-fatal', () async {
       int createCalls = 0;

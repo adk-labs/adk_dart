@@ -38,19 +38,34 @@ Future<String> loadWebPage(
   if (uri.host.trim().isEmpty) {
     return 'Failed to fetch URL "$url": host is missing.';
   }
-  if (!allowPrivateAddresses) {
-    final String? blockedReason = await _blockedTargetReason(
-      uri.host,
-      timeout: timeout,
-    );
-    if (blockedReason != null) {
-      return 'Failed to fetch URL "$url": $blockedReason.';
+  final List<InternetAddress>? pinnedAddresses;
+  if (allowPrivateAddresses) {
+    pinnedAddresses = null;
+  } else {
+    try {
+      pinnedAddresses = await _resolveAllowedAddresses(
+        uri.host,
+        timeout: timeout,
+      );
+    } on _BlockedTargetException catch (e) {
+      return 'Failed to fetch URL "$url": ${e.message}.';
     }
   }
 
   final HttpClient client = HttpClient();
   client.connectionTimeout = timeout;
   client.findProxy = (Uri _) => 'DIRECT';
+  final List<InternetAddress>? addresses = pinnedAddresses;
+  if (addresses != null) {
+    client.connectionFactory = (Uri _, String? proxyHost, int? proxyPort) {
+      if (proxyHost != null || proxyPort != null) {
+        return Future<ConnectionTask<Socket>>.error(
+          const SocketException('Proxy use is disabled for loadWebPage.'),
+        );
+      }
+      return _connectPinned(uri: uri, addresses: addresses, timeout: timeout);
+    };
+  }
   try {
     final HttpClientRequest request = await client.getUrl(uri).timeout(timeout);
     request.followRedirects = false;
@@ -90,33 +105,68 @@ Future<String> loadWebPage(
   }
 }
 
-Future<String?> _blockedTargetReason(
+Future<List<InternetAddress>> _resolveAllowedAddresses(
   String host, {
   required Duration timeout,
 }) async {
   final String normalizedHost = host.trim().toLowerCase();
   if (normalizedHost == 'localhost' || normalizedHost.endsWith('.localhost')) {
-    return 'host resolves to a local or private address';
+    throw const _BlockedTargetException(
+      'host resolves to a local or private address',
+    );
   }
 
   final List<InternetAddress> addresses;
   try {
     addresses = await InternetAddress.lookup(normalizedHost).timeout(timeout);
   } on TimeoutException {
-    return 'DNS lookup timed out after ${_formatDuration(timeout)}';
+    throw _BlockedTargetException(
+      'DNS lookup timed out after ${_formatDuration(timeout)}',
+    );
   } on SocketException catch (e) {
-    return 'DNS lookup failed (${e.message})';
+    throw _BlockedTargetException('DNS lookup failed (${e.message})');
   }
 
   if (addresses.isEmpty) {
-    return 'host did not resolve to any address';
+    throw const _BlockedTargetException('host did not resolve to any address');
   }
   for (final InternetAddress address in addresses) {
     if (_isRestrictedAddress(address)) {
-      return 'host resolves to a local or private address';
+      throw const _BlockedTargetException(
+        'host resolves to a local or private address',
+      );
     }
   }
-  return null;
+  return List<InternetAddress>.unmodifiable(addresses);
+}
+
+Future<ConnectionTask<Socket>> _connectPinned({
+  required Uri uri,
+  required List<InternetAddress> addresses,
+  required Duration timeout,
+}) async {
+  final InternetAddress address = addresses.first;
+  final int port = _effectivePort(uri);
+
+  if (uri.scheme == 'https') {
+    final ConnectionTask<Socket> tcpTask = await Socket.startConnect(
+      address,
+      port,
+    ).timeout(timeout);
+    final Future<Socket> secureSocket = tcpTask.socket.then(
+      (Socket socket) => SecureSocket.secure(socket, host: uri.host),
+    );
+    return ConnectionTask.fromSocket<Socket>(secureSocket, tcpTask.cancel);
+  }
+
+  return Socket.startConnect(address, port).timeout(timeout);
+}
+
+int _effectivePort(Uri uri) {
+  if (uri.hasPort) {
+    return uri.port;
+  }
+  return uri.scheme == 'https' ? 443 : 80;
 }
 
 bool _isRestrictedAddress(InternetAddress address) {
@@ -134,6 +184,17 @@ bool _isRestrictedAddress(InternetAddress address) {
     }
     // Unique local addresses fc00::/7 are not safe for arbitrary fetches.
     if ((bytes[0] & 0xfe) == 0xfc) {
+      return true;
+    }
+    // Deprecated site-local addresses fec0::/10.
+    if (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0xc0) {
+      return true;
+    }
+    // Documentation prefix 2001:db8::/32 is not globally routable.
+    if (bytes[0] == 0x20 &&
+        bytes[1] == 0x01 &&
+        bytes[2] == 0x0d &&
+        bytes[3] == 0xb8) {
       return true;
     }
     // IPv4-mapped IPv6 address ::ffff:a.b.c.d.
@@ -169,10 +230,28 @@ bool _isRestrictedIpv4(List<int> bytes) {
   if (first == 192 && second == 0) {
     return true;
   }
+  if (first == 192 && second == 0 && bytes[2] == 2) {
+    return true;
+  }
+  if (first == 192 && second == 88 && bytes[2] == 99) {
+    return true;
+  }
   if (first == 198 && (second == 18 || second == 19)) {
     return true;
   }
+  if (first == 198 && second == 51 && bytes[2] == 100) {
+    return true;
+  }
+  if (first == 203 && second == 0 && bytes[2] == 113) {
+    return true;
+  }
   return false;
+}
+
+class _BlockedTargetException implements Exception {
+  const _BlockedTargetException(this.message);
+
+  final String message;
 }
 
 String _formatDuration(Duration duration) {

@@ -47,6 +47,23 @@ Reference baselines:
 - Work: Made parallel function-call execution fail eagerly and deep-merge nested state deltas.
 - Reason: JS/Python references added script execution, computer-use filtering, stronger streaming argument reconstruction, and safer parallel function-call semantics.
 
+### 7. Review Follow-Up: Web Fetch Pinning
+
+- Work: Pinned `loadWebPage` connections to the DNS result that passed restricted-address validation, while preserving the original host for HTTP Host and HTTPS certificate validation.
+- Work: Expanded restricted address checks for non-global documentation and unique-local ranges.
+- Reason: The initial SSRF hardening blocked private targets before fetch, but Python also avoids DNS rebinding by connecting to the vetted address. Dart needed the same post-validation connection behavior.
+
+### 8. Review Follow-Up: Compaction Tracing
+
+- Work: Wrapped token-threshold and sliding-window compaction summarization in `compact_events <trigger>` trace spans.
+- Work: Added compaction span attributes for trigger, summarizer type, event count, config values, result event ID, and compacted timestamp range.
+- Reason: Latest Python added OpenTelemetry visibility for compaction so compaction latency and output metadata can be correlated with session traces.
+
+### 9. Review Follow-Up: BigQuery Formatter Safety
+
+- Work: Changed BigQuery analytics `contentFormatter` exception handling to fail closed by dropping content before serialization.
+- Reason: Java reference now treats formatter failures as a masking failure and avoids logging raw unformatted content that may contain sensitive data.
+
 ## Verification
 
 - Passed: `dart analyze` on changed implementation and test files.
@@ -61,6 +78,12 @@ Reference baselines:
   - `test/computer_use_parity_test.dart`
   - `test/utils_missing_parity_test.dart`
   - `test/skill_toolset_parity_test.dart`
+- Passed review follow-up tests:
+  - `test/load_web_page_test.dart`
+  - `test/compaction_parity_test.dart`
+  - `test/bigquery_agent_analytics_plugin_parity_test.dart`
+  - `test/tools_batch2_parity_test.dart`
+  - `test/utils_missing_parity_test.dart`
 - Full `dart test` still has existing `test/dev_web_server_test.dart` failures unrelated to this sync:
   - `loads extra plugin via dynamic file-path class spec`
   - `retries and drains persisted a2a push deliveries after server restart`

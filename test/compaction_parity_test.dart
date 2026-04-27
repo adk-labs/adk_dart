@@ -116,6 +116,73 @@ void main() {
     },
   );
 
+  test('token-threshold compaction emits trace attributes', () async {
+    tracer.clear();
+    addTearDown(tracer.clear);
+
+    final InMemorySessionService sessionService = InMemorySessionService();
+    final Session session = await sessionService.createSession(
+      appName: 'app',
+      userId: 'u_trace',
+      sessionId: 's_trace',
+    );
+    session.events.addAll(<Event>[
+      Event(
+        invocationId: 'inv_1',
+        author: 'user',
+        timestamp: 1.0,
+        content: Content.userText('message one'),
+      ),
+      Event(
+        invocationId: 'inv_1',
+        author: 'root_agent',
+        timestamp: 2.0,
+        content: Content.modelText('response one'),
+        usageMetadata: <String, Object?>{'prompt_token_count': 100},
+      ),
+      Event(
+        invocationId: 'inv_2',
+        author: 'user',
+        timestamp: 3.0,
+        content: Content.userText('message two'),
+      ),
+    ]);
+
+    final bool compacted = await runCompactionForTokenThresholdConfig(
+      config: EventsCompactionConfig(
+        tokenThreshold: 10,
+        eventRetentionSize: 1,
+        compactionInterval: 4,
+        overlapSize: 2,
+        summarizer: (List<Event> events) =>
+            Content.modelText('trace summary ${events.length}'),
+      ),
+      session: session,
+      sessionService: sessionService,
+      agentName: 'root_agent',
+      currentBranch: null,
+    );
+
+    expect(compacted, isTrue);
+    final TraceSpanRecord span = tracer.finishedSpans.singleWhere(
+      (TraceSpanRecord span) => span.name == 'compact_events token_threshold',
+    );
+    expect(span.attributes['gen_ai.operation.name'], 'compact_events');
+    expect(span.attributes['gen_ai.conversation.id'], session.id);
+    expect(span.attributes['gen_ai.compaction.trigger'], 'token_threshold');
+    expect(span.attributes['gen_ai.compaction.event_count'], 2);
+    expect(span.attributes['gen_ai.compaction.token_threshold'], 10);
+    expect(span.attributes['gen_ai.compaction.event_retention_size'], 1);
+    expect(span.attributes['gen_ai.compaction.compaction_interval'], 4);
+    expect(span.attributes['gen_ai.compaction.overlap_size'], 2);
+    expect(
+      span.attributes['gen_ai.compaction.result_event_id'],
+      session.events.last.id,
+    );
+    expect(span.attributes['gen_ai.compaction.start_timestamp'], 1.0);
+    expect(span.attributes['gen_ai.compaction.end_timestamp'], 2.0);
+  });
+
   test('runner performs sliding-window compaction after invocation', () async {
     final Agent agent = Agent(name: 'root_agent', model: _NoopModel());
     final App app = App(
