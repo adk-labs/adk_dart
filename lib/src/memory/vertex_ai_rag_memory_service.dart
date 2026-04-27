@@ -11,6 +11,8 @@ import '_utils.dart';
 import 'base_memory_service.dart';
 import 'memory_entry.dart';
 
+const String _memoryDisplayNamePrefix = 'adk-memory-v1';
+
 /// One RAG corpus resource reference.
 class VertexRagStoreRagResource {
   /// Creates a RAG resource descriptor.
@@ -248,7 +250,11 @@ class VertexAiRagMemoryService extends BaseMemoryService {
       await _ragClient.uploadFile(
         corpusName: ragResource.ragCorpus,
         text: output.toString(),
-        displayName: '${session.appName}.${session.userId}.${session.id}',
+        displayName: _buildSourceDisplayName(
+          appName: session.appName,
+          userId: session.userId,
+          sessionId: session.id,
+        ),
       );
     }
   }
@@ -272,15 +278,19 @@ class VertexAiRagMemoryService extends BaseMemoryService {
         LinkedHashMap<String, List<List<Event>>>();
 
     for (final VertexAiRagContext context in response.contexts) {
-      if (!context.sourceDisplayName.startsWith('$appName.$userId.')) {
+      final _SourceDisplayName? source = _parseSourceDisplayName(
+        context.sourceDisplayName,
+      );
+      if (source == null ||
+          source.appName != appName ||
+          source.userId != userId) {
         continue;
       }
 
-      final String sessionId = context.sourceDisplayName.split('.').last;
       final List<Event> events = _eventsFromContextText(context.text);
 
       sessionEventsMap
-          .putIfAbsent(sessionId, () => <List<Event>>[])
+          .putIfAbsent(source.sessionId, () => <List<Event>>[])
           .add(events);
     }
 
@@ -308,6 +318,65 @@ class VertexAiRagMemoryService extends BaseMemoryService {
 
     return SearchMemoryResponse(memories: memoryResults);
   }
+}
+
+class _SourceDisplayName {
+  _SourceDisplayName({
+    required this.appName,
+    required this.userId,
+    required this.sessionId,
+  });
+
+  final String appName;
+  final String userId;
+  final String sessionId;
+}
+
+String _buildSourceDisplayName({
+  required String appName,
+  required String userId,
+  required String sessionId,
+}) {
+  return <String>[
+    _memoryDisplayNamePrefix,
+    _encodeDisplayNameSegment(appName),
+    _encodeDisplayNameSegment(userId),
+    _encodeDisplayNameSegment(sessionId),
+  ].join('.');
+}
+
+_SourceDisplayName? _parseSourceDisplayName(String displayName) {
+  final List<String> segments = displayName.split('.');
+  if (segments.length == 4 && segments.first == _memoryDisplayNamePrefix) {
+    try {
+      return _SourceDisplayName(
+        appName: _decodeDisplayNameSegment(segments[1]),
+        userId: _decodeDisplayNameSegment(segments[2]),
+        sessionId: _decodeDisplayNameSegment(segments[3]),
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  // Backward compatibility for documents created before names were encoded.
+  if (segments.length == 3) {
+    return _SourceDisplayName(
+      appName: segments[0],
+      userId: segments[1],
+      sessionId: segments[2],
+    );
+  }
+  return null;
+}
+
+String _encodeDisplayNameSegment(String value) {
+  return base64Url.encode(utf8.encode(value)).replaceAll('=', '');
+}
+
+String _decodeDisplayNameSegment(String value) {
+  final int padding = (4 - value.length % 4) % 4;
+  return utf8.decode(base64Url.decode('$value${''.padRight(padding, '=')}'));
 }
 
 List<Event> _eventsFromContextText(String text) {

@@ -243,7 +243,7 @@ Future<Event?> handleFunctionCallListAsync(
     );
   }).toList();
 
-  final List<Event?> results = await Future.wait(tasks);
+  final List<Event?> results = await Future.wait(tasks, eagerError: true);
   final List<Event> events = results.whereType<Event>().toList(growable: false);
 
   if (events.isEmpty) {
@@ -518,7 +518,7 @@ Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
       mergedParts.addAll(content.parts.map((Part part) => part.copyWith()));
     }
 
-    mergedActions.stateDelta.addAll(event.actions.stateDelta);
+    _deepMergeStateDelta(mergedActions.stateDelta, event.actions.stateDelta);
     mergedActions.artifactDelta.addAll(event.actions.artifactDelta);
     mergedActions.requestedAuthConfigs.addAll(
       event.actions.requestedAuthConfigs,
@@ -566,6 +566,31 @@ Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
 
   merged.timestamp = base.timestamp;
   return merged;
+}
+
+void _deepMergeStateDelta(
+  Map<String, Object?> target,
+  Map<String, Object?> source,
+) {
+  source.forEach((String key, Object? value) {
+    final Object? existing = target[key];
+    if (existing is Map && value is Map) {
+      final Map<String, Object?> nested = existing.map(
+        (Object? nestedKey, Object? nestedValue) =>
+            MapEntry('$nestedKey', nestedValue),
+      );
+      _deepMergeStateDelta(
+        nested,
+        value.map(
+          (Object? nestedKey, Object? nestedValue) =>
+              MapEntry('$nestedKey', nestedValue),
+        ),
+      );
+      target[key] = nested;
+      return;
+    }
+    target[key] = value;
+  });
 }
 
 /// Finds the originating function-call event for the latest response event.

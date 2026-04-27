@@ -34,11 +34,15 @@ class ComputerUseToolAdapter {
 /// Toolset that surfaces [BaseComputer] actions as ADK tools.
 class ComputerUseToolset extends BaseToolset {
   /// Creates a computer-use toolset for [computer].
-  ComputerUseToolset({required BaseComputer computer})
-    : _computer = computer,
-      super();
+  ComputerUseToolset({
+    required BaseComputer computer,
+    List<String>? excludedPredefinedFunctions,
+  }) : _computer = computer,
+       _excludedPredefinedFunctions = <String>{...?excludedPredefinedFunctions},
+       super();
 
   final BaseComputer _computer;
+  final Set<String> _excludedPredefinedFunctions;
   bool _initialized = false;
   List<ComputerUseTool>? _tools;
 
@@ -117,109 +121,122 @@ class ComputerUseToolset extends BaseToolset {
     await _ensureInitialized();
     final (int, int) screenSize = await _computer.screenSize();
 
-    _tools = <ComputerUseTool>[
-      ComputerUseTool(
-        name: 'open_web_browser',
-        func: () => _computer.openWebBrowser(),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'click_at',
-        func: ({required int x, required int y}) => _computer.clickAt(x, y),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'hover_at',
-        func: ({required int x, required int y}) => _computer.hoverAt(x, y),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'type_text_at',
-        func:
-            ({
-              required int x,
-              required int y,
-              required String text,
-              bool press_enter = true,
-              bool clear_before_typing = true,
-            }) => _computer.typeTextAt(
-              x,
-              y,
-              text,
-              pressEnter: press_enter,
-              clearBeforeTyping: clear_before_typing,
-            ),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'scroll_document',
-        func: ({required String direction}) =>
-            _computer.scrollDocument(direction),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'scroll_at',
-        func:
-            ({
-              required int x,
-              required int y,
-              required String direction,
-              required int magnitude,
-            }) => _computer.scrollAt(x, y, direction, magnitude),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'wait',
-        func: ({required int seconds}) => _computer.wait(seconds),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'go_back',
-        func: () => _computer.goBack(),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'go_forward',
-        func: () => _computer.goForward(),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'search',
-        func: () => _computer.search(),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'navigate',
-        func: ({required String url}) => _computer.navigate(url),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'key_combination',
-        func: ({required List<Object?> keys}) {
-          final List<String> normalized = keys
-              .map((Object? value) => '$value')
-              .toList(growable: false);
-          return _computer.keyCombination(normalized);
-        },
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'drag_and_drop',
-        func:
-            ({
-              required int x,
-              required int y,
-              required int destination_x,
-              required int destination_y,
-            }) => _computer.dragAndDrop(x, y, destination_x, destination_y),
-        screenSize: screenSize,
-      ),
-      ComputerUseTool(
-        name: 'current_state',
-        func: () => _computer.currentState(),
-        screenSize: screenSize,
-      ),
-    ];
+    _tools =
+        <ComputerUseTool>[
+              ComputerUseTool(
+                name: 'open_web_browser',
+                func: () => _computer.openWebBrowser(),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'click_at',
+                func: ({required int x, required int y}) =>
+                    _computer.clickAt(x, y),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'hover_at',
+                func: ({required int x, required int y}) =>
+                    _computer.hoverAt(x, y),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'type_text_at',
+                func:
+                    ({
+                      required int x,
+                      required int y,
+                      required String text,
+                      bool press_enter = true,
+                      bool clear_before_typing = true,
+                    }) => _computer.typeTextAt(
+                      x,
+                      y,
+                      text,
+                      pressEnter: press_enter,
+                      clearBeforeTyping: clear_before_typing,
+                    ),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'scroll_document',
+                func: ({required String direction}) =>
+                    _computer.scrollDocument(direction),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'scroll_at',
+                func:
+                    ({
+                      required int x,
+                      required int y,
+                      required String direction,
+                      required int magnitude,
+                    }) => _computer.scrollAt(x, y, direction, magnitude),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'wait',
+                func: ({required int seconds}) => _computer.wait(seconds),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'go_back',
+                func: () => _computer.goBack(),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'go_forward',
+                func: () => _computer.goForward(),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'search',
+                func: () => _computer.search(),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'navigate',
+                func: ({required String url}) => _computer.navigate(url),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'key_combination',
+                func: ({required List<Object?> keys}) {
+                  final List<String> normalized = keys
+                      .map((Object? value) => '$value')
+                      .toList(growable: false);
+                  return _computer.keyCombination(normalized);
+                },
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'drag_and_drop',
+                func:
+                    ({
+                      required int x,
+                      required int y,
+                      required int destination_x,
+                      required int destination_y,
+                    }) => _computer.dragAndDrop(
+                      x,
+                      y,
+                      destination_x,
+                      destination_y,
+                    ),
+                screenSize: screenSize,
+              ),
+              ComputerUseTool(
+                name: 'current_state',
+                func: () => _computer.currentState(),
+                screenSize: screenSize,
+              ),
+            ]
+            .where(
+              (ComputerUseTool tool) =>
+                  !_excludedPredefinedFunctions.contains(tool.name),
+            )
+            .toList(growable: false);
 
     return _tools!;
   }
@@ -254,6 +271,9 @@ class ComputerUseToolset extends BaseToolset {
         ToolDeclaration(
           computerUse: <String, Object?>{
             'environment': _computerEnvironmentValue(environment),
+            if (_excludedPredefinedFunctions.isNotEmpty)
+              'excludedPredefinedFunctions':
+                  _excludedPredefinedFunctions.toList()..sort(),
           },
         ),
       );

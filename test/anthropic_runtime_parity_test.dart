@@ -78,6 +78,36 @@ void main() {
     );
 
     test(
+      'thinking config is translated to Anthropic request payload',
+      () async {
+        final _RecordingAnthropicTransport transport =
+            _RecordingAnthropicTransport();
+        final AnthropicLlm llm = AnthropicLlm(
+          model: 'claude-sonnet-4-20250514',
+          restTransport: transport,
+          environment: <String, String>{'ANTHROPIC_API_KEY': 'test-key'},
+        );
+
+        await llm
+            .generateContent(
+              LlmRequest(
+                model: 'claude-sonnet-4-20250514',
+                contents: <Content>[Content.userText('think')],
+                config: GenerateContentConfig(
+                  thinkingConfig: <String, Object?>{'thinkingBudget': 1024},
+                ),
+              ),
+            )
+            .toList();
+
+        expect(transport.lastRequest!['thinking'], <String, Object?>{
+          'type': 'enabled',
+          'budget_tokens': 1024,
+        });
+      },
+    );
+
+    test(
       'streaming text yields partial chunks and a final aggregated response',
       () async {
         final AnthropicLlm llm = AnthropicLlm(
@@ -243,6 +273,102 @@ void main() {
           responses.last.content?.parts[1].functionCall?.args,
           <String, dynamic>{'city': 'Paris'},
         );
+      },
+    );
+
+    test(
+      'streaming thinking yields partial thought and final signed thought part',
+      () async {
+        final AnthropicLlm llm = AnthropicLlm(
+          model: 'claude-sonnet-4-20250514',
+          streamInvoker: ({required Map<String, Object?> request}) {
+            return Stream<Map<String, Object?>>.fromIterable(
+              <Map<String, Object?>>[
+                <String, Object?>{
+                  'type': 'message_start',
+                  'message': <String, Object?>{
+                    'usage': <String, Object?>{
+                      'input_tokens': 8,
+                      'output_tokens': 0,
+                    },
+                  },
+                },
+                <String, Object?>{
+                  'type': 'content_block_start',
+                  'index': 0,
+                  'content_block': <String, Object?>{
+                    'type': 'thinking',
+                    'thinking': '',
+                  },
+                },
+                <String, Object?>{
+                  'type': 'content_block_delta',
+                  'index': 0,
+                  'delta': <String, Object?>{
+                    'type': 'thinking_delta',
+                    'thinking': 'reason ',
+                  },
+                },
+                <String, Object?>{
+                  'type': 'content_block_delta',
+                  'index': 0,
+                  'delta': <String, Object?>{
+                    'type': 'thinking_delta',
+                    'thinking': 'step',
+                  },
+                },
+                <String, Object?>{
+                  'type': 'content_block_delta',
+                  'index': 0,
+                  'delta': <String, Object?>{
+                    'type': 'signature_delta',
+                    'signature': 'sig-thinking',
+                  },
+                },
+                <String, Object?>{
+                  'type': 'content_block_start',
+                  'index': 1,
+                  'content_block': <String, Object?>{
+                    'type': 'text',
+                    'text': '',
+                  },
+                },
+                <String, Object?>{
+                  'type': 'content_block_delta',
+                  'index': 1,
+                  'delta': <String, Object?>{
+                    'type': 'text_delta',
+                    'text': 'answer',
+                  },
+                },
+                <String, Object?>{
+                  'type': 'message_delta',
+                  'usage': <String, Object?>{'output_tokens': 6},
+                },
+                <String, Object?>{'type': 'message_stop'},
+              ],
+            );
+          },
+        );
+
+        final List<LlmResponse> responses = await llm
+            .generateContent(
+              LlmRequest(
+                model: 'claude-sonnet-4-20250514',
+                contents: <Content>[Content.userText('Hi')],
+              ),
+              stream: true,
+            )
+            .toList();
+
+        expect(responses.first.content?.parts.single.thought, isTrue);
+        expect(responses.first.content?.parts.single.text, 'reason ');
+        final List<Part> finalParts = responses.last.content!.parts;
+        expect(finalParts, hasLength(2));
+        expect(finalParts.first.thought, isTrue);
+        expect(finalParts.first.text, 'reason step');
+        expect(finalParts.first.thoughtSignature, 'sig-thinking'.codeUnits);
+        expect(finalParts.last.text, 'answer');
       },
     );
   });

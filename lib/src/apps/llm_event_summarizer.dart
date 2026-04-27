@@ -63,10 +63,12 @@ class LlmEventSummarizer extends BaseEventsSummarizer {
     );
 
     Content? summaryContent;
+    Object? usageMetadata;
     await for (final LlmResponse response in _llm.generateContent(
       llmRequest,
       stream: false,
     )) {
+      usageMetadata ??= response.usageMetadata;
       if (response.content != null) {
         summaryContent = response.content!.copyWith();
         break;
@@ -86,6 +88,11 @@ class LlmEventSummarizer extends BaseEventsSummarizer {
     );
     final EventActions actions = EventActions(compaction: compaction);
 
-    return Event(author: 'user', actions: actions, invocationId: Event.newId());
+    return Event(
+      author: 'user',
+      actions: actions,
+      invocationId: Event.newId(),
+      usageMetadata: usageMetadata,
+    );
   }
 }

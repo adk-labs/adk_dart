@@ -259,6 +259,20 @@ class _AnthropicToolUseAccumulator {
   String argsJson = '';
 }
 
+class _AnthropicThinkingAccumulator {
+  _AnthropicThinkingAccumulator({String? text, this.signature})
+    : text = StringBuffer(text ?? '');
+
+  final StringBuffer text;
+  String? signature;
+}
+
+class _AnthropicRedactedThinkingAccumulator {
+  _AnthropicRedactedThinkingAccumulator({this.data});
+
+  String? data;
+}
+
 /// Anthropic Claude adapter for ADK model requests.
 class AnthropicLlm extends BaseLlm {
   /// Creates an Anthropic adapter for [model].
@@ -337,6 +351,25 @@ class AnthropicLlm extends BaseLlm {
 
   /// Converts a [Part] into an Anthropic content block.
   static Map<String, Object?> partToMessageBlock(Part part) {
+    if (part.thought) {
+      if (part.text != null && part.text!.isNotEmpty) {
+        return <String, Object?>{
+          'type': 'thinking',
+          'thinking': part.text,
+          if (part.thoughtSignature != null)
+            'signature': utf8.decode(
+              part.thoughtSignature!,
+              allowMalformed: true,
+            ),
+        };
+      }
+      if (part.thoughtSignature != null) {
+        return <String, Object?>{
+          'type': 'redacted_thinking',
+          'data': utf8.decode(part.thoughtSignature!, allowMalformed: true),
+        };
+      }
+    }
     if (part.text != null) {
       return <String, Object?>{'type': 'text', 'text': part.text};
     }
@@ -446,6 +479,18 @@ class AnthropicLlm extends BaseLlm {
     final String type = '${block['type'] ?? ''}';
     if (type == 'text') {
       return Part.text('${block['text'] ?? ''}');
+    }
+    if (type == 'thinking') {
+      final String? signature = block['signature'] as String?;
+      return Part.text(
+        '${block['thinking'] ?? ''}',
+        thought: true,
+        thoughtSignature: signature == null ? null : utf8.encode(signature),
+      );
+    }
+    if (type == 'redacted_thinking' || type == 'redacted') {
+      final String data = '${block['data'] ?? block['signature'] ?? ''}';
+      return Part(thought: true, thoughtSignature: utf8.encode(data));
     }
     if (type == 'tool_use') {
       final Object? input = block['input'];
@@ -584,9 +629,13 @@ class AnthropicLlm extends BaseLlm {
         }
       }
     }
+    final Map<String, Object?>? thinking = _anthropicThinkingConfig(
+      request.config.thinkingConfig,
+    );
     return <String, Object?>{
       'model': request.model,
       'max_tokens': maxTokens,
+      if (thinking != null) 'thinking': thinking,
       if (stream) 'stream': true,
       if ((request.config.systemInstruction ?? '').isNotEmpty)
         'system': request.config.systemInstruction,
@@ -597,6 +646,29 @@ class AnthropicLlm extends BaseLlm {
     };
   }
 
+  Map<String, Object?>? _anthropicThinkingConfig(Object? thinkingConfig) {
+    if (thinkingConfig == null) {
+      return null;
+    }
+    final Object? rawBudget = _thinkingBudgetValue(thinkingConfig);
+    if (rawBudget == null) {
+      throw ArgumentError(
+        'Anthropic thinkingConfig requires a thinking_budget, thinkingBudget, or budget value.',
+      );
+    }
+    final int? budget = _intValueOrNull(rawBudget);
+    if (budget == null) {
+      throw ArgumentError('Anthropic thinking budget must be numeric.');
+    }
+    if (budget < 0) {
+      throw ArgumentError('Anthropic thinking budget must be non-negative.');
+    }
+    if (budget == 0) {
+      return <String, Object?>{'type': 'disabled'};
+    }
+    return <String, Object?>{'type': 'enabled', 'budget_tokens': budget};
+  }
+
   Stream<LlmResponse> _streamAnthropicResponses(
     Stream<Map<String, Object?>> rawStream,
     LlmRequest request,
@@ -604,6 +676,10 @@ class AnthropicLlm extends BaseLlm {
     final Map<int, StringBuffer> textBlocks = <int, StringBuffer>{};
     final Map<int, _AnthropicToolUseAccumulator> toolUseBlocks =
         <int, _AnthropicToolUseAccumulator>{};
+    final Map<int, _AnthropicThinkingAccumulator> thinkingBlocks =
+        <int, _AnthropicThinkingAccumulator>{};
+    final Map<int, _AnthropicRedactedThinkingAccumulator>
+    redactedThinkingBlocks = <int, _AnthropicRedactedThinkingAccumulator>{};
     int inputTokens = 0;
     int outputTokens = 0;
     String? finishReason;
@@ -623,6 +699,16 @@ class AnthropicLlm extends BaseLlm {
           final String blockType = '${block['type'] ?? ''}';
           if (blockType == 'text') {
             textBlocks[index] = StringBuffer('${block['text'] ?? ''}');
+          } else if (blockType == 'thinking') {
+            thinkingBlocks[index] = _AnthropicThinkingAccumulator(
+              text: '${block['thinking'] ?? ''}',
+              signature: block['signature'] as String?,
+            );
+          } else if (blockType == 'redacted_thinking') {
+            redactedThinkingBlocks[index] =
+                _AnthropicRedactedThinkingAccumulator(
+                  data: block['data'] as String?,
+                );
           } else if (blockType == 'tool_use') {
             toolUseBlocks[index] = _AnthropicToolUseAccumulator(
               id: '${block['id'] ?? ''}',
@@ -650,6 +736,27 @@ class AnthropicLlm extends BaseLlm {
               partial: true,
               turnComplete: false,
             );
+          } else if (deltaType == 'thinking_delta') {
+            final String thinking = '${delta['thinking'] ?? ''}';
+            if (thinking.isEmpty) {
+              continue;
+            }
+            final _AnthropicThinkingAccumulator accumulator = thinkingBlocks
+                .putIfAbsent(index, _AnthropicThinkingAccumulator.new);
+            accumulator.text.write(thinking);
+            yield LlmResponse(
+              modelVersion: request.model,
+              content: Content(
+                role: 'model',
+                parts: <Part>[Part.text(thinking, thought: true)],
+              ),
+              partial: true,
+              turnComplete: false,
+            );
+          } else if (deltaType == 'signature_delta') {
+            final _AnthropicThinkingAccumulator accumulator = thinkingBlocks
+                .putIfAbsent(index, _AnthropicThinkingAccumulator.new);
+            accumulator.signature = delta['signature'] as String?;
           } else if (deltaType == 'input_json_delta') {
             final _AnthropicToolUseAccumulator? tool = toolUseBlocks[index];
             if (tool == null) {
@@ -677,8 +784,29 @@ class AnthropicLlm extends BaseLlm {
     final List<int> indices = <int>{
       ...textBlocks.keys,
       ...toolUseBlocks.keys,
+      ...thinkingBlocks.keys,
+      ...redactedThinkingBlocks.keys,
     }.toList()..sort();
     for (final int index in indices) {
+      final _AnthropicThinkingAccumulator? thinking = thinkingBlocks[index];
+      if (thinking != null && thinking.text.isNotEmpty) {
+        parts.add(
+          Part.text(
+            thinking.text.toString(),
+            thought: true,
+            thoughtSignature: thinking.signature == null
+                ? null
+                : utf8.encode(thinking.signature!),
+          ),
+        );
+      }
+      final _AnthropicRedactedThinkingAccumulator? redacted =
+          redactedThinkingBlocks[index];
+      if (redacted?.data != null) {
+        parts.add(
+          Part(thought: true, thoughtSignature: utf8.encode(redacted!.data!)),
+        );
+      }
       final StringBuffer? text = textBlocks[index];
       if (text != null && text.isNotEmpty) {
         parts.add(Part.text(text.toString()));
@@ -876,6 +1004,33 @@ Map<String, Object?> _mapOf(Object? value) {
     return value.map((Object? key, Object? nested) => MapEntry('$key', nested));
   }
   return const <String, Object?>{};
+}
+
+Object? _thinkingBudgetValue(Object? thinkingConfig) {
+  if (thinkingConfig is Map) {
+    return thinkingConfig['thinking_budget'] ??
+        thinkingConfig['thinkingBudget'] ??
+        thinkingConfig['budget'];
+  }
+  try {
+    final dynamic dynamicConfig = thinkingConfig;
+    return dynamicConfig.thinkingBudget;
+  } catch (_) {
+    return null;
+  }
+}
+
+int? _intValueOrNull(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
 }
 
 int _intValue(Object? value, {int fallback = 0}) {

@@ -119,6 +119,36 @@ void main() {
       );
     });
 
+    test('excludes selected predefined computer tools from toolset', () async {
+      final _FakeComputer computer = _FakeComputer();
+      final ComputerUseToolset toolset = ComputerUseToolset(
+        computer: computer,
+        excludedPredefinedFunctions: <String>['wait', 'search'],
+      );
+      final LlmRequest request = LlmRequest();
+
+      final List<ComputerUseTool> tools = await toolset.getTools();
+      expect(
+        tools.map((ComputerUseTool tool) => tool.name),
+        isNot(contains('wait')),
+      );
+      expect(
+        tools.map((ComputerUseTool tool) => tool.name),
+        isNot(contains('search')),
+      );
+
+      await toolset.processLlmRequest(
+        toolContext: _toolContext(),
+        llmRequest: request,
+      );
+      final Map<String, Object?> computerUse =
+          request.config.tools!.single.computerUse! as Map<String, Object?>;
+      expect(computerUse['excludedPredefinedFunctions'], <String>[
+        'search',
+        'wait',
+      ]);
+    });
+
     test('adaptComputerUseTool swaps tool implementation and name', () async {
       final _FakeComputer computer = _FakeComputer();
       final ComputerUseToolset toolset = ComputerUseToolset(computer: computer);

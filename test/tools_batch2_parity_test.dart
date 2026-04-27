@@ -225,6 +225,7 @@ void main() {
 
       final String text = await loadWebPage(
         'http://${server.address.host}:${server.port}/',
+        allowPrivateAddresses: true,
       );
       expect(
         text,
@@ -243,6 +244,27 @@ void main() {
       final Map<String, Object?> query =
           props['query']! as Map<String, Object?>;
       expect(query['type'], 'string');
+    });
+
+    test('Gemini schema dereferencing breaks circular refs safely', () {
+      final Map<String, dynamic> schema = dereferenceSchema(<String, dynamic>{
+        r'$defs': <String, dynamic>{
+          'Node': <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'child': <String, dynamic>{r'$ref': '#/\$defs/Node'},
+            },
+          },
+        },
+        r'$ref': '#/\$defs/Node',
+      });
+
+      final Map<String, dynamic> properties =
+          schema['properties']! as Map<String, dynamic>;
+      expect(properties['child'], <String, dynamic>{
+        'type': 'object',
+        'description': 'Circular reference to Node',
+      });
     });
 
     test('SessionContext starts once and closes', () async {

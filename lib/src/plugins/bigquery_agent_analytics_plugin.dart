@@ -13,6 +13,7 @@ import '../agents/callback_context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/remote_a2a_agent.dart';
 import '../events/event.dart';
+import '../models/cache_metadata.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../tools/agent_tool.dart';
@@ -186,6 +187,7 @@ class EventData {
     this.model,
     this.modelVersion,
     this.usageMetadata,
+    this.cacheMetadata,
     this.status = 'OK',
     this.errorMessage,
     Map<String, Object?>? extraAttributes,
@@ -214,6 +216,9 @@ class EventData {
 
   /// Raw usage metadata emitted by model providers.
   final Object? usageMetadata;
+
+  /// Context cache metadata emitted by model providers.
+  final Object? cacheMetadata;
 
   /// Event status string stored in the `status` column.
   final String status;
@@ -1008,6 +1013,12 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           config.maxContentLength,
         ).value;
       }
+      if (llmResponse.cacheMetadata != null) {
+        content['cache'] = _recursiveSmartTruncate(
+          llmResponse.cacheMetadata,
+          config.maxContentLength,
+        ).value;
+      }
 
       String? spanId = _TraceManager.getCurrentSpanId(callbackContext);
       String? parentSpanId = _TraceManager.getCurrentSpanAndParent(
@@ -1046,6 +1057,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           timeToFirstTokenMs: tfftMs,
           modelVersion: llmResponse.modelVersion,
           usageMetadata: llmResponse.usageMetadata,
+          cacheMetadata: llmResponse.cacheMetadata,
           spanIdOverride: popped ? spanId : null,
           parentSpanIdOverride: popped ? parentSpanId : null,
         ),
@@ -1322,7 +1334,8 @@ SELECT
   location
 FROM `$projectId.$datasetId.$tableId`
 WHERE event_type = '$escapedEventType'
-'''.trim();
+'''
+        .trim();
   }
 
   Map<String, Object?> _enrichAttributes({
@@ -1346,6 +1359,12 @@ WHERE event_type = '$escapedEventType'
     if (eventData.usageMetadata != null) {
       attrs['usage_metadata'] = _recursiveSmartTruncate(
         eventData.usageMetadata,
+        config.maxContentLength,
+      ).value;
+    }
+    if (eventData.cacheMetadata != null) {
+      attrs['cache_metadata'] = _recursiveSmartTruncate(
+        eventData.cacheMetadata,
         config.maxContentLength,
       ).value;
     }
@@ -1691,6 +1710,21 @@ _TruncateResult _recursiveSmartTruncate(
       );
     }
     return _TruncateResult(value: value, isTruncated: false);
+  }
+  if (value is CacheMetadata) {
+    return _recursiveSmartTruncate(
+      <String, Object?>{
+        if (value.cacheName != null) 'cache_name': value.cacheName,
+        if (value.expireTime != null) 'expire_time': value.expireTime,
+        'fingerprint': value.fingerprint,
+        if (value.invocationsUsed != null)
+          'invocations_used': value.invocationsUsed,
+        'contents_count': value.contentsCount,
+        if (value.createdAt != null) 'created_at': value.createdAt,
+      },
+      maxLength,
+      visited,
+    );
   }
 
   final int identity = identityHashCode(value);

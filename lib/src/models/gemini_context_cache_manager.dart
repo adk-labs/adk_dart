@@ -9,6 +9,8 @@ import 'cache_metadata.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+const int _geminiMinimumCacheTokens = 4096;
+
 /// Result returned by cache creation calls.
 class GeminiCreatedCache {
   /// Creates a cache creation result for [name].
@@ -92,6 +94,12 @@ class GeminiContextCacheManager {
           request.cacheMetadata = recreated;
           return recreated;
         }
+        final CacheMetadata fingerprintOnly = CacheMetadata(
+          fingerprint: currentFingerprint,
+          contentsCount: existing.contentsCount,
+        );
+        request.cacheMetadata = fingerprintOnly;
+        return fingerprintOnly;
       }
 
       final int totalContentsCount = request.contents.length;
@@ -186,8 +194,11 @@ class GeminiContextCacheManager {
       return null;
     }
     final int? previousTokenCount = request.cacheableContentsTokenCount;
-    if (previousTokenCount == null ||
-        previousTokenCount < cacheConfig.minTokens) {
+    final int minimumTokenCount =
+        cacheConfig.minTokens > _geminiMinimumCacheTokens
+        ? cacheConfig.minTokens
+        : _geminiMinimumCacheTokens;
+    if (previousTokenCount == null || previousTokenCount < minimumTokenCount) {
       return null;
     }
     final String model = request.model ?? '';

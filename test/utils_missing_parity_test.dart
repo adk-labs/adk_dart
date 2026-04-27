@@ -375,6 +375,70 @@ void main() {
       expect(merged.content!.parts[1].functionCall?.id, startsWith('adk-'));
     });
 
+    test('streaming response aggregator supports bracket JSON paths', () async {
+      overrideFeatureEnabled(FeatureName.progressiveSseStreaming, true);
+      final StreamingResponseAggregator aggregator =
+          StreamingResponseAggregator();
+
+      await aggregator
+          .processResponse(
+            LlmResponse(
+              content: Content(
+                parts: <Part>[
+                  Part.fromFunctionCall(
+                    name: 'configure',
+                    partialArgs: <Map<String, Object?>>[
+                      <String, Object?>{
+                        'json_path': r"$['database']['host']",
+                        'string_value': 'db',
+                      },
+                    ],
+                    willContinue: true,
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList();
+      await aggregator
+          .processResponse(
+            LlmResponse(
+              content: Content(
+                parts: <Part>[
+                  Part.fromFunctionCall(
+                    name: '',
+                    partialArgs: <Map<String, Object?>>[
+                      <String, Object?>{
+                        'json_path': r"$['database']['host']",
+                        'string_value': '.example',
+                      },
+                      <String, Object?>{
+                        'json_path': r"$.database['port']",
+                        'number_value': 5432,
+                      },
+                    ],
+                    willContinue: false,
+                  ),
+                ],
+              ),
+              finishReason: 'STOP',
+            ),
+          )
+          .toList();
+
+      final Map<String, dynamic> args = aggregator
+          .close()!
+          .content!
+          .parts
+          .single
+          .functionCall!
+          .args;
+      expect(args['database'], <String, Object?>{
+        'host': 'db.example',
+        'port': 5432,
+      });
+    });
+
     test(
       'streaming response aggregator preserves thought signatures and grounding metadata',
       () async {

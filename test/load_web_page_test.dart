@@ -20,6 +20,7 @@ void main() {
 
       final String text = await loadWebPage(
         'http://${server.address.host}:${server.port}/missing',
+        allowPrivateAddresses: true,
       );
       expect(text, contains('HTTP 404'));
       expect(text, contains('Failed to fetch URL'));
@@ -45,6 +46,7 @@ void main() {
       final String text = await loadWebPage(
         'http://${server.address.host}:${server.port}/slow',
         timeout: const Duration(milliseconds: 50),
+        allowPrivateAddresses: true,
       );
       expect(text, contains('timed out after 50ms'));
     });
@@ -68,8 +70,20 @@ void main() {
       final String text = await loadWebPage(
         'http://${server.address.host}:${server.port}/large',
         maxResponseBytes: 128,
+        allowPrivateAddresses: true,
       );
       expect(text, contains('response exceeded 128 bytes'));
+    });
+
+    test('blocks local and private network targets by default', () async {
+      final String localhost = await loadWebPage('http://localhost/');
+      expect(localhost, contains('local or private address'));
+
+      final String loopback = await loadWebPage('http://127.0.0.1/');
+      expect(loopback, contains('local or private address'));
+
+      final String file = await loadWebPage('file:///etc/passwd');
+      expect(file, contains('only http and https URLs are supported'));
     });
   });
 }

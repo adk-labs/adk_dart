@@ -24,33 +24,41 @@ String toSnakeCase(String text) {
 Map<String, dynamic> dereferenceSchema(Map<String, dynamic> schema) {
   final Map<String, dynamic> defs = _castMap(schema[r'$defs']);
 
-  dynamic resolveRefs(dynamic node) {
+  dynamic resolveRefs(dynamic node, Set<String> activeRefs) {
     if (node is Map) {
       final Map<String, dynamic> map = _castMap(node);
       if (map.containsKey(r'$ref')) {
         final String ref = '${map[r'$ref']}';
         final String refKey = ref.split('/').last;
         if (defs.containsKey(refKey)) {
+          if (activeRefs.contains(ref)) {
+            return <String, dynamic>{
+              'type': 'object',
+              'description': 'Circular reference to $refKey',
+            };
+          }
           final Map<String, dynamic> resolved = _castMap(defs[refKey]);
           final Map<String, dynamic> merged = <String, dynamic>{
             ...resolved,
             ...map,
           };
           merged.remove(r'$ref');
-          return resolveRefs(merged);
+          return resolveRefs(merged, <String>{...activeRefs, ref});
         }
       }
       return map.map((String key, dynamic value) {
-        return MapEntry(key, resolveRefs(value));
+        return MapEntry(key, resolveRefs(value, activeRefs));
       });
     }
     if (node is List) {
-      return node.map(resolveRefs).toList(growable: false);
+      return node
+          .map((dynamic item) => resolveRefs(item, activeRefs))
+          .toList(growable: false);
     }
     return node;
   }
 
-  final Map<String, dynamic> result = _castMap(resolveRefs(schema));
+  final Map<String, dynamic> result = _castMap(resolveRefs(schema, <String>{}));
   result.remove(r'$defs');
   return result;
 }

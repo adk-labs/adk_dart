@@ -54,8 +54,7 @@ class _QueuedHttpClient extends http.BaseClient {
 class _RecordingMemoryBankClient implements VertexAiMemoryBankApiClient {
   final List<int> directBatchSizes = <int>[];
   final List<String> createdFacts = <String>[];
-  final List<Map<String, Object?>> generatedEvents =
-      <Map<String, Object?>>[];
+  final List<Map<String, Object?>> generatedEvents = <Map<String, Object?>>[];
   final List<Map<String, Object?>> directConfigs = <Map<String, Object?>>[];
   final List<VertexAiRetrievedMemory> retrieved = <VertexAiRetrievedMemory>[];
 
@@ -205,7 +204,8 @@ void main() {
       expect(content['role'], 'user');
       final List<Object?> parts = content['parts'] as List<Object?>;
       expect(parts, hasLength(2));
-      final Map<Object?, Object?> textPart = parts.first as Map<Object?, Object?>;
+      final Map<Object?, Object?> textPart =
+          parts.first as Map<Object?, Object?>;
       expect(textPart['thought_signature'], 'CQoL');
       final Map<Object?, Object?> inlineDataPart =
           parts[1] as Map<Object?, Object?>;
@@ -281,19 +281,18 @@ void main() {
       );
     });
 
-    test('requires project/location or express mode api key by default', () async {
-      final VertexAiMemoryBankService service = VertexAiMemoryBankService(
-        agentEngineId: 'ae_missing',
-      );
-      await expectLater(
-        service.searchMemory(
-          appName: 'app',
-          userId: 'u1',
-          query: 'q',
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
-    });
+    test(
+      'requires project/location or express mode api key by default',
+      () async {
+        final VertexAiMemoryBankService service = VertexAiMemoryBankService(
+          agentEngineId: 'ae_missing',
+        );
+        await expectLater(
+          service.searchMemory(appName: 'app', userId: 'u1', query: 'q'),
+          throwsA(isA<ArgumentError>()),
+        );
+      },
+    );
 
     test('http api client shapes requests and parses retrieval rows', () async {
       final _QueuedHttpClient httpClient = _QueuedHttpClient(
@@ -433,8 +432,63 @@ void main() {
         await service.addSessionToMemory(session);
 
         expect(ragClient.uploads, hasLength(1));
-        expect(ragClient.uploads.first['display_name'], 'app.u1.s1');
+        expect(
+          ragClient.uploads.first['display_name'],
+          'adk-memory-v1.YXBw.dTE.czE',
+        );
         expect(ragClient.uploads.first['text'], contains('hello world'));
+      },
+    );
+
+    test(
+      'encoded display names keep app and user scope exact when values contain dots',
+      () async {
+        final _RecordingRagClient ragClient = _RecordingRagClient();
+        final VertexAiRagMemoryService service = VertexAiRagMemoryService(
+          ragCorpus: 'corpus_1',
+          ragClient: ragClient,
+        );
+
+        await service.addSessionToMemory(
+          Session(
+            id: 'session.with.dot',
+            appName: 'app.with.dot',
+            userId: 'user.with.dot',
+            events: <Event>[
+              Event(
+                invocationId: 'inv_1',
+                author: 'user',
+                timestamp: 1,
+                content: Content.userText('scoped memory payload'),
+              ),
+            ],
+          ),
+        );
+
+        final String displayName = ragClient.uploads.single['display_name']!;
+        expect(displayName, startsWith('adk-memory-v1.'));
+        expect(displayName.split('.'), hasLength(4));
+        ragClient.response = VertexAiRagRetrievalResponse(
+          contexts: <VertexAiRagContext>[
+            VertexAiRagContext(
+              sourceDisplayName: displayName,
+              text: '{"author":"user","timestamp":1,"text":"scoped"}',
+            ),
+            VertexAiRagContext(
+              sourceDisplayName: 'app.with.dot.user.with.dot.session.with.dot',
+              text: '{"author":"user","timestamp":2,"text":"legacy skip"}',
+            ),
+          ],
+        );
+
+        final SearchMemoryResponse result = await service.searchMemory(
+          appName: 'app.with.dot',
+          userId: 'user.with.dot',
+          query: 'scoped',
+        );
+
+        expect(result.memories, hasLength(1));
+        expect(result.memories.single.content.parts.single.text, 'scoped');
       },
     );
 

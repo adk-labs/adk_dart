@@ -74,15 +74,13 @@ class StreamingResponseAggregator {
   }
 
   Object? _getValueByJsonPath(String jsonPath) {
-    final String path = jsonPath.startsWith(r'$.')
-        ? jsonPath.substring(2)
-        : jsonPath;
-    if (path.isEmpty) {
+    final List<String> pathParts = _jsonPathParts(jsonPath);
+    if (pathParts.isEmpty) {
       return null;
     }
 
     Object? current = _currentFcArgs;
-    for (final String part in path.split('.')) {
+    for (final String part in pathParts) {
       if (current is! Map<String, Object?> || !current.containsKey(part)) {
         return null;
       }
@@ -92,14 +90,11 @@ class StreamingResponseAggregator {
   }
 
   void _setValueByJsonPath(String jsonPath, Object? value) {
-    final String path = jsonPath.startsWith(r'$.')
-        ? jsonPath.substring(2)
-        : jsonPath;
-    if (path.isEmpty) {
+    final List<String> pathParts = _jsonPathParts(jsonPath);
+    if (pathParts.isEmpty) {
       return;
     }
 
-    final List<String> pathParts = path.split('.');
     Map<String, Object?> current = _currentFcArgs;
     for (final String part in pathParts.take(pathParts.length - 1)) {
       final Object? next = current[part];
@@ -476,4 +471,77 @@ class StreamingResponseAggregator {
       partial: false,
     );
   }
+}
+
+List<String> _jsonPathParts(String jsonPath) {
+  String path = jsonPath.trim();
+  if (path.startsWith(r'$')) {
+    path = path.substring(1);
+  }
+  if (path.startsWith('.')) {
+    path = path.substring(1);
+  }
+  if (path.isEmpty) {
+    return const <String>[];
+  }
+
+  final List<String> parts = <String>[];
+  final StringBuffer current = StringBuffer();
+  int index = 0;
+  while (index < path.length) {
+    final String char = path[index];
+    if (char == '.') {
+      if (current.isNotEmpty) {
+        parts.add(current.toString());
+        current.clear();
+      }
+      index += 1;
+      continue;
+    }
+    if (char == '[') {
+      if (current.isNotEmpty) {
+        parts.add(current.toString());
+        current.clear();
+      }
+      final int start = index + 1;
+      if (start >= path.length) {
+        return const <String>[];
+      }
+      final String quote = path[start];
+      if (quote != '\'' && quote != '"') {
+        return const <String>[];
+      }
+      final StringBuffer quoted = StringBuffer();
+      index = start + 1;
+      bool closed = false;
+      while (index < path.length) {
+        final String quotedChar = path[index];
+        if (quotedChar == r'\' && index + 1 < path.length) {
+          quoted.write(path[index + 1]);
+          index += 2;
+          continue;
+        }
+        if (quotedChar == quote &&
+            index + 1 < path.length &&
+            path[index + 1] == ']') {
+          closed = true;
+          index += 2;
+          break;
+        }
+        quoted.write(quotedChar);
+        index += 1;
+      }
+      if (!closed || quoted.isEmpty) {
+        return const <String>[];
+      }
+      parts.add(quoted.toString());
+      continue;
+    }
+    current.write(char);
+    index += 1;
+  }
+  if (current.isNotEmpty) {
+    parts.add(current.toString());
+  }
+  return parts;
 }

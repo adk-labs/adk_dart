@@ -13,9 +13,46 @@ class _NoopModel extends BaseLlm {
   }
 }
 
+class _UsageModel extends BaseLlm {
+  _UsageModel() : super(model: 'usage');
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    yield LlmResponse(
+      content: Content.modelText('summary'),
+      usageMetadata: <String, Object?>{'total_token_count': 7},
+    );
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) => stream.toList();
 
 void main() {
+  test(
+    'llm event summarizer preserves usage metadata on compaction event',
+    () async {
+      final LlmEventSummarizer summarizer = LlmEventSummarizer(
+        llm: _UsageModel(),
+      );
+
+      final Event? event = await summarizer.maybeSummarizeEvents(
+        events: <Event>[
+          Event(
+            invocationId: 'inv_1',
+            author: 'user',
+            content: Content.userText('hello'),
+          ),
+        ],
+      );
+
+      expect(event, isNotNull);
+      expect(event!.usageMetadata, <String, Object?>{'total_token_count': 7});
+    },
+  );
+
   test(
     'compaction request processor appends token-threshold compaction event',
     () async {

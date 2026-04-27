@@ -68,6 +68,7 @@ class _FakeCodeExecutor extends BaseCodeExecutor {
 
   final CodeExecutionResult result;
   String? lastCode;
+  String? lastExecuteType;
 
   @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
@@ -81,6 +82,7 @@ class _FakeCodeExecutor extends BaseCodeExecutor {
     CodeExecutionInput codeExecutionInput,
   ) async {
     lastCode = codeExecutionInput.code;
+    lastExecuteType = codeExecutionInput.executeType;
     return result;
   }
 }
@@ -150,6 +152,7 @@ void main() {
         'load_skill',
         'load_skill_resource',
         'run_skill_script',
+        'run_skill_inline_script',
       ]);
     });
 
@@ -521,6 +524,33 @@ void main() {
         Map<String, Object?>.from(invalidArgs! as Map)['error_code'],
         'INVALID_ARGUMENTS',
       );
+    });
+
+    test('run_skill_inline_script executes configured code executor', () async {
+      final _FakeCodeExecutor fakeExecutor = _FakeCodeExecutor(
+        CodeExecutionResult(stdout: 'inline done', stderr: '', exitCode: 0),
+      );
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        codeExecutor: fakeExecutor,
+      );
+      final BaseTool runTool = (await toolset.getTools())[4];
+
+      final Object? result = await runTool.run(
+        args: <String, Object?>{
+          'script_content': 'print("inline done")',
+          'language': 'python',
+        },
+        toolContext: _newToolContext(),
+      );
+
+      final Map<String, Object?> payload = Map<String, Object?>.from(
+        result! as Map,
+      );
+      expect(payload['status'], 'success');
+      expect(payload['stdout'], 'inline done');
+      expect(fakeExecutor.lastCode, 'print("inline done")');
+      expect(fakeExecutor.lastExecuteType, 'python');
     });
 
     test(

@@ -332,7 +332,10 @@ bool _isAnthropicModel(String model) {
   return false;
 }
 
-List<Map<String, Object?>> _contentToMessages(Content content, {String model = ''}) {
+List<Map<String, Object?>> _contentToMessages(
+  Content content, {
+  String model = '',
+}) {
   final String role = content.role == 'model' ? 'assistant' : '${content.role}';
   final List<Map<String, Object?>> output = <Map<String, Object?>>[];
   final List<Map<String, Object?>> toolResponses = <Map<String, Object?>>[];
@@ -381,18 +384,39 @@ List<Map<String, Object?>> _contentToMessages(Content content, {String model = '
       continue;
     }
     if (part.inlineData != null) {
-      parts.add(<String, Object?>{
-        'type': 'image_url',
-        'image_url': <String, Object?>{
-          'url':
-              'data:${part.inlineData!.mimeType};base64,${base64Encode(part.inlineData!.data)}',
-        },
-      });
+      final String mimeType = part.inlineData!.mimeType;
+      final String encodedData = base64Encode(part.inlineData!.data);
+      if (_isAudioMimeType(mimeType)) {
+        parts.add(<String, Object?>{
+          'type': 'input_audio',
+          'input_audio': <String, Object?>{
+            'data': encodedData,
+            'format': _audioFormatFromMimeType(mimeType),
+          },
+        });
+      } else {
+        parts.add(<String, Object?>{
+          'type': 'image_url',
+          'image_url': <String, Object?>{
+            'url': 'data:$mimeType;base64,$encodedData',
+          },
+        });
+      }
     } else if (part.fileData != null && part.fileData!.fileUri.isNotEmpty) {
-      parts.add(<String, Object?>{
-        'type': 'file_url',
-        'file_url': <String, Object?>{'url': part.fileData!.fileUri},
-      });
+      final String mimeType = part.fileData!.mimeType ?? '';
+      final String provider = LiteLlm.getProviderFromModel(model);
+      if (_isAudioMimeType(mimeType) &&
+          (provider == 'openai' || provider == 'azure')) {
+        parts.add(<String, Object?>{
+          'type': 'text',
+          'text': '[File reference: "${part.fileData!.fileUri}"]',
+        });
+      } else {
+        parts.add(<String, Object?>{
+          'type': 'file_url',
+          'file_url': <String, Object?>{'url': part.fileData!.fileUri},
+        });
+      }
     }
   }
 
@@ -403,7 +427,9 @@ List<Map<String, Object?>> _contentToMessages(Content content, {String model = '
   final Map<String, Object?> message = <String, Object?>{'role': role};
   if (_isAnthropicModel(model) && reasoningParts.isNotEmpty) {
     final List<Map<String, Object?>> thinkingBlocks = reasoningParts
-        .where((Part part) => part.thoughtSignature != null && part.text != null)
+        .where(
+          (Part part) => part.thoughtSignature != null && part.text != null,
+        )
         .map(
           (Part part) => <String, Object?>{
             'type': 'thinking',
@@ -449,6 +475,29 @@ List<Map<String, Object?>> _contentToMessages(Content content, {String model = '
   }
   output.add(message);
   return output;
+}
+
+bool _isAudioMimeType(String mimeType) {
+  return mimeType.trim().toLowerCase().startsWith('audio/');
+}
+
+String _audioFormatFromMimeType(String mimeType) {
+  final String normalized = mimeType.split(';').first.trim().toLowerCase();
+  final String subtype = normalized.contains('/')
+      ? normalized.split('/').last
+      : normalized;
+  switch (subtype) {
+    case 'mpeg':
+    case 'mp3':
+      return 'mp3';
+    case 'wav':
+    case 'wave':
+    case 'x-wav':
+    case 'vnd.wave':
+      return 'wav';
+    default:
+      return subtype.startsWith('x-') ? subtype.substring(2) : subtype;
+  }
 }
 
 Part _parseFunctionCall(Map<String, Object?> callMap) {

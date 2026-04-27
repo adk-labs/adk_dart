@@ -86,6 +86,44 @@ void main() {
       expect(responses.single.usageMetadata, isA<Map<String, Object?>>());
     });
 
+    test('extracts Google API version suffix from baseUrl', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        nonStreamResponse: <String, Object?>{
+          'candidates': <Object?>[
+            <String, Object?>{
+              'content': <String, Object?>{
+                'role': 'model',
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'ok'},
+                ],
+              },
+              'finishReason': 'STOP',
+            },
+          ],
+        },
+      );
+      final Gemini model = Gemini(
+        baseUrl: 'https://generativelanguage.googleapis.com/v1alpha',
+        restTransport: transport,
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      await model
+          .generateContent(
+            LlmRequest(
+              model: 'gemini-2.5-flash',
+              contents: <Content>[Content.userText('hello')],
+            ),
+          )
+          .toList();
+
+      expect(
+        transport.lastBaseUrl,
+        'https://generativelanguage.googleapis.com/',
+      );
+      expect(transport.lastApiVersion, 'v1alpha');
+    });
+
     test('throws when API key is missing', () async {
       final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
         nonStreamResponse: <String, Object?>{

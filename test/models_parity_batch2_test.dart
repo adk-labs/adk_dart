@@ -5,9 +5,12 @@ import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
 class _FakeGeminiCacheClient implements GeminiCacheClient {
+  _FakeGeminiCacheClient({this.failCreate = false});
+
   int createCalls = 0;
   int deleteCalls = 0;
   String? deletedName;
+  final bool failCreate;
 
   @override
   Future<GeminiCreatedCache> createCache({
@@ -20,6 +23,9 @@ class _FakeGeminiCacheClient implements GeminiCacheClient {
     LlmToolConfig? toolConfig,
   }) async {
     createCalls += 1;
+    if (failCreate) {
+      throw StateError('create failed');
+    }
     return GeminiCreatedCache(name: 'caches/cache-$createCalls');
   }
 
@@ -183,7 +189,7 @@ void main() {
         final String fingerprint = manager.fingerprintCacheableContents(
           request,
         );
-        request.cacheableContentsTokenCount = 20;
+        request.cacheableContentsTokenCount = 5000;
         request.cacheMetadata = CacheMetadata(
           cacheName: 'caches/expired',
           expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 - 1,
@@ -201,6 +207,44 @@ void main() {
         expect(client.deleteCalls, 1);
         expect(client.createCalls, 1);
         expect(request.config.cachedContent, metadata.cacheName);
+      },
+    );
+
+    test(
+      'cache recreation failure preserves matching prefix fingerprint metadata',
+      () async {
+        final _FakeGeminiCacheClient client = _FakeGeminiCacheClient(
+          failCreate: true,
+        );
+        final GeminiContextCacheManager manager = GeminiContextCacheManager(
+          cacheClient: client,
+        );
+        final LlmRequest request = LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+          cacheConfig: ContextCacheConfig(minTokens: 10),
+        );
+        final String fingerprint = manager.fingerprintCacheableContents(
+          request,
+        );
+        request.cacheableContentsTokenCount = 5000;
+        request.cacheMetadata = CacheMetadata(
+          cacheName: 'caches/expired',
+          expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 - 1,
+          fingerprint: fingerprint,
+          invocationsUsed: 0,
+          contentsCount: 1,
+        );
+
+        final CacheMetadata? metadata = await manager.handleContextCaching(
+          request,
+        );
+
+        expect(client.createCalls, 1);
+        expect(metadata, isNotNull);
+        expect(metadata!.cacheName, isNull);
+        expect(metadata.fingerprint, fingerprint);
+        expect(metadata.contentsCount, 1);
       },
     );
   });
@@ -946,14 +990,16 @@ void main() {
       expect(listBlock['content'], '[]');
     });
 
-    test('unknown inbound content blocks are preserved as text', () {
+    test('inbound thinking blocks are preserved as thought parts', () {
       final LlmResponse response = AnthropicLlm.messageToLlmResponse(
         <String, Object?>{
           'content': <Object?>[
             <String, Object?>{
               'type': 'thinking',
-              'summary': 'token-efficient reasoning block',
+              'thinking': 'token-efficient reasoning block',
+              'signature': 'sig-thinking',
             },
+            <String, Object?>{'type': 'redacted_thinking', 'data': 'hidden'},
             'raw-non-map-block',
           ],
           'usage': <String, Object?>{'input_tokens': 1, 'output_tokens': 1},
@@ -961,12 +1007,48 @@ void main() {
         },
       );
 
-      expect(response.content?.parts, hasLength(2));
+      expect(response.content?.parts, hasLength(3));
       expect(
-        response.content?.parts.first.text,
-        contains('Unsupported anthropic content block'),
+        response.content?.parts[0].text,
+        'token-efficient reasoning block',
       );
-      expect(response.content?.parts.last.text, 'raw-non-map-block');
+      expect(response.content?.parts[0].thought, isTrue);
+      expect(
+        response.content?.parts[0].thoughtSignature,
+        utf8.encode('sig-thinking'),
+      );
+      expect(response.content?.parts[1].text, isNull);
+      expect(response.content?.parts[1].thought, isTrue);
+      expect(
+        response.content?.parts[1].thoughtSignature,
+        utf8.encode('hidden'),
+      );
+      expect(response.content?.parts[2].text, 'raw-non-map-block');
+    });
+
+    test('outbound thought parts map to Anthropic thinking blocks', () {
+      final Map<String, Object?> thinkingBlock =
+          AnthropicLlm.partToMessageBlock(
+            Part.text(
+              'reasoning step',
+              thought: true,
+              thoughtSignature: utf8.encode('sig-thinking'),
+            ),
+          );
+      expect(thinkingBlock, <String, Object?>{
+        'type': 'thinking',
+        'thinking': 'reasoning step',
+        'signature': 'sig-thinking',
+      });
+
+      final Map<String, Object?> redactedBlock =
+          AnthropicLlm.partToMessageBlock(
+            Part(thought: true, thoughtSignature: utf8.encode('hidden')),
+          );
+      expect(redactedBlock, <String, Object?>{
+        'type': 'redacted_thinking',
+        'data': 'hidden',
+      });
     });
 
     test('serializes arbitrary dict payloads in tool result content', () {
@@ -1185,6 +1267,45 @@ void main() {
         expect(message.containsKey('reasoning_content'), isFalse);
       },
     );
+
+    test('buildPayload maps OpenAI audio inline data to input_audio', () {
+      final Map<String, Object?> payload = LiteLlm.buildPayload(
+        LlmRequest(
+          model: 'openai/gpt-4o-audio-preview',
+          contents: <Content>[
+            Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromInlineData(
+                  mimeType: 'audio/wav',
+                  data: utf8.encode('audio-bytes'),
+                ),
+                Part.fromFileData(
+                  fileUri: 'gs://bucket/audio.wav',
+                  mimeType: 'audio/wav',
+                ),
+              ],
+            ),
+          ],
+        ),
+        stream: false,
+      );
+
+      final Map<String, Object?> message =
+          (payload['messages'] as List<Object?>).single as Map<String, Object?>;
+      final List<Object?> content = message['content']! as List<Object?>;
+      expect(content.first, <String, Object?>{
+        'type': 'input_audio',
+        'input_audio': <String, Object?>{
+          'data': base64Encode(utf8.encode('audio-bytes')),
+          'format': 'wav',
+        },
+      });
+      expect(
+        (content.last as Map<String, Object?>)['text'],
+        '[File reference: "gs://bucket/audio.wav"]',
+      );
+    });
 
     test('enforces strict OpenAI schema for structured outputs', () {
       final LlmRequest request = LlmRequest(

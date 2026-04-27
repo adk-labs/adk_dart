@@ -103,8 +103,12 @@ class Gemini extends BaseLlm {
   GoogleLLMVariant get apiBackend =>
       apiBackendOverride ?? getGoogleLlmVariant(environment: environment);
 
+  _NormalizedGeminiEndpoint get _normalizedEndpoint =>
+      _normalizeGeminiEndpoint(baseUrl);
+
   String get _liveApiVersion =>
-      apiBackend == GoogleLLMVariant.vertexAi ? 'v1beta1' : 'v1alpha';
+      _normalizedEndpoint.apiVersion ??
+      (apiBackend == GoogleLLMVariant.vertexAi ? 'v1beta1' : 'v1alpha');
 
   /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
@@ -165,6 +169,7 @@ class Gemini extends BaseLlm {
       );
 
       if (useInteractionsApi) {
+        final _NormalizedGeminiEndpoint endpoint = _normalizedEndpoint;
         await for (final LlmResponse response in generateContentViaInteractions(
           llmRequest: prepared,
           stream: stream,
@@ -173,8 +178,11 @@ class Gemini extends BaseLlm {
               ? _resolvedRestTransport
               : null,
           apiKey: apiKey,
-          baseUrl: baseUrl,
-          apiVersion: prepared.config.httpOptions?.apiVersion ?? 'v1beta',
+          baseUrl: endpoint.baseUrl,
+          apiVersion:
+              endpoint.apiVersion ??
+              prepared.config.httpOptions?.apiVersion ??
+              'v1beta',
           headers: prepared.config.httpOptions?.headers,
           retryOptions: resolvedRetryOptions,
         )) {
@@ -184,8 +192,11 @@ class Gemini extends BaseLlm {
       }
 
       final String computedModel = prepared.model ?? model;
+      final _NormalizedGeminiEndpoint endpoint = _normalizedEndpoint;
       final String apiVersion =
-          prepared.config.httpOptions?.apiVersion ?? 'v1beta';
+          endpoint.apiVersion ??
+          prepared.config.httpOptions?.apiVersion ??
+          'v1beta';
       final Map<String, Object?> payload = _buildGenerateContentPayload(
         prepared,
       );
@@ -198,7 +209,7 @@ class Gemini extends BaseLlm {
               model: computedModel,
               apiKey: apiKey!,
               payload: payload,
-              baseUrl: baseUrl,
+              baseUrl: endpoint.baseUrl,
               apiVersion: apiVersion,
               headers: prepared.config.httpOptions?.headers,
               retryOptions: resolvedRetryOptions,
@@ -241,7 +252,7 @@ class Gemini extends BaseLlm {
               model: computedModel,
               apiKey: apiKey!,
               payload: payload,
-              baseUrl: baseUrl,
+              baseUrl: endpoint.baseUrl,
               apiVersion: apiVersion,
               headers: prepared.config.httpOptions?.headers,
               retryOptions: resolvedRetryOptions,
@@ -1107,6 +1118,45 @@ List<int> _coerceIntList(Object? value) {
     }
   }
   return output;
+}
+
+class _NormalizedGeminiEndpoint {
+  const _NormalizedGeminiEndpoint({this.baseUrl, this.apiVersion});
+
+  final String? baseUrl;
+  final String? apiVersion;
+}
+
+_NormalizedGeminiEndpoint _normalizeGeminiEndpoint(String? baseUrl) {
+  if (baseUrl == null || baseUrl.trim().isEmpty) {
+    return const _NormalizedGeminiEndpoint();
+  }
+  final Uri? uri = Uri.tryParse(baseUrl);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    return _NormalizedGeminiEndpoint(baseUrl: baseUrl);
+  }
+  final String host = uri.host.toLowerCase();
+  final bool isGoogleApiHost =
+      host == 'generativelanguage.googleapis.com' ||
+      host == 'aiplatform.googleapis.com' ||
+      host.endsWith('.googleapis.com');
+  if (!isGoogleApiHost || uri.hasQuery || uri.hasFragment) {
+    return _NormalizedGeminiEndpoint(baseUrl: baseUrl);
+  }
+  final List<String> segments = uri.pathSegments
+      .where((String segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  if (segments.length != 1 || !_isApiVersionSegment(segments.single)) {
+    return _NormalizedGeminiEndpoint(baseUrl: baseUrl);
+  }
+  return _NormalizedGeminiEndpoint(
+    baseUrl: uri.replace(path: '/', query: null, fragment: null).toString(),
+    apiVersion: segments.single,
+  );
+}
+
+bool _isApiVersionSegment(String segment) {
+  return RegExp(r'^v\d[\w.-]*$').hasMatch(segment);
 }
 
 /// Backward-compatible alias for [Gemini].
