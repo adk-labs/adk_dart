@@ -395,6 +395,7 @@ export 'src/tools/runtime_bootstrap.dart';
 export 'src/tools/transfer_to_agent_tool.dart';
 export 'src/tools/url_context_tool.dart';
 export 'src/tools/vertex_ai_search_tool.dart';
+export 'src/tools/vertex_rag_retrieval_tool.dart';
 
 export 'src/types/content.dart';
 export 'src/utils/cache_performance_analyzer.dart';

@@ -510,7 +510,7 @@ void main() {
           isA<String>(),
         );
         expect(
-          inferenceSpan.attributes['gen_ai.tool_definitions'],
+          inferenceSpan.attributes['gen_ai.tool.definitions'],
           contains('"name":"clock"'),
         );
 

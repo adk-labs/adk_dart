@@ -65,7 +65,7 @@ const String genAiUsageInputTokens = 'gen_ai.usage.input_tokens';
 const String genAiUsageOutputTokens = 'gen_ai.usage.output_tokens';
 
 /// Key for tool definition attributes.
-const String genAiToolDefinitions = 'gen_ai.tool_definitions';
+const String genAiToolDefinitions = 'gen_ai.tool.definitions';
 
 /// Tool definition type for function tools.
 const String functionToolDefinitionType = 'function';

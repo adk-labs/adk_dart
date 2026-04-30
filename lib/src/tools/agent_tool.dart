@@ -4,12 +4,14 @@ library;
 import 'dart:convert';
 
 import '../agents/base_agent.dart';
+import '../agents/llm_agent.dart';
 import '../events/event.dart';
 import '../models/llm_request.dart';
 import '../runners/runner.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
+import '_forwarding_artifact_service.dart';
 import 'tool_context.dart';
 
 /// Tool adapter that executes another agent as a tool call.
@@ -36,16 +38,21 @@ class AgentTool extends BaseTool {
 
   @override
   FunctionDeclaration? getDeclaration() {
+    final Map<String, dynamic>? inputSchema = _schemaAsJsonMap(
+      _getInputSchema(agent),
+    );
     return FunctionDeclaration(
       name: name,
       description: description,
-      parameters: <String, dynamic>{
-        'type': 'object',
-        'properties': <String, dynamic>{
-          'request': <String, dynamic>{'type': 'string'},
-        },
-        'required': <String>['request'],
-      },
+      parameters:
+          inputSchema ??
+          <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'request': <String, dynamic>{'type': 'string'},
+            },
+            'required': <String>['request'],
+          },
     );
   }
 
@@ -58,7 +65,11 @@ class AgentTool extends BaseTool {
       toolContext.actions.skipSummarization = true;
     }
 
-    final String requestText = _resolveRequestText(args);
+    final Object? inputSchema = _getInputSchema(agent);
+    final String requestText = inputSchema == null
+        ? _resolveRequestText(args)
+        : jsonEncode(args);
+    final Object? outputSchema = _getOutputSchema(agent);
     final invocationContext = toolContext.invocationContext;
     final String childAppName = invocationContext.appName.isEmpty
         ? agent.name
@@ -66,7 +77,7 @@ class AgentTool extends BaseTool {
     final Runner runner = Runner(
       appName: childAppName,
       agent: agent,
-      artifactService: invocationContext.artifactService,
+      artifactService: ForwardingArtifactService(toolContext),
       sessionService: InMemorySessionService(),
       memoryService: invocationContext.memoryService,
       credentialService: invocationContext.credentialService,
@@ -117,8 +128,55 @@ class AgentTool extends BaseTool {
         .map((Part part) => part.text!.trim())
         .where((String text) => text.isNotEmpty)
         .join('\n');
+    if (outputSchema != null && mergedText.isNotEmpty) {
+      return jsonDecode(mergedText);
+    }
     return mergedText;
   }
+}
+
+Object? _getInputSchema(BaseAgent agent) {
+  if (agent is LlmAgent) {
+    return agent.inputSchema;
+  }
+  if (agent.subAgents.isNotEmpty) {
+    return _getInputSchema(agent.subAgents.first);
+  }
+  return null;
+}
+
+Object? _getOutputSchema(BaseAgent agent) {
+  if (agent is LlmAgent) {
+    return agent.outputSchema;
+  }
+  if (agent.subAgents.isNotEmpty) {
+    return _getOutputSchema(agent.subAgents.last);
+  }
+  return null;
+}
+
+Map<String, dynamic>? _schemaAsJsonMap(Object? schema) {
+  if (schema is! Map) {
+    return null;
+  }
+  return _deepJsonMap(schema);
+}
+
+Map<String, dynamic> _deepJsonMap(Map schema) {
+  return <String, dynamic>{
+    for (final MapEntry<dynamic, dynamic> entry in schema.entries)
+      '${entry.key}': _deepJsonValue(entry.value),
+  };
+}
+
+Object? _deepJsonValue(Object? value) {
+  if (value is Map) {
+    return _deepJsonMap(value);
+  }
+  if (value is List) {
+    return value.map(_deepJsonValue).toList(growable: false);
+  }
+  return value;
 }
 
 String _resolveRequestText(Map<String, dynamic> args) {

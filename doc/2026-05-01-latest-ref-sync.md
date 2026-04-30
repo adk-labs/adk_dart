@@ -33,8 +33,24 @@
 - 작업 내용: `outputSchema`가 tool 사용을 막는 것이 아니라 thought loop 중 tools를 노출하고 final output에 구조를 강제한다는 주석을 반영했다.
 - 작업 이유: 최신 `adk-python`의 output schema 설명 변경과 Dart API 문서 의미를 맞추기 위해서다.
 
+### Vertex AI RAG built-in tool 주입
+
+- 작업 내용: `VertexAiRagRetrieval`이 Gemini 2+에서 label metadata 대신 `retrieval.vertexRagStore` built-in tool config를 주입하도록 변경했고, `adk-js`의 새 `VertexRagRetrievalTool` API를 추가했다.
+- 작업 이유: 최신 `adk-python`은 Vertex RAG를 model-side retrieval tool로 직접 전달하고, 최신 `adk-js`도 같은 server-side tool 클래스를 제공하므로 Dart의 실제 요청 payload를 맞추기 위해서다.
+
+### AgentTool schema/forwarding 보강
+
+- 작업 내용: `AgentTool`이 child agent의 `inputSchema`를 function declaration에 반영하고, schema 입력은 JSON payload로 전달하며, `outputSchema`가 있으면 child 응답 JSON을 구조화된 객체로 반환하도록 보강했다. Artifact 접근은 parent `ToolContext`를 통해 forwarding한다.
+- 작업 이유: Python/JS `AgentTool`은 schema-aware 입출력과 forwarding artifact service를 사용하므로, nested agent를 tool로 호출할 때 선언과 반환 타입이 동일하게 동작해야 한다.
+
+### Telemetry semantic convention key 정렬
+
+- 작업 내용: experimental GenAI semconv fallback key를 `gen_ai.tool_definitions`에서 `gen_ai.tool.definitions`로 변경했다.
+- 작업 이유: 최신 `adk-python`의 OpenTelemetry fallback constant가 dotted key로 변경되어, semconv package 미제공 환경에서도 동일한 span attribute를 남기기 위해서다.
+
 ## 검토 결과
 
-- `adk-js`의 `url_context`, `vertex_ai_search`, model-id check bypass, MCP tool prefix/filter, built-in retrieval 계열은 Dart에 기존 구현이 있어 추가 구현 대상에서 제외했다.
+- `adk-js`의 `url_context`, `vertex_ai_search`, model-id check bypass, MCP tool prefix/filter 계열은 Dart에 기존 구현이 있어 추가 구현 대상에서 제외했다.
 - `adk-python`의 CLI onboarding/sample-only 변경은 Dart 런타임 동작과 직접 매핑되지 않아 이번 구현 범위에서 제외했다.
+- `adk-python`의 Agent Identity `GcpAuthProvider`는 Dart에 아직 IAM Connector Credentials 클라이언트가 없어 placeholder로 남아 있다. 외부 Google Cloud IAM Connector 의존성과 auth flow 설계가 필요하므로 별도 작업 단위로 분리하는 것이 안전하다.
 - `adk-java`의 Chat Completions request 확장과 Agent Engine deployer는 Java SDK 전용 API 변화로 판단했고, Dart 런타임 parity 구현 대상은 아니었다.

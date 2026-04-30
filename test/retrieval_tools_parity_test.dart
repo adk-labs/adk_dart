@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
@@ -111,7 +110,7 @@ void main() {
     );
 
     test(
-      'VertexAiRagRetrieval injects built-in retrieval labels for Gemini 2+',
+      'VertexAiRagRetrieval injects built-in retrieval tool for Gemini 2+',
       () async {
         final VertexAiRagRetrieval tool = VertexAiRagRetrieval(
           name: 'vertex_rag',
@@ -126,19 +125,52 @@ void main() {
           llmRequest: request,
         );
 
-        expect(
-          request.config.labels['adk_vertex_ai_rag_retrieval'],
-          'vertex_rag_store',
+        expect(request.config.tools, hasLength(1));
+        final Map<String, Object?> retrieval = Map<String, Object?>.from(
+          request.config.tools!.single.retrieval! as Map,
         );
-        final String? encoded =
-            request.config.labels['adk_vertex_ai_rag_store'];
-        expect(encoded, isNotNull);
-        final Map<String, Object?> payload = Map<String, Object?>.from(
-          jsonDecode(encoded!) as Map,
+        final Map<String, Object?> vertexRagStore = Map<String, Object?>.from(
+          retrieval['vertexRagStore']! as Map,
         );
-        expect(payload['similarity_top_k'], 3);
+        expect(vertexRagStore['ragCorpora'], <String>['corpus-a']);
+        expect(vertexRagStore['similarityTopK'], 3);
       },
     );
+
+    test('VertexRagRetrievalTool injects server-side RAG config', () async {
+      final VertexRagRetrievalTool tool = VertexRagRetrievalTool(
+        ragResources: <VertexAiRagResource>[
+          VertexAiRagResource(path: 'projects/p/locations/us/ragCorpora/c1'),
+        ],
+        vectorDistanceThreshold: 0.4,
+      );
+      final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
+
+      await tool.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: request,
+      );
+
+      expect(
+        await tool.run(
+          args: const <String, dynamic>{},
+          toolContext: _newToolContext(),
+        ),
+        isNull,
+      );
+      final Map<String, Object?> retrieval = Map<String, Object?>.from(
+        request.config.tools!.single.retrieval! as Map,
+      );
+      final Map<String, Object?> vertexRagStore = Map<String, Object?>.from(
+        retrieval['vertexRagStore']! as Map,
+      );
+      final List<Object?> resources = vertexRagStore['ragResources']! as List;
+      expect(
+        (resources.single as Map)['ragCorpus'],
+        'projects/p/locations/us/ragCorpora/c1',
+      );
+      expect(vertexRagStore['vectorDistanceThreshold'], 0.4);
+    });
 
     test(
       'VertexAiRagRetrieval falls back to function declaration on non-Gemini2 models',

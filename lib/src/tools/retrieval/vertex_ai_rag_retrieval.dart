@@ -18,6 +18,9 @@ class VertexAiRagResource {
 
   /// Encodes this resource for request metadata.
   Map<String, Object?> toJson() => <String, Object?>{'path': path};
+
+  /// Encodes this resource for Gemini built-in Vertex RAG tooling.
+  Map<String, Object?> toVertexJson() => <String, Object?>{'ragCorpus': path};
 }
 
 /// Store-level RAG query configuration used by [VertexAiRagRetrieval].
@@ -51,6 +54,18 @@ class VertexAiRagStore {
       if (similarityTopK != null) 'similarity_top_k': similarityTopK,
       if (vectorDistanceThreshold != null)
         'vector_distance_threshold': vectorDistanceThreshold,
+    };
+  }
+
+  /// Encodes this configuration for model-side `retrieval.vertexRagStore`.
+  Map<String, Object?> toVertexJson() {
+    return <String, Object?>{
+      if (ragCorpora != null) 'ragCorpora': ragCorpora,
+      if (ragResources != null)
+        'ragResources': ragResources!.map((e) => e.toVertexJson()).toList(),
+      if (similarityTopK != null) 'similarityTopK': similarityTopK,
+      if (vectorDistanceThreshold != null)
+        'vectorDistanceThreshold': vectorDistanceThreshold,
     };
   }
 
@@ -98,17 +113,20 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
   final bool Function() _modelIdCheckDisabledResolver;
 
   @override
-  /// Injects RAG labels for Gemini 2+ requests before model execution.
+  /// Injects model-side Vertex RAG retrieval for Gemini 2+ requests.
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
     final bool modelCheckDisabled = _modelIdCheckDisabledResolver();
     if (isGemini2OrAbove(llmRequest.model) || modelCheckDisabled) {
-      llmRequest.config.labels['adk_vertex_ai_rag_retrieval'] =
-          'vertex_rag_store';
-      llmRequest.config.labels['adk_vertex_ai_rag_store'] = jsonEncode(
-        vertexRagStore.toJson(),
+      llmRequest.config.tools ??= <ToolDeclaration>[];
+      llmRequest.config.tools!.add(
+        ToolDeclaration(
+          retrieval: <String, Object?>{
+            'vertexRagStore': vertexRagStore.toVertexJson(),
+          },
+        ),
       );
       return;
     }
