@@ -18,7 +18,8 @@
 - `Sequential` / `Parallel` / `Loop`
 - `Agent Team`
 - `MCP Toolset` (remote HTTP)
-- `Skills` (inline `Skill + SkillToolset`)
+- `URL Context` (Gemini built-in `UrlContextTool`)
+- `Skills` (inline `Skill + SkillToolset + SkillRegistry`)
 
 ## Platform Support Matrix (Current)
 
@@ -33,7 +34,8 @@ Status legend:
 | Example app UI/routing/chat screen | Y | Y | Y | Y | Y | Y | Flutter shared UI layer |
 | Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
-| Skills (inline) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
+| URL Context built-in tool | Y | Y | Y | Y | Y | Y | Model-side retrieval through Gemini |
+| Skills (inline + registry) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
 | Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
 | Local-process MCP stdio example | N | N | N | N | N | N | Remote HTTP MCP only |
 | Directory skill loading demo | N | N | N | N | N | N | Inline skills only |

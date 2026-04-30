@@ -1045,6 +1045,29 @@ ${responseLanguageInstruction(language)}
     );
   }
 
+  static BaseAgent buildUrlContext({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    return Agent(
+      name: 'UrlContextAssistant',
+      model: _createGeminiModel(apiKey),
+      description: 'Uses Gemini URL context retrieval for web pages.',
+      instruction:
+          '''
+You are an assistant that can use URL context.
+- When the user provides URLs, use the url_context tool to retrieve page context.
+- Summarize, compare, or extract facts from retrieved URL content as requested.
+- If no URL is provided, ask for one short clarification.
+- Mention the URLs you used when summarizing web content.
+${responseLanguageInstruction(language)}
+''',
+      tools: <Object>[urlContext],
+    );
+  }
+
   static BaseAgent buildSkills({
     required String apiKey,
     required AppLanguage language,
@@ -1113,22 +1136,53 @@ ${responseLanguageInstruction(language)}
       ),
     );
 
+    final Skill briefingTranslatorSkill = Skill(
+      frontmatter: Frontmatter(
+        name: 'briefing-translator',
+        description: '짧은 업데이트를 이해관계자용 브리핑으로 번역/현지화하는 레지스트리 스킬',
+      ),
+      instructions: '''
+목표:
+- 사용자가 제공한 짧은 업데이트를 대상 독자에게 맞춘 브리핑으로 번역 또는 현지화한다.
+
+절차:
+1) `references/briefing_style.md`를 읽고 톤과 구조를 맞춘다.
+2) 대상 언어가 명시되면 해당 언어로, 없으면 사용자 요청 언어로 작성한다.
+3) 결과는 제목, 핵심 요약, 영향, 다음 행동 순서로 정리한다.
+4) 과장 없이 확인된 내용과 추정 내용을 구분한다.
+''',
+      resources: Resources(
+        references: <String, String>{
+          'briefing_style.md': '''
+- 첫 문장은 결론부터 시작한다.
+- 독자가 바로 행동할 수 있도록 다음 행동을 명확히 쓴다.
+- 불확실한 내용은 "확인 필요"로 표시한다.
+''',
+        },
+      ),
+    );
+    final SkillRegistry registry = SkillRegistry()
+      ..register(briefingTranslatorSkill);
+
     return Agent(
       name: 'SkillEnabledAssistant',
       model: _createGeminiModel(apiKey),
-      description: 'Uses SkillToolset with inline skills.',
+      description: 'Uses SkillToolset with inline skills and registry search.',
       instruction:
           '''
 You are a skill-enabled assistant.
 - For writing/editing tasks, use writing-refiner skill.
 - For planning/roadmap tasks, use planning-advisor skill.
+- For translation/localization/briefing tasks, search the registry and load briefing-translator if relevant.
 - Always list/load relevant skills before applying them.
+- If the listed skills are not sufficient, call search_skills before deciding no skill applies.
 - Use load_skill_resource when instructions refer to references/assets.
 ${responseLanguageInstruction(language)}
 ''',
       tools: <Object>[
         SkillToolset(
           skills: <Skill>[writingRefinerSkill, planningAdvisorSkill],
+          registry: registry,
         ),
       ],
     );

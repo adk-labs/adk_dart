@@ -1,3 +1,5 @@
 dependency_overrides:
   adk_dart:
     path: ../../..
+  adk_mcp:
+    path: ../../adk_mcp

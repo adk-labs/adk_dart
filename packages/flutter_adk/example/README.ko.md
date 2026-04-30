@@ -19,7 +19,8 @@
 - `Loop`: Critic/Refiner 반복 개선 + `exit_loop` 종료 예제
 - `Agent Team`: Coordinator가 Greeting/Weather/Farewell 팀으로 transfer 라우팅
 - `MCP Toolset`: `McpToolset + StreamableHTTPConnectionParams` 기반 원격 MCP 예제
-- `Skills`: inline `Skill + SkillToolset` 기반 스킬 오케스트레이션 예제
+- `URL Context`: Gemini built-in `UrlContextTool` 기반 페이지 요약/비교 예제
+- `Skills`: inline `Skill + SkillToolset + SkillRegistry` 기반 스킬 오케스트레이션 예제
 
 ## 플랫폼 지원 매트릭스 (현재)
 
@@ -34,7 +35,8 @@
 | 예제 앱 UI/라우팅/대화 화면 | Y | Y | Y | Y | Y | Y | Flutter 공통 UI 레이어 |
 | Basic/Transfer/Workflow/Team 실행 경로 | Y | Y | Y | Y | Y | Y | `flutter_adk`의 `adk_core` 기반 in-memory 런타임 |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web은 서버 CORS 설정이 필요할 수 있음 |
-| Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | 파일시스템 없이 동작 |
+| URL Context built-in tool | Y | Y | Y | Y | Y | Y | Gemini model-side retrieval |
+| Skills (inline `Skill` + `SkillToolset` + `SkillRegistry`) | Y | Y | Y | Y | Y | Y | 파일시스템 없이 동작 |
 | 설정 저장 (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web은 브라우저 저장소 사용 |
 | 로컬 프로세스 기반 MCP stdio 예제 | N | N | N | N | N | N | 본 예제는 원격 HTTP MCP만 다룸 |
 | 디렉토리 기반 스킬 로딩 (`loadSkillFromDir`) 데모 | N | N | N | N | N | N | 예제는 inline skill 데모만 포함 |
@@ -85,9 +87,14 @@ MCP Toolset 테스트 예시:
 - `MCP 연결 상태 확인해줘`
 - `MCP 서버에 있는 tool 목록으로 가능한 작업을 알려줘`
 
+URL Context 테스트 예시:
+- `https://google.github.io/adk-docs/ 내용을 세 줄로 요약해줘`
+- `https://google.github.io/adk-docs/ 와 https://github.com/google/adk-python 을 비교해줘`
+
 Skills 테스트 예시:
 - `이 공지문 문장을 더 간결하게 다듬어줘`
 - `신규 기능 출시 계획을 단계별로 정리해줘`
+- `이 제품 업데이트를 이해관계자용 브리핑으로 번역해줘`
 
 ## 사용자 정의 예제(User Example)
 - 홈 우하단 `New Example` 버튼으로 사용자 예제를 만들 수 있습니다.

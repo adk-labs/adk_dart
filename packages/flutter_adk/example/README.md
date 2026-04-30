@@ -21,7 +21,8 @@ Example app for `flutter_adk`.
 - `Loop`: Critic/Refiner iterative loop with `exit_loop`
 - `Agent Team`: coordinator routing to Greeting/Weather/Farewell team
 - `MCP Toolset`: remote MCP with `McpToolset + StreamableHTTPConnectionParams`
-- `Skills`: orchestration using inline `Skill + SkillToolset`
+- `URL Context`: Gemini built-in `UrlContextTool` for page summarization/comparison
+- `Skills`: orchestration using inline `Skill + SkillToolset + SkillRegistry`
 
 ## Platform Support Matrix (Current)
 
@@ -36,7 +37,8 @@ Status legend:
 | Example app UI/routing/chat screen | Y | Y | Y | Y | Y | Y | Flutter shared UI layer |
 | Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
-| Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
+| URL Context built-in tool | Y | Y | Y | Y | Y | Y | Model-side retrieval through Gemini |
+| Skills (inline `Skill` + `SkillToolset` + `SkillRegistry`) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
 | Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
 | Local-process MCP stdio example | N | N | N | N | N | N | This app demonstrates remote HTTP MCP only |
 | Directory skill loading (`loadSkillFromDir`) demo | N | N | N | N | N | N | This app demonstrates inline skills only |
@@ -88,9 +90,14 @@ MCP Toolset sample prompts:
 - `Check MCP connection status`
 - `List available operations from MCP server tools`
 
+URL Context sample prompts:
+- `Summarize https://google.github.io/adk-docs/ in three bullets`
+- `Compare https://google.github.io/adk-docs/ with https://github.com/google/adk-python`
+
 Skills sample prompts:
 - `Make this announcement sentence more concise`
 - `Organize the new feature rollout plan step by step`
+- `Translate this product update into a stakeholder briefing`
 
 ## User Example Builder
 

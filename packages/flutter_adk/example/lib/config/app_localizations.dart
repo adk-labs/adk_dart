@@ -269,6 +269,30 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ja: 'MCP 設定済みならツール一覧を示し、実用的な例を1つ実行して。',
     AppLanguage.zh: '若 MCP 已配置，请列出工具并执行一个实用示例。',
   },
+  'prompt.url_context.1': <AppLanguage, String>{
+    AppLanguage.en:
+        'Summarize https://google.github.io/adk-docs/ in three bullets.',
+    AppLanguage.ko: 'https://google.github.io/adk-docs/ 내용을 세 줄로 요약해줘.',
+    AppLanguage.ja: 'https://google.github.io/adk-docs/ を3つの箇条書きで要約して。',
+    AppLanguage.zh: '用三条要点总结 https://google.github.io/adk-docs/。',
+  },
+  'prompt.url_context.2': <AppLanguage, String>{
+    AppLanguage.en:
+        'Read https://github.com/google/adk-python and explain what the project is.',
+    AppLanguage.ko: 'https://github.com/google/adk-python 을 읽고 어떤 프로젝트인지 설명해줘.',
+    AppLanguage.ja: 'https://github.com/google/adk-python を読み、どんなプロジェクトか説明して。',
+    AppLanguage.zh: '阅读 https://github.com/google/adk-python 并说明这个项目是什么。',
+  },
+  'prompt.url_context.3': <AppLanguage, String>{
+    AppLanguage.en:
+        'Compare https://google.github.io/adk-docs/ with https://github.com/google/adk-python.',
+    AppLanguage.ko:
+        'https://google.github.io/adk-docs/ 와 https://github.com/google/adk-python 을 비교해줘.',
+    AppLanguage.ja:
+        'https://google.github.io/adk-docs/ と https://github.com/google/adk-python を比較して。',
+    AppLanguage.zh:
+        '比较 https://google.github.io/adk-docs/ 和 https://github.com/google/adk-python。',
+  },
   'prompt.skills.1': <AppLanguage, String>{
     AppLanguage.en: 'Improve the structure of this blog post draft.',
     AppLanguage.ko: '이 블로그 초안 구조를 개선해줘.',
@@ -976,6 +1000,37 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ko: '예: MCP 연결 상태 확인해줘',
     AppLanguage.ja: '例: MCP 接続状態を確認して',
     AppLanguage.zh: '例如：检查 MCP 连接状态',
+  },
+  'url_context.title': <AppLanguage, String>{
+    AppLanguage.en: 'URL Context Example',
+    AppLanguage.ko: 'URL Context 예제',
+    AppLanguage.ja: 'URL Context 例',
+    AppLanguage.zh: 'URL Context 示例',
+  },
+  'url_context.summary': <AppLanguage, String>{
+    AppLanguage.en: 'Gemini built-in URL context retrieval example.',
+    AppLanguage.ko: 'Gemini built-in URL context retrieval 예제입니다.',
+    AppLanguage.ja: 'Gemini 組み込み URL context retrieval の例です。',
+    AppLanguage.zh: 'Gemini 内置 URL context retrieval 示例。',
+  },
+  'url_context.initial': <AppLanguage, String>{
+    AppLanguage.en:
+        'Hello. Send one or more URLs and I will use URL context to read them.',
+    AppLanguage.ko: '안녕하세요. URL을 보내면 URL context로 내용을 읽어 처리합니다.',
+    AppLanguage.ja: 'こんにちは。URL を送ると URL context で内容を読み取ります。',
+    AppLanguage.zh: '你好，发送 URL 后我会用 URL context 读取内容。',
+  },
+  'url_context.empty': <AppLanguage, String>{
+    AppLanguage.en: 'Send a URL to test model-side URL context retrieval.',
+    AppLanguage.ko: 'URL을 보내 model-side URL context retrieval을 확인하세요.',
+    AppLanguage.ja: 'URL を送って model-side URL context retrieval を確認してください。',
+    AppLanguage.zh: '发送 URL 以测试 model-side URL context retrieval。',
+  },
+  'url_context.hint': <AppLanguage, String>{
+    AppLanguage.en: 'e.g. Summarize https://google.github.io/adk-docs/',
+    AppLanguage.ko: '예: https://google.github.io/adk-docs/ 요약해줘',
+    AppLanguage.ja: '例: https://google.github.io/adk-docs/ を要約して',
+    AppLanguage.zh: '例如：总结 https://google.github.io/adk-docs/',
   },
   'skills.title': <AppLanguage, String>{
     AppLanguage.en: 'SkillToolset Example',

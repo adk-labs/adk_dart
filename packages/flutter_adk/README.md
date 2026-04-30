@@ -11,8 +11,11 @@ Flutter facade package for ADK Dart core runtime.
   - `SequentialAgent` / `ParallelAgent` / `LoopAgent`
   - `Runner` / `InMemoryRunner`
   - `FunctionTool`
+  - `AgentTool`
   - `McpToolset` (remote MCP over Streamable HTTP)
-  - `SkillToolset` + inline `Skill`
+  - `SkillToolset` + inline `Skill` + `SkillRegistry`
+  - Gemini built-in retrieval tools: `UrlContextTool`, `VertexAiSearchTool`,
+    `VertexRagRetrievalTool`
   - `Gemini` (BYOK-style key injection)
 - Includes a Flutter plugin scaffold registered for all major Flutter platforms:
   - Android
@@ -82,9 +85,10 @@ Status legend:
 | `flutter_adk` single import (`package:flutter_adk/flutter_adk.dart`) | Y | Y | Y | Y | Y | Y | Re-exports the Web-safe `adk_core` surface. |
 | Agent runtime (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | In-memory orchestration path is cross-platform. |
 | `Gemini` model usage | Y | Y | Partial | Y | Y | Y | Web requires BYOK/CORS/security policy consideration. |
+| Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | Tool execution is handled by Gemini/Vertex backends. |
 | MCP Toolset via Streamable HTTP | Y | Y | Y | Y | Y | Y | Works with remote MCP HTTP servers. |
 | MCP Toolset via stdio (`StdioConnectionParams`) | Partial | Partial | N | Y | Y | Y | Web cannot spawn local processes; mobile runtime support can depend on sandbox/process policy. |
-| Skills (`Skill`, `SkillToolset`) with inline definitions | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic. |
+| Skills (`Skill`, `SkillToolset`, `SkillRegistry`) with inline definitions | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic. |
 | Directory-based skill loading (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web throws `UnsupportedError` for filesystem-based loading. |
 | Plugin channel helper (`FlutterAdk().getPlatformVersion()`) | Y | Y | Y | Y | Y | Y | Uses platform channel / browser user-agent path. |
 | VM/CLI tooling (`adk` executable, dev server, CLI deploy path) | N | N | N | N | N | N | Not part of the Flutter package surface. |

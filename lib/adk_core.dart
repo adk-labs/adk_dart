@@ -57,6 +57,7 @@ export 'src/platform/time.dart';
 export 'src/platform/uuid.dart';
 
 export 'src/tools/base_tool.dart';
+export 'src/tools/agent_tool.dart';
 export 'src/tools/function_tool.dart';
 export 'src/tools/load_mcp_resource_tool.dart';
 export 'src/tools/mcp_tool/mcp_session_manager.dart';

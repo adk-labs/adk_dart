@@ -8,6 +8,8 @@ Flutter で ADK Dart の Web-safe コアランタイムを使うためのファ�
 
 - `package:adk_dart/adk_core.dart` re-export
 - Single Flutter import: `package:flutter_adk/flutter_adk.dart`
+- Latest Web-safe ADK surface such as `AgentTool`, `UrlContextTool`, Vertex
+  retrieval tools, and `SkillRegistry`
 - Plugin registration for Android/iOS/Web/Linux/macOS/Windows
 
 ## `flutter_adk` を使うべきケース
@@ -50,9 +52,10 @@ Status legend:
 | Single import (`package:flutter_adk/flutter_adk.dart`) | Y | Y | Y | Y | Y | Y | Re-exports web-safe `adk_core` |
 | Agent runtime (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | In-memory path is cross-platform |
 | `Gemini` model usage | Y | Y | Partial | Y | Y | Y | Consider BYOK/CORS/security on Web |
+| Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | Tool execution is handled by Gemini/Vertex backends |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Remote MCP HTTP servers |
 | MCP Toolset (stdio) | Partial | Partial | N | Y | Y | Y | Web cannot spawn local processes |
-| Skills (inline) | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic |
+| Skills (inline + registry) | Y | Y | Y | Y | Y | Y | Inline skills and registry search are platform-agnostic |
 | Directory skill loading (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web throws `UnsupportedError` |
 | Plugin helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | Platform channel / browser user-agent |
 | VM/CLI tooling (`adk`, dev server, deploy path) | N | N | N | N | N | N | Out of Flutter package scope |

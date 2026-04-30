@@ -18,7 +18,8 @@
 - `Sequential` / `Parallel` / `Loop`
 - `Agent Team`
 - `MCP Toolset`（远程 HTTP）
-- `Skills`（inline `Skill + SkillToolset`）
+- `URL Context`（Gemini 内置 `UrlContextTool`）
+- `Skills`（inline `Skill + SkillToolset + SkillRegistry`）
 
 ## 平台支持矩阵（当前）
 
@@ -33,7 +34,8 @@
 | 示例 UI/路由/聊天界面 | Y | Y | Y | Y | Y | Y | Flutter 通用 UI 层 |
 | Basic/Transfer/Workflow/Team 执行 | Y | Y | Y | Y | Y | Y | 基于 `flutter_adk` `adk_core` 的 in-memory 运行时 |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web 可能需要服务端 CORS 配置 |
-| Skills (inline) | Y | Y | Y | Y | Y | Y | 不依赖文件系统 |
+| URL Context built-in tool | Y | Y | Y | Y | Y | Y | 通过 Gemini 进行 model-side retrieval |
+| Skills (inline + registry) | Y | Y | Y | Y | Y | Y | 不依赖文件系统 |
 | 设置持久化 (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web 使用浏览器存储 |
 | 本地进程 MCP stdio 示例 | N | N | N | N | N | N | 本示例仅演示远程 HTTP MCP |
 | 目录技能加载示例 | N | N | N | N | N | N | 本示例仅演示 inline skills |

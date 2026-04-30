@@ -86,6 +86,17 @@ void main() {
     await runner.close();
   });
 
+  test('exports AgentTool symbol', () {
+    final Agent agent = Agent(
+      name: 'child_agent',
+      model: _EchoModel(),
+      instruction: 'Echo',
+    );
+    final AgentTool tool = AgentTool(agent: agent);
+
+    expect(tool.name, 'child_agent');
+  });
+
   test('exports Gemini model symbol', () {
     final Gemini gemini = Gemini(
       model: 'gemini-2.5-flash',
@@ -146,5 +157,21 @@ void main() {
 
     expect(mcpToolset.runtimeType, McpToolset);
     expect(skillToolset.runtimeType, SkillToolset);
+  });
+
+  test('exports built-in retrieval tool symbols', () {
+    final UrlContextTool urlTool = UrlContextTool();
+    final VertexAiSearchTool searchTool = VertexAiSearchTool(
+      dataStoreId:
+          'projects/p/locations/global/collections/default_collection/dataStores/ds',
+    );
+    final VertexRagRetrievalTool ragTool = VertexRagRetrievalTool(
+      ragCorpora: <String>['projects/p/locations/us-central1/ragCorpora/c'],
+    );
+
+    expect(urlTool.name, 'url_context');
+    expect(urlContext.name, 'url_context');
+    expect(searchTool.name, 'vertex_ai_search');
+    expect(ragTool.name, 'vertex_rag_retrieval');
   });
 }

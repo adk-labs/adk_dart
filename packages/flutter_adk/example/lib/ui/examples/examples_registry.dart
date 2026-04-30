@@ -232,6 +232,31 @@ List<ExampleMenuItem> buildExampleMenuItems() {
       agentBuilder: AgentService.buildMcp,
     ),
     ExampleMenuItem(
+      id: 'url_context',
+      icon: Icons.link_outlined,
+      category: ExampleCategory.integrations,
+      titleKey: 'url_context.title',
+      summaryKey: 'url_context.summary',
+      initialKey: 'url_context.initial',
+      emptyKey: 'url_context.empty',
+      hintKey: 'url_context.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.url_context.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.url_context.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.url_context.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildUrlContext,
+    ),
+    ExampleMenuItem(
       id: 'skills',
       icon: Icons.psychology_outlined,
       category: ExampleCategory.integrations,
