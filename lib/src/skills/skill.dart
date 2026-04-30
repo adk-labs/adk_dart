@@ -376,6 +376,75 @@ class SkillRegistry {
 
   /// Returns all registered skills.
   List<Skill> list() => _skills.values.toList(growable: false);
+
+  /// Fetches a skill by [name] and optional [version].
+  ///
+  /// Subclasses can override this to fetch skills from a remote registry.
+  Future<Skill?> getSkill({required String name, String? version}) async {
+    final Skill? skill = get(name);
+    if (skill == null) {
+      return null;
+    }
+    if (version != null && skill.version != version) {
+      return null;
+    }
+    return skill;
+  }
+
+  /// Searches the registry for skill frontmatter matching [query].
+  ///
+  /// The default in-memory implementation performs a simple case-insensitive
+  /// match over name, description, and instructions. Subclasses can override
+  /// this for semantic search or implementation-specific filters.
+  Future<List<Frontmatter>> searchSkills({
+    required String query,
+    Map<String, Object?>? filters,
+  }) async {
+    final String normalizedQuery = query.trim().toLowerCase();
+    final Iterable<Skill> candidates = normalizedQuery.isEmpty
+        ? _skills.values
+        : _skills.values.where((Skill skill) {
+            return skill.name.toLowerCase().contains(normalizedQuery) ||
+                skill.description.toLowerCase().contains(normalizedQuery) ||
+                skill.instructions.toLowerCase().contains(normalizedQuery);
+          });
+
+    return candidates
+        .where((Skill skill) => _matchesFilters(skill, filters))
+        .map((Skill skill) => skill.frontmatter)
+        .toList(growable: false);
+  }
+
+  /// JSON schema for filters accepted by [searchSkills], if any.
+  Map<String, Object?>? getFilterSchema() => null;
+
+  /// Model-facing description for the registry search tool.
+  String getSearchDescription() {
+    return 'Searches for relevant skills in the registry based on a semantic or keyword query.';
+  }
+
+  bool _matchesFilters(Skill skill, Map<String, Object?>? filters) {
+    if (filters == null || filters.isEmpty) {
+      return true;
+    }
+    final Object? version = filters['version'];
+    if (version is String && version.isNotEmpty && skill.version != version) {
+      return false;
+    }
+    final Object? license = filters['license'];
+    if (license is String &&
+        license.isNotEmpty &&
+        skill.frontmatter.license != license) {
+      return false;
+    }
+    final Object? compatibility = filters['compatibility'];
+    if (compatibility is String &&
+        compatibility.isNotEmpty &&
+        skill.frontmatter.compatibility != compatibility) {
+      return false;
+    }
+    return true;
+  }
 }
 
 /// Renders a skill summary list as XML text for model prompts.

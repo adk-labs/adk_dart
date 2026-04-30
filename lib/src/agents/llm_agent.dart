@@ -150,6 +150,9 @@ class LlmAgent extends BaseAgent {
   Object? inputSchema;
 
   /// Optional output schema.
+  ///
+  /// Tools remain available during the thought loop; structure is enforced on
+  /// the final output.
   Object? outputSchema;
 
   /// Optional state key to store final response output.

@@ -49,6 +49,28 @@ void main() {
       expect(registry.list(), hasLength(1));
     });
 
+    test('skill registry supports async get and search contract', () async {
+      final SkillRegistry registry = SkillRegistry();
+      registry.register(
+        Skill(
+          name: 'registry-search',
+          description: 'Finds registry skills',
+          instructions: 'Search the catalog.',
+        ),
+      );
+
+      expect(await registry.getSkill(name: 'registry-search'), isA<Skill>());
+      final List<Frontmatter> results = await registry.searchSkills(
+        query: 'catalog',
+      );
+      expect(results.single.name, 'registry-search');
+      expect(
+        registry.getSearchDescription(),
+        contains('Searches for relevant skills'),
+      );
+      expect(registry.getFilterSchema(), isNull);
+    });
+
     test('a2a router delivers message to target agent stream', () async {
       final InMemoryA2ARouter router = InMemoryA2ARouter();
       final Future<A2AMessage> next = router.messagesFor('agent_b').first;

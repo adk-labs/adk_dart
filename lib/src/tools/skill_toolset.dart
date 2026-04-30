@@ -114,7 +114,27 @@ class _LoadSkillTool extends BaseTool {
       };
     }
 
-    final Skill? skill = _toolset._getSkill(skillName.trim());
+    Skill? skill = _toolset._getSkill(skillName.trim());
+    if (skill == null && _toolset._registry != null) {
+      try {
+        skill = await _toolset._registry.getSkill(name: skillName.trim());
+        if (skill != null) {
+          _toolset._skills[skill.name] = skill;
+        }
+      } catch (error, stackTrace) {
+        developer.log(
+          "Failed to fetch skill '${skillName.trim()}' from registry.",
+          name: 'adk_dart.skill_toolset',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        return <String, Object?>{
+          'error':
+              "Failed to fetch skill '${skillName.trim()}' from registry: $error",
+          'error_code': 'REGISTRY_ERROR',
+        };
+      }
+    }
     if (skill == null) {
       return <String, Object?>{
         'error': "Skill '${skillName.trim()}' not found.",
@@ -737,25 +757,106 @@ class _RunSkillScriptTool extends BaseTool {
   }
 }
 
+class _SearchSkillsTool extends BaseTool {
+  _SearchSkillsTool(this._toolset)
+    : super(
+        name: 'search_skills',
+        description: _toolset._registry!.getSearchDescription(),
+      );
+
+  final SkillToolset _toolset;
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    final Map<String, Object?> properties = <String, Object?>{
+      'query': <String, Object?>{
+        'type': 'string',
+        'description': 'Semantic or keyword search query.',
+      },
+    };
+    final Map<String, Object?>? filterSchema = _toolset._registry!
+        .getFilterSchema();
+    if (filterSchema != null) {
+      properties['filters'] = filterSchema;
+    }
+
+    return FunctionDeclaration(
+      name: name,
+      description: description,
+      parameters: <String, Object?>{
+        'type': 'object',
+        'properties': properties,
+        'required': <String>['query'],
+      },
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    final Object? rawQuery = args['query'];
+    if (rawQuery is! String || rawQuery.trim().isEmpty) {
+      return <String, Object?>{
+        'error': "Argument 'query' is required.",
+        'error_code': 'INVALID_ARGUMENTS',
+      };
+    }
+
+    final Object? rawFilters = args['filters'];
+    if (rawFilters != null && rawFilters is! Map) {
+      return <String, Object?>{
+        'error': "Argument 'filters' must be an object.",
+        'error_code': 'INVALID_ARGUMENTS',
+      };
+    }
+
+    final List<Frontmatter> results = await _toolset._registry!.searchSkills(
+      query: rawQuery.trim(),
+      filters: rawFilters is Map
+          ? rawFilters.map(
+              (Object? key, Object? value) => MapEntry('$key', value),
+            )
+          : null,
+    );
+
+    final List<Map<String, Object?>> formatted = <Map<String, Object?>>[];
+    for (final Frontmatter result in results) {
+      if (_toolset._skills.containsKey(result.name)) {
+        developer.log(
+          "Naming conflict detected: Skill '${result.name}' exists both locally and in the registry. Filtering out the registry skill.",
+          name: 'adk_dart.skill_toolset',
+        );
+        continue;
+      }
+      formatted.add(result.toMap());
+    }
+    return formatted;
+  }
+}
+
 /// Toolset exposing skill-discovery, loading, and script-execution tools.
 class SkillToolset extends BaseToolset {
   /// Creates a toolset that exposes skill discovery/loading/script tools.
   SkillToolset({
-    required List<Skill> skills,
+    List<Skill>? skills,
+    SkillRegistry? registry,
     List<Object>? additionalTools,
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
-  }) : _codeExecutor = codeExecutor,
+  }) : _registry = registry,
+       _codeExecutor = codeExecutor,
        _scriptTimeout = scriptTimeout {
     final Set<String> seen = <String>{};
-    for (final Skill skill in skills) {
+    for (final Skill skill in skills ?? const <Skill>[]) {
       if (seen.contains(skill.name)) {
         throw ArgumentError("Duplicate skill name '${skill.name}'.");
       }
       seen.add(skill.name);
     }
     _skills = <String, Skill>{
-      for (final Skill skill in skills) skill.name: skill,
+      for (final Skill skill in skills ?? const <Skill>[]) skill.name: skill,
     };
     _tools = <BaseTool>[
       _ListSkillsTool(this),
@@ -763,6 +864,9 @@ class SkillToolset extends BaseToolset {
       _LoadSkillResourceTool(this),
       _RunSkillScriptTool(this),
     ];
+    if (_registry != null) {
+      _tools.add(_SearchSkillsTool(this));
+    }
     _providedToolsByName = <String, BaseTool>{};
     _providedToolsets = <BaseToolset>[];
     for (final Object toolUnion in additionalTools ?? const <Object>[]) {
@@ -784,6 +888,7 @@ class SkillToolset extends BaseToolset {
   late final List<BaseTool> _tools;
   late final Map<String, BaseTool> _providedToolsByName;
   late final List<BaseToolset> _providedToolsets;
+  final SkillRegistry? _registry;
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
 
@@ -891,6 +996,8 @@ class SkillToolset extends BaseToolset {
   }) async {
     final List<String> instructions = <String>[
       defaultSkillSystemInstruction,
+      if (_registry != null)
+        '\nYou can also use the `search_skills` tool to discover additional skills in the registry if the available skills listed below are not sufficient.\n',
       formatSkillsAsXml(_listSkills()),
     ];
     llmRequest.appendInstructions(instructions);

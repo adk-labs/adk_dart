@@ -76,6 +76,10 @@ void main() {
           (client.requests.single.parts.single.root as A2aTextPart).text,
           'ping',
         );
+        expect(
+          client.requests.single.parts.single.root.metadata['is_user_input'],
+          isTrue,
+        );
 
         expect(events, hasLength(1));
         expect(events.single.author, 'remote_agent');

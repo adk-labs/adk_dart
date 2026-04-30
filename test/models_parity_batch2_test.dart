@@ -376,6 +376,7 @@ void main() {
         final GeminiLlmConnection connection = GeminiLlmConnection(
           model: Gemini(),
           liveSession: session,
+          modelVersion: 'gemini-3.1-flash',
         );
         final List<LlmResponse> responses = <LlmResponse>[];
         final StreamSubscription<LlmResponse> sub = connection.receive().listen(
@@ -494,6 +495,7 @@ void main() {
         final GeminiLlmConnection connection = GeminiLlmConnection(
           model: Gemini(),
           liveSession: session,
+          modelVersion: 'gemini-3.1-flash',
         );
         final List<LlmResponse> responses = <LlmResponse>[];
         final StreamSubscription<LlmResponse> sub = connection.receive().listen(
@@ -540,6 +542,7 @@ void main() {
           responses.first.content?.parts.single.functionCall?.name,
           'enterprise_web_search',
         );
+        expect(responses.first.modelVersion, 'gemini-3.1-flash');
         expect(responses.first.groundingMetadata, isNull);
         expect(
           responses.last.content?.parts.single.inlineData?.mimeType,

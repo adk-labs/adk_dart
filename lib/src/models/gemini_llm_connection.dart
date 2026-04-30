@@ -360,6 +360,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
       _responses.add(
         LlmResponse(
           content: Content(role: 'model', parts: parts),
+          modelVersion: _modelVersion,
           liveSessionId: _liveSession?.liveSessionId,
         ),
       );

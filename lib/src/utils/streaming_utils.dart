@@ -383,6 +383,8 @@ class StreamingResponseAggregator {
         if (_text.isNotEmpty)
           Part.text(_text, thoughtSignature: _textThoughtSignature),
       ];
+      final String? finishReason = _finishReason ?? response.finishReason;
+      final bool success = finishReason == null || finishReason == 'STOP';
       yield LlmResponse(
         modelVersion: response.modelVersion ?? _modelVersion,
         content: Content(parts: mergedParts),
@@ -393,6 +395,9 @@ class StreamingResponseAggregator {
         logprobsResult: response.logprobsResult,
         cacheMetadata: response.cacheMetadata,
         interactionId: response.interactionId,
+        errorCode: success ? null : finishReason,
+        errorMessage: success ? null : response.errorMessage,
+        finishReason: finishReason,
       );
       _thoughtText = '';
       _text = '';
@@ -442,7 +447,7 @@ class StreamingResponseAggregator {
       return null;
     }
 
-    final String? finishReason = _response!.finishReason;
+    final String? finishReason = _finishReason ?? _response!.finishReason;
     final bool success = finishReason == null || finishReason == 'STOP';
     return LlmResponse(
       modelVersion: _response!.modelVersion ?? _modelVersion,

@@ -305,6 +305,33 @@ void main() {
       },
     );
 
+    test(
+      'streaming response aggregator keeps finish reason across empty final chunk',
+      () async {
+        overrideFeatureEnabled(FeatureName.progressiveSseStreaming, false);
+        final StreamingResponseAggregator aggregator =
+            StreamingResponseAggregator();
+
+        await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(parts: <Part>[Part.text('Hello')]),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+        final List<LlmResponse> finalChunk = await aggregator
+            .processResponse(LlmResponse())
+            .toList();
+
+        final LlmResponse merged = finalChunk.first;
+        expect(merged.content?.parts.single.text, 'Hello');
+        expect(merged.finishReason, 'STOP');
+        expect(merged.errorCode, isNull);
+        expect(aggregator.close(), isNull);
+      },
+    );
+
     test('streaming response aggregator supports progressive mode', () async {
       overrideFeatureEnabled(FeatureName.progressiveSseStreaming, true);
       final StreamingResponseAggregator aggregator =

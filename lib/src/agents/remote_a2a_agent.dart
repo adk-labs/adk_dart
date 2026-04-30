@@ -622,6 +622,11 @@ class RemoteA2aAgent extends BaseAgent {
           );
           continue;
         }
+        if (event.author == 'user') {
+          for (final A2aPart convertedPart in convertedParts) {
+            convertedPart.root.metadata['is_user_input'] = true;
+          }
+        }
         messageParts.addAll(convertedParts);
       }
     }
