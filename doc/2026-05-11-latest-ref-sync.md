@@ -43,11 +43,38 @@
 - 작업 내용: Flutter sample의 Skills 예제와 다국어 README에서 registry/search 기반 설명을 제거하고 inline skills 기반 설명으로 정리했다.
 - 작업 이유: 최신 Python의 model-facing skill prompt와 tool 구성이 registry 검색을 노출하지 않으므로, Flutter 예제가 오래된 `search_skills` 사용법을 안내하면 실제 런타임 동작과 어긋난다.
 
+### 추가 gap 검토 후 런타임 보정
+
+- 작업 내용: live 모드에서 audio뿐 아니라 image/video inline media 이벤트도 세션 저장에서 제외하고, `Runner.close()`가 session service `flush()`를 호출하도록 맞췄다.
+- 작업 이유: 최신 Python `Runner`는 live model media blob을 세션에 직접 저장하지 않고 close 시 session service flush hook을 호출한다. 이 동작이 다르면 live 세션 저장 용량과 buffered session service 종료 동작이 Python과 달라질 수 있다.
+
+### EnvironmentToolset 출력 제한 옵션
+
+- 작업 내용: `EnvironmentToolset(maxOutputChars: ...)` 옵션을 추가하고 `Execute` stdout/stderr 및 `ReadFile` 출력 truncation에 적용했다.
+- 작업 이유: 최신 Python 환경 toolset은 호출자가 출력 제한을 조정할 수 있다. Dart가 고정 30000자만 사용하면 긴 출력 제어 동작이 달라진다.
+
+### 캐시 분석 null 처리 정렬
+
+- 작업 내용: cache performance analyzer가 `invocationsUsed == null` 값을 평균/합계에서 제외하고, `cacheName == null` 값은 refresh count에서 제외하도록 수정했다.
+- 작업 이유: 최신 Python은 null cache metadata를 0이나 별도 cache refresh로 계산하지 않는다. Dart가 null을 0으로 합산하면 cache 효율 지표가 낮게 계산될 수 있다.
+
+### LLM-backed user simulator 실패 처리
+
+- 작업 내용: simulator LLM이 error code를 반환하거나 thought-only/empty 응답을 반환하면 `noMessageGenerated` 상태 대신 실패 이유가 포함된 `StateError`를 던지도록 수정했다.
+- 작업 이유: 최신 Python은 LLM-backed simulator의 빈 응답을 정상 종료 상태로 보지 않고 런타임 오류로 처리한다. 이 차이가 있으면 eval 생성 실패를 조용히 삼키게 된다.
+
+### OAuth2 PKCE challenge method 검증
+
+- 작업 내용: OAuth2 auth request 생성 시 `codeChallengeMethod`가 지정되어 있으면 `S256`만 허용하도록 검증을 추가했다.
+- 작업 이유: 최신 Python auth handler는 PKCE에서 `S256` 외 challenge method를 거부한다. Dart는 authorization URL 합성은 하지 않지만 unsupported PKCE payload를 그대로 통과시키지 않도록 공통 검증을 맞췄다.
+
 ## 검토 결과
 
 - `adk-js`의 Vertex AI session/memory bank service, Google Maps grounding tool, Vertex tool 계열은 Dart에 이미 대응 구현이 있어 이번 변경에서는 테스트 기준으로 유지했다.
 - `adk-java`의 `SkillSource` 계열은 Java SDK의 별도 source abstraction이며, 최신 Python은 registry 검색을 제거했다. Dart는 기존 inline/file skill parsing과 `Skill` 모델을 유지하되 LLM 노출 경로를 Python 기준으로 정리했다.
 - `adk-python`의 VMAAS, Firestore integration, CLI onboarding, release/workflow 변경은 Dart 런타임 또는 Flutter example에 직접 매핑되지 않아 별도 구현 대상에서 제외했다.
+- 추가 검토에서 `adk-python`의 `agent_engine_sandbox_code_executor.py` 404 재생성 보정은 Python의 Vertex/GenAI client 예외 타입에 묶인 코드 경로라 Dart의 `AgentEngineSandboxClient` 추상화에는 직접 매핑하지 않았다.
+- `adk-python`의 `BuiltInCodeExecutor` EAP 모델 판정 변경은 Dart에 동명의 built-in server-side code executor API가 없어 이번 변경에서는 기존 Gemini EAP capability gating 범위만 유지했다.
 
 ## 검증
 
@@ -55,4 +82,5 @@
 - 통과: `dart analyze lib test` (error/warning 없음, 기존 info lint만 남음)
 - 통과: `flutter analyze` / `flutter test` in `packages/flutter_adk`
 - 통과: `flutter analyze` / `flutter test` in `packages/flutter_adk/example`
+- 통과: `dart test test/runner_live_config_test.dart test/environment_toolset_parity_test.dart test/utils_missing_parity_test.dart test/user_simulation_parity_test.dart test/auth_handler_test.dart`
 - 참고: 루트 전체 `dart test`는 `test/dev_web_server_test.dart`의 기존 dev-server 통합 테스트 2건이 단독 실행에서도 실패했다. 이번 최신화 변경 범위의 auth/skill/analytics/model/session 테스트는 모두 통과했다.

@@ -23,8 +23,10 @@ class _LiveEchoAgent extends BaseAgent {
   }
 }
 
-class _InlineAudioLiveAgent extends BaseAgent {
-  _InlineAudioLiveAgent({required super.name});
+class _InlineMediaLiveAgent extends BaseAgent {
+  _InlineMediaLiveAgent({required super.name, required this.mimeType});
+
+  final String mimeType;
 
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {}
@@ -38,13 +40,20 @@ class _InlineAudioLiveAgent extends BaseAgent {
       content: Content(
         role: 'model',
         parts: <Part>[
-          Part.fromInlineData(
-            mimeType: 'audio/pcm;rate=24000',
-            data: <int>[1, 0, 2, 0],
-          ),
+          Part.fromInlineData(mimeType: mimeType, data: <int>[1, 0, 2, 0]),
         ],
       ),
     );
+  }
+}
+
+class _FlushTrackingSessionService extends InMemorySessionService {
+  int flushCalls = 0;
+
+  @override
+  Future<void> flush() async {
+    flushCalls += 1;
+    await super.flush();
   }
 }
 
@@ -125,32 +134,57 @@ void main() {
     },
   );
 
-  test('runLive does not persist inline audio events to session', () async {
-    final _InlineAudioLiveAgent root = _InlineAudioLiveAgent(
-      name: 'root_agent',
+  for (final String mimeType in <String>[
+    'audio/pcm;rate=24000',
+    'video/mp4',
+    'image/png',
+  ]) {
+    test(
+      'runLive does not persist inline $mimeType events to session',
+      () async {
+        final _InlineMediaLiveAgent root = _InlineMediaLiveAgent(
+          name: 'root_agent',
+          mimeType: mimeType,
+        );
+        final InMemoryRunner runner = InMemoryRunner(agent: root);
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'u1',
+          sessionId: 's_live_inline_${mimeType.split('/').first}',
+        );
+
+        final List<Event> events = await runner
+            .runLive(
+              liveRequestQueue: LiveRequestQueue()..close(),
+              session: session,
+            )
+            .toList();
+        expect(events, hasLength(1));
+        expect(events.first.content?.parts.first.inlineData, isNotNull);
+
+        final Session? updated = await runner.sessionService.getSession(
+          appName: runner.appName,
+          userId: session.userId,
+          sessionId: session.id,
+        );
+        expect(updated, isNotNull);
+        expect(updated!.events, isEmpty);
+      },
     );
-    final InMemoryRunner runner = InMemoryRunner(agent: root);
-    final Session session = await runner.sessionService.createSession(
-      appName: runner.appName,
-      userId: 'u1',
-      sessionId: 's_live_inline_audio',
+  }
+
+  test('close flushes the session service', () async {
+    final _FlushTrackingSessionService sessionService =
+        _FlushTrackingSessionService();
+    final Runner runner = Runner(
+      appName: 'app',
+      agent: _LiveEchoAgent(name: 'root_agent'),
+      sessionService: sessionService,
+      artifactService: InMemoryArtifactService(),
     );
 
-    final List<Event> events = await runner
-        .runLive(
-          liveRequestQueue: LiveRequestQueue()..close(),
-          session: session,
-        )
-        .toList();
-    expect(events, hasLength(1));
-    expect(events.first.content?.parts.first.inlineData, isNotNull);
+    await runner.close();
 
-    final Session? updated = await runner.sessionService.getSession(
-      appName: runner.appName,
-      userId: session.userId,
-      sessionId: session.id,
-    );
-    expect(updated, isNotNull);
-    expect(updated!.events, isEmpty);
+    expect(sessionService.flushCalls, 1);
   });
 }

@@ -150,8 +150,19 @@ class LlmBackedUserSimulator
 
   /// Produces the next simulator message from [rewrittenDialogue].
   Future<String> getLlmResponse(String rewrittenDialogue) async {
+    final ({String response, String? errorReason}) result =
+        await _getLlmResponseWithReason(rewrittenDialogue);
+    return result.response;
+  }
+
+  Future<({String response, String? errorReason})> _getLlmResponseWithReason(
+    String rewrittenDialogue,
+  ) async {
     if (_invocationCount == 0) {
-      return _conversationScenario.startingPrompt;
+      return (
+        response: _conversationScenario.startingPrompt,
+        errorReason: null,
+      );
     }
 
     final String prompt = getLlmBackedUserSimulatorPrompt(
@@ -172,22 +183,43 @@ class LlmBackedUserSimulator
     addDefaultRetryOptionsIfNotPresent(llmRequest);
 
     final StringBuffer response = StringBuffer();
+    String? errorReason;
+    bool hasThoughtTokens = false;
     await for (final LlmResponse llmResponse in _llm.generateContent(
       llmRequest,
       stream: true,
     )) {
+      final String? errorCode = llmResponse.errorCode;
+      if (errorCode != null && errorCode.isNotEmpty) {
+        errorReason = 'safety filters or other error (code=$errorCode)';
+        response.clear();
+        break;
+      }
+
       final Content? generated = llmResponse.content;
       if (generated == null || generated.parts.isEmpty) {
         continue;
       }
       for (final Part part in generated.parts) {
-        if ((part.text ?? '').isEmpty || part.thought) {
+        if (part.thought) {
+          hasThoughtTokens = true;
           continue;
         }
-        response.write(part.text);
+        final String? text = part.text;
+        if (text == null || text.isEmpty) {
+          continue;
+        }
+        response.write(text);
       }
     }
-    return response.toString();
+
+    final String text = response.toString();
+    if (text.isEmpty && errorReason == null) {
+      errorReason = hasThoughtTokens
+          ? 'LLM returned only thinking tokens'
+          : 'LLM returned empty response';
+    }
+    return (response: text, errorReason: errorReason);
   }
 
   @override
@@ -198,10 +230,13 @@ class LlmBackedUserSimulator
     }
 
     final String rewrittenDialogue = summarizeConversation(events);
-    final String response = await getLlmResponse(rewrittenDialogue);
+    final ({String response, String? errorReason}) llmResult =
+        await _getLlmResponseWithReason(rewrittenDialogue);
+    final String response = llmResult.response;
     _invocationCount += 1;
 
-    if (response.toLowerCase().contains(_stopSignal.toLowerCase())) {
+    if (response.isNotEmpty &&
+        response.toLowerCase().contains(_stopSignal.toLowerCase())) {
       return NextUserMessage(status: Status.stopSignalDetected);
     }
 
@@ -215,7 +250,9 @@ class LlmBackedUserSimulator
       );
     }
 
-    return NextUserMessage(status: Status.noMessageGenerated);
+    throw StateError(
+      'Failed to generate a user message: ${llmResult.errorReason}',
+    );
   }
 
   @override

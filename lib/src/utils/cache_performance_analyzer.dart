@@ -110,7 +110,8 @@ class CachePerformanceAnalyzer {
         : 0.0;
 
     final List<int> invocationsUsed = cacheHistory
-        .map((CacheMetadata metadata) => metadata.invocationsUsed ?? 0)
+        .where((CacheMetadata metadata) => metadata.invocationsUsed != null)
+        .map((CacheMetadata metadata) => metadata.invocationsUsed!)
         .toList(growable: false);
     final int totalInvocations = invocationsUsed.fold(
       0,
@@ -118,6 +119,7 @@ class CachePerformanceAnalyzer {
     );
     final int cacheRefreshes = cacheHistory
         .map((CacheMetadata metadata) => metadata.cacheName)
+        .whereType<String>()
         .toSet()
         .length;
 

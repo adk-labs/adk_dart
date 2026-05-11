@@ -357,6 +357,85 @@ void main() {
       expect(second.userMessage?.parts.single.text, 'Final answer');
     });
 
+    test(
+      'raises when the simulator LLM returns only thinking tokens',
+      () async {
+        final Queue<LlmResponse> responses = Queue<LlmResponse>.from(
+          <LlmResponse>[
+            LlmResponse(
+              content: Content(
+                role: 'model',
+                parts: <Part>[Part.text('internal plan', thought: true)],
+              ),
+              turnComplete: true,
+            ),
+          ],
+        );
+        final LlmBackedUserSimulator simulator = LlmBackedUserSimulator(
+          config: LlmBackedUserSimulatorConfig(maxAllowedInvocations: 10),
+          conversationScenario: ConversationScenario(
+            startingPrompt: 'Start here.',
+            conversationPlan: 'Get a clean answer.',
+          ),
+          llmFactory: (String _) => _StreamingFakeLlm(responses: responses),
+        );
+
+        await simulator.getNextUserMessage(const <Event>[]);
+
+        await expectLater(
+          simulator.getNextUserMessage(<Event>[
+            Event(
+              invocationId: 'inv-sim',
+              author: 'agent',
+              content: Content.modelText('How can I help?'),
+            ),
+          ]),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) => error.message,
+              'message',
+              contains('only thinking tokens'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('raises when the simulator LLM returns an error code', () async {
+      final Queue<LlmResponse> responses = Queue<LlmResponse>.from(
+        <LlmResponse>[
+          LlmResponse(errorCode: 'SAFETY', errorMessage: 'blocked'),
+        ],
+      );
+      final LlmBackedUserSimulator simulator = LlmBackedUserSimulator(
+        config: LlmBackedUserSimulatorConfig(maxAllowedInvocations: 10),
+        conversationScenario: ConversationScenario(
+          startingPrompt: 'Start here.',
+          conversationPlan: 'Get a clean answer.',
+        ),
+        llmFactory: (String _) => _StreamingFakeLlm(responses: responses),
+      );
+
+      await simulator.getNextUserMessage(const <Event>[]);
+
+      await expectLater(
+        simulator.getNextUserMessage(<Event>[
+          Event(
+            invocationId: 'inv-sim',
+            author: 'agent',
+            content: Content.modelText('How can I help?'),
+          ),
+        ]),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('code=SAFETY'),
+          ),
+        ),
+      );
+    });
+
     test('simulation evaluator is provided', () {
       final LlmBackedUserSimulator simulator = LlmBackedUserSimulator(
         config: LlmBackedUserSimulatorConfig(),

@@ -108,6 +108,36 @@ void main() {
   );
 
   test(
+    'AuthHandler generateAuthRequest rejects unsupported PKCE challenge method',
+    () {
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2_authorization_code',
+        credentialKey: 'cred_bad_pkce',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(
+            clientId: 'client',
+            clientSecret: 'secret',
+            codeChallengeMethod: 'plain',
+          ),
+        ),
+      );
+      final AuthHandler handler = AuthHandler(authConfig: config);
+
+      expect(
+        handler.generateAuthRequest,
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => '${error.message}',
+            'message',
+            contains('Unsupported code_challenge_method'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'AuthHandler parseAndStoreAuthResponse stores temp and auth keys',
     () async {
       final Session session = Session(id: 's1', appName: 'app', userId: 'u1');

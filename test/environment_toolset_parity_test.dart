@@ -172,5 +172,41 @@ void main() {
 
       expect(utf8.decode(bytes), 'hello');
     });
+
+    test('applies custom maxOutputChars to command and file output', () async {
+      final Directory workspace = await Directory.systemTemp.createTemp(
+        'environment_toolset_truncate_',
+      );
+      addTearDown(() => workspace.delete(recursive: true));
+
+      final EnvironmentToolset toolset = EnvironmentToolset(
+        environment: LocalEnvironment(workingDirectory: workspace),
+        maxOutputChars: 5,
+      );
+      final Map<String, BaseTool> tools = await _resolveTools(toolset);
+      final Context context = _toolContext();
+
+      final Object? executeResult = await tools['Execute']!.run(
+        args: <String, dynamic>{'command': 'printf 1234567890'},
+        toolContext: context,
+      );
+      final Map<String, Object?> executePayload =
+          executeResult! as Map<String, Object?>;
+      expect(executePayload['stdout'], startsWith('12345\n... (truncated'));
+
+      await tools['WriteFile']!.run(
+        args: <String, dynamic>{'path': 'long.txt', 'content': 'abcdefghij\n'},
+        toolContext: context,
+      );
+      final Object? readResult = await tools['ReadFile']!.run(
+        args: <String, dynamic>{'path': 'long.txt'},
+        toolContext: context,
+      );
+      final Map<String, Object?> readPayload =
+          readResult! as Map<String, Object?>;
+      expect(readPayload['content'], startsWith('     \n... (truncated'));
+
+      await toolset.close();
+    });
   });
 }

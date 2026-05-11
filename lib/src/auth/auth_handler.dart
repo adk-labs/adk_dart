@@ -87,6 +87,15 @@ class AuthHandler {
         'Auth scheme `${authConfig.authScheme}` requires oauth2 in auth_credential.',
       );
     }
+    final String? codeChallengeMethod = oauth2.codeChallengeMethod;
+    if (codeChallengeMethod != null &&
+        codeChallengeMethod.isNotEmpty &&
+        codeChallengeMethod != 'S256') {
+      throw ArgumentError(
+        'Unsupported code_challenge_method: $codeChallengeMethod. '
+        "Only 'S256' is supported.",
+      );
+    }
 
     if (oauth2.authUri?.isNotEmpty == true) {
       return authConfig.copyWith(exchangedAuthCredential: raw.copyWith());

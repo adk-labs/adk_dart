@@ -12,7 +12,7 @@ import '../tool_context.dart';
 import 'base_environment.dart';
 
 const int _defaultTimeoutSeconds = 30;
-const int _maxOutputChars = 30000;
+const int _defaultMaxOutputChars = 30000;
 const String _environmentInstructionTemplate =
     '''Your environment is at {working_dir}/
 
@@ -28,7 +28,7 @@ DON'T:
 - Use multiple `Execute` calls for dependent commands (they run in parallel)
 ''';
 
-String _truncateOutput(String text, {int limit = _maxOutputChars}) {
+String _truncateOutput(String text, {int limit = _defaultMaxOutputChars}) {
   if (text.length <= limit) {
     return text;
   }
@@ -61,11 +61,19 @@ String _trimTrailingSeparator(String path) {
 /// Experimental toolset for command execution and file I/O.
 class EnvironmentToolset extends BaseToolset {
   /// Creates an environment toolset backed by [environment].
-  EnvironmentToolset({required BaseEnvironment environment})
-    : _environment = environment,
-      super();
+  EnvironmentToolset({
+    required BaseEnvironment environment,
+    int? maxOutputChars,
+  }) : _maxOutputChars = maxOutputChars,
+       _environment = environment,
+       super();
 
+  /// Environment used to execute commands and perform file I/O.
   final BaseEnvironment _environment;
+
+  /// Optional character limit for command and file output truncation.
+  final int? _maxOutputChars;
+
   bool _initialized = false;
 
   Future<void> _ensureInitialized() async {
@@ -80,8 +88,8 @@ class EnvironmentToolset extends BaseToolset {
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     await _ensureInitialized();
     return <BaseTool>[
-      _ExecuteTool(_environment),
-      _ReadFileTool(_environment),
+      _ExecuteTool(_environment, maxOutputChars: _maxOutputChars),
+      _ReadFileTool(_environment, maxOutputChars: _maxOutputChars),
       _EditFileTool(_environment),
       _WriteFileTool(_environment),
     ];
@@ -111,8 +119,9 @@ class EnvironmentToolset extends BaseToolset {
 }
 
 class _ExecuteTool extends BaseTool {
-  _ExecuteTool(this._environment)
-    : super(
+  _ExecuteTool(this._environment, {int? maxOutputChars})
+    : _maxOutputChars = maxOutputChars,
+      super(
         name: 'Execute',
         description:
             'Run a shell command in the environment. Use this for programs, tests, '
@@ -120,6 +129,7 @@ class _ExecuteTool extends BaseTool {
       );
 
   final BaseEnvironment _environment;
+  final int? _maxOutputChars;
 
   @override
   FunctionDeclaration getDeclaration() {
@@ -160,10 +170,16 @@ class _ExecuteTool extends BaseTool {
       );
       final Map<String, Object?> payload = <String, Object?>{'status': 'ok'};
       if (result.stdout.isNotEmpty) {
-        payload['stdout'] = _truncateOutput(result.stdout);
+        payload['stdout'] = _truncateOutput(
+          result.stdout,
+          limit: _maxOutputChars ?? _defaultMaxOutputChars,
+        );
       }
       if (result.stderr.isNotEmpty) {
-        payload['stderr'] = _truncateOutput(result.stderr);
+        payload['stderr'] = _truncateOutput(
+          result.stderr,
+          limit: _maxOutputChars ?? _defaultMaxOutputChars,
+        );
       }
       if (result.exitCode != 0) {
         payload['status'] = 'error';
@@ -182,14 +198,16 @@ class _ExecuteTool extends BaseTool {
 }
 
 class _ReadFileTool extends BaseTool {
-  _ReadFileTool(this._environment)
-    : super(
+  _ReadFileTool(this._environment, {int? maxOutputChars})
+    : _maxOutputChars = maxOutputChars,
+      super(
         name: 'ReadFile',
         description:
             'Read the contents of a file in the environment and return numbered lines.',
       );
 
   final BaseEnvironment _environment;
+  final int? _maxOutputChars;
 
   @override
   FunctionDeclaration getDeclaration() {
@@ -275,7 +293,10 @@ class _ReadFileTool extends BaseTool {
 
       return <String, Object?>{
         'status': 'ok',
-        'content': _truncateOutput(numbered),
+        'content': _truncateOutput(
+          numbered,
+          limit: _maxOutputChars ?? _defaultMaxOutputChars,
+        ),
         if (start > 1 || boundedEnd < total) 'total_lines': total,
       };
     } on FileSystemException catch (error) {

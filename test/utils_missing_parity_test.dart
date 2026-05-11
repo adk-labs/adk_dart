@@ -239,6 +239,29 @@ void main() {
       expect(result['total_requests'], 2);
       expect(result['requests_with_cache_hits'], 2);
 
+      await sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv3',
+          author: 'agent',
+          usageMetadata: <String, Object?>{
+            'promptTokenCount': 10,
+            'cachedContentTokenCount': 0,
+          },
+          cacheMetadata: const <String, Object?>{'fingerprint': 'fp-3'},
+        ),
+      );
+      final Map<String, Object?> withNullCacheFields = await analyzer
+          .analyzeAgentCachePerformance(
+            sessionId: session.id,
+            userId: session.userId,
+            appName: session.appName,
+            agentName: 'agent',
+          );
+      expect(withNullCacheFields['cache_refreshes'], 2);
+      expect(withNullCacheFields['total_invocations'], 4);
+      expect(withNullCacheFields['avg_invocations_used'], 2.0);
+
       final Session emptySession = await sessionService.createSession(
         appName: 'app',
         userId: 'user',

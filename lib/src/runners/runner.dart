@@ -1014,24 +1014,30 @@ class Runner {
     if (!isLiveCall) {
       return true;
     }
-    if (_isLiveModelAudioEventWithInlineData(event)) {
+    if (_isLiveModelMediaEventWithInlineData(event)) {
       return false;
     }
     return true;
   }
 
-  bool _isLiveModelAudioEventWithInlineData(Event event) {
+  bool _isLiveModelMediaEventWithInlineData(Event event) {
     final Content? content = event.content;
     if (content == null || content.parts.isEmpty) {
       return false;
     }
     for (final Part part in content.parts) {
       final InlineData? inlineData = part.inlineData;
-      if (inlineData != null && inlineData.mimeType.startsWith('audio/')) {
+      if (inlineData != null && _isMediaMimeType(inlineData.mimeType)) {
         return true;
       }
     }
     return false;
+  }
+
+  bool _isMediaMimeType(String mimeType) {
+    return mimeType.startsWith('audio/') ||
+        mimeType.startsWith('video/') ||
+        mimeType.startsWith('image/');
   }
 
   void _applyRunConfigCustomMetadata(Event event, RunConfig? runConfig) {
@@ -1074,6 +1080,7 @@ class Runner {
   Future<void> close() async {
     await _cleanupToolsets(_collectToolsets(agent));
     await pluginManager.close();
+    await sessionService.flush();
   }
 }
 
