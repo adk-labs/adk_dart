@@ -137,6 +137,30 @@ void main() {
       },
     );
 
+    test(
+      'VertexAiRagRetrieval injects built-in retrieval for Gemini EAP models',
+      () async {
+        final VertexAiRagRetrieval tool = VertexAiRagRetrieval(
+          name: 'vertex_rag',
+          description: 'vertex rag retrieval',
+          ragCorpora: <String>['corpus-eap'],
+        );
+        final LlmRequest request = LlmRequest(model: 'gemini-flash-early-exp');
+
+        await tool.processLlmRequest(
+          toolContext: _newToolContext(),
+          llmRequest: request,
+        );
+
+        expect(request.toolsDict.containsKey('vertex_rag'), isFalse);
+        expect(request.config.tools, hasLength(1));
+        final Map<String, Object?> retrieval = Map<String, Object?>.from(
+          request.config.tools!.single.retrieval! as Map,
+        );
+        expect(retrieval['vertexRagStore'], isA<Map>());
+      },
+    );
+
     test('VertexRagRetrievalTool injects server-side RAG config', () async {
       final VertexRagRetrievalTool tool = VertexRagRetrievalTool(
         ragResources: <VertexAiRagResource>[

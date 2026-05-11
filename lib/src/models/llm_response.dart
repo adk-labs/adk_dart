@@ -93,6 +93,38 @@ class LlmResponse {
   /// Provider go-away control payload for live reconnects.
   Object? goAway;
 
+  /// Returns function-call parts embedded in [content].
+  List<FunctionCall> getFunctionCalls() {
+    final Content? value = content;
+    if (value == null) {
+      return const <FunctionCall>[];
+    }
+
+    final List<FunctionCall> calls = <FunctionCall>[];
+    for (final Part part in value.parts) {
+      if (part.functionCall != null) {
+        calls.add(part.functionCall!);
+      }
+    }
+    return calls;
+  }
+
+  /// Returns function-response parts embedded in [content].
+  List<FunctionResponse> getFunctionResponses() {
+    final Content? value = content;
+    if (value == null) {
+      return const <FunctionResponse>[];
+    }
+
+    final List<FunctionResponse> responses = <FunctionResponse>[];
+    for (final Part part in value.parts) {
+      if (part.functionResponse != null) {
+        responses.add(part.functionResponse!);
+      }
+    }
+    return responses;
+  }
+
   /// Returns a copy of this response with optional overrides.
   LlmResponse copyWith({
     Object? modelVersion = _sentinel,

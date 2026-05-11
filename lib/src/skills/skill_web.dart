@@ -1,4 +1,4 @@
-/// Web-safe skill parsing and registry runtime.
+/// Web-safe skill parsing runtime.
 library;
 
 import '../features/_feature_registry.dart';

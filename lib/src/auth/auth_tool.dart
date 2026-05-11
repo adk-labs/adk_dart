@@ -157,6 +157,7 @@ OAuth2Auth? _copyOAuth2Auth(OAuth2Auth? oauth2) {
     clientId: oauth2.clientId,
     clientSecret: oauth2.clientSecret,
     authUri: oauth2.authUri,
+    nonce: oauth2.nonce,
     state: oauth2.state,
     redirectUri: oauth2.redirectUri,
     authResponseUri: oauth2.authResponseUri,
@@ -167,6 +168,8 @@ OAuth2Auth? _copyOAuth2Auth(OAuth2Auth? oauth2) {
     expiresAt: oauth2.expiresAt,
     expiresIn: oauth2.expiresIn,
     audience: oauth2.audience,
+    codeVerifier: oauth2.codeVerifier,
+    codeChallengeMethod: oauth2.codeChallengeMethod,
     tokenEndpointAuthMethod: oauth2.tokenEndpointAuthMethod,
   );
 }

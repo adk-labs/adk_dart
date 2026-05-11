@@ -53,6 +53,32 @@ bool isGemini1Model(String? modelString) {
   return RegExp(r'^gemini-1\.\d+').hasMatch(extractModelName(modelString));
 }
 
+/// Whether [modelString] represents Gemini EAP or Gemini major version 2+.
+bool isGeminiEapOr2OrAbove(String? modelString) {
+  if (modelString == null || modelString.isEmpty) {
+    return false;
+  }
+
+  final String modelName = extractModelName(modelString);
+  if (_isGeminiEapModelName(modelName)) {
+    return true;
+  }
+  if (!modelName.startsWith('gemini-')) {
+    return false;
+  }
+
+  final String remainder = modelName.substring('gemini-'.length);
+  if (remainder.isEmpty) {
+    return false;
+  }
+  final String versionToken = remainder.split('-').first;
+  if (!RegExp(r'^\d+(?:\.\d+)*$').hasMatch(versionToken)) {
+    return false;
+  }
+  final int major = int.parse(versionToken.split('.').first);
+  return major >= 2;
+}
+
 /// Whether [modelString] represents Gemini major version 2 or later.
 bool isGemini2OrAbove(String? modelString) {
   if (modelString == null || modelString.isEmpty) {
@@ -74,4 +100,10 @@ bool isGemini2OrAbove(String? modelString) {
   }
   final int major = int.parse(versionToken.split('.').first);
   return major >= 2;
+}
+
+bool _isGeminiEapModelName(String modelName) {
+  return RegExp(
+    r'^gemini-[a-z0-9_]+(?:-[a-z0-9_]+)*-early-exp\d*$',
+  ).hasMatch(modelName);
 }

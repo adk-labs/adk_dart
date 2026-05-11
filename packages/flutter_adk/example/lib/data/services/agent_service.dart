@@ -1139,7 +1139,7 @@ ${responseLanguageInstruction(language)}
     final Skill briefingTranslatorSkill = Skill(
       frontmatter: Frontmatter(
         name: 'briefing-translator',
-        description: '짧은 업데이트를 이해관계자용 브리핑으로 번역/현지화하는 레지스트리 스킬',
+        description: '짧은 업데이트를 이해관계자용 브리핑으로 번역/현지화하는 스킬',
       ),
       instructions: '''
 목표:
@@ -1161,28 +1161,27 @@ ${responseLanguageInstruction(language)}
         },
       ),
     );
-    final SkillRegistry registry = SkillRegistry()
-      ..register(briefingTranslatorSkill);
-
     return Agent(
       name: 'SkillEnabledAssistant',
       model: _createGeminiModel(apiKey),
-      description: 'Uses SkillToolset with inline skills and registry search.',
+      description: 'Uses SkillToolset with inline skills.',
       instruction:
           '''
 You are a skill-enabled assistant.
 - For writing/editing tasks, use writing-refiner skill.
 - For planning/roadmap tasks, use planning-advisor skill.
-- For translation/localization/briefing tasks, search the registry and load briefing-translator if relevant.
+- For translation/localization/briefing tasks, use briefing-translator skill.
 - Always list/load relevant skills before applying them.
-- If the listed skills are not sufficient, call search_skills before deciding no skill applies.
 - Use load_skill_resource when instructions refer to references/assets.
 ${responseLanguageInstruction(language)}
 ''',
       tools: <Object>[
         SkillToolset(
-          skills: <Skill>[writingRefinerSkill, planningAdvisorSkill],
-          registry: registry,
+          skills: <Skill>[
+            writingRefinerSkill,
+            planningAdvisorSkill,
+            briefingTranslatorSkill,
+          ],
         ),
       ],
     );

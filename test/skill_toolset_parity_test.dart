@@ -63,19 +63,6 @@ Skill _binarySkill() {
   );
 }
 
-Skill _registrySkill() {
-  return Skill(
-    frontmatter: Frontmatter(
-      name: 'registry-skill',
-      description: 'Remote registry workflow',
-    ),
-    instructions: 'Use registry instructions.',
-    resources: Resources(
-      references: <String, Object>{'registry.md': 'registry reference'},
-    ),
-  );
-}
-
 class _FakeCodeExecutor extends BaseCodeExecutor {
   _FakeCodeExecutor(this.result);
 
@@ -168,81 +155,19 @@ void main() {
       ]);
     });
 
-    test(
-      'getTools includes search_skills when registry is configured',
-      () async {
-        final SkillRegistry registry = SkillRegistry()
-          ..register(_registrySkill());
-        final SkillToolset toolset = SkillToolset(
-          skills: <Skill>[_sampleSkill()],
-          registry: registry,
-        );
-
-        final List<BaseTool> tools = await toolset.getTools();
-
-        expect(
-          tools.map((BaseTool tool) => tool.name),
-          contains('search_skills'),
-        );
-        expect(tools.last.name, 'search_skills');
-      },
-    );
-
-    test(
-      'search_skills returns registry matches and filters local conflicts',
-      () async {
-        final SkillRegistry registry = SkillRegistry()
-          ..register(_registrySkill())
-          ..register(_sampleSkill());
-        final SkillToolset toolset = SkillToolset(
-          skills: <Skill>[_sampleSkill()],
-          registry: registry,
-        );
-        final BaseTool searchTool = (await toolset.getTools()).last;
-
-        final Object? result = await searchTool.run(
-          args: <String, dynamic>{'query': 'workflow'},
-          toolContext: _newToolContext(),
-        );
-
-        final List<Object?> payload = List<Object?>.from(result! as List);
-        expect(payload, hasLength(1));
-        final Map<String, Object?> frontmatter = Map<String, Object?>.from(
-          payload.single! as Map,
-        );
-        expect(frontmatter['name'], 'registry-skill');
-      },
-    );
-
-    test('load_skill fetches missing local skill from registry', () async {
-      final SkillRegistry registry = SkillRegistry()
-        ..register(_registrySkill());
-      final SkillToolset toolset = SkillToolset(registry: registry);
+    test('load_skill returns not found for missing local skill', () async {
+      final SkillToolset toolset = SkillToolset(skills: <Skill>[]);
       final List<BaseTool> tools = await toolset.getTools();
       final BaseTool loadTool = tools[1];
 
       final Object? result = await loadTool.run(
-        args: <String, dynamic>{'skill_name': 'registry-skill'},
+        args: <String, dynamic>{'skill_name': 'missing-skill'},
         toolContext: _newToolContext(),
       );
       final Map<String, Object?> payload = Map<String, Object?>.from(
         result! as Map,
       );
-      expect(payload['skill_name'], 'registry-skill');
-      expect(payload['instructions'], 'Use registry instructions.');
-
-      final BaseTool resourceTool = tools[2];
-      final Object? resource = await resourceTool.run(
-        args: <String, dynamic>{
-          'skill_name': 'registry-skill',
-          'file_path': 'references/registry.md',
-        },
-        toolContext: _newToolContext(),
-      );
-      expect(
-        Map<String, Object?>.from(resource! as Map)['content'],
-        'registry reference',
-      );
+      expect(payload['error_code'], 'SKILL_NOT_FOUND');
     });
 
     test('list_skills returns xml-formatted skill descriptor', () async {
@@ -730,28 +655,9 @@ void main() {
         expect(instruction!, contains("You can use specialized 'skills'"));
         expect(instruction, contains('run_skill_script'));
         expect(instruction, isNot(contains('run_skill_inline_script')));
-        expect(instruction, contains('<available_skills>'));
-        expect(instruction, contains('my-skill'));
-      },
-    );
-
-    test(
-      'processLlmRequest adds registry search guidance when registry exists',
-      () async {
-        final SkillRegistry registry = SkillRegistry()
-          ..register(_registrySkill());
-        final SkillToolset toolset = SkillToolset(registry: registry);
-        final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
-
-        await toolset.processLlmRequest(
-          toolContext: _newToolContext(),
-          llmRequest: request,
-        );
-
-        final String? instruction = request.config.systemInstruction;
-        expect(instruction, isNotNull);
-        expect(instruction!, contains('search_skills'));
-        expect(instruction, contains('<available_skills>'));
+        expect(instruction, isNot(contains('search_skills')));
+        expect(instruction, isNot(contains('<available_skills>')));
+        expect(instruction, isNot(contains('my-skill')));
       },
     );
 

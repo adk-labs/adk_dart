@@ -77,6 +77,7 @@ class Event extends LlmResponse {
   }
 
   /// Returns function-call parts embedded in [content].
+  @override
   List<FunctionCall> getFunctionCalls() {
     final Content? value = content;
     if (value == null) {
@@ -93,6 +94,7 @@ class Event extends LlmResponse {
   }
 
   /// Returns function-response parts embedded in [content].
+  @override
   List<FunctionResponse> getFunctionResponses() {
     final Content? value = content;
     if (value == null) {

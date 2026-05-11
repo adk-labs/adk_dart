@@ -607,6 +607,14 @@ class LlmAgent extends BaseAgent {
       return;
     }
 
+    final bool hasTextPart = event.content!.parts.any(
+      (Part part) =>
+          part.text != null && part.text!.isNotEmpty && !part.thought,
+    );
+    if (!hasTextPart) {
+      return;
+    }
+
     final String value = event.content!.parts
         .where((Part part) => part.text != null && !part.thought)
         .map((Part part) => part.text!)

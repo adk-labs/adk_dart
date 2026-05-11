@@ -17,6 +17,28 @@ class _StaticTextModel extends BaseLlm {
   }
 }
 
+class _ToolCallModel extends BaseLlm {
+  _ToolCallModel() : super(model: 'tool-call');
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    yield LlmResponse(
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part.fromFunctionCall(
+            name: 'lookup',
+            args: <String, dynamic>{'query': 'x'},
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 Future<List<Event>> _runOnce(LlmAgent agent) async {
   final InMemoryRunner runner = InMemoryRunner(agent: agent);
   final Session session = await runner.sessionService.createSession(
@@ -91,5 +113,50 @@ void main() {
         isEmpty,
       );
     });
+
+    test(
+      'does not overwrite outputKey for function-response-only final event',
+      () async {
+        final LlmAgent agent = LlmAgent(
+          name: 'root_agent',
+          model: _ToolCallModel(),
+          outputKey: 'final_answer',
+          tools: <Object>[
+            FunctionTool(
+              name: 'lookup',
+              description: 'Looks up a value.',
+              func: ({required String query}) => <String, Object?>{
+                'query': query,
+                'value': 1,
+              },
+            ),
+          ],
+          afterToolCallback:
+              (
+                BaseTool tool,
+                Map<String, dynamic> args,
+                ToolContext toolContext,
+                Map<String, dynamic> toolResponse,
+              ) {
+                toolContext.actions.skipSummarization = true;
+                toolContext.actions.stateDelta['tool_value'] =
+                    toolResponse['value'];
+                return null;
+              },
+        );
+
+        final List<Event> events = await _runOnce(agent);
+        final Event functionResponseEvent = events.firstWhere(
+          (Event event) => event.getFunctionResponses().isNotEmpty,
+        );
+
+        expect(functionResponseEvent.actions.skipSummarization, isTrue);
+        expect(functionResponseEvent.actions.stateDelta['tool_value'], 1);
+        expect(
+          functionResponseEvent.actions.stateDelta.containsKey('final_answer'),
+          isFalse,
+        );
+      },
+    );
   });
 }

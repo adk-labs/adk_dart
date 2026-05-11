@@ -78,6 +78,15 @@ void main() {
         expect(tools, isNotNull);
         expect(tools!.isNotEmpty, isTrue);
         expect(tools.last.urlContext, isA<Map<String, Object?>>());
+
+        final LlmRequest eapRequest = LlmRequest(
+          model: 'gemini-flash-early-exp',
+        );
+        await tool.processLlmRequest(
+          toolContext: context,
+          llmRequest: eapRequest,
+        );
+        expect(eapRequest.config.tools!.single.urlContext, isNotNull);
       },
     );
   });

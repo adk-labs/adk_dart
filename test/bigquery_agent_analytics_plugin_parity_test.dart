@@ -206,6 +206,52 @@ void main() {
       },
     );
 
+    test('logs final visible agent responses', () async {
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+      );
+
+      final InvocationContext invocationContext = _newInvocationContext(
+        invocationId: 'inv_agent_response',
+      );
+      await plugin.onEventCallback(
+        invocationContext: invocationContext,
+        event: Event(
+          id: 'event_final',
+          invocationId: 'inv_agent_response',
+          author: 'root_agent',
+          branch: 'branch_1',
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.text('visible answer'),
+              Part.text('internal thought', thought: true),
+            ],
+          ),
+        ),
+      );
+
+      final Map<String, Object?> row = sink.rows.singleWhere(
+        (Map<String, Object?> row) => row['event_type'] == 'AGENT_RESPONSE',
+      );
+      final Map<String, Object?> content = Map<String, Object?>.from(
+        row['content']! as Map,
+      );
+      expect(content['response'], contains('visible answer'));
+      expect(content['response'], isNot(contains('internal thought')));
+
+      final Map<String, Object?> attributes =
+          (jsonDecode(row['attributes'] as String) as Map).map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          );
+      expect(attributes['source_event_id'], 'event_final');
+      expect(attributes['source_event_author'], 'root_agent');
+      expect(attributes['source_event_branch'], 'branch_1');
+    });
+
     test('respects allowlist/denylist gating', () async {
       final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
       final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(

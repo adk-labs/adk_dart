@@ -13,7 +13,7 @@ Flutter facade package for ADK Dart core runtime.
   - `FunctionTool`
   - `AgentTool`
   - `McpToolset` (remote MCP over Streamable HTTP)
-  - `SkillToolset` + inline `Skill` + `SkillRegistry`
+  - `SkillToolset` + inline `Skill`
   - Gemini built-in retrieval tools: `UrlContextTool`, `VertexAiSearchTool`,
     `VertexRagRetrievalTool`
   - `Gemini` (BYOK-style key injection)
@@ -88,7 +88,7 @@ Status legend:
 | Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | Tool execution is handled by Gemini/Vertex backends. |
 | MCP Toolset via Streamable HTTP | Y | Y | Y | Y | Y | Y | Works with remote MCP HTTP servers. |
 | MCP Toolset via stdio (`StdioConnectionParams`) | Partial | Partial | N | Y | Y | Y | Web cannot spawn local processes; mobile runtime support can depend on sandbox/process policy. |
-| Skills (`Skill`, `SkillToolset`, `SkillRegistry`) with inline definitions | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic. |
+| Skills (`Skill`, `SkillToolset`) with inline definitions | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic. |
 | Directory-based skill loading (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web throws `UnsupportedError` for filesystem-based loading. |
 | Plugin channel helper (`FlutterAdk().getPlatformVersion()`) | Y | Y | Y | Y | Y | Y | Uses platform channel / browser user-agent path. |
 | VM/CLI tooling (`adk` executable, dev server, CLI deploy path) | N | N | N | N | N | N | Not part of the Flutter package surface. |

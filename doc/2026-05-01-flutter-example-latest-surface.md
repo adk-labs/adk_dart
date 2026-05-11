@@ -19,8 +19,9 @@ Reference baseline:
 
 ### 3. Skill Registry Example Coverage
 
-- Work: Extended the Skills example with an in-memory `SkillRegistry`, a registry-only `briefing-translator` skill, and prompt guidance to call `search_skills` when inline skills are insufficient.
-- Reason: Latest ADK Skills behavior includes registry-backed discovery/loading. The previous Flutter example only showed fixed inline skill listing and loading.
+- Work: At the time, extended the Skills example with an in-memory `SkillRegistry`, a registry-only `briefing-translator` skill, and prompt guidance to call `search_skills` when inline skills are insufficient.
+- Reason: The 2026-05-01 ADK Skills behavior included registry-backed discovery/loading. The previous Flutter example only showed fixed inline skill listing and loading.
+- Current status: Superseded by the 2026-05-11 sync. Latest `adk-python` removed the registry search path, so the Flutter example now documents inline skills without `search_skills`.
 
 ### 4. Local Development Overrides
 
@@ -30,13 +31,13 @@ Reference baseline:
 ### 5. Documentation
 
 - Work: Updated `flutter_adk` package docs and Flutter example docs in English, Korean, Japanese, and Chinese.
-- Reason: The supported platform matrix and included-example list needed to reflect built-in model tools, `AgentTool`, and SkillRegistry usage.
+- Reason: The supported platform matrix and included-example list needed to reflect built-in model tools, `AgentTool`, and the then-current Skills surface.
 
 ## Reviewed But Not Patched
 
 - `VertexAiSearchTool` and `VertexRagRetrievalTool` were not added as default runnable example cards because they require user-specific Google Cloud resource IDs and project setup.
 - MCP stdio remains outside the Flutter example because Web cannot spawn local processes; the example intentionally demonstrates Streamable HTTP MCP only.
-- Directory-based skill loading remains documented as unsupported on Web; inline skills and in-memory registry remain the cross-platform path.
+- Directory-based skill loading remains documented as unsupported on Web; inline skills remain the cross-platform path.
 
 ## Verification
 

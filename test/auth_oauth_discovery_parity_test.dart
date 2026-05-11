@@ -12,6 +12,8 @@ void main() {
           redirectUri: 'https://app.example.com/callback',
           state: 'state-1',
           tokenEndpointAuthMethod: 'client_secret_post',
+          codeVerifier: 'verifier-1',
+          codeChallengeMethod: 'S256',
         ),
       );
       final OpenIdConnectWithConfig scheme = OpenIdConnectWithConfig(
@@ -29,6 +31,8 @@ void main() {
       expect(result.session!.clientId, 'client-id');
       expect(result.session!.scope, 'scope.a scope.b');
       expect(result.session!.tokenEndpointAuthMethod, 'client_secret_post');
+      expect(result.session!.codeVerifier, 'verifier-1');
+      expect(result.session!.codeChallengeMethod, 'S256');
     });
 
     test('createOAuth2Session supports authorization-code OAuth2 flow', () {

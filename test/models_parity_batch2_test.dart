@@ -122,6 +122,36 @@ class _FakeApigeeCompletionsClient implements ApigeeCompletionsClient {
 }
 
 void main() {
+  group('llm response helpers parity', () {
+    test('returns function calls and responses from content parts', () {
+      final LlmResponse response = LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.text('before'),
+            Part.fromFunctionCall(
+              name: 'lookup',
+              args: <String, dynamic>{'q': 'x'},
+              id: 'call-1',
+            ),
+            Part.fromFunctionResponse(
+              name: 'lookup',
+              response: <String, dynamic>{'ok': true},
+              id: 'call-1',
+            ),
+          ],
+        ),
+      );
+
+      expect(response.getFunctionCalls(), hasLength(1));
+      expect(response.getFunctionCalls().single.name, 'lookup');
+      expect(response.getFunctionResponses(), hasLength(1));
+      expect(response.getFunctionResponses().single.response['ok'], isTrue);
+      expect(LlmResponse().getFunctionCalls(), isEmpty);
+      expect(LlmResponse().getFunctionResponses(), isEmpty);
+    });
+  });
+
   group('gemini context cache manager parity', () {
     test('returns fingerprint-only metadata on first request', () async {
       final GeminiContextCacheManager manager = GeminiContextCacheManager();

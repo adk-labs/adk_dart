@@ -33,16 +33,11 @@ class UrlContextTool extends BaseTool {
   }) async {
     final bool modelCheckDisabled = _modelIdCheckDisabledResolver();
     final String model = (llmRequest.model ?? '').trim();
-    final bool isGemini1 = model.startsWith('gemini-1');
-    final bool isGemini2OrAbove =
-        model.startsWith('gemini-2') ||
-        model.startsWith('gemini-3') ||
-        model.startsWith('gemini-4');
 
-    if (isGemini1) {
+    if (isGemini1Model(model)) {
       throw ArgumentError('Url context tool cannot be used in Gemini 1.x.');
     }
-    if (!isGemini2OrAbove && !modelCheckDisabled) {
+    if (!isGeminiEapOr2OrAbove(model) && !modelCheckDisabled) {
       throw ArgumentError('Url context tool is not supported for model $model');
     }
 

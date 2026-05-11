@@ -14,6 +14,8 @@ class OAuth2SessionData {
     this.redirectUri,
     this.state,
     this.tokenEndpointAuthMethod,
+    this.codeVerifier,
+    this.codeChallengeMethod,
   });
 
   /// OAuth2 client ID.
@@ -33,6 +35,12 @@ class OAuth2SessionData {
 
   /// Optional token-endpoint auth method.
   final String? tokenEndpointAuthMethod;
+
+  /// Optional PKCE code verifier.
+  final String? codeVerifier;
+
+  /// Optional PKCE code challenge method.
+  final String? codeChallengeMethod;
 }
 
 /// Result of deriving OAuth2 session config from auth metadata.
@@ -90,6 +98,8 @@ OAuth2SessionResult createOAuth2Session({
       redirectUri: oauth2.redirectUri,
       state: oauth2.state,
       tokenEndpointAuthMethod: oauth2.tokenEndpointAuthMethod,
+      codeVerifier: oauth2.codeVerifier,
+      codeChallengeMethod: oauth2.codeChallengeMethod,
     ),
     tokenEndpoint: tokenEndpoint,
   );

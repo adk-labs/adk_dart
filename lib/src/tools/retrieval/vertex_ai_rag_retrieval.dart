@@ -119,7 +119,7 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
     required LlmRequest llmRequest,
   }) async {
     final bool modelCheckDisabled = _modelIdCheckDisabledResolver();
-    if (isGemini2OrAbove(llmRequest.model) || modelCheckDisabled) {
+    if (isGeminiEapOr2OrAbove(llmRequest.model) || modelCheckDisabled) {
       llmRequest.config.tools ??= <ToolDeclaration>[];
       llmRequest.config.tools!.add(
         ToolDeclaration(

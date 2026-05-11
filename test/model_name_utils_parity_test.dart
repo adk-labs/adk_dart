@@ -30,6 +30,18 @@ void main() {
       expect(isGemini2OrAbove('gemini-3-pro-preview'), isTrue);
       expect(isGemini2OrAbove('gemini-1.5-flash'), isFalse);
       expect(isGemini2OrAbove('gemini-preview'), isFalse);
+
+      expect(isGeminiEapOr2OrAbove('gemini-flash-early-exp'), isTrue);
+      expect(isGeminiEapOr2OrAbove('gemini-flash-lite-early-exp3'), isTrue);
+      expect(
+        isGeminiEapOr2OrAbove(
+          'projects/p/locations/us/publishers/google/models/gemini-pro-early-exp',
+        ),
+        isTrue,
+      );
+      expect(isGeminiEapOr2OrAbove('gemini-2.0-flash'), isTrue);
+      expect(isGeminiEapOr2OrAbove('gemini-1.5-flash'), isFalse);
+      expect(isGeminiEapOr2OrAbove('gemini-preview'), isFalse);
     });
 
     test('gemini model-id check disable reads env flag', () {

@@ -22,7 +22,7 @@ Example app for `flutter_adk`.
 - `Agent Team`: coordinator routing to Greeting/Weather/Farewell team
 - `MCP Toolset`: remote MCP with `McpToolset + StreamableHTTPConnectionParams`
 - `URL Context`: Gemini built-in `UrlContextTool` for page summarization/comparison
-- `Skills`: orchestration using inline `Skill + SkillToolset + SkillRegistry`
+- `Skills`: orchestration using inline `Skill + SkillToolset`
 
 ## Platform Support Matrix (Current)
 
@@ -38,7 +38,7 @@ Status legend:
 | Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | Model-side retrieval through Gemini |
-| Skills (inline `Skill` + `SkillToolset` + `SkillRegistry`) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
+| Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
 | Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
 | Local-process MCP stdio example | N | N | N | N | N | N | This app demonstrates remote HTTP MCP only |
 | Directory skill loading (`loadSkillFromDir`) demo | N | N | N | N | N | N | This app demonstrates inline skills only |

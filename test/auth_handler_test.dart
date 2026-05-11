@@ -12,6 +12,9 @@ void main() {
           clientId: 'client',
           clientSecret: 'secret',
           authUri: 'https://auth.example.com',
+          nonce: 'nonce-1',
+          codeVerifier: 'verifier-1',
+          codeChallengeMethod: 'S256',
         ),
       ),
     );
@@ -24,6 +27,12 @@ void main() {
     expect(
       request.exchangedAuthCredential?.oauth2?.authUri,
       'https://auth.example.com',
+    );
+    expect(request.exchangedAuthCredential?.oauth2?.nonce, 'nonce-1');
+    expect(request.exchangedAuthCredential?.oauth2?.codeVerifier, 'verifier-1');
+    expect(
+      request.exchangedAuthCredential?.oauth2?.codeChallengeMethod,
+      'S256',
     );
   });
 

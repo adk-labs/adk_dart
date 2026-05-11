@@ -45,6 +45,7 @@ class OAuth2Auth {
     this.clientId,
     this.clientSecret,
     this.authUri,
+    this.nonce,
     this.state,
     this.redirectUri,
     this.authResponseUri,
@@ -55,6 +56,8 @@ class OAuth2Auth {
     this.expiresAt,
     this.expiresIn,
     this.audience,
+    this.codeVerifier,
+    this.codeChallengeMethod,
     this.tokenEndpointAuthMethod = 'client_secret_basic',
   });
 
@@ -66,6 +69,9 @@ class OAuth2Auth {
 
   /// Authorization URI.
   String? authUri;
+
+  /// Nonce value used to bind an OAuth/OpenID Connect authorization request.
+  String? nonce;
 
   /// OAuth state parameter.
   String? state;
@@ -96,6 +102,12 @@ class OAuth2Auth {
 
   /// Audience for token exchange or ID token.
   String? audience;
+
+  /// PKCE code verifier retained for authorization-code token exchange.
+  String? codeVerifier;
+
+  /// PKCE code challenge method, for example `S256`.
+  String? codeChallengeMethod;
 
   /// Token endpoint auth method.
   String tokenEndpointAuthMethod;

@@ -23,5 +23,5 @@ bool canUseOutputSchemaWithTools(
   };
   return getGoogleLlmVariant(environment: environment) ==
           GoogleLLMVariant.vertexAi &&
-      isGemini2OrAbove(modelString);
+      isGeminiEapOr2OrAbove(modelString);
 }

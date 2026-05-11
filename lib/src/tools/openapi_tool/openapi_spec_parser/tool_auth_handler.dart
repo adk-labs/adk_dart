@@ -428,6 +428,7 @@ Object? _authCredentialToPrimitive(AuthCredential credential) {
         'clientId': oauth2.clientId,
         'clientSecret': oauth2.clientSecret,
         'authUri': oauth2.authUri,
+        if (oauth2.nonce != null) 'nonce': oauth2.nonce,
         'state': oauth2.state,
         'redirectUri': oauth2.redirectUri,
         'authResponseUri': oauth2.authResponseUri,
@@ -437,6 +438,9 @@ Object? _authCredentialToPrimitive(AuthCredential credential) {
         'expiresAt': oauth2.expiresAt,
         'expiresIn': oauth2.expiresIn,
         'audience': oauth2.audience,
+        if (oauth2.codeVerifier != null) 'codeVerifier': oauth2.codeVerifier,
+        if (oauth2.codeChallengeMethod != null)
+          'codeChallengeMethod': oauth2.codeChallengeMethod,
         'tokenEndpointAuthMethod': oauth2.tokenEndpointAuthMethod,
       },
     if (serviceAccount != null)
@@ -548,6 +552,7 @@ OAuth2Auth? _oauth2FromObject(Object? value) {
     clientSecret:
         _readString(map['clientSecret']) ?? _readString(map['client_secret']),
     authUri: _readString(map['authUri']) ?? _readString(map['auth_uri']),
+    nonce: _readString(map['nonce']),
     state: _readString(map['state']),
     redirectUri:
         _readString(map['redirectUri']) ?? _readString(map['redirect_uri']),
@@ -562,6 +567,11 @@ OAuth2Auth? _oauth2FromObject(Object? value) {
     expiresAt: _readInt(map['expiresAt']) ?? _readInt(map['expires_at']),
     expiresIn: _readInt(map['expiresIn']) ?? _readInt(map['expires_in']),
     audience: _readString(map['audience']),
+    codeVerifier:
+        _readString(map['codeVerifier']) ?? _readString(map['code_verifier']),
+    codeChallengeMethod:
+        _readString(map['codeChallengeMethod']) ??
+        _readString(map['code_challenge_method']),
     tokenEndpointAuthMethod:
         _readString(map['tokenEndpointAuthMethod']) ??
         _readString(map['token_endpoint_auth_method']) ??
@@ -643,6 +653,7 @@ AuthCredential? _normalizeCredentialForKey(AuthCredential? credential) {
       clientId: oauth2.clientId,
       clientSecret: oauth2.clientSecret,
       authUri: null,
+      nonce: oauth2.nonce,
       state: null,
       redirectUri: oauth2.redirectUri,
       authResponseUri: null,
@@ -652,6 +663,8 @@ AuthCredential? _normalizeCredentialForKey(AuthCredential? credential) {
       expiresAt: null,
       expiresIn: null,
       audience: oauth2.audience,
+      codeVerifier: oauth2.codeVerifier,
+      codeChallengeMethod: oauth2.codeChallengeMethod,
       tokenEndpointAuthMethod: oauth2.tokenEndpointAuthMethod,
     );
   }

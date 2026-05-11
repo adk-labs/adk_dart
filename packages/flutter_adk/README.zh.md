@@ -8,8 +8,7 @@
 
 - 重新导出 `package:adk_dart/adk_core.dart`
 - Flutter 单一 import：`package:flutter_adk/flutter_adk.dart`
-- 包含 `AgentTool`、`UrlContextTool`、Vertex retrieval tools、`SkillRegistry`
-  等最新 Web-safe ADK 接口
+- 包含 `AgentTool`、`UrlContextTool`、Vertex retrieval tools 等最新 Web-safe ADK 接口
 - 覆盖 Android/iOS/Web/Linux/macOS/Windows 插件注册
 
 ## 什么时候用 `flutter_adk`？
@@ -54,7 +53,7 @@
 | Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | 由 Gemini/Vertex backend 执行 tool |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | 连接远程 MCP HTTP 服务 |
 | MCP Toolset (stdio) | Partial | Partial | N | Y | Y | Y | Web 无法拉起本地进程 |
-| Skills (inline + registry) | Y | Y | Y | Y | Y | Y | inline skill 和 registry search 跨平台可用 |
+| Skills (inline) | Y | Y | Y | Y | Y | Y | inline skill 跨平台可用 |
 | 目录技能加载 (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web 抛 `UnsupportedError` |
 | 插件 helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | 平台通道/浏览器 user-agent |
 | VM/CLI 能力 (`adk`/dev server/deploy) | N | N | N | N | N | N | 不在 Flutter 包范围内 |

@@ -77,6 +77,13 @@ void main() {
       );
       expect(
         canUseOutputSchemaWithTools(
+          'gemini-flash-early-exp',
+          environment: <String, String>{'GOOGLE_GENAI_USE_VERTEXAI': 'true'},
+        ),
+        isTrue,
+      );
+      expect(
+        canUseOutputSchemaWithTools(
           _FakeLlm('gemini-2.0-pro'),
           environment: <String, String>{},
         ),

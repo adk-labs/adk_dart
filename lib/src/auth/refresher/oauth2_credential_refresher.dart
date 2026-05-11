@@ -96,6 +96,7 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
       clientId: oauth2.clientId,
       clientSecret: oauth2.clientSecret,
       authUri: oauth2.authUri,
+      nonce: oauth2.nonce,
       state: oauth2.state,
       redirectUri: oauth2.redirectUri,
       authResponseUri: oauth2.authResponseUri,
@@ -108,6 +109,8 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
           _deriveExpiresAt(_readInt(tokens, 'expires_in'), oauth2.expiresAt),
       expiresIn: _readInt(tokens, 'expires_in') ?? oauth2.expiresIn,
       audience: oauth2.audience,
+      codeVerifier: oauth2.codeVerifier,
+      codeChallengeMethod: oauth2.codeChallengeMethod,
       tokenEndpointAuthMethod: oauth2.tokenEndpointAuthMethod,
     );
 

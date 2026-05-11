@@ -20,7 +20,7 @@
 - `Agent Team`: Coordinator가 Greeting/Weather/Farewell 팀으로 transfer 라우팅
 - `MCP Toolset`: `McpToolset + StreamableHTTPConnectionParams` 기반 원격 MCP 예제
 - `URL Context`: Gemini built-in `UrlContextTool` 기반 페이지 요약/비교 예제
-- `Skills`: inline `Skill + SkillToolset + SkillRegistry` 기반 스킬 오케스트레이션 예제
+- `Skills`: inline `Skill + SkillToolset` 기반 스킬 오케스트레이션 예제
 
 ## 플랫폼 지원 매트릭스 (현재)
 
@@ -36,7 +36,7 @@
 | Basic/Transfer/Workflow/Team 실행 경로 | Y | Y | Y | Y | Y | Y | `flutter_adk`의 `adk_core` 기반 in-memory 런타임 |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web은 서버 CORS 설정이 필요할 수 있음 |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | Gemini model-side retrieval |
-| Skills (inline `Skill` + `SkillToolset` + `SkillRegistry`) | Y | Y | Y | Y | Y | Y | 파일시스템 없이 동작 |
+| Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | 파일시스템 없이 동작 |
 | 설정 저장 (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web은 브라우저 저장소 사용 |
 | 로컬 프로세스 기반 MCP stdio 예제 | N | N | N | N | N | N | 본 예제는 원격 HTTP MCP만 다룸 |
 | 디렉토리 기반 스킬 로딩 (`loadSkillFromDir`) 데모 | N | N | N | N | N | N | 예제는 inline skill 데모만 포함 |

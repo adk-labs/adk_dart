@@ -10,8 +10,9 @@
 
 ### Skill registry 연동
 
-- 작업 내용: `SkillRegistry`에 비동기 `getSkill`, `searchSkills`, `getFilterSchema`, `getSearchDescription` contract를 추가하고, `SkillToolset`이 registry 기반 `search_skills` 도구와 동적 `load_skill` fallback을 제공하도록 반영했다.
-- 작업 이유: `adk-python`에 새로 추가된 registry 기반 skill discovery/load 흐름과 Dart 런타임의 skill 동작을 맞추기 위해서다.
+- 작업 내용: 당시 기준으로 `SkillRegistry`에 비동기 `getSkill`, `searchSkills`, `getFilterSchema`, `getSearchDescription` contract를 추가하고, `SkillToolset`이 registry 기반 `search_skills` 도구와 동적 `load_skill` fallback을 제공하도록 반영했다.
+- 작업 이유: 2026-05-01 기준 `adk-python`에 새로 추가된 registry 기반 skill discovery/load 흐름과 Dart 런타임의 skill 동작을 맞추기 위해서였다.
+- 최신 상태: 2026-05-11 기준 `adk-python`에서 registry 검색 경로가 제거되어, Dart도 `search_skills`와 registry fallback을 제거했다. 최신 문서는 `doc/2026-05-11-latest-ref-sync.md`를 기준으로 한다.
 
 ### Remote A2A 사용자 입력 메타데이터
 

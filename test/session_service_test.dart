@@ -86,5 +86,11 @@ void main() {
         expect(reloaded.state.containsKey('temp:transient'), isFalse);
       },
     );
+
+    test('flush is a no-op for non-buffering services', () async {
+      final InMemorySessionService service = InMemorySessionService();
+
+      await service.flush();
+    });
   });
 }

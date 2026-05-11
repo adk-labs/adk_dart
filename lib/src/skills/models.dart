@@ -1,4 +1,4 @@
-/// Skill model exports for frontmatter and registry types.
+/// Skill model exports for frontmatter, resource, and compatibility types.
 library;
 
 export 'skill_runtime.dart'

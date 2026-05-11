@@ -47,6 +47,7 @@ const List<String> _analyticsViewEventTypes = <String>[
   'TOOL_COMPLETED',
   'TOOL_ERROR',
   'STATE_DELTA',
+  'AGENT_RESPONSE',
   'USER_MESSAGE_RECEIVED',
   'HITL_CREDENTIAL_REQUEST',
   'HITL_CREDENTIAL_REQUEST_COMPLETED',
@@ -856,6 +857,42 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
               isTruncated: result.isTruncated,
             );
           }
+        }
+      }
+
+      final bool isAgentResponse =
+          event.isFinalResponse() &&
+          event.partial != true &&
+          event.getFunctionCalls().isEmpty &&
+          event.getFunctionResponses().isEmpty &&
+          (event.longRunningToolIds == null ||
+              event.longRunningToolIds!.isEmpty);
+      if (isAgentResponse) {
+        final List<Part> visibleTextParts = content.parts
+            .where(
+              (Part part) =>
+                  part.text != null && part.text!.isNotEmpty && !part.thought,
+            )
+            .map((Part part) => part.copyWith())
+            .toList(growable: false);
+        if (visibleTextParts.isNotEmpty) {
+          final _FormatResult formatted = _formatContent(
+            Content(role: content.role, parts: visibleTextParts),
+            maxLen: config.maxContentLength,
+          );
+          await _logEvent(
+            'AGENT_RESPONSE',
+            callbackContext,
+            rawContent: <String, Object?>{'response': formatted.text},
+            isTruncated: formatted.isTruncated,
+            eventData: EventData(
+              extraAttributes: <String, Object?>{
+                'source_event_id': event.id,
+                'source_event_author': event.author,
+                'source_event_branch': event.branch,
+              },
+            ),
+          );
         }
       }
 

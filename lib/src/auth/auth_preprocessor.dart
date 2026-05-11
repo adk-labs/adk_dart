@@ -302,6 +302,7 @@ class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
       clientSecret:
           _readString(map['clientSecret']) ?? _readString(map['client_secret']),
       authUri: _readString(map['authUri']) ?? _readString(map['auth_uri']),
+      nonce: _readString(map['nonce']),
       state: _readString(map['state']),
       redirectUri:
           _readString(map['redirectUri']) ?? _readString(map['redirect_uri']),
@@ -317,6 +318,11 @@ class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
       expiresAt: _readInt(map['expiresAt']) ?? _readInt(map['expires_at']),
       expiresIn: _readInt(map['expiresIn']) ?? _readInt(map['expires_in']),
       audience: _readString(map['audience']),
+      codeVerifier:
+          _readString(map['codeVerifier']) ?? _readString(map['code_verifier']),
+      codeChallengeMethod:
+          _readString(map['codeChallengeMethod']) ??
+          _readString(map['code_challenge_method']),
       tokenEndpointAuthMethod:
           _readString(
             map['tokenEndpointAuthMethod'] ?? map['token_endpoint_auth_method'],

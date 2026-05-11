@@ -1,4 +1,4 @@
-/// Skill discovery, parsing, and registry runtime for Dart and Flutter.
+/// Skill discovery and parsing runtime for Dart and Flutter.
 library;
 
 import 'dart:convert';

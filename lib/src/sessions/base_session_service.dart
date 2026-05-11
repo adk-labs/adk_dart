@@ -76,6 +76,11 @@ abstract class BaseSessionService {
     return persisted;
   }
 
+  /// Flushes buffered events for session services that batch writes.
+  ///
+  /// Non-buffering implementations can keep this no-op default.
+  Future<void> flush() async {}
+
   /// Returns the persistable form of [event].
   ///
   /// Transient `temp:` keys stay visible in the live session state during the

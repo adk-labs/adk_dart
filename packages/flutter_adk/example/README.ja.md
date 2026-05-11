@@ -19,7 +19,7 @@
 - `Agent Team`
 - `MCP Toolset` (remote HTTP)
 - `URL Context` (Gemini built-in `UrlContextTool`)
-- `Skills` (inline `Skill + SkillToolset + SkillRegistry`)
+- `Skills` (inline `Skill + SkillToolset`)
 
 ## Platform Support Matrix (Current)
 
@@ -35,7 +35,7 @@ Status legend:
 | Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | Model-side retrieval through Gemini |
-| Skills (inline + registry) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
+| Skills (inline) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
 | Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
 | Local-process MCP stdio example | N | N | N | N | N | N | Remote HTTP MCP only |
 | Directory skill loading demo | N | N | N | N | N | N | Inline skills only |
