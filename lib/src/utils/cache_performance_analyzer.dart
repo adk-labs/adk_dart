@@ -186,18 +186,22 @@ CacheMetadata? _toCacheMetadata(Object? value) {
     return null;
   }
 
-  return CacheMetadata(
-    cacheName:
-        asMap['cacheName']?.toString() ?? asMap['cache_name']?.toString(),
-    expireTime: _toDouble(asMap['expireTime'] ?? asMap['expire_time']),
-    fingerprint: '$fingerprint',
-    invocationsUsed: _toInt(
-      asMap['invocationsUsed'] ?? asMap['invocations_used'],
-    ),
-    contentsCount:
-        _toInt(asMap['contentsCount'] ?? asMap['contents_count']) ?? 0,
-    createdAt: _toDouble(asMap['createdAt'] ?? asMap['created_at']),
-  );
+  try {
+    return CacheMetadata(
+      cacheName:
+          asMap['cacheName']?.toString() ?? asMap['cache_name']?.toString(),
+      expireTime: _toDouble(asMap['expireTime'] ?? asMap['expire_time']),
+      fingerprint: '$fingerprint',
+      invocationsUsed: _toInt(
+        asMap['invocationsUsed'] ?? asMap['invocations_used'],
+      ),
+      contentsCount:
+          _toInt(asMap['contentsCount'] ?? asMap['contents_count']) ?? 0,
+      createdAt: _toDouble(asMap['createdAt'] ?? asMap['created_at']),
+    );
+  } on ArgumentError {
+    return null;
+  }
 }
 
 double? _toDouble(Object? value) {

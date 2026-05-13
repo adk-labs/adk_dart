@@ -5,6 +5,7 @@ import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
+import '../../models/anthropic_llm.dart';
 import '../../models/llm_request.dart';
 import '../../types/content.dart';
 import 'base_llm_flow.dart';
@@ -21,12 +22,14 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
     final List<Content> instructionContents = llmRequest.contents
         .map((Content content) => content.copyWith())
         .toList(growable: false);
+    final bool preserveFunctionCallIds = agent.canonicalModel is AnthropicLlm;
 
     if (agent.includeContents == 'default') {
       llmRequest.contents = getContents(
         currentBranch: invocationContext.branch,
         events: invocationContext.session.events,
         agentName: agent.name,
+        preserveFunctionCallIds: preserveFunctionCallIds,
       );
     } else if (agent.includeContents == 'none' ||
         agent.includeContents == 'current_turn') {
@@ -34,6 +37,7 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         currentBranch: invocationContext.branch,
         events: invocationContext.session.events,
         agentName: agent.name,
+        preserveFunctionCallIds: preserveFunctionCallIds,
       );
     }
 

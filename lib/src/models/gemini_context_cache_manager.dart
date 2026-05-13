@@ -302,16 +302,22 @@ CacheMetadata? _coerceCacheMetadata(Object? value) {
     return null;
   }
   final Object? cacheNameRaw = metadata['cache_name'] ?? metadata['cacheName'];
-  return CacheMetadata(
-    cacheName: cacheNameRaw is String ? cacheNameRaw : cacheNameRaw?.toString(),
-    expireTime: _asDouble(metadata['expire_time'] ?? metadata['expireTime']),
-    fingerprint: fingerprint,
-    invocationsUsed: _asInt(
-      metadata['invocations_used'] ?? metadata['invocationsUsed'],
-    ),
-    contentsCount: contentsCount,
-    createdAt: _asDouble(metadata['created_at'] ?? metadata['createdAt']),
-  );
+  try {
+    return CacheMetadata(
+      cacheName: cacheNameRaw is String
+          ? cacheNameRaw
+          : cacheNameRaw?.toString(),
+      expireTime: _asDouble(metadata['expire_time'] ?? metadata['expireTime']),
+      fingerprint: fingerprint,
+      invocationsUsed: _asInt(
+        metadata['invocations_used'] ?? metadata['invocationsUsed'],
+      ),
+      contentsCount: contentsCount,
+      createdAt: _asDouble(metadata['created_at'] ?? metadata['createdAt']),
+    );
+  } on ArgumentError {
+    return null;
+  }
 }
 
 List<Map<String, Object?>> _serializeTools(List<ToolDeclaration>? tools) {

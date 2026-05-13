@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../tools/base_tool.dart';
 import '../types/content.dart';
 import '../utils/system_environment/system_environment.dart';
 import '../version.dart';
@@ -273,6 +274,27 @@ class _AnthropicRedactedThinkingAccumulator {
   String? data;
 }
 
+class _ToolUseIdSanitizer {
+  final Map<String, String> _mapping = <String, String>{};
+  int _nextFallback = 0;
+
+  static final RegExp _validToolUseId = RegExp(r'^[a-zA-Z0-9_-]+$');
+
+  String sanitize(String? toolId) {
+    if (toolId != null &&
+        toolId.isNotEmpty &&
+        _validToolUseId.hasMatch(toolId)) {
+      return toolId;
+    }
+    final String key = toolId ?? '';
+    return _mapping.putIfAbsent(key, () {
+      final String fallback = 'toolu_fallback_$_nextFallback';
+      _nextFallback += 1;
+      return fallback;
+    });
+  }
+}
+
 /// Anthropic Claude adapter for ADK model requests.
 class AnthropicLlm extends BaseLlm {
   /// Creates an Anthropic adapter for [model].
@@ -351,6 +373,13 @@ class AnthropicLlm extends BaseLlm {
 
   /// Converts a [Part] into an Anthropic content block.
   static Map<String, Object?> partToMessageBlock(Part part) {
+    return _partToMessageBlock(part, _ToolUseIdSanitizer());
+  }
+
+  static Map<String, Object?> _partToMessageBlock(
+    Part part,
+    _ToolUseIdSanitizer sanitizer,
+  ) {
     if (part.thought) {
       if (part.text != null && part.text!.isNotEmpty) {
         return <String, Object?>{
@@ -376,7 +405,7 @@ class AnthropicLlm extends BaseLlm {
     if (part.functionCall != null) {
       return <String, Object?>{
         'type': 'tool_use',
-        'id': part.functionCall!.id ?? '',
+        'id': sanitizer.sanitize(part.functionCall!.id),
         'name': part.functionCall!.name,
         'input': Map<String, dynamic>.from(part.functionCall!.args),
       };
@@ -418,7 +447,7 @@ class AnthropicLlm extends BaseLlm {
       }
       return <String, Object?>{
         'type': 'tool_result',
-        'tool_use_id': part.functionResponse!.id ?? '',
+        'tool_use_id': sanitizer.sanitize(part.functionResponse!.id),
         'is_error': false,
         'content': content,
       };
@@ -461,12 +490,19 @@ class AnthropicLlm extends BaseLlm {
 
   /// Converts one [Content] into an Anthropic message payload.
   static Map<String, Object?> contentToMessageParam(Content content) {
+    return _contentToMessageParam(content, _ToolUseIdSanitizer());
+  }
+
+  static Map<String, Object?> _contentToMessageParam(
+    Content content,
+    _ToolUseIdSanitizer sanitizer,
+  ) {
     final List<Map<String, Object?>> blocks = <Map<String, Object?>>[];
     for (final Part part in content.parts) {
       if (content.role != 'user' && (isImagePart(part) || isPdfPart(part))) {
         continue;
       }
-      blocks.add(partToMessageBlock(part));
+      blocks.add(_partToMessageBlock(part, sanitizer));
     }
     return <String, Object?>{
       'role': toClaudeRole(content.role),
@@ -558,7 +594,7 @@ class AnthropicLlm extends BaseLlm {
     LlmRequest request, {
     bool stream = false,
   }) async* {
-    final LlmRequest prepared = request.sanitizedForModelCall();
+    final LlmRequest prepared = _cloneRequestPreservingFunctionCallIds(request);
     prepared.model ??= model;
     maybeAppendUserContent(prepared);
     prepared.config.httpOptions ??= HttpOptions();
@@ -616,8 +652,9 @@ class AnthropicLlm extends BaseLlm {
     LlmRequest request, {
     required bool stream,
   }) {
+    final _ToolUseIdSanitizer sanitizer = _ToolUseIdSanitizer();
     final List<Map<String, Object?>> messages = request.contents
-        .map(contentToMessageParam)
+        .map((Content content) => _contentToMessageParam(content, sanitizer))
         .toList();
     final List<Map<String, Object?>> tools = <Map<String, Object?>>[];
     final List<ToolDeclaration>? declarations = request.config.tools;
@@ -644,6 +681,22 @@ class AnthropicLlm extends BaseLlm {
       if (request.toolsDict.isNotEmpty)
         'tool_choice': <String, Object?>{'type': 'auto'},
     };
+  }
+
+  LlmRequest _cloneRequestPreservingFunctionCallIds(LlmRequest request) {
+    return LlmRequest(
+      model: request.model,
+      contents: request.contents
+          .map((Content content) => content.copyWith())
+          .toList(),
+      config: request.config.copyWith(),
+      liveConnectConfig: request.liveConnectConfig.copyWith(),
+      toolsDict: Map<String, BaseTool>.from(request.toolsDict),
+      cacheConfig: request.cacheConfig,
+      cacheMetadata: request.cacheMetadata,
+      cacheableContentsTokenCount: request.cacheableContentsTokenCount,
+      previousInteractionId: request.previousInteractionId,
+    );
   }
 
   Map<String, Object?>? _anthropicThinkingConfig(Object? thinkingConfig) {

@@ -8,7 +8,19 @@ class CacheMetadata {
     this.invocationsUsed,
     required this.contentsCount,
     this.createdAt,
-  });
+  }) {
+    final int activeFieldCount = <Object?>[
+      cacheName,
+      expireTime,
+      invocationsUsed,
+    ].where((Object? value) => value != null).length;
+    if (activeFieldCount != 0 && activeFieldCount != 3) {
+      throw ArgumentError(
+        'cacheName, expireTime, and invocationsUsed must all be set '
+        '(active cache) or all be null (fingerprint-only state).',
+      );
+    }
+  }
 
   /// Provider cache resource name.
   final String? cacheName;
@@ -74,12 +86,7 @@ class CacheMetadata {
     }
 
     final String cacheId = cacheName!.split('/').last;
-    final double? expiresAt = expireTime;
-    if (expiresAt == null) {
-      return 'Cache $cacheId: used $invocationsUsed invocations, '
-          'cached $contentsCount contents, expires unknown';
-    }
-
+    final double expiresAt = expireTime!;
     final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
     final double mins = (expiresAt - now) / 60.0;
     return 'Cache $cacheId: used $invocationsUsed invocations, '

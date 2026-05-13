@@ -171,6 +171,31 @@ void main() {
       expect(request.cacheMetadata, isA<CacheMetadata>());
     });
 
+    test('enforces active cache metadata invariant', () {
+      expect(
+        () => CacheMetadata(fingerprint: 'fp', contentsCount: 1),
+        returnsNormally,
+      );
+      expect(
+        () => CacheMetadata(
+          cacheName: 'caches/active',
+          expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 + 300,
+          fingerprint: 'fp',
+          invocationsUsed: 0,
+          contentsCount: 1,
+        ),
+        returnsNormally,
+      );
+      expect(
+        () => CacheMetadata(
+          cacheName: 'caches/partial',
+          fingerprint: 'fp',
+          contentsCount: 1,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'reuses valid cache and applies cached-content request mutation',
       () async {
@@ -851,6 +876,125 @@ void main() {
       );
       expect(message['role'], 'user');
     });
+
+    test('sanitizes invalid tool ids consistently within a request', () async {
+      Map<String, Object?>? captured;
+      final AnthropicLlm model = AnthropicLlm(
+        apiInvoker:
+            ({
+              required Map<String, Object?> request,
+              required bool stream,
+            }) async {
+              captured = request;
+              return <Map<String, Object?>>[
+                <String, Object?>{
+                  'content': <Object?>[
+                    <String, Object?>{'type': 'text', 'text': 'ok'},
+                  ],
+                  'usage': <String, Object?>{
+                    'input_tokens': 1,
+                    'output_tokens': 1,
+                  },
+                  'stop_reason': 'end_turn',
+                },
+              ];
+            },
+      );
+
+      await model
+          .generateContent(
+            LlmRequest(
+              model: 'claude-3-5-sonnet-20241022',
+              contents: <Content>[
+                Content(
+                  role: 'model',
+                  parts: <Part>[
+                    Part.fromFunctionCall(
+                      name: 'lookup',
+                      id: 'bad id',
+                      args: <String, dynamic>{'q': 'x'},
+                    ),
+                  ],
+                ),
+                Content(
+                  role: 'user',
+                  parts: <Part>[
+                    Part.fromFunctionResponse(
+                      name: 'lookup',
+                      id: 'bad id',
+                      response: <String, dynamic>{'result': 'done'},
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          )
+          .toList();
+
+      final List<Object?> messages = captured!['messages'] as List<Object?>;
+      final Map<String, Object?> toolUse =
+          ((messages[0] as Map<String, Object?>)['content'] as List<Object?>)
+                  .single
+              as Map<String, Object?>;
+      final Map<String, Object?> toolResult =
+          ((messages[1] as Map<String, Object?>)['content'] as List<Object?>)
+                  .single
+              as Map<String, Object?>;
+      expect(toolUse['id'], 'toolu_fallback_0');
+      expect(toolResult['tool_use_id'], toolUse['id']);
+    });
+
+    test(
+      'preserves valid tool ids in Anthropic request serialization',
+      () async {
+        Map<String, Object?>? captured;
+        final AnthropicLlm model = AnthropicLlm(
+          apiInvoker:
+              ({
+                required Map<String, Object?> request,
+                required bool stream,
+              }) async {
+                captured = request;
+                return <Map<String, Object?>>[
+                  <String, Object?>{
+                    'content': <Object?>[
+                      <String, Object?>{'type': 'text', 'text': 'ok'},
+                    ],
+                    'usage': <String, Object?>{
+                      'input_tokens': 1,
+                      'output_tokens': 1,
+                    },
+                    'stop_reason': 'end_turn',
+                  },
+                ];
+              },
+        );
+
+        await model
+            .generateContent(
+              LlmRequest(
+                model: 'claude-3-5-sonnet-20241022',
+                contents: <Content>[
+                  Content(
+                    role: 'model',
+                    parts: <Part>[
+                      Part.fromFunctionCall(name: 'lookup', id: 'adk-tool-1'),
+                    ],
+                  ),
+                ],
+              ),
+            )
+            .toList();
+
+        final List<Object?> messages = captured!['messages'] as List<Object?>;
+        final Map<String, Object?> toolUse =
+            ((messages.first as Map<String, Object?>)['content']
+                        as List<Object?>)
+                    .single
+                as Map<String, Object?>;
+        expect(toolUse['id'], 'adk-tool-1');
+      },
+    );
 
     test('function declaration tool params lowercase nested schema types', () {
       final Map<String, Object?> toolParam =

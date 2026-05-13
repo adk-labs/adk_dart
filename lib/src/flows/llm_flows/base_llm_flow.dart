@@ -458,6 +458,17 @@ class BaseLlmFlow {
             jsonResponse,
           );
         }
+        final String? transferToAgent =
+            functionResponseEvent.actions.transferToAgent;
+        if (transferToAgent != null && transferToAgent.isNotEmpty) {
+          final BaseAgent agentToRun = _getAgentToRun(context, transferToAgent);
+          final InvocationContext childContext = _createLiveTransferContext(
+            context,
+          );
+          await for (final Event event in agentToRun.runLive(childContext)) {
+            yield event;
+          }
+        }
       }
     }
   }
@@ -555,6 +566,39 @@ class BaseLlmFlow {
     mutable['handle'] = handle;
     mutable['transparent'] = true;
     request.liveConnectConfig.sessionResumption = mutable;
+  }
+
+  InvocationContext _createLiveTransferContext(InvocationContext context) {
+    final InvocationContext childContext = context.copyWith(
+      runConfig: _copyRunConfigWithoutSessionResumptionHandle(
+        context.runConfig,
+      ),
+    );
+    childContext.liveSessionResumptionHandle = null;
+    return childContext;
+  }
+
+  RunConfig? _copyRunConfigWithoutSessionResumptionHandle(RunConfig? config) {
+    if (config == null) {
+      return null;
+    }
+    return config.copyWith(
+      sessionResumption: _removeSessionResumptionHandle(
+        config.sessionResumption,
+      ),
+    );
+  }
+
+  Object? _removeSessionResumptionHandle(Object? sessionResumption) {
+    if (sessionResumption is Map) {
+      final Map<String, Object?> mutable = sessionResumption.map(
+        (Object? key, Object? value) =>
+            MapEntry<String, Object?>('$key', value),
+      );
+      mutable.remove('handle');
+      return mutable;
+    }
+    return sessionResumption;
   }
 
   bool _hasLiveSessionResumptionHandle(InvocationContext context) {

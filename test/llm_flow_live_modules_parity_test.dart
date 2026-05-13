@@ -347,6 +347,68 @@ void main() {
         isNot(contains('peer')),
       );
     });
+
+    test(
+      'Contents processor preserves function ids for Anthropic session replay',
+      () async {
+        final AnthropicLlm model = AnthropicLlm(
+          generateHook: (LlmRequest request, bool stream) async* {
+            yield LlmResponse(content: Content.modelText('ok'));
+          },
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_anthropic_replay',
+          events: <Event>[
+            Event(
+              invocationId: 'inv_anthropic_replay',
+              author: 'user',
+              content: Content.userText('Use the tool'),
+            ),
+            Event(
+              invocationId: 'inv_anthropic_replay',
+              author: 'agent',
+              content: Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromFunctionCall(
+                    name: 'lookup',
+                    id: 'adk-tool-1',
+                    args: <String, dynamic>{'q': 'x'},
+                  ),
+                ],
+              ),
+            ),
+            Event(
+              invocationId: 'inv_anthropic_replay',
+              author: 'user',
+              content: Content(
+                role: 'user',
+                parts: <Part>[
+                  Part.fromFunctionResponse(
+                    name: 'lookup',
+                    id: 'adk-tool-1',
+                    response: <String, dynamic>{'result': 'done'},
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+        final LlmRequest request = LlmRequest(
+          model: 'claude-3-5-sonnet-20241022',
+        );
+
+        await ContentsLlmRequestProcessor().runAsync(context, request).toList();
+
+        expect(request.contents[1].parts.single.functionCall?.id, 'adk-tool-1');
+        expect(
+          request.contents[2].parts.single.functionResponse?.id,
+          'adk-tool-1',
+        );
+      },
+    );
   });
 
   group('live queue and streaming parity', () {
@@ -686,6 +748,81 @@ void main() {
         );
 
         expect(inputEvent.author, 'user');
+      },
+    );
+
+    test(
+      'live transfer starts child without parent resumption handle',
+      () async {
+        final _FakeLiveConnection rootConnection = _FakeLiveConnection();
+        final _FakeLiveConnection childConnection = _FakeLiveConnection();
+        final _LiveConnectModel rootModel = _LiveConnectModel(
+          connection: rootConnection,
+        );
+        final _LiveConnectModel childModel = _LiveConnectModel(
+          connection: childConnection,
+        );
+        final LlmAgent childAgent = LlmAgent(name: 'child', model: childModel);
+        final LlmAgent rootAgent = LlmAgent(
+          name: 'root',
+          model: rootModel,
+          subAgents: <BaseAgent>[childAgent],
+        );
+        final InvocationContext context = _newInvocationContext(
+          agent: rootAgent,
+          invocationId: 'inv_live_transfer_resumption',
+        );
+        context.runConfig = RunConfig(
+          sessionResumption: <String, Object?>{
+            'enabled': true,
+            'handle': 'parent-run-handle',
+          },
+        );
+        context.liveSessionResumptionHandle = 'parent-live-handle';
+        context.liveRequestQueue = LiveRequestQueue()
+          ..sendContent(Content.userText('route live input'));
+
+        rootConnection.onSendContent = (Content _) async {
+          rootConnection.emit(
+            LlmResponse(
+              content: Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromFunctionCall(
+                    name: 'transfer_to_agent',
+                    id: 'transfer-call',
+                    args: <String, dynamic>{'agent_name': 'child'},
+                  ),
+                ],
+              ),
+            ),
+          );
+          await rootConnection.finish();
+        };
+        childConnection.onReceiveSubscribed = () {
+          childConnection.emit(
+            LlmResponse(content: Content.modelText('child live ok')),
+          );
+          Future<void>.microtask(childConnection.finish);
+        };
+
+        final List<Event> events = await AutoFlow().runLive(context).toList();
+
+        expect(
+          events.any(
+            (Event event) => event.content?.parts.first.text == 'child live ok',
+          ),
+          isTrue,
+        );
+        final Map<dynamic, dynamic> rootSessionResumption =
+            rootModel.connectedRequest!.liveConnectConfig.sessionResumption
+                as Map<dynamic, dynamic>;
+        expect(rootSessionResumption['handle'], 'parent-live-handle');
+
+        final Object? childSessionResumption =
+            childModel.connectedRequest!.liveConnectConfig.sessionResumption;
+        expect(childSessionResumption, isA<Map>());
+        expect((childSessionResumption as Map)['handle'], isNull);
       },
     );
   });
