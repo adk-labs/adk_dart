@@ -26,6 +26,7 @@ class StreamingResponseAggregator {
   String _currentTextBuffer = '';
   bool? _currentTextIsThought;
   List<int>? _currentTextThoughtSignature;
+  List<int>? _currentThoughtSignature;
   String? _finishReason;
 
   String? _currentFcName;
@@ -174,8 +175,20 @@ class StreamingResponseAggregator {
       return;
     }
 
+    Part effectivePart = part;
+    if ((part.thoughtSignature == null || part.thoughtSignature!.isEmpty) &&
+        _currentThoughtSignature != null &&
+        functionCall.name.isNotEmpty) {
+      effectivePart = part.copyWith(
+        thoughtSignature: List<int>.from(_currentThoughtSignature!),
+      );
+    }
+
     if (_isStreamingFunctionCall(functionCall)) {
-      _processStreamingFunctionCall(functionCall, part);
+      _processStreamingFunctionCall(functionCall, effectivePart);
+      if (functionCall.name.isNotEmpty) {
+        _currentThoughtSignature = null;
+      }
       return;
     }
 
@@ -187,7 +200,8 @@ class StreamingResponseAggregator {
     }
 
     _flushTextBufferToSequence();
-    _partsSequence.add(part.copyWith());
+    _partsSequence.add(effectivePart.copyWith());
+    _currentThoughtSignature = null;
   }
 
   List<Map<String, Object?>> _partialArgs(FunctionCall functionCall) {
@@ -309,6 +323,10 @@ class StreamingResponseAggregator {
 
     if (isFeatureEnabled(FeatureName.progressiveSseStreaming)) {
       for (final Part part in parts) {
+        if (part.thoughtSignature != null &&
+            part.thoughtSignature!.isNotEmpty) {
+          _currentThoughtSignature = List<int>.from(part.thoughtSignature!);
+        }
         if (part.text != null) {
           if (_currentTextBuffer.isNotEmpty &&
               (part.thought != _currentTextIsThought ||

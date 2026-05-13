@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -60,6 +62,46 @@ class _OutputSchemaModel extends BaseLlm {
           Part.fromFunctionCall(
             name: 'set_model_response',
             args: <String, dynamic>{'answer': 'done'},
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HitlMockModel extends BaseLlm {
+  _HitlMockModel() : super(model: 'hitl-mock-model');
+
+  int callCount = 0;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    callCount += 1;
+    if (callCount > 1) {
+      yield LlmResponse(
+        content: Content.modelText(
+          'Successfully processed your request after confirmation.',
+        ),
+      );
+      return;
+    }
+
+    yield LlmResponse(
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part.fromFunctionCall(
+            name: 'secure_action',
+            id: 'secure_call_1',
+            args: <String, dynamic>{'action_name': 'deploy_prod'},
+          ),
+          Part.fromFunctionCall(
+            name: 'secure_action',
+            id: 'secure_call_2',
+            args: <String, dynamic>{'action_name': 'delete_db'},
           ),
         ],
       ),
@@ -184,6 +226,109 @@ class _ScopedCredentialToolset extends BaseToolset {
 
 Future<List<Event>> _collect(Stream<Event> stream) => stream.toList();
 
+Map<String, Object?> _secureAction(Map<String, dynamic> args) {
+  return <String, Object?>{
+    'executed': true,
+    'action_name': args['action_name'],
+  };
+}
+
+class _HitlFixture {
+  _HitlFixture({
+    required this.runner,
+    required this.confirmationIdsByOriginalId,
+  });
+
+  final InMemoryRunner runner;
+  final Map<String, String> confirmationIdsByOriginalId;
+}
+
+Future<_HitlFixture> _startParallelHitlRun() async {
+  final _HitlMockModel model = _HitlMockModel();
+  final Agent agent = Agent(
+    name: 'hitl_tester',
+    description: 'HITL tester agent',
+    instruction: 'You are a secure helper.',
+    model: model,
+    tools: <Object>[
+      FunctionTool(
+        func: _secureAction,
+        name: 'secure_action',
+        description: 'performs a sensitive secure action',
+        requireConfirmation: true,
+      ),
+    ],
+    disallowTransferToParent: true,
+    disallowTransferToPeers: true,
+  );
+  final InMemoryRunner runner = InMemoryRunner(
+    appName: 'testApp',
+    agent: agent,
+  );
+  final Session session = await runner.sessionService.createSession(
+    appName: runner.appName,
+    userId: 'testUser',
+    sessionId: 'testSession',
+  );
+
+  final List<Event> turn1Events = await _collect(
+    runner.runAsync(
+      userId: session.userId,
+      sessionId: session.id,
+      newMessage: Content.userText('Please run prod deploy and db delete'),
+      runConfig: RunConfig(streamingMode: StreamingMode.sse),
+    ),
+  );
+
+  expect(turn1Events, hasLength(3));
+  expect(turn1Events[0].getFunctionCalls(), hasLength(2));
+
+  final List<FunctionCall> confirmationCalls = turn1Events[1]
+      .getFunctionCalls();
+  expect(confirmationCalls, hasLength(2));
+  final Map<String, String> confirmationIdsByOriginalId = <String, String>{};
+  for (final FunctionCall call in confirmationCalls) {
+    expect(call.name, requestConfirmationFunctionCallName);
+    expect(call.id, isNotNull);
+    final Object? originalRaw = call.args['originalFunctionCall'];
+    expect(originalRaw, isA<Map>());
+    final Map<Object?, Object?> original =
+        originalRaw! as Map<Object?, Object?>;
+    confirmationIdsByOriginalId[original['id']! as String] = call.id!;
+  }
+  expect(
+    confirmationIdsByOriginalId.keys,
+    containsAll(<String>['secure_call_1', 'secure_call_2']),
+  );
+
+  final List<FunctionResponse> placeholders = turn1Events[2]
+      .getFunctionResponses();
+  expect(placeholders, hasLength(2));
+  expect(
+    placeholders.map((FunctionResponse response) => response.id),
+    containsAll(<String>['secure_call_1', 'secure_call_2']),
+  );
+  for (final FunctionResponse response in placeholders) {
+    expect(response.name, 'secure_action');
+    expect(response.response['error'], contains('requires confirmation'));
+  }
+
+  return _HitlFixture(
+    runner: runner,
+    confirmationIdsByOriginalId: confirmationIdsByOriginalId,
+  );
+}
+
+Part _confirmationResponsePart(String confirmationRequestId, bool confirmed) {
+  return Part.fromFunctionResponse(
+    name: requestConfirmationFunctionCallName,
+    id: confirmationRequestId,
+    response: <String, dynamic>{
+      'response': jsonEncode(<String, Object?>{'confirmed': confirmed}),
+    },
+  );
+}
+
 void main() {
   test(
     'request confirmation processor resumes tool with user decision',
@@ -283,6 +428,83 @@ void main() {
       expect(responses.first.response['result'], 'approved:x');
     },
   );
+
+  test(
+    'parallel function calls requiring HITL pause and resume after confirmations',
+    () async {
+      final _HitlFixture fixture = await _startParallelHitlRun();
+      final List<Event> turn2Events = await _collect(
+        fixture.runner.runAsync(
+          userId: 'testUser',
+          sessionId: 'testSession',
+          newMessage: Content(
+            role: 'user',
+            parts: <Part>[
+              _confirmationResponsePart(
+                fixture.confirmationIdsByOriginalId['secure_call_1']!,
+                true,
+              ),
+              _confirmationResponsePart(
+                fixture.confirmationIdsByOriginalId['secure_call_2']!,
+                true,
+              ),
+            ],
+          ),
+          runConfig: RunConfig(streamingMode: StreamingMode.sse),
+        ),
+      );
+
+      expect(turn2Events, hasLength(2));
+      final List<FunctionResponse> responses = turn2Events[0]
+          .getFunctionResponses();
+      expect(responses, hasLength(2));
+      expect(
+        responses.map((FunctionResponse response) => response.id),
+        containsAll(<String>['secure_call_1', 'secure_call_2']),
+      );
+      for (final FunctionResponse response in responses) {
+        expect(response.name, 'secure_action');
+        expect(response.response['executed'], isTrue);
+      }
+      expect(
+        turn2Events[1].content?.parts.single.text,
+        'Successfully processed your request after confirmation.',
+      );
+    },
+  );
+
+  test('parallel HITL resume executes only confirmed calls', () async {
+    final _HitlFixture fixture = await _startParallelHitlRun();
+    final List<Event> turn2Events = await _collect(
+      fixture.runner.runAsync(
+        userId: 'testUser',
+        sessionId: 'testSession',
+        newMessage: Content(
+          role: 'user',
+          parts: <Part>[
+            _confirmationResponsePart(
+              fixture.confirmationIdsByOriginalId['secure_call_2']!,
+              true,
+            ),
+          ],
+        ),
+        runConfig: RunConfig(streamingMode: StreamingMode.sse),
+      ),
+    );
+
+    expect(turn2Events, hasLength(2));
+    final List<FunctionResponse> responses = turn2Events[0]
+        .getFunctionResponses();
+    expect(responses, hasLength(1));
+    expect(responses.single.id, 'secure_call_2');
+    expect(responses.single.name, 'secure_action');
+    expect(responses.single.response['executed'], isTrue);
+    expect(responses.single.response['action_name'], 'delete_db');
+    expect(
+      turn2Events[1].content?.parts.single.text,
+      'Successfully processed your request after confirmation.',
+    );
+  });
 
   test(
     'single flow request processors populate model and instructions',

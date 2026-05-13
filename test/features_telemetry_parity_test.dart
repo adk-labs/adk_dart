@@ -393,7 +393,8 @@ void main() {
         span.attributes['gen_ai.usage.experimental.reasoning_tokens_limit'],
         10,
       );
-      expect(span.attributes['gen_ai.usage.experimental.reasoning_tokens'], 5);
+      expect(span.attributes['gen_ai.usage.output_tokens'], 12);
+      expect(span.attributes['gen_ai.usage.reasoning.output_tokens'], 5);
       expect(
         span.attributes['gen_ai.usage.experimental.system_instruction_tokens'],
         2,
@@ -473,6 +474,7 @@ void main() {
           usageMetadata: <String, Object?>{
             'promptTokenCount': 2,
             'candidatesTokenCount': 4,
+            'thoughtsTokenCount': 3,
           },
         );
 
@@ -521,6 +523,11 @@ void main() {
         expect(
           detailsEvent.attributes['gen_ai.response.finish_reasons'],
           <String>['stop'],
+        );
+        expect(detailsEvent.attributes['gen_ai.usage.output_tokens'], 7);
+        expect(
+          detailsEvent.attributes['gen_ai.usage.reasoning.output_tokens'],
+          3,
         );
         expect(
           detailsEvent.attributes['gen_ai.output.messages'],

@@ -64,6 +64,10 @@ const String genAiUsageInputTokens = 'gen_ai.usage.input_tokens';
 /// Key for output token usage.
 const String genAiUsageOutputTokens = 'gen_ai.usage.output_tokens';
 
+/// Key for reasoning output token usage.
+const String genAiUsageReasoningOutputTokens =
+    'gen_ai.usage.reasoning.output_tokens';
+
 /// Key for tool definition attributes.
 const String genAiToolDefinitions = 'gen_ai.tool.definitions';
 
@@ -148,14 +152,25 @@ void setOperationDetailsAttributesFromResponse(
         usage['prompt_token_count'] ?? usage['promptTokenCount'];
     final Object? candidatesTokenCount =
         usage['candidates_token_count'] ?? usage['candidatesTokenCount'];
+    final Object? reasoningTokens =
+        usage['thoughts_token_count'] ??
+        usage['thoughtsTokenCount'] ??
+        usage['reasoning_tokens'] ??
+        usage['reasoningTokens'];
 
     if (promptTokenCount is num) {
       operationDetailsCommonAttributes[genAiUsageInputTokens] =
           promptTokenCount;
     }
     if (candidatesTokenCount is num) {
-      operationDetailsCommonAttributes[genAiUsageOutputTokens] =
-          candidatesTokenCount;
+      final num outputTokens = reasoningTokens is num
+          ? candidatesTokenCount + reasoningTokens
+          : candidatesTokenCount;
+      operationDetailsCommonAttributes[genAiUsageOutputTokens] = outputTokens;
+    }
+    if (reasoningTokens is num) {
+      operationDetailsCommonAttributes[genAiUsageReasoningOutputTokens] =
+          reasoningTokens;
     }
   }
 

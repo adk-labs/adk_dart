@@ -190,6 +190,7 @@ void main() {
           },
           cacheMetadata: CacheMetadata(
             cacheName: 'cache-a',
+            expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 + 300,
             fingerprint: 'fp-1',
             invocationsUsed: 1,
             contentsCount: 3,
@@ -207,6 +208,7 @@ void main() {
           },
           cacheMetadata: <String, Object?>{
             'cache_name': 'cache-b',
+            'expire_time': DateTime.now().millisecondsSinceEpoch / 1000.0 + 300,
             'fingerprint': 'fp-2',
             'invocations_used': 3,
             'contents_count': 5,
@@ -424,6 +426,43 @@ void main() {
       expect(merged.content!.parts[1].functionCall?.args['city'], 'Seoul');
       expect(merged.content!.parts[1].functionCall?.id, startsWith('adk-'));
     });
+
+    test(
+      'streaming response aggregator carries thought signature to first function call',
+      () async {
+        overrideFeatureEnabled(FeatureName.progressiveSseStreaming, true);
+        final StreamingResponseAggregator aggregator =
+            StreamingResponseAggregator();
+
+        await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[
+                    Part.text(
+                      'internal reasoning',
+                      thought: true,
+                      thoughtSignature: <int>[9, 8, 7],
+                    ),
+                    Part.fromFunctionCall(
+                      name: 'secure_action',
+                      args: <String, dynamic>{'action': 'deploy'},
+                    ),
+                  ],
+                ),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+
+        final LlmResponse? merged = aggregator.close();
+        expect(merged, isNotNull);
+        expect(merged!.content?.parts, hasLength(2));
+        expect(merged.content?.parts.first.thoughtSignature, <int>[9, 8, 7]);
+        expect(merged.content?.parts[1].functionCall?.name, 'secure_action');
+        expect(merged.content?.parts[1].thoughtSignature, <int>[9, 8, 7]);
+      },
+    );
 
     test('streaming response aggregator supports bracket JSON paths', () async {
       overrideFeatureEnabled(FeatureName.progressiveSseStreaming, true);

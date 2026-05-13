@@ -937,13 +937,13 @@ void _setUsageMetadataAttributes(TraceSpanRecord span, Object? usageMetadata) {
     span.setAttribute('gen_ai.usage.input_tokens', promptTokenCount);
   }
   if (candidatesTokenCount is num) {
-    span.setAttribute('gen_ai.usage.output_tokens', candidatesTokenCount);
+    final num outputTokens = reasoningTokens is num
+        ? candidatesTokenCount + reasoningTokens
+        : candidatesTokenCount;
+    span.setAttribute('gen_ai.usage.output_tokens', outputTokens);
   }
   if (reasoningTokens is num) {
-    span.setAttribute(
-      'gen_ai.usage.experimental.reasoning_tokens',
-      reasoningTokens,
-    );
+    span.setAttribute('gen_ai.usage.reasoning.output_tokens', reasoningTokens);
   }
   if (systemInstructionTokens is num) {
     span.setAttribute(
