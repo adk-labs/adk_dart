@@ -2,8 +2,8 @@
 
 - Date (UTC): 2026-05-13
 - Source: `google/adk-go`
-- Latest SHA: `853c11b6dbbbde0c7d99f06ff6c17ab0b94dbf3d`
-- Previous SHA: `ae7aed42099efabf8f9757ce505e891b11c97d3b`
+- Latest SHA: `992c1c2381f55538ef9b3ccb7f31689a6d79e277`
+- Previous SHA: `853c11b6dbbbde0c7d99f06ff6c17ab0b94dbf3d`
 
 ## Summary
 
@@ -11,8 +11,9 @@
 
 ## Commits
 
-- [853c11b](https://github.com/google/adk-go/commit/853c11b6dbbbde0c7d99f06ff6c17ab0b94dbf3d) Add parallel HITL function test (#817) (Joao Westerberg, 2026-05-13)
+- [992c1c2](https://github.com/google/adk-go/commit/992c1c2381f55538ef9b3ccb7f31689a6d79e277) bump a2a-go version to have nil part fix (#827) (Yaroslav, 2026-05-13)
 
 ## Changed Files
 
-- `A	internal/llminternal/parallel_function_call_hitl_test.go`
+- `M	go.mod`
+- `M	go.sum`

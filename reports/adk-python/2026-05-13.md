@@ -2,45 +2,21 @@
 
 - Date (UTC): 2026-05-13
 - Source: `google/adk-python`
-- Latest SHA: `fd8b49295d628075cf70acabb2c52eedf62dd5bd`
-- Previous SHA: `218ea76e30ced48898a46ca48a014f7dffd266a7`
+- Latest SHA: `6e534723dd6be938e6fb1b6f55b06de8ac4d27d8`
+- Previous SHA: `fd8b49295d628075cf70acabb2c52eedf62dd5bd`
 
 ## Summary
 
-- New commits: 6
+- New commits: 1
 
 ## Commits
 
-- [fd8b4929](https://github.com/google/adk-python/commit/fd8b49295d628075cf70acabb2c52eedf62dd5bd) feat(ci): add Gemini auto review and invoke workflows (Stanley Chin, 2026-05-12)
-- [327c45f9](https://github.com/google/adk-python/commit/327c45f9f4c98f7b32feeb8555c166b814ee6684) fix(models): preserve tool_use IDs for Anthropic models on session resume (knQzx, 2026-05-12)
-- [380d261e](https://github.com/google/adk-python/commit/380d261e59b1955af735bf66e47aba2150f04d9f) feat: Implement Skill Registry in ADK (Kathy Wu, 2026-05-12)
-- [cd78d87b](https://github.com/google/adk-python/commit/cd78d87b967111d40d429bcf9552a962b7e9614f) feat(a2a): add support for persistent task stores (Stephen Allen, 2026-05-12)
-- [76b9f0ba](https://github.com/google/adk-python/commit/76b9f0baa0bcc4e715ee996b4dc894ffc9264583) fix(cache): enforce CacheMetadata active-state invariant (George Weale, 2026-05-12)
-- [8dd91474](https://github.com/google/adk-python/commit/8dd9147443b1dc4121756ad186090f1f267e83b0) fix(live): ensure sub live agent doesn't inherit session resumption handle from parent live agent to avoid interrupting the conversation (Amy Wu, 2026-05-12)
+- [6e534723](https://github.com/google/adk-python/commit/6e534723dd6be938e6fb1b6f55b06de8ac4d27d8) feat: add support for non-ADK produced input-required events (Google Team Member, 2026-05-13)
 
 ## Changed Files
 
-- `A	.github/workflows/gemini-dispatch.yml`
-- `A	.github/workflows/gemini-invoke.yml`
-- `A	.github/workflows/gemini-review.yml`
-- `M	src/google/adk/a2a/utils/agent_to_a2a.py`
-- `M	src/google/adk/cli/fast_api.py`
-- `M	src/google/adk/cli/service_registry.py`
-- `M	src/google/adk/cli/utils/service_factory.py`
-- `M	src/google/adk/flows/llm_flows/base_llm_flow.py`
-- `M	src/google/adk/models/anthropic_llm.py`
-- `M	src/google/adk/models/cache_metadata.py`
-- `M	src/google/adk/skills/__init__.py`
-- `A	src/google/adk/skills/skill_registry.py`
-- `M	src/google/adk/tools/skill_toolset.py`
-- `M	tests/unittests/a2a/integration/server.py`
-- `M	tests/unittests/a2a/utils/test_agent_to_a2a.py`
-- `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/cli/test_service_registry.py`
-- `M	tests/unittests/cli/utils/test_service_factory.py`
-- `M	tests/unittests/flows/llm_flows/test_base_llm_flow.py`
-- `M	tests/unittests/flows/llm_flows/test_contents.py`
-- `M	tests/unittests/models/test_anthropic_llm.py`
-- `M	tests/unittests/models/test_cache_metadata.py`
-- `M	tests/unittests/sessions/test_vertex_ai_session_service.py`
-- `M	tests/unittests/tools/test_skill_toolset.py`
+- `M	src/google/adk/a2a/converters/to_adk_event.py`
+- `M	src/google/adk/agents/remote_a2a_agent.py`
+- `M	tests/unittests/a2a/converters/test_to_adk.py`
+- `M	tests/unittests/a2a/integration/test_client_server.py`
+- `M	tests/unittests/agents/test_remote_a2a_agent.py`

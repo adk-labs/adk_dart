@@ -5,14 +5,6 @@
 - Latest SHA: `fc1ff1f5183d1baa6a50dd019140d1b7a22a215c`
 - Previous SHA: `fc1ff1f5183d1baa6a50dd019140d1b7a22a215c`
 
-## Summary
+## Result
 
-- New commits: 0
-
-## Commits
-
-- No upstream changes since the previous check.
-
-## Changed Files
-
-- None
+No upstream changes since the last check.
