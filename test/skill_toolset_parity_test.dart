@@ -132,6 +132,47 @@ class _FakeAdditionalToolset extends BaseToolset {
   }
 }
 
+class _RecordingSkillRegistry extends SkillRegistry {
+  _RecordingSkillRegistry(Iterable<Skill> skills) {
+    for (final Skill skill in skills) {
+      register(skill);
+    }
+  }
+
+  int getSkillCalls = 0;
+  int searchSkillsCalls = 0;
+
+  @override
+  Future<Skill?> getSkill({required String name, String? version}) async {
+    getSkillCalls += 1;
+    return super.getSkill(name: name, version: version);
+  }
+
+  @override
+  Future<List<Frontmatter>> searchSkills({
+    required String query,
+    Map<String, Object?>? filters,
+  }) async {
+    searchSkillsCalls += 1;
+    return list().map((Skill skill) => skill.frontmatter).toList();
+  }
+
+  @override
+  Map<String, Object?>? getFilterSchema() {
+    return <String, Object?>{
+      'type': 'object',
+      'properties': <String, Object?>{
+        'domain': <String, Object?>{'type': 'string'},
+      },
+    };
+  }
+
+  @override
+  String getSearchDescription() {
+    return 'Search registry skills for this test.';
+  }
+}
+
 void main() {
   group('SkillToolset parity', () {
     test('rejects duplicate skill names', () {
@@ -154,6 +195,31 @@ void main() {
         'run_skill_script',
       ]);
     });
+
+    test(
+      'getTools includes search_skills when registry is configured',
+      () async {
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_sampleSkill()],
+          registry: _RecordingSkillRegistry(<Skill>[
+            _skillWithAdditionalTool(),
+          ]),
+        );
+        final List<BaseTool> tools = await toolset.getTools();
+        expect(
+          tools.map((BaseTool tool) => tool.name),
+          contains('search_skills'),
+        );
+
+        final BaseTool searchTool = tools.singleWhere(
+          (BaseTool tool) => tool.name == 'search_skills',
+        );
+        final Map<String, dynamic> parameters = searchTool
+            .getDeclaration()!
+            .parameters;
+        expect(parameters['properties'].toString(), contains('filters'));
+      },
+    );
 
     test('load_skill returns not found for missing local skill', () async {
       final SkillToolset toolset = SkillToolset(skills: <Skill>[]);
@@ -208,6 +274,77 @@ void main() {
       expect(frontmatter['name'], 'my-skill');
       expect(frontmatter['description'], 'Helpful specialized workflow');
       expect(frontmatter['x-extra'], 'custom');
+    });
+
+    test(
+      'search_skills returns registry frontmatter and filters local conflicts',
+      () async {
+        final _RecordingSkillRegistry registry = _RecordingSkillRegistry(
+          <Skill>[_sampleSkill(), _skillWithAdditionalTool()],
+        );
+        final SkillToolset toolset = SkillToolset(
+          skills: <Skill>[_sampleSkill()],
+          registry: registry,
+        );
+        final BaseTool searchTool = (await toolset.getTools()).singleWhere(
+          (BaseTool tool) => tool.name == 'search_skills',
+        );
+
+        final Object? result = await searchTool.run(
+          args: <String, dynamic>{
+            'query': 'dynamic',
+            'filters': <String, Object?>{'domain': 'test'},
+          },
+          toolContext: _newToolContext(),
+        );
+
+        final List<Object?> payload = List<Object?>.from(result! as List);
+        expect(registry.searchSkillsCalls, 1);
+        expect(payload, hasLength(1));
+        expect(
+          Map<String, Object?>.from(payload.single! as Map)['name'],
+          'dynamic-skill',
+        );
+      },
+    );
+
+    test('load_skill fetches registry skills once per invocation', () async {
+      final _RecordingSkillRegistry registry = _RecordingSkillRegistry(<Skill>[
+        _skillWithAdditionalTool(),
+      ]);
+      final SkillToolset toolset = SkillToolset(
+        registry: registry,
+        additionalTools: <BaseTool>[_FakeAdditionalTool()],
+      );
+      final Context toolContext = _newToolContext();
+      final BaseTool loadTool = (await toolset.getTools())[1];
+
+      final Object? first = await loadTool.run(
+        args: <String, dynamic>{'skill_name': 'dynamic-skill'},
+        toolContext: toolContext,
+      );
+      final Object? second = await loadTool.run(
+        args: <String, dynamic>{'skill_name': 'dynamic-skill'},
+        toolContext: toolContext,
+      );
+
+      expect(
+        Map<String, Object?>.from(first! as Map)['skill_name'],
+        'dynamic-skill',
+      );
+      expect(
+        Map<String, Object?>.from(second! as Map)['skill_name'],
+        'dynamic-skill',
+      );
+      expect(registry.getSkillCalls, 1);
+
+      final List<BaseTool> resolved = await toolset.getTools(
+        readonlyContext: ReadonlyContext(toolContext.invocationContext),
+      );
+      expect(
+        resolved.map((BaseTool tool) => tool.name),
+        contains('extra_tool'),
+      );
     });
 
     test(
@@ -658,6 +795,29 @@ void main() {
         expect(instruction, isNot(contains('search_skills')));
         expect(instruction, isNot(contains('<available_skills>')));
         expect(instruction, isNot(contains('my-skill')));
+      },
+    );
+
+    test(
+      'processLlmRequest appends registry search guidance when configured',
+      () async {
+        final SkillToolset toolset = SkillToolset(
+          registry: _RecordingSkillRegistry(<Skill>[
+            _skillWithAdditionalTool(),
+          ]),
+        );
+        final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
+
+        await toolset.processLlmRequest(
+          toolContext: _newToolContext(),
+          llmRequest: request,
+        );
+
+        expect(request.config.systemInstruction, contains('search_skills'));
+        expect(
+          request.config.systemInstruction,
+          contains('discover additional skills from the registry'),
+        );
       },
     );
 

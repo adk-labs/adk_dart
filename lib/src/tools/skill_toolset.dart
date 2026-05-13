@@ -70,6 +70,90 @@ class _ListSkillsTool extends BaseTool {
   }
 }
 
+class _SearchSkillsTool extends BaseTool {
+  _SearchSkillsTool(this._toolset)
+    : super(
+        name: 'search_skills',
+        description:
+            _toolset._registry?.getSearchDescription() ??
+            'Searches for relevant skills in the registry based on a semantic or keyword query.',
+      ) {
+    if (_toolset._registry == null) {
+      throw ArgumentError('SearchSkillsTool requires a configured registry.');
+    }
+  }
+
+  final SkillToolset _toolset;
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    final Map<String, Object?> properties = <String, Object?>{
+      'query': <String, Object?>{
+        'type': 'string',
+        'description': 'Semantic or keyword search query.',
+      },
+    };
+    final Map<String, Object?>? filterSchema = _toolset._registry
+        ?.getFilterSchema();
+    if (filterSchema != null) {
+      properties['filters'] = filterSchema;
+    }
+    return FunctionDeclaration(
+      name: name,
+      description: description,
+      parameters: <String, Object?>{
+        'type': 'object',
+        'properties': properties,
+        'required': <String>['query'],
+      },
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    final Object? query = args['query'];
+    if (query is! String || query.trim().isEmpty) {
+      return <String, Object?>{
+        'error': "Argument 'query' is required.",
+        'error_code': 'INVALID_ARGUMENTS',
+      };
+    }
+    final Object? rawFilters = args['filters'];
+    final Map<String, Object?>? filters = rawFilters is Map
+        ? rawFilters.map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          )
+        : null;
+
+    try {
+      final List<Frontmatter> results = await _toolset._registry!.searchSkills(
+        query: query.trim(),
+        filters: filters,
+      );
+      final List<Map<String, Object?>> formatted = <Map<String, Object?>>[];
+      for (final Frontmatter frontmatter in results) {
+        if (_toolset._skills.containsKey(frontmatter.name)) {
+          developer.log(
+            "Skill naming conflict: skill '${frontmatter.name}' already exists locally. Registry skill is filtered.",
+            name: 'adk_dart.skill_toolset',
+          );
+          continue;
+        }
+        formatted.add(frontmatter.toMap());
+      }
+      return formatted;
+    } catch (error) {
+      return <String, Object?>{
+        'error': 'Failed to search skills from registry: $error',
+        'error_code': 'REGISTRY_ERROR',
+      };
+    }
+  }
+}
+
 class _LoadSkillTool extends BaseTool {
   _LoadSkillTool(this._toolset)
     : super(
@@ -114,7 +198,19 @@ class _LoadSkillTool extends BaseTool {
       };
     }
 
-    final Skill? skill = _toolset._getSkill(skillName.trim());
+    Skill? skill;
+    try {
+      skill = await _toolset._getOrFetchSkill(
+        skillName.trim(),
+        invocationId: toolContext.invocationId,
+      );
+    } catch (error) {
+      return <String, Object?>{
+        'error':
+            "Failed to fetch skill '${skillName.trim()}' from registry: $error",
+        'error_code': 'REGISTRY_ERROR',
+      };
+    }
     if (skill == null) {
       return <String, Object?>{
         'error': "Skill '${skillName.trim()}' not found.",
@@ -200,7 +296,18 @@ class _LoadSkillResourceTool extends BaseTool {
 
     final String skillName = (rawSkillName as String).trim();
     final String resourcePath = (rawPath as String).trim();
-    final Skill? skill = _toolset._getSkill(skillName);
+    Skill? skill;
+    try {
+      skill = await _toolset._getOrFetchSkill(
+        skillName,
+        invocationId: toolContext.invocationId,
+      );
+    } catch (error) {
+      return <String, Object?>{
+        'error': "Failed to fetch skill '$skillName' from registry: $error",
+        'error_code': 'REGISTRY_ERROR',
+      };
+    }
     if (skill == null) {
       return <String, Object?>{
         'error': "Skill '$skillName' not found.",
@@ -284,7 +391,21 @@ class _LoadSkillResourceTool extends BaseTool {
         continue;
       }
 
-      final Skill? skill = _toolset._getSkill(skillName);
+      Skill? skill;
+      try {
+        skill = await _toolset._getOrFetchSkill(
+          skillName,
+          invocationId: toolContext.invocationId,
+        );
+      } catch (error, stackTrace) {
+        developer.log(
+          "Failed to fetch skill '$skillName' from registry during LLM request processing.",
+          name: 'adk_dart.skill_toolset',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        continue;
+      }
       if (skill == null) {
         continue;
       }
@@ -680,7 +801,18 @@ class _RunSkillScriptTool extends BaseTool {
 
     final String skillName = (rawSkillName as String).trim();
     final String scriptPath = (rawScriptPath as String).trim();
-    final Skill? skill = _toolset._getSkill(skillName);
+    Skill? skill;
+    try {
+      skill = await _toolset._getOrFetchSkill(
+        skillName,
+        invocationId: toolContext.invocationId,
+      );
+    } catch (error) {
+      return <String, Object?>{
+        'error': "Failed to fetch skill '$skillName' from registry: $error",
+        'error_code': 'REGISTRY_ERROR',
+      };
+    }
     if (skill == null) {
       return <String, Object?>{
         'error': "Skill '$skillName' not found.",
@@ -741,27 +873,31 @@ class _RunSkillScriptTool extends BaseTool {
 class SkillToolset extends BaseToolset {
   /// Creates a toolset that exposes skill discovery/loading/script tools.
   SkillToolset({
-    required List<Skill> skills,
+    List<Skill>? skills,
+    SkillRegistry? registry,
     List<Object>? additionalTools,
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
-  }) : _codeExecutor = codeExecutor,
+  }) : _registry = registry,
+       _codeExecutor = codeExecutor,
        _scriptTimeout = scriptTimeout {
     final Set<String> seen = <String>{};
-    for (final Skill skill in skills) {
+    final List<Skill> localSkills = skills ?? const <Skill>[];
+    for (final Skill skill in localSkills) {
       if (seen.contains(skill.name)) {
         throw ArgumentError("Duplicate skill name '${skill.name}'.");
       }
       seen.add(skill.name);
     }
     _skills = <String, Skill>{
-      for (final Skill skill in skills) skill.name: skill,
+      for (final Skill skill in localSkills) skill.name: skill,
     };
     _tools = <BaseTool>[
       _ListSkillsTool(this),
       _LoadSkillTool(this),
       _LoadSkillResourceTool(this),
       _RunSkillScriptTool(this),
+      if (registry != null) _SearchSkillsTool(this),
     ];
     _providedToolsByName = <String, BaseTool>{};
     _providedToolsets = <BaseToolset>[];
@@ -784,8 +920,12 @@ class SkillToolset extends BaseToolset {
   late final List<BaseTool> _tools;
   late final Map<String, BaseTool> _providedToolsByName;
   late final List<BaseToolset> _providedToolsets;
+  final SkillRegistry? _registry;
+  final Map<String, Map<String, Future<Skill?>>> _invocationCache =
+      <String, Map<String, Future<Skill?>>>{};
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
+  static const int _maxCacheTurns = 16;
 
   @override
   /// Returns skill tools filtered by [toolFilter], if configured.
@@ -799,6 +939,43 @@ class SkillToolset extends BaseToolset {
   }
 
   Skill? _getSkill(String name) => _skills[name];
+
+  Future<Skill?> _getOrFetchSkill(
+    String name, {
+    String? invocationId,
+  }) async {
+    final Skill? local = _getSkill(name);
+    if (local != null) {
+      return local;
+    }
+
+    final SkillRegistry? registry = _registry;
+    if (registry == null) {
+      return null;
+    }
+
+    if (invocationId == null || invocationId.isEmpty) {
+      return registry.getSkill(name: name);
+    }
+
+    if (!_invocationCache.containsKey(invocationId)) {
+      if (_invocationCache.length >= _maxCacheTurns) {
+        _invocationCache.remove(_invocationCache.keys.first);
+      }
+      _invocationCache[invocationId] = <String, Future<Skill?>>{};
+    }
+    final Map<String, Future<Skill?>> turnCache =
+        _invocationCache[invocationId]!;
+
+    return turnCache.putIfAbsent(name, () async {
+      try {
+        return await registry.getSkill(name: name);
+      } catch (_) {
+        turnCache.remove(name);
+        rethrow;
+      }
+    });
+  }
 
   List<Skill> _listSkills() => _skills.values.toList(growable: false);
 
@@ -823,7 +1000,10 @@ class SkillToolset extends BaseToolset {
       if (skillName is! String) {
         continue;
       }
-      final Skill? skill = _skills[skillName];
+      final Skill? skill = await _getOrFetchSkill(
+        skillName,
+        invocationId: readonlyContext.invocationId,
+      );
       if (skill == null) {
         continue;
       }
@@ -895,6 +1075,12 @@ class SkillToolset extends BaseToolset {
     );
     if (!hasListSkills) {
       instructions.add(formatSkillsAsXml(_listSkills()));
+    }
+    if (_registry != null) {
+      instructions.add(
+        '\nIf the locally available skills are not sufficient to complete your task, '
+        'you can use the `search_skills` tool to discover additional skills from the registry.',
+      );
     }
     llmRequest.appendInstructions(instructions);
   }
