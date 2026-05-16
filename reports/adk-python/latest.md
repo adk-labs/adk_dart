@@ -3,34 +3,8 @@
 - Date (UTC): 2026-05-16
 - Source: `google/adk-python`
 - Latest SHA: `bd062ec9eb4b48cc6d4ec45aaf0a1f8f847b6d7b`
-- Previous SHA: `85f397d20f8b32cdfd074463ff505a06c8535ddf`
+- Previous SHA: `bd062ec9eb4b48cc6d4ec45aaf0a1f8f847b6d7b`
 
-## Summary
+## Result
 
-- New commits: 15
-- Runtime-relevant themes: AgentTool code result preservation, empty Gemini response handling, output_key state visibility, HITL-safe compaction, Anthropic tool result serialization, evaluation live mode, and lazy-load/app split updates.
-
-## Commits
-
-- [bd062ec9](https://github.com/google/adk-python/commit/bd062ec9eb4b48cc6d4ec45aaf0a1f8f847b6d7b) perf: lazy-load service registries and split apps.app to cut cold start ~8% (Google Team Member, 2026-05-15)
-- [6e6621c7](https://github.com/google/adk-python/commit/6e6621c7680168cfb7e6ae36cb8718c529e46316) perf: lazy-load service registries and split apps.app to cut cold start ~8% (Google Team Member, 2026-05-15)
-- [790c9bef](https://github.com/google/adk-python/commit/790c9bef9a336ea000d0cf68e63b025dfead5227) feat: add general support for Gemini Live API in ADK evaluate (Google Team Member, 2026-05-15)
-- [a5cddb8e](https://github.com/google/adk-python/commit/a5cddb8e86f51dbf84c732dc3257bf4515db33e6) chore: Remove experimental tag from SkillToolset (Google Team Member, 2026-05-15)
-- [43091597](https://github.com/google/adk-python/commit/430915970062a4ff926a65e5884cc5bc2912c48c) fix(tools): Prevent AnyIO CancelScope task boundary violations during MCP session creation failure (Sasha Sobran, 2026-05-15)
-- [ec54bd43](https://github.com/google/adk-python/commit/ec54bd439e31c99a32d773ace04b73cb3a275675) perf(utils): cache find_context_parameter introspection (George Weale, 2026-05-15)
-- [2388090c](https://github.com/google/adk-python/commit/2388090cd26d09180d011e6138dd17f43ba6c7a2) chore: Remove experimental tag from SkillToolset (Kathy Wu, 2026-05-15)
-- [7e61b517](https://github.com/google/adk-python/commit/7e61b517027a23c640b7b636a87e04a0a02c392c) fix(tools): preserve code_execution_result and executable_code in AgentTool (George Weale, 2026-05-15)
-- [6ca6a141](https://github.com/google/adk-python/commit/6ca6a14187f9c65982ae2f4d506a659171ee58ce) perf: lazy-load service registries and split apps.app to cut cold start ~8% (George Weale, 2026-05-15)
-- [0cb9ae94](https://github.com/google/adk-python/commit/0cb9ae94b30ac2cff120b2c4ccab77e6b85cbf45) fix(models): treat empty GenerateContentResponse without prompt feedback as successful (George Weale, 2026-05-15)
-- [0524797a](https://github.com/google/adk-python/commit/0524797ac75ddd13b1c01cac91e507ba2c42cef0) fix(agents): fix visibility of output_key state delta in callbacks (Amaad Martin, 2026-05-15)
-- [9a1e75f2](https://github.com/google/adk-python/commit/9a1e75f24256cfe54766c69691247df90dc5558f) fix(models): preserve string content in Anthropic tool_result blocks (George Weale, 2026-05-15)
-- [bb2efb6b](https://github.com/google/adk-python/commit/bb2efb6bd234e3235c47b3245676581f6022b458) fix: Prevent compaction of events involved in Human-in-the-Loop interactions (George Weale, 2026-05-15)
-- [eed9bd31](https://github.com/google/adk-python/commit/eed9bd319ffc398fae14c2362c93f986ffe25f67) fix(evaluation): handle none config in per_turn_user_simulator_quality (George Weale, 2026-05-15)
-- [f5b765d6](https://github.com/google/adk-python/commit/f5b765d608fa22b492a9ccf5a8ab9b99e27fbe68) chore(build): exclude nested README.md files from sdist packaging (George Weale, 2026-05-15)
-
-## Changed Files
-
-- Apps/runner/session: `apps/_configs.py`, `apps/app.py`, `apps/compaction.py`, `runners.py`
-- Evaluation: `base_eval_service.py`, `constants.py`, `evaluation_generator.py`, `local_eval_service.py`
-- Models/tools: `anthropic_llm.py`, `llm_response.py`, `agent_tool.py`, `mcp_session_manager.py`
-- A2A and utilities: `to_adk_event.py`, `remote_a2a_agent.py`, `agent_to_a2a.py`, `context_utils.py`
+No upstream changes since the last check.

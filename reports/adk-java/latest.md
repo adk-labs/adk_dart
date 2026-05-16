@@ -5,15 +5,6 @@
 - Latest SHA: `3e496e4a2e8db0347e2f8fd8115ab751314e5de8`
 - Previous SHA: `3e496e4a2e8db0347e2f8fd8115ab751314e5de8`
 
-## Summary
+## Result
 
-- New commits: 0
-- Java was already at the latest 1.3.x state in the remote daily report sequence. Dart runtime work from this batch came from Python parity items.
-
-## Commits
-
-- No upstream changes since the previous check.
-
-## Changed Files
-
-- None
+No upstream changes since the last check.
