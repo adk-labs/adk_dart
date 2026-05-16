@@ -252,6 +252,37 @@ void main() {
       expect(exporter.defaultLogName, 'custom-log');
     });
 
+    test('gcp trace endpoint honors mTLS environment selection', () {
+      expect(
+        resolveTelemetryTracesEndpoint(
+          environment: <String, String>{
+            'GOOGLE_API_USE_MTLS_ENDPOINT': 'never',
+          },
+          hasDefaultClientCertificate: true,
+          useClientCertificate: true,
+        ),
+        defaultTelemetryTracesEndpoint,
+      );
+      expect(
+        resolveTelemetryTracesEndpoint(
+          environment: <String, String>{
+            'GOOGLE_API_USE_MTLS_ENDPOINT': 'always',
+          },
+        ),
+        defaultMtlsTelemetryTracesEndpoint,
+      );
+      expect(
+        resolveTelemetryTracesEndpoint(
+          environment: <String, String>{
+            'GOOGLE_API_USE_MTLS_ENDPOINT': 'auto',
+            'GOOGLE_API_USE_CLIENT_CERTIFICATE': 'true',
+          },
+          hasDefaultClientCertificate: true,
+        ),
+        defaultMtlsTelemetryTracesEndpoint,
+      );
+    });
+
     test('gcp resource merges project/env/detector attributes', () {
       final OTelResource resource = getGcpResource(
         projectId: 'proj-a',

@@ -86,6 +86,38 @@ void main() {
       expect(responses.single.usageMetadata, isA<Map<String, Object?>>());
     });
 
+    test(
+      'empty candidates without prompt feedback return successful empty content',
+      () async {
+        final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+          nonStreamResponse: <String, Object?>{
+            'modelVersion': 'gemini-empty',
+            'candidates': <Object?>[],
+            'usageMetadata': <String, Object?>{'totalTokenCount': 0},
+          },
+        );
+        final Gemini model = Gemini(
+          restTransport: transport,
+          environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+        );
+
+        final List<LlmResponse> responses = await model
+            .generateContent(
+              LlmRequest(
+                model: 'gemini-2.5-flash',
+                contents: <Content>[Content.userText('hello')],
+              ),
+            )
+            .toList();
+
+        expect(responses, hasLength(1));
+        expect(responses.single.errorCode, isNull);
+        expect(responses.single.content?.role, 'model');
+        expect(responses.single.content?.parts, isEmpty);
+        expect(responses.single.modelVersion, 'gemini-empty');
+      },
+    );
+
     test('extracts Google API version suffix from baseUrl', () async {
       final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
         nonStreamResponse: <String, Object?>{
@@ -155,7 +187,7 @@ void main() {
             .toList(),
         throwsA(
           isA<StateError>().having(
-            (StateError error) => '${error.message}',
+            (StateError error) => error.message,
             'message',
             contains('GEMINI_API_KEY or GOOGLE_API_KEY'),
           ),

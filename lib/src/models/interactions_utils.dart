@@ -25,9 +25,7 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
   }
   if (part.functionResponse != null) {
     Object result = part.functionResponse!.response;
-    if (result is Map) {
-      result = jsonEncode(result);
-    } else if (result is! String) {
+    if (result is! Map && result is! String && result is! List) {
       result = '$result';
     }
     return <String, Object?>{

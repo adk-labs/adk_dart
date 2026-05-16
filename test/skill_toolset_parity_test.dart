@@ -117,6 +117,7 @@ class _FakeAdditionalToolset extends BaseToolset {
 
   final List<BaseTool> tools;
   int getToolsWithPrefixCalls = 0;
+  int closeCalls = 0;
 
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
@@ -129,6 +130,11 @@ class _FakeAdditionalToolset extends BaseToolset {
   }) async {
     getToolsWithPrefixCalls += 1;
     return super.getToolsWithPrefix(readonlyContext: readonlyContext);
+  }
+
+  @override
+  Future<void> close() async {
+    closeCalls += 1;
   }
 }
 
@@ -406,6 +412,36 @@ void main() {
         expect(providedToolset.getToolsWithPrefixCalls, 1);
       },
     );
+
+    test('close clears registry cache and closes provided toolsets', () async {
+      final Context toolContext = _newToolContext();
+      final _RecordingSkillRegistry registry = _RecordingSkillRegistry(<Skill>[
+        _skillWithAdditionalTool(),
+      ]);
+      final _FakeAdditionalToolset providedToolset = _FakeAdditionalToolset(
+        <BaseTool>[_FakeAdditionalTool()],
+      );
+      final SkillToolset toolset = SkillToolset(
+        registry: registry,
+        additionalTools: <Object>[providedToolset],
+      );
+      final BaseTool loadTool = (await toolset.getTools())[1];
+
+      await loadTool.run(
+        args: <String, dynamic>{'skill_name': 'dynamic-skill'},
+        toolContext: toolContext,
+      );
+      expect(registry.getSkillCalls, 1);
+
+      await toolset.close();
+      expect(providedToolset.closeCalls, 1);
+
+      await loadTool.run(
+        args: <String, dynamic>{'skill_name': 'dynamic-skill'},
+        toolContext: toolContext,
+      );
+      expect(registry.getSkillCalls, 2);
+    });
 
     test('load_skill returns missing/not-found errors', () async {
       final SkillToolset toolset = SkillToolset(

@@ -45,6 +45,25 @@ class _JsonChildModel extends BaseLlm {
   }
 }
 
+class _CodePartAgent extends BaseAgent {
+  _CodePartAgent() : super(name: 'code_child');
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part(codeExecutionResult: <String, Object?>{'output': 'stdout\n'}),
+          Part(executableCode: <String, Object?>{'code': 'print(1)'}),
+        ],
+      ),
+    );
+  }
+}
+
 void main() {
   test('AgentTool runs wrapped agent and returns merged text', () async {
     final Agent childAgent = Agent(
@@ -126,6 +145,28 @@ void main() {
 
       expect(result, isA<Map<String, Object?>>());
       expect((result! as Map<String, Object?>)['answer'], contains('Seoul'));
+    },
+  );
+
+  test(
+    'AgentTool merges code execution result and executable code parts',
+    () async {
+      final AgentTool tool = AgentTool(agent: _CodePartAgent());
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_agent_tool_code',
+        agent: Agent(name: 'root_agent', model: _ChildModel()),
+        session: Session(id: 's_agent_tool_code', appName: 'app', userId: 'u1'),
+        artifactService: InMemoryArtifactService(),
+        memoryService: InMemoryMemoryService(),
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'request': 'run code'},
+        toolContext: Context(invocationContext),
+      );
+
+      expect(result, 'stdout\nprint(1)');
     },
   );
 }

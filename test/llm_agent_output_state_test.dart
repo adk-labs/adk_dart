@@ -39,6 +39,19 @@ class _ToolCallModel extends BaseLlm {
   }
 }
 
+class _StateRecordingPlugin extends BasePlugin {
+  _StateRecordingPlugin() : super(name: 'state_recording');
+
+  Object? finalAnswerInAfterRun;
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    finalAnswerInAfterRun = invocationContext.session.state['final_answer'];
+  }
+}
+
 Future<List<Event>> _runOnce(LlmAgent agent) async {
   final InMemoryRunner runner = InMemoryRunner(agent: agent);
   final Session session = await runner.sessionService.createSession(
@@ -84,6 +97,45 @@ void main() {
           (eventWithState.actions.stateDelta['final_answer'] as Map)['answer'],
           'done',
         );
+      },
+    );
+
+    test(
+      'runner updates context session state before after-run callbacks',
+      () async {
+        final _StateRecordingPlugin plugin = _StateRecordingPlugin();
+        final LlmAgent agent = LlmAgent(
+          name: 'root_agent',
+          model: _StaticTextModel('visible'),
+          outputKey: 'final_answer',
+          disallowTransferToParent: true,
+          disallowTransferToPeers: true,
+        );
+        final InMemoryRunner runner = InMemoryRunner(
+          agent: agent,
+          plugins: <BasePlugin>[plugin],
+        );
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'u1',
+          sessionId: 's_output_key_visibility',
+        );
+
+        await runner
+            .runAsync(
+              userId: 'u1',
+              sessionId: session.id,
+              newMessage: Content.userText('hello'),
+            )
+            .toList();
+
+        expect(plugin.finalAnswerInAfterRun, 'visible');
+        final Session? stored = await runner.sessionService.getSession(
+          appName: runner.appName,
+          userId: 'u1',
+          sessionId: session.id,
+        );
+        expect(stored?.state['final_answer'], 'visible');
       },
     );
 

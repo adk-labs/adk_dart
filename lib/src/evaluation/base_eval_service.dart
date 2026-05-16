@@ -2,8 +2,24 @@
 library;
 
 import 'eval_case.dart';
+import 'constants.dart';
 import 'eval_metric.dart';
 import 'eval_result.dart';
+
+/// Options that control how inference is generated for eval cases.
+class InferenceConfig {
+  /// Creates inference configuration.
+  const InferenceConfig({
+    this.useLive = false,
+    this.liveTimeoutSeconds = defaultLiveTimeoutSeconds,
+  });
+
+  /// Whether to use bidirectional live streaming inference.
+  final bool useLive;
+
+  /// Timeout for waiting for model turn completion in live mode.
+  final int liveTimeoutSeconds;
+}
 
 /// Input for evaluation inference runs.
 class InferenceRequest {
@@ -12,7 +28,8 @@ class InferenceRequest {
     required this.appName,
     required this.evalCases,
     this.userId = 'eval_user',
-  });
+    InferenceConfig? inferenceConfig,
+  }) : inferenceConfig = inferenceConfig ?? const InferenceConfig();
 
   /// App module name used for execution.
   final String appName;
@@ -22,6 +39,9 @@ class InferenceRequest {
 
   /// User identifier used for generated sessions.
   final String userId;
+
+  /// Inference runtime options.
+  final InferenceConfig inferenceConfig;
 }
 
 /// Input for metric evaluation after inference completes.

@@ -1167,6 +1167,19 @@ void main() {
       expect(listBlock['content'], '[]');
     });
 
+    test('string content in tool results is preserved as plain content', () {
+      final Map<String, Object?> block = AnthropicLlm.partToMessageBlock(
+        Part.fromFunctionResponse(
+          name: 'lookup',
+          id: 'tool_string',
+          response: <String, dynamic>{'content': 'plain result'},
+        ),
+      );
+
+      expect(block['type'], 'tool_result');
+      expect(block['content'], 'plain result');
+    });
+
     test('inbound thinking blocks are preserved as thought parts', () {
       final LlmResponse response = AnthropicLlm.messageToLlmResponse(
         <String, Object?>{

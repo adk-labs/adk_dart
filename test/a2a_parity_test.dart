@@ -426,6 +426,58 @@ void main() {
     );
 
     test(
+      'input-required task without ADK tool id creates mock function call',
+      () {
+        final Event event = convertA2aTaskToEvent(
+          A2aTask(
+            id: 'task_input',
+            contextId: 'ctx_input',
+            status: A2aTaskStatus(
+              state: A2aTaskState.inputRequired,
+              message: A2aMessage(
+                messageId: 'msg_input',
+                role: A2aRole.agent,
+                parts: <A2aPart>[A2aPart.text('Please provide an answer.')],
+              ),
+            ),
+          ),
+        );
+
+        final FunctionCall? call = event.content?.parts.single.functionCall;
+        expect(call, isNotNull);
+        expect(call!.name, mockFunctionCallForRequiredUserInput);
+        expect(call.args['input_required'], 'Please provide an answer.');
+        expect(event.longRunningToolIds, contains(call.id));
+      },
+    );
+
+    test(
+      'auth-required status update without ADK tool id creates mock call',
+      () {
+        final Event event = convertA2aStatusUpdateToEvent(
+          A2aTaskStatusUpdateEvent(
+            taskId: 'task_auth',
+            contextId: 'ctx_auth',
+            status: A2aTaskStatus(
+              state: A2aTaskState.authRequired,
+              message: A2aMessage(
+                messageId: 'msg_auth',
+                role: A2aRole.agent,
+                parts: <A2aPart>[A2aPart.text('Authentication required.')],
+              ),
+            ),
+          ),
+        );
+
+        final FunctionCall? call = event.content?.parts.single.functionCall;
+        expect(call, isNotNull);
+        expect(call!.name, mockFunctionCallForRequiredUserInput);
+        expect(call.args['input_required'], 'Authentication required.');
+        expect(event.longRunningToolIds, contains(call.id));
+      },
+    );
+
+    test(
       'artifact update conversion preserves metadata actions and partial flag',
       () {
         final A2aTaskArtifactUpdateEvent update = A2aTaskArtifactUpdateEvent(

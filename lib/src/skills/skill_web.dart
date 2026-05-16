@@ -177,7 +177,10 @@ class Frontmatter implements SkillDescriptor {
       throw ArgumentError('description must not be empty');
     }
     if (value.length > 1024) {
-      throw ArgumentError('description must be at most 1024 characters');
+      throw ArgumentError(
+        'description must be at most 1024 characters. '
+        'Description length: ${value.length}',
+      );
     }
     return value;
   }

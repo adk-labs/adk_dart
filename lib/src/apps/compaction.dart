@@ -70,6 +70,50 @@ List<Event> _truncateEventsBeforePendingFunctionCall(
   return events;
 }
 
+Set<String> _resolvedHitlCallIds(List<Event> events) {
+  final Map<String, int> hitlPosition = <String, int>{};
+  final Set<String> resolved = <String>{};
+  for (int index = 0; index < events.length; index += 1) {
+    final Event event = events[index];
+    for (final String callId in event.actions.requestedToolConfirmations.keys) {
+      hitlPosition.putIfAbsent(callId, () => index);
+    }
+    for (final String callId in event.actions.requestedAuthConfigs.keys) {
+      hitlPosition.putIfAbsent(callId, () => index);
+    }
+    for (final String responseId in _eventFunctionResponseIds(event)) {
+      final int? hitlIndex = hitlPosition[responseId];
+      if (hitlIndex != null && index > hitlIndex) {
+        resolved.add(responseId);
+      }
+    }
+  }
+  return resolved;
+}
+
+bool _isPendingHitl(Event event, Set<String> resolvedCallIds) {
+  final Set<String> requested = <String>{
+    ...event.actions.requestedToolConfirmations.keys,
+    ...event.actions.requestedAuthConfigs.keys,
+  };
+  if (requested.isEmpty) {
+    return false;
+  }
+  return requested.difference(resolvedCallIds).isNotEmpty;
+}
+
+List<Event> _truncateEventsBeforeHitlSignal(
+  List<Event> events,
+  Set<String> resolvedCallIds,
+) {
+  for (int index = 0; index < events.length; index += 1) {
+    if (_isPendingHitl(events[index], resolvedCallIds)) {
+      return events.take(index).toList(growable: false);
+    }
+  }
+  return events;
+}
+
 int _safeTokenCompactionSplitIndex({
   required List<Event> candidateEvents,
   required int eventRetentionSize,
@@ -147,6 +191,10 @@ Future<bool> runCompactionForTokenThresholdConfig({
   eventsToCompact = _truncateEventsBeforePendingFunctionCall(
     eventsToCompact,
     pendingIds,
+  );
+  eventsToCompact = _truncateEventsBeforeHitlSignal(
+    eventsToCompact,
+    _resolvedHitlCallIds(session.events),
   );
   if (eventsToCompact.isEmpty) {
     return false;
@@ -229,11 +277,19 @@ Future<bool> runCompactionForSlidingWindow({
   final Set<String> invocationIdsToCompact = userInvocations
       .take(compactCount)
       .toSet();
-  final List<Event> eventsToCompact = candidates
+  List<Event> eventsToCompact = candidates
       .where(
         (Event event) => invocationIdsToCompact.contains(event.invocationId),
       )
       .toList(growable: false);
+  eventsToCompact = _truncateEventsBeforePendingFunctionCall(
+    eventsToCompact,
+    _pendingFunctionCallIds(session.events),
+  );
+  eventsToCompact = _truncateEventsBeforeHitlSignal(
+    eventsToCompact,
+    _resolvedHitlCallIds(session.events),
+  );
 
   if (eventsToCompact.isEmpty) {
     return false;

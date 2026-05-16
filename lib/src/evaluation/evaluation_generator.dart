@@ -1,6 +1,8 @@
 /// Evaluation trajectory generation helpers for eval sets.
 library;
 
+import 'dart:convert';
+
 import '../agents/base_agent.dart';
 import '../events/event.dart';
 import '../models/llm_request.dart';
@@ -238,6 +240,8 @@ class EvaluationGenerator {
             for (final Part part in event.content!.parts) {
               if (part.functionCall != null ||
                   part.functionResponse != null ||
+                  part.inlineData != null ||
+                  part.fileData != null ||
                   (part.text != null && part.text!.isNotEmpty)) {
                 shouldInclude = true;
                 break;
@@ -382,6 +386,37 @@ Content _contentFromEvalJson(EvalJsonMap content) {
       );
       continue;
     }
+    if (part['inline_data'] != null || part['inlineData'] != null) {
+      final EvalJsonMap data = asEvalJson(
+        part['inline_data'] ?? part['inlineData'],
+      );
+      final String? encoded = asNullableString(data['data']);
+      if (encoded != null) {
+        parts.add(
+          Part.fromInlineData(
+            mimeType:
+                asNullableString(data['mime_type'] ?? data['mimeType']) ?? '',
+            data: base64Decode(encoded),
+          ),
+        );
+      }
+      continue;
+    }
+    if (part['file_data'] != null || part['fileData'] != null) {
+      final EvalJsonMap data = asEvalJson(
+        part['file_data'] ?? part['fileData'],
+      );
+      final String? uri = asNullableString(data['file_uri'] ?? data['fileUri']);
+      if (uri != null) {
+        parts.add(
+          Part.fromFileData(
+            fileUri: uri,
+            mimeType: asNullableString(data['mime_type'] ?? data['mimeType']),
+          ),
+        );
+      }
+      continue;
+    }
     final String? text = asNullableString(part['text']);
     if (text != null) {
       parts.add(Part.text(text));
@@ -413,6 +448,23 @@ EvalJsonMap? _contentToEvalJson(Content? content) {
             'response': part.functionResponse!.response,
             if (part.functionResponse!.id != null)
               'id': part.functionResponse!.id,
+          },
+        };
+      }
+      if (part.inlineData != null) {
+        return <String, Object?>{
+          'inline_data': <String, Object?>{
+            'mime_type': part.inlineData!.mimeType,
+            'data': base64Encode(part.inlineData!.data),
+          },
+        };
+      }
+      if (part.fileData != null) {
+        return <String, Object?>{
+          'file_data': <String, Object?>{
+            'file_uri': part.fileData!.fileUri,
+            if (part.fileData!.mimeType != null)
+              'mime_type': part.fileData!.mimeType,
           },
         };
       }

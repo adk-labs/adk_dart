@@ -12,6 +12,16 @@ const String gcpLogNameEnvVariableName = 'GOOGLE_CLOUD_DEFAULT_LOG_NAME';
 /// Default Cloud Logging log name used by ADK telemetry.
 const String defaultGcpLogName = 'adk-otel';
 
+/// Default Cloud Trace OTLP endpoint.
+const String defaultTelemetryTracesEndpoint =
+    'https://telemetry.googleapis.com/v1/traces';
+
+/// Default mTLS Cloud Trace OTLP endpoint.
+const String defaultMtlsTelemetryTracesEndpoint =
+    'https://telemetry.mtls.googleapis.com/v1/traces';
+
+enum _MtlsEndpoint { auto, always, never }
+
 /// Google authentication payload for telemetry exporters.
 class GoogleAuthResult {
   /// Creates a Google authentication result.
@@ -69,7 +79,9 @@ OTelHooks getGcpExporters({
 
   final List<SpanProcessor> spanProcessors = <SpanProcessor>[];
   if (enableCloudTracing) {
-    spanProcessors.add(getGcpSpanExporter(auth.credentials));
+    spanProcessors.add(
+      getGcpSpanExporter(auth.credentials, environment: environment),
+    );
   }
 
   final List<MetricReader> metricReaders = <MetricReader>[];
@@ -92,13 +104,76 @@ OTelHooks getGcpExporters({
 }
 
 /// Returns a Cloud Trace span exporter hook.
-SpanProcessor getGcpSpanExporter(Object credentials) {
+SpanProcessor getGcpSpanExporter(
+  Object credentials, {
+  Map<String, String>? environment,
+  bool hasDefaultClientCertificate = false,
+  bool? useClientCertificate,
+}) {
   return BatchSpanProcessor(
     OtlpSpanExporter(
       session: credentials,
-      endpoint: 'https://telemetry.googleapis.com/v1/traces',
+      endpoint: resolveTelemetryTracesEndpoint(
+        environment: environment,
+        hasDefaultClientCertificate: hasDefaultClientCertificate,
+        useClientCertificate: useClientCertificate,
+      ),
     ),
   );
+}
+
+/// Resolves the telemetry trace endpoint using Google API mTLS environment.
+String resolveTelemetryTracesEndpoint({
+  Map<String, String>? environment,
+  bool hasDefaultClientCertificate = false,
+  bool? useClientCertificate,
+}) {
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String rawEndpoint = (env['GOOGLE_API_USE_MTLS_ENDPOINT'] ?? 'auto')
+      .toLowerCase();
+  final _MtlsEndpoint endpointMode = _parseMtlsEndpoint(rawEndpoint);
+  final bool clientCertEnabled =
+      useClientCertificate ?? _useClientCertificateEffective(env);
+
+  if (endpointMode == _MtlsEndpoint.always ||
+      (endpointMode == _MtlsEndpoint.auto &&
+          clientCertEnabled &&
+          hasDefaultClientCertificate)) {
+    return defaultMtlsTelemetryTracesEndpoint;
+  }
+  return defaultTelemetryTracesEndpoint;
+}
+
+_MtlsEndpoint _parseMtlsEndpoint(String value) {
+  switch (value) {
+    case 'always':
+      return _MtlsEndpoint.always;
+    case 'never':
+      return _MtlsEndpoint.never;
+    case 'auto':
+      return _MtlsEndpoint.auto;
+    default:
+      developer.log(
+        'Environment variable `GOOGLE_API_USE_MTLS_ENDPOINT` must be one of '
+        '[auto, always, never]. Defaulting to auto.',
+        name: 'adk_dart.telemetry',
+      );
+      return _MtlsEndpoint.auto;
+  }
+}
+
+bool _useClientCertificateEffective(Map<String, String> environment) {
+  final String raw =
+      (environment['GOOGLE_API_USE_CLIENT_CERTIFICATE'] ?? 'false')
+          .toLowerCase();
+  if (raw != 'true' && raw != 'false') {
+    developer.log(
+      'Environment variable `GOOGLE_API_USE_CLIENT_CERTIFICATE` must be '
+      'either `true` or `false`.',
+      name: 'adk_dart.telemetry',
+    );
+  }
+  return raw == 'true';
 }
 
 /// Returns a Cloud Monitoring metrics exporter hook.

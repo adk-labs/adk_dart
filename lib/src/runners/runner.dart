@@ -304,7 +304,7 @@ class Runner {
     if (app != null && app!.eventsCompactionConfig != null) {
       await app_compaction.runCompactionForSlidingWindow(
         app: app!,
-        session: session,
+        session: context.session,
         sessionService: sessionService,
         skipTokenCompaction: context.tokenCompactionChecked,
       );
@@ -503,7 +503,7 @@ class Runner {
       runConfig: config,
     );
 
-    context.agent = _findAgentToRun(session, agent);
+    context.agent = _findAgentToRun(context.session, agent);
 
     await for (final Event event in _execWithPlugin(
       invocationContext: context,
@@ -590,7 +590,7 @@ class Runner {
       stateDelta: stateDelta,
     );
 
-    context.agent = _findAgentToRun(session, agent);
+    context.agent = _findAgentToRun(context.session, agent);
     return context;
   }
 
@@ -639,7 +639,7 @@ class Runner {
 
     context.populateInvocationAgentStates();
     if (!context.endOfAgents.containsKey(agent.name)) {
-      context.agent = _findAgentToRun(session, agent);
+      context.agent = _findAgentToRun(context.session, agent);
     }
 
     return context;
@@ -802,7 +802,7 @@ class Runner {
       event.branch = matchingCall.branch;
     }
 
-    await sessionService.appendEvent(session: session, event: event);
+    await sessionService.appendEvent(session: context.session, event: event);
   }
 
   Stream<Event> _execWithPlugin({
@@ -822,7 +822,10 @@ class Runner {
       );
       _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
       if (_shouldAppendEvent(event, isLiveCall)) {
-        await sessionService.appendEvent(session: session, event: event);
+        await sessionService.appendEvent(
+          session: invocationContext.session,
+          event: event,
+        );
       }
       yield event;
     } else {
@@ -859,7 +862,7 @@ class Runner {
               isTranscribing = false;
               if (_shouldAppendEvent(outputEvent, isLiveCall)) {
                 await sessionService.appendEvent(
-                  session: session,
+                  session: invocationContext.session,
                   event: outputEvent,
                 );
               }
@@ -867,7 +870,7 @@ class Runner {
               for (final Event buffered in bufferedEvents) {
                 if (_shouldAppendEvent(buffered, isLiveCall)) {
                   await sessionService.appendEvent(
-                    session: session,
+                    session: invocationContext.session,
                     event: buffered,
                   );
                 }
@@ -876,7 +879,7 @@ class Runner {
               bufferedEvents.clear();
             } else if (_shouldAppendEvent(outputEvent, isLiveCall)) {
               await sessionService.appendEvent(
-                session: session,
+                session: invocationContext.session,
                 event: outputEvent,
               );
             }
@@ -884,7 +887,7 @@ class Runner {
         } else if (event.partial != true &&
             _shouldAppendEvent(outputEvent, isLiveCall)) {
           await sessionService.appendEvent(
-            session: session,
+            session: invocationContext.session,
             event: outputEvent,
           );
         }

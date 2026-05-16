@@ -17,6 +17,29 @@ class _FixedModel extends BaseLlm {
 
 void main() {
   group('LocalEvalService', () {
+    test('inference request exposes live inference configuration', () {
+      final InferenceRequest defaultRequest = InferenceRequest(
+        appName: 'eval_app',
+        evalCases: <EvalCase>[],
+      );
+      expect(defaultRequest.inferenceConfig.useLive, isFalse);
+      expect(
+        defaultRequest.inferenceConfig.liveTimeoutSeconds,
+        defaultLiveTimeoutSeconds,
+      );
+
+      final InferenceRequest liveRequest = InferenceRequest(
+        appName: 'eval_app',
+        evalCases: <EvalCase>[],
+        inferenceConfig: const InferenceConfig(
+          useLive: true,
+          liveTimeoutSeconds: 7,
+        ),
+      );
+      expect(liveRequest.inferenceConfig.useLive, isTrue);
+      expect(liveRequest.inferenceConfig.liveTimeoutSeconds, 7);
+    });
+
     test('performs inference and evaluates final response metric', () async {
       final Agent agent = Agent(
         name: 'root_agent',

@@ -19,6 +19,10 @@ const String artifactIdSeparator = '-';
 /// Default error message used for failed conversion states.
 const String defaultErrorMessage = 'An error occurred during processing';
 
+/// Synthetic function-call name used to resume non-ADK input-required events.
+const String mockFunctionCallForRequiredUserInput =
+    'mock_function_call_for_required_user_input';
+
 /// Converter signature from ADK [Event] to A2A event batches.
 typedef AdkEventToA2AEventsConverter =
     List<A2aEvent> Function(
@@ -98,6 +102,38 @@ EventActions _mergeEventActions(EventActions base, EventActions update) {
   return eventActionsFromJson(
     _mergeTopLevelMaps(eventActionsToJson(base), eventActionsToJson(update)),
   );
+}
+
+/// Replaces the last text part with a synthetic long-running function call
+/// when a non-ADK A2A peer reports input/auth required without an ADK tool id.
+(List<Part>, Set<String>) createMockFunctionCallForRequiredUserInput(
+  A2aTaskState state,
+  List<Part> outputParts,
+  Set<String> longRunningFunctionIds,
+) {
+  if (state != A2aTaskState.inputRequired &&
+      state != A2aTaskState.authRequired) {
+    return (outputParts, longRunningFunctionIds);
+  }
+  if (longRunningFunctionIds.isNotEmpty) {
+    return (outputParts, longRunningFunctionIds);
+  }
+
+  for (int i = outputParts.length - 1; i >= 0; i -= 1) {
+    final String? text = outputParts[i].text;
+    if (text == null || text.isEmpty) {
+      continue;
+    }
+    final String id = newUuid();
+    final List<Part> updatedParts = List<Part>.from(outputParts);
+    updatedParts[i] = Part.fromFunctionCall(
+      name: mockFunctionCallForRequiredUserInput,
+      id: id,
+      args: <String, dynamic>{'input_required': text},
+    );
+    return (updatedParts, <String>{id});
+  }
+  return (outputParts, longRunningFunctionIds);
 }
 
 Map<String, Object?> _actionsToA2aMetadata(EventActions actions) {
@@ -238,15 +274,26 @@ Event convertA2aTaskToEvent(
     actions = _mergeEventActions(actions, converted.actions);
   }
 
+  final (
+    List<Part> processedParts,
+    Set<String> processedLongRunningIds,
+  ) = createMockFunctionCallForRequiredUserInput(
+    a2aTask.status.state,
+    outputParts,
+    longRunningToolIds,
+  );
+
   return Event(
     invocationId: invocationId,
     author: author ?? 'a2a_agent',
     branch: invocationContext?.branch,
     actions: actions,
-    longRunningToolIds: longRunningToolIds.isEmpty ? null : longRunningToolIds,
-    content: outputParts.isEmpty
+    longRunningToolIds: processedLongRunningIds.isEmpty
         ? null
-        : Content(role: 'model', parts: outputParts),
+        : processedLongRunningIds,
+    content: processedParts.isEmpty
+        ? null
+        : Content(role: 'model', parts: processedParts),
   );
 }
 
@@ -327,11 +374,27 @@ Event convertA2aStatusUpdateToEvent(
           invocationContext: invocationContext,
           partConverter: partConverter,
         );
+  final (
+    List<Part> processedParts,
+    Set<String> processedLongRunningIds,
+  ) = createMockFunctionCallForRequiredUserInput(
+    a2aStatusUpdate.status.state,
+    List<Part>.from(converted.content?.parts ?? const <Part>[]),
+    Set<String>.from(converted.longRunningToolIds ?? const <String>{}),
+  );
+  final Content? processedContent = converted.content?.copyWith(
+    parts: processedParts,
+  );
+
   return converted.copyWith(
     actions: _mergeEventActions(
       _extractEventActions(a2aStatusUpdate.metadata),
       converted.actions,
     ),
+    longRunningToolIds: processedLongRunningIds.isEmpty
+        ? null
+        : processedLongRunningIds,
+    content: processedContent,
   );
 }
 

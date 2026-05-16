@@ -766,8 +766,7 @@ class Gemini extends BaseLlm {
 
     return LlmResponse(
       modelVersion: modelVersion,
-      errorCode: 'UNKNOWN_ERROR',
-      errorMessage: 'Unknown error.',
+      content: Content(role: 'model', parts: <Part>[]),
       usageMetadata: usageMetadata,
       groundingMetadata: responseGroundingMetadata,
       interactionId: interactionId,

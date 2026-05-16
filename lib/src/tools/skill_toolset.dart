@@ -921,7 +921,7 @@ class SkillToolset extends BaseToolset {
   late final Map<String, BaseTool> _providedToolsByName;
   late final List<BaseToolset> _providedToolsets;
   final SkillRegistry? _registry;
-  final Map<String, Map<String, Future<Skill?>>> _invocationCache =
+  final Map<String, Map<String, Future<Skill?>>> _fetchedSkillCache =
       <String, Map<String, Future<Skill?>>>{};
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
@@ -940,10 +940,7 @@ class SkillToolset extends BaseToolset {
 
   Skill? _getSkill(String name) => _skills[name];
 
-  Future<Skill?> _getOrFetchSkill(
-    String name, {
-    String? invocationId,
-  }) async {
+  Future<Skill?> _getOrFetchSkill(String name, {String? invocationId}) async {
     final Skill? local = _getSkill(name);
     if (local != null) {
       return local;
@@ -958,14 +955,14 @@ class SkillToolset extends BaseToolset {
       return registry.getSkill(name: name);
     }
 
-    if (!_invocationCache.containsKey(invocationId)) {
-      if (_invocationCache.length >= _maxCacheTurns) {
-        _invocationCache.remove(_invocationCache.keys.first);
+    if (!_fetchedSkillCache.containsKey(invocationId)) {
+      if (_fetchedSkillCache.length >= _maxCacheTurns) {
+        _fetchedSkillCache.remove(_fetchedSkillCache.keys.first);
       }
-      _invocationCache[invocationId] = <String, Future<Skill?>>{};
+      _fetchedSkillCache[invocationId] = <String, Future<Skill?>>{};
     }
     final Map<String, Future<Skill?>> turnCache =
-        _invocationCache[invocationId]!;
+        _fetchedSkillCache[invocationId]!;
 
     return turnCache.putIfAbsent(name, () async {
       try {
@@ -1083,6 +1080,15 @@ class SkillToolset extends BaseToolset {
       );
     }
     llmRequest.appendInstructions(instructions);
+  }
+
+  @override
+  Future<void> close() async {
+    _fetchedSkillCache.clear();
+    for (final BaseToolset toolset in _providedToolsets) {
+      await toolset.close();
+    }
+    await super.close();
   }
 }
 

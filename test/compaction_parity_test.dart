@@ -384,6 +384,68 @@ void main() {
   });
 
   test(
+    'token compaction skips events with pending HITL confirmations',
+    () async {
+      final InMemorySessionService sessionService = InMemorySessionService();
+      final Session session = await sessionService.createSession(
+        appName: 'app',
+        userId: 'u_hitl',
+        sessionId: 's_hitl',
+      );
+
+      session.events.addAll(<Event>[
+        Event(
+          invocationId: 'inv_1',
+          author: 'user',
+          timestamp: 1.0,
+          content: Content.userText('message 1'),
+        ),
+        Event(
+          invocationId: 'inv_1',
+          author: 'root_agent',
+          timestamp: 2.0,
+          actions: EventActions(
+            requestedToolConfirmations: <String, Object>{
+              'call_1': <String, Object?>{'required': true},
+            },
+          ),
+          content: Content.modelText('need approval'),
+        ),
+        Event(
+          invocationId: 'inv_2',
+          author: 'user',
+          timestamp: 3.0,
+          content: Content.userText('message 2'),
+          usageMetadata: <String, Object?>{'prompt_token_count': 100},
+        ),
+      ]);
+
+      final bool compacted = await runCompactionForTokenThresholdConfig(
+        config: EventsCompactionConfig(
+          tokenThreshold: 10,
+          eventRetentionSize: 0,
+          summarizer: (List<Event> events) =>
+              Content.modelText('summary ${events.length}'),
+        ),
+        session: session,
+        sessionService: sessionService,
+        agentName: 'root_agent',
+        currentBranch: null,
+      );
+
+      expect(compacted, isTrue);
+      final Event compactionEvent = session.events.last;
+      expect(compactionEvent.actions.compaction, isNotNull);
+      expect(compactionEvent.actions.compaction!.startTimestamp, 1.0);
+      expect(compactionEvent.actions.compaction!.endTimestamp, 1.0);
+      expect(
+        compactionEvent.actions.compaction!.compactedContent.parts.first.text,
+        'summary 1',
+      );
+    },
+  );
+
+  test(
     'token compaction keeps tool call with retained function response',
     () async {
       final InMemorySessionService sessionService = InMemorySessionService();

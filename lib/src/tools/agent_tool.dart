@@ -14,6 +14,45 @@ import 'base_tool.dart';
 import '_forwarding_artifact_service.dart';
 import 'tool_context.dart';
 
+String _partToText(Part part) {
+  final String? text = part.text;
+  if (text != null && text.isNotEmpty) {
+    return text;
+  }
+
+  final Object? codeExecutionResult = part.codeExecutionResult;
+  if (codeExecutionResult != null) {
+    final Map<String, Object?> result = _objectMap(codeExecutionResult);
+    final String output =
+        _stringValue(result['output']) ??
+        _stringValue(result['result']) ??
+        '$codeExecutionResult';
+    return output.replaceFirst(RegExp(r'\n+$'), '');
+  }
+
+  final Object? executableCode = part.executableCode;
+  if (executableCode != null) {
+    final Map<String, Object?> code = _objectMap(executableCode);
+    return _stringValue(code['code']) ?? '$executableCode';
+  }
+
+  return '';
+}
+
+Map<String, Object?> _objectMap(Object? value) {
+  if (value is Map<String, Object?>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry<String, Object?>('$key', item),
+    );
+  }
+  return <String, Object?>{};
+}
+
+String? _stringValue(Object? value) => value is String ? value : null;
+
 /// Tool adapter that executes another agent as a tool call.
 class AgentTool extends BaseTool {
   /// Creates a tool wrapper that delegates execution to [agent].
@@ -124,8 +163,8 @@ class AgentTool extends BaseTool {
     }
 
     final String mergedText = lastContent.parts
-        .where((Part part) => part.text != null && !part.thought)
-        .map((Part part) => part.text!.trim())
+        .where((Part part) => !part.thought)
+        .map(_partToText)
         .where((String text) => text.isNotEmpty)
         .join('\n');
     if (outputSchema != null && mergedText.isNotEmpty) {

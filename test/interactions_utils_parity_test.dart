@@ -52,6 +52,32 @@ void main() {
       expect(part, isNull);
     });
 
+    test('function response result map is not pre-serialized', () {
+      final Part part = Part.fromFunctionResponse(
+        name: 'lookup',
+        id: 'call-1',
+        response: <String, dynamic>{
+          'result': <String, Object?>{
+            'ok': true,
+            'items': <Object?>[1, 2],
+          },
+        },
+      );
+
+      final Map<String, Object?>? converted = convertPartToInteractionContent(
+        part,
+      );
+
+      expect(converted, isNotNull);
+      expect(converted!['type'], 'function_result');
+      expect(converted['result'], <String, Object?>{
+        'result': <String, Object?>{
+          'ok': true,
+          'items': <Object?>[1, 2],
+        },
+      });
+    });
+
     test(
       'function call delta without name is ignored during stream mapping',
       () {

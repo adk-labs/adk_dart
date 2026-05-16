@@ -429,6 +429,10 @@ class AnthropicLlm extends BaseLlm {
           }
         }
         content = lines.join('\n');
+      } else if (response is Map &&
+          response['content'] is String &&
+          (response['content'] as String).isNotEmpty) {
+        content = response['content'] as String;
       } else if (response is Map && response['result'] != null) {
         final Object result = response['result'] as Object;
         if (result is Map || result is List) {

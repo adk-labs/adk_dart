@@ -537,8 +537,27 @@ class RemoteA2aAgent extends BaseAgent {
       return null;
     }
 
+    Event event = ctx.session.events.last;
+    if (functionCallEvent.getFunctionCalls().any(
+      (FunctionCall call) => call.name == mockFunctionCallForRequiredUserInput,
+    )) {
+      final List<Part> parts = <Part>[];
+      for (final FunctionResponse response in event.getFunctionResponses()) {
+        if (response.name != mockFunctionCallForRequiredUserInput ||
+            !response.response.containsKey('result')) {
+          continue;
+        }
+        parts.add(Part.text('${response.response['result']}'));
+      }
+      if (parts.isNotEmpty) {
+        event = event.copyWith(
+          content: Content(role: 'user', parts: parts),
+        );
+      }
+    }
+
     final A2aMessage? message = convertEventToA2aMessage(
-      ctx.session.events.last,
+      event,
       invocationContext: ctx,
       role: A2aRole.user,
       partConverter: _genaiPartConverter,
@@ -559,6 +578,23 @@ class RemoteA2aAgent extends BaseAgent {
       }
     }
     return message;
+  }
+
+  void _addMockFunctionCall(Event event, A2aTaskState state) {
+    final Content? content = event.content;
+    if (content == null) {
+      return;
+    }
+    final (
+      List<Part> parts,
+      Set<String> longRunningIds,
+    ) = createMockFunctionCallForRequiredUserInput(
+      state,
+      List<Part>.from(content.parts),
+      Set<String>.from(event.longRunningToolIds ?? const <String>{}),
+    );
+    event.content = content.copyWith(parts: parts);
+    event.longRunningToolIds = longRunningIds.isEmpty ? null : longRunningIds;
   }
 
   bool _isRemoteResponse(Event event) {
@@ -659,6 +695,7 @@ class RemoteA2aAgent extends BaseAgent {
               part.thought = true;
             }
           }
+          _addMockFunctionCall(event, task.status.state);
         } else if (update is A2aTaskStatusUpdateEvent &&
             update.status.message != null) {
           event = convertA2aStatusUpdateToEvent(
@@ -674,6 +711,7 @@ class RemoteA2aAgent extends BaseAgent {
               part.thought = true;
             }
           }
+          _addMockFunctionCall(event, update.status.state);
         } else if (update is A2aTaskArtifactUpdateEvent &&
             (!update.append || update.lastChunk)) {
           event = convertA2aArtifactUpdateToEvent(

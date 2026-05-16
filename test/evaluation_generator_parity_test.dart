@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
@@ -184,6 +186,63 @@ void main() {
         appDetails,
       );
       expect(toolDeclarationsJson, contains('ping_tool'));
+    });
+
+    test('intermediate events preserve inline and file data parts', () {
+      final List<Invocation> invocations =
+          EvaluationGenerator.convertEventsToEvalInvocations(<Event>[
+            Event(
+              invocationId: 'inv_blob',
+              author: userAuthor,
+              timestamp: 1.0,
+              content: Content.userText('input'),
+            ),
+            Event(
+              invocationId: 'inv_blob',
+              author: 'root_agent',
+              partial: true,
+              content: Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromInlineData(
+                    mimeType: 'image/png',
+                    data: <int>[1, 2, 3],
+                  ),
+                  Part.fromFileData(
+                    fileUri: 'gs://bucket/file.txt',
+                    mimeType: 'text/plain',
+                  ),
+                ],
+              ),
+            ),
+            Event(
+              invocationId: 'inv_blob',
+              author: 'root_agent',
+              content: Content.modelText('done'),
+              turnComplete: true,
+            ),
+          ]);
+
+      final InvocationEvents intermediate =
+          invocations.single.intermediateData! as InvocationEvents;
+      final InvocationEvent event = intermediate.invocationEvents.single;
+      final List<Object?> parts = List<Object?>.from(
+        event.content!['parts']! as List,
+      );
+      expect(
+        (parts.first! as Map<String, Object?>)['inline_data'],
+        <String, Object?>{
+          'mime_type': 'image/png',
+          'data': base64Encode(<int>[1, 2, 3]),
+        },
+      );
+      expect(
+        (parts.last! as Map<String, Object?>)['file_data'],
+        <String, Object?>{
+          'file_uri': 'gs://bucket/file.txt',
+          'mime_type': 'text/plain',
+        },
+      );
     });
   });
 }
