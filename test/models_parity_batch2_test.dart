@@ -425,6 +425,53 @@ void main() {
     );
 
     test(
+      'flushes pending transcription on Vertex AI live turn completion',
+      () async {
+        final _FakeLiveSession session = _FakeLiveSession();
+        final GeminiLlmConnection connection = GeminiLlmConnection(
+          model: Gemini(),
+          liveSession: session,
+          apiBackend: GoogleLLMVariant.vertexAi,
+        );
+        final List<LlmResponse> responses = <LlmResponse>[];
+        final StreamSubscription<LlmResponse> sub = connection.receive().listen(
+          responses.add,
+        );
+
+        await connection.sendContent(Content.userText('hello'));
+        session.controller.add(
+          GeminiLiveSessionMessage(
+            serverContent: GeminiServerContentPayload(
+              outputTranscription: GeminiTranscriptionEvent(
+                text: 'spoken',
+                finished: false,
+              ),
+            ),
+          ),
+        );
+        session.controller.add(
+          GeminiLiveSessionMessage(
+            serverContent: GeminiServerContentPayload(turnComplete: true),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          responses.any(
+            (LlmResponse response) =>
+                response.outputTranscription is Map &&
+                (response.outputTranscription as Map)['finished'] == true &&
+                (response.outputTranscription as Map)['text'] == 'spoken',
+          ),
+          isTrue,
+        );
+
+        await sub.cancel();
+        await connection.close();
+      },
+    );
+
+    test(
       'emits standalone grounding metadata from live server content',
       () async {
         final _FakeLiveSession session = _FakeLiveSession();

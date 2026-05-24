@@ -112,6 +112,14 @@ class FunctionTool extends BaseTool {
     return value;
   }
 
+  @override
+  String? detectErrorInResponse(Object? response) {
+    if (response is Map && response['error'] != null) {
+      return 'TOOL_ERROR';
+    }
+    return null;
+  }
+
   Future<Object?> _invokeFunction({
     required Function target,
     required Map<String, dynamic> args,

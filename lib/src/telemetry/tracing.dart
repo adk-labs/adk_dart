@@ -237,6 +237,7 @@ void traceToolCall(
   Map<String, Object?> args,
   Event? functionResponseEvent, {
   Object? error,
+  String? errorType,
   TraceSpanRecord? span,
   Map<String, String>? environment,
 }) {
@@ -255,6 +256,8 @@ void traceToolCall(
         error is ToolExecutionError && error.errorType != null
         ? error.errorType!
         : error.runtimeType.toString();
+    targetSpan.setAttribute('error.type', errorType);
+  } else if (errorType != null && errorType.isNotEmpty) {
     targetSpan.setAttribute('error.type', errorType);
   }
 
@@ -455,12 +458,15 @@ Future<T> useInferenceSpan<T>(
     invocationContext,
     modelResponseEvent,
   );
+  final Map<String, Object?> logOnlyCommonAttributes =
+      _buildLogOnlyInferenceAttributes(invocationContext);
 
   if (_isGeminiAgent(invocationContext.agent) &&
       _instrumentedWithOpenTelemetryInstrumentationGoogleGenai()) {
     return _runWithExtraGenerateContentAttributes(
       commonAttributes,
       () => run(null),
+      logOnlyExtraAttributes: logOnlyCommonAttributes,
     );
   }
 
@@ -482,13 +488,19 @@ Future<T> useInferenceSpan<T>(
       experimental_semconv.setOperationDetailsCommonAttributes(
         gcSpan.operationDetailsCommonAttributes,
         commonAttributes,
+        logOnlyAttributes: logOnlyCommonAttributes,
+        environment: environment,
       );
     } else {
       span.setAttribute(
         'gen_ai.system',
         _guessGeminiSystemName(environment: environment),
       );
-      _emitStablePromptLogs(llmRequest, environment: environment);
+      _emitStablePromptLogs(
+        llmRequest,
+        logOnlyCommonAttributes: logOnlyCommonAttributes,
+        environment: environment,
+      );
     }
 
     return await run(gcSpan);
@@ -857,6 +869,7 @@ Object? _serializeContentWithElision(
 
 void _emitStablePromptLogs(
   LlmRequest llmRequest, {
+  Map<String, Object?> logOnlyCommonAttributes = const <String, Object?>{},
   Map<String, String>? environment,
 }) {
   final String systemName = _guessGeminiSystemName(environment: environment);
@@ -873,6 +886,16 @@ void _emitStablePromptLogs(
     ),
   );
 
+  final Map<String, Object?> userMessageAttributes = <String, Object?>{
+    'gen_ai.system': systemName,
+  };
+  if (_shouldLogPromptResponseContent(environment: environment)) {
+    final Object? userId = logOnlyCommonAttributes['user.id'];
+    if (userId != null) {
+      userMessageAttributes['user.id'] = userId;
+    }
+  }
+
   for (final Content content in llmRequest.contents) {
     otelLogger.emit(
       OTelLogRecord(
@@ -883,7 +906,7 @@ void _emitStablePromptLogs(
             environment: environment,
           ),
         },
-        attributes: <String, Object?>{'gen_ai.system': systemName},
+        attributes: userMessageAttributes,
       ),
     );
   }
@@ -996,10 +1019,15 @@ Map<String, Object?> _buildCommonInferenceAttributes(
   return <String, Object?>{
     'gen_ai.agent.name': invocationContext.agent.name,
     'gen_ai.conversation.id': invocationContext.session.id,
-    'user.id': invocationContext.session.userId,
     'gcp.vertex.agent.event_id': modelResponseEvent.id,
     'gcp.vertex.agent.invocation_id': invocationContext.invocationId,
   };
+}
+
+Map<String, Object?> _buildLogOnlyInferenceAttributes(
+  InvocationContext invocationContext,
+) {
+  return <String, Object?>{'user.id': invocationContext.session.userId};
 }
 
 void _setCommonGenerateContentAttributes(
@@ -1038,7 +1066,8 @@ bool _instrumentedWithOpenTelemetryInstrumentationGoogleGenai() {
   return _genAiInstrumentationDetector();
 }
 
-const Object _generateContentExtraAttributesContextKey = Object();
+final Object _generateContentExtraAttributesContextKey = Object();
+final Object _generateContentEventOnlyExtraAttributesContextKey = Object();
 
 /// The current zone-scoped extra attributes for generate-content spans.
 Map<String, Object?>? getCurrentGenerateContentExtraAttributes() {
@@ -1055,16 +1084,36 @@ Map<String, Object?>? getCurrentGenerateContentExtraAttributes() {
   return null;
 }
 
+/// The current zone-scoped event-only attributes for generate-content logs.
+Map<String, Object?>? getCurrentGenerateContentEventOnlyExtraAttributes() {
+  final Object? value =
+      Zone.current[_generateContentEventOnlyExtraAttributesContextKey];
+  if (value is Map<String, Object?>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? nestedValue) =>
+          MapEntry<String, Object?>('$key', nestedValue),
+    );
+  }
+  return null;
+}
+
 T _runWithExtraGenerateContentAttributes<T>(
   Map<String, Object?> extraAttributes,
-  T Function() run,
-) {
+  T Function() run, {
+  Map<String, Object?> logOnlyExtraAttributes = const <String, Object?>{},
+}) {
   return runZoned(
     run,
     zoneValues: <Object?, Object?>{
       _generateContentExtraAttributesContextKey: Map<String, Object?>.from(
         extraAttributes,
       ),
+      if (logOnlyExtraAttributes.isNotEmpty)
+        _generateContentEventOnlyExtraAttributesContextKey:
+            Map<String, Object?>.from(logOnlyExtraAttributes),
     },
   );
 }

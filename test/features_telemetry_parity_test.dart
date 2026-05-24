@@ -462,6 +462,30 @@ void main() {
       );
 
       expect(span.attributes['error.type'], 'REQUEST_TIMEOUT');
+
+      final TraceSpanRecord responseErrorSpan = tracer.startAsCurrentSpan(
+        'tool_response_error',
+      );
+      traceToolCall(
+        _FakeTool(),
+        <String, Object?>{'city': 'Seoul'},
+        null,
+        span: responseErrorSpan,
+        errorType: 'TOOL_ERROR',
+      );
+
+      expect(responseErrorSpan.attributes['error.type'], 'TOOL_ERROR');
+
+      final FunctionTool functionTool = FunctionTool(
+        name: 'failing_function',
+        func: () => <String, Object?>{'error': 'bad input'},
+      );
+      expect(
+        functionTool.detectErrorInResponse(<String, Object?>{
+          'error': 'bad input',
+        }),
+        'TOOL_ERROR',
+      );
     });
 
     test(
@@ -538,6 +562,7 @@ void main() {
           inferenceSpan.attributes['gen_ai.operation.name'],
           'generate_content',
         );
+        expect(inferenceSpan.attributes.containsKey('user.id'), isFalse);
         expect(
           inferenceSpan.attributes['gen_ai.input.messages'],
           isA<String>(),
@@ -564,6 +589,73 @@ void main() {
           detailsEvent.attributes['gen_ai.output.messages'],
           isA<List<Map<String, Object?>>>(),
         );
+        expect(detailsEvent.attributes['user.id'], 'user-2');
+      },
+    );
+
+    test(
+      'stable prompt logs include user.id only in user message logs',
+      () async {
+        final InvocationContext context = InvocationContext(
+          sessionService: _FakeSessionService(),
+          invocationId: 'inv-logs',
+          agent: _FakeAgent(),
+          session: Session(id: 's-logs', appName: 'app', userId: 'user-logs'),
+        );
+        final Event modelResponseEvent = Event(
+          invocationId: 'inv-logs',
+          author: 'model',
+        );
+        final LlmRequest request = LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+        );
+        final Map<String, String> env = <String, String>{
+          otelInstrumentationGenaiCaptureMessageContent: 'true',
+        };
+
+        await useInferenceSpan(request, context, modelResponseEvent, (
+          GenerateContentSpan? span,
+        ) async {
+          expect(span?.span.attributes.containsKey('user.id'), isFalse);
+        }, environment: env);
+
+        final OTelLogRecord userMessage = otelLogger.records.singleWhere(
+          (OTelLogRecord record) => record.eventName == 'gen_ai.user.message',
+        );
+        expect(userMessage.attributes['user.id'], 'user-logs');
+      },
+    );
+
+    test(
+      'external Gemini instrumentation gets event-only user attributes',
+      () async {
+        setGenAiInstrumentationDetectorForTest(() => true);
+        final InvocationContext context = InvocationContext(
+          sessionService: _FakeSessionService(),
+          invocationId: 'inv-extra',
+          agent: LlmAgent(name: 'gemini_agent', model: Gemini()),
+          session: Session(id: 's-extra', appName: 'app', userId: 'user-extra'),
+        );
+        final Event modelResponseEvent = Event(
+          invocationId: 'inv-extra',
+          author: 'model',
+        );
+        final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
+
+        await useInferenceSpan(request, context, modelResponseEvent, (
+          GenerateContentSpan? span,
+        ) async {
+          expect(span, isNull);
+          expect(
+            getCurrentGenerateContentExtraAttributes()?.containsKey('user.id'),
+            isFalse,
+          );
+          expect(
+            getCurrentGenerateContentEventOnlyExtraAttributes()?['user.id'],
+            'user-extra',
+          );
+        });
       },
     );
   });

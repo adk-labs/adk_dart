@@ -124,9 +124,20 @@ Future<void> setOperationDetailsAttributesFromRequest(
 /// Copies common operation-details attributes.
 void setOperationDetailsCommonAttributes(
   Map<String, Object?> operationDetailsCommonAttributes,
-  Map<String, Object?> attributes,
-) {
+  Map<String, Object?> attributes, {
+  Map<String, Object?>? logOnlyAttributes,
+  Map<String, String>? environment,
+}) {
   operationDetailsCommonAttributes.addAll(attributes);
+  if (logOnlyAttributes == null || logOnlyAttributes.isEmpty) {
+    return;
+  }
+  final String capturingMode = getContentCapturingMode(
+    environment: environment,
+  );
+  if (capturingMode == 'EVENT_ONLY' || capturingMode == 'SPAN_AND_EVENT') {
+    operationDetailsCommonAttributes.addAll(logOnlyAttributes);
+  }
 }
 
 /// Extracts operation-details attributes from an LLM response.

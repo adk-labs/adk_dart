@@ -751,6 +751,40 @@ void main() {
       },
     );
 
+    test('BaseLlmFlow live mode preserves grounding-only responses', () async {
+      final _FakeLiveConnection connection = _FakeLiveConnection();
+      connection.onSendContent = (Content _) async {
+        connection.emit(
+          LlmResponse(
+            groundingMetadata: <String, Object?>{
+              'searchEntryPoint': <String, Object?>{
+                'renderedContent': '<p>grounded</p>',
+              },
+            },
+          ),
+        );
+        await connection.finish();
+      };
+
+      final _LiveConnectModel model = _LiveConnectModel(connection: connection);
+      final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+      final InvocationContext context = _newInvocationContext(
+        agent: agent,
+        invocationId: 'inv_live_grounding_only',
+      );
+      context.liveRequestQueue = LiveRequestQueue()
+        ..sendContent(Content.userText('search'))
+        ..close();
+
+      final List<Event> events = await BaseLlmFlow().runLive(context).toList();
+
+      final Event groundingEvent = events.firstWhere(
+        (Event event) => event.groundingMetadata != null,
+      );
+      expect(groundingEvent.content, isNull);
+      expect(groundingEvent.groundingMetadata, isA<Map<String, Object?>>());
+    });
+
     test(
       'live transfer starts child without parent resumption handle',
       () async {

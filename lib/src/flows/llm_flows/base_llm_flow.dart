@@ -384,7 +384,8 @@ class BaseLlmFlow {
         response.outputTranscription == null &&
         response.usageMetadata == null &&
         response.liveSessionResumptionUpdate == null &&
-        response.goAway == null) {
+        response.goAway == null &&
+        response.groundingMetadata == null) {
       return;
     }
 
@@ -401,7 +402,8 @@ class BaseLlmFlow {
           response.turnComplete != true &&
           response.inputTranscription == null &&
           response.outputTranscription == null &&
-          response.usageMetadata == null) {
+          response.usageMetadata == null &&
+          response.groundingMetadata == null) {
         return;
       }
     }
@@ -951,7 +953,8 @@ class BaseLlmFlow {
 
     if (response.content == null &&
         response.errorCode == null &&
-        response.interrupted != true) {
+        response.interrupted != true &&
+        response.groundingMetadata == null) {
       return;
     }
 

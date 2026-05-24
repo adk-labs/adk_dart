@@ -58,6 +58,17 @@ String _trimTrailingSeparator(String path) {
   return path;
 }
 
+RegExp _oldStringPattern(String oldString) {
+  final String normalizedOld = oldString
+      .replaceAll('\r\n', '\n')
+      .replaceAll('\r', '\n');
+  final String pattern = normalizedOld
+      .split('\n')
+      .map(RegExp.escape)
+      .join(r'\r?\n');
+  return RegExp(pattern);
+}
+
 /// Experimental toolset for command execution and file I/O.
 class EnvironmentToolset extends BaseToolset {
   /// Creates an environment toolset backed by [environment].
@@ -426,7 +437,8 @@ class _EditFileTool extends BaseTool {
         await _environment.readFile(path),
         allowMalformed: true,
       );
-      final int occurrences = content.split(oldString).length - 1;
+      final RegExp pattern = _oldStringPattern(oldString);
+      final int occurrences = pattern.allMatches(content).length;
       if (occurrences == 0) {
         return <String, Object?>{
           'status': 'error',
@@ -444,7 +456,7 @@ class _EditFileTool extends BaseTool {
 
       await _environment.writeFile(
         path,
-        content.replaceFirst(oldString, newString),
+        content.replaceFirstMapped(pattern, (_) => newString),
       );
       return <String, Object?>{'status': 'ok', 'message': 'Edited $path'};
     } on FileSystemException catch (error) {

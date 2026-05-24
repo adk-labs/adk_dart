@@ -40,6 +40,8 @@ class SessionContext<T> {
 
     final Completer<T> completer = Completer<T>();
     _starting = completer.future;
+    // Observe background startup failures even when a caller abandons start().
+    _starting!.ignore();
 
     () async {
       try {

@@ -120,6 +120,49 @@ void main() {
       await toolset.close();
     });
 
+    test(
+      'EditFile matches CRLF files and escapes regex metacharacters',
+      () async {
+        final Directory workspace = await Directory.systemTemp.createTemp(
+          'environment_toolset_edit_crlf_',
+        );
+        addTearDown(() => workspace.delete(recursive: true));
+
+        final EnvironmentToolset toolset = EnvironmentToolset(
+          environment: LocalEnvironment(workingDirectory: workspace),
+        );
+        final Map<String, BaseTool> tools = await _resolveTools(toolset);
+        final Context context = _toolContext();
+
+        await tools['WriteFile']!.run(
+          args: <String, dynamic>{
+            'path': 'regex.txt',
+            'content': 'before\r\na+b. [x]\r\nafter\r\n',
+          },
+          toolContext: context,
+        );
+
+        final Object? editResult = await tools['EditFile']!.run(
+          args: <String, dynamic>{
+            'path': 'regex.txt',
+            'old_string': 'a+b. [x]\nafter',
+            'new_string': r'a+b. [ok] $literal',
+          },
+          toolContext: context,
+        );
+
+        expect((editResult! as Map<String, Object?>)['status'], 'ok');
+        expect(
+          await File(
+            '${workspace.path}${Platform.pathSeparator}regex.txt',
+          ).readAsString(),
+          'before\r\na+b. [ok] \$literal\r\n',
+        );
+
+        await toolset.close();
+      },
+    );
+
     test('rejects file access outside the workspace', () async {
       final Directory workspace = await Directory.systemTemp.createTemp(
         'environment_toolset_guard_',

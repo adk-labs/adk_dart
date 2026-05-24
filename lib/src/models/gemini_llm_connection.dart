@@ -182,6 +182,9 @@ class GeminiLlmConnection extends BaseLlmConnection {
   Future<void> _lastDispatch = Future<void>.value();
   bool _closed = false;
 
+  /// Configured Google backend variant for this connection.
+  GoogleLLMVariant get apiBackend => _apiBackend;
+
   @override
   Future<void> sendHistory(List<Content> history) async {
     if (_closed) {
@@ -430,10 +433,9 @@ class GeminiLlmConnection extends BaseLlmConnection {
       isInput: false,
     );
 
-    if (_apiBackend == GoogleLLMVariant.geminiApi &&
-        (serverContent.interrupted ||
-            serverContent.turnComplete ||
-            serverContent.generationComplete)) {
+    if (serverContent.interrupted ||
+        serverContent.turnComplete ||
+        serverContent.generationComplete) {
       _flushPendingTranscriptions(force: true);
     }
 

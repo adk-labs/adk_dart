@@ -35,6 +35,12 @@ abstract class BaseTool {
     required ToolContext toolContext,
   });
 
+  /// Returns a telemetry error type when [response] represents a tool error.
+  ///
+  /// Tool implementations can return structured error payloads instead of
+  /// throwing. This hook lets telemetry record those failures consistently.
+  String? detectErrorInResponse(Object? response) => null;
+
   /// Mutates outgoing [llmRequest] before model generation.
   ///
   /// The default behavior appends this tool to the request tool list.
