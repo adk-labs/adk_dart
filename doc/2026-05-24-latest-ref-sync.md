@@ -44,16 +44,43 @@
 - 작업 내용: `reports/adk-python/2026-05-24.md`, `reports/adk-java/2026-05-24.md`, `reports/adk-js/2026-05-24.md`를 추가하고 latest/state 파일을 갱신했다.
 - 작업 이유: 최신화 기준 SHA를 명확히 남겨 다음 sync 때 누락/중복 반영을 줄인다.
 
+### 8. Chat Completions HTTP/SSE client
+
+- 작업 내용: `ChatCompletionsHttpClient`를 추가해 JSON POST와 SSE streaming 응답을 처리하고, Apigee Chat Completions 기본 경로를 synthetic placeholder에서 실제 HTTP client로 전환했다.
+- 작업 이유: Java 최신 ref의 ChatCompletions HTTP client와 Python/JS의 streaming chunk 누적 동작에 맞춰 text delta, tool call argument, usage metadata를 실제 런타임에서 처리해야 한다.
+
+### 9. Java-style SkillSource API
+
+- 작업 내용: `SkillSource`, `LocalSkillSource`, `InMemorySkillSource`, builder API, `SkillSourceException`을 추가하고 기존 `SKILL.md` loader와 연결했다.
+- 작업 이유: Java 최신 ref에 추가된 skill source 계층과 동일한 접근 방식으로 local/in-memory skill catalog를 사용할 수 있어야 한다.
+
+### 10. Experimental OpenAI labs adapter
+
+- 작업 내용: `OpenAILlm`을 추가하고 `OPENAI_API_KEY`, `openai/` model prefix stripping, injectable completions client를 지원했다.
+- 작업 이유: Python 최신 ref의 `labs/openai` 경로처럼 OpenAI-compatible Chat Completions backend를 ADK model surface에서 직접 호출할 수 있어야 한다.
+
+### 11. Workflow runtime foundation
+
+- 작업 내용: `Workflow`, `BaseNode`, `FunctionNode`, `JoinNode`, dependency edge 실행, fan-out scheduling, retry, timeout, runner integration을 추가했다.
+- 작업 이유: Python v2 workflow/node runtime이 큰 신규 축으로 들어왔으므로 Dart도 최소 실행 가능한 node graph 기반을 먼저 확보해야 한다.
+
+### 12. Dev server/runtime fallback 및 테스트 안정화
+
+- 작업 내용: `adk web` default app runtime fallback이 missing default app directory의 `ArgumentError`도 처리하도록 수정했고, built-in agent asset parity test는 package root 절대 경로를 사용하도록 바꿨다.
+- 작업 이유: 전체 테스트에서 확인된 fallback 누락과 병렬 실행 cwd 의존성을 제거해 실제 dev server 동작과 검증 안정성을 맞춘다.
+
 ## 이번 작업에서 남긴 Gap
 
-- Python v2 workflow/node runtime은 `src/google/adk/workflow/*` 전체 신규 아키텍처라 단순 parity patch가 아니라 별도 설계/포팅 단위가 필요하다.
+- Python v2 workflow/node runtime은 foundation만 들어갔다. dynamic node scheduling, request-input/HITL resume, tool-node/LLM-agent wrapper, replay/rehydration util, full graph serialization은 별도 포팅 단위가 필요하다.
 - Python `adk web`의 `api_server.py`, `dev_server.py`, 브라우저 asset 대량 변경은 Dart dev server 구조와 직접 1:1 매핑되지 않아 별도 UI/server parity 검토가 필요하다.
 - Python sample tree 대규모 재배치와 `.agents/skills/*` 문서 추가는 Dart package runtime에는 직접 영향이 적어 이번 코드 커밋에서는 문서 gap으로만 추적했다.
-- Java ChatCompletions streaming client, SkillSource toolset, GCS offloader는 Dart에 대응 API 설계가 필요해 별도 작업으로 남겼다.
+- Java GCS offloader와 Python workflow 심화 기능은 Dart 대응 API 설계가 필요해 별도 작업으로 남겼다.
 
 ## 검증
 
 - `dart analyze lib test`
 - `dart test test/environment_toolset_parity_test.dart test/models_parity_batch2_test.dart test/llm_flow_live_modules_parity_test.dart test/features_telemetry_parity_test.dart test/tools_batch2_parity_test.dart`
 - `dart test test/mcp_http_integration_test.dart`
-- `dart test --reporter json`는 전체 스위트에서 실패했다. 실패는 `test/dev_web_server_test.dart`의 기존 2건(`dynamic file-path class spec` 400 응답, persisted A2A push retry callback 미발생)만 남았다.
+- `dart test test/chat_completions_http_client_test.dart test/skill_source_parity_test.dart test/openai_labs_parity_test.dart test/workflow_runtime_parity_test.dart`
+- `dart test test/dev_web_server_test.dart --name "loads extra plugin via dynamic file-path class spec|retries and drains persisted a2a push deliveries after server restart"`
+- `dart test` 전체 스위트 통과 (`1109` pass, `3` skip).

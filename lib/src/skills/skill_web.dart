@@ -1,6 +1,8 @@
 /// Web-safe skill parsing runtime.
 library;
 
+import 'dart:convert';
+
 import '../features/_feature_registry.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
@@ -443,6 +445,302 @@ class SkillRegistry {
   }
 }
 
+/// Exception used by [SkillSource] implementations.
+class SkillSourceException implements Exception {
+  /// Creates a skill-source exception.
+  SkillSourceException(this.message, [this.cause]);
+
+  /// Human-readable failure reason.
+  final String message;
+
+  /// Optional underlying failure.
+  final Object? cause;
+
+  @override
+  String toString() => cause == null
+      ? 'SkillSourceException: $message'
+      : 'SkillSourceException: $message ($cause)';
+}
+
+/// Asynchronous source interface for skill metadata, instructions, resources.
+abstract class SkillSource {
+  /// Lists all available skill frontmatter keyed by skill name.
+  Future<Map<String, Frontmatter>> listFrontmatters();
+
+  /// Lists resource paths under [resourceDirectory], relative to the skill.
+  Future<List<String>> listResources(
+    String skillName,
+    String resourceDirectory,
+  );
+
+  /// Loads frontmatter for [skillName].
+  Future<Frontmatter> loadFrontmatter(String skillName);
+
+  /// Loads the instruction body from `SKILL.md` for [skillName].
+  Future<String> loadInstructions(String skillName);
+
+  /// Loads one resource as raw bytes, relative to the skill directory.
+  Future<List<int>> loadResource(String skillName, String resourcePath);
+}
+
+/// In-memory [SkillSource] implementation.
+class InMemorySkillSource implements SkillSource {
+  /// Creates a source from pre-built skill data.
+  InMemorySkillSource(Map<String, InMemorySkillData> skills)
+    : _skills = Map<String, InMemorySkillData>.unmodifiable(skills);
+
+  /// Creates a source from complete [Skill] objects.
+  factory InMemorySkillSource.fromSkills(Iterable<Skill> skills) {
+    return InMemorySkillSource(<String, InMemorySkillData>{
+      for (final Skill skill in skills)
+        skill.name: InMemorySkillData.fromSkill(skill),
+    });
+  }
+
+  /// Creates a Java-parity builder for in-memory skills.
+  static InMemorySkillSourceBuilder builder() {
+    return InMemorySkillSourceBuilder();
+  }
+
+  final Map<String, InMemorySkillData> _skills;
+
+  @override
+  Future<Map<String, Frontmatter>> listFrontmatters() async {
+    return <String, Frontmatter>{
+      for (final MapEntry<String, InMemorySkillData> entry in _skills.entries)
+        entry.key: entry.value.frontmatter,
+    };
+  }
+
+  @override
+  Future<List<String>> listResources(
+    String skillName,
+    String resourceDirectory,
+  ) async {
+    final InMemorySkillData data = _readSkill(skillName);
+    final String prefix = resourceDirectory.trim().isEmpty
+        ? ''
+        : resourceDirectory.endsWith('/')
+        ? resourceDirectory
+        : '$resourceDirectory/';
+    if (prefix.isNotEmpty &&
+        !data.resources.keys.any((String path) => path.startsWith(prefix))) {
+      throw SkillSourceException(
+        "Resource directory not found: $resourceDirectory for skill: $skillName",
+      );
+    }
+    final List<String> paths =
+        data.resources.keys
+            .where((String path) => path.startsWith(prefix))
+            .toList(growable: false)
+          ..sort();
+    return paths;
+  }
+
+  @override
+  Future<Frontmatter> loadFrontmatter(String skillName) async {
+    return _readSkill(skillName).frontmatter;
+  }
+
+  @override
+  Future<String> loadInstructions(String skillName) async {
+    return _readSkill(skillName).instructions;
+  }
+
+  @override
+  Future<List<int>> loadResource(String skillName, String resourcePath) async {
+    final List<int>? bytes = _readSkill(skillName).resources[resourcePath];
+    if (bytes == null) {
+      throw SkillSourceException('Resource not found: $resourcePath');
+    }
+    return List<int>.from(bytes);
+  }
+
+  InMemorySkillData _readSkill(String skillName) {
+    final InMemorySkillData? data = _skills[skillName];
+    if (data == null) {
+      throw SkillSourceException('Skill not found: $skillName');
+    }
+    return data;
+  }
+}
+
+/// Complete in-memory payload for one skill source entry.
+class InMemorySkillData {
+  /// Creates in-memory skill data.
+  InMemorySkillData({
+    required this.frontmatter,
+    required this.instructions,
+    Map<String, List<int>>? resources,
+  }) : resources = Map<String, List<int>>.unmodifiable(
+         (resources ?? <String, List<int>>{}).map(
+           (String key, List<int> value) =>
+               MapEntry(key, List<int>.from(value)),
+         ),
+       );
+
+  /// Builds skill data from a complete [Skill].
+  factory InMemorySkillData.fromSkill(Skill skill) {
+    final Map<String, List<int>> resources = <String, List<int>>{};
+    void addResource(String directory, String name, SkillResourceData data) {
+      resources['$directory/$name'] = _resourceToBytes(data);
+    }
+
+    skill.resources.references.forEach(
+      (String name, SkillResourceData data) =>
+          addResource('references', name, data),
+    );
+    skill.resources.assets.forEach(
+      (String name, SkillResourceData data) =>
+          addResource('assets', name, data),
+    );
+    skill.resources.scripts.forEach((String name, Script script) {
+      resources['scripts/$name'] = utf8.encode(script.src);
+    });
+    return InMemorySkillData(
+      frontmatter: skill.frontmatter,
+      instructions: skill.instructions,
+      resources: resources,
+    );
+  }
+
+  /// Frontmatter for this skill.
+  final Frontmatter frontmatter;
+
+  /// Instruction body for this skill.
+  final String instructions;
+
+  /// Resource bytes keyed by path relative to skill root.
+  final Map<String, List<int>> resources;
+}
+
+/// Builder for [InMemorySkillSource].
+class InMemorySkillSourceBuilder {
+  final Map<String, InMemorySkillBuilder> _skillBuilders =
+      <String, InMemorySkillBuilder>{};
+
+  /// Returns a builder for [name], creating it if needed.
+  InMemorySkillBuilder skill(String name) {
+    return _skillBuilders.putIfAbsent(
+      name,
+      () => InMemorySkillBuilder._(this, name),
+    );
+  }
+
+  /// Builds the source.
+  InMemorySkillSource build() {
+    return InMemorySkillSource(<String, InMemorySkillData>{
+      for (final MapEntry<String, InMemorySkillBuilder> entry
+          in _skillBuilders.entries)
+        entry.key: entry.value._build(),
+    });
+  }
+}
+
+/// Builder for one in-memory skill.
+class InMemorySkillBuilder {
+  InMemorySkillBuilder._(this._owner, this.name);
+
+  final InMemorySkillSourceBuilder _owner;
+
+  /// Skill name this builder configures.
+  final String name;
+  Frontmatter? _frontmatter;
+  String? _instructions;
+  final Map<String, List<int>> _resources = <String, List<int>>{};
+
+  /// Sets frontmatter.
+  InMemorySkillBuilder frontmatter(Frontmatter value) {
+    _frontmatter = value;
+    return this;
+  }
+
+  /// Sets instruction body.
+  InMemorySkillBuilder instructions(String value) {
+    _instructions = value;
+    return this;
+  }
+
+  /// Adds a resource from raw bytes.
+  InMemorySkillBuilder addResource(String path, Object content) {
+    _resources[path] = _resourceToBytes(content);
+    return this;
+  }
+
+  /// Switches to another skill builder.
+  InMemorySkillBuilder skill(String name) {
+    return _owner.skill(name);
+  }
+
+  /// Builds the containing source.
+  InMemorySkillSource build() {
+    return _owner.build();
+  }
+
+  InMemorySkillData _build() {
+    final Frontmatter? frontmatter = _frontmatter;
+    if (frontmatter == null) {
+      throw StateError('Frontmatter is required for skill $name.');
+    }
+    final String? instructions = _instructions;
+    if (instructions == null) {
+      throw StateError('Instructions are required for skill $name.');
+    }
+    return InMemorySkillData(
+      frontmatter: frontmatter,
+      instructions: instructions,
+      resources: _resources,
+    );
+  }
+}
+
+/// Filesystem-backed [SkillSource], unsupported on Web.
+class LocalSkillSource implements SkillSource {
+  /// Creates an unsupported local source on Web.
+  LocalSkillSource(this.skillsBasePath);
+
+  /// Directory containing skill subdirectories.
+  final String skillsBasePath;
+
+  @override
+  Future<Map<String, Frontmatter>> listFrontmatters() {
+    throw UnsupportedError(
+      'LocalSkillSource is not supported on this platform.',
+    );
+  }
+
+  @override
+  Future<List<String>> listResources(
+    String skillName,
+    String resourceDirectory,
+  ) {
+    throw UnsupportedError(
+      'LocalSkillSource is not supported on this platform.',
+    );
+  }
+
+  @override
+  Future<Frontmatter> loadFrontmatter(String skillName) {
+    throw UnsupportedError(
+      'LocalSkillSource is not supported on this platform.',
+    );
+  }
+
+  @override
+  Future<String> loadInstructions(String skillName) {
+    throw UnsupportedError(
+      'LocalSkillSource is not supported on this platform.',
+    );
+  }
+
+  @override
+  Future<List<int>> loadResource(String skillName, String resourcePath) {
+    throw UnsupportedError(
+      'LocalSkillSource is not supported on this platform.',
+    );
+  }
+}
+
 /// Renders a skill summary list as XML text for model prompts.
 String formatSkillsAsXml(List<SkillDescriptor> skills) {
   if (skills.isEmpty) {
@@ -626,6 +924,21 @@ SkillResourceData _normalizeResourceValue(Object? value) {
 }
 
 String? _readTextResource(Object? value) => value is String ? value : null;
+
+List<int> _resourceToBytes(Object value) {
+  if (value is String) {
+    return utf8.encode(value);
+  }
+  if (value is List<int>) {
+    return List<int>.from(value);
+  }
+  if (value is List) {
+    return value
+        .map<int>((Object? item) => item as int)
+        .toList(growable: false);
+  }
+  throw ArgumentError('resource values must be String or List<int>');
+}
 
 List<int>? _readBinaryResource(Object? value) {
   if (value is List<int>) {

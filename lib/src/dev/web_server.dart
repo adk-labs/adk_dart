@@ -447,16 +447,12 @@ class _AdkDevWebContext {
       if (appName != defaultAppName) {
         rethrow;
       }
-
-      return Runner(
-        appName: appName,
-        agent: runtime.runner.agent,
-        sessionService: sessionService,
-        artifactService: artifactService,
-        memoryService: memoryService,
-        plugins: extraPlugins,
-        autoCreateSession: autoCreateSession,
-      );
+      return _createRuntimeFallbackRunner(appName, extraPlugins);
+    } on ArgumentError {
+      if (appName != defaultAppName) {
+        rethrow;
+      }
+      return _createRuntimeFallbackRunner(appName, extraPlugins);
     }
 
     if (loaded is App) {
@@ -474,6 +470,21 @@ class _AdkDevWebContext {
     return Runner(
       appName: appName,
       agent: asBaseAgent(loaded),
+      sessionService: sessionService,
+      artifactService: artifactService,
+      memoryService: memoryService,
+      plugins: extraPlugins,
+      autoCreateSession: autoCreateSession,
+    );
+  }
+
+  Runner _createRuntimeFallbackRunner(
+    String appName,
+    List<BasePlugin> extraPlugins,
+  ) {
+    return Runner(
+      appName: appName,
+      agent: runtime.runner.agent,
       sessionService: sessionService,
       artifactService: artifactService,
       memoryService: memoryService,

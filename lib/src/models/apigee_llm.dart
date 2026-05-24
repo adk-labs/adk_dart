@@ -1,7 +1,10 @@
 /// Apigee-hosted Gemini adapter and protocol selection helpers.
 library;
 
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 
 import '../types/content.dart';
 import '../utils/env_utils.dart';
@@ -52,6 +55,349 @@ abstract class ApigeeCompletionsClient {
     required String baseUrl,
     required Map<String, String> headers,
   });
+}
+
+/// HTTP exception thrown by [ChatCompletionsHttpClient].
+class ChatCompletionsHttpException implements Exception {
+  /// Creates an HTTP exception for a chat-completions request.
+  ChatCompletionsHttpException(
+    this.statusCode,
+    this.message, {
+    this.responseBody,
+  });
+
+  /// HTTP status code returned by the endpoint.
+  final int statusCode;
+
+  /// Human-readable error message.
+  final String message;
+
+  /// Optional raw response body.
+  final String? responseBody;
+
+  @override
+  String toString() {
+    return 'ChatCompletionsHttpException('
+        'statusCode: $statusCode, message: $message)';
+  }
+}
+
+/// Production HTTP client for OpenAI-compatible chat-completions endpoints.
+class ChatCompletionsHttpClient implements ApigeeCompletionsClient {
+  /// Creates an HTTP chat-completions client.
+  ChatCompletionsHttpClient({http.Client? httpClient})
+    : _httpClient = httpClient ?? http.Client();
+
+  final http.Client _httpClient;
+
+  @override
+  Stream<LlmResponse> generateContent({
+    required LlmRequest request,
+    required bool stream,
+    required String baseUrl,
+    required Map<String, String> headers,
+  }) async* {
+    final Map<String, Object?> payload = ApigeeLlm.buildChatCompletionsPayload(
+      request,
+      stream: stream,
+    );
+    final Uri uri = Uri.parse(baseUrl);
+    if (!stream) {
+      yield await _postJson(uri: uri, headers: headers, payload: payload);
+      return;
+    }
+    yield* _postSse(uri: uri, headers: headers, payload: payload);
+  }
+
+  Future<LlmResponse> _postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required Map<String, Object?> payload,
+  }) async {
+    final http.Response response = await _httpClient.post(
+      uri,
+      headers: _buildHeaders(headers),
+      body: jsonEncode(payload),
+    );
+    if (response.statusCode >= 400) {
+      throw ChatCompletionsHttpException(
+        response.statusCode,
+        _extractChatCompletionsError(response.body),
+        responseBody: response.body,
+      );
+    }
+    return ApigeeLlm.parseChatCompletionsResponse(
+      _decodeChatCompletionsObject(response.body),
+    );
+  }
+
+  Stream<LlmResponse> _postSse({
+    required Uri uri,
+    required Map<String, String> headers,
+    required Map<String, Object?> payload,
+  }) async* {
+    final http.Request request = http.Request('POST', uri)
+      ..headers.addAll(_buildHeaders(headers, acceptEventStream: true))
+      ..body = jsonEncode(payload);
+
+    final http.StreamedResponse response = await _httpClient.send(request);
+    if (response.statusCode >= 400) {
+      final String body = await _readStreamedBody(response);
+      throw ChatCompletionsHttpException(
+        response.statusCode,
+        _extractChatCompletionsError(body),
+        responseBody: body,
+      );
+    }
+
+    final _ChatCompletionsChunkCollection collection =
+        _ChatCompletionsChunkCollection();
+    final StringBuffer dataBuffer = StringBuffer();
+    bool firstLine = true;
+    final Stream<String> lines = response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+
+    await for (final String rawLine in lines) {
+      String line = rawLine;
+      if (firstLine) {
+        line = _stripUtf8Bom(line);
+        firstLine = false;
+      }
+      if (line.isEmpty) {
+        final Map<String, Object?>? chunk = _decodeSseChunk(
+          dataBuffer.toString(),
+        );
+        dataBuffer.clear();
+        if (chunk != null) {
+          for (final LlmResponse item in collection.processChunk(chunk)) {
+            yield item;
+          }
+        }
+        continue;
+      }
+      if (line.startsWith(':')) {
+        continue;
+      }
+      final _SseField? field = _parseSseField(line);
+      if (field == null || field.name != 'data') {
+        continue;
+      }
+      dataBuffer.writeln(field.value);
+    }
+
+    final Map<String, Object?>? trailing = _decodeSseChunk(
+      dataBuffer.toString(),
+    );
+    if (trailing != null) {
+      for (final LlmResponse item in collection.processChunk(trailing)) {
+        yield item;
+      }
+    }
+  }
+
+  Map<String, String> _buildHeaders(
+    Map<String, String> headers, {
+    bool acceptEventStream = false,
+  }) {
+    final Map<String, String> merged = <String, String>{};
+    bool hasAccept = false;
+    headers.forEach((String key, String value) {
+      final String normalized = key.toLowerCase();
+      if (normalized == 'content-type') {
+        return;
+      }
+      if (normalized == 'accept') {
+        hasAccept = true;
+      }
+      merged[key] = value;
+    });
+    merged['Content-Type'] = 'application/json';
+    if (acceptEventStream && !hasAccept) {
+      merged['Accept'] = 'text/event-stream';
+    }
+    return merged;
+  }
+
+  Future<String> _readStreamedBody(http.StreamedResponse response) async {
+    final List<int> bytes = await response.stream.toBytes();
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+}
+
+class _ChatCompletionsChunkCollection {
+  final StringBuffer _content = StringBuffer();
+  final Map<int, _StreamingToolCall> _toolCalls = <int, _StreamingToolCall>{};
+  String _role = 'model';
+  String? _model;
+  Map<String, Object?>? _usage;
+  final Map<String, Object?> _metadata = <String, Object?>{};
+
+  List<LlmResponse> processChunk(Map<String, Object?> chunk) {
+    _updateState(chunk);
+    final List<Object?> choices =
+        (chunk['choices'] as List<Object?>?) ?? const <Object?>[];
+    if (choices.isEmpty) {
+      if (_usage != null || _metadata.isNotEmpty) {
+        return <LlmResponse>[_buildPartialResponse(const <Part>[])];
+      }
+      return const <LlmResponse>[];
+    }
+
+    final Map<String, Object?> choice = _asMap(choices.first);
+    final Map<String, Object?> delta = _asMap(choice['delta']);
+    final List<Part> chunkParts = _mapDeltaToParts(delta);
+    final List<LlmResponse> responses = <LlmResponse>[
+      _buildPartialResponse(chunkParts),
+    ];
+
+    final String finishReason = '${choice['finish_reason'] ?? ''}';
+    if (finishReason.isNotEmpty && finishReason != 'null') {
+      responses.add(
+        LlmResponse(
+          content: Content(role: _role, parts: _finalParts()),
+          finishReason: ApigeeLlm._mapFinishReason(finishReason),
+          modelVersion: _model,
+          usageMetadata: _mapUsage(_usage),
+          customMetadata: _customMetadata(),
+          turnComplete: true,
+        ),
+      );
+    }
+    return responses;
+  }
+
+  void _updateState(Map<String, Object?> chunk) {
+    final String model = '${chunk['model'] ?? ''}';
+    if (model.isNotEmpty) {
+      _model = model;
+    }
+    final Map<String, Object?> usage = _asMap(chunk['usage']);
+    if (usage.isNotEmpty) {
+      _usage = usage;
+    }
+    for (final String key in const <String>[
+      'id',
+      'created',
+      'object',
+      'system_fingerprint',
+      'service_tier',
+    ]) {
+      final Object? value = chunk[key];
+      if (value != null) {
+        _metadata[key] = value;
+      }
+    }
+  }
+
+  List<Part> _mapDeltaToParts(Map<String, Object?> delta) {
+    final String role = '${delta['role'] ?? ''}';
+    if (role.isNotEmpty && role != 'null') {
+      _role = role == 'assistant' ? 'model' : role;
+    }
+
+    final List<Part> parts = <Part>[];
+    final String content = '${delta['content'] ?? ''}';
+    if (content.isNotEmpty && content != 'null') {
+      _content.write(content);
+      parts.add(Part.text(content));
+    }
+    final String refusal = '${delta['refusal'] ?? ''}'.trim();
+    if (refusal.isNotEmpty && refusal != 'null') {
+      if (_content.isNotEmpty) {
+        _content.write('\n');
+      }
+      final String markedRefusal = '$_refusalPrefix$refusal';
+      _content.write(markedRefusal);
+      parts.add(Part.text(markedRefusal));
+    }
+
+    final List<Object?> toolCalls =
+        (delta['tool_calls'] as List<Object?>?) ?? const <Object?>[];
+    for (final Object? item in toolCalls) {
+      final Part? part = _upsertToolCall(_asMap(item));
+      if (part != null) {
+        parts.add(part);
+      }
+    }
+    return parts;
+  }
+
+  Part? _upsertToolCall(Map<String, Object?> toolCall) {
+    final int index = _readIndex(toolCall['index']) ?? _toolCalls.length;
+    final _StreamingToolCall state = _toolCalls.putIfAbsent(
+      index,
+      _StreamingToolCall.new,
+    );
+    final String id = '${toolCall['id'] ?? ''}';
+    if (id.isNotEmpty && id != 'null') {
+      state.id = id;
+    }
+    final Map<String, Object?> function = _asMap(toolCall['function']);
+    final String name = '${function['name'] ?? ''}';
+    if (name.isNotEmpty && name != 'null') {
+      state.name = name;
+    }
+    final String arguments = '${function['arguments'] ?? ''}';
+    if (arguments.isNotEmpty && arguments != 'null') {
+      state.arguments.write(arguments);
+    }
+    if ((state.name ?? '').isEmpty && (state.id ?? '').isEmpty) {
+      return null;
+    }
+    return Part.fromFunctionCall(
+      name: state.name ?? '',
+      id: state.id,
+      partialArgs: arguments.isEmpty || arguments == 'null'
+          ? null
+          : <Map<String, Object?>>[
+              <String, Object?>{'arguments': arguments},
+            ],
+      willContinue: true,
+    );
+  }
+
+  List<Part> _finalParts() {
+    final List<Part> parts = <Part>[];
+    if (_content.isNotEmpty) {
+      parts.add(Part.text(_content.toString()));
+    }
+    final List<int> sortedIndexes = _toolCalls.keys.toList()..sort();
+    for (final int index in sortedIndexes) {
+      final _StreamingToolCall state = _toolCalls[index]!;
+      parts.add(
+        Part.fromFunctionCall(
+          name: state.name ?? '',
+          id: state.id,
+          args: _decodeArguments(state.arguments.toString()),
+        ),
+      );
+    }
+    return parts;
+  }
+
+  LlmResponse _buildPartialResponse(List<Part> parts) {
+    return LlmResponse(
+      content: Content(role: _role, parts: parts),
+      partial: true,
+      modelVersion: _model,
+      usageMetadata: _mapUsage(_usage),
+      customMetadata: _customMetadata(),
+    );
+  }
+
+  Map<String, dynamic>? _customMetadata() {
+    if (_metadata.isEmpty) {
+      return null;
+    }
+    return Map<String, dynamic>.from(_metadata);
+  }
+}
+
+class _StreamingToolCall {
+  String? id;
+  String? name;
+  final StringBuffer arguments = StringBuffer();
 }
 
 /// Apigee model adapter that supports both GenAI and chat-completions flows.
@@ -149,21 +495,11 @@ class ApigeeLlm extends Gemini {
         throw ArgumentError('Apigee proxy URL is not configured.');
       }
 
-      if (completionsClient != null) {
-        yield* completionsClient!.generateContent(
-          request: prepared,
-          stream: stream,
-          baseUrl: configuredBaseUrl,
-          headers: Map<String, String>.from(customHeaders),
-        );
-        return;
-      }
-
-      final String text = _extractUserText(prepared);
-      yield LlmResponse(
-        modelVersion: prepared.model,
-        content: Content.modelText('Apigee completions response: $text'),
-        turnComplete: true,
+      yield* (completionsClient ?? ChatCompletionsHttpClient()).generateContent(
+        request: prepared,
+        stream: stream,
+        baseUrl: configuredBaseUrl,
+        headers: Map<String, String>.from(customHeaders),
       );
       return;
     }
@@ -550,22 +886,6 @@ class ApigeeLlm extends Gemini {
       refusal: refusal.isEmpty ? null : refusal,
     );
   }
-
-  String _extractUserText(LlmRequest request) {
-    for (int i = request.contents.length - 1; i >= 0; i -= 1) {
-      final Content content = request.contents[i];
-      if (content.role != 'user') {
-        continue;
-      }
-      for (int j = content.parts.length - 1; j >= 0; j -= 1) {
-        final String? text = content.parts[j].text;
-        if (text != null && text.isNotEmpty) {
-          return text;
-        }
-      }
-    }
-    return '';
-  }
 }
 
 bool _isKnownProvider(String value) {
@@ -577,6 +897,147 @@ Map<String, Object?> _asMap(Object? value) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
   }
   return <String, Object?>{};
+}
+
+Map<String, Object?> _decodeChatCompletionsObject(String body) {
+  final String normalized = body.trim();
+  if (normalized.isEmpty) {
+    throw ChatCompletionsHttpException(
+      500,
+      'Chat completions response body is empty.',
+      responseBody: body,
+    );
+  }
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(normalized);
+  } on FormatException {
+    throw ChatCompletionsHttpException(
+      500,
+      'Chat completions response is not valid JSON.',
+      responseBody: body,
+    );
+  }
+  if (decoded is! Map) {
+    throw ChatCompletionsHttpException(
+      500,
+      'Chat completions response is not a JSON object.',
+      responseBody: body,
+    );
+  }
+  return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
+}
+
+String _extractChatCompletionsError(String body) {
+  try {
+    final Object? decoded = jsonDecode(body);
+    if (decoded is Map) {
+      final Object? error = decoded['error'];
+      if (error is Map) {
+        final Object? message = error['message'];
+        if (message != null && '$message'.trim().isNotEmpty) {
+          return '$message';
+        }
+      }
+      if (error != null && '$error'.trim().isNotEmpty) {
+        return '$error';
+      }
+    }
+  } catch (_) {
+    // Fall back to the raw body.
+  }
+  final String trimmed = body.trim();
+  return trimmed.isEmpty ? 'Chat completions request failed.' : trimmed;
+}
+
+Map<String, Object?>? _decodeSseChunk(String rawData) {
+  final String data = rawData.trim();
+  if (data.isEmpty || data == '[DONE]') {
+    return null;
+  }
+  try {
+    final Object? decoded = jsonDecode(data);
+    if (decoded is Map) {
+      return decoded.map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+    }
+  } catch (_) {
+    // Java parity: malformed streaming chunks are ignored.
+  }
+  return null;
+}
+
+_SseField? _parseSseField(String line) {
+  final int separatorIndex = line.indexOf(':');
+  if (separatorIndex < 0) {
+    return _SseField(name: line, value: '');
+  }
+  final String name = line.substring(0, separatorIndex);
+  if (name.isEmpty) {
+    return null;
+  }
+  String value = line.substring(separatorIndex + 1);
+  if (value.startsWith(' ')) {
+    value = value.substring(1);
+  }
+  return _SseField(name: name, value: value);
+}
+
+class _SseField {
+  _SseField({required this.name, required this.value});
+
+  final String name;
+  final String value;
+}
+
+String _stripUtf8Bom(String value) {
+  if (value.startsWith('\ufeff')) {
+    return value.substring(1);
+  }
+  return value;
+}
+
+int? _readIndex(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse('${value ?? ''}');
+}
+
+Map<String, dynamic> _decodeArguments(String raw) {
+  if (raw.trim().isEmpty) {
+    return <String, dynamic>{};
+  }
+  try {
+    final Object? decoded = jsonDecode(raw);
+    if (decoded is Map) {
+      return decoded.cast<String, dynamic>();
+    }
+  } catch (_) {
+    return <String, dynamic>{};
+  }
+  return <String, dynamic>{};
+}
+
+Map<String, Object?>? _mapUsage(Map<String, Object?>? usage) {
+  if (usage == null || usage.isEmpty) {
+    return null;
+  }
+  final Map<String, Object?> completionTokenDetails = _asMap(
+    usage['completion_tokens_details'],
+  );
+  final Object? reasoningTokens = completionTokenDetails['reasoning_tokens'];
+  return <String, Object?>{
+    'prompt_token_count': usage['prompt_tokens'] ?? 0,
+    'candidates_token_count': usage['completion_tokens'] ?? 0,
+    'total_token_count': usage['total_tokens'] ?? 0,
+    if (reasoningTokens != null && reasoningTokens != 0)
+      'thoughts_token_count': reasoningTokens,
+  };
 }
 
 Map<String, String> get _safeEnvironment {

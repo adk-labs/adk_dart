@@ -1,0 +1,495 @@
+/// Experimental node-based workflow runtime.
+library;
+
+import 'dart:async';
+import 'dart:convert';
+
+import '../agents/base_agent.dart';
+import '../agents/invocation_context.dart';
+import '../events/event.dart';
+import '../types/content.dart';
+
+/// Sentinel node name used for workflow start edges.
+// ignore: constant_identifier_names
+const String START = 'START';
+
+/// Default route value used by routed workflow edges.
+// ignore: constant_identifier_names
+const String DEFAULT_ROUTE = '__DEFAULT__';
+
+/// Function callback signature for [FunctionNode].
+typedef WorkflowFunction =
+    FutureOr<Object?> Function(WorkflowContext context, Object? nodeInput);
+
+/// Retry configuration for workflow node execution.
+class RetryConfig {
+  /// Creates retry configuration.
+  const RetryConfig({
+    this.maxAttempts = 1,
+    this.initialDelay = Duration.zero,
+    this.maxDelay = const Duration(seconds: 30),
+    this.backoffMultiplier = 2,
+  });
+
+  /// Maximum number of attempts including the first run.
+  final int maxAttempts;
+
+  /// Delay before the first retry.
+  final Duration initialDelay;
+
+  /// Maximum delay between retries.
+  final Duration maxDelay;
+
+  /// Exponential backoff multiplier.
+  final double backoffMultiplier;
+}
+
+/// Error thrown when a node exceeds its timeout.
+class NodeTimeoutError implements Exception {
+  /// Creates a node timeout error.
+  NodeTimeoutError({required this.nodeName, required this.timeout});
+
+  /// Timed-out node name.
+  final String nodeName;
+
+  /// Timeout that was exceeded.
+  final Duration timeout;
+
+  @override
+  String toString() {
+    return 'NodeTimeoutError: node `$nodeName` exceeded $timeout.';
+  }
+}
+
+/// Runtime status for a workflow node.
+enum NodeStatus {
+  /// Node has not started yet.
+  pending,
+
+  /// Node is currently running.
+  running,
+
+  /// Node completed successfully.
+  succeeded,
+
+  /// Node failed.
+  failed,
+}
+
+/// Mutable state for one workflow node.
+class NodeState {
+  /// Creates node state.
+  NodeState({this.status = NodeStatus.pending, this.attemptCount = 0});
+
+  /// Current node status.
+  NodeStatus status;
+
+  /// Number of attempts performed.
+  int attemptCount;
+
+  /// Last error, if any.
+  Object? error;
+}
+
+/// Shared runtime context passed to workflow nodes.
+class WorkflowContext {
+  /// Creates a workflow context.
+  WorkflowContext({
+    this.invocationContext,
+    this.input,
+    Map<String, Object?>? outputs,
+    Map<String, NodeState>? nodeStates,
+  }) : outputs = outputs ?? <String, Object?>{},
+       nodeStates = nodeStates ?? <String, NodeState>{};
+
+  /// ADK invocation context when running as an agent.
+  final InvocationContext? invocationContext;
+
+  /// Initial workflow input.
+  final Object? input;
+
+  /// Node outputs keyed by node name.
+  final Map<String, Object?> outputs;
+
+  /// Node states keyed by node name.
+  final Map<String, NodeState> nodeStates;
+
+  /// Reads an output by node [name].
+  Object? outputOf(String name) => outputs[name];
+}
+
+/// Execution result from [Workflow.runWorkflow].
+class WorkflowResult {
+  /// Creates workflow result.
+  WorkflowResult({required this.outputs, required this.nodeStates});
+
+  /// Node outputs keyed by node name.
+  final Map<String, Object?> outputs;
+
+  /// Final node states keyed by node name.
+  final Map<String, NodeState> nodeStates;
+}
+
+/// Base class for node-based workflow units.
+abstract class BaseNode {
+  /// Creates a workflow node.
+  BaseNode({
+    required this.name,
+    this.description = '',
+    List<String>? dependsOn,
+    this.rerunOnResume = false,
+    this.waitForOutput = false,
+    this.retryConfig,
+    this.timeout,
+  }) : dependsOn = dependsOn ?? const <String>[];
+
+  /// Stable node name.
+  final String name;
+
+  /// Human-readable node description.
+  final String description;
+
+  /// Names of predecessor nodes that must finish before this node runs.
+  final List<String> dependsOn;
+
+  /// Whether the node should rerun after resume.
+  final bool rerunOnResume;
+
+  /// Whether the workflow should wait for this output before proceeding.
+  final bool waitForOutput;
+
+  /// Optional retry configuration.
+  final RetryConfig? retryConfig;
+
+  /// Optional per-attempt timeout.
+  final Duration? timeout;
+
+  /// Runs this node with [nodeInput].
+  FutureOr<Object?> run(WorkflowContext context, Object? nodeInput);
+}
+
+/// Node designed for subclassing.
+abstract class Node extends BaseNode {
+  /// Creates a subclassable workflow node.
+  Node({
+    required super.name,
+    super.description,
+    super.dependsOn,
+    super.rerunOnResume,
+    super.waitForOutput,
+    super.retryConfig,
+    super.timeout,
+  });
+}
+
+/// Function-backed workflow node.
+class FunctionNode extends BaseNode {
+  /// Creates a function-backed node.
+  FunctionNode({
+    required this.function,
+    required super.name,
+    super.description,
+    super.dependsOn,
+    super.rerunOnResume,
+    super.waitForOutput,
+    super.retryConfig,
+    super.timeout,
+  });
+
+  /// Function invoked for this node.
+  final WorkflowFunction function;
+
+  @override
+  FutureOr<Object?> run(WorkflowContext context, Object? nodeInput) {
+    return function(context, nodeInput);
+  }
+}
+
+/// Convenience wrapper matching Python's `node(...)` helper.
+FunctionNode node(
+  WorkflowFunction function, {
+  required String name,
+  String description = '',
+  List<String>? dependsOn,
+  bool rerunOnResume = false,
+  RetryConfig? retryConfig,
+  Duration? timeout,
+}) {
+  return FunctionNode(
+    function: function,
+    name: name,
+    description: description,
+    dependsOn: dependsOn,
+    rerunOnResume: rerunOnResume,
+    retryConfig: retryConfig,
+    timeout: timeout,
+  );
+}
+
+/// Node that passes through aggregated predecessor inputs.
+class JoinNode extends BaseNode {
+  /// Creates a join node.
+  JoinNode({
+    required super.name,
+    super.description,
+    super.dependsOn,
+    super.retryConfig,
+    super.timeout,
+  });
+
+  @override
+  Object? run(WorkflowContext context, Object? nodeInput) => nodeInput;
+}
+
+/// Directed workflow edge.
+class Edge {
+  /// Creates a workflow edge.
+  Edge({required Object fromNode, required Object toNode, this.route})
+    : fromNode = _nodeName(fromNode),
+      toNode = _nodeName(toNode);
+
+  /// Source node name or [START].
+  final String fromNode;
+
+  /// Destination node name.
+  final String toNode;
+
+  /// Optional route value.
+  final Object? route;
+}
+
+/// Node-based workflow agent.
+class Workflow extends BaseAgent {
+  /// Creates a workflow.
+  Workflow({
+    required super.name,
+    super.description,
+    required List<BaseNode> nodes,
+    List<Edge> edges = const <Edge>[],
+    super.beforeAgentCallback,
+    super.afterAgentCallback,
+  }) : nodes = List<BaseNode>.unmodifiable(nodes),
+       edges = List<Edge>.unmodifiable(edges),
+       super(subAgents: const <BaseAgent>[]);
+
+  /// Nodes in this workflow.
+  final List<BaseNode> nodes;
+
+  /// Directed edges between nodes.
+  final List<Edge> edges;
+
+  /// Runs the workflow without requiring an ADK [InvocationContext].
+  Future<WorkflowResult> runWorkflow({Object? input}) async {
+    final WorkflowContext context = WorkflowContext(input: input);
+    await _execute(context);
+    return WorkflowResult(
+      outputs: Map<String, Object?>.from(context.outputs),
+      nodeStates: Map<String, NodeState>.from(context.nodeStates),
+    );
+  }
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    final WorkflowContext workflowContext = WorkflowContext(
+      invocationContext: context,
+      input: context.userContent,
+    );
+    await _execute(workflowContext);
+    for (final MapEntry<String, Object?> entry
+        in workflowContext.outputs.entries) {
+      final Event? event = _eventFromOutput(context, entry.key, entry.value);
+      if (event != null) {
+        yield event;
+      }
+    }
+  }
+
+  Future<void> _execute(WorkflowContext context) async {
+    final Map<String, BaseNode> byName = <String, BaseNode>{
+      for (final BaseNode node in nodes) node.name: node,
+    };
+    if (byName.length != nodes.length) {
+      throw ArgumentError('Workflow node names must be unique.');
+    }
+
+    final Map<String, Set<String>> dependencies = _dependencies(byName);
+    final Set<String> pending = byName.keys.toSet();
+    final Set<String> completed = <String>{};
+
+    while (pending.isNotEmpty) {
+      final List<String> ready =
+          pending
+              .where(
+                (String name) => dependencies[name]!.every(completed.contains),
+              )
+              .toList()
+            ..sort();
+      if (ready.isEmpty) {
+        throw StateError(
+          'Workflow graph has unresolved or cyclic dependencies.',
+        );
+      }
+
+      final List<_NodeRunResult> results = await Future.wait(
+        ready.map((String name) async {
+          final BaseNode node = byName[name]!;
+          final Object? nodeInput = _nodeInput(
+            context: context,
+            dependencies: dependencies[name]!,
+          );
+          final Object? output = await _runNodeWithRetry(
+            context: context,
+            node: node,
+            nodeInput: nodeInput,
+          );
+          return _NodeRunResult(name: name, output: output);
+        }),
+      );
+
+      for (final _NodeRunResult result in results) {
+        context.outputs[result.name] = result.output;
+        pending.remove(result.name);
+        completed.add(result.name);
+      }
+    }
+  }
+
+  Map<String, Set<String>> _dependencies(Map<String, BaseNode> byName) {
+    final Map<String, Set<String>> dependencies = <String, Set<String>>{
+      for (final BaseNode node in nodes) node.name: node.dependsOn.toSet(),
+    };
+    for (final Edge edge in edges) {
+      if (!byName.containsKey(edge.toNode)) {
+        throw ArgumentError('Unknown workflow edge target: ${edge.toNode}');
+      }
+      if (edge.fromNode == START) {
+        continue;
+      }
+      if (!byName.containsKey(edge.fromNode)) {
+        throw ArgumentError('Unknown workflow edge source: ${edge.fromNode}');
+      }
+      dependencies[edge.toNode]!.add(edge.fromNode);
+    }
+    return dependencies;
+  }
+
+  Object? _nodeInput({
+    required WorkflowContext context,
+    required Set<String> dependencies,
+  }) {
+    if (dependencies.isEmpty) {
+      return context.input;
+    }
+    if (dependencies.length == 1) {
+      return context.outputs[dependencies.single];
+    }
+    return <String, Object?>{
+      for (final String dependency in dependencies)
+        dependency: context.outputs[dependency],
+    };
+  }
+
+  Future<Object?> _runNodeWithRetry({
+    required WorkflowContext context,
+    required BaseNode node,
+    required Object? nodeInput,
+  }) async {
+    final RetryConfig retry = node.retryConfig ?? const RetryConfig();
+    final int maxAttempts = retry.maxAttempts < 1 ? 1 : retry.maxAttempts;
+    final NodeState state = context.nodeStates.putIfAbsent(
+      node.name,
+      NodeState.new,
+    );
+
+    Object? lastError;
+    for (int attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      state.status = NodeStatus.running;
+      state.attemptCount = attempt;
+      try {
+        Future<Object?> future = Future<Object?>.sync(
+          () => node.run(context, nodeInput),
+        );
+        final Duration? timeout = node.timeout;
+        if (timeout != null) {
+          future = future.timeout(
+            timeout,
+            onTimeout: () =>
+                throw NodeTimeoutError(nodeName: node.name, timeout: timeout),
+          );
+        }
+        final Object? output = await future;
+        state.status = NodeStatus.succeeded;
+        state.error = null;
+        return output;
+      } catch (error) {
+        lastError = error;
+        state.status = NodeStatus.failed;
+        state.error = error;
+        if (attempt >= maxAttempts) {
+          rethrow;
+        }
+        await Future<void>.delayed(_retryDelay(retry, attempt));
+      }
+    }
+    throw StateError('Workflow node failed unexpectedly: $lastError');
+  }
+
+  Duration _retryDelay(RetryConfig retry, int attempt) {
+    if (retry.initialDelay == Duration.zero) {
+      return Duration.zero;
+    }
+    final double factor = retry.backoffMultiplier <= 0
+        ? 1
+        : retry.backoffMultiplier;
+    int delayMs = retry.initialDelay.inMilliseconds;
+    for (int i = 1; i < attempt; i += 1) {
+      delayMs = (delayMs * factor).round();
+    }
+    if (delayMs > retry.maxDelay.inMilliseconds) {
+      delayMs = retry.maxDelay.inMilliseconds;
+    }
+    return Duration(milliseconds: delayMs);
+  }
+
+  Event? _eventFromOutput(
+    InvocationContext context,
+    String author,
+    Object? output,
+  ) {
+    if (output == null) {
+      return null;
+    }
+    if (output is Event) {
+      return output;
+    }
+    if (output is Content) {
+      return Event(
+        invocationId: context.invocationId,
+        author: author,
+        branch: context.branch,
+        content: output,
+      );
+    }
+    final String text = output is String ? output : jsonEncode(output);
+    return Event(
+      invocationId: context.invocationId,
+      author: author,
+      branch: context.branch,
+      content: Content.modelText(text),
+    );
+  }
+}
+
+class _NodeRunResult {
+  _NodeRunResult({required this.name, required this.output});
+
+  final String name;
+  final Object? output;
+}
+
+String _nodeName(Object node) {
+  if (node is BaseNode) {
+    return node.name;
+  }
+  return '$node';
+}

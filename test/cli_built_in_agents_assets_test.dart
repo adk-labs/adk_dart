@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:test/test.dart';
 
 void main() {
   group('built_in_agents assets parity', () {
-    test('all python baseline files are bundled and non-empty', () {
+    test('all python baseline files are bundled and non-empty', () async {
+      final Directory packageRoot = await _packageRoot();
       const List<String> expected = <String>[
         'lib/src/cli/built_in_agents/README.md',
         'lib/src/cli/built_in_agents/__init__.py',
@@ -32,7 +34,7 @@ void main() {
       ];
 
       for (final String relativePath in expected) {
-        final File file = File(relativePath);
+        final File file = File(_join(packageRoot.path, relativePath));
         expect(file.existsSync(), isTrue, reason: '$relativePath must exist');
         expect(
           file.lengthSync(),
@@ -42,14 +44,36 @@ void main() {
       }
     });
 
-    test('embedded instruction template contains callback/tool snippets', () {
-      final File template = File(
-        'lib/src/cli/built_in_agents/instruction_embedded.template',
-      );
-      final String content = template.readAsStringSync();
-      expect(content, contains('content_filter_callback'));
-      expect(content, contains('log_model_request'));
-      expect(content, contains('validate_tool_input'));
-    });
+    test(
+      'embedded instruction template contains callback/tool snippets',
+      () async {
+        final Directory packageRoot = await _packageRoot();
+        final File template = File(
+          _join(
+            packageRoot.path,
+            'lib/src/cli/built_in_agents/instruction_embedded.template',
+          ),
+        );
+        final String content = template.readAsStringSync();
+        expect(content, contains('content_filter_callback'));
+        expect(content, contains('log_model_request'));
+        expect(content, contains('validate_tool_input'));
+      },
+    );
   });
 }
+
+Future<Directory> _packageRoot() async {
+  final Uri? libraryUri = await Isolate.resolvePackageUri(
+    Uri.parse('package:adk_dart/adk_dart.dart'),
+  );
+  if (libraryUri == null) {
+    throw StateError('Unable to resolve package:adk_dart/adk_dart.dart');
+  }
+  return File.fromUri(libraryUri).parent.parent;
+}
+
+String _join(String root, String relativePath) =>
+    relativePath.split('/').fold(root, (String path, String segment) {
+      return '$path${Platform.pathSeparator}$segment';
+    });

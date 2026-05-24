@@ -78,6 +78,7 @@ export 'src/integrations/_iam_connectors/gcp_auth_provider.dart';
 export 'src/integrations/_iam_connectors/gcp_iam_connector_auth.dart';
 export 'src/integrations/agent_registry/agent_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
+export 'src/labs/openai.dart';
 
 export 'src/cli/__init__.dart' hide main;
 export 'src/cli/adk_web_server.dart';
@@ -398,6 +399,7 @@ export 'src/tools/vertex_ai_search_tool.dart';
 export 'src/tools/vertex_rag_retrieval_tool.dart';
 
 export 'src/types/content.dart';
+export 'src/workflow/workflow.dart' hide RetryConfig;
 export 'src/utils/cache_performance_analyzer.dart';
 export 'src/utils/client_labels_utils.dart';
 export 'src/utils/content_utils.dart';

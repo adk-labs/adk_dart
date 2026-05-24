@@ -71,6 +71,7 @@ export 'src/tools/vertex_ai_search_tool.dart';
 export 'src/tools/vertex_rag_retrieval_tool.dart';
 
 export 'src/types/content.dart';
+export 'src/workflow/workflow.dart' hide RetryConfig;
 
 // Web-safe skill surface:
 // - Inline Skill objects are supported on all platforms.
