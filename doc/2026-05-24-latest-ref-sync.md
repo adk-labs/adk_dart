@@ -24,10 +24,10 @@
 - 작업 내용: `EditFile`의 `old_string` 매칭을 CRLF/LF 모두 허용하도록 바꾸고, regex metacharacter를 literal로 escape한 뒤 첫 1회만 치환하도록 수정했다.
 - 작업 이유: Python `1f245535`와 동일하게 Windows/Unix 줄바꿈 차이와 `[]`, `.`, `+`, `$` 같은 문자가 포함된 파일 편집 실패를 줄인다.
 
-### 4. MCP session startup error observation
+### 4. MCP graceful error handling / session startup observation
 
-- 작업 내용: `SessionContext.start()`의 background startup future에 `ignore()` observer를 붙여 호출자가 시작 future를 버린 경우에도 startup exception이 미처리 오류로 남지 않도록 했다.
-- 작업 이유: Python `933653c6`는 MCP background task exception을 회수해 live stream 비정상 종료를 방지한다. Dart는 구조가 다르지만 같은 실패 모드를 줄이는 방향으로 반영했다.
+- 작업 내용: `SessionContext.start()`의 background startup future에 `ignore()` observer를 붙이고, Python의 `_MCP_GRACEFUL_ERROR_HANDLING`에 맞춰 `MCP_GRACEFUL_ERROR_HANDLING` feature flag를 추가했다. 기본값은 on이며 MCP tool call 오류를 structured error payload로 반환하고, flag off 시 기존처럼 예외를 전파한다.
+- 작업 이유: Python `933653c6`는 MCP background task exception을 회수하고 MCP tool call 오류로 agent loop가 끊기지 않도록 graceful error handling을 둔다. Dart도 default 동작과 legacy fallback을 모두 맞춰야 한다.
 
 ### 5. Tool error telemetry
 
@@ -55,4 +55,5 @@
 
 - `dart analyze lib test`
 - `dart test test/environment_toolset_parity_test.dart test/models_parity_batch2_test.dart test/llm_flow_live_modules_parity_test.dart test/features_telemetry_parity_test.dart test/tools_batch2_parity_test.dart`
-- `dart test`는 전체 스위트에서 실패했다. 별도 재현 시 `test/dev_web_server_test.dart`의 기존 2건(`dynamic file-path class spec` 400 응답, persisted A2A push retry callback 미발생)이 계속 실패했다. full run 중 보인 `cli_built_in_agents_assets_test.dart` asset missing 3건은 해당 파일 단독 재실행에서는 재현되지 않았다.
+- `dart test test/mcp_http_integration_test.dart`
+- `dart test --reporter json`는 전체 스위트에서 실패했다. 실패는 `test/dev_web_server_test.dart`의 기존 2건(`dynamic file-path class spec` 400 응답, persisted A2A push retry callback 미발생)만 남았다.

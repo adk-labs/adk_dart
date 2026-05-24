@@ -21,6 +21,7 @@ enum FeatureName {
   googleCredentialsConfig('GOOGLE_CREDENTIALS_CONFIG'),
   googleTool('GOOGLE_TOOL'),
   jsonSchemaForFuncDecl('JSON_SCHEMA_FOR_FUNC_DECL'),
+  mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
   pluggableAuth('PLUGGABLE_AUTH'),
   progressiveSseStreaming('PROGRESSIVE_SSE_STREAMING'),
   pubsubToolConfig('PUBSUB_TOOL_CONFIG'),
@@ -127,6 +128,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.jsonSchemaForFuncDecl: const FeatureConfig(FeatureStage.wip),
+      FeatureName.mcpGracefulErrorHandling: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.pluggableAuth: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,

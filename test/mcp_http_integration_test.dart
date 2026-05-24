@@ -8,6 +8,7 @@ import 'package:adk_dart/src/agents/invocation_context.dart';
 import 'package:adk_dart/src/agents/llm_agent.dart';
 import 'package:adk_dart/src/agents/mcp_instruction_provider.dart';
 import 'package:adk_dart/src/agents/readonly_context.dart';
+import 'package:adk_dart/src/features/_feature_registry.dart';
 import 'package:adk_dart/src/models/base_llm.dart';
 import 'package:adk_dart/src/models/llm_request.dart';
 import 'package:adk_dart/src/models/llm_response.dart';
@@ -461,25 +462,51 @@ void main() {
       expect(seenMethods, isNot(contains('tools/list')));
     });
 
-    test('propagates JSON-RPC tool call errors', () async {
+    test('returns structured JSON-RPC tool call errors by default', () async {
       final McpToolset toolset = McpToolset(connectionParams: connectionParams);
       final List<BaseTool> tools = await toolset.getTools();
 
-      expect(
-        () async => tools.first.run(
-          args: <String, dynamic>{'q': 'boom'},
-          toolContext: await _newToolContext(),
-        ),
-        throwsA(
-          predicate(
-            (Object error) =>
-                error is StateError &&
-                '$error'.contains('(-32042)') &&
-                '$error'.contains('tool exploded'),
-          ),
-        ),
+      final Object? result = await tools.first.run(
+        args: <String, dynamic>{'q': 'boom'},
+        toolContext: await _newToolContext(),
       );
+      expect(result, isA<Map>());
+      final Object? error = (result as Map)['error'];
+      expect(error, contains('MCP tool execution failed'));
+      expect(error, contains('(-32042)'));
+      expect(error, contains('tool exploded'));
     });
+
+    test(
+      'propagates JSON-RPC tool call errors when graceful handling is off',
+      () async {
+        final McpToolset toolset = McpToolset(
+          connectionParams: connectionParams,
+        );
+        final List<BaseTool> tools = await toolset.getTools();
+
+        await withTemporaryFeatureOverrideAsync(
+          FeatureName.mcpGracefulErrorHandling,
+          false,
+          () async {
+            await expectLater(
+              () async => tools.first.run(
+                args: <String, dynamic>{'q': 'boom'},
+                toolContext: await _newToolContext(),
+              ),
+              throwsA(
+                predicate(
+                  (Object error) =>
+                      error is StateError &&
+                      '$error'.contains('(-32042)') &&
+                      '$error'.contains('tool exploded'),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
 
     test('propagates JSON-RPC prompt errors to instruction provider', () async {
       final McpInstructionProvider provider = McpInstructionProvider(

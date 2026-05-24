@@ -176,7 +176,10 @@ class McpTool extends BaseAuthenticatedTool {
         headers: headers.isEmpty ? null : headers,
       );
     } catch (error) {
-      return <String, Object?>{'error': '$error'};
+      if (!isFeatureEnabled(FeatureName.mcpGracefulErrorHandling)) {
+        rethrow;
+      }
+      return <String, Object?>{'error': 'MCP tool execution failed: $error'};
     }
     final String? resourceUri = mcpAppResourceUri;
     if (resourceUri != null) {
@@ -193,6 +196,14 @@ class McpTool extends BaseAuthenticatedTool {
       );
     }
     return response;
+  }
+
+  @override
+  String? detectErrorInResponse(Object? response) {
+    if (response is Map && response['isError'] == true) {
+      return 'MCP_TOOL_ERROR';
+    }
+    return null;
   }
 
   Future<bool> _evaluateRequireConfirmation({

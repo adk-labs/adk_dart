@@ -9,7 +9,7 @@
 
 - New commits: 0
 - No new upstream Python commits were detected after the 2026-05-23 report.
-- Dart runtime parity work was applied for already tracked Python changes: MCP startup error observation, Gemini live transcription flush, grounding-only live response preservation, environment edit matching, telemetry user attribution, and tool-response error telemetry.
+- Dart runtime parity work was applied for already tracked Python changes: MCP graceful error handling/startup error observation, Gemini live transcription flush, grounding-only live response preservation, environment edit matching, telemetry user attribution, and tool-response error telemetry.
 
 ## Runtime-Relevant Changes Applied
 
