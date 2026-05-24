@@ -1,18 +1,10 @@
 # ADK Java Daily Change Report
 
-- Date (UTC): `2026-05-24`
+- Date (UTC): 2026-05-24
 - Source: `google/adk-java`
 - Latest SHA: `5ee51fd1f3ecd9445fa559ee66fe426df7008ea8`
 - Previous SHA: `5ee51fd1f3ecd9445fa559ee66fe426df7008ea8`
 
-## Summary
+## Result
 
-- New commits: 0
-- No new upstream Java commits were detected after the 2026-05-23 report.
-- Java-specific changes already tracked remain open Dart parity gaps: ChatCompletionsHTTPClient streaming support, SkillSource tools/toolset, and GCS offloader support.
-
-## Remaining Gaps
-
-- ChatCompletions streaming client parity needs a separate Dart API design.
-- SkillSource-backed tools/toolset need a Dart-facing abstraction rather than a direct Java class copy.
-- GCS offloader support needs dependency and async upload lifecycle decisions for Dart.
+No upstream changes since the last check.

@@ -1,11 +1,10 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): `2026-05-24`
+- Date (UTC): 2026-05-24
 - Source: `google/adk-js`
 - Latest SHA: `1138e3cf8f9436801c82cf74e0cf928dae97ff3c`
 - Previous SHA: `1138e3cf8f9436801c82cf74e0cf928dae97ff3c`
 
-## Summary
+## Result
 
-- New commits: 0
-- No new JS changes were detected since the last tracked SHA.
+No upstream changes since the last check.
