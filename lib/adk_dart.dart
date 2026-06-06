@@ -223,6 +223,7 @@ export 'src/memory/vertex_ai_memory_bank_service.dart';
 export 'src/memory/vertex_ai_rag_memory_service.dart';
 
 export 'src/plugins/base_plugin.dart';
+export 'src/plugins/auto_tracing_plugin.dart';
 export 'src/plugins/bigquery_agent_analytics_plugin.dart';
 export 'src/plugins/context_filter_plugin.dart';
 export 'src/plugins/debug_logging_plugin.dart';

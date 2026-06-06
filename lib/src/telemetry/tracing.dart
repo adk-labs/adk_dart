@@ -136,6 +136,22 @@ class AdkTracer {
     _finishedSpans.add(_spanStack.removeLast());
   }
 
+  /// Ends [span] and any spans that were started after it.
+  ///
+  /// Returns `false` when [span] is not currently active.
+  bool endSpan(TraceSpanRecord span) {
+    final int index = _spanStack.lastIndexWhere(
+      (TraceSpanRecord candidate) => identical(candidate, span),
+    );
+    if (index < 0) {
+      return false;
+    }
+    while (_spanStack.length > index) {
+      _finishedSpans.add(_spanStack.removeLast());
+    }
+    return true;
+  }
+
   /// Completed spans in completion order.
   List<TraceSpanRecord> get finishedSpans {
     return List<TraceSpanRecord>.unmodifiable(_finishedSpans);
