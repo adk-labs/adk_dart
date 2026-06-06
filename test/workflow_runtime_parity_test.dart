@@ -68,7 +68,13 @@ void main() {
         'a': 'start-a',
         'b': 'start-b',
       });
-      expect(result.nodeStates['join']?.status, NodeStatus.succeeded);
+      expect(result.nodeStates['join']?.status, NodeStatus.completed);
+      expect(result.nodeStates['join']?.input, <String, Object?>{
+        'a': 'start-a',
+        'b': 'start-b',
+      });
+      expect(result.nodeStates['join']?.runCounter, 1);
+      expect(result.nodeStates['join']?.runId, '1');
     });
 
     test('uses edges as dependencies', () async {
@@ -145,6 +151,36 @@ void main() {
       expect(call.id, 'ask_1');
       expect(call.args['message'], 'Need a decision');
     });
+
+    test(
+      'keeps RequestInput node waiting and skips downstream nodes',
+      () async {
+        final Workflow workflow = Workflow(
+          name: 'hitl_waiting',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext _, Object? _) =>
+                  RequestInput(interruptId: 'ask_2', message: 'Confirm'),
+              name: 'ask_user',
+            ),
+            node(
+              (WorkflowContext _, Object? _) => 'should not run',
+              name: 'after_user',
+            ),
+          ],
+          edges: <Edge>[Edge(fromNode: 'ask_user', toNode: 'after_user')],
+        );
+
+        final WorkflowResult result = await workflow.runWorkflow();
+        final NodeState askState = result.nodeStates['ask_user']!;
+
+        expect(askState.status, NodeStatus.waiting);
+        expect(askState.interrupts, <String>['ask_2']);
+        expect(result.outputs['ask_user'], isA<RequestInput>());
+        expect(result.outputs.containsKey('after_user'), isFalse);
+        expect(result.nodeStates['after_user'], isNull);
+      },
+    );
 
     test('routes edges from workflow event actions', () async {
       final FunctionNode router = node((WorkflowContext _, Object? _) {
@@ -368,7 +404,7 @@ void main() {
 
       expect(result.outputs['first_tool'], <String, Object?>{'value': 'hello'});
       expect(result.outputs['second_tool'], 'hello world');
-      expect(result.nodeStates['second_tool']?.status, NodeStatus.succeeded);
+      expect(result.nodeStates['second_tool']?.status, NodeStatus.completed);
     });
 
     test('rejects non-map input for tool nodes', () async {

@@ -79,6 +79,9 @@ class NodeTimeoutError implements Exception {
 
 /// Runtime status for a workflow node.
 enum NodeStatus {
+  /// Node is not ready to run.
+  inactive,
+
   /// Node has not started yet.
   pending,
 
@@ -86,22 +89,60 @@ enum NodeStatus {
   running,
 
   /// Node completed successfully.
-  succeeded,
+  completed,
+
+  /// Node is waiting for user input or another trigger.
+  waiting,
 
   /// Node failed.
   failed,
+
+  /// Node was cancelled.
+  cancelled,
+
+  /// Legacy alias for [completed].
+  succeeded,
 }
 
 /// Mutable state for one workflow node.
 class NodeState {
   /// Creates node state.
-  NodeState({this.status = NodeStatus.pending, this.attemptCount = 0});
+  NodeState({
+    this.status = NodeStatus.inactive,
+    this.input,
+    this.attemptCount = 1,
+    List<String>? interrupts,
+    Map<String, Object?>? resumeInputs,
+    this.runCounter = 0,
+    this.runId,
+    this.parentRunId,
+    this.error,
+  }) : interrupts = interrupts ?? <String>[],
+       resumeInputs = resumeInputs ?? <String, Object?>{};
 
   /// Current node status.
   NodeStatus status;
 
+  /// Input provided to this node run.
+  Object? input;
+
   /// Number of attempts performed.
   int attemptCount;
+
+  /// Interrupt identifiers currently waiting for a response.
+  final List<String> interrupts;
+
+  /// Resume input values keyed by interrupt identifier.
+  final Map<String, Object?> resumeInputs;
+
+  /// Sequential run counter for fresh node runs.
+  int runCounter;
+
+  /// Current node run identifier.
+  String? runId;
+
+  /// Parent dynamic node run identifier, when applicable.
+  String? parentRunId;
 
   /// Last error, if any.
   Object? error;
@@ -508,18 +549,37 @@ class Workflow extends BaseAgent {
             node: node,
             nodeInput: nodeInput,
           );
+          final Object? workflowOutput = _workflowOutputFromRaw(output);
+          final Object? route = _routeFromOutput(output);
           return _NodeRunResult(
             name: name,
-            output: _workflowOutputFromRaw(output),
-            route: _routeFromOutput(output),
+            output: workflowOutput,
+            route: route,
+            interruptIds: _interruptIdsFromOutput(output),
+            waiting:
+                (node.waitForOutput && workflowOutput == null && route == null),
           );
         }),
       );
 
       for (final _NodeRunResult result in results) {
-        context.outputs[result.name] = result.output;
+        final NodeState state = context.nodeStates[result.name]!;
         pending.remove(result.name);
+        if (result.output != null || result.route != null) {
+          context.outputs[result.name] = result.output;
+        }
+        if (result.interruptIds.isNotEmpty || result.waiting) {
+          state.status = NodeStatus.waiting;
+          state.interrupts
+            ..clear()
+            ..addAll(result.interruptIds);
+          continue;
+        }
+        context.outputs[result.name] = result.output;
         completed.add(result.name);
+        if (state.resumeInputs.isNotEmpty) {
+          state.resumeInputs.clear();
+        }
         _activateDownstream(
           fromNode: result.name,
           route: result.route,
@@ -621,6 +681,11 @@ class Workflow extends BaseAgent {
       node.name,
       NodeState.new,
     );
+    state.input = nodeInput;
+    if (state.status == NodeStatus.inactive || state.runId == null) {
+      state.runCounter += 1;
+      state.runId = '${state.runCounter}';
+    }
 
     Object? lastError;
     for (int attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -639,7 +704,7 @@ class Workflow extends BaseAgent {
           );
         }
         final Object? output = await future;
-        state.status = NodeStatus.succeeded;
+        state.status = NodeStatus.completed;
         state.error = null;
         return output;
       } catch (error) {
@@ -739,11 +804,19 @@ class Workflow extends BaseAgent {
 }
 
 class _NodeRunResult {
-  _NodeRunResult({required this.name, required this.output, this.route});
+  _NodeRunResult({
+    required this.name,
+    required this.output,
+    this.route,
+    Set<String>? interruptIds,
+    this.waiting = false,
+  }) : interruptIds = interruptIds ?? <String>{};
 
   final String name;
   final Object? output;
   final Object? route;
+  final Set<String> interruptIds;
+  final bool waiting;
 }
 
 String _nodeName(Object node) {
@@ -842,6 +915,19 @@ Object? _workflowOutputFromRaw(Object? output) {
     }
   }
   return output;
+}
+
+Set<String> _interruptIdsFromOutput(Object? output) {
+  if (output is RequestInput) {
+    return <String>{output.interruptId};
+  }
+  if (output is Event) {
+    return <String>{
+      ...?output.longRunningToolIds,
+      ...getRequestInputInterruptIds(output),
+    };
+  }
+  return <String>{};
 }
 
 NodeInfo _nodeInfoForOutput(InvocationContext context, String nodeName) {
