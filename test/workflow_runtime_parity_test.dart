@@ -255,6 +255,83 @@ void main() {
       expect(result.outputs['always'], 'always');
     });
 
+    test('runs dynamic child nodes via WorkflowContext.runNode', () async {
+      int attempts = 0;
+      final Workflow workflow = Workflow(
+        name: 'dynamic_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? input) async {
+            final Object? childOutput = await context.runNode(
+              node(
+                (WorkflowContext _, Object? childInput) {
+                  attempts += 1;
+                  if (attempts < 2) {
+                    throw const _RetryableWorkflowError('retry dynamic');
+                  }
+                  return '$childInput-child';
+                },
+                name: 'dynamic_child',
+                retryConfig: const wf.RetryConfig(maxAttempts: 2),
+              ),
+              input: '$input-parent',
+            );
+            return 'parent:$childOutput';
+          }, name: 'parent'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow(input: 'start');
+
+      expect(result.outputs['dynamic_child'], 'start-parent-child');
+      expect(result.outputs['parent'], 'parent:start-parent-child');
+      expect(result.nodeStates['dynamic_child']?.status, NodeStatus.completed);
+      expect(result.nodeStates['dynamic_child']?.attemptCount, 2);
+      expect(result.nodeStates['dynamic_child']?.input, 'start-parent');
+    });
+
+    test('runs dynamic nodes from standalone WorkflowContext', () async {
+      final WorkflowContext context = WorkflowContext(input: 'standalone');
+
+      final Object? output = await context.runNode(
+        node(
+          (WorkflowContext _, Object? input) => '$input-child',
+          name: 'standalone_child',
+        ),
+        input: context.input,
+      );
+
+      expect(output, 'standalone-child');
+      expect(context.outputs['standalone_child'], 'standalone-child');
+      expect(
+        context.nodeStates['standalone_child']?.status,
+        NodeStatus.completed,
+      );
+    });
+
+    test('marks dynamic request-input nodes as waiting', () async {
+      final Workflow workflow = Workflow(
+        name: 'dynamic_hitl_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) {
+            return context.runNode(
+              node(
+                (WorkflowContext _, Object? _) =>
+                    RequestInput(interruptId: 'dynamic_ask'),
+                name: 'dynamic_ask_user',
+              ),
+            );
+          }, name: 'parent'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+      final NodeState childState = result.nodeStates['dynamic_ask_user']!;
+
+      expect(childState.status, NodeStatus.waiting);
+      expect(childState.interrupts, <String>['dynamic_ask']);
+      expect(result.outputs['dynamic_ask_user'], isA<RequestInput>());
+    });
+
     test('retries failed nodes', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(

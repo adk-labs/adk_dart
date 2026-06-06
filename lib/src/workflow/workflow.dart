@@ -159,6 +159,8 @@ class WorkflowContext {
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{};
 
+  Future<Object?> Function(BaseNode node, Object? nodeInput)? _nodeScheduler;
+
   /// ADK invocation context when running as an agent.
   final InvocationContext? invocationContext;
 
@@ -173,6 +175,39 @@ class WorkflowContext {
 
   /// Reads an output by node [name].
   Object? outputOf(String name) => outputs[name];
+
+  /// Runs [nodeLike] immediately as a dynamic child node.
+  ///
+  /// The child node shares this workflow context, records its output in
+  /// [outputs], and records execution state in [nodeStates]. When the context is
+  /// owned by a [Workflow], the same retry and timeout behavior used by static
+  /// graph nodes is applied.
+  Future<Object?> runNode(
+    Object nodeLike, {
+    Object? input,
+    String? name,
+    String description = '',
+    bool? rerunOnResume,
+    bool? waitForOutput,
+    RetryConfig? retryConfig,
+    Duration? timeout,
+  }) async {
+    final BaseNode node = buildNode(
+      nodeLike,
+      name: name,
+      description: description,
+      rerunOnResume: rerunOnResume,
+      waitForOutput: waitForOutput,
+      retryConfig: retryConfig,
+      timeout: timeout,
+    );
+    final Object? rawOutput = await (_nodeScheduler == null
+        ? _runNodeWithRetry(context: this, node: node, nodeInput: input)
+        : _nodeScheduler!(node, input));
+    final _NodeRunResult result = _resultFromRawNodeOutput(node, rawOutput);
+    _recordNodeResult(this, result);
+    return result.output;
+  }
 }
 
 /// Execution result from [Workflow.runWorkflow].
@@ -511,6 +546,13 @@ class Workflow extends BaseAgent {
   }
 
   Future<void> _execute(WorkflowContext context) async {
+    context._nodeScheduler ??= (BaseNode node, Object? nodeInput) {
+      return _runNodeWithRetry(
+        context: context,
+        node: node,
+        nodeInput: nodeInput,
+      );
+    };
     final Map<String, BaseNode> byName = <String, BaseNode>{
       for (final BaseNode node in nodes) node.name: node,
     };
@@ -549,37 +591,17 @@ class Workflow extends BaseAgent {
             node: node,
             nodeInput: nodeInput,
           );
-          final Object? workflowOutput = _workflowOutputFromRaw(output);
-          final Object? route = _routeFromOutput(output);
-          return _NodeRunResult(
-            name: name,
-            output: workflowOutput,
-            route: route,
-            interruptIds: _interruptIdsFromOutput(output),
-            waiting:
-                (node.waitForOutput && workflowOutput == null && route == null),
-          );
+          return _resultFromRawNodeOutput(node, output);
         }),
       );
 
       for (final _NodeRunResult result in results) {
-        final NodeState state = context.nodeStates[result.name]!;
         pending.remove(result.name);
-        if (result.output != null || result.route != null) {
-          context.outputs[result.name] = result.output;
-        }
-        if (result.interruptIds.isNotEmpty || result.waiting) {
-          state.status = NodeStatus.waiting;
-          state.interrupts
-            ..clear()
-            ..addAll(result.interruptIds);
+        final bool completedNode = _recordNodeResult(context, result);
+        if (!completedNode) {
           continue;
         }
-        context.outputs[result.name] = result.output;
         completed.add(result.name);
-        if (state.resumeInputs.isNotEmpty) {
-          state.resumeInputs.clear();
-        }
         _activateDownstream(
           fromNode: result.name,
           route: result.route,
@@ -668,100 +690,6 @@ class Workflow extends BaseAgent {
     };
   }
 
-  Future<Object?> _runNodeWithRetry({
-    required WorkflowContext context,
-    required BaseNode node,
-    required Object? nodeInput,
-  }) async {
-    final RetryConfig? retry = node.retryConfig;
-    final int maxAttempts = retry == null
-        ? 1
-        : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
-    final NodeState state = context.nodeStates.putIfAbsent(
-      node.name,
-      NodeState.new,
-    );
-    state.input = nodeInput;
-    if (state.status == NodeStatus.inactive || state.runId == null) {
-      state.runCounter += 1;
-      state.runId = '${state.runCounter}';
-    }
-
-    Object? lastError;
-    for (int attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      state.status = NodeStatus.running;
-      state.attemptCount = attempt;
-      try {
-        Future<Object?> future = Future<Object?>.sync(
-          () => node.run(context, nodeInput),
-        );
-        final Duration? timeout = node.timeout;
-        if (timeout != null) {
-          future = future.timeout(
-            timeout,
-            onTimeout: () =>
-                throw NodeTimeoutError(nodeName: node.name, timeout: timeout),
-          );
-        }
-        final Object? output = await future;
-        state.status = NodeStatus.completed;
-        state.error = null;
-        return output;
-      } catch (error) {
-        lastError = error;
-        state.status = NodeStatus.failed;
-        state.error = error;
-        if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
-          rethrow;
-        }
-        await Future<void>.delayed(_retryDelay(retry!, attempt));
-      }
-    }
-    throw StateError('Workflow node failed unexpectedly: $lastError');
-  }
-
-  bool _shouldRetryError(Object error, RetryConfig? retry) {
-    if (retry == null) {
-      return false;
-    }
-    final List<Object>? filters = retry.exceptions;
-    if (filters == null) {
-      return true;
-    }
-    if (filters.isEmpty) {
-      return false;
-    }
-
-    final String errorTypeName = error.runtimeType.toString();
-    for (final Object filter in filters) {
-      if (filter is String && filter == errorTypeName) {
-        return true;
-      }
-      if (filter is Type &&
-          (filter == error.runtimeType || filter.toString() == errorTypeName)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Duration _retryDelay(RetryConfig retry, int attempt) {
-    if (retry.initialDelay == Duration.zero) {
-      return Duration.zero;
-    }
-    final double factor = retry.backoffMultiplier <= 0
-        ? 1
-        : retry.backoffMultiplier;
-    int delayMs = retry.initialDelay.inMilliseconds;
-    for (int i = 1; i < attempt; i += 1) {
-      delayMs = (delayMs * factor).round();
-    }
-    if (delayMs > retry.maxDelay.inMilliseconds) {
-      delayMs = retry.maxDelay.inMilliseconds;
-    }
-    return Duration(milliseconds: delayMs);
-  }
-
   Event? _eventFromOutput(
     InvocationContext context,
     String author,
@@ -817,6 +745,133 @@ class _NodeRunResult {
   final Object? route;
   final Set<String> interruptIds;
   final bool waiting;
+}
+
+Future<Object?> _runNodeWithRetry({
+  required WorkflowContext context,
+  required BaseNode node,
+  required Object? nodeInput,
+}) async {
+  final RetryConfig? retry = node.retryConfig;
+  final int maxAttempts = retry == null
+      ? 1
+      : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
+  final NodeState state = context.nodeStates.putIfAbsent(
+    node.name,
+    NodeState.new,
+  );
+  state.input = nodeInput;
+  if (state.status == NodeStatus.inactive || state.runId == null) {
+    state.runCounter += 1;
+    state.runId = '${state.runCounter}';
+  }
+
+  Object? lastError;
+  for (int attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    state.status = NodeStatus.running;
+    state.attemptCount = attempt;
+    try {
+      Future<Object?> future = Future<Object?>.sync(
+        () => node.run(context, nodeInput),
+      );
+      final Duration? timeout = node.timeout;
+      if (timeout != null) {
+        future = future.timeout(
+          timeout,
+          onTimeout: () =>
+              throw NodeTimeoutError(nodeName: node.name, timeout: timeout),
+        );
+      }
+      final Object? output = await future;
+      state.status = NodeStatus.completed;
+      state.error = null;
+      return output;
+    } catch (error) {
+      lastError = error;
+      state.status = NodeStatus.failed;
+      state.error = error;
+      if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
+        rethrow;
+      }
+      await Future<void>.delayed(_retryDelay(retry!, attempt));
+    }
+  }
+  throw StateError('Workflow node failed unexpectedly: $lastError');
+}
+
+bool _shouldRetryError(Object error, RetryConfig? retry) {
+  if (retry == null) {
+    return false;
+  }
+  final List<Object>? filters = retry.exceptions;
+  if (filters == null) {
+    return true;
+  }
+  if (filters.isEmpty) {
+    return false;
+  }
+
+  final String errorTypeName = error.runtimeType.toString();
+  for (final Object filter in filters) {
+    if (filter is String && filter == errorTypeName) {
+      return true;
+    }
+    if (filter is Type &&
+        (filter == error.runtimeType || filter.toString() == errorTypeName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+Duration _retryDelay(RetryConfig retry, int attempt) {
+  if (retry.initialDelay == Duration.zero) {
+    return Duration.zero;
+  }
+  final double factor = retry.backoffMultiplier <= 0
+      ? 1
+      : retry.backoffMultiplier;
+  int delayMs = retry.initialDelay.inMilliseconds;
+  for (int i = 1; i < attempt; i += 1) {
+    delayMs = (delayMs * factor).round();
+  }
+  if (delayMs > retry.maxDelay.inMilliseconds) {
+    delayMs = retry.maxDelay.inMilliseconds;
+  }
+  return Duration(milliseconds: delayMs);
+}
+
+_NodeRunResult _resultFromRawNodeOutput(BaseNode node, Object? rawOutput) {
+  final Object? workflowOutput = _workflowOutputFromRaw(rawOutput);
+  final Object? route = _routeFromOutput(rawOutput);
+  return _NodeRunResult(
+    name: node.name,
+    output: workflowOutput,
+    route: route,
+    interruptIds: _interruptIdsFromOutput(rawOutput),
+    waiting: node.waitForOutput && workflowOutput == null && route == null,
+  );
+}
+
+bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
+  final NodeState? state = context.nodeStates[result.name];
+  if (result.output != null || result.route != null) {
+    context.outputs[result.name] = result.output;
+  }
+  if (result.interruptIds.isNotEmpty || result.waiting) {
+    if (state != null) {
+      state.status = NodeStatus.waiting;
+      state.interrupts
+        ..clear()
+        ..addAll(result.interruptIds);
+    }
+    return false;
+  }
+  context.outputs[result.name] = result.output;
+  if (state?.resumeInputs.isNotEmpty == true) {
+    state!.resumeInputs.clear();
+  }
+  return true;
 }
 
 String _nodeName(Object node) {
