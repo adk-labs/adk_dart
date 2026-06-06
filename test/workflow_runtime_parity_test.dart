@@ -345,9 +345,49 @@ void main() {
       expect(events.single.nodeInfo.path, 'workflow_agent@1/writer@1');
       expect(events.single.nodeInfo.outputFor, <String>[
         'workflow_agent@1/writer@1',
+        'workflow_agent@1',
       ]);
       expect(events.single.nodeInfo.messageAsOutput, isTrue);
       expect(events.single.content?.parts.single.text, 'hello');
+    });
+
+    test('stamps terminal node outputFor with workflow path', () async {
+      final FunctionNode first = node(
+        (WorkflowContext _, Object? input) => '$input:first',
+        name: 'first',
+      );
+      final FunctionNode second = node(
+        (WorkflowContext _, Object? input) => '$input:second',
+        name: 'second',
+      );
+      final Workflow workflow = Workflow(
+        name: 'terminal_output_for_workflow',
+        nodes: <BaseNode>[first, second],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: first),
+          Edge(fromNode: first, toNode: second),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_terminal_output_for',
+        agent: workflow,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+        userContent: Content.userText('go'),
+      );
+
+      final List<Event> events = await workflow.runAsync(context).toList();
+
+      final Map<String, Event> byAuthor = <String, Event>{
+        for (final Event event in events) event.author: event,
+      };
+      expect(byAuthor['first']?.nodeInfo.outputFor, <String>[
+        'terminal_output_for_workflow@1/first@1',
+      ]);
+      expect(byAuthor['second']?.nodeInfo.outputFor, <String>[
+        'terminal_output_for_workflow@1/second@1',
+        'terminal_output_for_workflow@1',
+      ]);
     });
 
     test('converts RequestInput node output to long-running event', () async {
@@ -1409,6 +1449,7 @@ void main() {
       expect(events.single.nodeInfo.outputFor, <String>[
         'delegated_event_workflow@1/delegated_event_child@1',
         'delegated_event_workflow@1/parent@1',
+        'delegated_event_workflow@1',
       ]);
       expect(
         events.single.content?.parts.single.text,

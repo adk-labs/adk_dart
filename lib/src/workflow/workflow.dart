@@ -23,6 +23,8 @@ const String START = 'START';
 // ignore: constant_identifier_names
 const String DEFAULT_ROUTE = '__DEFAULT__';
 
+const String _workflowOutputOwner = r'$workflow';
+
 /// Function callback signature for [FunctionNode].
 typedef WorkflowFunction =
     FutureOr<Object?> Function(WorkflowContext context, Object? nodeInput);
@@ -885,11 +887,14 @@ class Workflow extends BaseAgent {
         ? byName.keys.toSet()
         : _initialActiveNodes(byName);
     for (final String completedNode in completed) {
-      _activateDownstream(
+      final Set<String> activatedTargets = _activateDownstream(
         fromNode: completedNode,
         route: context.nodeStates[completedNode]?.route,
         active: active,
       );
+      if (activatedTargets.isEmpty) {
+        _markTerminalOutputOwner(context, completedNode);
+      }
     }
 
     final int? concurrencyLimit = maxConcurrency;
@@ -936,11 +941,14 @@ class Workflow extends BaseAgent {
           continue;
         }
         completed.add(result.name);
-        _activateDownstream(
+        final Set<String> activatedTargets = _activateDownstream(
           fromNode: result.name,
           route: result.route,
           active: active,
         );
+        if (activatedTargets.isEmpty) {
+          _markTerminalOutputOwner(context, result.name);
+        }
       }
     }
   }
@@ -990,11 +998,14 @@ class Workflow extends BaseAgent {
         continue;
       }
       completed.add(result.name);
-      _activateDownstream(
+      final Set<String> activatedTargets = _activateDownstream(
         fromNode: result.name,
         route: result.route,
         active: active,
       );
+      if (activatedTargets.isEmpty) {
+        _markTerminalOutputOwner(context, result.name);
+      }
     }
   }
 
@@ -1089,18 +1100,19 @@ class Workflow extends BaseAgent {
     };
   }
 
-  void _activateDownstream({
+  Set<String> _activateDownstream({
     required String fromNode,
     required Object? route,
     required Set<String> active,
   }) {
     bool matchedSpecificRoute = false;
     final List<String> defaultTargets = <String>[];
+    final Set<String> activatedTargets = <String>{};
     for (final Edge edge in edges.where(
       (Edge edge) => edge.fromNode == fromNode,
     )) {
       if (edge.route == null) {
-        active.add(edge.toNode);
+        activatedTargets.add(edge.toNode);
         continue;
       }
       if (edge.route == DEFAULT_ROUTE) {
@@ -1109,12 +1121,14 @@ class Workflow extends BaseAgent {
       }
       if (_routeMatches(edge.route, route)) {
         matchedSpecificRoute = true;
-        active.add(edge.toNode);
+        activatedTargets.add(edge.toNode);
       }
     }
     if (!matchedSpecificRoute) {
-      active.addAll(defaultTargets);
+      activatedTargets.addAll(defaultTargets);
     }
+    active.addAll(activatedTargets);
+    return activatedTargets;
   }
 
   Object? _nodeInput({
@@ -1459,6 +1473,32 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
   return true;
 }
 
+void _markTerminalOutputOwner(WorkflowContext context, String nodeName) {
+  if (!context.outputs.containsKey(nodeName)) {
+    return;
+  }
+  final NodeState? state = context.nodeStates[nodeName];
+  if (state == null) {
+    return;
+  }
+  _addOutputOwner(state.outputFor, nodeName);
+  _addOutputOwner(state.outputFor, _workflowOutputOwner);
+  for (final NodeState childState in context.nodeStates.values) {
+    if (identical(childState, state)) {
+      continue;
+    }
+    if (childState.outputFor.contains(nodeName)) {
+      _addOutputOwner(childState.outputFor, _workflowOutputOwner);
+    }
+  }
+}
+
+void _addOutputOwner(List<String> outputFor, String owner) {
+  if (!outputFor.contains(owner)) {
+    outputFor.add(owner);
+  }
+}
+
 bool _seedNodeResumeInputs(NodeState state, Map<String, Object?> resumeInputs) {
   if (state.status != NodeStatus.waiting ||
       state.interrupts.isEmpty ||
@@ -1661,6 +1701,9 @@ String _nodePathForOutputKey(InvocationContext context, String outputKey) {
   final String workflowName = context.agent.name.isEmpty
       ? 'workflow'
       : context.agent.name;
+  if (outputKey == _workflowOutputOwner) {
+    return '$workflowName@1';
+  }
   final int separator = outputKey.lastIndexOf('@');
   if (separator > 0 && separator < outputKey.length - 1) {
     final String nodeName = outputKey.substring(0, separator);
