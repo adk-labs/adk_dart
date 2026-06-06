@@ -91,6 +91,31 @@ void main() {
       expect(result.outputs['second'], 'go-first-second');
     });
 
+    test('stamps workflow output events with nodeInfo metadata', () async {
+      final Workflow workflow = Workflow(
+        name: 'workflow_agent',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => 'hello', name: 'writer'),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_workflow_node_info',
+        agent: workflow,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+      );
+
+      final List<Event> events = await workflow.runAsync(context).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single.nodeInfo.path, 'workflow_agent@1/writer@1');
+      expect(events.single.nodeInfo.outputFor, <String>[
+        'workflow_agent@1/writer@1',
+      ]);
+      expect(events.single.nodeInfo.messageAsOutput, isTrue);
+      expect(events.single.content?.parts.single.text, 'hello');
+    });
+
     test('routes edges from workflow event actions', () async {
       final FunctionNode router = node((WorkflowContext _, Object? _) {
         return Event(

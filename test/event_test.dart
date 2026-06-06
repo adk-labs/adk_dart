@@ -76,6 +76,11 @@ void main() {
         invocationId: 'inv_1',
         author: 'agent',
         output: <String, Object?>{'value': 1},
+        nodeInfo: NodeInfo(
+          path: 'workflow@1/router@2',
+          outputFor: <String>['workflow@1/router@2', 'workflow@1'],
+          messageAsOutput: true,
+        ),
         actions: EventActions(route: <Object>['next', true]),
       );
 
@@ -92,6 +97,26 @@ void main() {
       expect(decoded.copyWith(output: 'updated').output, 'updated');
       expect(decoded.copyWith(output: null).output, isNull);
       expect(decoded.copyWith(output: null).hasOutput, isTrue);
+      expect(encoded['node_info'], isA<Map>());
+      final Map<String, Object?> nodeInfo = Map<String, Object?>.from(
+        encoded['node_info']! as Map,
+      );
+      expect(nodeInfo['path'], 'workflow@1/router@2');
+      expect(nodeInfo['output_for'], <String>[
+        'workflow@1/router@2',
+        'workflow@1',
+      ]);
+      expect(nodeInfo['message_as_output'], isTrue);
+      expect(decoded.nodeInfo.path, 'workflow@1/router@2');
+      expect(decoded.nodeInfo.outputFor, <String>[
+        'workflow@1/router@2',
+        'workflow@1',
+      ]);
+      expect(decoded.nodeInfo.messageAsOutput, isTrue);
+      expect(decoded.nodeInfo.runId, '2');
+      expect(decoded.nodeInfo.parentRunId, '1');
+      expect(decoded.nodeInfo.name, 'router');
+      expect(decoded.copyWith().nodeInfo.path, 'workflow@1/router@2');
       expect(actions['route'], <Object>['next', true]);
       expect(decoded.actions.route, <Object>['next', true]);
       expect(decoded.actions.copyWith().route, <Object>['next', true]);

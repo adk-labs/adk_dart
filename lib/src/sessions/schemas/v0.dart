@@ -124,6 +124,7 @@ class StorageEventV0 {
     required this.invocationId,
     required this.author,
     EventActions? actions,
+    NodeInfo? nodeInfo,
     Object? output = _eventOutputSentinel,
     this.longRunningToolIdsJson,
     this.branch,
@@ -151,6 +152,7 @@ class StorageEventV0 {
     this.liveSessionResumptionUpdate,
     this.goAway,
   }) : actions = actions ?? EventActions(),
+       nodeInfo = nodeInfo ?? NodeInfo(),
        output = identical(output, _eventOutputSentinel) ? null : output,
        hasOutput = !identical(output, _eventOutputSentinel),
        timestamp = timestamp ?? getUtcNow();
@@ -175,6 +177,9 @@ class StorageEventV0 {
 
   /// Event actions payload.
   final EventActions actions;
+
+  /// Workflow node metadata payload.
+  final NodeInfo nodeInfo;
 
   /// Generic workflow node output payload.
   final Object? output;
@@ -267,6 +272,9 @@ class StorageEventV0 {
       invocationId: '${json['invocation_id'] ?? json['invocationId'] ?? ''}',
       author: '${json['author'] ?? ''}',
       actions: _eventActionsFromJson(_castMap(json['actions'])),
+      nodeInfo: eventNodeInfoFromJson(
+        _castMap(json['node_info'] ?? json['nodeInfo']),
+      ),
       output: json.containsKey('output')
           ? json['output']
           : _eventOutputSentinel,
@@ -327,6 +335,7 @@ class StorageEventV0 {
       invocationId: event.invocationId,
       author: event.author,
       actions: event.actions.copyWith(),
+      nodeInfo: event.nodeInfo.copyWith(),
       output: event.hasOutput ? event.output : _eventOutputSentinel,
       longRunningToolIdsJson: event.longRunningToolIds == null
           ? null
@@ -382,6 +391,7 @@ class StorageEventV0 {
       branch: branch,
       isolationScope: isolationScope,
       actions: actions.copyWith(),
+      nodeInfo: nodeInfo.copyWith(),
       timestamp: PreciseTimestamp.toSeconds(timestamp),
       longRunningToolIds: longRunningToolIds,
       partial: partial,
@@ -425,6 +435,8 @@ class StorageEventV0 {
       'invocation_id': invocationId,
       'author': author,
       'actions': _eventActionsToJson(actions),
+      if (!nodeInfo.isEmpty)
+        'node_info': eventNodeInfoToJson(nodeInfo, snakeCase: true),
       if (hasOutput) 'output': output,
       if (longRunningToolIdsJson != null)
         'long_running_tool_ids_json': longRunningToolIdsJson,

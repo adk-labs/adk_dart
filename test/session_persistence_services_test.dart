@@ -467,6 +467,51 @@ void main() {
       );
     });
 
+    test('persists workflow nodeInfo in sqlite event payload', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_node_info_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/node_info.db',
+      );
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_node_info',
+          author: 'node',
+          output: 'done',
+          nodeInfo: NodeInfo(
+            path: 'workflow@1/node@3',
+            outputFor: <String>['workflow@1/node@3'],
+            messageAsOutput: false,
+          ),
+        ),
+      );
+
+      final Session? loaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.events.single.nodeInfo.path, 'workflow@1/node@3');
+      expect(loaded.events.single.nodeInfo.outputFor, <String>[
+        'workflow@1/node@3',
+      ]);
+      expect(loaded.events.single.nodeInfo.messageAsOutput, isFalse);
+      expect(loaded.events.single.output, 'done');
+    });
+
     test(
       'persists live session control fields in sqlite event payload',
       () async {
@@ -1707,6 +1752,11 @@ CREATE TABLE events (
         event: Event(
           invocationId: 'inv_vertex_widget',
           author: 'agent',
+          nodeInfo: NodeInfo(
+            path: 'workflow@1/widget@4',
+            outputFor: <String>['workflow@1/widget@4', 'workflow@1'],
+            messageAsOutput: true,
+          ),
           actions: EventActions(
             renderUiWidgets: <UiWidget>[
               UiWidget(
@@ -1743,6 +1793,12 @@ CREATE TABLE events (
             .payload['resource_uri'],
         'ui://widget/vertex',
       );
+      expect(reloaded.events.single.nodeInfo.path, 'workflow@1/widget@4');
+      expect(reloaded.events.single.nodeInfo.outputFor, <String>[
+        'workflow@1/widget@4',
+        'workflow@1',
+      ]);
+      expect(reloaded.events.single.nodeInfo.messageAsOutput, isTrue);
     });
 
     test(

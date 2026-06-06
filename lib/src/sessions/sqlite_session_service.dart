@@ -984,6 +984,8 @@ Map<String, Object?> _eventToJson(Event event) {
     'id': event.id,
     'timestamp': event.timestamp,
     'actions': _eventActionsToJson(event.actions),
+    if (!event.nodeInfo.isEmpty)
+      'nodeInfo': eventNodeInfoToJson(event.nodeInfo),
     if (event.hasOutput) 'output': event.output,
     if (event.longRunningToolIds != null)
       'longRunningToolIds': event.longRunningToolIds!.toList(),
@@ -1025,6 +1027,9 @@ Event _eventFromJson(Map<String, Object?> json) {
     id: (json['id'] ?? '') as String,
     timestamp: _asDouble(json['timestamp']),
     actions: _eventActionsFromJson(_castMap(json['actions'])),
+    nodeInfo: eventNodeInfoFromJson(
+      _castMap(json['nodeInfo'] ?? json['node_info']),
+    ),
     longRunningToolIds: _asStringSet(json['longRunningToolIds']),
     branch: json['branch'] as String?,
     isolationScope:

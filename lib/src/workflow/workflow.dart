@@ -704,14 +704,18 @@ class Workflow extends BaseAgent {
     if (output == null) {
       return null;
     }
+    final NodeInfo nodeInfo = _nodeInfoForOutput(context, author);
     if (output is Event) {
-      return output;
+      return output.nodeInfo.isEmpty
+          ? output.copyWith(nodeInfo: nodeInfo)
+          : output;
     }
     if (output is Content) {
       return Event(
         invocationId: context.invocationId,
         author: author,
         branch: context.branch,
+        nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
         content: output,
       );
     }
@@ -720,6 +724,7 @@ class Workflow extends BaseAgent {
       invocationId: context.invocationId,
       author: author,
       branch: context.branch,
+      nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
       content: Content.modelText(text),
     );
   }
@@ -829,6 +834,14 @@ Object? _workflowOutputFromRaw(Object? output) {
     }
   }
   return output;
+}
+
+NodeInfo _nodeInfoForOutput(InvocationContext context, String nodeName) {
+  final String workflowName = context.agent.name.isEmpty
+      ? 'workflow'
+      : context.agent.name;
+  final String nodePath = '$workflowName@1/$nodeName@1';
+  return NodeInfo(path: nodePath, outputFor: <String>[nodePath]);
 }
 
 bool _routeMatches(Object? edgeRoute, Object? emittedRoute) {

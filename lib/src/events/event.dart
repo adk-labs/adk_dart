@@ -14,6 +14,7 @@ class Event extends LlmResponse {
     required this.invocationId,
     required this.author,
     EventActions? actions,
+    NodeInfo? nodeInfo,
     Object? output = _sentinel,
     this.longRunningToolIds,
     this.branch,
@@ -42,6 +43,7 @@ class Event extends LlmResponse {
     super.liveSessionResumptionUpdate,
     super.goAway,
   }) : actions = actions ?? EventActions(),
+       nodeInfo = nodeInfo ?? NodeInfo(),
        output = identical(output, _sentinel) ? null : output,
        hasOutput = !identical(output, _sentinel),
        id = id ?? Event.newId(),
@@ -55,6 +57,9 @@ class Event extends LlmResponse {
 
   /// Side-channel actions associated with this event.
   EventActions actions;
+
+  /// Workflow node metadata associated with this event.
+  NodeInfo nodeInfo;
 
   /// Generic workflow node output associated with this event.
   Object? output;
@@ -137,6 +142,7 @@ class Event extends LlmResponse {
     Object? invocationId = _sentinel,
     Object? author = _sentinel,
     EventActions? actions,
+    NodeInfo? nodeInfo,
     Object? output = _sentinel,
     Object? longRunningToolIds = _sentinel,
     Object? branch = _sentinel,
@@ -172,6 +178,7 @@ class Event extends LlmResponse {
           : invocationId as String,
       author: identical(author, _sentinel) ? this.author : author as String,
       actions: actions ?? this.actions.copyWith(),
+      nodeInfo: nodeInfo ?? this.nodeInfo.copyWith(),
       output: nextHasOutput
           ? (identical(output, _sentinel) ? this.output : output)
           : _sentinel,
@@ -257,6 +264,117 @@ class Event extends LlmResponse {
 
   /// Creates a new runtime event identifier.
   static String newId() => newAdkId(prefix: 'evt_');
+}
+
+/// Workflow node metadata attached to an [Event].
+class NodeInfo {
+  /// Creates workflow node metadata.
+  NodeInfo({this.path = '', List<String>? outputFor, this.messageAsOutput})
+    : outputFor = outputFor == null ? null : List<String>.from(outputFor);
+
+  /// The path of the workflow node that generated the event.
+  String path;
+
+  /// Node paths whose output this event represents.
+  List<String>? outputFor;
+
+  /// Whether this event's [Event.content] should be treated as node output.
+  bool? messageAsOutput;
+
+  /// Whether this metadata contains no meaningful fields.
+  bool get isEmpty =>
+      path.isEmpty &&
+      (outputFor == null || outputFor!.isEmpty) &&
+      messageAsOutput == null;
+
+  /// The run ID parsed from the final path segment.
+  String get runId => _runIdFromSegment(_lastPathSegment(path)) ?? '';
+
+  /// The run ID parsed from the parent path segment, if present.
+  String? get parentRunId {
+    final List<String> segments = _pathSegments(path);
+    if (segments.length < 2) {
+      return null;
+    }
+    return _runIdFromSegment(segments[segments.length - 2]);
+  }
+
+  /// The node name parsed from the final path segment.
+  String get name {
+    final String segment = _lastPathSegment(path);
+    final int marker = segment.lastIndexOf('@');
+    return marker <= 0 ? segment : segment.substring(0, marker);
+  }
+
+  /// Returns copied node metadata with optional overrides.
+  NodeInfo copyWith({
+    String? path,
+    List<String>? outputFor,
+    Object? messageAsOutput = _sentinel,
+  }) {
+    return NodeInfo(
+      path: path ?? this.path,
+      outputFor: outputFor ?? this.outputFor,
+      messageAsOutput: identical(messageAsOutput, _sentinel)
+          ? this.messageAsOutput
+          : messageAsOutput as bool?,
+    );
+  }
+}
+
+/// Serializes [nodeInfo] into a JSON-compatible map.
+Map<String, Object?> eventNodeInfoToJson(
+  NodeInfo nodeInfo, {
+  bool snakeCase = false,
+}) {
+  final Map<String, Object?> json = <String, Object?>{};
+  if (nodeInfo.path.isNotEmpty) {
+    json['path'] = nodeInfo.path;
+  }
+  if (nodeInfo.outputFor != null) {
+    json[snakeCase ? 'output_for' : 'outputFor'] = List<String>.from(
+      nodeInfo.outputFor!,
+    );
+  }
+  if (nodeInfo.messageAsOutput != null) {
+    json[snakeCase ? 'message_as_output' : 'messageAsOutput'] =
+        nodeInfo.messageAsOutput;
+  }
+  return json;
+}
+
+/// Deserializes [json] into workflow [NodeInfo].
+NodeInfo eventNodeInfoFromJson(Map<String, Object?> json) {
+  return NodeInfo(
+    path: '${json['path'] ?? ''}',
+    outputFor: _stringListFromObject(json['outputFor'] ?? json['output_for']),
+    messageAsOutput:
+        (json['messageAsOutput'] ?? json['message_as_output']) as bool?,
+  );
+}
+
+List<String>? _stringListFromObject(Object? value) {
+  if (value is! List) {
+    return null;
+  }
+  return value.map((Object? item) => '$item').toList(growable: false);
+}
+
+List<String> _pathSegments(String path) {
+  return path.split('/').where((String segment) => segment.isNotEmpty).toList();
+}
+
+String _lastPathSegment(String path) {
+  final List<String> segments = _pathSegments(path);
+  return segments.isEmpty ? '' : segments.last;
+}
+
+String? _runIdFromSegment(String segment) {
+  final int marker = segment.lastIndexOf('@');
+  if (marker < 0 || marker == segment.length - 1) {
+    return null;
+  }
+  return segment.substring(marker + 1);
 }
 
 const Object _sentinel = Object();

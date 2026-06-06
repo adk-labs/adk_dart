@@ -789,6 +789,8 @@ class VertexAiSessionService extends BaseSessionService {
         growable: false,
       ),
       'grounding_metadata': event.groundingMetadata,
+      if (!event.nodeInfo.isEmpty)
+        'node_info': eventNodeInfoToJson(event.nodeInfo, snakeCase: true),
     };
     if (event.actions.compaction != null) {
       _setInternalCustomMetadata(
@@ -1009,6 +1011,9 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
       'isolation_scope',
       'isolationScope',
     ]),
+    nodeInfo: eventNodeInfoFromJson(
+      _asObjectMap(metadata['node_info'] ?? metadata['nodeInfo']),
+    ),
     customMetadata: userCustomMetadata,
     groundingMetadata: metadata['grounding_metadata'],
     longRunningToolIds: _asStringSet(metadata['long_running_tool_ids']),
