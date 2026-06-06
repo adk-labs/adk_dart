@@ -11,6 +11,7 @@ import '../agents/context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../events/event.dart';
+import '../events/node_path_builder.dart';
 import '../events/request_input.dart';
 import '../flows/llm_flows/functions.dart';
 import '../sessions/in_memory_session_service.dart';
@@ -2068,24 +2069,24 @@ List<String>? _outputKeysFromPaths(
 }
 
 bool _isWorkflowNodePath(String path, String workflowPath) {
-  return path == workflowPath || path.startsWith('$workflowPath/');
+  final NodePathBuilder nodePath = NodePathBuilder.fromString(path);
+  final NodePathBuilder workflowNodePath = NodePathBuilder.fromString(
+    workflowPath,
+  );
+  return nodePath == workflowNodePath ||
+      nodePath.isDescendantOf(workflowNodePath);
 }
 
 List<String> _workflowPathSegments(String path) {
-  return path.split('/').where((String segment) => segment.isNotEmpty).toList();
+  return NodePathBuilder.fromString(path).segments;
 }
 
 String _workflowNodeNameFromSegment(String segment) {
-  final int marker = segment.lastIndexOf('@');
-  return marker <= 0 ? segment : segment.substring(0, marker);
+  return NodePathBuilder(<String>[segment]).nodeName;
 }
 
 String? _workflowRunIdFromSegment(String segment) {
-  final int marker = segment.lastIndexOf('@');
-  if (marker < 0 || marker == segment.length - 1) {
-    return null;
-  }
-  return segment.substring(marker + 1);
+  return NodePathBuilder(<String>[segment]).runId;
 }
 
 int _runCounterFromRunId(String? runId) {

@@ -33,6 +33,7 @@ export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
+export 'src/events/node_path_builder.dart';
 export 'src/events/request_input.dart';
 export 'src/events/structured_events.dart';
 
