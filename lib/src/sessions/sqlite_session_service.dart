@@ -984,6 +984,7 @@ Map<String, Object?> _eventToJson(Event event) {
     'id': event.id,
     'timestamp': event.timestamp,
     'actions': _eventActionsToJson(event.actions),
+    if (event.hasOutput) 'output': event.output,
     if (event.longRunningToolIds != null)
       'longRunningToolIds': event.longRunningToolIds!.toList(),
     if (event.branch != null) 'branch': event.branch,
@@ -1018,7 +1019,7 @@ Map<String, Object?> _eventToJson(Event event) {
 }
 
 Event _eventFromJson(Map<String, Object?> json) {
-  return Event(
+  final Event event = Event(
     invocationId: (json['invocationId'] ?? '') as String,
     author: (json['author'] ?? '') as String,
     id: (json['id'] ?? '') as String,
@@ -1052,6 +1053,11 @@ Event _eventFromJson(Map<String, Object?> json) {
     liveSessionResumptionUpdate: json['liveSessionResumptionUpdate'],
     goAway: json['goAway'],
   );
+  if (json.containsKey('output')) {
+    event.output = json['output'];
+    event.hasOutput = true;
+  }
+  return event;
 }
 
 Map<String, Object?> _eventActionsToJson(EventActions actions) {

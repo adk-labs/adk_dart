@@ -96,12 +96,12 @@ void main() {
         return Event(
           invocationId: 'inv_route',
           author: 'router',
+          output: 'A',
           actions: EventActions(route: 'route_b'),
         );
       }, name: 'router');
       final FunctionNode routeB = node(
-        (WorkflowContext _, Object? input) =>
-            'b:${(input as Event).actions.route}',
+        (WorkflowContext _, Object? input) => 'b:$input',
         name: 'route_b_node',
       );
       final FunctionNode routeC = node(
@@ -119,7 +119,8 @@ void main() {
 
       final WorkflowResult result = await workflow.runWorkflow();
 
-      expect(result.outputs['route_b_node'], 'b:route_b');
+      expect(result.outputs['router'], 'A');
+      expect(result.outputs['route_b_node'], 'b:A');
       expect(result.outputs.containsKey('route_c_node'), isFalse);
       expect(result.nodeStates['route_c_node'], isNull);
     });
@@ -157,6 +158,8 @@ void main() {
       final WorkflowResult result = await workflow.runWorkflow();
 
       expect(result.outputs.containsKey('specific'), isFalse);
+      expect(result.outputs.containsKey('router'), isTrue);
+      expect(result.outputs['router'], isNull);
       expect(result.outputs['fallback'], 'fallback');
       expect(result.outputs['always'], 'always');
     });

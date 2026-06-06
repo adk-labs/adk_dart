@@ -509,7 +509,7 @@ class Workflow extends BaseAgent {
           );
           return _NodeRunResult(
             name: name,
-            output: output,
+            output: _workflowOutputFromRaw(output),
             route: _routeFromOutput(output),
           );
         }),
@@ -817,6 +817,18 @@ Object? _routeFromOutput(Object? output) {
     return output.actions.route;
   }
   return null;
+}
+
+Object? _workflowOutputFromRaw(Object? output) {
+  if (output is Event) {
+    if (output.hasOutput) {
+      return output.output;
+    }
+    if (output.content == null && output.actions.route != null) {
+      return null;
+    }
+  }
+  return output;
 }
 
 bool _routeMatches(Object? edgeRoute, Object? emittedRoute) {

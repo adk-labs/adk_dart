@@ -14,6 +14,7 @@ class Event extends LlmResponse {
     required this.invocationId,
     required this.author,
     EventActions? actions,
+    Object? output = _sentinel,
     this.longRunningToolIds,
     this.branch,
     this.isolationScope,
@@ -41,6 +42,8 @@ class Event extends LlmResponse {
     super.liveSessionResumptionUpdate,
     super.goAway,
   }) : actions = actions ?? EventActions(),
+       output = identical(output, _sentinel) ? null : output,
+       hasOutput = !identical(output, _sentinel),
        id = id ?? Event.newId(),
        timestamp = timestamp ?? getTime();
 
@@ -52,6 +55,12 @@ class Event extends LlmResponse {
 
   /// Side-channel actions associated with this event.
   EventActions actions;
+
+  /// Generic workflow node output associated with this event.
+  Object? output;
+
+  /// Whether [output] was explicitly provided.
+  bool hasOutput;
 
   /// Long-running tool IDs associated with this event.
   Set<String>? longRunningToolIds;
@@ -128,6 +137,7 @@ class Event extends LlmResponse {
     Object? invocationId = _sentinel,
     Object? author = _sentinel,
     EventActions? actions,
+    Object? output = _sentinel,
     Object? longRunningToolIds = _sentinel,
     Object? branch = _sentinel,
     Object? isolationScope = _sentinel,
@@ -155,12 +165,16 @@ class Event extends LlmResponse {
     Object? liveSessionResumptionUpdate = _sentinel,
     Object? goAway = _sentinel,
   }) {
+    final bool nextHasOutput = identical(output, _sentinel) ? hasOutput : true;
     return Event(
       invocationId: identical(invocationId, _sentinel)
           ? this.invocationId
           : invocationId as String,
       author: identical(author, _sentinel) ? this.author : author as String,
       actions: actions ?? this.actions.copyWith(),
+      output: nextHasOutput
+          ? (identical(output, _sentinel) ? this.output : output)
+          : _sentinel,
       longRunningToolIds: identical(longRunningToolIds, _sentinel)
           ? longRunningToolIds == null
                 ? null

@@ -8,6 +8,8 @@ import '../../sessions/session.dart';
 import '../../types/content.dart';
 import 'shared.dart';
 
+const Object _eventOutputSentinel = Object();
+
 /// Session row model for schema v0.
 class StorageSessionV0 {
   /// Creates a schema-v0 storage session.
@@ -122,6 +124,7 @@ class StorageEventV0 {
     required this.invocationId,
     required this.author,
     EventActions? actions,
+    Object? output = _eventOutputSentinel,
     this.longRunningToolIdsJson,
     this.branch,
     this.isolationScope,
@@ -148,6 +151,8 @@ class StorageEventV0 {
     this.liveSessionResumptionUpdate,
     this.goAway,
   }) : actions = actions ?? EventActions(),
+       output = identical(output, _eventOutputSentinel) ? null : output,
+       hasOutput = !identical(output, _eventOutputSentinel),
        timestamp = timestamp ?? getUtcNow();
 
   /// Event ID.
@@ -170,6 +175,12 @@ class StorageEventV0 {
 
   /// Event actions payload.
   final EventActions actions;
+
+  /// Generic workflow node output payload.
+  final Object? output;
+
+  /// Whether [output] was present in the stored event payload.
+  final bool hasOutput;
 
   /// Serialized long-running tool IDs.
   final String? longRunningToolIdsJson;
@@ -256,6 +267,9 @@ class StorageEventV0 {
       invocationId: '${json['invocation_id'] ?? json['invocationId'] ?? ''}',
       author: '${json['author'] ?? ''}',
       actions: _eventActionsFromJson(_castMap(json['actions'])),
+      output: json.containsKey('output')
+          ? json['output']
+          : _eventOutputSentinel,
       longRunningToolIdsJson:
           json['long_running_tool_ids_json']?.toString() ??
           json['longRunningToolIdsJson']?.toString(),
@@ -313,6 +327,7 @@ class StorageEventV0 {
       invocationId: event.invocationId,
       author: event.author,
       actions: event.actions.copyWith(),
+      output: event.hasOutput ? event.output : _eventOutputSentinel,
       longRunningToolIdsJson: event.longRunningToolIds == null
           ? null
           : '[${event.longRunningToolIds!.map((String v) => '"$v"').join(',')}]',
@@ -360,7 +375,7 @@ class StorageEventV0 {
 
   /// Converts this storage model into runtime [Event].
   Event toEvent() {
-    return Event(
+    final Event event = Event(
       id: id,
       invocationId: invocationId,
       author: author,
@@ -393,6 +408,11 @@ class StorageEventV0 {
       liveSessionResumptionUpdate: liveSessionResumptionUpdate,
       goAway: goAway,
     );
+    if (hasOutput) {
+      event.output = output;
+      event.hasOutput = true;
+    }
+    return event;
   }
 
   /// Serializes this event row to JSON.
@@ -405,6 +425,7 @@ class StorageEventV0 {
       'invocation_id': invocationId,
       'author': author,
       'actions': _eventActionsToJson(actions),
+      if (hasOutput) 'output': output,
       if (longRunningToolIdsJson != null)
         'long_running_tool_ids_json': longRunningToolIdsJson,
       if (branch != null) 'branch': branch,

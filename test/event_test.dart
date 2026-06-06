@@ -75,6 +75,7 @@ void main() {
       final Event event = Event(
         invocationId: 'inv_1',
         author: 'agent',
+        output: <String, Object?>{'value': 1},
         actions: EventActions(route: <Object>['next', true]),
       );
 
@@ -84,11 +85,33 @@ void main() {
       final Map<String, Object?> actions = Map<String, Object?>.from(
         encoded['actions']! as Map,
       );
+      expect(encoded['output'], <String, Object?>{'value': 1});
+      expect(decoded.hasOutput, isTrue);
+      expect(decoded.output, <String, Object?>{'value': 1});
+      expect(decoded.copyWith().output, <String, Object?>{'value': 1});
+      expect(decoded.copyWith(output: 'updated').output, 'updated');
+      expect(decoded.copyWith(output: null).output, isNull);
+      expect(decoded.copyWith(output: null).hasOutput, isTrue);
       expect(actions['route'], <Object>['next', true]);
       expect(decoded.actions.route, <Object>['next', true]);
       expect(decoded.actions.copyWith().route, <Object>['next', true]);
       expect(decoded.actions.copyWith(route: 'fallback').route, 'fallback');
       expect(decoded.actions.copyWith(route: null).route, isNull);
+
+      final Event controlOnly = Event(
+        invocationId: 'inv_2',
+        author: 'agent',
+        output: null,
+      );
+      expect(controlOnly.output, isNull);
+      expect(controlOnly.hasOutput, isTrue);
+
+      final Map<String, Object?> encodedControl = encodeEventData(controlOnly);
+      final Event decodedControl = decodeEventData(encodedControl);
+      expect(encodedControl.containsKey('output'), isTrue);
+      expect(encodedControl['output'], isNull);
+      expect(decodedControl.hasOutput, isTrue);
+      expect(decodedControl.output, isNull);
     });
   });
 }
