@@ -50,6 +50,64 @@ class _EchoAgent extends BaseAgent {
 
 void main() {
   group('workflow runtime parity', () {
+    test('ReplaySequenceBarrier initializes first replay key', () {
+      final ReplaySequenceBarrier barrier = ReplaySequenceBarrier(<String>[
+        'NodeA@1',
+        'NodeB@1',
+      ]);
+
+      expect(barrier.sequence, <String>['NodeA@1', 'NodeB@1']);
+      expect(barrier.currentIndex, 0);
+      expect(barrier.isReleased('NodeA@1'), isTrue);
+      expect(barrier.isReleased('NodeB@1'), isFalse);
+    });
+
+    test('ReplaySequenceBarrier blocks and unblocks in order', () async {
+      final ReplaySequenceBarrier barrier = ReplaySequenceBarrier(<String>[
+        'NodeA@1',
+        'NodeB@1',
+      ]);
+
+      await barrier.wait('NodeA@1');
+
+      bool nodeBCompleted = false;
+      final Future<void> nodeBWait = () async {
+        await barrier.wait('NodeB@1');
+        nodeBCompleted = true;
+      }();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(nodeBCompleted, isFalse);
+
+      barrier.checkAndAdvance('NodeA@1');
+
+      await nodeBWait;
+      expect(nodeBCompleted, isTrue);
+      expect(barrier.currentIndex, 1);
+      expect(barrier.isReleased('NodeB@1'), isTrue);
+    });
+
+    test('ReplaySequenceBarrier ignores out-of-order advance', () {
+      final ReplaySequenceBarrier barrier = ReplaySequenceBarrier(<String>[
+        'NodeA@1',
+        'NodeB@1',
+      ]);
+
+      barrier.checkAndAdvance('NodeB@1');
+
+      expect(barrier.currentIndex, 0);
+      expect(barrier.isReleased('NodeB@1'), isFalse);
+    });
+
+    test('ReplaySequenceBarrier wait ignores unknown keys', () async {
+      final ReplaySequenceBarrier barrier = ReplaySequenceBarrier(<String>[
+        'NodeA@1',
+      ]);
+
+      await barrier.wait('Unknown@1');
+
+      expect(barrier.currentIndex, 0);
+    });
+
     test('runs dependency graph and join nodes', () async {
       final Workflow workflow = Workflow(
         name: 'graph',

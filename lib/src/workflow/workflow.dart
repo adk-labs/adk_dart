@@ -29,6 +29,58 @@ const String DEFAULT_ROUTE = '__DEFAULT__';
 
 const String _workflowOutputOwner = r'$workflow';
 
+/// Chronological barrier used to coordinate deterministic replay ordering.
+///
+/// Keys not present in [sequence] pass through [wait] immediately. Keys in the
+/// sequence are released one at a time as [checkAndAdvance] observes the
+/// expected key, matching Python's replay barrier semantics.
+class ReplaySequenceBarrier {
+  /// Creates a replay sequence barrier.
+  ReplaySequenceBarrier(Iterable<String> sequence)
+    : sequence = List<String>.unmodifiable(sequence) {
+    for (final String key in this.sequence) {
+      _events.putIfAbsent(key, Completer<void>.new);
+    }
+    if (this.sequence.isNotEmpty) {
+      _events[this.sequence.first]?.complete();
+    }
+  }
+
+  /// Chronological replay key sequence.
+  final List<String> sequence;
+
+  /// Current expected sequence index.
+  int currentIndex = 0;
+
+  final Map<String, Completer<void>> _events = <String, Completer<void>>{};
+
+  /// Waits until [key] is released, or returns immediately for unknown keys.
+  Future<void> wait(String key) {
+    return _events[key]?.future ?? Future<void>.value();
+  }
+
+  /// Advances the barrier if [key] is the current expected replay key.
+  void checkAndAdvance(String key) {
+    if (currentIndex >= sequence.length) {
+      return;
+    }
+    if (key != sequence[currentIndex]) {
+      return;
+    }
+    currentIndex += 1;
+    if (currentIndex >= sequence.length) {
+      return;
+    }
+    final Completer<void>? next = _events[sequence[currentIndex]];
+    if (next != null && !next.isCompleted) {
+      next.complete();
+    }
+  }
+
+  /// Whether [key] is a replay key that has already been released.
+  bool isReleased(String key) => _events[key]?.isCompleted ?? true;
+}
+
 /// Function callback signature for [FunctionNode].
 typedef WorkflowFunction =
     FutureOr<Object?> Function(WorkflowContext context, Object? nodeInput);
