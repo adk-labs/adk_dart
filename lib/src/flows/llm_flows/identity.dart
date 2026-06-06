@@ -15,6 +15,9 @@ class IdentityLlmRequestProcessor extends BaseLlmRequestProcessor {
     LlmRequest llmRequest,
   ) async* {
     final LlmAgent agent = invocationContext.agent as LlmAgent;
+    if (agent.mode == 'single_turn') {
+      return;
+    }
     String instruction =
         'You are an agent. Your internal name is "${agent.name}".';
     final String description = agent.description;

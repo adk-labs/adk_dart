@@ -565,6 +565,43 @@ void main() {
     },
   );
 
+  test('single_turn mode omits framework identity instruction', () async {
+    final _CaptureModel model = _CaptureModel();
+    final Agent agent = Agent(
+      name: 'one_shot_agent',
+      model: model,
+      mode: 'single_turn',
+      globalInstruction: 'global instruction',
+      staticInstruction: 'static instruction',
+    );
+
+    final InMemoryRunner runner = InMemoryRunner(agent: agent);
+    final Session session = await runner.sessionService.createSession(
+      appName: runner.appName,
+      userId: 'user_1',
+      sessionId: 's_single_turn_identity',
+    );
+
+    await _collect(
+      runner.runAsync(
+        userId: 'user_1',
+        sessionId: session.id,
+        newMessage: Content.userText('hello'),
+      ),
+    );
+
+    expect(model.callCount, 1);
+    final String systemInstruction =
+        model.lastRequest!.config.systemInstruction ?? '';
+    expect(systemInstruction, contains('global instruction'));
+    expect(systemInstruction, contains('static instruction'));
+    expect(systemInstruction, isNot(contains('one_shot_agent')));
+    expect(
+      systemInstruction,
+      isNot(contains('You are an agent. Your internal name is')),
+    );
+  });
+
   test('basic processor mirrors runConfig into liveConnectConfig', () async {
     final _CaptureModel model = _CaptureModel();
     final Agent agent = Agent(
