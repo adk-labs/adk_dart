@@ -36,10 +36,10 @@ class RetryConfig {
   /// Creates retry configuration.
   const RetryConfig({
     this.maxAttempts = 5,
-    this.initialDelay = Duration.zero,
-    this.maxDelay = const Duration(seconds: 30),
+    this.initialDelay = const Duration(seconds: 1),
+    this.maxDelay = const Duration(seconds: 60),
     this.backoffMultiplier = 2,
-    this.jitter = 0.0,
+    this.jitter = 1.0,
     this.exceptions,
   }) : assert(jitter >= 0, 'jitter must be non-negative.');
 
@@ -50,9 +50,14 @@ class RetryConfig {
   final int maxAttempts;
 
   /// Delay before the first retry.
+  ///
+  /// Defaults to the Python workflow runtime's 1 second. Use [Duration.zero]
+  /// for immediate retries.
   final Duration initialDelay;
 
   /// Maximum delay between retries.
+  ///
+  /// Defaults to the Python workflow runtime's 60 seconds.
   final Duration maxDelay;
 
   /// Exponential backoff multiplier.
@@ -61,7 +66,8 @@ class RetryConfig {
   /// Randomness factor applied to retry delay.
   ///
   /// A value of `0.0` disables jitter. A value of `0.5` randomizes the delay
-  /// within +/-50% of the calculated backoff delay.
+  /// within +/-50% of the calculated backoff delay. Defaults to Python's
+  /// `1.0` behavior.
   final double jitter;
 
   /// Optional retry filter by exception class name or exact [Type].

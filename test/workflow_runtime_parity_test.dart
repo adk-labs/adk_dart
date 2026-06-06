@@ -1051,7 +1051,11 @@ void main() {
                     return '$childInput-child';
                   },
                   name: 'dynamic_child',
-                  retryConfig: const wf.RetryConfig(maxAttempts: 2),
+                  retryConfig: const wf.RetryConfig(
+                    maxAttempts: 2,
+                    initialDelay: Duration.zero,
+                    jitter: 0.0,
+                  ),
                 ),
                 input: '$input-parent',
               );
@@ -1623,7 +1627,11 @@ void main() {
               return 'ok';
             },
             name: 'flaky',
-            retryConfig: const wf.RetryConfig(maxAttempts: 2),
+            retryConfig: const wf.RetryConfig(
+              maxAttempts: 2,
+              initialDelay: Duration.zero,
+              jitter: 0.0,
+            ),
           ),
         ],
       );
@@ -1650,7 +1658,10 @@ void main() {
                 return 'ok';
               },
               name: 'flaky',
-              retryConfig: const wf.RetryConfig(),
+              retryConfig: const wf.RetryConfig(
+                initialDelay: Duration.zero,
+                jitter: 0.0,
+              ),
             ),
           ],
         );
@@ -1661,6 +1672,16 @@ void main() {
         expect(result.nodeStates['flaky']?.attemptCount, 5);
       },
     );
+
+    test('retry config defaults match Python workflow defaults', () {
+      const wf.RetryConfig config = wf.RetryConfig();
+
+      expect(config.maxAttempts, 5);
+      expect(config.initialDelay, const Duration(seconds: 1));
+      expect(config.maxDelay, const Duration(seconds: 60));
+      expect(config.backoffMultiplier, 2);
+      expect(config.jitter, 1.0);
+    });
 
     test('retries only matching exception names', () async {
       int attempts = 0;
@@ -1677,6 +1698,8 @@ void main() {
             },
             name: 'flaky',
             retryConfig: const wf.RetryConfig(
+              initialDelay: Duration.zero,
+              jitter: 0.0,
               exceptions: <Object>['_RetryableWorkflowError'],
             ),
           ),
