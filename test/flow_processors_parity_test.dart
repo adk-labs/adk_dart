@@ -836,6 +836,58 @@ void main() {
   );
 
   test(
+    'task mode uses finish_task instead of generic output schema handling',
+    () async {
+      final _CaptureModel model = _CaptureModel();
+      final Agent agent = Agent(
+        name: 'task_agent',
+        model: model,
+        mode: 'task',
+        outputSchema: <String, dynamic>{
+          'type': 'object',
+          'properties': <String, dynamic>{
+            'answer': <String, dynamic>{'type': 'string'},
+          },
+          'required': <String>['answer'],
+        },
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 's_task_output_schema',
+      );
+
+      await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('answer this'),
+        ),
+      );
+
+      final LlmRequest request = model.lastRequest!;
+      expect(request.config.responseSchema, isNull);
+      final List<String> toolNames =
+          request.config.tools
+              ?.expand(
+                (ToolDeclaration declaration) =>
+                    declaration.functionDeclarations,
+              )
+              .map((FunctionDeclaration declaration) => declaration.name)
+              .toList() ??
+          <String>[];
+      expect(toolNames, contains(finishTaskToolName));
+      expect(toolNames, isNot(contains('set_model_response')));
+      final String systemInstruction = request.config.systemInstruction ?? '';
+      expect(systemInstruction, contains('finish_task'));
+      expect(systemInstruction, isNot(contains('set_model_response')));
+    },
+  );
+
+  test(
     'output schema processor converts set_model_response into final text event',
     () async {
       String noopTool({required String query}) => query;

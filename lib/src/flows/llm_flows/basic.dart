@@ -22,7 +22,8 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
 
     // Keep parity with Python behavior: set output schema directly when tools
     // are absent or when model supports native schema+tools together.
-    if (agent.outputSchema != null &&
+    if (agent.mode != 'task' &&
+        agent.outputSchema != null &&
         (agent.tools.isEmpty ||
             canUseOutputSchemaWithTools(agent.canonicalModel))) {
       llmRequest.setOutputSchema(agent.outputSchema!);

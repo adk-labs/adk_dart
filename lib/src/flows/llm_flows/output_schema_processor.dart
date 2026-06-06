@@ -20,7 +20,8 @@ class OutputSchemaRequestProcessor extends BaseLlmRequestProcessor {
     LlmRequest llmRequest,
   ) async* {
     final LlmAgent agent = invocationContext.agent as LlmAgent;
-    if (agent.outputSchema == null ||
+    if (agent.mode == 'task' ||
+        agent.outputSchema == null ||
         agent.tools.isEmpty ||
         canUseOutputSchemaWithTools(agent.canonicalModel)) {
       return;
