@@ -96,7 +96,10 @@ class InMemorySessionService extends BaseSessionService {
     final Session copied = session.copyWith();
 
     if (config != null) {
-      if (config.numRecentEvents != null && config.numRecentEvents! > 0) {
+      if (config.numRecentEvents != null && config.numRecentEvents! == 0) {
+        copied.events = <Event>[];
+      } else if (config.numRecentEvents != null &&
+          config.numRecentEvents! > 0) {
         final int count = config.numRecentEvents!;
         if (copied.events.length > count) {
           copied.events = copied.events.sublist(copied.events.length - count);
@@ -164,6 +167,16 @@ class InMemorySessionService extends BaseSessionService {
   }) async {
     final Map<String, Session>? userSessions = _sessions[appName]?[userId];
     userSessions?.remove(sessionId);
+  }
+
+  @override
+  Future<Map<String, Object?>> getUserState({
+    required String appName,
+    required String userId,
+  }) async {
+    return Map<String, Object?>.from(
+      _userState[appName]?[userId] ?? <String, Object?>{},
+    );
   }
 
   @override

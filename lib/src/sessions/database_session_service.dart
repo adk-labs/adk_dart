@@ -185,6 +185,14 @@ class DatabaseSessionService extends BaseSessionService {
   }
 
   @override
+  Future<Map<String, Object?>> getUserState({
+    required String appName,
+    required String userId,
+  }) {
+    return _delegate.getUserState(appName: appName, userId: userId);
+  }
+
+  @override
   Future<Event> appendEvent({required Session session, required Event event}) {
     return _delegate.appendEvent(session: session, event: event);
   }

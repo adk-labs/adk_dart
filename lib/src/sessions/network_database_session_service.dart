@@ -272,7 +272,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
 
         final bool hasAfterTimestamp = config?.afterTimestamp != null;
         final int? recentLimit = config?.numRecentEvents;
-        final bool hasLimit = recentLimit != null && recentLimit > 0;
+        final bool hasLimit = recentLimit != null && recentLimit >= 0;
         final List<Object?> parameters = <Object?>[appName, userId, sessionId];
         final StringBuffer eventQuery = StringBuffer(
           'SELECT id, invocation_id, timestamp, event_data '
@@ -436,6 +436,19 @@ class NetworkDatabaseSessionService extends BaseSessionService {
           'DELETE FROM sessions WHERE app_name=? AND user_id=? AND id=?',
           <Object?>[appName, userId, sessionId],
         );
+      });
+    });
+  }
+
+  @override
+  Future<Map<String, Object?>> getUserState({
+    required String appName,
+    required String userId,
+  }) {
+    return _withLock<Map<String, Object?>>(() async {
+      await _ensureInitialized();
+      return _withExecutor<Map<String, Object?>>((_NetworkDbExecutor db) {
+        return _getUserState(db: db, appName: appName, userId: userId);
       });
     });
   }

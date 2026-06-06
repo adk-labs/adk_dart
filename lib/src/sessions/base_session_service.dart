@@ -61,6 +61,21 @@ abstract class BaseSessionService {
     required String sessionId,
   });
 
+  /// Returns raw user-scoped state for [appName] and [userId].
+  ///
+  /// Returned keys do not include the `user:` prefix. Implementations that
+  /// cannot read user state independently of a session should throw
+  /// [UnimplementedError].
+  Future<Map<String, Object?>> getUserState({
+    required String appName,
+    required String userId,
+  }) async {
+    throw UnimplementedError(
+      '$runtimeType does not support getUserState. '
+      'Enumerate sessions and call getSession to read merged user state.',
+    );
+  }
+
   /// Appends [event] to [session] and updates persisted session state.
   Future<Event> appendEvent({
     required Session session,

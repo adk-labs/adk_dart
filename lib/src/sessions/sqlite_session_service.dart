@@ -260,9 +260,10 @@ class SqliteSessionService extends BaseSessionService {
           eventParams.add(config!.afterTimestamp);
         }
         eventQuery.write(' ORDER BY timestamp DESC');
-        if (config?.numRecentEvents != null && config!.numRecentEvents! > 0) {
+        final int? recentLimit = config?.numRecentEvents;
+        if (recentLimit != null && recentLimit >= 0) {
           eventQuery.write(' LIMIT ?');
-          eventParams.add(config.numRecentEvents);
+          eventParams.add(recentLimit);
         }
 
         final List<Map<String, Object?>> eventRows = db.query(
@@ -377,6 +378,18 @@ class SqliteSessionService extends BaseSessionService {
           'DELETE FROM sessions WHERE app_name=? AND user_id=? AND id=?',
           <Object?>[appName, userId, sessionId],
         );
+      });
+    });
+  }
+
+  @override
+  Future<Map<String, Object?>> getUserState({
+    required String appName,
+    required String userId,
+  }) {
+    return _withLock<Map<String, Object?>>(() async {
+      return _withDatabase<Map<String, Object?>>((_SqliteDatabase db) {
+        return Map<String, Object?>.from(_getUserState(db, appName, userId));
       });
     });
   }

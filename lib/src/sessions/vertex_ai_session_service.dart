@@ -610,7 +610,10 @@ class VertexAiSessionService extends BaseSessionService {
         .cast<Event>()
         .toList(growable: true);
 
-    if (config?.numRecentEvents != null && config!.numRecentEvents! > 0) {
+    if (config?.numRecentEvents != null && config!.numRecentEvents! == 0) {
+      events.clear();
+    } else if (config?.numRecentEvents != null &&
+        config!.numRecentEvents! > 0) {
       final int n = config.numRecentEvents!;
       final int start = events.length > n ? events.length - n : 0;
       events
@@ -681,6 +684,19 @@ class VertexAiSessionService extends BaseSessionService {
     await apiClient.deleteSession(
       reasoningEngineId: reasoningEngineId,
       sessionId: sessionId,
+    );
+  }
+
+  @override
+  Future<Map<String, Object?>> getUserState({
+    required String appName,
+    required String userId,
+  }) async {
+    throw UnimplementedError(
+      'VertexAiSessionService does not support getUserState. '
+      'The Vertex AI Agent Engine API does not expose user state independently '
+      'of a session. Enumerate sessions with listSessions and call getSession '
+      'to read merged session state.',
     );
   }
 

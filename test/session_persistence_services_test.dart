@@ -356,6 +356,20 @@ void main() {
         isFalse,
       );
       expect(loaded.events.first.content?.parts.first.text, 'hello');
+
+      final Map<String, Object?> userState = await reopened.getUserState(
+        appName: 'app',
+        userId: 'u1',
+      );
+      expect(userState, <String, Object?>{'plan': 'pro', 'tier': 'gold'});
+      userState['plan'] = 'mutated';
+      final Map<String, Object?> copiedUserState = await reopened.getUserState(
+        appName: 'app',
+        userId: 'u1',
+      );
+      expect(copiedUserState['plan'], 'pro');
+      expect(copiedUserState.containsKey('${State.appPrefix}locale'), isFalse);
+      expect(copiedUserState.containsKey('score'), isFalse);
     });
 
     test('persists renderUiWidgets in sqlite event actions', () async {
@@ -619,6 +633,15 @@ void main() {
         recent.events.map((Event event) => event.timestamp).toList(),
         <double>[base + 3, base + 4, base + 5],
       );
+
+      final Session? none = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+        config: GetSessionConfig(numRecentEvents: 0),
+      );
+      expect(none, isNotNull);
+      expect(none!.events, isEmpty);
 
       final Session? after = await service.getSession(
         appName: 'app',
@@ -1772,6 +1795,49 @@ CREATE TABLE events (
         sessionId: 'missing',
       );
       expect(missing, isNull);
+    });
+
+    test('returns no events when numRecentEvents is zero', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return fakeClient;
+        },
+      );
+      final Session session = await service.createSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+      );
+      await service.appendEvent(
+        session: session,
+        event: Event(invocationId: 'inv_vertex_zero', author: 'agent'),
+      );
+
+      final Session? loaded = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'u1',
+        sessionId: session.id,
+        config: GetSessionConfig(numRecentEvents: 0),
+      );
+      expect(loaded, isNotNull);
+      expect(loaded!.events, isEmpty);
+    });
+
+    test('does not support independent user state lookup', () async {
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return _FakeVertexAiSessionApiClient();
+        },
+      );
+
+      await expectLater(
+        service.getUserState(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'u1',
+        ),
+        throwsA(isA<UnimplementedError>()),
+      );
     });
 
     test('rejects user-provided session id', () async {

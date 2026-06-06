@@ -47,6 +47,53 @@ void main() {
       expect(loaded.state['user:tier'], 'pro');
     });
 
+    test('getUserState returns raw user state copy', () async {
+      final InMemorySessionService service = InMemorySessionService();
+
+      final Session session = await service.createSession(
+        appName: 'my_app',
+        userId: 'user_1',
+        state: <String, Object?>{
+          '${State.appPrefix}region': 'us',
+          '${State.userPrefix}tier': 'pro',
+          'session_key': 'value',
+        },
+      );
+
+      final Map<String, Object?> initial = await service.getUserState(
+        appName: 'my_app',
+        userId: 'user_1',
+      );
+      expect(initial, <String, Object?>{'tier': 'pro'});
+
+      initial['tier'] = 'mutated';
+      initial['local'] = 'only';
+
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_user_state',
+          author: 'agent',
+          actions: EventActions(
+            stateDelta: <String, Object?>{
+              '${State.userPrefix}plan': 'paid',
+              '${State.appPrefix}theme': 'dark',
+              'turn': 2,
+            },
+          ),
+        ),
+      );
+
+      final Map<String, Object?> updated = await service.getUserState(
+        appName: 'my_app',
+        userId: 'user_1',
+      );
+      expect(updated, <String, Object?>{'tier': 'pro', 'plan': 'paid'});
+      expect(updated.containsKey('local'), isFalse);
+      expect(updated.containsKey('${State.appPrefix}theme'), isFalse);
+      expect(updated.containsKey('turn'), isFalse);
+    });
+
     test(
       'appendEvent keeps temp keys visible during invocation without persisting them',
       () async {
@@ -86,6 +133,33 @@ void main() {
         expect(reloaded.state.containsKey('temp:transient'), isFalse);
       },
     );
+
+    test('getSession returns no events when numRecentEvents is zero', () async {
+      final InMemorySessionService service = InMemorySessionService();
+      final Session session = await service.createSession(
+        appName: 'my_app',
+        userId: 'user_1',
+      );
+
+      await service.appendEvent(
+        session: session,
+        event: Event(invocationId: 'inv_1', author: 'agent'),
+      );
+      await service.appendEvent(
+        session: session,
+        event: Event(invocationId: 'inv_2', author: 'agent'),
+      );
+
+      final Session? loaded = await service.getSession(
+        appName: 'my_app',
+        userId: 'user_1',
+        sessionId: session.id,
+        config: GetSessionConfig(numRecentEvents: 0),
+      );
+
+      expect(loaded, isNotNull);
+      expect(loaded!.events, isEmpty);
+    });
 
     test('flush is a no-op for non-buffering services', () async {
       final InMemorySessionService service = InMemorySessionService();
