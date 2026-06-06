@@ -448,6 +448,7 @@ void main() {
         expect(call, isNotNull);
         expect(call!.name, mockFunctionCallForRequiredUserInput);
         expect(call.args['input_required'], 'Please provide an answer.');
+        expect(call.args.containsKey('auth_required'), isFalse);
         expect(event.longRunningToolIds, contains(call.id));
       },
     );
@@ -472,8 +473,9 @@ void main() {
 
         final FunctionCall? call = event.content?.parts.single.functionCall;
         expect(call, isNotNull);
-        expect(call!.name, mockFunctionCallForRequiredUserInput);
-        expect(call.args['input_required'], 'Authentication required.');
+        expect(call!.name, mockFunctionCallForRequiredUserAuth);
+        expect(call.args['auth_required'], 'Authentication required.');
+        expect(call.args.containsKey('input_required'), isFalse);
         expect(event.longRunningToolIds, contains(call.id));
       },
     );

@@ -538,12 +538,16 @@ class RemoteA2aAgent extends BaseAgent {
     }
 
     Event event = ctx.session.events.last;
+    final Set<String> requiredUserMockFunctionNames = <String>{
+      mockFunctionCallForRequiredUserInput,
+      mockFunctionCallForRequiredUserAuth,
+    };
     if (functionCallEvent.getFunctionCalls().any(
-      (FunctionCall call) => call.name == mockFunctionCallForRequiredUserInput,
+      (FunctionCall call) => requiredUserMockFunctionNames.contains(call.name),
     )) {
       final List<Part> parts = <Part>[];
       for (final FunctionResponse response in event.getFunctionResponses()) {
-        if (response.name != mockFunctionCallForRequiredUserInput ||
+        if (!requiredUserMockFunctionNames.contains(response.name) ||
             !response.response.containsKey('result')) {
           continue;
         }

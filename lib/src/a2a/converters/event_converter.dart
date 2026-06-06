@@ -23,6 +23,10 @@ const String defaultErrorMessage = 'An error occurred during processing';
 const String mockFunctionCallForRequiredUserInput =
     'mock_function_call_for_required_user_input';
 
+/// Synthetic function-call name used to resume non-ADK auth-required events.
+const String mockFunctionCallForRequiredUserAuth =
+    'mock_function_call_for_required_user_auth';
+
 /// Converter signature from ADK [Event] to A2A event batches.
 typedef AdkEventToA2AEventsConverter =
     List<A2aEvent> Function(
@@ -111,11 +115,19 @@ EventActions _mergeEventActions(EventActions base, EventActions update) {
   List<Part> outputParts,
   Set<String> longRunningFunctionIds,
 ) {
-  if (state != A2aTaskState.inputRequired &&
-      state != A2aTaskState.authRequired) {
+  if (longRunningFunctionIds.isNotEmpty) {
     return (outputParts, longRunningFunctionIds);
   }
-  if (longRunningFunctionIds.isNotEmpty) {
+
+  final String functionName;
+  final String argsKey;
+  if (state == A2aTaskState.inputRequired) {
+    functionName = mockFunctionCallForRequiredUserInput;
+    argsKey = 'input_required';
+  } else if (state == A2aTaskState.authRequired) {
+    functionName = mockFunctionCallForRequiredUserAuth;
+    argsKey = 'auth_required';
+  } else {
     return (outputParts, longRunningFunctionIds);
   }
 
@@ -127,9 +139,9 @@ EventActions _mergeEventActions(EventActions base, EventActions update) {
     final String id = newUuid();
     final List<Part> updatedParts = List<Part>.from(outputParts);
     updatedParts[i] = Part.fromFunctionCall(
-      name: mockFunctionCallForRequiredUserInput,
+      name: functionName,
       id: id,
-      args: <String, dynamic>{'input_required': text},
+      args: <String, dynamic>{argsKey: text},
     );
     return (updatedParts, <String>{id});
   }

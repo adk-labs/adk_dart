@@ -441,6 +441,82 @@ void main() {
     );
 
     test(
+      'mock auth-required function response resumes A2A peer as text',
+      () async {
+        final _RecordingClient client = _RecordingClient(
+          () => Stream<Object>.value(
+            A2aMessage(
+              messageId: 'resp_auth_mock',
+              role: A2aRole.agent,
+              parts: <A2aPart>[A2aPart.text('done')],
+            ),
+          ),
+        );
+
+        final RemoteA2aAgent agent = RemoteA2aAgent(
+          name: 'remote_agent',
+          agentCard: AgentCard(
+            name: 'remote',
+            description: 'desc',
+            url: 'https://remote.example/rpc',
+            version: '1.0.0',
+          ),
+          a2aClientFactory: _RecordingClientFactory(client),
+        );
+
+        final InvocationContext context = _context(
+          agent: agent,
+          events: <Event>[
+            Event(
+              invocationId: 'inv-auth-mock',
+              author: 'remote_agent',
+              customMetadata: <String, dynamic>{
+                'a2a:task_id': 'task-auth-mock',
+                'a2a:context_id': 'ctx-auth-mock',
+              },
+              longRunningToolIds: <String>{'mock-auth-call-1'},
+              content: Content(
+                role: 'model',
+                parts: <Part>[
+                  Part.fromFunctionCall(
+                    name: mockFunctionCallForRequiredUserAuth,
+                    id: 'mock-auth-call-1',
+                    args: <String, Object?>{
+                      'auth_required': 'Authentication required.',
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Event(
+              invocationId: 'inv-auth-mock',
+              author: 'user',
+              content: Content(
+                role: 'user',
+                parts: <Part>[
+                  Part.fromFunctionResponse(
+                    name: mockFunctionCallForRequiredUserAuth,
+                    id: 'mock-auth-call-1',
+                    response: <String, Object?>{'result': 'approved'},
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+        await agent.runAsync(context).toList();
+
+        expect(client.requests, hasLength(1));
+        final A2aMessage request = client.requests.single;
+        expect(request.taskId, 'task-auth-mock');
+        expect(request.contextId, 'ctx-auth-mock');
+        expect(request.parts.single.textPart?.text, 'approved');
+        expect(request.parts.single.dataPart, isNull);
+      },
+    );
+
+    test(
       'fullHistoryWhenStateless keeps pre-response history when enabled',
       () async {
         final _RecordingClient defaultClient = _RecordingClient(
