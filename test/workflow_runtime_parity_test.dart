@@ -137,6 +137,153 @@ void main() {
       }
     });
 
+    test('parallel worker processes list input in original order', () async {
+      final BaseNode producer = node(
+        (WorkflowContext _, Object? _) => <Map<String, Object?>>[
+          <String, Object?>{'value': 'first', 'delay': 10},
+          <String, Object?>{'value': 'second', 'delay': 1},
+        ],
+        name: 'producer',
+      );
+      final ParallelWorker worker = ParallelWorker(
+        node: node((WorkflowContext _, Object? input) async {
+          final Map<dynamic, dynamic> item = input! as Map<dynamic, dynamic>;
+          await Future<void>.delayed(
+            Duration(milliseconds: item['delay'] as int),
+          );
+          return '${item['value']}_processed';
+        }, name: 'worker'),
+      );
+      final Workflow workflow = Workflow(
+        name: 'parallel_worker_ordered',
+        nodes: <BaseNode>[producer, worker],
+        edges: <Edge>[Edge(fromNode: producer, toNode: worker)],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['worker'], <String>[
+        'first_processed',
+        'second_processed',
+      ]);
+      expect(result.outputs['worker@1'], 'first_processed');
+      expect(result.outputs['worker@2'], 'second_processed');
+      expect(result.nodeStates['worker']?.status, NodeStatus.completed);
+      expect(result.nodeStates['worker@1']?.status, NodeStatus.completed);
+      expect(result.nodeStates['worker@2']?.status, NodeStatus.completed);
+    });
+
+    test('parallel worker returns empty list for empty input', () async {
+      final ParallelWorker worker = parallelWorker(
+        node((WorkflowContext _, Object? input) => '$input', name: 'worker'),
+      );
+      final Workflow workflow = Workflow(
+        name: 'parallel_worker_empty',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => <Object?>[], name: 'producer'),
+          worker,
+        ],
+        edges: <Edge>[Edge(fromNode: 'producer', toNode: worker)],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['worker'], <Object?>[]);
+      expect(result.outputs.containsKey('worker@1'), isFalse);
+    });
+
+    test('parallel worker wraps non-list input', () async {
+      final Workflow workflow = Workflow(
+        name: 'parallel_worker_single',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => 'single', name: 'producer'),
+          parallelWorker(
+            node(
+              (WorkflowContext _, Object? input) => '$input processed',
+              name: 'worker',
+            ),
+          ),
+        ],
+        edges: <Edge>[Edge(fromNode: 'producer', toNode: 'worker')],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['worker'], <String>['single processed']);
+      expect(result.outputs['worker@1'], 'single processed');
+    });
+
+    test('parallel worker honors maxConcurrency', () async {
+      final List<int> started = <int>[];
+      final Map<int, Completer<void>> finishers = <int, Completer<void>>{
+        for (int i = 0; i < 4; i += 1) i: Completer<void>(),
+      };
+      final ParallelWorker worker = ParallelWorker(
+        node: node((WorkflowContext _, Object? input) async {
+          final int item = input! as int;
+          started.add(item);
+          await finishers[item]!.future;
+          return 'done:$item';
+        }, name: 'worker'),
+        maxConcurrency: 2,
+      );
+      final Workflow workflow = Workflow(
+        name: 'parallel_worker_limited',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => <int>[0, 1, 2, 3], name: 'p'),
+          worker,
+        ],
+        edges: <Edge>[Edge(fromNode: 'p', toNode: worker)],
+      );
+
+      final Future<WorkflowResult> resultFuture = workflow.runWorkflow();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(started, <int>[0, 1]);
+      finishers[0]!.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(started, <int>[0, 1, 2]);
+
+      for (final Completer<void> finisher in finishers.values) {
+        if (!finisher.isCompleted) {
+          finisher.complete();
+        }
+      }
+      final WorkflowResult result = await resultFuture;
+
+      expect(result.outputs['worker'], <String>[
+        'done:0',
+        'done:1',
+        'done:2',
+        'done:3',
+      ]);
+    });
+
+    test('rejects task-mode LlmAgent as static workflow graph node', () {
+      final LlmAgent taskAgent = LlmAgent(name: 'task_agent', mode: 'task');
+
+      expect(
+        () => Workflow(
+          name: 'task_static_graph',
+          nodes: <BaseNode>[AgentNode(agent: taskAgent)],
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message,
+            'message',
+            contains("mode='task'"),
+          ),
+        ),
+      );
+    });
+
+    test('buildNode wraps agents with rerunOnResume enabled by default', () {
+      final BaseNode wrapped = buildNode(_EchoAgent(name: 'echo'));
+
+      expect(wrapped, isA<AgentNode>());
+      expect(wrapped.rerunOnResume, isTrue);
+    });
+
     test('stamps workflow output events with nodeInfo metadata', () async {
       final Workflow workflow = Workflow(
         name: 'workflow_agent',

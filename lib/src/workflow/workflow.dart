@@ -547,13 +547,15 @@ BaseNode buildNode(
     );
   }
   if (nodeLike is BaseAgent) {
+    final bool agentWaitForOutput =
+        waitForOutput ?? (nodeLike is LlmAgent && nodeLike.mode == 'task');
     return AgentNode(
       agent: nodeLike,
       name: name,
       description: description,
       dependsOn: dependsOn,
-      rerunOnResume: rerunOnResume ?? false,
-      waitForOutput: waitForOutput ?? false,
+      rerunOnResume: rerunOnResume,
+      waitForOutput: agentWaitForOutput,
       retryConfig: retryConfig,
       timeout: timeout,
     );
@@ -577,6 +579,21 @@ BaseNode buildNode(
   );
 }
 
+/// Wraps [nodeLike] in a [ParallelWorker].
+ParallelWorker parallelWorker(
+  Object nodeLike, {
+  int? maxConcurrency,
+  RetryConfig? retryConfig,
+  Duration? timeout,
+}) {
+  return ParallelWorker(
+    node: nodeLike,
+    maxConcurrency: maxConcurrency,
+    retryConfig: retryConfig,
+    timeout: timeout,
+  );
+}
+
 /// Node that passes through aggregated predecessor inputs.
 class JoinNode extends BaseNode {
   /// Creates a join node.
@@ -590,6 +607,87 @@ class JoinNode extends BaseNode {
 
   @override
   Object? run(WorkflowContext context, Object? nodeInput) => nodeInput;
+}
+
+/// Node that runs a wrapped child node for every input item in parallel.
+class ParallelWorker extends BaseNode {
+  /// Creates a parallel worker node.
+  factory ParallelWorker({
+    required Object node,
+    int? maxConcurrency,
+    RetryConfig? retryConfig,
+    Duration? timeout,
+  }) {
+    final BaseNode wrappedNode = _buildParallelWorkerNode(node);
+    return ParallelWorker._(
+      wrappedNode: wrappedNode,
+      maxConcurrency: maxConcurrency,
+      retryConfig: retryConfig,
+      timeout: timeout,
+    );
+  }
+
+  ParallelWorker._({
+    required this.wrappedNode,
+    required this.maxConcurrency,
+    super.retryConfig,
+    super.timeout,
+  }) : super(name: wrappedNode.name, rerunOnResume: true);
+
+  /// Wrapped child node.
+  final BaseNode wrappedNode;
+
+  /// Maximum worker tasks to run at once. `null` means unlimited.
+  final int? maxConcurrency;
+
+  @override
+  Future<List<Object?>> run(WorkflowContext context, Object? nodeInput) async {
+    final List<Object?> items = nodeInput is List<Object?>
+        ? nodeInput
+        : nodeInput is List
+        ? List<Object?>.from(nodeInput)
+        : <Object?>[nodeInput];
+    if (items.isEmpty) {
+      return <Object?>[];
+    }
+
+    final List<Object?> results = List<Object?>.filled(items.length, null);
+    final int limit = maxConcurrency == null || maxConcurrency! <= 0
+        ? items.length
+        : maxConcurrency!;
+    int nextIndex = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final int index = nextIndex;
+        nextIndex += 1;
+        if (index >= items.length) {
+          return;
+        }
+        results[index] = await context.runNode(
+          wrappedNode,
+          input: items[index],
+          useSubBranch: true,
+        );
+      }
+    }
+
+    await Future.wait(<Future<void>>[
+      for (int i = 0; i < limit && i < items.length; i += 1) worker(),
+    ]);
+    return results;
+  }
+}
+
+BaseNode _buildParallelWorkerNode(Object node) {
+  if (node == START) {
+    throw ArgumentError.value(
+      node,
+      'node',
+      'ParallelWorker cannot wrap a START node.',
+    );
+  }
+  return buildNode(node);
 }
 
 /// Node that wraps an ADK [BaseTool].
@@ -630,11 +728,11 @@ class AgentNode extends BaseNode {
     String? name,
     super.description,
     super.dependsOn,
-    super.rerunOnResume,
+    bool? rerunOnResume,
     super.waitForOutput,
     super.retryConfig,
     super.timeout,
-  }) : super(name: name ?? agent.name);
+  }) : super(name: name ?? agent.name, rerunOnResume: rerunOnResume ?? true);
 
   /// Agent executed by this node.
   final BaseAgent agent;
@@ -696,7 +794,9 @@ class Workflow extends BaseAgent {
     super.afterAgentCallback,
   }) : nodes = List<BaseNode>.unmodifiable(nodes),
        edges = List<Edge>.unmodifiable(edges),
-       super(subAgents: const <BaseAgent>[]);
+       super(subAgents: const <BaseAgent>[]) {
+    _validateNoStaticTaskModeNodes(this.nodes);
+  }
 
   /// Nodes in this workflow.
   final List<BaseNode> nodes;
@@ -1078,6 +1178,31 @@ class Workflow extends BaseAgent {
       content: Content.modelText(text),
     );
   }
+}
+
+void _validateNoStaticTaskModeNodes(Iterable<BaseNode> nodes) {
+  for (final BaseNode node in nodes) {
+    final LlmAgent? agent = _taskModeAgentInStaticNode(node);
+    if (agent == null) {
+      continue;
+    }
+    throw ArgumentError(
+      "Agent '${agent.name}' has mode='task' and cannot be used as a "
+      'static workflow graph node. Use a chat coordinator with task '
+      'sub-agents, or dispatch dynamically via WorkflowContext.runNode.',
+    );
+  }
+}
+
+LlmAgent? _taskModeAgentInStaticNode(BaseNode node) {
+  if (node is AgentNode && node.agent is LlmAgent) {
+    final LlmAgent agent = node.agent as LlmAgent;
+    return agent.mode == 'task' ? agent : null;
+  }
+  if (node is ParallelWorker) {
+    return _taskModeAgentInStaticNode(node.wrappedNode);
+  }
+  return null;
 }
 
 class _NodeRunResult {
