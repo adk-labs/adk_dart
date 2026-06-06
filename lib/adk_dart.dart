@@ -78,6 +78,14 @@ export 'src/auth/refresher/oauth2_credential_refresher.dart';
 export 'src/integrations/_iam_connectors/gcp_auth_provider.dart';
 export 'src/integrations/_iam_connectors/gcp_iam_connector_auth.dart';
 export 'src/integrations/agent_registry/agent_registry.dart';
+export 'src/integrations/bigquery/bigquery.dart'
+    hide
+        executeSql,
+        getExecuteSql,
+        getTableInfo,
+        BigQueryToolset,
+        ExecuteSqlTool,
+        bigQuerySessionInfoKey;
 export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
 export 'src/labs/openai.dart';

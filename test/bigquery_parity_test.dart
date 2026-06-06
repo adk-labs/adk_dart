@@ -1,4 +1,6 @@
 import 'package:adk_dart/adk_dart.dart';
+import 'package:adk_dart/src/integrations/bigquery/bigquery.dart'
+    as bigquery_integration;
 import 'package:adk_dart/src/tools/bigquery/data_insights_tool.dart'
     as data_insights_tool;
 import 'package:adk_dart/src/tools/bigquery/metadata_tool.dart'
@@ -1021,6 +1023,16 @@ void main() {
   });
 
   group('bigquery toolset parity', () {
+    test('integration import path re-exports existing BigQuery tools', () {
+      final bigquery_integration.BigQueryToolset toolset =
+          bigquery_integration.BigQueryToolset();
+      final bigquery_integration.BigQueryToolConfig config =
+          bigquery_integration.BigQueryToolConfig(maxQueryResultRows: 5);
+
+      expect(toolset, isA<bigquery_toolset.BigQueryToolset>());
+      expect(config.maxQueryResultRows, 5);
+    });
+
     test('returns tools and supports filtering', () async {
       final bigquery_toolset.BigQueryToolset all =
           bigquery_toolset.BigQueryToolset();
