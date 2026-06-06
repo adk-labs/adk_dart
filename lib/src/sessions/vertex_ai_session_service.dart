@@ -86,6 +86,17 @@ typedef VertexAiSessionUriBuilder =
 
 const String _compactionCustomMetadataKey = '_compaction';
 const String _usageMetadataCustomMetadataKey = '_usage_metadata';
+final RegExp _sessionIdPattern = RegExp(r'^[A-Za-z0-9_-]+$');
+
+void _validateSessionId(String sessionId) {
+  if (!_sessionIdPattern.hasMatch(sessionId)) {
+    throw ArgumentError.value(
+      sessionId,
+      'sessionId',
+      'must match ${_sessionIdPattern.pattern}',
+    );
+  }
+}
 
 void _setInternalCustomMetadata({
   required Map<String, Object?> metadata,
@@ -172,6 +183,7 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
     required String reasoningEngineId,
     required String sessionId,
   }) async {
+    _validateSessionId(sessionId);
     return _requestJsonOrNull(
       method: 'GET',
       operation: 'getSession',
@@ -222,6 +234,7 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
     required String reasoningEngineId,
     required String sessionId,
   }) async {
+    _validateSessionId(sessionId);
     await _requestJson(
       method: 'DELETE',
       operation: 'deleteSession',
@@ -237,6 +250,7 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
     required String sessionId,
     double? afterTimestamp,
   }) async* {
+    _validateSessionId(sessionId);
     String? pageToken;
     while (true) {
       final Map<String, String> query = <String, String>{
@@ -280,6 +294,7 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
     required double timestamp,
     required Map<String, Object?> config,
   }) async {
+    _validateSessionId(sessionId);
     await _requestJson(
       method: 'POST',
       operation: 'appendEvent',
@@ -560,6 +575,7 @@ class VertexAiSessionService extends BaseSessionService {
     required String sessionId,
     GetSessionConfig? config,
   }) async {
+    _validateSessionId(sessionId);
     final String reasoningEngineId = _getReasoningEngineId(appName);
     final VertexAiSessionApiClient apiClient = _getApiClient();
 
@@ -679,8 +695,23 @@ class VertexAiSessionService extends BaseSessionService {
     required String userId,
     required String sessionId,
   }) async {
+    _validateSessionId(sessionId);
     final String reasoningEngineId = _getReasoningEngineId(appName);
     final VertexAiSessionApiClient apiClient = _getApiClient();
+    final Map<String, Object?>? existing = await apiClient.getSession(
+      reasoningEngineId: reasoningEngineId,
+      sessionId: sessionId,
+    );
+    if (existing == null) {
+      return;
+    }
+    final String ownerUserId =
+        _readStringByKeys(existing, const <String>['user_id', 'userId']) ?? '';
+    if (ownerUserId != userId) {
+      throw ArgumentError(
+        'Session $sessionId does not belong to user $userId.',
+      );
+    }
     await apiClient.deleteSession(
       reasoningEngineId: reasoningEngineId,
       sessionId: sessionId,
@@ -706,6 +737,7 @@ class VertexAiSessionService extends BaseSessionService {
     required Session session,
     required Event event,
   }) async {
+    _validateSessionId(session.id);
     final Event persistedEvent = eventForPersistence(event);
     await super.appendEvent(session: session, event: event);
 

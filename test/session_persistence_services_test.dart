@@ -1920,6 +1920,76 @@ CREATE TABLE events (
       );
     });
 
+    test('deleteSession rejects sessions owned by another user', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return fakeClient;
+        },
+      );
+      final Session created = await service.createSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'owner',
+      );
+
+      await expectLater(
+        service.deleteSession(
+          appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+          userId: 'other',
+          sessionId: created.id,
+        ),
+        throwsArgumentError,
+      );
+
+      final Session? stillExists = await service.getSession(
+        appName: 'projects/p/locations/us-central1/reasoningEngines/123',
+        userId: 'owner',
+        sessionId: created.id,
+      );
+      expect(stillExists, isNotNull);
+    });
+
+    test('rejects invalid Vertex AI session ids', () async {
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) {
+          return fakeClient;
+        },
+      );
+      const String appName =
+          'projects/p/locations/us-central1/reasoningEngines/123';
+
+      for (final String badId in <String>[
+        '..',
+        '../foo',
+        '..?force=true',
+        'a/b',
+        '',
+      ]) {
+        await expectLater(
+          service.getSession(appName: appName, userId: 'u1', sessionId: badId),
+          throwsArgumentError,
+        );
+        await expectLater(
+          service.deleteSession(
+            appName: appName,
+            userId: 'u1',
+            sessionId: badId,
+          ),
+          throwsArgumentError,
+        );
+        await expectLater(
+          service.appendEvent(
+            session: Session(id: badId, appName: appName, userId: 'u1'),
+            event: Event(invocationId: 'inv_bad_id', author: 'agent'),
+          ),
+          throwsArgumentError,
+        );
+      }
+    });
+
     test('rejects unsupported app names', () {
       final VertexAiSessionService service = VertexAiSessionService();
       expect(
