@@ -1846,9 +1846,13 @@ Future<void> _handleGetEventGraph(
   }
 
   final Runner runner = await context.getRunner(appName);
+  final Map<String, NodeStatus> nodeStatuses = _nodeStatusesFromAgentState(
+    event.actions.agentState,
+  );
   final String dotSrc = await _buildAgentGraphDot(
     runner.agent,
     highlightPairs: highlights,
+    nodeStatuses: nodeStatuses,
   );
   await _writeJson(
     request,
@@ -1992,49 +1996,64 @@ String _joinNodePath(String base, String child) {
 Future<String> _buildAgentGraphDot(
   BaseAgent rootAgent, {
   Set<(String, String)> highlightPairs = const <(String, String)>{},
+  Map<String, NodeStatus> nodeStatuses = const <String, NodeStatus>{},
 }) async {
-  final agent_graph.AgentGraph graph = await agent_graph.buildGraph(rootAgent);
-  final StringBuffer out = StringBuffer('digraph G {\n');
-  out.writeln('  rankdir=LR;');
+  return agent_graph.getAgentGraphDot(
+    rootAgent,
+    highlightPairs: highlightPairs,
+    nodeStatuses: nodeStatuses,
+  );
+}
 
-  for (final agent_graph.AgentGraphNode node in graph.nodes) {
-    out.writeln(
-      '  "${_escapeDot(node.id)}" [label="${_escapeDot(node.caption)}"];',
-    );
+Map<String, NodeStatus> _nodeStatusesFromAgentState(
+  Map<String, Object?>? agentState,
+) {
+  final Object? rawNodes = agentState?['nodes'];
+  if (rawNodes is! Map) {
+    return const <String, NodeStatus>{};
   }
 
-  for (final (String from, String to) in graph.edges) {
-    final bool highlighted =
-        highlightPairs.contains((from, to)) ||
-        highlightPairs.contains((to, from));
-    if (highlighted) {
-      final String? label = graph.edgeLabels[(from, to)];
-      final String labelAttribute = label == null
-          ? ''
-          : ', label="${_escapeDot(label)}"';
-      out.writeln(
-        '  "${_escapeDot(from)}" -> "${_escapeDot(to)}" '
-        '[color="red", penwidth=2.0$labelAttribute];',
-      );
-    } else {
-      final String? label = graph.edgeLabels[(from, to)];
-      if (label == null) {
-        out.writeln('  "${_escapeDot(from)}" -> "${_escapeDot(to)}";');
-      } else {
-        out.writeln(
-          '  "${_escapeDot(from)}" -> "${_escapeDot(to)}" '
-          '[label="${_escapeDot(label)}"];',
-        );
+  final Map<String, NodeStatus> statuses = <String, NodeStatus>{};
+  for (final MapEntry<dynamic, dynamic> entry in rawNodes.entries) {
+    final String? nodeName = entry.key is String ? entry.key as String : null;
+    if (nodeName == null || nodeName.isEmpty) {
+      continue;
+    }
+    final Object? rawStatus = entry.value is Map
+        ? (entry.value as Map<dynamic, dynamic>)['status']
+        : entry.value;
+    final NodeStatus? status = _parseNodeStatus(rawStatus);
+    if (status != null) {
+      statuses[nodeName] = status;
+    }
+  }
+  return Map<String, NodeStatus>.unmodifiable(statuses);
+}
+
+NodeStatus? _parseNodeStatus(Object? value) {
+  if (value is NodeStatus) {
+    return value;
+  }
+  if (value is int && value >= 0 && value < NodeStatus.values.length) {
+    return NodeStatus.values[value];
+  }
+  if (value is String) {
+    final int? index = int.tryParse(value);
+    if (index != null) {
+      return _parseNodeStatus(index);
+    }
+    final String normalized = value
+        .split('.')
+        .last
+        .replaceAll('-', '_')
+        .toLowerCase();
+    for (final NodeStatus status in NodeStatus.values) {
+      if (status.name.toLowerCase() == normalized) {
+        return status;
       }
     }
   }
-
-  out.writeln('}');
-  return out.toString().trimRight();
-}
-
-String _escapeDot(String value) {
-  return value.replaceAll('\\', r'\\').replaceAll('"', r'\"');
+  return null;
 }
 
 Future<void> _handleListMetricsInfo(

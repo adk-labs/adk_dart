@@ -101,5 +101,75 @@ void main() {
         );
       },
     );
+
+    test('renders Graphviz dot with workflow styles and statuses', () async {
+      final FunctionNode decide = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'decide',
+      );
+      final FunctionNode approved = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'approved',
+      );
+      final Workflow workflow = Workflow(
+        name: 'viz_workflow',
+        nodes: <BaseNode>[decide, approved],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: decide),
+          Edge(fromNode: decide, toNode: approved, route: 'approved'),
+        ],
+      );
+
+      final String dot = await getAgentGraphDot(
+        workflow,
+        nodeStatuses: <String, NodeStatus>{
+          'viz_workflow:decide': NodeStatus.running,
+          'approved': NodeStatus.completed,
+        },
+      );
+
+      expect(dot, contains('graph [bgcolor="#0F172A"'));
+      expect(dot, contains('shape="diamond"'));
+      expect(dot, contains('[NO DEFAULT]'));
+      expect(dot, contains('fillcolor="#D97706"'));
+      expect(dot, contains('fillcolor="#16A34A"'));
+      expect(dot, contains('"__END__"'));
+      expect(dot, contains('"viz_workflow:approved" -> "__END__"'));
+    });
+
+    test(
+      'renders Graphviz dot with dashed and highlighted tool edges',
+      () async {
+        final FunctionTool getTime = FunctionTool(
+          name: 'get_current_time',
+          description: 'Returns time.',
+          func: ({required String city}) {
+            return <String, Object>{'city': city, 'time': '10:30 AM'};
+          },
+        );
+        final Agent root = Agent(
+          name: 'root_agent',
+          model: 'gemini-2.5-flash',
+          tools: <Object>[getTime],
+        );
+
+        final String dot = await getAgentGraphDot(
+          root,
+          highlightPairs: const <(String, String)>{
+            ('root_agent', 'tool:get_current_time'),
+          },
+        );
+
+        expect(dot, contains('"tool:get_current_time"'));
+        expect(dot, contains('style="rounded,filled,dashed"'));
+        expect(
+          dot,
+          contains(
+            '"root_agent" -> "tool:get_current_time" '
+            '[style="dashed", color="red", penwidth="2.0"]',
+          ),
+        );
+      },
+    );
   });
 }
