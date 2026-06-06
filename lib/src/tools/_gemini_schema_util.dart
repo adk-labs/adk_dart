@@ -128,10 +128,67 @@ Map<String, dynamic> sanitizeSchemaFormatsForGemini(
       }
     });
 
+    _normalizeEnumAndConst(out);
     return sanitizeSchemaType(out, preserveNullType: preserveNull);
   }
 
   return _castMap(sanitize(schema, preserveNull: preserveNullType));
+}
+
+void _normalizeEnumAndConst(Map<String, dynamic> schema) {
+  if (!schema.containsKey('type')) {
+    final Object? enumValues = schema['enum'];
+    if (enumValues is List && enumValues.isNotEmpty) {
+      final String? inferredType = _inferPrimitiveSchemaType(enumValues);
+      if (inferredType != null) {
+        schema['type'] = inferredType;
+      }
+    } else if (schema.containsKey('const')) {
+      final Object? constValue = schema['const'];
+      final String? inferredType = _inferPrimitiveSchemaType(<Object?>[
+        constValue,
+      ]);
+      if (inferredType != null) {
+        schema['type'] = inferredType;
+      }
+      schema['enum'] = <Object?>[constValue];
+    }
+  } else if (schema.containsKey('const') && !schema.containsKey('enum')) {
+    schema['enum'] = <Object?>[schema['const']];
+  }
+
+  schema.remove('const');
+
+  final Object? enumValues = schema['enum'];
+  if (enumValues is List) {
+    schema['enum'] = enumValues
+        .map((Object? value) => '$value')
+        .toList(growable: false);
+  }
+}
+
+String? _inferPrimitiveSchemaType(List<Object?> values) {
+  if (values.isEmpty) {
+    return null;
+  }
+
+  String? inferred;
+  for (final Object? value in values) {
+    final String? current = switch (value) {
+      String() => 'string',
+      num() => 'number',
+      bool() => 'boolean',
+      _ => null,
+    };
+    if (current == null) {
+      return null;
+    }
+    inferred ??= current;
+    if (inferred != current) {
+      return null;
+    }
+  }
+  return inferred;
 }
 
 /// Normalizes the `type` field and ensures required array defaults.

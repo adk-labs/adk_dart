@@ -112,6 +112,39 @@ void main() {
       );
     });
 
+    test('gemini schema util infers enum-only schema types', () {
+      final Map<String, dynamic> converted = toGeminiSchema(<String, dynamic>{
+        'description': 'A color value',
+        'enum': <Object?>['red', 'green', 'blue'],
+      });
+
+      expect(converted['type'], 'string');
+      expect(converted['description'], 'A color value');
+      expect(converted['enum'], <String>['red', 'green', 'blue']);
+    });
+
+    test('gemini schema util keeps mixed enum type unspecified', () {
+      final Map<String, dynamic> converted = toGeminiSchema(<String, dynamic>{
+        'enum': <Object?>['red', 1, true],
+      });
+
+      expect(converted.containsKey('type'), isFalse);
+      expect(converted['enum'], <String>['red', '1', 'true']);
+    });
+
+    test('gemini schema util forwards const-only schema as enum', () {
+      final Map<String, dynamic> input = <String, dynamic>{'const': 42};
+
+      final Map<String, dynamic> converted = toGeminiSchema(input);
+      final Map<String, dynamic> convertedAgain = toGeminiSchema(input);
+
+      expect(converted['type'], 'number');
+      expect(converted['enum'], <String>['42']);
+      expect(converted.containsKey('const'), isFalse);
+      expect(convertedAgain, converted);
+      expect(input, <String, dynamic>{'const': 42});
+    });
+
     test('explicit json schema preserves nested required fields', () {
       final FunctionDeclaration declaration =
           buildFunctionDeclarationWithJsonSchema(
