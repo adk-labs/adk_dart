@@ -44,6 +44,20 @@ void main() {
       }
     });
 
+    test('resolve root directory asset blocks path traversal', () async {
+      final Directory packageRoot = await _packageRoot();
+      final File resolver = File(
+        _join(
+          packageRoot.path,
+          'lib/src/cli/built_in_agents/utils/resolve_root_directory.py',
+        ),
+      );
+      final String content = resolver.readAsStringSync();
+      expect(content, contains('candidate.relative_to(resolved_root)'));
+      expect(content, contains('resolves outside the root directory'));
+      expect(content, isNot(contains('return file_path_obj')));
+    });
+
     test(
       'embedded instruction template contains callback/tool snippets',
       () async {
