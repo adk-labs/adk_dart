@@ -5,8 +5,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../agents/base_agent.dart';
+import '../agents/context.dart';
 import '../agents/invocation_context.dart';
+import '../agents/llm_agent.dart';
 import '../events/event.dart';
+import '../sessions/in_memory_session_service.dart';
+import '../sessions/session.dart';
+import '../tools/base_tool.dart';
 import '../types/content.dart';
 
 /// Sentinel node name used for workflow start edges.
@@ -249,6 +254,36 @@ class JoinNode extends BaseNode {
 
   @override
   Object? run(WorkflowContext context, Object? nodeInput) => nodeInput;
+}
+
+/// Node that wraps an ADK [BaseTool].
+class ToolNode extends BaseNode {
+  /// Creates a tool-backed workflow node.
+  ToolNode({
+    required this.tool,
+    String? name,
+    super.description,
+    super.dependsOn,
+    super.rerunOnResume,
+    super.waitForOutput,
+    super.retryConfig,
+    super.timeout,
+  }) : super(name: name ?? tool.name);
+
+  /// Tool executed by this node.
+  final BaseTool tool;
+
+  @override
+  Future<Object?> run(WorkflowContext context, Object? nodeInput) async {
+    final Map<String, dynamic> args = _toolArgsFromInput(nodeInput);
+    final InvocationContext invocationContext =
+        context.invocationContext ?? _standaloneInvocationContext(name);
+    final Context toolContext = Context(
+      invocationContext,
+      functionCallId: 'workflow-$name-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    return tool.run(args: args, toolContext: toolContext);
+  }
 }
 
 /// Directed workflow edge.
@@ -529,4 +564,35 @@ String _nodeName(Object node) {
     return node.name;
   }
   return '$node';
+}
+
+Map<String, dynamic> _toolArgsFromInput(Object? nodeInput) {
+  if (nodeInput == null) {
+    return <String, dynamic>{};
+  }
+  if (nodeInput is Map) {
+    return <String, dynamic>{
+      for (final MapEntry<Object?, Object?> entry in nodeInput.entries)
+        '${entry.key}': entry.value,
+    };
+  }
+  throw ArgumentError.value(
+    nodeInput,
+    'nodeInput',
+    'ToolNode input must be a map of tool arguments or null.',
+  );
+}
+
+InvocationContext _standaloneInvocationContext(String nodeName) {
+  final InMemorySessionService sessionService = InMemorySessionService();
+  return InvocationContext(
+    sessionService: sessionService,
+    invocationId: 'workflow_${nodeName}_tool',
+    agent: LlmAgent(name: 'workflow_${nodeName}_tool_agent'),
+    session: Session(
+      id: 'workflow_${nodeName}_session',
+      appName: 'workflow',
+      userId: 'workflow',
+    ),
+  );
 }

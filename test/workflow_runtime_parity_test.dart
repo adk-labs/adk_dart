@@ -190,5 +190,51 @@ void main() {
         throwsA(isA<NodeTimeoutError>()),
       );
     });
+
+    test('runs function tools as workflow nodes', () async {
+      final FunctionTool firstTool = FunctionTool(
+        name: 'first_tool',
+        description: 'Returns structured tool output.',
+        func: () => <String, Object?>{'value': 'hello'},
+      );
+      final FunctionTool secondTool = FunctionTool(
+        name: 'second_tool',
+        description: 'Uses predecessor output as tool args.',
+        func: ({required String value}) => '$value world',
+      );
+      final Workflow workflow = Workflow(
+        name: 'tool_nodes',
+        nodes: <BaseNode>[
+          ToolNode(tool: firstTool),
+          ToolNode(tool: secondTool, dependsOn: const <String>['first_tool']),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['first_tool'], <String, Object?>{'value': 'hello'});
+      expect(result.outputs['second_tool'], 'hello world');
+      expect(result.nodeStates['second_tool']?.status, NodeStatus.succeeded);
+    });
+
+    test('rejects non-map input for tool nodes', () async {
+      final FunctionTool tool = FunctionTool(
+        name: 'needs_args',
+        description: 'Requires map args.',
+        func: ({required String value}) => value,
+      );
+      final Workflow workflow = Workflow(
+        name: 'tool_node_input',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? input) => 'not a map',
+            name: 'source',
+          ),
+          ToolNode(tool: tool, dependsOn: const <String>['source']),
+        ],
+      );
+
+      await expectLater(workflow.runWorkflow(), throwsA(isA<ArgumentError>()));
+    });
   });
 }
