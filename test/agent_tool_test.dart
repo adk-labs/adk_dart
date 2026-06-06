@@ -102,6 +102,22 @@ class _CodePartAgent extends BaseAgent {
   }
 }
 
+class _StateCaptureAgent extends BaseAgent {
+  _StateCaptureAgent() : super(name: 'state_child');
+
+  Map<String, Object?>? seenSessionState;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    seenSessionState = Map<String, Object?>.from(context.session.state);
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('ok'),
+    );
+  }
+}
+
 class _NamedTool extends BaseTool {
   _NamedTool(String name) : super(name: name, description: 'named tool');
 
@@ -175,6 +191,44 @@ void main() {
     expect('$result', contains('child:'));
     expect('$result', contains('ping'));
   });
+
+  test(
+    'AgentTool does not propagate temp state to child agent session',
+    () async {
+      final _StateCaptureAgent childAgent = _StateCaptureAgent();
+      final AgentTool tool = AgentTool(agent: childAgent);
+
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_agent_tool_temp_state',
+        agent: Agent(name: 'root_agent', model: _ChildModel()),
+        session: Session(
+          id: 's_agent_tool_temp_state',
+          appName: 'app',
+          userId: 'u1',
+          state: <String, Object?>{
+            'normalKey': 'parentValue',
+            'temp:transient': 'tempValue',
+          },
+        ),
+        artifactService: InMemoryArtifactService(),
+        memoryService: InMemoryMemoryService(),
+      );
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'request': 'hello'},
+        toolContext: Context(invocationContext),
+      );
+
+      expect(result, 'ok');
+      expect(childAgent.seenSessionState, isNotNull);
+      expect(
+        childAgent.seenSessionState,
+        containsPair('normalKey', 'parentValue'),
+      );
+      expect(childAgent.seenSessionState, isNot(contains('temp:transient')));
+    },
+  );
 
   test(
     'AgentTool uses child input schema and parses structured output',
