@@ -35,9 +35,44 @@ This is very important:
 
 1. If a skill seems relevant to the current user query, you MUST use the `load_skill` tool with `skill_name="<SKILL_NAME>"` to read its full instructions before proceeding.
 2. Once you have read the instructions, follow them exactly as documented before replying to the user. For example, If the instruction lists multiple steps, please make sure you complete all of them in order.
-3. The `load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). Do NOT use other tools to access these files.
+3. The `load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). It is ONLY for skill-bundled files — do NOT use it to access documents or files provided by the user at runtime. Do NOT use other tools to access skill files.
 4. Use `run_skill_script` to run scripts from a skill's `scripts/` directory. Use `load_skill_resource` to view script content first if needed.
+5. If `load_skill_resource` returns any error, do not retry any path. Report the error to the user and stop.
 """;
+
+String _buildSkillSystemInstruction(String? prefix) {
+  final String p = prefix == null || prefix.isEmpty ? '' : '${prefix}_';
+  if (p.isEmpty) {
+    return defaultSkillSystemInstruction;
+  }
+
+  return """You can use specialized 'skills' to help you with complex tasks. You MUST use the skill tools to interact with these skills.
+
+Skills are folders of instructions and resources that extend your capabilities for specialized tasks. Each skill folder contains:
+- **SKILL.md** (required): The main instruction file with skill metadata and detailed markdown instructions.
+- **references/** (Optional): Additional documentation or examples for skill usage.
+- **assets/** (Optional): Templates, scripts or other resources used by the skill.
+- **scripts/** (Optional): Executable scripts that can be run via bash.
+
+This is very important:
+
+1. If a skill seems relevant to the current user query, you MUST use the `${p}load_skill` tool with `skill_name="<SKILL_NAME>"` to read its full instructions before proceeding.
+2. Once you have read the instructions, follow them exactly as documented before replying to the user. For example, If the instruction lists multiple steps, please make sure you complete all of them in order.
+3. The `${p}load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). It is ONLY for skill-bundled files — do NOT use it to access documents or files provided by the user at runtime. Do NOT use other tools to access skill files.
+4. Use `${p}run_skill_script` to run scripts from a skill's `scripts/` directory. Use `${p}load_skill_resource` to view script content first if needed.
+5. If `${p}load_skill_resource` returns any error, do not retry any path. Report the error to the user and stop.
+""";
+}
+
+String? _detectSkillToolError(Object? response) {
+  if (response is Map && response['error'] != null) {
+    final Object? errorCode = response['error_code'];
+    return errorCode is String && errorCode.isNotEmpty
+        ? errorCode
+        : 'TOOL_ERROR';
+  }
+  return null;
+}
 
 class _ListSkillsTool extends BaseTool {
   _ListSkillsTool(this._toolset)
@@ -152,6 +187,11 @@ class _SearchSkillsTool extends BaseTool {
       };
     }
   }
+
+  @override
+  String? detectErrorInResponse(Object? response) {
+    return _detectSkillToolError(response);
+  }
 }
 
 class _LoadSkillTool extends BaseTool {
@@ -236,6 +276,11 @@ class _LoadSkillTool extends BaseTool {
       'instructions': skill.instructions,
       'frontmatter': skill.frontmatter.toMap(),
     };
+  }
+
+  @override
+  String? detectErrorInResponse(Object? response) {
+    return _detectSkillToolError(response);
   }
 }
 
@@ -337,6 +382,18 @@ class _LoadSkillResourceTool extends BaseTool {
     }
 
     if (content == null) {
+      final String counterKey =
+          'temp:_adk_skill_resource_not_found_count_${toolContext.invocationId}';
+      final Object? rawCount = toolContext.state[counterKey];
+      final int failCount = rawCount is num ? rawCount.toInt() + 1 : 1;
+      toolContext.state[counterKey] = failCount;
+      if (failCount > 1) {
+        return <String, Object?>{
+          'error':
+              "Resource '$resourcePath' not found in skill '$skillName'. This is resource lookup failure #$failCount this invocation. Do not retry any path — report the error to the user and stop.",
+          'error_code': 'RESOURCE_NOT_FOUND_FATAL',
+        };
+      }
       return <String, Object?>{
         'error': "Resource '$resourcePath' not found in skill '$skillName'.",
         'error_code': 'RESOURCE_NOT_FOUND',
@@ -437,6 +494,11 @@ class _LoadSkillResourceTool extends BaseTool {
         ),
       );
     }
+  }
+
+  @override
+  String? detectErrorInResponse(Object? response) {
+    return _detectSkillToolError(response);
   }
 }
 
@@ -867,6 +929,11 @@ class _RunSkillScriptTool extends BaseTool {
           : <Object?>[],
     );
   }
+
+  @override
+  String? detectErrorInResponse(Object? response) {
+    return _detectSkillToolError(response);
+  }
 }
 
 /// Toolset exposing skill-discovery, loading, and script-execution tools.
@@ -878,6 +945,8 @@ class SkillToolset extends BaseToolset {
     List<Object>? additionalTools,
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
+    super.toolNamePrefix,
+    super.toolFilter,
   }) : _registry = registry,
        _codeExecutor = codeExecutor,
        _scriptTimeout = scriptTimeout {
@@ -1066,7 +1135,9 @@ class SkillToolset extends BaseToolset {
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
-    final List<String> instructions = <String>[defaultSkillSystemInstruction];
+    final List<String> instructions = <String>[
+      _buildSkillSystemInstruction(toolNamePrefix),
+    ];
     final bool hasListSkills = _tools.any(
       (BaseTool tool) => tool is _ListSkillsTool,
     );
@@ -1074,9 +1145,12 @@ class SkillToolset extends BaseToolset {
       instructions.add(formatSkillsAsXml(_listSkills()));
     }
     if (_registry != null) {
+      final String p = toolNamePrefix == null || toolNamePrefix!.isEmpty
+          ? ''
+          : '${toolNamePrefix}_';
       instructions.add(
         '\nIf the locally available skills are not sufficient to complete your task, '
-        'you can use the `search_skills` tool to discover additional skills from the registry.',
+        'you can use the `${p}search_skills` tool to discover additional skills from the registry.',
       );
     }
     llmRequest.appendInstructions(instructions);

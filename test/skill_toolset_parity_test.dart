@@ -227,6 +227,40 @@ void main() {
       },
     );
 
+    test('supports tool filter and prefix-aware instructions', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        registry: _RecordingSkillRegistry(<Skill>[_skillWithAdditionalTool()]),
+        toolNamePrefix: 'skill',
+        toolFilter: <String>['load_skill', 'search_skills'],
+      );
+
+      final List<BaseTool> rawTools = await toolset.getTools();
+      expect(rawTools.map((BaseTool tool) => tool.name).toList(), <String>[
+        'load_skill',
+        'search_skills',
+      ]);
+
+      final List<BaseTool> prefixedTools = await toolset.getToolsWithPrefix();
+      expect(prefixedTools.map((BaseTool tool) => tool.name).toList(), <String>[
+        'skill_load_skill',
+        'skill_search_skills',
+      ]);
+
+      final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: request,
+      );
+
+      final String instruction = request.config.systemInstruction!;
+      expect(instruction, contains('`skill_load_skill`'));
+      expect(instruction, contains('`skill_load_skill` tool'));
+      expect(instruction, contains('`skill_search_skills`'));
+      expect(instruction, isNot(contains('`load_skill` tool')));
+      expect(instruction, contains('do not retry any path'));
+    });
+
     test('load_skill returns not found for missing local skill', () async {
       final SkillToolset toolset = SkillToolset(skills: <Skill>[]);
       final List<BaseTool> tools = await toolset.getTools();
@@ -565,6 +599,43 @@ void main() {
       expect(
         Map<String, Object?>.from(missingResource! as Map)['error_code'],
         'RESOURCE_NOT_FOUND',
+      );
+    });
+
+    test('load_skill_resource escalates repeated lookup misses', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+      );
+      final BaseTool resourceTool = (await toolset.getTools())[2];
+      final ToolContext toolContext = _newToolContext();
+
+      final Object? first = await resourceTool.run(
+        args: <String, dynamic>{
+          'skill_name': 'my-skill',
+          'file_path': 'references/missing.md',
+        },
+        toolContext: toolContext,
+      );
+      expect(
+        Map<String, Object?>.from(first! as Map)['error_code'],
+        'RESOURCE_NOT_FOUND',
+      );
+
+      final Object? second = await resourceTool.run(
+        args: <String, dynamic>{
+          'skill_name': 'my-skill',
+          'file_path': 'assets/also-missing.txt',
+        },
+        toolContext: toolContext,
+      );
+      final Map<String, Object?> payload = Map<String, Object?>.from(
+        second! as Map,
+      );
+      expect(payload['error_code'], 'RESOURCE_NOT_FOUND_FATAL');
+      expect('${payload['error']}', contains('Do not retry any path'));
+      expect(
+        resourceTool.detectErrorInResponse(payload),
+        'RESOURCE_NOT_FOUND_FATAL',
       );
     });
 
