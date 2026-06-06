@@ -2,4 +2,4 @@
 library;
 
 /// Semantic version string for this package release.
-const String adkVersion = '1.31.0';
+const String adkVersion = '2.2.0';

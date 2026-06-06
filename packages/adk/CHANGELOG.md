@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2026.6.6
+
+- Bumped package version to `2026.6.6`.
+- Updated dependency alignment to `adk_dart: ^2026.6.6`.
+- Synced facade release with `adk_dart` `2026.6.6`, including the `2.2.0` ADK baseline update, workflow parity expansion, event conversion fixes, telemetry/plugin updates, and latest runtime hardening.
+
 ## 2026.4.17
 
 - Bumped package version to `2026.4.17`.

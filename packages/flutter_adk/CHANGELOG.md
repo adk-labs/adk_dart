@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2026.6.6
+
+- Bumped package version to `2026.6.6`.
+- Updated dependency alignment to `adk_dart: ^2026.6.6`.
+- Synced facade release with `adk_dart` `2026.6.6`, including the `2.2.0` ADK baseline update and latest workflow/runtime parity work.
+- Refreshed the Flutter example surface with updated localized README content, latest example registry entries, local path overrides, service wiring updates, and plugin smoke-test coverage.
+
 ## 2026.4.17
 
 - Bumped package version to `2026.4.17`.

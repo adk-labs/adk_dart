@@ -270,7 +270,7 @@ class McpStdioClient {
   Future<Map<String, Object?>> getPrompt({
     required StdioConnectionParams connectionParams,
     required String name,
-    Map<String, Object?>? arguments,
+    Map<String, String>? arguments,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -295,6 +295,8 @@ class McpStdioClient {
     required StdioConnectionParams connectionParams,
     required String name,
     Map<String, Object?> arguments = const <String, Object?>{},
+    Map<String, Object?>? task,
+    Map<String, Object?>? meta,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -302,7 +304,7 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<Map<String, Object?>> getTask({
     required StdioConnectionParams connectionParams,
-    required String id,
+    required String taskId,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -310,7 +312,7 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<Map<String, Object?>> getTaskResult({
     required StdioConnectionParams connectionParams,
-    required String id,
+    required String taskId,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -318,8 +320,7 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<Map<String, Object?>> cancelTask({
     required StdioConnectionParams connectionParams,
-    required String id,
-    String? reason,
+    required String taskId,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -344,6 +345,7 @@ class McpStdioClient {
     required StdioConnectionParams connectionParams,
     required Object requestId,
     String? reason,
+    Map<String, Object?>? meta,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -351,10 +353,11 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<void> notifyProgress({
     required StdioConnectionParams connectionParams,
-    required Object requestId,
-    required Object progress,
-    Object? total,
+    required Object progressToken,
+    required num progress,
+    num? total,
     String? message,
+    Map<String, Object?>? meta,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -362,6 +365,7 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<void> notifyRootsListChanged({
     required StdioConnectionParams connectionParams,
+    Map<String, Object?>? meta,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }
@@ -369,9 +373,7 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<void> notifyTaskStatus({
     required StdioConnectionParams connectionParams,
-    required String taskId,
-    required String status,
-    Object? result,
+    required Map<String, Object?> status,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }

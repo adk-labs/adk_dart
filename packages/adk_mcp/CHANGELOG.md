@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 2026.6.6
+
+- Bumped package version to `2026.6.6`.
+- Synced MCP package release with the `adk_dart` `2026.6.6` rollout.
+- Aligned the non-IO stdio stub API with the IO implementation for task,
+  progress, metadata, and notification helpers.
+- Hardened stdio timeout cancellation coverage to avoid timing-dependent false
+  negatives.
+- ADK-facing MCP session cleanup and toolset handling updates landed in the main
+  `adk_dart` MCP integration layer.
+
 ## 2026.4.17
 
 - Bumped package version to `2026.4.17`.

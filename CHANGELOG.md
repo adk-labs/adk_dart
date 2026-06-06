@@ -1,5 +1,16 @@
 ## Unreleased
 
+## 2026.6.6
+
+- Bumped package release versions to `2026.6.6` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
+- Updated the exported ADK runtime baseline version to `2.2.0` to match the current local `adk-python` reference baseline.
+- Added broad workflow parity coverage, including workflow nodes, routed edges, dynamic run IDs, request-input helpers, retry/cancellation/concurrency handling, terminal-output ownership, replay/resume/rehydration, nested workflow events, graph serialization, and status-aware graph DOT output.
+- Expanded runtime event and conversion parity with structured events, node path building, A2A part metadata preservation, Event convenience routing, and output-key callback visibility coverage.
+- Added and exposed newer integration/tool surfaces, including GCP Skill Registry, BigQuery integration exports, environment tools, public skill tools, URL/load-web-page handling, Vertex RAG retrieval updates, and OpenAI labs adapter support.
+- Hardened model, streaming, and tool-call behavior across Gemini schemas, Anthropic/LiteLLM/Apigee paths, REST streaming function continuations, streaming tool-call preservation, and cooperative abort handling.
+- Added telemetry/plugin parity updates, including metrics instrumentation, auto tracing plugin support, BigQuery analytics hardening, and save-files-as-artifacts behavior updates.
+- Refreshed `flutter_adk` example and documentation surface and consolidated repository documentation under `docs/knowledge` and `docs/worklog`.
+
 ## 2026.4.17
 
 - Bumped package release versions to `2026.4.17` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.

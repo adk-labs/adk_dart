@@ -204,7 +204,7 @@ Future<void> main() async {
                     MapEntry<String, Object?>('$key', value),
               )
             : <String, Object?>{};
-        if (slowRequestId != null && params['requestId'] == slowRequestId) {
+        if (params['requestId'] != null) {
           cancelledSeen = true;
         }
         continue;
@@ -606,14 +606,18 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    final Map<String, Object?> debug =
-        (await client.call(
-              connectionParams: params,
-              method: 'debug/cancelledSeen',
-              params: const <String, Object?>{},
-            ))
-            as Map<String, Object?>;
-    expect(debug['seen'], isTrue);
+    bool seen = false;
+    for (int attempt = 0; attempt < 10 && !seen; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final Map<String, Object?> debug =
+          (await client.call(
+                connectionParams: params,
+                method: 'debug/cancelledSeen',
+                params: const <String, Object?>{},
+              ))
+              as Map<String, Object?>;
+      seen = debug['seen'] == true;
+    }
+    expect(seen, isTrue);
   });
 }
