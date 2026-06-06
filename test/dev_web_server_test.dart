@@ -1304,6 +1304,33 @@ void main() {
           rootAgent['graph'] as Map<String, dynamic>;
       expect(graph['nodes'], rootAgent['nodes']);
       expect(graph['edges'], expectedEdges);
+
+      final HttpClientRequest graphRequest = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/graph'),
+      );
+      final HttpClientResponse graphResponse = await graphRequest.close();
+      final Map<String, dynamic> graphPayload =
+          jsonDecode(await utf8.decoder.bind(graphResponse).join())
+              as Map<String, dynamic>;
+      expect(graphResponse.statusCode, HttpStatus.ok);
+      expect('${graphPayload['dot_src']}', contains('workflow_agent'));
+      expect('${graphPayload['dot_src']}', contains('start_node'));
+      expect('${graphPayload['dot_src']}', contains('label="next"'));
+
+      final HttpClientRequest graphImageRequest = await client.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/apps/test_app/build_graph_image',
+        ),
+      );
+      final HttpClientResponse graphImageResponse = await graphImageRequest
+          .close();
+      final Map<String, dynamic> graphImagePayload =
+          jsonDecode(await utf8.decoder.bind(graphImageResponse).join())
+              as Map<String, dynamic>;
+      final Map<String, dynamic> rootGraphImage =
+          graphImagePayload[''] as Map<String, dynamic>;
+      expect(graphImageResponse.statusCode, HttpStatus.ok);
+      expect('${rootGraphImage['dot_src']}', contains('workflow_agent'));
     });
 
     test('creates and lists eval sets via web routes', () async {

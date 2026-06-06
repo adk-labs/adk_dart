@@ -1253,6 +1253,18 @@ Future<bool> _handlePythonStyleRoutes(
     await _handleGetAppInfo(request, context, appName: appName);
     return true;
   }
+  if (segments.length == 3 &&
+      segments[2] == 'graph' &&
+      request.method == 'GET') {
+    await _handleGetAppGraph(request, context, appName: appName);
+    return true;
+  }
+  if (segments.length == 3 &&
+      segments[2] == 'build_graph_image' &&
+      request.method == 'GET') {
+    await _handleBuildGraphImage(request, context, appName: appName);
+    return true;
+  }
   if (await _handleEvalRoutes(request, context, segments, appName: appName)) {
     return true;
   }
@@ -1841,6 +1853,36 @@ Future<void> _handleGetEventGraph(
     request,
     context,
     payload: <String, Object?>{'dot_src': dotSrc},
+  );
+}
+
+Future<void> _handleGetAppGraph(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+}) async {
+  final Runner runner = await context.getRunner(appName);
+  final String dotSrc = await _buildAgentGraphDot(runner.agent);
+  await _writeJson(
+    request,
+    context,
+    payload: <String, Object?>{'dot_src': dotSrc},
+  );
+}
+
+Future<void> _handleBuildGraphImage(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+}) async {
+  final Runner runner = await context.getRunner(appName);
+  final String dotSrc = await _buildAgentGraphDot(runner.agent);
+  await _writeJson(
+    request,
+    context,
+    payload: <String, Object?>{
+      '': <String, Object?>{'dot_src': dotSrc},
+    },
   );
 }
 
