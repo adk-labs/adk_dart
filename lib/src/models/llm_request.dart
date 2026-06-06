@@ -461,6 +461,7 @@ class LiveConnectConfig {
     this.enableAffectiveDialog,
     this.proactivity,
     this.sessionResumption,
+    this.historyConfig,
     this.contextWindowCompression,
   });
 
@@ -497,6 +498,9 @@ class LiveConnectConfig {
   /// Provider session resumption configuration.
   Object? sessionResumption;
 
+  /// Provider live history exchange configuration.
+  Object? historyConfig;
+
   /// Provider context window compression configuration.
   Object? contextWindowCompression;
 
@@ -513,6 +517,7 @@ class LiveConnectConfig {
     Object? enableAffectiveDialog = _sentinel,
     Object? proactivity = _sentinel,
     Object? sessionResumption = _sentinel,
+    Object? historyConfig = _sentinel,
     Object? contextWindowCompression = _sentinel,
   }) {
     return LiveConnectConfig(
@@ -551,6 +556,9 @@ class LiveConnectConfig {
       sessionResumption: identical(sessionResumption, _sentinel)
           ? this.sessionResumption
           : sessionResumption,
+      historyConfig: identical(historyConfig, _sentinel)
+          ? this.historyConfig
+          : historyConfig,
       contextWindowCompression: identical(contextWindowCompression, _sentinel)
           ? this.contextWindowCompression
           : contextWindowCompression,

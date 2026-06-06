@@ -106,6 +106,7 @@ class BaseLlmFlow {
     try {
       while (true) {
         _applyLiveSessionResumptionHandle(context, request);
+        _applyLiveInitialHistoryConfig(context, request);
 
         final BaseLlmConnection connection = _connectLive(llm, request);
         final Completer<void> stopSending = Completer<void>();
@@ -613,6 +614,37 @@ class BaseLlmFlow {
     mutable['handle'] = handle;
     mutable['transparent'] = true;
     request.liveConnectConfig.sessionResumption = mutable;
+  }
+
+  void _applyLiveInitialHistoryConfig(
+    InvocationContext context,
+    LlmRequest request,
+  ) {
+    if (request.contents.isEmpty || _hasLiveSessionResumptionHandle(context)) {
+      return;
+    }
+
+    final Object? historyConfig =
+        request.liveConnectConfig.historyConfig ??
+        context.runConfig?.historyConfig;
+    if (historyConfig != null && historyConfig is! Map) {
+      return;
+    }
+
+    final Map<String, Object?> mutable = historyConfig is Map
+        ? historyConfig.map(
+            (Object? key, Object? value) =>
+                MapEntry<String, Object?>('$key', value),
+          )
+        : <String, Object?>{};
+    const List<String> initialHistoryKeys = <String>[
+      'initial_history_in_client_content',
+      'initialHistoryInClientContent',
+    ];
+    if (!initialHistoryKeys.any(mutable.containsKey)) {
+      mutable['initial_history_in_client_content'] = true;
+    }
+    request.liveConnectConfig.historyConfig = mutable;
   }
 
   InvocationContext _createLiveTransferContext(InvocationContext context) {

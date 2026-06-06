@@ -625,6 +625,83 @@ void main() {
       },
     );
 
+    test('BaseLlmFlow live mode marks seeded history in live config', () async {
+      final _FakeLiveConnection connection = _FakeLiveConnection();
+      final _LiveConnectModel model = _LiveConnectModel(connection: connection);
+      final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+      final InvocationContext context = _newInvocationContext(
+        agent: agent,
+        invocationId: 'inv_live_history_config',
+        events: <Event>[
+          Event(
+            invocationId: 'inv_live_history_config',
+            author: 'user',
+            content: Content.userText('history'),
+          ),
+        ],
+      );
+      context.liveRequestQueue = LiveRequestQueue();
+      connection.onReceiveSubscribed = () {
+        connection.emit(LlmResponse(content: Content.modelText('ok')));
+        Future<void>.microtask(() {
+          context.liveRequestQueue?.close();
+        });
+      };
+
+      await BaseLlmFlow().runLive(context).toList();
+
+      expect(connection.historySent, hasLength(1));
+      final Object? historyConfig =
+          model.connectedRequest!.liveConnectConfig.historyConfig;
+      expect(historyConfig, isA<Map>());
+      final Map<dynamic, dynamic> historyConfigMap =
+          historyConfig as Map<dynamic, dynamic>;
+      expect(historyConfigMap['initial_history_in_client_content'], isTrue);
+    });
+
+    test(
+      'BaseLlmFlow live mode respects explicit initial history false',
+      () async {
+        final _FakeLiveConnection connection = _FakeLiveConnection();
+        final _LiveConnectModel model = _LiveConnectModel(
+          connection: connection,
+        );
+        final LlmAgent agent = LlmAgent(name: 'agent', model: model);
+        final InvocationContext context = _newInvocationContext(
+          agent: agent,
+          invocationId: 'inv_live_history_config_false',
+          events: <Event>[
+            Event(
+              invocationId: 'inv_live_history_config_false',
+              author: 'user',
+              content: Content.userText('history'),
+            ),
+          ],
+        );
+        context.runConfig = RunConfig(
+          historyConfig: <String, Object?>{
+            'initial_history_in_client_content': false,
+          },
+        );
+        context.liveRequestQueue = LiveRequestQueue();
+        connection.onReceiveSubscribed = () {
+          connection.emit(LlmResponse(content: Content.modelText('ok')));
+          Future<void>.microtask(() {
+            context.liveRequestQueue?.close();
+          });
+        };
+
+        await BaseLlmFlow().runLive(context).toList();
+
+        final Object? historyConfig =
+            model.connectedRequest!.liveConnectConfig.historyConfig;
+        expect(historyConfig, isA<Map>());
+        final Map<dynamic, dynamic> historyConfigMap =
+            historyConfig as Map<dynamic, dynamic>;
+        expect(historyConfigMap['initial_history_in_client_content'], isFalse);
+      },
+    );
+
     test(
       'BaseLlmFlow live mode reconnects on goAway and skips resumed history',
       () async {

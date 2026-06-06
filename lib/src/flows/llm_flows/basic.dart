@@ -45,6 +45,7 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
       llmRequest.liveConnectConfig.proactivity = runConfig.proactivity;
       llmRequest.liveConnectConfig.sessionResumption =
           runConfig.sessionResumption;
+      llmRequest.liveConnectConfig.historyConfig = runConfig.historyConfig;
       llmRequest.liveConnectConfig.contextWindowCompression =
           runConfig.contextWindowCompression;
     }

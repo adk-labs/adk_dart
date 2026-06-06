@@ -418,6 +418,8 @@ ConformanceJson _serializeLiveConnectConfig(LiveConnectConfig config) {
       'session_resumption': normalizeConformanceJsonValue(
         config.sessionResumption,
       ),
+    if (config.historyConfig != null)
+      'history_config': normalizeConformanceJsonValue(config.historyConfig),
     if (config.contextWindowCompression != null)
       'context_window_compression': normalizeConformanceJsonValue(
         config.contextWindowCompression,

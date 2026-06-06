@@ -54,6 +54,7 @@ class RunConfig {
     this.enableAffectiveDialog,
     this.proactivity,
     this.sessionResumption,
+    this.historyConfig,
     this.contextWindowCompression,
     this.customMetadata,
     this.getSessionConfig,
@@ -103,6 +104,9 @@ class RunConfig {
   /// Optional session resumption configuration.
   Object? sessionResumption;
 
+  /// Optional live history exchange configuration.
+  Object? historyConfig;
+
   /// Optional context-window compression configuration.
   Object? contextWindowCompression;
 
@@ -148,6 +152,7 @@ class RunConfig {
     Object? enableAffectiveDialog = _sentinel,
     Object? proactivity = _sentinel,
     Object? sessionResumption = _sentinel,
+    Object? historyConfig = _sentinel,
     Object? contextWindowCompression = _sentinel,
     Map<String, dynamic>? customMetadata,
     Object? getSessionConfig = _sentinel,
@@ -191,6 +196,9 @@ class RunConfig {
       sessionResumption: identical(sessionResumption, _sentinel)
           ? this.sessionResumption
           : sessionResumption,
+      historyConfig: identical(historyConfig, _sentinel)
+          ? this.historyConfig
+          : historyConfig,
       contextWindowCompression: identical(contextWindowCompression, _sentinel)
           ? this.contextWindowCompression
           : contextWindowCompression,

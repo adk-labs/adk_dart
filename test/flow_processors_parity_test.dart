@@ -709,6 +709,9 @@ void main() {
           enableAffectiveDialog: true,
           proactivity: <String, Object?>{'mode': 'auto'},
           sessionResumption: <String, Object?>{'enabled': true},
+          historyConfig: <String, Object?>{
+            'initial_history_in_client_content': false,
+          },
           contextWindowCompression: <String, Object?>{'enabled': true},
         ),
       ),
@@ -723,6 +726,7 @@ void main() {
     expect(request.liveConnectConfig.enableAffectiveDialog, isTrue);
     expect(request.liveConnectConfig.proactivity, isNotNull);
     expect(request.liveConnectConfig.sessionResumption, isNotNull);
+    expect(request.liveConnectConfig.historyConfig, isNotNull);
     expect(request.liveConnectConfig.contextWindowCompression, isNotNull);
   });
 
