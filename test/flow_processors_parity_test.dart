@@ -602,6 +602,83 @@ void main() {
     );
   });
 
+  test(
+    'contents processor isolates task scope and rebuilds task input',
+    () async {
+      final Agent taskAgent = Agent(
+        name: 'task_agent',
+        model: _NoopModel(),
+        mode: 'single_turn',
+      );
+      final Session session = Session(
+        id: 's_task_scope',
+        appName: 'app',
+        userId: 'u1',
+        events: <Event>[
+          Event(
+            invocationId: 'inv_scope',
+            author: 'coordinator',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'task_agent',
+                  id: 'task_call_1',
+                  args: <String, dynamic>{'request': 'write a concise report'},
+                ),
+              ],
+            ),
+          ),
+          Event(
+            invocationId: 'inv_scope',
+            author: 'coordinator',
+            content: Content.modelText('unscoped coordinator reply'),
+          ),
+          Event(
+            invocationId: 'inv_scope',
+            author: 'task_agent',
+            isolationScope: 'task_call_1',
+            content: Content.modelText('scoped task progress'),
+          ),
+          Event(
+            invocationId: 'inv_scope',
+            author: 'task_agent',
+            isolationScope: 'other_task_call',
+            content: Content.modelText('other task progress'),
+          ),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_scope',
+        isolationScope: 'task_call_1',
+        agent: taskAgent,
+        session: session,
+      );
+      final LlmRequest request = LlmRequest();
+
+      await ContentsLlmRequestProcessor().runAsync(context, request).drain();
+
+      expect(request.contents, hasLength(2));
+      expect(request.contents.first.role, 'user');
+      final Map<String, Object?> taskInput =
+          jsonDecode(request.contents.first.parts.first.text!)
+              as Map<String, Object?>;
+      expect(taskInput['request'], 'write a concise report');
+      expect(
+        request.contents.first.parts[1].text,
+        contains('You will not receive any user replies'),
+      );
+      final String mergedText = request.contents
+          .expand((Content content) => content.parts)
+          .map((Part part) => part.text ?? '')
+          .join('\n');
+      expect(mergedText, contains('scoped task progress'));
+      expect(mergedText, isNot(contains('unscoped coordinator reply')));
+      expect(mergedText, isNot(contains('other task progress')));
+    },
+  );
+
   test('basic processor mirrors runConfig into liveConnectConfig', () async {
     final _CaptureModel model = _CaptureModel();
     final Agent agent = Agent(

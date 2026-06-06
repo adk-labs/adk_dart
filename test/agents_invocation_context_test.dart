@@ -188,5 +188,22 @@ void main() {
 
       expect(identical(copied.pluginManager, manager), isTrue);
     });
+
+    test('copyWith preserves and overrides isolationScope', () {
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_1',
+        isolationScope: 'scope_1',
+        agent: _NoopAgent(name: 'root'),
+        session: Session(id: 's1', appName: 'app', userId: 'u1'),
+      );
+
+      expect(context.copyWith().isolationScope, 'scope_1');
+      expect(
+        context.copyWith(isolationScope: 'scope_2').isolationScope,
+        'scope_2',
+      );
+      expect(context.copyWith(isolationScope: null).isolationScope, isNull);
+    });
   });
 }

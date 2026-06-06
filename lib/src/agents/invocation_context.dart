@@ -18,6 +18,8 @@ import 'base_agent.dart';
 import 'live_request_queue.dart';
 import 'run_config.dart';
 
+const Object _sentinel = Object();
+
 /// Error thrown when LLM call count exceeds the configured limit.
 class LlmCallsLimitExceededError implements Exception {
   /// Creates an LLM call-limit error with [message].
@@ -41,6 +43,7 @@ class InvocationContext {
     this.contextCacheConfig,
     required this.invocationId,
     this.branch,
+    this.isolationScope,
     required this.agent,
     this.userContent,
     required this.session,
@@ -87,6 +90,12 @@ class InvocationContext {
 
   /// Branch identifier for branched execution, if any.
   String? branch;
+
+  /// Internal logical scope tag for filtering task-agent conversation views.
+  ///
+  /// This mirrors Python ADK's isolation scope: when set, LLM content builders
+  /// include only session events whose [Event.isolationScope] matches exactly.
+  String? isolationScope;
 
   /// Active agent for this invocation.
   BaseAgent agent;
@@ -497,6 +506,7 @@ class InvocationContext {
   InvocationContext copyWith({
     BaseAgent? agent,
     String? branch,
+    Object? isolationScope = _sentinel,
     Content? userContent,
     String? invocationId,
     RunConfig? runConfig,
@@ -509,6 +519,9 @@ class InvocationContext {
       contextCacheConfig: contextCacheConfig,
       invocationId: invocationId ?? this.invocationId,
       branch: branch ?? this.branch,
+      isolationScope: identical(isolationScope, _sentinel)
+          ? this.isolationScope
+          : isolationScope as String?,
       agent: agent ?? this.agent,
       userContent: userContent ?? this.userContent?.copyWith(),
       session: session,

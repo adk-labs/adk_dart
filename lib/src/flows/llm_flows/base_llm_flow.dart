@@ -845,7 +845,9 @@ class BaseLlmFlow {
         _ => context.getEvents(currentBranch: true),
       };
 
-      for (final Event event in sourceEvents) {
+      for (final Event event in sourceEvents.where(
+        (Event event) => event.isolationScope == context.isolationScope,
+      )) {
         final Content? content = event.content;
         if (content != null) {
           request.contents.add(content.copyWith());

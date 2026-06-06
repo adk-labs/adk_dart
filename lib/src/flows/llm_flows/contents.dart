@@ -1,6 +1,8 @@
 /// LLM flow pipeline components and processors.
 library;
 
+import 'dart:convert';
+
 import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../events/event.dart';
@@ -30,6 +32,9 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         events: invocationContext.session.events,
         agentName: agent.name,
         preserveFunctionCallIds: preserveFunctionCallIds,
+        isolationScope: invocationContext.isolationScope,
+        isSingleTurn: agent.mode == 'single_turn',
+        userContent: invocationContext.userContent,
       );
     } else if (agent.includeContents == 'none' ||
         agent.includeContents == 'current_turn') {
@@ -38,6 +43,9 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         events: invocationContext.session.events,
         agentName: agent.name,
         preserveFunctionCallIds: preserveFunctionCallIds,
+        isolationScope: invocationContext.isolationScope,
+        isSingleTurn: agent.mode == 'single_turn',
+        userContent: invocationContext.userContent,
       );
     }
 
@@ -51,10 +59,19 @@ List<Content> getContents({
   required List<Event> events,
   String agentName = '',
   bool preserveFunctionCallIds = false,
+  String? isolationScope,
+  bool isSingleTurn = false,
+  Content? userContent,
 }) {
   final List<Event> rewindFiltered = _filterRewoundEvents(events);
   final List<Event> rawFiltered = rewindFiltered
-      .where((Event event) => shouldIncludeEventInContext(currentBranch, event))
+      .where(
+        (Event event) => shouldIncludeEventInContext(
+          currentBranch,
+          event,
+          isolationScope: isolationScope,
+        ),
+      )
       .toList(growable: false);
 
   final List<Event> eventsToProcess = _hasCompactionEvents(rawFiltered)
@@ -84,6 +101,16 @@ List<Content> getContents({
     }
     contents.add(content);
   }
+
+  final Content? leading = buildTaskInputUserContent(
+    events: events,
+    isolationScope: isolationScope,
+    isSingleTurn: isSingleTurn,
+    userContent: userContent,
+  );
+  if (leading != null) {
+    contents.insert(0, leading);
+  }
   return contents;
 }
 
@@ -93,16 +120,26 @@ List<Content> getCurrentTurnContents({
   required List<Event> events,
   String agentName = '',
   bool preserveFunctionCallIds = false,
+  String? isolationScope,
+  bool isSingleTurn = false,
+  Content? userContent,
 }) {
   for (int i = events.length - 1; i >= 0; i -= 1) {
     final Event event = events[i];
-    if (shouldIncludeEventInContext(currentBranch, event) &&
+    if (shouldIncludeEventInContext(
+          currentBranch,
+          event,
+          isolationScope: isolationScope,
+        ) &&
         (event.author == 'user' || _isOtherAgentReply(agentName, event))) {
       return getContents(
         currentBranch: currentBranch,
         events: events.sublist(i),
         agentName: agentName,
         preserveFunctionCallIds: preserveFunctionCallIds,
+        isolationScope: isolationScope,
+        isSingleTurn: isSingleTurn,
+        userContent: userContent,
       );
     }
   }
@@ -139,13 +176,71 @@ void addInstructionsToUserContent(
 }
 
 /// Whether [event] should be included in model context.
-bool shouldIncludeEventInContext(String? currentBranch, Event event) {
-  return !containsEmptyContent(event) &&
+bool shouldIncludeEventInContext(
+  String? currentBranch,
+  Event event, {
+  String? isolationScope,
+}) {
+  return event.isolationScope == isolationScope &&
+      !containsEmptyContent(event) &&
       isEventBelongsToBranch(currentBranch, event) &&
       !_isAdkFrameworkEvent(event) &&
       !_isAuthEvent(event) &&
       !_isRequestConfirmationEvent(event) &&
       !_isRequestInputEvent(event);
+}
+
+/// Rebuilds a scoped task's originating function-call arguments as user text.
+Content? buildTaskInputUserContent({
+  required List<Event> events,
+  required String? isolationScope,
+  bool isSingleTurn = false,
+  Content? userContent,
+}) {
+  if (isolationScope == null) {
+    return null;
+  }
+
+  for (final Event event in events) {
+    final Content? content = event.content;
+    if (content == null || content.parts.isEmpty) {
+      continue;
+    }
+    for (final Part part in content.parts) {
+      final FunctionCall? call = part.functionCall;
+      if (call == null || call.id != isolationScope || call.args.isEmpty) {
+        continue;
+      }
+      final List<Part> parts = <Part>[Part.text(_taskArgsText(call.args))];
+      if (isSingleTurn) {
+        parts.add(Part.text(_singleTurnNudge));
+      }
+      return Content(role: 'user', parts: parts);
+    }
+  }
+
+  if (userContent != null && userContent.parts.isNotEmpty) {
+    final List<Part> parts = userContent.parts
+        .map((Part part) => part.copyWith())
+        .toList();
+    if (isSingleTurn) {
+      parts.add(Part.text(_singleTurnNudge));
+    }
+    return Content(role: 'user', parts: parts);
+  }
+  return null;
+}
+
+const String _singleTurnNudge =
+    'Important: You will not receive any user replies or clarifications. '
+    'Complete the task using only the information provided above.';
+
+String _taskArgsText(Map<String, dynamic> args) {
+  try {
+    return jsonEncode(args);
+  } catch (_) {
+    return '$args';
+  }
 }
 
 /// Whether [event] contains no visible content for model context.
@@ -235,6 +330,7 @@ List<Event> _processCompactionEvents(List<Event> events) {
         invocationId: event.invocationId,
         author: 'model',
         branch: event.branch,
+        isolationScope: event.isolationScope,
         content: compaction.compactedContent.copyWith(),
         actions: event.actions.copyWith(),
       ),
@@ -355,6 +451,7 @@ Event? _presentOtherAgentMessage(Event event) {
     invocationId: event.invocationId,
     author: 'user',
     branch: event.branch,
+    isolationScope: event.isolationScope,
     content: content,
   );
 }
