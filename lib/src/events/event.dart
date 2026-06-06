@@ -16,6 +16,10 @@ class Event extends LlmResponse {
     required this.author,
     EventActions? actions,
     NodeInfo? nodeInfo,
+    Content? message,
+    Map<String, Object?>? state,
+    Object? route,
+    String? nodePath,
     Object? output = _sentinel,
     this.longRunningToolIds,
     this.branch,
@@ -48,7 +52,25 @@ class Event extends LlmResponse {
        output = identical(output, _sentinel) ? null : output,
        hasOutput = !identical(output, _sentinel),
        id = id ?? Event.newId(),
-       timestamp = timestamp ?? getTime();
+       timestamp = timestamp ?? getTime() {
+    if (message != null) {
+      if (content != null) {
+        throw ArgumentError(
+          "'message' and 'content' are mutually exclusive. Use one or the other.",
+        );
+      }
+      content = message;
+    }
+    if (state != null) {
+      this.actions.stateDelta = Map<String, Object?>.from(state);
+    }
+    if (route != null) {
+      this.actions.route = route;
+    }
+    if (nodePath != null) {
+      this.nodeInfo.path = nodePath;
+    }
+  }
 
   /// Invocation ID that produced this event.
   String invocationId;
@@ -82,6 +104,13 @@ class Event extends LlmResponse {
 
   /// Event timestamp in seconds since epoch.
   double timestamp;
+
+  /// Alias for [content], matching Python's `Event.message` convenience field.
+  Content? get message => content;
+
+  set message(Content? value) {
+    content = value;
+  }
 
   /// Whether this event should be treated as a final user-visible response.
   bool isFinalResponse() {

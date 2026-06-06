@@ -55,6 +55,38 @@ void main() {
       expect(event.copyWith(isolationScope: null).isolationScope, isNull);
     });
 
+    test('convenience fields route to content, actions, and nodeInfo', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        message: Content.modelText('hello'),
+        state: <String, Object?>{'counter': 1},
+        route: <Object>['approved', true],
+        nodePath: 'workflow@1/node@2',
+      );
+
+      expect(event.message?.parts.single.text, 'hello');
+      expect(event.content?.parts.single.text, 'hello');
+      expect(event.actions.stateDelta, <String, Object?>{'counter': 1});
+      expect(event.actions.route, <Object>['approved', true]);
+      expect(event.nodeInfo.path, 'workflow@1/node@2');
+
+      event.message = Content.modelText('updated');
+      expect(event.content?.parts.single.text, 'updated');
+    });
+
+    test('convenience message rejects simultaneous content', () {
+      expect(
+        () => Event(
+          invocationId: 'inv_1',
+          author: 'agent',
+          content: Content.modelText('content'),
+          message: Content.modelText('message'),
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('storage event data round-trips isolationScope', () {
       final Event event = Event(
         invocationId: 'inv_1',
