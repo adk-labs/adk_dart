@@ -233,7 +233,32 @@ class WorkflowContext {
       retryConfig: retryConfig,
       timeout: timeout,
     );
-    final WorkflowContext childContext = _childExecutionContext();
+    final NodeState? state = nodeStates[node.name];
+    if (state != null) {
+      if (_isCompletedNodeState(state) && outputs.containsKey(node.name)) {
+        return outputs[node.name];
+      }
+      _seedNodeResumeInputs(state, resumeInputs);
+      if (_hasUnresolvedWaitingInterrupts(state)) {
+        interruptIds.addAll(state.interrupts);
+        return outputs[node.name];
+      }
+      if (state.status == NodeStatus.waiting &&
+          state.resumeInputs.isNotEmpty &&
+          !node.rerunOnResume) {
+        final Object? output = _outputFromResumeInputs(state.resumeInputs);
+        outputs[node.name] = output;
+        state.status = NodeStatus.completed;
+        state.interrupts.clear();
+        state.resumeInputs.clear();
+        return output;
+      }
+    }
+    final WorkflowContext childContext = _childExecutionContext(
+      resumeInputs: state?.resumeInputs.isNotEmpty == true
+          ? Map<String, Object?>.from(state!.resumeInputs)
+          : const <String, Object?>{},
+    );
     final Object? rawOutput = await _runNodeWithRetry(
       context: childContext,
       node: node,
@@ -707,16 +732,9 @@ class Workflow extends BaseAgent {
       if (state.status != NodeStatus.waiting || state.interrupts.isEmpty) {
         continue;
       }
-      final Map<String, Object?> resolved = <String, Object?>{
-        for (final String interruptId in state.interrupts)
-          if (context.resumeInputs.containsKey(interruptId))
-            interruptId: context.resumeInputs[interruptId],
-      };
-      if (resolved.isEmpty) {
+      if (!_seedNodeResumeInputs(state, context.resumeInputs)) {
         continue;
       }
-      state.resumeInputs.addAll(resolved);
-      state.interrupts.removeWhere(resolved.containsKey);
       if (state.interrupts.isEmpty && !node.rerunOnResume) {
         context.outputs[entry.key] = _outputFromResumeInputs(
           state.resumeInputs,
@@ -1011,6 +1029,25 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
     state.interrupts.clear();
     state.resumeInputs.clear();
   }
+  return true;
+}
+
+bool _seedNodeResumeInputs(NodeState state, Map<String, Object?> resumeInputs) {
+  if (state.status != NodeStatus.waiting ||
+      state.interrupts.isEmpty ||
+      resumeInputs.isEmpty) {
+    return false;
+  }
+  final Map<String, Object?> resolved = <String, Object?>{
+    for (final String interruptId in state.interrupts)
+      if (resumeInputs.containsKey(interruptId))
+        interruptId: resumeInputs[interruptId],
+  };
+  if (resolved.isEmpty) {
+    return false;
+  }
+  state.resumeInputs.addAll(resolved);
+  state.interrupts.removeWhere(resolved.containsKey);
   return true;
 }
 

@@ -649,6 +649,130 @@ void main() {
       expect(result.outputs['dynamic_ask_user'], isA<RequestInput>());
     });
 
+    test('deduplicates completed dynamic nodes when parent resumes', () async {
+      int parentRuns = 0;
+      int completerRuns = 0;
+      int interrupterRuns = 0;
+      final FunctionNode completer = node((WorkflowContext _, Object? _) {
+        completerRuns += 1;
+        return 'completed_result';
+      }, name: 'dynamic_completer');
+      final FunctionNode interrupter = node(
+        (WorkflowContext context, Object? _) {
+          interrupterRuns += 1;
+          final Object? resumeInput = context.resumeInputs['dyn_fc'];
+          if (resumeInput != null) {
+            final Map<dynamic, dynamic> response =
+                resumeInput as Map<dynamic, dynamic>;
+            return 'resumed:${response['value']}';
+          }
+          return RequestInput(interruptId: 'dyn_fc', message: 'Approve?');
+        },
+        name: 'dynamic_interrupter',
+        rerunOnResume: true,
+      );
+      final Workflow workflow = Workflow(
+        name: 'dynamic_resume_graph',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext context, Object? _) async {
+              parentRuns += 1;
+              final Object? completed = await context.runNode(completer);
+              final Object? interrupted = await context.runNode(interrupter);
+              if (interrupted is RequestInput) {
+                return interrupted;
+              }
+              return '$completed + $interrupted';
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
+        ],
+      );
+
+      final WorkflowResult first = await workflow.runWorkflow();
+      expect(first.nodeStates['parent']?.status, NodeStatus.waiting);
+      expect(
+        first.nodeStates['dynamic_completer']?.status,
+        NodeStatus.completed,
+      );
+      expect(
+        first.nodeStates['dynamic_interrupter']?.status,
+        NodeStatus.waiting,
+      );
+
+      final WorkflowResult second = await workflow.runWorkflow(
+        previousResult: first,
+        resumeInputs: <String, Object?>{
+          'dyn_fc': <String, Object?>{'value': 'done'},
+        },
+      );
+
+      expect(parentRuns, 2);
+      expect(completerRuns, 1);
+      expect(interrupterRuns, 2);
+      expect(second.outputs['parent'], 'completed_result + resumed:done');
+      expect(
+        second.nodeStates['dynamic_interrupter']?.status,
+        NodeStatus.completed,
+      );
+    });
+
+    test(
+      'uses dynamic resume response output when child does not rerun',
+      () async {
+        int parentRuns = 0;
+        int childRuns = 0;
+        final FunctionNode child = node((WorkflowContext _, Object? _) {
+          childRuns += 1;
+          return RequestInput(interruptId: 'dyn_default', message: 'Continue?');
+        }, name: 'dynamic_default_child');
+        final Workflow workflow = Workflow(
+          name: 'dynamic_no_rerun_graph',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext context, Object? _) async {
+                parentRuns += 1;
+                final Object? childOutput = await context.runNode(child);
+                if (childOutput is RequestInput) {
+                  return childOutput;
+                }
+                final Map<dynamic, dynamic> response =
+                    childOutput! as Map<dynamic, dynamic>;
+                return 'continued:${response['ok']}';
+              },
+              name: 'parent',
+              rerunOnResume: true,
+            ),
+          ],
+        );
+
+        final WorkflowResult first = await workflow.runWorkflow();
+        expect(
+          first.nodeStates['dynamic_default_child']?.status,
+          NodeStatus.waiting,
+        );
+
+        final WorkflowResult second = await workflow.runWorkflow(
+          previousResult: first,
+          resumeInputs: <String, Object?>{
+            'dyn_default': <String, Object?>{'ok': true},
+          },
+        );
+
+        expect(parentRuns, 2);
+        expect(childRuns, 1);
+        expect(second.outputs['dynamic_default_child'], <String, Object?>{
+          'ok': true,
+        });
+        expect(second.outputs['parent'], 'continued:true');
+        expect(
+          second.nodeStates['dynamic_default_child']?.status,
+          NodeStatus.completed,
+        );
+      },
+    );
+
     test('retries failed nodes', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(
