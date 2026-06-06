@@ -15,6 +15,7 @@ import '../types/content.dart';
 import '../utils/vertex_ai_utils.dart';
 import 'base_session_service.dart';
 import 'session.dart';
+import 'session_util.dart';
 
 /// API client interface for Vertex AI session operations.
 abstract class VertexAiSessionApiClient {
@@ -534,8 +535,9 @@ class VertexAiSessionService extends BaseSessionService {
 
     final String reasoningEngineId = _getReasoningEngineId(appName);
     final VertexAiSessionApiClient apiClient = _getApiClient();
+    final Map<String, Object?> filteredState = trimTempState(state);
     final Map<String, Object?> config = <String, Object?>{
-      if (state != null && state.isNotEmpty) 'session_state': state,
+      if (filteredState.isNotEmpty) 'session_state': filteredState,
     };
 
     final Map<String, Object?>? created = await apiClient.createSession(

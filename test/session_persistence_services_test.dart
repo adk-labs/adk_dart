@@ -1565,7 +1565,17 @@ CREATE TABLE events (
         final Session session = await service.createSession(
           appName: 'projects/p/locations/us-central1/reasoningEngines/123',
           userId: 'u1',
-          state: <String, Object?>{'x': 1},
+          state: <String, Object?>{
+            'x': 1,
+            '${State.userPrefix}plan': 'pro',
+            '${State.tempPrefix}initial': 'tmp',
+          },
+        );
+        expect(session.state['x'], 1);
+        expect(session.state['${State.userPrefix}plan'], 'pro');
+        expect(
+          session.state.containsKey('${State.tempPrefix}initial'),
+          isFalse,
         );
         final Session? loaded = await service.getSession(
           appName: 'projects/p/locations/us-central1/reasoningEngines/123',
@@ -1574,6 +1584,8 @@ CREATE TABLE events (
         );
         expect(loaded, isNotNull);
         expect(loaded!.state['x'], 1);
+        expect(loaded.state['${State.userPrefix}plan'], 'pro');
+        expect(loaded.state.containsKey('${State.tempPrefix}initial'), isFalse);
 
         await service.appendEvent(
           session: loaded,

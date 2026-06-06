@@ -64,3 +64,14 @@ SessionStateDelta extractStateDelta(Map<String, Object?>? state) {
 
   return SessionStateDelta(app: app, user: user, session: session);
 }
+
+/// Returns [state] without transient `temp:` entries.
+Map<String, Object?> trimTempState(Map<String, Object?>? state) {
+  if (state == null || state.isEmpty) {
+    return <String, Object?>{};
+  }
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in state.entries)
+      if (!entry.key.startsWith(State.tempPrefix)) entry.key: entry.value,
+  };
+}
