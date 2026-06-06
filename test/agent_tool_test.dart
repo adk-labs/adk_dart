@@ -45,6 +45,44 @@ class _JsonChildModel extends BaseLlm {
   }
 }
 
+class _FinishTaskModel extends BaseLlm {
+  _FinishTaskModel({Map<String, dynamic>? finishArgs})
+    : finishArgs = finishArgs ?? <String, dynamic>{'result': 'task done'},
+      super(model: 'finish-task-model');
+
+  final Map<String, dynamic> finishArgs;
+  final List<String> seenUserPrompts = <String>[];
+  int calls = 0;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    calls += 1;
+    seenUserPrompts.add(
+      request.contents
+          .where((Content content) => content.role == 'user')
+          .expand((Content content) => content.parts)
+          .where((Part part) => part.text != null)
+          .map((Part part) => part.text!)
+          .join('\n'),
+    );
+    yield LlmResponse(
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part.fromFunctionCall(
+            name: finishTaskToolName,
+            id: 'finish_call_$calls',
+            args: finishArgs,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CodePartAgent extends BaseAgent {
   _CodePartAgent() : super(name: 'code_child');
 
@@ -270,10 +308,6 @@ void main() {
           'Detailed instructions or context for the task sub-agent.',
         ),
       );
-      expect(
-        await tool.run(args: <String, dynamic>{}, toolContext: _toolContext()),
-        isNull,
-      );
     });
 
     test('task wrapper uses child input schema when provided', () async {
@@ -356,11 +390,195 @@ void main() {
       expect(clonedTool.agent, same(cloned.subAgents.single));
       expect(clonedTool.agent, isNot(same(childAgent)));
     });
-  });
-}
 
-ToolContext _toolContext() {
-  return Context(_invocationContext());
+    test('single-turn wrapper runs child in parent session branch', () async {
+      final Agent childAgent = Agent(
+        name: 'single_turn_child',
+        model: _ChildModel(),
+        mode: 'single_turn',
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+      final InMemorySessionService sessionService = InMemorySessionService();
+      final Session session = await sessionService.createSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's_single_turn',
+      );
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: sessionService,
+        invocationId: 'inv_single_turn',
+        agent: rootAgent,
+        session: session,
+        artifactService: InMemoryArtifactService(),
+        memoryService: InMemoryMemoryService(),
+      );
+      final SingleTurnAgentTool tool = SingleTurnAgentTool(agent: childAgent);
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'request': 'handle this once'},
+        toolContext: Context(invocationContext),
+      );
+
+      expect('$result', contains('handle this once'));
+      expect(
+        session.events.any(
+          (Event event) =>
+              event.author == 'user' &&
+              event.branch == 'root_agent.single_turn_child',
+        ),
+        isTrue,
+      );
+      expect(
+        session.events.any(
+          (Event event) =>
+              event.author == 'single_turn_child' &&
+              event.branch == 'root_agent.single_turn_child',
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'task wrapper runs child in isolation scope and returns output',
+      () async {
+        final _FinishTaskModel taskModel = _FinishTaskModel();
+        final Agent childAgent = Agent(
+          name: 'task_child',
+          model: taskModel,
+          mode: 'task',
+        );
+        final Agent rootAgent = Agent(
+          name: 'root_agent',
+          model: _ChildModel(),
+          subAgents: <BaseAgent>[childAgent],
+        );
+        final InMemorySessionService sessionService = InMemorySessionService();
+        final Session session = await sessionService.createSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: 's_task_tool',
+        );
+        final InvocationContext invocationContext = InvocationContext(
+          sessionService: sessionService,
+          invocationId: 'inv_task_tool',
+          agent: rootAgent,
+          session: session,
+          artifactService: InMemoryArtifactService(),
+          memoryService: InMemoryMemoryService(),
+        );
+        await sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: invocationContext.invocationId,
+            author: rootAgent.name,
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: childAgent.name,
+                  id: 'task_call_1',
+                  args: <String, dynamic>{'request': 'ship it'},
+                ),
+              ],
+            ),
+          ),
+        );
+        final TaskAgentTool tool = TaskAgentTool(agent: childAgent);
+
+        final Object? result = await tool.run(
+          args: <String, dynamic>{'request': 'ship it'},
+          toolContext: Context(
+            invocationContext,
+            functionCallId: 'task_call_1',
+          ),
+        );
+
+        expect(result, <String, dynamic>{'result': 'task done'});
+        expect(taskModel.seenUserPrompts.single, contains('ship it'));
+        final List<Event> childEvents = session.events
+            .where((Event event) => event.author == childAgent.name)
+            .toList();
+        expect(childEvents, isNotEmpty);
+        expect(
+          childEvents.every(
+            (Event event) => event.isolationScope == 'task_call_1',
+          ),
+          isTrue,
+        );
+        expect(
+          session.events.any(
+            (Event event) => event.getFunctionResponses().any(
+              (FunctionResponse response) => response.name == 'finish_task',
+            ),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('task wrapper unwraps primitive finish_task output', () async {
+      final _FinishTaskModel taskModel = _FinishTaskModel(
+        finishArgs: <String, dynamic>{'result': 'primitive done'},
+      );
+      final Agent childAgent = Agent(
+        name: 'primitive_task_child',
+        model: taskModel,
+        mode: 'task',
+        outputSchema: String,
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+      final InMemorySessionService sessionService = InMemorySessionService();
+      final Session session = await sessionService.createSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's_primitive_task_tool',
+      );
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: sessionService,
+        invocationId: 'inv_primitive_task_tool',
+        agent: rootAgent,
+        session: session,
+        artifactService: InMemoryArtifactService(),
+        memoryService: InMemoryMemoryService(),
+      );
+      await sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: invocationContext.invocationId,
+          author: rootAgent.name,
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.fromFunctionCall(
+                name: childAgent.name,
+                id: 'task_call_primitive',
+                args: <String, dynamic>{'request': 'finish primitive'},
+              ),
+            ],
+          ),
+        ),
+      );
+      final TaskAgentTool tool = TaskAgentTool(agent: childAgent);
+
+      final Object? result = await tool.run(
+        args: <String, dynamic>{'request': 'finish primitive'},
+        toolContext: Context(
+          invocationContext,
+          functionCallId: 'task_call_primitive',
+        ),
+      );
+
+      expect(result, 'primitive done');
+    });
+  });
 }
 
 InvocationContext _invocationContext() {

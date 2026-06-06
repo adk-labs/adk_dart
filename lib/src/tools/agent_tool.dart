@@ -4,9 +4,13 @@ library;
 import 'dart:convert';
 
 import '../agents/base_agent.dart';
+import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../events/event.dart';
+import '../flows/llm_flows/persist_barrier.dart';
+import '../agents/llm/task/finish_task_tool.dart';
 import '../models/llm_request.dart';
+import '../plugins/plugin_manager.dart';
 import '../runners/runner.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../types/content.dart';
@@ -201,6 +205,35 @@ class SingleTurnAgentTool extends AgentTool {
     super.includePlugins,
     super.propagateGroundingMetadata,
   });
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    if (skipSummarization) {
+      toolContext.actions.skipSummarization = true;
+    }
+
+    final _InlineAgentRunResult result = await _runAgentInCurrentSession(
+      agent: agent,
+      args: args,
+      toolContext: toolContext,
+      branch: _childBranch(toolContext.invocationContext, agent),
+      appendUserContent: true,
+      includePlugins: includePlugins,
+    );
+    _propagateRunResult(
+      result,
+      toolContext,
+      propagateGroundingMetadata: propagateGroundingMetadata,
+    );
+
+    return _resultFromLastContent(
+      result.lastContent,
+      outputSchema: _getOutputSchema(agent),
+    );
+  }
 }
 
 /// Tool adapter for a sub-agent configured with `mode: 'task'`.
@@ -235,8 +268,235 @@ class TaskAgentTool extends AgentTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
-    return null;
+    if (skipSummarization) {
+      toolContext.actions.skipSummarization = true;
+    }
+
+    final _InlineAgentRunResult result = await _runAgentInCurrentSession(
+      agent: agent,
+      args: args,
+      toolContext: toolContext,
+      branch: toolContext.invocationContext.branch,
+      isolationScope: toolContext.functionCallId,
+      appendUserContent: false,
+      includePlugins: includePlugins,
+    );
+    _propagateRunResult(
+      result,
+      toolContext,
+      propagateGroundingMetadata: propagateGroundingMetadata,
+    );
+
+    if (result.taskOutput != null) {
+      return result.taskOutput;
+    }
+    final Object? fallback = _resultFromLastContent(
+      result.lastContent,
+      outputSchema: _getOutputSchema(agent),
+    );
+    return fallback == '' ? null : fallback;
   }
+}
+
+class _InlineAgentRunResult {
+  Content? lastContent;
+  Object? lastGroundingMetadata;
+  Object? taskOutput;
+}
+
+Future<_InlineAgentRunResult> _runAgentInCurrentSession({
+  required BaseAgent agent,
+  required Map<String, dynamic> args,
+  required ToolContext toolContext,
+  required String? branch,
+  required bool appendUserContent,
+  required bool includePlugins,
+  String? isolationScope,
+}) async {
+  final InvocationContext parentContext = toolContext.invocationContext;
+  final Object? nodeInput = _toolArgsToNodeInput(agent, args);
+  final Content userContent = _nodeInputToContent(nodeInput);
+  final InvocationContext childContext = parentContext.copyWith(
+    agent: agent,
+    branch: branch,
+    isolationScope: isolationScope,
+    userContent: userContent,
+  );
+  if (!includePlugins) {
+    childContext.pluginManager = PluginManager();
+  }
+
+  if (appendUserContent) {
+    await _appendInlineEvent(
+      childContext,
+      Event(
+        invocationId: childContext.invocationId,
+        author: 'user',
+        branch: childContext.branch,
+        isolationScope: childContext.isolationScope,
+        content: userContent.copyWith(),
+      ),
+    );
+  }
+
+  final _InlineAgentRunResult result = _InlineAgentRunResult();
+  Map<String, dynamic>? pendingFinishArgs;
+  String? pendingFinishCallId;
+
+  await for (final Event emitted in agent.runAsync(childContext)) {
+    final Event event = await _appendInlineEvent(childContext, emitted);
+
+    if (event.actions.stateDelta.isNotEmpty) {
+      toolContext.state.addAll(event.actions.stateDelta);
+    }
+    if (event.partial != true && event.content != null) {
+      result.lastContent = event.content;
+    }
+    if (event.partial != true && event.groundingMetadata != null) {
+      result.lastGroundingMetadata = event.groundingMetadata;
+    }
+
+    for (final FunctionCall call in event.getFunctionCalls()) {
+      if (call.name == finishTaskToolName) {
+        pendingFinishCallId = call.id;
+        pendingFinishArgs = Map<String, dynamic>.from(call.args);
+      }
+    }
+
+    for (final FunctionResponse response in event.getFunctionResponses()) {
+      if (response.name == finishTaskToolName &&
+          (pendingFinishCallId == null || response.id == pendingFinishCallId) &&
+          _isFinishTaskSuccess(response.response) &&
+          pendingFinishArgs != null) {
+        result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
+        return result;
+      }
+    }
+  }
+
+  return result;
+}
+
+Future<Event> _appendInlineEvent(InvocationContext context, Event event) async {
+  event.isolationScope ??= context.isolationScope;
+  final Event? modified = await context.pluginManager.runOnEventCallback(
+    invocationContext: context,
+    event: event,
+  );
+  final Event outputEvent = _mergeModifiedEvent(event, modified);
+  final Event persisted = await context.sessionService.appendEvent(
+    session: context.session,
+    event: outputEvent,
+  );
+  PersistBarrier.markPersisted(context, outputEvent.id);
+  if (event.id != outputEvent.id) {
+    PersistBarrier.markPersisted(context, event.id);
+  }
+  return persisted;
+}
+
+Event _mergeModifiedEvent(Event original, Event? modified) {
+  if (modified == null) {
+    return original;
+  }
+  final Event merged = modified.copyWith();
+  merged.invocationId = original.invocationId;
+  merged.author = original.author;
+  merged.branch ??= original.branch;
+  merged.isolationScope ??= original.isolationScope;
+  merged.id = original.id;
+  merged.timestamp = original.timestamp;
+  return merged;
+}
+
+Object? _toolArgsToNodeInput(BaseAgent agent, Map<String, dynamic> args) {
+  if (_getInputSchema(agent) != null) {
+    return args;
+  }
+  if (args.containsKey('request')) {
+    return args['request'];
+  }
+  return args;
+}
+
+Content _nodeInputToContent(Object? nodeInput) {
+  if (nodeInput is Content) {
+    return nodeInput.copyWith(role: 'user');
+  }
+  if (nodeInput is String) {
+    return Content.userText(nodeInput);
+  }
+  if (nodeInput is Map || nodeInput is List) {
+    return Content.userText(jsonEncode(nodeInput));
+  }
+  if (nodeInput == null) {
+    return Content.userText('');
+  }
+  return Content.userText('$nodeInput');
+}
+
+String _childBranch(InvocationContext context, BaseAgent agent) {
+  final String suffix = '${context.agent.name}.${agent.name}';
+  final String? branch = context.branch;
+  if (branch == null || branch.isEmpty) {
+    return suffix;
+  }
+  return '$branch.$suffix';
+}
+
+bool _isFinishTaskSuccess(Map<String, dynamic> response) {
+  return response['result'] == finishTaskSuccessResult ||
+      response['output'] == finishTaskSuccessResult;
+}
+
+Object? _extractTaskOutput(BaseAgent agent, Map<String, dynamic> args) {
+  if (_usesObjectFinishTaskArgs(agent)) {
+    return args;
+  }
+  return args['result'];
+}
+
+bool _usesObjectFinishTaskArgs(BaseAgent agent) {
+  final Object? schema = _getOutputSchema(agent);
+  if (schema == null) {
+    return true;
+  }
+  final Map<String, dynamic>? map = _schemaAsJsonMap(schema);
+  if (map != null) {
+    final Object? type = map['type'];
+    return type == null || '$type'.toLowerCase() == 'object';
+  }
+  if (schema is String) {
+    return schema.toLowerCase() == 'object';
+  }
+  return schema == Map || schema == Object;
+}
+
+void _propagateRunResult(
+  _InlineAgentRunResult result,
+  ToolContext toolContext, {
+  required bool propagateGroundingMetadata,
+}) {
+  if (propagateGroundingMetadata && result.lastGroundingMetadata != null) {
+    toolContext.state['temp:_adk_grounding_metadata'] =
+        result.lastGroundingMetadata;
+  }
+}
+
+Object? _resultFromLastContent(Content? content, {Object? outputSchema}) {
+  if (content == null || content.parts.isEmpty) {
+    return '';
+  }
+
+  final String mergedText = content.parts
+      .where((Part part) => !part.thought)
+      .map(_partToText)
+      .where((String text) => text.isNotEmpty)
+      .join('\n');
+  if (outputSchema != null && mergedText.isNotEmpty) {
+    return jsonDecode(mergedText);
+  }
+  return mergedText;
 }
 
 Object? _getInputSchema(BaseAgent agent) {
