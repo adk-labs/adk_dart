@@ -179,6 +179,7 @@ class WorkflowContext {
   bool _outputDelegated = false;
   final Map<String, int> _childRunCounters = <String, int>{};
   String? _currentNodeKey;
+  bool? _currentNodeRerunOnResume;
 
   /// ADK invocation context when running as an agent.
   final InvocationContext? invocationContext;
@@ -242,6 +243,9 @@ class WorkflowContext {
   /// [overrideBranch] replaces the inherited branch for the child output event.
   /// When [useSubBranch] is true, the child output event branch appends the
   /// generated `nodeName@runId` segment to the inherited or overridden branch.
+  /// When called from a workflow node, the caller node must set
+  /// `rerunOnResume: true` so interrupted dynamic children can be replayed
+  /// safely during workflow resume.
   Future<Object?> runNode(
     Object nodeLike, {
     Object? input,
@@ -256,6 +260,12 @@ class WorkflowContext {
     RetryConfig? retryConfig,
     Duration? timeout,
   }) async {
+    if (_currentNodeRerunOnResume == false) {
+      throw StateError(
+        'A workflow node must have rerunOnResume: true before it can '
+        'schedule dynamic child nodes.',
+      );
+    }
     final BaseNode node = buildNode(
       nodeLike,
       name: name,
@@ -1100,6 +1110,7 @@ Future<Object?> _runNodeWithRetry({
   final String key = stateKey ?? node.name;
   final NodeState state = context.nodeStates.putIfAbsent(key, NodeState.new);
   context._currentNodeKey = key;
+  context._currentNodeRerunOnResume = node.rerunOnResume;
   state.input = nodeInput;
   if (state.status == NodeStatus.inactive || state.runId == null) {
     state.runCounter += 1;

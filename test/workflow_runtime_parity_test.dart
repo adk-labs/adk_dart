@@ -662,23 +662,27 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'dynamic_graph',
         nodes: <BaseNode>[
-          node((WorkflowContext context, Object? input) async {
-            final Object? childOutput = await context.runNode(
-              node(
-                (WorkflowContext _, Object? childInput) {
-                  attempts += 1;
-                  if (attempts < 2) {
-                    throw const _RetryableWorkflowError('retry dynamic');
-                  }
-                  return '$childInput-child';
-                },
-                name: 'dynamic_child',
-                retryConfig: const wf.RetryConfig(maxAttempts: 2),
-              ),
-              input: '$input-parent',
-            );
-            return 'parent:$childOutput';
-          }, name: 'parent'),
+          node(
+            (WorkflowContext context, Object? input) async {
+              final Object? childOutput = await context.runNode(
+                node(
+                  (WorkflowContext _, Object? childInput) {
+                    attempts += 1;
+                    if (attempts < 2) {
+                      throw const _RetryableWorkflowError('retry dynamic');
+                    }
+                    return '$childInput-child';
+                  },
+                  name: 'dynamic_child',
+                  retryConfig: const wf.RetryConfig(maxAttempts: 2),
+                ),
+                input: '$input-parent',
+              );
+              return 'parent:$childOutput';
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
         ],
       );
 
@@ -714,6 +718,33 @@ void main() {
       );
     });
 
+    test('requires rerunOnResume parent for dynamic workflow nodes', () async {
+      final Workflow workflow = Workflow(
+        name: 'dynamic_parent_guard_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) {
+            return context.runNode(
+              node(
+                (WorkflowContext _, Object? _) => 'child',
+                name: 'guard_child',
+              ),
+            );
+          }, name: 'parent'),
+        ],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('rerunOnResume: true'),
+          ),
+        ),
+      );
+    });
+
     test('assigns automatic dynamic runIds per node name', () async {
       int childRuns = 0;
       final FunctionNode child = node((WorkflowContext _, Object? input) {
@@ -723,14 +754,18 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'dynamic_auto_run_id_graph',
         nodes: <BaseNode>[
-          node((WorkflowContext context, Object? _) async {
-            final List<Object?> outputs = await Future.wait(<Future<Object?>>[
-              context.runNode(child, input: 'a'),
-              context.runNode(child, input: 'b'),
-              context.runNode(child, input: 'c'),
-            ]);
-            return outputs.join(',');
-          }, name: 'parent'),
+          node(
+            (WorkflowContext context, Object? _) async {
+              final List<Object?> outputs = await Future.wait(<Future<Object?>>[
+                context.runNode(child, input: 'a'),
+                context.runNode(child, input: 'b'),
+                context.runNode(child, input: 'c'),
+              ]);
+              return outputs.join(',');
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
         ],
       );
 
@@ -755,19 +790,23 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'dynamic_run_id_graph',
         nodes: <BaseNode>[
-          node((WorkflowContext context, Object? _) async {
-            final Object? first = await context.runNode(
-              child,
-              input: 'first',
-              runId: 'first-id',
-            );
-            final Object? second = await context.runNode(
-              child,
-              input: 'second',
-              runId: 'second-id',
-            );
-            return '$first/$second';
-          }, name: 'parent'),
+          node(
+            (WorkflowContext context, Object? _) async {
+              final Object? first = await context.runNode(
+                child,
+                input: 'first',
+                runId: 'first-id',
+              );
+              final Object? second = await context.runNode(
+                child,
+                input: 'second',
+                runId: 'second-id',
+              );
+              return '$first/$second';
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
         ],
       );
 
@@ -797,15 +836,19 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'dynamic_hitl_graph',
         nodes: <BaseNode>[
-          node((WorkflowContext context, Object? _) {
-            return context.runNode(
-              node(
-                (WorkflowContext _, Object? _) =>
-                    RequestInput(interruptId: 'dynamic_ask'),
-                name: 'dynamic_ask_user',
-              ),
-            );
-          }, name: 'parent'),
+          node(
+            (WorkflowContext context, Object? _) {
+              return context.runNode(
+                node(
+                  (WorkflowContext _, Object? _) =>
+                      RequestInput(interruptId: 'dynamic_ask'),
+                  name: 'dynamic_ask_user',
+                ),
+              );
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
         ],
       );
 
@@ -1078,14 +1121,18 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'delegated_event_workflow',
         nodes: <BaseNode>[
-          node((WorkflowContext context, Object? _) async {
-            final Object? output = await context.runNode(
-              child,
-              useAsOutput: true,
-            );
-            context.output = output;
-            return null;
-          }, name: 'parent'),
+          node(
+            (WorkflowContext context, Object? _) async {
+              final Object? output = await context.runNode(
+                child,
+                useAsOutput: true,
+              );
+              context.output = output;
+              return null;
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
         ],
       );
       final InvocationContext context = InvocationContext(
@@ -1120,10 +1167,14 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'override_branch_workflow',
         nodes: <BaseNode>[
-          node((WorkflowContext context, Object? _) async {
-            await context.runNode(child, overrideBranch: 'custom_branch');
-            return null;
-          }, name: 'parent'),
+          node(
+            (WorkflowContext context, Object? _) async {
+              await context.runNode(child, overrideBranch: 'custom_branch');
+              return null;
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
         ],
       );
       final InvocationContext context = InvocationContext(
@@ -1151,10 +1202,14 @@ void main() {
         final Workflow workflow = Workflow(
           name: 'sub_branch_workflow',
           nodes: <BaseNode>[
-            node((WorkflowContext context, Object? _) async {
-              await context.runNode(child, useSubBranch: true);
-              return null;
-            }, name: 'parent'),
+            node(
+              (WorkflowContext context, Object? _) async {
+                await context.runNode(child, useSubBranch: true);
+                return null;
+              },
+              name: 'parent',
+              rerunOnResume: true,
+            ),
           ],
         );
         final InvocationContext context = InvocationContext(
