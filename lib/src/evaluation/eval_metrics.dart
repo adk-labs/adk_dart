@@ -37,6 +37,10 @@ class PrebuiltMetricNames {
   static const String rubricBasedToolUseQualityV1 =
       'rubric_based_tool_use_quality_v1';
 
+  /// Rubric-based multi-turn trajectory quality metric version 1.
+  static const String rubricBasedMultiTurnTrajectoryQualityV1 =
+      'rubric_based_multi_turn_trajectory_quality_v1';
+
   /// Per-turn user simulator quality metric version 1.
   static const String perTurnUserSimulatorQualityV1 =
       'per_turn_user_simulator_quality_v1';
@@ -65,6 +69,9 @@ enum PrebuiltMetrics {
   ),
   hallucinationsV1(PrebuiltMetricNames.hallucinationsV1),
   rubricBasedToolUseQualityV1(PrebuiltMetricNames.rubricBasedToolUseQualityV1),
+  rubricBasedMultiTurnTrajectoryQualityV1(
+    PrebuiltMetricNames.rubricBasedMultiTurnTrajectoryQualityV1,
+  ),
   perTurnUserSimulatorQualityV1(
     PrebuiltMetricNames.perTurnUserSimulatorQualityV1,
   ),

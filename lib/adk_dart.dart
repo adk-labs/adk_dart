@@ -149,6 +149,7 @@ export 'src/evaluation/multi_turn_trajectory_quality_evaluator.dart';
 export 'src/evaluation/response_evaluator.dart';
 export 'src/evaluation/rubric_based_evaluator.dart';
 export 'src/evaluation/rubric_based_final_response_quality_v1.dart';
+export 'src/evaluation/rubric_based_multi_turn_trajectory_evaluator.dart';
 export 'src/evaluation/rubric_based_tool_use_quality_v1.dart';
 export 'src/evaluation/request_intercepter_plugin.dart';
 export 'src/evaluation/safety_evaluator.dart';

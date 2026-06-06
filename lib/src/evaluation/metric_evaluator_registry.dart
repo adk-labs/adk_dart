@@ -13,6 +13,7 @@ import 'multi_turn_tool_use_quality_evaluator.dart';
 import 'multi_turn_trajectory_quality_evaluator.dart';
 import 'response_evaluator.dart';
 import 'rubric_based_final_response_quality_v1.dart';
+import 'rubric_based_multi_turn_trajectory_evaluator.dart';
 import 'rubric_based_tool_use_quality_v1.dart';
 import 'safety_evaluator.dart';
 import 'simulation/per_turn_user_simulator_quality_v1.dart';
@@ -137,6 +138,12 @@ MetricEvaluatorRegistry getDefaultMetricEvaluatorRegistry() {
         .getMetricInfo(),
     evaluatorFactory: (EvalMetricSpec evalMetric) =>
         RubricBasedToolUseV1Evaluator(evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: RubricBasedMultiTurnTrajectoryMetricInfoProvider()
+        .getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        RubricBasedMultiTurnTrajectoryEvaluator(evalMetric),
   );
   registry.registerEvaluator(
     metricInfo: PerTurnUserSimulatorQualityV1MetricInfoProvider()

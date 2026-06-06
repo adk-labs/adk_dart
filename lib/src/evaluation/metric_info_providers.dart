@@ -181,6 +181,23 @@ class RubricBasedToolUseV1EvaluatorMetricInfoProvider
   }
 }
 
+/// Metric metadata provider for rubric-based multi-turn trajectory quality v1.
+class RubricBasedMultiTurnTrajectoryMetricInfoProvider
+    extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.rubricBasedMultiTurnTrajectoryQualityV1,
+      description:
+          'This metric assesses a full multi-turn agent trajectory against '
+          'provided rubrics.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: 1.0),
+      ),
+    );
+  }
+}
+
 /// Metric metadata provider for per-turn user simulator quality v1.
 class PerTurnUserSimulatorQualityV1MetricInfoProvider
     extends MetricInfoProvider {
