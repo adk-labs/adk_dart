@@ -74,8 +74,10 @@ String? _detectSkillToolError(Object? response) {
   return null;
 }
 
-class _ListSkillsTool extends BaseTool {
-  _ListSkillsTool(this._toolset)
+/// Tool to list all locally available skills.
+class ListSkillsTool extends BaseTool {
+  /// Creates a list-skills tool backed by [toolset].
+  ListSkillsTool(this._toolset)
     : super(
         name: 'list_skills',
         description:
@@ -105,8 +107,10 @@ class _ListSkillsTool extends BaseTool {
   }
 }
 
-class _SearchSkillsTool extends BaseTool {
-  _SearchSkillsTool(this._toolset)
+/// Tool to search a configured skill registry for relevant skills.
+class SearchSkillsTool extends BaseTool {
+  /// Creates a registry-backed skill search tool.
+  SearchSkillsTool(this._toolset)
     : super(
         name: 'search_skills',
         description:
@@ -194,8 +198,10 @@ class _SearchSkillsTool extends BaseTool {
   }
 }
 
-class _LoadSkillTool extends BaseTool {
-  _LoadSkillTool(this._toolset)
+/// Tool to load a skill's main instructions.
+class LoadSkillTool extends BaseTool {
+  /// Creates a load-skill tool backed by [toolset].
+  LoadSkillTool(this._toolset)
     : super(
         name: 'load_skill',
         description: 'Loads the SKILL.md instructions for a given skill.',
@@ -284,8 +290,10 @@ class _LoadSkillTool extends BaseTool {
   }
 }
 
-class _LoadSkillResourceTool extends BaseTool {
-  _LoadSkillResourceTool(this._toolset)
+/// Tool to load a resource from a skill bundle.
+class LoadSkillResourceTool extends BaseTool {
+  /// Creates a load-skill-resource tool backed by [toolset].
+  LoadSkillResourceTool(this._toolset)
     : super(
         name: 'load_skill_resource',
         description:
@@ -758,8 +766,10 @@ class _SkillScriptCodeExecutor {
   }
 }
 
-class _RunSkillScriptTool extends BaseTool {
-  _RunSkillScriptTool(this._toolset)
+/// Tool to execute scripts from a skill bundle.
+class RunSkillScriptTool extends BaseTool {
+  /// Creates a run-skill-script tool backed by [toolset].
+  RunSkillScriptTool(this._toolset)
     : super(
         name: 'run_skill_script',
         description: "Executes a script from a skill's scripts/ directory.",
@@ -962,11 +972,11 @@ class SkillToolset extends BaseToolset {
       for (final Skill skill in localSkills) skill.name: skill,
     };
     _tools = <BaseTool>[
-      _ListSkillsTool(this),
-      _LoadSkillTool(this),
-      _LoadSkillResourceTool(this),
-      _RunSkillScriptTool(this),
-      if (registry != null) _SearchSkillsTool(this),
+      ListSkillsTool(this),
+      LoadSkillTool(this),
+      LoadSkillResourceTool(this),
+      RunSkillScriptTool(this),
+      if (registry != null) SearchSkillsTool(this),
     ];
     _providedToolsByName = <String, BaseTool>{};
     _providedToolsets = <BaseToolset>[];
@@ -1139,7 +1149,7 @@ class SkillToolset extends BaseToolset {
       _buildSkillSystemInstruction(toolNamePrefix),
     ];
     final bool hasListSkills = _tools.any(
-      (BaseTool tool) => tool is _ListSkillsTool,
+      (BaseTool tool) => tool is ListSkillsTool,
     );
     if (!hasListSkills) {
       instructions.add(formatSkillsAsXml(_listSkills()));

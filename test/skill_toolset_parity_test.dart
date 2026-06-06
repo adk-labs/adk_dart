@@ -200,6 +200,10 @@ void main() {
         'load_skill_resource',
         'run_skill_script',
       ]);
+      expect(tools[0], isA<ListSkillsTool>());
+      expect(tools[1], isA<LoadSkillTool>());
+      expect(tools[2], isA<LoadSkillResourceTool>());
+      expect(tools[3], isA<RunSkillScriptTool>());
     });
 
     test(
@@ -220,12 +224,63 @@ void main() {
         final BaseTool searchTool = tools.singleWhere(
           (BaseTool tool) => tool.name == 'search_skills',
         );
+        expect(searchTool, isA<SearchSkillsTool>());
         final Map<String, dynamic> parameters = searchTool
             .getDeclaration()!
             .parameters;
         expect(parameters['properties'].toString(), contains('filters'));
       },
     );
+
+    test('public skill tools can be constructed standalone', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        registry: _RecordingSkillRegistry(<Skill>[_skillWithAdditionalTool()]),
+      );
+      final ToolContext toolContext = _newToolContext();
+
+      final Object? listed = await ListSkillsTool(
+        toolset,
+      ).run(args: <String, dynamic>{}, toolContext: toolContext);
+      expect('$listed', contains('my-skill'));
+
+      final Object? loaded = await LoadSkillTool(toolset).run(
+        args: <String, dynamic>{'skill_name': 'my-skill'},
+        toolContext: toolContext,
+      );
+      expect(
+        Map<String, Object?>.from(loaded! as Map)['skill_name'],
+        'my-skill',
+      );
+
+      final Object? resource = await LoadSkillResourceTool(toolset).run(
+        args: <String, dynamic>{
+          'skill_name': 'my-skill',
+          'file_path': 'references/guide.md',
+        },
+        toolContext: toolContext,
+      );
+      expect(
+        Map<String, Object?>.from(resource! as Map)['content'],
+        'reference doc',
+      );
+
+      final Object? searched = await SearchSkillsTool(toolset).run(
+        args: <String, dynamic>{'query': 'dynamic'},
+        toolContext: toolContext,
+      );
+      expect(
+        Map<String, Object?>.from(
+          List<Object?>.from(searched! as List).single! as Map,
+        )['name'],
+        'dynamic-skill',
+      );
+
+      expect(
+        () => SearchSkillsTool(SkillToolset(skills: <Skill>[_sampleSkill()])),
+        throwsArgumentError,
+      );
+    });
 
     test('supports tool filter and prefix-aware instructions', () async {
       final SkillToolset toolset = SkillToolset(
