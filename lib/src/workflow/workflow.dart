@@ -9,6 +9,7 @@ import '../agents/context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../events/event.dart';
+import '../events/request_input.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_tool.dart';
@@ -709,6 +710,13 @@ class Workflow extends BaseAgent {
       return output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
           : output;
+    }
+    if (output is RequestInput) {
+      return createRequestInputEvent(
+        output,
+        invocationId: context.invocationId,
+        author: author,
+      ).copyWith(nodeInfo: nodeInfo);
     }
     if (output is Content) {
       return Event(

@@ -116,6 +116,36 @@ void main() {
       expect(events.single.content?.parts.single.text, 'hello');
     });
 
+    test('converts RequestInput node output to long-running event', () async {
+      final Workflow workflow = Workflow(
+        name: 'hitl_workflow',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? _) =>
+                RequestInput(interruptId: 'ask_1', message: 'Need a decision'),
+            name: 'ask_user',
+          ),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_hitl',
+        agent: workflow,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+      );
+
+      final List<Event> events = await workflow.runAsync(context).toList();
+
+      expect(events, hasLength(1));
+      expect(hasRequestInputFunctionCall(events.single), isTrue);
+      expect(events.single.longRunningToolIds, <String>{'ask_1'});
+      expect(events.single.nodeInfo.path, 'hitl_workflow@1/ask_user@1');
+      final FunctionCall call = events.single.getFunctionCalls().single;
+      expect(call.name, requestInputFunctionCallName);
+      expect(call.id, 'ask_1');
+      expect(call.args['message'], 'Need a decision');
+    });
+
     test('routes edges from workflow event actions', () async {
       final FunctionNode router = node((WorkflowContext _, Object? _) {
         return Event(

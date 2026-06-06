@@ -43,6 +43,49 @@ void main() {
 
       expect(result, isNull);
     });
+
+    test('event helpers create request-input function call and response', () {
+      final RequestInput request = RequestInput(
+        interruptId: 'interrupt_1',
+        payload: <String, Object?>{'step': 'approval'},
+        message: 'Need approval',
+        responseSchema: <String, Object?>{'type': 'object'},
+      );
+
+      final Event event = createRequestInputEvent(
+        request,
+        invocationId: 'inv_request',
+        author: 'workflow',
+      );
+      final FunctionCall call = event.getFunctionCalls().single;
+
+      expect(event.invocationId, 'inv_request');
+      expect(event.author, 'workflow');
+      expect(event.longRunningToolIds, <String>{'interrupt_1'});
+      expect(call.name, requestInputFunctionCallName);
+      expect(call.id, 'interrupt_1');
+      expect(call.args['interruptId'], 'interrupt_1');
+      expect(call.args['payload'], <String, Object?>{'step': 'approval'});
+      expect(call.args['message'], 'Need approval');
+      expect(call.args['response_schema'], <String, Object?>{'type': 'object'});
+      expect(hasRequestInputFunctionCall(event), isTrue);
+      expect(getRequestInputInterruptIds(event), <String>['interrupt_1']);
+
+      final RequestInput decoded = RequestInput.fromJson(call.args);
+      expect(decoded.interruptId, 'interrupt_1');
+      expect(decoded.message, 'Need approval');
+      expect(decoded.responseSchema, <String, Object?>{'type': 'object'});
+
+      final Part response = createRequestInputResponse(
+        'interrupt_1',
+        <String, dynamic>{'answer': 'approved'},
+      );
+      expect(response.functionResponse?.name, requestInputFunctionCallName);
+      expect(response.functionResponse?.id, 'interrupt_1');
+      expect(response.functionResponse?.response, <String, dynamic>{
+        'answer': 'approved',
+      });
+    });
   });
 }
 

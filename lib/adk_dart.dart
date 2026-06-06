@@ -102,6 +102,7 @@ export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
+export 'src/events/request_input.dart';
 export 'src/events/ui_widget.dart';
 
 export 'src/evaluation/base_eval_service.dart';
