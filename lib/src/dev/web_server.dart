@@ -10,6 +10,7 @@ import 'dart:mirrors';
 import '../a2a/executor/a2a_agent_executor.dart';
 import '../a2a/protocol.dart';
 import '../a2a/utils/agent_card_builder.dart';
+import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
 import '../agents/live_request_queue.dart';
 import '../agents/llm_agent.dart';
@@ -3131,6 +3132,8 @@ Future<void> _handleRunSse(
     invocationId: runRequest.invocationId,
     newMessage: runRequest.newMessage,
   );
+  final AdkAbortController abortController = AdkAbortController();
+  var clientDisconnected = false;
 
   try {
     await for (final Event event in runner.runAsync(
@@ -3144,7 +3147,11 @@ Future<void> _handleRunSse(
             ? StreamingMode.sse
             : StreamingMode.none,
       ),
+      abortSignal: abortController.signal,
     )) {
+      if (abortController.signal.aborted) {
+        break;
+      }
       context.recordTraceEvent(
         appName: runRequest.appName,
         userId: runRequest.userId,
@@ -3166,17 +3173,27 @@ Future<void> _handleRunSse(
             sessionId: runRequest.sessionId,
           ),
         );
-        response.write('data: $data\n\n');
-        await response.flush();
+        try {
+          response.write('data: $data\n\n');
+          await response.flush();
+        } catch (_) {
+          clientDisconnected = true;
+          abortController.abort('SSE client disconnected');
+          return;
+        }
       }
     }
   } catch (error) {
-    response.write(
-      'data: ${jsonEncode(<String, Object?>{'error': '$error'})}\n\n',
-    );
+    if (!clientDisconnected && !abortController.signal.aborted) {
+      response.write(
+        'data: ${jsonEncode(<String, Object?>{'error': '$error'})}\n\n',
+      );
+    }
   }
 
-  await response.close();
+  if (!clientDisconnected) {
+    await response.close();
+  }
 }
 
 Future<void> _handleRunLive(
@@ -3223,6 +3240,7 @@ Future<void> _handleRunLive(
   }
 
   final LiveRequestQueue liveQueue = LiveRequestQueue();
+  final AdkAbortController abortController = AdkAbortController();
   final Runner runner = await context.getRunner(appName);
   final bool? proactiveAudio = _readOptionalBoolQuery(
     request,
@@ -3257,7 +3275,11 @@ Future<void> _handleRunLive(
       liveRequestQueue: liveQueue,
       session: session,
       runConfig: runConfig,
+      abortSignal: abortController.signal,
     )) {
+      if (abortController.signal.aborted) {
+        break;
+      }
       context.recordTraceEvent(
         appName: appName,
         userId: userId,
@@ -3297,6 +3319,7 @@ Future<void> _handleRunLive(
   try {
     await Future.any(<Future<void>>[forwardTask, messageTask]);
   } finally {
+    abortController.abort('WebSocket client disconnected');
     liveQueue.close();
     await socket.close();
   }

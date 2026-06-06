@@ -30,6 +30,33 @@ class _CaptureLiveConfigAgent extends BaseAgent {
   }
 }
 
+class _AbortSignalCaptureAgent extends BaseAgent {
+  _AbortSignalCaptureAgent({required super.name});
+
+  AdkAbortSignal? seenRunAsyncAbortSignal;
+  AdkAbortSignal? seenRunLiveAbortSignal;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    seenRunAsyncAbortSignal = context.abortSignal;
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('ok'),
+    );
+  }
+
+  @override
+  Stream<Event> runLiveImpl(InvocationContext context) async* {
+    seenRunLiveAbortSignal = context.abortSignal;
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('live ok'),
+    );
+  }
+}
+
 void main() {
   group('startAdkDevWebServer', () {
     late HttpServer server;
@@ -1441,6 +1468,81 @@ void main() {
       expect(sseBody, contains('data: '));
     });
 
+    test('passes abort signal to /run_sse runner', () async {
+      final _AbortSignalCaptureAgent captureAgent = _AbortSignalCaptureAgent(
+        name: 'root_agent',
+      );
+      final InMemoryRunner captureRunner = InMemoryRunner(
+        appName: 'test_app',
+        agent: captureAgent,
+      );
+      final DevAgentRuntime captureRuntime = DevAgentRuntime(
+        config: config,
+        runner: captureRunner,
+      );
+      final Directory agentsDir = await Directory.systemTemp.createTemp(
+        'adk_capture_agents_',
+      );
+      addTearDown(() async {
+        if (await agentsDir.exists()) {
+          await agentsDir.delete(recursive: true);
+        }
+      });
+      final HttpServer captureServer = await startAdkDevWebServer(
+        runtime: captureRuntime,
+        project: config,
+        agentsDir: agentsDir.path,
+        port: 0,
+      );
+      addTearDown(() async {
+        await captureServer.close(force: true);
+        await captureRunner.close();
+      });
+
+      final HttpClient captureClient = HttpClient();
+      addTearDown(() => captureClient.close(force: true));
+
+      const String sessionId = 's_sse_abort_signal';
+      final HttpClientRequest createRequest = await captureClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${captureServer.port}/apps/test_app/users/u1/sessions',
+        ),
+      );
+      createRequest.headers.contentType = ContentType.json;
+      createRequest.write(
+        jsonEncode(<String, Object>{'session_id': sessionId}),
+      );
+      final HttpClientResponse createResponse = await createRequest.close();
+      await utf8.decoder.bind(createResponse).join();
+      expect(createResponse.statusCode, HttpStatus.ok);
+
+      final HttpClientRequest sseRequest = await captureClient.postUrl(
+        Uri.parse('http://127.0.0.1:${captureServer.port}/run_sse'),
+      );
+      sseRequest.headers.contentType = ContentType.json;
+      sseRequest.write(
+        jsonEncode(<String, Object>{
+          'app_name': 'test_app',
+          'user_id': 'u1',
+          'session_id': sessionId,
+          'new_message': <String, Object>{
+            'role': 'user',
+            'parts': <Object>[
+              <String, Object>{'text': 'hello'},
+            ],
+          },
+        }),
+      );
+
+      final HttpClientResponse sseResponse = await sseRequest.close();
+      final String body = await utf8.decoder.bind(sseResponse).join();
+
+      expect(sseResponse.statusCode, HttpStatus.ok);
+      expect(body, contains('data: '));
+      expect(captureAgent.seenRunAsyncAbortSignal, isNotNull);
+      expect(captureAgent.seenRunAsyncAbortSignal!.aborted, isFalse);
+    });
+
     test('lists empty artifact names', () async {
       final String sessionId = 's_art_${DateTime.now().microsecondsSinceEpoch}';
       final HttpClientRequest createRequest = await client.postUrl(
@@ -1673,6 +1775,74 @@ void main() {
       final Map<String, dynamic> payload =
           jsonDecode(firstMessage as String) as Map<String, dynamic>;
       expect(payload['author'], isNotNull);
+    });
+
+    test('passes abort signal to run_live runner', () async {
+      final _AbortSignalCaptureAgent captureAgent = _AbortSignalCaptureAgent(
+        name: 'root_agent',
+      );
+      final InMemoryRunner captureRunner = InMemoryRunner(
+        appName: 'test_app',
+        agent: captureAgent,
+      );
+      final DevAgentRuntime captureRuntime = DevAgentRuntime(
+        config: config,
+        runner: captureRunner,
+      );
+      final Directory agentsDir = await Directory.systemTemp.createTemp(
+        'adk_capture_live_agents_',
+      );
+      addTearDown(() async {
+        if (await agentsDir.exists()) {
+          await agentsDir.delete(recursive: true);
+        }
+      });
+      final HttpServer captureServer = await startAdkDevWebServer(
+        runtime: captureRuntime,
+        project: config,
+        agentsDir: agentsDir.path,
+        port: 0,
+      );
+      addTearDown(() async {
+        await captureServer.close(force: true);
+        await captureRunner.close();
+      });
+
+      final HttpClient captureClient = HttpClient();
+      addTearDown(() => captureClient.close(force: true));
+
+      const String sessionId = 's_live_abort_signal';
+      final HttpClientRequest createRequest = await captureClient.postUrl(
+        Uri.parse(
+          'http://127.0.0.1:${captureServer.port}/apps/test_app/users/u1/sessions',
+        ),
+      );
+      createRequest.headers.contentType = ContentType.json;
+      createRequest.write(
+        jsonEncode(<String, Object>{'session_id': sessionId}),
+      );
+      final HttpClientResponse createResponse = await createRequest.close();
+      await utf8.decoder.bind(createResponse).join();
+      expect(createResponse.statusCode, HttpStatus.ok);
+
+      final WebSocket socket = await WebSocket.connect(
+        'ws://127.0.0.1:${captureServer.port}/run_live?app_name=test_app&user_id=u1&session_id=$sessionId&modalities=TEXT',
+      );
+
+      final dynamic firstMessage = await socket.first.timeout(
+        const Duration(seconds: 5),
+      );
+      await socket.close();
+
+      expect(firstMessage, isA<String>());
+      expect(captureAgent.seenRunLiveAbortSignal, isNotNull);
+      for (int i = 0; i < 20; i += 1) {
+        if (captureAgent.seenRunLiveAbortSignal!.aborted) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(captureAgent.seenRunLiveAbortSignal!.aborted, isTrue);
     });
 
     test('maps save_live_blob query onto runLive RunConfig', () async {
