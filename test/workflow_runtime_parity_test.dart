@@ -299,5 +299,47 @@ void main() {
       expect(output, 'agent:stateful');
       expect(session.state['echo_output'], 'agent:stateful');
     });
+
+    test('buildNode wraps workflow-compatible values', () {
+      final FunctionTool tool = FunctionTool(
+        name: 'wrapped_tool',
+        description: 'tool',
+        func: () => 'ok',
+      );
+      final _EchoAgent agent = _EchoAgent(name: 'wrapped_agent');
+      final FunctionNode existing = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'existing',
+      );
+
+      final BaseNode toolNode = buildNode(tool, name: 'tool_node');
+      final BaseNode agentNode = buildNode(agent, name: 'agent_node');
+      final BaseNode functionNode = buildNode(
+        (WorkflowContext _, Object? input) => '$input-built',
+        name: 'function_node',
+        dependsOn: const <String>['source'],
+        rerunOnResume: true,
+        waitForOutput: true,
+        retryConfig: const wf.RetryConfig(maxAttempts: 2),
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(buildNode(existing), same(existing));
+      expect(toolNode, isA<ToolNode>());
+      expect(toolNode.name, 'tool_node');
+      expect(agentNode, isA<AgentNode>());
+      expect(agentNode.name, 'agent_node');
+      expect(functionNode, isA<FunctionNode>());
+      expect(functionNode.dependsOn, const <String>['source']);
+      expect(functionNode.rerunOnResume, isTrue);
+      expect(functionNode.waitForOutput, isTrue);
+      expect(functionNode.retryConfig?.maxAttempts, 2);
+      expect(functionNode.timeout, const Duration(seconds: 1));
+      expect(
+        () => buildNode(existing, name: 'override'),
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(() => buildNode(Object()), throwsArgumentError);
+    });
   });
 }

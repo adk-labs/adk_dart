@@ -230,14 +230,89 @@ FunctionNode node(
   RetryConfig? retryConfig,
   Duration? timeout,
 }) {
-  return FunctionNode(
-    function: function,
-    name: name,
-    description: description,
-    dependsOn: dependsOn,
-    rerunOnResume: rerunOnResume,
-    retryConfig: retryConfig,
-    timeout: timeout,
+  return buildNode(
+        function,
+        name: name,
+        description: description,
+        dependsOn: dependsOn,
+        rerunOnResume: rerunOnResume,
+        retryConfig: retryConfig,
+        timeout: timeout,
+      )
+      as FunctionNode;
+}
+
+/// Converts a workflow-compatible object into a [BaseNode].
+///
+/// Supports existing [BaseNode] instances, [BaseTool] values, [BaseAgent]
+/// values, and [WorkflowFunction] callbacks.
+///
+/// Throws an [UnsupportedError] when overriding an existing node is requested
+/// and an [ArgumentError] for unsupported values.
+BaseNode buildNode(
+  Object nodeLike, {
+  String? name,
+  String description = '',
+  List<String>? dependsOn,
+  bool? rerunOnResume,
+  bool? waitForOutput,
+  RetryConfig? retryConfig,
+  Duration? timeout,
+}) {
+  if (nodeLike is BaseNode) {
+    if (name == null &&
+        description.isEmpty &&
+        dependsOn == null &&
+        rerunOnResume == null &&
+        waitForOutput == null &&
+        retryConfig == null &&
+        timeout == null) {
+      return nodeLike;
+    }
+    throw UnsupportedError(
+      'Cannot override fields for existing node `${nodeLike.name}`.',
+    );
+  }
+  if (nodeLike is BaseTool) {
+    return ToolNode(
+      tool: nodeLike,
+      name: name,
+      description: description,
+      dependsOn: dependsOn,
+      rerunOnResume: rerunOnResume ?? false,
+      waitForOutput: waitForOutput ?? false,
+      retryConfig: retryConfig,
+      timeout: timeout,
+    );
+  }
+  if (nodeLike is BaseAgent) {
+    return AgentNode(
+      agent: nodeLike,
+      name: name,
+      description: description,
+      dependsOn: dependsOn,
+      rerunOnResume: rerunOnResume ?? false,
+      waitForOutput: waitForOutput ?? false,
+      retryConfig: retryConfig,
+      timeout: timeout,
+    );
+  }
+  if (nodeLike is WorkflowFunction) {
+    return FunctionNode(
+      function: nodeLike,
+      name: name ?? 'function_node',
+      description: description,
+      dependsOn: dependsOn,
+      rerunOnResume: rerunOnResume ?? false,
+      waitForOutput: waitForOutput ?? false,
+      retryConfig: retryConfig,
+      timeout: timeout,
+    );
+  }
+  throw ArgumentError.value(
+    nodeLike,
+    'nodeLike',
+    'Expected a BaseNode, BaseTool, BaseAgent, or WorkflowFunction.',
   );
 }
 
