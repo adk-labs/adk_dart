@@ -35,13 +35,14 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
           .toList(growable: false),
     );
 
-    llmRequest.appendInstructions(<String>[
-      buildTransferInstructions(
-        transferToAgentTool.name,
-        agent,
-        transferTargets,
-      ),
-    ]);
+    final String instructions = buildTransferInstructions(
+      transferToAgentTool.name,
+      agent,
+      transferTargets,
+    );
+    if (instructions.isNotEmpty) {
+      llmRequest.appendInstructions(<String>[instructions]);
+    }
 
     final ToolContext toolContext = Context(invocationContext);
     await transferToAgentTool.processLlmRequest(
@@ -97,6 +98,9 @@ String buildTransferInstructions(
   LlmAgent agent,
   List<BaseAgent> targetAgents,
 ) {
+  if (_usesTaskTransferMode(agent)) {
+    return '';
+  }
   String instruction = buildTransferInstructionBody(toolName, targetAgents);
 
   if (agent.parentAgent != null && !agent.disallowTransferToParent) {
@@ -112,7 +116,11 @@ If neither you nor the other agents are best for the question, transfer to your 
 /// Returns transfer targets allowed for [agent].
 List<BaseAgent> getTransferTargets(LlmAgent agent) {
   final List<BaseAgent> result = <BaseAgent>[];
-  result.addAll(agent.subAgents);
+  result.addAll(
+    agent.subAgents.where((BaseAgent subAgent) {
+      return !_usesTaskTransferMode(subAgent);
+    }),
+  );
 
   final BaseAgent? parent = agent.parentAgent;
   if (parent is! LlmAgent) {
@@ -126,10 +134,16 @@ List<BaseAgent> getTransferTargets(LlmAgent agent) {
   if (!agent.disallowTransferToPeers) {
     result.addAll(
       parent.subAgents.where(
-        (BaseAgent peerAgent) => peerAgent.name != agent.name,
+        (BaseAgent peerAgent) =>
+            peerAgent.name != agent.name && !_usesTaskTransferMode(peerAgent),
       ),
     );
   }
 
   return result;
+}
+
+bool _usesTaskTransferMode(BaseAgent agent) {
+  return agent is LlmAgent &&
+      (agent.mode == 'task' || agent.mode == 'single_turn');
 }

@@ -348,6 +348,74 @@ void main() {
       );
     });
 
+    test('getTransferTargets excludes task and single_turn agents', () {
+      final LlmAgent chatChild = LlmAgent(
+        name: 'chat_child',
+        model: 'gemini-2.5-flash',
+      );
+      final LlmAgent taskChild = LlmAgent(
+        name: 'task_child',
+        model: 'gemini-2.5-flash',
+        mode: 'task',
+      );
+      final LlmAgent singleTurnChild = LlmAgent(
+        name: 'single_turn_child',
+        model: 'gemini-2.5-flash',
+        mode: 'single_turn',
+      );
+      final LlmAgent root = LlmAgent(
+        name: 'root',
+        model: 'gemini-2.5-flash',
+        subAgents: <BaseAgent>[chatChild, taskChild, singleTurnChild],
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+
+      expect(
+        getTransferTargets(root).map((BaseAgent agent) => agent.name),
+        <String>['chat_child'],
+      );
+
+      chatChild.disallowTransferToParent = true;
+      chatChild.disallowTransferToPeers = false;
+      expect(
+        getTransferTargets(chatChild).map((BaseAgent agent) => agent.name),
+        isEmpty,
+      );
+    });
+
+    test('buildTransferInstructions is empty for task transfer modes', () {
+      final LlmAgent target = LlmAgent(
+        name: 'target',
+        model: 'gemini-2.5-flash',
+      );
+      final LlmAgent taskAgent = LlmAgent(
+        name: 'task_agent',
+        model: 'gemini-2.5-flash',
+        mode: 'task',
+      );
+      final LlmAgent singleTurnAgent = LlmAgent(
+        name: 'single_turn_agent',
+        model: 'gemini-2.5-flash',
+        mode: 'single_turn',
+      );
+
+      expect(
+        buildTransferInstructions('transfer_to_agent', taskAgent, <BaseAgent>[
+          target,
+        ]),
+        isEmpty,
+      );
+      expect(
+        buildTransferInstructions(
+          'transfer_to_agent',
+          singleTurnAgent,
+          <BaseAgent>[target],
+        ),
+        isEmpty,
+      );
+    });
+
     test(
       'Contents processor preserves function ids for Anthropic session replay',
       () async {
