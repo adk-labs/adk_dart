@@ -156,8 +156,10 @@ class WorkflowContext {
     this.input,
     Map<String, Object?>? outputs,
     Map<String, NodeState>? nodeStates,
+    Map<String, Object?>? resumeInputs,
   }) : outputs = outputs ?? <String, Object?>{},
-       nodeStates = nodeStates ?? <String, NodeState>{};
+       nodeStates = nodeStates ?? <String, NodeState>{},
+       resumeInputs = resumeInputs ?? <String, Object?>{};
 
   bool _hasDirectOutput = false;
   Object? _directOutput;
@@ -173,6 +175,9 @@ class WorkflowContext {
 
   /// Node states keyed by node name.
   final Map<String, NodeState> nodeStates;
+
+  /// Resume payloads keyed by interrupt identifier.
+  final Map<String, Object?> resumeInputs;
 
   /// Route emitted directly by the current node.
   Object? route;
@@ -243,12 +248,13 @@ class WorkflowContext {
     return result.output;
   }
 
-  WorkflowContext _childExecutionContext() {
+  WorkflowContext _childExecutionContext({Map<String, Object?>? resumeInputs}) {
     return WorkflowContext(
       invocationContext: invocationContext,
       input: input,
       outputs: outputs,
       nodeStates: nodeStates,
+      resumeInputs: resumeInputs ?? this.resumeInputs,
     );
   }
 }
@@ -563,8 +569,25 @@ class Workflow extends BaseAgent {
   final List<Edge> edges;
 
   /// Runs the workflow without requiring an ADK [InvocationContext].
-  Future<WorkflowResult> runWorkflow({Object? input}) async {
-    final WorkflowContext context = WorkflowContext(input: input);
+  ///
+  /// When [previousResult] and [resumeInputs] are provided, completed nodes from
+  /// the previous run are reused and waiting nodes whose interrupt ids are
+  /// resolved by [resumeInputs] are rerun with `context.resumeInputs`.
+  Future<WorkflowResult> runWorkflow({
+    Object? input,
+    Map<String, Object?>? resumeInputs,
+    WorkflowResult? previousResult,
+  }) async {
+    final WorkflowContext context = WorkflowContext(
+      input: input,
+      outputs: previousResult == null
+          ? null
+          : Map<String, Object?>.from(previousResult.outputs),
+      nodeStates: previousResult == null
+          ? null
+          : _copyNodeStates(previousResult.nodeStates),
+      resumeInputs: resumeInputs,
+    );
     await _execute(context);
     return WorkflowResult(
       outputs: Map<String, Object?>.from(context.outputs),
@@ -597,11 +620,25 @@ class Workflow extends BaseAgent {
     }
 
     final Map<String, Set<String>> dependencies = _dependencies(byName);
-    final Set<String> pending = byName.keys.toSet();
-    final Set<String> completed = <String>{};
+    _seedResumeInputs(context, byName);
+    final Set<String> completed = <String>{
+      for (final MapEntry<String, NodeState> entry
+          in context.nodeStates.entries)
+        if (_isCompletedNodeState(entry.value) && byName.containsKey(entry.key))
+          entry.key,
+    };
+    final Set<String> pending = <String>{
+      for (final String name in byName.keys)
+        if (!completed.contains(name) &&
+            !_hasUnresolvedWaitingInterrupts(context.nodeStates[name]))
+          name,
+    };
     final Set<String> active = edges.isEmpty
         ? byName.keys.toSet()
         : _initialActiveNodes(byName);
+    for (final String completedNode in completed) {
+      _activateDownstream(fromNode: completedNode, route: null, active: active);
+    }
 
     while (pending.any(active.contains)) {
       final List<String> ready = pending.where(active.contains).where((
@@ -622,7 +659,12 @@ class Workflow extends BaseAgent {
             context: context,
             dependencies: dependencies[name]!,
           );
-          final WorkflowContext nodeContext = context._childExecutionContext();
+          final NodeState? state = context.nodeStates[name];
+          final WorkflowContext nodeContext = context._childExecutionContext(
+            resumeInputs: state?.resumeInputs.isNotEmpty == true
+                ? Map<String, Object?>.from(state!.resumeInputs)
+                : const <String, Object?>{},
+          );
           final Object? output = await _runNodeWithRetry(
             context: nodeContext,
             node: node,
@@ -644,6 +686,43 @@ class Workflow extends BaseAgent {
           route: result.route,
           active: active,
         );
+      }
+    }
+  }
+
+  void _seedResumeInputs(
+    WorkflowContext context,
+    Map<String, BaseNode> byName,
+  ) {
+    if (context.resumeInputs.isEmpty) {
+      return;
+    }
+    for (final MapEntry<String, NodeState> entry
+        in context.nodeStates.entries) {
+      final BaseNode? node = byName[entry.key];
+      if (node == null) {
+        continue;
+      }
+      final NodeState state = entry.value;
+      if (state.status != NodeStatus.waiting || state.interrupts.isEmpty) {
+        continue;
+      }
+      final Map<String, Object?> resolved = <String, Object?>{
+        for (final String interruptId in state.interrupts)
+          if (context.resumeInputs.containsKey(interruptId))
+            interruptId: context.resumeInputs[interruptId],
+      };
+      if (resolved.isEmpty) {
+        continue;
+      }
+      state.resumeInputs.addAll(resolved);
+      state.interrupts.removeWhere(resolved.containsKey);
+      if (state.interrupts.isEmpty && !node.rerunOnResume) {
+        context.outputs[entry.key] = _outputFromResumeInputs(
+          state.resumeInputs,
+        );
+        state.status = NodeStatus.completed;
+        state.resumeInputs.clear();
       }
     }
   }
@@ -928,10 +1007,47 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
     return false;
   }
   context.outputs[result.name] = result.output;
-  if (state?.resumeInputs.isNotEmpty == true) {
-    state!.resumeInputs.clear();
+  if (state != null) {
+    state.interrupts.clear();
+    state.resumeInputs.clear();
   }
   return true;
+}
+
+Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
+  return <String, NodeState>{
+    for (final MapEntry<String, NodeState> entry in states.entries)
+      entry.key: NodeState(
+        status: entry.value.status,
+        input: entry.value.input,
+        attemptCount: entry.value.attemptCount,
+        interrupts: List<String>.from(entry.value.interrupts),
+        resumeInputs: Map<String, Object?>.from(entry.value.resumeInputs),
+        runCounter: entry.value.runCounter,
+        runId: entry.value.runId,
+        parentRunId: entry.value.parentRunId,
+        error: entry.value.error,
+      ),
+  };
+}
+
+bool _isCompletedNodeState(NodeState state) {
+  return state.status == NodeStatus.completed ||
+      state.status == NodeStatus.succeeded;
+}
+
+bool _hasUnresolvedWaitingInterrupts(NodeState? state) {
+  if (state == null || state.status != NodeStatus.waiting) {
+    return false;
+  }
+  return state.interrupts.isNotEmpty;
+}
+
+Object? _outputFromResumeInputs(Map<String, Object?> resumeInputs) {
+  if (resumeInputs.length == 1) {
+    return resumeInputs.values.single;
+  }
+  return Map<String, Object?>.from(resumeInputs);
 }
 
 String _nodeName(Object node) {

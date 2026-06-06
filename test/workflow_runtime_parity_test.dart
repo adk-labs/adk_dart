@@ -182,6 +182,166 @@ void main() {
       },
     );
 
+    test(
+      'reruns request-input nodes with resume inputs when enabled',
+      () async {
+        final Workflow workflow = Workflow(
+          name: 'hitl_resume',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext context, Object? _) {
+                final Object? resumeInput = context.resumeInputs['ask_resume'];
+                if (resumeInput != null) {
+                  return resumeInput;
+                }
+                return RequestInput(
+                  interruptId: 'ask_resume',
+                  message: 'Need input',
+                );
+              },
+              name: 'ask_user',
+              rerunOnResume: true,
+            ),
+            node((WorkflowContext _, Object? input) {
+              final Map<dynamic, dynamic> response =
+                  input! as Map<dynamic, dynamic>;
+              return 'received:${response['text']}';
+            }, name: 'after_user'),
+          ],
+          edges: <Edge>[Edge(fromNode: 'ask_user', toNode: 'after_user')],
+        );
+
+        final WorkflowResult first = await workflow.runWorkflow();
+        final NodeState firstAskState = first.nodeStates['ask_user']!;
+        final String? firstRunId = firstAskState.runId;
+
+        final WorkflowResult second = await workflow.runWorkflow(
+          previousResult: first,
+          resumeInputs: <String, Object?>{
+            'ask_resume': <String, Object?>{'text': 'Hello from user'},
+          },
+        );
+
+        expect(firstAskState.status, NodeStatus.waiting);
+        expect(firstAskState.interrupts, <String>['ask_resume']);
+        expect(second.outputs['after_user'], 'received:Hello from user');
+        final NodeState secondAskState = second.nodeStates['ask_user']!;
+        expect(secondAskState.status, NodeStatus.completed);
+        expect(secondAskState.runId, firstRunId);
+        expect(secondAskState.runCounter, firstAskState.runCounter);
+        expect(secondAskState.interrupts, isEmpty);
+        expect(secondAskState.resumeInputs, isEmpty);
+      },
+    );
+
+    test(
+      'accumulates partial resume inputs until all interrupts resolve',
+      () async {
+        int runs = 0;
+        final Workflow workflow = Workflow(
+          name: 'hitl_partial_resume',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext context, Object? _) {
+                runs += 1;
+                final Object? first = context.resumeInputs['req1'];
+                final Object? second = context.resumeInputs['req2'];
+                if (first != null && second != null) {
+                  return '$first/$second';
+                }
+                context.interruptIds.addAll(<String>{'req1', 'req2'});
+                return null;
+              },
+              name: 'ask_twice',
+              rerunOnResume: true,
+            ),
+          ],
+        );
+
+        final WorkflowResult first = await workflow.runWorkflow();
+        final WorkflowResult partial = await workflow.runWorkflow(
+          previousResult: first,
+          resumeInputs: <String, Object?>{'req1': 'one'},
+        );
+
+        expect(runs, 1);
+        expect(partial.outputs.containsKey('ask_twice'), isFalse);
+        final NodeState partialState = partial.nodeStates['ask_twice']!;
+        expect(partialState.status, NodeStatus.waiting);
+        expect(partialState.interrupts, <String>['req2']);
+        expect(partialState.resumeInputs, <String, Object?>{'req1': 'one'});
+
+        final WorkflowResult completed = await workflow.runWorkflow(
+          previousResult: partial,
+          resumeInputs: <String, Object?>{'req2': 'two'},
+        );
+
+        expect(runs, 2);
+        expect(completed.outputs['ask_twice'], 'one/two');
+        expect(completed.nodeStates['ask_twice']?.status, NodeStatus.completed);
+        expect(completed.nodeStates['ask_twice']?.interrupts, isEmpty);
+        expect(completed.nodeStates['ask_twice']?.resumeInputs, isEmpty);
+      },
+    );
+
+    test(
+      'uses resume response output without rerunning completed predecessors',
+      () async {
+        int setupRuns = 0;
+        int askRuns = 0;
+        int afterRuns = 0;
+        final Workflow workflow = Workflow(
+          name: 'hitl_no_rerun',
+          nodes: <BaseNode>[
+            node((WorkflowContext _, Object? _) {
+              setupRuns += 1;
+              return 'ready';
+            }, name: 'setup'),
+            node((WorkflowContext _, Object? input) {
+              askRuns += 1;
+              return RequestInput(
+                interruptId: 'approval',
+                message: 'Approve $input?',
+              );
+            }, name: 'ask_user'),
+            node((WorkflowContext _, Object? input) {
+              afterRuns += 1;
+              final Map<dynamic, dynamic> response =
+                  input! as Map<dynamic, dynamic>;
+              return 'approved:${response['approved']}';
+            }, name: 'after_user'),
+          ],
+          edges: <Edge>[
+            Edge(fromNode: 'setup', toNode: 'ask_user'),
+            Edge(fromNode: 'ask_user', toNode: 'after_user'),
+          ],
+        );
+
+        final WorkflowResult first = await workflow.runWorkflow();
+
+        expect(first.nodeStates['ask_user']?.status, NodeStatus.waiting);
+        expect(first.outputs.containsKey('after_user'), isFalse);
+        expect(setupRuns, 1);
+        expect(askRuns, 1);
+        expect(afterRuns, 0);
+
+        final WorkflowResult second = await workflow.runWorkflow(
+          previousResult: first,
+          resumeInputs: <String, Object?>{
+            'approval': <String, Object?>{'approved': true},
+          },
+        );
+
+        expect(setupRuns, 1);
+        expect(askRuns, 1);
+        expect(afterRuns, 1);
+        expect(second.outputs['ask_user'], <String, Object?>{'approved': true});
+        expect(second.outputs['after_user'], 'approved:true');
+        expect(second.nodeStates['ask_user']?.status, NodeStatus.completed);
+        expect(second.nodeStates['ask_user']?.interrupts, isEmpty);
+      },
+    );
+
     test('routes edges from workflow event actions', () async {
       final FunctionNode router = node((WorkflowContext _, Object? _) {
         return Event(
