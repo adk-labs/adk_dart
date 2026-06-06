@@ -1863,12 +1863,24 @@ Future<String> _buildAgentGraphDot(
         highlightPairs.contains((from, to)) ||
         highlightPairs.contains((to, from));
     if (highlighted) {
+      final String? label = graph.edgeLabels[(from, to)];
+      final String labelAttribute = label == null
+          ? ''
+          : ', label="${_escapeDot(label)}"';
       out.writeln(
         '  "${_escapeDot(from)}" -> "${_escapeDot(to)}" '
-        '[color="red", penwidth=2.0];',
+        '[color="red", penwidth=2.0$labelAttribute];',
       );
     } else {
-      out.writeln('  "${_escapeDot(from)}" -> "${_escapeDot(to)}";');
+      final String? label = graph.edgeLabels[(from, to)];
+      if (label == null) {
+        out.writeln('  "${_escapeDot(from)}" -> "${_escapeDot(to)}";');
+      } else {
+        out.writeln(
+          '  "${_escapeDot(from)}" -> "${_escapeDot(to)}" '
+          '[label="${_escapeDot(label)}"];',
+        );
+      }
     }
   }
 
