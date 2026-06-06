@@ -56,6 +56,7 @@ export 'src/sessions/state.dart';
 
 export 'src/telemetry/base_telemetry_service.dart';
 export 'src/telemetry/in_memory_telemetry_service.dart';
+export 'src/telemetry/metrics.dart';
 
 export 'src/platform/time.dart';
 export 'src/platform/uuid.dart';

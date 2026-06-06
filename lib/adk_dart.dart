@@ -277,6 +277,7 @@ export 'src/sessions/vertex_ai_session_service.dart';
 export 'src/telemetry/base_telemetry_service.dart';
 export 'src/telemetry/google_cloud.dart';
 export 'src/telemetry/in_memory_telemetry_service.dart';
+export 'src/telemetry/metrics.dart';
 export 'src/telemetry/setup.dart';
 export 'src/telemetry/sqlite_span_exporter.dart';
 export 'src/telemetry/tracing.dart';

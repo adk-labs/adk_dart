@@ -125,7 +125,12 @@ void main() {
 
   test('records tool errors and keeps error propagation untouched', () async {
     final AdkTracer localTracer = AdkTracer();
-    final AutoTracingPlugin plugin = AutoTracingPlugin(tracer: localTracer);
+    final InMemoryAdkMetricsRecorder metricsRecorder =
+        InMemoryAdkMetricsRecorder();
+    final AutoTracingPlugin plugin = AutoTracingPlugin(
+      tracer: localTracer,
+      metricsRecorder: metricsRecorder,
+    );
     final InvocationContext invocationContext = _newInvocationContext();
     final ToolContext toolContext = Context(
       invocationContext,
@@ -151,5 +156,108 @@ void main() {
     expect(span.attributes['adk.auto_tracing.completed'], false);
     expect(span.attributes['error.type'], 'FormatException');
     expect(span.attributes['adk.fn.exc_repr'], contains('boom'));
+
+    final AdkMetricRecord duration = metricsRecorder.records.firstWhere((
+      AdkMetricRecord record,
+    ) {
+      return record.name == genAiToolExecutionDurationMetric;
+    });
+    expect(duration.attributes['gen_ai.tool.name'], 'fake_tool');
+    expect(duration.attributes['error.type'], 'FormatException');
+    final AdkMetricRecord responseSize = metricsRecorder.records.firstWhere((
+      AdkMetricRecord record,
+    ) {
+      return record.name == genAiToolResponseSizeMetric;
+    });
+    expect(responseSize.value, 0);
+  });
+
+  test('records lifecycle metrics from traced callbacks and events', () async {
+    final AdkTracer localTracer = AdkTracer();
+    final InMemoryAdkMetricsRecorder metricsRecorder =
+        InMemoryAdkMetricsRecorder();
+    final AutoTracingPlugin plugin = AutoTracingPlugin(
+      tracer: localTracer,
+      metricsRecorder: metricsRecorder,
+    );
+    final InvocationContext invocationContext = _newInvocationContext()
+      ..userContent = Content(
+        role: 'user',
+        parts: <Part>[
+          Part.text('hello'),
+          Part.fromInlineData(mimeType: 'text/plain', data: <int>[1, 2]),
+        ],
+      );
+    final Context callbackContext = Context(invocationContext);
+    final ToolContext toolContext = Context(
+      invocationContext,
+      functionCallId: 'fn_1',
+    );
+    final BaseTool tool = _FakeTool();
+
+    await plugin.beforeRunCallback(invocationContext: invocationContext);
+    await plugin.beforeAgentCallback(
+      agent: invocationContext.agent,
+      callbackContext: callbackContext,
+    );
+    await plugin.beforeToolCallback(
+      tool: tool,
+      toolArgs: <String, dynamic>{'city': 'Seoul', 'count': 2},
+      toolContext: toolContext,
+    );
+    await plugin.afterToolCallback(
+      tool: tool,
+      toolArgs: <String, dynamic>{'city': 'Seoul', 'count': 2},
+      toolContext: toolContext,
+      result: <String, dynamic>{'weather': 'sunny'},
+    );
+    await plugin.onEventCallback(
+      invocationContext: invocationContext,
+      event: Event(
+        invocationId: invocationContext.invocationId,
+        author: invocationContext.agent.name,
+        content: Content(
+          role: 'user',
+          parts: <Part>[
+            Part.fromFunctionResponse(
+              name: 'fake_tool',
+              response: <String, dynamic>{'weather': 'sunny'},
+              id: 'fn_1',
+            ),
+            Part.fromInlineData(mimeType: 'image/png', data: <int>[1, 2, 3]),
+          ],
+        ),
+      ),
+    );
+    await plugin.onEventCallback(
+      invocationContext: invocationContext,
+      event: Event(
+        invocationId: invocationContext.invocationId,
+        author: invocationContext.agent.name,
+        content: Content.modelText('response'),
+      ),
+    );
+    await plugin.afterAgentCallback(
+      agent: invocationContext.agent,
+      callbackContext: callbackContext,
+    );
+    await plugin.afterRunCallback(invocationContext: invocationContext);
+
+    AdkMetricRecord metric(String name) {
+      return metricsRecorder.records.firstWhere((AdkMetricRecord record) {
+        return record.name == name;
+      });
+    }
+
+    expect(metric(genAiAgentInvocationDurationMetric).unit, 'ms');
+    expect(metric(genAiAgentRequestSizeMetric).value, 7);
+    expect(metric(genAiAgentResponseSizeMetric).value, 8);
+    expect(metric(genAiAgentWorkflowStepsMetric).value, 2);
+    expect(metric(genAiToolRequestSizeMetric).value, 5);
+    expect(metric(genAiToolResponseSizeMetric).value, 3);
+    expect(
+      metric(genAiToolExecutionDurationMetric).attributes,
+      containsPair('gen_ai.tool.name', 'fake_tool'),
+    );
   });
 }
