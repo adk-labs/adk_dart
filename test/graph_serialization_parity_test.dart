@@ -46,6 +46,10 @@ void main() {
         <String, Object?>{'from_node': 'NodeA', 'to_node': 'NodeB', 'route': 1},
         <String, Object?>{'from_node': 'NodeB', 'to_node': 'Join'},
       ]);
+      final Map<String, Object?> graph =
+          result['graph']! as Map<String, Object?>;
+      expect(graph['nodes'], result['nodes']);
+      expect(graph['edges'], result['edges']);
       expect(jsonEncode(result), isA<String>());
     });
 

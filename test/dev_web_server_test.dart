@@ -1291,14 +1291,19 @@ void main() {
       expect(rootAgent['name'], 'workflow_agent');
       expect(rootAgent['type'], 'workflow');
       expect(rootAgent['nodes'], isA<List<dynamic>>());
-      expect(rootAgent['edges'], <dynamic>[
+      final List<dynamic> expectedEdges = <dynamic>[
         <String, dynamic>{'from_node': START, 'to_node': 'start_node'},
         <String, dynamic>{
           'from_node': 'start_node',
           'to_node': 'routed_node',
           'route': 'next',
         },
-      ]);
+      ];
+      expect(rootAgent['edges'], expectedEdges);
+      final Map<String, dynamic> graph =
+          rootAgent['graph'] as Map<String, dynamic>;
+      expect(graph['nodes'], rootAgent['nodes']);
+      expect(graph['edges'], expectedEdges);
     });
 
     test('creates and lists eval sets via web routes', () async {

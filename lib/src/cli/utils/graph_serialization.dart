@@ -50,8 +50,11 @@ GraphJson serializeAgent(BaseAgent agent) {
     result.addAll(_serializeLlmAgentFields(agent));
   }
   if (agent is Workflow) {
-    result['nodes'] = agent.nodes.map(serializeNode).toList();
-    result['edges'] = agent.edges.map(serializeEdge).toList();
+    final List<GraphJson> nodes = agent.nodes.map(serializeNode).toList();
+    final List<GraphJson> edges = agent.edges.map(serializeEdge).toList();
+    result['nodes'] = nodes;
+    result['edges'] = edges;
+    result['graph'] = <String, Object?>{'nodes': nodes, 'edges': edges};
   } else if (agent.subAgents.isNotEmpty) {
     result['sub_agents'] = agent.subAgents.map(serializeAgent).toList();
   }
