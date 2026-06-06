@@ -479,68 +479,60 @@ class StreamingResponseAggregator {
 
   /// Finalizes aggregation and returns the terminal merged response.
   LlmResponse? close() {
+    final LlmResponse? response = _response;
+    if (response == null) {
+      return null;
+    }
+
     if (isFeatureEnabled(FeatureName.progressiveSseStreaming)) {
-      if (_response == null) {
-        return null;
-      }
       _flushTextBufferToSequence();
       _flushFunctionCallToSequence();
-      if (_partsSequence.isEmpty) {
-        return null;
-      }
-
-      final String? finishReason = _finishReason ?? _response!.finishReason;
-      final bool success = finishReason == null || finishReason == 'STOP';
-      return LlmResponse(
-        modelVersion: _response!.modelVersion ?? _modelVersion,
-        content: Content(
-          parts: _partsSequence
-              .map((Part part) => part.copyWith())
-              .toList(growable: false),
-        ),
-        citationMetadata: _citationMetadata,
-        groundingMetadata: _groundingMetadata,
-        avgLogprobs: _avgLogprobs,
-        logprobsResult: _logprobsResult,
-        cacheMetadata: _cacheMetadata,
-        interactionId: _interactionId,
-        errorCode: success ? null : finishReason,
-        errorMessage: success ? null : _response!.errorMessage,
-        usageMetadata: _usageMetadata,
-        finishReason: finishReason,
-        partial: false,
+      return _terminalResponse(
+        response,
+        content: _partsSequence.isEmpty
+            ? null
+            : Content(
+                parts: _partsSequence
+                    .map((Part part) => part.copyWith())
+                    .toList(growable: false),
+              ),
       );
     }
 
     final bool hasBufferedText = _text.isNotEmpty || _thoughtText.isNotEmpty;
-    if (!hasBufferedText || _response == null) {
-      return null;
-    }
+    return _terminalResponse(
+      response,
+      content: hasBufferedText
+          ? Content(
+              parts: <Part>[
+                if (_thoughtText.isNotEmpty)
+                  Part.text(
+                    _thoughtText,
+                    thought: true,
+                    thoughtSignature: _thoughtTextSignature,
+                  ),
+                if (_text.isNotEmpty)
+                  Part.text(_text, thoughtSignature: _textThoughtSignature),
+              ],
+            )
+          : null,
+    );
+  }
 
-    final String? finishReason = _finishReason ?? _response!.finishReason;
+  LlmResponse _terminalResponse(LlmResponse response, {Content? content}) {
+    final String? finishReason = _finishReason ?? response.finishReason;
     final bool success = finishReason == null || finishReason == 'STOP';
     return LlmResponse(
-      modelVersion: _response!.modelVersion ?? _modelVersion,
-      content: Content(
-        parts: <Part>[
-          if (_thoughtText.isNotEmpty)
-            Part.text(
-              _thoughtText,
-              thought: true,
-              thoughtSignature: _thoughtTextSignature,
-            ),
-          if (_text.isNotEmpty)
-            Part.text(_text, thoughtSignature: _textThoughtSignature),
-        ],
-      ),
+      modelVersion: response.modelVersion ?? _modelVersion,
+      content: content,
       citationMetadata: _citationMetadata,
       groundingMetadata: _groundingMetadata,
       avgLogprobs: _avgLogprobs,
       logprobsResult: _logprobsResult,
       cacheMetadata: _cacheMetadata,
       interactionId: _interactionId,
-      errorCode: success ? null : finishReason,
-      errorMessage: success ? null : _response!.errorMessage,
+      errorCode: response.errorCode ?? (success ? null : finishReason),
+      errorMessage: response.errorMessage,
       usageMetadata: _usageMetadata,
       finishReason: finishReason,
       partial: false,

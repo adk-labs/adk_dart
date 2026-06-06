@@ -25,6 +25,23 @@ Future<List<String>> _capturePrints(FutureOr<void> Function() action) async {
   return lines;
 }
 
+void _expectEmptyTerminalFrame(
+  LlmResponse? response, {
+  String? finishReason = 'STOP',
+  String? errorCode,
+  String? errorMessage,
+}) {
+  expect(response, isNotNull);
+  final LlmResponse terminal = response!;
+  expect(terminal.partial, isFalse);
+  expect(terminal.content, isNull);
+  expect(terminal.finishReason, finishReason);
+  expect(terminal.errorCode, errorCode);
+  if (errorMessage != null) {
+    expect(terminal.errorMessage, errorMessage);
+  }
+}
+
 void main() {
   group('missing utils parity', () {
     setUp(() {
@@ -326,7 +343,69 @@ void main() {
           third.last.content?.parts.first.functionCall?.id,
           startsWith('adk-'),
         );
-        expect(aggregator.close(), isNull);
+        _expectEmptyTerminalFrame(aggregator.close());
+      },
+    );
+
+    test(
+      'streaming response aggregator emits final frame for empty content',
+      () async {
+        for (final bool progressive in <bool>[false, true]) {
+          overrideFeatureEnabled(
+            FeatureName.progressiveSseStreaming,
+            progressive,
+          );
+          final StreamingResponseAggregator aggregator =
+              StreamingResponseAggregator();
+
+          final List<LlmResponse> results = await aggregator
+              .processResponse(
+                LlmResponse(
+                  content: Content(parts: const <Part>[]),
+                  finishReason: 'STOP',
+                ),
+              )
+              .toList();
+
+          expect(results, hasLength(1));
+          expect(results.single.content, isNotNull);
+          _expectEmptyTerminalFrame(aggregator.close());
+        }
+      },
+    );
+
+    test(
+      'streaming response aggregator emits final error frame without content',
+      () async {
+        for (final bool progressive in <bool>[false, true]) {
+          overrideFeatureEnabled(
+            FeatureName.progressiveSseStreaming,
+            progressive,
+          );
+          final StreamingResponseAggregator aggregator =
+              StreamingResponseAggregator();
+
+          await aggregator
+              .processResponse(
+                LlmResponse(
+                  errorCode: 'SAFETY',
+                  errorMessage: 'Blocked by safety',
+                  usageMetadata: <String, Object?>{'totalTokenCount': 4},
+                ),
+              )
+              .toList();
+
+          final LlmResponse? terminal = aggregator.close();
+          _expectEmptyTerminalFrame(
+            terminal,
+            finishReason: null,
+            errorCode: 'SAFETY',
+            errorMessage: 'Blocked by safety',
+          );
+          expect(terminal!.usageMetadata, <String, Object?>{
+            'totalTokenCount': 4,
+          });
+        }
       },
     );
 
@@ -401,7 +480,7 @@ void main() {
             )
             .toList();
         expect(emptyStop, isEmpty);
-        expect(aggregator.close(), isNull);
+        _expectEmptyTerminalFrame(aggregator.close());
       },
     );
 
@@ -445,7 +524,7 @@ void main() {
           startsWith('adk-'),
         );
         expect(results.last.partial, isFalse);
-        expect(aggregator.close(), isNull);
+        _expectEmptyTerminalFrame(aggregator.close());
       },
     );
 
@@ -473,7 +552,7 @@ void main() {
         expect(merged.content?.parts.single.text, 'Hello');
         expect(merged.finishReason, 'STOP');
         expect(merged.errorCode, isNull);
-        expect(aggregator.close(), isNull);
+        _expectEmptyTerminalFrame(aggregator.close());
       },
     );
 
