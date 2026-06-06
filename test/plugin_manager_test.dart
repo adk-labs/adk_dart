@@ -80,6 +80,17 @@ class _CloseSlowPlugin extends BasePlugin {
   }
 }
 
+class _CloseRecordingPlugin extends BasePlugin {
+  _CloseRecordingPlugin({required super.name});
+
+  int closeCalls = 0;
+
+  @override
+  Future<void> close() async {
+    closeCalls += 1;
+  }
+}
+
 InvocationContext _newInvocationContext() {
   final LlmAgent agent = LlmAgent(
     name: 'root_agent',
@@ -170,6 +181,23 @@ void main() {
       ),
     );
   });
+
+  test(
+    'setSkipClosingPlugins makes close a no-op for shared plugins',
+    () async {
+      final _CloseRecordingPlugin plugin = _CloseRecordingPlugin(
+        name: 'shared',
+      );
+      final PluginManager manager = PluginManager(
+        plugins: <BasePlugin>[plugin],
+      );
+
+      manager.setSkipClosingPlugins(true);
+      await manager.close();
+
+      expect(plugin.closeCalls, 0);
+    },
+  );
 
   test('runAfterRunCallback wraps plugin errors with callback name', () async {
     final PluginManager manager = PluginManager(

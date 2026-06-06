@@ -131,6 +131,17 @@ class _DeferredNullTool extends BaseTool {
   }
 }
 
+class _CloseRecordingPlugin extends BasePlugin {
+  _CloseRecordingPlugin() : super(name: 'close_recorder');
+
+  int closeCalls = 0;
+
+  @override
+  Future<void> close() async {
+    closeCalls += 1;
+  }
+}
+
 void main() {
   test('AgentTool runs wrapped agent and returns merged text', () async {
     final Agent childAgent = Agent(
@@ -236,6 +247,39 @@ void main() {
       expect(result, 'stdout\nprint(1)');
     },
   );
+
+  test('AgentTool does not close inherited parent plugins', () async {
+    final _CloseRecordingPlugin plugin = _CloseRecordingPlugin();
+    final Agent childAgent = Agent(
+      name: 'child_agent',
+      model: _ChildModel(),
+      disallowTransferToParent: true,
+      disallowTransferToPeers: true,
+    );
+    final AgentTool tool = AgentTool(agent: childAgent);
+
+    final InvocationContext invocationContext = InvocationContext(
+      sessionService: InMemorySessionService(),
+      invocationId: 'inv_agent_tool_plugins',
+      agent: Agent(name: 'root_agent', model: _ChildModel()),
+      session: Session(
+        id: 's_agent_tool_plugins',
+        appName: 'app',
+        userId: 'u1',
+      ),
+      artifactService: InMemoryArtifactService(),
+      memoryService: InMemoryMemoryService(),
+      pluginManager: PluginManager(plugins: <BasePlugin>[plugin]),
+    );
+
+    final Object? result = await tool.run(
+      args: <String, dynamic>{'request': 'ping'},
+      toolContext: Context(invocationContext),
+    );
+
+    expect('$result', contains('ping'));
+    expect(plugin.closeCalls, 0);
+  });
 
   test('deferred response tools skip automatic function response', () async {
     final _DeferredNullTool tool = _DeferredNullTool();

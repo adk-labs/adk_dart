@@ -39,6 +39,7 @@ class PluginManager {
 
   final Duration _closeTimeout;
   final List<BasePlugin> _plugins;
+  bool _skipClosingPlugins = false;
 
   /// Registered plugins in execution order.
   List<BasePlugin> get plugins => List<BasePlugin>.unmodifiable(_plugins);
@@ -83,6 +84,13 @@ class PluginManager {
       }
     }
     return null;
+  }
+
+  /// Controls whether [close] tears down registered plugin instances.
+  ///
+  /// Set this when the manager references plugins owned by another runner.
+  void setSkipClosingPlugins(bool value) {
+    _skipClosingPlugins = value;
   }
 
   /// Runs the `onUserMessageCallback` chain.
@@ -287,6 +295,10 @@ class PluginManager {
 
   /// Closes all plugins and reports aggregated close failures.
   Future<void> close() async {
+    if (_skipClosingPlugins) {
+      return;
+    }
+
     final Map<String, Object> errors = <String, Object>{};
     for (final BasePlugin plugin in _plugins) {
       try {

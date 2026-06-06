@@ -146,6 +146,9 @@ class AgentTool extends BaseTool {
           ? invocationContext.pluginManager.plugins.toList(growable: false)
           : null,
     );
+    if (includePlugins) {
+      runner.pluginManager.setSkipClosingPlugins(true);
+    }
 
     final Map<String, Object?> stateSnapshot = Map<String, Object?>.from(
       toolContext.state.toMap(),
