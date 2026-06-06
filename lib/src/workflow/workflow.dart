@@ -286,6 +286,50 @@ class ToolNode extends BaseNode {
   }
 }
 
+/// Node that wraps an ADK [BaseAgent].
+class AgentNode extends BaseNode {
+  /// Creates an agent-backed workflow node.
+  AgentNode({
+    required this.agent,
+    String? name,
+    super.description,
+    super.dependsOn,
+    super.rerunOnResume,
+    super.waitForOutput,
+    super.retryConfig,
+    super.timeout,
+  }) : super(name: name ?? agent.name);
+
+  /// Agent executed by this node.
+  final BaseAgent agent;
+
+  @override
+  Future<Object?> run(WorkflowContext context, Object? nodeInput) async {
+    final InvocationContext parentContext =
+        context.invocationContext ?? _standaloneInvocationContext(name);
+    final Content? userContent = nodeInput == null
+        ? null
+        : _contentFromNodeInput(nodeInput);
+    final InvocationContext agentContext = parentContext.copyWith(
+      agent: agent,
+      userContent: userContent,
+    );
+
+    Event? finalEvent;
+    await for (final Event event in agent.runAsync(agentContext)) {
+      if (event.isFinalResponse()) {
+        finalEvent = event;
+      }
+    }
+
+    if (finalEvent == null) {
+      return null;
+    }
+    _mergeStateDelta(agentContext.session, finalEvent.actions.stateDelta);
+    return _outputFromAgentEvent(finalEvent);
+  }
+}
+
 /// Directed workflow edge.
 class Edge {
   /// Creates a workflow edge.
@@ -595,4 +639,45 @@ InvocationContext _standaloneInvocationContext(String nodeName) {
       userId: 'workflow',
     ),
   );
+}
+
+Content _contentFromNodeInput(Object nodeInput) {
+  if (nodeInput is Content) {
+    return nodeInput.copyWith(role: 'user');
+  }
+  if (nodeInput is String) {
+    return Content.userText(nodeInput);
+  }
+  if (nodeInput is Map || nodeInput is List) {
+    return Content.userText(jsonEncode(nodeInput));
+  }
+  return Content.userText('$nodeInput');
+}
+
+Object? _outputFromAgentEvent(Event event) {
+  final Content? content = event.content;
+  if (content == null) {
+    return null;
+  }
+  if (event.getFunctionCalls().isNotEmpty ||
+      event.getFunctionResponses().isNotEmpty ||
+      event.partial == true) {
+    return event;
+  }
+  final String text = content.parts
+      .where((Part part) => part.text != null && !part.thought)
+      .map((Part part) => part.text!)
+      .join();
+  if (text.isNotEmpty ||
+      content.parts.every((Part part) => part.text != null)) {
+    return text;
+  }
+  return content;
+}
+
+void _mergeStateDelta(Session session, Map<String, Object?> stateDelta) {
+  if (stateDelta.isEmpty) {
+    return;
+  }
+  session.state.addAll(stateDelta);
 }

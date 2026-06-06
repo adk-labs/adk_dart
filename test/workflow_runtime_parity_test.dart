@@ -22,6 +22,32 @@ class _NonRetryableWorkflowError implements Exception {
   String toString() => '_NonRetryableWorkflowError: $message';
 }
 
+class _EchoAgent extends BaseAgent {
+  _EchoAgent({required super.name, this.stateKey});
+
+  final String? stateKey;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    final String input =
+        context.userContent?.parts
+            .where((Part part) => part.text != null)
+            .map((Part part) => part.text!)
+            .join() ??
+        '';
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('agent:$input'),
+      actions: stateKey == null
+          ? EventActions()
+          : EventActions(
+              stateDelta: <String, Object?>{stateKey!: 'agent:$input'},
+            ),
+    );
+  }
+}
+
 void main() {
   group('workflow runtime parity', () {
     test('runs dependency graph and join nodes', () async {
@@ -235,6 +261,43 @@ void main() {
       );
 
       await expectLater(workflow.runWorkflow(), throwsA(isA<ArgumentError>()));
+    });
+
+    test('runs agents as workflow nodes', () async {
+      final Workflow workflow = Workflow(
+        name: 'agent_node_graph',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? input) => '$input from source',
+            name: 'source',
+          ),
+          AgentNode(
+            agent: _EchoAgent(name: 'echo_agent'),
+            dependsOn: const <String>['source'],
+          ),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow(input: 'hello');
+
+      expect(result.outputs['echo_agent'], 'agent:hello from source');
+    });
+
+    test('agent nodes merge state deltas into the workflow session', () async {
+      final Session session = Session(id: 's', appName: 'app', userId: 'u');
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv',
+        agent: LlmAgent(name: 'root'),
+        session: session,
+      );
+
+      final Object? output = await AgentNode(
+        agent: _EchoAgent(name: 'echo_agent', stateKey: 'echo_output'),
+      ).run(WorkflowContext(invocationContext: invocationContext), 'stateful');
+
+      expect(output, 'agent:stateful');
+      expect(session.state['echo_output'], 'agent:stateful');
     });
   });
 }
