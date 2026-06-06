@@ -1258,8 +1258,23 @@ void main() {
       );
     });
 
-    test('returns bad request for non-llm app info roots', () async {
-      runtime.runner.agent = SequentialAgent(name: 'workflow_agent');
+    test('serves graph serialized app info for workflow roots', () async {
+      final FunctionNode startNode = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'start_node',
+      );
+      final FunctionNode routedNode = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'routed_node',
+      );
+      runtime.runner.agent = Workflow(
+        name: 'workflow_agent',
+        nodes: <BaseNode>[startNode, routedNode],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: startNode),
+          Edge(fromNode: startNode, toNode: routedNode, route: 'next'),
+        ],
+      );
 
       final HttpClientRequest request = await client.getUrl(
         Uri.parse('http://127.0.0.1:${server.port}/apps/test_app/app-info'),
@@ -1269,8 +1284,21 @@ void main() {
           jsonDecode(await utf8.decoder.bind(response).join())
               as Map<String, dynamic>;
 
-      expect(response.statusCode, HttpStatus.badRequest);
-      expect(payload['error'], 'Root agent is not an LlmAgent');
+      expect(response.statusCode, HttpStatus.ok);
+      expect(payload['name'], 'test_app');
+      final Map<String, dynamic> rootAgent =
+          payload['root_agent'] as Map<String, dynamic>;
+      expect(rootAgent['name'], 'workflow_agent');
+      expect(rootAgent['type'], 'workflow');
+      expect(rootAgent['nodes'], isA<List<dynamic>>());
+      expect(rootAgent['edges'], <dynamic>[
+        <String, dynamic>{'from_node': START, 'to_node': 'start_node'},
+        <String, dynamic>{
+          'from_node': 'start_node',
+          'to_node': 'routed_node',
+          'route': 'next',
+        },
+      ]);
     });
 
     test('creates and lists eval sets via web routes', () async {

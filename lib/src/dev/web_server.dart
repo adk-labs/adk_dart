@@ -21,6 +21,7 @@ import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/utils/agent_loader.dart';
 import '../cli/utils/base_agent_loader.dart';
 import '../cli/utils/evals.dart' as cli_evals;
+import '../cli/utils/graph_serialization.dart' as graph_serialization;
 import '../cli/service_registry.dart';
 import '../cli/plugins/conformance_recordings_plugin.dart';
 import '../cli/plugins/conformance_replay_plugin.dart';
@@ -1552,9 +1553,9 @@ Future<void> _handleGetAppInfo(
   _AdkDevWebContext context, {
   required String appName,
 }) async {
-  final BaseAgent rootAgent;
+  final Runner runner;
   try {
-    rootAgent = context.getRootAgent(appName);
+    runner = await context.getRunner(appName);
   } on ArgumentError catch (error) {
     await _writeError(
       request,
@@ -1573,12 +1574,20 @@ Future<void> _handleGetAppInfo(
     return;
   }
 
+  final BaseAgent rootAgent = runner.agent;
   if (rootAgent is! LlmAgent) {
-    await _writeError(
+    await _writeJson(
       request,
       context,
-      statusCode: HttpStatus.badRequest,
-      message: 'Root agent is not an LlmAgent',
+      payload: graph_serialization.serializeAppInfo(
+        App(
+          name: appName,
+          rootAgent: rootAgent,
+          plugins: runner.pluginManager.plugins.toList(growable: false),
+          contextCacheConfig: runner.contextCacheConfig,
+          resumabilityConfig: runner.resumabilityConfig,
+        ),
+      ),
     );
     return;
   }
