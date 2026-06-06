@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
@@ -38,8 +39,9 @@ class RetryConfig {
     this.initialDelay = Duration.zero,
     this.maxDelay = const Duration(seconds: 30),
     this.backoffMultiplier = 2,
+    this.jitter = 0.0,
     this.exceptions,
-  });
+  }) : assert(jitter >= 0, 'jitter must be non-negative.');
 
   /// Maximum number of attempts including the first run.
   ///
@@ -55,6 +57,12 @@ class RetryConfig {
 
   /// Exponential backoff multiplier.
   final double backoffMultiplier;
+
+  /// Randomness factor applied to retry delay.
+  ///
+  /// A value of `0.0` disables jitter. A value of `0.5` randomizes the delay
+  /// within +/-50% of the calculated backoff delay.
+  final double jitter;
 
   /// Optional retry filter by exception class name or exact [Type].
   ///
@@ -1513,6 +1521,11 @@ Duration _retryDelay(RetryConfig retry, int attempt) {
   }
   if (delayMs > retry.maxDelay.inMilliseconds) {
     delayMs = retry.maxDelay.inMilliseconds;
+  }
+  if (retry.jitter > 0 && delayMs > 0) {
+    final double spread = delayMs * retry.jitter;
+    final double offset = (math.Random().nextDouble() * spread * 2) - spread;
+    delayMs = math.max(0, delayMs + offset).round();
   }
   return Duration(milliseconds: delayMs);
 }

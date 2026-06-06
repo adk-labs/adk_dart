@@ -1689,6 +1689,45 @@ void main() {
       expect(result.nodeStates['flaky']?.attemptCount, 3);
     });
 
+    test('retry config applies explicit jitter to retry delay', () async {
+      int attempts = 0;
+      DateTime? firstAttemptAt;
+      DateTime? secondAttemptAt;
+      final Workflow workflow = Workflow(
+        name: 'retry_jitter',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? _) {
+              attempts += 1;
+              if (attempts == 1) {
+                firstAttemptAt = DateTime.now();
+                throw const _RetryableWorkflowError('try again');
+              }
+              secondAttemptAt = DateTime.now();
+              return 'ok';
+            },
+            name: 'flaky',
+            retryConfig: const wf.RetryConfig(
+              maxAttempts: 2,
+              initialDelay: Duration(milliseconds: 20),
+              maxDelay: Duration(milliseconds: 20),
+              backoffMultiplier: 1,
+              jitter: 0.5,
+            ),
+          ),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['flaky'], 'ok');
+      expect(result.nodeStates['flaky']?.attemptCount, 2);
+      expect(
+        secondAttemptAt!.difference(firstAttemptAt!).inMilliseconds,
+        greaterThanOrEqualTo(5),
+      );
+    });
+
     test('does not retry non-matching exception names', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(
