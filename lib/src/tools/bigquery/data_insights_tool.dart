@@ -109,6 +109,7 @@ Future<List<Map<String, Object?>>> _getStream({
 
   String accumulator = '';
   final List<Map<String, Object?>> messages = <Map<String, Object?>>[];
+  int dataMessageIndex = -1;
 
   await for (final String rawLine in responseStream) {
     if (rawLine.isEmpty) {
@@ -143,9 +144,10 @@ Future<List<Map<String, Object?>>> _getStream({
 
     if (!dataJson.containsKey('systemMessage')) {
       if (dataJson['error'] is Map) {
-        _appendMessage(
+        dataMessageIndex = _appendMessage(
           messages,
           _handleError(Map<String, Object?>.from(dataJson['error'] as Map)),
+          dataMessageIndex: dataMessageIndex,
         );
       }
       continue;
@@ -160,26 +162,29 @@ Future<List<Map<String, Object?>>> _getStream({
     );
 
     if (systemMessage['text'] is Map) {
-      _appendMessage(
+      dataMessageIndex = _appendMessage(
         messages,
         _handleTextResponse(
           Map<String, Object?>.from(systemMessage['text'] as Map),
         ),
+        dataMessageIndex: dataMessageIndex,
       );
     } else if (systemMessage['schema'] is Map) {
-      _appendMessage(
+      dataMessageIndex = _appendMessage(
         messages,
         _handleSchemaResponse(
           Map<String, Object?>.from(systemMessage['schema'] as Map),
         ),
+        dataMessageIndex: dataMessageIndex,
       );
     } else if (systemMessage['data'] is Map) {
-      _appendMessage(
+      dataMessageIndex = _appendMessage(
         messages,
         _handleDataResponse(
           Map<String, Object?>.from(systemMessage['data'] as Map),
           maxQueryResultRows,
         ),
+        dataMessageIndex: dataMessageIndex,
       );
     }
   }
@@ -369,19 +374,27 @@ Map<String, Object?> _handleError(Map<String, Object?> response) {
   };
 }
 
-void _appendMessage(
+int _appendMessage(
   List<Map<String, Object?>> messages,
-  Map<String, Object?> newMessage,
-) {
+  Map<String, Object?> newMessage, {
+  required int dataMessageIndex,
+}) {
   if (newMessage.isEmpty) {
-    return;
+    return dataMessageIndex;
   }
 
-  if (messages.isNotEmpty && messages.last.containsKey('Data Retrieved')) {
-    messages.removeLast();
+  if (newMessage.containsKey('Data Retrieved')) {
+    if (dataMessageIndex >= 0 && dataMessageIndex < messages.length) {
+      messages[dataMessageIndex] = <String, Object?>{
+        'Data Retrieved': 'Intermediate result omitted',
+      };
+    }
+    messages.add(newMessage);
+    return messages.length - 1;
   }
 
   messages.add(newMessage);
+  return dataMessageIndex;
 }
 
 String? _extractAccessToken(Object credentials) {

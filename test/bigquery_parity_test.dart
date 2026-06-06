@@ -1020,6 +1020,50 @@ void main() {
           );
       expect(fromAuthCredential['status'], 'SUCCESS');
     });
+
+    test('omits intermediate data results while preserving step order', () async {
+      data_insights_tool.setBigQueryInsightsStreamProvider(({
+        required Uri url,
+        required Map<String, Object?> payload,
+        required Map<String, String> headers,
+      }) async {
+        return Stream<String>.fromIterable(<String>[
+          '{"systemMessage":{"data":{"result":{"schema":{"fields":[{"name":"id"}]},"data":[{"id":1}]}}}}',
+          '{"systemMessage":{"data":{"result":{"schema":{"fields":[{"name":"id"}]},"data":[{"id":2},{"id":3}]}}}}',
+          '{"systemMessage":{"text":{"parts":["Final answer"]}}}',
+        ]);
+      });
+
+      final Map<String, Object?> result = await data_insights_tool
+          .askDataInsights(
+            projectId: 'project1',
+            userQueryWithContext: 'question',
+            tableReferences: <Map<String, String>>[
+              <String, String>{
+                'projectId': 'project1',
+                'datasetId': 'dataset',
+                'tableId': 'table',
+              },
+            ],
+            credentials: GoogleOAuthCredential(accessToken: 'token_123'),
+            settings: BigQueryToolConfig(maxQueryResultRows: 1),
+          );
+
+      expect(result['status'], 'SUCCESS');
+      final List response = result['response'] as List;
+      expect(response, hasLength(3));
+      expect(response[0], <String, Object?>{
+        'Data Retrieved': 'Intermediate result omitted',
+      });
+      final Map<String, Object?> latestData = Map<String, Object?>.from(
+        (response[1] as Map)['Data Retrieved'] as Map,
+      );
+      expect(latestData['rows'], <List<Object?>>[
+        <Object?>[2],
+      ]);
+      expect(latestData['summary'], 'Showing the first 1 of 2 total rows.');
+      expect(response[2], <String, Object?>{'Answer': 'Final answer'});
+    });
   });
 
   group('bigquery toolset parity', () {
