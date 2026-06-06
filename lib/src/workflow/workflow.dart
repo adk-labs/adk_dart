@@ -114,6 +114,7 @@ class NodeState {
     List<String>? interrupts,
     Map<String, Object?>? resumeInputs,
     List<String>? outputFor,
+    this.branch,
     this.runCounter = 0,
     this.runId,
     this.parentRunId,
@@ -140,6 +141,9 @@ class NodeState {
 
   /// Output ownership targets for delegated workflow outputs.
   final List<String> outputFor;
+
+  /// Branch used when emitting this node's output event.
+  String? branch;
 
   /// Sequential run counter for fresh node runs.
   int runCounter;
@@ -235,12 +239,17 @@ class WorkflowContext {
   ///
   /// When [useAsOutput] is true, the dynamic child output is treated as the
   /// caller's delegated output and the caller's own output is suppressed.
+  /// [overrideBranch] replaces the inherited branch for the child output event.
+  /// When [useSubBranch] is true, the child output event branch appends the
+  /// generated `nodeName@runId` segment to the inherited or overridden branch.
   Future<Object?> runNode(
     Object nodeLike, {
     Object? input,
     String? name,
     String? runId,
     bool useAsOutput = false,
+    bool useSubBranch = false,
+    String? overrideBranch,
     String description = '',
     bool? rerunOnResume,
     bool? waitForOutput,
@@ -271,7 +280,20 @@ class WorkflowContext {
     }
     final String effectiveRunId = runId ?? _nextDynamicRunId(node.name);
     final String stateKey = '${node.name}@$effectiveRunId';
+    final String? parentKey = _currentNodeKey;
+    final NodeState? parentState = parentKey == null
+        ? null
+        : nodeStates[parentKey];
+    final String? branch = _dynamicNodeBranch(
+      nodeKey: stateKey,
+      parentBranch: parentState?.branch ?? invocationContext?.branch,
+      useSubBranch: useSubBranch,
+      overrideBranch: overrideBranch,
+    );
     final NodeState? state = nodeStates[stateKey];
+    if (branch != null && state != null) {
+      state.branch = branch;
+    }
     if (state != null) {
       if (_isCompletedNodeState(state) && outputs.containsKey(stateKey)) {
         return outputs[stateKey];
@@ -304,6 +326,9 @@ class WorkflowContext {
       stateKey: stateKey,
       runId: effectiveRunId,
     );
+    if (branch != null) {
+      nodeStates[stateKey]?.branch = branch;
+    }
     final _NodeRunResult result = _resultFromRawNodeOutput(
       node,
       rawOutput,
@@ -312,9 +337,7 @@ class WorkflowContext {
     );
     if (useAsOutput) {
       final NodeState? childState = nodeStates[stateKey];
-      final String? parentKey = _currentNodeKey;
       if (childState != null && parentKey != null) {
-        final NodeState? parentState = nodeStates[parentKey];
         childState.outputFor
           ..clear()
           ..add(stateKey)
@@ -327,6 +350,21 @@ class WorkflowContext {
     }
     _recordNodeResult(this, result);
     return result.output;
+  }
+
+  String? _dynamicNodeBranch({
+    required String nodeKey,
+    required String? parentBranch,
+    required bool useSubBranch,
+    required String? overrideBranch,
+  }) {
+    final String? baseBranch = overrideBranch ?? parentBranch;
+    if (useSubBranch) {
+      return baseBranch == null || baseBranch.isEmpty
+          ? nodeKey
+          : '$baseBranch.$nodeKey';
+    }
+    return overrideBranch;
   }
 
   String _nextDynamicRunId(String nodeName) {
@@ -998,22 +1036,25 @@ class Workflow extends BaseAgent {
       outputForKeys: state?.outputFor,
     );
     if (output is Event) {
-      return output.nodeInfo.isEmpty
+      final Event event = output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
           : output;
+      return event.branch == null
+          ? event.copyWith(branch: state?.branch ?? context.branch)
+          : event;
     }
     if (output is RequestInput) {
       return createRequestInputEvent(
         output,
         invocationId: context.invocationId,
         author: author,
-      ).copyWith(nodeInfo: nodeInfo);
+      ).copyWith(nodeInfo: nodeInfo, branch: state?.branch ?? context.branch);
     }
     if (output is Content) {
       return Event(
         invocationId: context.invocationId,
         author: author,
-        branch: context.branch,
+        branch: state?.branch ?? context.branch,
         nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
         content: output,
       );
@@ -1022,7 +1063,7 @@ class Workflow extends BaseAgent {
     return Event(
       invocationId: context.invocationId,
       author: author,
-      branch: context.branch,
+      branch: state?.branch ?? context.branch,
       nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
       content: Content.modelText(text),
     );
@@ -1237,6 +1278,7 @@ Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
         interrupts: List<String>.from(entry.value.interrupts),
         resumeInputs: Map<String, Object?>.from(entry.value.resumeInputs),
         outputFor: List<String>.from(entry.value.outputFor),
+        branch: entry.value.branch,
         runCounter: entry.value.runCounter,
         runId: entry.value.runId,
         parentRunId: entry.value.parentRunId,

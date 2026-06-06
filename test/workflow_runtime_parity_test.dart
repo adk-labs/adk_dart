@@ -1112,6 +1112,70 @@ void main() {
       );
     });
 
+    test('uses overrideBranch for dynamic node output events', () async {
+      final FunctionNode child = node(
+        (WorkflowContext _, Object? _) => 'branch child output',
+        name: 'override_branch_child',
+      );
+      final Workflow workflow = Workflow(
+        name: 'override_branch_workflow',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) async {
+            await context.runNode(child, overrideBranch: 'custom_branch');
+            return null;
+          }, name: 'parent'),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_dynamic_override_branch',
+        agent: workflow,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+        branch: 'parent_branch',
+      );
+
+      final List<Event> events = await workflow.runAsync(context).toList();
+
+      expect(events, hasLength(1));
+      expect(events.single.branch, 'custom_branch');
+      expect(events.single.content?.parts.single.text, 'branch child output');
+    });
+
+    test(
+      'appends useSubBranch segment for dynamic node output events',
+      () async {
+        final FunctionNode child = node(
+          (WorkflowContext _, Object? _) => 'sub branch child output',
+          name: 'sub_branch_child',
+        );
+        final Workflow workflow = Workflow(
+          name: 'sub_branch_workflow',
+          nodes: <BaseNode>[
+            node((WorkflowContext context, Object? _) async {
+              await context.runNode(child, useSubBranch: true);
+              return null;
+            }, name: 'parent'),
+          ],
+        );
+        final InvocationContext context = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_dynamic_sub_branch',
+          agent: workflow,
+          session: Session(id: 's', appName: 'app', userId: 'u'),
+          branch: 'parent_branch',
+        );
+
+        final List<Event> events = await workflow.runAsync(context).toList();
+
+        expect(events, hasLength(1));
+        expect(events.single.branch, 'parent_branch.sub_branch_child@1');
+        expect(
+          events.single.content?.parts.single.text,
+          'sub branch child output',
+        );
+      },
+    );
+
     test('retries failed nodes', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(
