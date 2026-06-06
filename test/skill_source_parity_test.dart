@@ -30,6 +30,7 @@ Use weather references.
 ''');
         _writeFile(_join(skillDir.path, 'references/guide.md'), 'guide');
         _writeFile(_join(skillDir.path, 'assets/data.bin'), <int>[1, 2, 3]);
+        _writeFile(_join(tempDir.path, 'secret.txt'), 'outside');
 
         final LocalSkillSource source = LocalSkillSource(tempDir.path);
 
@@ -53,6 +54,36 @@ Use weather references.
         expect(
           await source.loadResource('weather-skill', 'assets/data.bin'),
           <int>[1, 2, 3],
+        );
+        await expectLater(
+          source.loadResource('weather-skill', '../secret.txt'),
+          throwsA(
+            isA<SkillSourceException>().having(
+              (SkillSourceException error) => error.toString(),
+              'message',
+              contains('outside the skill source'),
+            ),
+          ),
+        );
+        await expectLater(
+          source.listResources('weather-skill', '../'),
+          throwsA(
+            isA<SkillSourceException>().having(
+              (SkillSourceException error) => error.toString(),
+              'message',
+              contains('outside the skill source'),
+            ),
+          ),
+        );
+        await expectLater(
+          source.loadInstructions('../weather-skill'),
+          throwsA(
+            isA<SkillSourceException>().having(
+              (SkillSourceException error) => error.toString(),
+              'message',
+              contains('outside the skill source'),
+            ),
+          ),
         );
       },
     );

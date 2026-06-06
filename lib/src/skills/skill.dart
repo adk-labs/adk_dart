@@ -724,18 +724,29 @@ class LocalSkillSource implements SkillSource {
     String skillName,
     String resourceDirectory,
   ) async {
-    final Directory skillDir = Directory(_join(skillsBasePath, skillName));
+    final String skillDirPath = _resolveLocalSkillDir(skillName);
+    final Directory skillDir = Directory(skillDirPath);
     if (!skillDir.existsSync()) {
       throw SkillSourceException('Skill not found: $skillName');
     }
     final Directory resourceDir = Directory(
-      _join(skillDir.path, resourceDirectory),
+      _resolveDescendantPath(
+        rootPath: skillDirPath,
+        relativePath: resourceDirectory,
+        label: 'Resource directory',
+        allowEmpty: true,
+      ),
     );
     if (!resourceDir.existsSync()) {
       throw SkillSourceException(
         "Resource directory '$resourceDirectory' not found for skill '$skillName'",
       );
     }
+    _assertExistingPathWithin(
+      rootPath: skillDirPath,
+      candidatePath: resourceDir.path,
+      label: 'Resource directory',
+    );
     try {
       final List<String> paths = <String>[];
       for (final FileSystemEntity entity in resourceDir.listSync(
@@ -761,7 +772,7 @@ class LocalSkillSource implements SkillSource {
   @override
   Future<Frontmatter> loadFrontmatter(String skillName) async {
     try {
-      return readSkillProperties(_join(skillsBasePath, skillName));
+      return readSkillProperties(_resolveLocalSkillDir(skillName));
     } catch (error) {
       throw SkillSourceException(
         "Cannot load frontmatter for skill '$skillName'",
@@ -773,7 +784,7 @@ class LocalSkillSource implements SkillSource {
   @override
   Future<String> loadInstructions(String skillName) async {
     try {
-      return loadSkillFromDir(_join(skillsBasePath, skillName)).instructions;
+      return loadSkillFromDir(_resolveLocalSkillDir(skillName)).instructions;
     } catch (error) {
       throw SkillSourceException(
         "Failed to load instruction for skill '$skillName'",
@@ -784,13 +795,33 @@ class LocalSkillSource implements SkillSource {
 
   @override
   Future<List<int>> loadResource(String skillName, String resourcePath) async {
+    final String skillDirPath = _resolveLocalSkillDir(skillName);
     final File file = File(
-      _join(_join(skillsBasePath, skillName), resourcePath),
+      _resolveDescendantPath(
+        rootPath: skillDirPath,
+        relativePath: resourcePath,
+        label: 'Resource path',
+        allowEmpty: false,
+      ),
     );
     if (!file.existsSync()) {
       throw SkillSourceException('Resource not found: ${file.path}');
     }
+    _assertExistingPathWithin(
+      rootPath: skillDirPath,
+      candidatePath: file.path,
+      label: 'Resource path',
+    );
     return file.readAsBytes();
+  }
+
+  String _resolveLocalSkillDir(String skillName) {
+    return _resolveDescendantPath(
+      rootPath: skillsBasePath,
+      relativePath: skillName,
+      label: 'Skill name',
+      allowEmpty: false,
+    );
   }
 }
 
@@ -1570,6 +1601,92 @@ String _join(String left, String right) {
     return '$left$right';
   }
   return '$left${Platform.pathSeparator}$right';
+}
+
+String _resolveDescendantPath({
+  required String rootPath,
+  required String relativePath,
+  required String label,
+  required bool allowEmpty,
+}) {
+  final String input = relativePath.trim();
+  if (input.isEmpty) {
+    if (allowEmpty) {
+      return Directory(rootPath).absolute.path;
+    }
+    throw SkillSourceException('$label must not be empty.');
+  }
+  if (_looksLikeAbsolutePath(input)) {
+    throw SkillSourceException('$label must be relative to the skill source.');
+  }
+
+  final Uri rootUri = Directory(rootPath).absolute.uri;
+  final Uri resolvedUri = rootUri.resolve(input.replaceAll('\\', '/'));
+  final String resolvedPath = File.fromUri(resolvedUri).absolute.path;
+  _assertPathWithin(
+    rootPath: Directory(rootPath).absolute.path,
+    candidatePath: resolvedPath,
+    label: label,
+  );
+  _assertExistingPathWithin(
+    rootPath: rootPath,
+    candidatePath: resolvedPath,
+    label: label,
+  );
+  return resolvedPath;
+}
+
+void _assertExistingPathWithin({
+  required String rootPath,
+  required String candidatePath,
+  required String label,
+}) {
+  final FileSystemEntityType type = FileSystemEntity.typeSync(candidatePath);
+  if (type == FileSystemEntityType.notFound) {
+    return;
+  }
+
+  final String resolvedRoot = _resolveExistingPath(rootPath);
+  final String resolvedCandidate = _resolveExistingPath(candidatePath);
+  _assertPathWithin(
+    rootPath: resolvedRoot,
+    candidatePath: resolvedCandidate,
+    label: label,
+  );
+}
+
+String _resolveExistingPath(String path) {
+  try {
+    return FileSystemEntity.isDirectorySync(path)
+        ? Directory(path).resolveSymbolicLinksSync()
+        : File(path).resolveSymbolicLinksSync();
+  } on FileSystemException {
+    return File(path).absolute.path;
+  }
+}
+
+void _assertPathWithin({
+  required String rootPath,
+  required String candidatePath,
+  required String label,
+}) {
+  final String root = _stripTrailingSlash(_normalizePath(rootPath));
+  final String candidate = _stripTrailingSlash(_normalizePath(candidatePath));
+  final String rootPrefix = '$root/';
+  if (candidate != root && !candidate.startsWith(rootPrefix)) {
+    throw SkillSourceException('$label is outside the skill source.');
+  }
+}
+
+bool _looksLikeAbsolutePath(String path) {
+  return path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+}
+
+String _stripTrailingSlash(String path) {
+  if (path == '/') {
+    return path;
+  }
+  return path.replaceFirst(RegExp(r'/+$'), '');
 }
 
 String _relativePath(String path, {required String from}) {
