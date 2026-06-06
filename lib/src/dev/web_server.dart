@@ -66,6 +66,7 @@ import '../tools/_automatic_function_calling_util.dart';
 import '../tools/base_tool.dart';
 import '../tools/base_toolset.dart';
 import '../tools/computer_use/computer_use_toolset.dart';
+import '../workflow/workflow.dart';
 import 'a2a_push_delivery_queue.dart';
 import 'project.dart';
 import 'runtime.dart';
@@ -1876,14 +1877,116 @@ Future<void> _handleBuildGraphImage(
   required String appName,
 }) async {
   final Runner runner = await context.getRunner(appName);
-  final String dotSrc = await _buildAgentGraphDot(runner.agent);
-  await _writeJson(
-    request,
-    context,
-    payload: <String, Object?>{
-      '': <String, Object?>{'dot_src': dotSrc},
-    },
+  final String? nodePath = request.uri.queryParameters['node'];
+  final BaseAgent? targetAgent = _findGraphTarget(
+    runner.agent,
+    _splitNodePath(nodePath),
   );
+  if (targetAgent == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: 'Node not found: $nodePath',
+    );
+    return;
+  }
+
+  final String targetPath = nodePath == null ? '' : nodePath.trim();
+  final Map<String, BaseAgent> targets = _collectWorkflowGraphTargets(
+    targetAgent,
+    currentPath: targetPath,
+  );
+  if (targets.isEmpty) {
+    targets[targetPath] = targetAgent;
+  }
+
+  final Map<String, Object?> payload = <String, Object?>{};
+  for (final MapEntry<String, BaseAgent> entry in targets.entries) {
+    payload[entry.key] = <String, Object?>{
+      'dot_src': await _buildAgentGraphDot(entry.value),
+    };
+  }
+  await _writeJson(request, context, payload: payload);
+}
+
+Map<String, BaseAgent> _collectWorkflowGraphTargets(
+  BaseAgent agent, {
+  required String currentPath,
+}) {
+  final Map<String, BaseAgent> targets = <String, BaseAgent>{};
+  if (agent is Workflow) {
+    targets[currentPath] = agent;
+    for (final BaseNode node in agent.nodes) {
+      if (node is AgentNode) {
+        final String childPath = _joinNodePath(currentPath, node.name);
+        targets.addAll(
+          _collectWorkflowGraphTargets(node.agent, currentPath: childPath),
+        );
+      }
+    }
+  }
+
+  for (final BaseAgent subAgent in agent.subAgents) {
+    final String childPath = _joinNodePath(currentPath, subAgent.name);
+    targets.addAll(
+      _collectWorkflowGraphTargets(subAgent, currentPath: childPath),
+    );
+  }
+  return targets;
+}
+
+BaseAgent? _findGraphTarget(BaseAgent rootAgent, List<String> nodePath) {
+  if (nodePath.isEmpty) {
+    return rootAgent;
+  }
+
+  final List<String> path = nodePath.first == rootAgent.name
+      ? nodePath.skip(1).toList(growable: false)
+      : nodePath;
+  return _findGraphTargetFrom(rootAgent, path);
+}
+
+BaseAgent? _findGraphTargetFrom(BaseAgent agent, List<String> path) {
+  if (path.isEmpty) {
+    return agent;
+  }
+
+  final String current = path.first;
+  final List<String> rest = path.skip(1).toList(growable: false);
+  for (final BaseAgent subAgent in agent.subAgents) {
+    if (subAgent.name == current) {
+      return _findGraphTargetFrom(subAgent, rest);
+    }
+  }
+
+  if (agent is Workflow) {
+    for (final BaseNode node in agent.nodes) {
+      if (node is AgentNode &&
+          (node.name == current || node.agent.name == current)) {
+        return _findGraphTargetFrom(node.agent, rest);
+      }
+    }
+  }
+  return null;
+}
+
+List<String> _splitNodePath(String? nodePath) {
+  if (nodePath == null) {
+    return const <String>[];
+  }
+  return nodePath
+      .split('/')
+      .map((String segment) => segment.trim())
+      .where((String segment) => segment.isNotEmpty)
+      .toList(growable: false);
+}
+
+String _joinNodePath(String base, String child) {
+  if (base.isEmpty) {
+    return child;
+  }
+  return '$base/$child';
 }
 
 Future<String> _buildAgentGraphDot(

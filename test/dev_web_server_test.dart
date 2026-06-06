@@ -1267,9 +1267,22 @@ void main() {
         (WorkflowContext _, Object? input) => input,
         name: 'routed_node',
       );
+      final FunctionNode nestedStartNode = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'nested_start',
+      );
+      final Workflow nestedWorkflow = Workflow(
+        name: 'nested_workflow',
+        nodes: <BaseNode>[nestedStartNode],
+        edges: <Edge>[Edge(fromNode: START, toNode: nestedStartNode)],
+      );
       runtime.runner.agent = Workflow(
         name: 'workflow_agent',
-        nodes: <BaseNode>[startNode, routedNode],
+        nodes: <BaseNode>[
+          startNode,
+          routedNode,
+          AgentNode(agent: nestedWorkflow, name: 'nested_node'),
+        ],
         edges: <Edge>[
           Edge(fromNode: START, toNode: startNode),
           Edge(fromNode: startNode, toNode: routedNode, route: 'next'),
@@ -1331,6 +1344,24 @@ void main() {
           graphImagePayload[''] as Map<String, dynamic>;
       expect(graphImageResponse.statusCode, HttpStatus.ok);
       expect('${rootGraphImage['dot_src']}', contains('workflow_agent'));
+      final Map<String, dynamic> nestedGraphImage =
+          graphImagePayload['nested_node'] as Map<String, dynamic>;
+      expect('${nestedGraphImage['dot_src']}', contains('nested_workflow'));
+      expect('${nestedGraphImage['dot_src']}', contains('nested_start'));
+
+      final HttpClientRequest scopedGraphImageRequest = await client.getUrl(
+        Uri.parse(
+          'http://127.0.0.1:${server.port}/apps/test_app/build_graph_image?node=nested_node',
+        ),
+      );
+      final HttpClientResponse scopedGraphImageResponse =
+          await scopedGraphImageRequest.close();
+      final Map<String, dynamic> scopedGraphImagePayload =
+          jsonDecode(await utf8.decoder.bind(scopedGraphImageResponse).join())
+              as Map<String, dynamic>;
+      expect(scopedGraphImageResponse.statusCode, HttpStatus.ok);
+      expect(scopedGraphImagePayload.keys, contains('nested_node'));
+      expect(scopedGraphImagePayload.keys, isNot(contains('')));
     });
 
     test('creates and lists eval sets via web routes', () async {
