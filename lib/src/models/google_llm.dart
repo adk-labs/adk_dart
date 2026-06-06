@@ -817,21 +817,21 @@ class Gemini extends BaseLlm {
 
     final Map<String, Object?> functionCall = _asMap(partMap['functionCall']);
     if (functionCall.isNotEmpty) {
-      final String? name = _stringValue(functionCall['name']);
-      if (name != null && name.isNotEmpty) {
-        final JsonMap args = _coerceJsonMap(functionCall['args']);
-        final List<Map<String, Object?>>? partialArgs = _coercePartialArgs(
-          functionCall['partialArgs'] ??
-              functionCall['partial_args'] ??
-              args['partialArgs'] ??
-              args['partial_args'],
-        );
-        final bool? willContinue = _coerceBool(
-          functionCall['willContinue'] ??
-              functionCall['will_continue'] ??
-              args['willContinue'] ??
-              args['will_continue'],
-        );
+      final String name = _stringValue(functionCall['name']) ?? '';
+      final JsonMap args = _coerceJsonMap(functionCall['args']);
+      final List<Map<String, Object?>>? partialArgs = _coercePartialArgs(
+        functionCall['partialArgs'] ??
+            functionCall['partial_args'] ??
+            args['partialArgs'] ??
+            args['partial_args'],
+      );
+      final bool? willContinue = _coerceBool(
+        functionCall['willContinue'] ??
+            functionCall['will_continue'] ??
+            args['willContinue'] ??
+            args['will_continue'],
+      );
+      if (name.isNotEmpty || partialArgs != null || willContinue != null) {
         return Part.fromFunctionCall(
           name: name,
           args: args,

@@ -263,6 +263,111 @@ void main() {
     );
 
     test(
+      'stream requests aggregate nameless function call partial args',
+      () async {
+        final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+          streamResponses: <Map<String, Object?>>[
+            <String, Object?>{
+              'candidates': <Object?>[
+                <String, Object?>{
+                  'content': <String, Object?>{
+                    'role': 'model',
+                    'parts': <Object?>[
+                      <String, Object?>{
+                        'functionCall': <String, Object?>{
+                          'name': 'lookup_city',
+                          'id': 'fc-rest-1',
+                          'partialArgs': <Object?>[
+                            <String, Object?>{
+                              'jsonPath': r'$.city',
+                              'stringValue': 'Se',
+                            },
+                          ],
+                          'willContinue': true,
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            <String, Object?>{
+              'candidates': <Object?>[
+                <String, Object?>{
+                  'content': <String, Object?>{
+                    'role': 'model',
+                    'parts': <Object?>[
+                      <String, Object?>{
+                        'functionCall': <String, Object?>{
+                          'partialArgs': <Object?>[
+                            <String, Object?>{
+                              'jsonPath': r'$.city',
+                              'stringValue': 'oul',
+                            },
+                            <String, Object?>{
+                              'jsonPath': r'$.limit',
+                              'numberValue': 3,
+                            },
+                            <String, Object?>{
+                              'jsonPath': r'$.includeForecast',
+                              'boolValue': true,
+                            },
+                          ],
+                          'willContinue': false,
+                        },
+                      },
+                    ],
+                  },
+                  'finishReason': 'STOP',
+                },
+              ],
+              'usageMetadata': <String, Object?>{'totalTokenCount': 9},
+            },
+          ],
+        );
+        final Gemini model = Gemini(
+          restTransport: transport,
+          environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+        );
+
+        final List<LlmResponse> responses = await model
+            .generateContent(
+              LlmRequest(
+                model: 'gemini-2.5-flash',
+                contents: <Content>[Content.userText('weather')],
+              ),
+              stream: true,
+            )
+            .toList();
+
+        expect(responses, hasLength(3));
+        expect(responses.first.partial, isTrue);
+        expect(
+          responses.first.content?.parts.single.functionCall?.id,
+          'fc-rest-1',
+        );
+        expect(responses[1].partial, isTrue);
+        expect(responses[1].finishReason, 'STOP');
+        expect(responses.last.partial, isFalse);
+        expect(responses.last.turnComplete, isTrue);
+        expect(responses.last.usageMetadata, <String, Object?>{
+          'totalTokenCount': 9,
+        });
+
+        final FunctionCall? finalCall =
+            responses.last.content?.parts.single.functionCall;
+        expect(finalCall, isNotNull);
+        expect(finalCall!.name, 'lookup_city');
+        expect(finalCall.id, 'fc-rest-1');
+        expect(finalCall.args, <String, Object?>{
+          'city': 'Seoul',
+          'limit': 3,
+          'includeForecast': true,
+        });
+      },
+    );
+
+    test(
       'serializes thought signatures and function call streaming fields in request payload',
       () async {
         final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(

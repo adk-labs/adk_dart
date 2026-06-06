@@ -55,21 +55,28 @@ class StreamingResponseAggregator {
     Map<String, Object?> partialArg,
     String jsonPath,
   ) {
-    if (partialArg['string_value'] != null) {
-      final String chunk = '${partialArg['string_value']}';
+    final Object? stringValue =
+        partialArg['string_value'] ?? partialArg['stringValue'];
+    if (stringValue != null) {
+      final String chunk = '$stringValue';
       final Object? existing = _getValueByJsonPath(jsonPath);
       if (existing is String) {
         return (existing + chunk, true);
       }
       return (chunk, true);
     }
-    if (partialArg['number_value'] != null) {
-      return (partialArg['number_value'], true);
+    final Object? numberValue =
+        partialArg['number_value'] ?? partialArg['numberValue'];
+    if (numberValue != null) {
+      return (numberValue, true);
     }
-    if (partialArg['bool_value'] != null) {
-      return (partialArg['bool_value'], true);
+    final Object? boolValue =
+        partialArg['bool_value'] ?? partialArg['boolValue'];
+    if (boolValue != null) {
+      return (boolValue, true);
     }
-    if (partialArg.containsKey('null_value')) {
+    if (partialArg.containsKey('null_value') ||
+        partialArg.containsKey('nullValue')) {
       return (null, true);
     }
     return (null, false);
