@@ -331,6 +331,125 @@ void main() {
     );
 
     test(
+      'streaming response aggregator preserves tool calls without close replay',
+      () async {
+        overrideFeatureEnabled(FeatureName.progressiveSseStreaming, false);
+        final StreamingResponseAggregator aggregator =
+            StreamingResponseAggregator();
+
+        final List<LlmResponse> first = await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[Part.text('Let me help with that. ')],
+                ),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+        expect(first.single.partial, isTrue);
+
+        final List<LlmResponse> toolCalls = await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[
+                    Part.fromFunctionCall(
+                      name: 'showForecastChart',
+                      args: <String, dynamic>{'location': 'San Francisco'},
+                    ),
+                    Part.fromFunctionCall(
+                      name: 'showQuickActions',
+                      args: <String, dynamic>{
+                        'actions': <String>['Refresh', 'Share'],
+                      },
+                    ),
+                  ],
+                ),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+
+        expect(toolCalls, hasLength(2));
+        expect(
+          toolCalls.first.content?.parts.single.text,
+          'Let me help with that. ',
+        );
+        expect(toolCalls.first.partial, isFalse);
+        expect(toolCalls.last.content?.parts, hasLength(2));
+        expect(
+          toolCalls.last.content?.parts.first.functionCall?.name,
+          'showForecastChart',
+        );
+        expect(
+          toolCalls.last.content?.parts.last.functionCall?.name,
+          'showQuickActions',
+        );
+        expect(
+          toolCalls.last.content?.parts.first.functionCall?.id,
+          startsWith('adk-'),
+        );
+        expect(toolCalls.last.partial, isFalse);
+
+        final List<LlmResponse> emptyStop = await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(parts: <Part>[Part.text('')]),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+        expect(emptyStop, isEmpty);
+        expect(aggregator.close(), isNull);
+      },
+    );
+
+    test(
+      'streaming response aggregator splits mixed text and tool chunks',
+      () async {
+        overrideFeatureEnabled(FeatureName.progressiveSseStreaming, false);
+        final StreamingResponseAggregator aggregator =
+            StreamingResponseAggregator();
+
+        final List<LlmResponse> results = await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[
+                    Part.text('Let me help with that. '),
+                    Part.fromFunctionCall(
+                      name: 'showForecastChart',
+                      args: <String, dynamic>{'location': 'San Francisco'},
+                    ),
+                  ],
+                ),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+
+        expect(results, hasLength(2));
+        expect(
+          results.first.content?.parts.single.text,
+          'Let me help with that. ',
+        );
+        expect(results.first.partial, isFalse);
+        expect(results.last.content?.parts, hasLength(1));
+        expect(
+          results.last.content?.parts.single.functionCall?.name,
+          'showForecastChart',
+        );
+        expect(
+          results.last.content?.parts.single.functionCall?.id,
+          startsWith('adk-'),
+        );
+        expect(results.last.partial, isFalse);
+        expect(aggregator.close(), isNull);
+      },
+    );
+
+    test(
       'streaming response aggregator keeps finish reason across empty final chunk',
       () async {
         overrideFeatureEnabled(FeatureName.progressiveSseStreaming, false);
@@ -349,11 +468,72 @@ void main() {
             .processResponse(LlmResponse())
             .toList();
 
+        expect(finalChunk, hasLength(1));
         final LlmResponse merged = finalChunk.first;
         expect(merged.content?.parts.single.text, 'Hello');
         expect(merged.finishReason, 'STOP');
         expect(merged.errorCode, isNull);
         expect(aggregator.close(), isNull);
+      },
+    );
+
+    test(
+      'streaming response aggregator preserves metadata on suppressed empty stop',
+      () async {
+        overrideFeatureEnabled(FeatureName.progressiveSseStreaming, true);
+        final StreamingResponseAggregator aggregator =
+            StreamingResponseAggregator();
+
+        await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(
+                  parts: <Part>[
+                    Part.fromFunctionCall(
+                      name: 'get_weather',
+                      args: <String, dynamic>{'location': 'San Francisco'},
+                    ),
+                  ],
+                ),
+                finishReason: 'STOP',
+              ),
+            )
+            .toList();
+
+        final List<LlmResponse> suppressed = await aggregator
+            .processResponse(
+              LlmResponse(
+                content: Content(parts: <Part>[Part.text('')]),
+                finishReason: 'STOP',
+                usageMetadata: <String, Object?>{
+                  'promptTokenCount': 10,
+                  'candidatesTokenCount': 20,
+                  'totalTokenCount': 30,
+                },
+                groundingMetadata: <String, Object?>{
+                  'groundingChunks': <Object?>[
+                    <String, Object?>{
+                      'web': <String, Object?>{
+                        'uri': 'https://google.com',
+                        'title': 'Google',
+                      },
+                    },
+                  ],
+                },
+              ),
+            )
+            .toList();
+
+        expect(suppressed, isEmpty);
+        final LlmResponse? finalResponse = aggregator.close();
+        expect(finalResponse, isNotNull);
+        expect(
+          finalResponse!.content?.parts.single.functionCall?.name,
+          'get_weather',
+        );
+        expect(finalResponse.usageMetadata, isA<Map<String, Object?>>());
+        expect(finalResponse.groundingMetadata, isA<Map<String, Object?>>());
+        expect(finalResponse.finishReason, 'STOP');
       },
     );
 

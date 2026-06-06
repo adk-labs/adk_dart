@@ -33,6 +33,7 @@ class StreamingResponseAggregator {
   Map<String, Object?> _currentFcArgs = <String, Object?>{};
   String? _currentFcId;
   List<int>? _currentFcThoughtSignature;
+  bool _sawFunctionCall = false;
 
   void _flushTextBufferToSequence() {
     if (_currentTextBuffer.isEmpty) {
@@ -253,6 +254,85 @@ class StreamingResponseAggregator {
     return _partialArgs(functionCall).isNotEmpty || _willContinue(functionCall);
   }
 
+  bool _isEmptyContentPart(Part part) {
+    return part.functionCall == null &&
+        part.functionResponse == null &&
+        part.inlineData == null &&
+        part.fileData == null &&
+        part.executableCode == null &&
+        part.codeExecutionResult == null &&
+        (part.text == null || part.text!.isEmpty);
+  }
+
+  bool _hasBufferedNonProgressiveText() {
+    return _thoughtText.isNotEmpty || _text.isNotEmpty;
+  }
+
+  LlmResponse _flushBufferedNonProgressiveText(LlmResponse response) {
+    final List<Part> mergedParts = <Part>[
+      if (_thoughtText.isNotEmpty)
+        Part.text(
+          _thoughtText,
+          thought: true,
+          thoughtSignature: _thoughtTextSignature,
+        ),
+      if (_text.isNotEmpty)
+        Part.text(_text, thoughtSignature: _textThoughtSignature),
+    ];
+    final String? finishReason = _finishReason ?? response.finishReason;
+    final bool success = finishReason == null || finishReason == 'STOP';
+    final LlmResponse merged = LlmResponse(
+      modelVersion: response.modelVersion ?? _modelVersion,
+      content: Content(parts: mergedParts),
+      usageMetadata: response.usageMetadata,
+      citationMetadata: response.citationMetadata,
+      groundingMetadata: response.groundingMetadata,
+      avgLogprobs: response.avgLogprobs,
+      logprobsResult: response.logprobsResult,
+      cacheMetadata: response.cacheMetadata,
+      interactionId: response.interactionId,
+      errorCode: success ? null : finishReason,
+      errorMessage: success ? null : response.errorMessage,
+      finishReason: finishReason,
+      partial: false,
+    );
+    _thoughtText = '';
+    _text = '';
+    _thoughtTextSignature = null;
+    _textThoughtSignature = null;
+    return merged;
+  }
+
+  void _appendNonProgressiveTextPart(Part part) {
+    final String text = part.text ?? '';
+    if (part.thought) {
+      _thoughtText += text;
+      if (part.thoughtSignature != null) {
+        if (_thoughtTextSignature == null) {
+          _thoughtTextSignature = List<int>.from(part.thoughtSignature!);
+        } else if (!_sameThoughtSignature(
+          _thoughtTextSignature,
+          part.thoughtSignature,
+        )) {
+          _thoughtTextSignature = null;
+        }
+      }
+      return;
+    }
+
+    _text += text;
+    if (part.thoughtSignature != null) {
+      if (_textThoughtSignature == null) {
+        _textThoughtSignature = List<int>.from(part.thoughtSignature!);
+      } else if (!_sameThoughtSignature(
+        _textThoughtSignature,
+        part.thoughtSignature,
+      )) {
+        _textThoughtSignature = null;
+      }
+    }
+  }
+
   bool _sameThoughtSignature(List<int>? left, List<int>? right) {
     if (left == null && right == null) {
       return true;
@@ -304,6 +384,7 @@ class StreamingResponseAggregator {
       if (functionCall == null) {
         continue;
       }
+      _sawFunctionCall = true;
       if ((functionCall.id ?? '').isNotEmpty) {
         continue;
       }
@@ -319,6 +400,13 @@ class StreamingResponseAggregator {
       if (functionCall.name.isNotEmpty) {
         functionCall.id = flow_functions.generateClientFunctionCallId();
       }
+    }
+
+    if (_sawFunctionCall &&
+        response.finishReason == 'STOP' &&
+        parts.isNotEmpty &&
+        parts.every(_isEmptyContentPart)) {
+      return;
     }
 
     if (isFeatureEnabled(FeatureName.progressiveSseStreaming)) {
@@ -354,73 +442,37 @@ class StreamingResponseAggregator {
       return;
     }
 
-    if (parts.isNotEmpty && parts.first.text != null) {
-      final Part first = parts.first;
-      final String text = first.text ?? '';
-      if (first.thought) {
-        _thoughtText += text;
-        if (first.thoughtSignature != null) {
-          if (_thoughtTextSignature == null) {
-            _thoughtTextSignature = List<int>.from(first.thoughtSignature!);
-          } else if (!_sameThoughtSignature(
-            _thoughtTextSignature,
-            first.thoughtSignature,
-          )) {
-            _thoughtTextSignature = null;
-          }
-        }
-      } else {
-        _text += text;
-        if (first.thoughtSignature != null) {
-          if (_textThoughtSignature == null) {
-            _textThoughtSignature = List<int>.from(first.thoughtSignature!);
-          } else if (!_sameThoughtSignature(
-            _textThoughtSignature,
-            first.thoughtSignature,
-          )) {
-            _textThoughtSignature = null;
-          }
-        }
+    final List<Part> nonTextParts = <Part>[];
+    bool sawTextPart = false;
+    for (final Part part in parts) {
+      if (part.text != null) {
+        sawTextPart = true;
+        _appendNonProgressiveTextPart(part);
+        continue;
       }
+      nonTextParts.add(part.copyWith());
+    }
+
+    if (nonTextParts.isNotEmpty) {
+      if (_hasBufferedNonProgressiveText()) {
+        yield _flushBufferedNonProgressiveText(response);
+      }
+      yield response.copyWith(
+        content: Content(role: response.content?.role, parts: nonTextParts),
+        partial: false,
+      );
+      return;
+    }
+
+    if (sawTextPart) {
       yield response.copyWith(partial: true);
       return;
     }
 
-    final bool hasBufferedText = _thoughtText.isNotEmpty || _text.isNotEmpty;
-    final bool hasInlineDataFirst =
-        parts.isNotEmpty && parts.first.inlineData != null;
-    if (hasBufferedText &&
-        (parts.isEmpty || response.content == null || !hasInlineDataFirst)) {
-      final List<Part> mergedParts = <Part>[
-        if (_thoughtText.isNotEmpty)
-          Part.text(
-            _thoughtText,
-            thought: true,
-            thoughtSignature: _thoughtTextSignature,
-          ),
-        if (_text.isNotEmpty)
-          Part.text(_text, thoughtSignature: _textThoughtSignature),
-      ];
-      final String? finishReason = _finishReason ?? response.finishReason;
-      final bool success = finishReason == null || finishReason == 'STOP';
-      yield LlmResponse(
-        modelVersion: response.modelVersion ?? _modelVersion,
-        content: Content(parts: mergedParts),
-        usageMetadata: response.usageMetadata,
-        citationMetadata: response.citationMetadata,
-        groundingMetadata: response.groundingMetadata,
-        avgLogprobs: response.avgLogprobs,
-        logprobsResult: response.logprobsResult,
-        cacheMetadata: response.cacheMetadata,
-        interactionId: response.interactionId,
-        errorCode: success ? null : finishReason,
-        errorMessage: success ? null : response.errorMessage,
-        finishReason: finishReason,
-      );
-      _thoughtText = '';
-      _text = '';
-      _thoughtTextSignature = null;
-      _textThoughtSignature = null;
+    if (_hasBufferedNonProgressiveText() &&
+        (parts.isEmpty || response.content == null)) {
+      yield _flushBufferedNonProgressiveText(response);
+      return;
     }
     yield response;
   }
