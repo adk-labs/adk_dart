@@ -25,13 +25,17 @@ typedef WorkflowFunction =
 class RetryConfig {
   /// Creates retry configuration.
   const RetryConfig({
-    this.maxAttempts = 1,
+    this.maxAttempts = 5,
     this.initialDelay = Duration.zero,
     this.maxDelay = const Duration(seconds: 30),
     this.backoffMultiplier = 2,
+    this.exceptions,
   });
 
   /// Maximum number of attempts including the first run.
+  ///
+  /// This default applies only when a node explicitly sets [retryConfig].
+  /// Nodes without retry config still run once.
   final int maxAttempts;
 
   /// Delay before the first retry.
@@ -42,6 +46,12 @@ class RetryConfig {
 
   /// Exponential backoff multiplier.
   final double backoffMultiplier;
+
+  /// Optional retry filter by exception class name or exact [Type].
+  ///
+  /// A `null` value retries all thrown exceptions until [maxAttempts] is
+  /// reached. An empty list retries none.
+  final List<Object>? exceptions;
 }
 
 /// Error thrown when a node exceeds its timeout.
@@ -394,8 +404,10 @@ class Workflow extends BaseAgent {
     required BaseNode node,
     required Object? nodeInput,
   }) async {
-    final RetryConfig retry = node.retryConfig ?? const RetryConfig();
-    final int maxAttempts = retry.maxAttempts < 1 ? 1 : retry.maxAttempts;
+    final RetryConfig? retry = node.retryConfig;
+    final int maxAttempts = retry == null
+        ? 1
+        : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
     final NodeState state = context.nodeStates.putIfAbsent(
       node.name,
       NodeState.new,
@@ -425,13 +437,38 @@ class Workflow extends BaseAgent {
         lastError = error;
         state.status = NodeStatus.failed;
         state.error = error;
-        if (attempt >= maxAttempts) {
+        if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
           rethrow;
         }
-        await Future<void>.delayed(_retryDelay(retry, attempt));
+        await Future<void>.delayed(_retryDelay(retry!, attempt));
       }
     }
     throw StateError('Workflow node failed unexpectedly: $lastError');
+  }
+
+  bool _shouldRetryError(Object error, RetryConfig? retry) {
+    if (retry == null) {
+      return false;
+    }
+    final List<Object>? filters = retry.exceptions;
+    if (filters == null) {
+      return true;
+    }
+    if (filters.isEmpty) {
+      return false;
+    }
+
+    final String errorTypeName = error.runtimeType.toString();
+    for (final Object filter in filters) {
+      if (filter is String && filter == errorTypeName) {
+        return true;
+      }
+      if (filter is Type &&
+          (filter == error.runtimeType || filter.toString() == errorTypeName)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Duration _retryDelay(RetryConfig retry, int attempt) {

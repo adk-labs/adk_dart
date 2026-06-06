@@ -4,6 +4,24 @@ import 'package:adk_dart/adk_dart.dart';
 import 'package:adk_dart/src/workflow/workflow.dart' as wf;
 import 'package:test/test.dart';
 
+class _RetryableWorkflowError implements Exception {
+  const _RetryableWorkflowError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => '_RetryableWorkflowError: $message';
+}
+
+class _NonRetryableWorkflowError implements Exception {
+  const _NonRetryableWorkflowError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => '_NonRetryableWorkflowError: $message';
+}
+
 void main() {
   group('workflow runtime parity', () {
     test('runs dependency graph and join nodes', () async {
@@ -70,6 +88,86 @@ void main() {
 
       expect(result.outputs['flaky'], 'ok');
       expect(result.nodeStates['flaky']?.attemptCount, 2);
+    });
+
+    test(
+      'uses Python-style default attempts when retry config is present',
+      () async {
+        int attempts = 0;
+        final Workflow workflow = Workflow(
+          name: 'retry_default_attempts',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext _, Object? _) {
+                attempts += 1;
+                if (attempts < 5) {
+                  throw const _RetryableWorkflowError('try again');
+                }
+                return 'ok';
+              },
+              name: 'flaky',
+              retryConfig: const wf.RetryConfig(),
+            ),
+          ],
+        );
+
+        final WorkflowResult result = await workflow.runWorkflow();
+
+        expect(result.outputs['flaky'], 'ok');
+        expect(result.nodeStates['flaky']?.attemptCount, 5);
+      },
+    );
+
+    test('retries only matching exception names', () async {
+      int attempts = 0;
+      final Workflow workflow = Workflow(
+        name: 'retry_filtered',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? _) {
+              attempts += 1;
+              if (attempts < 3) {
+                throw const _RetryableWorkflowError('try again');
+              }
+              return 'ok';
+            },
+            name: 'flaky',
+            retryConfig: const wf.RetryConfig(
+              exceptions: <Object>['_RetryableWorkflowError'],
+            ),
+          ),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['flaky'], 'ok');
+      expect(result.nodeStates['flaky']?.attemptCount, 3);
+    });
+
+    test('does not retry non-matching exception names', () async {
+      int attempts = 0;
+      final Workflow workflow = Workflow(
+        name: 'retry_filtered_miss',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? _) {
+              attempts += 1;
+              throw const _NonRetryableWorkflowError('stop');
+            },
+            name: 'flaky',
+            retryConfig: const wf.RetryConfig(
+              exceptions: <Object>['_RetryableWorkflowError'],
+            ),
+          ),
+        ],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
+        throwsA(isA<_NonRetryableWorkflowError>()),
+      );
+      expect(attempts, 1);
     });
 
     test('times out slow nodes', () async {
