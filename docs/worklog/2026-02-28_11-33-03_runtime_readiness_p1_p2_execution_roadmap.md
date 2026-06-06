@@ -1,6 +1,6 @@
 # Runtime Readiness P1/P2 실행 로드맵
 
-- 기준 문서: `knowledge/2026-02-28_11-29-46_runtime_readiness_full_audit.md`
+- 기준 문서: `docs/worklog/2026-02-28_11-29-46_runtime_readiness_full_audit.md`
 - 목표: "포팅 완료"를 넘어 운영 환경에서의 실동작 안정성 확보
 
 ## 1) 우선순위 정의

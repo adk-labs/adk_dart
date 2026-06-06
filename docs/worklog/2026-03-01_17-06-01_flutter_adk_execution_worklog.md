@@ -2,9 +2,9 @@
 
 ## 목적
 - 기준 문서:
-  - `knowledge/2026-02-28_18-38-11_flutter_adk_all_platform_checklist.md`
-  - `knowledge/2026-02-28_21-44-13_adk_core_split_plan.md`
-  - `knowledge/2026-03-01_16-59-24_flutter_adk_all_platform_plan.md`
+  - `docs/worklog/2026-02-28_18-38-11_flutter_adk_all_platform_checklist.md`
+  - `docs/worklog/2026-02-28_21-44-13_adk_core_split_plan.md`
+  - `docs/worklog/2026-03-01_16-59-24_flutter_adk_all_platform_plan.md`
 - 사용자 요청: 작업 단위별 문서화 + 작업 단위별 커밋/푸시
 
 ## Work Unit 1 — 최신 베이스라인 재확인
@@ -33,7 +33,7 @@
 - 상태: 완료
 - 목표:
   - `lib/adk_core.dart`
-  - `knowledge/adk_core_api_matrix.md`
+  - `docs/knowledge/adk_core_api_matrix.md`
   - `tool/smoke/adk_core_web_smoke.dart`
   - `tool/check_adk_core_web_compile.sh`
 
@@ -44,7 +44,7 @@
 - `lib/adk_core.dart` 신설:
   - Flutter/Web-safe 엔트리포인트 추가
   - core 화이트리스트 export 구성
-- `knowledge/adk_core_api_matrix.md` 작성:
+- `docs/knowledge/adk_core_api_matrix.md` 작성:
   - 포함/제외 API 그룹화
   - Web-safe 제외 규칙 명시
 - `tool/smoke/adk_core_web_smoke.dart` 작성:
@@ -146,7 +146,7 @@
 
 ### 구현 내용
 - 플랫폼 지원 매트릭스 문서 신규 작성:
-  - `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
+  - `docs/worklog/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
   - `as-is`/`to-be`를 분리해 플랫폼별 지원 상태와 제한을 명시
   - BYOK(API 키 입력/저장/주입) 정책 및 보안 주의사항 포함
 - `flutter_adk` README 제한사항 명시:

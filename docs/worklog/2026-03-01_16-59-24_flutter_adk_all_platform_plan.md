@@ -2,8 +2,8 @@
 
 ## 0) 문서 목적
 - 기준 문서:
-  - `knowledge/2026-02-28_18-38-11_flutter_adk_all_platform_checklist.md`
-  - `knowledge/2026-02-28_21-44-13_adk_core_split_plan.md`
+  - `docs/worklog/2026-02-28_18-38-11_flutter_adk_all_platform_checklist.md`
+  - `docs/worklog/2026-02-28_21-44-13_adk_core_split_plan.md`
 - 최신 코드베이스(`adk_dart` `2026.3.1`) 기준으로 Flutter 6개 플랫폼(Android, iOS, Web, Linux, macOS, Windows) 지원 계획을 재정의한다.
 - 목표는 "즉시 전체 기능 parity"가 아니라 "컴파일 가능한 core 경로 + flutter_adk 패키지 + 회귀 방지 게이트"를 순차적으로 확보하는 것이다.
 
@@ -68,7 +68,7 @@
 ### Phase 1: adk_core 분리 (선행 필수)
 - 작업
   - `lib/adk_core.dart` 생성
-  - `knowledge/adk_core_api_matrix.md` 작성
+  - `docs/knowledge/adk_core_api_matrix.md` 작성
   - `tool/smoke/adk_core_web_smoke.dart` 추가
   - `tool/check_adk_core_web_compile.sh` 추가
 - 제외 규칙
@@ -128,7 +128,7 @@
 
 ## 9) 즉시 착수 체크리스트
 - [ ] `lib/adk_core.dart` 화이트리스트 초안 작성
-- [ ] `knowledge/adk_core_api_matrix.md` v1 작성
+- [ ] `docs/knowledge/adk_core_api_matrix.md` v1 작성
 - [ ] `tool/smoke/adk_core_web_smoke.dart` 추가
 - [ ] `dart compile js` gate 통과
 - [ ] `packages/flutter_adk` 스캐폴드 생성

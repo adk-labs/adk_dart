@@ -2,8 +2,8 @@
 
 Date: 2026-03-01
 Related plans:
-- `knowledge/2026-02-28_21-44-13_adk_core_split_plan.md`
-- `knowledge/2026-03-01_16-59-24_flutter_adk_all_platform_plan.md`
+- `docs/worklog/2026-02-28_21-44-13_adk_core_split_plan.md`
+- `docs/worklog/2026-03-01_16-59-24_flutter_adk_all_platform_plan.md`
 
 ## Scope
 - Entrypoint: `lib/adk_core.dart`

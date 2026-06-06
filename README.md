@@ -238,6 +238,9 @@ For most users, importing `package:adk_dart/adk_dart.dart` is sufficient.
 
 - Repository: <https://github.com/adk-labs/adk_dart>
 - API surface entrypoint: [`lib/adk_dart.dart`](lib/adk_dart.dart)
+- Documentation index: [`docs/README.md`](docs/README.md)
+- Work-unit logs: [`docs/worklog/`](docs/worklog/)
+- Reference knowledge: [`docs/knowledge/`](docs/knowledge/)
 - Parity status tracker: [`docs/python_parity_status.md`](../docs/python_parity_status.md)
 - Parity manifest: [`docs/python_to_dart_parity_manifest.md`](../docs/python_to_dart_parity_manifest.md)
 

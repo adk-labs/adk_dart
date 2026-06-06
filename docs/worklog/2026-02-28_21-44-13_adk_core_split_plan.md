@@ -52,7 +52,7 @@
 - `lib/adk_core.dart`
 - `tool/check_adk_core_web_compile.sh` (또는 동등 Dart 스크립트)
 - `tool/smoke/adk_core_web_smoke.dart` (core import 전용 최소 스모크)
-- `knowledge/adk_core_api_matrix.md` (포함/제외/사유 표)
+- `docs/knowledge/adk_core_api_matrix.md` (포함/제외/사유 표)
 
 수정:
 - `README.md` (`adk_core` 사용 가이드, 어떤 경우 `adk_dart` 사용해야 하는지)
@@ -64,7 +64,7 @@
 ### Phase A: API 인벤토리 고정 (반나절)
 - `lib/adk_dart.dart` export를 카테고리별 분류
 - direct `dart:io` 포함 export 45개 우선 제외 후보로 마킹
-- 산출물: `knowledge/adk_core_api_matrix.md` v1
+- 산출물: `docs/knowledge/adk_core_api_matrix.md` v1
 
 완료 기준:
 - core 포함 후보 / 제외 후보 / 보류 후보가 모두 표로 존재
