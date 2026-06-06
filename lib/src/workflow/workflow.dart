@@ -1369,11 +1369,18 @@ class Workflow extends BaseAgent {
           : event;
     }
     if (output is RequestInput) {
-      return createRequestInputEvent(
+      final Event event = createRequestInputEvent(
         output,
         invocationId: context.invocationId,
         author: author,
-      ).copyWith(nodeInfo: nodeInfo, branch: state?.branch ?? context.branch);
+      );
+      return event.copyWith(
+        actions: state?.route == null
+            ? event.actions
+            : event.actions.copyWith(route: state?.route),
+        nodeInfo: nodeInfo,
+        branch: state?.branch ?? context.branch,
+      );
     }
     if (output is Content) {
       return Event(

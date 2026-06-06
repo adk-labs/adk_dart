@@ -793,6 +793,84 @@ void main() {
       },
     );
 
+    test(
+      'runAsync preserves request-input route when resuming from history',
+      () async {
+        int routeRuns = 0;
+        final Workflow workflow = Workflow(
+          name: 'run_async_route_resume_graph',
+          nodes: <BaseNode>[
+            node((WorkflowContext context, Object? _) {
+              routeRuns += 1;
+              context.route = 'go';
+              return RequestInput(
+                interruptId: 'route_confirm',
+                message: 'Continue?',
+              );
+            }, name: 'route_node'),
+            node((WorkflowContext _, Object? input) {
+              final Map<dynamic, dynamic> response =
+                  input! as Map<dynamic, dynamic>;
+              return 'reached:${response['ok']}';
+            }, name: 'target_node'),
+          ],
+          edges: <Edge>[
+            Edge(fromNode: 'route_node', toNode: 'target_node', route: 'go'),
+          ],
+        );
+        final Session session = Session(id: 's', appName: 'app', userId: 'u');
+        final InvocationContext firstContext = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_route_resume',
+          agent: workflow,
+          session: session,
+          userContent: Content.userText('go'),
+        );
+        final List<Event> firstEvents = await workflow
+            .runAsync(firstContext)
+            .toList();
+
+        expect(firstEvents.single.actions.route, 'go');
+        session.events.addAll(firstEvents);
+        session.events.add(
+          Event(
+            invocationId: 'inv_route_resume',
+            author: 'user',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  id: 'route_confirm',
+                  name: requestInputFunctionCallName,
+                  response: <String, Object?>{
+                    'result': <String, Object?>{'ok': true},
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+        final InvocationContext resumeContext = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_route_resume',
+          agent: workflow,
+          session: session,
+          userContent: Content.userText('go'),
+          resumabilityConfig: ResumabilityConfig(isResumable: true),
+        );
+
+        final List<Event> resumedEvents = await workflow
+            .runAsync(resumeContext)
+            .toList();
+
+        expect(routeRuns, 1);
+        expect(resumedEvents.map((Event event) => event.author), <String>[
+          'target_node',
+        ]);
+        expect(resumedEvents.single.content?.parts.single.text, 'reached:true');
+      },
+    );
+
     test('emits nested workflow leaf events under parent node path', () async {
       final Workflow inner = Workflow(
         name: 'inner',
