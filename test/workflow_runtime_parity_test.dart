@@ -470,6 +470,131 @@ void main() {
       ]);
     });
 
+    test('rehydrates previous workflow result from emitted events', () async {
+      int firstRuns = 0;
+      int askRuns = 0;
+      final Workflow workflow = Workflow(
+        name: 'rehydrate_events_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) {
+            firstRuns += 1;
+            return 'cached';
+          }, name: 'first'),
+          node(
+            (WorkflowContext context, Object? input) {
+              askRuns += 1;
+              final Object? resumeInput = context.resumeInputs['approval'];
+              if (resumeInput != null) {
+                final Map<dynamic, dynamic> response =
+                    resumeInput as Map<dynamic, dynamic>;
+                return '$input:${response['ok']}';
+              }
+              return RequestInput(
+                interruptId: 'approval',
+                message: 'Approve?',
+                responseSchema: <String, Object?>{'type': 'object'},
+              );
+            },
+            name: 'ask_user',
+            rerunOnResume: true,
+          ),
+          node(
+            (WorkflowContext _, Object? input) => 'after:$input',
+            name: 'after_user',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'first'),
+          Edge(fromNode: 'first', toNode: 'ask_user'),
+          Edge(fromNode: 'ask_user', toNode: 'after_user'),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_rehydrate_events',
+        agent: workflow,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+      );
+
+      final List<Event> events = await workflow.runAsync(context).toList();
+      final WorkflowResult previous = workflow.rehydrateResultFromEvents(
+        events,
+        invocationId: 'inv_rehydrate_events',
+      );
+
+      expect(previous.outputs['first'], 'cached');
+      expect(previous.outputs['ask_user'], isA<RequestInput>());
+      expect(previous.nodeStates['first']?.status, NodeStatus.completed);
+      expect(previous.nodeStates['ask_user']?.status, NodeStatus.waiting);
+      expect(previous.nodeStates['ask_user']?.interrupts, <String>['approval']);
+
+      final WorkflowResult resumed = await workflow.runWorkflow(
+        previousResult: previous,
+        resumeInputs: <String, Object?>{
+          'approval': <String, Object?>{'ok': true},
+        },
+      );
+
+      expect(firstRuns, 1);
+      expect(askRuns, 2);
+      expect(resumed.outputs['first'], 'cached');
+      expect(resumed.outputs['ask_user'], 'cached:true');
+      expect(resumed.outputs['after_user'], 'after:cached:true');
+    });
+
+    test(
+      'rehydrates user function responses and coerces request schema values',
+      () async {
+        int askRuns = 0;
+        final Workflow workflow = Workflow(
+          name: 'rehydrate_response_graph',
+          nodes: <BaseNode>[
+            node((WorkflowContext _, Object? _) {
+              askRuns += 1;
+              return RequestInput(
+                interruptId: 'count_response',
+                message: 'How many?',
+                responseSchema: <String, Object?>{'type': 'integer'},
+              );
+            }, name: 'ask_count'),
+          ],
+        );
+        final InvocationContext context = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_rehydrate_response',
+          agent: workflow,
+          session: Session(id: 's', appName: 'app', userId: 'u'),
+        );
+
+        final List<Event> events = await workflow.runAsync(context).toList();
+        final Event userResponse = Event(
+          invocationId: 'inv_rehydrate_response',
+          author: 'user',
+          content: Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                id: 'count_response',
+                name: requestInputFunctionCallName,
+                response: <String, Object?>{'result': '42'},
+              ),
+            ],
+          ),
+        );
+
+        final WorkflowResult previous = workflow.rehydrateResultFromEvents(
+          <Event>[...events, userResponse],
+          invocationId: 'inv_rehydrate_response',
+        );
+
+        expect(askRuns, 1);
+        expect(previous.outputs['ask_count'], 42);
+        expect(previous.nodeStates['ask_count']?.status, NodeStatus.completed);
+        expect(previous.nodeStates['ask_count']?.interrupts, isEmpty);
+        expect(previous.nodeStates['ask_count']?.resumeInputs, isEmpty);
+      },
+    );
+
     test('converts RequestInput node output to long-running event', () async {
       final Workflow workflow = Workflow(
         name: 'hitl_workflow',

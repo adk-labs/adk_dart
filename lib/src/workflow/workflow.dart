@@ -12,6 +12,7 @@ import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../events/event.dart';
 import '../events/request_input.dart';
+import '../flows/llm_flows/functions.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_tool.dart';
@@ -921,6 +922,27 @@ class Workflow extends BaseAgent {
     );
   }
 
+  /// Reconstructs a [WorkflowResult] from previously emitted workflow [events].
+  ///
+  /// The returned result can be passed to [runWorkflow] as `previousResult`.
+  /// This mirrors the Python workflow rehydration path: completed node outputs,
+  /// routes, waiting request-input interrupts, and user function responses are
+  /// recovered from stored session events.
+  WorkflowResult rehydrateResultFromEvents(
+    Iterable<Event> events, {
+    String? invocationId,
+  }) {
+    final Map<String, BaseNode> byName = <String, BaseNode>{
+      for (final BaseNode node in nodes) node.name: node,
+    };
+    return _workflowResultFromEvents(
+      events,
+      workflowName: name,
+      staticNodes: byName,
+      invocationId: invocationId,
+    );
+  }
+
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
     final WorkflowContext workflowContext = WorkflowContext(
@@ -1652,6 +1674,397 @@ bool _seedNodeResumeInputs(NodeState state, Map<String, Object?> resumeInputs) {
   state.resumeInputs.addAll(resolved);
   state.interrupts.removeWhere(resolved.containsKey);
   return true;
+}
+
+WorkflowResult _workflowResultFromEvents(
+  Iterable<Event> events, {
+  required String workflowName,
+  required Map<String, BaseNode> staticNodes,
+  String? invocationId,
+}) {
+  final String effectiveWorkflowName = workflowName.isEmpty
+      ? 'workflow'
+      : workflowName;
+  final String workflowPath = '$effectiveWorkflowName@1';
+  final Map<String, Object?> outputs = <String, Object?>{};
+  final Map<String, NodeState> states = <String, NodeState>{};
+  final Map<String, String> interruptOwner = <String, String>{};
+  final Map<String, Object?> responseSchemas = <String, Object?>{};
+
+  NodeState stateFor(String key, String? runId, String? parentRunId) {
+    return states.putIfAbsent(
+      key,
+      () => NodeState(
+        status: NodeStatus.inactive,
+        runId: runId,
+        runCounter: _runCounterFromRunId(runId),
+        parentRunId: parentRunId,
+      ),
+    );
+  }
+
+  for (final Event event in events) {
+    if (invocationId != null && event.invocationId != invocationId) {
+      continue;
+    }
+
+    if (event.author == 'user' && event.getFunctionResponses().isNotEmpty) {
+      _applyWorkflowResumeResponses(
+        event,
+        states: states,
+        outputs: outputs,
+        staticNodes: staticNodes,
+        interruptOwner: interruptOwner,
+        responseSchemas: responseSchemas,
+      );
+      continue;
+    }
+
+    final String path = event.nodeInfo.path;
+    if (!_isWorkflowNodePath(path, workflowPath)) {
+      continue;
+    }
+
+    final _WorkflowEventOwner? owner = _workflowEventOwnerForPath(
+      path,
+      workflowPath: workflowPath,
+      staticNodes: staticNodes,
+    );
+    if (owner == null) {
+      continue;
+    }
+
+    final NodeState state = stateFor(owner.key, owner.runId, owner.parentRunId);
+    if (event.branch != null) {
+      state.branch = event.branch;
+    }
+    final List<String>? outputFor = _outputKeysFromPaths(
+      event.nodeInfo.outputFor,
+      workflowPath: workflowPath,
+      staticNodes: staticNodes,
+    );
+    if (outputFor != null) {
+      state.outputFor
+        ..clear()
+        ..addAll(outputFor);
+    }
+
+    final Object? route = event.actions.route;
+    if (route != null) {
+      state.route = route;
+      if (state.status != NodeStatus.waiting) {
+        state.status = NodeStatus.completed;
+      }
+    }
+
+    final Object? eventOutput = _workflowOutputFromEvent(event);
+    if (event.hasOutput || _hasMessageAsOutput(event)) {
+      outputs[owner.key] = eventOutput;
+      if (state.status != NodeStatus.waiting) {
+        state.status = NodeStatus.completed;
+      }
+    }
+
+    if (event.errorCode != null) {
+      state.status = NodeStatus.failed;
+      state.error = event.errorMessage ?? event.errorCode;
+    }
+
+    final Set<String> interruptIds = _interruptIdsFromEvent(event);
+    if (interruptIds.isEmpty) {
+      continue;
+    }
+
+    final RequestInput? requestInput = _requestInputFromEvent(event);
+    if (requestInput != null) {
+      outputs[owner.key] = requestInput;
+    }
+    state.status = NodeStatus.waiting;
+    state.interrupts
+      ..clear()
+      ..addAll(interruptIds);
+    for (final String interruptId in interruptIds) {
+      interruptOwner[interruptId] = owner.key;
+      final Object? schema = _responseSchemaFromEvent(event, interruptId);
+      if (schema != null) {
+        responseSchemas[interruptId] = schema;
+      }
+    }
+  }
+
+  return WorkflowResult(outputs: outputs, nodeStates: states);
+}
+
+void _applyWorkflowResumeResponses(
+  Event event, {
+  required Map<String, NodeState> states,
+  required Map<String, Object?> outputs,
+  required Map<String, BaseNode> staticNodes,
+  required Map<String, String> interruptOwner,
+  required Map<String, Object?> responseSchemas,
+}) {
+  for (final FunctionResponse response in event.getFunctionResponses()) {
+    final String? interruptId = response.id;
+    if (interruptId == null) {
+      continue;
+    }
+    final String? ownerKey = interruptOwner[interruptId];
+    if (ownerKey == null) {
+      continue;
+    }
+    final NodeState state = states.putIfAbsent(
+      ownerKey,
+      () => NodeState(status: NodeStatus.waiting),
+    );
+    Object? responseData = _unwrapWorkflowResumeResponse(response.response);
+    responseData = _validateWorkflowResumeResponse(
+      responseData,
+      responseSchemas[interruptId],
+    );
+    state.resumeInputs[interruptId] = responseData;
+    state.interrupts.remove(interruptId);
+    if (state.interrupts.isNotEmpty) {
+      state.status = NodeStatus.waiting;
+      continue;
+    }
+
+    final BaseNode? staticNode = staticNodes[ownerKey];
+    if (staticNode != null && !staticNode.rerunOnResume) {
+      outputs[ownerKey] = _outputFromResumeInputs(state.resumeInputs);
+      state.status = NodeStatus.completed;
+      state.resumeInputs.clear();
+    } else {
+      state.status = NodeStatus.waiting;
+    }
+  }
+}
+
+class _WorkflowEventOwner {
+  _WorkflowEventOwner({
+    required this.key,
+    required this.runId,
+    required this.parentRunId,
+  });
+
+  final String key;
+  final String? runId;
+  final String? parentRunId;
+}
+
+_WorkflowEventOwner? _workflowEventOwnerForPath(
+  String path, {
+  required String workflowPath,
+  required Map<String, BaseNode> staticNodes,
+}) {
+  final List<String> segments = _workflowPathSegments(path);
+  if (segments.length < 2 || segments.first != workflowPath) {
+    return null;
+  }
+  final String leaf = segments.last;
+  final String nodeName = _workflowNodeNameFromSegment(leaf);
+  if (nodeName.isEmpty) {
+    return null;
+  }
+  final bool staticNode =
+      segments.length == 2 && staticNodes.containsKey(nodeName);
+  return _WorkflowEventOwner(
+    key: staticNode ? nodeName : leaf,
+    runId: _workflowRunIdFromSegment(leaf),
+    parentRunId: segments.length < 2
+        ? null
+        : _workflowRunIdFromSegment(segments[segments.length - 2]),
+  );
+}
+
+List<String>? _outputKeysFromPaths(
+  List<String>? paths, {
+  required String workflowPath,
+  required Map<String, BaseNode> staticNodes,
+}) {
+  if (paths == null) {
+    return null;
+  }
+  final List<String> keys = <String>[];
+  for (final String path in paths) {
+    if (path == workflowPath) {
+      keys.add(_workflowOutputOwner);
+      continue;
+    }
+    final _WorkflowEventOwner? owner = _workflowEventOwnerForPath(
+      path,
+      workflowPath: workflowPath,
+      staticNodes: staticNodes,
+    );
+    if (owner != null) {
+      keys.add(owner.key);
+    }
+  }
+  return keys;
+}
+
+bool _isWorkflowNodePath(String path, String workflowPath) {
+  return path == workflowPath || path.startsWith('$workflowPath/');
+}
+
+List<String> _workflowPathSegments(String path) {
+  return path.split('/').where((String segment) => segment.isNotEmpty).toList();
+}
+
+String _workflowNodeNameFromSegment(String segment) {
+  final int marker = segment.lastIndexOf('@');
+  return marker <= 0 ? segment : segment.substring(0, marker);
+}
+
+String? _workflowRunIdFromSegment(String segment) {
+  final int marker = segment.lastIndexOf('@');
+  if (marker < 0 || marker == segment.length - 1) {
+    return null;
+  }
+  return segment.substring(marker + 1);
+}
+
+int _runCounterFromRunId(String? runId) {
+  final int? parsed = runId == null ? null : int.tryParse(runId);
+  return parsed == null || parsed < 0 ? 0 : parsed;
+}
+
+bool _hasMessageAsOutput(Event event) {
+  return event.nodeInfo.messageAsOutput == true && event.content != null;
+}
+
+Object? _workflowOutputFromEvent(Event event) {
+  if (event.hasOutput) {
+    return event.output;
+  }
+  if (!_hasMessageAsOutput(event)) {
+    return null;
+  }
+  return _outputFromAgentEvent(event);
+}
+
+Set<String> _interruptIdsFromEvent(Event event) {
+  return <String>{
+    ...?event.longRunningToolIds,
+    ...getRequestInputInterruptIds(event),
+  };
+}
+
+RequestInput? _requestInputFromEvent(Event event) {
+  final List<FunctionCall> calls = event
+      .getFunctionCalls()
+      .where((FunctionCall call) => call.name == requestInputFunctionCallName)
+      .toList(growable: false);
+  if (calls.length != 1) {
+    return null;
+  }
+  return RequestInput.fromJson(calls.single.args);
+}
+
+Object? _responseSchemaFromEvent(Event event, String interruptId) {
+  for (final FunctionCall call in event.getFunctionCalls()) {
+    if (call.name != requestInputFunctionCallName || call.id != interruptId) {
+      continue;
+    }
+    return call.args['response_schema'] ?? call.args['responseSchema'];
+  }
+  return null;
+}
+
+Object? _unwrapWorkflowResumeResponse(Object? response) {
+  if (response is Map &&
+      response.length == 1 &&
+      response.containsKey('result')) {
+    final Object? value = response['result'];
+    if (value is String) {
+      try {
+        return jsonDecode(value);
+      } on FormatException {
+        return value;
+      }
+    }
+    return value;
+  }
+  return response;
+}
+
+Object? _validateWorkflowResumeResponse(Object? value, Object? schema) {
+  if (schema is! Map) {
+    return value;
+  }
+  final Object? type = schema['type'];
+  switch (type) {
+    case 'integer':
+      return _coerceWorkflowInt(value);
+    case 'number':
+      return _coerceWorkflowNum(value);
+    case 'string':
+      return value is String ? value : '$value';
+    case 'boolean':
+      return _coerceWorkflowBool(value);
+    case 'array':
+      if (value is List) {
+        return value;
+      }
+      throw ArgumentError.value(value, 'response', 'Expected array response.');
+    case 'object':
+      if (value is Map) {
+        return <String, Object?>{
+          for (final MapEntry<dynamic, dynamic> entry in value.entries)
+            '${entry.key}': entry.value,
+        };
+      }
+      throw ArgumentError.value(value, 'response', 'Expected object response.');
+    default:
+      return value;
+  }
+}
+
+int _coerceWorkflowInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num && value.toInt() == value) {
+    return value.toInt();
+  }
+  if (value is String) {
+    final int? parsed = int.tryParse(value);
+    if (parsed != null) {
+      return parsed;
+    }
+  }
+  throw ArgumentError.value(value, 'response', 'Expected integer response.');
+}
+
+num _coerceWorkflowNum(Object? value) {
+  if (value is num) {
+    return value;
+  }
+  if (value is String) {
+    final num? parsed = num.tryParse(value);
+    if (parsed != null) {
+      return parsed;
+    }
+  }
+  throw ArgumentError.value(value, 'response', 'Expected number response.');
+}
+
+bool _coerceWorkflowBool(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  if (value is String) {
+    final String normalized = value.toLowerCase();
+    if (normalized == 'true' || normalized == '1') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0') {
+      return false;
+    }
+  }
+  throw ArgumentError.value(value, 'response', 'Expected boolean response.');
 }
 
 Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
