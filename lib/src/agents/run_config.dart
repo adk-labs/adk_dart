@@ -6,6 +6,21 @@ import '../sessions/base_session_service.dart';
 /// Streaming transport mode used by a run.
 enum StreamingMode { none, sse, bidi }
 
+/// Execution mode used when a model requests multiple tools in one turn.
+enum ToolExecutionMode {
+  /// Preserve the runtime default behavior.
+  none,
+
+  /// Execute tools strictly in the order requested by the model.
+  sequential,
+
+  /// Start all tool calls eagerly and await all results.
+  parallel,
+
+  /// Java parity value. In Dart this currently behaves like [parallel].
+  parallelSubscribe,
+}
+
 final BigInt _pythonSysMaxSize = BigInt.parse('9223372036854775807');
 
 /// Thread-pool configuration for concurrent tool execution.
@@ -27,6 +42,7 @@ class RunConfig {
   RunConfig({
     this.supportCfc = false,
     this.streamingMode = StreamingMode.none,
+    this.toolExecutionMode = ToolExecutionMode.none,
     this.maxLlmCalls = 500,
     this.speechConfig,
     this.saveLiveBlob = false,
@@ -50,6 +66,9 @@ class RunConfig {
 
   /// Streaming behavior for model responses.
   StreamingMode streamingMode;
+
+  /// Execution behavior for multiple model-requested tool calls.
+  ToolExecutionMode toolExecutionMode;
 
   /// Maximum number of model calls allowed in a run.
   int maxLlmCalls;
@@ -117,6 +136,7 @@ class RunConfig {
   RunConfig copyWith({
     bool? supportCfc,
     StreamingMode? streamingMode,
+    ToolExecutionMode? toolExecutionMode,
     int? maxLlmCalls,
     Object? speechConfig = _sentinel,
     bool? saveLiveBlob,
@@ -135,6 +155,7 @@ class RunConfig {
     return RunConfig(
       supportCfc: supportCfc ?? this.supportCfc,
       streamingMode: streamingMode ?? this.streamingMode,
+      toolExecutionMode: toolExecutionMode ?? this.toolExecutionMode,
       maxLlmCalls: maxLlmCalls ?? this.maxLlmCalls,
       speechConfig: identical(speechConfig, _sentinel)
           ? this.speechConfig

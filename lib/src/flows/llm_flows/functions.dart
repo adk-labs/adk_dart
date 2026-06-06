@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
+import '../../agents/run_config.dart';
 import '../../auth/auth_tool.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
@@ -235,19 +236,40 @@ Future<Event?> handleFunctionCallListAsync(
 
   final LlmAgent agent = invocationContext.agent as LlmAgent;
 
-  final List<Future<Event?>> tasks = filtered.map((FunctionCall call) {
-    return _executeSingleFunctionCallAsync(
-      invocationContext,
-      call,
-      toolsDict,
-      agent,
-      toolConfirmation: call.id == null
-          ? null
-          : toolConfirmationDict?[call.id!],
-    );
-  }).toList();
+  final List<Event?> results = <Event?>[];
+  if (invocationContext.runConfig?.toolExecutionMode ==
+      ToolExecutionMode.sequential) {
+    for (final FunctionCall call in filtered) {
+      if (invocationContext.isAborted) {
+        return null;
+      }
+      results.add(
+        await _executeSingleFunctionCallAsync(
+          invocationContext,
+          call,
+          toolsDict,
+          agent,
+          toolConfirmation: call.id == null
+              ? null
+              : toolConfirmationDict?[call.id!],
+        ),
+      );
+    }
+  } else {
+    final List<Future<Event?>> tasks = filtered.map((FunctionCall call) {
+      return _executeSingleFunctionCallAsync(
+        invocationContext,
+        call,
+        toolsDict,
+        agent,
+        toolConfirmation: call.id == null
+            ? null
+            : toolConfirmationDict?[call.id!],
+      );
+    }).toList();
 
-  final List<Event?> results = await Future.wait(tasks, eagerError: true);
+    results.addAll(await Future.wait(tasks, eagerError: true));
+  }
   if (invocationContext.isAborted) {
     return null;
   }
