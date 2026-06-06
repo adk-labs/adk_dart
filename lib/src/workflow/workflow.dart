@@ -658,25 +658,46 @@ class ParallelWorker extends BaseNode {
         ? items.length
         : maxConcurrency!;
     int nextIndex = 0;
+    var cancelRemaining = false;
+    Object? firstError;
+    StackTrace? firstStackTrace;
 
     Future<void> worker() async {
       while (true) {
+        if (cancelRemaining) {
+          return;
+        }
         final int index = nextIndex;
         nextIndex += 1;
         if (index >= items.length) {
           return;
         }
-        results[index] = await context.runNode(
-          wrappedNode,
-          input: items[index],
-          useSubBranch: true,
-        );
+        try {
+          results[index] = await context.runNode(
+            wrappedNode,
+            input: items[index],
+            useSubBranch: true,
+          );
+        } catch (error, stackTrace) {
+          cancelRemaining = true;
+          firstError ??= error;
+          firstStackTrace ??= stackTrace;
+          Error.throwWithStackTrace(error, stackTrace);
+        }
       }
     }
 
-    await Future.wait(<Future<void>>[
-      for (int i = 0; i < limit && i < items.length; i += 1) worker(),
-    ]);
+    try {
+      await Future.wait(<Future<void>>[
+        for (int i = 0; i < limit && i < items.length; i += 1) worker(),
+      ], eagerError: true);
+    } catch (error, stackTrace) {
+      cancelRemaining = true;
+      Error.throwWithStackTrace(
+        firstError ?? error,
+        firstStackTrace ?? stackTrace,
+      );
+    }
     return results;
   }
 }

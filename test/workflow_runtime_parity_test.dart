@@ -259,6 +259,45 @@ void main() {
       ]);
     });
 
+    test('parallel worker stops queued work after worker failure', () async {
+      final List<int> started = <int>[];
+      final ParallelWorker worker = ParallelWorker(
+        node: node((WorkflowContext _, Object? input) async {
+          final int item = input! as int;
+          started.add(item);
+          if (item == 0) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            throw StateError('worker failed');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 40));
+          return 'done:$item';
+        }, name: 'worker'),
+        maxConcurrency: 2,
+      );
+      final Workflow workflow = Workflow(
+        name: 'parallel_worker_failure_stops_queue',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => <int>[0, 1, 2], name: 'p'),
+          worker,
+        ],
+        edges: <Edge>[Edge(fromNode: 'p', toNode: worker)],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            'worker failed',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(started, <int>[0, 1]);
+    });
+
     test('rejects task-mode LlmAgent as static workflow graph node', () {
       final LlmAgent taskAgent = LlmAgent(name: 'task_agent', mode: 'task');
 
