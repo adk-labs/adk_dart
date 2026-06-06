@@ -11,6 +11,7 @@ abstract class BaseTool {
     required this.name,
     required this.description,
     this.isLongRunning = false,
+    this.defersResponse = false,
     this.customMetadata,
   });
 
@@ -22,6 +23,9 @@ abstract class BaseTool {
 
   /// Whether the tool can outlive a single response turn.
   bool isLongRunning;
+
+  /// Whether response event creation is handled by framework code elsewhere.
+  bool defersResponse;
 
   /// Arbitrary metadata attached to this tool declaration.
   Map<String, dynamic>? customMetadata;

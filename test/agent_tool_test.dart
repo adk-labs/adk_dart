@@ -76,6 +76,23 @@ class _NamedTool extends BaseTool {
   }
 }
 
+class _DeferredNullTool extends BaseTool {
+  _DeferredNullTool()
+    : super(
+        name: 'deferred_tool',
+        description: 'defers response',
+        defersResponse: true,
+      );
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return null;
+  }
+}
+
 void main() {
   test('AgentTool runs wrapped agent and returns merged text', () async {
     final Agent childAgent = Agent(
@@ -182,6 +199,24 @@ void main() {
     },
   );
 
+  test('deferred response tools skip automatic function response', () async {
+    final _DeferredNullTool tool = _DeferredNullTool();
+
+    final Event? event = await handleFunctionCallListAsync(
+      _invocationContext(),
+      <FunctionCall>[
+        FunctionCall(
+          name: tool.name,
+          id: 'call_deferred',
+          args: <String, dynamic>{},
+        ),
+      ],
+      <String, BaseTool>{tool.name: tool},
+    );
+
+    expect(event, isNull);
+  });
+
   group('sub-agent mode wrappers', () {
     test('adds single-turn sub-agent wrapper automatically', () async {
       final Agent childAgent = Agent(
@@ -219,6 +254,7 @@ void main() {
       final TaskAgentTool tool = tools.whereType<TaskAgentTool>().single;
       final FunctionDeclaration declaration = tool.getDeclaration()!;
 
+      expect(tool.defersResponse, isTrue);
       expect(tool.agent, same(childAgent));
       expect(declaration.name, 'task_child');
       expect(
@@ -324,7 +360,11 @@ void main() {
 }
 
 ToolContext _toolContext() {
-  final InvocationContext invocationContext = InvocationContext(
+  return Context(_invocationContext());
+}
+
+InvocationContext _invocationContext() {
+  return InvocationContext(
     sessionService: InMemorySessionService(),
     invocationId: 'inv_task_agent_tool',
     agent: Agent(name: 'root_agent', model: _ChildModel()),
@@ -332,5 +372,4 @@ ToolContext _toolContext() {
     artifactService: InMemoryArtifactService(),
     memoryService: InMemoryMemoryService(),
   );
-  return Context(invocationContext);
 }

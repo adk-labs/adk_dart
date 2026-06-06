@@ -327,7 +327,9 @@ Future<Event?> _executeSingleFunctionCallAsync(
         args: functionArgs,
         toolContext: toolContext,
       );
-      functionResponse = _normalizeFunctionResult(result);
+      functionResponse = tool.defersResponse && result == null
+          ? <String, dynamic>{}
+          : _normalizeFunctionResult(result);
     } catch (error) {
       final Exception exception = error is Exception
           ? error
@@ -373,7 +375,7 @@ Future<Event?> _executeSingleFunctionCallAsync(
     functionResponse = altered;
   }
 
-  if (tool.isLongRunning && functionResponse.isEmpty) {
+  if ((tool.isLongRunning || tool.defersResponse) && functionResponse.isEmpty) {
     return null;
   }
 

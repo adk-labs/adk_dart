@@ -85,6 +85,7 @@ class _PrefixedTool extends BaseTool {
         name: '${prefix}_${delegate.name}',
         description: delegate.description,
         isLongRunning: delegate.isLongRunning,
+        defersResponse: delegate.defersResponse,
         customMetadata: delegate.customMetadata == null
             ? null
             : Map<String, dynamic>.from(delegate.customMetadata!),

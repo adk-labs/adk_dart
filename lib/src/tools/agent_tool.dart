@@ -211,7 +211,9 @@ class TaskAgentTool extends AgentTool {
     super.skipSummarization,
     super.includePlugins,
     super.propagateGroundingMetadata,
-  });
+  }) {
+    defersResponse = true;
+  }
 
   @override
   FunctionDeclaration? getDeclaration() {
