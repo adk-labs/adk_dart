@@ -695,6 +695,104 @@ void main() {
       );
     });
 
+    test(
+      'runAsync fast-forwards silent state-only predecessors from history',
+      () async {
+        int setupRuns = 0;
+        int askRuns = 0;
+        final Workflow workflow = Workflow(
+          name: 'run_async_silent_rehydrate_graph',
+          nodes: <BaseNode>[
+            node((WorkflowContext _, Object? _) {
+              setupRuns += 1;
+              return Event(
+                invocationId: 'inv_silent_rehydrate',
+                author: 'setup',
+                actions: EventActions(
+                  stateDelta: <String, Object?>{'setup_done': true},
+                ),
+              );
+            }, name: 'setup'),
+            node(
+              (WorkflowContext context, Object? _) {
+                askRuns += 1;
+                final Object? resumeInput = context.resumeInputs['approval'];
+                if (resumeInput != null) {
+                  final Map<dynamic, dynamic> response =
+                      resumeInput as Map<dynamic, dynamic>;
+                  final Object? setupDone =
+                      context.invocationContext?.session.state['setup_done'];
+                  return 'approved:${response['ok']}:$setupDone';
+                }
+                return RequestInput(
+                  interruptId: 'approval',
+                  message: 'Approve?',
+                );
+              },
+              name: 'ask_user',
+              rerunOnResume: true,
+            ),
+          ],
+          edges: <Edge>[
+            Edge(fromNode: START, toNode: 'setup'),
+            Edge(fromNode: 'setup', toNode: 'ask_user'),
+          ],
+        );
+        final Session session = Session(id: 's', appName: 'app', userId: 'u');
+        final InvocationContext firstContext = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_silent_rehydrate',
+          agent: workflow,
+          session: session,
+          userContent: Content.userText('go'),
+        );
+        final List<Event> firstEvents = await workflow
+            .runAsync(firstContext)
+            .toList();
+        session.events.addAll(firstEvents);
+        session.events.add(
+          Event(
+            invocationId: 'inv_silent_rehydrate',
+            author: 'user',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  id: 'approval',
+                  name: requestInputFunctionCallName,
+                  response: <String, Object?>{
+                    'result': <String, Object?>{'ok': true},
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+        final InvocationContext resumeContext = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_silent_rehydrate',
+          agent: workflow,
+          session: session,
+          userContent: Content.userText('go'),
+          resumabilityConfig: ResumabilityConfig(isResumable: true),
+        );
+
+        final List<Event> resumedEvents = await workflow
+            .runAsync(resumeContext)
+            .toList();
+
+        expect(setupRuns, 1);
+        expect(askRuns, 2);
+        expect(resumedEvents.map((Event event) => event.author), <String>[
+          'ask_user',
+        ]);
+        expect(
+          resumedEvents.single.content?.parts.single.text,
+          'approved:true:true',
+        );
+      },
+    );
+
     test('emits nested workflow leaf events under parent node path', () async {
       final Workflow inner = Workflow(
         name: 'inner',

@@ -1961,7 +1961,8 @@ WorkflowResult _workflowResultFromEvents(
     }
 
     final Object? route = event.actions.route;
-    if (route != null) {
+    final bool hasRoute = route != null;
+    if (hasRoute) {
       state.route = route;
       if (state.status != NodeStatus.waiting) {
         state.status = NodeStatus.completed;
@@ -1969,20 +1970,28 @@ WorkflowResult _workflowResultFromEvents(
     }
 
     final Object? eventOutput = _workflowOutputFromEvent(event);
-    if (event.hasOutput || _hasMessageAsOutput(event)) {
+    final bool hasOutput = event.hasOutput || _hasMessageAsOutput(event);
+    if (hasOutput) {
       outputs[owner.key] = eventOutput;
       if (state.status != NodeStatus.waiting) {
         state.status = NodeStatus.completed;
       }
     }
 
-    if (event.errorCode != null) {
+    final bool hasError = event.errorCode != null;
+    if (hasError) {
       state.status = NodeStatus.failed;
       state.error = event.errorMessage ?? event.errorCode;
     }
 
     final Set<String> interruptIds = _interruptIdsFromEvent(event);
     if (interruptIds.isEmpty) {
+      if (!hasOutput &&
+          !hasRoute &&
+          !hasError &&
+          state.status != NodeStatus.waiting) {
+        state.status = NodeStatus.completed;
+      }
       continue;
     }
 
