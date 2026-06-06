@@ -42,5 +42,33 @@ void main() {
 
       expect(event.isFinalResponse(), isTrue);
     });
+
+    test('copyWith preserves and overrides isolationScope', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        isolationScope: 'call_1',
+      );
+
+      expect(event.copyWith().isolationScope, 'call_1');
+      expect(event.copyWith(isolationScope: 'call_2').isolationScope, 'call_2');
+      expect(event.copyWith(isolationScope: null).isolationScope, isNull);
+    });
+
+    test('storage event data round-trips isolationScope', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        isolationScope: 'task_scope_1',
+        content: Content.modelText('scoped'),
+      );
+
+      final Map<String, Object?> encoded = encodeEventData(event);
+      final Event decoded = decodeEventData(encoded);
+
+      expect(encoded['isolation_scope'], 'task_scope_1');
+      expect(decoded.isolationScope, 'task_scope_1');
+      expect(decoded.content?.parts.single.text, 'scoped');
+    });
   });
 }

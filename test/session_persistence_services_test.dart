@@ -214,6 +214,43 @@ void main() {
   });
 
   group('SqliteSessionService', () {
+    test('persists event isolationScope through sqlite roundtrip', () async {
+      final Directory dir = await Directory.systemTemp.createTemp(
+        'adk_sqlite_isolation_scope_',
+      );
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final SqliteSessionService service = SqliteSessionService(
+        '${dir.path}/sessions.db',
+      );
+      final Session session = await service.createSession(
+        appName: 'app',
+        userId: 'u1',
+      );
+      await service.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv_scope',
+          author: 'agent',
+          isolationScope: 'call_scope_1',
+          content: Content.modelText('scoped'),
+        ),
+      );
+
+      final Session? reloaded = await service.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: session.id,
+      );
+
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events.single.isolationScope, 'call_scope_1');
+    });
+
     test('creates latest events lookup index for new sqlite stores', () async {
       final Directory dir = await Directory.systemTemp.createTemp(
         'adk_sqlite_index_create_',
@@ -1543,6 +1580,7 @@ CREATE TABLE events (
           event: Event(
             invocationId: 'inv_vertex_1',
             author: 'agent',
+            isolationScope: 'vertex_scope_1',
             actions: EventActions(stateDelta: <String, Object?>{'k': 'v'}),
             content: Content.modelText('vertex reply'),
           ),
@@ -1555,6 +1593,7 @@ CREATE TABLE events (
         );
         expect(withEvent, isNotNull);
         expect(withEvent!.events, hasLength(1));
+        expect(withEvent.events.single.isolationScope, 'vertex_scope_1');
         expect(withEvent.state['k'], 'v');
 
         final ListSessionsResponse listed = await service.listSessions(

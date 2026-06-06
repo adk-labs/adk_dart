@@ -748,6 +748,7 @@ class VertexAiSessionService extends BaseSessionService {
       'turn_complete': event.turnComplete,
       'interrupted': event.interrupted,
       'branch': event.branch,
+      'isolation_scope': event.isolationScope,
       'custom_metadata': event.customMetadata,
       'long_running_tool_ids': event.longRunningToolIds?.toList(
         growable: false,
@@ -968,6 +969,10 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
     ),
     interrupted: _asBool(metadata['interrupted']),
     branch: _readStringByKeys(metadata, const <String>['branch']),
+    isolationScope: _readStringByKeys(metadata, const <String>[
+      'isolation_scope',
+      'isolationScope',
+    ]),
     customMetadata: userCustomMetadata,
     groundingMetadata: metadata['grounding_metadata'],
     longRunningToolIds: _asStringSet(metadata['long_running_tool_ids']),

@@ -987,6 +987,7 @@ Map<String, Object?> _eventToJson(Event event) {
     if (event.longRunningToolIds != null)
       'longRunningToolIds': event.longRunningToolIds!.toList(),
     if (event.branch != null) 'branch': event.branch,
+    if (event.isolationScope != null) 'isolationScope': event.isolationScope,
     if (event.modelVersion != null) 'modelVersion': event.modelVersion,
     if (event.content != null) 'content': _contentToJson(event.content!),
     if (event.partial != null) 'partial': event.partial,
@@ -1025,6 +1026,8 @@ Event _eventFromJson(Map<String, Object?> json) {
     actions: _eventActionsFromJson(_castMap(json['actions'])),
     longRunningToolIds: _asStringSet(json['longRunningToolIds']),
     branch: json['branch'] as String?,
+    isolationScope:
+        (json['isolationScope'] ?? json['isolation_scope']) as String?,
     modelVersion: json['modelVersion'] as String?,
     content: json['content'] is Map
         ? _contentFromJson(_castMap(json['content']))

@@ -16,6 +16,7 @@ class Event extends LlmResponse {
     EventActions? actions,
     this.longRunningToolIds,
     this.branch,
+    this.isolationScope,
     String? id,
     double? timestamp,
     super.modelVersion,
@@ -57,6 +58,9 @@ class Event extends LlmResponse {
 
   /// Optional branch identifier for branching conversations.
   String? branch;
+
+  /// Internal logical scope tag used to isolate task-agent conversation views.
+  String? isolationScope;
 
   /// Event identifier.
   String id;
@@ -126,6 +130,7 @@ class Event extends LlmResponse {
     EventActions? actions,
     Object? longRunningToolIds = _sentinel,
     Object? branch = _sentinel,
+    Object? isolationScope = _sentinel,
     Object? id = _sentinel,
     Object? timestamp = _sentinel,
     Object? modelVersion = _sentinel,
@@ -164,6 +169,9 @@ class Event extends LlmResponse {
                 : Set<String>.from(this.longRunningToolIds!)
           : longRunningToolIds as Set<String>?,
       branch: identical(branch, _sentinel) ? this.branch : branch as String?,
+      isolationScope: identical(isolationScope, _sentinel)
+          ? this.isolationScope
+          : isolationScope as String?,
       id: identical(id, _sentinel) ? this.id : id as String,
       timestamp: identical(timestamp, _sentinel)
           ? this.timestamp

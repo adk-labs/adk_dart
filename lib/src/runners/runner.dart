@@ -947,6 +947,8 @@ class Runner {
                 : Set<String>.from(originalEvent.longRunningToolIds!))
           : Set<String>.from(modifiedEvent.longRunningToolIds!),
       branch: modifiedEvent.branch ?? originalEvent.branch,
+      isolationScope:
+          modifiedEvent.isolationScope ?? originalEvent.isolationScope,
       modelVersion: modifiedEvent.modelVersion ?? originalEvent.modelVersion,
       content: modifiedEvent.content?.copyWith() ?? originalEvent.content,
       partial: modifiedEvent.partial ?? originalEvent.partial,

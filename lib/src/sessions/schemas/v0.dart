@@ -124,6 +124,7 @@ class StorageEventV0 {
     EventActions? actions,
     this.longRunningToolIdsJson,
     this.branch,
+    this.isolationScope,
     DateTime? timestamp,
     this.content,
     this.customMetadata,
@@ -175,6 +176,9 @@ class StorageEventV0 {
 
   /// Branch identifier.
   final String? branch;
+
+  /// Internal isolation scope identifier.
+  final String? isolationScope;
 
   /// Event timestamp.
   final DateTime timestamp;
@@ -256,6 +260,8 @@ class StorageEventV0 {
           json['long_running_tool_ids_json']?.toString() ??
           json['longRunningToolIdsJson']?.toString(),
       branch: json['branch']?.toString(),
+      isolationScope: (json['isolation_scope'] ?? json['isolationScope'])
+          ?.toString(),
       timestamp: _parseDateTime(json['timestamp']),
       content: json['content'] is Map
           ? _contentFromJson(_castMap(json['content']))
@@ -311,6 +317,7 @@ class StorageEventV0 {
           ? null
           : '[${event.longRunningToolIds!.map((String v) => '"$v"').join(',')}]',
       branch: event.branch,
+      isolationScope: event.isolationScope,
       timestamp: PreciseTimestamp.fromSeconds(event.timestamp),
       content: event.content?.copyWith(),
       customMetadata: event.customMetadata == null
@@ -358,6 +365,7 @@ class StorageEventV0 {
       invocationId: invocationId,
       author: author,
       branch: branch,
+      isolationScope: isolationScope,
       actions: actions.copyWith(),
       timestamp: PreciseTimestamp.toSeconds(timestamp),
       longRunningToolIds: longRunningToolIds,
@@ -400,6 +408,7 @@ class StorageEventV0 {
       if (longRunningToolIdsJson != null)
         'long_running_tool_ids_json': longRunningToolIdsJson,
       if (branch != null) 'branch': branch,
+      if (isolationScope != null) 'isolation_scope': isolationScope,
       'timestamp': timestamp.toUtc().toIso8601String(),
       if (content != null) 'content': _contentToJson(content!),
       if (customMetadata != null) 'custom_metadata': customMetadata,
