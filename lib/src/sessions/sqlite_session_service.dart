@@ -1083,6 +1083,7 @@ Map<String, Object?> _eventActionsToJson(EventActions actions) {
     if (actions.agentState != null) 'agentState': actions.agentState,
     if (actions.rewindBeforeInvocationId != null)
       'rewindBeforeInvocationId': actions.rewindBeforeInvocationId,
+    if (actions.route != null) 'route': actions.route,
   };
 }
 
@@ -1115,6 +1116,7 @@ EventActions _eventActionsFromJson(Map<String, Object?> json) {
     endOfAgent: json['endOfAgent'] as bool?,
     agentState: _castMap(json['agentState']),
     rewindBeforeInvocationId: json['rewindBeforeInvocationId'] as String?,
+    route: json['route'],
   );
 }
 

@@ -70,5 +70,25 @@ void main() {
       expect(decoded.isolationScope, 'task_scope_1');
       expect(decoded.content?.parts.single.text, 'scoped');
     });
+
+    test('storage event data round-trips workflow route actions', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        actions: EventActions(route: <Object>['next', true]),
+      );
+
+      final Map<String, Object?> encoded = encodeEventData(event);
+      final Event decoded = decodeEventData(encoded);
+
+      final Map<String, Object?> actions = Map<String, Object?>.from(
+        encoded['actions']! as Map,
+      );
+      expect(actions['route'], <Object>['next', true]);
+      expect(decoded.actions.route, <Object>['next', true]);
+      expect(decoded.actions.copyWith().route, <Object>['next', true]);
+      expect(decoded.actions.copyWith(route: 'fallback').route, 'fallback');
+      expect(decoded.actions.copyWith(route: null).route, isNull);
+    });
   });
 }

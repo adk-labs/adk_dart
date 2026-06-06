@@ -764,6 +764,7 @@ class VertexAiSessionService extends BaseSessionService {
       'requested_tool_confirmations': Map<String, Object>.from(
         event.actions.requestedToolConfirmations,
       ),
+      'route': event.actions.route,
       'render_ui_widgets': event.actions.renderUiWidgets
           .map((UiWidget widget) => widget.toJson())
           .toList(growable: false),
@@ -987,6 +988,7 @@ Event? _eventFromApiJson(Map<String, Object?> apiEvent) {
       renderUiWidgets: _asList(
         actionsJson['render_ui_widgets'],
       ).map(_uiWidgetFromApiJson).toList(growable: false),
+      route: actionsJson['route'],
       compaction: compaction,
     ),
     errorCode: _readStringByKeys(apiEvent, const <String>[

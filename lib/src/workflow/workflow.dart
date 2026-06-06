@@ -479,15 +479,16 @@ class Workflow extends BaseAgent {
     final Map<String, Set<String>> dependencies = _dependencies(byName);
     final Set<String> pending = byName.keys.toSet();
     final Set<String> completed = <String>{};
+    final Set<String> active = edges.isEmpty
+        ? byName.keys.toSet()
+        : _initialActiveNodes(byName);
 
-    while (pending.isNotEmpty) {
-      final List<String> ready =
-          pending
-              .where(
-                (String name) => dependencies[name]!.every(completed.contains),
-              )
-              .toList()
-            ..sort();
+    while (pending.any(active.contains)) {
+      final List<String> ready = pending.where(active.contains).where((
+        String name,
+      ) {
+        return dependencies[name]!.every(completed.contains);
+      }).toList()..sort();
       if (ready.isEmpty) {
         throw StateError(
           'Workflow graph has unresolved or cyclic dependencies.',
@@ -506,7 +507,11 @@ class Workflow extends BaseAgent {
             node: node,
             nodeInput: nodeInput,
           );
-          return _NodeRunResult(name: name, output: output);
+          return _NodeRunResult(
+            name: name,
+            output: output,
+            route: _routeFromOutput(output),
+          );
         }),
       );
 
@@ -514,6 +519,11 @@ class Workflow extends BaseAgent {
         context.outputs[result.name] = result.output;
         pending.remove(result.name);
         completed.add(result.name);
+        _activateDownstream(
+          fromNode: result.name,
+          route: result.route,
+          active: active,
+        );
       }
     }
   }
@@ -535,6 +545,50 @@ class Workflow extends BaseAgent {
       dependencies[edge.toNode]!.add(edge.fromNode);
     }
     return dependencies;
+  }
+
+  Set<String> _initialActiveNodes(Map<String, BaseNode> byName) {
+    final Set<String> targets = <String>{};
+    final Set<String> startTargets = <String>{};
+    for (final Edge edge in edges) {
+      targets.add(edge.toNode);
+      if (edge.fromNode == START) {
+        startTargets.add(edge.toNode);
+      }
+    }
+    return <String>{
+      for (final BaseNode node in byName.values)
+        if (!targets.contains(node.name) || startTargets.contains(node.name))
+          node.name,
+    };
+  }
+
+  void _activateDownstream({
+    required String fromNode,
+    required Object? route,
+    required Set<String> active,
+  }) {
+    bool matchedSpecificRoute = false;
+    final List<String> defaultTargets = <String>[];
+    for (final Edge edge in edges.where(
+      (Edge edge) => edge.fromNode == fromNode,
+    )) {
+      if (edge.route == null) {
+        active.add(edge.toNode);
+        continue;
+      }
+      if (edge.route == DEFAULT_ROUTE) {
+        defaultTargets.add(edge.toNode);
+        continue;
+      }
+      if (_routeMatches(edge.route, route)) {
+        matchedSpecificRoute = true;
+        active.add(edge.toNode);
+      }
+    }
+    if (!matchedSpecificRoute) {
+      active.addAll(defaultTargets);
+    }
   }
 
   Object? _nodeInput({
@@ -672,10 +726,11 @@ class Workflow extends BaseAgent {
 }
 
 class _NodeRunResult {
-  _NodeRunResult({required this.name, required this.output});
+  _NodeRunResult({required this.name, required this.output, this.route});
 
   final String name;
   final Object? output;
+  final Object? route;
 }
 
 String _nodeName(Object node) {
@@ -755,4 +810,26 @@ void _mergeStateDelta(Session session, Map<String, Object?> stateDelta) {
     return;
   }
   session.state.addAll(stateDelta);
+}
+
+Object? _routeFromOutput(Object? output) {
+  if (output is Event) {
+    return output.actions.route;
+  }
+  return null;
+}
+
+bool _routeMatches(Object? edgeRoute, Object? emittedRoute) {
+  final Set<Object?> edgeRoutes = _routeSet(edgeRoute);
+  if (emittedRoute is Iterable && emittedRoute is! String) {
+    return emittedRoute.any(edgeRoutes.contains);
+  }
+  return edgeRoutes.contains(emittedRoute);
+}
+
+Set<Object?> _routeSet(Object? route) {
+  if (route is Iterable && route is! String) {
+    return route.toSet();
+  }
+  return <Object?>{route};
 }

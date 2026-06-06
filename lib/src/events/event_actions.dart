@@ -38,6 +38,7 @@ class EventActions {
     this.endOfAgent,
     this.agentState,
     this.rewindBeforeInvocationId,
+    this.route,
     List<UiWidget>? renderUiWidgets,
   }) : stateDelta = stateDelta ?? <String, Object?>{},
        artifactDelta = artifactDelta ?? <String, int>{},
@@ -79,6 +80,9 @@ class EventActions {
   /// Optional invocation ID to rewind before replay.
   String? rewindBeforeInvocationId;
 
+  /// Route or routes used for workflow graph edge matching.
+  Object? route;
+
   /// UI widgets that the client should render for this event.
   List<UiWidget> renderUiWidgets;
 
@@ -95,6 +99,7 @@ class EventActions {
     Object? endOfAgent = _sentinel,
     Object? agentState = _sentinel,
     Object? rewindBeforeInvocationId = _sentinel,
+    Object? route = _sentinel,
     List<UiWidget>? renderUiWidgets,
   }) {
     return EventActions(
@@ -129,6 +134,7 @@ class EventActions {
       rewindBeforeInvocationId: identical(rewindBeforeInvocationId, _sentinel)
           ? this.rewindBeforeInvocationId
           : rewindBeforeInvocationId as String?,
+      route: identical(route, _sentinel) ? this.route : route,
       renderUiWidgets:
           renderUiWidgets ??
           this.renderUiWidgets
@@ -173,6 +179,7 @@ Map<String, Object?> eventActionsToJson(EventActions actions) {
       'agentState': Map<String, Object?>.from(actions.agentState!),
     if (actions.rewindBeforeInvocationId != null)
       'rewindBeforeInvocationId': actions.rewindBeforeInvocationId,
+    if (actions.route != null) 'route': actions.route,
   };
 }
 
@@ -210,6 +217,7 @@ EventActions eventActionsFromJson(Map<String, Object?> json) {
     endOfAgent: json['endOfAgent'] as bool?,
     agentState: _castMap(json['agentState']),
     rewindBeforeInvocationId: json['rewindBeforeInvocationId'] as String?,
+    route: json['route'],
   );
 }
 

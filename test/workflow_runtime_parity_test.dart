@@ -91,6 +91,76 @@ void main() {
       expect(result.outputs['second'], 'go-first-second');
     });
 
+    test('routes edges from workflow event actions', () async {
+      final FunctionNode router = node((WorkflowContext _, Object? _) {
+        return Event(
+          invocationId: 'inv_route',
+          author: 'router',
+          actions: EventActions(route: 'route_b'),
+        );
+      }, name: 'router');
+      final FunctionNode routeB = node(
+        (WorkflowContext _, Object? input) =>
+            'b:${(input as Event).actions.route}',
+        name: 'route_b_node',
+      );
+      final FunctionNode routeC = node(
+        (WorkflowContext _, Object? _) => 'c',
+        name: 'route_c_node',
+      );
+      final Workflow workflow = Workflow(
+        name: 'routed_graph',
+        nodes: <BaseNode>[router, routeB, routeC],
+        edges: <Edge>[
+          Edge(fromNode: router, toNode: routeB, route: 'route_b'),
+          Edge(fromNode: router, toNode: routeC, route: 'route_c'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['route_b_node'], 'b:route_b');
+      expect(result.outputs.containsKey('route_c_node'), isFalse);
+      expect(result.nodeStates['route_c_node'], isNull);
+    });
+
+    test('routes default and untagged workflow edges', () async {
+      final FunctionNode router = node((WorkflowContext _, Object? _) {
+        return Event(
+          invocationId: 'inv_default_route',
+          author: 'router',
+          actions: EventActions(route: 'unmatched'),
+        );
+      }, name: 'router');
+      final FunctionNode specific = node(
+        (WorkflowContext _, Object? _) => 'specific',
+        name: 'specific',
+      );
+      final FunctionNode fallback = node(
+        (WorkflowContext _, Object? _) => 'fallback',
+        name: 'fallback',
+      );
+      final FunctionNode always = node(
+        (WorkflowContext _, Object? _) => 'always',
+        name: 'always',
+      );
+      final Workflow workflow = Workflow(
+        name: 'default_routed_graph',
+        nodes: <BaseNode>[router, specific, fallback, always],
+        edges: <Edge>[
+          Edge(fromNode: router, toNode: specific, route: 'route_b'),
+          Edge(fromNode: router, toNode: fallback, route: DEFAULT_ROUTE),
+          Edge(fromNode: router, toNode: always),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs.containsKey('specific'), isFalse);
+      expect(result.outputs['fallback'], 'fallback');
+      expect(result.outputs['always'], 'always');
+    });
+
     test('retries failed nodes', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(
