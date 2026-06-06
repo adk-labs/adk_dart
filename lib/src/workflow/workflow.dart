@@ -585,6 +585,7 @@ class Workflow extends BaseAgent {
     super.description,
     required List<BaseNode> nodes,
     List<Edge> edges = const <Edge>[],
+    this.maxConcurrency,
     super.beforeAgentCallback,
     super.afterAgentCallback,
   }) : nodes = List<BaseNode>.unmodifiable(nodes),
@@ -596,6 +597,12 @@ class Workflow extends BaseAgent {
 
   /// Directed edges between nodes.
   final List<Edge> edges;
+
+  /// Maximum number of graph-scheduled nodes to run at once.
+  ///
+  /// A null or non-positive value means unlimited concurrency. Dynamic child
+  /// nodes run through [WorkflowContext.runNode] are not limited by this value.
+  final int? maxConcurrency;
 
   /// Runs the workflow without requiring an ADK [InvocationContext].
   ///
@@ -673,6 +680,20 @@ class Workflow extends BaseAgent {
       );
     }
 
+    final int? concurrencyLimit = maxConcurrency;
+    if (concurrencyLimit != null && concurrencyLimit > 0) {
+      await _executeWithConcurrencyLimit(
+        context: context,
+        byName: byName,
+        dependencies: dependencies,
+        pending: pending,
+        completed: completed,
+        active: active,
+        concurrencyLimit: concurrencyLimit,
+      );
+      return;
+    }
+
     while (pending.any(active.contains)) {
       final List<String> ready = pending.where(active.contains).where((
         String name,
@@ -686,25 +707,14 @@ class Workflow extends BaseAgent {
       }
 
       final List<_NodeRunResult> results = await Future.wait(
-        ready.map((String name) async {
-          final BaseNode node = byName[name]!;
-          final Object? nodeInput = _nodeInput(
+        ready.map(
+          (String name) => _runReadyNode(
             context: context,
-            dependencies: dependencies[name]!,
-          );
-          final NodeState? state = context.nodeStates[name];
-          final WorkflowContext nodeContext = context._childExecutionContext(
-            resumeInputs: state?.resumeInputs.isNotEmpty == true
-                ? Map<String, Object?>.from(state!.resumeInputs)
-                : const <String, Object?>{},
-          );
-          final Object? output = await _runNodeWithRetry(
-            context: nodeContext,
-            node: node,
-            nodeInput: nodeInput,
-          );
-          return _resultFromRawNodeOutput(node, output, context: nodeContext);
-        }),
+            byName: byName,
+            dependencies: dependencies,
+            name: name,
+          ),
+        ),
       );
 
       for (final _NodeRunResult result in results) {
@@ -721,6 +731,84 @@ class Workflow extends BaseAgent {
         );
       }
     }
+  }
+
+  Future<void> _executeWithConcurrencyLimit({
+    required WorkflowContext context,
+    required Map<String, BaseNode> byName,
+    required Map<String, Set<String>> dependencies,
+    required Set<String> pending,
+    required Set<String> completed,
+    required Set<String> active,
+    required int concurrencyLimit,
+  }) async {
+    final Map<String, Future<_NodeRunResult>> running =
+        <String, Future<_NodeRunResult>>{};
+    while (pending.any(active.contains) || running.isNotEmpty) {
+      final int availableSlots = concurrencyLimit - running.length;
+      if (availableSlots > 0) {
+        final List<String> ready = pending.where(active.contains).where((
+          String name,
+        ) {
+          return dependencies[name]!.every(completed.contains);
+        }).toList()..sort();
+        if (ready.isEmpty && running.isEmpty && pending.any(active.contains)) {
+          throw StateError(
+            'Workflow graph has unresolved or cyclic dependencies.',
+          );
+        }
+        for (final String name in ready.take(availableSlots)) {
+          pending.remove(name);
+          running[name] = _runReadyNode(
+            context: context,
+            byName: byName,
+            dependencies: dependencies,
+            name: name,
+          );
+        }
+      }
+      if (running.isEmpty) {
+        break;
+      }
+
+      final _NodeRunResult result = await Future.any(running.values);
+      running.remove(result.name);
+      final bool completedNode = _recordNodeResult(context, result);
+      if (!completedNode) {
+        continue;
+      }
+      completed.add(result.name);
+      _activateDownstream(
+        fromNode: result.name,
+        route: result.route,
+        active: active,
+      );
+    }
+  }
+
+  Future<_NodeRunResult> _runReadyNode({
+    required WorkflowContext context,
+    required Map<String, BaseNode> byName,
+    required Map<String, Set<String>> dependencies,
+    required String name,
+  }) async {
+    final BaseNode node = byName[name]!;
+    final Object? nodeInput = _nodeInput(
+      context: context,
+      dependencies: dependencies[name]!,
+    );
+    final NodeState? state = context.nodeStates[name];
+    final WorkflowContext nodeContext = context._childExecutionContext(
+      resumeInputs: state?.resumeInputs.isNotEmpty == true
+          ? Map<String, Object?>.from(state!.resumeInputs)
+          : const <String, Object?>{},
+    );
+    final Object? output = await _runNodeWithRetry(
+      context: nodeContext,
+      node: node,
+      nodeInput: nodeInput,
+    );
+    return _resultFromRawNodeOutput(node, output, context: nodeContext);
   }
 
   void _seedResumeInputs(

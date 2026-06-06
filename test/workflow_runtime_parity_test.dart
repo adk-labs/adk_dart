@@ -97,6 +97,46 @@ void main() {
       expect(result.outputs['second'], 'go-first-second');
     });
 
+    test('limits graph-scheduled nodes with maxConcurrency', () async {
+      final List<String> started = <String>[];
+      final Map<String, Completer<void>> finishers = <String, Completer<void>>{
+        for (int i = 0; i < 4; i += 1) 'node_$i': Completer<void>(),
+      };
+      FunctionNode worker(String name) {
+        return node((WorkflowContext _, Object? input) async {
+          started.add(name);
+          await finishers[name]!.future;
+          expect(input, isNull);
+          return '$name done';
+        }, name: name);
+      }
+
+      final Workflow workflow = Workflow(
+        name: 'limited_concurrency',
+        maxConcurrency: 2,
+        nodes: <BaseNode>[for (int i = 0; i < 4; i += 1) worker('node_$i')],
+      );
+
+      final Future<WorkflowResult> resultFuture = workflow.runWorkflow();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(started, hasLength(2));
+      finishers[started.first]!.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(started, hasLength(3));
+
+      for (final Completer<void> finisher in finishers.values) {
+        if (!finisher.isCompleted) {
+          finisher.complete();
+        }
+      }
+      final WorkflowResult result = await resultFuture;
+
+      for (int i = 0; i < 4; i += 1) {
+        expect(result.outputs['node_$i'], 'node_$i done');
+      }
+    });
+
     test('stamps workflow output events with nodeInfo metadata', () async {
       final Workflow workflow = Workflow(
         name: 'workflow_agent',
