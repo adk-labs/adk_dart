@@ -252,6 +252,69 @@ void main() {
       expect((converted! as Part).thought, isTrue);
     });
 
+    test('text and file part metadata survives A2A roundtrip', () {
+      final Map<String, Object?> textMetadata = <String, Object?>{
+        'key1': 'value1',
+        'key2': 'value2',
+      };
+      final A2aPart textPart = A2aPart.text(
+        'some text',
+        metadata: textMetadata,
+      );
+
+      final Object? genaiText = convertA2aPartToGenaiPart(textPart);
+      expect(genaiText, isA<Part>());
+      final Part genaiTextPart = genaiText! as Part;
+      expect(genaiTextPart.partMetadata, textMetadata);
+
+      final Object? textRoundtrip = convertGenaiPartToA2aPart(genaiTextPart);
+      expect(textRoundtrip, isA<A2aPart>());
+      expect((textRoundtrip! as A2aPart).textPart?.metadata, textMetadata);
+
+      final Map<String, Object?> fileMetadata = <String, Object?>{
+        'key1': 'value1',
+      };
+      final A2aPart filePart = A2aPart.fileUri(
+        'gs://bucket/file.txt',
+        mimeType: 'text/plain',
+        metadata: fileMetadata,
+      );
+
+      final Object? genaiFile = convertA2aPartToGenaiPart(filePart);
+      expect(genaiFile, isA<Part>());
+      final Part genaiFilePart = genaiFile! as Part;
+      expect(genaiFilePart.partMetadata, fileMetadata);
+
+      final Object? fileRoundtrip = convertGenaiPartToA2aPart(genaiFilePart);
+      expect(fileRoundtrip, isA<A2aPart>());
+      expect((fileRoundtrip! as A2aPart).filePart?.metadata, fileMetadata);
+    });
+
+    test('typed data part metadata survives A2A roundtrip', () {
+      final Map<String, Object?> metadata = <String, Object?>{
+        getAdkMetadataKey(a2aDataPartMetadataTypeKey):
+            a2aDataPartMetadataTypeFunctionResponse,
+        'trace_id': 'trace-1',
+      };
+      final A2aPart part = A2aPart.data(<String, Object?>{
+        'name': 'lookup',
+        'response': <String, Object?>{'ok': true},
+        'id': 'call_1',
+      }, metadata: metadata);
+
+      final Object? converted = convertA2aPartToGenaiPart(part);
+      expect(converted, isA<Part>());
+      final Part genaiPart = converted! as Part;
+      expect(genaiPart.partMetadata, metadata);
+      expect(genaiPart.functionResponse?.name, 'lookup');
+
+      final Object? roundtrip = convertGenaiPartToA2aPart(genaiPart);
+      expect(roundtrip, isA<A2aPart>());
+      final A2aPart a2aPart = roundtrip! as A2aPart;
+      expect(a2aPart.dataPart?.metadata, metadata);
+      expect(a2aPart.dataPart?.data['id'], 'call_1');
+    });
+
     test(
       'event converter marks auth_required for long-running auth call',
       () async {

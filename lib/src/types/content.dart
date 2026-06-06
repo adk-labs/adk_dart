@@ -161,13 +161,17 @@ class Part {
     this.fileData,
     this.executableCode,
     this.codeExecutionResult,
-  });
+    Map<String, Object?>? partMetadata,
+  }) : partMetadata = partMetadata == null
+           ? null
+           : Map<String, Object?>.from(partMetadata);
 
   /// Creates a text [Part].
   factory Part.text(
     String text, {
     bool thought = false,
     List<int>? thoughtSignature,
+    Map<String, Object?>? partMetadata,
   }) {
     return Part(
       text: text,
@@ -175,6 +179,7 @@ class Part {
       thoughtSignature: thoughtSignature == null
           ? null
           : List<int>.from(thoughtSignature),
+      partMetadata: partMetadata,
     );
   }
 
@@ -186,6 +191,7 @@ class Part {
     List<Map<String, Object?>>? partialArgs,
     bool? willContinue,
     List<int>? thoughtSignature,
+    Map<String, Object?>? partMetadata,
   }) {
     return Part(
       functionCall: FunctionCall(
@@ -198,6 +204,7 @@ class Part {
       thoughtSignature: thoughtSignature == null
           ? null
           : List<int>.from(thoughtSignature),
+      partMetadata: partMetadata,
     );
   }
 
@@ -206,6 +213,7 @@ class Part {
     required String name,
     JsonMap? response,
     String? id,
+    Map<String, Object?>? partMetadata,
   }) {
     return Part(
       functionResponse: FunctionResponse(
@@ -213,6 +221,7 @@ class Part {
         response: response,
         id: id,
       ),
+      partMetadata: partMetadata,
     );
   }
 
@@ -221,6 +230,7 @@ class Part {
     required String mimeType,
     required List<int> data,
     String? displayName,
+    Map<String, Object?>? partMetadata,
   }) {
     return Part(
       inlineData: InlineData(
@@ -228,6 +238,7 @@ class Part {
         data: List<int>.from(data),
         displayName: displayName,
       ),
+      partMetadata: partMetadata,
     );
   }
 
@@ -236,6 +247,7 @@ class Part {
     required String fileUri,
     String? mimeType,
     String? displayName,
+    Map<String, Object?>? partMetadata,
   }) {
     return Part(
       fileData: FileData(
@@ -243,6 +255,7 @@ class Part {
         mimeType: mimeType,
         displayName: displayName,
       ),
+      partMetadata: partMetadata,
     );
   }
 
@@ -273,6 +286,9 @@ class Part {
   /// Optional code execution result payload.
   Object? codeExecutionResult;
 
+  /// Optional provider-specific metadata attached to this part.
+  Map<String, Object?>? partMetadata;
+
   /// Whether this part contains non-empty text.
   bool get hasText => text != null && text!.isNotEmpty;
 
@@ -287,6 +303,7 @@ class Part {
     Object? fileData = _sentinel,
     Object? executableCode = _sentinel,
     Object? codeExecutionResult = _sentinel,
+    Object? partMetadata = _sentinel,
   }) {
     return Part(
       text: identical(text, _sentinel) ? this.text : text as String?,
@@ -314,6 +331,11 @@ class Part {
       codeExecutionResult: identical(codeExecutionResult, _sentinel)
           ? this.codeExecutionResult
           : codeExecutionResult,
+      partMetadata: identical(partMetadata, _sentinel)
+          ? (this.partMetadata == null
+                ? null
+                : Map<String, Object?>.from(this.partMetadata!))
+          : partMetadata as Map<String, Object?>?,
     );
   }
 }

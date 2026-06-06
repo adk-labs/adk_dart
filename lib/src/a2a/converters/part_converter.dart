@@ -60,6 +60,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
       root.text,
       thought: thought,
       thoughtSignature: thoughtSignature,
+      partMetadata: _metadataOrNull(root.metadata),
     );
   }
 
@@ -73,6 +74,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
         fileUri: file.uri,
         mimeType: file.mimeType,
         displayName: displayName,
+        partMetadata: _metadataOrNull(root.metadata),
       );
     }
     if (file is A2aFileWithBytes) {
@@ -86,6 +88,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
         mimeType: file.mimeType ?? 'application/octet-stream',
         data: bytes,
         displayName: displayName,
+        partMetadata: _metadataOrNull(root.metadata),
       );
     }
     return null;
@@ -108,6 +111,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
           args: args,
           id: id,
           thoughtSignature: thoughtSignature,
+          partMetadata: _metadataOrNull(root.metadata),
         );
       }
     }
@@ -124,6 +128,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
           name: name,
           response: response,
           id: id,
+          partMetadata: _metadataOrNull(root.metadata),
         );
         if (thoughtSignature != null) {
           return converted.copyWith(thoughtSignature: thoughtSignature);
@@ -133,11 +138,17 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
     }
 
     if (type == a2aDataPartMetadataTypeCodeExecutionResult) {
-      return Part(codeExecutionResult: Map<String, Object?>.from(root.data));
+      return Part(
+        codeExecutionResult: Map<String, Object?>.from(root.data),
+        partMetadata: _metadataOrNull(root.metadata),
+      );
     }
 
     if (type == a2aDataPartMetadataTypeExecutableCode) {
-      return Part(executableCode: Map<String, Object?>.from(root.data));
+      return Part(
+        executableCode: Map<String, Object?>.from(root.data),
+        partMetadata: _metadataOrNull(root.metadata),
+      );
     }
 
     final List<int> encodedData = <int>[
@@ -154,6 +165,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
     return Part.fromInlineData(
       mimeType: a2aDataPartTextMimeType,
       data: encodedData,
+      partMetadata: _metadataOrNull(root.metadata),
     );
   }
 
@@ -173,7 +185,10 @@ Object? convertGenaiPartToA2aPart(Part part) {
     if (thoughtSignature != null) {
       metadata[getAdkMetadataKey('thought_signature')] = thoughtSignature;
     }
-    return A2aPart.text(part.text!, metadata: metadata);
+    return A2aPart.text(
+      part.text!,
+      metadata: _mergePartMetadata(metadata, part.partMetadata),
+    );
   }
 
   if (part.fileData != null) {
@@ -186,7 +201,7 @@ Object? convertGenaiPartToA2aPart(Part part) {
     return A2aPart.fileUri(
       file.fileUri,
       mimeType: file.mimeType,
-      metadata: metadata.isEmpty ? null : metadata,
+      metadata: _mergePartMetadata(metadata, part.partMetadata),
     );
   }
 
@@ -202,17 +217,20 @@ Object? convertGenaiPartToA2aPart(Part part) {
       final Map<String, Object?> json = _asMapObject(jsonDecode(payload));
       return A2aPart.data(
         _asMapObject(json['data']),
-        metadata: _asMapObject(json['metadata']),
+        metadata: _mergePartMetadata(
+          _asMapObject(json['metadata']),
+          part.partMetadata,
+        ),
       );
     }
 
     return A2aPart.fileBytes(
       base64Encode(data),
       mimeType: blob.mimeType,
-      metadata: <String, Object?>{
+      metadata: _mergePartMetadata(<String, Object?>{
         if (blob.displayName != null)
           getAdkMetadataKey('display_name'): blob.displayName,
-      },
+      }, part.partMetadata),
     );
   }
 
@@ -229,10 +247,10 @@ Object? convertGenaiPartToA2aPart(Part part) {
         if (thoughtSignature case final String value)
           'thought_signature': value,
       },
-      metadata: <String, Object?>{
+      metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeFunctionCall,
-      },
+      }, part.partMetadata),
     );
   }
 
@@ -249,34 +267,51 @@ Object? convertGenaiPartToA2aPart(Part part) {
         if (thoughtSignature case final String value)
           'thought_signature': value,
       },
-      metadata: <String, Object?>{
+      metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeFunctionResponse,
-      },
+      }, part.partMetadata),
     );
   }
 
   if (part.codeExecutionResult != null) {
     return A2aPart.data(
       _asMapObject(part.codeExecutionResult),
-      metadata: <String, Object?>{
+      metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeCodeExecutionResult,
-      },
+      }, part.partMetadata),
     );
   }
 
   if (part.executableCode != null) {
     return A2aPart.data(
       _asMapObject(part.executableCode),
-      metadata: <String, Object?>{
+      metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeExecutableCode,
-      },
+      }, part.partMetadata),
     );
   }
 
   return null;
+}
+
+Map<String, Object?>? _metadataOrNull(Map<String, Object?> metadata) {
+  if (metadata.isEmpty) {
+    return null;
+  }
+  return Map<String, Object?>.from(metadata);
+}
+
+Map<String, Object?>? _mergePartMetadata(
+  Map<String, Object?> metadata,
+  Map<String, Object?>? partMetadata,
+) {
+  if (partMetadata == null || partMetadata.isEmpty) {
+    return metadata.isEmpty ? null : metadata;
+  }
+  return <String, Object?>{...metadata, ...partMetadata};
 }
 
 String? _parseDisplayName(Object? value) {
