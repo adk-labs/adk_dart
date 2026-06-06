@@ -113,12 +113,14 @@ class NodeState {
     this.attemptCount = 1,
     List<String>? interrupts,
     Map<String, Object?>? resumeInputs,
+    List<String>? outputFor,
     this.runCounter = 0,
     this.runId,
     this.parentRunId,
     this.route,
     this.error,
   }) : interrupts = interrupts ?? <String>[],
+       outputFor = outputFor ?? <String>[],
        resumeInputs = resumeInputs ?? <String, Object?>{};
 
   /// Current node status.
@@ -135,6 +137,9 @@ class NodeState {
 
   /// Resume input values keyed by interrupt identifier.
   final Map<String, Object?> resumeInputs;
+
+  /// Output ownership targets for delegated workflow outputs.
+  final List<String> outputFor;
 
   /// Sequential run counter for fresh node runs.
   int runCounter;
@@ -169,6 +174,7 @@ class WorkflowContext {
   Object? _directOutput;
   bool _outputDelegated = false;
   final Map<String, int> _childRunCounters = <String, int>{};
+  String? _currentNodeKey;
 
   /// ADK invocation context when running as an agent.
   final InvocationContext? invocationContext;
@@ -304,6 +310,21 @@ class WorkflowContext {
       context: childContext,
       name: stateKey,
     );
+    if (useAsOutput) {
+      final NodeState? childState = nodeStates[stateKey];
+      final String? parentKey = _currentNodeKey;
+      if (childState != null && parentKey != null) {
+        final NodeState? parentState = nodeStates[parentKey];
+        childState.outputFor
+          ..clear()
+          ..add(stateKey)
+          ..addAll(
+            parentState?.outputFor.isNotEmpty == true
+                ? parentState!.outputFor
+                : <String>[parentKey],
+          );
+      }
+    }
     _recordNodeResult(this, result);
     return result.output;
   }
@@ -677,7 +698,12 @@ class Workflow extends BaseAgent {
     await _execute(workflowContext);
     for (final MapEntry<String, Object?> entry
         in workflowContext.outputs.entries) {
-      final Event? event = _eventFromOutput(context, entry.key, entry.value);
+      final Event? event = _eventFromOutput(
+        context,
+        entry.key,
+        entry.value,
+        state: workflowContext.nodeStates[entry.key],
+      );
       if (event != null) {
         yield event;
       }
@@ -960,12 +986,17 @@ class Workflow extends BaseAgent {
   Event? _eventFromOutput(
     InvocationContext context,
     String author,
-    Object? output,
-  ) {
+    Object? output, {
+    NodeState? state,
+  }) {
     if (output == null) {
       return null;
     }
-    final NodeInfo nodeInfo = _nodeInfoForOutput(context, author);
+    final NodeInfo nodeInfo = _nodeInfoForOutput(
+      context,
+      author,
+      outputForKeys: state?.outputFor,
+    );
     if (output is Event) {
       return output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
@@ -1027,6 +1058,7 @@ Future<Object?> _runNodeWithRetry({
       : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
   final String key = stateKey ?? node.name;
   final NodeState state = context.nodeStates.putIfAbsent(key, NodeState.new);
+  context._currentNodeKey = key;
   state.input = nodeInput;
   if (state.status == NodeStatus.inactive || state.runId == null) {
     state.runCounter += 1;
@@ -1204,6 +1236,7 @@ Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
         attemptCount: entry.value.attemptCount,
         interrupts: List<String>.from(entry.value.interrupts),
         resumeInputs: Map<String, Object?>.from(entry.value.resumeInputs),
+        outputFor: List<String>.from(entry.value.outputFor),
         runCounter: entry.value.runCounter,
         runId: entry.value.runId,
         parentRunId: entry.value.parentRunId,
@@ -1358,12 +1391,31 @@ Set<String> _interruptIdsFromOutput(Object? output) {
   return <String>{};
 }
 
-NodeInfo _nodeInfoForOutput(InvocationContext context, String nodeName) {
+NodeInfo _nodeInfoForOutput(
+  InvocationContext context,
+  String outputKey, {
+  List<String>? outputForKeys,
+}) {
+  final String nodePath = _nodePathForOutputKey(context, outputKey);
+  final List<String> outputFor = outputForKeys == null || outputForKeys.isEmpty
+      ? <String>[nodePath]
+      : outputForKeys
+            .map((String key) => _nodePathForOutputKey(context, key))
+            .toList();
+  return NodeInfo(path: nodePath, outputFor: outputFor);
+}
+
+String _nodePathForOutputKey(InvocationContext context, String outputKey) {
   final String workflowName = context.agent.name.isEmpty
       ? 'workflow'
       : context.agent.name;
-  final String nodePath = '$workflowName@1/$nodeName@1';
-  return NodeInfo(path: nodePath, outputFor: <String>[nodePath]);
+  final int separator = outputKey.lastIndexOf('@');
+  if (separator > 0 && separator < outputKey.length - 1) {
+    final String nodeName = outputKey.substring(0, separator);
+    final String runId = outputKey.substring(separator + 1);
+    return '$workflowName@1/$nodeName@$runId';
+  }
+  return '$workflowName@1/$outputKey@1';
 }
 
 bool _routeMatches(Object? edgeRoute, Object? emittedRoute) {

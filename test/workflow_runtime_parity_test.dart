@@ -1070,6 +1070,48 @@ void main() {
       expect(second.nodeStates['parent']?.status, NodeStatus.completed);
     });
 
+    test('stamps delegated dynamic outputFor ancestors on events', () async {
+      final FunctionNode child = node(
+        (WorkflowContext _, Object? _) => 'delegated child output',
+        name: 'delegated_event_child',
+      );
+      final Workflow workflow = Workflow(
+        name: 'delegated_event_workflow',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) async {
+            final Object? output = await context.runNode(
+              child,
+              useAsOutput: true,
+            );
+            context.output = output;
+            return null;
+          }, name: 'parent'),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_delegated_output_for',
+        agent: workflow,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+      );
+
+      final List<Event> events = await workflow.runAsync(context).toList();
+
+      expect(events, hasLength(1));
+      expect(
+        events.single.nodeInfo.path,
+        'delegated_event_workflow@1/delegated_event_child@1',
+      );
+      expect(events.single.nodeInfo.outputFor, <String>[
+        'delegated_event_workflow@1/delegated_event_child@1',
+        'delegated_event_workflow@1/parent@1',
+      ]);
+      expect(
+        events.single.content?.parts.single.text,
+        'delegated child output',
+      );
+    });
+
     test('retries failed nodes', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(
