@@ -99,10 +99,10 @@ class EnvironmentToolset extends BaseToolset {
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     await _ensureInitialized();
     return <BaseTool>[
-      _ExecuteTool(_environment, maxOutputChars: _maxOutputChars),
-      _ReadFileTool(_environment, maxOutputChars: _maxOutputChars),
-      _EditFileTool(_environment),
-      _WriteFileTool(_environment),
+      ExecuteTool(_environment, maxOutputChars: _maxOutputChars),
+      ReadFileTool(_environment, maxOutputChars: _maxOutputChars),
+      EditFileTool(_environment),
+      WriteFileTool(_environment),
     ];
   }
 
@@ -129,8 +129,10 @@ class EnvironmentToolset extends BaseToolset {
   }
 }
 
-class _ExecuteTool extends BaseTool {
-  _ExecuteTool(this._environment, {int? maxOutputChars})
+/// Tool that runs shell commands in an environment.
+class ExecuteTool extends BaseTool {
+  /// Creates an execute tool backed by [environment].
+  ExecuteTool(this._environment, {int? maxOutputChars})
     : _maxOutputChars = maxOutputChars,
       super(
         name: 'Execute',
@@ -208,8 +210,10 @@ class _ExecuteTool extends BaseTool {
   }
 }
 
-class _ReadFileTool extends BaseTool {
-  _ReadFileTool(this._environment, {int? maxOutputChars})
+/// Tool that reads file contents from an environment with line numbers.
+class ReadFileTool extends BaseTool {
+  /// Creates a read-file tool backed by [environment].
+  ReadFileTool(this._environment, {int? maxOutputChars})
     : _maxOutputChars = maxOutputChars,
       super(
         name: 'ReadFile',
@@ -318,8 +322,10 @@ class _ReadFileTool extends BaseTool {
   }
 }
 
-class _WriteFileTool extends BaseTool {
-  _WriteFileTool(this._environment)
+/// Tool that creates or overwrites a file in an environment.
+class WriteFileTool extends BaseTool {
+  /// Creates a write-file tool backed by [environment].
+  WriteFileTool(this._environment)
     : super(
         name: 'WriteFile',
         description:
@@ -373,8 +379,10 @@ class _WriteFileTool extends BaseTool {
   }
 }
 
-class _EditFileTool extends BaseTool {
-  _EditFileTool(this._environment)
+/// Tool that performs an exact text replacement in an environment file.
+class EditFileTool extends BaseTool {
+  /// Creates an edit-file tool backed by [environment].
+  EditFileTool(this._environment)
     : super(
         name: 'EditFile',
         description:

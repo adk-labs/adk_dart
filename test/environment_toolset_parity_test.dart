@@ -55,6 +55,63 @@ void main() {
       },
     );
 
+    test('public environment tools can be constructed directly', () async {
+      final Directory workspace = await Directory.systemTemp.createTemp(
+        'environment_public_tools_',
+      );
+      addTearDown(() => workspace.delete(recursive: true));
+
+      final LocalEnvironment environment = LocalEnvironment(
+        workingDirectory: workspace,
+      );
+      final Context context = _toolContext();
+      final List<BaseTool> tools = <BaseTool>[
+        ExecuteTool(environment),
+        ReadFileTool(environment, maxOutputChars: 100),
+        EditFileTool(environment),
+        WriteFileTool(environment),
+      ];
+
+      expect(tools.map((BaseTool tool) => tool.name), <String>[
+        'Execute',
+        'ReadFile',
+        'EditFile',
+        'WriteFile',
+      ]);
+      expect(tools[0].getDeclaration()!.name, 'Execute');
+      expect(tools[1].getDeclaration()!.name, 'ReadFile');
+      expect(tools[2].getDeclaration()!.name, 'EditFile');
+      expect(tools[3].getDeclaration()!.name, 'WriteFile');
+
+      final Object? writeResult = await tools[3].run(
+        args: <String, dynamic>{'path': 'public.txt', 'content': 'old\n'},
+        toolContext: context,
+      );
+      expect((writeResult! as Map<String, Object?>)['status'], 'ok');
+
+      final Object? editResult = await tools[2].run(
+        args: <String, dynamic>{
+          'path': 'public.txt',
+          'old_string': 'old',
+          'new_string': 'new',
+        },
+        toolContext: context,
+      );
+      expect((editResult! as Map<String, Object?>)['status'], 'ok');
+
+      final Object? readResult = await tools[1].run(
+        args: <String, dynamic>{'path': 'public.txt'},
+        toolContext: context,
+      );
+      expect((readResult! as Map<String, Object?>)['content'], contains('new'));
+
+      final Object? executeResult = await tools[0].run(
+        args: <String, dynamic>{'command': 'printf direct'},
+        toolContext: context,
+      );
+      expect((executeResult! as Map<String, Object?>)['stdout'], 'direct');
+    });
+
     test('writes, reads, edits, and executes within the workspace', () async {
       final Directory workspace = await Directory.systemTemp.createTemp(
         'environment_toolset_io_',
