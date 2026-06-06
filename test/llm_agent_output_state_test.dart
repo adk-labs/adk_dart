@@ -39,6 +39,46 @@ class _ToolCallModel extends BaseLlm {
   }
 }
 
+class _StaticFlow extends BaseLlmFlow {
+  _StaticFlow(this.text);
+
+  final String text;
+
+  @override
+  Stream<Event> runAsync(InvocationContext context) async* {
+    yield _event(context);
+  }
+
+  @override
+  Stream<Event> runLive(InvocationContext context) async* {
+    yield _event(context);
+  }
+
+  Event _event(InvocationContext context) {
+    return Event(
+      invocationId: context.invocationId,
+      author: context.agent.name,
+      branch: context.branch,
+      content: Content.modelText(text),
+    );
+  }
+}
+
+class _FlowBackedLlmAgent extends LlmAgent {
+  _FlowBackedLlmAgent({
+    required super.name,
+    required String text,
+    super.outputKey,
+    super.beforeAgentCallback,
+    super.afterAgentCallback,
+  }) : _flow = _StaticFlow(text);
+
+  final BaseLlmFlow _flow;
+
+  @override
+  BaseLlmFlow get llmFlow => _flow;
+}
+
 class _StateRecordingPlugin extends BasePlugin {
   _StateRecordingPlugin() : super(name: 'state_recording');
 
@@ -52,7 +92,7 @@ class _StateRecordingPlugin extends BasePlugin {
   }
 }
 
-Future<List<Event>> _runOnce(LlmAgent agent) async {
+Future<List<Event>> _runOnce(BaseAgent agent) async {
   final InMemoryRunner runner = InMemoryRunner(agent: agent);
   final Session session = await runner.sessionService.createSession(
     appName: runner.appName,
@@ -136,6 +176,91 @@ void main() {
           sessionId: session.id,
         );
         expect(stored?.state['final_answer'], 'visible');
+      },
+    );
+
+    test('outputKey state is visible inside after-agent callback', () async {
+      Object? callbackStateValue;
+      Object? callbackSessionStateValue;
+      final LlmAgent agent = _FlowBackedLlmAgent(
+        name: 'root_agent',
+        text: 'visible',
+        outputKey: 'final_answer',
+        afterAgentCallback: (CallbackContext callbackContext) {
+          callbackStateValue = callbackContext.state['final_answer'];
+          callbackSessionStateValue =
+              callbackContext.session.state['final_answer'];
+          return null;
+        },
+      );
+
+      await _runOnce(agent);
+
+      expect(callbackStateValue, 'visible');
+      expect(callbackSessionStateValue, 'visible');
+    });
+
+    test(
+      'outputKey state is visible inside after-agent callback in live run',
+      () async {
+        Object? callbackStateValue;
+        Object? callbackSessionStateValue;
+        final LlmAgent agent = _FlowBackedLlmAgent(
+          name: 'root_agent',
+          text: 'live visible',
+          outputKey: 'final_answer',
+          afterAgentCallback: (CallbackContext callbackContext) {
+            callbackStateValue = callbackContext.state['final_answer'];
+            callbackSessionStateValue =
+                callbackContext.session.state['final_answer'];
+            return null;
+          },
+        );
+        final InMemoryRunner runner = InMemoryRunner(agent: agent);
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'u1',
+          sessionId: 's_output_key_live_visibility',
+        );
+
+        await runner
+            .runLive(
+              liveRequestQueue: LiveRequestQueue()..close(),
+              session: session,
+            )
+            .toList();
+
+        expect(callbackStateValue, 'live visible');
+        expect(callbackSessionStateValue, 'live visible');
+      },
+    );
+
+    test(
+      'outputKey state is visible to next sequential agent before callback',
+      () async {
+        Object? callbackSessionStateValue;
+        final LlmAgent first = _FlowBackedLlmAgent(
+          name: 'first_agent',
+          text: 'from first',
+          outputKey: 'final_answer',
+        );
+        final LlmAgent second = _FlowBackedLlmAgent(
+          name: 'second_agent',
+          text: 'from second',
+          beforeAgentCallback: (CallbackContext callbackContext) {
+            callbackSessionStateValue =
+                callbackContext.session.state['final_answer'];
+            return null;
+          },
+        );
+        final SequentialAgent agent = SequentialAgent(
+          name: 'seq_agent',
+          subAgents: <BaseAgent>[first, second],
+        );
+
+        await _runOnce(agent);
+
+        expect(callbackSessionStateValue, 'from first');
       },
     );
 
