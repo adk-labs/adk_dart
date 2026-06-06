@@ -85,6 +85,23 @@ class _AbortOnEventPlugin extends BasePlugin {
   }
 }
 
+class _UserMessageStateSnapshotPlugin extends BasePlugin {
+  _UserMessageStateSnapshotPlugin() : super(name: 'state_snapshot');
+
+  Map<String, Object?>? stateInCallback;
+
+  @override
+  Future<Content?> onUserMessageCallback({
+    required InvocationContext invocationContext,
+    required Content userMessage,
+  }) async {
+    stateInCallback = Map<String, Object?>.from(
+      invocationContext.session.state,
+    );
+    return null;
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) async {
   return stream.toList();
 }
@@ -118,6 +135,53 @@ void main() {
       expect(events, hasLength(1));
       expect(events.first.author, 'root_agent');
       expect(events.first.content?.parts.first.text, 'hello from model');
+    });
+
+    test('onUserMessage callback sees runAsync stateDelta', () async {
+      final _UserMessageStateSnapshotPlugin plugin =
+          _UserMessageStateSnapshotPlugin();
+      final MockModel model = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('state observed')),
+        ],
+      );
+      final Agent agent = Agent(name: 'root_agent', model: model);
+      final InMemoryRunner runner = InMemoryRunner(
+        agent: agent,
+        plugins: <BasePlugin>[plugin],
+      );
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_state_delta_callback',
+      );
+
+      await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+          stateDelta: <String, Object?>{
+            'callback_key': 'callback_value',
+            'number': 123,
+          },
+        ),
+      );
+
+      expect(plugin.stateInCallback, isNotNull);
+      expect(
+        plugin.stateInCallback,
+        containsPair('callback_key', 'callback_value'),
+      );
+      expect(plugin.stateInCallback, containsPair('number', 123));
+
+      final Session? loaded = await runner.sessionService.getSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: session.id,
+      );
+      expect(loaded?.state, containsPair('callback_key', 'callback_value'));
+      expect(loaded?.state, containsPair('number', 123));
     });
 
     test(

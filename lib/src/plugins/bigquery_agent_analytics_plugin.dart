@@ -28,6 +28,7 @@ import 'base_plugin.dart';
 
 const String _schemaVersion = '1';
 const String _schemaVersionLabelKey = 'adk_schema_version';
+const String _cycleDetectedMessage = '[cycle detected]';
 
 const Map<String, String> _hitlEventMap = <String, String>{
   'adk_request_credential': 'HITL_CREDENTIAL_REQUEST',
@@ -2092,7 +2093,7 @@ _TruncateResult _recursiveSmartTruncate(
 
   final int identity = identityHashCode(value);
   if (visited.contains(identity)) {
-    return _TruncateResult(value: '[CIRCULAR_REFERENCE]', isTruncated: false);
+    return _TruncateResult(value: _cycleDetectedMessage, isTruncated: true);
   }
 
   final bool isCompound = value is Map || value is List || value is Set;
@@ -2182,31 +2183,52 @@ String _newInsertId() {
 
 Map<String, Object?> _toJsonSafeMap(Map<String, Object?> source) {
   final Map<String, Object?> converted = <String, Object?>{};
+  final Set<int> visited = <int>{identityHashCode(source)};
   source.forEach((String key, Object? value) {
-    converted[key] = _toJsonSafeValue(value);
+    converted[key] = _toJsonSafeValue(value, visited);
   });
   return converted;
 }
 
-Object? _toJsonSafeValue(Object? value) {
+Object? _toJsonSafeValue(Object? value, Set<int> visited) {
   if (value == null || value is num || value is bool || value is String) {
     return value;
   }
   if (value is DateTime) {
     return value.toUtc().toIso8601String();
   }
-  if (value is List) {
-    return value.map(_toJsonSafeValue).toList(growable: false);
+
+  final bool isCompound = value is List || value is Set || value is Map;
+  final int identity = identityHashCode(value);
+  if (isCompound) {
+    if (visited.contains(identity)) {
+      return _cycleDetectedMessage;
+    }
+    visited.add(identity);
   }
-  if (value is Set) {
-    return value.map(_toJsonSafeValue).toList(growable: false);
+
+  try {
+    if (value is List) {
+      return value
+          .map((Object? item) => _toJsonSafeValue(item, visited))
+          .toList(growable: false);
+    }
+    if (value is Set) {
+      return value
+          .map((Object? item) => _toJsonSafeValue(item, visited))
+          .toList(growable: false);
+    }
+    if (value is Map) {
+      final Map<String, Object?> nested = <String, Object?>{};
+      value.forEach((Object? nestedKey, Object? nestedValue) {
+        nested['$nestedKey'] = _toJsonSafeValue(nestedValue, visited);
+      });
+      return nested;
+    }
+    return '$value';
+  } finally {
+    if (isCompound) {
+      visited.remove(identity);
+    }
   }
-  if (value is Map) {
-    final Map<String, Object?> nested = <String, Object?>{};
-    value.forEach((Object? nestedKey, Object? nestedValue) {
-      nested['$nestedKey'] = _toJsonSafeValue(nestedValue);
-    });
-    return nested;
-  }
-  return '$value';
 }

@@ -798,6 +798,11 @@ class Runner {
     if (context.isAborted) {
       return;
     }
+    if (stateDelta != null && stateDelta.isNotEmpty) {
+      stateDelta.forEach((String key, Object? value) {
+        session.state[key] = value;
+      });
+    }
     final Content? modifiedMessage = await context.pluginManager
         .runOnUserMessageCallback(
           userMessage: newMessage,

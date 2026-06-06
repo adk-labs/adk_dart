@@ -318,6 +318,47 @@ void main() {
       expect((firstRow['json'] as Map)['event_type'], 'A');
     });
 
+    test('native insertAll sink serializes cyclic rows safely', () async {
+      final _QueuedHttpClient httpClient = _QueuedHttpClient(
+        responses: <http.Response>[http.Response('{}', 200)],
+      );
+      final BigQueryInsertAllEventSink sink = BigQueryInsertAllEventSink(
+        projectId: 'project',
+        datasetId: 'dataset',
+        tableId: 'agent_events',
+        httpClient: httpClient,
+        accessTokenProvider: () async => 'token-123',
+      );
+      final Map<String, Object?> cyclicPayload = <String, Object?>{
+        'value': 'kept',
+      };
+      cyclicPayload['self'] = cyclicPayload;
+
+      await sink.append(<String, Object?>{
+        'event_type': 'A',
+        'payload': cyclicPayload,
+      });
+      await sink.close();
+
+      final Map<String, Object?> payload =
+          (jsonDecode(httpClient.recordedCalls.single.body) as Map).map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          );
+      final List<Object?> rows = payload['rows'] as List<Object?>;
+      final Map<String, Object?> row = (rows.single as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final Map<String, Object?> json = (row['json'] as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final Map<String, Object?> loggedPayload = (json['payload'] as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+
+      expect(loggedPayload['value'], 'kept');
+      expect(loggedPayload['self'], '[cycle detected]');
+    });
+
     test('plugin can use native insertAll sink', () async {
       final _QueuedHttpClient httpClient = _QueuedHttpClient(
         responses: <http.Response>[
@@ -491,6 +532,37 @@ void main() {
       expect(sink.rows.first['event_type'], 'LLM_REQUEST');
       expect(sink.rows.first['content'], isNull);
       expect(sink.rows.first['content_parts'], isEmpty);
+    });
+
+    test('marks cyclic analytics payloads as truncated', () async {
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final Map<String, Object?> cyclicPayload = <String, Object?>{
+        'value': 'kept',
+      };
+      cyclicPayload['self'] = cyclicPayload;
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+        config: BigQueryLoggerConfig(
+          contentFormatter: (Object? _, String _) => cyclicPayload,
+        ),
+      );
+
+      await plugin.beforeModelCallback(
+        callbackContext: Context(_newInvocationContext()),
+        llmRequest: LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+        ),
+      );
+
+      final Map<String, Object?> content = Map<String, Object?>.from(
+        sink.rows.single['content']! as Map,
+      );
+      expect(content['value'], 'kept');
+      expect(content['self'], '[cycle detected]');
+      expect(sink.rows.single['is_truncated'], isTrue);
     });
 
     test('creates analytics views on startup when enabled', () async {
