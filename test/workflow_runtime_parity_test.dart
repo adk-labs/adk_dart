@@ -277,6 +277,47 @@ void main() {
       );
     });
 
+    test('rejects chat-mode LlmAgent following a non-START node', () {
+      final FunctionNode predecessor = node(
+        (WorkflowContext _, Object? input) => '$input prepared',
+        name: 'predecessor',
+      );
+      final LlmAgent chatAgent = LlmAgent(name: 'chat_agent', mode: 'chat');
+
+      expect(
+        () => Workflow(
+          name: 'chat_after_node',
+          nodes: <BaseNode>[
+            predecessor,
+            AgentNode(agent: chatAgent),
+          ],
+          edges: <Edge>[Edge(fromNode: predecessor, toNode: chatAgent.name)],
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message,
+            'message',
+            allOf(
+              contains("mode='chat'"),
+              contains("following node 'predecessor'"),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('allows chat-mode LlmAgent directly from START', () {
+      final LlmAgent chatAgent = LlmAgent(name: 'chat_agent', mode: 'chat');
+
+      final Workflow workflow = Workflow(
+        name: 'chat_from_start',
+        nodes: <BaseNode>[AgentNode(agent: chatAgent)],
+        edges: <Edge>[Edge(fromNode: START, toNode: chatAgent.name)],
+      );
+
+      expect(workflow.nodes.single.name, 'chat_agent');
+    });
+
     test('buildNode wraps agents with rerunOnResume enabled by default', () {
       final BaseNode wrapped = buildNode(_EchoAgent(name: 'echo'));
 

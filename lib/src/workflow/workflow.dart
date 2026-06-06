@@ -796,6 +796,7 @@ class Workflow extends BaseAgent {
        edges = List<Edge>.unmodifiable(edges),
        super(subAgents: const <BaseAgent>[]) {
     _validateNoStaticTaskModeNodes(this.nodes);
+    _validateNoChatModeAgentAfterNode(this.nodes, this.edges);
   }
 
   /// Nodes in this workflow.
@@ -1060,6 +1061,7 @@ class Workflow extends BaseAgent {
       if (!byName.containsKey(edge.toNode)) {
         throw ArgumentError('Unknown workflow edge target: ${edge.toNode}');
       }
+      _validateChatModeEdge(edge, byName);
       if (edge.fromNode == START) {
         continue;
       }
@@ -1201,6 +1203,47 @@ LlmAgent? _taskModeAgentInStaticNode(BaseNode node) {
   }
   if (node is ParallelWorker) {
     return _taskModeAgentInStaticNode(node.wrappedNode);
+  }
+  return null;
+}
+
+void _validateNoChatModeAgentAfterNode(
+  Iterable<BaseNode> nodes,
+  Iterable<Edge> edges,
+) {
+  final Map<String, BaseNode> byName = <String, BaseNode>{
+    for (final BaseNode node in nodes) node.name: node,
+  };
+  for (final Edge edge in edges) {
+    _validateChatModeEdge(edge, byName);
+  }
+}
+
+void _validateChatModeEdge(Edge edge, Map<String, BaseNode> byName) {
+  if (edge.fromNode == START) {
+    return;
+  }
+  final BaseNode? toNode = byName[edge.toNode];
+  if (toNode == null) {
+    return;
+  }
+  final LlmAgent? agent = _chatModeAgentInNode(toNode);
+  if (agent == null) {
+    return;
+  }
+  throw ArgumentError(
+    "The agent '${agent.name}' has been added to the workflow with "
+    "mode='chat' following node '${edge.fromNode}'. This is not supported "
+    'because chat-mode agents rely on conversational history and cannot '
+    'consume direct node inputs from preceding nodes. Please change the '
+    "agent's mode to 'single_turn'.",
+  );
+}
+
+LlmAgent? _chatModeAgentInNode(BaseNode node) {
+  if (node is AgentNode && node.agent is LlmAgent) {
+    final LlmAgent agent = node.agent as LlmAgent;
+    return agent.mode == 'chat' ? agent : null;
   }
   return null;
 }
