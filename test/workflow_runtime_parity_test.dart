@@ -684,11 +684,15 @@ void main() {
 
       final WorkflowResult result = await workflow.runWorkflow(input: 'start');
 
-      expect(result.outputs['dynamic_child'], 'start-parent-child');
+      expect(result.outputs['dynamic_child@1'], 'start-parent-child');
       expect(result.outputs['parent'], 'parent:start-parent-child');
-      expect(result.nodeStates['dynamic_child']?.status, NodeStatus.completed);
-      expect(result.nodeStates['dynamic_child']?.attemptCount, 2);
-      expect(result.nodeStates['dynamic_child']?.input, 'start-parent');
+      expect(
+        result.nodeStates['dynamic_child@1']?.status,
+        NodeStatus.completed,
+      );
+      expect(result.nodeStates['dynamic_child@1']?.attemptCount, 2);
+      expect(result.nodeStates['dynamic_child@1']?.input, 'start-parent');
+      expect(result.nodeStates['dynamic_child@1']?.runId, '1');
     });
 
     test('runs dynamic nodes from standalone WorkflowContext', () async {
@@ -703,11 +707,43 @@ void main() {
       );
 
       expect(output, 'standalone-child');
-      expect(context.outputs['standalone_child'], 'standalone-child');
+      expect(context.outputs['standalone_child@1'], 'standalone-child');
       expect(
-        context.nodeStates['standalone_child']?.status,
+        context.nodeStates['standalone_child@1']?.status,
         NodeStatus.completed,
       );
+    });
+
+    test('assigns automatic dynamic runIds per node name', () async {
+      int childRuns = 0;
+      final FunctionNode child = node((WorkflowContext _, Object? input) {
+        childRuns += 1;
+        return 'auto:$input';
+      }, name: 'auto_child');
+      final Workflow workflow = Workflow(
+        name: 'dynamic_auto_run_id_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) async {
+            final List<Object?> outputs = await Future.wait(<Future<Object?>>[
+              context.runNode(child, input: 'a'),
+              context.runNode(child, input: 'b'),
+              context.runNode(child, input: 'c'),
+            ]);
+            return outputs.join(',');
+          }, name: 'parent'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(childRuns, 3);
+      expect(result.outputs['auto_child@1'], 'auto:a');
+      expect(result.outputs['auto_child@2'], 'auto:b');
+      expect(result.outputs['auto_child@3'], 'auto:c');
+      expect(result.outputs['parent'], 'auto:a,auto:b,auto:c');
+      expect(result.nodeStates['auto_child@1']?.runId, '1');
+      expect(result.nodeStates['auto_child@2']?.runId, '2');
+      expect(result.nodeStates['auto_child@3']?.runId, '3');
     });
 
     test('separates dynamic node instances by explicit runId', () async {
@@ -774,11 +810,11 @@ void main() {
       );
 
       final WorkflowResult result = await workflow.runWorkflow();
-      final NodeState childState = result.nodeStates['dynamic_ask_user']!;
+      final NodeState childState = result.nodeStates['dynamic_ask_user@1']!;
 
       expect(childState.status, NodeStatus.waiting);
       expect(childState.interrupts, <String>['dynamic_ask']);
-      expect(result.outputs['dynamic_ask_user'], isA<RequestInput>());
+      expect(result.outputs['dynamic_ask_user@1'], isA<RequestInput>());
     });
 
     test(
@@ -904,11 +940,11 @@ void main() {
       final WorkflowResult first = await workflow.runWorkflow();
       expect(first.nodeStates['parent']?.status, NodeStatus.waiting);
       expect(
-        first.nodeStates['dynamic_completer']?.status,
+        first.nodeStates['dynamic_completer@1']?.status,
         NodeStatus.completed,
       );
       expect(
-        first.nodeStates['dynamic_interrupter']?.status,
+        first.nodeStates['dynamic_interrupter@1']?.status,
         NodeStatus.waiting,
       );
 
@@ -924,7 +960,7 @@ void main() {
       expect(interrupterRuns, 2);
       expect(second.outputs['parent'], 'completed_result + resumed:done');
       expect(
-        second.nodeStates['dynamic_interrupter']?.status,
+        second.nodeStates['dynamic_interrupter@1']?.status,
         NodeStatus.completed,
       );
     });
@@ -960,7 +996,7 @@ void main() {
 
         final WorkflowResult first = await workflow.runWorkflow();
         expect(
-          first.nodeStates['dynamic_default_child']?.status,
+          first.nodeStates['dynamic_default_child@1']?.status,
           NodeStatus.waiting,
         );
 
@@ -973,12 +1009,12 @@ void main() {
 
         expect(parentRuns, 2);
         expect(childRuns, 1);
-        expect(second.outputs['dynamic_default_child'], <String, Object?>{
+        expect(second.outputs['dynamic_default_child@1'], <String, Object?>{
           'ok': true,
         });
         expect(second.outputs['parent'], 'continued:true');
         expect(
-          second.nodeStates['dynamic_default_child']?.status,
+          second.nodeStates['dynamic_default_child@1']?.status,
           NodeStatus.completed,
         );
       },

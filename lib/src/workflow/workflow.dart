@@ -167,6 +167,7 @@ class WorkflowContext {
 
   bool _hasDirectOutput = false;
   Object? _directOutput;
+  final Map<String, int> _childRunCounters = <String, int>{};
 
   /// ADK invocation context when running as an agent.
   final InvocationContext? invocationContext;
@@ -219,11 +220,11 @@ class WorkflowContext {
   /// owned by a [Workflow], the same retry and timeout behavior used by static
   /// graph nodes is applied.
   ///
-  /// When [runId] is provided, state and output are recorded under
-  /// `nodeName@runId` so multiple dynamic instances of the same node can be
-  /// resumed or deduplicated independently. Explicit run IDs must contain at
-  /// least one non-numeric character to avoid collisions with auto-generated
-  /// numeric run IDs.
+  /// State and output are recorded under `nodeName@runId` so multiple dynamic
+  /// instances of the same node can be resumed or deduplicated independently.
+  /// When [runId] is omitted, a per-caller numeric ID is generated from the
+  /// child node name. Explicit run IDs must contain at least one non-numeric
+  /// character to avoid collisions with auto-generated numeric run IDs.
   Future<Object?> runNode(
     Object nodeLike, {
     Object? input,
@@ -251,7 +252,8 @@ class WorkflowContext {
         'Explicit dynamic workflow run IDs must contain non-numeric characters.',
       );
     }
-    final String stateKey = runId == null ? node.name : '${node.name}@$runId';
+    final String effectiveRunId = runId ?? _nextDynamicRunId(node.name);
+    final String stateKey = '${node.name}@$effectiveRunId';
     final NodeState? state = nodeStates[stateKey];
     if (state != null) {
       if (_isCompletedNodeState(state) && outputs.containsKey(stateKey)) {
@@ -283,7 +285,7 @@ class WorkflowContext {
       node: node,
       nodeInput: input,
       stateKey: stateKey,
-      runId: runId,
+      runId: effectiveRunId,
     );
     final _NodeRunResult result = _resultFromRawNodeOutput(
       node,
@@ -293,6 +295,12 @@ class WorkflowContext {
     );
     _recordNodeResult(this, result);
     return result.output;
+  }
+
+  String _nextDynamicRunId(String nodeName) {
+    final int next = (_childRunCounters[nodeName] ?? 0) + 1;
+    _childRunCounters[nodeName] = next;
+    return '$next';
   }
 
   WorkflowContext _childExecutionContext({Map<String, Object?>? resumeInputs}) {
