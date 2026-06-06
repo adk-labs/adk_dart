@@ -298,6 +298,47 @@ void main() {
       expect(started, <int>[0, 1]);
     });
 
+    test('sibling nodes observe workflow cancellation after failure', () async {
+      final List<bool> observedCancellation = <bool>[];
+      late WorkflowContext slowContext;
+      final Workflow workflow = Workflow(
+        name: 'workflow_sibling_cancellation_signal',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) async {
+            slowContext = context;
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+            observedCancellation.add(context.isCancelled);
+            context.throwIfCancelled();
+            return 'slow';
+          }, name: 'slow'),
+          node((WorkflowContext _, Object? _) async {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            throw StateError('fail');
+          }, name: 'fail'),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'slow'),
+          Edge(fromNode: START, toNode: 'fail'),
+        ],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            'fail',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(observedCancellation, <bool>[true]);
+      expect(slowContext.nodeStates['slow']?.status, NodeStatus.cancelled);
+      expect(slowContext.outputs.containsKey('slow'), isFalse);
+    });
+
     test('rejects task-mode LlmAgent as static workflow graph node', () {
       final LlmAgent taskAgent = LlmAgent(name: 'task_agent', mode: 'task');
 

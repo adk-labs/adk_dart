@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
 import '../agents/context.dart';
 import '../agents/invocation_context.dart';
@@ -174,7 +175,20 @@ class WorkflowContext {
     Map<String, Object?>? resumeInputs,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
-       resumeInputs = resumeInputs ?? <String, Object?>{};
+       resumeInputs = resumeInputs ?? <String, Object?>{},
+       _cancellation = _WorkflowCancelToken();
+
+  WorkflowContext._({
+    this.invocationContext,
+    this.input,
+    required _WorkflowCancelToken cancellation,
+    Map<String, Object?>? outputs,
+    Map<String, NodeState>? nodeStates,
+    Map<String, Object?>? resumeInputs,
+  }) : outputs = outputs ?? <String, Object?>{},
+       nodeStates = nodeStates ?? <String, NodeState>{},
+       resumeInputs = resumeInputs ?? <String, Object?>{},
+       _cancellation = cancellation;
 
   bool _hasDirectOutput = false;
   Object? _directOutput;
@@ -182,6 +196,7 @@ class WorkflowContext {
   final Map<String, int> _childRunCounters = <String, int>{};
   String? _currentNodeKey;
   bool? _currentNodeRerunOnResume;
+  final _WorkflowCancelToken _cancellation;
 
   /// ADK invocation context when running as an agent.
   final InvocationContext? invocationContext;
@@ -197,6 +212,18 @@ class WorkflowContext {
 
   /// Resume payloads keyed by interrupt identifier.
   final Map<String, Object?> resumeInputs;
+
+  /// Whether this workflow context has observed cancellation.
+  bool get isCancelled =>
+      invocationContext?.isAborted == true || _cancellation.cancelled;
+
+  /// Throws [AdkAbortException] when the workflow has been cancelled.
+  void throwIfCancelled() {
+    invocationContext?.abortSignal?.throwIfAborted();
+    if (_cancellation.cancelled) {
+      throw AdkAbortException(_cancellation.reason);
+    }
+  }
 
   /// Route emitted directly by the current node.
   Object? route;
@@ -262,6 +289,7 @@ class WorkflowContext {
     RetryConfig? retryConfig,
     Duration? timeout,
   }) async {
+    throwIfCancelled();
     if (_currentNodeRerunOnResume == false) {
       throw StateError(
         'A workflow node must have rerunOnResume: true before it can '
@@ -386,13 +414,31 @@ class WorkflowContext {
   }
 
   WorkflowContext _childExecutionContext({Map<String, Object?>? resumeInputs}) {
-    return WorkflowContext(
+    return WorkflowContext._(
       invocationContext: invocationContext,
       input: input,
+      cancellation: _cancellation,
       outputs: outputs,
       nodeStates: nodeStates,
       resumeInputs: resumeInputs ?? this.resumeInputs,
     );
+  }
+
+  void _cancel(Object? reason) {
+    _cancellation.cancel(reason);
+  }
+}
+
+class _WorkflowCancelToken {
+  bool cancelled = false;
+  Object? reason;
+
+  void cancel(Object? reason) {
+    if (cancelled) {
+      return;
+    }
+    cancelled = true;
+    this.reason = reason;
   }
 }
 
@@ -944,16 +990,23 @@ class Workflow extends BaseAgent {
         );
       }
 
-      final List<_NodeRunResult> results = await Future.wait(
-        ready.map(
-          (String name) => _runReadyNode(
-            context: context,
-            byName: byName,
-            dependencies: dependencies,
-            name: name,
+      late final List<_NodeRunResult> results;
+      try {
+        results = await Future.wait(
+          ready.map(
+            (String name) => _runReadyNode(
+              context: context,
+              byName: byName,
+              dependencies: dependencies,
+              name: name,
+            ),
           ),
-        ),
-      );
+          eagerError: true,
+        );
+      } catch (error, stackTrace) {
+        context._cancel(error);
+        Error.throwWithStackTrace(error, stackTrace);
+      }
 
       for (final _NodeRunResult result in results) {
         pending.remove(result.name);
@@ -1012,7 +1065,13 @@ class Workflow extends BaseAgent {
         break;
       }
 
-      final _NodeRunResult result = await Future.any(running.values);
+      late final _NodeRunResult result;
+      try {
+        result = await Future.any(running.values);
+      } catch (error, stackTrace) {
+        context._cancel(error);
+        Error.throwWithStackTrace(error, stackTrace);
+      }
       running.remove(result.name);
       final bool completedNode = _recordNodeResult(context, result);
       if (!completedNode) {
@@ -1353,6 +1412,13 @@ Future<Object?> _runNodeWithRetry({
 
   Object? lastError;
   for (int attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      context.throwIfCancelled();
+    } on AdkAbortException catch (error) {
+      state.status = NodeStatus.cancelled;
+      state.error = error;
+      rethrow;
+    }
     state.status = NodeStatus.running;
     state.attemptCount = attempt;
     try {
@@ -1368,6 +1434,13 @@ Future<Object?> _runNodeWithRetry({
         );
       }
       final Object? output = await future;
+      try {
+        context.throwIfCancelled();
+      } on AdkAbortException catch (error) {
+        state.status = NodeStatus.cancelled;
+        state.error = error;
+        rethrow;
+      }
       if (_hasReturnedWorkflowOutput(output) &&
           context._hasDirectOutput &&
           !context._outputDelegated) {
@@ -1385,6 +1458,10 @@ Future<Object?> _runNodeWithRetry({
       state.status = NodeStatus.completed;
       state.error = null;
       return output;
+    } on AdkAbortException catch (error) {
+      state.status = NodeStatus.cancelled;
+      state.error = error;
+      rethrow;
     } catch (error) {
       lastError = error;
       state.status = NodeStatus.failed;
