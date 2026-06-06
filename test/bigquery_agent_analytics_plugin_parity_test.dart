@@ -384,6 +384,61 @@ void main() {
       expect(parts, isNotEmpty);
     });
 
+    test('offloads inline media content_parts to GCS references', () async {
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final List<Map<String, Object?>> uploads = <Map<String, Object?>>[];
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+        config: BigQueryLoggerConfig(
+          gcsBucketName: 'bucket',
+          connectionId: 'connection',
+          gcsUploadProvider:
+              ({
+                required List<int> data,
+                required String contentType,
+                required String path,
+              }) async {
+                uploads.add(<String, Object?>{
+                  'data': List<int>.from(data),
+                  'contentType': contentType,
+                  'path': path,
+                });
+                return 'gs://bucket/$path';
+              },
+        ),
+      );
+
+      await plugin.onUserMessageCallback(
+        invocationContext: _newInvocationContext(invocationId: 'inv_gcs'),
+        userMessage: Content(
+          role: 'user',
+          parts: <Part>[
+            Part.fromInlineData(mimeType: 'image/png', data: <int>[1, 2, 3]),
+          ],
+        ),
+      );
+
+      expect(uploads, hasLength(1));
+      expect(uploads.single['data'], <int>[1, 2, 3]);
+      expect(uploads.single['contentType'], 'image/png');
+      expect(uploads.single['path'], endsWith('.png'));
+
+      final List<Object?> parts =
+          sink.rows.first['content_parts'] as List<Object?>;
+      final Map<String, Object?> part = parts.single as Map<String, Object?>;
+      expect(part['storage_mode'], 'GCS_REFERENCE');
+      expect(part['uri'], startsWith('gs://bucket/'));
+      expect(part['text'], '[MEDIA OFFLOADED]');
+
+      final Map<String, Object?> objectRef =
+          part['object_ref'] as Map<String, Object?>;
+      expect(objectRef['authorizer'], 'connection');
+      expect(objectRef['uri'], part['uri']);
+      expect(objectRef['details'], contains('image/png'));
+    });
+
     test('omits multimodal content_parts when disabled', () async {
       final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
       final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(

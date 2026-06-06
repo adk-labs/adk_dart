@@ -84,6 +84,14 @@ class RetryConfig {
 typedef BigQueryContentFormatter =
     Object? Function(Object? content, String eventType);
 
+/// Uploads analytics content to Cloud Storage and returns a `gs://` URI.
+typedef BigQueryGcsUploadProvider =
+    Future<String> Function({
+      required List<int> data,
+      required String contentType,
+      required String path,
+    });
+
 /// Executes generated analytics view SQL statements.
 typedef BigQueryAnalyticsViewExecutor =
     Future<void> Function(List<String> statements);
@@ -106,6 +114,7 @@ class BigQueryLoggerConfig {
     this.queueMaxSize = 10000,
     this.contentFormatter,
     this.gcsBucketName,
+    this.gcsUploadProvider,
     this.connectionId,
     this.logSessionMetadata = true,
     Map<String, Object?>? customTags,
@@ -159,6 +168,9 @@ class BigQueryLoggerConfig {
 
   /// Optional Cloud Storage bucket for overflow or archival integrations.
   String? gcsBucketName;
+
+  /// Optional uploader used when [gcsBucketName] is configured.
+  BigQueryGcsUploadProvider? gcsUploadProvider;
 
   /// Optional BigQuery connection identifier for external integrations.
   String? connectionId;
@@ -418,6 +430,54 @@ class InMemoryBigQueryEventSink implements BigQueryEventSink {
   Future<void> flush() async {}
 }
 
+class _GcsJsonUploadProvider {
+  _GcsJsonUploadProvider({
+    required this.bucketName,
+    required http.Client httpClient,
+    required BigQueryAccessTokenProvider accessTokenProvider,
+  }) : _httpClient = httpClient,
+       _accessTokenProvider = accessTokenProvider;
+
+  final String bucketName;
+  final http.Client _httpClient;
+  final BigQueryAccessTokenProvider _accessTokenProvider;
+
+  Future<String> uploadContent({
+    required List<int> data,
+    required String contentType,
+    required String path,
+  }) async {
+    final String? accessToken = await _accessTokenProvider();
+    final Map<String, String> headers = <String, String>{
+      'content-type': contentType,
+      'accept': 'application/json',
+    };
+    if (accessToken != null && accessToken.isNotEmpty) {
+      headers[HttpHeaders.authorizationHeader] = 'Bearer $accessToken';
+    }
+
+    final Uri uri = Uri(
+      scheme: 'https',
+      host: 'storage.googleapis.com',
+      pathSegments: <String>['upload', 'storage', 'v1', 'b', bucketName, 'o'],
+      queryParameters: <String, String>{'uploadType': 'media', 'name': path},
+    );
+
+    final http.Response response = await _httpClient.post(
+      uri,
+      headers: headers,
+      body: data,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(
+        'GCS analytics offload failed (${response.statusCode}): '
+        '${response.body}',
+      );
+    }
+    return 'gs://$bucketName/$path';
+  }
+}
+
 class _SpanRecord {
   _SpanRecord({required this.spanId, required this.startMicros});
 
@@ -645,6 +705,11 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
        super(name: 'bigquery_agent_analytics') {
     this.tableId = tableId ?? this.config.tableId;
     _applyConfigOverrides(configOverrides);
+    _gcsUploadProvider = _resolveGcsUploadProvider(
+      accessToken: accessToken,
+      accessTokenProvider: accessTokenProvider,
+      httpClient: httpClient,
+    );
   }
 
   /// The Google Cloud project identifier.
@@ -670,6 +735,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   bool _viewsCreated = false;
   final BigQueryEventSink _sink;
   final BigQueryAnalyticsViewExecutor? _analyticsViewExecutor;
+  BigQueryGcsUploadProvider? _gcsUploadProvider;
+  http.Client? _ownedGcsHttpClient;
 
   /// The schema version stored in each event row.
   String get schemaVersion => _schemaVersion;
@@ -699,6 +766,32 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     }
   }
 
+  BigQueryGcsUploadProvider? _resolveGcsUploadProvider({
+    required String? accessToken,
+    required BigQueryAccessTokenProvider? accessTokenProvider,
+    required http.Client? httpClient,
+  }) {
+    final String? bucketName = config.gcsBucketName?.trim();
+    if (bucketName == null || bucketName.isEmpty) {
+      return null;
+    }
+    final BigQueryGcsUploadProvider? configured = config.gcsUploadProvider;
+    if (configured != null) {
+      return configured;
+    }
+
+    final http.Client client =
+        httpClient ?? (_ownedGcsHttpClient = http.Client());
+    final BigQueryAccessTokenProvider tokenProvider = accessToken == null
+        ? accessTokenProvider ?? _defaultBigQueryAccessTokenProvider
+        : () async => accessToken;
+    return _GcsJsonUploadProvider(
+      bucketName: bucketName,
+      httpClient: client,
+      accessTokenProvider: tokenProvider,
+    ).uploadContent;
+  }
+
   /// Flushes and closes the sink.
   ///
   /// The optional [timeout] parameter is accepted for parity with Python ADK.
@@ -709,6 +802,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     _isShuttingDown = true;
     await _sink.flush();
     await _sink.close();
+    _ownedGcsHttpClient?.close();
+    _ownedGcsHttpClient = null;
     _isShuttingDown = false;
     _started = false;
   }
@@ -1274,18 +1369,6 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       }
     }
 
-    final _TruncateResult contentResult = _serializeContentPayload(
-      normalizedContent,
-      maxLength: config.maxContentLength,
-    );
-    isTruncated = isTruncated || contentResult.isTruncated;
-    final List<Object?> contentParts = config.logMultiModalContent
-        ? _extractContentPartsForLogging(
-            normalizedContent,
-            maxLength: config.maxContentLength,
-          )
-        : const <Object?>[];
-
     final _TracePair pair = _TraceManager.getCurrentSpanAndParent(
       callbackContext,
     );
@@ -1295,6 +1378,22 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     final String? spanId = resolvedEventData.spanIdOverride ?? pair.spanId;
     final String? parentSpanId =
         resolvedEventData.parentSpanIdOverride ?? pair.parentSpanId;
+
+    final _TruncateResult contentResult = _serializeContentPayload(
+      normalizedContent,
+      maxLength: config.maxContentLength,
+    );
+    isTruncated = isTruncated || contentResult.isTruncated;
+    final List<Object?> contentParts = config.logMultiModalContent
+        ? await _extractContentPartsForLogging(
+            normalizedContent,
+            maxLength: config.maxContentLength,
+            gcsUploadProvider: _gcsUploadProvider,
+            traceId: traceId,
+            spanId: spanId,
+            connectionId: config.connectionId,
+          )
+        : const <Object?>[];
 
     final Map<String, Object?> attributes = _enrichAttributes(
       callbackContext: callbackContext,
@@ -1501,6 +1600,14 @@ WHERE event_type = '$escapedEventType'
           if (entry.value is bool) {
             config.logMultiModalContent = entry.value as bool;
           }
+        case 'gcs_bucket_name':
+          if (entry.value is String) {
+            config.gcsBucketName = entry.value as String;
+          }
+        case 'connection_id':
+          if (entry.value is String) {
+            config.connectionId = entry.value as String;
+          }
         case 'log_session_metadata':
           if (entry.value is bool) {
             config.logSessionMetadata = entry.value as bool;
@@ -1611,34 +1718,69 @@ _TruncateResult _serializeContentPayload(
   return _recursiveSmartTruncate(value, maxLength);
 }
 
-List<Object?> _extractContentPartsForLogging(
+Future<List<Object?>> _extractContentPartsForLogging(
   Object? value, {
   required int maxLength,
-}) {
+  required BigQueryGcsUploadProvider? gcsUploadProvider,
+  required String traceId,
+  required String? spanId,
+  required String? connectionId,
+}) async {
   if (value is Content) {
-    return value.parts
-        .map(
-          (Part part) => _recursiveSmartTruncate(_partToJson(part), maxLength),
-        )
-        .map((_TruncateResult result) => result.value)
-        .toList(growable: false);
+    final List<Object?> parts = <Object?>[];
+    for (int index = 0; index < value.parts.length; index += 1) {
+      parts.add(
+        await _partToContentPartForLogging(
+          value.parts[index],
+          index,
+          maxLength: maxLength,
+          gcsUploadProvider: gcsUploadProvider,
+          traceId: traceId,
+          spanId: spanId,
+          connectionId: connectionId,
+        ),
+      );
+    }
+    return parts;
   }
 
   if (value is Part) {
     return <Object?>[
-      _recursiveSmartTruncate(_partToJson(value), maxLength).value,
+      await _partToContentPartForLogging(
+        value,
+        0,
+        maxLength: maxLength,
+        gcsUploadProvider: gcsUploadProvider,
+        traceId: traceId,
+        spanId: spanId,
+        connectionId: connectionId,
+      ),
     ];
   }
 
   if (value is LlmResponse) {
-    return _extractContentPartsForLogging(value.content, maxLength: maxLength);
+    return _extractContentPartsForLogging(
+      value.content,
+      maxLength: maxLength,
+      gcsUploadProvider: gcsUploadProvider,
+      traceId: traceId,
+      spanId: spanId,
+      connectionId: connectionId,
+    );
   }
 
   if (value is LlmRequest) {
     final List<Object?> parts = <Object?>[];
     for (final Content content in value.contents) {
       parts.addAll(
-        _extractContentPartsForLogging(content, maxLength: maxLength),
+        await _extractContentPartsForLogging(
+          content,
+          maxLength: maxLength,
+          gcsUploadProvider: gcsUploadProvider,
+          traceId: traceId,
+          spanId: spanId,
+          connectionId: connectionId,
+        ),
       );
     }
     return parts;
@@ -1663,6 +1805,188 @@ List<Object?> _extractContentPartsForLogging(
   }
 
   return const <Object?>[];
+}
+
+Future<Object?> _partToContentPartForLogging(
+  Part part,
+  int index, {
+  required int maxLength,
+  required BigQueryGcsUploadProvider? gcsUploadProvider,
+  required String traceId,
+  required String? spanId,
+  required String? connectionId,
+}) async {
+  final Map<String, Object?> partData = <String, Object?>{
+    'part_index': index,
+    'mime_type': 'text/plain',
+    'uri': null,
+    'text': null,
+    'part_attributes': '{}',
+    'storage_mode': 'INLINE',
+    'object_ref': null,
+  };
+
+  final FileData? fileData = part.fileData;
+  if (fileData != null) {
+    partData['storage_mode'] = 'EXTERNAL_URI';
+    partData['uri'] = fileData.fileUri;
+    partData['mime_type'] = fileData.mimeType;
+    return _recursiveSmartTruncate(partData, maxLength).value;
+  }
+
+  final InlineData? inlineData = part.inlineData;
+  if (inlineData != null) {
+    final String mimeType = inlineData.mimeType.isEmpty
+        ? 'application/octet-stream'
+        : inlineData.mimeType;
+    partData['mime_type'] = mimeType;
+    if (gcsUploadProvider != null) {
+      final String path = _gcsOffloadPath(
+        traceId: traceId,
+        spanId: spanId,
+        partIndex: index,
+        extension: _mimeTypeExtension(mimeType),
+      );
+      try {
+        final String uri = await gcsUploadProvider(
+          data: List<int>.from(inlineData.data),
+          contentType: mimeType,
+          path: path,
+        );
+        partData['storage_mode'] = 'GCS_REFERENCE';
+        partData['uri'] = uri;
+        partData['text'] = '[MEDIA OFFLOADED]';
+        partData['object_ref'] = _gcsObjectRef(
+          uri: uri,
+          contentType: mimeType,
+          connectionId: connectionId,
+        );
+      } catch (error) {
+        stderr.writeln('Failed to offload content to GCS: $error');
+        partData['text'] = '[UPLOAD FAILED]';
+      }
+    } else {
+      partData['text'] = '[BINARY DATA]';
+    }
+    return _recursiveSmartTruncate(partData, maxLength).value;
+  }
+
+  final String? text = part.text;
+  if (text != null) {
+    final int byteLength = utf8.encode(text).length;
+    final bool exceedsByteLimit = byteLength > 32 * 1024;
+    final bool exceedsCharLimit = maxLength != -1 && text.length > maxLength;
+    if (gcsUploadProvider != null && (exceedsByteLimit || exceedsCharLimit)) {
+      final String path = _gcsOffloadPath(
+        traceId: traceId,
+        spanId: spanId,
+        partIndex: index,
+        extension: '.txt',
+      );
+      try {
+        final String uri = await gcsUploadProvider(
+          data: utf8.encode(text),
+          contentType: 'text/plain',
+          path: path,
+        );
+        partData['storage_mode'] = 'GCS_REFERENCE';
+        partData['uri'] = uri;
+        partData['mime_type'] = 'text/plain';
+        partData['text'] = _truncateAndAddSuffix(text, 200, '... [OFFLOADED]');
+        partData['object_ref'] = _gcsObjectRef(
+          uri: uri,
+          contentType: 'text/plain',
+          connectionId: connectionId,
+        );
+        return _recursiveSmartTruncate(partData, maxLength).value;
+      } catch (error) {
+        stderr.writeln('Failed to offload text to GCS: $error');
+      }
+    }
+    partData['text'] = _recursiveSmartTruncate(text, maxLength).value;
+    return _recursiveSmartTruncate(partData, maxLength).value;
+  }
+
+  final FunctionCall? functionCall = part.functionCall;
+  if (functionCall != null) {
+    partData['mime_type'] = 'application/json';
+    partData['text'] = 'Function: ${functionCall.name}';
+    partData['part_attributes'] = jsonEncode(<String, Object?>{
+      'function_name': functionCall.name,
+    });
+    return _recursiveSmartTruncate(partData, maxLength).value;
+  }
+
+  final FunctionResponse? functionResponse = part.functionResponse;
+  if (functionResponse != null) {
+    partData['mime_type'] = 'application/json';
+    partData['text'] = 'Function response: ${functionResponse.name}';
+    partData['part_attributes'] = jsonEncode(<String, Object?>{
+      'function_name': functionResponse.name,
+    });
+    return _recursiveSmartTruncate(partData, maxLength).value;
+  }
+
+  partData['part_attributes'] = jsonEncode(_partToJson(part));
+  return _recursiveSmartTruncate(partData, maxLength).value;
+}
+
+Map<String, Object?> _gcsObjectRef({
+  required String uri,
+  required String contentType,
+  required String? connectionId,
+}) {
+  return <String, Object?>{
+    'uri': uri,
+    'version': null,
+    'authorizer': connectionId,
+    'details': jsonEncode(<String, Object?>{
+      'gcs_metadata': <String, Object?>{'content_type': contentType},
+    }),
+  };
+}
+
+String _gcsOffloadPath({
+  required String traceId,
+  required String? spanId,
+  required int partIndex,
+  required String extension,
+}) {
+  final String date = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+  final String safeTrace = _safeGcsPathSegment(traceId);
+  final String safeSpan = _safeGcsPathSegment(spanId ?? 'root');
+  return '$date/$safeTrace/${safeSpan}_p${partIndex}_${_newInsertId()}$extension';
+}
+
+String _safeGcsPathSegment(String value) {
+  return value.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+}
+
+String _mimeTypeExtension(String mimeType) {
+  const Map<String, String> known = <String, String>{
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'audio/wav': '.wav',
+    'audio/mpeg': '.mp3',
+    'audio/ogg': '.ogg',
+    'video/mp4': '.mp4',
+    'application/pdf': '.pdf',
+    'text/plain': '.txt',
+  };
+  final String? mapped = known[mimeType.toLowerCase()];
+  if (mapped != null) {
+    return mapped;
+  }
+  return '.bin';
+}
+
+String _truncateAndAddSuffix(String text, int maxLength, String suffix) {
+  if (text.length <= maxLength) {
+    return '$text$suffix';
+  }
+  return '${text.substring(0, maxLength)}$suffix';
 }
 
 Map<String, Object?> _toStringObjectMap(Object? value) {

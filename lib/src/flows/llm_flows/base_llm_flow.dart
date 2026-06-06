@@ -30,6 +30,7 @@ import '../../types/content.dart';
 import 'audio_cache_manager.dart';
 import 'functions.dart' as flow_functions;
 import 'output_schema_processor.dart' as output_schema;
+import 'persist_barrier.dart';
 
 /// Contract for preprocessing a model request into emitted events.
 abstract class BaseLlmRequestProcessor {
@@ -728,10 +729,14 @@ class BaseLlmFlow {
   Stream<Event> runAsync(InvocationContext context) async* {
     while (true) {
       Event? lastEvent;
+      final List<Event> stepEvents = <Event>[];
       await for (final Event event in _runOneStepAsync(context)) {
         lastEvent = event;
+        stepEvents.add(event);
         yield event;
       }
+
+      await PersistBarrier.awaitPersisted(context, stepEvents);
 
       if (lastEvent == null ||
           lastEvent.isFinalResponse() ||

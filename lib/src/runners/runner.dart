@@ -14,6 +14,7 @@ import '../artifacts/base_artifact_service.dart';
 import '../artifacts/in_memory_artifact_service.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../flows/llm_flows/persist_barrier.dart';
 import '../flows/llm_flows/functions.dart' as flow_functions;
 import '../plugins/base_plugin.dart';
 import '../plugins/plugin_manager.dart';
@@ -802,7 +803,7 @@ class Runner {
       event.branch = matchingCall.branch;
     }
 
-    await sessionService.appendEvent(session: context.session, event: event);
+    await _appendEventWithPersistBarrier(context, event);
   }
 
   Stream<Event> _execWithPlugin({
@@ -822,14 +823,13 @@ class Runner {
       );
       _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
       if (_shouldAppendEvent(event, isLiveCall)) {
-        await sessionService.appendEvent(
-          session: invocationContext.session,
-          event: event,
-        );
+        await _appendEventWithPersistBarrier(invocationContext, event);
       }
       yield event;
     } else {
-      final List<Event> bufferedEvents = <Event>[];
+      PersistBarrier.enable(invocationContext);
+      final List<({Event event, String? barrierEventId})> bufferedEvents =
+          <({Event event, String? barrierEventId})>[];
       bool isTranscribing = false;
 
       await for (final Event event in execute(invocationContext)) {
@@ -851,7 +851,7 @@ class Runner {
           }
 
           if (isTranscribing && _isToolCallOrResponse(event)) {
-            bufferedEvents.add(outputEvent);
+            bufferedEvents.add((event: outputEvent, barrierEventId: event.id));
             continue;
           }
 
@@ -861,34 +861,38 @@ class Runner {
                     _hasNonEmptyTranscriptionText(event.outputTranscription))) {
               isTranscribing = false;
               if (_shouldAppendEvent(outputEvent, isLiveCall)) {
-                await sessionService.appendEvent(
-                  session: invocationContext.session,
-                  event: outputEvent,
+                await _appendEventWithPersistBarrier(
+                  invocationContext,
+                  outputEvent,
+                  barrierEventId: event.id,
                 );
               }
 
-              for (final Event buffered in bufferedEvents) {
-                if (_shouldAppendEvent(buffered, isLiveCall)) {
-                  await sessionService.appendEvent(
-                    session: invocationContext.session,
-                    event: buffered,
+              for (final buffered in bufferedEvents) {
+                if (_shouldAppendEvent(buffered.event, isLiveCall)) {
+                  await _appendEventWithPersistBarrier(
+                    invocationContext,
+                    buffered.event,
+                    barrierEventId: buffered.barrierEventId,
                   );
                 }
-                yield buffered;
+                yield buffered.event;
               }
               bufferedEvents.clear();
             } else if (_shouldAppendEvent(outputEvent, isLiveCall)) {
-              await sessionService.appendEvent(
-                session: invocationContext.session,
-                event: outputEvent,
+              await _appendEventWithPersistBarrier(
+                invocationContext,
+                outputEvent,
+                barrierEventId: event.id,
               );
             }
           }
         } else if (event.partial != true &&
             _shouldAppendEvent(outputEvent, isLiveCall)) {
-          await sessionService.appendEvent(
-            session: invocationContext.session,
-            event: outputEvent,
+          await _appendEventWithPersistBarrier(
+            invocationContext,
+            outputEvent,
+            barrierEventId: event.id,
           );
         }
 
@@ -899,6 +903,26 @@ class Runner {
     await invocationContext.pluginManager.runAfterRunCallback(
       invocationContext: invocationContext,
     );
+  }
+
+  Future<void> _appendEventWithPersistBarrier(
+    InvocationContext context,
+    Event event, {
+    String? barrierEventId,
+  }) async {
+    try {
+      await sessionService.appendEvent(session: context.session, event: event);
+      PersistBarrier.markPersisted(context, event.id);
+      if (barrierEventId != event.id) {
+        PersistBarrier.markPersisted(context, barrierEventId);
+      }
+    } catch (error, stackTrace) {
+      PersistBarrier.markFailed(context, event.id, error, stackTrace);
+      if (barrierEventId != event.id) {
+        PersistBarrier.markFailed(context, barrierEventId, error, stackTrace);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   Event _buildOutputEvent({

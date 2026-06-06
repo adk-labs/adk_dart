@@ -63,6 +63,7 @@ export 'src/tools/load_mcp_resource_tool.dart';
 export 'src/tools/mcp_tool/mcp_session_manager.dart';
 export 'src/tools/mcp_tool/mcp_tool.dart';
 export 'src/tools/mcp_tool/mcp_toolset.dart';
+export 'src/tools/request_input_tool.dart';
 export 'src/tools/retrieval/vertex_ai_rag_retrieval.dart';
 export 'src/tools/skill_toolset.dart';
 export 'src/tools/tool_context.dart';

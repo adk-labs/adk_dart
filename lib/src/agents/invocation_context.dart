@@ -60,10 +60,12 @@ class InvocationContext {
     PluginManager? pluginManager,
     this.canonicalToolsCache,
     Map<String, AuthCredential>? credentialByKey,
+    Map<String, Object?>? callbackContextData,
   }) : agentStates = agentStates ?? <String, Map<String, Object?>>{},
        endOfAgents = endOfAgents ?? <String, bool>{},
        pluginManager = pluginManager ?? PluginManager(),
-       credentialByKey = credentialByKey ?? <String, AuthCredential>{};
+       credentialByKey = credentialByKey ?? <String, AuthCredential>{},
+       callbackContextData = callbackContextData ?? <String, Object?>{};
 
   /// Artifact service used for persistence and retrieval.
   BaseArtifactService? artifactService;
@@ -142,6 +144,12 @@ class InvocationContext {
 
   /// Resolved credentials for this invocation keyed by auth credential key.
   Map<String, AuthCredential> credentialByKey;
+
+  /// Shared invocation-scoped scratch data for flow/runner coordination.
+  ///
+  /// This map is intentionally shared across shallow context copies so agent
+  /// transfers and nested flows can coordinate on one invocation-level state.
+  Map<String, Object?> callbackContextData;
 
   int _numberOfLlmCalls = 0;
 
@@ -539,6 +547,7 @@ class InvocationContext {
         (String key, AuthCredential value) =>
             MapEntry<String, AuthCredential>(key, value.copyWith()),
       ),
+      callbackContextData: callbackContextData,
     ).._numberOfLlmCalls = _numberOfLlmCalls;
   }
 }
