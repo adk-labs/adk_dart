@@ -34,6 +34,7 @@ export 'src/errors/tool_execution_error.dart';
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
 export 'src/events/request_input.dart';
+export 'src/events/structured_events.dart';
 
 export 'src/memory/base_memory_service.dart';
 export 'src/memory/in_memory_memory_service.dart';
