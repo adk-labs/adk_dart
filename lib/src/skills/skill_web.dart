@@ -4,7 +4,9 @@ library;
 import 'dart:convert';
 
 import '../features/_feature_registry.dart';
+import 'package:archive/archive.dart' as archive;
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
+import 'package:yaml/yaml.dart';
 
 final RegExp _skillNamePattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 final RegExp _skillNameSnakeOrKebabPattern = RegExp(
@@ -762,6 +764,101 @@ String formatSkillsAsXml(List<SkillDescriptor> skills) {
   return lines.join('\n');
 }
 
+/// Loads a [Skill] from ZIP bytes containing a root-level `SKILL.md`.
+Skill loadSkillFromZipBytes(List<int> zipBytes) {
+  final archive.Archive skillArchive = archive.ZipDecoder().decodeBytes(
+    zipBytes,
+  );
+  final Map<String, archive.ArchiveFile> files =
+      <String, archive.ArchiveFile>{};
+  for (final archive.ArchiveFile entry in skillArchive) {
+    final String name = _normalizeArchiveEntryName(entry.name);
+    _assertSafeArchiveEntry(entry.name, name);
+    if (!entry.isFile) {
+      continue;
+    }
+    if (entry.isSymbolicLink) {
+      throw ArgumentError('Dangerous zip entry ignored: ${entry.name}');
+    }
+    files[name] = entry;
+  }
+
+  final archive.ArchiveFile? skillMd = files['SKILL.md'] ?? files['skill.md'];
+  if (skillMd == null) {
+    throw StateError('SKILL.md not found in zipped filesystem.');
+  }
+  final List<int>? skillMdBytes = skillMd.readBytes();
+  if (skillMdBytes == null) {
+    throw const FormatException(
+      'SKILL.md could not be read from zipped filesystem.',
+    );
+  }
+
+  final _ParsedSkillMd parsed = _parseSkillMdContent(
+    _decodeSkillText(skillMdBytes),
+  );
+  final Object? skillName = parsed.frontmatter['name'];
+  if (skillName == null) {
+    throw ArgumentError("SKILL.md frontmatter must contain 'name'");
+  }
+  if (skillName is! String || _isInvalidArchiveSkillName(skillName)) {
+    throw ArgumentError('Invalid skill name in SKILL.md: $skillName');
+  }
+  final Frontmatter frontmatter = Frontmatter.fromMap(parsed.frontmatter);
+
+  final Map<String, SkillResourceData> references =
+      <String, SkillResourceData>{};
+  final Map<String, SkillResourceData> assets = <String, SkillResourceData>{};
+  final Map<String, Script> scripts = <String, Script>{};
+  for (final MapEntry<String, archive.ArchiveFile> entry in files.entries) {
+    if (entry.key == 'SKILL.md' || entry.key == 'skill.md') {
+      continue;
+    }
+    if (_containsIgnoredArchiveSegment(entry.key)) {
+      continue;
+    }
+    final List<int>? bytes = entry.value.readBytes();
+    if (bytes == null) {
+      continue;
+    }
+    if (entry.key.startsWith('references/')) {
+      final String resourceId = entry.key.substring('references/'.length);
+      if (resourceId.isNotEmpty) {
+        references[resourceId] = _decodeSkillResource(resourceId, bytes);
+      }
+      continue;
+    }
+    if (entry.key.startsWith('assets/')) {
+      final String resourceId = entry.key.substring('assets/'.length);
+      if (resourceId.isNotEmpty) {
+        assets[resourceId] = _decodeSkillResource(resourceId, bytes);
+      }
+      continue;
+    }
+    if (entry.key.startsWith('scripts/')) {
+      final String scriptId = entry.key.substring('scripts/'.length);
+      if (scriptId.isEmpty) {
+        continue;
+      }
+      try {
+        scripts[scriptId] = Script(src: _decodeSkillText(bytes));
+      } on FormatException {
+        continue;
+      }
+    }
+  }
+
+  return Skill(
+    frontmatter: frontmatter,
+    instructions: parsed.body,
+    resources: Resources(
+      references: references,
+      assets: assets,
+      scripts: scripts,
+    ),
+  );
+}
+
 /// Throws because directory-based skill loading is unsupported on Web.
 Skill loadSkillFromDir(String skillDirPath) {
   throw UnsupportedError(
@@ -950,4 +1047,135 @@ List<int>? _readBinaryResource(Object? value) {
         .toList(growable: false);
   }
   return null;
+}
+
+class _ParsedSkillMd {
+  _ParsedSkillMd({required this.frontmatter, required this.body});
+
+  final Map<String, Object?> frontmatter;
+  final String body;
+}
+
+_ParsedSkillMd _parseSkillMdContent(String content) {
+  if (!content.startsWith('---')) {
+    throw FormatException('SKILL.md must start with YAML frontmatter (---)');
+  }
+
+  final int closingIndex = content.indexOf('---', 3);
+  if (closingIndex < 0) {
+    throw FormatException('SKILL.md frontmatter not properly closed with ---');
+  }
+
+  final String frontmatterText = content.substring(3, closingIndex);
+  final String body = content.substring(closingIndex + 3).trim();
+
+  final Map<String, Object?> parsed = _parseYamlMapping(frontmatterText);
+  return _ParsedSkillMd(frontmatter: parsed, body: body);
+}
+
+Map<String, Object?> _parseYamlMapping(String source) {
+  final Object? loaded = loadYaml(source);
+  if (loaded is! YamlMap) {
+    throw FormatException('SKILL.md frontmatter must be a YAML mapping');
+  }
+  return _yamlMapToPlainMap(loaded);
+}
+
+Map<String, Object?> _yamlMapToPlainMap(YamlMap map) {
+  final Map<String, Object?> result = <String, Object?>{};
+  for (final MapEntry<dynamic, dynamic> entry in map.entries) {
+    final Object? key = entry.key;
+    if (key is! String) {
+      throw FormatException('SKILL.md frontmatter keys must be strings');
+    }
+    result[key] = _yamlToPlainValue(entry.value);
+  }
+  return result;
+}
+
+Object? _yamlToPlainValue(Object? value) {
+  if (value is YamlMap) {
+    return _yamlMapToPlainMap(value);
+  }
+  if (value is YamlList) {
+    return value.nodes
+        .map<Object?>((YamlNode node) => _yamlToPlainValue(node.value))
+        .toList(growable: false);
+  }
+  return value;
+}
+
+String _decodeSkillText(List<int> bytes) {
+  try {
+    return utf8.decode(bytes, allowMalformed: false);
+  } on FormatException {
+    throw FormatException('Skill content is not valid UTF-8 text.');
+  }
+}
+
+SkillResourceData _decodeSkillResource(String relativePath, List<int> bytes) {
+  if (_shouldTreatAsBinaryResource(relativePath)) {
+    return List<int>.from(bytes);
+  }
+  try {
+    return utf8.decode(bytes, allowMalformed: false);
+  } on FormatException {
+    return List<int>.from(bytes);
+  }
+}
+
+String _normalizeArchiveEntryName(String name) => name.replaceAll('\\', '/');
+
+void _assertSafeArchiveEntry(String originalName, String normalizedName) {
+  final List<String> segments = normalizedName.split('/');
+  if (normalizedName.isEmpty ||
+      normalizedName.startsWith('/') ||
+      RegExp(r'^[A-Za-z]:/').hasMatch(normalizedName) ||
+      segments.contains('..')) {
+    throw ArgumentError('Dangerous zip entry ignored: $originalName');
+  }
+}
+
+bool _isInvalidArchiveSkillName(String skillName) {
+  final String normalized = skillName.replaceAll('\\', '/');
+  return normalized.isEmpty ||
+      normalized.startsWith('/') ||
+      normalized.contains('/') ||
+      normalized == '.' ||
+      normalized == '..';
+}
+
+bool _containsIgnoredArchiveSegment(String path) {
+  return path.split('/').contains('__pycache__');
+}
+
+const Set<String> _textSkillResourceExtensions = <String>{
+  '.bash',
+  '.csv',
+  '.dart',
+  '.html',
+  '.htm',
+  '.js',
+  '.json',
+  '.md',
+  '.py',
+  '.sh',
+  '.sql',
+  '.svg',
+  '.toml',
+  '.ts',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+};
+
+bool _shouldTreatAsBinaryResource(String relativePath) {
+  final String lower = relativePath.toLowerCase();
+  for (final String extension in _textSkillResourceExtensions) {
+    if (lower.endsWith(extension)) {
+      return false;
+    }
+  }
+  return true;
 }

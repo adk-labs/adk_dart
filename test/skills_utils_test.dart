@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
+import 'package:archive/archive.dart' as archive;
 import 'package:test/test.dart';
 
 String _join(String left, String right) {
@@ -15,6 +16,25 @@ void _writeFile(String path, String content) {
   final File file = File(path);
   file.parent.createSync(recursive: true);
   file.writeAsStringSync(content);
+}
+
+List<int> _createSkillZip(Map<String, Object> files) {
+  final archive.Archive skillArchive = archive.Archive();
+  for (final MapEntry<String, Object> entry in files.entries) {
+    final Object content = entry.value;
+    if (content is String) {
+      skillArchive.addFile(archive.ArchiveFile.string(entry.key, content));
+      continue;
+    }
+    if (content is List<int>) {
+      skillArchive.addFile(archive.ArchiveFile.bytes(entry.key, content));
+      continue;
+    }
+    throw ArgumentError(
+      'Unsupported zip entry content: ${content.runtimeType}',
+    );
+  }
+  return archive.ZipEncoder().encode(skillArchive);
 }
 
 Matcher _throwsArgumentMessage(String messageFragment) {
@@ -149,6 +169,77 @@ Instructions here
 
       final Skill skill = loadSkillFromDir(skillDir.path);
       expect(skill.frontmatter.allowedTools, 'some-tool-*');
+    });
+
+    test('loadSkillFromZipBytes loads instructions and resources', () {
+      final Skill skill = loadSkillFromZipBytes(
+        _createSkillZip(<String, Object>{
+          'SKILL.md': '''
+---
+name: my-skill
+description: A zipped skill
+metadata:
+  adk_additional_tools:
+    - extra_tool
+---
+Zip instructions
+''',
+          'references/guide.md': 'guide',
+          'assets/template.txt': 'template',
+          'assets/file.pdf': <int>[37, 80, 68, 70],
+          'scripts/setup.sh': 'echo setup',
+          'scripts/binary.bin': <int>[0, 159, 146, 150],
+          'references/__pycache__/skip.md': 'skip',
+        }),
+      );
+
+      expect(skill.name, 'my-skill');
+      expect(skill.description, 'A zipped skill');
+      expect(skill.instructions, 'Zip instructions');
+      expect(skill.frontmatter.metadata['adk_additional_tools'], <String>[
+        'extra_tool',
+      ]);
+      expect(skill.resources.getReference('guide.md'), 'guide');
+      expect(skill.resources.getReference('__pycache__/skip.md'), isNull);
+      expect(skill.resources.getAsset('template.txt'), 'template');
+      expect(skill.resources.getAssetBytes('file.pdf'), <int>[37, 80, 68, 70]);
+      expect(skill.resources.getScript('setup.sh')?.src, 'echo setup');
+      expect(skill.resources.getScript('binary.bin'), isNull);
+    });
+
+    test('loadSkillFromZipBytes rejects dangerous archive paths', () {
+      expect(
+        () => loadSkillFromZipBytes(
+          _createSkillZip(<String, Object>{
+            '../evil.txt': 'malicious content',
+            'SKILL.md': '''
+---
+name: my-skill
+description: A skill
+---
+Body
+''',
+          }),
+        ),
+        _throwsArgumentMessage('Dangerous zip entry ignored'),
+      );
+    });
+
+    test('loadSkillFromZipBytes rejects invalid manifest skill name', () {
+      expect(
+        () => loadSkillFromZipBytes(
+          _createSkillZip(<String, Object>{
+            'SKILL.md': '''
+---
+name: ../evil
+description: A skill
+---
+Body
+''',
+          }),
+        ),
+        _throwsArgumentMessage('Invalid skill name in SKILL.md'),
+      );
     });
 
     test('loadSkillFromDir parses YAML block scalars in frontmatter', () async {

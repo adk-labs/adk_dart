@@ -34,3 +34,4 @@ dependencies:
   postgres: ^3.5.9
   mysql_client_plus: ^0.1.2
   sqlite3: ^3.1.6
+  archive: ^4.0.9
