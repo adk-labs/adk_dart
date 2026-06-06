@@ -10,7 +10,7 @@ ADK Dart is an open-source, code-first Dart framework for building and running
 AI agents with modular runtime primitives, tool orchestration, and MCP
 integration.
 
-It is a Dart port of ADK concepts with a focus on practical runtime parity and
+It is a Dart port of ADK concepts with a focus on practical runtime compatibility and
 developer ergonomics.
 
 ---
@@ -22,7 +22,7 @@ developer ergonomics.
 - **MCP Spec Hardening**: Improved MCP lifecycle and transport behavior
   (session recovery, SSE response matching by request id, cancellation
   notifications, capability-aware RPC usage).
-- **Parity Expansion**: Added broader runtime parity coverage across sessions,
+- **Compatibility Expansion**: Added broader runtime compatibility coverage across sessions,
   toolsets, and model/tool integration layers in the `0.1.x` line.
 
 ## Key Features
@@ -40,6 +40,44 @@ developer ergonomics.
 - **Developer CLI + Web UI**: Scaffold projects and run chat/dev server with
   the `adk` CLI (`create`, `run`, `web`, `api_server`).
 
+## ADK Python Compatibility Status
+
+ADK Dart is intended to behave like `adk-python` while using Dart-native
+types, async streams, package structure, and platform constraints. The current
+release baseline tracks `adk-python` `2.2.0`.
+
+Status legend:
+
+- `✅` Implemented and covered by compatibility/runtime tests.
+- `⚠️` Implemented with platform, credential, or environment constraints.
+- `🚧` Not fully implemented yet / planned.
+
+| `adk-python` area | Dart status | Dart implementation surface | Notes |
+| --- | --- | --- | --- |
+| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk` are aligned on `2026.6.6`; exported ADK baseline is `2.2.0`. |
+| Agents and runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | Core invocation, live fallback, rewind, session state, callback, and transfer behavior are ported. |
+| LLM flow processors | ✅ | request/response processors under `flows/llm_flows` | Covers instructions, identity, contents, compaction, context cache, code execution, output schema, tool confirmation, auth preflight, and agent transfer. |
+| Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, graph serialization, and status-aware DOT output. |
+| Events and content conversion | ✅ | `Event`, `EventActions`, content/part models, node path helpers | Includes structured event actions, node-path building, function/tool response conversion, and A2A metadata preservation. |
+| Sessions and state | ✅ | in-memory, SQLite, database, Vertex AI session services, migration helpers | Local and remote session APIs are implemented; network/cloud backends require their normal credentials and endpoints. |
+| Memory and artifacts | ✅ | in-memory memory, Vertex AI memory/RAG, in-memory/file/GCS artifacts | GCS/Vertex paths use HTTP/auth provider wiring and remain environment-dependent for live cloud calls. |
+| Tools and toolsets | ✅ | function tools, agent tools, OpenAPI tools, Google API tools, retrieval tools, environment tools, data tools | Includes built-in Gemini tool payload compatibility for Google Search, URL Context, code execution, computer use, Google Maps, Enterprise Web Search, Vertex AI Search, and Vertex RAG. |
+| MCP integration | ⚠️ | `adk_mcp`, `McpToolset`, `McpSessionManager`, `StreamableHTTPConnectionParams`, `StdioConnectionParams` | Streamable HTTP works across VM/Flutter/Web when HTTP/CORS allows it. Stdio requires local process execution and is VM-only. |
+| Models/providers | ✅ | Gemini REST/live, Anthropic, LiteLLM, Gemma, Apigee, Chat Completions, OpenAI labs adapter | Provider behavior is ported with injectable transports; real provider calls still require API keys, project settings, and provider availability. |
+| Auth and credentials | ✅ | auth schemes, credential manager/service, OAuth2 exchanger/refresher, service-account hooks | Ported for tool auth, auth response persistence, OAuth discovery, token exchange/refresh, and session-state credential storage. |
+| Evaluation and simulation | ✅ | eval managers/services, metric evaluators, LLM-as-judge, user simulators | Local/GCS eval-set managers, trajectory/final-response/rubric/safety metrics, and simulator-driven generation are implemented. |
+| Plugins and telemetry | ✅ | plugin manager, debug/global/reflection/save-artifact plugins, OpenTelemetry/SQLite/cloud telemetry | SQLite trace persistence, metrics instrumentation, auto tracing, and plugin lifecycle hooks are implemented. |
+| CLI, dev server, and deploy | ✅ | `adk create/run/web/api_server/deploy/eval/eval_set/conformance/migrate` | Behavior is ported for Dart CLI usage. Some command output formatting can differ from Python because the implementation is Dart-native. |
+| A2A protocol | ✅ | A2A converters, executor, agent card, JSON-RPC/REST task routes, remote A2A agent | Includes streaming, task resume/cancel/resubscribe, push notification config, metadata propagation, and persistent push callback retry queue. |
+| Code execution | ⚠️ | unsafe local, built-in, container/Docker, GKE, Vertex AI code executor paths | Runtime behavior is implemented, but live execution depends on local process/Docker/Kubernetes/Vertex AI availability and policy. |
+| Data/cloud integrations | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | Runtime clients and facades are implemented; live behavior depends on cloud credentials, service enablement, and environment configuration. |
+| Skills | ✅ | `Skill`, `SkillToolset`, local/in-memory/GCS skill sources, skill prompt formatting | Inline and directory-backed skills are implemented. Filesystem-backed loading is not available on Flutter Web. |
+| Flutter/Web-safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter example app | Web-safe runtime APIs are exposed, but VM-only APIs (`dart:io`, `dart:ffi`, `dart:mirrors`, local process execution, local filesystem servers) are intentionally excluded. |
+| OpenAPI external refs | 🚧 | OpenAPI parser/toolset | Inline and local spec handling are implemented; external multi-file `$ref` resolution is still planned. |
+| Spanner PostgreSQL ANN | 🚧 | Spanner vector tooling | Core Spanner/vector paths are implemented, but PostgreSQL ANN behavior is not yet supported. |
+| Speech transcription bootstrap | ⚠️ | audio transcription runtime | Transcription orchestration is present; a recognizer must be supplied per instance or through the default recognizer registration hook. |
+| Python sample tree coverage | 🚧 | examples, `flutter_adk/example`, docs/worklog | Runtime behavior is prioritized first. Representative Dart/Flutter examples exist, but the full Python sample tree is not mirrored one-for-one yet. |
+
 ## Which Package Should I Use?
 
 | If you are... | Use this package | Why |
@@ -56,7 +94,7 @@ Quick rule:
 
 ## Design Philosophy
 
-- `adk_dart` is the runtime-parity core package.
+- `adk_dart` is the Python-compatible runtime core package.
   It preserves ADK SDK concepts and prioritizes broad feature implementation on
   Dart VM execution paths.
 - `adk` is an ergonomics facade.
@@ -107,7 +145,7 @@ Status legend:
 
 This matrix is rebuilt from a fresh source audit plus targeted runtime tests
 (`dev_web_server`, `cli_adk_web_server`, `mcp_http`, `mcp_tooling`,
-`session_persistence`) rather than legacy parity docs.
+`session_persistence`) rather than legacy compatibility notes.
 
 Status legend:
 
@@ -128,7 +166,7 @@ Status legend:
 | Web server | `/dev-ui` static hosting and config endpoint | Y | Bundled UI serving and SPA fallback are implemented. |
 | Web server | `/health`, `/version`, `/list-apps`, `/run`, `/run_sse`, `/run_live` | Y | Core dev runtime API works and is covered by web tests. |
 | Web server | Python-style session/memory/artifact routes | Y | `/apps/{app}/users/{user}/sessions...` CRUD and artifact routes are implemented. |
-| Web server | Debug/Eval/Trace parity families | Y | Includes `/debug/trace/*`, `/apps/{app}/metrics-info`, `/apps/{app}/eval-*`, and event graph endpoints. |
+| Web server | Debug/Eval/Trace route families | Y | Includes `/debug/trace/*`, `/apps/{app}/metrics-info`, `/apps/{app}/eval-*`, and event graph endpoints. |
 | Web options | `allow_origins`, `url_prefix`, `reload`, `reload_agents`, logo, telemetry flags | Y | Options are parsed and propagated into runtime/web context. |
 | A2A | Agent card endpoints (`/.well-known/agent.json`, `/a2a/<app>/.well-known/agent.json`) | Y | Agent card generation/serving works when `--a2a` is enabled. |
 | A2A | RPC routes (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`, `tasks/resubscribe`, push config set/get) | Y | JSON-RPC + REST-style task routes are implemented and tested. |
@@ -142,7 +180,7 @@ Status legend:
 | Area | Feature | Status | Notes |
 | --- | --- | --- | --- |
 | Sessions | `mysql://` TLS/SSL transport options | Y | Uses `mysql_client_plus`; supports TLS flags (`secure`/`ssl`/`tls`, `sslmode=require`), CA file (`ssl_ca_file`), client cert/key (`ssl_cert_file` + `ssl_key_file`), optional verify toggle (`ssl_verify=false`), and auto secure-retry for auth plugins that require TLS (unless explicitly disabled). |
-| Sessions | `VertexAiSessionService` remote persistence parity | Y | Service uses Vertex Session API client paths (`create/get/list/delete`, events append/list) with HTTP transport. |
+| Sessions | `VertexAiSessionService` remote persistence compatibility | Y | Service uses Vertex Session API client paths (`create/get/list/delete`, events append/list) with HTTP transport. |
 | Artifacts | `gs://` default artifact backend | Y | `GcsArtifactService` now includes built-in live HTTP/auth providers; custom providers remain optional. |
 | Tools runtime | BigQuery default client | Y | Bundled REST client is available by default (token required via credentials/env/gcloud ADC). |
 | Tools runtime | Bigtable default clients | Y | Bundled REST admin/data clients are available by default (token required via credentials/env/gcloud ADC). |
@@ -154,7 +192,7 @@ Status legend:
 | Secrets | Secret Manager access without fetcher | Y | Built-in Secret Manager HTTP fetcher is available; injection is optional. |
 | Audio | Speech transcription runtime bootstrap | Partial | Recognizer is still required, but can now be provided per instance or globally via `AudioTranscriber.registerDefaultRecognizer(...)`. |
 | OpenAPI | External multi-file `$ref` resolution | N | Parser throws on external refs (`External references not supported`). |
-| Spanner | PostgreSQL vector/ANN parity | Partial | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |
+| Spanner | PostgreSQL vector/ANN support | Partial | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |
 
 ## Installation
 
@@ -241,8 +279,8 @@ For most users, importing `package:adk_dart/adk_dart.dart` is sufficient.
 - Documentation index: [`docs/README.md`](docs/README.md)
 - Work-unit logs: [`docs/worklog/`](docs/worklog/)
 - Reference knowledge: [`docs/knowledge/`](docs/knowledge/)
-- Parity status tracker: [`docs/python_parity_status.md`](../docs/python_parity_status.md)
-- Parity manifest: [`docs/python_to_dart_parity_manifest.md`](../docs/python_to_dart_parity_manifest.md)
+- Python compatibility status tracker: [`docs/python_parity_status.md`](../docs/python_parity_status.md)
+- Python-to-Dart implementation manifest: [`docs/python_to_dart_parity_manifest.md`](../docs/python_to_dart_parity_manifest.md)
 
 ## Feature Highlight
 
