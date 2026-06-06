@@ -595,6 +595,97 @@ void main() {
       },
     );
 
+    test('runAsync resumes workflow from session event history', () async {
+      int firstRuns = 0;
+      int askRuns = 0;
+      final Workflow workflow = Workflow(
+        name: 'run_async_rehydrate_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) {
+            firstRuns += 1;
+            return 'cached';
+          }, name: 'first'),
+          node(
+            (WorkflowContext context, Object? input) {
+              askRuns += 1;
+              final Object? resumeInput = context.resumeInputs['approval'];
+              if (resumeInput != null) {
+                final Map<dynamic, dynamic> response =
+                    resumeInput as Map<dynamic, dynamic>;
+                return '$input:${response['ok']}';
+              }
+              return RequestInput(interruptId: 'approval', message: 'Approve?');
+            },
+            name: 'ask_user',
+            rerunOnResume: true,
+          ),
+          node(
+            (WorkflowContext _, Object? input) => 'after:$input',
+            name: 'after_user',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'first'),
+          Edge(fromNode: 'first', toNode: 'ask_user'),
+          Edge(fromNode: 'ask_user', toNode: 'after_user'),
+        ],
+      );
+      final Session session = Session(id: 's', appName: 'app', userId: 'u');
+      final InvocationContext firstContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_run_async_rehydrate',
+        agent: workflow,
+        session: session,
+        userContent: Content.userText('go'),
+      );
+      final List<Event> firstEvents = await workflow
+          .runAsync(firstContext)
+          .toList();
+      session.events.addAll(firstEvents);
+      session.events.add(
+        Event(
+          invocationId: 'inv_run_async_rehydrate',
+          author: 'user',
+          content: Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                id: 'approval',
+                name: requestInputFunctionCallName,
+                response: <String, Object?>{
+                  'result': <String, Object?>{'ok': true},
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+      final InvocationContext resumeContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_run_async_rehydrate',
+        agent: workflow,
+        session: session,
+        userContent: Content.userText('go'),
+        resumabilityConfig: ResumabilityConfig(isResumable: true),
+      );
+
+      final List<Event> resumedEvents = await workflow
+          .runAsync(resumeContext)
+          .toList();
+
+      expect(firstRuns, 1);
+      expect(askRuns, 2);
+      expect(resumedEvents.map((Event event) => event.author), <String>[
+        'ask_user',
+        'after_user',
+      ]);
+      expect(resumedEvents.first.content?.parts.single.text, 'cached:true');
+      expect(
+        resumedEvents.last.content?.parts.single.text,
+        'after:cached:true',
+      );
+    });
+
     test('converts RequestInput node output to long-running event', () async {
       final Workflow workflow = Workflow(
         name: 'hitl_workflow',

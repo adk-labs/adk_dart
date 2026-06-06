@@ -945,13 +945,26 @@ class Workflow extends BaseAgent {
 
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    final WorkflowResult? previousResult = _rehydratedResultForContext(
+      this,
+      context,
+    );
     final WorkflowContext workflowContext = WorkflowContext(
       invocationContext: context,
       input: context.userContent,
+      outputs: previousResult == null
+          ? null
+          : Map<String, Object?>.from(previousResult.outputs),
+      nodeStates: previousResult == null
+          ? null
+          : _copyNodeStates(previousResult.nodeStates),
     );
     await _execute(workflowContext);
     for (final MapEntry<String, Object?> entry
         in workflowContext.outputs.entries) {
+      if (_isPreviouslyCompletedOutput(previousResult, entry.key)) {
+        continue;
+      }
       final Event? event = _eventFromOutput(
         context,
         entry.key,
@@ -1310,6 +1323,41 @@ class Workflow extends BaseAgent {
       content: Content.modelText(text),
     );
   }
+}
+
+WorkflowResult? _rehydratedResultForContext(
+  Workflow workflow,
+  InvocationContext context,
+) {
+  if (!context.isResumable) {
+    return null;
+  }
+  final bool hasWorkflowEvents = context.session.events.any((Event event) {
+    return event.invocationId == context.invocationId &&
+        _isWorkflowNodePath(event.nodeInfo.path, _workflowRootPath(workflow));
+  });
+  if (!hasWorkflowEvents) {
+    return null;
+  }
+  return workflow.rehydrateResultFromEvents(
+    context.session.events,
+    invocationId: context.invocationId,
+  );
+}
+
+String _workflowRootPath(Workflow workflow) {
+  final String workflowName = workflow.name.isEmpty
+      ? 'workflow'
+      : workflow.name;
+  return '$workflowName@1';
+}
+
+bool _isPreviouslyCompletedOutput(WorkflowResult? previousResult, String key) {
+  if (previousResult == null || !previousResult.outputs.containsKey(key)) {
+    return false;
+  }
+  final NodeState? previousState = previousResult.nodeStates[key];
+  return previousState != null && _isCompletedNodeState(previousState);
 }
 
 void _validateNoStaticTaskModeNodes(Iterable<BaseNode> nodes) {
