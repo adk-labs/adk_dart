@@ -116,6 +116,7 @@ class NodeState {
     this.runCounter = 0,
     this.runId,
     this.parentRunId,
+    this.route,
     this.error,
   }) : interrupts = interrupts ?? <String>[],
        resumeInputs = resumeInputs ?? <String, Object?>{};
@@ -143,6 +144,9 @@ class NodeState {
 
   /// Parent dynamic node run identifier, when applicable.
   String? parentRunId;
+
+  /// Last route emitted by this node.
+  Object? route;
 
   /// Last error, if any.
   Object? error;
@@ -662,7 +666,11 @@ class Workflow extends BaseAgent {
         ? byName.keys.toSet()
         : _initialActiveNodes(byName);
     for (final String completedNode in completed) {
-      _activateDownstream(fromNode: completedNode, route: null, active: active);
+      _activateDownstream(
+        fromNode: completedNode,
+        route: context.nodeStates[completedNode]?.route,
+        active: active,
+      );
     }
 
     while (pending.any(active.contains)) {
@@ -1012,6 +1020,9 @@ _NodeRunResult _resultFromRawNodeOutput(
 
 bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
   final NodeState? state = context.nodeStates[result.name];
+  if (state != null) {
+    state.route = result.route;
+  }
   if (result.output != null || result.route != null) {
     context.outputs[result.name] = result.output;
   }
@@ -1063,6 +1074,7 @@ Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
         runCounter: entry.value.runCounter,
         runId: entry.value.runId,
         parentRunId: entry.value.parentRunId,
+        route: entry.value.route,
         error: entry.value.error,
       ),
   };

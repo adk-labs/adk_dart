@@ -342,6 +342,51 @@ void main() {
       },
     );
 
+    test(
+      'preserves interrupted node route when completing from resume',
+      () async {
+        int routeRuns = 0;
+        final Workflow workflow = Workflow(
+          name: 'hitl_route_resume',
+          nodes: <BaseNode>[
+            node((WorkflowContext context, Object? _) {
+              routeRuns += 1;
+              context.route = 'go';
+              return RequestInput(
+                interruptId: 'route_confirm',
+                message: 'Continue?',
+              );
+            }, name: 'route_node'),
+            node((WorkflowContext _, Object? input) {
+              final Map<dynamic, dynamic> response =
+                  input! as Map<dynamic, dynamic>;
+              return 'reached:${response['ok']}';
+            }, name: 'target_node'),
+          ],
+          edges: <Edge>[
+            Edge(fromNode: 'route_node', toNode: 'target_node', route: 'go'),
+          ],
+        );
+
+        final WorkflowResult first = await workflow.runWorkflow();
+        expect(first.nodeStates['route_node']?.status, NodeStatus.waiting);
+        expect(first.nodeStates['route_node']?.route, 'go');
+        expect(first.outputs.containsKey('target_node'), isFalse);
+
+        final WorkflowResult second = await workflow.runWorkflow(
+          previousResult: first,
+          resumeInputs: <String, Object?>{
+            'route_confirm': <String, Object?>{'ok': true},
+          },
+        );
+
+        expect(routeRuns, 1);
+        expect(second.outputs['target_node'], 'reached:true');
+        expect(second.nodeStates['route_node']?.status, NodeStatus.completed);
+        expect(second.nodeStates['route_node']?.route, 'go');
+      },
+    );
+
     test('routes edges from workflow event actions', () async {
       final FunctionNode router = node((WorkflowContext _, Object? _) {
         return Event(
