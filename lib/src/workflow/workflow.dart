@@ -218,10 +218,17 @@ class WorkflowContext {
   /// [outputs], and records execution state in [nodeStates]. When the context is
   /// owned by a [Workflow], the same retry and timeout behavior used by static
   /// graph nodes is applied.
+  ///
+  /// When [runId] is provided, state and output are recorded under
+  /// `nodeName@runId` so multiple dynamic instances of the same node can be
+  /// resumed or deduplicated independently. Explicit run IDs must contain at
+  /// least one non-numeric character to avoid collisions with auto-generated
+  /// numeric run IDs.
   Future<Object?> runNode(
     Object nodeLike, {
     Object? input,
     String? name,
+    String? runId,
     String description = '',
     bool? rerunOnResume,
     bool? waitForOutput,
@@ -237,21 +244,29 @@ class WorkflowContext {
       retryConfig: retryConfig,
       timeout: timeout,
     );
-    final NodeState? state = nodeStates[node.name];
+    if (runId != null && int.tryParse(runId) != null) {
+      throw ArgumentError.value(
+        runId,
+        'runId',
+        'Explicit dynamic workflow run IDs must contain non-numeric characters.',
+      );
+    }
+    final String stateKey = runId == null ? node.name : '${node.name}@$runId';
+    final NodeState? state = nodeStates[stateKey];
     if (state != null) {
-      if (_isCompletedNodeState(state) && outputs.containsKey(node.name)) {
-        return outputs[node.name];
+      if (_isCompletedNodeState(state) && outputs.containsKey(stateKey)) {
+        return outputs[stateKey];
       }
       _seedNodeResumeInputs(state, resumeInputs);
       if (_hasUnresolvedWaitingInterrupts(state)) {
         interruptIds.addAll(state.interrupts);
-        return outputs[node.name];
+        return outputs[stateKey];
       }
       if (state.status == NodeStatus.waiting &&
           state.resumeInputs.isNotEmpty &&
           !node.rerunOnResume) {
         final Object? output = _outputFromResumeInputs(state.resumeInputs);
-        outputs[node.name] = output;
+        outputs[stateKey] = output;
         state.status = NodeStatus.completed;
         state.interrupts.clear();
         state.resumeInputs.clear();
@@ -267,11 +282,14 @@ class WorkflowContext {
       context: childContext,
       node: node,
       nodeInput: input,
+      stateKey: stateKey,
+      runId: runId,
     );
     final _NodeRunResult result = _resultFromRawNodeOutput(
       node,
       rawOutput,
       context: childContext,
+      name: stateKey,
     );
     _recordNodeResult(this, result);
     return result.output;
@@ -981,19 +999,19 @@ Future<Object?> _runNodeWithRetry({
   required WorkflowContext context,
   required BaseNode node,
   required Object? nodeInput,
+  String? stateKey,
+  String? runId,
 }) async {
   final RetryConfig? retry = node.retryConfig;
   final int maxAttempts = retry == null
       ? 1
       : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
-  final NodeState state = context.nodeStates.putIfAbsent(
-    node.name,
-    NodeState.new,
-  );
+  final String key = stateKey ?? node.name;
+  final NodeState state = context.nodeStates.putIfAbsent(key, NodeState.new);
   state.input = nodeInput;
   if (state.status == NodeStatus.inactive || state.runId == null) {
     state.runCounter += 1;
-    state.runId = '${state.runCounter}';
+    state.runId = runId ?? '${state.runCounter}';
   }
 
   Object? lastError;
@@ -1087,6 +1105,7 @@ _NodeRunResult _resultFromRawNodeOutput(
   BaseNode node,
   Object? rawOutput, {
   WorkflowContext? context,
+  String? name,
 }) {
   final Object? workflowOutput = context?._hasDirectOutput == true
       ? context!._directOutput
@@ -1095,7 +1114,7 @@ _NodeRunResult _resultFromRawNodeOutput(
   final bool hasOutput =
       context?._hasDirectOutput == true || _hasWorkflowOutput(rawOutput);
   return _NodeRunResult(
-    name: node.name,
+    name: name ?? node.name,
     output: workflowOutput,
     route: route,
     interruptIds: <String>{

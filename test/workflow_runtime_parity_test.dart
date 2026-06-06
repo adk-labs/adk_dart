@@ -710,6 +710,53 @@ void main() {
       );
     });
 
+    test('separates dynamic node instances by explicit runId', () async {
+      int childRuns = 0;
+      final FunctionNode child = node((WorkflowContext _, Object? input) {
+        childRuns += 1;
+        return 'child:$input';
+      }, name: 'dynamic_child');
+      final Workflow workflow = Workflow(
+        name: 'dynamic_run_id_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) async {
+            final Object? first = await context.runNode(
+              child,
+              input: 'first',
+              runId: 'first-id',
+            );
+            final Object? second = await context.runNode(
+              child,
+              input: 'second',
+              runId: 'second-id',
+            );
+            return '$first/$second';
+          }, name: 'parent'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(childRuns, 2);
+      expect(result.outputs['dynamic_child@first-id'], 'child:first');
+      expect(result.outputs['dynamic_child@second-id'], 'child:second');
+      expect(result.outputs['parent'], 'child:first/child:second');
+      expect(result.nodeStates['dynamic_child@first-id']?.runId, 'first-id');
+      expect(result.nodeStates['dynamic_child@second-id']?.runId, 'second-id');
+    });
+
+    test('rejects numeric explicit dynamic runIds', () async {
+      final WorkflowContext context = WorkflowContext();
+
+      await expectLater(
+        context.runNode(
+          node((WorkflowContext _, Object? input) => input, name: 'child'),
+          runId: '123',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('marks dynamic request-input nodes as waiting', () async {
       final Workflow workflow = Workflow(
         name: 'dynamic_hitl_graph',
@@ -733,6 +780,85 @@ void main() {
       expect(childState.interrupts, <String>['dynamic_ask']);
       expect(result.outputs['dynamic_ask_user'], isA<RequestInput>());
     });
+
+    test(
+      'deduplicates explicit dynamic runIds independently on resume',
+      () async {
+        final Map<String, int> childRuns = <String, int>{
+          'cached': 0,
+          'waiting': 0,
+        };
+        final FunctionNode child = node(
+          (WorkflowContext context, Object? input) {
+            final String label = input! as String;
+            childRuns[label] = childRuns[label]! + 1;
+            if (label == 'waiting') {
+              final Object? resumeInput = context.resumeInputs['explicit_wait'];
+              if (resumeInput != null) {
+                final Map<dynamic, dynamic> response =
+                    resumeInput as Map<dynamic, dynamic>;
+                return 'resumed:${response['value']}';
+              }
+              return RequestInput(
+                interruptId: 'explicit_wait',
+                message: 'Continue?',
+              );
+            }
+            return 'cached-result';
+          },
+          name: 'explicit_child',
+          rerunOnResume: true,
+        );
+        final Workflow workflow = Workflow(
+          name: 'dynamic_explicit_resume_graph',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext context, Object? _) async {
+                final Object? cached = await context.runNode(
+                  child,
+                  input: 'cached',
+                  runId: 'cached-id',
+                );
+                final Object? waiting = await context.runNode(
+                  child,
+                  input: 'waiting',
+                  runId: 'waiting-id',
+                );
+                if (waiting is RequestInput) {
+                  return waiting;
+                }
+                return '$cached + $waiting';
+              },
+              name: 'parent',
+              rerunOnResume: true,
+            ),
+          ],
+        );
+
+        final WorkflowResult first = await workflow.runWorkflow();
+        expect(
+          first.nodeStates['explicit_child@cached-id']?.status,
+          NodeStatus.completed,
+        );
+        expect(
+          first.nodeStates['explicit_child@waiting-id']?.status,
+          NodeStatus.waiting,
+        );
+
+        final WorkflowResult second = await workflow.runWorkflow(
+          previousResult: first,
+          resumeInputs: <String, Object?>{
+            'explicit_wait': <String, Object?>{'value': 'done'},
+          },
+        );
+
+        expect(childRuns['cached'], 1);
+        expect(childRuns['waiting'], 2);
+        expect(second.outputs['parent'], 'cached-result + resumed:done');
+        expect(second.outputs['explicit_child@cached-id'], 'cached-result');
+        expect(second.outputs['explicit_child@waiting-id'], 'resumed:done');
+      },
+    );
 
     test('deduplicates completed dynamic nodes when parent resumes', () async {
       int parentRuns = 0;
