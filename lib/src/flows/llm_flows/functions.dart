@@ -218,6 +218,10 @@ Future<Event?> handleFunctionCallListAsync(
   Set<String>? filters,
   Map<String, ToolConfirmation>? toolConfirmationDict,
 }) async {
+  if (invocationContext.isAborted) {
+    return null;
+  }
+
   final List<FunctionCall> filtered = functionCalls
       .where(
         (FunctionCall call) =>
@@ -244,6 +248,9 @@ Future<Event?> handleFunctionCallListAsync(
   }).toList();
 
   final List<Event?> results = await Future.wait(tasks, eagerError: true);
+  if (invocationContext.isAborted) {
+    return null;
+  }
   final List<Event> events = results.whereType<Event>().toList(growable: false);
 
   if (events.isEmpty) {
@@ -260,6 +267,10 @@ Future<Event?> _executeSingleFunctionCallAsync(
   LlmAgent agent, {
   ToolConfirmation? toolConfirmation,
 }) async {
+  if (invocationContext.isAborted) {
+    return null;
+  }
+
   final Map<String, dynamic> functionArgs = Map<String, dynamic>.from(
     functionCall.args,
   );
@@ -306,14 +317,23 @@ Future<Event?> _executeSingleFunctionCallAsync(
         toolArgs: functionArgs,
         toolContext: toolContext,
       );
+  if (invocationContext.isAborted) {
+    return null;
+  }
 
   if (functionResponse == null) {
     for (final BeforeToolCallback callback
         in agent.canonicalBeforeToolCallbacks) {
+      if (invocationContext.isAborted) {
+        return null;
+      }
       final Map<String, dynamic>? value =
           await Future<Map<String, dynamic>?>.value(
             callback(tool, functionArgs, toolContext),
           );
+      if (invocationContext.isAborted) {
+        return null;
+      }
       if (value != null) {
         functionResponse = value;
         break;
@@ -323,10 +343,16 @@ Future<Event?> _executeSingleFunctionCallAsync(
 
   if (functionResponse == null) {
     try {
+      if (invocationContext.isAborted) {
+        return null;
+      }
       final Object? result = await tool.run(
         args: functionArgs,
         toolContext: toolContext,
       );
+      if (invocationContext.isAborted) {
+        return null;
+      }
       functionResponse = tool.defersResponse && result == null
           ? <String, dynamic>{}
           : _normalizeFunctionResult(result);
@@ -356,14 +382,23 @@ Future<Event?> _executeSingleFunctionCallAsync(
         toolContext: toolContext,
         result: functionResponse,
       );
+  if (invocationContext.isAborted) {
+    return null;
+  }
 
   if (altered == null) {
     for (final AfterToolCallback callback
         in agent.canonicalAfterToolCallbacks) {
+      if (invocationContext.isAborted) {
+        return null;
+      }
       final Map<String, dynamic>? value =
           await Future<Map<String, dynamic>?>.value(
             callback(tool, functionArgs, toolContext, functionResponse),
           );
+      if (invocationContext.isAborted) {
+        return null;
+      }
       if (value != null) {
         altered = value;
         break;
@@ -395,6 +430,10 @@ Future<Map<String, dynamic>?> _runOnToolErrorCallbacks({
   required ToolContext toolContext,
   required Exception error,
 }) async {
+  if (invocationContext.isAborted) {
+    return null;
+  }
+
   final Map<String, dynamic>? pluginHandled = await invocationContext
       .pluginManager
       .runOnToolErrorCallback(
@@ -403,16 +442,25 @@ Future<Map<String, dynamic>?> _runOnToolErrorCallbacks({
         toolContext: toolContext,
         error: error,
       );
+  if (invocationContext.isAborted) {
+    return null;
+  }
   if (pluginHandled != null) {
     return pluginHandled;
   }
 
   for (final OnToolErrorCallback callback
       in agent.canonicalOnToolErrorCallbacks) {
+    if (invocationContext.isAborted) {
+      return null;
+    }
     final Map<String, dynamic>? value =
         await Future<Map<String, dynamic>?>.value(
           callback(tool, toolArgs, toolContext, error),
         );
+    if (invocationContext.isAborted) {
+      return null;
+    }
     if (value != null) {
       return value;
     }

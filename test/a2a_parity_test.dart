@@ -54,6 +54,7 @@ class _RecordingRunner extends InMemoryRunner {
     Content? newMessage,
     Map<String, Object?>? stateDelta,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) {
     runAsyncCalls += 1;
     lastUserId = userId;

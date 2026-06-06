@@ -6,6 +6,7 @@ import 'dart:collection';
 import '../auth/auth_credential.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
+import 'abort_signal.dart';
 import 'invocation_context.dart';
 import 'run_config.dart';
 
@@ -43,6 +44,9 @@ class ReadonlyContext {
 
   /// Optional run configuration for this invocation.
   RunConfig? get runConfig => _invocationContext.runConfig;
+
+  /// Cooperative cancellation signal for this invocation.
+  AdkAbortSignal? get abortSignal => _invocationContext.abortSignal;
 
   /// Returns an invocation-scoped credential for [key], if available.
   AuthCredential? getCredential(String key) {

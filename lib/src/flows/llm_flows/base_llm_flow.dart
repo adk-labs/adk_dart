@@ -71,6 +71,10 @@ class BaseLlmFlow {
 
   /// Runs the flow in live mode when a live queue is available.
   Stream<Event> runLive(InvocationContext context) async* {
+    if (context.isAborted) {
+      return;
+    }
+
     final LiveRequestQueue? liveQueue = context.liveRequestQueue;
     if (liveQueue == null) {
       await for (final Event event in runAsync(context)) {
@@ -89,9 +93,12 @@ class BaseLlmFlow {
 
     final LlmRequest request = LlmRequest();
     await for (final Event event in _preprocessAsync(context, request)) {
+      if (context.isAborted) {
+        return;
+      }
       yield event;
     }
-    if (context.endInvocation) {
+    if (context.endInvocation || context.isAborted) {
       return;
     }
 
@@ -135,6 +142,9 @@ class BaseLlmFlow {
             context,
             request,
           )) {
+            if (context.isAborted) {
+              return;
+            }
             reconnectAttempts = 0;
             yield event;
             if (event.getFunctionResponses().isNotEmpty &&
@@ -200,6 +210,9 @@ class BaseLlmFlow {
     LiveRequestQueue liveQueue,
   ) async* {
     while (true) {
+      if (context.isAborted) {
+        return;
+      }
       final LiveRequest liveRequest = await liveQueue.get();
       _fanOutLiveRequest(context, liveRequest);
 
@@ -231,6 +244,9 @@ class BaseLlmFlow {
         userContent: content.copyWith(),
       );
       await for (final Event event in runAsync(turnContext)) {
+        if (context.isAborted || turnContext.isAborted) {
+          return;
+        }
         _maybeUpdateLiveSessionResumptionHandle(context, event.customMetadata);
         yield event;
       }
@@ -250,6 +266,9 @@ class BaseLlmFlow {
     void Function()? onTerminalClose,
   }) async {
     while (true) {
+      if (context.isAborted) {
+        return;
+      }
       final LiveRequestQueue? liveQueue = context.liveRequestQueue;
       if (liveQueue == null) {
         return;
@@ -266,6 +285,9 @@ class BaseLlmFlow {
       _fanOutLiveRequest(context, liveRequest);
 
       await Future<void>.delayed(Duration.zero);
+      if (context.isAborted) {
+        return;
+      }
       if (liveRequest.close) {
         onTerminalClose?.call();
         await closeConnection();
@@ -319,6 +341,9 @@ class BaseLlmFlow {
     LlmRequest request,
   ) async* {
     await for (final LlmResponse response in connection.receive()) {
+      if (context.isAborted) {
+        return;
+      }
       _updateLiveSessionResumptionHandle(
         context,
         response.liveSessionResumptionUpdate,
@@ -343,6 +368,9 @@ class BaseLlmFlow {
         response,
         modelResponseEvent,
       )) {
+        if (context.isAborted) {
+          return;
+        }
         if ((context.runConfig?.saveLiveBlob ?? false) &&
             event.content?.parts.isNotEmpty == true &&
             event.content!.parts.first.inlineData != null &&
@@ -374,7 +402,14 @@ class BaseLlmFlow {
       context,
       response,
     )) {
+      if (context.isAborted) {
+        return;
+      }
       yield event;
+    }
+
+    if (context.isAborted) {
+      return;
     }
 
     if (response.content == null &&
@@ -441,6 +476,9 @@ class BaseLlmFlow {
       response,
       modelResponseEvent,
     );
+    if (context.isAborted) {
+      return;
+    }
     yield finalized;
 
     if (finalized.getFunctionCalls().isNotEmpty) {
@@ -450,6 +488,9 @@ class BaseLlmFlow {
 
       final Event? functionResponseEvent = await flow_functions
           .handleFunctionCallsAsync(context, finalized, request.toolsDict);
+      if (context.isAborted) {
+        return;
+      }
       if (functionResponseEvent != null) {
         yield functionResponseEvent;
         final String? jsonResponse = output_schema.getStructuredModelResponse(
@@ -469,6 +510,9 @@ class BaseLlmFlow {
             context,
           );
           await for (final Event event in agentToRun.runLive(childContext)) {
+            if (context.isAborted || childContext.isAborted) {
+              return;
+            }
             yield event;
           }
         }
@@ -729,12 +773,22 @@ class BaseLlmFlow {
   /// Runs the standard request-response flow until completion.
   Stream<Event> runAsync(InvocationContext context) async* {
     while (true) {
+      if (context.isAborted) {
+        return;
+      }
       Event? lastEvent;
       final List<Event> stepEvents = <Event>[];
       await for (final Event event in _runOneStepAsync(context)) {
+        if (context.isAborted) {
+          return;
+        }
         lastEvent = event;
         stepEvents.add(event);
         yield event;
+      }
+
+      if (context.isAborted) {
+        return;
       }
 
       await PersistBarrier.awaitPersisted(context, stepEvents);
@@ -748,13 +802,20 @@ class BaseLlmFlow {
   }
 
   Stream<Event> _runOneStepAsync(InvocationContext context) async* {
+    if (context.isAborted) {
+      return;
+    }
+
     final LlmRequest request = LlmRequest();
 
     await for (final Event event in _preprocessAsync(context, request)) {
+      if (context.isAborted) {
+        return;
+      }
       yield event;
     }
 
-    if (context.endInvocation) {
+    if (context.endInvocation || context.isAborted) {
       return;
     }
 
@@ -782,6 +843,9 @@ class BaseLlmFlow {
         functionCallEvent,
         request,
       )) {
+        if (context.isAborted) {
+          return;
+        }
         yield event;
       }
       return;
@@ -799,12 +863,18 @@ class BaseLlmFlow {
       request,
       modelResponseEvent,
     )) {
+      if (context.isAborted) {
+        return;
+      }
       await for (final Event event in _postprocessAsync(
         context,
         request,
         response,
         modelResponseEvent,
       )) {
+        if (context.isAborted) {
+          return;
+        }
         modelResponseEvent.id = Event.newId();
         modelResponseEvent.timestamp =
             DateTime.now().millisecondsSinceEpoch / 1000;
@@ -819,19 +889,25 @@ class BaseLlmFlow {
   ) async* {
     for (final BaseLlmRequestProcessor processor in requestProcessors) {
       await for (final Event event in processor.runAsync(context, request)) {
+        if (context.isAborted) {
+          return;
+        }
         yield event;
       }
     }
 
-    if (context.endInvocation) {
+    if (context.endInvocation || context.isAborted) {
       return;
     }
 
     await for (final Event event in _resolveToolsetAuth(context)) {
+      if (context.isAborted) {
+        return;
+      }
       yield event;
     }
 
-    if (context.endInvocation) {
+    if (context.endInvocation || context.isAborted) {
       return;
     }
 
@@ -956,7 +1032,14 @@ class BaseLlmFlow {
       context,
       response,
     )) {
+      if (context.isAborted) {
+        return;
+      }
       yield event;
+    }
+
+    if (context.isAborted) {
+      return;
     }
 
     if (response.content == null &&
@@ -971,6 +1054,9 @@ class BaseLlmFlow {
       response,
       modelResponseEvent,
     );
+    if (context.isAborted) {
+      return;
+    }
     yield finalized;
 
     if (finalized.getFunctionCalls().isNotEmpty) {
@@ -983,6 +1069,9 @@ class BaseLlmFlow {
         finalized,
         request,
       )) {
+        if (context.isAborted) {
+          return;
+        }
         yield event;
       }
     }
@@ -994,6 +1083,9 @@ class BaseLlmFlow {
   ) async* {
     for (final BaseLlmResponseProcessor processor in responseProcessors) {
       await for (final Event event in processor.runAsync(context, response)) {
+        if (context.isAborted) {
+          return;
+        }
         yield event;
       }
     }
@@ -1004,12 +1096,19 @@ class BaseLlmFlow {
     Event functionCallEvent,
     LlmRequest request,
   ) async* {
+    if (context.isAborted) {
+      return;
+    }
+
     final Event? functionResponseEvent = await flow_functions
         .handleFunctionCallsAsync(
           context,
           functionCallEvent,
           request.toolsDict,
         );
+    if (context.isAborted) {
+      return;
+    }
 
     if (functionResponseEvent == null) {
       return;
@@ -1047,6 +1146,9 @@ class BaseLlmFlow {
     if (transferToAgent != null && transferToAgent.isNotEmpty) {
       final BaseAgent agentToRun = _getAgentToRun(context, transferToAgent);
       await for (final Event event in agentToRun.runAsync(context)) {
+        if (context.isAborted) {
+          return;
+        }
         yield event;
       }
     }
@@ -1057,11 +1159,18 @@ class BaseLlmFlow {
     LlmRequest request,
     Event modelResponseEvent,
   ) async* {
+    if (context.isAborted) {
+      return;
+    }
+
     final LlmResponse? beforeResponse = await _handleBeforeModelCallback(
       context,
       request,
       modelResponseEvent,
     );
+    if (context.isAborted) {
+      return;
+    }
     if (beforeResponse != null) {
       yield beforeResponse;
       return;
@@ -1077,11 +1186,17 @@ class BaseLlmFlow {
         request.sanitizedForModelCall(),
         stream: context.runConfig?.streamingMode == StreamingMode.sse,
       )) {
+        if (context.isAborted) {
+          return;
+        }
         final LlmResponse? altered = await _handleAfterModelCallback(
           context,
           response,
           modelResponseEvent,
         );
+        if (context.isAborted) {
+          return;
+        }
         if (altered != null) {
           response = altered;
         }

@@ -91,8 +91,14 @@ abstract class BaseAgent {
   /// Runs the agent asynchronously with lifecycle callbacks.
   Stream<Event> runAsync(InvocationContext parentContext) async* {
     final InvocationContext context = createInvocationContext(parentContext);
+    if (context.isAborted) {
+      return;
+    }
 
     final Event? before = await _handleBeforeAgentCallback(context);
+    if (context.isAborted) {
+      return;
+    }
     if (before != null) {
       _stampIsolationScope(context, before);
       yield before;
@@ -103,15 +109,21 @@ abstract class BaseAgent {
     }
 
     await for (final Event event in runAsyncImpl(context)) {
+      if (context.isAborted) {
+        return;
+      }
       _stampIsolationScope(context, event);
       yield event;
     }
 
-    if (context.endInvocation) {
+    if (context.endInvocation || context.isAborted) {
       return;
     }
 
     final Event? after = await _handleAfterAgentCallback(context);
+    if (context.isAborted) {
+      return;
+    }
     if (after != null) {
       _stampIsolationScope(context, after);
       yield after;
@@ -121,8 +133,14 @@ abstract class BaseAgent {
   /// Runs the agent in live mode with lifecycle callbacks.
   Stream<Event> runLive(InvocationContext parentContext) async* {
     final InvocationContext context = createInvocationContext(parentContext);
+    if (context.isAborted) {
+      return;
+    }
 
     final Event? before = await _handleBeforeAgentCallback(context);
+    if (context.isAborted) {
+      return;
+    }
     if (before != null) {
       _stampIsolationScope(context, before);
       yield before;
@@ -133,11 +151,20 @@ abstract class BaseAgent {
     }
 
     await for (final Event event in runLiveImpl(context)) {
+      if (context.isAborted) {
+        return;
+      }
       _stampIsolationScope(context, event);
       yield event;
     }
 
+    if (context.isAborted) {
+      return;
+    }
     final Event? after = await _handleAfterAgentCallback(context);
+    if (context.isAborted) {
+      return;
+    }
     if (after != null) {
       _stampIsolationScope(context, after);
       yield after;

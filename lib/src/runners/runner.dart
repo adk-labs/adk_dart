@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
 import '../agents/invocation_context.dart';
 import '../agents/live_request_queue.dart';
@@ -214,12 +215,14 @@ class Runner {
     required String sessionId,
     required Content newMessage,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) {
     return runAsync(
       userId: userId,
       sessionId: sessionId,
       newMessage: newMessage,
       runConfig: runConfig,
+      abortSignal: abortSignal,
     );
   }
 
@@ -231,8 +234,12 @@ class Runner {
     Content? newMessage,
     Map<String, Object?>? stateDelta,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) async* {
     final RunConfig config = runConfig ?? RunConfig();
+    if (abortSignal?.aborted ?? false) {
+      return;
+    }
 
     if (newMessage != null &&
         (newMessage.role == null || newMessage.role!.isEmpty)) {
@@ -244,6 +251,9 @@ class Runner {
       sessionId: sessionId,
       getSessionConfig: config.getSessionConfig,
     );
+    if (abortSignal?.aborted ?? false) {
+      return;
+    }
 
     if (invocationId == null && newMessage == null) {
       throw ArgumentError(
@@ -265,6 +275,7 @@ class Runner {
         newMessage: newMessage!,
         stateDelta: stateDelta,
         runConfig: config,
+        abortSignal: abortSignal,
       );
     } else {
       final String? resolvedInvocationId = _resolveInvocationId(
@@ -278,6 +289,7 @@ class Runner {
           newMessage: newMessage!,
           stateDelta: stateDelta,
           runConfig: config,
+          abortSignal: abortSignal,
         );
       } else {
         context = await _setupContextForResumedInvocation(
@@ -286,11 +298,16 @@ class Runner {
           newMessage: newMessage,
           stateDelta: stateDelta,
           runConfig: config,
+          abortSignal: abortSignal,
         );
         if (context.endOfAgents[context.agent.name] == true) {
           return;
         }
       }
+    }
+
+    if (context.isAborted) {
+      return;
     }
 
     await for (final Event event in _execWithPlugin(
@@ -474,8 +491,12 @@ class Runner {
     String? sessionId,
     Session? session,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) async* {
     final RunConfig config = runConfig ?? RunConfig();
+    if (abortSignal?.aborted ?? false) {
+      return;
+    }
     config.responseModalities ??= <String>['AUDIO'];
     if (agent.subAgents.isNotEmpty) {
       if (config.responseModalities!.contains('AUDIO') &&
@@ -496,15 +517,22 @@ class Runner {
         sessionId: sessionId,
         getSessionConfig: config.getSessionConfig,
       );
+      if (abortSignal?.aborted ?? false) {
+        return;
+      }
     }
 
     final InvocationContext context = _newInvocationContext(
       session,
       liveRequestQueue: liveRequestQueue,
       runConfig: config,
+      abortSignal: abortSignal,
     );
 
     context.agent = _findAgentToRun(context.session, agent);
+    if (context.isAborted) {
+      return;
+    }
 
     await for (final Event event in _execWithPlugin(
       invocationContext: context,
@@ -576,11 +604,13 @@ class Runner {
     required Content newMessage,
     required RunConfig runConfig,
     Map<String, Object?>? stateDelta,
+    AdkAbortSignal? abortSignal,
   }) async {
     final InvocationContext context = _newInvocationContext(
       session,
       newMessage: newMessage,
       runConfig: runConfig,
+      abortSignal: abortSignal,
     );
 
     await _handleNewMessage(
@@ -590,6 +620,9 @@ class Runner {
       runConfig: runConfig,
       stateDelta: stateDelta,
     );
+    if (context.isAborted) {
+      return context;
+    }
 
     context.agent = _findAgentToRun(context.session, agent);
     return context;
@@ -601,6 +634,7 @@ class Runner {
     required Content? newMessage,
     required RunConfig runConfig,
     Map<String, Object?>? stateDelta,
+    AdkAbortSignal? abortSignal,
   }) async {
     if (!resumabilityConfigOrDefault) {
       throw StateError(
@@ -626,6 +660,7 @@ class Runner {
       invocationId: invocationId,
       newMessage: userMessage,
       runConfig: runConfig,
+      abortSignal: abortSignal,
     );
 
     if (newMessage != null) {
@@ -636,6 +671,9 @@ class Runner {
         runConfig: runConfig,
         stateDelta: stateDelta,
       );
+      if (context.isAborted) {
+        return context;
+      }
     }
 
     context.populateInvocationAgentStates();
@@ -729,6 +767,7 @@ class Runner {
     Content? newMessage,
     LiveRequestQueue? liveRequestQueue,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) {
     return InvocationContext(
       artifactService: artifactService,
@@ -744,6 +783,7 @@ class Runner {
       runConfig: runConfig ?? RunConfig(),
       resumabilityConfig: resumabilityConfig,
       eventsCompactionConfig: app?.eventsCompactionConfig,
+      abortSignal: abortSignal,
       pluginManager: pluginManager,
     );
   }
@@ -755,11 +795,17 @@ class Runner {
     required RunConfig runConfig,
     Map<String, Object?>? stateDelta,
   }) async {
+    if (context.isAborted) {
+      return;
+    }
     final Content? modifiedMessage = await context.pluginManager
         .runOnUserMessageCallback(
           userMessage: newMessage,
           invocationContext: context,
         );
+    if (context.isAborted) {
+      return;
+    }
 
     final Content finalMessage = modifiedMessage ?? newMessage;
     context.userContent = finalMessage;
@@ -778,6 +824,9 @@ class Runner {
     required InvocationContext context,
     Map<String, Object?>? stateDelta,
   }) async {
+    if (context.isAborted) {
+      return;
+    }
     if (newMessage.parts.isEmpty) {
       throw ArgumentError('No parts in the newMessage.');
     }
@@ -813,8 +862,15 @@ class Runner {
     required Stream<Event> Function(InvocationContext context) execute,
     required bool isLiveCall,
   }) async* {
+    if (invocationContext.isAborted) {
+      return;
+    }
+
     final Content? earlyExit = await invocationContext.pluginManager
         .runBeforeRunCallback(invocationContext: invocationContext);
+    if (invocationContext.isAborted) {
+      return;
+    }
 
     if (earlyExit != null) {
       final Event event = Event(
@@ -825,8 +881,14 @@ class Runner {
         content: earlyExit,
       );
       _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
+      if (invocationContext.isAborted) {
+        return;
+      }
       if (_shouldAppendEvent(event, isLiveCall)) {
         await _appendEventWithPersistBarrier(invocationContext, event);
+      }
+      if (invocationContext.isAborted) {
+        return;
       }
       yield event;
     } else {
@@ -836,6 +898,9 @@ class Runner {
       bool isTranscribing = false;
 
       await for (final Event event in execute(invocationContext)) {
+        if (invocationContext.isAborted) {
+          return;
+        }
         event.isolationScope ??= invocationContext.isolationScope;
         _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
         final Event? modified = await invocationContext.pluginManager
@@ -843,6 +908,9 @@ class Runner {
               invocationContext: invocationContext,
               event: event,
             );
+        if (invocationContext.isAborted) {
+          return;
+        }
         final Event outputEvent = _buildOutputEvent(
           originalEvent: event,
           modifiedEvent: modified,
@@ -870,15 +938,24 @@ class Runner {
                   outputEvent,
                   barrierEventId: event.id,
                 );
+                if (invocationContext.isAborted) {
+                  return;
+                }
               }
 
               for (final buffered in bufferedEvents) {
+                if (invocationContext.isAborted) {
+                  return;
+                }
                 if (_shouldAppendEvent(buffered.event, isLiveCall)) {
                   await _appendEventWithPersistBarrier(
                     invocationContext,
                     buffered.event,
                     barrierEventId: buffered.barrierEventId,
                   );
+                  if (invocationContext.isAborted) {
+                    return;
+                  }
                 }
                 yield buffered.event;
               }
@@ -889,6 +966,9 @@ class Runner {
                 outputEvent,
                 barrierEventId: event.id,
               );
+              if (invocationContext.isAborted) {
+                return;
+              }
             }
           }
         } else if (event.partial != true &&
@@ -898,15 +978,27 @@ class Runner {
             outputEvent,
             barrierEventId: event.id,
           );
+          if (invocationContext.isAborted) {
+            return;
+          }
         }
 
+        if (invocationContext.isAborted) {
+          return;
+        }
         yield outputEvent;
       }
     }
 
+    if (invocationContext.isAborted) {
+      return;
+    }
     await invocationContext.pluginManager.runAfterRunCallback(
       invocationContext: invocationContext,
     );
+    if (invocationContext.isAborted) {
+      return;
+    }
   }
 
   Future<void> _appendEventWithPersistBarrier(
@@ -914,6 +1006,9 @@ class Runner {
     Event event, {
     String? barrierEventId,
   }) async {
+    if (context.isAborted) {
+      return;
+    }
     try {
       await sessionService.appendEvent(session: context.session, event: event);
       PersistBarrier.markPersisted(context, event.id);

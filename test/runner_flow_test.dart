@@ -55,6 +55,36 @@ class _EarlyExitPlugin extends BasePlugin {
   }
 }
 
+class _AbortUserMessagePlugin extends BasePlugin {
+  _AbortUserMessagePlugin(this.controller) : super(name: 'abort_user_message');
+
+  final AdkAbortController controller;
+
+  @override
+  Future<Content?> onUserMessageCallback({
+    required InvocationContext invocationContext,
+    required Content userMessage,
+  }) async {
+    controller.abort('stop before user append');
+    return null;
+  }
+}
+
+class _AbortOnEventPlugin extends BasePlugin {
+  _AbortOnEventPlugin(this.controller) : super(name: 'abort_on_event');
+
+  final AdkAbortController controller;
+
+  @override
+  Future<Event?> onEventCallback({
+    required InvocationContext invocationContext,
+    required Event event,
+  }) async {
+    controller.abort('stop before event append');
+    return null;
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) async {
   return stream.toList();
 }
@@ -476,6 +506,122 @@ void main() {
         expect(events.first.content?.parts.first.text, 'early exit');
         expect(plugin.afterRunCalls, 1);
         expect(model.requests, isEmpty);
+      },
+    );
+
+    test('runAsync stops before session mutation when pre-aborted', () async {
+      final MockModel model = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('unused')),
+        ],
+      );
+      final Agent agent = Agent(name: 'root_agent', model: model);
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_pre_aborted',
+      );
+      final AdkAbortController controller = AdkAbortController()
+        ..abort('already stopped');
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+          abortSignal: controller.signal,
+        ),
+      );
+
+      expect(events, isEmpty);
+      expect(model.requests, isEmpty);
+      final Session? reloaded = await runner.sessionService.getSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: session.id,
+      );
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events, isEmpty);
+    });
+
+    test('runAsync stops after user-message plugin aborts', () async {
+      final MockModel model = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('unused')),
+        ],
+      );
+      final Agent agent = Agent(name: 'root_agent', model: model);
+      final AdkAbortController controller = AdkAbortController();
+      final InMemoryRunner runner = InMemoryRunner(
+        agent: agent,
+        plugins: <BasePlugin>[_AbortUserMessagePlugin(controller)],
+      );
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_abort_user_message',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+          abortSignal: controller.signal,
+        ),
+      );
+
+      expect(events, isEmpty);
+      expect(model.requests, isEmpty);
+      final Session? reloaded = await runner.sessionService.getSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: session.id,
+      );
+      expect(reloaded, isNotNull);
+      expect(reloaded!.events, isEmpty);
+    });
+
+    test(
+      'runAsync stops after event plugin aborts before append/yield',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('should not persist')),
+          ],
+        );
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final AdkAbortController controller = AdkAbortController();
+        final InMemoryRunner runner = InMemoryRunner(
+          agent: agent,
+          plugins: <BasePlugin>[_AbortOnEventPlugin(controller)],
+        );
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: 'session_abort_on_event',
+        );
+
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content.userText('hi'),
+            abortSignal: controller.signal,
+          ),
+        );
+
+        expect(events, isEmpty);
+        expect(model.requests, hasLength(1));
+        final Session? reloaded = await runner.sessionService.getSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: session.id,
+        );
+        expect(reloaded, isNotNull);
+        expect(reloaded!.events, hasLength(1));
+        expect(reloaded.events.single.author, 'user');
       },
     );
 

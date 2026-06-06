@@ -363,13 +363,23 @@ class LlmAgent extends BaseAgent {
   /// Runs async LLM flow execution for this agent.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    if (context.isAborted) {
+      return;
+    }
+
     final BaseAgentState? agentState = loadAgentState(context);
 
     if (agentState != null) {
       final BaseAgent? agentToResume = _getSubagentToResume(context);
       if (agentToResume != null) {
         await for (final Event event in agentToResume.runAsync(context)) {
+          if (context.isAborted) {
+            return;
+          }
           yield event;
+        }
+        if (context.isAborted) {
+          return;
         }
         context.setAgentState(name, endOfAgent: true);
         yield createAgentStateEvent(context);
@@ -379,6 +389,9 @@ class LlmAgent extends BaseAgent {
 
     bool shouldPause = false;
     await for (final Event event in llmFlow.runAsync(context)) {
+      if (context.isAborted) {
+        return;
+      }
       _maybeSaveOutputToState(event);
       yield event;
       if (context.shouldPauseInvocation(event)) {
@@ -386,7 +399,7 @@ class LlmAgent extends BaseAgent {
       }
     }
 
-    if (shouldPause) {
+    if (shouldPause || context.isAborted) {
       return;
     }
 
@@ -410,6 +423,9 @@ class LlmAgent extends BaseAgent {
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
     await for (final Event event in llmFlow.runLive(context)) {
+      if (context.isAborted) {
+        return;
+      }
       _maybeSaveOutputToState(event);
       yield event;
     }

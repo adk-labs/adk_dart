@@ -7,6 +7,7 @@
 library;
 
 export 'src/agents/agent_state.dart';
+export 'src/agents/abort_signal.dart';
 export 'src/agents/base_agent.dart';
 export 'src/agents/callback_context.dart';
 export 'src/agents/context.dart';

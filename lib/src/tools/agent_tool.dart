@@ -161,11 +161,19 @@ class AgentTool extends BaseTool {
 
     Content? lastContent;
     Object? lastGroundingMetadata;
+    if (toolContext.abortSignal?.aborted == true) {
+      await runner.close();
+      return '';
+    }
     await for (final Event event in runner.runAsync(
       userId: session.userId,
       sessionId: session.id,
       newMessage: Content.userText(requestText),
+      abortSignal: toolContext.abortSignal,
     )) {
+      if (toolContext.abortSignal?.aborted == true) {
+        break;
+      }
       if (event.actions.stateDelta.isNotEmpty) {
         toolContext.state.addAll(event.actions.stateDelta);
       }
@@ -317,6 +325,10 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
   String? isolationScope,
 }) async {
   final InvocationContext parentContext = toolContext.invocationContext;
+  if (parentContext.isAborted) {
+    return _InlineAgentRunResult();
+  }
+
   final Object? nodeInput = _toolArgsToNodeInput(agent, args);
   final Content userContent = _nodeInputToContent(nodeInput);
   final InvocationContext childContext = parentContext.copyWith(
@@ -347,7 +359,14 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
   String? pendingFinishCallId;
 
   await for (final Event emitted in agent.runAsync(childContext)) {
-    final Event event = await _appendInlineEvent(childContext, emitted);
+    if (childContext.isAborted) {
+      return result;
+    }
+
+    final Event? event = await _appendInlineEvent(childContext, emitted);
+    if (event == null || childContext.isAborted) {
+      return result;
+    }
 
     if (event.actions.stateDelta.isNotEmpty) {
       toolContext.state.addAll(event.actions.stateDelta);
@@ -380,12 +399,21 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
   return result;
 }
 
-Future<Event> _appendInlineEvent(InvocationContext context, Event event) async {
+Future<Event?> _appendInlineEvent(
+  InvocationContext context,
+  Event event,
+) async {
+  if (context.isAborted) {
+    return null;
+  }
   event.isolationScope ??= context.isolationScope;
   final Event? modified = await context.pluginManager.runOnEventCallback(
     invocationContext: context,
     event: event,
   );
+  if (context.isAborted) {
+    return null;
+  }
   final Event outputEvent = _mergeModifiedEvent(event, modified);
   final Event persisted = await context.sessionService.appendEvent(
     session: context.session,

@@ -99,7 +99,7 @@ class LoopAgent extends BaseAgent {
   /// Runs sub-agents in repeated loops until completion or stop conditions.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
-    if (subAgents.isEmpty) {
+    if (context.isAborted || subAgents.isEmpty) {
       return;
     }
 
@@ -118,7 +118,13 @@ class LoopAgent extends BaseAgent {
 
     while ((_hasNoIterationLimit || timesLooped < maxIterations!) &&
         !(shouldExit || pauseInvocation)) {
+      if (context.isAborted) {
+        return;
+      }
       for (int index = startIndex; index < subAgents.length; index += 1) {
+        if (context.isAborted) {
+          return;
+        }
         final BaseAgent subAgent = subAgents[index];
 
         if (context.isResumable && !isResumingAtCurrentAgent) {
@@ -135,6 +141,9 @@ class LoopAgent extends BaseAgent {
         isResumingAtCurrentAgent = false;
 
         await for (final Event event in subAgent.runAsync(context)) {
+          if (context.isAborted) {
+            return;
+          }
           yield event;
           if (event.actions.escalate == true) {
             shouldExit = true;
@@ -144,7 +153,10 @@ class LoopAgent extends BaseAgent {
           }
         }
 
-        if (context.endInvocation || shouldExit || pauseInvocation) {
+        if (context.endInvocation ||
+            context.isAborted ||
+            shouldExit ||
+            pauseInvocation) {
           break;
         }
       }
@@ -154,7 +166,7 @@ class LoopAgent extends BaseAgent {
         timesLooped += 1;
         context.resetSubAgentStates(name);
 
-        if (context.endInvocation) {
+        if (context.endInvocation || context.isAborted) {
           return;
         }
       }

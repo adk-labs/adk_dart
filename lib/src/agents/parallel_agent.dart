@@ -60,7 +60,7 @@ class ParallelAgent extends BaseAgent {
   /// Runs sub-agents concurrently and merges their emitted events.
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
-    if (subAgents.isEmpty) {
+    if (context.isAborted || subAgents.isEmpty) {
       return;
     }
 
@@ -96,6 +96,9 @@ class ParallelAgent extends BaseAgent {
 
     try {
       while (running.isNotEmpty) {
+        if (context.isAborted) {
+          return;
+        }
         final _ParallelResult result = await Future.any<_ParallelResult>(
           running.values
               .map((_PendingSubAgentRun run) => run.pending)
@@ -113,6 +116,9 @@ class ParallelAgent extends BaseAgent {
         }
 
         final Event event = result.event!;
+        if (context.isAborted) {
+          return;
+        }
         _syncSubAgentStateFromEvent(context, event);
         yield event;
         if (context.shouldPauseInvocation(event)) {

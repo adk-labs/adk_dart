@@ -39,6 +39,7 @@ class _StubRunner extends Runner {
     Content? newMessage,
     Map<String, Object?>? stateDelta,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) {
     lastUserId = userId;
     lastSessionId = sessionId;

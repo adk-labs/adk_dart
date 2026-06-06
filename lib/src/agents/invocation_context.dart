@@ -12,6 +12,7 @@ import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_tool.dart';
 import '../types/content.dart';
+import 'abort_signal.dart';
 import 'agent_state.dart';
 import 'active_streaming_tool.dart';
 import 'base_agent.dart';
@@ -59,6 +60,7 @@ class InvocationContext {
     this.runConfig,
     this.resumabilityConfig,
     this.eventsCompactionConfig,
+    this.abortSignal,
     this.tokenCompactionChecked = false,
     PluginManager? pluginManager,
     this.canonicalToolsCache,
@@ -141,6 +143,12 @@ class InvocationContext {
 
   /// Event compaction settings for this invocation.
   EventsCompactionConfig? eventsCompactionConfig;
+
+  /// Cooperative cancellation signal for this invocation.
+  AdkAbortSignal? abortSignal;
+
+  /// Whether this invocation has been cancelled.
+  bool get isAborted => abortSignal?.aborted ?? false;
 
   /// Whether token compaction checks already ran.
   bool tokenCompactionChecked;
@@ -510,6 +518,7 @@ class InvocationContext {
     Content? userContent,
     String? invocationId,
     RunConfig? runConfig,
+    AdkAbortSignal? abortSignal,
   }) {
     return InvocationContext(
       artifactService: artifactService,
@@ -551,6 +560,7 @@ class InvocationContext {
       runConfig: runConfig ?? this.runConfig?.copyWith(),
       resumabilityConfig: resumabilityConfig,
       eventsCompactionConfig: eventsCompactionConfig,
+      abortSignal: abortSignal ?? this.abortSignal,
       tokenCompactionChecked: tokenCompactionChecked,
       pluginManager: pluginManager,
       canonicalToolsCache: canonicalToolsCache == null
