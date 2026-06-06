@@ -167,6 +167,7 @@ class WorkflowContext {
 
   bool _hasDirectOutput = false;
   Object? _directOutput;
+  bool _outputDelegated = false;
   final Map<String, int> _childRunCounters = <String, int>{};
 
   /// ADK invocation context when running as an agent.
@@ -225,11 +226,15 @@ class WorkflowContext {
   /// When [runId] is omitted, a per-caller numeric ID is generated from the
   /// child node name. Explicit run IDs must contain at least one non-numeric
   /// character to avoid collisions with auto-generated numeric run IDs.
+  ///
+  /// When [useAsOutput] is true, the dynamic child output is treated as the
+  /// caller's delegated output and the caller's own output is suppressed.
   Future<Object?> runNode(
     Object nodeLike, {
     Object? input,
     String? name,
     String? runId,
+    bool useAsOutput = false,
     String description = '',
     bool? rerunOnResume,
     bool? waitForOutput,
@@ -251,6 +256,12 @@ class WorkflowContext {
         'runId',
         'Explicit dynamic workflow run IDs must contain non-numeric characters.',
       );
+    }
+    if (useAsOutput) {
+      if (_outputDelegated) {
+        throw StateError('Workflow node already has a delegated output.');
+      }
+      _outputDelegated = true;
     }
     final String effectiveRunId = runId ?? _nextDynamicRunId(node.name);
     final String stateKey = '${node.name}@$effectiveRunId';
@@ -1039,7 +1050,9 @@ Future<Object?> _runNodeWithRetry({
         );
       }
       final Object? output = await future;
-      if (_hasReturnedWorkflowOutput(output) && context._hasDirectOutput) {
+      if (_hasReturnedWorkflowOutput(output) &&
+          context._hasDirectOutput &&
+          !context._outputDelegated) {
         throw StateError(
           'Workflow node `${node.name}` produced both a return output and '
           'ctx.output.',
@@ -1115,12 +1128,17 @@ _NodeRunResult _resultFromRawNodeOutput(
   WorkflowContext? context,
   String? name,
 }) {
-  final Object? workflowOutput = context?._hasDirectOutput == true
+  final bool outputDelegated = context?._outputDelegated == true;
+  final Object? workflowOutput = outputDelegated
+      ? null
+      : context?._hasDirectOutput == true
       ? context!._directOutput
       : _workflowOutputFromRaw(rawOutput);
   final Object? route = _routeFromOutput(rawOutput) ?? context?.route;
   final bool hasOutput =
-      context?._hasDirectOutput == true || _hasWorkflowOutput(rawOutput);
+      outputDelegated ||
+      context?._hasDirectOutput == true ||
+      _hasWorkflowOutput(rawOutput);
   return _NodeRunResult(
     name: name ?? node.name,
     output: workflowOutput,

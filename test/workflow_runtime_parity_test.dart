@@ -1020,6 +1020,56 @@ void main() {
       },
     );
 
+    test('suppresses parent output for dynamic useAsOutput children', () async {
+      int childRuns = 0;
+      final FunctionNode child = node(
+        (WorkflowContext context, Object? _) {
+          childRuns += 1;
+          final Object? resumeInput = context.resumeInputs['delegated_fc'];
+          if (resumeInput != null) {
+            return 'child:${resumeInput as String}';
+          }
+          return RequestInput(interruptId: 'delegated_fc', message: 'Approve?');
+        },
+        name: 'delegated_child',
+        rerunOnResume: true,
+      );
+      final Workflow workflow = Workflow(
+        name: 'dynamic_use_as_output_graph',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext context, Object? _) async {
+              final Object? result = await context.runNode(
+                child,
+                useAsOutput: true,
+              );
+              if (result is RequestInput) {
+                return result;
+              }
+              context.output = result;
+              return null;
+            },
+            name: 'parent',
+            rerunOnResume: true,
+          ),
+        ],
+      );
+
+      final WorkflowResult first = await workflow.runWorkflow();
+      expect(first.nodeStates['parent']?.status, NodeStatus.waiting);
+      expect(first.nodeStates['delegated_child@1']?.status, NodeStatus.waiting);
+
+      final WorkflowResult second = await workflow.runWorkflow(
+        previousResult: first,
+        resumeInputs: <String, Object?>{'delegated_fc': 'approved'},
+      );
+
+      expect(childRuns, 2);
+      expect(second.outputs['delegated_child@1'], 'child:approved');
+      expect(second.outputs['parent'], isNull);
+      expect(second.nodeStates['parent']?.status, NodeStatus.completed);
+    });
+
     test('retries failed nodes', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(
