@@ -688,6 +688,75 @@ void main() {
       expect(result.outputs['always'], 'always');
     });
 
+    test('rejects duplicate workflow edges regardless of route', () {
+      final FunctionNode target = node(
+        (WorkflowContext _, Object? _) => 'target',
+        name: 'target',
+      );
+
+      expect(
+        () => Workflow(
+          name: 'duplicate_edges',
+          nodes: <BaseNode>[target],
+          edges: <Edge>[
+            Edge(fromNode: START, toNode: target),
+            Edge(fromNode: START, toNode: target, route: 'fallback'),
+          ],
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message,
+            'message',
+            allOf(
+              contains('Duplicate edge found'),
+              contains('from=START, to=target'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('rejects multiple DEFAULT_ROUTE edges from one source', () {
+      final FunctionNode router = node(
+        (WorkflowContext _, Object? _) => null,
+        name: 'router',
+      );
+      final FunctionNode firstFallback = node(
+        (WorkflowContext _, Object? _) => 'first',
+        name: 'first_fallback',
+      );
+      final FunctionNode secondFallback = node(
+        (WorkflowContext _, Object? _) => 'second',
+        name: 'second_fallback',
+      );
+
+      expect(
+        () => Workflow(
+          name: 'multiple_default_routes',
+          nodes: <BaseNode>[router, firstFallback, secondFallback],
+          edges: <Edge>[
+            Edge(fromNode: START, toNode: router),
+            Edge(fromNode: router, toNode: firstFallback, route: DEFAULT_ROUTE),
+            Edge(
+              fromNode: router,
+              toNode: secondFallback,
+              route: DEFAULT_ROUTE,
+            ),
+          ],
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message,
+            'message',
+            allOf(
+              contains('Multiple DEFAULT_ROUTE edges'),
+              contains('node router to first_fallback and second_fallback'),
+            ),
+          ),
+        ),
+      );
+    });
+
     test('uses direct ctx.output as node output', () async {
       final Workflow workflow = Workflow(
         name: 'direct_output_graph',

@@ -796,7 +796,7 @@ class Workflow extends BaseAgent {
        edges = List<Edge>.unmodifiable(edges),
        super(subAgents: const <BaseAgent>[]) {
     _validateNoStaticTaskModeNodes(this.nodes);
-    _validateNoChatModeAgentAfterNode(this.nodes, this.edges);
+    _validateStaticGraphEdges(this.nodes, this.edges);
   }
 
   /// Nodes in this workflow.
@@ -1207,15 +1207,46 @@ LlmAgent? _taskModeAgentInStaticNode(BaseNode node) {
   return null;
 }
 
-void _validateNoChatModeAgentAfterNode(
-  Iterable<BaseNode> nodes,
-  Iterable<Edge> edges,
-) {
+void _validateStaticGraphEdges(Iterable<BaseNode> nodes, Iterable<Edge> edges) {
   final Map<String, BaseNode> byName = <String, BaseNode>{
     for (final BaseNode node in nodes) node.name: node,
   };
+  _validateNoDuplicateEdges(edges);
+  _validateDefaultRoutes(edges);
   for (final Edge edge in edges) {
     _validateChatModeEdge(edge, byName);
+  }
+}
+
+void _validateNoDuplicateEdges(Iterable<Edge> edges) {
+  final Set<String> seen = <String>{};
+  for (final Edge edge in edges) {
+    final String key = '${edge.fromNode}\u0000${edge.toNode}';
+    if (seen.add(key)) {
+      continue;
+    }
+    throw ArgumentError(
+      'Graph validation failed. Duplicate edge found: '
+      'from=${edge.fromNode}, to=${edge.toNode}',
+    );
+  }
+}
+
+void _validateDefaultRoutes(Iterable<Edge> edges) {
+  final Map<String, String> defaultRouteTargets = <String, String>{};
+  for (final Edge edge in edges) {
+    if (edge.route != DEFAULT_ROUTE) {
+      continue;
+    }
+    final String? previousTarget = defaultRouteTargets[edge.fromNode];
+    if (previousTarget == null) {
+      defaultRouteTargets[edge.fromNode] = edge.toNode;
+      continue;
+    }
+    throw ArgumentError(
+      'Graph validation failed. Multiple DEFAULT_ROUTE edges found from '
+      'node ${edge.fromNode} to $previousTarget and ${edge.toNode}',
+    );
   }
 }
 
