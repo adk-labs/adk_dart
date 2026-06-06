@@ -1068,6 +1068,11 @@ class Workflow extends BaseAgent {
         active: active,
         concurrencyLimit: concurrencyLimit,
       );
+      _validateSingleTerminalOutput(
+        context,
+        _terminalNodeNames(dependencies),
+        workflowName: name,
+      );
       return;
     }
 
@@ -1118,6 +1123,11 @@ class Workflow extends BaseAgent {
         }
       }
     }
+    _validateSingleTerminalOutput(
+      context,
+      _terminalNodeNames(dependencies),
+      workflowName: name,
+    );
   }
 
   Future<void> _executeWithConcurrencyLimit({
@@ -1270,6 +1280,22 @@ class Workflow extends BaseAgent {
       for (final BaseNode node in byName.values)
         if (!targets.contains(node.name) || startTargets.contains(node.name))
           node.name,
+    };
+  }
+
+  Set<String> _terminalNodeNames(Map<String, Set<String>> dependencies) {
+    final Set<String> nonTerminal = <String>{};
+    for (final Edge edge in edges) {
+      if (edge.fromNode != START) {
+        nonTerminal.add(edge.fromNode);
+      }
+    }
+    for (final Set<String> nodeDependencies in dependencies.values) {
+      nonTerminal.addAll(nodeDependencies);
+    }
+    return <String>{
+      for (final BaseNode node in nodes)
+        if (!nonTerminal.contains(node.name)) node.name,
     };
   }
 
@@ -1815,6 +1841,25 @@ void _markTerminalOutputOwner(WorkflowContext context, String nodeName) {
       _addOutputOwner(childState.outputFor, _workflowOutputOwner);
     }
   }
+}
+
+void _validateSingleTerminalOutput(
+  WorkflowContext context,
+  Set<String> terminalNodeNames, {
+  required String workflowName,
+}) {
+  final List<String> terminalOutputs = <String>[
+    for (final String nodeName in terminalNodeNames)
+      if (context.outputs.containsKey(nodeName)) nodeName,
+  ];
+  if (terminalOutputs.length <= 1) {
+    return;
+  }
+  throw StateError(
+    'Workflow $workflowName: multiple terminal nodes produced output '
+    '(${terminalOutputs.length}). A workflow must have at most one terminal '
+    'output.',
+  );
 }
 
 void _addOutputOwner(List<String> outputFor, String owner) {

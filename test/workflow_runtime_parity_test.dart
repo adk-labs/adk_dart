@@ -114,7 +114,13 @@ void main() {
       final Workflow workflow = Workflow(
         name: 'limited_concurrency',
         maxConcurrency: 2,
-        nodes: <BaseNode>[for (int i = 0; i < 4; i += 1) worker('node_$i')],
+        nodes: <BaseNode>[
+          for (int i = 0; i < 4; i += 1) worker('node_$i'),
+          JoinNode(
+            name: 'join',
+            dependsOn: <String>[for (int i = 0; i < 4; i += 1) 'node_$i'],
+          ),
+        ],
       );
 
       final Future<WorkflowResult> resultFuture = workflow.runWorkflow();
@@ -135,6 +141,9 @@ void main() {
       for (int i = 0; i < 4; i += 1) {
         expect(result.outputs['node_$i'], 'node_$i done');
       }
+      expect(result.outputs['join'], <String, Object?>{
+        for (int i = 0; i < 4; i += 1) 'node_$i': 'node_$i done',
+      });
     });
 
     test('parallel worker processes list input in original order', () async {
@@ -728,6 +737,34 @@ void main() {
       expect(events.last.content?.parts.single.text, 'consumed:leaf-data');
     });
 
+    test('rejects nested workflow with multiple terminal outputs', () async {
+      final Workflow inner = Workflow(
+        name: 'inner_multiple_terminal_outputs',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => 'first', name: 'first_leaf'),
+          node((WorkflowContext _, Object? _) => 'second', name: 'second_leaf'),
+        ],
+      );
+      final Workflow outer = Workflow(
+        name: 'outer_multiple_terminal_outputs',
+        nodes: <BaseNode>[AgentNode(agent: inner)],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'inner_multiple_terminal_outputs'),
+        ],
+      );
+
+      await expectLater(
+        outer.runWorkflow(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('multiple terminal nodes'),
+          ),
+        ),
+      );
+    });
+
     test(
       'merges nested workflow state deltas before downstream nodes',
       () async {
@@ -1084,6 +1121,44 @@ void main() {
       expect(result.nodeStates['route_c_node'], isNull);
     });
 
+    test('rejects routed fan-out to multiple terminal outputs', () async {
+      final FunctionNode router = node((WorkflowContext _, Object? _) {
+        return Event(
+          invocationId: 'inv_route_fan_out',
+          author: 'router',
+          output: 'A',
+          actions: EventActions(route: 'fan_out'),
+        );
+      }, name: 'router');
+      final FunctionNode first = node(
+        (WorkflowContext _, Object? input) => 'first:$input',
+        name: 'first_terminal',
+      );
+      final FunctionNode second = node(
+        (WorkflowContext _, Object? input) => 'second:$input',
+        name: 'second_terminal',
+      );
+      final Workflow workflow = Workflow(
+        name: 'routed_multiple_terminal_outputs',
+        nodes: <BaseNode>[router, first, second],
+        edges: <Edge>[
+          Edge(fromNode: router, toNode: first, route: 'fan_out'),
+          Edge(fromNode: router, toNode: second, route: 'fan_out'),
+        ],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            contains('multiple terminal nodes'),
+          ),
+        ),
+      );
+    });
+
     test('routes default and untagged workflow edges', () async {
       final FunctionNode router = node((WorkflowContext _, Object? _) {
         return Event(
@@ -1104,9 +1179,13 @@ void main() {
         (WorkflowContext _, Object? _) => 'always',
         name: 'always',
       );
+      final JoinNode join = JoinNode(
+        name: 'join',
+        dependsOn: const <String>['fallback', 'always'],
+      );
       final Workflow workflow = Workflow(
         name: 'default_routed_graph',
-        nodes: <BaseNode>[router, specific, fallback, always],
+        nodes: <BaseNode>[router, specific, fallback, always, join],
         edges: <Edge>[
           Edge(fromNode: router, toNode: specific, route: 'route_b'),
           Edge(fromNode: router, toNode: fallback, route: DEFAULT_ROUTE),
@@ -1121,6 +1200,10 @@ void main() {
       expect(result.outputs['router'], isNull);
       expect(result.outputs['fallback'], 'fallback');
       expect(result.outputs['always'], 'always');
+      expect(result.outputs['join'], <String, Object?>{
+        'fallback': 'fallback',
+        'always': 'always',
+      });
     });
 
     test('rejects duplicate workflow edges regardless of route', () {
@@ -1328,6 +1411,30 @@ void main() {
       expect(result.outputs.containsKey('after_manual_hitl'), isFalse);
     });
 
+    test(
+      'rejects parallel root nodes with multiple terminal outputs',
+      () async {
+        final Workflow workflow = Workflow(
+          name: 'parallel_multiple_terminal_outputs',
+          nodes: <BaseNode>[
+            node((WorkflowContext _, Object? _) => 'a', name: 'a'),
+            node((WorkflowContext _, Object? _) => 'b', name: 'b'),
+          ],
+        );
+
+        await expectLater(
+          workflow.runWorkflow(),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) => error.message,
+              'message',
+              contains('multiple terminal nodes'),
+            ),
+          ),
+        );
+      },
+    );
+
     test('isolates direct ctx.output for parallel nodes', () async {
       final Workflow workflow = Workflow(
         name: 'parallel_direct_output_graph',
@@ -1340,6 +1447,7 @@ void main() {
             context.output = 'b';
             return null;
           }, name: 'b'),
+          JoinNode(name: 'join', dependsOn: const <String>['a', 'b']),
         ],
       );
 
@@ -1347,6 +1455,7 @@ void main() {
 
       expect(result.outputs['a'], 'a');
       expect(result.outputs['b'], 'b');
+      expect(result.outputs['join'], <String, Object?>{'a': 'a', 'b': 'b'});
     });
 
     test('runs dynamic child nodes via WorkflowContext.runNode', () async {
