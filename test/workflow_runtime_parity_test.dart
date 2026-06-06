@@ -255,6 +255,163 @@ void main() {
       expect(result.outputs['always'], 'always');
     });
 
+    test('uses direct ctx.output as node output', () async {
+      final Workflow workflow = Workflow(
+        name: 'direct_output_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? input) {
+            context.output = '$input-direct';
+            return null;
+          }, name: 'writer'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow(input: 'start');
+
+      expect(result.outputs['writer'], 'start-direct');
+      expect(result.nodeStates['writer']?.status, NodeStatus.completed);
+    });
+
+    test('routes direct ctx.route values', () async {
+      final Workflow workflow = Workflow(
+        name: 'direct_route_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) {
+            context.route = 'approved';
+            return null;
+          }, name: 'router'),
+          node(
+            (WorkflowContext _, Object? input) => 'next:$input',
+            name: 'approved_node',
+          ),
+          node(
+            (WorkflowContext _, Object? _) => 'blocked',
+            name: 'blocked_node',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: 'router', toNode: 'approved_node', route: 'approved'),
+          Edge(fromNode: 'router', toNode: 'blocked_node', route: 'blocked'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['router'], isNull);
+      expect(result.outputs['approved_node'], 'next:null');
+      expect(result.outputs.containsKey('blocked_node'), isFalse);
+    });
+
+    test('combines direct ctx.output with returned route event', () async {
+      final Workflow workflow = Workflow(
+        name: 'direct_output_route_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) {
+            context.output = 'payload';
+            return Event(
+              invocationId: 'invocation',
+              author: 'router',
+              actions: EventActions(route: 'approved'),
+            );
+          }, name: 'router'),
+          node(
+            (WorkflowContext _, Object? input) => 'next:$input',
+            name: 'approved_node',
+          ),
+          node(
+            (WorkflowContext _, Object? _) => 'blocked',
+            name: 'blocked_node',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: 'router', toNode: 'approved_node', route: 'approved'),
+          Edge(fromNode: 'router', toNode: 'blocked_node', route: 'blocked'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['router'], 'payload');
+      expect(result.outputs['approved_node'], 'next:payload');
+      expect(result.outputs.containsKey('blocked_node'), isFalse);
+    });
+
+    test('treats direct ctx.output null as no output', () async {
+      final Workflow workflow = Workflow(
+        name: 'direct_null_output_graph',
+        nodes: <BaseNode>[
+          FunctionNode(
+            name: 'needs_output',
+            waitForOutput: true,
+            function: (WorkflowContext context, Object? _) {
+              context.output = null;
+              return null;
+            },
+          ),
+          node(
+            (WorkflowContext _, Object? _) => 'should not run',
+            name: 'after_needs_output',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: 'needs_output', toNode: 'after_needs_output'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.nodeStates['needs_output']?.status, NodeStatus.waiting);
+      expect(result.outputs.containsKey('needs_output'), isFalse);
+      expect(result.outputs.containsKey('after_needs_output'), isFalse);
+    });
+
+    test('keeps direct interrupt nodes waiting', () async {
+      final Workflow workflow = Workflow(
+        name: 'direct_interrupt_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) {
+            context.interruptIds.add('manual_interrupt');
+            return null;
+          }, name: 'manual_hitl'),
+          node(
+            (WorkflowContext _, Object? _) => 'should not run',
+            name: 'after_manual_hitl',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: 'manual_hitl', toNode: 'after_manual_hitl'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+      final NodeState state = result.nodeStates['manual_hitl']!;
+
+      expect(state.status, NodeStatus.waiting);
+      expect(state.interrupts, <String>['manual_interrupt']);
+      expect(result.outputs.containsKey('after_manual_hitl'), isFalse);
+    });
+
+    test('isolates direct ctx.output for parallel nodes', () async {
+      final Workflow workflow = Workflow(
+        name: 'parallel_direct_output_graph',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) {
+            context.output = 'a';
+            return null;
+          }, name: 'a'),
+          node((WorkflowContext context, Object? _) {
+            context.output = 'b';
+            return null;
+          }, name: 'b'),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow();
+
+      expect(result.outputs['a'], 'a');
+      expect(result.outputs['b'], 'b');
+    });
+
     test('runs dynamic child nodes via WorkflowContext.runNode', () async {
       int attempts = 0;
       final Workflow workflow = Workflow(

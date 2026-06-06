@@ -159,7 +159,8 @@ class WorkflowContext {
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{};
 
-  Future<Object?> Function(BaseNode node, Object? nodeInput)? _nodeScheduler;
+  bool _hasDirectOutput = false;
+  Object? _directOutput;
 
   /// ADK invocation context when running as an agent.
   final InvocationContext? invocationContext;
@@ -172,6 +173,32 @@ class WorkflowContext {
 
   /// Node states keyed by node name.
   final Map<String, NodeState> nodeStates;
+
+  /// Route emitted directly by the current node.
+  Object? route;
+
+  /// Interrupt identifiers emitted directly by the current node.
+  final Set<String> interruptIds = <String>{};
+
+  /// Output emitted directly by the current node.
+  Object? get output => _directOutput;
+
+  /// Sets direct output for the current node.
+  ///
+  /// A node may set a non-null output once. Setting output more than once, or
+  /// setting it while also returning an output value, is treated as a workflow
+  /// authoring error. A null value is treated as no output.
+  set output(Object? value) {
+    if (_hasDirectOutput) {
+      throw StateError('Workflow node output is already set.');
+    }
+    if (value == null) {
+      _directOutput = null;
+      return;
+    }
+    _hasDirectOutput = true;
+    _directOutput = value;
+  }
 
   /// Reads an output by node [name].
   Object? outputOf(String name) => outputs[name];
@@ -201,12 +228,28 @@ class WorkflowContext {
       retryConfig: retryConfig,
       timeout: timeout,
     );
-    final Object? rawOutput = await (_nodeScheduler == null
-        ? _runNodeWithRetry(context: this, node: node, nodeInput: input)
-        : _nodeScheduler!(node, input));
-    final _NodeRunResult result = _resultFromRawNodeOutput(node, rawOutput);
+    final WorkflowContext childContext = _childExecutionContext();
+    final Object? rawOutput = await _runNodeWithRetry(
+      context: childContext,
+      node: node,
+      nodeInput: input,
+    );
+    final _NodeRunResult result = _resultFromRawNodeOutput(
+      node,
+      rawOutput,
+      context: childContext,
+    );
     _recordNodeResult(this, result);
     return result.output;
+  }
+
+  WorkflowContext _childExecutionContext() {
+    return WorkflowContext(
+      invocationContext: invocationContext,
+      input: input,
+      outputs: outputs,
+      nodeStates: nodeStates,
+    );
   }
 }
 
@@ -546,13 +589,6 @@ class Workflow extends BaseAgent {
   }
 
   Future<void> _execute(WorkflowContext context) async {
-    context._nodeScheduler ??= (BaseNode node, Object? nodeInput) {
-      return _runNodeWithRetry(
-        context: context,
-        node: node,
-        nodeInput: nodeInput,
-      );
-    };
     final Map<String, BaseNode> byName = <String, BaseNode>{
       for (final BaseNode node in nodes) node.name: node,
     };
@@ -586,12 +622,13 @@ class Workflow extends BaseAgent {
             context: context,
             dependencies: dependencies[name]!,
           );
+          final WorkflowContext nodeContext = context._childExecutionContext();
           final Object? output = await _runNodeWithRetry(
-            context: context,
+            context: nodeContext,
             node: node,
             nodeInput: nodeInput,
           );
-          return _resultFromRawNodeOutput(node, output);
+          return _resultFromRawNodeOutput(node, output, context: nodeContext);
         }),
       );
 
@@ -783,6 +820,18 @@ Future<Object?> _runNodeWithRetry({
         );
       }
       final Object? output = await future;
+      if (_hasReturnedWorkflowOutput(output) && context._hasDirectOutput) {
+        throw StateError(
+          'Workflow node `${node.name}` produced both a return output and '
+          'ctx.output.',
+        );
+      }
+      if (_routeFromOutput(output) != null && context.route != null) {
+        throw StateError(
+          'Workflow node `${node.name}` produced both a return route and '
+          'ctx.route.',
+        );
+      }
       state.status = NodeStatus.completed;
       state.error = null;
       return output;
@@ -841,15 +890,26 @@ Duration _retryDelay(RetryConfig retry, int attempt) {
   return Duration(milliseconds: delayMs);
 }
 
-_NodeRunResult _resultFromRawNodeOutput(BaseNode node, Object? rawOutput) {
-  final Object? workflowOutput = _workflowOutputFromRaw(rawOutput);
-  final Object? route = _routeFromOutput(rawOutput);
+_NodeRunResult _resultFromRawNodeOutput(
+  BaseNode node,
+  Object? rawOutput, {
+  WorkflowContext? context,
+}) {
+  final Object? workflowOutput = context?._hasDirectOutput == true
+      ? context!._directOutput
+      : _workflowOutputFromRaw(rawOutput);
+  final Object? route = _routeFromOutput(rawOutput) ?? context?.route;
+  final bool hasOutput =
+      context?._hasDirectOutput == true || _hasWorkflowOutput(rawOutput);
   return _NodeRunResult(
     name: node.name,
     output: workflowOutput,
     route: route,
-    interruptIds: _interruptIdsFromOutput(rawOutput),
-    waiting: node.waitForOutput && workflowOutput == null && route == null,
+    interruptIds: <String>{
+      ..._interruptIdsFromOutput(rawOutput),
+      ...?context?.interruptIds,
+    },
+    waiting: node.waitForOutput && !hasOutput && route == null,
   );
 }
 
@@ -970,6 +1030,21 @@ Object? _workflowOutputFromRaw(Object? output) {
     }
   }
   return output;
+}
+
+bool _hasWorkflowOutput(Object? output) {
+  if (output is Event) {
+    return output.hasOutput || output.content != null;
+  }
+  return output != null;
+}
+
+bool _hasReturnedWorkflowOutput(Object? output) {
+  if (output is Event) {
+    return output.hasOutput ||
+        (output.nodeInfo.messageAsOutput == true && output.content != null);
+  }
+  return output != null;
 }
 
 Set<String> _interruptIdsFromOutput(Object? output) {
