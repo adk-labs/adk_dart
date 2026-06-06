@@ -188,9 +188,13 @@ class WorkflowContext {
     Map<String, Object?>? outputs,
     Map<String, NodeState>? nodeStates,
     Map<String, Object?>? resumeInputs,
+    Map<String, List<Event>>? nodeEvents,
+    Map<String, Event>? nodeOutputEvents,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
        resumeInputs = resumeInputs ?? <String, Object?>{},
+       _nodeEvents = nodeEvents ?? <String, List<Event>>{},
+       _nodeOutputEvents = nodeOutputEvents ?? <String, Event>{},
        _cancellation = _WorkflowCancelToken();
 
   WorkflowContext._({
@@ -200,9 +204,13 @@ class WorkflowContext {
     Map<String, Object?>? outputs,
     Map<String, NodeState>? nodeStates,
     Map<String, Object?>? resumeInputs,
+    Map<String, List<Event>>? nodeEvents,
+    Map<String, Event>? nodeOutputEvents,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
        resumeInputs = resumeInputs ?? <String, Object?>{},
+       _nodeEvents = nodeEvents ?? <String, List<Event>>{},
+       _nodeOutputEvents = nodeOutputEvents ?? <String, Event>{},
        _cancellation = cancellation;
 
   bool _hasDirectOutput = false;
@@ -211,6 +219,8 @@ class WorkflowContext {
   final Map<String, int> _childRunCounters = <String, int>{};
   String? _currentNodeKey;
   bool? _currentNodeRerunOnResume;
+  final Map<String, List<Event>> _nodeEvents;
+  final Map<String, Event> _nodeOutputEvents;
   final _WorkflowCancelToken _cancellation;
 
   /// ADK invocation context when running as an agent.
@@ -436,6 +446,8 @@ class WorkflowContext {
       outputs: outputs,
       nodeStates: nodeStates,
       resumeInputs: resumeInputs ?? this.resumeInputs,
+      nodeEvents: _nodeEvents,
+      nodeOutputEvents: _nodeOutputEvents,
     );
   }
 
@@ -832,18 +844,40 @@ class AgentNode extends BaseNode {
       agent: agent,
       userContent: userContent,
     );
+    final String? nodeKey = context._currentNodeKey;
+    final bool collectNestedWorkflowEvents =
+        agent is Workflow &&
+        nodeKey != null &&
+        context.invocationContext != null;
+    final String? ownerPath = collectNestedWorkflowEvents
+        ? _nodePathForOutputKey(parentContext, nodeKey)
+        : null;
+    final List<Event> nestedEvents = <Event>[];
 
     Event? finalEvent;
     await for (final Event event in agent.runAsync(agentContext)) {
+      _mergeStateDelta(agentContext.session, event.actions.stateDelta);
       if (event.isFinalResponse()) {
         finalEvent = event;
       }
+      if (collectNestedWorkflowEvents) {
+        nestedEvents.add(
+          _rewriteNestedWorkflowEvent(
+            event,
+            nestedWorkflow: agent as Workflow,
+            ownerPath: ownerPath!,
+          ),
+        );
+      }
+    }
+
+    if (collectNestedWorkflowEvents && nestedEvents.isNotEmpty) {
+      context._nodeEvents[nodeKey] = nestedEvents;
     }
 
     if (finalEvent == null) {
       return null;
     }
-    _mergeStateDelta(agentContext.session, finalEvent.actions.stateDelta);
     return _outputFromAgentEvent(finalEvent);
   }
 }
@@ -962,13 +996,22 @@ class Workflow extends BaseAgent {
     await _execute(workflowContext);
     for (final MapEntry<String, Object?> entry
         in workflowContext.outputs.entries) {
+      final List<Event>? nodeEvents = workflowContext._nodeEvents[entry.key];
+      if (nodeEvents != null) {
+        for (final Event event in nodeEvents) {
+          yield event;
+        }
+        continue;
+      }
       if (_isPreviouslyCompletedOutput(previousResult, entry.key)) {
         continue;
       }
+      final Object? eventOutput =
+          workflowContext._nodeOutputEvents[entry.key] ?? entry.value;
       final Event? event = _eventFromOutput(
         context,
         entry.key,
-        entry.value,
+        eventOutput,
         state: workflowContext.nodeStates[entry.key],
       );
       if (event != null) {
@@ -1360,6 +1403,58 @@ bool _isPreviouslyCompletedOutput(WorkflowResult? previousResult, String key) {
   return previousState != null && _isCompletedNodeState(previousState);
 }
 
+Event _rewriteNestedWorkflowEvent(
+  Event event, {
+  required Workflow nestedWorkflow,
+  required String ownerPath,
+}) {
+  final String nestedRootPath = _workflowRootPath(nestedWorkflow);
+  return event.copyWith(
+    nodeInfo: _rewriteNestedWorkflowNodeInfo(
+      event.nodeInfo,
+      nestedRootPath: nestedRootPath,
+      ownerPath: ownerPath,
+    ),
+  );
+}
+
+NodeInfo _rewriteNestedWorkflowNodeInfo(
+  NodeInfo nodeInfo, {
+  required String nestedRootPath,
+  required String ownerPath,
+}) {
+  return nodeInfo.copyWith(
+    path: _rewriteNestedWorkflowPath(
+      nodeInfo.path,
+      nestedRootPath: nestedRootPath,
+      ownerPath: ownerPath,
+    ),
+    outputFor: nodeInfo.outputFor
+        ?.map(
+          (String path) => _rewriteNestedWorkflowPath(
+            path,
+            nestedRootPath: nestedRootPath,
+            ownerPath: ownerPath,
+          ),
+        )
+        .toList(growable: false),
+  );
+}
+
+String _rewriteNestedWorkflowPath(
+  String path, {
+  required String nestedRootPath,
+  required String ownerPath,
+}) {
+  if (path == nestedRootPath) {
+    return ownerPath;
+  }
+  if (path.startsWith('$nestedRootPath/')) {
+    return '$ownerPath/${path.substring(nestedRootPath.length + 1)}';
+  }
+  return path;
+}
+
 void _validateNoStaticTaskModeNodes(Iterable<BaseNode> nodes) {
   for (final BaseNode node in nodes) {
     final LlmAgent? agent = _taskModeAgentInStaticNode(node);
@@ -1462,13 +1557,18 @@ class _NodeRunResult {
     required this.name,
     required this.output,
     this.route,
+    Map<String, Object?>? stateDelta,
+    this.eventOutput,
     Set<String>? interruptIds,
     this.waiting = false,
-  }) : interruptIds = interruptIds ?? <String>{};
+  }) : stateDelta = stateDelta ?? <String, Object?>{},
+       interruptIds = interruptIds ?? <String>{};
 
   final String name;
   final Object? output;
   final Object? route;
+  final Map<String, Object?> stateDelta;
+  final Event? eventOutput;
   final Set<String> interruptIds;
   final bool waiting;
 }
@@ -1642,10 +1742,18 @@ _NodeRunResult _resultFromRawNodeOutput(
       outputDelegated ||
       context?._hasDirectOutput == true ||
       _hasWorkflowOutput(rawOutput);
+  final Map<String, Object?> stateDelta = <String, Object?>{
+    ..._stateDeltaFromOutput(rawOutput),
+    if (context?._hasDirectOutput == true)
+      ..._stateDeltaFromOutput(context!._directOutput),
+  };
+  final Event? eventOutput = _eventOutputFromRaw(rawOutput, context);
   return _NodeRunResult(
     name: name ?? node.name,
     output: workflowOutput,
     route: route,
+    stateDelta: stateDelta,
+    eventOutput: eventOutput,
     interruptIds: <String>{
       ..._interruptIdsFromOutput(rawOutput),
       ...?context?.interruptIds,
@@ -1656,6 +1764,15 @@ _NodeRunResult _resultFromRawNodeOutput(
 
 bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
   final NodeState? state = context.nodeStates[result.name];
+  final Session? session = context.invocationContext?.session;
+  if (session != null) {
+    _mergeStateDelta(session, result.stateDelta);
+  }
+  if (result.eventOutput != null) {
+    context._nodeOutputEvents[result.name] = result.eventOutput!;
+  } else {
+    context._nodeOutputEvents.remove(result.name);
+  }
   if (state != null) {
     state.route = result.route;
   }
@@ -2206,6 +2323,9 @@ Content _contentFromNodeInput(Object nodeInput) {
 }
 
 Object? _outputFromAgentEvent(Event event) {
+  if (event.hasOutput) {
+    return event.output;
+  }
   final Content? content = event.content;
   if (content == null) {
     return null;
@@ -2238,6 +2358,26 @@ Object? _routeFromOutput(Object? output) {
     return output.actions.route;
   }
   return null;
+}
+
+Map<String, Object?> _stateDeltaFromOutput(Object? output) {
+  if (output is Event) {
+    return output.actions.stateDelta;
+  }
+  return const <String, Object?>{};
+}
+
+Event? _eventOutputFromRaw(Object? rawOutput, WorkflowContext? context) {
+  if (rawOutput is Event) {
+    if (context?._hasDirectOutput == true &&
+        !rawOutput.hasOutput &&
+        rawOutput.content == null) {
+      return rawOutput.copyWith(output: context!._directOutput);
+    }
+    return rawOutput;
+  }
+  final Object? directOutput = context?._directOutput;
+  return directOutput is Event ? directOutput : null;
 }
 
 Object? _workflowOutputFromRaw(Object? output) {

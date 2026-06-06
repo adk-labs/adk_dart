@@ -686,6 +686,105 @@ void main() {
       );
     });
 
+    test('emits nested workflow leaf events under parent node path', () async {
+      final Workflow inner = Workflow(
+        name: 'inner',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => 'leaf-data', name: 'leaf'),
+        ],
+      );
+      final Workflow outer = Workflow(
+        name: 'outer',
+        nodes: <BaseNode>[
+          AgentNode(agent: inner),
+          node(
+            (WorkflowContext _, Object? input) => 'consumed:$input',
+            name: 'consume',
+          ),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'inner'),
+          Edge(fromNode: 'inner', toNode: 'consume'),
+        ],
+      );
+      final InvocationContext context = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_nested_leaf_events',
+        agent: outer,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+      );
+
+      final List<Event> events = await outer.runAsync(context).toList();
+
+      expect(events.map((Event event) => event.nodeInfo.path), <String>[
+        'outer@1/inner@1/leaf@1',
+        'outer@1/consume@1',
+      ]);
+      expect(
+        events.any((Event event) => event.nodeInfo.path == 'outer@1/inner@1'),
+        isFalse,
+      );
+      expect(events.first.content?.parts.single.text, 'leaf-data');
+      expect(events.last.content?.parts.single.text, 'consumed:leaf-data');
+    });
+
+    test(
+      'merges nested workflow state deltas before downstream nodes',
+      () async {
+        final Workflow inner = Workflow(
+          name: 'inner_state',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext _, Object? _) => Event(
+                invocationId: '',
+                author: '',
+                output: 'nested-output',
+                actions: EventActions(
+                  stateDelta: <String, Object?>{'nested_key': 'nested-value'},
+                ),
+              ),
+              name: 'state_writer',
+            ),
+          ],
+        );
+        final Workflow outer = Workflow(
+          name: 'outer_state',
+          nodes: <BaseNode>[
+            AgentNode(agent: inner),
+            node((WorkflowContext context, Object? input) {
+              final Object? stateValue =
+                  context.invocationContext?.session.state['nested_key'];
+              return '$input:$stateValue';
+            }, name: 'state_reader'),
+          ],
+          edges: <Edge>[
+            Edge(fromNode: START, toNode: 'inner_state'),
+            Edge(fromNode: 'inner_state', toNode: 'state_reader'),
+          ],
+        );
+        final Session session = Session(id: 's', appName: 'app', userId: 'u');
+        final InvocationContext context = InvocationContext(
+          sessionService: InMemorySessionService(),
+          invocationId: 'inv_nested_state',
+          agent: outer,
+          session: session,
+        );
+
+        final List<Event> events = await outer.runAsync(context).toList();
+
+        expect(session.state['nested_key'], 'nested-value');
+        expect(events.map((Event event) => event.nodeInfo.path), <String>[
+          'outer_state@1/inner_state@1/state_writer@1',
+          'outer_state@1/state_reader@1',
+        ]);
+        expect(events.first.output, 'nested-output');
+        expect(
+          events.last.content?.parts.single.text,
+          'nested-output:nested-value',
+        );
+      },
+    );
+
     test('converts RequestInput node output to long-running event', () async {
       final Workflow workflow = Workflow(
         name: 'hitl_workflow',
