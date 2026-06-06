@@ -1753,6 +1753,38 @@ void main() {
       expect(attempts, 1);
     });
 
+    test(
+      'rejects invalid retry exception filters before running node',
+      () async {
+        int attempts = 0;
+        final Workflow workflow = Workflow(
+          name: 'retry_invalid_filter',
+          nodes: <BaseNode>[
+            node(
+              (WorkflowContext _, Object? _) {
+                attempts += 1;
+                return 'should not run';
+              },
+              name: 'flaky',
+              retryConfig: const wf.RetryConfig(exceptions: <Object>[42]),
+            ),
+          ],
+        );
+
+        await expectLater(
+          workflow.runWorkflow(),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError error) => '${error.message}',
+              'message',
+              contains('exception class names'),
+            ),
+          ),
+        );
+        expect(attempts, 0);
+      },
+    );
+
     test('times out slow nodes', () async {
       final Workflow workflow = Workflow(
         name: 'timeout',

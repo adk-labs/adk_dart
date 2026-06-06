@@ -1405,6 +1405,7 @@ Future<Object?> _runNodeWithRetry({
   String? runId,
 }) async {
   final RetryConfig? retry = node.retryConfig;
+  _validateRetryExceptionFilters(retry);
   final int maxAttempts = retry == null
       ? 1
       : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
@@ -1481,6 +1482,24 @@ Future<Object?> _runNodeWithRetry({
     }
   }
   throw StateError('Workflow node failed unexpectedly: $lastError');
+}
+
+void _validateRetryExceptionFilters(RetryConfig? retry) {
+  final List<Object>? filters = retry?.exceptions;
+  if (filters == null) {
+    return;
+  }
+  for (final Object filter in filters) {
+    if (filter is String || filter is Type) {
+      continue;
+    }
+    throw ArgumentError.value(
+      filter,
+      'exceptions',
+      'RetryConfig.exceptions must contain exception class names (String) '
+          'or exception classes (Type).',
+    );
+  }
 }
 
 bool _shouldRetryError(Object error, RetryConfig? retry) {
