@@ -378,6 +378,8 @@ export 'src/tools/retrieval/files_retrieval.dart';
 export 'src/tools/retrieval/llama_index_retrieval.dart';
 export 'src/tools/retrieval/vertex_ai_rag_retrieval.dart';
 export 'src/tools/request_input_tool.dart';
+export 'src/agents/llm/task/finish_task_tool.dart';
+export 'src/agents/llm/task/task_models.dart';
 export 'src/tools/set_model_response_tool.dart';
 export 'src/tools/skill_toolset.dart';
 export 'src/tools/spanner/admin_tool.dart' hide listInstances;

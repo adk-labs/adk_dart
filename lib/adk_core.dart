@@ -11,6 +11,8 @@ export 'src/agents/base_agent.dart';
 export 'src/agents/callback_context.dart';
 export 'src/agents/context.dart';
 export 'src/agents/invocation_context.dart';
+export 'src/agents/llm/task/finish_task_tool.dart';
+export 'src/agents/llm/task/task_models.dart';
 export 'src/agents/live_request_queue.dart';
 export 'src/agents/llm_agent.dart';
 export 'src/agents/loop_agent.dart';

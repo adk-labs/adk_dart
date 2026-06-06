@@ -27,6 +27,7 @@ import 'agent_state.dart';
 import 'base_agent.dart';
 import 'callback_context.dart';
 import 'invocation_context.dart';
+import 'llm/task/finish_task_tool.dart';
 import 'readonly_context.dart';
 
 /// Callback invoked before model generation.
@@ -98,6 +99,7 @@ class LlmAgent extends BaseAgent {
     this.generateContentConfig,
     this.disallowTransferToParent = false,
     this.disallowTransferToPeers = false,
+    this.mode,
     this.includeContents = 'default',
     this.inputSchema,
     this.outputSchema,
@@ -113,6 +115,7 @@ class LlmAgent extends BaseAgent {
   }) : tools = tools ?? <Object>[] {
     _validateGenerateContentConfig(generateContentConfig);
     _warnOnThinkingConfigPrecedence();
+    _installTaskModeToolIfNeeded();
   }
 
   /// Built-in default model name.
@@ -142,6 +145,9 @@ class LlmAgent extends BaseAgent {
 
   /// Whether transfers to peer agents are disallowed.
   bool disallowTransferToPeers;
+
+  /// Delegation mode for this agent (`chat`, `task`, or `single_turn`).
+  String? mode;
 
   /// Content inclusion mode for prompts and responses.
   String includeContents;
@@ -198,6 +204,7 @@ class LlmAgent extends BaseAgent {
         'generateContentConfig',
         'disallowTransferToParent',
         'disallowTransferToPeers',
+        'mode',
         'includeContents',
         'inputSchema',
         'outputSchema',
@@ -281,6 +288,11 @@ class LlmAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'disallowTransferToPeers',
         currentValue: disallowTransferToPeers,
+      ),
+      mode: cloneFieldValue<String?>(
+        update: cloneUpdate,
+        fieldName: 'mode',
+        currentValue: mode,
       ),
       includeContents: cloneFieldValue<String>(
         update: cloneUpdate,
@@ -708,6 +720,38 @@ class LlmAgent extends BaseAgent {
         name: 'adk_dart.agents',
       );
     }
+  }
+
+  void _installTaskModeToolIfNeeded() {
+    if (mode != 'task') {
+      return;
+    }
+    for (int index = 0; index < tools.length; index += 1) {
+      final Object tool = tools[index];
+      if (tool is FinishTaskTool) {
+        if (tool.taskAgentName != name) {
+          tools[index] = FinishTaskTool.fromSchema(
+            taskAgentName: name,
+            outputSchema: outputSchema,
+          );
+        }
+        return;
+      }
+      if (tool is BaseTool) {
+        if (tool.name == finishTaskToolName) {
+          return;
+        }
+      }
+      if ('$tool'.contains(finishTaskToolName)) {
+        return;
+      }
+    }
+    tools.add(
+      FinishTaskTool.fromSchema(
+        taskAgentName: name,
+        outputSchema: outputSchema,
+      ),
+    );
   }
 }
 

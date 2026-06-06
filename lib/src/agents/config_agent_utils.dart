@@ -365,6 +365,7 @@ BaseAgent _buildLlmAgent(
     staticInstruction: config.staticInstruction,
     disallowTransferToParent: config.disallowTransferToParent ?? false,
     disallowTransferToPeers: config.disallowTransferToPeers ?? false,
+    mode: config.mode,
     includeContents: config.includeContents,
     inputSchema: config.inputSchema == null
         ? null

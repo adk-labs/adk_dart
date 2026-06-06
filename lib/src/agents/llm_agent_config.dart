@@ -22,6 +22,7 @@ class LlmAgentConfig extends BaseAgentConfig {
     this.staticInstruction,
     this.disallowTransferToParent,
     this.disallowTransferToPeers,
+    this.mode,
     this.inputSchema,
     this.outputSchema,
     this.outputKey,
@@ -45,6 +46,14 @@ class LlmAgentConfig extends BaseAgentConfig {
         'include_contents must be either `default` or `none`.',
       );
     }
+    if (mode != null &&
+        mode != 'chat' &&
+        mode != 'task' &&
+        mode != 'single_turn') {
+      throw ArgumentError(
+        'mode must be one of `chat`, `task`, or `single_turn`.',
+      );
+    }
   }
 
   /// Static model name.
@@ -64,6 +73,9 @@ class LlmAgentConfig extends BaseAgentConfig {
 
   /// Whether transfer to peer agents is disallowed.
   final bool? disallowTransferToPeers;
+
+  /// Delegation mode (`chat`, `task`, or `single_turn`).
+  final String? mode;
 
   /// Optional input schema callback.
   final CodeConfig? inputSchema;
@@ -106,6 +118,7 @@ class LlmAgentConfig extends BaseAgentConfig {
     'disallowTransferToParent',
     'disallow_transfer_to_peers',
     'disallowTransferToPeers',
+    'mode',
     'input_schema',
     'inputSchema',
     'output_schema',
@@ -177,6 +190,7 @@ class LlmAgentConfig extends BaseAgentConfig {
       disallowTransferToPeers:
           normalized['disallow_transfer_to_peers'] as bool? ??
           normalized['disallowTransferToPeers'] as bool?,
+      mode: normalized['mode'] as String?,
       inputSchema: _toCodeConfig(
         normalized['input_schema'] ?? normalized['inputSchema'],
       ),
@@ -276,6 +290,9 @@ class LlmAgentConfig extends BaseAgentConfig {
     }
     if (disallowTransferToPeers != null) {
       json['disallow_transfer_to_peers'] = disallowTransferToPeers;
+    }
+    if (mode != null) {
+      json['mode'] = mode;
     }
     if (inputSchema != null) {
       json['input_schema'] = inputSchema!.toJson();
