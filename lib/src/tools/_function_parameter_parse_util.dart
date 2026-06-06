@@ -73,7 +73,7 @@ Map<String, dynamic> parseParameterSchema({
   Object? annotation,
   Object? defaultValue,
 }) {
-  final String inferredType =
+  final Object inferredType =
       _schemaTypeFromAnnotation(annotation) ??
       jsonSchemaTypeForValue(defaultValue) ??
       'object';
@@ -84,7 +84,28 @@ Map<String, dynamic> parseParameterSchema({
   return <String, dynamic>{name: schema};
 }
 
-String? _schemaTypeFromAnnotation(Object? annotation) {
+Object? _schemaTypeFromAnnotation(Object? annotation) {
+  if (annotation is List) {
+    final List<String> types = <String>[];
+    for (final Object? item in annotation) {
+      final Object? type = _schemaTypeFromAnnotation(item);
+      if (type is String) {
+        if (!types.contains(type)) {
+          types.add(type);
+        }
+      } else if (type is List) {
+        for (final Object? nestedType in type) {
+          if (nestedType is String && !types.contains(nestedType)) {
+            types.add(nestedType);
+          }
+        }
+      }
+    }
+    if (types.isEmpty) {
+      return null;
+    }
+    return types.length == 1 ? types.single : types;
+  }
   if (annotation is String) {
     final String normalized = annotation.toLowerCase();
     switch (normalized) {
@@ -114,6 +135,9 @@ String? _schemaTypeFromAnnotation(Object? annotation) {
     }
   }
   if (annotation is Type) {
+    if (annotation == Null) {
+      return 'null';
+    }
     if (annotation == String) {
       return 'string';
     }

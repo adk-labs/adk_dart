@@ -37,6 +37,22 @@ void main() {
       expect(isDefaultValueCompatible(1, int), isTrue);
       expect(isDefaultValueCompatible('x', int), isFalse);
       expect(
+        parseParameterSchema(
+          name: 'optional',
+          annotation: <Object>[String, 'null'],
+        )['optional'],
+        <String, Object>{
+          'type': <String>['string', 'null'],
+        },
+      );
+      expect(
+        parseParameterSchema(
+          name: 'deduplicated',
+          annotation: <Object>['str', String],
+        )['deduplicated'],
+        <String, Object>{'type': 'string'},
+      );
+      expect(
         addUnevaluatedItemsToFixedLenTupleSchema(<String, dynamic>{
           'type': 'array',
           'prefixItems': <Object>[1, 2],

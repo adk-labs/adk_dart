@@ -160,6 +160,65 @@ void main() {
       expect((error! as Map)['error'], contains('expected integer'));
     });
 
+    test('run honors nullable schema fields', () async {
+      final FinishTaskTool nullableFlagTool = FinishTaskTool.fromSchema(
+        taskAgentName: 'task_agent',
+        outputSchema: <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'nullableField': <String, Object?>{
+              'type': 'string',
+              'nullable': true,
+            },
+            'nonNullableField': <String, Object?>{'type': 'string'},
+          },
+          'required': <String>['nullableField', 'nonNullableField'],
+        },
+      );
+
+      expect(
+        await nullableFlagTool.run(
+          args: <String, dynamic>{
+            'nullableField': null,
+            'nonNullableField': 'present',
+          },
+          toolContext: _newToolContext(),
+        ),
+        finishTaskSuccessResult,
+      );
+
+      final Object? nonNullableError = await nullableFlagTool.run(
+        args: <String, dynamic>{
+          'nullableField': 'present',
+          'nonNullableField': null,
+        },
+        toolContext: _newToolContext(),
+      );
+      expect(nonNullableError, isA<Map>());
+      expect((nonNullableError! as Map)['error'], contains('expected string'));
+
+      final FinishTaskTool typeUnionTool = FinishTaskTool.fromSchema(
+        taskAgentName: 'task_agent',
+        outputSchema: <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'nullableField': <String, Object?>{
+              'type': <String>['string', 'null'],
+            },
+          },
+          'required': <String>['nullableField'],
+        },
+      );
+
+      expect(
+        await typeUnionTool.run(
+          args: <String, dynamic>{'nullableField': null},
+          toolContext: _newToolContext(),
+        ),
+        finishTaskSuccessResult,
+      );
+    });
+
     test('LlmAgent task mode auto-installs finish_task once', () {
       final FinishTaskTool existing = FinishTaskTool.fromSchema(
         taskAgentName: 'task_agent',

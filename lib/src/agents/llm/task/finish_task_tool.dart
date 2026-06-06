@@ -255,6 +255,10 @@ void _validateValue(
   required String path,
   required List<String> errors,
 }) {
+  if (value == null && _schemaAllowsNull(schema)) {
+    return;
+  }
+
   final Object? anyOf = schema['anyOf'];
   if (anyOf is List && anyOf.isNotEmpty) {
     _validateAgainstAlternatives(value, anyOf, path: path, errors: errors);
@@ -306,6 +310,17 @@ void _validateValue(
       }
       return;
   }
+}
+
+bool _schemaAllowsNull(Map<String, dynamic> schema) {
+  if (schema['nullable'] == true) {
+    return true;
+  }
+  final Object? type = schema['type'];
+  return type is List &&
+      type.any(
+        (Object? item) => item is String && item.toLowerCase() == 'null',
+      );
 }
 
 void _validateAgainstAlternatives(
