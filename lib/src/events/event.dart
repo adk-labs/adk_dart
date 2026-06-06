@@ -6,6 +6,7 @@ import '../platform/time.dart';
 import '../types/content.dart';
 import '../types/id.dart';
 import 'event_actions.dart';
+import 'node_path_builder.dart';
 
 /// One runtime event emitted during an invocation.
 class Event extends LlmResponse {
@@ -288,23 +289,15 @@ class NodeInfo {
       messageAsOutput == null;
 
   /// The run ID parsed from the final path segment.
-  String get runId => _runIdFromSegment(_lastPathSegment(path)) ?? '';
+  String get runId => NodePathBuilder.fromString(path).runId ?? '';
 
   /// The run ID parsed from the parent path segment, if present.
   String? get parentRunId {
-    final List<String> segments = _pathSegments(path);
-    if (segments.length < 2) {
-      return null;
-    }
-    return _runIdFromSegment(segments[segments.length - 2]);
+    return NodePathBuilder.fromString(path).parent?.runId;
   }
 
   /// The node name parsed from the final path segment.
-  String get name {
-    final String segment = _lastPathSegment(path);
-    final int marker = segment.lastIndexOf('@');
-    return marker <= 0 ? segment : segment.substring(0, marker);
-  }
+  String get name => NodePathBuilder.fromString(path).nodeName;
 
   /// Returns copied node metadata with optional overrides.
   NodeInfo copyWith({
@@ -358,23 +351,6 @@ List<String>? _stringListFromObject(Object? value) {
     return null;
   }
   return value.map((Object? item) => '$item').toList(growable: false);
-}
-
-List<String> _pathSegments(String path) {
-  return path.split('/').where((String segment) => segment.isNotEmpty).toList();
-}
-
-String _lastPathSegment(String path) {
-  final List<String> segments = _pathSegments(path);
-  return segments.isEmpty ? '' : segments.last;
-}
-
-String? _runIdFromSegment(String segment) {
-  final int marker = segment.lastIndexOf('@');
-  if (marker < 0 || marker == segment.length - 1) {
-    return null;
-  }
-  return segment.substring(marker + 1);
 }
 
 const Object _sentinel = Object();

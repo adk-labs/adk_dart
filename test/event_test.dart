@@ -138,5 +138,27 @@ void main() {
       expect(decodedControl.hasOutput, isTrue);
       expect(decodedControl.output, isNull);
     });
+
+    test('NodeInfo derives path fields with node path builder semantics', () {
+      final NodeInfo leaf = NodeInfo(path: 'workflow@1/router@2');
+      expect(leaf.name, 'router');
+      expect(leaf.runId, '2');
+      expect(leaf.parentRunId, '1');
+
+      final NodeInfo missingRunId = NodeInfo(path: 'workflow/router');
+      expect(missingRunId.name, 'router');
+      expect(missingRunId.runId, '');
+      expect(missingRunId.parentRunId, isNull);
+
+      final NodeInfo emptyRunSuffix = NodeInfo(path: 'workflow@/router@');
+      expect(emptyRunSuffix.name, 'router');
+      expect(emptyRunSuffix.runId, '');
+      expect(emptyRunSuffix.parentRunId, '');
+
+      final NodeInfo emptyPath = NodeInfo();
+      expect(emptyPath.name, '');
+      expect(emptyPath.runId, '');
+      expect(emptyPath.parentRunId, isNull);
+    });
   });
 }
