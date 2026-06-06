@@ -344,6 +344,79 @@ void main() {
     );
 
     test(
+      'resumable app falls back to root for stale function-call author',
+      () async {
+        final MockModel model = MockModel(
+          responses: <LlmResponse>[
+            LlmResponse(content: Content.modelText('resumed by root')),
+          ],
+        );
+        final Agent agent = Agent(name: 'root_agent', model: model);
+        final App app = App(
+          name: 'resumable_app',
+          rootAgent: agent,
+          resumabilityConfig: ResumabilityConfig(isResumable: true),
+        );
+        final Runner runner = Runner(
+          app: app,
+          sessionService: InMemorySessionService(),
+        );
+
+        final Session session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: 'user_1',
+          sessionId: 'session_stale_resume_author',
+        );
+        await runner.sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'invocation_from_stale_call',
+            author: 'agent_from_previous_session',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'lookup_weather',
+                  args: <String, dynamic>{'city': 'Seoul'},
+                  id: 'call_stale',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        final List<Event> events = await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  name: 'lookup_weather',
+                  response: <String, dynamic>{'result': 'sunny'},
+                  id: 'call_stale',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        expect(events, isNotEmpty);
+        final Event resumedEvent = events.firstWhere(
+          (Event event) =>
+              event.content?.parts.any(
+                (Part part) => part.text == 'resumed by root',
+              ) ==
+              true,
+          orElse: () => throw StateError('Missing resumed model response'),
+        );
+        expect(resumedEvent.author, 'root_agent');
+        expect(resumedEvent.invocationId, 'invocation_from_stale_call');
+      },
+    );
+
+    test(
       'resumable app stays paused when a long-running call is followed by a function response',
       () async {
         final MockModel model = MockModel(
