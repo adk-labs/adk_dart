@@ -785,6 +785,7 @@ class Runner {
     final Event event = Event(
       invocationId: context.invocationId,
       author: 'user',
+      isolationScope: context.isolationScope,
       content: newMessage,
       actions: stateDelta == null
           ? EventActions()
@@ -819,6 +820,8 @@ class Runner {
       final Event event = Event(
         invocationId: invocationContext.invocationId,
         author: 'model',
+        branch: invocationContext.branch,
+        isolationScope: invocationContext.isolationScope,
         content: earlyExit,
       );
       _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
@@ -833,6 +836,7 @@ class Runner {
       bool isTranscribing = false;
 
       await for (final Event event in execute(invocationContext)) {
+        event.isolationScope ??= invocationContext.isolationScope;
         _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
         final Event? modified = await invocationContext.pluginManager
             .runOnEventCallback(

@@ -83,6 +83,7 @@ abstract class BaseAgent {
       invocationId: context.invocationId,
       author: name,
       branch: context.branch,
+      isolationScope: context.isolationScope,
       actions: actions,
     );
   }
@@ -93,6 +94,7 @@ abstract class BaseAgent {
 
     final Event? before = await _handleBeforeAgentCallback(context);
     if (before != null) {
+      _stampIsolationScope(context, before);
       yield before;
     }
 
@@ -101,6 +103,7 @@ abstract class BaseAgent {
     }
 
     await for (final Event event in runAsyncImpl(context)) {
+      _stampIsolationScope(context, event);
       yield event;
     }
 
@@ -110,6 +113,7 @@ abstract class BaseAgent {
 
     final Event? after = await _handleAfterAgentCallback(context);
     if (after != null) {
+      _stampIsolationScope(context, after);
       yield after;
     }
   }
@@ -120,6 +124,7 @@ abstract class BaseAgent {
 
     final Event? before = await _handleBeforeAgentCallback(context);
     if (before != null) {
+      _stampIsolationScope(context, before);
       yield before;
     }
 
@@ -128,13 +133,19 @@ abstract class BaseAgent {
     }
 
     await for (final Event event in runLiveImpl(context)) {
+      _stampIsolationScope(context, event);
       yield event;
     }
 
     final Event? after = await _handleAfterAgentCallback(context);
     if (after != null) {
+      _stampIsolationScope(context, after);
       yield after;
     }
+  }
+
+  void _stampIsolationScope(InvocationContext context, Event event) {
+    event.isolationScope ??= context.isolationScope;
   }
 
   /// Runs the agent's async implementation.

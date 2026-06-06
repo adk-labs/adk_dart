@@ -717,6 +717,7 @@ class BaseLlmFlow {
       invocationId: context.invocationId,
       author: 'user',
       branch: context.branch,
+      isolationScope: context.isolationScope,
       content: content.copyWith(),
     );
     await context.sessionService.appendEvent(

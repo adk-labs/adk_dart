@@ -69,10 +69,15 @@ class _LiveEndingAgent extends BaseAgent {
   }
 }
 
-InvocationContext _newContext(BaseAgent agent, {PluginManager? pluginManager}) {
+InvocationContext _newContext(
+  BaseAgent agent, {
+  PluginManager? pluginManager,
+  String? isolationScope,
+}) {
   return InvocationContext(
     sessionService: InMemorySessionService(),
     invocationId: 'inv_1',
+    isolationScope: isolationScope,
     agent: agent,
     session: Session(id: 's1', appName: 'app', userId: 'u1'),
     pluginManager: pluginManager,
@@ -235,6 +240,17 @@ void main() {
       );
 
       expect(() => agent.canonicalBeforeAgentCallbacks, throwsArgumentError);
+    });
+
+    test('runAsync stamps isolationScope on emitted events', () async {
+      final _ProbeAgent agent = _ProbeAgent(name: 'probe');
+
+      final List<Event> events = await agent
+          .runAsync(_newContext(agent, isolationScope: 'scope_1'))
+          .toList();
+
+      expect(events, hasLength(1));
+      expect(events.single.isolationScope, 'scope_1');
     });
   });
 }
