@@ -14,6 +14,7 @@ import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../models/registry.dart';
 import '../planners/built_in_planner.dart';
+import '../tools/agent_tool.dart';
 import '../tools/base_tool.dart';
 import '../tools/base_toolset.dart';
 import '../tools/discovery_engine_search_tool.dart';
@@ -116,6 +117,7 @@ class LlmAgent extends BaseAgent {
     _validateGenerateContentConfig(generateContentConfig);
     _warnOnThinkingConfigPrecedence();
     _installTaskModeToolIfNeeded();
+    _installModeSubAgentToolsIfNeeded();
   }
 
   /// Built-in default model name.
@@ -221,6 +223,7 @@ class LlmAgent extends BaseAgent {
     );
 
     final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
+    final List<Object> clonedTools = _cloneToolsForClone(cloneUpdate);
     final LlmAgent clonedAgent = LlmAgent(
       name: cloneFieldValue<String>(
         update: cloneUpdate,
@@ -269,11 +272,7 @@ class LlmAgent extends BaseAgent {
         fieldName: 'staticInstruction',
         currentValue: staticInstruction,
       ),
-      tools: cloneListFieldValue<Object>(
-        update: cloneUpdate,
-        fieldName: 'tools',
-        currentValue: tools,
-      ),
+      tools: clonedTools,
       generateContentConfig: cloneFieldValue<GenerateContentConfig?>(
         update: cloneUpdate,
         fieldName: 'generateContentConfig',
@@ -357,6 +356,7 @@ class LlmAgent extends BaseAgent {
     );
     clonedAgent.subAgents = clonedSubAgents;
     relinkClonedSubAgents(clonedAgent);
+    clonedAgent._installModeSubAgentToolsIfNeeded();
     return clonedAgent;
   }
 
@@ -751,6 +751,65 @@ class LlmAgent extends BaseAgent {
         taskAgentName: name,
         outputSchema: outputSchema,
       ),
+    );
+  }
+
+  void _installModeSubAgentToolsIfNeeded() {
+    for (final BaseAgent subAgent in subAgents) {
+      if (subAgent is! LlmAgent) {
+        continue;
+      }
+
+      String? subAgentMode = subAgent.mode;
+      if (subAgentMode == null) {
+        subAgent.mode = 'chat';
+        subAgentMode = 'chat';
+      }
+
+      if (_hasToolNamed(subAgent.name)) {
+        continue;
+      }
+      if (subAgentMode == 'single_turn') {
+        tools.add(SingleTurnAgentTool(agent: subAgent));
+      } else if (subAgentMode == 'task') {
+        tools.add(TaskAgentTool(agent: subAgent));
+      }
+    }
+  }
+
+  bool _hasToolNamed(String toolName) {
+    for (final Object tool in tools) {
+      if (tool is BaseTool && tool.name == toolName) {
+        return true;
+      }
+      if ('$tool' == toolName) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<Object> _cloneToolsForClone(Map<String, Object?> update) {
+    if (update.containsKey('tools')) {
+      return cloneListFieldValue<Object>(
+        update: update,
+        fieldName: 'tools',
+        currentValue: tools,
+      );
+    }
+
+    return tools
+        .where((Object tool) => !_isGeneratedSubAgentModeTool(tool))
+        .toList();
+  }
+
+  bool _isGeneratedSubAgentModeTool(Object tool) {
+    if (tool is! SingleTurnAgentTool && tool is! TaskAgentTool) {
+      return false;
+    }
+    final AgentTool agentTool = tool as AgentTool;
+    return subAgents.any(
+      (BaseAgent subAgent) => identical(agentTool.agent, subAgent),
     );
   }
 }

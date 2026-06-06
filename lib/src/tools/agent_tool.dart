@@ -53,6 +53,24 @@ Map<String, Object?> _objectMap(Object? value) {
 
 String? _stringValue(Object? value) => value is String ? value : null;
 
+const String _taskAgentToolSuffix =
+    'IMPORTANT: This tool delegates execution to a specialized agent. '
+    'Do NOT call this tool in parallel with any other tools.';
+
+Map<String, dynamic> _defaultTaskInputSchema() {
+  return <String, dynamic>{
+    'type': 'object',
+    'properties': <String, dynamic>{
+      'request': <String, dynamic>{
+        'type': 'string',
+        'description':
+            'Detailed instructions or context for the task sub-agent.',
+      },
+    },
+    'required': <String>['request'],
+  };
+}
+
 /// Tool adapter that executes another agent as a tool call.
 class AgentTool extends BaseTool {
   /// Creates a tool wrapper that delegates execution to [agent].
@@ -171,6 +189,51 @@ class AgentTool extends BaseTool {
       return jsonDecode(mergedText);
     }
     return mergedText;
+  }
+}
+
+/// Tool adapter for a sub-agent configured with `mode: 'single_turn'`.
+class SingleTurnAgentTool extends AgentTool {
+  /// Creates a tool wrapper for a single-turn [agent].
+  SingleTurnAgentTool({
+    required super.agent,
+    super.skipSummarization,
+    super.includePlugins,
+    super.propagateGroundingMetadata,
+  });
+}
+
+/// Tool adapter for a sub-agent configured with `mode: 'task'`.
+class TaskAgentTool extends AgentTool {
+  /// Creates a framework delegation marker for a task-mode [agent].
+  TaskAgentTool({
+    required super.agent,
+    super.skipSummarization,
+    super.includePlugins,
+    super.propagateGroundingMetadata,
+  });
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    final Map<String, dynamic> parameters =
+        _schemaAsJsonMap(_getInputSchema(agent)) ?? _defaultTaskInputSchema();
+    final String baseDescription = agent.description.trim();
+    final String description = baseDescription.isEmpty
+        ? _taskAgentToolSuffix
+        : '$baseDescription\n$_taskAgentToolSuffix';
+    return FunctionDeclaration(
+      name: name,
+      description: description,
+      parameters: parameters,
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return null;
   }
 }
 

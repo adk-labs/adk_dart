@@ -64,6 +64,18 @@ class _CodePartAgent extends BaseAgent {
   }
 }
 
+class _NamedTool extends BaseTool {
+  _NamedTool(String name) : super(name: name, description: 'named tool');
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return <String, Object?>{'ok': true};
+  }
+}
+
 void main() {
   test('AgentTool runs wrapped agent and returns merged text', () async {
     final Agent childAgent = Agent(
@@ -169,4 +181,156 @@ void main() {
       expect(result, 'stdout\nprint(1)');
     },
   );
+
+  group('sub-agent mode wrappers', () {
+    test('adds single-turn sub-agent wrapper automatically', () async {
+      final Agent childAgent = Agent(
+        name: 'single_turn_child',
+        model: _ChildModel(),
+        mode: 'single_turn',
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+
+      final List<BaseTool> tools = await rootAgent.canonicalTools();
+
+      expect(tools, hasLength(1));
+      expect(tools.single, isA<SingleTurnAgentTool>());
+      expect((tools.single as SingleTurnAgentTool).agent, same(childAgent));
+    });
+
+    test('adds task sub-agent wrapper with default request schema', () async {
+      final Agent childAgent = Agent(
+        name: 'task_child',
+        description: 'Handles a delegated task.',
+        model: _ChildModel(),
+        mode: 'task',
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+
+      final List<BaseTool> tools = await rootAgent.canonicalTools();
+      final TaskAgentTool tool = tools.whereType<TaskAgentTool>().single;
+      final FunctionDeclaration declaration = tool.getDeclaration()!;
+
+      expect(tool.agent, same(childAgent));
+      expect(declaration.name, 'task_child');
+      expect(
+        declaration.description,
+        contains('Do NOT call this tool in parallel with any other tools.'),
+      );
+      expect(declaration.parameters['properties'], contains('request'));
+      expect(
+        (declaration.parameters['properties']
+            as Map<String, Object?>)['request'],
+        containsPair(
+          'description',
+          'Detailed instructions or context for the task sub-agent.',
+        ),
+      );
+      expect(
+        await tool.run(args: <String, dynamic>{}, toolContext: _toolContext()),
+        isNull,
+      );
+    });
+
+    test('task wrapper uses child input schema when provided', () async {
+      final Agent childAgent = Agent(
+        name: 'task_child',
+        model: _ChildModel(),
+        mode: 'task',
+        inputSchema: <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'city': <String, Object?>{'type': 'string'},
+          },
+          'required': <String>['city'],
+        },
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+
+      final TaskAgentTool tool = (await rootAgent.canonicalTools())
+          .whereType<TaskAgentTool>()
+          .single;
+      final FunctionDeclaration declaration = tool.getDeclaration()!;
+
+      expect(declaration.parameters['properties'], contains('city'));
+      expect(declaration.parameters['properties'], isNot(contains('request')));
+    });
+
+    test('sets unspecified LlmAgent sub-agent mode to chat', () async {
+      final Agent childAgent = Agent(name: 'chat_child', model: _ChildModel());
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+
+      expect(childAgent.mode, 'chat');
+      expect(await rootAgent.canonicalTools(), isEmpty);
+    });
+
+    test('does not duplicate an explicit same-name sub-agent tool', () async {
+      final Agent childAgent = Agent(
+        name: 'task_child',
+        model: _ChildModel(),
+        mode: 'task',
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+        tools: <Object>[_NamedTool('task_child')],
+      );
+
+      final List<BaseTool> tools = await rootAgent.canonicalTools();
+
+      expect(tools, hasLength(1));
+      expect(tools.single, isA<_NamedTool>());
+    });
+
+    test('clone installs wrappers for cloned sub-agents', () async {
+      final Agent childAgent = Agent(
+        name: 'task_child',
+        model: _ChildModel(),
+        mode: 'task',
+      );
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: _ChildModel(),
+        subAgents: <BaseAgent>[childAgent],
+      );
+
+      final LlmAgent cloned = rootAgent.clone();
+      final TaskAgentTool clonedTool = cloned.tools
+          .whereType<TaskAgentTool>()
+          .single;
+
+      expect(identical(cloned.subAgents.single, childAgent), isFalse);
+      expect(clonedTool.agent, same(cloned.subAgents.single));
+      expect(clonedTool.agent, isNot(same(childAgent)));
+    });
+  });
+}
+
+ToolContext _toolContext() {
+  final InvocationContext invocationContext = InvocationContext(
+    sessionService: InMemorySessionService(),
+    invocationId: 'inv_task_agent_tool',
+    agent: Agent(name: 'root_agent', model: _ChildModel()),
+    session: Session(id: 's_task_agent_tool', appName: 'app', userId: 'u1'),
+    artifactService: InMemoryArtifactService(),
+    memoryService: InMemoryMemoryService(),
+  );
+  return Context(invocationContext);
 }
