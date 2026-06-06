@@ -656,10 +656,12 @@ class Runner {
       throw StateError('Session ${session.id} has no events to resume.');
     }
 
-    final Content? userMessage =
-        newMessage ??
-        _findUserMessageForInvocation(session.events, invocationId);
-    if (userMessage == null) {
+    final Content? originalUserContent = _findUserMessageForInvocation(
+      session.events,
+      invocationId,
+    );
+    final Content? contextUserContent = originalUserContent ?? newMessage;
+    if (contextUserContent == null) {
       throw StateError(
         'No user message available for invocation: $invocationId',
       );
@@ -668,7 +670,7 @@ class Runner {
     final InvocationContext context = _newInvocationContext(
       session,
       invocationId: invocationId,
-      newMessage: userMessage,
+      newMessage: contextUserContent,
       runConfig: runConfig,
       abortSignal: abortSignal,
     );
@@ -676,11 +678,14 @@ class Runner {
     if (newMessage != null) {
       await _handleNewMessage(
         session: session,
-        newMessage: userMessage,
+        newMessage: newMessage,
         context: context,
         runConfig: runConfig,
         stateDelta: stateDelta,
       );
+      if (originalUserContent != null) {
+        context.userContent = originalUserContent.copyWith();
+      }
       if (context.isAborted) {
         return context;
       }

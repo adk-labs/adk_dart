@@ -102,6 +102,24 @@ class _UserMessageStateSnapshotPlugin extends BasePlugin {
   }
 }
 
+class _BeforeModelUserContentPlugin extends BasePlugin {
+  _BeforeModelUserContentPlugin() : super(name: 'before_model_user_content');
+
+  String? userText;
+
+  @override
+  Future<LlmResponse?> beforeModelCallback({
+    required CallbackContext callbackContext,
+    required LlmRequest llmRequest,
+  }) async {
+    userText = callbackContext.userContent?.parts
+        .where((Part part) => part.text != null && !part.thought)
+        .map((Part part) => part.text!)
+        .join();
+    return null;
+  }
+}
+
 class _CloseCountingToolset extends BaseToolset {
   int closeCalls = 0;
 
@@ -384,6 +402,8 @@ void main() {
     test(
       'resumable app resolves invocationId from function response call id',
       () async {
+        final _BeforeModelUserContentPlugin plugin =
+            _BeforeModelUserContentPlugin();
         final MockModel model = MockModel(
           responses: <LlmResponse>[
             LlmResponse(content: Content.modelText('resumed')),
@@ -393,6 +413,7 @@ void main() {
         final App app = App(
           name: 'resumable_app',
           rootAgent: agent,
+          plugins: <BasePlugin>[plugin],
           resumabilityConfig: ResumabilityConfig(isResumable: true),
         );
         final Runner runner = Runner(
@@ -404,6 +425,14 @@ void main() {
           appName: runner.appName,
           userId: 'user_1',
           sessionId: 'session_resume_resolution',
+        );
+        await runner.sessionService.appendEvent(
+          session: session,
+          event: Event(
+            invocationId: 'invocation_from_call',
+            author: 'user',
+            content: Content.userText('what is the weather?'),
+          ),
         );
         await runner.sessionService.appendEvent(
           session: session,
@@ -448,6 +477,7 @@ void main() {
           orElse: () => throw StateError('Missing resumed model response'),
         );
         expect(resumedEvent.invocationId, 'invocation_from_call');
+        expect(plugin.userText, 'what is the weather?');
       },
     );
 
