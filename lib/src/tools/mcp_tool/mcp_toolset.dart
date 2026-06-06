@@ -121,6 +121,11 @@ class McpToolset extends BaseToolset {
   @override
   AuthConfig? getAuthConfig() => authConfig?.copyWith();
 
+  @override
+  Future<void> close() {
+    return McpSessionManager.instance.closeConnection(connectionParams);
+  }
+
   Map<String, String>? _buildHeaders(ReadonlyContext? readonlyContext) {
     final Map<String, String> headers = <String, String>{};
     final AuthCredential? credential = authConfig == null

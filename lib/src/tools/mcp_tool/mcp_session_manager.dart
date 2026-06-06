@@ -201,6 +201,25 @@ class McpSessionManager {
     return _toolsByUrl.keys.toList(growable: false);
   }
 
+  /// Closes transport session state for one MCP [connectionParams].
+  ///
+  /// Local tool/resource registrations are kept so the same toolset can be
+  /// reused after close. Remote descriptors are dropped and rediscovered on the
+  /// next tool listing.
+  Future<void> closeConnection(McpConnectionParams connectionParams) async {
+    final String key = _connectionKey(connectionParams);
+    _remoteToolDescriptorsByUrl.remove(key);
+
+    if (connectionParams is StreamableHTTPConnectionParams) {
+      _remoteClient.clearConnection(connectionParams);
+      return;
+    }
+    if (connectionParams is StdioConnectionParams) {
+      await _stdioClient.close();
+      return;
+    }
+  }
+
   /// Returns locally cached resource names for [connectionParams].
   List<String> listResources(McpConnectionParams connectionParams) {
     final String key = _connectionKey(connectionParams);
@@ -630,7 +649,8 @@ class McpSessionManager {
 
   FutureOr<Object?> _handleServerRequest(McpServerMessage message) {
     if (message.method == mcpMethodSamplingCreateMessage) {
-      final McpSamplingCallback? callback = _samplingCallbacksByUrl[message.url];
+      final McpSamplingCallback? callback =
+          _samplingCallbacksByUrl[message.url];
       if (callback != null) {
         final List<Map<String, Object?>> messages = _asObjectList(
           message.params['messages'],

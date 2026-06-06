@@ -310,22 +310,27 @@ class Runner {
       return;
     }
 
-    await for (final Event event in _execWithPlugin(
-      invocationContext: context,
-      session: session,
-      execute: (InvocationContext ctx) => ctx.agent.runAsync(ctx),
-      isLiveCall: false,
-    )) {
-      yield event;
-    }
+    final Set<BaseToolset> toolsets = _collectToolsets(agent);
+    try {
+      await for (final Event event in _execWithPlugin(
+        invocationContext: context,
+        session: session,
+        execute: (InvocationContext ctx) => ctx.agent.runAsync(ctx),
+        isLiveCall: false,
+      )) {
+        yield event;
+      }
 
-    if (app != null && app!.eventsCompactionConfig != null) {
-      await app_compaction.runCompactionForSlidingWindow(
-        app: app!,
-        session: context.session,
-        sessionService: sessionService,
-        skipTokenCompaction: context.tokenCompactionChecked,
-      );
+      if (app != null && app!.eventsCompactionConfig != null) {
+        await app_compaction.runCompactionForSlidingWindow(
+          app: app!,
+          session: context.session,
+          sessionService: sessionService,
+          skipTokenCompaction: context.tokenCompactionChecked,
+        );
+      }
+    } finally {
+      await _cleanupToolsets(toolsets, ignoreErrors: true);
     }
   }
 
@@ -534,13 +539,18 @@ class Runner {
       return;
     }
 
-    await for (final Event event in _execWithPlugin(
-      invocationContext: context,
-      session: session,
-      execute: (InvocationContext ctx) => ctx.agent.runLive(ctx),
-      isLiveCall: true,
-    )) {
-      yield event;
+    final Set<BaseToolset> toolsets = _collectToolsets(agent);
+    try {
+      await for (final Event event in _execWithPlugin(
+        invocationContext: context,
+        session: session,
+        execute: (InvocationContext ctx) => ctx.agent.runLive(ctx),
+        isLiveCall: true,
+      )) {
+        yield event;
+      }
+    } finally {
+      await _cleanupToolsets(toolsets, ignoreErrors: true);
     }
   }
 
@@ -1203,9 +1213,20 @@ class Runner {
     return toolsets;
   }
 
-  Future<void> _cleanupToolsets(Set<BaseToolset> toolsets) async {
+  Future<void> _cleanupToolsets(
+    Set<BaseToolset> toolsets, {
+    bool ignoreErrors = false,
+  }) async {
     for (final BaseToolset toolset in toolsets) {
-      await toolset.close();
+      if (!ignoreErrors) {
+        await toolset.close();
+        continue;
+      }
+      try {
+        await toolset.close();
+      } catch (_) {
+        // Invocation cleanup should not mask agent execution results.
+      }
     }
   }
 

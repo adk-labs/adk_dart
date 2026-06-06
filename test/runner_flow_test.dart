@@ -102,6 +102,20 @@ class _UserMessageStateSnapshotPlugin extends BasePlugin {
   }
 }
 
+class _CloseCountingToolset extends BaseToolset {
+  int closeCalls = 0;
+
+  @override
+  Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
+    return const <BaseTool>[];
+  }
+
+  @override
+  Future<void> close() async {
+    closeCalls += 1;
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) async {
   return stream.toList();
 }
@@ -135,6 +149,36 @@ void main() {
       expect(events, hasLength(1));
       expect(events.first.author, 'root_agent');
       expect(events.first.content?.parts.first.text, 'hello from model');
+    });
+
+    test('closes configured toolsets after runAsync completes', () async {
+      final _CloseCountingToolset toolset = _CloseCountingToolset();
+      final MockModel model = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('done')),
+        ],
+      );
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[toolset],
+      );
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_toolset_close',
+      );
+
+      await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+        ),
+      );
+
+      expect(toolset.closeCalls, 1);
     });
 
     test('onUserMessage callback sees runAsync stateDelta', () async {

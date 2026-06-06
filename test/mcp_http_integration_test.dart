@@ -386,6 +386,26 @@ void main() {
       expect(toolsListHeaders['accept'], contains('text/event-stream'));
     });
 
+    test('McpToolset.close clears remote session state', () async {
+      final McpToolset toolset = McpToolset(connectionParams: connectionParams);
+
+      expect(await toolset.getTools(), hasLength(1));
+      expect(
+        seenMethods.where((String method) => method == 'initialize'),
+        <String>['initialize'],
+      );
+
+      seenMethods.clear();
+      seenHeadersByMethod.clear();
+      await toolset.close();
+
+      expect(await toolset.getTools(), hasLength(1));
+      expect(
+        seenMethods.where((String method) => method == 'initialize'),
+        <String>['initialize'],
+      );
+    });
+
     test('loads remote MCP resources through toolset', () async {
       final McpToolset toolset = McpToolset(connectionParams: connectionParams);
 
