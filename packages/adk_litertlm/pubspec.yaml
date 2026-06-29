@@ -1,0 +1,22 @@
+name: adk_litertlm
+description: LiteRT-LM model integration for ADK Dart packages.
+version: 2026.6.6
+repository: https://github.com/adk-labs/adk_dart
+homepage: https://github.com/adk-labs/adk_dart
+issue_tracker: https://github.com/adk-labs/adk_dart/issues
+topics:
+  - litertlm
+  - agents
+  - ai
+  - llm
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart: ^2026.6.6
+  litertlm: ^0.0.8
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6

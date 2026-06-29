@@ -1,3 +1,5 @@
 dependency_overrides:
   adk_mcp:
     path: packages/adk_mcp
+  adk_litertlm:
+    path: packages/adk_litertlm
