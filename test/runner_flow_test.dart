@@ -134,6 +134,36 @@ class _CloseCountingToolset extends BaseToolset {
   }
 }
 
+class _MockWorkflowAgent extends BaseAgent {
+  _MockWorkflowAgent({required super.name});
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content(
+        role: 'user',
+        parts: <Part>[
+          Part(
+            functionResponse: FunctionResponse(
+              name: 'escalate',
+              id: 'esc-1',
+              response: <String, dynamic>{},
+            ),
+          )
+        ],
+      ),
+      actions: EventActions(escalate: true),
+    );
+  }
+
+  @override
+  _MockWorkflowAgent clone({Map<String, Object?>? update}) {
+    return _MockWorkflowAgent(name: name);
+  }
+}
+
 Future<List<Event>> _collect(Stream<Event> stream) async {
   return stream.toList();
 }
@@ -859,6 +889,198 @@ void main() {
             .toList(),
         throwsA(isA<SessionNotFoundError>()),
       );
+    });
+
+    test('findAgentToRun: candidate under workflow agent falls back to root', () async {
+      final MockModel leafModel = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('Hello from leaf')),
+        ],
+      );
+      final Agent leaf = Agent(name: 'leaf', model: leafModel);
+      final SequentialAgent seq = SequentialAgent(
+        name: 'seq',
+        subAgents: <BaseAgent>[leaf],
+      );
+      final MockModel rootModel = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('Hello from root')),
+        ],
+      );
+      final Agent root = Agent(
+        name: 'root',
+        model: rootModel,
+        subAgents: <BaseAgent>[seq],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: root);
+
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_workflow_fallback',
+      );
+
+      // leaf produced the last model event, then the user replied.
+      await runner.sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv-1',
+          author: 'leaf',
+          content: Content.modelText('Hello from leaf'),
+        ),
+      );
+
+      await runner.sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv-1',
+          author: 'user',
+          content: Content.userText('Hi'),
+        ),
+      );
+
+      // On next run, since leaf is under seq (SequentialAgent, not LlmAgent),
+      // it should fallback to root.
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('Hi again'),
+        ),
+      );
+
+      expect(events, isNotEmpty);
+      expect(events.last.author, 'root');
+      expect(events.last.content?.parts.single.text, 'Hello from root');
+    });
+
+    test('findAgentToRun: leaf not transferable returns nearest transferable ancestor', () async {
+      final MockModel leafModel = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('Hello from leaf')),
+        ],
+      );
+      final Agent leaf = Agent(
+        name: 'leaf',
+        model: leafModel,
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+      final MockModel midModel = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('Hello from mid')),
+        ],
+      );
+      final Agent mid = Agent(
+        name: 'mid',
+        model: midModel,
+        subAgents: <BaseAgent>[leaf],
+      );
+      final MockModel rootModel = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(content: Content.modelText('Hello from root')),
+        ],
+      );
+      final Agent root = Agent(
+        name: 'root',
+        model: rootModel,
+        subAgents: <BaseAgent>[mid],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: root);
+
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_leaf_not_transferable',
+      );
+
+      await runner.sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv-1',
+          author: 'mid',
+          content: Content.modelText('mid'),
+        ),
+      );
+      await runner.sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv-1',
+          author: 'leaf',
+          content: Content.modelText('leaf'),
+        ),
+      );
+      await runner.sessionService.appendEvent(
+        session: session,
+        event: Event(
+          invocationId: 'inv-1',
+          author: 'user',
+          content: Content.userText('Hi'),
+        ),
+      );
+
+      // On next run, since leaf disallows transfer to parent, walk up to mid (transferable LlmAgent).
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('Hi again'),
+        ),
+      );
+
+      expect(events, isNotEmpty);
+      expect(events.last.author, 'mid');
+      expect(events.last.content?.parts.single.text, 'Hello from mid');
+    });
+
+    test('agent transfer returns control to parent after sub-agent completes', () async {
+      final _MockWorkflowAgent workflow = _MockWorkflowAgent(name: 'workflow');
+      final MockModel rootModel = MockModel(
+        responses: <LlmResponse>[
+          LlmResponse(
+            content: Content(
+              parts: <Part>[
+                Part(
+                  functionCall: FunctionCall(
+                    name: 'transfer_to_agent',
+                    args: <String, dynamic>{'agent_name': 'workflow'},
+                    id: 'fc-trans',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          LlmResponse(content: Content.modelText('root-after-workflow')),
+        ],
+      );
+      final Agent root = Agent(
+        name: 'root',
+        model: rootModel,
+        subAgents: <BaseAgent>[workflow],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: root);
+
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_transfer_control',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+        ),
+      );
+
+      final List<Event> agentEvents = events.where((Event e) => e.author != 'user').toList();
+      expect(agentEvents, isNotEmpty);
+      expect(agentEvents.last.author, 'root');
+      expect(agentEvents.last.content?.parts.single.text, 'root-after-workflow');
     });
   });
 }

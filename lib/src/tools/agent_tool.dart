@@ -226,11 +226,20 @@ class SingleTurnAgentTool extends AgentTool {
       toolContext.actions.skipSummarization = true;
     }
 
+    final String? fcId = toolContext.functionCallId;
+    final String? baseBranch = toolContext.invocationContext.branch;
+    final String segment = fcId != null && fcId.isNotEmpty
+        ? '${agent.name}@$fcId'
+        : '${toolContext.agentName}.${agent.name}';
+    final String toolBranch = baseBranch != null && baseBranch.isNotEmpty
+        ? '$baseBranch.$segment'
+        : segment;
+
     final _InlineAgentRunResult result = await _runAgentInCurrentSession(
       agent: agent,
       args: args,
       toolContext: toolContext,
-      branch: _childBranch(toolContext.invocationContext, agent),
+      branch: toolBranch,
       appendUserContent: true,
       includePlugins: includePlugins,
     );

@@ -655,7 +655,7 @@ AuthCredential? _normalizeCredentialForKey(AuthCredential? credential) {
       authUri: null,
       nonce: oauth2.nonce,
       state: null,
-      redirectUri: oauth2.redirectUri,
+      redirectUri: null,
       authResponseUri: null,
       authCode: null,
       accessToken: null,

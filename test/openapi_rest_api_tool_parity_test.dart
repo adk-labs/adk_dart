@@ -353,5 +353,35 @@ void main() {
       expect(requested, isA<AuthConfig>());
       expect((requested as AuthConfig).credentialKey, 'my_tool_tokens');
     });
+
+    test('credential key is stable across redirectUri changes', () {
+      final SecurityScheme scheme = SecurityScheme(
+        type: AuthSchemeType.oauth2,
+      );
+      final AuthCredential credentialLocal = AuthCredential(
+        authType: AuthCredentialType.oauth2,
+        oauth2: OAuth2Auth(
+          clientId: 'client',
+          clientSecret: 'secret',
+          redirectUri: 'http://localhost:8001/oauth2callback',
+        ),
+      );
+      final AuthCredential credentialDeployed = AuthCredential(
+        authType: AuthCredentialType.oauth2,
+        oauth2: OAuth2Auth(
+          clientId: 'client',
+          clientSecret: 'secret',
+          redirectUri: 'https://deployed.example.com/oauth2callback',
+        ),
+      );
+
+      final ToolContextCredentialStore store = ToolContextCredentialStore(
+        toolContext: _newToolContext(),
+      );
+
+      final String keyLocal = store.getCredentialKey(scheme, credentialLocal);
+      final String keyDeployed = store.getCredentialKey(scheme, credentialDeployed);
+      expect(keyLocal, keyDeployed);
+    });
   });
 }

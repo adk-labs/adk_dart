@@ -518,7 +518,7 @@ void main() {
 
       final Object? result = await tool.run(
         args: <String, dynamic>{'request': 'handle this once'},
-        toolContext: Context(invocationContext),
+        toolContext: Context(invocationContext, functionCallId: 'fc-1'),
       );
 
       expect('$result', contains('handle this once'));
@@ -526,7 +526,7 @@ void main() {
         session.events.any(
           (Event event) =>
               event.author == 'user' &&
-              event.branch == 'root_agent.single_turn_child',
+              event.branch == 'single_turn_child@fc-1',
         ),
         isTrue,
       );
@@ -534,7 +534,7 @@ void main() {
         session.events.any(
           (Event event) =>
               event.author == 'single_turn_child' &&
-              event.branch == 'root_agent.single_turn_child',
+              event.branch == 'single_turn_child@fc-1',
         ),
         isTrue,
       );
