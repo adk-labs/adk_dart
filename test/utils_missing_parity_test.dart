@@ -183,6 +183,10 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
+      final String staticTemplate = 'A static instruction with no placeholders.';
+      final String renderedStatic = await injectSessionState(staticTemplate, readonlyContext);
+      expect(renderedStatic, equals(staticTemplate));
+
       expect(isValidStateName('city'), isTrue);
       expect(isValidStateName('app:region'), isTrue);
       expect(isValidStateName('invalid-name'), isFalse);

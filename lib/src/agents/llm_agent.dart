@@ -388,11 +388,14 @@ class LlmAgent extends BaseAgent {
     }
 
     bool shouldPause = false;
+    String outputAccumulator = '';
     await for (final Event event in llmFlow.runAsync(context)) {
       if (context.isAborted) {
         return;
       }
       _maybeSaveOutputToState(event);
+      outputAccumulator =
+          _maybeAccumulateStreamingOutput(event, outputAccumulator);
       yield event;
       if (context.shouldPauseInvocation(event)) {
         shouldPause = true;
@@ -422,11 +425,14 @@ class LlmAgent extends BaseAgent {
   /// Runs live LLM flow execution for this agent.
   @override
   Stream<Event> runLiveImpl(InvocationContext context) async* {
+    String outputAccumulator = '';
     await for (final Event event in llmFlow.runLive(context)) {
       if (context.isAborted) {
         return;
       }
       _maybeSaveOutputToState(event);
+      outputAccumulator =
+          _maybeAccumulateStreamingOutput(event, outputAccumulator);
       yield event;
     }
   }
@@ -657,6 +663,30 @@ class LlmAgent extends BaseAgent {
     }
 
     event.actions.stateDelta[outputKey!] = value;
+  }
+
+  String _maybeAccumulateStreamingOutput(Event event, String accumulator) {
+    if (outputKey == null ||
+        outputSchema != null ||
+        event.author != name ||
+        event.partial == true ||
+        event.content == null ||
+        event.content!.parts.isEmpty) {
+      return accumulator;
+    }
+
+    final String text = event.content!.parts
+        .where((Part part) => part.text != null && part.text!.isNotEmpty && !part.thought)
+        .map((Part part) => part.text!)
+        .join();
+
+    if (text.isEmpty) {
+      return accumulator;
+    }
+
+    final String newAccumulator = accumulator + text;
+    event.actions.stateDelta[outputKey!] = newAccumulator;
+    return newAccumulator;
   }
 
   List<T> _coerceCallbacks<T>(Object? value) {

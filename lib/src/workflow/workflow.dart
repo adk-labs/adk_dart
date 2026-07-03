@@ -2422,19 +2422,40 @@ String _nodeName(Object node) {
 }
 
 Map<String, dynamic> _toolArgsFromInput(Object? nodeInput) {
-  if (nodeInput == null) {
+  Object? args = nodeInput;
+  if (args is Content) {
+    args = args.parts
+        .where((Part part) => part.text != null)
+        .map((Part part) => part.text!)
+        .join();
+  }
+
+  if (args is String) {
+    final String trimmed = args.trim();
+    if (trimmed.isEmpty) {
+      args = null;
+    } else {
+      try {
+        args = jsonDecode(trimmed);
+      } catch (_) {
+        // Leave as string to throw ArgumentError below.
+      }
+    }
+  }
+
+  if (args == null) {
     return <String, dynamic>{};
   }
-  if (nodeInput is Map) {
+
+  if (args is Map) {
     return <String, dynamic>{
-      for (final MapEntry<Object?, Object?> entry in nodeInput.entries)
+      for (final MapEntry<Object?, Object?> entry in args.entries)
         '${entry.key}': entry.value,
     };
   }
-  throw ArgumentError.value(
-    nodeInput,
-    'nodeInput',
-    'ToolNode input must be a map of tool arguments or null.',
+
+  throw ArgumentError(
+    'The input to ToolNode must be a dictionary (Map), JSON string representing a Map, or null.',
   );
 }
 

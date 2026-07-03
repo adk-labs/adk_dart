@@ -343,6 +343,8 @@ Future<Event?> _executeSingleFunctionCallAsync(
     return null;
   }
 
+  Object? rawResult = functionResponse;
+
   if (functionResponse == null) {
     for (final BeforeToolCallback callback
         in agent.canonicalBeforeToolCallbacks) {
@@ -358,6 +360,7 @@ Future<Event?> _executeSingleFunctionCallAsync(
       }
       if (value != null) {
         functionResponse = value;
+        rawResult = value;
         break;
       }
     }
@@ -375,6 +378,7 @@ Future<Event?> _executeSingleFunctionCallAsync(
       if (invocationContext.isAborted) {
         return null;
       }
+      rawResult = result;
       functionResponse = tool.defersResponse && result == null
           ? <String, dynamic>{}
           : _normalizeFunctionResult(result);
@@ -394,6 +398,7 @@ Future<Event?> _executeSingleFunctionCallAsync(
         rethrow;
       }
       functionResponse = handled;
+      rawResult = handled;
     }
   }
 
@@ -441,6 +446,7 @@ Future<Event?> _executeSingleFunctionCallAsync(
     functionResult: functionResponse,
     toolContext: toolContext,
     invocationContext: invocationContext,
+    rawResult: rawResult,
   );
 }
 
@@ -509,7 +515,9 @@ Event _buildResponseEvent({
   required Map<String, dynamic> functionResult,
   required ToolContext toolContext,
   required InvocationContext invocationContext,
+  Object? rawResult,
 }) {
+  final Object? displayResult = rawResult ?? functionResult;
   final Part functionResponsePart = Part.fromFunctionResponse(
     name: tool.name,
     response: functionResult,
@@ -517,6 +525,33 @@ Event _buildResponseEvent({
   );
   final Part? imagePart = _decodeComputerUseImagePart(tool, functionResult);
   final List<Part> parts = <Part>[functionResponsePart, ?imagePart];
+
+  // When summarization is skipped, ensure a displayable text part is added so
+  // the tool's output is not lost in UIs that don't render function responses.
+  // Control-flow tools (e.g. exit_loop) set skipSummarization but return no
+  // meaningful output; their null result is normalized to {'result': null}, so
+  // skip those to avoid emitting a noisy "null" text part.
+  final bool hasDisplayableResult = displayResult != null &&
+      !(displayResult is Map &&
+          displayResult.length == 1 &&
+          displayResult.containsKey('result') &&
+          displayResult['result'] == null);
+
+  if (toolContext.actions.skipSummarization == true &&
+      !functionResult.containsKey('error') &&
+      hasDisplayableResult) {
+    String resultText;
+    if (displayResult is String) {
+      resultText = displayResult;
+    } else {
+      try {
+        resultText = jsonEncode(displayResult);
+      } catch (_) {
+        resultText = '$displayResult';
+      }
+    }
+    parts.add(Part.text(resultText));
+  }
 
   return Event(
     invocationId: invocationContext.invocationId,
@@ -659,6 +694,10 @@ void _deepMergeStateDelta(
         ),
       );
       target[key] = nested;
+      return;
+    }
+    if (existing is List && value is List) {
+      target[key] = <Object?>[...existing, ...value];
       return;
     }
     target[key] = value;

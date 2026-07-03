@@ -1023,5 +1023,29 @@ void main() {
         expect(appended.parts.last.inlineData?.data, <int>[37, 80, 68, 70]);
       },
     );
+
+    test('system instruction marks load_skill as non-terminal', () {
+      final String instruction = defaultSkillSystemInstruction;
+      expect(instruction, contains('does NOT complete your turn'));
+      expect(instruction, contains('empty response'));
+      expect(instruction, contains('run_skill_script'));
+    });
+
+    test('prefixed system instruction includes continue after load rule', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        toolNamePrefix: 'my',
+      );
+      final LlmRequest request = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: request,
+      );
+
+      final String systemInstruction = request.config.systemInstruction ?? '';
+      expect(systemInstruction, contains('does NOT complete your turn'));
+      expect(systemInstruction, contains('my_load_skill'));
+      expect(systemInstruction, contains('my_run_skill_script'));
+    });
   });
 }

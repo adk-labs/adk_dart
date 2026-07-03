@@ -868,10 +868,7 @@ class Runner {
       };
     }
 
-    final Event? matchingCall = context.findMatchingFunctionCall(event);
-    if (matchingCall != null) {
-      event.branch = matchingCall.branch;
-    }
+    context.stampEventBranchContext(event);
 
     await _appendEventWithPersistBarrier(context, event);
   }

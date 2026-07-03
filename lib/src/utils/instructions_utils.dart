@@ -17,6 +17,9 @@ Future<String> injectSessionState(
   String template,
   ReadonlyContext readonlyContext,
 ) async {
+  if (!template.contains('{')) {
+    return template;
+  }
   final InvocationContext invocationContext = readonlyContext.invocationContext;
   final List<RegExpMatch> matches = _templatePattern
       .allMatches(template)

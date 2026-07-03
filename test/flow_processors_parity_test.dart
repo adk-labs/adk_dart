@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:adk_dart/adk_dart.dart';
+import 'package:adk_dart/src/flows/llm_flows/functions.dart';
 import 'package:test/test.dart';
 
 class _NoopModel extends BaseLlm {
@@ -1174,4 +1175,52 @@ void main() {
       );
     },
   );
+
+  test('mergeParallelFunctionResponseEvents merges state_delta lists', () {
+    const String invocationId = 'base_invocation_123';
+
+    final Event event1 = Event(
+      invocationId: invocationId,
+      author: 'tool',
+      content: Content(
+        role: 'user',
+        parts: <Part>[
+          Part.fromFunctionResponse(
+            name: 'func_1',
+            response: <String, dynamic>{'result': 'ok'},
+          ),
+        ],
+      ),
+      actions: EventActions(
+        stateDelta: <String, Object?>{
+          'items': <Object?>['a'],
+        },
+      ),
+    );
+
+    final Event event2 = Event(
+      invocationId: invocationId,
+      author: 'tool',
+      content: Content(
+        role: 'user',
+        parts: <Part>[
+          Part.fromFunctionResponse(
+            name: 'func_2',
+            response: <String, dynamic>{'result': 'ok'},
+          ),
+        ],
+      ),
+      actions: EventActions(
+        stateDelta: <String, Object?>{
+          'items': <Object?>['b'],
+        },
+      ),
+    );
+
+    final Event mergedEvent = mergeParallelFunctionResponseEvents(<Event>[event1, event2]);
+
+    expect(mergedEvent.actions.stateDelta, equals(<String, Object?>{
+      'items': <Object?>['a', 'b'],
+    }));
+  });
 }

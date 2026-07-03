@@ -1082,5 +1082,253 @@ void main() {
       expect(agentEvents.last.author, 'root');
       expect(agentEvents.last.content?.parts.single.text, 'root-after-workflow');
     });
+
+    test('empty STOP after tool call surfaces error event', () async {
+      final LlmResponse turn1 = LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'increase_by_one',
+              args: <String, dynamic>{'x': 1},
+            ),
+          ],
+        ),
+        finishReason: 'STOP',
+      );
+      // An empty Gemini turn: STOP with no content parts and no error from the model.
+      final LlmResponse turn2 = LlmResponse(
+        content: Content(role: 'model', parts: <Part>[]),
+        finishReason: 'STOP',
+      );
+
+      int functionCalled = 0;
+      final int Function(int) increaseByOne = (int x) {
+        functionCalled++;
+        return x + 1;
+      };
+
+      final MockModel model = MockModel(responses: <LlmResponse>[turn1, turn2]);
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[
+          FunctionTool(
+            func: increaseByOne,
+            name: 'increase_by_one',
+            description: 'Increase input integer by one',
+          ),
+        ],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_empty_stop',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('test'),
+        ),
+      );
+
+      expect(functionCalled, 1);
+
+      final List<Event> functionCallEvents =
+          events.where((Event e) => e.getFunctionCalls().isNotEmpty).toList();
+      final List<Event> functionResponseEvents =
+          events.where((Event e) => e.getFunctionResponses().isNotEmpty).toList();
+      expect(functionCallEvents, hasLength(1));
+      expect(functionResponseEvents, hasLength(1));
+
+      // The empty turn 2 must surface as an error event, not an empty final.
+      final List<Event> errorEvents =
+          events.where((Event e) => e.errorCode != null).toList();
+      expect(errorEvents, hasLength(1));
+      final Event err = errorEvents.first;
+      expect(err.errorCode, 'MODEL_RETURNED_NO_CONTENT');
+      expect(err.errorMessage, isNotNull);
+      // And it must be the run's final event.
+      expect(events.last, same(err));
+    });
+
+    test('tool skipSummarization string output is appended as text', () async {
+      final LlmResponse turn1 = LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'skip_sum_tool',
+              args: <String, dynamic>{},
+            ),
+          ],
+        ),
+        finishReason: 'STOP',
+      );
+      final LlmResponse turn2 = LlmResponse(content: Content.modelText('done'));
+
+      final MockModel model = MockModel(responses: <LlmResponse>[turn1, turn2]);
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[
+          _SkipSummarizationTool(result: 'tool_response_text'),
+        ],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_skip_sum_1',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('test'),
+        ),
+      );
+
+      // Verify that the tool response event has both function response and text part.
+      final List<Event> responseEvents =
+          events.where((Event e) => e.getFunctionResponses().isNotEmpty).toList();
+      expect(responseEvents, hasLength(1));
+      final Event responseEvent = responseEvents.first;
+
+      final List<Part> textParts =
+          responseEvent.content?.parts.where((Part p) => p.text != null).toList() ?? <Part>[];
+      expect(textParts, hasLength(1));
+      expect(textParts.first.text, 'tool_response_text');
+    });
+
+    test('tool skipSummarization structured output is JSON-encoded as text', () async {
+      final LlmResponse turn1 = LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'skip_sum_tool',
+              args: <String, dynamic>{},
+            ),
+          ],
+        ),
+        finishReason: 'STOP',
+      );
+      final LlmResponse turn2 = LlmResponse(content: Content.modelText('done'));
+
+      final MockModel model = MockModel(responses: <LlmResponse>[turn1, turn2]);
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[
+          _SkipSummarizationTool(result: <String, dynamic>{'value': 123}),
+        ],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_skip_sum_2',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('test'),
+        ),
+      );
+
+      final List<Event> responseEvents =
+          events.where((Event e) => e.getFunctionResponses().isNotEmpty).toList();
+      expect(responseEvents, hasLength(1));
+      final Event responseEvent = responseEvents.first;
+
+      final List<Part> textParts =
+          responseEvent.content?.parts.where((Part p) => p.text != null).toList() ?? <Part>[];
+      expect(textParts, hasLength(1));
+      expect(textParts.first.text, '{"value":123}');
+    });
+
+    test('tool skipSummarization null output is not appended as text', () async {
+      final LlmResponse turn1 = LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'skip_sum_tool',
+              args: <String, dynamic>{},
+            ),
+          ],
+        ),
+        finishReason: 'STOP',
+      );
+      final LlmResponse turn2 = LlmResponse(content: Content.modelText('done'));
+
+      final MockModel model = MockModel(responses: <LlmResponse>[turn1, turn2]);
+      final Agent agent = Agent(
+        name: 'root_agent',
+        model: model,
+        tools: <Object>[
+          _SkipSummarizationTool(result: null),
+        ],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: agent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_skip_sum_3',
+      );
+
+      final List<Event> events = await _collect(
+        runner.runAsync(
+          userId: 'user_1',
+          sessionId: session.id,
+          newMessage: Content.userText('test'),
+        ),
+      );
+
+      final List<Event> responseEvents =
+          events.where((Event e) => e.getFunctionResponses().isNotEmpty).toList();
+      expect(responseEvents, hasLength(1));
+      final Event responseEvent = responseEvents.first;
+
+      final List<Part> textParts =
+          responseEvent.content?.parts.where((Part p) => p.text != null).toList() ?? <Part>[];
+      // null result maps to {"result": null} which is skipped from adding text.
+      expect(textParts, isEmpty);
+    });
   });
 }
+
+class _SkipSummarizationTool extends BaseTool {
+  _SkipSummarizationTool({required this.result})
+      : super(name: 'skip_sum_tool', description: 'description');
+
+  final Object? result;
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    return FunctionDeclaration(name: name, description: description);
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    toolContext.actions.skipSummarization = true;
+    return result;
+  }
+}
+
+
+

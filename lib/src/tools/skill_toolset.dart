@@ -38,6 +38,8 @@ This is very important:
 3. The `load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). It is ONLY for skill-bundled files — do NOT use it to access documents or files provided by the user at runtime. Do NOT use other tools to access skill files.
 4. Use `run_skill_script` to run scripts from a skill's `scripts/` directory. Use `load_skill_resource` to view script content first if needed.
 5. If `load_skill_resource` returns any error, do not retry any path. Report the error to the user and stop.
+6. If `run_skill_script` returns an error (for example `SCRIPT_NOT_FOUND`), do not retry the same script or guess a different script path. Report the error to the user and stop.
+7. Loading a skill only retrieves its instructions; it does NOT complete your turn. After a `load_skill` call returns, continue in the SAME turn: call whatever tools the skill's steps require (search, data retrieval, render), then write your reply. Never end your turn with an empty response right after loading a skill.
 """;
 
 String _buildSkillSystemInstruction(String? prefix) {
@@ -61,6 +63,8 @@ This is very important:
 3. The `${p}load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). It is ONLY for skill-bundled files — do NOT use it to access documents or files provided by the user at runtime. Do NOT use other tools to access skill files.
 4. Use `${p}run_skill_script` to run scripts from a skill's `scripts/` directory. Use `${p}load_skill_resource` to view script content first if needed.
 5. If `${p}load_skill_resource` returns any error, do not retry any path. Report the error to the user and stop.
+6. If `${p}run_skill_script` returns an error (for example `SCRIPT_NOT_FOUND`), do not retry the same script or guess a different script path. Report the error to the user and stop.
+7. Loading a skill only retrieves its instructions; it does NOT complete your turn. After a `${p}load_skill` call returns, continue in the SAME turn: call whatever tools the skill's steps require (search, data retrieval, render), then write your reply. Never end your turn with an empty response right after loading a skill.
 """;
 }
 

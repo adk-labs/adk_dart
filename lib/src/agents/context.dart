@@ -62,6 +62,9 @@ class Context extends ReadonlyContext {
   @override
   State get state => _state;
 
+  /// The branch path of the current invocation context.
+  String? get branch => invocationContext.branch;
+
   /// Buffered actions collected during this invocation.
   EventActions get actions => _eventActions;
 

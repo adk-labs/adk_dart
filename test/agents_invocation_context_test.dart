@@ -205,5 +205,50 @@ void main() {
       );
       expect(context.copyWith(isolationScope: null).isolationScope, isNull);
     });
+
+    test('stampEventBranchContext does not overwrite existing isolationScope if set', () {
+      final Event fcEvent = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        branch: 'root@1',
+        isolationScope: 'task_456',
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'some_tool',
+              id: 'test_function_call_id',
+              args: <String, Object?>{},
+            ),
+          ],
+        ),
+      );
+
+      final Event frEvent = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        isolationScope: 'task_123',
+        content: Content(
+          role: 'user',
+          parts: <Part>[
+            Part.fromFunctionResponse(
+              name: 'some_tool',
+              id: 'test_function_call_id',
+              response: <String, Object?>{'result': 'ok'},
+            ),
+          ],
+        ),
+      );
+
+      final InvocationContext context = _newContext(
+        invocationId: 'inv_1',
+        events: <Event>[fcEvent, frEvent],
+      );
+
+      context.stampEventBranchContext(frEvent);
+      expect(frEvent.branch, 'root@1');
+      expect(frEvent.isolationScope, 'task_123');
+    });
   });
 }
+

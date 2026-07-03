@@ -2742,7 +2742,101 @@ void main() {
       expect(agent.includeContents, 'default');
     });
   });
+
+  group('ToolNode input parsing', () {
+    test('accepts Map input', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      final Object? out = await node.run(ctx, <String, Object?>{'a': 1, 'b': 'value'});
+      expect(out, equals(<String, Object?>{'a': 1, 'b': 'value'}));
+    });
+
+    test('accepts null input, returning empty Map', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      final Object? out = await node.run(ctx, null);
+      expect(out, equals(<String, Object?>{}));
+    });
+
+    test('accepts empty/whitespace string, returning empty Map', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      expect(await node.run(ctx, ''), equals(<String, Object?>{}));
+      expect(await node.run(ctx, '   '), equals(<String, Object?>{}));
+    });
+
+    test('accepts valid JSON string representing Map', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      final Object? out = await node.run(ctx, '{"a": 1, "b": "value"}');
+      expect(out, equals(<String, Object?>{'a': 1, 'b': 'value'}));
+    });
+
+    test('accepts Content containing JSON string', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      final Content content = Content(
+        role: 'user',
+        parts: <Part>[Part.text('{"a": 1, "b": "value"}')],
+      );
+      final Object? out = await node.run(ctx, content);
+      expect(out, equals(<String, Object?>{'a': 1, 'b': 'value'}));
+    });
+
+    test('rejects non-dict JSON string (e.g. list)', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      expect(
+        () => node.run(ctx, '[1, 2, 3]'),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects invalid JSON string', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      expect(
+        () => node.run(ctx, 'not a JSON'),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects non-dict Content text', () async {
+      final _MockReturnArgsTool tool = _MockReturnArgsTool();
+      final wf.ToolNode node = wf.ToolNode(tool: tool);
+      final wf.WorkflowContext ctx = wf.WorkflowContext();
+      final Content content = Content(
+        role: 'user',
+        parts: <Part>[Part.text('not a JSON')],
+      );
+      expect(
+        () => node.run(ctx, content),
+        throwsArgumentError,
+      );
+    });
+  });
 }
+
+class _MockReturnArgsTool extends BaseTool {
+  _MockReturnArgsTool()
+      : super(name: 'mock_return_args_tool', description: 'returns args');
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return args;
+  }
+}
+
 
 /// Applies the same defaulting logic that [AgentNode.run] performs on
 /// [LlmAgent] nodes in a workflow.

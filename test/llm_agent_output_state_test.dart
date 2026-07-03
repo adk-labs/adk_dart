@@ -302,10 +302,7 @@ void main() {
             FunctionTool(
               name: 'lookup',
               description: 'Looks up a value.',
-              func: ({required String query}) => <String, Object?>{
-                'query': query,
-                'value': 1,
-              },
+              func: ({required String query}) => null,
             ),
           ],
           afterToolCallback:
@@ -316,8 +313,7 @@ void main() {
                 Map<String, dynamic> toolResponse,
               ) {
                 toolContext.actions.skipSummarization = true;
-                toolContext.actions.stateDelta['tool_value'] =
-                    toolResponse['value'];
+                toolContext.actions.stateDelta['tool_value'] = 1;
                 return null;
               },
         );
@@ -335,5 +331,151 @@ void main() {
         );
       },
     );
+
+    test('runAsync accumulates text around tool calls', () async {
+      final List<Event> canned = <Event>[
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(role: 'model', parts: <Part>[Part.text('Intro one. ')]),
+          partial: true,
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(role: 'model', parts: <Part>[Part.text('Intro two.')]),
+          partial: true,
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.text('Intro one. Intro two.'),
+              Part.fromFunctionCall(name: 't', args: <String, dynamic>{}),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'user',
+          content: Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(name: 't', response: <String, dynamic>{'ok': true}),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(role: 'model', parts: <Part>[Part.text('Progress.')]),
+          partial: true,
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.text('Progress.'),
+              Part.fromFunctionCall(name: 't', args: <String, dynamic>{}),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'user',
+          content: Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(name: 't', response: <String, dynamic>{'ok': true}),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(role: 'model', parts: <Part>[Part.text('Conclusion one. ')]),
+          partial: true,
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(role: 'model', parts: <Part>[Part.text('Conclusion two.')]),
+          partial: true,
+        ),
+        Event(
+          invocationId: 'inv',
+          author: 'agent',
+          content: Content(role: 'model', parts: <Part>[Part.text('Conclusion one. Conclusion two.')]),
+        ),
+      ];
+
+      final _CannedFlow flow = _CannedFlow(canned);
+      final LlmAgent agent = _CustomFlowLlmAgent(
+        name: 'agent',
+        outputKey: 'final_output',
+        flow: flow,
+      );
+
+      final InMemorySessionService sessionService = InMemorySessionService();
+      final Session session = await sessionService.createSession(
+        appName: 't',
+        userId: 'u',
+        sessionId: 's',
+      );
+
+      final InvocationContext ctx = InvocationContext(
+        sessionService: sessionService,
+        invocationId: 'inv',
+        agent: agent,
+        session: session,
+      );
+
+      await for (final Event event in agent.runAsync(ctx)) {
+        await sessionService.appendEvent(session: session, event: event);
+      }
+
+      expect(
+        session.state['final_output'],
+        'Intro one. Intro two.Progress.Conclusion one. Conclusion two.',
+      );
+    });
   });
 }
+
+class _CannedFlow extends BaseLlmFlow {
+  _CannedFlow(this.events);
+
+  final List<Event> events;
+
+  @override
+  Stream<Event> runAsync(InvocationContext context) async* {
+    for (final Event event in events) {
+      yield event;
+    }
+  }
+
+  @override
+  Stream<Event> runLive(InvocationContext context) async* {
+    for (final Event event in events) {
+      yield event;
+    }
+  }
+}
+
+class _CustomFlowLlmAgent extends LlmAgent {
+  _CustomFlowLlmAgent({
+    required super.name,
+    super.outputKey,
+    required this.flow,
+  });
+
+  final BaseLlmFlow flow;
+
+  @override
+  BaseLlmFlow get llmFlow => flow;
+}
+

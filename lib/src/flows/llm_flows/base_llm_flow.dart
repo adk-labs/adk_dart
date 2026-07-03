@@ -1074,6 +1074,16 @@ class BaseLlmFlow {
       return;
     }
 
+    if (response.partial != true &&
+        response.errorCode == null &&
+        response.finishReason == 'STOP' &&
+        (response.content == null || response.content!.parts.isEmpty) &&
+        context.runConfig?.streamingMode != StreamingMode.sse) {
+      response.errorCode = 'MODEL_RETURNED_NO_CONTENT';
+      response.errorMessage = response.errorMessage ??
+          'The model returned no content (finish_reason=STOP with empty parts).';
+    }
+
     if (response.content == null &&
         response.errorCode == null &&
         response.interrupted != true &&

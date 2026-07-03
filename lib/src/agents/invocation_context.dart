@@ -510,6 +510,17 @@ class InvocationContext {
     return null;
   }
 
+  /// Stamps the event with the branch and isolation scope of its matching function call.
+  void stampEventBranchContext(Event event) {
+    final Event? functionCall = findMatchingFunctionCall(event);
+    if (functionCall != null) {
+      event.branch = functionCall.branch;
+      if (event.isolationScope == null && functionCall.isolationScope != null) {
+        event.isolationScope = functionCall.isolationScope;
+      }
+    }
+  }
+
   /// Creates a shallow-cloned context with selected overrides.
   InvocationContext copyWith({
     BaseAgent? agent,
