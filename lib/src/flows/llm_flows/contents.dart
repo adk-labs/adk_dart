@@ -186,8 +186,7 @@ bool shouldIncludeEventInContext(
       isEventBelongsToBranch(currentBranch, event) &&
       !_isAdkFrameworkEvent(event) &&
       !_isAuthEvent(event) &&
-      !_isRequestConfirmationEvent(event) &&
-      !_isRequestInputEvent(event);
+      !_isRequestConfirmationEvent(event);
 }
 
 /// Rebuilds a scoped task's originating function-call arguments as user text.
@@ -480,10 +479,6 @@ bool _isAuthEvent(Event event) {
 
 bool _isRequestConfirmationEvent(Event event) {
   return _isFunctionCallEvent(event, requestConfirmationFunctionCallName);
-}
-
-bool _isRequestInputEvent(Event event) {
-  return _isFunctionCallEvent(event, requestInputFunctionCallName);
 }
 
 bool _isAdkFrameworkEvent(Event event) {

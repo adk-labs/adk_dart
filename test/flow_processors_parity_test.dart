@@ -602,6 +602,60 @@ void main() {
     );
   });
 
+  test('contents processor keeps request_input events', () async {
+    final Agent testAgent = Agent(
+      name: 'root_agent',
+      model: _NoopModel(),
+    );
+
+    final RequestInput input = RequestInput(
+      interruptId: 'input_call_1',
+      message: 'Provide your name',
+    );
+    final Event requestInputCall = createRequestInputEvent(
+      input,
+      invocationId: 'inv_1',
+      author: 'root_agent',
+      role: 'model',
+    );
+    final Event requestInputResponse = Event(
+      invocationId: 'inv_1',
+      author: 'user',
+      content: Content(
+        role: 'user',
+        parts: <Part>[
+          createRequestInputResponse(
+            'input_call_1',
+            <String, dynamic>{'name': 'John'},
+          )
+        ],
+      ),
+    );
+
+    final Session session = Session(
+      id: 's_request_input_keep',
+      appName: 'app',
+      userId: 'u1',
+      events: <Event>[requestInputCall, requestInputResponse],
+    );
+
+    final InvocationContext context = InvocationContext(
+      sessionService: InMemorySessionService(),
+      invocationId: 'inv_1',
+      agent: testAgent,
+      session: session,
+    );
+
+    final LlmRequest request = LlmRequest();
+    await ContentsLlmRequestProcessor().runAsync(context, request).drain();
+
+    expect(request.contents, hasLength(2));
+    expect(request.contents[0].parts.single.functionCall?.name,
+        requestInputFunctionCallName);
+    expect(request.contents[1].parts.single.functionResponse?.name,
+        requestInputFunctionCallName);
+  });
+
   test(
     'contents processor isolates task scope and rebuilds task input',
     () async {
