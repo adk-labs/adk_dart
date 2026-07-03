@@ -711,12 +711,14 @@ BaseNode buildNode(
 ParallelWorker parallelWorker(
   Object nodeLike, {
   int? maxConcurrency,
+  int? maxParallelWorkers,
   RetryConfig? retryConfig,
   Duration? timeout,
 }) {
   return ParallelWorker(
     node: nodeLike,
     maxConcurrency: maxConcurrency,
+    maxParallelWorkers: maxParallelWorkers,
     retryConfig: retryConfig,
     timeout: timeout,
   );
@@ -743,13 +745,18 @@ class ParallelWorker extends BaseNode {
   factory ParallelWorker({
     required Object node,
     int? maxConcurrency,
+    int? maxParallelWorkers,
     RetryConfig? retryConfig,
     Duration? timeout,
   }) {
     final BaseNode wrappedNode = _buildParallelWorkerNode(node);
+    final int? resolvedLimit = maxParallelWorkers ?? maxConcurrency;
+    if (resolvedLimit != null && resolvedLimit < 1) {
+      throw ArgumentError('maxParallelWorkers must be greater than or equal to 1.');
+    }
     return ParallelWorker._(
       wrappedNode: wrappedNode,
-      maxConcurrency: maxConcurrency,
+      maxParallelWorkers: resolvedLimit,
       retryConfig: retryConfig,
       timeout: timeout,
     );
@@ -757,7 +764,7 @@ class ParallelWorker extends BaseNode {
 
   ParallelWorker._({
     required this.wrappedNode,
-    required this.maxConcurrency,
+    required this.maxParallelWorkers,
     super.retryConfig,
     super.timeout,
   }) : super(name: wrappedNode.name, rerunOnResume: true);
@@ -766,7 +773,11 @@ class ParallelWorker extends BaseNode {
   final BaseNode wrappedNode;
 
   /// Maximum worker tasks to run at once. `null` means unlimited.
-  final int? maxConcurrency;
+  final int? maxParallelWorkers;
+
+  /// Deprecated. Use [maxParallelWorkers] instead.
+  @deprecated
+  int? get maxConcurrency => maxParallelWorkers;
 
   @override
   Future<List<Object?>> run(WorkflowContext context, Object? nodeInput) async {
@@ -780,9 +791,9 @@ class ParallelWorker extends BaseNode {
     }
 
     final List<Object?> results = List<Object?>.filled(items.length, null);
-    final int limit = maxConcurrency == null || maxConcurrency! <= 0
+    final int limit = maxParallelWorkers == null || maxParallelWorkers! <= 0
         ? items.length
-        : maxConcurrency!;
+        : maxParallelWorkers!;
     int nextIndex = 0;
     var cancelRemaining = false;
     Object? firstError;
@@ -888,6 +899,24 @@ class AgentNode extends BaseNode {
 
   @override
   Future<Object?> run(WorkflowContext context, Object? nodeInput) async {
+    // As a node in a workflow, LlmAgent defaults to single_turn mode and
+    // suppresses prior conversation contents unless the user explicitly
+    // configured includeContents.
+    // Matches adk-python _llm_agent_wrapper.run_llm_agent_as_node.
+    if (agent is LlmAgent) {
+      final LlmAgent llmAgent = agent as LlmAgent;
+      if (llmAgent.mode == null) {
+        llmAgent.mode = 'single_turn';
+      }
+      // Only default includeContents to 'none' when the user has not
+      // explicitly set it (i.e. it is still at the constructor default
+      // value of 'default').
+      if (llmAgent.mode == 'single_turn' &&
+          llmAgent.includeContents == 'default') {
+        llmAgent.includeContents = 'none';
+      }
+    }
+
     final InvocationContext parentContext =
         context.invocationContext ?? _standaloneInvocationContext(name);
     final Content? userContent = nodeInput == null

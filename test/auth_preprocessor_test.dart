@@ -151,4 +151,100 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'AuthLlmRequestProcessor ignores auth responses outside current branch',
+    () async {
+      final LlmAgent agent = LlmAgent(
+        name: 'root_agent',
+        model: _NoopModel(),
+        disallowTransferToParent: true,
+        disallowTransferToPeers: true,
+      );
+
+      final Session session = Session(
+        id: 'session_1',
+        appName: 'app',
+        userId: 'user_1',
+        events: <Event>[
+          Event(
+            invocationId: 'inv_1',
+            author: 'root_agent',
+            branch: 'other_branch',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'secure_tool',
+                  id: 'tool_call_1',
+                  args: <String, dynamic>{},
+                ),
+              ],
+            ),
+          ),
+          Event(
+            invocationId: 'inv_1',
+            author: 'root_agent',
+            branch: 'other_branch',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'adk_request_credential',
+                  id: 'auth_call_1',
+                  args: <String, dynamic>{
+                    'function_call_id': 'tool_call_1',
+                    'auth_config': AuthConfig(
+                      authScheme: 'oauth2',
+                      credentialKey: 'cred_1',
+                    ),
+                  },
+                ),
+              ],
+            ),
+          ),
+          Event(
+            invocationId: 'inv_1',
+            author: 'user',
+            branch: 'other_branch',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  name: 'adk_request_credential',
+                  id: 'auth_call_1',
+                  response: <String, Object?>{
+                    'authScheme': 'oauth2',
+                    'credentialKey': 'cred_1',
+                    'exchangedAuthCredential': <String, Object?>{
+                      'authType': 'oauth2',
+                      'oauth2': <String, Object?>{
+                        'accessToken': 'token-abc',
+                        'id_token': 'id-token-xyz',
+                      },
+                    },
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_1',
+        agent: agent,
+        session: session,
+        branch: 'my_branch',
+      );
+
+      final AuthLlmRequestProcessor processor = AuthLlmRequestProcessor();
+      final List<Event> resumedEvents = await processor
+          .runAsync(invocationContext, LlmRequest())
+          .toList();
+
+      expect(resumedEvents, isEmpty);
+    },
+  );
 }

@@ -18,7 +18,7 @@ import 'auth_tool.dart';
 class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
   @override
   Stream<Event> runAsync(InvocationContext context, LlmRequest request) async* {
-    final List<Event> events = context.session.events;
+    final List<Event> events = context.getEvents(currentBranch: true);
     if (events.isEmpty) {
       return;
     }

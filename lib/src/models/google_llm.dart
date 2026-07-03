@@ -44,6 +44,29 @@ class ResourceExhaustedModelException implements Exception {
   }
 }
 
+/// Exception thrown when the model returned a malformed function call.
+class MalformedFunctionCallException implements Exception {
+  /// Creates a malformed function call exception with [message].
+  MalformedFunctionCallException(this.message);
+
+  /// Error message describing the malformed call.
+  final String message;
+
+  @override
+  String toString() {
+    return 'MalformedFunctionCallException: $message';
+  }
+}
+
+void _raiseForMalformedFunctionCall(LlmResponse response) {
+  if (response.finishReason == 'MALFORMED_FUNCTION_CALL' &&
+      (response.content == null || response.content!.parts.isEmpty)) {
+    throw MalformedFunctionCallException(
+      response.errorMessage ?? 'Model returned a malformed function call.',
+    );
+  }
+}
+
 /// Google Gemini model adapter with REST, interactions, and live support.
 class Gemini extends BaseLlm {
   /// Creates a Gemini adapter for [model].
@@ -150,6 +173,7 @@ class Gemini extends BaseLlm {
         if (cacheMetadata != null) {
           cacheManager.populateCacheMetadataInResponse(response, cacheMetadata);
         }
+        _raiseForMalformedFunctionCall(response);
         yield response;
       }
       return;
@@ -186,6 +210,7 @@ class Gemini extends BaseLlm {
           headers: prepared.config.httpOptions?.headers,
           retryOptions: resolvedRetryOptions,
         )) {
+          _raiseForMalformedFunctionCall(response);
           yield response;
         }
         return;
@@ -230,6 +255,7 @@ class Gemini extends BaseLlm {
                 cacheMetadata,
               );
             }
+            _raiseForMalformedFunctionCall(emitted);
             yield emitted;
           }
         }
@@ -244,6 +270,7 @@ class Gemini extends BaseLlm {
               cacheMetadata,
             );
           }
+          _raiseForMalformedFunctionCall(finalResponse);
           yield finalResponse;
         }
       } else {
@@ -266,6 +293,7 @@ class Gemini extends BaseLlm {
         if (cacheMetadata != null) {
           cacheManager.populateCacheMetadataInResponse(response, cacheMetadata);
         }
+        _raiseForMalformedFunctionCall(response);
         yield response;
       }
     } catch (error) {

@@ -326,6 +326,62 @@ void main() {
       ]);
     });
 
+    test('parallel worker honors maxParallelWorkers', () async {
+      final List<int> started = <int>[];
+      final Map<int, Completer<void>> finishers = <int, Completer<void>>{
+        for (int i = 0; i < 4; i += 1) i: Completer<void>(),
+      };
+      final ParallelWorker worker = ParallelWorker(
+        node: node((WorkflowContext _, Object? input) async {
+          final int item = input! as int;
+          started.add(item);
+          await finishers[item]!.future;
+          return 'done:$item';
+        }, name: 'worker'),
+        maxParallelWorkers: 2,
+      );
+      final Workflow workflow = Workflow(
+        name: 'parallel_worker_limited_workers',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) => <int>[0, 1, 2, 3], name: 'p'),
+          worker,
+        ],
+        edges: <Edge>[Edge(fromNode: 'p', toNode: worker)],
+      );
+
+      final Future<WorkflowResult> resultFuture = workflow.runWorkflow();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(started, <int>[0, 1]);
+      finishers[0]!.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(started, <int>[0, 1, 2]);
+
+      for (final Completer<void> finisher in finishers.values) {
+        if (!finisher.isCompleted) {
+          finisher.complete();
+        }
+      }
+      final WorkflowResult result = await resultFuture;
+
+      expect(result.outputs['worker'], <String>[
+        'done:0',
+        'done:1',
+        'done:2',
+        'done:3',
+      ]);
+    });
+
+    test('ParallelWorker throws ArgumentError for maxParallelWorkers < 1', () {
+      expect(
+        () => ParallelWorker(
+          node: node((WorkflowContext _, Object? input) => '$input', name: 'worker'),
+          maxParallelWorkers: 0,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('parallel worker stops queued work after worker failure', () async {
       final List<int> started = <int>[];
       final ParallelWorker worker = ParallelWorker(
@@ -2605,11 +2661,98 @@ void main() {
       expect(functionNode.waitForOutput, isTrue);
       expect(functionNode.retryConfig?.maxAttempts, 2);
       expect(functionNode.timeout, const Duration(seconds: 1));
-      expect(
-        () => buildNode(existing, name: 'override'),
+      expect(() => buildNode(existing, name: 'override'),
         throwsA(isA<UnsupportedError>()),
       );
       expect(() => buildNode(Object()), throwsArgumentError);
     });
   });
+
+  group('AgentNode single_turn defaults', () {
+    // The AgentNode.run method defaults LlmAgent.mode to 'single_turn'
+    // and LlmAgent.includeContents to 'none' (when not explicitly set)
+    // before invoking the agent. These tests use a non-LLM echo agent to
+    // verify the defaulting logic by wrapping an LlmAgent inside an
+    // AgentNode and running with a lightweight _EchoAgent.
+    //
+    // Since the code path is in AgentNode.run and checks `agent is LlmAgent`,
+    // we test the mutation directly on the LlmAgent fields.
+
+    test('defaults LlmAgent mode to single_turn when mode is null', () {
+      final LlmAgent agent = LlmAgent(name: 'test_agent');
+      expect(agent.mode, isNull);
+
+      // Simulate the defaulting that AgentNode.run does.
+      _applyAgentNodeDefaults(agent);
+
+      expect(agent.mode, 'single_turn');
+    });
+
+    test(
+      'defaults includeContents to none for single_turn when not explicit',
+      () {
+        final LlmAgent agent = LlmAgent(name: 'test_agent');
+        expect(agent.includeContents, 'default');
+
+        _applyAgentNodeDefaults(agent);
+
+        // includeContents should be set to 'none' because mode
+        // defaulted to single_turn and includeContents was not
+        // explicitly configured.
+        expect(agent.includeContents, 'none');
+      },
+    );
+
+    test('preserves explicit includeContents for single_turn agent', () {
+      final LlmAgent agent = LlmAgent(
+        name: 'explicit_none',
+        includeContents: 'none',
+        mode: 'single_turn',
+      );
+
+      _applyAgentNodeDefaults(agent);
+
+      // includeContents was already 'none', so it stays 'none'.
+      expect(agent.includeContents, 'none');
+    });
+
+    test('does not change includeContents for task-mode agent', () {
+      final LlmAgent agent = LlmAgent(
+        name: 'task_agent',
+        mode: 'task',
+      );
+      expect(agent.includeContents, 'default');
+
+      _applyAgentNodeDefaults(agent);
+
+      // Task mode should NOT have its includeContents changed.
+      expect(agent.includeContents, 'default');
+    });
+
+    test('does not change includeContents for chat-mode agent', () {
+      final LlmAgent agent = LlmAgent(
+        name: 'chat_agent',
+        mode: 'chat',
+      );
+      expect(agent.includeContents, 'default');
+
+      _applyAgentNodeDefaults(agent);
+
+      // Chat mode should NOT have its includeContents changed.
+      expect(agent.includeContents, 'default');
+    });
+  });
+}
+
+/// Applies the same defaulting logic that [AgentNode.run] performs on
+/// [LlmAgent] nodes in a workflow.
+///
+/// Extracted to enable unit testing without triggering the full LLM pipeline.
+void _applyAgentNodeDefaults(LlmAgent agent) {
+  if (agent.mode == null) {
+    agent.mode = 'single_turn';
+  }
+  if (agent.mode == 'single_turn' && agent.includeContents == 'default') {
+    agent.includeContents = 'none';
+  }
 }

@@ -1152,6 +1152,7 @@ class BaseLlmFlow {
     );
     if (authEvent != null) {
       yield authEvent;
+      context.endInvocation = true;
     }
 
     final Event? confirmationEvent = flow_functions

@@ -824,6 +824,77 @@ void main() {
         );
       },
     );
+
+    test('non-stream malformed function call finish reason throws MalformedFunctionCallException', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        nonStreamResponse: <String, Object?>{
+          'modelVersion': 'gemini-2.5-flash',
+          'candidates': <Object?>[
+            <String, Object?>{
+              'content': null,
+              'finishReason': 'MALFORMED_FUNCTION_CALL',
+              'finishMessage': 'Malformed function call finish message',
+            },
+          ],
+        },
+      );
+
+      final Gemini model = Gemini(
+        restTransport: transport,
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      expect(
+        () => model.generateContent(
+          LlmRequest(
+            model: 'gemini-2.5-flash',
+            contents: <Content>[Content.userText('hello')],
+          ),
+        ).toList(),
+        throwsA(isA<MalformedFunctionCallException>().having(
+          (MalformedFunctionCallException e) => e.message,
+          'message',
+          contains('Malformed function call finish message'),
+        )),
+      );
+    });
+
+    test('stream malformed function call finish reason throws MalformedFunctionCallException', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        streamResponses: <Map<String, Object?>>[
+          <String, Object?>{
+            'modelVersion': 'gemini-2.5-flash',
+            'candidates': <Object?>[
+              <String, Object?>{
+                'content': null,
+                'finishReason': 'MALFORMED_FUNCTION_CALL',
+                'finishMessage': 'Stream malformed function call finish message',
+              },
+            ],
+          },
+        ],
+      );
+
+      final Gemini model = Gemini(
+        restTransport: transport,
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      expect(
+        () => model.generateContent(
+          LlmRequest(
+            model: 'gemini-2.5-flash',
+            contents: <Content>[Content.userText('hello')],
+          ),
+          stream: true,
+        ).toList(),
+        throwsA(isA<MalformedFunctionCallException>().having(
+          (MalformedFunctionCallException e) => e.message,
+          'message',
+          contains('Stream malformed function call finish message'),
+        )),
+      );
+    });
   });
 }
 
