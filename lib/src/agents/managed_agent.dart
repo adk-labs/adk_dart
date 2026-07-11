@@ -12,7 +12,6 @@ import '../tools/base_tool.dart';
 import '../tools/remote_mcp_server.dart';
 import '../tools/tool_context.dart';
 import '../types/content.dart';
-import '../utils/env_utils.dart';
 import '../utils/google_client_headers.dart';
 import '../utils/system_environment/system_environment.dart';
 import '../flows/llm_flows/interactions_processor.dart';
@@ -20,8 +19,6 @@ import 'base_agent.dart';
 import 'invocation_context.dart';
 import 'readonly_context.dart';
 import 'run_config.dart';
-
-const String _managedAgentLocation = 'global';
 
 /// An agent backed by the Managed Agents API (interactions.create).
 class ManagedAgent extends BaseAgent {
@@ -65,8 +62,8 @@ class ManagedAgent extends BaseAgent {
   GeminiRestTransport get restClient => _restClient ?? GeminiRestHttpTransport();
 
   String _resolveApiKey() {
-    if (_apiKey != null && _apiKey!.isNotEmpty) {
-      return _apiKey!;
+    if (_apiKey != null && _apiKey.isNotEmpty) {
+      return _apiKey;
     }
     final Map<String, String> env = readSystemEnvironment();
     final String? envKey = env['GEMINI_API_KEY'] ?? env['GOOGLE_API_KEY'];
@@ -79,8 +76,8 @@ class ManagedAgent extends BaseAgent {
   }
 
   String _resolveBaseUrl() {
-    if (_baseUrl != null && _baseUrl!.isNotEmpty) {
-      return _baseUrl!;
+    if (_baseUrl != null && _baseUrl.isNotEmpty) {
+      return _baseUrl;
     }
     final Map<String, String> env = readSystemEnvironment();
     final String? envUrl = env['GEMINI_API_BASE'] ?? env['GOOGLE_API_BASE'];
@@ -223,8 +220,8 @@ class ManagedAgent extends BaseAgent {
       'input': inputSteps,
       'background': true,
       if (interactionTools.isNotEmpty) 'tools': interactionTools,
-      if (activeEnvironment != null) 'environment': activeEnvironment,
-      if (agentConfig != null) 'agent_config': agentConfig,
+      'environment': ?activeEnvironment,
+      'agent_config': ?agentConfig,
       if (prevInteractionId != null && prevInteractionId.isNotEmpty)
         'previous_interaction_id': prevInteractionId,
     };
