@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2026.7.11
+
+- Bumped package version to `2026.7.11`.
+- Synced MCP package release with the `adk_dart` `2026.7.11` rollout.
+- Added ADK 2.0 support including Managed Agent and Remote MCP Server
+  integration for server-side tool execution via the Interactions API.
+
 ## 2026.6.6
 
 - Bumped package version to `2026.6.6`.

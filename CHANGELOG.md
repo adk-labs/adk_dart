@@ -1,5 +1,16 @@
 ## Unreleased
 
+## 2026.7.11
+
+- Bumped package release versions to `2026.7.11` for `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm`.
+- Added ADK 2.0 Managed Agent support: `ManagedAgent` and `RemoteMcpServer` for server-side tool execution via the GCP Interactions API.
+- Added `environmentId` propagation across `LlmResponse`, `Event`, session persistence, and telemetry tracing.
+- Added `isManagedAgent` toggle to `LlmRequest` for grounding tool check bypass in managed workflows.
+- Updated `InteractionsProcessor.findPreviousInteractionState` to return both `previousInteractionId` and `environmentId` for turn-to-turn chaining.
+- Added `isEnterpriseModeEnabled` helper in `env_utils.dart`.
+- Added ADK 2.0 Workflow & Managed Agent documentation to README (EN/KO).
+- All 1,365 tests passing.
+
 ## 2026.6.6
 
 - Bumped package release versions to `2026.6.6` for `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk`.
