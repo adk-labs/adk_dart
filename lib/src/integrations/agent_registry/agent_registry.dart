@@ -54,6 +54,14 @@ typedef AgentRegistryHttpGetProvider =
       required Map<String, String> headers,
     });
 
+/// Function that executes one Agent Registry POST request with a JSON body.
+typedef AgentRegistryHttpPostProvider =
+    Future<AgentRegistryHttpResponse> Function(
+      Uri uri, {
+      required Map<String, String> headers,
+      Object? body,
+    });
+
 /// Function that resolves auth headers for Agent Registry and downstream calls.
 typedef AgentRegistryAuthHeadersProvider =
     Future<Map<String, String>> Function();
@@ -94,9 +102,12 @@ class AgentRegistry {
     required this.location,
     this.headerProvider,
     AgentRegistryHttpGetProvider? httpGetProvider,
+    AgentRegistryHttpPostProvider? httpPostProvider,
     AgentRegistryAuthHeadersProvider? authHeadersProvider,
   }) : _httpGetProvider =
            httpGetProvider ?? _defaultAgentRegistryHttpGetProvider,
+       _httpPostProvider =
+           httpPostProvider ?? _defaultAgentRegistryHttpPostProvider,
        _authHeadersProvider =
            authHeadersProvider ?? _defaultAgentRegistryAuthHeadersProvider {
     if (projectId.trim().isEmpty || location.trim().isEmpty) {
@@ -114,6 +125,7 @@ class AgentRegistry {
   final Map<String, String> Function(ReadonlyContext)? headerProvider;
 
   final AgentRegistryHttpGetProvider _httpGetProvider;
+  final AgentRegistryHttpPostProvider _httpPostProvider;
   final AgentRegistryAuthHeadersProvider _authHeadersProvider;
 
   String get _basePath => 'projects/$projectId/locations/$location';
@@ -137,6 +149,28 @@ class AgentRegistry {
   /// Retrieves one MCP server resource.
   Future<Map<String, Object?>> getMcpServer(String name) {
     return _makeRequest(name);
+  }
+
+  /// Searches registered MCP servers.
+  ///
+  /// [searchType] accepts `KEYWORD` or `SEMANTIC`.
+  Future<Map<String, Object?>> searchMcpServers({
+    String? searchString,
+    String? searchType,
+    String? filter,
+    String? orderBy,
+    int? pageSize,
+    String? pageToken,
+  }) {
+    return _search(
+      'mcpServers',
+      searchString: searchString,
+      searchType: searchType,
+      filter: filter,
+      orderBy: orderBy,
+      pageSize: pageSize,
+      pageToken: pageToken,
+    );
   }
 
   /// Builds an [McpToolset] from one registered MCP server.
@@ -190,9 +224,52 @@ class AgentRegistry {
     );
   }
 
+  /// Searches registered A2A agents.
+  ///
+  /// [searchType] accepts `KEYWORD` or `SEMANTIC`.
+  Future<Map<String, Object?>> searchAgents({
+    String? searchString,
+    String? searchType,
+    String? filter,
+    String? orderBy,
+    int? pageSize,
+    String? pageToken,
+  }) {
+    return _search(
+      'agents',
+      searchString: searchString,
+      searchType: searchType,
+      filter: filter,
+      orderBy: orderBy,
+      pageSize: pageSize,
+      pageToken: pageToken,
+    );
+  }
+
   /// Retrieves detailed metadata for one Agent Registry agent.
   Future<Map<String, Object?>> getAgentInfo(String name) {
     return _makeRequest(name);
+  }
+
+  /// Executes a `POST {resourceType}:search` request against the registry.
+  Future<Map<String, Object?>> _search(
+    String resourceType, {
+    String? searchString,
+    String? searchType,
+    String? filter,
+    String? orderBy,
+    int? pageSize,
+    String? pageToken,
+  }) {
+    final Map<String, Object?> jsonData = <String, Object?>{
+      'searchString': ?searchString,
+      'searchType': ?searchType,
+      'filter': ?filter,
+      'orderBy': ?orderBy,
+      'pageSize': ?pageSize,
+      'pageToken': ?pageToken,
+    };
+    return _makeRequest('$resourceType:search', method: 'POST', body: jsonData);
   }
 
   /// Builds a ready-to-use [RemoteA2aAgent] from Agent Registry metadata.
@@ -295,17 +372,23 @@ class AgentRegistry {
 
   Future<Map<String, Object?>> _makeRequest(
     String path, {
+    String method = 'GET',
     Map<String, String>? params,
+    Object? body,
   }) async {
-    final Uri uri = _buildRequestUri(path, params: params);
+    // POST requests (search) carry a JSON body, not query params.
+    final Uri uri = _buildRequestUri(
+      path,
+      params: method == 'POST' ? null : params,
+    );
     try {
-      final AgentRegistryHttpResponse response = await _httpGetProvider(
-        uri,
-        headers: <String, String>{
-          ...await _authHeadersProvider(),
-          'Content-Type': 'application/json',
-        },
-      );
+      final Map<String, String> headers = <String, String>{
+        ...await _authHeadersProvider(),
+        'Content-Type': 'application/json',
+      };
+      final AgentRegistryHttpResponse response = method == 'POST'
+          ? await _httpPostProvider(uri, headers: headers, body: body)
+          : await _httpGetProvider(uri, headers: headers);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
           'API request failed with status ${response.statusCode}: '
@@ -459,6 +542,41 @@ Future<AgentRegistryHttpResponse> _defaultAgentRegistryHttpGetProvider(
     return AgentRegistryHttpResponse(
       statusCode: response.statusCode,
       body: body,
+      headers: responseHeaders,
+    );
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<AgentRegistryHttpResponse> _defaultAgentRegistryHttpPostProvider(
+  Uri uri, {
+  required Map<String, String> headers,
+  Object? body,
+}) async {
+  final HttpClient client = HttpClient();
+  client.connectionTimeout = const Duration(seconds: 5);
+  try {
+    final HttpClientRequest request = await client.postUrl(uri);
+    headers.forEach(request.headers.set);
+    if (body != null) {
+      request.add(utf8.encode(jsonEncode(body)));
+    }
+    final HttpClientResponse response = await request.close();
+    final String bodyText = await utf8.decoder.bind(response).join();
+    final Object? decoded = bodyText.trim().isEmpty
+        ? <String, Object?>{}
+        : jsonDecode(bodyText);
+    final Map<String, Object?> responseBody = decoded is Map
+        ? _toStringObjectMap(decoded)
+        : <String, Object?>{};
+    final Map<String, String> responseHeaders = <String, String>{};
+    response.headers.forEach((String key, List<String> values) {
+      responseHeaders[key] = values.join(',');
+    });
+    return AgentRegistryHttpResponse(
+      statusCode: response.statusCode,
+      body: responseBody,
       headers: responseHeaders,
     );
   } finally {
