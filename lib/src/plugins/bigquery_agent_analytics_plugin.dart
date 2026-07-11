@@ -1100,8 +1100,17 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       if (llmConfig.labels.isNotEmpty) {
         attributes['labels'] = Map<String, String>.from(llmConfig.labels);
       }
+      bool toolsTruncated = false;
       if (llmRequest.toolsDict.isNotEmpty) {
-        attributes['tools'] = llmRequest.toolsDict.keys.toList(growable: false);
+        // Route tool declarations through the shared safety pipeline so
+        // unbounded descriptions / parameter schemas are size-capped and
+        // sensitive keys are redacted, consistent with every other attribute.
+        final _TruncateResult truncatedTools = _recursiveSmartTruncate(
+          _extractToolDeclarations(llmRequest.toolsDict),
+          config.maxContentLength,
+        );
+        attributes['tools'] = truncatedTools.value;
+        toolsTruncated = truncatedTools.isTruncated;
       }
 
       _TraceManager.pushSpan(callbackContext, 'llm_request');
@@ -1109,6 +1118,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         'LLM_REQUEST',
         callbackContext,
         rawContent: llmRequest,
+        isTruncated: toolsTruncated,
         eventData: EventData(
           model: llmRequest.model,
           extraAttributes: attributes,
@@ -1648,6 +1658,54 @@ String _getToolOrigin(BaseTool tool) {
     return 'LOCAL';
   }
   return 'UNKNOWN';
+}
+
+/// Extracts structured tool metadata for the `LLM_REQUEST` event.
+///
+/// Earlier versions logged only the tool names. Downstream consumers such as
+/// online evaluation need the tool *description* and *parameter schema* to judge
+/// whether the model selected and invoked the right tool, so this returns one
+/// `{name, description?, parameters?}` entry per tool instead of a bare name.
+///
+/// Extraction is best-effort and per-tool: a tool whose declaration cannot be
+/// resolved still contributes its name and description, so one misbehaving tool
+/// never drops the whole `tools` attribute. Ports adk-python ecef5f85.
+List<Map<String, Object?>> _extractToolDeclarations(
+  Map<String, BaseTool> toolsDict,
+) {
+  final List<Map<String, Object?>> tools = <Map<String, Object?>>[];
+  toolsDict.forEach((String name, BaseTool tool) {
+    // Fall back to the map key when the tool has no (or an empty) name.
+    final Map<String, Object?> entry = <String, Object?>{
+      'name': tool.name.isNotEmpty ? tool.name : name,
+    };
+    if (tool.description.isNotEmpty) {
+      entry['description'] = tool.description;
+    }
+
+    // The parameter schema lives on the tool's FunctionDeclaration, which some
+    // tools (e.g. built-in tools) do not provide. Resolve defensively so a
+    // single failing tool does not discard the whole tools list.
+    FunctionDeclaration? declaration;
+    try {
+      declaration = tool.getDeclaration();
+    } catch (_) {
+      declaration = null;
+    }
+
+    if (declaration != null) {
+      if (!entry.containsKey('description') &&
+          declaration.description.isNotEmpty) {
+        entry['description'] = declaration.description;
+      }
+      if (declaration.parameters.isNotEmpty) {
+        entry['parameters'] = declaration.parameters;
+      }
+    }
+
+    tools.add(entry);
+  });
+  return tools;
 }
 
 class _FormatResult {
