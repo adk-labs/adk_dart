@@ -29,6 +29,7 @@ import 'base_agent.dart';
 import 'callback_context.dart';
 import 'invocation_context.dart';
 import 'llm/task/finish_task_tool.dart';
+import 'managed_agent.dart';
 import 'readonly_context.dart';
 
 /// Callback invoked before model generation.
@@ -802,14 +803,18 @@ class LlmAgent extends BaseAgent {
 
   void _installModeSubAgentToolsIfNeeded() {
     for (final BaseAgent subAgent in subAgents) {
-      if (subAgent is! LlmAgent) {
-        continue;
-      }
-
-      String? subAgentMode = subAgent.mode;
-      if (subAgentMode == null) {
-        subAgent.mode = 'chat';
-        subAgentMode = 'chat';
+      // `mode` participates for any agent class that declares it (LlmAgent,
+      // ManagedAgent); a sub-agent without a mode is never wrapped and stays
+      // an LLM-transfer target. LlmAgent sub-agents default to chat mode.
+      String? subAgentMode;
+      if (subAgent is LlmAgent) {
+        subAgentMode = subAgent.mode;
+        if (subAgentMode == null) {
+          subAgent.mode = 'chat';
+          subAgentMode = 'chat';
+        }
+      } else if (subAgent is ManagedAgent) {
+        subAgentMode = subAgent.mode;
       }
 
       if (_hasToolNamed(subAgent.name)) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:test/test.dart';
 import 'package:adk_dart/adk_dart.dart';
 import 'package:adk_dart/src/models/gemini_rest_api_client.dart';
@@ -497,6 +498,143 @@ void main() {
       expect(events.first.errorCode, equals('UNKNOWN_ERROR'));
       expect(events.first.errorMessage, contains('API failure'));
       expect(events.first.turnComplete, isTrue);
+    });
+  });
+
+  group('single_turn sub-agent wrapping', () {
+    test('single_turn ManagedAgent is wrapped as inline tool', () {
+      final ManagedAgent managed = ManagedAgent(
+        name: 'm',
+        agentId: 'a',
+        mode: 'single_turn',
+      );
+      final Agent coordinator = Agent(
+        name: 'c',
+        model: 'gemini-3-flash-preview',
+        subAgents: <BaseAgent>[managed],
+      );
+
+      expect(
+        coordinator.tools.any(
+          (Object tool) =>
+              tool is SingleTurnAgentTool && identical(tool.agent, managed),
+        ),
+        isTrue,
+      );
+    });
+
+    test('ManagedAgent without mode is not wrapped', () {
+      final ManagedAgent managed = ManagedAgent(name: 'm', agentId: 'a');
+      final Agent coordinator = Agent(
+        name: 'c',
+        model: 'gemini-3-flash-preview',
+        subAgents: <BaseAgent>[managed],
+      );
+
+      expect(coordinator.tools.whereType<SingleTurnAgentTool>(), isEmpty);
+    });
+
+    test('single_turn ManagedAgent is excluded from transfer targets', () {
+      final ManagedAgent managed = ManagedAgent(
+        name: 'm',
+        agentId: 'a',
+        mode: 'single_turn',
+      );
+      final Agent coordinator = Agent(
+        name: 'c',
+        model: 'gemini-3-flash-preview',
+        subAgents: <BaseAgent>[managed],
+      );
+
+      expect(getTransferTargets(coordinator), isNot(contains(managed)));
+    });
+
+    test(
+      'single-turn tool call bridges args into the interactions payload',
+      () async {
+        final MockGeminiRestTransport transport = MockGeminiRestTransport(
+          Stream<Map<String, Object?>>.fromIterable(<Map<String, Object?>>[
+            <String, Object?>{
+              'id': 'interaction_1',
+              'event_type': 'content.delta',
+              'delta': <String, Object?>{'type': 'text', 'text': 'done'},
+            },
+            <String, Object?>{
+              'id': 'interaction_1',
+              'event_type': 'content.stop',
+            },
+            <String, Object?>{
+              'id': 'interaction_1',
+              'event_type': 'interaction.complete',
+              'interaction': <String, Object?>{
+                'id': 'interaction_1',
+                'status': 'completed',
+              },
+            },
+          ]),
+        );
+        final ManagedAgent managed = ManagedAgent(
+          name: 'mgr',
+          agentId: 'projects/123/locations/global/agents/456',
+          mode: 'single_turn',
+          restClient: transport,
+          apiKey: 'fake-key',
+        );
+        final Agent coordinator = Agent(
+          name: 'c',
+          model: 'gemini-3-flash-preview',
+          subAgents: <BaseAgent>[managed],
+        );
+        final SingleTurnAgentTool tool = coordinator.tools
+            .whereType<SingleTurnAgentTool>()
+            .single;
+
+        final InMemorySessionService sessionService = InMemorySessionService();
+        final Session session = await sessionService.createSession(
+          appName: 'app',
+          userId: 'user',
+          sessionId: 's1',
+        );
+        final InvocationContext context = InvocationContext(
+          invocationId: 'inv1',
+          sessionService: sessionService,
+          session: session,
+          agent: coordinator,
+          runConfig: RunConfig(streamingMode: StreamingMode.sse),
+        );
+
+        await tool.run(
+          args: <String, dynamic>{'request': 'from-parent-tool-call'},
+          toolContext: ToolContext(context),
+        );
+
+        expect(transport.payloads, hasLength(1));
+        expect(
+          jsonEncode(transport.payloads.single['input']),
+          contains('from-parent-tool-call'),
+        );
+      },
+    );
+
+    test('task ManagedAgent is wrapped as task tool', () {
+      final ManagedAgent managed = ManagedAgent(
+        name: 'm',
+        agentId: 'a',
+        mode: 'task',
+      );
+      final Agent coordinator = Agent(
+        name: 'c',
+        model: 'gemini-3-flash-preview',
+        subAgents: <BaseAgent>[managed],
+      );
+
+      expect(
+        coordinator.tools.any(
+          (Object tool) =>
+              tool is TaskAgentTool && identical(tool.agent, managed),
+        ),
+        isTrue,
+      );
     });
   });
 }

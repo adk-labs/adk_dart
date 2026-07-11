@@ -25,7 +25,11 @@ class TransferToAgentTool extends FunctionTool {
         func: transferToAgent,
         name: 'transfer_to_agent',
         description:
-            'Transfer the question to another agent when another agent is more suitable.',
+            'Transfer the query to another agent.\n'
+            '\n'
+            'Use this tool to hand off control to another agent that is more '
+            "suitable to answer the user's query according to the agent's "
+            'description.',
       );
 
   final List<String> _agentNames;

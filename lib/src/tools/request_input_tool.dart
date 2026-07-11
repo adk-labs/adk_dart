@@ -13,7 +13,10 @@ class RequestInputTool extends BaseTool {
     : super(
         name: requestInputFunctionCallName,
         description:
-            'Ask the user a question and wait for their response before proceeding.',
+            'Ask the user a question and wait for their response.\n'
+            '\n'
+            'Use this when you need clarification or additional information '
+            'before proceeding.',
         isLongRunning: true,
       );
 
@@ -32,7 +35,9 @@ class RequestInputTool extends BaseTool {
           'response_schema': <String, dynamic>{
             'type': 'object',
             'description':
-                'Optional JSON Schema describing the expected user response.',
+                'JSON Schema describing the expected response format. Use '
+                '{"type": "string"} for free-text, {"type": "boolean"} for '
+                'yes/no, or a structured object schema for complex input.',
           },
         },
         'required': <String>['message'],
