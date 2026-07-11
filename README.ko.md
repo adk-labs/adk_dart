@@ -5,6 +5,12 @@
 ADK Dart는 AI 에이전트 개발/실행을 위한 코드 중심 Dart 프레임워크입니다.
 에이전트 런타임, 툴 오케스트레이션, MCP 연동을 제공합니다.
 
+## 최근 업데이트 (ADK 2.0 지원)
+
+- **ADK 2.0 워크플로 및 Managed Agent 지원**:
+  - **v2 워크플로**: `Workflow`, `BaseNode`, `JoinNode` 등을 활용한 선언적 노드 그래프 스케줄링, 병렬 실행 및 상태 병합 지원.
+  - **Managed Agent**: GCP Managed Agents Interactions API와 직접 연동되는 `ManagedAgent` 및 `RemoteMcpServer` 설정 연동 추가.
+
 ## 핵심 기능
 
 - 코드 중심 에이전트 런타임 (`BaseAgent`, `LlmAgent`, `Runner`)

@@ -17,6 +17,9 @@ developer ergonomics.
 
 ## What's New
 
+- **ADK 2.0 Workflows & Managed Agent**: Added native support for core ADK 2.0 features:
+  - **v2 Workflows**: Programmatic node graph scheduling, dependencies, conditional routing, and state merging via `Workflow`, `BaseNode`, `JoinNode`, etc.
+  - **Managed Agents**: Direct connection to GCP Managed Agents Interactions API via `ManagedAgent` and `RemoteMcpServer` configuration mapping.
 - **MCP Protocol Core Package**: Added `packages/adk_mcp` and moved MCP
   streamable HTTP protocol handling into a dedicated package.
 - **MCP Spec Hardening**: Improved MCP lifecycle and transport behavior
