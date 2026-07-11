@@ -81,6 +81,8 @@ Server/Executors/도구/기타:
 - `68a78030`: 비표준 `gen_ai.agent.workflow.steps` 메트릭 제거 (upstream이 표준 `gen_ai.invoke_agent.*`로 대체하며 삭제 — Dart도 동일 제거).
 - `ac997706`: OAuth `prompt` 파라미터.
 - `f9ffcfca`: A2A part 변환 시 빈 inline_data blob 스킵.
+- `ecef5f85`: BigQuery `LLM_REQUEST`에 구조화된 tool 선언(`{name, description?, parameters?}`) 로깅(truncation/redaction 파이프라인 경유, `is_truncated` 전파).
+- `ed579c13`: agent registry `searchAgents` / `searchMcpServers`(POST `{resourceType}:search`, KEYWORD/SEMANTIC).
 - 소규모 수정 다수 (`3c0fb65c`, `1509dcf3`, `53a8ab16` 등).
 
 ### ⏸ 보류 (Dart에 신규 서브시스템 필요 — 의식적으로 연기, 문서화)
@@ -88,16 +90,12 @@ Server/Executors/도구/기타:
 - `50ff37f8` `to_mcp_server`: ADK 에이전트를 **MCP 서버로 노출**. Python은 `mcp.server.fastmcp.FastMCP` 기반이지만 Dart `adk_mcp`에는 **클라이언트 프리미티브만** 존재(서버 프레임워크 없음). 포팅하려면 stdio JSON-RPC MCP 서버(initialize/tools.list/tools.call/resource) 서브시스템을 먼저 구축해야 함.
 - `07aa1e09` / `820a910e` / `5620d8f4` live 3종 (streaming tool yield / VAD 이벤트 반환 / non-blocking tool 백그라운드 태스크): Python `asyncio.create_task` + `asyncio.Lock` + `InvocationContext.active_non_blocking_tool_tasks` 레지스트리 + `BaseTool.response_scheduling`에 강결합. live/bidi 스트리밍 인프라 확장이 필요하고 기존 live 경로 회귀 위험이 있어, 별도 live 전용 작업 단위로 진행 권장.
 
-### 🔎 잔여 백로그 (포팅 가능하나 이번 세션 미완 — 다음 작업 단위)
-
-- `ecef5f85` / `c14258df`: BigQuery analytics plugin 필드 확장(tool 설명/파라미터 스키마 로깅, thinking/tool-use 토큰 컬럼). Dart `bigquery_agent_analytics_plugin.dart` 존재 — 포팅 가능. (위임 에이전트가 세션 한도로 중단, 미반영.)
-- `ed579c13`: agent registry search agents/MCP servers. Dart `integrations/agent_registry/` 존재 — 포팅 가능. (동상.)
-
 ### ⛔ N/A (Dart에 대응 구조 없음 — 증거 기반 판정)
 
 - `c2918211` (histogram 0 bucket): Dart 메트릭 레이어는 raw 샘플(`AdkMetricRecord`)만 기록하고 explicit bucket boundary/`_invoke_agent_*` 카운트 히스토그램을 정의하지 않음 → 조정 대상 없음.
 - `8fc25f1e` (`cloud.resource_id`): Dart `getGcpResource()`에 agent-engine `cloud.resource.id` 분기가 없어 수정할 잘못된 키가 존재하지 않음.
 - `20197de9` (`gen_ai.workflow.nested`): Dart telemetry에 `node_tracing`/`gen_ai.workflow.*` 노드 스팬 모듈 자체가 없음(OTel context 전파 서브시스템 부재).
+- `c14258df` (BigQuery thinking/tool-use 토큰 뷰 컬럼): Dart 분석 뷰는 이벤트 타입별로 동일한 generic JSON-passthrough(`SELECT ... attributes ... WHERE event_type=`)라 파생 컬럼을 만들지 않음 → thinking/tool-use 토큰은 raw `usage_metadata` attributes 컬럼에 이미 노출됨.
 - `41693dce` / `d831ee6e` / `3fa993bf` (mTLS): Dart에 google-auth mTLS workload-cert 전송 계층이 없음(GoogleApiToolset에 cert/mtls 표면 부재).
 - `96d29143` (VertexAiRagMemoryService): Python은 `vertexai.preview.rag` SDK 최신화. Dart는 REST 기반 구현으로 SDK 메서드 시그니처 변경이 직접 매핑되지 않음(REST 엔드포인트 기준 재검토 필요 — 잔여).
 - `ce2e4caf` (scheduler 수명주기), `a69ba4fa` (asyncio.shield): Dart Future는 취소 불가 → asyncio 구조 의존분 N/A.
