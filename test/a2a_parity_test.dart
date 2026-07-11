@@ -416,6 +416,24 @@ void main() {
       expect((inlineRoundtrip! as Part).inlineData?.displayName, 'plot.png');
     });
 
+    test('inline_data part with present-but-empty bytes is still kept', () {
+      // Unlike Python's `Blob(data=None)`, Dart's `InlineData.data` is a
+      // non-nullable `List<int>`, so there is no distinct "missing payload"
+      // state to skip; an empty-but-present byte list is the only "empty"
+      // representation and must still convert (matching upstream's
+      // `test_convert_inline_data_part_empty_bytes_is_kept`).
+      final Part emptyBytesPart = Part.fromInlineData(
+        mimeType: 'text/plain',
+        data: const <int>[],
+      );
+
+      final Object? converted = convertGenaiPartToA2aPart(emptyBytesPart);
+
+      expect(converted, isA<A2aPart>());
+      final A2aPart a2aPart = converted! as A2aPart;
+      expect(a2aPart.root, isA<A2aFilePart>());
+    });
+
     test('convertEventToA2aMessage works without invocation context', () {
       final Event event = Event(
         invocationId: 'inv_1',

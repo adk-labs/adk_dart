@@ -257,7 +257,6 @@ OpenIdConnectWithConfig _buildOpenIdScheme(Map<String, Object?> openApiSpec) {
   return OpenIdConnectWithConfig(
     authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenEndpoint: 'https://oauth2.googleapis.com/token',
-    userinfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
     revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
     tokenEndpointAuthMethodsSupported: const <String>[
       'client_secret_post',

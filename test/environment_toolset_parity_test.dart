@@ -178,6 +178,92 @@ void main() {
     });
 
     test(
+      'ReadFile rejects a non-integer end_line without executing shell syntax',
+      () async {
+        final Directory workspace = await Directory.systemTemp.createTemp(
+          'environment_toolset_read_injection_',
+        );
+        addTearDown(() => workspace.delete(recursive: true));
+
+        final EnvironmentToolset toolset = EnvironmentToolset(
+          environment: LocalEnvironment(workingDirectory: workspace),
+        );
+        final Map<String, BaseTool> tools = await _resolveTools(toolset);
+        final Context context = _toolContext();
+
+        await tools['WriteFile']!.run(
+          args: <String, dynamic>{
+            'path': 'sample.txt',
+            'content': 'line1\nline2\n',
+          },
+          toolContext: context,
+        );
+
+        final File marker = File(
+          '${workspace.path}${Platform.pathSeparator}marker.txt',
+        );
+        final String injectedEndLine = "1'; touch ${marker.path}; echo '";
+
+        final Object? result = await tools['ReadFile']!.run(
+          args: <String, dynamic>{
+            'path': 'sample.txt',
+            'end_line': injectedEndLine,
+          },
+          toolContext: context,
+        );
+
+        expect(result, <String, Object?>{
+          'status': 'error',
+          'error': '`end_line` must be an integer if provided.',
+        });
+        expect(marker.existsSync(), isFalse);
+
+        await toolset.close();
+      },
+    );
+
+    test('ReadFile rejects boolean start_line and end_line', () async {
+      final Directory workspace = await Directory.systemTemp.createTemp(
+        'environment_toolset_read_bool_',
+      );
+      addTearDown(() => workspace.delete(recursive: true));
+
+      final EnvironmentToolset toolset = EnvironmentToolset(
+        environment: LocalEnvironment(workingDirectory: workspace),
+      );
+      final Map<String, BaseTool> tools = await _resolveTools(toolset);
+      final Context context = _toolContext();
+
+      await tools['WriteFile']!.run(
+        args: <String, dynamic>{
+          'path': 'sample.txt',
+          'content': 'line1\nline2\n',
+        },
+        toolContext: context,
+      );
+
+      final Object? resultStart = await tools['ReadFile']!.run(
+        args: <String, dynamic>{'path': 'sample.txt', 'start_line': true},
+        toolContext: context,
+      );
+      final Object? resultEnd = await tools['ReadFile']!.run(
+        args: <String, dynamic>{'path': 'sample.txt', 'end_line': false},
+        toolContext: context,
+      );
+
+      expect(resultStart, <String, Object?>{
+        'status': 'error',
+        'error': '`start_line` must be an integer if provided.',
+      });
+      expect(resultEnd, <String, Object?>{
+        'status': 'error',
+        'error': '`end_line` must be an integer if provided.',
+      });
+
+      await toolset.close();
+    });
+
+    test(
       'EditFile matches CRLF files and escapes regex metacharacters',
       () async {
         final Directory workspace = await Directory.systemTemp.createTemp(

@@ -129,8 +129,27 @@ Future<HttpServer> startAdkDevWebServer({
 
   final InternetAddress resolvedHost = host ?? InternetAddress.loopbackIPv4;
   final HttpServer server = await HttpServer.bind(resolvedHost, port);
+  context.serverHost = resolvedHost.address;
   unawaited(_handleRequests(server, context));
   return server;
+}
+
+/// Thrown when an internal special agent (an app name starting with `__`)
+/// is requested while the server is not configured to allow it.
+///
+/// Special agents (such as a built-in agent-builder assistant) may only be
+/// loaded when the Dev UI is enabled; API-server-only deployments must
+/// reject them to avoid exposing privileged internal tooling.
+class SpecialAgentAccessDeniedException implements Exception {
+  /// Creates a special-agent access-denied exception.
+  const SpecialAgentAccessDeniedException();
+
+  /// Human-readable error message, matching upstream's HTTP detail text.
+  String get message =>
+      'Access to internal special agents is disabled in API server mode.';
+
+  @override
+  String toString() => 'SpecialAgentAccessDeniedException: $message';
 }
 
 /// Parsed extra plugin spec from CLI input.
@@ -290,6 +309,13 @@ class _AdkDevWebContext {
   final A2aPushDeliveryQueue? a2aPushQueue;
   final Directory? webAssetsDir;
 
+  /// Address the server is bound to, set once [HttpServer.bind] resolves.
+  ///
+  /// Used for DNS-rebinding protection: when the server is on loopback and
+  /// no explicit [allowOrigins] are configured, request origins must also
+  /// resolve to loopback.
+  String? serverHost;
+
   final Map<String, Runner> _runners = <String, Runner>{};
   final Map<String, Map<String, Map<String, Object?>>> _a2aTasksByApp =
       <String, Map<String, Map<String, Object?>>>{};
@@ -414,10 +440,27 @@ class _AdkDevWebContext {
   String get defaultAppName => project.appName;
   String get defaultUserId => project.userId;
 
+  /// Whether internal special agents (app names starting with `__`, such as
+  /// a built-in agent-builder assistant) may be loaded and executed.
+  ///
+  /// Mirrors Python's `_allow_special_agents`: it is only enabled when the
+  /// Dev UI is served ([enableWebUi]); API-server-only deployments must not
+  /// expose these privileged internal agents.
+  bool get allowSpecialAgents => enableWebUi;
+
+  /// Throws a [SpecialAgentAccessDeniedException] when [appName] is an
+  /// internal special agent and [allowSpecialAgents] is false.
+  void _guardSpecialAgentAccess(String appName) {
+    if (appName.startsWith('__') && !allowSpecialAgents) {
+      throw const SpecialAgentAccessDeniedException();
+    }
+  }
+
   Future<Runner> getRunner(String? appName) async {
     final String resolvedAppName = (appName == null || appName.trim().isEmpty)
         ? defaultAppName
         : appName.trim();
+    _guardSpecialAgentAccess(resolvedAppName);
 
     final bool shouldReload = reload || reloadAgents;
     if (!shouldReload) {
@@ -1002,6 +1045,13 @@ Future<void> _handleRequests(
           request,
           context,
           statusCode: HttpStatus.notFound,
+          message: error.message,
+        );
+      } on SpecialAgentAccessDeniedException catch (error) {
+        await _writeError(
+          request,
+          context,
+          statusCode: HttpStatus.forbidden,
           message: error.message,
         );
       } catch (_) {
@@ -3401,6 +3451,7 @@ Future<void> _handleRunLive(
         origin: wsOrigin,
         request: request,
         allowOrigins: context.allowOrigins,
+        serverHost: context.serverHost,
       )) {
     await _writeText(
       request,
@@ -3411,6 +3462,10 @@ Future<void> _handleRunLive(
     );
     return;
   }
+
+  // Guard before the websocket upgrade so the 403 can still be written as a
+  // plain HTTP response.
+  context._guardSpecialAgentAccess(appName);
 
   final Session? session = await context.sessionService.getSession(
     appName: appName,
@@ -3761,6 +3816,7 @@ bool _shouldBlockCrossOriginRequest(
     origin: origin,
     request: request,
     allowOrigins: context.allowOrigins,
+    serverHost: context.serverHost,
   );
 }
 
@@ -3768,12 +3824,66 @@ bool _isRequestOriginAllowed({
   required String origin,
   required HttpRequest request,
   required List<String> allowOrigins,
+  String? serverHost,
 }) {
   if (allowOrigins.isNotEmpty && _originAllowed(origin, allowOrigins)) {
     return true;
   }
+
+  // DNS-rebinding guard: if the server is bound to a loopback address and no
+  // explicit allow-origins list is configured, only permit origins whose
+  // host is also loopback. This mirrors the protection used by the MCP
+  // go-sdk SSEHandler and prevents an external page from DNS-rebinding to
+  // 127.0.0.1 and then sending requests whose Origin/Host headers it
+  // controls (e.g. Origin: http://evil.com while physically connecting to
+  // the loopback-bound dev server).
+  if (allowOrigins.isEmpty &&
+      serverHost != null &&
+      _isLoopbackAddress(serverHost)) {
+    final String originHost = Uri.tryParse(origin)?.host ?? '';
+    if (!_isLoopbackAddress(originHost)) {
+      return false;
+    }
+  }
+
   final String? requestOrigin = _getRequestOrigin(request);
   return requestOrigin != null && requestOrigin == origin;
+}
+
+/// Loopback hostnames recognized in addition to loopback IP literals.
+const Set<String> _loopbackHostnames = <String>{'localhost'};
+
+/// Returns true if [host] (with or without a port, optionally
+/// IPv6-bracketed) refers to a loopback address.
+///
+/// Handles the forms produced by browsers and Dart's HTTP stack:
+///   - Plain IPv4:          "127.0.0.1"
+///   - IPv4 with port:      "127.0.0.1:8000"
+///   - Bracketed IPv6:      "[::1]"
+///   - Bracketed IPv6+port: "[::1]:8000"
+///   - Plain IPv6:          "::1"
+///   - Hostname:            "localhost"
+///   - Hostname with port:  "localhost:8000"
+bool _isLoopbackAddress(String host) {
+  String bare = host;
+  if (bare.startsWith('[')) {
+    final int end = bare.indexOf(']');
+    if (end != -1) {
+      bare = bare.substring(1, end);
+    }
+  } else if (bare.split(':').length == 2) {
+    // IPv4:port or hostname:port (IPv6 without brackets has > 1 colon).
+    bare = bare.substring(0, bare.lastIndexOf(':'));
+  }
+  if (_loopbackHostnames.contains(bare)) {
+    return true;
+  }
+  try {
+    final InternetAddress address = InternetAddress(bare);
+    return address.isLoopback;
+  } on ArgumentError {
+    return false;
+  }
 }
 
 String? _getRequestOrigin(HttpRequest request) {
