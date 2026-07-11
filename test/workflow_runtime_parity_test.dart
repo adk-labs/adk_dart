@@ -462,23 +462,206 @@ void main() {
       expect(slowContext.outputs.containsKey('slow'), isFalse);
     });
 
-    test('rejects task-mode LlmAgent as static workflow graph node', () {
-      final LlmAgent taskAgent = LlmAgent(name: 'task_agent', mode: 'task');
+    test('preserves completed siblings when a sibling fails in the same '
+        'tick', () async {
+      bool succeedingStarted = false;
+      bool succeedingCompleted = false;
+      late WorkflowContext succeedingContext;
 
-      expect(
-        () => Workflow(
-          name: 'task_static_graph',
-          nodes: <BaseNode>[AgentNode(agent: taskAgent)],
-        ),
+      final Workflow workflow = Workflow(
+        name: 'fail_fast_preserves_siblings',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? _) async {
+            succeedingContext = context;
+            succeedingStarted = true;
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            succeedingCompleted = true;
+            return 'success_output';
+          }, name: 'succeeding'),
+          node((WorkflowContext _, Object? _) async {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            throw StateError('Fail');
+          }, name: 'failing'),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'succeeding'),
+          Edge(fromNode: START, toNode: 'failing'),
+        ],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
         throwsA(
-          isA<ArgumentError>().having(
-            (ArgumentError error) => error.message,
+          isA<StateError>().having(
+            (StateError error) => error.message,
             'message',
-            contains("mode='task'"),
+            'Fail',
+          ),
+        ),
+      );
+
+      // The succeeding node ran to completion.
+      expect(succeedingStarted, isTrue);
+      expect(succeedingCompleted, isTrue);
+
+      // With the fix, the succeeding sibling's completion is recorded even
+      // though a sibling failed in the same tick.
+      expect(succeedingContext.outputs['succeeding'], 'success_output');
+      expect(
+        succeedingContext.nodeStates['succeeding']?.status,
+        NodeStatus.completed,
+      );
+    });
+
+    test('first error wins when multiple siblings fail in the same '
+        'tick', () async {
+      final Workflow workflow = Workflow(
+        name: 'multiple_failures_first_error_wins',
+        nodes: <BaseNode>[
+          node((WorkflowContext _, Object? _) async {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            throw StateError('Fail 1');
+          }, name: 'failing_1'),
+          node((WorkflowContext _, Object? _) async {
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+            throw StateError('Fail 2');
+          }, name: 'failing_2'),
+        ],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'failing_1'),
+          Edge(fromNode: START, toNode: 'failing_2'),
+        ],
+      );
+
+      await expectLater(
+        workflow.runWorkflow(),
+        throwsA(
+          isA<StateError>().having(
+            (StateError error) => error.message,
+            'message',
+            'Fail 1',
           ),
         ),
       );
     });
+
+    test('accepts task-mode LlmAgent as static workflow graph node', () {
+      // Task-mode agents may now be used as static graph nodes; the scheduler
+      // preserves resumption state for them. Mirrors upstream's
+      // test_workflow_accepts_task_mode_graph_node.
+      final LlmAgent taskAgent = LlmAgent(name: 'task_agent', mode: 'task');
+      final FunctionNode capture = node(
+        (WorkflowContext _, Object? input) => input,
+        name: 'capture',
+      );
+
+      final Workflow workflow = Workflow(
+        name: 'task_static_graph',
+        nodes: <BaseNode>[AgentNode(agent: taskAgent), capture],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: 'task_agent'),
+          Edge(fromNode: 'task_agent', toNode: 'capture'),
+        ],
+      );
+
+      expect(workflow, isNotNull);
+    });
+
+    group('validateNodeData input schema validation', () {
+      test('returns data unchanged when schema or data is null', () {
+        expect(validateNodeData(null, 'some_data'), 'some_data');
+        expect(
+          validateNodeData(<String, Object?>{'type': 'object'}, null),
+          isNull,
+        );
+      });
+
+      test('bypasses validation for non-Map (descriptive) schema', () {
+        // A bare type-name string is a descriptive schema; not enforced.
+        expect(validateNodeData('object', 'some_data'), 'some_data');
+      });
+
+      test('validates a raw JSON string against an object schema', () {
+        final Map<String, Object?> schema = <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'required_field': <String, Object?>{'type': 'string'},
+          },
+          'required': <String>['required_field'],
+        };
+        final Object? result = validateNodeData(
+          schema,
+          '{"required_field": "hello"}',
+        );
+        expect(result, <String, Object?>{'required_field': 'hello'});
+      });
+
+      test('throws InputValidationError when required field is missing', () {
+        final Map<String, Object?> schema = <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'required_field': <String, Object?>{'type': 'string'},
+          },
+          'required': <String>['required_field'],
+        };
+        expect(
+          () => validateNodeData(schema, '{"wrong_field": "hello"}'),
+          throwsA(isA<InputValidationError>()),
+        );
+      });
+
+      test('unwraps Content text and validates it', () {
+        final Map<String, Object?> schema = <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'name': <String, Object?>{'type': 'string'},
+          },
+          'required': <String>['name'],
+        };
+        final Content content = Content.userText('{"name": "test"}');
+        expect(
+          validateNodeData(schema, content),
+          <String, Object?>{'name': 'test'},
+        );
+      });
+
+      test('does not JSON-parse a raw string when schema type is string', () {
+        expect(
+          validateNodeData(<String, Object?>{'type': 'string'}, 'hello'),
+          'hello',
+        );
+      });
+    });
+
+    test(
+      'LlmAgent workflow node rejects input violating its input schema',
+      () async {
+        // Invalid node input is rejected before the agent runs, so no model is
+        // needed. Mirrors upstream's
+        // test_workflow_node_with_invalid_input_schema_raises_validation_error.
+        final LlmAgent agent = LlmAgent(
+          name: 'schema_agent',
+          mode: 'single_turn',
+          inputSchema: <String, Object?>{
+            'type': 'object',
+            'properties': <String, Object?>{
+              'required_field': <String, Object?>{'type': 'string'},
+            },
+            'required': <String>['required_field'],
+          },
+        );
+        final Workflow workflow = Workflow(
+          name: 'schema_workflow',
+          nodes: <BaseNode>[AgentNode(agent: agent)],
+          edges: <Edge>[Edge(fromNode: START, toNode: 'schema_agent')],
+        );
+
+        await expectLater(
+          workflow.runWorkflow(input: '{"wrong_field": "hello"}'),
+          throwsA(isA<InputValidationError>()),
+        );
+      },
+    );
 
     test('rejects chat-mode LlmAgent following a non-START node', () {
       final FunctionNode predecessor = node(
@@ -1497,18 +1680,23 @@ void main() {
     });
 
     test('rejects duplicate workflow edges regardless of route', () {
-      final FunctionNode target = node(
-        (WorkflowContext _, Object? _) => 'target',
-        name: 'target',
+      final FunctionNode nodeA = node(
+        (WorkflowContext _, Object? _) => 'a',
+        name: 'NodeA',
+      );
+      final FunctionNode nodeB = node(
+        (WorkflowContext _, Object? _) => 'b',
+        name: 'NodeB',
       );
 
       expect(
         () => Workflow(
           name: 'duplicate_edges',
-          nodes: <BaseNode>[target],
+          nodes: <BaseNode>[nodeA, nodeB],
           edges: <Edge>[
-            Edge(fromNode: START, toNode: target),
-            Edge(fromNode: START, toNode: target, route: 'fallback'),
+            Edge(fromNode: START, toNode: nodeA),
+            Edge(fromNode: nodeA, toNode: nodeB, route: 'route_a'),
+            Edge(fromNode: nodeA, toNode: nodeB, route: 'route_b'),
           ],
         ),
         throwsA(
@@ -1517,8 +1705,32 @@ void main() {
             'message',
             allOf(
               contains('Duplicate edge found'),
-              contains('from=START, to=target'),
+              contains('from=NodeA, to=NodeB'),
             ),
+          ),
+        ),
+      );
+    });
+
+    test('rejects routed edges starting from START', () {
+      final FunctionNode target = node(
+        (WorkflowContext _, Object? _) => 'target',
+        name: 'target',
+      );
+
+      expect(
+        () => Workflow(
+          name: 'routed_start_edge',
+          nodes: <BaseNode>[target],
+          edges: <Edge>[
+            Edge(fromNode: START, toNode: target, route: 'route1'),
+          ],
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError error) => error.message,
+            'message',
+            contains('Edges from START must not have routes'),
           ),
         ),
       );

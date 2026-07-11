@@ -135,4 +135,84 @@ void main() {
       expect(path.append('node', '2').toString(), 'wf@1/node@2');
     });
   });
+
+  group('BranchPath parity', () {
+    test('append adds a single segment returning a new path', () {
+      final BranchPath path = BranchPath.fromString('parent');
+      final BranchPath newPath = path.append('child');
+
+      expect(newPath, BranchPath.fromString('parent.child'));
+      // Immutability check: the original path is unchanged.
+      expect(path, BranchPath.fromString('parent'));
+    });
+
+    test('append formats the segment as name@runId when runId is provided', () {
+      final BranchPath path = BranchPath.fromString('parent');
+
+      expect(
+        path.append('child', runId: 'call_123'),
+        BranchPath.fromString('parent.child@call_123'),
+      );
+    });
+
+    test('appendPath combines segments from another BranchPath', () {
+      final BranchPath path1 = BranchPath.fromString('parent');
+      final BranchPath path2 = BranchPath.fromString('child.grandchild');
+
+      expect(
+        path1.appendPath(path2),
+        BranchPath.fromString('parent.child.grandchild'),
+      );
+    });
+
+    test('append with a dot-separated path expands into segments', () {
+      final BranchPath path = BranchPath.fromString('parent');
+
+      expect(
+        path.append('agent.sub_agent'),
+        BranchPath.fromString('parent.agent.sub_agent'),
+      );
+    });
+
+    test('createSubBranch constructs sub-branch strings safely', () {
+      // With base branch and run ID.
+      expect(
+        BranchPath.createSubBranch('parent.sub', name: 'child', runId: 'run_1'),
+        'parent.sub.child@run_1',
+      );
+
+      // Without base branch (null or empty).
+      expect(
+        BranchPath.createSubBranch(null, name: 'agent', runId: 'fc_456'),
+        'agent@fc_456',
+      );
+
+      // Dot-separated sub-path without run ID.
+      expect(
+        BranchPath.createSubBranch('parent', name: 'agent.sub_agent'),
+        'parent.agent.sub_agent',
+      );
+    });
+
+    test('append rejects runId combined with a dot-separated path', () {
+      final BranchPath path = BranchPath.fromString('parent');
+
+      expect(
+        () => path.append('child.sub', runId: '123'),
+        throwsArgumentError,
+      );
+    });
+
+    test('fromString returns empty path when string is null or empty', () {
+      expect(BranchPath.fromString(null).segments, isEmpty);
+      expect(BranchPath.fromString('').segments, isEmpty);
+    });
+
+    test('is exported through the Web-safe core entrypoint', () {
+      expect(
+        core.BranchPath.createSubBranch('parent', name: 'child', runId: '1'),
+        'parent.child@1',
+      );
+    });
+  });
 }
