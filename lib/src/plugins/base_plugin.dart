@@ -119,4 +119,32 @@ abstract class BasePlugin {
   }) async {
     return null;
   }
+
+  /// Callback executed when an unhandled exception escapes agent execution.
+  ///
+  /// This is a notification-only callback. The exception is always re-raised
+  /// after all registered plugins have been notified. Plugins should NOT
+  /// suppress the exception.
+  ///
+  /// [agent] is the agent instance that encountered the error,
+  /// [callbackContext] is the callback context for the agent invocation, and
+  /// [error] is the exception that was raised during agent execution.
+  Future<void> onAgentErrorCallback({
+    required BaseAgent agent,
+    required CallbackContext callbackContext,
+    required Object error,
+  }) async {}
+
+  /// Callback executed when an unhandled exception escapes runner execution.
+  ///
+  /// This is a notification-only callback. The exception is always re-raised
+  /// after all registered plugins have been notified. Plugins should NOT
+  /// suppress the exception.
+  ///
+  /// [invocationContext] is the context for the entire invocation, and
+  /// [error] is the exception that was raised during runner execution.
+  Future<void> onRunErrorCallback({
+    required InvocationContext invocationContext,
+    required Object error,
+  }) async {}
 }

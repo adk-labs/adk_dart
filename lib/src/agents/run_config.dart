@@ -2,6 +2,7 @@
 library;
 
 import '../sessions/base_session_service.dart';
+import '../types/content.dart';
 
 /// Streaming transport mode used by a run.
 enum StreamingMode { none, sse, bidi }
@@ -58,6 +59,8 @@ class RunConfig {
     this.contextWindowCompression,
     this.customMetadata,
     this.getSessionConfig,
+    this.modelInputContext,
+    this.includeThoughtsFromOtherAgents = false,
   }) {
     maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
   }
@@ -116,6 +119,23 @@ class RunConfig {
   /// Optional filter passed to session-service `getSession()` calls.
   GetSessionConfig? getSessionConfig;
 
+  /// Transient context to include in the model input for this invocation.
+  ///
+  /// The Runner does not persist these contents to the session. They are only
+  /// added to the LLM request assembled for the current invocation, which lets
+  /// callers provide per-turn context without changing the conversation
+  /// history.
+  List<Content>? modelInputContext;
+
+  /// Whether to include thought parts from other agents when presenting their
+  /// messages as user context.
+  ///
+  /// Defaults to `false`, preserving the privacy-first behavior of excluding
+  /// other agents' reasoning. Enabling it converts other-agent thoughts into
+  /// explicit `[agent] thought: ...` context text, which can help orchestrator,
+  /// reviewer, or planner agents coordinate in trusted multi-agent systems.
+  bool includeThoughtsFromOtherAgents;
+
   /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {
     if (BigInt.from(value) == _pythonSysMaxSize) {
@@ -156,6 +176,8 @@ class RunConfig {
     Object? contextWindowCompression = _sentinel,
     Map<String, dynamic>? customMetadata,
     Object? getSessionConfig = _sentinel,
+    Object? modelInputContext = _sentinel,
+    bool? includeThoughtsFromOtherAgents,
   }) {
     return RunConfig(
       supportCfc: supportCfc ?? this.supportCfc,
@@ -215,6 +237,14 @@ class RunConfig {
                     afterTimestamp: this.getSessionConfig!.afterTimestamp,
                   ))
           : getSessionConfig as GetSessionConfig?,
+      modelInputContext: identical(modelInputContext, _sentinel)
+          ? this.modelInputContext
+                ?.map((Content content) => content.copyWith())
+                .toList()
+          : modelInputContext as List<Content>?,
+      includeThoughtsFromOtherAgents:
+          includeThoughtsFromOtherAgents ??
+          this.includeThoughtsFromOtherAgents,
     );
   }
 }

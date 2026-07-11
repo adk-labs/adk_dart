@@ -292,17 +292,19 @@ void main() {
         ),
       ]);
 
-      final bool compacted = await runCompactionForSlidingWindow(
+      final List<Event> yielded = await runCompactionForSlidingWindow(
         app: app,
         session: session,
         sessionService: sessionService,
         skipTokenCompaction: false,
-      );
+      ).toList();
 
+      // Token-threshold compaction ran (and appended internally), so the
+      // sliding-window path yields nothing.
+      expect(yielded, isEmpty);
       final List<Event> compactionEvents = session.events
           .where((Event event) => event.actions.compaction != null)
           .toList(growable: false);
-      expect(compacted, isTrue);
       expect(compactionEvents, hasLength(1));
       expect(compactionEvents.single.actions.compaction!.startTimestamp, 1.0);
       expect(compactionEvents.single.actions.compaction!.endTimestamp, 4.0);
@@ -319,6 +321,114 @@ void main() {
       );
     },
   );
+
+  test('sliding window yields event without appending', () async {
+    final Agent agent = Agent(name: 'root_agent', model: _NoopModel());
+    final App app = App(
+      name: 'yield_compaction_app',
+      rootAgent: agent,
+      eventsCompactionConfig: EventsCompactionConfig(
+        compactionInterval: 2,
+        overlapSize: 1,
+        summarizer: (List<Event> events) =>
+            Content.modelText('Summary inv1-inv4'),
+      ),
+    );
+    final InMemorySessionService sessionService = InMemorySessionService();
+    final Session session = await sessionService.createSession(
+      appName: app.name,
+      userId: 'u_yield',
+      sessionId: 's_yield',
+    );
+    session.events.addAll(<Event>[
+      Event(
+        invocationId: 'inv1',
+        author: 'user',
+        timestamp: 1.0,
+        content: Content.userText('e1'),
+      ),
+      Event(
+        invocationId: 'inv2',
+        author: 'user',
+        timestamp: 2.0,
+        content: Content.userText('e2'),
+      ),
+      Event(
+        invocationId: 'inv3',
+        author: 'user',
+        timestamp: 3.0,
+        content: Content.userText('e3'),
+      ),
+      Event(
+        invocationId: 'inv4',
+        author: 'user',
+        timestamp: 4.0,
+        content: Content.userText('e4'),
+      ),
+    ]);
+    final int eventCountBefore = session.events.length;
+
+    final List<Event> yielded = await runCompactionForSlidingWindow(
+      app: app,
+      session: session,
+      sessionService: sessionService,
+    ).toList();
+
+    // The compaction event is yielded to the caller (the runner loop), and
+    // the function itself never appends -- persistence is the runner's job.
+    expect(yielded, hasLength(1));
+    expect(yielded.single.actions.compaction, isNotNull);
+    expect(
+      yielded.single.actions.compaction!.compactedContent.parts.first.text,
+      'Summary inv1-inv4',
+    );
+    expect(session.events, hasLength(eventCountBefore));
+  });
+
+  test('sliding window yields nothing when no compaction', () async {
+    final Agent agent = Agent(name: 'root_agent', model: _NoopModel());
+    final App app = App(
+      name: 'no_compaction_app',
+      rootAgent: agent,
+      eventsCompactionConfig: EventsCompactionConfig(
+        compactionInterval: 3,
+        overlapSize: 1,
+        summarizer: (List<Event> events) => Content.modelText('unused'),
+      ),
+    );
+    final InMemorySessionService sessionService = InMemorySessionService();
+    final Session session = await sessionService.createSession(
+      appName: app.name,
+      userId: 'u_no_compaction',
+      sessionId: 's_no_compaction',
+    );
+    session.events.addAll(<Event>[
+      Event(
+        invocationId: 'inv1',
+        author: 'user',
+        timestamp: 1.0,
+        content: Content.userText('e1'),
+      ),
+      Event(
+        invocationId: 'inv2',
+        author: 'user',
+        timestamp: 2.0,
+        content: Content.userText('e2'),
+      ),
+    ]);
+
+    final List<Event> yielded = await runCompactionForSlidingWindow(
+      app: app,
+      session: session,
+      sessionService: sessionService,
+    ).toList();
+
+    expect(yielded, isEmpty);
+    expect(
+      session.events.any((Event event) => event.actions.compaction != null),
+      isFalse,
+    );
+  });
 
   test('token compaction skips events with pending function calls', () async {
     final InMemorySessionService sessionService = InMemorySessionService();

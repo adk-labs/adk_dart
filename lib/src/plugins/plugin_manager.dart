@@ -293,6 +293,56 @@ class PluginManager {
     );
   }
 
+  /// Runs the `onAgentErrorCallback` for all plugins.
+  Future<void> runOnAgentErrorCallback({
+    required BaseAgent agent,
+    required CallbackContext callbackContext,
+    required Object error,
+  }) async {
+    await _runNotificationCallbacks(
+      'on_agent_error_callback',
+      (BasePlugin plugin) => plugin.onAgentErrorCallback(
+        agent: agent,
+        callbackContext: callbackContext,
+        error: error,
+      ),
+    );
+  }
+
+  /// Runs the `onRunErrorCallback` for all plugins.
+  Future<void> runOnRunErrorCallback({
+    required InvocationContext invocationContext,
+    required Object error,
+  }) async {
+    await _runNotificationCallbacks(
+      'on_run_error_callback',
+      (BasePlugin plugin) => plugin.onRunErrorCallback(
+        invocationContext: invocationContext,
+        error: error,
+      ),
+    );
+  }
+
+  /// Executes a notification-only callback for all registered plugins.
+  ///
+  /// Unlike [_runCallbacks], this method is best-effort: it always iterates
+  /// all plugins regardless of return values or exceptions. If a plugin's
+  /// callback raises, the error is swallowed and iteration continues so that
+  /// every plugin gets notified.
+  Future<void> _runNotificationCallbacks(
+    String callbackName,
+    Future<void> Function(BasePlugin plugin) invoke,
+  ) async {
+    for (final BasePlugin plugin in _plugins) {
+      try {
+        await invoke(plugin);
+      } catch (_) {
+        // Best-effort: a failure in a notification callback must never mask
+        // the original error, so log-and-continue (suppress here).
+      }
+    }
+  }
+
   /// Closes all plugins and reports aggregated close failures.
   Future<void> close() async {
     if (_skipClosingPlugins) {

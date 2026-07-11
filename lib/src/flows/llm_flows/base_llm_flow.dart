@@ -330,6 +330,11 @@ class BaseLlmFlow {
       if (content == null || content.parts.isEmpty) {
         continue;
       }
+      // Reject user-authored function calls: they would bypass the LLM and
+      // directly execute arbitrary registered tools.
+      if (content.parts.any((Part part) => part.functionCall != null)) {
+        throw ArgumentError('User message cannot contain function calls.');
+      }
       _normalizeLiveContentRole(content);
       await _appendLiveUserContent(context, content);
       await connection.sendContent(content.copyWith());

@@ -134,6 +134,53 @@ void main() {
       );
     });
 
+    test('runAsync fetches the session once per turn', () async {
+      // Mirrors Python's test_chat_mode_fetches_session_once_per_turn
+      // (commit 81306bbb): the prologue fetch is reused for the node run, so
+      // there is no redundant second fetch (and no dropped session config).
+      final _RecordingSessionService sessionService =
+          _RecordingSessionService();
+      final Runner runner = Runner(
+        appName: 'app',
+        agent: _RunnerTestAgent(name: 'agent'),
+        sessionService: sessionService,
+      );
+      await sessionService.createSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's_once',
+      );
+      // InMemorySessionService.createSession fetches internally; only count
+      // fetches made by the runner turn itself.
+      sessionService.capturedConfigs.clear();
+
+      await runner
+          .runAsync(
+            userId: 'u1',
+            sessionId: 's_once',
+            newMessage: Content.userText('hi'),
+            runConfig: RunConfig(
+              getSessionConfig: GetSessionConfig(numRecentEvents: 1),
+            ),
+          )
+          .toList();
+
+      expect(sessionService.capturedConfigs, hasLength(1));
+      expect(sessionService.capturedConfigs.single?.numRecentEvents, 1);
+
+      // Correctness: the user message is still persisted despite the single
+      // fetch.
+      final Session? updated = await sessionService.getSession(
+        appName: 'app',
+        userId: 'u1',
+        sessionId: 's_once',
+      );
+      expect(
+        updated!.events.any((Event event) => event.author == 'user'),
+        isTrue,
+      );
+    });
+
     test('runDebug forwards getSessionConfig to session service', () async {
       final _RecordingSessionService sessionService =
           _RecordingSessionService();
