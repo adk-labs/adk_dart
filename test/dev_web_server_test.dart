@@ -1825,6 +1825,113 @@ void main() {
       );
     });
 
+    test(
+      'blocks DNS-rebinding: evil Host header on loopback server with '
+      'no configured allow-origins',
+      () async {
+        // Simulates an attacker page that DNS-rebinds evil.com to
+        // 127.0.0.1 and then sends a same-looking POST: the browser sets
+        // both Origin and Host to evil.com, but the socket physically
+        // connects to the loopback-bound dev server.
+        final HttpClientRequest request = await client.postUrl(
+          Uri.parse('http://127.0.0.1:${server.port}/api/sessions'),
+        );
+        request.headers.contentType = ContentType.json;
+        request.headers.set('origin', 'http://evil.com');
+        request.headers.host = 'evil.com';
+        request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+        final HttpClientResponse response = await request.close();
+        final String body = await utf8.decoder.bind(response).join();
+
+        expect(response.statusCode, HttpStatus.forbidden);
+        expect(body, 'Forbidden: origin not allowed');
+      },
+    );
+
+    test(
+      'blocks DNS-rebinding when Origin host looks like 127.evil.com',
+      () async {
+        final HttpClientRequest request = await client.postUrl(
+          Uri.parse('http://127.0.0.1:${server.port}/api/sessions'),
+        );
+        request.headers.contentType = ContentType.json;
+        request.headers.set('origin', 'http://127.evil.com');
+        request.headers.host = '127.evil.com';
+        request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+        final HttpClientResponse response = await request.close();
+        await utf8.decoder.bind(response).join();
+
+        expect(response.statusCode, HttpStatus.forbidden);
+      },
+    );
+
+    test('explicit allow-origins bypasses the DNS-rebinding guard', () async {
+      final DevAgentRuntime corsRuntime = DevAgentRuntime(config: config);
+      final HttpServer corsServer = await startAdkDevWebServer(
+        runtime: corsRuntime,
+        project: config,
+        port: 0,
+        allowOrigins: const <String>['http://evil.com'],
+      );
+      addTearDown(() async {
+        await corsServer.close(force: true);
+        await corsRuntime.runner.close();
+      });
+
+      final HttpClient corsClient = HttpClient();
+      addTearDown(() => corsClient.close(force: true));
+
+      final HttpClientRequest request = await corsClient.postUrl(
+        Uri.parse('http://127.0.0.1:${corsServer.port}/api/sessions'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.headers.set('origin', 'http://evil.com');
+      request.headers.host = 'evil.com';
+      request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+      final HttpClientResponse response = await request.close();
+      await utf8.decoder.bind(response).join();
+
+      expect(response.statusCode, HttpStatus.ok);
+    });
+
+    test(
+      'non-loopback bind host does not trigger the DNS-rebinding guard',
+      () async {
+        final DevAgentRuntime anyRuntime = DevAgentRuntime(config: config);
+        final HttpServer anyServer = await startAdkDevWebServer(
+          runtime: anyRuntime,
+          project: config,
+          port: 0,
+          host: InternetAddress.anyIPv4,
+        );
+        addTearDown(() async {
+          await anyServer.close(force: true);
+          await anyRuntime.runner.close();
+        });
+
+        final HttpClient anyClient = HttpClient();
+        addTearDown(() => anyClient.close(force: true));
+
+        // Same-origin request (Origin matches the Host the client actually
+        // sent) should still be allowed even though the server is not on
+        // loopback and no allow-origins are configured.
+        final HttpClientRequest request = await anyClient.postUrl(
+          Uri.parse('http://127.0.0.1:${anyServer.port}/api/sessions'),
+        );
+        request.headers.contentType = ContentType.json;
+        request.headers.set('origin', 'http://127.0.0.1:${anyServer.port}');
+        request.write(jsonEncode(<String, Object>{'userId': 'u1'}));
+
+        final HttpClientResponse response = await request.close();
+        await utf8.decoder.bind(response).join();
+
+        expect(response.statusCode, HttpStatus.ok);
+      },
+    );
+
     test('supports run_live websocket stream', () async {
       final String sessionId =
           's_live_${DateTime.now().microsecondsSinceEpoch}';

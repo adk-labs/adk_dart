@@ -68,6 +68,34 @@ class _FakeTool extends BaseTool {
   }
 }
 
+/// A tool that exposes a FunctionDeclaration with a parameter schema so the
+/// analytics plugin can surface description + parameters (ecef5f85).
+class _SchemaTool extends BaseTool {
+  _SchemaTool() : super(name: 'lookup', description: 'Look up a record');
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    return FunctionDeclaration(
+      name: 'lookup',
+      description: 'Look up a record',
+      parameters: <String, dynamic>{
+        'type': 'object',
+        'properties': <String, dynamic>{
+          'id': <String, dynamic>{'type': 'string'},
+        },
+      },
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    return <String, Object?>{'ok': true};
+  }
+}
+
 InvocationContext _newInvocationContext({String invocationId = 'inv_bq'}) {
   final Agent rootAgent = Agent(
     name: 'root_agent',
@@ -532,6 +560,55 @@ void main() {
       expect(sink.rows.first['event_type'], 'LLM_REQUEST');
       expect(sink.rows.first['content'], isNull);
       expect(sink.rows.first['content_parts'], isEmpty);
+    });
+
+    test('logs structured tool declarations, not bare names', () async {
+      // Ports adk-python ecef5f85: attributes.tools is a list of
+      // {name, description?, parameters?} objects, not a list of strings.
+      final InMemoryBigQueryEventSink sink = InMemoryBigQueryEventSink();
+      final BigQueryAgentAnalyticsPlugin plugin = BigQueryAgentAnalyticsPlugin(
+        projectId: 'project',
+        datasetId: 'dataset',
+        sink: sink,
+      );
+
+      final InvocationContext invocationContext = _newInvocationContext(
+        invocationId: 'inv_tool_decl',
+      );
+      final CallbackContext callbackContext = Context(invocationContext);
+      await plugin.beforeModelCallback(
+        callbackContext: callbackContext,
+        llmRequest: LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+          toolsDict: <String, BaseTool>{
+            'fake_tool': _FakeTool(),
+            'lookup': _SchemaTool(),
+          },
+        ),
+      );
+
+      expect(sink.rows, hasLength(1));
+      final Map<String, Object?> attributes =
+          jsonDecode(sink.rows.first['attributes'] as String)
+              as Map<String, Object?>;
+      final List<Object?> tools = attributes['tools'] as List<Object?>;
+      expect(tools, hasLength(2));
+
+      final Map<String, Object?> fake = tools
+          .cast<Map<String, Object?>>()
+          .firstWhere((Map<String, Object?> t) => t['name'] == 'fake_tool');
+      expect(fake['description'], 'fake tool');
+      expect(fake.containsKey('parameters'), isFalse);
+
+      final Map<String, Object?> lookup = tools
+          .cast<Map<String, Object?>>()
+          .firstWhere((Map<String, Object?> t) => t['name'] == 'lookup');
+      expect(lookup['description'], 'Look up a record');
+      expect(
+        (lookup['parameters'] as Map<String, Object?>)['type'],
+        'object',
+      );
     });
 
     test('marks cyclic analytics payloads as truncated', () async {

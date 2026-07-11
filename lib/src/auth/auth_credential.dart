@@ -56,6 +56,7 @@ class OAuth2Auth {
     this.expiresAt,
     this.expiresIn,
     this.audience,
+    this.prompt,
     this.codeVerifier,
     this.codeChallengeMethod,
     this.tokenEndpointAuthMethod = 'client_secret_basic',
@@ -102,6 +103,11 @@ class OAuth2Auth {
 
   /// Audience for token exchange or ID token.
   String? audience;
+
+  /// OAuth `prompt` parameter used when building the authorization URL.
+  ///
+  /// Defaults to `consent` when unset.
+  String? prompt;
 
   /// PKCE code verifier retained for authorization-code token exchange.
   String? codeVerifier;

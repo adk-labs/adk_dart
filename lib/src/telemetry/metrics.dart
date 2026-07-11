@@ -20,9 +20,6 @@ const String genAiAgentRequestSizeMetric = 'gen_ai.agent.request.size';
 /// Metric name for agent response sizes.
 const String genAiAgentResponseSizeMetric = 'gen_ai.agent.response.size';
 
-/// Metric name for agent workflow step counts.
-const String genAiAgentWorkflowStepsMetric = 'gen_ai.agent.workflow.steps';
-
 /// Metric name for tool request sizes.
 const String genAiToolRequestSizeMetric = 'gen_ai.tool.request.size';
 
@@ -200,27 +197,6 @@ void recordAgentResponseSize(
       value: contentSizeBytes(responseContent),
       unit: 'By',
       description: 'Size of agent responses.',
-      attributes: _agentAttributes(agentName),
-    ),
-  );
-}
-
-/// Records the number of events authored by an agent.
-void recordAgentWorkflowSteps(
-  String agentName,
-  List<Event> events, {
-  AdkMetricsRecorder? recorder,
-}) {
-  final int count = events.where((Event event) {
-    return event.author == agentName;
-  }).length;
-  _record(
-    recorder,
-    AdkMetricRecord(
-      name: genAiAgentWorkflowStepsMetric,
-      value: count,
-      unit: '1',
-      description: 'Length of agentic workflow (# of events).',
       attributes: _agentAttributes(agentName),
     ),
   );

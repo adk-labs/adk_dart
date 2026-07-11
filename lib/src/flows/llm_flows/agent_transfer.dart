@@ -5,6 +5,7 @@ import '../../agents/base_agent.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
+import '../../agents/managed_agent.dart';
 import '../../events/event.dart';
 import '../../models/llm_request.dart';
 import '../../tools/tool_context.dart';
@@ -144,6 +145,12 @@ List<BaseAgent> getTransferTargets(LlmAgent agent) {
 }
 
 bool _usesTaskTransferMode(BaseAgent agent) {
-  return agent is LlmAgent &&
-      (agent.mode == 'task' || agent.mode == 'single_turn');
+  // Any agent class that declares `mode` participates here, mirroring
+  // Python's hasattr-based check (LlmAgent, ManagedAgent).
+  final String? mode = agent is LlmAgent
+      ? agent.mode
+      : agent is ManagedAgent
+      ? agent.mode
+      : null;
+  return mode == 'task' || mode == 'single_turn';
 }

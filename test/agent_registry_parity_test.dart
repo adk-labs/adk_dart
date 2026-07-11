@@ -214,6 +214,80 @@ void main() {
       expect(agent.resolvedAgentCard?.capabilities.values['streaming'], isTrue);
       expect(agent.resolvedAgentCard?.skills.single.name, 'S1');
     });
+
+    test('searchAgents POSTs to agents:search with a JSON search body',
+        () async {
+      // Ports adk-python ed579c13.
+      Uri? postedUri;
+      Object? postedBody;
+      final AgentRegistry registry = AgentRegistry(
+        projectId: 'test-project',
+        location: 'global',
+        httpGetProvider: _unexpectedHttpGet,
+        httpPostProvider:
+            (Uri uri, {required Map<String, String> headers, Object? body}) async {
+              postedUri = uri;
+              postedBody = body;
+              expect(headers, containsPair('Authorization', 'Bearer token'));
+              return AgentRegistryHttpResponse(
+                statusCode: 200,
+                body: <String, Object?>{
+                  'agents': <Object?>[
+                    <String, Object?>{'name': 'agents/found'},
+                  ],
+                },
+              );
+            },
+        authHeadersProvider: _staticAuthHeadersProvider,
+      );
+
+      final Map<String, Object?> result = await registry.searchAgents(
+        searchString: 'weather',
+        searchType: 'SEMANTIC',
+        pageSize: 5,
+      );
+
+      expect(
+        postedUri.toString(),
+        contains('/v1alpha/projects/test-project/locations/global/agents:search'),
+      );
+      expect(postedBody, <String, Object?>{
+        'searchString': 'weather',
+        'searchType': 'SEMANTIC',
+        'pageSize': 5,
+      });
+      expect(
+        (result['agents'] as List<Object?>).single,
+        <String, Object?>{'name': 'agents/found'},
+      );
+    });
+
+    test('searchMcpServers POSTs to mcpServers:search', () async {
+      Uri? postedUri;
+      final AgentRegistry registry = AgentRegistry(
+        projectId: 'test-project',
+        location: 'global',
+        httpGetProvider: _unexpectedHttpGet,
+        httpPostProvider:
+            (Uri uri, {required Map<String, String> headers, Object? body}) async {
+              postedUri = uri;
+              return AgentRegistryHttpResponse(
+                statusCode: 200,
+                body: <String, Object?>{'mcpServers': <Object?>[]},
+              );
+            },
+        authHeadersProvider: _staticAuthHeadersProvider,
+      );
+
+      await registry.searchMcpServers(searchString: 'db', filter: 'x=y');
+
+      expect(
+        postedUri.toString(),
+        contains(
+          '/v1alpha/projects/test-project/locations/global/mcpServers:search',
+        ),
+      );
+    });
   });
 }
 

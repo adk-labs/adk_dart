@@ -147,15 +147,20 @@ Future<bool> runCompactionForTokenThresholdConfig({
 }
 
 /// Runs sliding-window compaction for [app] and [session].
-Future<bool> runCompactionForSlidingWindow({
+///
+/// Yields the sliding-window compaction event, if one is produced. The caller
+/// (the runner loop) is responsible for appending it to the session, so that
+/// persistence of this event stays at the runtime's synchronization point.
+/// The token-threshold fallback still appends internally via [sessionService].
+Stream<Event> runCompactionForSlidingWindow({
   required App app,
   required Session session,
   required BaseSessionService sessionService,
   bool skipTokenCompaction = false,
-}) async {
+}) async* {
   final EventsCompactionConfig? config = app.eventsCompactionConfig;
   if (config == null) {
-    return false;
+    return;
   }
 
   if (!skipTokenCompaction) {
@@ -167,12 +172,12 @@ Future<bool> runCompactionForSlidingWindow({
       currentBranch: null,
     );
     if (tokenCompacted) {
-      return true;
+      return;
     }
   }
 
   if (!hasSlidingWindowConfig(config)) {
-    return false;
+    return;
   }
 
   final double lastCompactedEnd = latestCompactionEndTimestamp(session.events);
@@ -184,7 +189,7 @@ Future<bool> runCompactionForSlidingWindow({
       )
       .toList(growable: false);
   if (candidates.isEmpty) {
-    return false;
+    return;
   }
 
   final List<String> userInvocations = <String>[];
@@ -199,13 +204,13 @@ Future<bool> runCompactionForSlidingWindow({
   }
 
   if (userInvocations.length < config.compactionInterval) {
-    return false;
+    return;
   }
 
   final int keep = config.overlapSize.clamp(0, userInvocations.length);
   final int compactCount = userInvocations.length - keep;
   if (compactCount <= 0) {
-    return false;
+    return;
   }
 
   final Set<String> invocationIdsToCompact = userInvocations
@@ -219,7 +224,7 @@ Future<bool> runCompactionForSlidingWindow({
   eventsToCompact = _longestSelfContainedPrefix(eventsToCompact);
 
   if (eventsToCompact.isEmpty) {
-    return false;
+    return;
   }
 
   final Event compactionEvent = await _createCompactionEventWithTrace(
@@ -229,8 +234,7 @@ Future<bool> runCompactionForSlidingWindow({
     trigger: 'sliding_window',
     author: app.rootAgent.name,
   );
-  await sessionService.appendEvent(session: session, event: compactionEvent);
-  return true;
+  yield compactionEvent;
 }
 
 Future<Event> _createCompactionEventWithTrace({

@@ -15,9 +15,11 @@
 - `Basic Chatbot`: 单 `Agent + FunctionTool`
 - `Transfer Multi-Agent`: Coordinator/Dispatcher 模式
 - `Workflow Combo`: `SequentialAgent + ParallelAgent + LoopAgent`
+- `Graph Workflow`: ADK 2.0 graph `Workflow`（triage `FunctionNode` + routed `Edge`）
 - `Sequential` / `Parallel` / `Loop`
 - `Agent Team`
 - `MCP Toolset`（远程 HTTP）
+- `Google Search`（Gemini 内置 `GoogleSearchTool`）
 - `URL Context`（Gemini 内置 `UrlContextTool`）
 - `Skills`（inline `Skill + SkillToolset`）
 
@@ -33,7 +35,9 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 示例 UI/路由/聊天界面 | Y | Y | Y | Y | Y | Y | Flutter 通用 UI 层 |
 | Basic/Transfer/Workflow/Team 执行 | Y | Y | Y | Y | Y | Y | 基于 `flutter_adk` `adk_core` 的 in-memory 运行时 |
+| Graph Workflow (ADK 2.0 `Workflow`) | Y | Y | Y | Y | Y | Y | 通过 routed edge 只执行一个专家节点 |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web 可能需要服务端 CORS 配置 |
+| Google Search built-in tool | Y | Y | Y | Y | Y | Y | 通过 Gemini 进行 server-side grounding |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | 通过 Gemini 进行 model-side retrieval |
 | Skills (inline) | Y | Y | Y | Y | Y | Y | 不依赖文件系统 |
 | 设置持久化 (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web 使用浏览器存储 |

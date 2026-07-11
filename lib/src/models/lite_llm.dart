@@ -296,14 +296,23 @@ List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {
         continue;
       }
       final String text = '${block['thinking'] ?? ''}'.trim();
-      if (text.isEmpty || !seen.add(text)) {
+      final Object? signature = block['signature'];
+      final bool hasSignature =
+          signature != null && '$signature'.isNotEmpty;
+      // Anthropic streams a signature in a final chunk with empty text.
+      // Preserve signature-only blocks so the signature survives aggregation;
+      // blocks with neither text nor signature are still skipped. Only apply
+      // text-based dedup to non-empty text so distinct signature-only blocks
+      // are not collapsed by an empty-string collision.
+      if (text.isEmpty && !hasSignature) {
+        continue;
+      }
+      if (text.isNotEmpty && !seen.add(text)) {
         continue;
       }
       parts.add(
         Part.text(text, thought: true).copyWith(
-          thoughtSignature: block['signature'] == null
-              ? null
-              : utf8.encode('${block['signature']}'),
+          thoughtSignature: hasSignature ? utf8.encode('$signature') : null,
         ),
       );
     }
@@ -341,6 +350,62 @@ List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {
     addThought(raw['content']);
   }
   return parts;
+}
+
+/// Aggregates fragmented streaming thought parts into clean individual parts.
+///
+/// During streaming, Anthropic splits a thinking block across many deltas:
+/// text-only chunks followed by a signature-only chunk at `block_stop`. This
+/// helper joins the text chunks and attaches the signature, producing clean
+/// individual thought parts for session history and outbound requests.
+List<Part> _aggregateStreamingThoughtParts(Iterable<Part> thoughtParts) {
+  final List<Part> partsList = thoughtParts.toList(growable: false);
+  if (partsList.isEmpty) {
+    return const <Part>[];
+  }
+  final List<Part> aggregated = <Part>[];
+  final List<String> currentTexts = <String>[];
+  for (final Part part in partsList) {
+    final String? text = part.text;
+    if (text != null && text.isNotEmpty) {
+      currentTexts.add(text);
+    }
+    if (part.thoughtSignature != null) {
+      aggregated.add(
+        Part.text(currentTexts.join(), thought: true).copyWith(
+          thoughtSignature: part.thoughtSignature,
+        ),
+      );
+      currentTexts.clear();
+    }
+  }
+  if (currentTexts.isNotEmpty) {
+    aggregated.add(Part.text(currentTexts.join(), thought: true));
+  }
+  return aggregated;
+}
+
+/// Merges reasoning text fragments into a single provider payload.
+///
+/// Streaming providers such as vLLM can emit reasoning as token-sized chunks.
+/// ADK stores those chunks as consecutive thought parts, so inserting
+/// separators here would change the model's original reasoning text.
+String _mergeReasoningTexts(Iterable<Part> reasoningParts) {
+  final StringBuffer buffer = StringBuffer();
+  for (final Part part in reasoningParts) {
+    final String? text = part.text;
+    if (text != null && text.isNotEmpty) {
+      buffer.write(text);
+      continue;
+    }
+    final InlineData? inlineData = part.inlineData;
+    if (inlineData != null &&
+        inlineData.data.isNotEmpty &&
+        inlineData.mimeType.startsWith('text/')) {
+      buffer.write(utf8.decode(inlineData.data, allowMalformed: true));
+    }
+  }
+  return buffer.toString();
 }
 
 bool _isThinkingBlocksFormat(Object? value) {
@@ -410,7 +475,12 @@ List<Map<String, Object?>> _contentToMessages(
       toolCalls.add(toolCall);
       continue;
     }
-    if (part.thought && part.text != null && part.text!.isNotEmpty) {
+    if (part.thought &&
+        ((part.text != null && part.text!.isNotEmpty) ||
+            part.thoughtSignature != null)) {
+      // Collect thought parts that carry text or a signature. Streaming emits
+      // signature-only thought parts (empty text) that must be preserved so
+      // the signature survives aggregation for Anthropic outbound requests.
       reasoningParts.add(part);
       continue;
     }
@@ -461,9 +531,18 @@ List<Map<String, Object?>> _contentToMessages(
 
   final Map<String, Object?> message = <String, Object?>{'role': role};
   if (_isAnthropicModel(model) && reasoningParts.isNotEmpty) {
-    final List<Map<String, Object?>> thinkingBlocks = reasoningParts
+    // Streaming splits one Anthropic thinking block across many deltas:
+    // text-only chunks followed by a signature-only chunk at block_stop.
+    // Aggregate them back into one thinking block for outbound.
+    final List<Part> aggregatedParts = _aggregateStreamingThoughtParts(
+      reasoningParts,
+    );
+    final List<Map<String, Object?>> thinkingBlocks = aggregatedParts
         .where(
-          (Part part) => part.thoughtSignature != null && part.text != null,
+          (Part part) =>
+              part.thoughtSignature != null &&
+              part.text != null &&
+              part.text!.isNotEmpty,
         )
         .map(
           (Part part) => <String, Object?>{
@@ -476,21 +555,13 @@ List<Map<String, Object?>> _contentToMessages(
     if (thinkingBlocks.isNotEmpty) {
       message['thinking_blocks'] = thinkingBlocks;
     } else {
-      final String reasoningText = reasoningParts
-          .map((Part part) => part.text)
-          .whereType<String>()
-          .where((String text) => text.isNotEmpty)
-          .join('\n');
+      final String reasoningText = _mergeReasoningTexts(reasoningParts);
       if (reasoningText.isNotEmpty) {
         message['reasoning_content'] = reasoningText;
       }
     }
   } else if (reasoningParts.isNotEmpty) {
-    final String reasoningText = reasoningParts
-        .map((Part part) => part.text)
-        .whereType<String>()
-        .where((String text) => text.isNotEmpty)
-        .join('\n');
+    final String reasoningText = _mergeReasoningTexts(reasoningParts);
     if (reasoningText.isNotEmpty) {
       message['reasoning_content'] = reasoningText;
     }

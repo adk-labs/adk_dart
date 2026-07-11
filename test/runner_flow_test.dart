@@ -55,6 +55,19 @@ class _EarlyExitPlugin extends BasePlugin {
   }
 }
 
+class _AfterRunCountingPlugin extends BasePlugin {
+  _AfterRunCountingPlugin() : super(name: 'after_run_counter');
+
+  int afterRunCalls = 0;
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    afterRunCalls += 1;
+  }
+}
+
 class _AbortUserMessagePlugin extends BasePlugin {
   _AbortUserMessagePlugin(this.controller) : super(name: 'abort_user_message');
 
@@ -1305,6 +1318,42 @@ void main() {
           responseEvent.content?.parts.where((Part p) => p.text != null).toList() ?? <Part>[];
       // null result maps to {"result": null} which is skipped from adding text.
       expect(textParts, isEmpty);
+    });
+
+    test('dispatches after_run_callback once on a Workflow node root', () async {
+      // Mirrors upstream's test_after_run_callback_dispatched_on_workflow_root:
+      // the Runner fires a plugin's afterRunCallback exactly once when the root
+      // agent is a Workflow.
+      final _AfterRunCountingPlugin plugin = _AfterRunCountingPlugin();
+      final Workflow workflow = Workflow(
+        name: 'wf',
+        nodes: <BaseNode>[
+          node(
+            (WorkflowContext _, Object? input) => '$input'.toUpperCase(),
+            name: 'terminal',
+          ),
+        ],
+        edges: <Edge>[Edge(fromNode: START, toNode: 'terminal')],
+      );
+      final InMemoryRunner runner = InMemoryRunner(
+        agent: workflow,
+        plugins: <BasePlugin>[plugin],
+      );
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'u',
+        sessionId: 'session_workflow_after_run',
+      );
+
+      await _collect(
+        runner.runAsync(
+          userId: 'u',
+          sessionId: session.id,
+          newMessage: Content.userText('hi'),
+        ),
+      );
+
+      expect(plugin.afterRunCalls, 1);
     });
   });
 }

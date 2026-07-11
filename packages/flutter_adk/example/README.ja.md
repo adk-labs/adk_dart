@@ -15,9 +15,11 @@
 - `Basic Chatbot`: 単一 `Agent + FunctionTool`
 - `Transfer Multi-Agent`: Coordinator/Dispatcher パターン
 - `Workflow Combo`: `SequentialAgent + ParallelAgent + LoopAgent`
+- `Graph Workflow`: ADK 2.0 graph `Workflow`（triage `FunctionNode` + routed `Edge`）
 - `Sequential` / `Parallel` / `Loop`
 - `Agent Team`
 - `MCP Toolset` (remote HTTP)
+- `Google Search` (Gemini built-in `GoogleSearchTool`)
 - `URL Context` (Gemini built-in `UrlContextTool`)
 - `Skills` (inline `Skill + SkillToolset`)
 
@@ -33,7 +35,9 @@ Status legend:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Example app UI/routing/chat screen | Y | Y | Y | Y | Y | Y | Flutter shared UI layer |
 | Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
+| Graph Workflow (ADK 2.0 `Workflow`) | Y | Y | Y | Y | Y | Y | Routed edges select one specialist node |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
+| Google Search built-in tool | Y | Y | Y | Y | Y | Y | Server-side grounding through Gemini |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | Model-side retrieval through Gemini |
 | Skills (inline) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
 | Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |

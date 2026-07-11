@@ -260,6 +260,56 @@ void main() {
       expect(tools.single.name, 'items_get');
     });
 
+    test('generated OIDC auth scheme has no userinfo endpoint', () async {
+      final GoogleApiToolset toolset = GoogleApiToolset(
+        'sample',
+        'v1',
+        openApiSpec: <String, Object?>{
+          'servers': <Object?>[
+            <String, Object?>{
+              'url': 'https://example.googleapis.com/sample/v1',
+            },
+          ],
+          'paths': <String, Object?>{
+            '/items': <String, Object?>{
+              'get': <String, Object?>{
+                'operationId': 'items.list',
+                'summary': 'List items',
+                'description': 'List items',
+              },
+            },
+          },
+          'components': <String, Object?>{
+            'securitySchemes': <String, Object?>{
+              'oauth2': <String, Object?>{
+                'flows': <String, Object?>{
+                  'authorizationCode': <String, Object?>{
+                    'scopes': <String, Object?>{'scope-1': 'Scope 1'},
+                  },
+                },
+              },
+            },
+          },
+        },
+      );
+
+      final List<BaseTool> tools = await toolset.getTools();
+      final GoogleApiTool tool = tools.single as GoogleApiTool;
+      final OpenIdConnectWithConfig scheme =
+          tool.authScheme! as OpenIdConnectWithConfig;
+      expect(scheme.userinfoEndpoint, isNull);
+      expect(
+        scheme.authorizationEndpoint,
+        'https://accounts.google.com/o/oauth2/v2/auth',
+      );
+      expect(scheme.tokenEndpoint, 'https://oauth2.googleapis.com/token');
+      expect(
+        scheme.revocationEndpoint,
+        'https://oauth2.googleapis.com/revoke',
+      );
+      expect(scheme.toJson().containsKey('userinfo_endpoint'), isFalse);
+    });
+
     test(
       'prebuilt google api toolset classes set expected api names/versions',
       () {

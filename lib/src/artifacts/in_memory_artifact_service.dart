@@ -1,7 +1,9 @@
 /// In-memory artifact storage implementation.
 library;
 
+import '../errors/input_validation_error.dart';
 import '../types/content.dart';
+import 'artifact_util.dart';
 import 'base_artifact_service.dart';
 
 /// Artifact service backed by process-local memory maps.
@@ -57,6 +59,23 @@ class InMemoryArtifactService extends BaseArtifactService {
       () => <_ArtifactEntry>[],
     );
 
+    if (isArtifactRef(artifact)) {
+      final ParsedArtifactUri? parsedUri = parseArtifactUri(
+        artifact.fileData!.fileUri,
+      );
+      if (parsedUri == null) {
+        throw InputValidationError(
+          'Invalid artifact reference URI: ${artifact.fileData!.fileUri}',
+        );
+      }
+      validateArtifactReferenceScope(
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+        parsedUri: parsedUri,
+      );
+    }
+
     final int version = versions.length;
     final String canonicalUri = _fileHasUserNamespace(filename)
         ? 'memory://apps/$appName/users/$userId/artifacts/$filename/versions/$version'
@@ -106,6 +125,32 @@ class InMemoryArtifactService extends BaseArtifactService {
     }
 
     final Part value = entries[index].data.copyWith();
+
+    // Resolve artifact reference if needed.
+    if (isArtifactRef(value)) {
+      final ParsedArtifactUri? parsedUri = parseArtifactUri(
+        value.fileData!.fileUri,
+      );
+      if (parsedUri == null) {
+        throw InputValidationError(
+          'Invalid artifact reference URI: ${value.fileData!.fileUri}',
+        );
+      }
+      validateArtifactReferenceScope(
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+        parsedUri: parsedUri,
+      );
+      return loadArtifact(
+        appName: parsedUri.appName,
+        userId: parsedUri.userId,
+        filename: parsedUri.filename,
+        sessionId: parsedUri.sessionId,
+        version: parsedUri.version,
+      );
+    }
+
     if (_isEmptyPart(value)) {
       return null;
     }

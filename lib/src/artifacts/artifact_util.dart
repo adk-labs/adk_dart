@@ -1,6 +1,7 @@
 /// Artifact URI parsing and conversion helpers.
 library;
 
+import '../errors/input_validation_error.dart';
 import '../types/content.dart';
 
 /// Parsed components of an `artifact://` URI.
@@ -86,4 +87,28 @@ String getArtifactUri(
 bool isArtifactRef(Part artifact) {
   final FileData? fileData = artifact.fileData;
   return fileData != null && fileData.fileUri.startsWith('artifact://');
+}
+
+/// Ensures artifact references cannot escape the caller's scope.
+///
+/// Throws [InputValidationError] when [parsedUri] points at a different app or
+/// user, or when a session-scoped reference targets a different session than
+/// [sessionId].
+void validateArtifactReferenceScope({
+  required String appName,
+  required String userId,
+  required String? sessionId,
+  required ParsedArtifactUri parsedUri,
+}) {
+  if (parsedUri.appName != appName || parsedUri.userId != userId) {
+    throw InputValidationError(
+      'Artifact references must stay within the same app and user scope.',
+    );
+  }
+  if (parsedUri.sessionId != null && parsedUri.sessionId != sessionId) {
+    throw InputValidationError(
+      'Session-scoped artifact references must stay within the same session'
+      ' scope.',
+    );
+  }
 }

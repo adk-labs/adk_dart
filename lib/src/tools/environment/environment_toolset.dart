@@ -48,6 +48,15 @@ int? _readIntArg(Object? value) {
   return null;
 }
 
+/// Returns `true` when [value] is an integer.
+///
+/// `bool` values are rejected: Dart's `bool` is not a subtype of `int`, so
+/// this already excludes them (unlike Python, where `bool` is an `int`
+/// subclass and needs an explicit exclusion).
+bool _isValidLineNumber(Object? value) {
+  return value is int;
+}
+
 String _trimTrailingSeparator(String path) {
   if (path.length <= 1) {
     return path;
@@ -261,6 +270,18 @@ class ReadFileTool extends BaseTool {
         'status': 'error',
         'error': '`path` is required.',
       };
+    }
+
+    for (final MapEntry<String, Object?> entry in <String, Object?>{
+      'start_line': args['start_line'],
+      'end_line': args['end_line'],
+    }.entries) {
+      if (entry.value != null && !_isValidLineNumber(entry.value)) {
+        return <String, Object?>{
+          'status': 'error',
+          'error': '`${entry.key}` must be an integer if provided.',
+        };
+      }
     }
 
     final int start = _readIntArg(args['start_line']) ?? 1;

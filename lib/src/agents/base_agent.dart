@@ -95,38 +95,46 @@ abstract class BaseAgent {
       return;
     }
 
-    final Event? before = await _handleBeforeAgentCallback(context);
-    if (context.isAborted) {
-      return;
-    }
-    if (before != null) {
-      _stampIsolationScope(context, before);
-      yield before;
-    }
-
-    if (context.endInvocation) {
-      return;
-    }
-
-    await for (final Event event in runAsyncImpl(context)) {
+    // Wrap the full agent lifecycle (before/impl/after callbacks) so that any
+    // unhandled error is surfaced to on_agent_error_callback before being
+    // re-raised. Notification-only; the original error always propagates.
+    try {
+      final Event? before = await _handleBeforeAgentCallback(context);
       if (context.isAborted) {
         return;
       }
-      _stampIsolationScope(context, event);
-      yield event;
-    }
+      if (before != null) {
+        _stampIsolationScope(context, before);
+        yield before;
+      }
 
-    if (context.endInvocation || context.isAborted) {
-      return;
-    }
+      if (context.endInvocation) {
+        return;
+      }
 
-    final Event? after = await _handleAfterAgentCallback(context);
-    if (context.isAborted) {
-      return;
-    }
-    if (after != null) {
-      _stampIsolationScope(context, after);
-      yield after;
+      await for (final Event event in runAsyncImpl(context)) {
+        if (context.isAborted) {
+          return;
+        }
+        _stampIsolationScope(context, event);
+        yield event;
+      }
+
+      if (context.endInvocation || context.isAborted) {
+        return;
+      }
+
+      final Event? after = await _handleAfterAgentCallback(context);
+      if (context.isAborted) {
+        return;
+      }
+      if (after != null) {
+        _stampIsolationScope(context, after);
+        yield after;
+      }
+    } catch (error) {
+      await _handleAgentErrorCallback(context, error);
+      rethrow;
     }
   }
 
@@ -137,37 +145,44 @@ abstract class BaseAgent {
       return;
     }
 
-    final Event? before = await _handleBeforeAgentCallback(context);
-    if (context.isAborted) {
-      return;
-    }
-    if (before != null) {
-      _stampIsolationScope(context, before);
-      yield before;
-    }
-
-    if (context.endInvocation) {
-      return;
-    }
-
-    await for (final Event event in runLiveImpl(context)) {
+    // Wrap the full agent lifecycle so that any unhandled error is surfaced to
+    // on_agent_error_callback before being re-raised. Notification-only.
+    try {
+      final Event? before = await _handleBeforeAgentCallback(context);
       if (context.isAborted) {
         return;
       }
-      _stampIsolationScope(context, event);
-      yield event;
-    }
+      if (before != null) {
+        _stampIsolationScope(context, before);
+        yield before;
+      }
 
-    if (context.isAborted) {
-      return;
-    }
-    final Event? after = await _handleAfterAgentCallback(context);
-    if (context.isAborted) {
-      return;
-    }
-    if (after != null) {
-      _stampIsolationScope(context, after);
-      yield after;
+      if (context.endInvocation) {
+        return;
+      }
+
+      await for (final Event event in runLiveImpl(context)) {
+        if (context.isAborted) {
+          return;
+        }
+        _stampIsolationScope(context, event);
+        yield event;
+      }
+
+      if (context.isAborted) {
+        return;
+      }
+      final Event? after = await _handleAfterAgentCallback(context);
+      if (context.isAborted) {
+        return;
+      }
+      if (after != null) {
+        _stampIsolationScope(context, after);
+        yield after;
+      }
+    } catch (error) {
+      await _handleAgentErrorCallback(context, error);
+      rethrow;
     }
   }
 
@@ -422,6 +437,27 @@ abstract class BaseAgent {
     }
 
     return null;
+  }
+
+  /// Runs the on_agent_error_callback for all plugins.
+  ///
+  /// This is notification-only and best-effort: the triggering [error] is
+  /// always re-raised by the caller, and any exception from the callback itself
+  /// is suppressed so it can never mask the original error.
+  Future<void> _handleAgentErrorCallback(
+    InvocationContext context,
+    Object error,
+  ) async {
+    final CallbackContext callbackContext = Context(context);
+    try {
+      await context.pluginManager.runOnAgentErrorCallback(
+        agent: this,
+        callbackContext: callbackContext,
+        error: error,
+      );
+    } catch (_) {
+      // Suppress so the original agent error propagates.
+    }
   }
 
   List<AgentLifecycleCallback> _coerceAgentCallbacks(Object? callback) {

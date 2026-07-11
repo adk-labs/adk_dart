@@ -25,6 +25,26 @@ import '../sessions/session.dart';
 import '../tools/base_toolset.dart';
 import '../types/content.dart';
 
+/// Best-effort on_run_error notification; never masks the original error.
+///
+/// on_run_error_callback is notification-only: the triggering [error] is
+/// always re-raised by the caller, so any exception from the callback itself
+/// is suppressed.
+Future<void> _notifyRunError(
+  PluginManager pluginManager,
+  InvocationContext invocationContext,
+  Object error,
+) async {
+  try {
+    await pluginManager.runOnRunErrorCallback(
+      invocationContext: invocationContext,
+      error: error,
+    );
+  } catch (_) {
+    // Suppress so the original run error propagates.
+  }
+}
+
 bool _isToolCallOrResponse(Event event) {
   return event.getFunctionCalls().isNotEmpty ||
       event.getFunctionResponses().isNotEmpty;
@@ -322,12 +342,28 @@ class Runner {
       }
 
       if (app != null && app!.eventsCompactionConfig != null) {
-        await app_compaction.runCompactionForSlidingWindow(
-          app: app!,
-          session: context.session,
-          sessionService: sessionService,
-          skipTokenCompaction: context.tokenCompactionChecked,
-        );
+        // Compaction runs on the success path. A failure here is an unhandled
+        // runner error, so notify on_run_error_callback once and re-raise.
+        // Compaction yields its event instead of appending it; the runner is
+        // the single append site so persistence stays at the runtime's
+        // synchronization point.
+        try {
+          await for (final Event compactionEvent
+              in app_compaction.runCompactionForSlidingWindow(
+                app: app!,
+                session: context.session,
+                sessionService: sessionService,
+                skipTokenCompaction: context.tokenCompactionChecked,
+              )) {
+            await sessionService.appendEvent(
+              session: context.session,
+              event: compactionEvent,
+            );
+          }
+        } catch (error) {
+          await _notifyRunError(context.pluginManager, context, error);
+          rethrow;
+        }
       }
     } finally {
       await _cleanupToolsets(toolsets, ignoreErrors: true);
@@ -818,24 +854,33 @@ class Runner {
         session.state[key] = value;
       });
     }
-    final Content? modifiedMessage = await context.pluginManager
-        .runOnUserMessageCallback(
-          userMessage: newMessage,
-          invocationContext: context,
-        );
-    if (context.isAborted) {
-      return;
+    // Failures in these setup hooks (on_user_message_callback and the
+    // user-event session append) are part of runner execution even though they
+    // run before the main event loop, so notify on_run_error_callback.
+    // Notification-only; the original exception is always re-raised.
+    try {
+      final Content? modifiedMessage = await context.pluginManager
+          .runOnUserMessageCallback(
+            userMessage: newMessage,
+            invocationContext: context,
+          );
+      if (context.isAborted) {
+        return;
+      }
+
+      final Content finalMessage = modifiedMessage ?? newMessage;
+      context.userContent = finalMessage;
+
+      await _appendNewMessageToSession(
+        session: session,
+        newMessage: finalMessage,
+        context: context,
+        stateDelta: stateDelta,
+      );
+    } catch (error) {
+      await _notifyRunError(context.pluginManager, context, error);
+      rethrow;
     }
-
-    final Content finalMessage = modifiedMessage ?? newMessage;
-    context.userContent = finalMessage;
-
-    await _appendNewMessageToSession(
-      session: session,
-      newMessage: finalMessage,
-      context: context,
-      stateDelta: stateDelta,
-    );
   }
 
   Future<void> _appendNewMessageToSession({
@@ -849,6 +894,11 @@ class Runner {
     }
     if (newMessage.parts.isEmpty) {
       throw ArgumentError('No parts in the newMessage.');
+    }
+    // Reject user-authored function calls: they would bypass the LLM and
+    // directly execute arbitrary registered tools.
+    if (newMessage.parts.any((Part part) => part.functionCall != null)) {
+      throw ArgumentError('User message cannot contain function calls.');
     }
 
     final Event event = Event(
@@ -883,101 +933,126 @@ class Runner {
       return;
     }
 
-    final Content? earlyExit = await invocationContext.pluginManager
-        .runBeforeRunCallback(invocationContext: invocationContext);
-    if (invocationContext.isAborted) {
-      return;
-    }
+    // Buffer produced events so the error handler wraps only production (the
+    // before_run callback, early-exit, and the main execution loop), not the
+    // consumer-side yield. Failures here notify on_run_error_callback once and
+    // re-raise; the notification is best-effort and never masks the error.
+    final StreamController<Event> output = StreamController<Event>();
 
-    if (earlyExit != null) {
-      final Event event = Event(
-        invocationId: invocationContext.invocationId,
-        author: 'model',
-        branch: invocationContext.branch,
-        isolationScope: invocationContext.isolationScope,
-        content: earlyExit,
-      );
-      _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
-      if (invocationContext.isAborted) {
-        return;
-      }
-      if (_shouldAppendEvent(event, isLiveCall)) {
-        await _appendEventWithPersistBarrier(invocationContext, event);
-      }
-      if (invocationContext.isAborted) {
-        return;
-      }
-      yield event;
-    } else {
-      PersistBarrier.enable(invocationContext);
-      final List<({Event event, String? barrierEventId})> bufferedEvents =
-          <({Event event, String? barrierEventId})>[];
-      bool isTranscribing = false;
-
-      await for (final Event event in execute(invocationContext)) {
+    Future<void> produce() async {
+      try {
+        final Content? earlyExit = await invocationContext.pluginManager
+            .runBeforeRunCallback(invocationContext: invocationContext);
         if (invocationContext.isAborted) {
           return;
         }
-        event.isolationScope ??= invocationContext.isolationScope;
-        _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
-        final Event? modified = await invocationContext.pluginManager
-            .runOnEventCallback(
-              invocationContext: invocationContext,
-              event: event,
-            );
-        if (invocationContext.isAborted) {
-          return;
-        }
-        final Event outputEvent = _buildOutputEvent(
-          originalEvent: event,
-          modifiedEvent: modified,
-          runConfig: invocationContext.runConfig,
-        );
 
-        if (isLiveCall) {
-          if (event.partial == true && _isTranscription(event)) {
-            isTranscribing = true;
+        if (earlyExit != null) {
+          final Event event = Event(
+            invocationId: invocationContext.invocationId,
+            author: 'model',
+            branch: invocationContext.branch,
+            isolationScope: invocationContext.isolationScope,
+            content: earlyExit,
+          );
+          _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
+          if (invocationContext.isAborted) {
+            return;
           }
-
-          if (isTranscribing && _isToolCallOrResponse(event)) {
-            bufferedEvents.add((event: outputEvent, barrierEventId: event.id));
-            continue;
+          if (_shouldAppendEvent(event, isLiveCall)) {
+            await _appendEventWithPersistBarrier(invocationContext, event);
           }
+          if (invocationContext.isAborted) {
+            return;
+          }
+          output.add(event);
+        } else {
+          PersistBarrier.enable(invocationContext);
+          final List<({Event event, String? barrierEventId})> bufferedEvents =
+              <({Event event, String? barrierEventId})>[];
+          bool isTranscribing = false;
 
-          if (event.partial != true) {
-            if (_isTranscription(event) &&
-                (_hasNonEmptyTranscriptionText(event.inputTranscription) ||
-                    _hasNonEmptyTranscriptionText(event.outputTranscription))) {
-              isTranscribing = false;
-              if (_shouldAppendEvent(outputEvent, isLiveCall)) {
-                await _appendEventWithPersistBarrier(
-                  invocationContext,
-                  outputEvent,
-                  barrierEventId: event.id,
+          await for (final Event event in execute(invocationContext)) {
+            if (invocationContext.isAborted) {
+              return;
+            }
+            event.isolationScope ??= invocationContext.isolationScope;
+            _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
+            final Event? modified = await invocationContext.pluginManager
+                .runOnEventCallback(
+                  invocationContext: invocationContext,
+                  event: event,
                 );
-                if (invocationContext.isAborted) {
-                  return;
-                }
+            if (invocationContext.isAborted) {
+              return;
+            }
+            final Event outputEvent = _buildOutputEvent(
+              originalEvent: event,
+              modifiedEvent: modified,
+              runConfig: invocationContext.runConfig,
+            );
+
+            if (isLiveCall) {
+              if (event.partial == true && _isTranscription(event)) {
+                isTranscribing = true;
               }
 
-              for (final buffered in bufferedEvents) {
-                if (invocationContext.isAborted) {
-                  return;
-                }
-                if (_shouldAppendEvent(buffered.event, isLiveCall)) {
+              if (isTranscribing && _isToolCallOrResponse(event)) {
+                bufferedEvents.add((
+                  event: outputEvent,
+                  barrierEventId: event.id,
+                ));
+                continue;
+              }
+
+              if (event.partial != true) {
+                if (_isTranscription(event) &&
+                    (_hasNonEmptyTranscriptionText(event.inputTranscription) ||
+                        _hasNonEmptyTranscriptionText(
+                          event.outputTranscription,
+                        ))) {
+                  isTranscribing = false;
+                  if (_shouldAppendEvent(outputEvent, isLiveCall)) {
+                    await _appendEventWithPersistBarrier(
+                      invocationContext,
+                      outputEvent,
+                      barrierEventId: event.id,
+                    );
+                    if (invocationContext.isAborted) {
+                      return;
+                    }
+                  }
+
+                  for (final buffered in bufferedEvents) {
+                    if (invocationContext.isAborted) {
+                      return;
+                    }
+                    if (_shouldAppendEvent(buffered.event, isLiveCall)) {
+                      await _appendEventWithPersistBarrier(
+                        invocationContext,
+                        buffered.event,
+                        barrierEventId: buffered.barrierEventId,
+                      );
+                      if (invocationContext.isAborted) {
+                        return;
+                      }
+                    }
+                    output.add(buffered.event);
+                  }
+                  bufferedEvents.clear();
+                } else if (_shouldAppendEvent(outputEvent, isLiveCall)) {
                   await _appendEventWithPersistBarrier(
                     invocationContext,
-                    buffered.event,
-                    barrierEventId: buffered.barrierEventId,
+                    outputEvent,
+                    barrierEventId: event.id,
                   );
                   if (invocationContext.isAborted) {
                     return;
                   }
                 }
-                yield buffered.event;
               }
-              bufferedEvents.clear();
-            } else if (_shouldAppendEvent(outputEvent, isLiveCall)) {
+            } else if (event.partial != true &&
+                _shouldAppendEvent(outputEvent, isLiveCall)) {
               await _appendEventWithPersistBarrier(
                 invocationContext,
                 outputEvent,
@@ -987,32 +1062,61 @@ class Runner {
                 return;
               }
             }
-          }
-        } else if (event.partial != true &&
-            _shouldAppendEvent(outputEvent, isLiveCall)) {
-          await _appendEventWithPersistBarrier(
-            invocationContext,
-            outputEvent,
-            barrierEventId: event.id,
-          );
-          if (invocationContext.isAborted) {
-            return;
-          }
-        }
 
-        if (invocationContext.isAborted) {
-          return;
+            if (invocationContext.isAborted) {
+              return;
+            }
+            output.add(outputEvent);
+          }
         }
-        yield outputEvent;
+      } catch (error) {
+        // Notify plugins of the unhandled execution error. Covers failures in
+        // before_run_callback, early-exit, and the main execution loop.
+        // Notification-only; the original exception is always re-raised.
+        await _notifyRunError(
+          invocationContext.pluginManager,
+          invocationContext,
+          error,
+        );
+        rethrow;
       }
     }
+
+    // Drive production and forward events as they arrive. Errors from the
+    // producer surface through the stream after on_run_error notification.
+    unawaited(
+      produce().then(
+        (_) => output.close(),
+        onError: (Object error, StackTrace stackTrace) {
+          output.addError(error, stackTrace);
+          return output.close();
+        },
+      ),
+    );
+
+    yield* output.stream;
 
     if (invocationContext.isAborted) {
       return;
     }
-    await invocationContext.pluginManager.runAfterRunCallback(
-      invocationContext: invocationContext,
-    );
+
+    // Step: run the after_run callbacks (success path only). A failure here
+    // (e.g. an after_run plugin raising, surfaced by PluginManager as a
+    // PluginManagerException) is still an unhandled runner error, so notify
+    // on_run_error_callback once and re-raise. on_run_error is
+    // notification-only, so there is no recursive notification.
+    try {
+      await invocationContext.pluginManager.runAfterRunCallback(
+        invocationContext: invocationContext,
+      );
+    } catch (error) {
+      await _notifyRunError(
+        invocationContext.pluginManager,
+        invocationContext,
+        error,
+      );
+      rethrow;
+    }
     if (invocationContext.isAborted) {
       return;
     }

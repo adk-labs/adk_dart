@@ -57,10 +57,10 @@ Status legend:
 
 | `adk-python` area | Dart status | Dart implementation surface | Notes |
 | --- | --- | --- | --- |
-| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk` are aligned on `2026.6.6`; exported ADK baseline is `2.2.0`. |
+| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk` are aligned on `2026.7.11`; exported ADK baseline is `2.2.0`. |
 | Agents and runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | Core invocation, live fallback, rewind, session state, callback, and transfer behavior are ported. |
 | LLM flow processors | ✅ | request/response processors under `flows/llm_flows` | Covers instructions, identity, contents, compaction, context cache, code execution, output schema, tool confirmation, auth preflight, and agent transfer. |
-| Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, graph serialization, and status-aware DOT output. |
+| Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, `NodeTool` (workflow-as-tool), joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, START-edge routing guards, completed-task batching, strict node input-schema validation, graph serialization, and status-aware DOT output. |
 | Events and content conversion | ✅ | `Event`, `EventActions`, content/part models, node path helpers | Includes structured event actions, node-path building, function/tool response conversion, and A2A metadata preservation. |
 | Sessions and state | ✅ | in-memory, SQLite, database, Vertex AI session services, migration helpers | Local and remote session APIs are implemented; network/cloud backends require their normal credentials and endpoints. |
 | Memory and artifacts | ✅ | in-memory memory, Vertex AI memory/RAG, in-memory/file/GCS artifacts | GCS/Vertex paths use HTTP/auth provider wiring and remain environment-dependent for live cloud calls. |
@@ -72,7 +72,7 @@ Status legend:
 | Plugins and telemetry | ✅ | plugin manager, debug/global/reflection/save-artifact plugins, OpenTelemetry/SQLite/cloud telemetry | SQLite trace persistence, metrics instrumentation, auto tracing, and plugin lifecycle hooks are implemented. |
 | CLI, dev server, and deploy | ✅ | `adk create/run/web/api_server/deploy/eval/eval_set/conformance/migrate` | Behavior is ported for Dart CLI usage. Some command output formatting can differ from Python because the implementation is Dart-native. |
 | A2A protocol | ✅ | A2A converters, executor, agent card, JSON-RPC/REST task routes, remote A2A agent | Includes streaming, task resume/cancel/resubscribe, push notification config, metadata propagation, and persistent push callback retry queue. |
-| Code execution | ⚠️ | unsafe local, built-in, container/Docker, GKE, Vertex AI code executor paths | Runtime behavior is implemented, but live execution depends on local process/Docker/Kubernetes/Vertex AI availability and policy. |
+| Code execution | ⚠️ | unsafe local, built-in, container/Docker, GKE, Vertex AI, Cloud Run sandbox code executor paths | Runtime behavior is implemented, but live execution depends on local process/Docker/Kubernetes/Vertex AI/Cloud Run availability and policy. |
 | Data/cloud integrations | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | Runtime clients and facades are implemented; live behavior depends on cloud credentials, service enablement, and environment configuration. |
 | Skills | ✅ | `Skill`, `SkillToolset`, local/in-memory/GCS skill sources, skill prompt formatting | Inline and directory-backed skills are implemented. Filesystem-backed loading is not available on Flutter Web. |
 | Flutter/Web-safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter example app | Web-safe runtime APIs are exposed, but VM-only APIs (`dart:io`, `dart:ffi`, `dart:mirrors`, local process execution, local filesystem servers) are intentionally excluded. |

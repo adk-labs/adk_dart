@@ -25,6 +25,8 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         .map((Content content) => content.copyWith())
         .toList(growable: false);
     final bool preserveFunctionCallIds = agent.canonicalModel is AnthropicLlm;
+    final bool includeThoughtsFromOtherAgents =
+        invocationContext.runConfig?.includeThoughtsFromOtherAgents ?? false;
 
     if (agent.includeContents == 'default') {
       llmRequest.contents = getContents(
@@ -35,6 +37,7 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         isolationScope: invocationContext.isolationScope,
         isSingleTurn: agent.mode == 'single_turn',
         userContent: invocationContext.userContent,
+        includeThoughtsFromOtherAgents: includeThoughtsFromOtherAgents,
       );
     } else if (agent.includeContents == 'none' ||
         agent.includeContents == 'current_turn') {
@@ -46,6 +49,18 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         isolationScope: invocationContext.isolationScope,
         isSingleTurn: agent.mode == 'single_turn',
         userContent: invocationContext.userContent,
+      );
+    }
+
+    final List<Content>? modelInputContext =
+        invocationContext.runConfig?.modelInputContext;
+    if (modelInputContext != null && modelInputContext.isNotEmpty) {
+      _addModelInputContextToUserContent(
+        invocationContext,
+        llmRequest,
+        modelInputContext
+            .map((Content content) => content.copyWith())
+            .toList(),
       );
     }
 
@@ -62,6 +77,7 @@ List<Content> getContents({
   String? isolationScope,
   bool isSingleTurn = false,
   Content? userContent,
+  bool includeThoughtsFromOtherAgents = false,
 }) {
   final List<Event> rewindFiltered = _filterRewoundEvents(events);
   final List<Event> rawFiltered = rewindFiltered
@@ -74,14 +90,27 @@ List<Content> getContents({
       )
       .toList(growable: false);
 
-  final List<Event> eventsToProcess = _hasCompactionEvents(rawFiltered)
-      ? _processCompactionEvents(rawFiltered)
-      : rawFiltered;
+  List<Event> eventsToProcess;
+  if (_hasCompactionEvents(rawFiltered)) {
+    eventsToProcess = _processCompactionEvents(rawFiltered);
+    // Compaction may have removed a function_call whose response survives
+    // (e.g. a long-running call resumed after it was compacted); restore it so
+    // the call/response pairing is intact.
+    eventsToProcess = _recoverCompactedFunctionCalls(
+      eventsToProcess,
+      rawFiltered,
+    );
+  } else {
+    eventsToProcess = rawFiltered;
+  }
 
   final List<Event> filtered = <Event>[];
   for (final Event event in eventsToProcess) {
     if (_isOtherAgentReply(agentName, event)) {
-      final Event? converted = _presentOtherAgentMessage(event);
+      final Event? converted = _presentOtherAgentMessage(
+        event,
+        includeThoughts: includeThoughtsFromOtherAgents,
+      );
       if (converted != null) {
         filtered.add(converted);
       }
@@ -131,7 +160,8 @@ List<Content> getCurrentTurnContents({
           event,
           isolationScope: isolationScope,
         ) &&
-        (event.author == 'user' || _isOtherAgentReply(agentName, event))) {
+        (event.author == 'user' || _isOtherAgentReply(agentName, event)) &&
+        !_isDirectTransfer(event)) {
       return getContents(
         currentBranch: currentBranch,
         events: events.sublist(i),
@@ -173,6 +203,54 @@ void addInstructionsToUserContent(
     insertIndex,
     instructionContents.map((Content content) => content.copyWith()),
   );
+}
+
+/// Inserts transient model input context before the invocation user content.
+///
+/// When the invocation has no user content anchor in the request (e.g. live
+/// mode or a re-run over existing history), the transient context falls back
+/// to the front of the request, before all prior history.
+void _addModelInputContextToUserContent(
+  InvocationContext invocationContext,
+  LlmRequest llmRequest,
+  List<Content> modelInputContext,
+) {
+  if (modelInputContext.isEmpty) {
+    return;
+  }
+
+  int insertIndex = 0;
+  final Content? userContent = invocationContext.userContent;
+  if (userContent != null) {
+    for (int i = llmRequest.contents.length - 1; i >= 0; i -= 1) {
+      if (_contentEquals(llmRequest.contents[i], userContent)) {
+        insertIndex = i;
+        break;
+      }
+    }
+  }
+
+  llmRequest.contents.insertAll(insertIndex, modelInputContext);
+}
+
+/// Structural equality between two contents, mirroring Python's pydantic
+/// model comparison for the user-content anchor lookup.
+bool _contentEquals(Content a, Content b) {
+  if (a.role != b.role || a.parts.length != b.parts.length) {
+    return false;
+  }
+  for (int i = 0; i < a.parts.length; i += 1) {
+    final Part left = a.parts[i];
+    final Part right = b.parts[i];
+    if (left.text != right.text ||
+        left.functionCall?.name != right.functionCall?.name ||
+        left.functionCall?.id != right.functionCall?.id ||
+        left.functionResponse?.name != right.functionResponse?.name ||
+        left.functionResponse?.id != right.functionResponse?.id) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// Whether [event] should be included in model context.
@@ -363,6 +441,117 @@ List<Event> _processCompactionEvents(List<Event> events) {
   return processed.map((record) => record.$3).toList(growable: false);
 }
 
+/// Re-injects function-call events that compaction removed.
+///
+/// Compaction can summarize away a function_call while a matching
+/// function_response survives outside the compacted range. The clearest case
+/// is a long-running tool call: the call is compacted along with its
+/// intermediate placeholder response, then the real result arrives on resume
+/// (a later event not covered by the summary). That surviving response would
+/// be orphaned, which breaks call/response pairing during prompt assembly.
+///
+/// For each response whose call is no longer present, this restores the
+/// original call event from [sourceEvents] (the pre-compaction list),
+/// inserting it immediately before the first surviving response that
+/// references it. The whole call event is re-injected verbatim (rather than
+/// trimmed to the resumed call) so parallel-call thought signatures, which only
+/// the first part carries, are preserved. Any sibling responses that compaction
+/// removed are re-injected too, so a sibling is not surfaced as a phantom
+/// pending call.
+///
+/// [events] is the post-compaction events being assembled into request
+/// contents; [sourceEvents] is the pre-compaction events to recover missing
+/// calls from. Returns [events] unchanged when nothing needs recovery.
+List<Event> _recoverCompactedFunctionCalls(
+  List<Event> events,
+  List<Event> sourceEvents,
+) {
+  final Set<String> callIdsPresent = <String>{};
+  final Set<String> responseIdsPresent = <String>{};
+  for (final Event event in events) {
+    for (final FunctionCall functionCall in event.getFunctionCalls()) {
+      final String? id = functionCall.id;
+      if (id != null && id.isNotEmpty) {
+        callIdsPresent.add(id);
+      }
+    }
+    for (final FunctionResponse functionResponse
+        in event.getFunctionResponses()) {
+      final String? id = functionResponse.id;
+      if (id != null && id.isNotEmpty) {
+        responseIdsPresent.add(id);
+      }
+    }
+  }
+
+  final Set<String> orphanedIds = responseIdsPresent
+      .where((String responseId) => !callIdsPresent.contains(responseId))
+      .toSet();
+  if (orphanedIds.isEmpty) {
+    return events;
+  }
+
+  final Map<String, Event> callEventById = <String, Event>{};
+  for (final Event event in sourceEvents) {
+    for (final FunctionCall functionCall in event.getFunctionCalls()) {
+      final String? id = functionCall.id;
+      if (id != null && orphanedIds.contains(id)) {
+        callEventById.putIfAbsent(id, () => event);
+      }
+    }
+  }
+
+  if (callEventById.isEmpty) {
+    return events;
+  }
+
+  final Map<String, Event> responseEventById = <String, Event>{};
+  for (final Event event in sourceEvents) {
+    for (final FunctionResponse functionResponse
+        in event.getFunctionResponses()) {
+      final String? id = functionResponse.id;
+      if (id != null && id.isNotEmpty) {
+        responseEventById.putIfAbsent(id, () => event);
+      }
+    }
+  }
+
+  final List<Event> result = <Event>[];
+  final Set<String> reinjectedIds = <String>{};
+  for (final Event event in events) {
+    for (final FunctionResponse functionResponse
+        in event.getFunctionResponses()) {
+      final String? responseId = functionResponse.id;
+      if (responseId == null) {
+        continue;
+      }
+      final Event? callEvent = callEventById[responseId];
+      if (callEvent == null || reinjectedIds.contains(responseId)) {
+        continue;
+      }
+      result.add(callEvent);
+      final List<String> siblingIds = <String>[
+        for (final FunctionCall functionCall in callEvent.getFunctionCalls())
+          if (functionCall.id != null && functionCall.id!.isNotEmpty)
+            functionCall.id!,
+      ];
+      reinjectedIds.addAll(siblingIds);
+      // Recover sibling responses that compaction removed so a parallel sibling
+      // is not left looking like a pending call.
+      for (final String siblingId in siblingIds) {
+        if (!responseIdsPresent.contains(siblingId)) {
+          final Event? siblingResponse = responseEventById[siblingId];
+          if (siblingResponse != null) {
+            result.add(siblingResponse);
+          }
+        }
+      }
+    }
+    result.add(event);
+  }
+  return result;
+}
+
 List<Event> _filterRewoundEvents(List<Event> events) {
   final List<Event> rewindFiltered = <Event>[];
   int i = events.length - 1;
@@ -397,7 +586,31 @@ bool _isOtherAgentReply(String currentAgentName, Event event) {
       event.author != 'user';
 }
 
-Event? _presentOtherAgentMessage(Event event) {
+/// Whether the event is a direct `transfer_to_agent` event.
+///
+/// When `includeContents='none'` and control is handed to a sub-agent via
+/// `transfer_to_agent`, the trailing transfer events (the function call and
+/// its response) must not be treated as the start of the current turn.
+/// Otherwise the sub-agent's turn would anchor on the parent's transfer event
+/// and drop the latest user input. Skipping these events lets the turn anchor
+/// on the real user input (or a non-transfer model request) instead, while the
+/// transfer events are still included as context.
+bool _isDirectTransfer(Event event) {
+  if (event.actions.transferToAgent != null) {
+    return true;
+  }
+  final Content? content = event.content;
+  if (content == null || content.parts.isEmpty) {
+    return false;
+  }
+  return content.parts.any(
+    (Part part) =>
+        part.functionCall != null &&
+        part.functionCall!.name == 'transfer_to_agent',
+  );
+}
+
+Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
   final Content? original = event.content;
   if (original == null || original.parts.isEmpty) {
     return event;
@@ -409,6 +622,13 @@ Event? _presentOtherAgentMessage(Event event) {
   );
   for (final Part part in original.parts) {
     if (part.thought) {
+      if (includeThoughts &&
+          part.text != null &&
+          part.text!.trim().isNotEmpty) {
+        content.parts.add(
+          Part.text('[${event.author}] thought: ${part.text}'),
+        );
+      }
       continue;
     }
     if (part.text != null && part.text!.trim().isNotEmpty) {

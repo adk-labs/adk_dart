@@ -500,11 +500,6 @@ class AutoTracingPlugin extends BasePlugin {
           active.events,
           recorder: recorder,
         );
-        adk_metrics.recordAgentWorkflowSteps(
-          agentName,
-          active.events,
-          recorder: recorder,
-        );
       case 'tool':
         final String? toolName = active.toolName;
         final String? agentName = active.agentName;

@@ -10,6 +10,7 @@ import '../agents/base_agent.dart';
 import '../agents/context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
+import '../errors/input_validation_error.dart';
 import '../events/event.dart';
 import '../events/node_path_builder.dart';
 import '../events/request_input.dart';
@@ -478,9 +479,8 @@ class WorkflowContext {
   }) {
     final String? baseBranch = overrideBranch ?? parentBranch;
     if (useSubBranch) {
-      return baseBranch == null || baseBranch.isEmpty
-          ? nodeKey
-          : '$baseBranch.$nodeKey';
+      // [nodeKey] is already a `name@runId` segment, so append it as-is.
+      return BranchPath.createSubBranch(baseBranch, name: nodeKey);
     }
     return overrideBranch;
   }
@@ -917,11 +917,22 @@ class AgentNode extends BaseNode {
       }
     }
 
+    // Enforce the node input boundary against the agent's input schema before
+    // wrapping the payload into Content. Matches upstream's strict validation
+    // for LlmAgent workflow nodes.
+    Object? validatedInput = nodeInput;
+    if (agent is LlmAgent) {
+      validatedInput = validateNodeData(
+        (agent as LlmAgent).inputSchema,
+        nodeInput,
+      );
+    }
+
     final InvocationContext parentContext =
         context.invocationContext ?? _standaloneInvocationContext(name);
-    final Content? userContent = nodeInput == null
+    final Content? userContent = validatedInput == null
         ? null
-        : _contentFromNodeInput(nodeInput);
+        : _contentFromNodeInput(validatedInput);
     final InvocationContext agentContext = parentContext.copyWith(
       agent: agent,
       userContent: userContent,
@@ -995,7 +1006,6 @@ class Workflow extends BaseAgent {
   }) : nodes = List<BaseNode>.unmodifiable(nodes),
        edges = List<Edge>.unmodifiable(edges),
        super(subAgents: const <BaseAgent>[]) {
-    _validateNoStaticTaskModeNodes(this.nodes);
     _validateStaticGraphEdges(this.nodes, this.edges);
   }
 
@@ -1158,6 +1168,14 @@ class Workflow extends BaseAgent {
     }
 
     while (pending.any(active.contains)) {
+      // Serialize concurrency: while a task-mode agent node is waiting for
+      // user input, do not schedule further parallel branches. The workflow
+      // pauses until the task node is resumed. Mirrors upstream's
+      // `_has_waiting_task_agent` guard in `_schedule_ready_nodes`.
+      if (_hasWaitingTaskAgent(context)) {
+        break;
+      }
+
       final List<String> ready = pending.where(active.contains).where((
         String name,
       ) {
@@ -1169,26 +1187,42 @@ class Workflow extends BaseAgent {
         );
       }
 
-      late final List<_NodeRunResult> results;
-      try {
-        results = await Future.wait(
-          ready.map(
-            (String name) => _runReadyNode(
-              context: context,
-              byName: byName,
-              dependencies: dependencies,
-              name: name,
-            ),
-          ),
-          eagerError: true,
-        );
-      } catch (error, stackTrace) {
-        context._cancel(error);
-        Error.throwWithStackTrace(error, stackTrace);
-      }
+      // Schedule all ready tasks, then drain them by completion order. When a
+      // node fails, the workflow is cancelled immediately so still-running
+      // siblings observe the cancellation. Sibling nodes that completed in the
+      // same tick as the failure (i.e. already settled) still have their
+      // outputs recorded before the workflow shuts down.
+      final Map<String, Future<_TaskOutcome>> running =
+          <String, Future<_TaskOutcome>>{
+            for (final String name in ready)
+              name: _runReadyNode(
+                context: context,
+                byName: byName,
+                dependencies: dependencies,
+                name: name,
+              ).then(
+                (_NodeRunResult result) => _TaskOutcome.success(result),
+                onError: (Object error, StackTrace stackTrace) =>
+                    _TaskOutcome.failure(name, error, stackTrace),
+              ),
+          };
 
-      for (final _NodeRunResult result in results) {
-        pending.remove(result.name);
+      _TaskOutcome? firstFailure;
+      while (running.isNotEmpty) {
+        final _TaskOutcome outcome = await Future.any(running.values);
+        running.remove(outcome.name);
+        pending.remove(outcome.name);
+        if (outcome.error != null) {
+          // Cancel immediately on the first failure so still-running siblings
+          // observe the cancellation, but keep draining already-settled
+          // siblings so their outputs are recorded.
+          if (firstFailure == null) {
+            firstFailure = outcome;
+            context._cancel(outcome.error!);
+          }
+          continue;
+        }
+        final _NodeRunResult result = outcome.result!;
         final bool completedNode = _recordNodeResult(context, result);
         if (!completedNode) {
           continue;
@@ -1202,6 +1236,13 @@ class Workflow extends BaseAgent {
         if (activatedTargets.isEmpty) {
           _markTerminalOutputOwner(context, result.name);
         }
+      }
+
+      if (firstFailure != null) {
+        Error.throwWithStackTrace(
+          firstFailure.error!,
+          firstFailure.stackTrace!,
+        );
       }
     }
     _validateSingleTerminalOutput(
@@ -1220,10 +1261,21 @@ class Workflow extends BaseAgent {
     required Set<String> active,
     required int concurrencyLimit,
   }) async {
-    final Map<String, Future<_NodeRunResult>> running =
-        <String, Future<_NodeRunResult>>{};
+    final Map<String, Future<_TaskOutcome>> running =
+        <String, Future<_TaskOutcome>>{};
     while (pending.any(active.contains) || running.isNotEmpty) {
-      final int availableSlots = concurrencyLimit - running.length;
+      // Serialize concurrency when a task-mode agent node is waiting: do not
+      // schedule further parallel branches. If nothing is in flight, the
+      // workflow pauses until the task node is resumed. Mirrors upstream's
+      // `_has_waiting_task_agent` guard.
+      if (_hasWaitingTaskAgent(context)) {
+        if (running.isEmpty) {
+          break;
+        }
+      }
+      final int availableSlots = _hasWaitingTaskAgent(context)
+          ? 0
+          : concurrencyLimit - running.length;
       if (availableSlots > 0) {
         final List<String> ready = pending.where(active.contains).where((
           String name,
@@ -1242,6 +1294,10 @@ class Workflow extends BaseAgent {
             byName: byName,
             dependencies: dependencies,
             name: name,
+          ).then(
+            (_NodeRunResult result) => _TaskOutcome.success(result),
+            onError: (Object error, StackTrace stackTrace) =>
+                _TaskOutcome.failure(name, error, stackTrace),
           );
         }
       }
@@ -1249,14 +1305,27 @@ class Workflow extends BaseAgent {
         break;
       }
 
-      late final _NodeRunResult result;
-      try {
-        result = await Future.any(running.values);
-      } catch (error, stackTrace) {
-        context._cancel(error);
-        Error.throwWithStackTrace(error, stackTrace);
+      final _TaskOutcome outcome = await Future.any(running.values);
+      running.remove(outcome.name);
+      if (outcome.error != null) {
+        // Drain remaining in-flight tasks so completed siblings still have
+        // their outputs recorded, then propagate the first failure.
+        final _TaskOutcome firstFailure = outcome;
+        while (running.isNotEmpty) {
+          final _TaskOutcome sibling = await Future.any(running.values);
+          running.remove(sibling.name);
+          if (sibling.error != null) {
+            continue;
+          }
+          _recordNodeResult(context, sibling.result!);
+        }
+        context._cancel(firstFailure.error!);
+        Error.throwWithStackTrace(
+          firstFailure.error!,
+          firstFailure.stackTrace!,
+        );
       }
-      running.remove(result.name);
+      final _NodeRunResult result = outcome.result!;
       final bool completedNode = _recordNodeResult(context, result);
       if (!completedNode) {
         continue;
@@ -1271,6 +1340,25 @@ class Workflow extends BaseAgent {
         _markTerminalOutputOwner(context, result.name);
       }
     }
+  }
+
+  /// Whether any task-mode agent node in this graph is currently waiting.
+  ///
+  /// Task-mode agents are multi-turn and pause for user input. While one is
+  /// waiting, the scheduler stops dispatching further parallel branches so the
+  /// suspended task keeps exclusive control of the conversation.
+  bool _hasWaitingTaskAgent(WorkflowContext context) {
+    for (final BaseNode node in nodes) {
+      if (node is AgentNode &&
+          node.agent is LlmAgent &&
+          (node.agent as LlmAgent).mode == 'task') {
+        final NodeState? state = context.nodeStates[node.name];
+        if (state != null && state.status == NodeStatus.waiting) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   Future<_NodeRunResult> _runReadyNode({
@@ -1570,39 +1658,26 @@ String _rewriteNestedWorkflowPath(
   return path;
 }
 
-void _validateNoStaticTaskModeNodes(Iterable<BaseNode> nodes) {
-  for (final BaseNode node in nodes) {
-    final LlmAgent? agent = _taskModeAgentInStaticNode(node);
-    if (agent == null) {
-      continue;
-    }
-    throw ArgumentError(
-      "Agent '${agent.name}' has mode='task' and cannot be used as a "
-      'static workflow graph node. Use a chat coordinator with task '
-      'sub-agents, or dispatch dynamically via WorkflowContext.runNode.',
-    );
-  }
-}
-
-LlmAgent? _taskModeAgentInStaticNode(BaseNode node) {
-  if (node is AgentNode && node.agent is LlmAgent) {
-    final LlmAgent agent = node.agent as LlmAgent;
-    return agent.mode == 'task' ? agent : null;
-  }
-  if (node is ParallelWorker) {
-    return _taskModeAgentInStaticNode(node.wrappedNode);
-  }
-  return null;
-}
-
 void _validateStaticGraphEdges(Iterable<BaseNode> nodes, Iterable<Edge> edges) {
   final Map<String, BaseNode> byName = <String, BaseNode>{
     for (final BaseNode node in nodes) node.name: node,
   };
+  _validateStartEdges(edges);
   _validateNoDuplicateEdges(edges);
   _validateDefaultRoutes(edges);
   for (final Edge edge in edges) {
     _validateChatModeEdge(edge, byName);
+  }
+}
+
+void _validateStartEdges(Iterable<Edge> edges) {
+  for (final Edge edge in edges) {
+    if (edge.fromNode == START && edge.route != null) {
+      throw ArgumentError(
+        'Graph validation failed. Edges from START must not have routes '
+        '(edge to ${edge.toNode} has route ${edge.route}).',
+      );
+    }
   }
 }
 
@@ -1665,6 +1740,26 @@ LlmAgent? _chatModeAgentInNode(BaseNode node) {
     return agent.mode == 'chat' ? agent : null;
   }
   return null;
+}
+
+/// Outcome of awaiting a single scheduled node task.
+///
+/// Wraps either a successful [_NodeRunResult] or a captured error so the
+/// orchestration loop can process all completed sibling tasks in a batch
+/// before propagating the first failure.
+class _TaskOutcome {
+  _TaskOutcome.success(_NodeRunResult this.result)
+    : name = result.name,
+      error = null,
+      stackTrace = null;
+
+  _TaskOutcome.failure(this.name, Object this.error, StackTrace this.stackTrace)
+    : result = null;
+
+  final String name;
+  final _NodeRunResult? result;
+  final Object? error;
+  final StackTrace? stackTrace;
 }
 
 class _NodeRunResult {
@@ -1734,13 +1829,12 @@ Future<Object?> _runNodeWithRetry({
         );
       }
       final Object? output = await future;
-      try {
-        context.throwIfCancelled();
-      } on AdkAbortException catch (error) {
-        state.status = NodeStatus.cancelled;
-        state.error = error;
-        rethrow;
-      }
+      // A node that ran to completion keeps its result even if a sibling
+      // failed or the workflow was cancelled while it was in-flight. This
+      // mirrors upstream's batch completion: sibling nodes that finish in the
+      // same tick as a failure still have their outputs recorded. Nodes that
+      // must abort early cooperatively check `context.throwIfCancelled()`
+      // inside their own body.
       if (_hasReturnedWorkflowOutput(output) &&
           context._hasDirectOutput &&
           !context._outputDelegated) {
@@ -2484,6 +2578,143 @@ Content _contentFromNodeInput(Object nodeInput) {
     return Content.userText(jsonEncode(nodeInput));
   }
   return Content.userText('$nodeInput');
+}
+
+/// Extracts and concatenates the text parts of a [Content] instance.
+String _textFromContent(Content content) {
+  return content.parts
+      .where((Part part) => part.text != null)
+      .map((Part part) => part.text!)
+      .join();
+}
+
+/// Validates and sanitizes node input [data] against [schema].
+///
+/// Mirrors upstream's `validate_node_data(schema, data,
+/// preserve_content=False)`: enforces the input boundary of an LlmAgent
+/// workflow node before the payload is wrapped into [Content] for the model.
+///
+/// A `null` [schema] or [data] is returned unchanged. Descriptive JSON schemas
+/// (a plain type-name [String]) are treated as pass-through. When [schema] is a
+/// JSON-schema [Map], [Content] values are unwrapped to text and JSON strings
+/// are parsed before validation. Throws [InputValidationError] when the data
+/// does not satisfy the schema.
+Object? validateNodeData(Object? schema, Object? data) {
+  if (data == null || schema == null) {
+    return data;
+  }
+
+  // Descriptive schemas (bare type-name strings) do not enforce structure.
+  if (schema is! Map) {
+    return data;
+  }
+
+  final Map<String, Object?> jsonSchema = <String, Object?>{
+    for (final MapEntry<Object?, Object?> entry in schema.entries)
+      '${entry.key}': entry.value,
+  };
+  final Object? schemaType = jsonSchema['type'];
+
+  Object? payload = data;
+  if (payload is Content) {
+    final String text = _textFromContent(payload);
+    if (schemaType == 'string') {
+      payload = text;
+    } else {
+      // Try to parse the text as JSON first, falling back to the raw string.
+      try {
+        payload = jsonDecode(text);
+      } on FormatException {
+        payload = text;
+      }
+    }
+  } else if (payload is String && schemaType != 'string') {
+    // A raw JSON string is parsed so it can be validated structurally.
+    try {
+      payload = jsonDecode(payload);
+    } on FormatException {
+      // Leave as-is; validation below reports the mismatch.
+    }
+  }
+
+  final List<String> errors = <String>[];
+  _validateNodeValue(payload, jsonSchema, path: r'$', errors: errors);
+  if (errors.isNotEmpty) {
+    throw InputValidationError(
+      'Input does not match input schema:\n${errors.join('\n')}',
+    );
+  }
+  return payload;
+}
+
+/// Validates [value] against a JSON [schema], appending failures to [errors].
+void _validateNodeValue(
+  Object? value,
+  Map<String, Object?> schema, {
+  required String path,
+  required List<String> errors,
+}) {
+  final Object? type = schema['type'];
+  switch (type) {
+    case 'object':
+      if (value is! Map) {
+        errors.add('$path: expected object');
+        return;
+      }
+      final Object? required = schema['required'];
+      if (required is List) {
+        for (final Object? field in required) {
+          if (!value.containsKey(field)) {
+            errors.add('$path.$field: missing required field');
+          }
+        }
+      }
+      final Object? properties = schema['properties'];
+      if (properties is Map) {
+        for (final MapEntry<Object?, Object?> entry in value.entries) {
+          final Object? propSchema = properties['${entry.key}'];
+          if (propSchema is Map) {
+            _validateNodeValue(
+              entry.value,
+              <String, Object?>{
+                for (final MapEntry<Object?, Object?> e in propSchema.entries)
+                  '${e.key}': e.value,
+              },
+              path: '$path.${entry.key}',
+              errors: errors,
+            );
+          }
+        }
+      }
+      return;
+    case 'array':
+      if (value is! List) {
+        errors.add('$path: expected array');
+      }
+      return;
+    case 'string':
+      if (value is! String) {
+        errors.add('$path: expected string');
+      }
+      return;
+    case 'integer':
+      if (value is! int && !(value is num && value == value.toInt())) {
+        errors.add('$path: expected integer');
+      }
+      return;
+    case 'number':
+      if (value is! num) {
+        errors.add('$path: expected number');
+      }
+      return;
+    case 'boolean':
+      if (value is! bool) {
+        errors.add('$path: expected boolean');
+      }
+      return;
+    default:
+      return;
+  }
 }
 
 Object? _outputFromAgentEvent(Event event) {

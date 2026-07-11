@@ -37,6 +37,32 @@ void main() {
   });
 
   test(
+    'OAuth2Auth prompt defaults to unset and forwards a custom override',
+    () {
+      expect(OAuth2Auth().prompt, isNull);
+
+      final AuthConfig config = AuthConfig(
+        authScheme: 'oauth2_authorization_code',
+        credentialKey: 'cred_prompt',
+        rawAuthCredential: AuthCredential(
+          authType: AuthCredentialType.oauth2,
+          oauth2: OAuth2Auth(
+            clientId: 'client',
+            clientSecret: 'secret',
+            authUri: 'https://auth.example.com',
+            prompt: 'none',
+          ),
+        ),
+      );
+
+      final AuthConfig request = AuthHandler(
+        authConfig: config,
+      ).generateAuthRequest();
+      expect(request.exchangedAuthCredential?.oauth2?.prompt, 'none');
+    },
+  );
+
+  test(
     'AuthHandler generateAuthRequest throws for oauth scheme without raw auth credential',
     () {
       final AuthConfig config = AuthConfig(

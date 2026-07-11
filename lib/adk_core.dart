@@ -66,7 +66,9 @@ export 'src/platform/uuid.dart';
 
 export 'src/tools/base_tool.dart';
 export 'src/tools/agent_tool.dart';
+export 'src/tools/node_tool.dart';
 export 'src/tools/function_tool.dart';
+export 'src/tools/google_search_tool.dart';
 export 'src/tools/load_mcp_resource_tool.dart';
 export 'src/tools/mcp_tool/mcp_session_manager.dart';
 export 'src/tools/mcp_tool/mcp_tool.dart';

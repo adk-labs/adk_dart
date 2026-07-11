@@ -16,11 +16,13 @@ Example app for `flutter_adk`.
 - `Transfer Multi-Agent`: Coordinator/Dispatcher pattern from MAS docs
   - `HelpDeskCoordinator` routes requests to `Billing` and `Support`
 - `Workflow Combo`: combined `SequentialAgent + ParallelAgent + LoopAgent`
+- `Graph Workflow`: ADK 2.0 graph `Workflow` with a triage `FunctionNode` and routed `Edge`s to specialist `AgentNode`s
 - `Sequential`: code-write -> review -> refactor flow
 - `Parallel`: parallel specialist responses + merge
 - `Loop`: Critic/Refiner iterative loop with `exit_loop`
 - `Agent Team`: coordinator routing to Greeting/Weather/Farewell team
 - `MCP Toolset`: remote MCP with `McpToolset + StreamableHTTPConnectionParams`
+- `Google Search`: Gemini built-in `GoogleSearchTool` grounding for factual/recent questions
 - `URL Context`: Gemini built-in `UrlContextTool` for page summarization/comparison
 - `Skills`: orchestration using inline `Skill + SkillToolset`
 
@@ -36,7 +38,9 @@ Status legend:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Example app UI/routing/chat screen | Y | Y | Y | Y | Y | Y | Flutter shared UI layer |
 | Basic/Transfer/Workflow/Team execution | Y | Y | Y | Y | Y | Y | In-memory runtime via `flutter_adk` `adk_core` |
+| Graph Workflow (ADK 2.0 `Workflow`) | Y | Y | Y | Y | Y | Y | Routed edges select one specialist node |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web may require server CORS setup |
+| Google Search built-in tool | Y | Y | Y | Y | Y | Y | Server-side grounding through Gemini |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | Model-side retrieval through Gemini |
 | Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | No filesystem requirement |
 | Settings persistence (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web uses browser storage |
@@ -71,6 +75,10 @@ Workflow Combo sample prompts:
 - `Recommend a 2-night 3-day itinerary for Paris`
 - `Give UX improvement ideas for a new subscription plan`
 
+Graph Workflow sample prompts:
+- `How do I fix this API error?` (routes to the tech specialist)
+- `Suggest a pricing strategy for our new subscription` (routes to the business specialist)
+
 Sequential sample prompt:
 - `Write a Python function to get the maximum value in a list of numbers`
 
@@ -89,6 +97,10 @@ Agent Team sample prompts:
 MCP Toolset sample prompts:
 - `Check MCP connection status`
 - `List available operations from MCP server tools`
+
+Google Search sample prompts:
+- `What are the latest updates in the Gemini API?`
+- `Search for this week's major AI industry news`
 
 URL Context sample prompts:
 - `Summarize https://google.github.io/adk-docs/ in three bullets`
