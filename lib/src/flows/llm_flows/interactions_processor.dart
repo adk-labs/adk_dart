@@ -13,8 +13,11 @@ class InteractionsRequestProcessor extends BaseLlmRequestProcessor {
     InvocationContext invocationContext,
     LlmRequest llmRequest,
   ) async* {
-    final String? previousInteractionId = _findPreviousInteractionId(
-      invocationContext,
+    final (String? previousInteractionId, _) =
+        findPreviousInteractionState(
+      events: invocationContext.session.events,
+      agentName: invocationContext.agent.name,
+      currentBranch: invocationContext.branch,
     );
     if (previousInteractionId != null && previousInteractionId.isNotEmpty) {
       llmRequest.previousInteractionId = previousInteractionId;
@@ -22,11 +25,12 @@ class InteractionsRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 
-String? _findPreviousInteractionId(InvocationContext invocationContext) {
-  final List<Event> events = invocationContext.session.events;
-  final String? currentBranch = invocationContext.branch;
-  final String agentName = invocationContext.agent.name;
-
+/// Scans events in reverse to find the most recent (interactionId, environmentId) for [agentName].
+(String?, String?) findPreviousInteractionState({
+  required List<Event> events,
+  required String agentName,
+  required String? currentBranch,
+}) {
   for (int i = events.length - 1; i >= 0; i -= 1) {
     final Event event = events[i];
     if (!_isEventInBranch(currentBranch, event)) {
@@ -36,10 +40,10 @@ String? _findPreviousInteractionId(InvocationContext invocationContext) {
     if (event.author == agentName &&
         interactionId != null &&
         interactionId.isNotEmpty) {
-      return interactionId;
+      return (interactionId, event.environmentId);
     }
   }
-  return null;
+  return (null, null);
 }
 
 bool _isEventInBranch(String? currentBranch, Event event) {

@@ -722,6 +722,7 @@ Map<String, Object?> _llmResponseToJson(LlmResponse llmResponse) {
     'usage_metadata': llmResponse.usageMetadata,
     'grounding_metadata': llmResponse.groundingMetadata,
     'interaction_id': llmResponse.interactionId,
+    'environment_id': llmResponse.environmentId,
   };
 }
 

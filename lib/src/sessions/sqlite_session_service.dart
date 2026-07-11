@@ -1013,6 +1013,7 @@ Map<String, Object?> _eventToJson(Event event) {
     if (event.groundingMetadata != null)
       'groundingMetadata': event.groundingMetadata,
     if (event.interactionId != null) 'interactionId': event.interactionId,
+    if (event.environmentId != null) 'environmentId': event.environmentId,
     if (event.liveSessionId != null) 'liveSessionId': event.liveSessionId,
     if (event.liveSessionResumptionUpdate != null)
       'liveSessionResumptionUpdate': event.liveSessionResumptionUpdate,
@@ -1054,6 +1055,7 @@ Event _eventFromJson(Map<String, Object?> json) {
     citationMetadata: json['citationMetadata'],
     groundingMetadata: json['groundingMetadata'],
     interactionId: json['interactionId'] as String?,
+    environmentId: json['environmentId'] as String?,
     liveSessionId: json['liveSessionId'] as String?,
     liveSessionResumptionUpdate: json['liveSessionResumptionUpdate'],
     goAway: json['goAway'],

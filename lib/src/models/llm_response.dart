@@ -25,6 +25,7 @@ class LlmResponse {
     this.citationMetadata,
     this.groundingMetadata,
     this.interactionId,
+    this.environmentId,
     this.liveSessionId,
     this.liveSessionResumptionUpdate,
     this.goAway,
@@ -83,6 +84,9 @@ class LlmResponse {
 
   /// Provider interaction identifier for tracing.
   String? interactionId;
+
+  /// Provider execution environment ID for sandboxing.
+  String? environmentId;
 
   /// Provider live-session identifier for bidi/live runs.
   String? liveSessionId;
@@ -145,6 +149,7 @@ class LlmResponse {
     Object? citationMetadata = _sentinel,
     Object? groundingMetadata = _sentinel,
     Object? interactionId = _sentinel,
+    Object? environmentId = _sentinel,
     Object? liveSessionId = _sentinel,
     Object? liveSessionResumptionUpdate = _sentinel,
     Object? goAway = _sentinel,
@@ -204,6 +209,9 @@ class LlmResponse {
       interactionId: identical(interactionId, _sentinel)
           ? this.interactionId
           : interactionId as String?,
+      environmentId: identical(environmentId, _sentinel)
+          ? this.environmentId
+          : environmentId as String?,
       liveSessionId: identical(liveSessionId, _sentinel)
           ? this.liveSessionId
           : liveSessionId as String?,

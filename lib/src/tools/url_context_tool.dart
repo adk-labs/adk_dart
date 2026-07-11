@@ -37,7 +37,7 @@ class UrlContextTool extends BaseTool {
     if (isGemini1Model(model)) {
       throw ArgumentError('Url context tool cannot be used in Gemini 1.x.');
     }
-    if (!isGeminiEapOr2OrAbove(model) && !modelCheckDisabled) {
+    if (!isGeminiEapOr2OrAbove(model) && !modelCheckDisabled && !llmRequest.isManagedAgent) {
       throw ArgumentError('Url context tool is not supported for model $model');
     }
 

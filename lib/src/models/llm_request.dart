@@ -579,10 +579,14 @@ class LlmRequest {
     this.cacheMetadata,
     this.cacheableContentsTokenCount,
     this.previousInteractionId,
+    this.isManagedAgent = false,
   }) : contents = contents ?? <Content>[],
        config = config ?? GenerateContentConfig(),
        liveConnectConfig = liveConnectConfig ?? LiveConnectConfig(),
        toolsDict = toolsDict ?? <String, BaseTool>{};
+
+  /// Whether this request was built by a ManagedAgent.
+  bool isManagedAgent;
 
   /// Target model identifier.
   String? model;
