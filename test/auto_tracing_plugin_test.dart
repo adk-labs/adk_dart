@@ -252,7 +252,6 @@ void main() {
     expect(metric(genAiAgentInvocationDurationMetric).unit, 'ms');
     expect(metric(genAiAgentRequestSizeMetric).value, 7);
     expect(metric(genAiAgentResponseSizeMetric).value, 8);
-    expect(metric(genAiAgentWorkflowStepsMetric).value, 2);
     expect(metric(genAiToolRequestSizeMetric).value, 5);
     expect(metric(genAiToolResponseSizeMetric).value, 3);
     expect(

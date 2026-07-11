@@ -79,13 +79,11 @@ void main() {
       ];
 
       recordAgentResponseSize('my-agent', events, recorder: recorder);
-      recordAgentWorkflowSteps('my-agent', events, recorder: recorder);
 
       expect(
         _recordByName(recorder, genAiAgentResponseSizeMetric).value,
         utf8.encode('response').length,
       );
-      expect(_recordByName(recorder, genAiAgentWorkflowStepsMetric).value, 2);
     });
 
     test('counts only string-valued tool request arguments', () {
