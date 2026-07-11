@@ -15,6 +15,7 @@ environment:
 
 dependencies:
   adk_dart: ^2026.7.11
+  collection: ^1.18.0
   litertlm: ^0.0.8
 
 dev_dependencies:
