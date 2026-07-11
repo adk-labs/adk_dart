@@ -554,6 +554,351 @@ void main() {
       expect(metadata!.canonicalUri, 'gs://external-bucket/docs/report.pdf');
     });
   });
+
+  group('file artifact service path segment validation parity', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('adk_file_segment_');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    for (final String userId in <String>[
+      '../escape',
+      '../../etc',
+      'foo/../../bar',
+      'valid/../..',
+      '..',
+      '.',
+      'has/slash',
+      'back\\slash',
+      'null\x00byte',
+      '',
+    ]) {
+      test('rejects traversal in user_id (${jsonEncode(userId)})', () async {
+        final FileArtifactService service = FileArtifactService(tempDir.path);
+
+        expect(
+          () => service.saveArtifact(
+            appName: 'myapp',
+            userId: userId,
+            sessionId: 'sess123',
+            filename: 'safe.txt',
+            artifact: Part.text('content'),
+          ),
+          throwsA(isA<InputValidationError>()),
+        );
+      });
+    }
+
+    for (final String sessionId in <String>[
+      '../escape',
+      '../../tmp',
+      'foo/../../bar',
+      '..',
+      '.',
+      'has/slash',
+      'back\\slash',
+      'null\x00byte',
+    ]) {
+      test(
+        'rejects traversal in session_id (${jsonEncode(sessionId)})',
+        () async {
+          final FileArtifactService service = FileArtifactService(tempDir.path);
+
+          expect(
+            () => service.saveArtifact(
+              appName: 'myapp',
+              userId: 'user123',
+              sessionId: sessionId,
+              filename: 'safe.txt',
+              artifact: Part.text('content'),
+            ),
+            throwsA(isA<InputValidationError>()),
+          );
+        },
+      );
+    }
+  });
+
+  group('file uri path normalization parity', () {
+    test('windows-style file uri maps to native path via File.fromUri', () {
+      // Mirrors Python's _file_uri_to_path Windows normalization. Dart's
+      // File.fromUri is platform-aware, so a canonical file URI resolves to the
+      // correct native path (equivalent to Python url2pathname on Windows).
+      final Uri parsed = Uri.parse('file:///C:/tmp/adk%20artifacts');
+      expect(parsed.scheme, 'file');
+      expect(parsed.toFilePath(windows: true), r'C:\tmp\adk artifacts');
+      expect(parsed.toFilePath(windows: false), '/C:/tmp/adk artifacts');
+    });
+
+    test('non-file uri is not treated as a filesystem path', () {
+      final Uri parsed = Uri.parse('gs://bucket/adk_artifacts');
+      expect(parsed.scheme, isNot('file'));
+    });
+  });
+
+  group('artifact reference scope validation parity', () {
+    BaseArtifactService inMemoryService() => InMemoryArtifactService();
+    BaseArtifactService gcsService() => GcsArtifactService.inMemory('bucket-a');
+
+    for (final MapEntry<String, BaseArtifactService Function()> entry
+        in <String, BaseArtifactService Function()>{
+          'in_memory': inMemoryService,
+          'gcs': gcsService,
+        }.entries) {
+      final String label = entry.key;
+      final BaseArtifactService Function() factory = entry.value;
+
+      test('allows references inside the same session scope ($label)', () async {
+        final BaseArtifactService service = factory();
+
+        await service.saveArtifact(
+          appName: 'app0',
+          userId: 'user0',
+          sessionId: 'sess0',
+          filename: 'source.txt',
+          artifact: Part.text('hello'),
+        );
+
+        final Part ref = Part.fromFileData(
+          fileUri:
+              'artifact://apps/app0/users/user0/sessions/sess0/'
+              'artifacts/source.txt/versions/0',
+          mimeType: 'text/plain',
+        );
+        await service.saveArtifact(
+          appName: 'app0',
+          userId: 'user0',
+          sessionId: 'sess0',
+          filename: 'ref.txt',
+          artifact: ref,
+        );
+
+        final Part? loaded = await service.loadArtifact(
+          appName: 'app0',
+          userId: 'user0',
+          sessionId: 'sess0',
+          filename: 'ref.txt',
+        );
+        expect(loaded, isNotNull);
+        expect(_dereferencedText(loaded!), 'hello');
+      });
+
+      test(
+        'allows references to user-scoped files from same user ($label)',
+        () async {
+          final BaseArtifactService service = factory();
+
+          await service.saveArtifact(
+            appName: 'app0',
+            userId: 'user0',
+            sessionId: 'sess0',
+            filename: 'user:profile.txt',
+            artifact: Part.text('profile'),
+          );
+
+          final Part ref = Part.fromFileData(
+            fileUri:
+                'artifact://apps/app0/users/user0/artifacts/'
+                'user:profile.txt/versions/0',
+            mimeType: 'text/plain',
+          );
+          await service.saveArtifact(
+            appName: 'app0',
+            userId: 'user0',
+            sessionId: 'sess1',
+            filename: 'ref.txt',
+            artifact: ref,
+          );
+
+          final Part? loaded = await service.loadArtifact(
+            appName: 'app0',
+            userId: 'user0',
+            sessionId: 'sess1',
+            filename: 'ref.txt',
+          );
+          expect(loaded, isNotNull);
+          expect(_dereferencedText(loaded!), 'profile');
+        },
+      );
+
+      test('rejects references to different users on save ($label)', () async {
+        final BaseArtifactService service = factory();
+
+        await service.saveArtifact(
+          appName: 'app0',
+          userId: 'victim',
+          sessionId: 'victim-sess',
+          filename: 'user:secret.txt',
+          artifact: Part.text('secret'),
+        );
+
+        final Part ref = Part.fromFileData(
+          fileUri:
+              'artifact://apps/app0/users/victim/artifacts/'
+              'user:secret.txt/versions/0',
+          mimeType: 'text/plain',
+        );
+        expect(
+          () => service.saveArtifact(
+            appName: 'app0',
+            userId: 'attacker',
+            sessionId: 'attacker-sess',
+            filename: 'ref.txt',
+            artifact: ref,
+          ),
+          throwsA(
+            isA<InputValidationError>().having(
+              (InputValidationError error) => error.message,
+              'message',
+              contains('same app and user scope'),
+            ),
+          ),
+        );
+      });
+
+      test('rejects references to different apps on save ($label)', () async {
+        final BaseArtifactService service = factory();
+
+        await service.saveArtifact(
+          appName: 'victim-app',
+          userId: 'user0',
+          sessionId: 'sess0',
+          filename: 'user:secret.txt',
+          artifact: Part.text('secret'),
+        );
+
+        final Part ref = Part.fromFileData(
+          fileUri:
+              'artifact://apps/victim-app/users/user0/artifacts/'
+              'user:secret.txt/versions/0',
+          mimeType: 'text/plain',
+        );
+        expect(
+          () => service.saveArtifact(
+            appName: 'attacker-app',
+            userId: 'user0',
+            sessionId: 'sess0',
+            filename: 'ref.txt',
+            artifact: ref,
+          ),
+          throwsA(
+            isA<InputValidationError>().having(
+              (InputValidationError error) => error.message,
+              'message',
+              contains('same app and user scope'),
+            ),
+          ),
+        );
+      });
+    }
+
+    test('validateArtifactReferenceScope allows same-scope references', () {
+      expect(
+        () => validateArtifactReferenceScope(
+          appName: 'app0',
+          userId: 'user0',
+          sessionId: 'sess0',
+          parsedUri: parseArtifactUri(
+            'artifact://apps/app0/users/user0/sessions/sess0/'
+            'artifacts/source.txt/versions/0',
+          )!,
+        ),
+        returnsNormally,
+      );
+      // User-scoped references (no session) are allowed across sessions.
+      expect(
+        () => validateArtifactReferenceScope(
+          appName: 'app0',
+          userId: 'user0',
+          sessionId: 'sess1',
+          parsedUri: parseArtifactUri(
+            'artifact://apps/app0/users/user0/artifacts/'
+            'user:profile.txt/versions/0',
+          )!,
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('validateArtifactReferenceScope rejects cross-app/user/session', () {
+      expect(
+        () => validateArtifactReferenceScope(
+          appName: 'attacker-app',
+          userId: 'user0',
+          sessionId: 'sess0',
+          parsedUri: parseArtifactUri(
+            'artifact://apps/victim-app/users/user0/artifacts/'
+            'user:secret.txt/versions/0',
+          )!,
+        ),
+        throwsA(
+          isA<InputValidationError>().having(
+            (InputValidationError error) => error.message,
+            'message',
+            contains('same app and user scope'),
+          ),
+        ),
+      );
+      expect(
+        () => validateArtifactReferenceScope(
+          appName: 'app0',
+          userId: 'attacker',
+          sessionId: 'sess0',
+          parsedUri: parseArtifactUri(
+            'artifact://apps/app0/users/victim/artifacts/'
+            'user:secret.txt/versions/0',
+          )!,
+        ),
+        throwsA(
+          isA<InputValidationError>().having(
+            (InputValidationError error) => error.message,
+            'message',
+            contains('same app and user scope'),
+          ),
+        ),
+      );
+      // A session-scoped reference targeting a different session is rejected,
+      // mirroring the cross-session-on-load rejection in the Python suite.
+      expect(
+        () => validateArtifactReferenceScope(
+          appName: 'app0',
+          userId: 'user0',
+          sessionId: 'sess0',
+          parsedUri: parseArtifactUri(
+            'artifact://apps/app0/users/user0/sessions/sess1/'
+            'artifacts/source.txt/versions/0',
+          )!,
+        ),
+        throwsA(
+          isA<InputValidationError>().having(
+            (InputValidationError error) => error.message,
+            'message',
+            contains('same session scope'),
+          ),
+        ),
+      );
+    });
+  });
+}
+
+/// Returns the textual payload of a dereferenced artifact regardless of whether
+/// the backend reconstructs it as a text part (in-memory) or as inline bytes
+/// (GCS, which stores text as `text/plain` bytes).
+String? _dereferencedText(Part part) {
+  if (part.text != null) {
+    return part.text;
+  }
+  if (part.inlineData != null) {
+    return utf8.decode(part.inlineData!.data);
+  }
+  return null;
 }
 
 class _FakeLlm extends BaseLlm {

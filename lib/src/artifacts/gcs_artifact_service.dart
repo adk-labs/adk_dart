@@ -7,6 +7,7 @@ import 'dart:io';
 import '../errors/input_validation_error.dart';
 import '../types/content.dart';
 import '../tools/_google_access_token.dart';
+import 'artifact_util.dart';
 import 'base_artifact_service.dart';
 
 /// Runtime mode for [GcsArtifactService].
@@ -125,6 +126,65 @@ class GcsArtifactService extends BaseArtifactService {
       return null;
     }
     return trimmed;
+  }
+
+  /// Validates an `artifact://` [fileUri] reference against the caller scope.
+  ///
+  /// No-op for non-reference URIs. Throws [InputValidationError] when the
+  /// reference cannot be parsed or escapes the caller's app, user, or session
+  /// scope.
+  void _validateFileUriReferenceScope(
+    String fileUri, {
+    required String appName,
+    required String userId,
+    required String? sessionId,
+  }) {
+    if (!fileUri.startsWith('artifact://')) {
+      return;
+    }
+    final ParsedArtifactUri? parsedUri = parseArtifactUri(fileUri);
+    if (parsedUri == null) {
+      throw InputValidationError('Invalid artifact reference URI: $fileUri');
+    }
+    validateArtifactReferenceScope(
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+      parsedUri: parsedUri,
+    );
+  }
+
+  /// Resolves an `artifact://` [fileUri] reference to its target artifact.
+  ///
+  /// Returns `null` when [fileUri] is not an artifact reference. Throws
+  /// [InputValidationError] when the reference cannot be parsed or escapes the
+  /// caller's scope, otherwise dereferences it by loading the target artifact.
+  Future<Part?>? _dereferenceFileUri(
+    String fileUri, {
+    required String appName,
+    required String userId,
+    required String? sessionId,
+  }) {
+    if (!fileUri.startsWith('artifact://')) {
+      return null;
+    }
+    final ParsedArtifactUri? parsedUri = parseArtifactUri(fileUri);
+    if (parsedUri == null) {
+      throw InputValidationError('Invalid artifact reference URI: $fileUri');
+    }
+    validateArtifactReferenceScope(
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+      parsedUri: parsedUri,
+    );
+    return loadArtifact(
+      appName: parsedUri.appName,
+      userId: parsedUri.userId,
+      filename: parsedUri.filename,
+      sessionId: parsedUri.sessionId,
+      version: parsedUri.version,
+    );
   }
 
   String _canonicalUriForBlob(String blobName, _GcsBlob blob) {
@@ -379,6 +439,12 @@ class GcsArtifactService extends BaseArtifactService {
           'Artifact file_data.file_uri must be provided.',
         );
       }
+      _validateFileUriReferenceScope(
+        parsedUri,
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+      );
       data = const <int>[];
       contentType = _normalizeMimeType(artifact.fileData!.mimeType);
       fileUri = _normalizeCanonicalFileUri(parsedUri);
@@ -442,6 +508,12 @@ class GcsArtifactService extends BaseArtifactService {
           'Artifact file_data.file_uri must be provided.',
         );
       }
+      _validateFileUriReferenceScope(
+        parsedUri,
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+      );
       data = const <int>[];
       contentType = _normalizeMimeType(artifact.fileData!.mimeType);
       fileUri = _normalizeCanonicalFileUri(parsedUri);
@@ -539,6 +611,15 @@ class GcsArtifactService extends BaseArtifactService {
     }
     final String? fileUri = blob.fileUri;
     if (fileUri != null && fileUri.isNotEmpty) {
+      final Future<Part?>? dereferenced = _dereferenceFileUri(
+        fileUri,
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+      );
+      if (dereferenced != null) {
+        return dereferenced;
+      }
       return Part.fromFileData(fileUri: fileUri, mimeType: blob.contentType);
     }
     if (blob.data.isEmpty) {
@@ -592,6 +673,15 @@ class GcsArtifactService extends BaseArtifactService {
         _normalizeMimeType(_asNullableString(blobMetadata['contentType'])) ??
         _normalizeMimeType(metadata[_fileMimeTypeMetadataKey]);
     if (fileUri != null) {
+      final Future<Part?>? dereferenced = _dereferenceFileUri(
+        fileUri,
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+      );
+      if (dereferenced != null) {
+        return dereferenced;
+      }
       return Part.fromFileData(
         fileUri: _normalizeCanonicalFileUri(fileUri),
         mimeType: resolvedMimeType,

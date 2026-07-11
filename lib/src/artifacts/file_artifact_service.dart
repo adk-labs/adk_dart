@@ -128,11 +128,35 @@ bool _isUserScoped(String? sessionId, String filename) {
   return sessionId == null || _fileHasUserNamespace(filename);
 }
 
+/// Rejects [value] segments that could alter the constructed filesystem path.
+///
+/// Throws [InputValidationError] when [value] is empty or contains null bytes,
+/// path separators, or traversal segments.
+void _validatePathSegment(String value, String fieldName) {
+  if (value.isEmpty) {
+    throw InputValidationError('$fieldName must not be empty.');
+  }
+  if (value.contains('\x00')) {
+    throw InputValidationError('$fieldName must not contain null bytes.');
+  }
+  if (value.contains('/') || value.contains(r'\')) {
+    throw InputValidationError(
+      "$fieldName '$value' must not contain path separators.",
+    );
+  }
+  if (value == '.' || value == '..') {
+    throw InputValidationError(
+      "$fieldName '$value' must not contain traversal segments.",
+    );
+  }
+}
+
 Directory _userArtifactsDir(Directory baseRoot) {
   return Directory(_appendPath(baseRoot.path, 'artifacts'));
 }
 
 Directory _sessionArtifactsDir(Directory baseRoot, String sessionId) {
+  _validatePathSegment(sessionId, 'session_id');
   return Directory(
     _appendPath(
       _appendPath(_appendPath(baseRoot.path, 'sessions'), sessionId),
@@ -303,6 +327,7 @@ class FileArtifactService extends BaseArtifactService {
   final Directory rootDir;
 
   Directory _baseRoot(String userId) {
+    _validatePathSegment(userId, 'user_id');
     return Directory(_appendPath(_appendPath(rootDir.path, 'users'), userId));
   }
 
