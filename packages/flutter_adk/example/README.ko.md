@@ -14,11 +14,13 @@
 - `Transfer Multi-Agent`: 공식 문서 MAS의 Coordinator/Dispatcher 패턴 예제
   - `HelpDeskCoordinator`가 `Billing`, `Support` sub-agent로 라우팅
 - `Workflow Combo`: `SequentialAgent + ParallelAgent + LoopAgent` 조합 예제
+- `Graph Workflow`: Triage `FunctionNode`와 routed `Edge`로 전문 `AgentNode`를 선택하는 ADK 2.0 graph `Workflow` 예제
 - `Sequential`: 코드 작성 -> 리뷰 -> 리팩터링 순차 실행 예제
 - `Parallel`: 독립 관점 에이전트 병렬 실행 + 통합 예제
 - `Loop`: Critic/Refiner 반복 개선 + `exit_loop` 종료 예제
 - `Agent Team`: Coordinator가 Greeting/Weather/Farewell 팀으로 transfer 라우팅
 - `MCP Toolset`: `McpToolset + StreamableHTTPConnectionParams` 기반 원격 MCP 예제
+- `Google Search`: Gemini built-in `GoogleSearchTool` grounding 예제
 - `URL Context`: Gemini built-in `UrlContextTool` 기반 페이지 요약/비교 예제
 - `Skills`: inline `Skill + SkillToolset` 기반 스킬 오케스트레이션 예제
 
@@ -34,7 +36,9 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 예제 앱 UI/라우팅/대화 화면 | Y | Y | Y | Y | Y | Y | Flutter 공통 UI 레이어 |
 | Basic/Transfer/Workflow/Team 실행 경로 | Y | Y | Y | Y | Y | Y | `flutter_adk`의 `adk_core` 기반 in-memory 런타임 |
+| Graph Workflow (ADK 2.0 `Workflow`) | Y | Y | Y | Y | Y | Y | Routed edge로 전문 노드 1개만 실행 |
 | MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | Web은 서버 CORS 설정이 필요할 수 있음 |
+| Google Search built-in tool | Y | Y | Y | Y | Y | Y | Gemini server-side grounding |
 | URL Context built-in tool | Y | Y | Y | Y | Y | Y | Gemini model-side retrieval |
 | Skills (inline `Skill` + `SkillToolset`) | Y | Y | Y | Y | Y | Y | 파일시스템 없이 동작 |
 | 설정 저장 (`shared_preferences`) | Y | Y | Y | Y | Y | Y | Web은 브라우저 저장소 사용 |
@@ -68,6 +72,10 @@ Workflow Combo 테스트 예시:
 - `파리 2박 3일 일정 추천`
 - `신규 구독 플랜 UX 개선 아이디어`
 
+Graph Workflow 테스트 예시:
+- `이 API 에러를 어떻게 고치죠?` (기술 전문 노드로 라우팅)
+- `새 구독 상품의 가격 전략을 제안해줘` (비즈니스 전문 노드로 라우팅)
+
 Sequential 테스트 예시:
 - `숫자 리스트의 최댓값을 구하는 파이썬 함수를 작성해줘`
 
@@ -86,6 +94,10 @@ Agent Team 테스트 예시:
 MCP Toolset 테스트 예시:
 - `MCP 연결 상태 확인해줘`
 - `MCP 서버에 있는 tool 목록으로 가능한 작업을 알려줘`
+
+Google Search 테스트 예시:
+- `Gemini API의 최신 업데이트 내용을 알려줘`
+- `이번 주 주요 AI 업계 뉴스를 검색해줘`
 
 URL Context 테스트 예시:
 - `https://google.github.io/adk-docs/ 내용을 세 줄로 요약해줘`

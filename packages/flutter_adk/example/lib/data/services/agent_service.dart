@@ -627,6 +627,156 @@ ${responseLanguageInstruction(language)}
     );
   }
 
+  static BaseAgent buildGraphWorkflow({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    final Agent techSpecialist = Agent(
+      name: 'TechSpecialist',
+      model: _createGeminiModel(apiKey),
+      description: '기술/엔지니어링 요청을 처리합니다.',
+      instruction:
+          '''
+You are a technical specialist.
+- Solve the routed request with concrete engineering guidance.
+- Include practical steps or short code snippets when useful.
+- Keep it concise.
+${responseLanguageInstruction(language)}
+''',
+    );
+
+    final Agent bizSpecialist = Agent(
+      name: 'BizSpecialist',
+      model: _createGeminiModel(apiKey),
+      description: '비즈니스/전략 요청을 처리합니다.',
+      instruction:
+          '''
+You are a business strategy specialist.
+- Answer the routed request from market, pricing, and growth perspectives.
+- Keep it concise with actionable bullets.
+${responseLanguageInstruction(language)}
+''',
+    );
+
+    final Agent generalAssistant = Agent(
+      name: 'GeneralAssistant',
+      model: _createGeminiModel(apiKey),
+      description: '분류되지 않은 일반 요청을 처리합니다.',
+      instruction:
+          '''
+You are a helpful general assistant.
+- Answer the routed request clearly and concisely.
+${responseLanguageInstruction(language)}
+''',
+    );
+
+    // ADK 2.0 graph workflow: FunctionNode가 라우팅을 결정하고 Edge route로
+    // 단 하나의 전문 에이전트 노드만 실행된다.
+    final FunctionNode triage = FunctionNode(
+      name: 'TriageRouter',
+      description: 'Classifies the request and routes it via graph edges.',
+      function: (WorkflowContext context, Object? nodeInput) {
+        final String text = _workflowInputText(nodeInput);
+        return Event(
+          invocationId:
+              context.invocationContext?.invocationId ?? 'graph_triage',
+          author: 'TriageRouter',
+          output: text,
+          actions: EventActions(route: _classifyGraphRoute(text)),
+        );
+      },
+    );
+    final AgentNode techNode = AgentNode(agent: techSpecialist);
+    final AgentNode bizNode = AgentNode(agent: bizSpecialist);
+    final AgentNode generalNode = AgentNode(agent: generalAssistant);
+
+    return Workflow(
+      name: 'GraphTriageWorkflow',
+      description: 'ADK 2.0 graph workflow with routed specialist nodes.',
+      nodes: <BaseNode>[triage, techNode, bizNode, generalNode],
+      edges: <Edge>[
+        Edge(fromNode: triage, toNode: techNode, route: 'technical'),
+        Edge(fromNode: triage, toNode: bizNode, route: 'business'),
+        Edge(fromNode: triage, toNode: generalNode, route: DEFAULT_ROUTE),
+      ],
+    );
+  }
+
+  static String _workflowInputText(Object? nodeInput) {
+    if (nodeInput is Content) {
+      return nodeInput.parts
+          .where((Part part) => part.text != null)
+          .map((Part part) => part.text!)
+          .join(' ')
+          .trim();
+    }
+    if (nodeInput == null) {
+      return '';
+    }
+    return '$nodeInput'.trim();
+  }
+
+  static String? _classifyGraphRoute(String text) {
+    final String normalized = text.toLowerCase();
+    const List<String> technicalKeywords = <String>[
+      'code',
+      'bug',
+      'api',
+      'error',
+      'crash',
+      'deploy',
+      'server',
+      'database',
+      'flutter',
+      'dart',
+      '코드',
+      '버그',
+      '에러',
+      '오류',
+      '배포',
+      '서버',
+      'コード',
+      'バグ',
+      'エラー',
+      '代码',
+      '报错',
+      '部署',
+    ];
+    const List<String> businessKeywords = <String>[
+      'price',
+      'pricing',
+      'market',
+      'revenue',
+      'launch',
+      'growth',
+      'strategy',
+      '가격',
+      '시장',
+      '매출',
+      '출시',
+      '전략',
+      '성장',
+      '価格',
+      '市場',
+      '売上',
+      '戦略',
+      '价格',
+      '市场',
+      '营收',
+      '战略',
+    ];
+    if (technicalKeywords.any(normalized.contains)) {
+      return 'technical';
+    }
+    if (businessKeywords.any(normalized.contains)) {
+      return 'business';
+    }
+    // null이면 매칭되는 route가 없어 DEFAULT_ROUTE 엣지가 실행된다.
+    return null;
+  }
+
   static BaseAgent buildSequential({
     required String apiKey,
     required AppLanguage language,
@@ -1065,6 +1215,29 @@ You are an assistant that can use URL context.
 ${responseLanguageInstruction(language)}
 ''',
       tools: <Object>[urlContext],
+    );
+  }
+
+  static BaseAgent buildGoogleSearch({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    return Agent(
+      name: 'GoogleSearchAssistant',
+      model: _createGeminiModel(apiKey),
+      description: 'Uses Gemini built-in Google Search grounding.',
+      instruction:
+          '''
+You are an assistant with Google Search grounding.
+- For factual, recent, or time-sensitive questions, use the google_search tool.
+- Summarize what you found and mention the key sources.
+- If the question needs no search, answer directly.
+- Keep answers concise.
+${responseLanguageInstruction(language)}
+''',
+      tools: <Object>[googleSearch],
     );
   }
 

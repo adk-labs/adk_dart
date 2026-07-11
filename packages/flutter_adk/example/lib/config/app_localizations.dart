@@ -312,6 +312,44 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ja: 'この告知文を改善し、段階的な実行計画も追加して。',
     AppLanguage.zh: '润色这份公告，并补充分阶段执行计划。',
   },
+  'prompt.graph.1': <AppLanguage, String>{
+    AppLanguage.en: 'Our Flutter app crashes on launch. How do I debug it?',
+    AppLanguage.ko: 'Flutter 앱이 실행하자마자 크래시가 나요. 어떻게 디버깅하죠?',
+    AppLanguage.ja: 'Flutter アプリが起動直後にクラッシュします。どうデバッグすれば？',
+    AppLanguage.zh: 'Flutter 应用一启动就崩溃，该怎么调试？',
+  },
+  'prompt.graph.2': <AppLanguage, String>{
+    AppLanguage.en: 'Suggest a pricing strategy for our new subscription.',
+    AppLanguage.ko: '새 구독 상품의 가격 전략을 제안해줘.',
+    AppLanguage.ja: '新しいサブスクの価格戦略を提案して。',
+    AppLanguage.zh: '为我们的新订阅产品建议一个价格策略。',
+  },
+  'prompt.graph.3': <AppLanguage, String>{
+    AppLanguage.en:
+        'Recommend a weekend reading list about creative thinking.',
+    AppLanguage.ko: '창의적 사고에 관한 주말 독서 목록을 추천해줘.',
+    AppLanguage.ja: '創造的思考に関する週末の読書リストを勧めて。',
+    AppLanguage.zh: '推荐一份关于创造性思维的周末书单。',
+  },
+  'prompt.google_search.1': <AppLanguage, String>{
+    AppLanguage.en: 'What are the latest updates in the Gemini API?',
+    AppLanguage.ko: 'Gemini API의 최신 업데이트 내용을 알려줘.',
+    AppLanguage.ja: 'Gemini API の最新アップデートを教えて。',
+    AppLanguage.zh: '介绍一下 Gemini API 的最新更新。',
+  },
+  'prompt.google_search.2': <AppLanguage, String>{
+    AppLanguage.en: 'Search for this week\'s major AI industry news.',
+    AppLanguage.ko: '이번 주 주요 AI 업계 뉴스를 검색해줘.',
+    AppLanguage.ja: '今週の主要な AI 業界ニュースを検索して。',
+    AppLanguage.zh: '搜索本周主要的 AI 行业新闻。',
+  },
+  'prompt.google_search.3': <AppLanguage, String>{
+    AppLanguage.en:
+        'Compare the current stable versions of Flutter and React Native with sources.',
+    AppLanguage.ko: 'Flutter와 React Native의 현재 안정 버전을 출처와 함께 비교해줘.',
+    AppLanguage.ja: 'Flutter と React Native の現在の安定版を出典付きで比較して。',
+    AppLanguage.zh: '比较 Flutter 和 React Native 当前的稳定版本，并附上来源。',
+  },
   'settings.title': <AppLanguage, String>{
     AppLanguage.en: 'API Settings',
     AppLanguage.ko: 'API 설정',
@@ -1000,6 +1038,69 @@ appI18n = <String, Map<AppLanguage, String>>{
     AppLanguage.ko: '예: MCP 연결 상태 확인해줘',
     AppLanguage.ja: '例: MCP 接続状態を確認して',
     AppLanguage.zh: '例如：检查 MCP 连接状态',
+  },
+  'graph.title': <AppLanguage, String>{
+    AppLanguage.en: 'Graph Workflow Example',
+    AppLanguage.ko: 'Graph Workflow 예제',
+    AppLanguage.ja: 'Graph Workflow 例',
+    AppLanguage.zh: 'Graph Workflow 示例',
+  },
+  'graph.summary': <AppLanguage, String>{
+    AppLanguage.en:
+        'ADK 2.0 graph Workflow with a triage node and routed edges.',
+    AppLanguage.ko: 'Triage 노드와 routed edge를 사용하는 ADK 2.0 graph Workflow 예제입니다.',
+    AppLanguage.ja: 'Triage ノードと routed edge を使う ADK 2.0 graph Workflow の例です。',
+    AppLanguage.zh: '使用 triage 节点与 routed edge 的 ADK 2.0 graph Workflow 示例。',
+  },
+  'graph.initial': <AppLanguage, String>{
+    AppLanguage.en:
+        'Hello. A triage node routes each request to a tech, business, or general specialist node.',
+    AppLanguage.ko: '안녕하세요. Triage 노드가 요청을 기술/비즈니스/일반 전문 노드로 라우팅합니다.',
+    AppLanguage.ja: 'こんにちは。Triage ノードが要求を技術/ビジネス/一般ノードへルーティングします。',
+    AppLanguage.zh: '你好，triage 节点会把请求路由到技术/商业/通用专家节点。',
+  },
+  'graph.empty': <AppLanguage, String>{
+    AppLanguage.en: 'Send a message to see graph-based routing in action.',
+    AppLanguage.ko: '메시지를 보내 graph 기반 라우팅을 확인하세요.',
+    AppLanguage.ja: 'メッセージを送って graph ベースのルーティングを確認してください。',
+    AppLanguage.zh: '发送消息以体验基于 graph 的路由。',
+  },
+  'graph.hint': <AppLanguage, String>{
+    AppLanguage.en: 'e.g. How do I fix this API error?',
+    AppLanguage.ko: '예: 이 API 에러를 어떻게 고치죠?',
+    AppLanguage.ja: '例: この API エラーの直し方は？',
+    AppLanguage.zh: '例如：这个 API 报错怎么修？',
+  },
+  'google_search.title': <AppLanguage, String>{
+    AppLanguage.en: 'Google Search Example',
+    AppLanguage.ko: 'Google Search 예제',
+    AppLanguage.ja: 'Google Search 例',
+    AppLanguage.zh: 'Google Search 示例',
+  },
+  'google_search.summary': <AppLanguage, String>{
+    AppLanguage.en: 'Gemini built-in Google Search grounding example.',
+    AppLanguage.ko: 'Gemini built-in Google Search grounding 예제입니다.',
+    AppLanguage.ja: 'Gemini 組み込み Google Search grounding の例です。',
+    AppLanguage.zh: 'Gemini 内置 Google Search grounding 示例。',
+  },
+  'google_search.initial': <AppLanguage, String>{
+    AppLanguage.en:
+        'Hello. Ask about recent or factual topics and I will ground answers with Google Search.',
+    AppLanguage.ko: '안녕하세요. 최신/사실 확인 질문을 하면 Google Search로 근거를 찾아 답합니다.',
+    AppLanguage.ja: 'こんにちは。最新情報や事実確認の質問には Google Search で根拠を探して答えます。',
+    AppLanguage.zh: '你好，问我最新或需要核实的问题，我会用 Google Search 提供有依据的回答。',
+  },
+  'google_search.empty': <AppLanguage, String>{
+    AppLanguage.en: 'Ask a question to test Google Search grounding.',
+    AppLanguage.ko: '질문을 보내 Google Search grounding을 확인하세요.',
+    AppLanguage.ja: '質問を送って Google Search grounding を確認してください。',
+    AppLanguage.zh: '发送问题以测试 Google Search grounding。',
+  },
+  'google_search.hint': <AppLanguage, String>{
+    AppLanguage.en: 'e.g. Latest Gemini API updates?',
+    AppLanguage.ko: '예: Gemini API 최신 업데이트는?',
+    AppLanguage.ja: '例: Gemini API の最新アップデートは？',
+    AppLanguage.zh: '例如：Gemini API 有哪些最新更新？',
   },
   'url_context.title': <AppLanguage, String>{
     AppLanguage.en: 'URL Context Example',

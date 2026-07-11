@@ -107,6 +107,31 @@ List<ExampleMenuItem> buildExampleMenuItems() {
       agentBuilder: AgentService.buildWorkflow,
     ),
     ExampleMenuItem(
+      id: 'graph_workflow',
+      icon: Icons.schema_outlined,
+      category: ExampleCategory.workflow,
+      titleKey: 'graph.title',
+      summaryKey: 'graph.summary',
+      initialKey: 'graph.initial',
+      emptyKey: 'graph.empty',
+      hintKey: 'graph.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.graph.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.graph.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.graph.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildGraphWorkflow,
+    ),
+    ExampleMenuItem(
       id: 'sequential',
       icon: Icons.linear_scale_outlined,
       category: ExampleCategory.workflow,
@@ -230,6 +255,31 @@ List<ExampleMenuItem> buildExampleMenuItems() {
         ),
       ],
       agentBuilder: AgentService.buildMcp,
+    ),
+    ExampleMenuItem(
+      id: 'google_search',
+      icon: Icons.travel_explore_outlined,
+      category: ExampleCategory.integrations,
+      titleKey: 'google_search.title',
+      summaryKey: 'google_search.summary',
+      initialKey: 'google_search.initial',
+      emptyKey: 'google_search.empty',
+      hintKey: 'google_search.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.google_search.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.google_search.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.google_search.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildGoogleSearch,
     ),
     ExampleMenuItem(
       id: 'url_context',
