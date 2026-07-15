@@ -4,8 +4,14 @@ library;
 import 'client_labels_utils.dart';
 
 /// The standard tracking headers for the current runtime context.
-Map<String, String> getTrackingHeaders({Map<String, String>? environment}) {
-  final List<String> labels = getClientLabels(environment: environment);
+Map<String, String> getTrackingHeaders({
+  String? frameworkLabel,
+  Map<String, String>? environment,
+}) {
+  final List<String> labels = getClientLabels(
+    frameworkLabel: frameworkLabel,
+    environment: environment,
+  );
   final String headerValue = labels.join(' ');
   return <String, String>{
     'x-goog-api-client': headerValue,
@@ -18,10 +24,12 @@ Map<String, String> getTrackingHeaders({Map<String, String>? environment}) {
 /// Existing header tokens are preserved and deduplicated.
 Map<String, String> mergeTrackingHeaders(
   Map<String, String>? headers, {
+  String? frameworkLabel,
   Map<String, String>? environment,
 }) {
   final Map<String, String> merged = <String, String>{...?headers};
   final Map<String, String> tracking = getTrackingHeaders(
+    frameworkLabel: frameworkLabel,
     environment: environment,
   );
 

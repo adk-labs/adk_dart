@@ -62,6 +62,12 @@ void main() {
       );
       expect(agentEngineLabels.first, contains('+remote_reasoning_engine'));
 
+      final List<String> customFrameworkLabels = getClientLabels(
+        frameworkLabel: 'my_framework',
+        environment: <String, String>{},
+      );
+      expect(customFrameworkLabels.first, contains('+my_framework'));
+
       final List<String> contextual = await clientLabelContext(
         'custom-label',
         () async {

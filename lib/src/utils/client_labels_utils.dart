@@ -16,16 +16,21 @@ const Object _labelContextKey = Object();
 /// The default client label used by evaluation API calls.
 const String evalClientLabel = 'google-adk-eval/$adkVersion';
 
-List<String> _getDefaultLabels({Map<String, String>? environment}) {
+List<String> _getDefaultLabels({
+  String? frameworkLabel,
+  Map<String, String>? environment,
+}) {
   final Map<String, String> env = environment ?? readSystemEnvironment();
-  String frameworkLabel = '$_adkLabel/$adkVersion';
-  if ((env[_agentEngineTelemetryEnvVariableName] ?? '').isNotEmpty) {
-    frameworkLabel = '$frameworkLabel+$_agentEngineTelemetryTag';
+  String frameworkToken = '$_adkLabel/$adkVersion';
+  if (frameworkLabel != null && frameworkLabel.isNotEmpty) {
+    frameworkToken = '$frameworkToken+$frameworkLabel';
+  } else if ((env[_agentEngineTelemetryEnvVariableName] ?? '').isNotEmpty) {
+    frameworkToken = '$frameworkToken+$_agentEngineTelemetryTag';
   }
 
   final String languageVersion = readRuntimeLanguageVersion();
   final String languageLabel = '$_languageLabel/$languageVersion';
-  return <String>[frameworkLabel, languageLabel];
+  return <String>[frameworkToken, languageLabel];
 }
 
 /// Runs [operation] with a temporary custom [clientLabel] bound to this zone.
@@ -49,8 +54,14 @@ T clientLabelContext<T>(String clientLabel, T Function() operation) {
 ///
 /// This always includes framework and language labels, and appends the
 /// zone-scoped custom label when [clientLabelContext] was used.
-List<String> getClientLabels({Map<String, String>? environment}) {
-  final List<String> labels = _getDefaultLabels(environment: environment);
+List<String> getClientLabels({
+  String? frameworkLabel,
+  Map<String, String>? environment,
+}) {
+  final List<String> labels = _getDefaultLabels(
+    frameworkLabel: frameworkLabel,
+    environment: environment,
+  );
   final String? currentClientLabel = Zone.current[_labelContextKey] as String?;
   if (currentClientLabel != null && currentClientLabel.isNotEmpty) {
     labels.add(currentClientLabel);
