@@ -1036,27 +1036,31 @@ class BaseLlmFlow {
     LlmRequest request,
   ) async {
     final LlmAgent agent = context.agent as LlmAgent;
-    final ToolContext toolContext = Context(context);
-    if (agent.tools.isNotEmpty) {
-      for (final Object toolUnion in agent.tools) {
-        if (toolUnion is BaseToolset) {
-          await toolUnion.processLlmRequest(
-            toolContext: toolContext,
-            llmRequest: request,
-          );
-        }
-      }
+    if (agent.tools.isEmpty) {
+      context.canonicalToolsCache = <BaseTool>[];
+      return;
+    }
 
-      final List<BaseTool> tools = await agent.canonicalTools(
-        ReadonlyContext(context),
-      );
-      for (final BaseTool tool in tools) {
-        await tool.processLlmRequest(
+    final ToolContext toolContext = Context(context);
+    for (final Object toolUnion in agent.tools) {
+      if (toolUnion is BaseToolset) {
+        await toolUnion.processLlmRequest(
           toolContext: toolContext,
           llmRequest: request,
         );
       }
     }
+
+    final List<BaseTool> tools = await agent.canonicalTools(
+      ReadonlyContext(context),
+    );
+    for (final BaseTool tool in tools) {
+      await tool.processLlmRequest(
+        toolContext: toolContext,
+        llmRequest: request,
+      );
+    }
+    context.canonicalToolsCache = tools;
   }
 
   Stream<Event> _postprocessAsync(

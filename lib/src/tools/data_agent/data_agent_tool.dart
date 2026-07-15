@@ -11,7 +11,7 @@ import 'config.dart';
 
 /// Base REST endpoint for Data Agent API calls.
 const String dataAgentBaseUrl =
-    'https://geminidataanalytics.googleapis.com/v1beta';
+    'https://geminidataanalytics.googleapis.com/v1';
 
 /// Client identifier value sent in Data Agent request headers.
 const String dataAgentClientId = 'GOOGLE_ADK';

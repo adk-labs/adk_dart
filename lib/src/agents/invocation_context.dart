@@ -451,7 +451,41 @@ class InvocationContext {
       );
     }
     if (currentBranch) {
-      events = events.where((Event event) => event.branch == branch);
+      final String? br = branch;
+      events = events.where((Event event) {
+        if (event.author == 'user') {
+          final List<FunctionResponse> frs = event.getFunctionResponses();
+          if (frs.isNotEmpty && br != null) {
+            final Set<String> frIds = frs
+                .map((FunctionResponse fr) => fr.id)
+                .where((String? id) => id != null && id.isNotEmpty)
+                .cast<String>()
+                .toSet();
+            if (frIds.isNotEmpty) {
+              final List<Event> branchEvents = session.events
+                  .where((Event e) =>
+                      e.branch != null &&
+                      (e.branch == br || e.branch!.startsWith('$br.')))
+                  .toList();
+              final Set<String> branchFcIds = branchEvents
+                  .expand((Event e) => e.getFunctionCalls())
+                  .map((FunctionCall fc) => fc.id)
+                  .where((String? id) => id != null && id.isNotEmpty)
+                  .cast<String>()
+                  .toSet();
+              if (frIds.intersection(branchFcIds).isEmpty) {
+                return false;
+              }
+            }
+          }
+
+          return event.branch == null ||
+              br == null ||
+              event.branch == br ||
+              event.branch!.startsWith('$br.');
+        }
+        return event.branch == br;
+      });
     }
     return events.toList();
   }
