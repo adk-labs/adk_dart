@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:adk_dart/adk_dart.dart';
+import 'package:archive/archive.dart';
 import 'package:test/test.dart';
 
 Future<Context> _newToolContext({
@@ -262,6 +263,65 @@ void main() {
         'gs://bucket/path/audio.mp3',
       );
       expect(appended[1].parts[1].fileData!.mimeType, 'audio/mpeg');
+    },
+  );
+
+  test(
+    'LoadArtifactsTool extracts DOCX files successfully',
+    () async {
+      final Context toolContext = await _newToolContext(
+        memoryService: InMemoryMemoryService(),
+        artifactService: InMemoryArtifactService(),
+      );
+
+      final Archive archive = Archive();
+      final String xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+          '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n'
+          '  <w:body>\n'
+          '    <w:p>\n'
+          '      <w:r>\n'
+          '        <w:t>Hello from DOCX!</w:t>\n'
+          '      </w:r>\n'
+          '    </w:p>\n'
+          '  </w:body>\n'
+          '</w:document>';
+      final List<int> xmlBytes = utf8.encode(xml);
+      archive.addFile(ArchiveFile('word/document.xml', xmlBytes.length, xmlBytes));
+      final List<int>? zipBytes = ZipEncoder().encode(archive);
+
+      await toolContext.saveArtifact(
+        'doc.docx',
+        Part.fromInlineData(
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          data: zipBytes!,
+        ),
+      );
+
+      final LoadArtifactsTool tool = LoadArtifactsTool();
+      final LlmRequest request = LlmRequest(
+        contents: <Content>[
+          Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: 'load_artifacts',
+                response: <String, dynamic>{
+                  'artifact_names': <String>['doc.docx'],
+                },
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tool.processLlmRequest(
+        toolContext: toolContext,
+        llmRequest: request,
+      );
+
+      final Content appended = request.contents.last;
+      expect(appended.parts.first.text, 'Artifact doc.docx is:');
+      expect(appended.parts[1].text, 'Hello from DOCX!');
     },
   );
 }

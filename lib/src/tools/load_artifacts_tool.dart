@@ -3,6 +3,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
+
 import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
@@ -180,7 +182,26 @@ Part _asSafeInlineDataPart(Part artifact, String artifactName) {
     );
   }
 
-  if (mimeType.startsWith('text/') || _textLikeMimeTypes.contains(mimeType)) {
+  // Attempt DOCX extraction
+  final bool isDocx = mimeType ==
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mimeType == 'application/octet-stream' ||
+      artifactName.toLowerCase().endsWith('.docx');
+  if (isDocx) {
+    final String? extractedText = _tryExtractDocxText(data);
+    if (extractedText != null) {
+      return Part.text(extractedText);
+    }
+  }
+
+  final bool isTextLike = mimeType.startsWith('text/') ||
+      _textLikeMimeTypes.contains(mimeType) ||
+      artifactName.toLowerCase().endsWith('.csv') ||
+      artifactName.toLowerCase().endsWith('.txt') ||
+      artifactName.toLowerCase().endsWith('.json') ||
+      artifactName.toLowerCase().endsWith('.xml');
+
+  if (isTextLike) {
     return Part.text(utf8.decode(data, allowMalformed: true));
   }
 
@@ -188,6 +209,50 @@ Part _asSafeInlineDataPart(Part artifact, String artifactName) {
   return Part.text(
     '[Binary artifact: $artifactName, type: $mimeType, size: ${sizeKb.toStringAsFixed(1)} KB. Content cannot be displayed inline.]',
   );
+}
+
+String? _tryExtractDocxText(List<int> data) {
+  try {
+    final Archive archive = ZipDecoder().decodeBytes(data);
+    final ArchiveFile? file = archive.findFile('word/document.xml');
+    if (file == null) {
+      return null;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return null;
+    }
+    final List<int> xmlBytes = file.content as List<int>;
+    final String xmlContent = utf8.decode(xmlBytes, allowMalformed: true);
+
+    final RegExp nsRegex = RegExp(
+      r'xmlns:(\w+)="http://schemas.openxmlformats.org/wordprocessingml/2006/main"',
+    );
+    final RegExpMatch? nsMatch = nsRegex.firstMatch(xmlContent);
+    final String prefix = nsMatch != null ? nsMatch.group(1)! : 'w';
+
+    final String pTag = '$prefix:p';
+    final String tTag = '$prefix:t';
+
+    final List<String> paragraphs = <String>[];
+    final RegExp pSplitRegex = RegExp('<$pTag(?:[^>]*)>');
+    final List<String> pSegments = xmlContent.split(pSplitRegex);
+
+    final RegExp tFindRegex = RegExp('<$tTag(?:[^>]*)>([^<]*)</$tTag>');
+
+    for (final String p in pSegments) {
+      final List<String> texts = <String>[];
+      for (final RegExpMatch m in tFindRegex.allMatches(p)) {
+        texts.add(m.group(1) ?? '');
+      }
+      if (texts.isNotEmpty) {
+        paragraphs.add(texts.join(''));
+      }
+    }
+
+    return paragraphs.join('\n');
+  } catch (_) {
+    return null;
+  }
 }
 
 String? _normalizeMimeType(String? mimeType) {
