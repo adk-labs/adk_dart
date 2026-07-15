@@ -425,6 +425,7 @@ export 'src/tools/vertex_rag_retrieval_tool.dart';
 
 export 'src/types/content.dart';
 export 'src/workflow/workflow.dart' hide RetryConfig;
+export 'src/workflow/replay_manager.dart';
 export 'src/utils/cache_performance_analyzer.dart';
 export 'src/utils/client_labels_utils.dart';
 export 'src/utils/content_utils.dart';

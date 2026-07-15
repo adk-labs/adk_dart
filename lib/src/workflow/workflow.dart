@@ -1530,12 +1530,16 @@ class Workflow extends BaseAgent {
       outputForKeys: state?.outputFor,
     );
     if (output is Event) {
-      final Event event = output.nodeInfo.isEmpty
+      Event event = output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
           : output;
-      return event.branch == null
-          ? event.copyWith(branch: state?.branch ?? context.branch)
-          : event;
+      if (event.branch == null) {
+        event = event.copyWith(branch: state?.branch ?? context.branch);
+      }
+      if (event.isolationScope == null) {
+        event = event.copyWith(isolationScope: context.isolationScope);
+      }
+      return event;
     }
     if (output is RequestInput) {
       final Event event = createRequestInputEvent(
@@ -1549,6 +1553,7 @@ class Workflow extends BaseAgent {
             : event.actions.copyWith(route: state?.route),
         nodeInfo: nodeInfo,
         branch: state?.branch ?? context.branch,
+        isolationScope: event.isolationScope ?? context.isolationScope,
       );
     }
     if (output is Content) {
@@ -1556,6 +1561,7 @@ class Workflow extends BaseAgent {
         invocationId: context.invocationId,
         author: author,
         branch: state?.branch ?? context.branch,
+        isolationScope: context.isolationScope,
         nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
         content: output,
       );
@@ -1565,6 +1571,7 @@ class Workflow extends BaseAgent {
       invocationId: context.invocationId,
       author: author,
       branch: state?.branch ?? context.branch,
+      isolationScope: context.isolationScope,
       nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
       content: Content.modelText(text),
     );
