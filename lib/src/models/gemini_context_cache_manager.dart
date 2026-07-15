@@ -40,10 +40,102 @@ abstract class GeminiCacheClient {
 /// Manages cache metadata and cache lifecycle for Gemini requests.
 class GeminiContextCacheManager {
   /// Creates a context cache manager.
-  const GeminiContextCacheManager({this.cacheClient});
+  const GeminiContextCacheManager({
+    this.cacheClient,
+    this.backend,
+    this.project,
+    this.location,
+    this.baseUrl,
+  });
 
   /// Optional cache client used for create/delete operations.
   final GeminiCacheClient? cacheClient;
+
+  /// Optional backend scope ('vertex' or 'gemini')
+  final String? backend;
+
+  /// Optional Vertex project ID
+  final String? project;
+
+  /// Optional Vertex location
+  final String? location;
+
+  /// Optional baseUrl override
+  final String? baseUrl;
+
+  Map<String, dynamic> _cacheScope() {
+    final Map<String, dynamic> scope = <String, dynamic>{
+      'backend': backend ?? 'gemini',
+    };
+    if (project != null) {
+      scope['project'] = project;
+    }
+    if (location != null) {
+      scope['location'] = location;
+    }
+    if (baseUrl != null) {
+      scope['base_url'] = baseUrl;
+    }
+    return scope;
+  }
+
+  int _estimateRequestTokens(
+    LlmRequest request, [
+    int? cacheContentsCount,
+  ]) {
+    int totalChars = 0;
+
+    final String? systemInstruction = request.config.systemInstruction;
+    if (systemInstruction != null) {
+      totalChars += systemInstruction.length;
+    }
+
+    final List<ToolDeclaration>? tools = request.config.tools;
+    if (tools != null) {
+      for (final ToolDeclaration tool in tools) {
+        for (final FunctionDeclaration declaration in tool.functionDeclarations) {
+          totalChars += declaration.name.length;
+          totalChars += declaration.description.length;
+          totalChars += jsonEncode(declaration.parameters).length;
+        }
+      }
+    }
+
+    final List<Content> contents = request.contents;
+    final List<Content> targetContents = cacheContentsCount != null
+        ? contents.take(cacheContentsCount).toList()
+        : contents;
+    for (final Content content in targetContents) {
+      for (final Part part in content.parts) {
+        final String? text = part.text;
+        if (text != null) {
+          totalChars += text.length;
+        }
+      }
+    }
+
+    return totalChars ~/ 4;
+  }
+
+  int _estimateCacheablePrefixTokens(
+    LlmRequest request,
+    int cacheContentsCount,
+  ) {
+    final int? fullTokens = request.cacheableContentsTokenCount;
+    if (fullTokens == null || fullTokens <= 0) {
+      return 0;
+    }
+
+    final int fullEstimate = _estimateRequestTokens(request);
+    if (fullEstimate <= 0) {
+      return fullTokens;
+    }
+
+    final int prefixEstimate =
+        _estimateRequestTokens(request, cacheContentsCount);
+    final double ratio = (prefixEstimate / fullEstimate).clamp(0.0, 1.0);
+    return (fullTokens * ratio).toInt();
+  }
 
   /// Updates [request] cache metadata and applies reusable cached content.
   Future<CacheMetadata?> handleContextCaching(LlmRequest request) async {
@@ -194,13 +286,20 @@ class GeminiContextCacheManager {
       return null;
     }
     final int? previousTokenCount = request.cacheableContentsTokenCount;
+    if (previousTokenCount == null) {
+      return null;
+    }
     final int minimumTokenCount =
         cacheConfig.minTokens > _geminiMinimumCacheTokens
         ? cacheConfig.minTokens
         : _geminiMinimumCacheTokens;
-    if (previousTokenCount == null || previousTokenCount < minimumTokenCount) {
+
+    final int cacheablePrefixTokens =
+        _estimateCacheablePrefixTokens(request, cacheContentsCount);
+    if (cacheablePrefixTokens < minimumTokenCount) {
       return null;
     }
+
     final String model = request.model ?? '';
     if (model.isEmpty) {
       return null;
@@ -257,6 +356,8 @@ class GeminiContextCacheManager {
         : cacheContentsCount;
 
     final Map<String, Object?> payload = <String, Object?>{
+      'model': request.model,
+      'cache_scope': _cacheScope(),
       'systemInstruction': request.config.systemInstruction,
       'tools': _serializeTools(request.config.tools),
       'toolConfig': _serializeToolConfig(request.config.toolConfig),
