@@ -570,8 +570,11 @@ class _SkillScriptCodeExecutor {
             stdout = '${parsed['stdout'] ?? ''}';
             stderr = '${parsed['stderr'] ?? ''}';
             returnCode = _toInt(parsed['returncode']) ?? returnCode;
-            if (returnCode != 0 && stderr.isEmpty) {
-              stderr = 'Exit code $returnCode';
+            if (returnCode != 0 && parsed['timeout'] != true) {
+              final String exitCodeMessage = 'Exit code $returnCode';
+              stderr = stderr.isNotEmpty
+                  ? '${stderr.trimRight()}\n$exitCodeMessage'
+                  : exitCodeMessage;
             }
           }
         } catch (_) {
@@ -742,6 +745,7 @@ class _SkillScriptCodeExecutor {
         '        _r = subprocess.run(',
         '          ${jsonEncode(command)},',
         '          capture_output=True, text=True,',
+        '          encoding=\'utf-8\', errors=\'replace\',',
         '          timeout=$_scriptTimeout, cwd=td,',
         '        )',
         '        print(_json.dumps({',
@@ -756,6 +760,7 @@ class _SkillScriptCodeExecutor {
         "            'stdout': _e.stdout or '',",
         "            'stderr': 'Timed out after ${_scriptTimeout}s',",
         "            'returncode': -1,",
+        "            'timeout': True,",
         '        }))',
       ]);
     }

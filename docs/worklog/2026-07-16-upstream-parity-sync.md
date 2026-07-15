@@ -25,6 +25,13 @@ Syncing recent upstream commits from `adk-python` to `adk-dart` to ensure functi
   - Cleared/initialized the cache to an empty list when `agent.tools` is empty to prevent tools from leaking across steps.
   - Reused the cache in response preprocessing instead of re-resolving tools.
 
+### 4. Decode Shell Skill Output as UTF-8 and Preserving Exit Code
+- **Upstream Commit**: `b7ad76a2` (decode shell skill output as UTF-8)
+- **Files Modified**: `lib/src/tools/skill_toolset.dart`
+- **Details**:
+  - Encoded shell execution commands using `utf-8` and replaced error characters dynamically inside the Python subprocess runner template to keep executions locale-independent.
+  - Preserved original `stderr` output even when a non-zero exit code is encountered, appending the exit code message as a suffix.
+
 ## Verification
-- Ran targeted test suites: `test/replay_manager_test.dart`, `test/tools_memory_artifacts_test.dart`, `test/utils_missing_parity_test.dart`, `test/flow_processors_parity_test.dart`, `test/node_tool_test.dart`.
+- Ran targeted test suites: `test/replay_manager_test.dart`, `test/tools_memory_artifacts_test.dart`, `test/utils_missing_parity_test.dart`, `test/flow_processors_parity_test.dart`, `test/node_tool_test.dart`, `test/skill_toolset_parity_test.dart`.
 - All tests passed successfully with 0 regressions.
