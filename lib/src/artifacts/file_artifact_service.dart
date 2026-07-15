@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../errors/input_validation_error.dart';
 import '../types/content.dart';
+import 'artifact_util.dart';
 import 'base_artifact_service.dart';
 
 const String _userNamespacePrefix = 'user:';
@@ -402,6 +403,7 @@ class FileArtifactService extends BaseArtifactService {
     String? sessionId,
     Map<String, Object?>? customMetadata,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final _ResolvedArtifactPath artifactPath = _artifactPath(
       userId,
       sessionId,
@@ -466,6 +468,7 @@ class FileArtifactService extends BaseArtifactService {
     String? sessionId,
     int? version,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final _ResolvedArtifactPath artifactPath = _artifactPath(
       userId,
       sessionId,
@@ -537,6 +540,7 @@ class FileArtifactService extends BaseArtifactService {
     required String userId,
     String? sessionId,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final Set<String> filenames = <String>{};
     final Directory baseRoot = _baseRoot(userId);
 
@@ -580,6 +584,7 @@ class FileArtifactService extends BaseArtifactService {
     required String filename,
     String? sessionId,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final Directory artifactDir = _artifactPath(
       userId,
       sessionId,
@@ -598,6 +603,7 @@ class FileArtifactService extends BaseArtifactService {
     required String filename,
     String? sessionId,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final Directory artifactDir = _artifactPath(
       userId,
       sessionId,
@@ -614,6 +620,7 @@ class FileArtifactService extends BaseArtifactService {
     required String filename,
     String? sessionId,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final Directory artifactDir = _artifactPath(
       userId,
       sessionId,
@@ -648,6 +655,7 @@ class FileArtifactService extends BaseArtifactService {
     String? sessionId,
     int? version,
   }) async {
+    validatePathSegment(appName, 'app_name');
     final Directory artifactDir = _artifactPath(
       userId,
       sessionId,

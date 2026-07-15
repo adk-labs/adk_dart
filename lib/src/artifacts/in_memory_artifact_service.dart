@@ -24,6 +24,8 @@ class InMemoryArtifactService extends BaseArtifactService {
     required String filename,
     required String? sessionId,
   }) {
+    validatePathSegment(appName, 'app_name');
+    validatePathSegment(userId, 'user_id');
     if (_fileHasUserNamespace(filename)) {
       return '$appName/$userId/user/$filename';
     }
@@ -33,6 +35,7 @@ class InMemoryArtifactService extends BaseArtifactService {
         'sessionId must be provided for session-scoped artifacts.',
       );
     }
+    validatePathSegment(sessionId, 'session_id');
 
     return '$appName/$userId/$sessionId/$filename';
   }

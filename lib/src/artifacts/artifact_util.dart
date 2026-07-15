@@ -112,3 +112,29 @@ void validateArtifactReferenceScope({
     );
   }
 }
+
+/// Rejects values that could alter the constructed path.
+///
+/// Throws [InputValidationError] if [value] contains traversal segments, null
+/// bytes, is empty, or starts with a slash or backslash.
+void validatePathSegment(String value, String fieldName) {
+  if (value.isEmpty) {
+    throw InputValidationError('$fieldName must not be empty.');
+  }
+  if (value.contains('\x00')) {
+    throw InputValidationError('$fieldName must not contain null bytes.');
+  }
+  if (value.startsWith('/') || value.startsWith('\\')) {
+    throw InputValidationError(
+      '$fieldName "$value" must not be an absolute path or start with a slash.',
+    );
+  }
+  if (value == '.' ||
+      value == '..' ||
+      value.split('/').contains('..') ||
+      value.split('\\').contains('..')) {
+    throw InputValidationError(
+      '$fieldName "$value" must not contain traversal segments.',
+    );
+  }
+}
