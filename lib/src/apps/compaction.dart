@@ -3,6 +3,7 @@ library;
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../events/rewind_events.dart';
 import '../flows/llm_flows/contents.dart' as contents_flow;
 import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
@@ -93,8 +94,9 @@ Future<bool> runCompactionForTokenThresholdConfig({
     return false;
   }
 
+  final List<Event> events = applyRewinds(session.events);
   final int? promptTokenCount = latestPromptTokenCount(
-    events: session.events,
+    events: events,
     currentBranch: currentBranch,
     agentName: agentName,
   );
@@ -102,8 +104,8 @@ Future<bool> runCompactionForTokenThresholdConfig({
     return false;
   }
 
-  final double lastCompactedEnd = latestCompactionEndTimestamp(session.events);
-  final List<Event> candidates = session.events
+  final double lastCompactedEnd = latestCompactionEndTimestamp(events);
+  final List<Event> candidates = events
       .where(
         (Event event) =>
             event.actions.compaction == null &&
@@ -180,8 +182,9 @@ Stream<Event> runCompactionForSlidingWindow({
     return;
   }
 
-  final double lastCompactedEnd = latestCompactionEndTimestamp(session.events);
-  final List<Event> candidates = session.events
+  final List<Event> events = applyRewinds(session.events);
+  final double lastCompactedEnd = latestCompactionEndTimestamp(events);
+  final List<Event> candidates = events
       .where(
         (Event event) =>
             event.actions.compaction == null &&

@@ -7,6 +7,7 @@ import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
+import '../../events/rewind_events.dart';
 import '../../models/anthropic_llm.dart';
 import '../../models/llm_request.dart';
 import '../../types/content.dart';
@@ -553,28 +554,7 @@ List<Event> _recoverCompactedFunctionCalls(
 }
 
 List<Event> _filterRewoundEvents(List<Event> events) {
-  final List<Event> rewindFiltered = <Event>[];
-  int i = events.length - 1;
-  while (i >= 0) {
-    final Event event = events[i];
-    final String? rewindBefore = event.actions.rewindBeforeInvocationId;
-    if (rewindBefore != null && rewindBefore.isNotEmpty) {
-      int target = -1;
-      for (int j = 0; j < i; j += 1) {
-        if (events[j].invocationId == rewindBefore) {
-          target = j;
-          break;
-        }
-      }
-      if (target != -1) {
-        i = target - 1;
-        continue;
-      }
-    }
-    rewindFiltered.add(event);
-    i -= 1;
-  }
-  return rewindFiltered.reversed.toList(growable: false);
+  return applyRewinds(events);
 }
 
 bool _isOtherAgentReply(String currentAgentName, Event event) {
