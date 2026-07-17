@@ -5,6 +5,12 @@
 ADK Dart 是一个面向 AI Agent 的代码优先 Dart 框架，
 提供 Agent 运行时、工具编排和 MCP 集成能力。
 
+## 最近更新 (支持 ADK 2.0)
+
+- **ADK 2.0 工作流与 Managed Agent 支持**:
+  - **v2 工作流**: 支持通过 `Workflow`、`BaseNode`、`JoinNode` 等实现声明式节点图调度、并行执行和状态合并。
+  - **Managed Agent**: 新增与 GCP Managed Agents Interactions API 直接对接的 `ManagedAgent` 和 `RemoteMcpServer` 配置映射。
+
 ## 核心能力
 
 - 代码优先的 Agent 运行时 (`BaseAgent`, `LlmAgent`, `Runner`)
