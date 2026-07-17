@@ -37,6 +37,10 @@
   全量运行时 API 的核心包。
 - [adk](https://pub.dev/packages/adk): 以短包名重新导出 `adk_dart` 的 facade 包。
 
+## ADK 2.0 兼容性
+
+本包与 ADK 2.0 保持一致，支持 v2 工作流（声明式节点图调度、条件路由和状态合并）与 GCP Managed Agent 整合（包括 `ManagedAgent` 和 `RemoteMcpServer` 配置映射）以实现混合设备端 + 云端执行。
+
 ## 平台支持矩阵（当前）
 
 状态说明:

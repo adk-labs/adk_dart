@@ -55,6 +55,10 @@ Design intent:
 - [adk](https://pub.dev/packages/adk): Short-name facade package that
   re-exports `adk_dart`.
 
+## ADK 2.0 Compatibility
+
+This package is fully aligned with ADK 2.0, supporting v2 Workflows (declarative node-graph scheduling, conditional routing, and state merging) and GCP Managed Agents (including `ManagedAgent` and `RemoteMcpServer` configuration mapping) for hybrid on-device and cloud execution.
+
 ## Usage
 
 ```dart

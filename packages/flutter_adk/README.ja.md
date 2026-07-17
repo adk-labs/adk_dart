@@ -39,6 +39,10 @@ Design intent:
 - [adk](https://pub.dev/packages/adk): `adk_dart` を短い名前で再公開する
   ファサードパッケージです。
 
+## ADK 2.0 互換性
+
+このパッケージは ADK 2.0 と整合しており、v2 ワークフロー（宣言的なノードグラフスケジューリング、条件付きルーティング、および状態マージ）と GCP Managed Agents（`ManagedAgent` および `RemoteMcpServer` 設定マッピングを含む）によるハイブリッドオンデバイス + クラウド実行をサポートしています。
+
 ## Platform Support Matrix (Current)
 
 Status legend:

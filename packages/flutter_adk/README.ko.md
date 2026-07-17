@@ -37,6 +37,10 @@ Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe 표면으로 사용하�
 - [adk](https://pub.dev/packages/adk): `adk_dart`를 짧은 이름으로
   재노출하는 파사드 패키지입니다.
 
+## ADK 2.0 호환성
+
+이 패키지는 ADK 2.0과 정렬되어 있어, v2 워크플로(선언적 노드 그래프 스케줄링, 조건부 라우팅 및 상태 병합)와 하이브리드 온디바이스 + 클라우드 실행을 위한 GCP Managed Agent 연동(`ManagedAgent` 및 `RemoteMcpServer` 설정 매핑)을 지원합니다.
+
 ## 플랫폼 지원 매트릭스 (현재)
 
 상태 표기:
