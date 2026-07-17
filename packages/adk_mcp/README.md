@@ -59,6 +59,10 @@ Status legend:
 | Auth | Built-in OAuth/token lifecycle manager | N | Caller supplies headers/tokens; credential lifecycle is out of scope. |
 | ADK integration | Runner/tool wiring for ADK agents | N | Integration lives in `adk_dart`, not in `adk_mcp`. |
 
+## ADK 2.0 Compatibility
+
+This package is fully aligned with ADK 2.0, supporting remote MCP server integration, Managed Agent configurations, and GCP Managed Agents Interactions API for hybrid agent execution.
+
 ## Install
 
 ```bash

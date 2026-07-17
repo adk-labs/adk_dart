@@ -28,6 +28,10 @@ Status legend:
 | HTTP session termination (`terminateSession`) | Y | Y | Y | MCP Streamable HTTP DELETE flow |
 | Built-in credential/token lifecycle manager | N | N | N | Caller manages headers/tokens |
 
+## ADK 2.0 互換性
+
+このパッケージは ADK 2.0 と整合しており、リモート MCP サーバーの統合、Managed Agent 構成、およびハイブリッドエージェント実行のための GCP Managed Agents Interactions API をサポートしています。
+
 ## Install
 
 ```bash

@@ -28,6 +28,10 @@
 | HTTP 会话终止 (`terminateSession`) | Y | Y | Y | 使用 MCP Streamable HTTP DELETE 流程 |
 | 内置凭证/令牌生命周期管理器 | N | N | N | 由调用方自行管理 headers/tokens |
 
+## ADK 2.0 兼容性
+
+本包与 ADK 2.0 保持一致，支持远程 MCP 服务端集成、Managed Agent 配置以及适用于混合 Agent 执行的 GCP Managed Agents Interactions API。
+
 ## 安装
 
 ```bash

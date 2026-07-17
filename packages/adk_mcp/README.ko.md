@@ -28,6 +28,10 @@
 | HTTP 세션 종료 (`terminateSession`) | Y | Y | Y | MCP Streamable HTTP DELETE 종료 흐름 |
 | 내장 토큰/자격증명 수명주기 매니저 | N | N | N | 호출자가 헤더/토큰 직접 관리 |
 
+## ADK 2.0 호환성
+
+이 패키지는 ADK 2.0과 정렬되어 있어, 원격 MCP 서버 연동, Managed Agent 구성 및 하이브리드 에이전트 실행을 위한 GCP Managed Agents Interactions API를 지원합니다.
+
 ## 설치
 
 ```bash
