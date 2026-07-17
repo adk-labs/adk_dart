@@ -14,6 +14,7 @@ It re-exports `adk_dart` so you can use a shorter import path:
 
 ## What's New
 
+- **ADK 2.0 Workflows & Managed Agent**: Fully exposes upstream ADK 2.0 v2 Workflows and GCP Managed Agent APIs.
 - **Facade Package for ADK Dart**: Keeps the full ADK Dart API while providing
   a shorter package/import name.
 - **CLI Exposure**: Ships the same `adk` executable entrypoint for local and
@@ -110,7 +111,7 @@ Or with `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk: ^2026.2.28
+  adk: ^2026.7.11
 ```
 
 For local repository development:
