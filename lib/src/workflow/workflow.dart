@@ -1179,23 +1179,7 @@ class Workflow extends BaseAgent {
     for (final MapEntry<String, Object?> entry
         in workflowContext.outputs.entries) {
       final List<Event>? nodeEvents = workflowContext._nodeEvents[entry.key];
-      final String nodePath = entry.key.contains('@') ? entry.key : '${entry.key}@1';
-      final String rootPath = _workflowRootPath(this, context);
-      final String fullNodePath = rootPath.isEmpty ? nodePath : '$rootPath/$nodePath';
-      final bool isRequestInputNode = context.session.events.any((Event event) {
-        if (event.nodeInfo.path != fullNodePath) {
-          return false;
-        }
-        return event.getFunctionCalls().any(
-            (FunctionCall call) => call.name == requestInputFunctionCallName);
-      });
-      final BaseNode? staticNode = nodes.cast<BaseNode?>().firstWhere(
-        (BaseNode? n) => n?.name == entry.key,
-        orElse: () => null,
-      );
-      final bool rerunOnResume = staticNode?.rerunOnResume ?? false;
-      if ((isRequestInputNode && !rerunOnResume) ||
-          workflowContext.requestInputNodeKeys.contains(entry.key)) {
+      if (workflowContext.requestInputNodeKeys.contains(entry.key)) {
         continue;
       }
       final bool isPrevCompleted = _isPreviouslyCompletedOutput(

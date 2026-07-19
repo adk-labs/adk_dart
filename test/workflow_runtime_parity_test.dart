@@ -1194,9 +1194,11 @@ void main() {
               event.actions.endOfAgent == null)
           .toList();
       expect(nodeOutputEvents.map((Event event) => event.author), <String>[
+        'route_node',
         'target_node',
       ]);
-      expect(nodeOutputEvents.single.content?.parts.single.text, 'reached:true');
+      final Event targetOutputEvent = nodeOutputEvents.firstWhere((e) => e.author == 'target_node');
+      expect(targetOutputEvent.content?.parts.single.text, 'reached:true');
       expect(
         resumedEvents.any((Event event) => event.actions.agentState != null),
         isTrue,
