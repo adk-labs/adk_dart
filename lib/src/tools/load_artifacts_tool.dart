@@ -16,10 +16,19 @@ const List<String> _geminiSupportedInlineMimePrefixes = <String>[
   'video/',
 ];
 const Set<String> _geminiSupportedInlineMimeTypes = <String>{'application/pdf'};
+const Set<String> _geminiUnsupportedInlineSubtypes = <String>{
+  'image/svg',
+  'image/svg+xml',
+  'image/xml',
+};
 const Set<String> _textLikeMimeTypes = <String>{
   'application/csv',
   'application/json',
   'application/xml',
+  'application/svg+xml',
+  'image/svg',
+  'image/svg+xml',
+  'image/xml',
 };
 
 /// Tool that loads saved artifacts into the current turn.
@@ -273,6 +282,9 @@ String? _normalizeMimeType(String? mimeType) {
 bool _isInlineMimeTypeSupported(String? mimeType) {
   final String? normalized = _normalizeMimeType(mimeType);
   if (normalized == null) {
+    return false;
+  }
+  if (_geminiUnsupportedInlineSubtypes.contains(normalized)) {
     return false;
   }
   if (_geminiSupportedInlineMimeTypes.contains(normalized)) {
