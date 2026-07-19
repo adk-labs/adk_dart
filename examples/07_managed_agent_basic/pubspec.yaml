@@ -1,0 +1,14 @@
+name: managed_agent_basic_example
+description: A basic managed agent example demonstrating interactions.create and server-side tools in ADK.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

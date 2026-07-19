@@ -1,0 +1,14 @@
+name: workflow_fan_out_fan_in_example
+description: An example workflow demonstrating parallel fan-out and fan-in using JoinNode in ADK.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

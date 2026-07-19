@@ -18,6 +18,15 @@ ADK (Agent Development Kit) Dart 패키지를 사용하여 AI 에이전트를 �
 4. **[04_local_environment](./04_local_environment)**
    - **설명**: 에이전트가 로컬 머신의 파일 시스템 및 터미널 명령어 실행 권한을 가지는 **실행 환경 연동(LocalEnvironment)** 구성 요소를 적용하는 예제입니다.
 
+5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)**
+   - **설명**: ADK 2.0 워크플로우의 병렬 노드 실행(Fan-Out) 및 `JoinNode`를 사용한 결과 집계(Fan-In)를 수행하는 예제입니다.
+
+6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)**
+   - **설명**: `WorkflowContext.runNode`를 사용해 실행 조건에 따라 런타임에 에이전트를 루프로 호출하거나 제어하는 동적 노드 오케스트레이션 예제입니다.
+
+7. **[07_managed_agent_basic](./07_managed_agent_basic)**
+   - **설명**: ADK 2.0에서 도입된 원격 에이전트인 `ManagedAgent`를 구성하여 Google GenAI Interactions API 및 서버사이드 도구를 활용하는 예제입니다.
+
 ## 빠른 시작
 각 하위 예제 폴더로 이동하여 의존성을 받고 바로 실행할 수 있습니다.
 
@@ -28,7 +37,7 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> 실제 LLM 기능 및 구글 검색이 연동되는 예제(`02`, `03`, `04`)의 경우 실행 전 시스템 환경 변수로 `GEMINI_API_KEY`를 설정해야 합니다.
+> 실제 LLM 기능 및 구글 검색이 연동되는 예제(`02` ~ `07`)의 경우 실행 전 시스템 환경 변수로 `GEMINI_API_KEY`를 설정해야 합니다.
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
 > ```
