@@ -4,6 +4,7 @@
 - Fixed `AgentNode.run` event loop to not misclassify `endOfAgent` and `agentState` checkpoint events as `finalEvent`.
 - Enhanced `LoadArtifactsTool` with Gemini unsupported inline MIME type blocklist (SVG/XML image variants) to deliver them as text.
 - Rebuilt and updated the bundled Web UI assets (`adk-web`) to the latest version to support nested navigation breadcrumbs, bidi streaming restarts, and usage token counts.
+- Renamed the `example` folder to `examples` and reorganized all code examples into self-contained, user-friendly Dart project templates with individual `README.md` and dependency setup files.
 
 ## 2026.7.11
 

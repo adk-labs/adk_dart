@@ -27,6 +27,18 @@ This worklog documents the investigation and resolution of the failing nested wo
   - Rebuilt the latest `adk-web` Angular application using `npm run build`.
   - Copied the compiled JS chunks, index.html, styles, and SVG resources into `lib/src/cli/browser` in `adk-dart` to update the bundled Web UI with the latest features (e.g. dot-nested navigation breadcrumbs, bidi streaming restarts, and usage metadata tracking).
 
+### 5. Reorganize and User-friendly Examples Project Templates
+- **Directory**: `examples/`
+- **Resolution**:
+  - Renamed the `example` folder to `examples` as requested.
+  - Split each distinct example into its own self-contained Dart project containing `pubspec.yaml` (with local path dependency on `adk_dart: path: ../../`), a dedicated `README.md` in Korean detailing usage/API keys/how to run, and the code placed inside `bin/main.dart`:
+    - `01_echo_agent`: Echo model agent base runner setup.
+    - `02_weather_agent`: FunctionTool weather API calling example.
+    - `03_multi_agent_search`: Multi-agent transfer/coordinator and Google Search.
+    - `04_local_environment`: EnvironmentToolset & LocalEnvironment execution environment.
+  - Created a top-level `examples/README.md` indexing all examples.
+
 ## Verification
 - Ran all 1,483 unit and integration tests (`dart test`), including `test/dev_web_server_test.dart`.
-- All tests passed successfully with 0 failures, verifying both runtime parity and web server serving correctness.
+- Ran `dart pub get` and `dart run bin/main.dart` in the new template projects to confirm clean resolution and execution.
+- All tests and examples passed successfully, verifying both runtime parity, web server serving correctness, and project template compilation.
