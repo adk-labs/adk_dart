@@ -1,6 +1,6 @@
 # ADK Dart Examples
 
-> 🇰🇷 [한국어](#한국어) | 🇺🇸 [English](#english)
+> 🇰🇷 [한국어](#한국어) | 🇺🇸 [English](#english) | 🇯🇵 [日本語](#日本語) | 🇨🇳 [中文](#中文)
 
 ---
 
@@ -12,35 +12,17 @@ ADK (Agent Development Kit) Dart 패키지를 사용하여 AI 에이전트를 �
 
 ### 예제 목록
 
-1. **[01_echo_agent](./01_echo_agent)**
-   - **설명**: 에이전트 개발의 가장 핵심적인 기초 구성법을 다룹니다. 커스텀 LLM(`BaseLlm`)을 상속받아 에이전트와 Runner를 생성하고 로컬 세션을 통해 간단한 에코 대화를 수행합니다.
-
-2. **[02_weather_agent](./02_weather_agent)**
-   - **설명**: 에이전트에게 외부 날씨 검색을 위한 Dart 함수(`FunctionTool`)를 바인딩하고, 모델이 필요에 따라 자동으로 해당 함수를 호출하는 **도구 사용(Tool Calling)**의 흐름을 보여줍니다.
-
-3. **[03_multi_agent_search](./03_multi_agent_search)**
-   - **설명**: 여러 에이전트 간에 대화 맥락과 실행 권한을 전환하는 **Hand-off 오케스트레이션**과 실제 구글 검색 도구(`googleSearch`)를 연동하여 최신 웹 정보를 조회하는 법을 학습합니다.
-
-4. **[04_local_environment](./04_local_environment)**
-   - **설명**: 에이전트가 로컬 머신의 파일 시스템 및 터미널 명령어 실행 권한을 가지는 **실행 환경 연동(LocalEnvironment)** 구성 요소를 적용하는 예제입니다.
-
-5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)**
-   - **설명**: ADK 2.0 워크플로우의 병렬 노드 실행(Fan-Out) 및 `JoinNode`를 사용한 결과 집계(Fan-In)를 수행하는 예제입니다.
-
-6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)**
-   - **설명**: `WorkflowContext.runNode`를 사용해 실행 조건에 따라 런타임에 에이전트를 루프로 호출하거나 제어하는 동적 노드 오케스트레이션 예제입니다.
-
-7. **[07_managed_agent_basic](./07_managed_agent_basic)**
-   - **설명**: ADK 2.0에서 도입된 원격 에이전트인 `ManagedAgent`를 구성하여 Google GenAI Interactions API 및 서버사이드 도구를 활용하는 예제입니다.
-
-8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)**
-   - **설명**: `LiteLlm` 어댑터를 사용해 로컬에 구동되는 Ollama 또는 LiteLLM 프록시 API 서버에 직접 연결하여 오프라인으로 로컬 Gemma/Llama 모델을 사용하는 예제입니다.
-
-9. **[09_local_llm_litert](./09_local_llm_litert)**
-   - **설명**: `adk_litertlm` 패키지를 사용해 모바일/PC 등의 기기 내부에서 LiteRT-LM 엔진을 사용하여 오프라인으로 Gemma 온디바이스 모델 인퍼런스를 수행하는 에이전트 예제입니다.
+1. **[01_echo_agent](./01_echo_agent)** — 기초 에이전트 및 Runner 구성
+2. **[02_weather_agent](./02_weather_agent)** — FunctionTool을 이용한 도구 사용(Tool Calling)
+3. **[03_multi_agent_search](./03_multi_agent_search)** — 멀티 에이전트 Hand-off 오케스트레이션 + Google 검색
+4. **[04_local_environment](./04_local_environment)** — LocalEnvironment 실행 환경 연동
+5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)** — ADK 2.0 워크플로우 Fan-Out / Fan-In
+6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)** — 런타임 동적 노드 오케스트레이션
+7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (원격 에이전트) 구성
+8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — 로컬 Ollama / LiteLLM 서버 연동
+9. **[09_local_llm_litert](./09_local_llm_litert)** — 온디바이스 Gemma (LiteRT-LM) 추론
 
 ### 빠른 시작
-각 하위 예제 폴더로 이동하여 의존성을 받고 바로 실행할 수 있습니다.
 
 ```bash
 cd 01_echo_agent
@@ -49,7 +31,8 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> 실제 LLM 기능 및 구글 검색이 연동되는 예제(`02` ~ `07`)의 경우 실행 전 시스템 환경 변수로 `GEMINI_API_KEY`를 설정해야 합니다. (Ollama 및 LiteRT 온디바이스 예제 `08`, `09`는 로컬/기기 내 모델 구동을 요구하며 별도 API 키가 불필요하거나 별도의 로컬 설정법을 따릅니다.)
+> 예제 `02` ~ `07`은 실행 전 `GEMINI_API_KEY` 환경 변수를 설정해야 합니다.
+> 예제 `08`, `09`는 로컬/온디바이스 모델을 사용하므로 API 키가 필요하지 않습니다.
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
 > ```
@@ -60,39 +43,21 @@ dart run bin/main.dart
 
 A collection of step-by-step example projects for building and running AI agents with the ADK (Agent Development Kit) Dart package.
 
-Each example is structured as a self-contained **Dart CLI project** that you can download and run immediately as a standalone project.
+Each example is a self-contained **Dart CLI project** you can download and run immediately.
 
 ### Example List
 
-1. **[01_echo_agent](./01_echo_agent)**
-   - **Description**: Covers the most fundamental setup for agent development. Extends a custom LLM (`BaseLlm`), creates an agent and runner, and runs a simple echo conversation through a local session.
-
-2. **[02_weather_agent](./02_weather_agent)**
-   - **Description**: Binds a Dart function (`FunctionTool`) for external weather lookups to an agent, demonstrating the **Tool Calling** flow where the model automatically invokes functions as needed.
-
-3. **[03_multi_agent_search](./03_multi_agent_search)**
-   - **Description**: Demonstrates **Hand-off orchestration** — transferring conversation context and execution authority between multiple agents — and integrating the live Google Search tool (`googleSearch`) to query up-to-date web information.
-
-4. **[04_local_environment](./04_local_environment)**
-   - **Description**: Shows how to apply the **LocalEnvironment** component, granting an agent access to the local machine's file system and terminal command execution.
-
-5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)**
-   - **Description**: Demonstrates ADK 2.0 workflow parallel node execution (Fan-Out) and result aggregation using `JoinNode` (Fan-In).
-
-6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)**
-   - **Description**: Shows dynamic node orchestration using `WorkflowContext.runNode` to call or control agents in a loop at runtime based on execution conditions.
-
-7. **[07_managed_agent_basic](./07_managed_agent_basic)**
-   - **Description**: Configures a `ManagedAgent` — a remote agent introduced in ADK 2.0 — leveraging the Google GenAI Interactions API and server-side tools.
-
-8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)**
-   - **Description**: Uses the `LiteLlm` adapter to connect directly to a locally running Ollama or LiteLLM proxy API server, running local Gemma/Llama models completely offline.
-
-9. **[09_local_llm_litert](./09_local_llm_litert)**
-   - **Description**: Uses the `adk_litertlm` package to run on-device Gemma model inference offline via the LiteRT-LM engine directly on a mobile device or PC.
+1. **[01_echo_agent](./01_echo_agent)** — Basic agent & runner setup
+2. **[02_weather_agent](./02_weather_agent)** — Tool Calling with FunctionTool
+3. **[03_multi_agent_search](./03_multi_agent_search)** — Multi-agent Hand-off orchestration + Google Search
+4. **[04_local_environment](./04_local_environment)** — LocalEnvironment integration
+5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)** — ADK 2.0 Workflow Fan-Out / Fan-In
+6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)** — Runtime dynamic node orchestration
+7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (remote agent) setup
+8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — Local Ollama / LiteLLM server integration
+9. **[09_local_llm_litert](./09_local_llm_litert)** — On-device Gemma inference via LiteRT-LM
 
 ### Quick Start
-Navigate to any example subdirectory, install dependencies, and run immediately.
 
 ```bash
 cd 01_echo_agent
@@ -101,7 +66,78 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> Examples `02` through `07` (which use real LLM features and Google Search) require a `GEMINI_API_KEY` environment variable to be set before running. (Examples `08` and `09` use local/on-device models and do not require an API key — follow each example's own local setup instructions instead.)
+> Examples `02` through `07` require a `GEMINI_API_KEY` environment variable before running.
+> Examples `08` and `09` use local/on-device models and do not require an API key.
+> ```bash
+> export GEMINI_API_KEY="your-gemini-api-key"
+> ```
+
+---
+
+## 日本語
+
+ADK (Agent Development Kit) Dart パッケージを使用して AI エージェントを開発・活用するための、段階的なサンプルプロジェクト集です。
+
+各サンプルは、ダウンロードしてすぐにスタンドアロンプロジェクトとしてコンパイル・実行できる完成形の **Dart CLI プロジェクト**として構成されています。
+
+### サンプル一覧
+
+1. **[01_echo_agent](./01_echo_agent)** — 基本的なエージェントと Runner の構成
+2. **[02_weather_agent](./02_weather_agent)** — FunctionTool を使ったツール呼び出し (Tool Calling)
+3. **[03_multi_agent_search](./03_multi_agent_search)** — マルチエージェント Hand-off オーケストレーション + Google 検索
+4. **[04_local_environment](./04_local_environment)** — LocalEnvironment 実行環境の連携
+5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)** — ADK 2.0 ワークフロー Fan-Out / Fan-In
+6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)** — ランタイム動的ノードオーケストレーション
+7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (リモートエージェント) の設定
+8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — ローカル Ollama / LiteLLM サーバー連携
+9. **[09_local_llm_litert](./09_local_llm_litert)** — LiteRT-LM によるオンデバイス Gemma 推論
+
+### クイックスタート
+
+```bash
+cd 01_echo_agent
+dart pub get
+dart run bin/main.dart
+```
+
+> [!IMPORTANT]
+> サンプル `02` ～ `07` を実行する前に、環境変数 `GEMINI_API_KEY` を設定してください。
+> サンプル `08`、`09` はローカル/オンデバイスモデルを使用するため、API キーは不要です。
+> ```bash
+> export GEMINI_API_KEY="your-gemini-api-key"
+> ```
+
+---
+
+## 中文
+
+这是一个使用 ADK (Agent Development Kit) Dart 包开发和使用 AI 智能体的分步示例项目合集。
+
+每个示例都是一个完整的 **Dart CLI 项目**，可以直接下载并作为独立项目编译运行。
+
+### 示例列表
+
+1. **[01_echo_agent](./01_echo_agent)** — 基础智能体与 Runner 配置
+2. **[02_weather_agent](./02_weather_agent)** — 使用 FunctionTool 进行工具调用 (Tool Calling)
+3. **[03_multi_agent_search](./03_multi_agent_search)** — 多智能体 Hand-off 编排 + Google 搜索
+4. **[04_local_environment](./04_local_environment)** — LocalEnvironment 执行环境集成
+5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)** — ADK 2.0 工作流 Fan-Out / Fan-In
+6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)** — 运行时动态节点编排
+7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent（远程智能体）配置
+8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — 本地 Ollama / LiteLLM 服务器集成
+9. **[09_local_llm_litert](./09_local_llm_litert)** — 通过 LiteRT-LM 进行设备端 Gemma 推理
+
+### 快速开始
+
+```bash
+cd 01_echo_agent
+dart pub get
+dart run bin/main.dart
+```
+
+> [!IMPORTANT]
+> 示例 `02` 至 `07` 在运行前需要设置环境变量 `GEMINI_API_KEY`。
+> 示例 `08` 和 `09` 使用本地/设备端模型，无需 API 密钥。
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
 > ```
