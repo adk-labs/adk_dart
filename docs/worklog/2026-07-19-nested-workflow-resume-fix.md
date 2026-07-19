@@ -38,7 +38,21 @@ This worklog documents the investigation and resolution of the failing nested wo
     - `04_local_environment`: EnvironmentToolset & LocalEnvironment execution environment.
   - Created a top-level `examples/README.md` indexing all examples.
 
+### 6. Default HTTP Completions Invoker for LiteLlm
+- **File**: `lib/src/models/lite_llm.dart`
+- **Resolution**:
+  - Implemented a default HTTP completions invoker (`_defaultHttpCompletionsInvoker`) inside `LiteLlm` class so that developers do not have to write custom completions hooks to connect to OpenAI-compatible endpoints.
+  - Added optional `baseUrl` and `apiKey` properties to the `LiteLlm` constructor.
+  - Added support for both streaming (parsing Server-Sent Events/SSE stream chunks) and non-streaming HTTP requests.
+  - Defaults to local environment variables `LITELLM_API_BASE`, `OLLAMA_API_BASE` or `OPENAI_API_BASE`.
+
+### 7. Local LLM and On-Device Example Project Templates
+- **Directory**: `examples/`
+- **Resolution**:
+  - `08_local_llm_ollama_litellm`: Added a user-friendly example demonstrating how to configure `LiteLlm` to point to a local Ollama or LiteLLM proxy server (`http://localhost:11434/v1`) using the new HTTP invoker.
+  - `09_local_llm_litert`: Added an on-device Gemma example utilizing the `adk_litertlm` sub-package and on-device Gemma `.bin` model via the `litertlm` native inference engine config.
+
 ## Verification
-- Ran all 1,483 unit and integration tests (`dart test`), including `test/dev_web_server_test.dart`.
-- Ran `dart pub get` and `dart run bin/main.dart` in the new template projects to confirm clean resolution and execution.
+- Ran all 1,483 unit and integration tests (`dart test`), including `test/dev_web_server_test.dart` and `test/models_parity_batch2_test.dart`.
+- Ran `dart pub get` and verified compilation in all examples (01 to 09).
 - All tests and examples passed successfully, verifying both runtime parity, web server serving correctness, and project template compilation.

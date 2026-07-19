@@ -5,6 +5,8 @@
 - Enhanced `LoadArtifactsTool` with Gemini unsupported inline MIME type blocklist (SVG/XML image variants) to deliver them as text.
 - Rebuilt and updated the bundled Web UI assets (`adk-web`) to the latest version to support nested navigation breadcrumbs, bidi streaming restarts, and usage token counts.
 - Renamed the `example` folder to `examples` and reorganized all code examples into self-contained, user-friendly Dart project templates with individual `README.md` and dependency setup files.
+- Implemented a default HTTP completions invoker inside `LiteLlm` supporting streaming (SSE) and non-streaming requests to connect out-of-the-box with Ollama and LiteLLM servers.
+- Added new local model examples: `08_local_llm_ollama_litellm` (Ollama/LiteLLM integration via `LiteLlm` client) and `09_local_llm_litert` (on-device Gemma inference via `adk_litertlm` sub-package).
 
 ## 2026.7.11
 
