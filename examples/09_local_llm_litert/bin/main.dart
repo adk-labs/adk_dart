@@ -27,7 +27,6 @@ Future<void> main() async {
   // 2. Initialize the LiteRT-LM Engine and ADK LiteRtLmModel
   final litert.EngineConfig config = litert.EngineConfig(
     modelPath: modelPath,
-    maxDecodeSteps: 512,
   );
 
   final LiteRtLmModel model = LiteRtLmModel.fromConfig(
@@ -73,6 +72,6 @@ Future<void> main() async {
     print('\n[Error] Failed to execute on-device Gemma: $e');
   } finally {
     // Release native resources held by LiteRT engine
-    model.engine.close();
+    await model.close();
   }
 }
