@@ -27,6 +27,12 @@ ADK (Agent Development Kit) Dart 패키지를 사용하여 AI 에이전트를 �
 7. **[07_managed_agent_basic](./07_managed_agent_basic)**
    - **설명**: ADK 2.0에서 도입된 원격 에이전트인 `ManagedAgent`를 구성하여 Google GenAI Interactions API 및 서버사이드 도구를 활용하는 예제입니다.
 
+8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)**
+   - **설명**: `LiteLlm` 어댑터를 사용해 로컬에 구동되는 Ollama 또는 LiteLLM 프록시 API 서버에 직접 연결하여 오프라인으로 로컬 Gemma/Llama 모델을 사용하는 예제입니다.
+
+9. **[09_local_llm_litert](./09_local_llm_litert)**
+   - **설명**: `adk_litertlm` 패키지를 사용해 모바일/PC 등의 기기 내부에서 LiteRT-LM 엔진을 사용하여 오프라인으로 Gemma 온디바이스 모델 인퍼런스를 수행하는 에이전트 예제입니다.
+
 ## 빠른 시작
 각 하위 예제 폴더로 이동하여 의존성을 받고 바로 실행할 수 있습니다.
 
@@ -37,7 +43,7 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> 실제 LLM 기능 및 구글 검색이 연동되는 예제(`02` ~ `07`)의 경우 실행 전 시스템 환경 변수로 `GEMINI_API_KEY`를 설정해야 합니다.
+> 실제 LLM 기능 및 구글 검색이 연동되는 예제(`02` ~ `07`)의 경우 실행 전 시스템 환경 변수로 `GEMINI_API_KEY`를 설정해야 합니다. (Ollama 및 LiteRT 온디바이스 예제 `08`, `09`는 로컬/기기 내 모델 구동을 요구하며 별도 API 키가 불필요하거나 별도의 로컬 설정법을 따릅니다.)
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
 > ```

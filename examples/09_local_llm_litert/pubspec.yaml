@@ -1,0 +1,17 @@
+name: local_llm_litert_example
+description: An example demonstrating how to configure and run on-device Gemma models using LiteRT-LM in ADK.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+  adk_litertlm:
+    path: ../../packages/adk_litertlm
+  litertlm: ^0.0.8
+
+dev_dependencies:
+  lints: ^6.0.0

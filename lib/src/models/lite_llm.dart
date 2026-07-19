@@ -2,6 +2,9 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import '../types/content.dart';
 import 'base_llm.dart';
@@ -31,6 +34,8 @@ class LiteLlm extends BaseLlm {
     this.customProvider = '',
     this.completionsInvoker,
     LiteLlmGenerateHook? generateHook,
+    this.apiKey,
+    this.baseUrl,
   }) : _generateHook = generateHook;
 
   /// Optional explicit provider name override.
@@ -39,6 +44,12 @@ class LiteLlm extends BaseLlm {
 
   /// Optional invoker for completions responses.
   final LiteLlmCompletionsInvoker? completionsInvoker;
+
+  /// Optional API key for remote completions request when using default invoker.
+  final String? apiKey;
+
+  /// Optional base URL of the completions API when using default invoker.
+  final String? baseUrl;
 
   /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
@@ -250,44 +261,106 @@ class LiteLlm extends BaseLlm {
     maybeAppendUserContent(prepared);
     _appendFallbackUserContentIfMissing(prepared);
 
-    if (completionsInvoker != null) {
-      final List<Map<String, Object?>> responses = await completionsInvoker!(
-        payload: buildPayload(prepared, stream: stream),
-        stream: stream,
-      );
-      for (final Map<String, Object?> response in responses) {
-        yield parseCompletionResponse(response);
-      }
-      return;
-    }
-
     if (_generateHook != null) {
       yield* _generateHook(prepared, stream);
       return;
     }
 
-    final String text = _extractUserText(prepared);
-    yield LlmResponse(
-      modelVersion: prepared.model,
-      content: Content.modelText('LiteLLM response: $text'),
-      turnComplete: true,
+    final LiteLlmCompletionsInvoker invoker = completionsInvoker ?? _defaultHttpCompletionsInvoker;
+
+    final List<Map<String, Object?>> responses = await invoker(
+      payload: buildPayload(prepared, stream: stream),
+      stream: stream,
     );
+    for (final Map<String, Object?> response in responses) {
+      yield parseCompletionResponse(response);
+    }
   }
 
-  String _extractUserText(LlmRequest request) {
-    for (int i = request.contents.length - 1; i >= 0; i -= 1) {
-      final Content content = request.contents[i];
-      if (content.role != 'user') {
-        continue;
+  Future<List<Map<String, Object?>>> _defaultHttpCompletionsInvoker({
+    required Map<String, Object?> payload,
+    required bool stream,
+  }) async {
+    final String resolvedBaseUrl = baseUrl ??
+        Platform.environment['LITELLM_API_BASE'] ??
+        Platform.environment['OLLAMA_API_BASE'] ??
+        Platform.environment['OPENAI_API_BASE'] ??
+        'http://localhost:4000/v1';
+
+    final String resolvedApiKey = apiKey ??
+        Platform.environment['LITELLM_API_KEY'] ??
+        Platform.environment['OLLAMA_API_KEY'] ??
+        Platform.environment['OPENAI_API_KEY'] ??
+        'no-key';
+
+    final Uri uri = Uri.parse('$resolvedBaseUrl/chat/completions');
+
+    final Map<String, String> headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (resolvedApiKey != 'no-key') {
+      headers['Authorization'] = 'Bearer $resolvedApiKey';
+    }
+
+    if (stream) {
+      final http.Request httpRequest = http.Request('POST', uri)
+        ..headers.addAll(headers)
+        ..body = jsonEncode(payload);
+
+      final http.Client client = http.Client();
+      final http.StreamedResponse streamedResponse = await client.send(httpRequest);
+
+      if (streamedResponse.statusCode != 200) {
+        final String errorBody = await streamedResponse.stream.bytesToString();
+        client.close();
+        throw HttpException(
+          'LiteLlm HTTP error ${streamedResponse.statusCode}: $errorBody',
+          uri: uri,
+        );
       }
-      for (int j = content.parts.length - 1; j >= 0; j -= 1) {
-        final String? text = content.parts[j].text;
-        if (text != null && text.isNotEmpty) {
-          return text;
+
+      final List<Map<String, Object?>> chunks = <Map<String, Object?>>[];
+      final Stream<String> lineStream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final String line in lineStream) {
+        final String trimmed = line.trim();
+        if (trimmed.isEmpty) {
+          continue;
+        }
+        if (trimmed.startsWith('data: ')) {
+          final String dataContent = trimmed.substring(6).trim();
+          if (dataContent == '[DONE]') {
+            continue;
+          }
+          try {
+            final Map<String, Object?> parsed = jsonDecode(dataContent) as Map<String, Object?>;
+            chunks.add(parsed);
+          } catch (_) {
+            // Ignore malformed chunks
+          }
         }
       }
+      client.close();
+      return chunks;
+    } else {
+      final http.Response response = await http.post(
+        uri,
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode != 200) {
+        throw HttpException(
+          'LiteLlm HTTP error ${response.statusCode}: ${response.body}',
+          uri: uri,
+        );
+      }
+
+      final Map<String, Object?> data = jsonDecode(response.body) as Map<String, Object?>;
+      return <Map<String, Object?>>[data];
     }
-    return '';
   }
 }
 

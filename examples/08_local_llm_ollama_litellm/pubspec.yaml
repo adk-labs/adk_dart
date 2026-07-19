@@ -1,0 +1,14 @@
+name: local_llm_ollama_litellm_example
+description: An example demonstrating how to configure and run local LLMs (Ollama/LiteLLM) using LiteLlm in ADK.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0
