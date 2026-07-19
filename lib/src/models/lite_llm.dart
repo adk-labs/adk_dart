@@ -122,6 +122,61 @@ class LiteLlm extends BaseLlm {
         'type': 'json_object',
       };
     }
+
+    final List<ToolDeclaration>? requestTools = request.config.tools;
+    if (requestTools != null && requestTools.isNotEmpty) {
+      final List<Map<String, Object?>> tools = <Map<String, Object?>>[];
+      for (final ToolDeclaration tool in requestTools) {
+        if (tool.functionDeclarations.isNotEmpty) {
+          for (final FunctionDeclaration declaration in tool.functionDeclarations) {
+            tools.add(<String, Object?>{
+              'type': 'function',
+              'function': <String, Object?>{
+                'name': declaration.name,
+                if (declaration.description.isNotEmpty)
+                  'description': declaration.description,
+                if (declaration.parameters.isNotEmpty)
+                  'parameters': _deepCopyJsonValue(declaration.parameters),
+              },
+            });
+          }
+        } else {
+          final Map<String, Object?> nativeDump = <String, Object?>{
+            if (tool.googleSearch != null)
+              'google_search': _deepCopyJsonValue(tool.googleSearch),
+            if (tool.googleSearchRetrieval != null)
+              'google_search_retrieval': _deepCopyJsonValue(tool.googleSearchRetrieval),
+            if (tool.codeExecution != null)
+              'code_execution': _deepCopyJsonValue(tool.codeExecution),
+            if (tool.googleMaps != null)
+              'google_maps': _deepCopyJsonValue(tool.googleMaps),
+            if (tool.enterpriseWebSearch != null)
+              'enterprise_web_search': _deepCopyJsonValue(tool.enterpriseWebSearch),
+            if (tool.computerUse != null)
+              'computer_use': _deepCopyJsonValue(tool.computerUse),
+            if (tool.googleSearch != null)
+              'googleSearch': _deepCopyJsonValue(tool.googleSearch),
+            if (tool.googleSearchRetrieval != null)
+              'googleSearchRetrieval': _deepCopyJsonValue(tool.googleSearchRetrieval),
+            if (tool.codeExecution != null)
+              'codeExecution': _deepCopyJsonValue(tool.codeExecution),
+            if (tool.googleMaps != null)
+              'googleMaps': _deepCopyJsonValue(tool.googleMaps),
+            if (tool.enterpriseWebSearch != null)
+              'enterpriseWebSearch': _deepCopyJsonValue(tool.enterpriseWebSearch),
+            if (tool.computerUse != null)
+              'computerUse': _deepCopyJsonValue(tool.computerUse),
+          };
+          if (nativeDump.isNotEmpty) {
+            tools.add(nativeDump);
+          }
+        }
+      }
+      if (tools.isNotEmpty) {
+        payload['tools'] = tools;
+      }
+    }
+
     return payload;
   }
 

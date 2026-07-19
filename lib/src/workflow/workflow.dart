@@ -12,6 +12,7 @@ import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../errors/input_validation_error.dart';
 import '../events/event.dart';
+import '../events/event_actions.dart';
 import '../events/node_path_builder.dart';
 import '../events/request_input.dart';
 import '../flows/llm_flows/functions.dart';
@@ -244,11 +245,14 @@ class WorkflowContext {
     Map<String, Object?>? resumeInputs,
     Map<String, List<Event>>? nodeEvents,
     Map<String, Event>? nodeOutputEvents,
+    Set<String>? requestInputNodeKeys,
+    this.onNodeStateChange,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
        resumeInputs = resumeInputs ?? <String, Object?>{},
        _nodeEvents = nodeEvents ?? <String, List<Event>>{},
        _nodeOutputEvents = nodeOutputEvents ?? <String, Event>{},
+       requestInputNodeKeys = requestInputNodeKeys ?? <String>{},
        _cancellation = _WorkflowCancelToken();
 
   WorkflowContext._({
@@ -260,11 +264,14 @@ class WorkflowContext {
     Map<String, Object?>? resumeInputs,
     Map<String, List<Event>>? nodeEvents,
     Map<String, Event>? nodeOutputEvents,
+    Set<String>? requestInputNodeKeys,
+    this.onNodeStateChange,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
        resumeInputs = resumeInputs ?? <String, Object?>{},
        _nodeEvents = nodeEvents ?? <String, List<Event>>{},
        _nodeOutputEvents = nodeOutputEvents ?? <String, Event>{},
+       requestInputNodeKeys = requestInputNodeKeys ?? <String>{},
        _cancellation = cancellation;
 
   bool _hasDirectOutput = false;
@@ -282,6 +289,15 @@ class WorkflowContext {
 
   /// Initial workflow input.
   final Object? input;
+
+  /// Callback invoked whenever a node's state or status changes.
+  void Function()? onNodeStateChange;
+
+  /// Set of request input node keys in this workflow.
+  final Set<String> requestInputNodeKeys;
+
+  /// Intermediate checkpoint events.
+  final List<Event> _checkpointEvents = <Event>[];
 
   /// Node outputs keyed by node name.
   final Map<String, Object?> outputs;
@@ -367,6 +383,7 @@ class WorkflowContext {
     bool? waitForOutput,
     RetryConfig? retryConfig,
     Duration? timeout,
+    bool raiseOnWait = false,
   }) async {
     throwIfCancelled();
     if (_currentNodeRerunOnResume == false) {
@@ -399,6 +416,9 @@ class WorkflowContext {
     }
     final String effectiveRunId = runId ?? _nextDynamicRunId(node.name);
     final String stateKey = '${node.name}@$effectiveRunId';
+    if (node is RequestInput) {
+      requestInputNodeKeys.add(stateKey);
+    }
     final String? parentKey = _currentNodeKey;
     final NodeState? parentState = parentKey == null
         ? null
@@ -420,6 +440,9 @@ class WorkflowContext {
       _seedNodeResumeInputs(state, resumeInputs);
       if (_hasUnresolvedWaitingInterrupts(state)) {
         interruptIds.addAll(state.interrupts);
+        if (raiseOnWait) {
+          throw NodeInterruptedError();
+        }
         return outputs[stateKey];
       }
       if (state.status == NodeStatus.waiting &&
@@ -468,6 +491,12 @@ class WorkflowContext {
       }
     }
     _recordNodeResult(this, result);
+    if (result.interruptIds.isNotEmpty) {
+      interruptIds.addAll(result.interruptIds);
+    }
+    if (raiseOnWait && (result.waiting || result.interruptIds.isNotEmpty)) {
+      throw NodeInterruptedError();
+    }
     return result.output;
   }
 
@@ -501,6 +530,8 @@ class WorkflowContext {
       resumeInputs: resumeInputs ?? this.resumeInputs,
       nodeEvents: _nodeEvents,
       nodeOutputEvents: _nodeOutputEvents,
+      requestInputNodeKeys: requestInputNodeKeys,
+      onNodeStateChange: onNodeStateChange,
     );
   }
 
@@ -933,10 +964,6 @@ class AgentNode extends BaseNode {
     final Content? userContent = validatedInput == null
         ? null
         : _contentFromNodeInput(validatedInput);
-    final InvocationContext agentContext = parentContext.copyWith(
-      agent: agent,
-      userContent: userContent,
-    );
     final String? nodeKey = context._currentNodeKey;
     final bool collectNestedWorkflowEvents =
         agent is Workflow &&
@@ -945,12 +972,19 @@ class AgentNode extends BaseNode {
     final String? ownerPath = collectNestedWorkflowEvents
         ? _nodePathForOutputKey(parentContext, nodeKey)
         : null;
+    final InvocationContext agentContext = parentContext.copyWith(
+      agent: agent,
+      userContent: userContent,
+      branch: ownerPath,
+    );
     final List<Event> nestedEvents = <Event>[];
 
     Event? finalEvent;
     await for (final Event event in agent.runAsync(agentContext)) {
       _mergeStateDelta(agentContext.session, event.actions.stateDelta);
-      if (event.isFinalResponse()) {
+      if (event.isFinalResponse() &&
+          event.actions.endOfAgent == null &&
+          event.actions.agentState == null) {
         finalEvent = event;
       }
       if (collectNestedWorkflowEvents) {
@@ -1057,6 +1091,7 @@ class Workflow extends BaseAgent {
   WorkflowResult rehydrateResultFromEvents(
     Iterable<Event> events, {
     String? invocationId,
+    String? workflowPath,
   }) {
     final Map<String, BaseNode> byName = <String, BaseNode>{
       for (final BaseNode node in nodes) node.name: node,
@@ -1066,6 +1101,45 @@ class Workflow extends BaseAgent {
       workflowName: name,
       staticNodes: byName,
       invocationId: invocationId,
+      workflowPath: workflowPath,
+    );
+  }
+
+  void _emitNodeCheckpoint(WorkflowContext context) {
+    final InvocationContext? ic = context.invocationContext;
+    if (ic == null || !ic.isResumable) {
+      return;
+    }
+    final Map<String, Object?> nodes = <String, Object?>{
+      for (final MapEntry<String, NodeState> entry in context.nodeStates.entries)
+        entry.key: <String, Object?>{
+          'status': entry.value.status.name,
+          'interrupts': entry.value.interrupts,
+          'resume_inputs': entry.value.resumeInputs,
+        },
+    };
+    context._checkpointEvents.add(
+      Event(
+        invocationId: ic.invocationId,
+        author: name,
+        branch: ic.branch,
+        actions: EventActions(agentState: <String, Object?>{'nodes': nodes}),
+      ),
+    );
+  }
+
+  void _emitEndOfAgent(WorkflowContext context) {
+    final InvocationContext? ic = context.invocationContext;
+    if (ic == null || !ic.isResumable) {
+      return;
+    }
+    context._checkpointEvents.add(
+      Event(
+        invocationId: ic.invocationId,
+        author: name,
+        branch: ic.branch,
+        actions: EventActions(endOfAgent: true),
+      ),
     );
   }
 
@@ -1085,17 +1159,58 @@ class Workflow extends BaseAgent {
           ? null
           : _copyNodeStates(previousResult.nodeStates),
     );
+    workflowContext.onNodeStateChange = () => _emitNodeCheckpoint(workflowContext);
+    
+    // Emit initial checkpoint of recovered node states when workflow starts
+    _emitNodeCheckpoint(workflowContext);
+
     await _execute(workflowContext);
+
+    final bool hasPendingInterrupts = workflowContext.nodeStates.values
+        .any((NodeState state) => _hasUnresolvedWaitingInterrupts(state));
+    if (!hasPendingInterrupts) {
+      _emitEndOfAgent(workflowContext);
+    }
+
+    for (final Event event in workflowContext._checkpointEvents) {
+      yield event;
+    }
+
     for (final MapEntry<String, Object?> entry
         in workflowContext.outputs.entries) {
       final List<Event>? nodeEvents = workflowContext._nodeEvents[entry.key];
+      final String nodePath = entry.key.contains('@') ? entry.key : '${entry.key}@1';
+      final String rootPath = _workflowRootPath(this, context);
+      final String fullNodePath = rootPath.isEmpty ? nodePath : '$rootPath/$nodePath';
+      final bool isRequestInputNode = context.session.events.any((Event event) {
+        if (event.nodeInfo.path != fullNodePath) {
+          return false;
+        }
+        return event.getFunctionCalls().any(
+            (FunctionCall call) => call.name == requestInputFunctionCallName);
+      });
+      final BaseNode? staticNode = nodes.cast<BaseNode?>().firstWhere(
+        (BaseNode? n) => n?.name == entry.key,
+        orElse: () => null,
+      );
+      final bool rerunOnResume = staticNode?.rerunOnResume ?? false;
+      if ((isRequestInputNode && !rerunOnResume) ||
+          workflowContext.requestInputNodeKeys.contains(entry.key)) {
+        continue;
+      }
+      final bool isPrevCompleted = _isPreviouslyCompletedOutput(
+        previousResult,
+        entry.key,
+        historyEvents: context.session.events,
+        workflowPath: _workflowRootPath(this, context),
+      );
       if (nodeEvents != null) {
         for (final Event event in nodeEvents) {
           yield event;
         }
         continue;
       }
-      if (_isPreviouslyCompletedOutput(previousResult, entry.key)) {
+      if (isPrevCompleted) {
         continue;
       }
       final Object? eventOutput =
@@ -1368,6 +1483,9 @@ class Workflow extends BaseAgent {
     required String name,
   }) async {
     final BaseNode node = byName[name]!;
+    if (node is RequestInput) {
+      context.requestInputNodeKeys.add(name);
+    }
     final Object? nodeInput = _nodeInput(
       context: context,
       dependencies: dependencies[name]!,
@@ -1378,12 +1496,21 @@ class Workflow extends BaseAgent {
           ? Map<String, Object?>.from(state!.resumeInputs)
           : const <String, Object?>{},
     );
-    final Object? output = await _runNodeWithRetry(
-      context: nodeContext,
-      node: node,
-      nodeInput: nodeInput,
-    );
-    return _resultFromRawNodeOutput(node, output, context: nodeContext);
+    try {
+      final Object? output = await _runNodeWithRetry(
+        context: nodeContext,
+        node: node,
+        nodeInput: nodeInput,
+      );
+      return _resultFromRawNodeOutput(node, output, context: nodeContext);
+    } on NodeInterruptedError {
+      return _NodeRunResult(
+        name: name,
+        output: null,
+        interruptIds: nodeContext.interruptIds,
+        waiting: true,
+      );
+    }
   }
 
   void _seedResumeInputs(
@@ -1585,9 +1712,10 @@ WorkflowResult? _rehydratedResultForContext(
   if (!context.isResumable) {
     return null;
   }
+  final String rootPath = _workflowRootPath(workflow, context);
   final bool hasWorkflowEvents = context.session.events.any((Event event) {
     return event.invocationId == context.invocationId &&
-        _isWorkflowNodePath(event.nodeInfo.path, _workflowRootPath(workflow));
+        _isWorkflowNodePath(event.nodeInfo.path, rootPath);
   });
   if (!hasWorkflowEvents) {
     return null;
@@ -1595,22 +1723,44 @@ WorkflowResult? _rehydratedResultForContext(
   return workflow.rehydrateResultFromEvents(
     context.session.events,
     invocationId: context.invocationId,
+    workflowPath: rootPath,
   );
 }
 
-String _workflowRootPath(Workflow workflow) {
+String _workflowRootPath(Workflow workflow, [InvocationContext? context]) {
+  if (context != null && context.branch != null && context.branch!.isNotEmpty) {
+    return context.branch!;
+  }
   final String workflowName = workflow.name.isEmpty
       ? 'workflow'
       : workflow.name;
   return '$workflowName@1';
 }
 
-bool _isPreviouslyCompletedOutput(WorkflowResult? previousResult, String key) {
+bool _isPreviouslyCompletedOutput(
+  WorkflowResult? previousResult,
+  String key, {
+  required Iterable<Event> historyEvents,
+  required String workflowPath,
+}) {
   if (previousResult == null || !previousResult.outputs.containsKey(key)) {
     return false;
   }
   final NodeState? previousState = previousResult.nodeStates[key];
-  return previousState != null && _isCompletedNodeState(previousState);
+  if (previousState == null || !_isCompletedNodeState(previousState)) {
+    return false;
+  }
+  final String nodePath = key.contains('@') ? key : '$key@1';
+  final String fullNodePath = workflowPath.isEmpty ? nodePath : '$workflowPath/$nodePath';
+  return historyEvents.any((Event event) {
+    if (event.nodeInfo.path != fullNodePath) {
+      return false;
+    }
+    return (event.hasOutput || event.content != null) &&
+        event.getFunctionCalls().isEmpty &&
+        event.getFunctionResponses().isEmpty &&
+        event.longRunningToolIds?.isNotEmpty != true;
+  });
 }
 
 Event _rewriteNestedWorkflowEvent(
@@ -1817,11 +1967,11 @@ Future<Object?> _runNodeWithRetry({
     try {
       context.throwIfCancelled();
     } on AdkAbortException catch (error) {
-      state.status = NodeStatus.cancelled;
+      _updateNodeStatus(context, state, NodeStatus.cancelled);
       state.error = error;
       rethrow;
     }
-    state.status = NodeStatus.running;
+    _updateNodeStatus(context, state, NodeStatus.running);
     state.attemptCount = attempt;
     try {
       Future<Object?> future = Future<Object?>.sync(
@@ -1856,16 +2006,16 @@ Future<Object?> _runNodeWithRetry({
           'ctx.route.',
         );
       }
-      state.status = NodeStatus.completed;
+      _updateNodeStatus(context, state, NodeStatus.completed);
       state.error = null;
       return output;
     } on AdkAbortException catch (error) {
-      state.status = NodeStatus.cancelled;
+      _updateNodeStatus(context, state, NodeStatus.cancelled);
       state.error = error;
       rethrow;
     } catch (error) {
       lastError = error;
-      state.status = NodeStatus.failed;
+      _updateNodeStatus(context, state, NodeStatus.failed);
       state.error = error;
       if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
         rethrow;
@@ -1974,7 +2124,11 @@ _NodeRunResult _resultFromRawNodeOutput(
       ..._interruptIdsFromOutput(rawOutput),
       ...?context?.interruptIds,
     },
-    waiting: node.waitForOutput && !hasOutput && route == null,
+    waiting: (node.waitForOutput ||
+            node is Workflow ||
+            (node is AgentNode && node.agent is Workflow)) &&
+        !hasOutput &&
+        route == null,
   );
 }
 
@@ -1997,7 +2151,7 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
   }
   if (result.interruptIds.isNotEmpty || result.waiting) {
     if (state != null) {
-      state.status = NodeStatus.waiting;
+      _updateNodeStatus(context, state, NodeStatus.waiting);
       state.interrupts
         ..clear()
         ..addAll(result.interruptIds);
@@ -2081,11 +2235,12 @@ WorkflowResult _workflowResultFromEvents(
   required String workflowName,
   required Map<String, BaseNode> staticNodes,
   String? invocationId,
+  String? workflowPath,
 }) {
   final String effectiveWorkflowName = workflowName.isEmpty
       ? 'workflow'
       : workflowName;
-  final String workflowPath = '$effectiveWorkflowName@1';
+  final String effectiveWorkflowPath = workflowPath ?? '$effectiveWorkflowName@1';
   final Map<String, Object?> outputs = <String, Object?>{};
   final Map<String, NodeState> states = <String, NodeState>{};
   final Map<String, String> interruptOwner = <String, String>{};
@@ -2121,13 +2276,13 @@ WorkflowResult _workflowResultFromEvents(
     }
 
     final String path = event.nodeInfo.path;
-    if (!_isWorkflowNodePath(path, workflowPath)) {
+    if (!_isWorkflowNodePath(path, effectiveWorkflowPath)) {
       continue;
     }
 
     final _WorkflowEventOwner? owner = _workflowEventOwnerForPath(
       path,
-      workflowPath: workflowPath,
+      workflowPath: effectiveWorkflowPath,
       staticNodes: staticNodes,
     );
     if (owner == null) {
@@ -2140,7 +2295,7 @@ WorkflowResult _workflowResultFromEvents(
     }
     final List<String>? outputFor = _outputKeysFromPaths(
       event.nodeInfo.outputFor,
-      workflowPath: workflowPath,
+      workflowPath: effectiveWorkflowPath,
       staticNodes: staticNodes,
     );
     if (outputFor != null) {
@@ -2266,23 +2421,39 @@ _WorkflowEventOwner? _workflowEventOwnerForPath(
   required Map<String, BaseNode> staticNodes,
 }) {
   final List<String> segments = _workflowPathSegments(path);
-  if (segments.length < 2 || segments.first != workflowPath) {
+  final List<String> workflowPathSegments = _workflowPathSegments(workflowPath);
+  if (segments.length < workflowPathSegments.length + 1) {
     return null;
   }
+  for (int i = 0; i < workflowPathSegments.length; i += 1) {
+    if (segments[i] != workflowPathSegments[i]) {
+      return null;
+    }
+  }
+  final String directChildSegment = segments[workflowPathSegments.length];
+  final String directChildName = _workflowNodeNameFromSegment(directChildSegment);
+  final bool hasDescendants = segments.length > workflowPathSegments.length + 1;
   final String leaf = segments.last;
-  final String nodeName = _workflowNodeNameFromSegment(leaf);
-  if (nodeName.isEmpty) {
-    return null;
+  final String leafName = _workflowNodeNameFromSegment(leaf);
+
+  if (hasDescendants) {
+    final String key = staticNodes.containsKey(directChildName) ? directChildName : directChildSegment;
+    return _WorkflowEventOwner(
+      key: key,
+      runId: _workflowRunIdFromSegment(directChildSegment),
+      parentRunId: _workflowRunIdFromSegment(workflowPathSegments.last),
+    );
+  } else {
+    if (leafName.isEmpty) {
+      return null;
+    }
+    final bool staticNode = staticNodes.containsKey(leafName);
+    return _WorkflowEventOwner(
+      key: staticNode ? leafName : leaf,
+      runId: _workflowRunIdFromSegment(leaf),
+      parentRunId: _workflowRunIdFromSegment(workflowPathSegments.last),
+    );
   }
-  final bool staticNode =
-      segments.length == 2 && staticNodes.containsKey(nodeName);
-  return _WorkflowEventOwner(
-    key: staticNode ? nodeName : leaf,
-    runId: _workflowRunIdFromSegment(leaf),
-    parentRunId: segments.length < 2
-        ? null
-        : _workflowRunIdFromSegment(segments[segments.length - 2]),
-  );
 }
 
 List<String>? _outputKeysFromPaths(
@@ -2865,4 +3036,19 @@ Set<Object?> _routeSet(Object? route) {
     return route.toSet();
   }
   return <Object?>{route};
+}
+
+void _updateNodeStatus(
+  WorkflowContext context,
+  NodeState state,
+  NodeStatus status,
+) {
+  if (state.status != status) {
+    state.status = status;
+    context.onNodeStateChange?.call();
+  }
+}
+
+class NodeInterruptedError implements Exception {
+  NodeInterruptedError();
 }

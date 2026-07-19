@@ -59,7 +59,7 @@ void main() {
         httpGet: ({required Uri uri, required Map<String, String> headers}) async {
           expect(
             uri.path,
-            '/v1beta/projects/my-project/locations/global/dataAgents:listAccessible',
+            '/v1/projects/my-project/locations/global/dataAgents:listAccessible',
           );
           expect(headers['authorization'], 'Bearer token-1');
           return <String, Object?>{
@@ -96,7 +96,7 @@ void main() {
             ({required Uri uri, required Map<String, String> headers}) async {
               expect(
                 uri.path,
-                '/v1beta/projects/p/locations/global/dataAgents/a1',
+                '/v1/projects/p/locations/global/dataAgents/a1',
               );
               expect(headers['authorization'], 'Bearer token-2');
               return <String, Object?>{'name': 'projects/p/.../a1'};
@@ -118,7 +118,7 @@ void main() {
             ({required Uri uri, required Map<String, String> headers}) async {
               expect(
                 uri.path,
-                '/v1beta/projects/p/locations/global/dataAgents/a1',
+                '/v1/projects/p/locations/global/dataAgents/a1',
               );
               expect(headers['x-goog-api-client'], 'GOOGLE_ADK');
               return <String, Object?>{
@@ -131,7 +131,7 @@ void main() {
               required Map<String, Object?> payload,
               required Map<String, String> headers,
             }) async {
-              expect(uri.path, '/v1beta/projects/p/locations/global:chat');
+              expect(uri.path, '/v1/projects/p/locations/global:chat');
               expect(payload['clientIdEnum'], 'GOOGLE_ADK');
               expect(headers['authorization'], 'Bearer token-3');
               return <String>[

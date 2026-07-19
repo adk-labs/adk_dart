@@ -1731,5 +1731,61 @@ void main() {
       expect(parsed.content?.parts.single.functionCall?.name, 'load_skill');
       expect(parsed.content?.parts.single.thoughtSignature, thoughtSignature);
     });
+
+    test('buildPayload serializes native and custom function tools', () {
+      final Map<String, Object?> payload = LiteLlm.buildPayload(
+        LlmRequest(
+          model: 'openai/gpt-4o',
+          contents: <Content>[Content.userText('hello')],
+          config: GenerateContentConfig(
+            tools: <ToolDeclaration>[
+              ToolDeclaration(
+                googleSearch: <String, Object?>{'custom': 'param'},
+              ),
+              ToolDeclaration(
+                functionDeclarations: <FunctionDeclaration>[
+                  FunctionDeclaration(
+                    name: 'get_weather',
+                    description: 'Gets weather',
+                    parameters: <String, Object?>{
+                      'type': 'object',
+                      'properties': <String, Object?>{
+                        'city': <String, Object?>{'type': 'string'},
+                      },
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        stream: false,
+      );
+
+      final List<Object?> tools = payload['tools'] as List<Object?>;
+      expect(tools, hasLength(2));
+
+      final Map<String, Object?> nativeTool = tools[0] as Map<String, Object?>;
+      expect(nativeTool['google_search'], <String, Object?>{'custom': 'param'});
+      expect(nativeTool['googleSearch'], <String, Object?>{'custom': 'param'});
+
+      final Map<String, Object?> funcTool = tools[1] as Map<String, Object?>;
+      expect(funcTool['type'], 'function');
+      final Map<String, Object?> funcDetails = funcTool['function'] as Map<String, Object?>;
+      expect(funcDetails['name'], 'get_weather');
+      expect(funcDetails['description'], 'Gets weather');
+    });
+
+    test('buildPayload returns no tools if none configured', () {
+      final Map<String, Object?> payload = LiteLlm.buildPayload(
+        LlmRequest(
+          model: 'openai/gpt-4o',
+          contents: <Content>[Content.userText('hello')],
+          config: GenerateContentConfig(),
+        ),
+        stream: false,
+      );
+      expect(payload.containsKey('tools'), isFalse);
+    });
   });
 }

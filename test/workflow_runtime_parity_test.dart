@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:adk_dart/adk_dart.dart';
+import 'package:adk_dart/src/flows/llm_flows/functions.dart';
 import 'package:adk_dart/src/workflow/workflow.dart' as wf;
 import 'package:test/test.dart';
 
@@ -981,14 +982,27 @@ void main() {
 
       expect(firstRuns, 1);
       expect(askRuns, 2);
-      expect(resumedEvents.map((Event event) => event.author), <String>[
+      final List<Event> nodeOutputEvents = resumedEvents
+          .where((Event event) =>
+              event.actions.agentState == null &&
+              event.actions.endOfAgent == null)
+          .toList();
+      expect(nodeOutputEvents.map((Event event) => event.author), <String>[
         'ask_user',
         'after_user',
       ]);
-      expect(resumedEvents.first.content?.parts.single.text, 'cached:true');
+      expect(nodeOutputEvents.first.content?.parts.single.text, 'cached:true');
       expect(
-        resumedEvents.last.content?.parts.single.text,
+        nodeOutputEvents.last.content?.parts.single.text,
         'after:cached:true',
+      );
+      expect(
+        resumedEvents.any((Event event) => event.actions.agentState != null),
+        isTrue,
+      );
+      expect(
+        resumedEvents.any((Event event) => event.actions.endOfAgent == true),
+        isTrue,
       );
     });
 
@@ -1080,13 +1094,26 @@ void main() {
 
         expect(setupRuns, 1);
         expect(askRuns, 2);
-        expect(resumedEvents.map((Event event) => event.author), <String>[
-          'ask_user',
-        ]);
-        expect(
-          resumedEvents.single.content?.parts.single.text,
-          'approved:true:true',
-        );
+      final List<Event> nodeOutputEvents = resumedEvents
+          .where((Event event) =>
+              event.actions.agentState == null &&
+              event.actions.endOfAgent == null)
+          .toList();
+      expect(nodeOutputEvents.map((Event event) => event.author), <String>[
+        'ask_user',
+      ]);
+      expect(
+        nodeOutputEvents.single.content?.parts.single.text,
+        'approved:true:true',
+      );
+      expect(
+        resumedEvents.any((Event event) => event.actions.agentState != null),
+        isTrue,
+      );
+      expect(
+        resumedEvents.any((Event event) => event.actions.endOfAgent == true),
+        isTrue,
+      );
       },
     );
 
@@ -1161,12 +1188,113 @@ void main() {
             .toList();
 
         expect(routeRuns, 1);
-        expect(resumedEvents.map((Event event) => event.author), <String>[
-          'target_node',
-        ]);
-        expect(resumedEvents.single.content?.parts.single.text, 'reached:true');
+      final List<Event> nodeOutputEvents = resumedEvents
+          .where((Event event) =>
+              event.actions.agentState == null &&
+              event.actions.endOfAgent == null)
+          .toList();
+      expect(nodeOutputEvents.map((Event event) => event.author), <String>[
+        'target_node',
+      ]);
+      expect(nodeOutputEvents.single.content?.parts.single.text, 'reached:true');
+      expect(
+        resumedEvents.any((Event event) => event.actions.agentState != null),
+        isTrue,
+      );
+      expect(
+        resumedEvents.any((Event event) => event.actions.endOfAgent == true),
+        isTrue,
+      );
       },
     );
+
+    test('resumes nested workflow with request input (task-mode simulation)', () async {
+      final Workflow inner = Workflow(
+        name: 'inner',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? input) {
+            if (context.resumeInputs.isEmpty) {
+              return RequestInput(message: 'give approval', interruptId: 'appr');
+            }
+            return 'approved:${context.resumeInputs['appr']}';
+          }, name: 'inner_task'),
+        ],
+      );
+
+      final Workflow outer = Workflow(
+        name: 'outer',
+        nodes: <BaseNode>[
+          node((WorkflowContext context, Object? input) async {
+            final Object? childResult = await context.runNode(
+              inner,
+              input: input,
+              raiseOnWait: true,
+            );
+            return 'outer:$childResult';
+          }, name: 'outer_driver', rerunOnResume: true),
+        ],
+      );
+
+      final InMemorySessionService sessionService = InMemorySessionService();
+      final Session session = Session(id: 's', appName: 'app', userId: 'u');
+      final InvocationContext context1 = InvocationContext(
+        sessionService: sessionService,
+        invocationId: 'inv_nested_task',
+        agent: outer,
+        session: session,
+        resumabilityConfig: ResumabilityConfig(isResumable: true),
+      );
+
+      final List<Event> events1 = await outer.runAsync(context1).toList();
+      print('EVENTS1: ${events1.map((e) => 'path: ${e.nodeInfo.path}, content: ${e.content?.parts.map((p) => p.text).toList()}, state: ${e.actions.agentState != null}, end: ${e.actions.endOfAgent}').toList()}');
+
+      final List<Event> outputs1 = events1
+          .where((Event e) => e.actions.agentState == null && e.actions.endOfAgent == null)
+          .toList();
+      expect(outputs1, hasLength(1));
+      expect(outputs1.first.nodeInfo.path, 'outer@1/inner@1/inner_task@1');
+      final FunctionCall call = outputs1.first.getFunctionCalls().single;
+      expect(call.name, requestInputFunctionCallName);
+      expect(call.id, 'appr');
+      expect(call.args['message'], 'give approval');
+
+      session.events.addAll(events1);
+
+      final Event responseEvent = Event(
+        invocationId: 'inv_nested_task',
+        author: 'user',
+        content: Content(
+          role: 'user',
+          parts: <Part>[
+            Part.fromFunctionResponse(
+              id: 'appr',
+              name: requestInputFunctionCallName,
+              response: <String, Object?>{
+                'result': <String, Object?>{'response': 'yes'},
+              },
+            ),
+          ],
+        ),
+      );
+      session.events.add(responseEvent);
+
+      final InvocationContext context2 = InvocationContext(
+        sessionService: sessionService,
+        invocationId: 'inv_nested_task',
+        agent: outer,
+        session: session,
+        resumabilityConfig: ResumabilityConfig(isResumable: true),
+      );
+
+      final List<Event> events2 = await outer.runAsync(context2).toList();
+      final List<Event> outputs2 = events2
+          .where((Event e) => e.actions.agentState == null && e.actions.endOfAgent == null)
+          .toList();
+      print('EVENTS2: ${events2.map((e) => 'path: ${e.nodeInfo.path}, state: ${e.actions.agentState}, end: ${e.actions.endOfAgent}').toList()}');
+      expect(outputs2, hasLength(2));
+      final Event driverOutputEvent = outputs2.firstWhere((e) => e.nodeInfo.path == 'outer@1/outer_driver@1');
+      expect(driverOutputEvent.content?.parts.single.text, 'outer:{"response":"yes"}');
+    });
 
     test('emits nested workflow leaf events under parent node path', () async {
       final Workflow inner = Workflow(
