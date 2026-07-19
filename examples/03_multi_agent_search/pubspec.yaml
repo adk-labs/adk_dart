@@ -1,0 +1,14 @@
+name: multi_agent_search_example
+description: An example demonstrating a multi-agent coordinator transferring tasks to sub-agents and using Google Search.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

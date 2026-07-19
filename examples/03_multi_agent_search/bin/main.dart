@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:adk_dart/adk_dart.dart';
 
 Future<void> main() async {
