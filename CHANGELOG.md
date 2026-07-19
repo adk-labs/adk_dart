@@ -3,6 +3,7 @@
 - Fixed nested workflow resume by yielding resolved outputs of resumed request-input nodes on resume instead of skipping them.
 - Fixed `AgentNode.run` event loop to not misclassify `endOfAgent` and `agentState` checkpoint events as `finalEvent`.
 - Enhanced `LoadArtifactsTool` with Gemini unsupported inline MIME type blocklist (SVG/XML image variants) to deliver them as text.
+- Rebuilt and updated the bundled Web UI assets (`adk-web`) to the latest version to support nested navigation breadcrumbs, bidi streaming restarts, and usage token counts.
 
 ## 2026.7.11
 

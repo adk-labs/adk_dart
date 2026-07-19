@@ -20,6 +20,13 @@ This worklog documents the investigation and resolution of the failing nested wo
 - **Issue**: Gemini API does not support SVG/XML image variants as inline image data (yielding 400 Bad Request).
 - **Resolution**: Added `_geminiUnsupportedInlineSubtypes` containing `image/svg`, `image/svg+xml`, and `image/xml`. Enhanced `_isInlineMimeTypeSupported` to block these subtypes so they fall through to the text-decoding path and are delivered to the model as text, matching Python's `_as_safe_part_for_llm` behavior.
 
+### 4. Build and Update Bundled adk-web Assets
+- **Web App Directory**: `ref/adk-web`
+- **Output Directory**: `adk-dart/adk_dart/lib/src/cli/browser`
+- **Resolution**:
+  - Rebuilt the latest `adk-web` Angular application using `npm run build`.
+  - Copied the compiled JS chunks, index.html, styles, and SVG resources into `lib/src/cli/browser` in `adk-dart` to update the bundled Web UI with the latest features (e.g. dot-nested navigation breadcrumbs, bidi streaming restarts, and usage metadata tracking).
+
 ## Verification
-- Ran all 1,483 unit and integration tests (`dart test`).
-- All tests passed successfully with 0 failures, verifying parity with Python behavior.
+- Ran all 1,483 unit and integration tests (`dart test`), including `test/dev_web_server_test.dart`.
+- All tests passed successfully with 0 failures, verifying both runtime parity and web server serving correctness.
