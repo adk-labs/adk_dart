@@ -636,6 +636,7 @@ class LlmAgent extends BaseAgent {
     }
 
     if (outputKey == null ||
+        mode == 'task' ||
         !event.isFinalResponse() ||
         event.content == null ||
         event.content!.parts.isEmpty) {
@@ -668,6 +669,7 @@ class LlmAgent extends BaseAgent {
 
   String _maybeAccumulateStreamingOutput(Event event, String accumulator) {
     if (outputKey == null ||
+        mode == 'task' ||
         outputSchema != null ||
         event.author != name ||
         event.partial == true ||

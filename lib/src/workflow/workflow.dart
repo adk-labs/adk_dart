@@ -1005,7 +1005,14 @@ class AgentNode extends BaseNode {
     if (finalEvent == null) {
       return null;
     }
-    return _outputFromAgentEvent(finalEvent);
+    final Object? finalOutput = _outputFromAgentEvent(finalEvent);
+    if (agent is LlmAgent) {
+      final LlmAgent llmAgent = agent as LlmAgent;
+      if (llmAgent.outputKey != null && finalOutput != null) {
+        agentContext.session.state[llmAgent.outputKey!] = finalOutput;
+      }
+    }
+    return finalOutput;
   }
 }
 
