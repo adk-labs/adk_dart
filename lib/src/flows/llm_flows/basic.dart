@@ -33,9 +33,7 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
     if (runConfig != null) {
       if (runConfig.labels != null && runConfig.labels!.isNotEmpty) {
         final Map<String, String> labels =
-            llmRequest.config.labels != null
-                ? Map<String, String>.from(llmRequest.config.labels!)
-                : <String, String>{};
+            Map<String, String>.from(llmRequest.config.labels);
         labels.addAll(runConfig.labels!);
         llmRequest.config.labels = labels;
       }
