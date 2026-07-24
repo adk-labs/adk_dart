@@ -5,7 +5,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:mirrors';
 
 import '../a2a/executor/a2a_agent_executor.dart';
 import '../a2a/protocol.dart';
@@ -1796,16 +1795,6 @@ Map<String, Object?> _serializeFunctionDeclaration(
 }
 
 String _inferFunctionToolName(Function function) {
-  try {
-    final ClosureMirror mirror = reflect(function) as ClosureMirror;
-    final String reflected = MirrorSystem.getName(mirror.function.simpleName);
-    if (reflected.isNotEmpty && !reflected.startsWith('<')) {
-      return reflected;
-    }
-  } catch (_) {
-    // Fall back to string parsing below.
-  }
-
   final Match? quotedName = RegExp(r"'([^']+)'").firstMatch('$function');
   if (quotedName != null) {
     final String name = quotedName.group(1) ?? '';
@@ -4780,171 +4769,10 @@ class _DynamicPluginTarget {
   final List<Uri> libraryCandidates;
 }
 
-final Map<String, ClassMirror?> _dynamicPluginMirrorCache =
-    <String, ClassMirror?>{};
-
 Future<BasePlugin?> _instantiatePluginUsingMirrors(
   String pluginSpec, {
   required String baseDir,
 }) async {
-  final _DynamicPluginTarget? target = _parseDynamicPluginTarget(
-    pluginSpec,
-    baseDir: baseDir,
-  );
-  if (target == null) {
-    return null;
-  }
-
-  final ClassMirror? pluginClass = await _resolveDynamicPluginClass(target);
-  if (pluginClass == null) {
-    return null;
-  }
-
-  final ClassMirror basePluginMirror = reflectClass(BasePlugin);
-  if (!(pluginClass == basePluginMirror ||
-      pluginClass.isSubclassOf(basePluginMirror))) {
-    return null;
-  }
-
-  final Map<String, Object?> kwargs = <String, Object?>{
-    'baseDir': baseDir,
-    'base_dir': baseDir,
-    'agentsDir': baseDir,
-    'agents_dir': baseDir,
-    'pluginSpec': pluginSpec,
-    'plugin_spec': pluginSpec,
-    'name': _normalizePluginName(pluginSpec),
-  };
-
-  return _newPluginInstanceFromClassMirror(pluginClass, kwargs);
-}
-
-Future<ClassMirror?> _resolveDynamicPluginClass(
-  _DynamicPluginTarget target,
-) async {
-  for (final Uri candidateUri in target.libraryCandidates) {
-    final String cacheKey = '${candidateUri.toString()}::${target.className}';
-    if (_dynamicPluginMirrorCache.containsKey(cacheKey)) {
-      final ClassMirror? cached = _dynamicPluginMirrorCache[cacheKey];
-      if (cached != null) {
-        return cached;
-      }
-      continue;
-    }
-
-    ClassMirror? resolved;
-    try {
-      final LibraryMirror library = await currentMirrorSystem().isolate.loadUri(
-        candidateUri,
-      );
-      resolved = _findClassMirrorByName(library, target.className);
-    } catch (_) {
-      resolved = null;
-    }
-
-    _dynamicPluginMirrorCache[cacheKey] = resolved;
-    if (resolved != null) {
-      return resolved;
-    }
-  }
-  return null;
-}
-
-ClassMirror? _findClassMirrorByName(LibraryMirror library, String className) {
-  for (final DeclarationMirror declaration in library.declarations.values) {
-    if (declaration is! ClassMirror) {
-      continue;
-    }
-    if (MirrorSystem.getName(declaration.simpleName) == className) {
-      return declaration;
-    }
-  }
-  return null;
-}
-
-BasePlugin? _newPluginInstanceFromClassMirror(
-  ClassMirror classMirror,
-  Map<String, Object?> kwargs,
-) {
-  final List<MethodMirror> constructors =
-      classMirror.declarations.values
-          .whereType<MethodMirror>()
-          .where((MethodMirror value) => value.isConstructor)
-          .toList(growable: false)
-        ..sort((MethodMirror left, MethodMirror right) {
-          final String leftName = MirrorSystem.getName(left.constructorName);
-          final String rightName = MirrorSystem.getName(right.constructorName);
-          if (leftName.isEmpty && rightName.isNotEmpty) {
-            return -1;
-          }
-          if (leftName.isNotEmpty && rightName.isEmpty) {
-            return 1;
-          }
-          return leftName.compareTo(rightName);
-        });
-
-  for (final MethodMirror constructor in constructors) {
-    final List<Object?> positional = <Object?>[];
-    final Map<Symbol, Object?> named = <Symbol, Object?>{};
-    bool isValid = true;
-
-    for (final ParameterMirror parameter in constructor.parameters) {
-      final String parameterName = MirrorSystem.getName(parameter.simpleName);
-      final Object? argument = _lookupDynamicPluginArgument(
-        kwargs: kwargs,
-        parameterName: parameterName,
-      );
-
-      if (parameter.isNamed) {
-        if (argument != null) {
-          named[parameter.simpleName] = argument;
-        } else if (!parameter.isOptional) {
-          isValid = false;
-          break;
-        }
-        continue;
-      }
-
-      if (argument != null) {
-        positional.add(argument);
-      } else if (!parameter.isOptional) {
-        isValid = false;
-        break;
-      }
-    }
-
-    if (!isValid) {
-      continue;
-    }
-
-    try {
-      final InstanceMirror instance = classMirror.newInstance(
-        constructor.constructorName,
-        positional,
-        named,
-      );
-      final Object reflectee = instance.reflectee;
-      if (reflectee is BasePlugin) {
-        return reflectee;
-      }
-    } catch (_) {
-      continue;
-    }
-  }
-
-  try {
-    final InstanceMirror instance = classMirror.newInstance(
-      const Symbol(''),
-      const <Object?>[],
-    );
-    final Object reflectee = instance.reflectee;
-    if (reflectee is BasePlugin) {
-      return reflectee;
-    }
-  } catch (_) {
-    // Fall through and return null.
-  }
-
   return null;
 }
 
