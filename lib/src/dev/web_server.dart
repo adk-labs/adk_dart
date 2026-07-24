@@ -4644,7 +4644,6 @@ void registerExtraPluginFactory(String pluginSpec, ExtraPluginFactory factory) {
 /// Clears registered extra plugin factories and related test caches.
 void clearExtraPluginFactoriesForTest() {
   _extraPluginFactories.clear();
-  _dynamicPluginMirrorCache.clear();
 }
 
 List<_ExtraPluginSpec> _parseExtraPluginSpecs(List<String> extraPlugins) {
@@ -4754,21 +4753,6 @@ Future<List<BasePlugin>> _instantiateExtraPlugins(
   return plugins;
 }
 
-/// Resolved target class and candidate libraries for dynamic plugin loading.
-class _DynamicPluginTarget {
-  /// Creates a dynamic plugin lookup target.
-  _DynamicPluginTarget({
-    required this.className,
-    required this.libraryCandidates,
-  });
-
-  /// Plugin class name to instantiate.
-  final String className;
-
-  /// Candidate library URIs where [className] may be declared.
-  final List<Uri> libraryCandidates;
-}
-
 Future<BasePlugin?> _instantiatePluginUsingMirrors(
   String pluginSpec, {
   required String baseDir,
@@ -4776,171 +4760,7 @@ Future<BasePlugin?> _instantiatePluginUsingMirrors(
   return null;
 }
 
-Object? _lookupDynamicPluginArgument({
-  required Map<String, Object?> kwargs,
-  required String parameterName,
-}) {
-  final String normalizedParameter = _normalizeIdentifierForLookup(
-    parameterName,
-  );
 
-  Object? selected;
-  for (final MapEntry<String, Object?> entry in kwargs.entries) {
-    if (_normalizeIdentifierForLookup(entry.key) == normalizedParameter) {
-      selected = entry.value;
-      break;
-    }
-  }
-
-  if (selected != null) {
-    return selected;
-  }
-
-  if (normalizedParameter == 'plugin') {
-    return kwargs['pluginSpec'] ?? kwargs['plugin_spec'];
-  }
-
-  return null;
-}
-
-String _normalizeIdentifierForLookup(String raw) {
-  return raw.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
-}
-
-_DynamicPluginTarget? _parseDynamicPluginTarget(
-  String pluginSpec, {
-  required String baseDir,
-}) {
-  final String trimmed = pluginSpec.trim();
-  if (trimmed.isEmpty) {
-    return null;
-  }
-
-  final _DynamicPluginTarget? explicit = _parseExplicitDynamicPluginTarget(
-    trimmed,
-    baseDir: baseDir,
-  );
-  if (explicit != null) {
-    return explicit;
-  }
-
-  if (!trimmed.contains('.')) {
-    return null;
-  }
-
-  final List<String> parts = trimmed
-      .split('.')
-      .map((String value) => value.trim())
-      .where((String value) => value.isNotEmpty)
-      .toList(growable: false);
-  if (parts.length < 3) {
-    return null;
-  }
-
-  final String packageName = parts.first;
-  final String className = parts.last;
-  final String modulePath = parts.sublist(1, parts.length - 1).join('/');
-  if (packageName.isEmpty || className.isEmpty || modulePath.isEmpty) {
-    return null;
-  }
-
-  final List<Uri> candidates = <Uri>[
-    Uri.parse('package:$packageName/$modulePath.dart'),
-    Uri.parse('package:$packageName/src/$modulePath.dart'),
-  ];
-  return _DynamicPluginTarget(
-    className: className,
-    libraryCandidates: candidates,
-  );
-}
-
-_DynamicPluginTarget? _parseExplicitDynamicPluginTarget(
-  String pluginSpec, {
-  required String baseDir,
-}) {
-  String libraryPart = pluginSpec;
-  String className = '';
-
-  if (pluginSpec.contains('::')) {
-    final int index = pluginSpec.lastIndexOf('::');
-    libraryPart = pluginSpec.substring(0, index).trim();
-    className = pluginSpec.substring(index + 2).trim();
-  } else if (pluginSpec.contains('#')) {
-    final int index = pluginSpec.lastIndexOf('#');
-    libraryPart = pluginSpec.substring(0, index).trim();
-    className = pluginSpec.substring(index + 1).trim();
-  } else {
-    final int index = pluginSpec.lastIndexOf('.dart:');
-    if (index >= 0) {
-      libraryPart = pluginSpec.substring(0, index + '.dart'.length).trim();
-      className = pluginSpec.substring(index + '.dart:'.length).trim();
-    }
-  }
-
-  if (className.isEmpty) {
-    if (!libraryPart.endsWith('.dart')) {
-      return null;
-    }
-    className = _inferClassNameFromLibraryPath(libraryPart);
-  }
-
-  final Uri? libraryUri = _parseDynamicPluginLibraryUri(
-    libraryPart,
-    baseDir: baseDir,
-  );
-  if (libraryUri == null) {
-    return null;
-  }
-
-  return _DynamicPluginTarget(
-    className: className,
-    libraryCandidates: <Uri>[libraryUri],
-  );
-}
-
-Uri? _parseDynamicPluginLibraryUri(
-  String libraryPart, {
-  required String baseDir,
-}) {
-  final String trimmed = libraryPart.trim();
-  if (trimmed.isEmpty) {
-    return null;
-  }
-  if (trimmed.startsWith('package:') || trimmed.startsWith('file:')) {
-    return Uri.tryParse(trimmed);
-  }
-  if (!trimmed.endsWith('.dart')) {
-    return null;
-  }
-
-  final bool absolutePath =
-      trimmed.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(trimmed);
-  final File file = absolutePath
-      ? File(trimmed)
-      : File('$baseDir${Platform.pathSeparator}$trimmed');
-  return file.absolute.uri;
-}
-
-String _inferClassNameFromLibraryPath(String libraryPart) {
-  final String source = libraryPart.split('/').last;
-  final String fileStem = source.endsWith('.dart')
-      ? source.substring(0, source.length - '.dart'.length)
-      : source;
-  final List<String> tokens = fileStem
-      .split(RegExp(r'[^A-Za-z0-9]+'))
-      .where((String value) => value.isNotEmpty)
-      .toList(growable: false);
-  if (tokens.isEmpty) {
-    return fileStem;
-  }
-  return tokens
-      .map(
-        (String token) =>
-            token.substring(0, 1).toUpperCase() +
-            token.substring(1).toLowerCase(),
-      )
-      .join();
-}
 
 void _configureCloudTelemetry({
   required bool traceToCloud,
