@@ -1,10 +1,18 @@
-## Unreleased
+## 2026.7.24
 
+- Bumped package release versions to `2026.7.24` for `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm`.
+- Synced latest core features & bug fixes from `adk-python` (`be5828f3..07455ee6`):
+  - Added user labels (`labels`) support in `RunConfig` and automatic merging in `BasicLlmRequestProcessor` to propagate Vertex AI billing/attribution labels.
+  - Guarded resumable invocation replay in `BaseLlmFlow` against partial streaming function-call SSE events to prevent replay loops.
+  - Expanded `AnthropicLlm` `finishReason` mapping to support `pause_turn` (`STOP`) and `refusal` (`SAFETY`).
+  - Fixed `VertexAiSessionService.getSession` to apply `afterTimestamp` server-side filtering alongside `numRecentEvents`.
+  - Added opt-in `finalResponseToolNames` to `BigQueryAgentAnalyticsPlugin` to log final answer tool call payloads as `AGENT_RESPONSE` events.
+- Added comprehensive unit test suite in `test/python_upstream_updates_test.dart` (1,105 total unit tests passing).
 - Fixed nested workflow resume by yielding resolved outputs of resumed request-input nodes on resume instead of skipping them.
 - Fixed `AgentNode.run` event loop to not misclassify `endOfAgent` and `agentState` checkpoint events as `finalEvent`.
 - Enhanced `LoadArtifactsTool` with Gemini unsupported inline MIME type blocklist (SVG/XML image variants) to deliver them as text.
 - Rebuilt and updated the bundled Web UI assets (`adk-web`) to the latest version to support nested navigation breadcrumbs, bidi streaming restarts, and usage token counts.
-- Renamed the `example` folder to `examples` and reorganized all code examples into self-contained, user-friendly Dart project templates with individual `README.md` and dependency setup files.
+- Renamed the `example` folder to `examples` and reorganized all code examples into self-contained, user-friendly Dart project templates with individual `README.md` and dependency setup files in 4 languages (KO, EN, JA, ZH).
 - Implemented a default HTTP completions invoker inside `LiteLlm` supporting streaming (SSE) and non-streaming requests to connect out-of-the-box with Ollama and LiteLLM servers.
 - Added new local model examples: `08_local_llm_ollama_litellm` (Ollama/LiteLLM integration via `LiteLlm` client) and `09_local_llm_litert` (on-device Gemma inference via `adk_litertlm` sub-package).
 

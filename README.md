@@ -57,7 +57,7 @@ Status legend:
 
 | `adk-python` area | Dart status | Dart implementation surface | Notes |
 | --- | --- | --- | --- |
-| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk` are aligned on `2026.7.11`; exported ADK baseline is `2.2.0`. |
+| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, and `flutter_adk` are aligned on `2026.7.24`; exported ADK baseline is `2.2.0`. |
 | Agents and runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | Core invocation, live fallback, rewind, session state, callback, and transfer behavior are ported. |
 | LLM flow processors | ✅ | request/response processors under `flows/llm_flows` | Covers instructions, identity, contents, compaction, context cache, code execution, output schema, tool confirmation, auth preflight, and agent transfer. |
 | Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, `NodeTool` (workflow-as-tool), joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, START-edge routing guards, completed-task batching, strict node input-schema validation, graph serialization, and status-aware DOT output. |
