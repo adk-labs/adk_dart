@@ -587,10 +587,7 @@ class VertexAiSessionService extends BaseSessionService {
     );
     final Future<List<Map<String, Object?>>> eventsFuture = () async {
       final List<Map<String, Object?>> rows = <Map<String, Object?>>[];
-      final double? afterTimestamp =
-          (config != null && (config.numRecentEvents == null))
-          ? config.afterTimestamp
-          : null;
+      final double? afterTimestamp = config?.afterTimestamp;
       await for (final Map<String, Object?> row in apiClient.listEvents(
         reasoningEngineId: reasoningEngineId,
         sessionId: sessionId,

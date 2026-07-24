@@ -121,10 +121,12 @@ class BigQueryLoggerConfig {
     Map<String, Object?>? customTags,
     this.autoSchemaUpgrade = true,
     this.createViews = true,
+    Set<String>? finalResponseToolNames,
   }) : clusteringFields =
            clusteringFields ?? <String>['event_type', 'agent', 'user_id'],
        retryConfig = retryConfig ?? RetryConfig(),
-       customTags = customTags ?? <String, Object?>{};
+       customTags = customTags ?? <String, Object?>{},
+       finalResponseToolNames = finalResponseToolNames ?? <String>{};
 
   /// Whether event logging is enabled.
   bool enabled;
@@ -187,6 +189,11 @@ class BigQueryLoggerConfig {
 
   /// Whether per-event analytics views should be created.
   bool createViews;
+
+  /// Tool names whose successful completion carries the agent's final answer.
+  /// When a completed tool's name is in this set, its call args are logged as
+  /// an `AGENT_RESPONSE` event.
+  Set<String> finalResponseToolNames;
 }
 
 /// Per-event metadata captured in BigQuery rows.
@@ -1289,6 +1296,22 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           parentSpanIdOverride: popResult.parentSpanId,
         ),
       );
+
+      if (config.finalResponseToolNames.contains(tool.name)) {
+        final _TruncateResult argsTruncated = _recursiveSmartTruncate(
+          toolArgs,
+          config.maxContentLength,
+        );
+        await _logEvent(
+          'AGENT_RESPONSE',
+          toolContext,
+          rawContent: <String, Object?>{'response': argsTruncated.value},
+          isTruncated: argsTruncated.isTruncated,
+          eventData: EventData(
+            extraAttributes: <String, Object?>{'source_tool': tool.name},
+          ),
+        );
+      }
       return null;
     });
   }

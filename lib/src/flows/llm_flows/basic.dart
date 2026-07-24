@@ -31,6 +31,14 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
 
     final runConfig = invocationContext.runConfig;
     if (runConfig != null) {
+      if (runConfig.labels != null && runConfig.labels!.isNotEmpty) {
+        final Map<String, String> labels =
+            llmRequest.config.labels != null
+                ? Map<String, String>.from(llmRequest.config.labels!)
+                : <String, String>{};
+        labels.addAll(runConfig.labels!);
+        llmRequest.config.labels = labels;
+      }
       llmRequest.liveConnectConfig.responseModalities =
           runConfig.responseModalities;
       llmRequest.liveConnectConfig.speechConfig = runConfig.speechConfig;

@@ -61,6 +61,7 @@ class RunConfig {
     this.getSessionConfig,
     this.modelInputContext,
     this.includeThoughtsFromOtherAgents = false,
+    this.labels,
   }) {
     maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
   }
@@ -136,6 +137,9 @@ class RunConfig {
   /// reviewer, or planner agents coordinate in trusted multi-agent systems.
   bool includeThoughtsFromOtherAgents;
 
+  /// User labels for the current invocation (e.g. for billing/attribution).
+  Map<String, String>? labels;
+
   /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {
     if (BigInt.from(value) == _pythonSysMaxSize) {
@@ -178,6 +182,7 @@ class RunConfig {
     Object? getSessionConfig = _sentinel,
     Object? modelInputContext = _sentinel,
     bool? includeThoughtsFromOtherAgents,
+    Map<String, String>? labels,
   }) {
     return RunConfig(
       supportCfc: supportCfc ?? this.supportCfc,
@@ -245,6 +250,11 @@ class RunConfig {
       includeThoughtsFromOtherAgents:
           includeThoughtsFromOtherAgents ??
           this.includeThoughtsFromOtherAgents,
+      labels:
+          labels ??
+          (this.labels == null
+              ? null
+              : Map<String, String>.from(this.labels!)),
     );
   }
 }

@@ -343,14 +343,21 @@ class AnthropicLlm extends BaseLlm {
   }
 
   /// Maps Anthropic stop reasons to ADK finish reason strings.
-  static String toGoogleFinishReason(String? anthropicStopReason) {
+  static String? toGoogleFinishReason(String? anthropicStopReason) {
+    if (anthropicStopReason == null) {
+      return null;
+    }
     if (anthropicStopReason == 'end_turn' ||
         anthropicStopReason == 'stop_sequence' ||
-        anthropicStopReason == 'tool_use') {
+        anthropicStopReason == 'tool_use' ||
+        anthropicStopReason == 'pause_turn') {
       return 'STOP';
     }
     if (anthropicStopReason == 'max_tokens') {
       return 'MAX_TOKENS';
+    }
+    if (anthropicStopReason == 'refusal') {
+      return 'SAFETY';
     }
     return 'FINISH_REASON_UNSPECIFIED';
   }

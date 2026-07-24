@@ -873,6 +873,7 @@ class BaseLlmFlow {
 
     if (context.isResumable &&
         events.isNotEmpty &&
+        events.last.partial != true &&
         events.last.getFunctionCalls().isNotEmpty) {
       final Event functionCallEvent = events.last;
       await for (final Event event in _postprocessHandleFunctionCallsAsync(
