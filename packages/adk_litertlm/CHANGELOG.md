@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2026.7.24
+
+- Bumped package version to `2026.7.24`.
+- Updated dependency alignment to `adk_dart: ^2026.7.24`.
+- Synced release with `adk_dart` `2026.7.24` rollout.
 
 ## 2026.7.11
 
