@@ -389,6 +389,7 @@ export 'src/tools/mcp_tool/mcp_tool.dart';
 export 'src/tools/mcp_tool/mcp_session_manager.dart';
 export 'src/tools/mcp_tool/mcp_toolset.dart';
 export 'src/tools/mcp_tool/session_context.dart';
+export 'src/tools/mcp_tool/agent_to_mcp.dart';
 export 'src/tools/preload_memory_tool.dart';
 export 'src/tools/pubsub/client.dart';
 export 'src/tools/pubsub/config.dart';

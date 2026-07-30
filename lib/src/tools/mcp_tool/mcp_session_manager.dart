@@ -13,6 +13,7 @@ import 'package:adk_mcp/adk_mcp.dart'
         StdioConnectionParams,
         StreamableHTTPConnectionParams,
         mcpMethodSamplingCreateMessage,
+        mcpMethodElicitationCreate,
         mcpMethodNotFoundCode;
 
 import '../../version.dart';
@@ -42,6 +43,12 @@ typedef McpSamplingCallback =
       List<Map<String, Object?>> messages, {
       Map<String, Object?>? params,
     });
+
+/// Callback invoked when an MCP server requests client elicitation (`elicitation/create`).
+typedef McpElicitationCallback =
+    FutureOr<Object?> Function(
+      Map<String, Object?> params,
+    );
 
 /// Central registry and transport manager for MCP sessions.
 class McpSessionManager {
@@ -78,18 +85,26 @@ class McpSessionManager {
       <String, McpSamplingCallback>{};
   final Map<String, Map<String, Object?>> _samplingCapabilitiesByUrl =
       <String, Map<String, Object?>>{};
+  final Map<String, McpElicitationCallback> _elicitationCallbacksByUrl =
+      <String, McpElicitationCallback>{};
 
-  /// Configures per-connection MCP client-side sampling support.
+  /// Configures per-connection MCP client-side sampling and elicitation support.
   void configureConnection({
     required McpConnectionParams connectionParams,
     McpSamplingCallback? samplingCallback,
     Map<String, Object?>? samplingCapabilities,
+    McpElicitationCallback? elicitationCallback,
   }) {
     final String key = _connectionKey(connectionParams);
     if (samplingCallback == null) {
       _samplingCallbacksByUrl.remove(key);
     } else {
       _samplingCallbacksByUrl[key] = samplingCallback;
+    }
+    if (elicitationCallback == null) {
+      _elicitationCallbacksByUrl.remove(key);
+    } else {
+      _elicitationCallbacksByUrl[key] = elicitationCallback;
     }
     if (samplingCapabilities == null || samplingCapabilities.isEmpty) {
       _samplingCapabilitiesByUrl.remove(key);
@@ -643,6 +658,7 @@ class McpSessionManager {
     _remoteToolDescriptorsByUrl.clear();
     _samplingCallbacksByUrl.clear();
     _samplingCapabilitiesByUrl.clear();
+    _elicitationCallbacksByUrl.clear();
     _remoteClient.clear();
     unawaited(_stdioClient.close());
   }
@@ -659,6 +675,13 @@ class McpSessionManager {
           messages,
           params: Map<String, Object?>.from(message.params),
         );
+      }
+    }
+    if (message.method == mcpMethodElicitationCreate) {
+      final McpElicitationCallback? callback =
+          _elicitationCallbacksByUrl[message.url];
+      if (callback != null) {
+        return callback(Map<String, Object?>.from(message.params));
       }
     }
     if (message.method == 'ping') {

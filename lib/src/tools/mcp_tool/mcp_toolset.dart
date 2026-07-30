@@ -25,12 +25,14 @@ class McpToolset extends BaseToolset {
     this.authConfig,
     this.headerProvider,
     this.samplingCallback,
+    this.elicitationCallback,
     Map<String, Object?>? samplingCapabilities,
   }) : samplingCapabilities = samplingCapabilities ?? <String, Object?>{} {
     McpSessionManager.instance.configureConnection(
       connectionParams: connectionParams,
       samplingCallback: samplingCallback,
       samplingCapabilities: this.samplingCapabilities,
+      elicitationCallback: elicitationCallback,
     );
   }
 
@@ -45,6 +47,9 @@ class McpToolset extends BaseToolset {
 
   /// Optional callback used to answer MCP `sampling/createMessage` requests.
   final McpSamplingCallback? samplingCallback;
+
+  /// Optional callback used to answer MCP `elicitation/create` requests.
+  final McpElicitationCallback? elicitationCallback;
 
   /// Optional MCP client capabilities advertised for sampling support.
   final Map<String, Object?> samplingCapabilities;
