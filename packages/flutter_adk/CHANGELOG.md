@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.7.30
+
+- Bumped package version to `2026.7.30` and dependency `adk_dart: ^2026.7.30`.
+
 ## 2026.7.24
 
 - Bumped package version to `2026.7.24`.

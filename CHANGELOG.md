@@ -1,3 +1,14 @@
+## 2026.7.30
+
+- Bumped package release versions to `2026.7.30` for `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm`.
+- Added `ReflectAndRetryModelPlugin` (`lib/src/plugins/reflect_retry_model_plugin.dart`) for framework-level LLM error recovery, self-healing reflection tool calls (`adkHandleModelError`), and retry tracking.
+- Added `FunctionTool` declaration caching (`_cachedDeclaration`) to eliminate redundant parameter schema rebuilds during agent turns.
+- Standardized `SessionNotFoundError` handling across session services, agent runners, and dev web server.
+- Updated MCP protocol support to official specification version `2026-07-28` (`mcpLatestProtocolVersion = '2026-07-28'`).
+- Added `elicitationCallback` support (`elicitation/create` and `notifications/elicitation/complete`) to `McpToolset` and `McpSessionManager` for client-side user input & OAuth challenge handling.
+- Added `AdkAgentMcpServer` (`lib/src/tools/mcp_tool/agent_to_mcp.dart`) to expose any ADK `BaseAgent` as a compliant MCP server over tool interfaces.
+- Implemented `LoadWebPageTool` and `EnterpriseWebSearchTool` (ported from `adk-js`) for web scraping with SSRF prevention and Vertex AI search grounding.
+
 ## 2026.7.24
 
 - Bumped package release versions to `2026.7.24` for `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm`.

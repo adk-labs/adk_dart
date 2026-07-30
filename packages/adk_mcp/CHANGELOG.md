@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.7.30
+
+- Updated MCP protocol support to official specification version `2026-07-28` (`mcpLatestProtocolVersion = '2026-07-28'`).
+- Added RPC method constants `mcpMethodServerDiscover` (`server/discover`) and `mcpMethodSubscriptionsListen` (`subscriptions/listen`).
+- Expanded supported protocol versions set `mcpSupportedProtocolVersions` with `'2026-07-28'`.
+
 ## 2026.7.24
 
 - Bumped package version to `2026.7.24`.
