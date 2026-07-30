@@ -40,10 +40,13 @@ class FunctionTool extends BaseTool {
   /// provided to align with user-defined function signatures.
   final List<String> toolContextParamNames;
 
+  FunctionDeclaration? _cachedDeclaration;
+
   @override
   /// Returns a simple declaration derived from [name] and [description].
   FunctionDeclaration? getDeclaration() {
-    return FunctionDeclaration(name: name, description: description);
+    return _cachedDeclaration ??=
+        FunctionDeclaration(name: name, description: description);
   }
 
   @override

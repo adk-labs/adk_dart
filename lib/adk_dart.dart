@@ -108,6 +108,7 @@ export 'src/cli/utils/state.dart' show createEmptyState;
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
+export 'src/errors/session_not_found_error.dart';
 export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
@@ -249,6 +250,7 @@ export 'src/plugins/logging_plugin.dart';
 export 'src/plugins/multimodal_tool_results_plugin.dart';
 export 'src/plugins/plugin_manager.dart';
 export 'src/plugins/reflect_retry_tool_plugin.dart';
+export 'src/plugins/reflect_retry_model_plugin.dart';
 export 'src/plugins/save_files_as_artifacts_plugin.dart';
 export 'src/platform/runtime_environment.dart';
 export 'src/platform/thread.dart';

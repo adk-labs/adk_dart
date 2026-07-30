@@ -187,30 +187,32 @@ String? _readSqliteIndexSql(String dbPath, String indexName) {
 
 void main() {
   group('InMemorySessionService', () {
-    test('appendEvent returns event when session does not exist', () async {
-      final InMemorySessionService service = InMemorySessionService();
-      final Session session = await service.createSession(
-        appName: 'app',
-        userId: 'u1',
-      );
-      await service.deleteSession(
-        appName: 'app',
-        userId: 'u1',
-        sessionId: session.id,
-      );
+    test(
+      'appendEvent throws SessionNotFoundError when session does not exist',
+      () async {
+        final InMemorySessionService service = InMemorySessionService();
+        final Session session = await service.createSession(
+          appName: 'app',
+          userId: 'u1',
+        );
+        await service.deleteSession(
+          appName: 'app',
+          userId: 'u1',
+          sessionId: session.id,
+        );
 
-      final Event event = Event(
-        invocationId: 'inv_missing',
-        author: 'agent',
-        content: Content.modelText('hello'),
-      );
+        final Event event = Event(
+          invocationId: 'inv_missing',
+          author: 'agent',
+          content: Content.modelText('hello'),
+        );
 
-      final Event appended = await service.appendEvent(
-        session: session,
-        event: event,
-      );
-      expect(appended, same(event));
-    });
+        expect(
+          () => service.appendEvent(session: session, event: event),
+          throwsA(isA<SessionNotFoundError>()),
+        );
+      },
+    );
   });
 
   group('SqliteSessionService', () {

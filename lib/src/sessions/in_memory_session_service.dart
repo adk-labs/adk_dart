@@ -2,6 +2,7 @@
 library;
 
 import '../errors/already_exists_error.dart';
+import '../errors/session_not_found_error.dart';
 import '../events/event.dart';
 import '../platform/time.dart';
 import '../types/id.dart';
@@ -191,7 +192,7 @@ class InMemorySessionService extends BaseSessionService {
     final Session? stored =
         _sessions[session.appName]?[session.userId]?[session.id];
     if (stored == null) {
-      return event;
+      throw SessionNotFoundError('Session with id ${session.id} not found.');
     }
 
     final Event appended = await super.appendEvent(

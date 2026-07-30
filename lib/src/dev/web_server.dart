@@ -18,7 +18,9 @@ import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
 import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/utils/agent_loader.dart';
-import '../cli/utils/base_agent_loader.dart';
+import '../errors/already_exists_error.dart';
+import '../errors/session_not_found_error.dart';
+import '../events/event.dart';
 import '../cli/utils/evals.dart' as cli_evals;
 import '../cli/utils/graph_serialization.dart' as graph_serialization;
 import '../cli/service_registry.dart';
@@ -477,6 +479,13 @@ class _AdkDevWebContext {
     final Runner runner = await _createRunner(resolvedAppName);
     _runners[resolvedAppName] = runner;
     return runner;
+  }
+
+  BaseAgent? asBaseAgent(Object? value) {
+    if (value is BaseAgent) {
+      return value;
+    }
+    return null;
   }
 
   Future<Runner> _createRunner(String appName) async {
@@ -946,7 +955,7 @@ class _AdkDevWebContext {
       if (loaded is App) {
         return loaded.rootAgent;
       }
-      return asBaseAgent(loaded);
+      return asBaseAgent(loaded) ?? runtime.runner.agent;
     } on StateError {
       if (resolvedAppName != defaultAppName) {
         rethrow;

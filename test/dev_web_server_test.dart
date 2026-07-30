@@ -9,6 +9,8 @@ import 'package:adk_dart/src/dev/web_server.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:test/test.dart';
 
+import 'fixtures/dynamic_extra_plugin.dart';
+
 String appInfoTool({required String text}) => text;
 
 class _CaptureLiveConfigAgent extends BaseAgent {
@@ -204,6 +206,10 @@ void main() {
 
       final String fixturePath =
           '${Directory.current.path}${Platform.pathSeparator}test${Platform.pathSeparator}fixtures${Platform.pathSeparator}dynamic_extra_plugin.dart';
+      final String pluginSpecKey = '$fixturePath:DynamicExtraPlugin';
+      registerExtraPluginFactory(pluginSpecKey, (spec, {String? baseDir}) {
+        return DynamicExtraPlugin(baseDir: baseDir, pluginSpec: spec);
+      });
       final String markerPath =
           '${sandbox.path}${Platform.pathSeparator}.dynamic_extra_plugin_marker';
       final File marker = File(markerPath);
