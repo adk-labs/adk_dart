@@ -1699,13 +1699,14 @@ const int mcpMethodNotFoundCode = -32601;
 const int mcpServerErrorCode = -32000;
 
 /// The most recent MCP protocol version this client advertises by default.
-const String mcpLatestProtocolVersion = '2025-11-25';
+const String mcpLatestProtocolVersion = '2026-07-28';
 
 /// Protocol versions supported by this client.
 const Set<String> mcpSupportedProtocolVersions = <String>{
   '2025-03-26',
   '2025-06-18',
   '2025-11-25',
+  '2026-07-28',
 };
 
 /// Valid values for `logging/setLevel`.
@@ -1815,6 +1816,12 @@ const String mcpMethodElicitationCreate = 'elicitation/create';
 /// The `notifications/elicitation/complete` notification method.
 const String mcpMethodElicitationCompleteNotification =
     'notifications/elicitation/complete';
+
+/// The `server/discover` request method (MCP 2026-07-28).
+const String mcpMethodServerDiscover = 'server/discover';
+
+/// The `subscriptions/listen` request method (MCP 2026-07-28).
+const String mcpMethodSubscriptionsListen = 'subscriptions/listen';
 
 /// The `notifications/cancelled` notification method.
 const String mcpMethodCancelledNotification = 'notifications/cancelled';
