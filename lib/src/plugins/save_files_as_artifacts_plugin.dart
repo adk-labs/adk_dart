@@ -12,6 +12,9 @@ import 'base_plugin.dart';
 const Set<String> _modelAccessibleUriSchemes = <String>{'gs', 'https', 'http'};
 const String _pendingDeltaStateSuffix = ':pending_delta';
 
+/// Maximum allowed file artifact size (20 MB).
+const int maxArtifactSizeBytes = 20 * 1024 * 1024;
+
 /// Saves user inline files as artifacts and replaces them with file references.
 class SaveFilesAsArtifactsPlugin extends BasePlugin {
   /// Creates a save-files-as-artifacts plugin.
@@ -48,6 +51,12 @@ class SaveFilesAsArtifactsPlugin extends BasePlugin {
       if (inlineData == null) {
         newParts.add(part);
         continue;
+      }
+
+      if (inlineData.data.length > maxArtifactSizeBytes) {
+        throw ArgumentError(
+          'File "${inlineData.displayName ?? 'inline_data'}" size (${inlineData.data.length} bytes) exceeds maximum artifact size limit of $maxArtifactSizeBytes bytes (20MB).',
+        );
       }
 
       try {

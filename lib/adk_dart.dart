@@ -219,6 +219,7 @@ export 'src/flows/llm_flows/transcription_manager.dart';
 export 'src/flows/llm_flows/output_schema_processor.dart';
 
 export 'src/models/base_llm.dart';
+export 'src/models/capabilities.dart';
 export 'src/models/base_llm_connection.dart';
 export 'src/models/cache_metadata.dart';
 export 'src/models/gemini_context_cache_manager.dart';
@@ -378,6 +379,7 @@ export 'src/tools/openapi_tool/openapi_spec_parser/operation_parser.dart';
 export 'src/tools/openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 export 'src/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.dart';
 export 'src/tools/google_tool.dart';
+export 'src/tools/get_user_choice_tool.dart';
 export 'src/tools/load_artifacts_tool.dart';
 export 'src/tools/load_mcp_resource_tool.dart';
 export 'src/tools/load_memory_tool.dart';

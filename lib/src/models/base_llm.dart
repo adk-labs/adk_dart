@@ -2,6 +2,7 @@
 library;
 
 import '../types/content.dart';
+import 'capabilities.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
@@ -12,6 +13,9 @@ abstract class BaseLlm {
 
   /// The model identifier sent to the backend.
   String model;
+
+  /// Self-reported capabilities snapshot for this LLM instance.
+  LlmCapabilities get capabilities => LlmCapabilities.defaultCapabilities;
 
   /// Generates model responses for [request].
   ///

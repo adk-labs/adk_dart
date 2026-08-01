@@ -55,6 +55,24 @@ class FunctionTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
+    final FunctionDeclaration? declaration = getDeclaration();
+    if (declaration != null && declaration.parameters != null) {
+      final Object? requiredRaw = declaration.parameters!['required'];
+      if (requiredRaw is List) {
+        final List<String> missingParams = requiredRaw
+            .map((Object? p) => '$p')
+            .where((String p) => p.isNotEmpty && !args.containsKey(p))
+            .toList();
+        if (missingParams.isNotEmpty) {
+          final String missingStr = missingParams.join(', ');
+          return <String, Object>{
+            'error':
+                'Invoking `$name()` failed as mandatory input parameter(s) are missing: $missingStr. Please retry calling this tool providing all mandatory parameters.',
+          };
+        }
+      }
+    }
+
     if (await _requiresConfirmation(args)) {
       final confirmation = toolContext.toolConfirmation;
       if (confirmation == null) {

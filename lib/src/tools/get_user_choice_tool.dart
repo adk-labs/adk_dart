@@ -1,20 +1,50 @@
-/// User-choice helper tool definitions.
+/// A long-running tool that presents a list of options to the user and awaits their selection.
 library;
 
-import '../agents/context.dart';
-import 'long_running_tool.dart';
+import '../models/llm_request.dart';
+import 'base_tool.dart';
+import 'tool_context.dart';
 
-/// Requests a user selection from [options].
-///
-/// Returns `null` so the runtime can wait for external user input.
-String? getUserChoice(List<String> options, Context toolContext) {
-  toolContext.actions.skipSummarization = true;
-  return null;
+const String getUserChoiceFunctionName = 'get_user_choice';
+
+/// Long-running function tool that prompts user to select from a list of options.
+class GetUserChoiceTool extends BaseTool {
+  /// Creates a get_user_choice tool instance.
+  GetUserChoiceTool()
+      : super(
+          name: getUserChoiceFunctionName,
+          description:
+              'Presents a list of options to the user and awaits their selection.',
+        );
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    return FunctionDeclaration(
+      name: name,
+      description: description,
+      parameters: <String, dynamic>{
+        'type': 'object',
+        'properties': <String, dynamic>{
+          'options': <String, dynamic>{
+            'type': 'array',
+            'items': <String, dynamic>{'type': 'string'},
+            'description': 'List of options to present to the user.',
+          },
+        },
+        'required': <String>['options'],
+      },
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    toolContext.actions.skipSummarization = true;
+    return null;
+  }
 }
 
-/// Long-running tool wrapper for [getUserChoice].
-final LongRunningFunctionTool getUserChoiceTool = LongRunningFunctionTool(
-  func: getUserChoice,
-  name: 'get_user_choice',
-  description: 'Provides options to the user and asks them to choose one.',
-);
+/// Global singleton instance of [GetUserChoiceTool].
+final GetUserChoiceTool getUserChoice = GetUserChoiceTool();
