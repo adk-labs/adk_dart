@@ -239,6 +239,7 @@ class FakeConversation implements litert.Conversation {
   Future<litert.Message> sendMessage(
     litert.Message message, {
     Map<String, Object?>? extraContext,
+    int? maxOutputTokens,
   }) async {
     sendMessageCallCount += 1;
     lastMessageSent = message;
@@ -252,6 +253,7 @@ class FakeConversation implements litert.Conversation {
   Stream<litert.Message> sendMessageStream(
     litert.Message message, {
     Map<String, Object?>? extraContext,
+    int? maxOutputTokens,
   }) {
     sendMessageCallCount += 1;
     lastMessageSent = message;
@@ -266,9 +268,13 @@ class FakeConversation implements litert.Conversation {
     litert.Message message,
     litert.MessageCallback callback, {
     Map<String, Object?>? extraContext,
+    int? maxOutputTokens,
   }) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<String> renderPreface() async => '';
 
   @override
   Future<int> getTokenCount() async => 0;
