@@ -314,29 +314,19 @@ class StreamingResponseAggregator {
     final String text = part.text ?? '';
     if (part.thought) {
       _thoughtText += text;
-      if (part.thoughtSignature != null) {
-        if (_thoughtTextSignature == null) {
-          _thoughtTextSignature = List<int>.from(part.thoughtSignature!);
-        } else if (!_sameThoughtSignature(
-          _thoughtTextSignature,
-          part.thoughtSignature,
-        )) {
-          _thoughtTextSignature = null;
-        }
+      if (part.thoughtSignature != null &&
+          part.thoughtSignature!.isNotEmpty &&
+          _thoughtTextSignature == null) {
+        _thoughtTextSignature = List<int>.from(part.thoughtSignature!);
       }
       return;
     }
 
     _text += text;
-    if (part.thoughtSignature != null) {
-      if (_textThoughtSignature == null) {
-        _textThoughtSignature = List<int>.from(part.thoughtSignature!);
-      } else if (!_sameThoughtSignature(
-        _textThoughtSignature,
-        part.thoughtSignature,
-      )) {
-        _textThoughtSignature = null;
-      }
+    if (part.thoughtSignature != null &&
+        part.thoughtSignature!.isNotEmpty &&
+        _textThoughtSignature == null) {
+      _textThoughtSignature = List<int>.from(part.thoughtSignature!);
     }
   }
 
@@ -424,20 +414,19 @@ class StreamingResponseAggregator {
         }
         if (part.text != null) {
           if (_currentTextBuffer.isNotEmpty &&
-              (part.thought != _currentTextIsThought ||
-                  !_sameThoughtSignature(
-                    part.thoughtSignature,
-                    _currentTextThoughtSignature,
-                  ))) {
+              part.thought != _currentTextIsThought) {
             _flushTextBufferToSequence();
           }
           if (_currentTextBuffer.isEmpty) {
             _currentTextIsThought = part.thought;
-            _currentTextThoughtSignature = part.thoughtSignature == null
-                ? null
-                : List<int>.from(part.thoughtSignature!);
           }
           _currentTextBuffer += part.text!;
+          if (part.thoughtSignature != null &&
+              part.thoughtSignature!.isNotEmpty &&
+              _currentTextThoughtSignature == null) {
+            _currentTextThoughtSignature =
+                List<int>.from(part.thoughtSignature!);
+          }
         } else if (part.functionCall != null) {
           _processFunctionCallPart(part);
         } else {

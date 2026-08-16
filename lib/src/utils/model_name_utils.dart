@@ -104,6 +104,6 @@ bool isGemini2OrAbove(String? modelString) {
 
 bool _isGeminiEapModelName(String modelName) {
   return RegExp(
-    r'^gemini-[a-z0-9_]+(?:-[a-z0-9_]+)*-early-exp\d*$',
+    r'^gemini-(?:[a-z0-9_]+(?:-[a-z0-9_]+)*-)?early-exp\d*$',
   ).hasMatch(modelName);
 }

@@ -13,6 +13,11 @@ bool canUseOutputSchemaWithTools(
   Object model, {
   Map<String, String>? environment,
 }) {
+  if (model is BaseLlm) {
+    if (model.capabilities.outputSchemaAndTools) {
+      return true;
+    }
+  }
   if (model is LiteLlm) {
     return true;
   }

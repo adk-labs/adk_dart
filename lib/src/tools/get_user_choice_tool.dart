@@ -36,6 +36,12 @@ class GetUserChoiceTool extends BaseTool {
     );
   }
 
+  /// Invokes the tool synchronously given [options] and [context].
+  String? call(List<String> options, ToolContext context) {
+    context.actions.skipSummarization = true;
+    return null;
+  }
+
   @override
   Future<Object?> run({
     required Map<String, dynamic> args,

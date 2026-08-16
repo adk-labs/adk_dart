@@ -7,9 +7,11 @@ import '../types/content.dart';
 import '../utils/google_client_headers.dart';
 import '../utils/system_environment/system_environment.dart';
 import '../utils/streaming_utils.dart';
+import '../utils/model_name_utils.dart';
 import '../utils/variant_utils.dart';
 import 'base_llm.dart';
 import 'base_llm_connection.dart';
+import 'capabilities.dart';
 import 'cache_metadata.dart';
 import 'gemini_context_cache_manager.dart';
 import 'gemini_llm_connection.dart';
@@ -132,6 +134,14 @@ class Gemini extends BaseLlm {
   String get _liveApiVersion =>
       _normalizedEndpoint.apiVersion ??
       (apiBackend == GoogleLLMVariant.vertexAi ? 'v1beta1' : 'v1alpha');
+
+  @override
+  LlmCapabilities get capabilities => LlmCapabilities(
+    outputSchemaAndTools:
+        apiBackend == GoogleLLMVariant.vertexAi && isGeminiModel(model),
+    supportsAudioInput: true,
+    supportsSystemInstruction: true,
+  );
 
   /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {

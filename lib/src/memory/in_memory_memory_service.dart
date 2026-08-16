@@ -12,12 +12,12 @@ class InMemoryMemoryService extends BaseMemoryService {
   /// Creates an in-memory memory service.
   InMemoryMemoryService();
 
-  final Map<String, Map<String, List<Event>>> _sessionEventsByUserKey =
-      <String, Map<String, List<Event>>>{};
+  final Map<(String, String), Map<String, List<Event>>> _sessionEventsByUserKey =
+      <(String, String), Map<String, List<Event>>>{};
 
   @override
   Future<void> addSessionToMemory(Session session) async {
-    final String key = _userKey(session.appName, session.userId);
+    final (String, String) key = _userKey(session.appName, session.userId);
     final List<Event> events = session.events
         .where(
           (Event event) =>
@@ -41,7 +41,7 @@ class InMemoryMemoryService extends BaseMemoryService {
     Map<String, Object?>? customMetadata,
   }) async {
     final Map<String, Object?>? _ = customMetadata;
-    final String key = _userKey(appName, userId);
+    final (String, String) key = _userKey(appName, userId);
     final String scopedSessionId = sessionId ?? '__unknown_session_id__';
     final List<Event> target = _sessionEventsByUserKey
         .putIfAbsent(key, () => <String, List<Event>>{})
@@ -68,7 +68,7 @@ class InMemoryMemoryService extends BaseMemoryService {
     required String userId,
     required String query,
   }) async {
-    final String key = _userKey(appName, userId);
+    final (String, String) key = _userKey(appName, userId);
     final Map<String, List<Event>> sessions =
         _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
 
@@ -103,7 +103,7 @@ class InMemoryMemoryService extends BaseMemoryService {
   }
 }
 
-String _userKey(String appName, String userId) => '$appName/$userId';
+(String, String) _userKey(String appName, String userId) => (appName, userId);
 
 String _eventText(Event event) {
   final content = event.content;

@@ -509,6 +509,45 @@ BaseTool _getTool(FunctionCall functionCall, Map<String, BaseTool> toolsDict) {
   return tool;
 }
 
+(Object?, List<Part>?) _extractMultimodalParts(Object? functionResult) {
+  if (functionResult is Part) {
+    if (functionResult.inlineData != null) {
+      return (<String, dynamic>{}, <Part>[functionResult]);
+    }
+  }
+
+  if (functionResult is Map) {
+    final Map<String, dynamic> keptItems = <String, dynamic>{};
+    final List<Part> parts = <Part>[];
+    for (final MapEntry<Object?, Object?> entry in functionResult.entries) {
+      final Object? value = entry.value;
+      if (value is Part && value.inlineData != null) {
+        parts.add(value);
+      } else {
+        keptItems['${entry.key}'] = value;
+      }
+    }
+    if (parts.isNotEmpty) {
+      return (keptItems, parts);
+    }
+  } else if (functionResult is List) {
+    final List<Object?> keptValues = <Object?>[];
+    final List<Part> parts = <Part>[];
+    for (final Object? value in functionResult) {
+      if (value is Part && value.inlineData != null) {
+        parts.add(value);
+      } else {
+        keptValues.add(value);
+      }
+    }
+    if (parts.isNotEmpty) {
+      return (keptValues, parts);
+    }
+  }
+
+  return (functionResult, null);
+}
+
 /// Builds a user-role function response event from tool execution output.
 Event _buildResponseEvent({
   required BaseTool tool,
@@ -517,13 +556,19 @@ Event _buildResponseEvent({
   required InvocationContext invocationContext,
   Object? rawResult,
 }) {
-  final Object? displayResult = rawResult ?? functionResult;
+  final (Object? remainingResult, List<Part>? extractedParts) =
+      _extractMultimodalParts(rawResult ?? functionResult);
+  final Map<String, dynamic> normalizedResult =
+      _normalizeFunctionResult(remainingResult);
+
+  final Object? displayResult = rawResult ?? normalizedResult;
   final Part functionResponsePart = Part.fromFunctionResponse(
     name: tool.name,
-    response: functionResult,
+    response: normalizedResult,
     id: toolContext.functionCallId,
+    parts: extractedParts,
   );
-  final Part? imagePart = _decodeComputerUseImagePart(tool, functionResult);
+  final Part? imagePart = _decodeComputerUseImagePart(tool, normalizedResult);
   final List<Part> parts = <Part>[functionResponsePart, ?imagePart];
 
   // When summarization is skipped, ensure a displayable text part is added so

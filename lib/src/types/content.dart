@@ -122,8 +122,12 @@ class FunctionCall {
 /// Function-response payload sent back to the model.
 class FunctionResponse {
   /// Creates a function-response payload.
-  FunctionResponse({required this.name, JsonMap? response, this.id})
-    : response = response ?? <String, dynamic>{};
+  FunctionResponse({
+    required this.name,
+    JsonMap? response,
+    this.id,
+    this.parts,
+  }) : response = response ?? <String, dynamic>{};
 
   /// Function name this response corresponds to.
   String name;
@@ -134,16 +138,23 @@ class FunctionResponse {
   /// Optional tool-call identifier.
   String? id;
 
+  /// Optional media/multimodal parts associated with this function response.
+  List<Part>? parts;
+
   /// Returns a copy of this function-response payload.
   FunctionResponse copyWith({
     String? name,
     JsonMap? response,
     Object? id = _sentinel,
+    Object? parts = _sentinel,
   }) {
     return FunctionResponse(
       name: name ?? this.name,
       response: response ?? Map<String, dynamic>.from(this.response),
       id: identical(id, _sentinel) ? this.id : id as String?,
+      parts: identical(parts, _sentinel)
+          ? this.parts?.map((p) => p.copyWith()).toList()
+          : parts as List<Part>?,
     );
   }
 }
@@ -213,6 +224,7 @@ class Part {
     required String name,
     JsonMap? response,
     String? id,
+    List<Part>? parts,
     Map<String, Object?>? partMetadata,
   }) {
     return Part(
@@ -220,6 +232,7 @@ class Part {
         name: name,
         response: response,
         id: id,
+        parts: parts,
       ),
       partMetadata: partMetadata,
     );
