@@ -1,0 +1,14 @@
+name: context_caching_and_compaction_example
+description: An example demonstrating long-context optimization using ContextCacheConfig with Gemini.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

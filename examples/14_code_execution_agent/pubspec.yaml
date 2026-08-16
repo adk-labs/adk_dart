@@ -1,0 +1,14 @@
+name: code_execution_agent_example
+description: An example demonstrating code execution capabilities within the ADK agent reasoning loop.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

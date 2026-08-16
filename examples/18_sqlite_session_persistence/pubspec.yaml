@@ -1,0 +1,14 @@
+name: sqlite_session_persistence_example
+description: An example demonstrating persistent conversation sessions across application restarts using SqliteSessionService.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

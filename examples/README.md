@@ -24,6 +24,12 @@ ADK (Agent Development Kit) Dart 패키지를 사용하여 AI 에이전트를 �
 10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP 서버 및 도구 연동
 11. **[11_hitl_user_choice](./11_hitl_user_choice)** — GetUserChoiceTool 기반 휴먼 인 더 루프(HITL) 상호작용
 12. **[12_structured_output_schema](./12_structured_output_schema)** — outputSchema 기반 구조화된 JSON 응답 생성
+13. **[13_a2a_agent_protocol](./13_a2a_agent_protocol)** — Agent-to-Agent (A2A) 표준 프로토콜 및 AgentCard 연동
+14. **[14_code_execution_agent](./14_code_execution_agent)** — 샌드박스 코드 실행(Code Execution) 기반 연산 에이전트
+15. **[15_evaluation_llm_judge](./15_evaluation_llm_judge)** — LocalEvalService 기반 자동화된 에이전트 평가 및 벤치마킹
+16. **[16_multimodal_gemini](./16_multimodal_gemini)** — 이미지/바이트 멀티모달 입력 처리
+17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — ContextCacheConfig 기반 컨텍스트 캐싱 최적화
+18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — SqliteSessionService 기반 영속 세션 관리
 
 ### 빠른 시작
 
@@ -34,8 +40,8 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> 예제 `02` ~ `07`, `10` ~ `12`는 실행 전 `GEMINI_API_KEY` 환경 변수를 설정해야 합니다.
-> 예제 `08`, `09`는 로컬/온디바이스 모델을 사용하므로 API 키가 필요하지 않습니다.
+> Gemini 연동 예제(`02` ~ `07`, `10` ~ `12`, `14`, `16`, `17`)는 실행 전 `GEMINI_API_KEY` 환경 변수를 설정해야 합니다.
+> 스텁 및 로컬 예제(`01`, `08`, `09`, `13`, `15`, `18`)는 외부 API 키 없이 즉시 실행 가능합니다.
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
 > ```
@@ -62,6 +68,12 @@ Each example is a self-contained **Dart CLI project** you can download and run i
 10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP server & tool integration
 11. **[11_hitl_user_choice](./11_hitl_user_choice)** — Human-In-The-Loop interactive choices with GetUserChoiceTool
 12. **[12_structured_output_schema](./12_structured_output_schema)** — Typed JSON responses via outputSchema
+13. **[13_a2a_agent_protocol](./13_a2a_agent_protocol)** — Agent-to-Agent (A2A) protocol & AgentCard
+14. **[14_code_execution_agent](./14_code_execution_agent)** — Code Execution agent for numerical problem-solving
+15. **[15_evaluation_llm_judge](./15_evaluation_llm_judge)** — Automated evaluation & benchmarking via LocalEvalService
+16. **[16_multimodal_gemini](./16_multimodal_gemini)** — Multimodal input processing (Images & Text)
+17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — Context caching optimization with ContextCacheConfig
+18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — Persistent sessions across restarts with SqliteSessionService
 
 ### Quick Start
 
@@ -72,8 +84,8 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> Examples `02` through `07`, `10` through `12` require a `GEMINI_API_KEY` environment variable before running.
-> Examples `08` and `09` use local/on-device models and do not require an API key.
+> Gemini-backed examples (`02` ~ `07`, `10` ~ `12`, `14`, `16`, `17`) require a `GEMINI_API_KEY` environment variable.
+> Stub & local examples (`01`, `08`, `09`, `13`, `15`, `18`) run offline without an API key.
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
 > ```
@@ -100,6 +112,12 @@ ADK (Agent Development Kit) Dart パッケージを使用して AI エージェ�
 10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP サーバー連携
 11. **[11_hitl_user_choice](./11_hitl_user_choice)** — GetUserChoiceTool による Human-In-The-Loop 選択対話
 12. **[12_structured_output_schema](./12_structured_output_schema)** — outputSchema による構造化 JSON レスポンス生成
+13. **[13_a2a_agent_protocol](./13_a2a_agent_protocol)** — A2A 標準プロトコルと AgentCard 連携
+14. **[14_code_execution_agent](./14_code_execution_agent)** — コード実行 (Code Execution) による高精度計算エージェント
+15. **[15_evaluation_llm_judge](./15_evaluation_llm_judge)** — LocalEvalService による自動評価とベンチマーク
+16. **[16_multimodal_gemini](./16_multimodal_gemini)** — 画像・バイトデータのマルチモーダル入力処理
+17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — ContextCacheConfig によるコンテキストキャッシュ最適化
+18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — SqliteSessionService による永続セッション管理
 
 ### クイックスタート
 
@@ -108,13 +126,6 @@ cd 01_echo_agent
 dart pub get
 dart run bin/main.dart
 ```
-
-> [!IMPORTANT]
-> サンプル `02` ～ `07`、`10` ～ `12` を実行する前に、環境変数 `GEMINI_API_KEY` を設定してください。
-> サンプル `08`、`09` はローカル/オンデバイスモデルを使用するため、API キーは不要です。
-> ```bash
-> export GEMINI_API_KEY="your-gemini-api-key"
-> ```
 
 ---
 
@@ -138,18 +149,9 @@ dart run bin/main.dart
 10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP 协议与远程工具集成
 11. **[11_hitl_user_choice](./11_hitl_user_choice)** — 基于 GetUserChoiceTool 的人机协同选择交互
 12. **[12_structured_output_schema](./12_structured_output_schema)** — 基于 outputSchema 的类型安全 JSON 输出
-
-### 快速开始
-
-```bash
-cd 01_echo_agent
-dart pub get
-dart run bin/main.dart
-```
-
-> [!IMPORTANT]
-> 示例 `02` 至 `07`、`10` 至 `12` 在运行前需要设置环境变量 `GEMINI_API_KEY`。
-> 示例 `08` 和 `09` 使用本地/设备端模型，无需 API 密钥。
-> ```bash
-> export GEMINI_API_KEY="your-gemini-api-key"
-> ```
+13. **[13_a2a_agent_protocol](./13_a2a_agent_protocol)** — Agent-to-Agent (A2A) 标准协议与 AgentCard
+14. **[14_code_execution_agent](./14_code_execution_agent)** — 基于代码执行 (Code Execution) 的数值计算智能体
+15. **[15_evaluation_llm_judge](./15_evaluation_llm_judge)** — 基于 LocalEvalService 的自动化智能体评测与基准测试
+16. **[16_multimodal_gemini](./16_multimodal_gemini)** — 图像与多模态输入处理
+17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — 基于 ContextCacheConfig 的上下文缓存优化
+18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — 基于 SqliteSessionService 的跨重启会话持久化

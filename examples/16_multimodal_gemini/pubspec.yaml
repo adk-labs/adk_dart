@@ -1,0 +1,14 @@
+name: multimodal_gemini_example
+description: An example demonstrating multimodal inputs (images and text) with Gemini and ADK.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0
