@@ -330,24 +330,6 @@ class StreamingResponseAggregator {
     }
   }
 
-  bool _sameThoughtSignature(List<int>? left, List<int>? right) {
-    if (left == null && right == null) {
-      return true;
-    }
-    if (left == null || right == null) {
-      return false;
-    }
-    if (left.length != right.length) {
-      return false;
-    }
-    for (int index = 0; index < left.length; index += 1) {
-      if (left[index] != right[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   /// Processes one streamed [response] and yields incremental outputs.
   Stream<LlmResponse> processResponse(LlmResponse response) async* {
     _response = response;

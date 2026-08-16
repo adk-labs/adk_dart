@@ -8,7 +8,6 @@ import '../../artifacts/in_memory_artifact_service.dart';
 import '../../auth/credential_service/in_memory_credential_service.dart';
 import '../../events/event.dart';
 import '../../memory/in_memory_memory_service.dart';
-import '../../models/llm_request.dart';
 import '../../runners/runner.dart';
 import '../../sessions/in_memory_session_service.dart';
 import '../../types/content.dart';

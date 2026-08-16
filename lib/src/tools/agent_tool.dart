@@ -475,15 +475,6 @@ Content _nodeInputToContent(Object? nodeInput) {
   return Content.userText('$nodeInput');
 }
 
-String _childBranch(InvocationContext context, BaseAgent agent) {
-  final String suffix = '${context.agent.name}.${agent.name}';
-  final String? branch = context.branch;
-  if (branch == null || branch.isEmpty) {
-    return suffix;
-  }
-  return '$branch.$suffix';
-}
-
 bool _isFinishTaskSuccess(Map<String, dynamic> response) {
   return response['result'] == finishTaskSuccessResult ||
       response['output'] == finishTaskSuccessResult;

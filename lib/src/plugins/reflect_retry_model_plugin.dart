@@ -240,7 +240,7 @@ Formulate a new plan based on your analysis and try a corrected or different app
 
   String _getModelNameFromContext(CallbackContext callbackContext) {
     final Object agent = callbackContext.invocationContext.agent;
-    if (agent is LlmAgent && agent.model != null) {
+    if (agent is LlmAgent) {
       return '${agent.model}';
     }
     return 'default_model';

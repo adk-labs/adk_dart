@@ -56,8 +56,8 @@ class FunctionTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final FunctionDeclaration? declaration = getDeclaration();
-    if (declaration != null && declaration.parameters != null) {
-      final Object? requiredRaw = declaration.parameters!['required'];
+    if (declaration != null) {
+      final Object? requiredRaw = declaration.parameters['required'];
       if (requiredRaw is List) {
         final List<String> missingParams = requiredRaw
             .map((Object? p) => '$p')
