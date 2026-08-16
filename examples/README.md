@@ -1,6 +1,50 @@
 # ADK Dart Examples
 
-> 🇰🇷 [한국어](#한국어) | 🇺🇸 [English](#english) | 🇯🇵 [日本語](#日本語) | 🇨🇳 [中文](#中文)
+> 🇺🇸 [English](#english) | 🇰🇷 [한국어](#한국어) | 🇯🇵 [日本語](#日本語) | 🇨🇳 [中文](#中文)
+
+---
+
+## English
+
+A collection of step-by-step example projects for building, orchestrating, and deploying AI agents with the ADK (Agent Development Kit) Dart package.
+
+Each example is a self-contained **Dart CLI project** that you can download, compile, and run immediately.
+
+### Example Directory
+
+1. **[01_echo_agent](./01_echo_agent)** — Basic agent setup, custom `BaseLlm`, and `Runner` lifecycle
+2. **[02_weather_agent](./02_weather_agent)** — Tool Calling with `FunctionTool` and Gemini
+3. **[03_multi_agent_search](./03_multi_agent_search)** — Multi-agent Hand-off orchestration + Google Search Grounding
+4. **[04_local_environment](./04_local_environment)** — `LocalEnvironment` integration (shell & file execution)
+5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)** — ADK 2.0 Node Graph Workflow Fan-Out / Fan-In
+6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)** — Runtime dynamic node scheduling & state propagation
+7. **[07_managed_agent_basic](./07_managed_agent_basic)** — GCP `ManagedAgent` & remote Interactions API
+8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — Local Ollama / LiteLLM server proxy integration
+9. **[09_local_llm_litert](./09_local_llm_litert)** — On-device Gemma inference via LiteRT-LM (Native C API)
+10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP server & remote tool integration
+11. **[11_hitl_user_choice](./11_hitl_user_choice)** — Human-In-The-Loop interactive choices via `GetUserChoiceTool`
+12. **[12_structured_output_schema](./12_structured_output_schema)** — Type-safe JSON outputs via `outputSchema`
+13. **[13_a2a_agent_protocol](./13_a2a_agent_protocol)** — Agent-to-Agent (A2A) standard protocol & `AgentCard`
+14. **[14_code_execution_agent](./14_code_execution_agent)** — Code Execution agent for precise numerical problem-solving
+15. **[15_evaluation_llm_judge](./15_evaluation_llm_judge)** — Automated agent evaluation & benchmarking via `LocalEvalService`
+16. **[16_multimodal_gemini](./16_multimodal_gemini)** — Multimodal input processing (Images & Text)
+17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — Context caching optimization with `ContextCacheConfig`
+18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — Persistent conversation sessions across restarts via `SqliteSessionService`
+
+### Quick Start
+
+```bash
+cd 01_echo_agent
+dart pub get
+dart run bin/main.dart
+```
+
+> [!IMPORTANT]
+> Gemini-backed examples (`02` ~ `07`, `10` ~ `12`, `14`, `16`, `17`) require a `GEMINI_API_KEY` environment variable.
+> Stub & local examples (`01`, `08`, `09`, `13`, `15`, `18`) run offline without an external API key.
+> ```bash
+> export GEMINI_API_KEY="your-gemini-api-key"
+> ```
 
 ---
 
@@ -38,57 +82,6 @@ cd 01_echo_agent
 dart pub get
 dart run bin/main.dart
 ```
-
-> [!IMPORTANT]
-> Gemini 연동 예제(`02` ~ `07`, `10` ~ `12`, `14`, `16`, `17`)는 실행 전 `GEMINI_API_KEY` 환경 변수를 설정해야 합니다.
-> 스텁 및 로컬 예제(`01`, `08`, `09`, `13`, `15`, `18`)는 외부 API 키 없이 즉시 실행 가능합니다.
-> ```bash
-> export GEMINI_API_KEY="your-gemini-api-key"
-> ```
-
----
-
-## English
-
-A collection of step-by-step example projects for building and running AI agents with the ADK (Agent Development Kit) Dart package.
-
-Each example is a self-contained **Dart CLI project** you can download and run immediately.
-
-### Example List
-
-1. **[01_echo_agent](./01_echo_agent)** — Basic agent & runner setup
-2. **[02_weather_agent](./02_weather_agent)** — Tool Calling with FunctionTool
-3. **[03_multi_agent_search](./03_multi_agent_search)** — Multi-agent Hand-off orchestration + Google Search
-4. **[04_local_environment](./04_local_environment)** — LocalEnvironment integration
-5. **[05_workflow_fan_out_fan_in](./05_workflow_fan_out_fan_in)** — ADK 2.0 Workflow Fan-Out / Fan-In
-6. **[06_workflow_dynamic_nodes](./06_workflow_dynamic_nodes)** — Runtime dynamic node orchestration
-7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (remote agent) setup
-8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — Local Ollama / LiteLLM server integration
-9. **[09_local_llm_litert](./09_local_llm_litert)** — On-device Gemma inference via LiteRT-LM
-10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP server & tool integration
-11. **[11_hitl_user_choice](./11_hitl_user_choice)** — Human-In-The-Loop interactive choices with GetUserChoiceTool
-12. **[12_structured_output_schema](./12_structured_output_schema)** — Typed JSON responses via outputSchema
-13. **[13_a2a_agent_protocol](./13_a2a_agent_protocol)** — Agent-to-Agent (A2A) protocol & AgentCard
-14. **[14_code_execution_agent](./14_code_execution_agent)** — Code Execution agent for numerical problem-solving
-15. **[15_evaluation_llm_judge](./15_evaluation_llm_judge)** — Automated evaluation & benchmarking via LocalEvalService
-16. **[16_multimodal_gemini](./16_multimodal_gemini)** — Multimodal input processing (Images & Text)
-17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — Context caching optimization with ContextCacheConfig
-18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — Persistent sessions across restarts with SqliteSessionService
-
-### Quick Start
-
-```bash
-cd 01_echo_agent
-dart pub get
-dart run bin/main.dart
-```
-
-> [!IMPORTANT]
-> Gemini-backed examples (`02` ~ `07`, `10` ~ `12`, `14`, `16`, `17`) require a `GEMINI_API_KEY` environment variable.
-> Stub & local examples (`01`, `08`, `09`, `13`, `15`, `18`) run offline without an API key.
-> ```bash
-> export GEMINI_API_KEY="your-gemini-api-key"
-> ```
 
 ---
 
@@ -155,3 +148,11 @@ dart run bin/main.dart
 16. **[16_multimodal_gemini](./16_multimodal_gemini)** — 图像与多模态输入处理
 17. **[17_context_caching_and_compaction](./17_context_caching_and_compaction)** — 基于 ContextCacheConfig 的上下文缓存优化
 18. **[18_sqlite_session_persistence](./18_sqlite_session_persistence)** — 基于 SqliteSessionService 的跨重启会话持久化
+
+### 快速开始
+
+```bash
+cd 01_echo_agent
+dart pub get
+dart run bin/main.dart
+```

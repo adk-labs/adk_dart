@@ -1,19 +1,22 @@
-# Echo Agent Example
+# 01. Echo Agent
 
-이 예제는 ADK Dart 패키지를 사용하여 간단한 에이전트를 초기화하고 실행하는 기본 구조를 보여줍니다.
+A foundational example demonstrating how to initialize and run a basic agent using a custom `BaseLlm` and `InMemoryRunner`.
 
-## 주요 개념
-- **BaseLlm**: 사용자 정의 LLM 모델 인터페이스를 구현합니다 (`EchoModel`은 사용자의 마지막 입력을 그대로 에코하는 더미 모델입니다).
-- **Agent**: 에이전트의 이름, 설명 및 LLM 모델을 정의합니다.
-- **InMemoryRunner**: 인메모리 세션 및 메모리 서비스를 사용하는 간단한 에이전트 실행기입니다.
-- **Session**: 사용자 세션을 생성하고 이력을 보존합니다.
+## How to Run
 
-## 실행 방법
-1. 의존성 설치:
-   ```bash
-   dart pub get
-   ```
-2. 예제 실행:
-   ```bash
-   dart run bin/main.dart
-   ```
+```bash
+cd examples/01_echo_agent
+dart pub get
+dart run bin/main.dart
+```
+
+---
+
+### 한국어
+커스텀 `BaseLlm`(`EchoModel`)과 `InMemoryRunner`를 사용하여 가장 기초적인 에이전트를 초기화하고 대화를 실행하는 예제입니다.
+
+### 日本語
+カスタム `BaseLlm` (`EchoModel`) と `InMemoryRunner` を使用して、最も基本的なエージェントを初期化し実行するサンプルです。
+
+### 中文
+使用自定义 `BaseLlm` (`EchoModel`) 和 `InMemoryRunner` 初始化并运行最基础智能体的示例。

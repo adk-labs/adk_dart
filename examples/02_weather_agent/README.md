@@ -1,21 +1,23 @@
-# Weather Agent Example (Function Calling)
+# 02. Weather Agent (Tool Calling)
 
-이 예제는 ADK Dart 에이전트에 사용자 정의 함수 도구(`FunctionTool`)를 바인딩하고 실행하는 방법을 보여줍니다. 에이전트가 서울 날씨에 관한 질문을 받았을 때 자동으로 해당 날씨 조회 API(함수)를 호출하여 답변을 구성합니다.
+Demonstrates how to bind external Dart functions to an agent using `FunctionTool` and execute automated tool calls via Gemini.
 
-## 주요 개념
-- **FunctionTool**: Dart 함수(`getWeather`)를 에이전트의 LLM 도구 호출 규격에 맞춰 어댑팅합니다.
-- **Automatic Function Calling**: 에이전트가 날씨 정보를 필요로 할 때, LLM이 반환하는 Tool Call 요청을 감지하여 정의된 Dart 함수를 직접 실행하고 그 결과를 LLM에 응답으로 전달하는 전 과정이 자동화되어 처리됩니다.
+## How to Run
 
-## 실행 방법
-
-### 1. API 키 설정
-이 예제는 실제 Gemini API 모델(`gemini-2.5-flash`)을 사용합니다. 먼저 `GEMINI_API_KEY` 환경 변수를 등록해야 합니다.
 ```bash
-export GEMINI_API_KEY="your-gemini-api-key"
-```
-
-### 2. 예제 실행
-```bash
+cd examples/02_weather_agent
 dart pub get
+export GEMINI_API_KEY="your-gemini-api-key"
 dart run bin/main.dart
 ```
+
+---
+
+### 한국어
+`FunctionTool`을 사용하여 일반 Dart 함수(날씨 조회 함수)를 에이전트 도구로 등록하고 Gemini 모델이 자동으로 도구를 호출(Tool Calling)하도록 하는 예제입니다.
+
+### 日本語
+`FunctionTool` を使用して Dart 関数をエージェントツールとしてバインドし、Gemini による自動ツール呼び出し (Tool Calling) を実行するサンプルです。
+
+### 中文
+使用 `FunctionTool` 将 Dart 函数绑定为智能体工具，并通过 Gemini 自动执行工具调用 (Tool Calling) 的示例。

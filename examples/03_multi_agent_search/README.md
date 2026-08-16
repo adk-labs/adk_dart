@@ -1,27 +1,23 @@
-# Multi-Agent and Google Search Example
+# 03. Multi-Agent Search & Hand-off
 
-이 예제는 ADK Dart에서 **단일 에이전트의 구글 검색 도구 활용** 및 **멀티 에이전트 간의 전환(Hand-off)** 오케스트레이션을 보여줍니다.
+Demonstrates multi-agent orchestration with root agent routing, specialized subagents, and Google Search Grounding (`googleSearch`).
 
-## 주요 개념
+## How to Run
 
-### 1. 단일 에이전트 구글 검색
-- **googleSearch**: Gemini 모델과 연동되는 구글 검색 도구입니다. 에이전트가 사용자의 질문에 답하기 위해 신뢰성 있는 최신 정보가 필요할 때 자동으로 검색을 진행합니다.
-
-### 2. 멀티 에이전트 오케스트레이션
-- **greeter**: 사용자의 일상 인사와 스몰토크를 처리하는 전담 에이전트입니다.
-- **task_executor**: 검색 도구를 사용하여 복잡한 정보 수집이나 실행 작업을 처리하는 전담 에이전트입니다.
-- **coordinator**: 사용자 입력의 의도에 맞게 적절한 서브 에이전트(`greeter` 또는 `task_executor`)로 제어권을 넘겨주는 라우터 역할을 수행합니다.
-
-## 실행 방법
-
-### 1. API 키 설정
-실제 구글 검색 도구 및 Gemini 모델을 사용하므로 `GEMINI_API_KEY` 환경 변수가 필요합니다.
 ```bash
-export GEMINI_API_KEY="your-gemini-api-key"
-```
-
-### 2. 예제 실행
-```bash
+cd examples/03_multi_agent_search
 dart pub get
+export GEMINI_API_KEY="your-gemini-api-key"
 dart run bin/main.dart
 ```
+
+---
+
+### 한국어
+루트 오케스트레이터 에이전트와 서브 에이전트 간의 자동 Hand-off 및 실시간 Google 검색 그라운딩(`googleSearch`)을 수행하는 멀티 에이전트 예제입니다.
+
+### 日本語
+ルートエージェントと専門サブエージェント間の自動 Hand-off および Google 検索グラウンディング (`googleSearch`) を実行するマルチエージェントサンプルです。
+
+### 中文
+演示根智能体与专业子智能体之间的自动 Hand-off 以及 Google 搜索接地 (`googleSearch`) 的多智能体协作示例。

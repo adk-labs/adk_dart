@@ -1,17 +1,23 @@
-# Workflow Fan-Out / Fan-In Example (JoinNode)
+# 05. Workflow Fan-Out / Fan-In
 
-이 예제는 ADK 2.0의 워크플로우 엔진을 사용하여 여러 작업을 병렬로 처리(Fan-Out)하고, 그 결과를 `JoinNode`를 통해 동기화 및 병합(Fan-In)하는 구조를 보여줍니다.
+Demonstrates ADK 2.0 graph workflows with parallel branch execution (`Fan-Out`) and synchronization joins (`Fan-In`).
 
-## 주요 개념
-- **Workflow**: 노드(Node)와 엣지(Edge)의 방향성 비순환 그래프(DAG) 구조를 조율하고 병렬 실행 및 결과 흐름을 관리합니다.
-- **JoinNode**: 지정된 복수의 선행 노드들이 모두 성공적으로 실행 완료될 때까지 대기하고, 완료 시 선행 노드들의 출력 결과를 노드명을 Key로 하는 Map 형태로 병합하여 후속 노드에 전달합니다.
+## How to Run
 
-## 실행 방법
-1. 의존성 설치:
-   ```bash
-   dart pub get
-   ```
-2. 예제 실행:
-   ```bash
-   dart run bin/main.dart
-   ```
+```bash
+cd examples/05_workflow_fan_out_fan_in
+dart pub get
+export GEMINI_API_KEY="your-gemini-api-key"
+dart run bin/main.dart
+```
+
+---
+
+### 한국어
+ADK 2.0 노드 그래프 워크플로우를 사용하여 여러 분석 노드를 병렬로 동시 실행(Fan-Out)하고, 결과를 종합 노드로 합류(Fan-In)시키는 예제입니다.
+
+### 日本語
+ADK 2.0 ノードグラフワークフローを使用して、複数の分析ノードを並行実行 (Fan-Out) し、結果を集約ノードに合流 (Fan-In) させるサンプルです。
+
+### 中文
+使用 ADK 2.0 节点图工作流并行执行多个分析节点 (Fan-Out) 并将结果汇总到聚合节点 (Fan-In) 的示例。
