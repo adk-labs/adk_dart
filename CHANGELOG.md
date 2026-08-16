@@ -1,3 +1,17 @@
+## Unreleased (Upcoming 2026.8.17)
+
+- Synced latest core features & bug fixes from `adk-python` v2.7.0, `adk-js` v1.6.0, `adk-go` v2.2.0, and `adk-kotlin` v0.7.0:
+  - Added `LlmCapabilities` (`lib/src/models/capabilities.dart`) model feature capability reporting system and updated `BaseLlm.capabilities` & `Gemini.capabilities`.
+  - Added `GetUserChoiceTool` (`lib/src/tools/get_user_choice_tool.dart`) with `getUserChoice` callable helper for user choice prompts.
+  - Enhanced `FunctionTool` with self-correction feedback returned to the model when mandatory `required` parameters are missing.
+  - Added 20MB file size guard (`maxArtifactSizeBytes = 20 * 1024 * 1024`) to `SaveFilesAsArtifactsPlugin` to protect against oversized artifact payloads.
+  - Supported multimodal media extraction (`FunctionResponse.parts`) from tool execution results in `functions.dart`.
+  - Added automatic orphaned `function_response` pruning (`_dropOrphanedFunctionResponses`) in `ContentsLlmRequestProcessor` (`contents.dart`).
+  - Improved `InMemoryMemoryService` with tuple record keys (`(appName, userId)`) to prevent delimiter collisions when identifiers contain slashes.
+  - Enhanced `StreamingResponseAggregator` to preserve `thoughtSignature` across streamed text chunk runs without premature buffer flushing.
+  - Aligned Gemini EAP model detection regex in `model_name_utils.dart` (`r'^gemini-(?:[a-z0-9_]+(?:-[a-z0-9_]+)*-)?early-exp\d*$'`).
+  - Added unit test coverage in `test/upstream_v2_7_parity_test.dart`, `test/get_user_choice_tool_test.dart`, `test/capabilities_test.dart`, and `test/function_tool_mandatory_args_test.dart` (1,504 total tests passing).
+
 ## 2026.7.30
 
 - Bumped package release versions to `2026.7.30` for `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm`.
