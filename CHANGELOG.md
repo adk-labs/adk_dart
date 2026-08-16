@@ -10,7 +10,10 @@
   - Improved `InMemoryMemoryService` with tuple record keys (`(appName, userId)`) to prevent delimiter collisions when identifiers contain slashes.
   - Enhanced `StreamingResponseAggregator` to preserve `thoughtSignature` across streamed text chunk runs without premature buffer flushing.
   - Aligned Gemini EAP model detection regex in `model_name_utils.dart` (`r'^gemini-(?:[a-z0-9_]+(?:-[a-z0-9_]+)*-)?early-exp\d*$'`).
-  - Added unit test coverage in `test/upstream_v2_7_parity_test.dart`, `test/get_user_choice_tool_test.dart`, `test/capabilities_test.dart`, and `test/function_tool_mandatory_args_test.dart` (1,504 total tests passing).
+  - Added `StaleSessionError` (`lib/src/errors/stale_session_error.dart`) for optimistic concurrency write conflicts in database and SQLite session services.
+  - Synced latest compiled `adk-web` UI assets (`lib/src/cli/browser/`) supporting telemetry consent modal, GA4 analytics instrumentation, live audio eval UI, and 3-legged AuthManager OAuth flow.
+  - Implemented `/config/telemetry` (GET and POST) endpoint in `startAdkDevWebServer` with CSRF header check (`x-adk-telemetry-request: true`) and local config persistence (`lib/src/utils/telemetry_config.dart`).
+  - Added unit test coverage in `test/upstream_v2_7_parity_test.dart`, `test/telemetry_config_test.dart`, `test/get_user_choice_tool_test.dart`, `test/capabilities_test.dart`, and `test/function_tool_mandatory_args_test.dart` (1,506 total tests passing).
 
 ## 2026.7.30
 
