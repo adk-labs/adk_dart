@@ -64,10 +64,10 @@ class FunctionTool extends BaseTool {
             .where((String p) => p.isNotEmpty && !args.containsKey(p))
             .toList();
         if (missingParams.isNotEmpty) {
-          final String missingStr = missingParams.join(', ');
+          final String missingStr = missingParams.join('\n');
           return <String, Object>{
             'error':
-                'Invoking `$name()` failed as mandatory input parameter(s) are missing: $missingStr. Please retry calling this tool providing all mandatory parameters.',
+                'Invoking `$name()` failed as the following mandatory input parameters are not present:\n$missingStr\nYou could retry calling this tool, but it is IMPORTANT for you to provide all the mandatory parameters.',
           };
         }
       }

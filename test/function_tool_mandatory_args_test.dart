@@ -48,7 +48,7 @@ void main() {
       expect(result, isA<Map<String, Object?>>());
       final map = result as Map<String, Object?>;
       expect(map['error'], contains('param2'));
-      expect(map['error'], contains('missing'));
+      expect(map['error'], contains('mandatory input parameters are not present'));
     });
   });
 }
