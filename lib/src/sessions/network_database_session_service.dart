@@ -12,6 +12,7 @@ import '../errors/already_exists_error.dart';
 import '../events/event.dart';
 import '../platform/time.dart';
 import '../types/id.dart';
+import '../errors/stale_session_error.dart';
 import 'base_session_service.dart';
 import 'schemas/v1.dart' show decodeEventData, encodeEventData;
 import 'session.dart';
@@ -487,12 +488,12 @@ class NetworkDatabaseSessionService extends BaseSessionService {
         );
         if (session.storageUpdateMarker != null) {
           if (session.storageUpdateMarker != storedUpdateMarker) {
-            throw StateError(_staleSessionErrorMessage);
+            throw StaleSessionError(_staleSessionErrorMessage);
           }
           session.lastUpdateTime = storedLastUpdateTime;
         } else if (storedLastUpdateTime > session.lastUpdateTime) {
           if (!await _sessionMatchesStorageRevision(db, session: session)) {
-            throw StateError(_staleSessionErrorMessage);
+            throw StaleSessionError(_staleSessionErrorMessage);
           }
           session.lastUpdateTime = storedLastUpdateTime;
         }

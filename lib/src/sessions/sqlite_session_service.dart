@@ -12,6 +12,7 @@ import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../events/ui_widget.dart';
 import '../platform/time.dart';
+import '../errors/stale_session_error.dart';
 import '../types/content.dart';
 import '../types/id.dart';
 import 'base_session_service.dart';
@@ -425,12 +426,12 @@ class SqliteSessionService extends BaseSessionService {
           );
           if (session.storageUpdateMarker != null) {
             if (session.storageUpdateMarker != storedUpdateMarker) {
-              throw StateError(_staleSessionErrorMessage);
+              throw StaleSessionError(_staleSessionErrorMessage);
             }
             session.lastUpdateTime = storedLastUpdateTime;
           } else if (storedLastUpdateTime > session.lastUpdateTime) {
             if (!_sessionMatchesStorageRevision(db, session: session)) {
-              throw StateError(_staleSessionErrorMessage);
+              throw StaleSessionError(_staleSessionErrorMessage);
             }
             session.lastUpdateTime = storedLastUpdateTime;
           }

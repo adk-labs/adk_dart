@@ -109,6 +109,7 @@ export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
 export 'src/errors/session_not_found_error.dart';
+export 'src/errors/stale_session_error.dart';
 export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
