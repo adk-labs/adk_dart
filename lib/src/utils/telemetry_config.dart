@@ -4,17 +4,14 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
-import '../utils/system_environment/system_environment.dart';
-
 /// Returns the path to the ADK global config file (`~/.adk/config.json`).
 File getUserConfigFile() {
   final String home =
       Platform.environment['HOME'] ??
       Platform.environment['USERPROFILE'] ??
       Directory.current.path;
-  return File(p.join(home, '.adk', 'config.json'));
+  final String separator = Platform.pathSeparator;
+  return File('$home$separator.adk${separator}config.json');
 }
 
 /// Reads the telemetry consent status from local config (`config.json`).
