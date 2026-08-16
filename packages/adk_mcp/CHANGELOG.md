@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.8.17
+
+- Bumped package version to `2026.8.17`.
+- Synced MCP protocol primitives and client stability improvements with `adk_dart` `2026.8.17` rollout.
+- Upgraded internal test dependencies to latest versions.
+
 ## 2026.7.30
 
 - Updated MCP protocol support to official specification version `2026-07-28` (`mcpLatestProtocolVersion = '2026-07-28'`).

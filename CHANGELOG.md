@@ -1,4 +1,4 @@
-## Unreleased (Upcoming 2026.8.17)
+## 2026.8.17
 
 - Synced latest core features & bug fixes from `adk-python` v2.7.0, `adk-js` v1.6.0, `adk-go` v2.2.0, and `adk-kotlin` v0.7.0:
   - Added `LlmCapabilities` (`lib/src/models/capabilities.dart`) model feature capability reporting system and updated `BaseLlm.capabilities` & `Gemini.capabilities`.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.8.17
+
+- Bumped package version to `2026.8.17` and dependency `adk_dart: ^2026.8.17`.
+- Exported new Web-safe parity symbols: `LlmCapabilities`, `GetUserChoiceTool` (`getUserChoice`), `StaleSessionError`, `SessionNotFoundError`, `ReflectAndRetryModelPlugin`, and `ReflectAndRetryToolPlugin`.
+- Upgraded `web` and `plugin_platform_interface` dependencies to latest versions.
+
 ## 2026.7.30
 
 - Bumped package version to `2026.7.30` and dependency `adk_dart: ^2026.7.30`.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.8.17
+
+- Bumped package version to `2026.8.17` and dependency `adk_dart: ^2026.8.17`.
+- Upgraded `litertlm` dependency to `^0.0.13` and `collection` to `^1.19.1`.
+- Aligned runtime interface with `litertlm` 0.0.13 conversation methods.
+
 ## 2026.7.30
 
 - Bumped package version to `2026.7.30` and dependency `adk_dart: ^2026.7.30`.
