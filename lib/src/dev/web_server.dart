@@ -53,6 +53,7 @@ import '../plugins/global_instruction_plugin.dart';
 import '../plugins/logging_plugin.dart';
 import '../plugins/multimodal_tool_results_plugin.dart';
 import '../plugins/reflect_retry_tool_plugin.dart';
+import '../utils/telemetry_config.dart';
 import '../plugins/save_files_as_artifacts_plugin.dart';
 import '../runners/runner.dart';
 import '../sessions/base_session_service.dart';
@@ -1166,6 +1167,50 @@ Future<void> _handleRequest(
       },
     );
     return;
+  }
+
+  if (routedPath == '/config/telemetry') {
+    if (request.method == 'GET') {
+      await _writeJson(
+        request,
+        context,
+        payload: <String, Object?>{
+          'telemetry': readTelemetryConsent(),
+        },
+      );
+      return;
+    }
+    if (request.method == 'POST') {
+      final String? headerVal =
+          request.headers.value('x-adk-telemetry-request');
+      if (headerVal != 'true') {
+        await _writeText(
+          request,
+          context,
+          statusCode: HttpStatus.forbidden,
+          text: 'Forbidden: missing x-adk-telemetry-request header',
+        );
+        return;
+      }
+      final Map<String, dynamic> body = await _readJsonBody(request);
+      final Object? telemetryVal = body['telemetry'];
+      if (telemetryVal is! bool) {
+        await _writeText(
+          request,
+          context,
+          statusCode: HttpStatus.badRequest,
+          text: "Bad Request: 'telemetry' boolean field is required",
+        );
+        return;
+      }
+      writeTelemetryConsent(telemetryVal);
+      await _writeJson(
+        request,
+        context,
+        payload: <String, Object?>{'telemetry': telemetryVal},
+      );
+      return;
+    }
   }
 
   if (request.method == 'GET' && routedPath.startsWith('/debug/trace/')) {
