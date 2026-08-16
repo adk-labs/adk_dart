@@ -40,15 +40,15 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 - `⚠️` 플랫폼, 자격증명 또는 환경 제약 조건 하에 구현됨.
 - `🚧` 향후 계획 / 미구현.
 
-| `adk-python` 영역 | Dart 상태 | Dart 구현 표면 | 비고 |
+| `adk-python` 영역 | Dart 상태 | Dart 구현 API 및 인터페이스 | 비고 |
 | --- | --- | --- | --- |
 | 패키지/버전 기준선 | ✅ | `adkVersion`, 패키지 버전 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk` 최신 정렬 완료; ADK 기준 버전은 `2.7.0`. |
-| 에이전트 및 런너 | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 핵심 호출, 실시간 폴백, 되감기(Rewind), 세션 상태, 콜백 및 Agent Transfer 구현 완료. |
-| LLM 플로우 프로세서 | ✅ | `flows/llm_flows` 하위 요청/응답 프로세서 | 지침, 정체성, 컨텐츠, 컴팩션, 컨텍스트 캐시, 코드 실행, 출력 스키마, 툴 확인(HITL), 사전 인증 및 에이전트 전환 처리. |
-| 워크플로우 런타임 | ✅ | `Workflow`, `BaseNode`, 함수/도구/LLM-Agent 노드, `NodeTool`(도구화된 워크플로우), 조인, 라우트, 동적 노드, 리플레이 헬퍼 | 재시도, 타임아웃, 입력 요청/HITL, 병렬 워커, 리플레이/재수화, START 라우팅 가드, 완료 태스크 배칭, 엄격한 입력 스키마 검증, 그래프 직렬화, DOT 시각화 포팅 완료. |
+| 에이전트 및 런너 | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 핵심 호출, 실시간 폴백, 세션 롤백 및 리와인드(Rewind), 세션 상태, 콜백 및 Agent Transfer 구현 완료. |
+| LLM 플로우 프로세서 | ✅ | `flows/llm_flows` 하위 요청/응답 프로세서 | 지침, 정체성, 컨텐츠, 토큰 컴팩션, 컨텍스트 캐시, 코드 실행, 출력 스키마, 툴 확인(HITL), 사전 인증 및 에이전트 전환 처리. |
+| 워크플로우 런타임 | ✅ | `Workflow`, `BaseNode`, 함수/도구/LLM-Agent 노드, `NodeTool`(도구화된 워크플로우), 조인, 라우트, 동적 노드, 리플레이 헬퍼 | 재시도, 타임아웃, 입력 요청/HITL, 병렬 워커, 워크플로우 리플레이 및 상태 복원(State Restoration), START 라우팅 가드, 완료 태스크 배칭, 엄격한 입력 스키마 검증, 그래프 직렬화, DOT 시각화 포팅 완료. |
 | 이벤트 및 컨텐츠 변환 | ✅ | `Event`, `EventActions`, 컨텐츠/파트 모델, 노드 경로 헬퍼 | 구조화 이벤트 액션, 노드 경로 빌더, 함수/도구 응답 변환, A2A 메타데이터 보존 포함. |
 | 세션 및 상태 | ✅ | In-Memory, SQLite, Database, Vertex AI 세션 서비스, 마이그레이션 헬퍼 | 로컬 및 원격 세션 API 구현 완료; 네트워크/클라우드 백엔드는 적절한 자격증명 및 엔드포인트 필요. |
-| 메모리 및 아티팩트 | ✅ | In-Memory 메모리, Vertex AI 메모리/RAG, In-Memory/파일/GCS 아티팩트 | GCS/Vertex 경로는 HTTP/인증 프로바이더 연동을 사용하며 실제 클라우드 호출 시 환경 의존. |
+| 메모리 및 아티팩트 | ✅ | In-Memory 메모리, Vertex AI 메모리/RAG, In-Memory/파일/GCS 아티팩트 | GCS/Vertex 경로는 HTTP/인증 프로바이더 연동을 사용하며 실제 클라우드 호출 시 환경 설정 필요. |
 | 도구 및 툴셋 | ✅ | 함수 도구, 에이전트 도구, OpenAPI 도구, Google API 도구, 검색/검색증강 도구, 환경 도구, 데이터 도구 | Google 검색, URL 컨텍스트, 코드 실행, 컴퓨터 사용, Google Maps, 엔터프라이즈 웹 검색, Vertex AI 검색, Vertex RAG 내장 지원. |
 | MCP 통합 | ⚠️ | `adk_mcp`, `McpToolset`, `McpSessionManager`, `StreamableHTTPConnectionParams`, `StdioConnectionParams` | Streamable HTTP는 HTTP/CORS가 허용되는 VM/Flutter/Web 전반에서 동작. Stdio는 로컬 프로세스 실행이 필요하여 VM 전용. |
 | 모델/제공자 | ✅ | Gemini REST/Live, Anthropic, LiteLLM, Gemma, Apigee, Chat Completions, OpenAI labs 어댑터 | 주입 가능한 전송 계층으로 포팅 완료; 실제 호출 시 API 키 및 프로바이더 설정 필요. |
@@ -60,19 +60,19 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | 코드 실행기 | ⚠️ | 로컬 프로세스, 컨테이너/Docker, GKE, Vertex AI, Cloud Run 샌드박스 실행기 | 런타임 로직 구현 완료; 실제 실행은 로컬 Docker/K8s/Vertex/Cloud Run 환경에 의존. |
 | 데이터/클라우드 연동 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | 런타임 클라이언트 및 파사드 구현 완료; 실제 동작은 클라우드 자격증명 필요. |
 | 스킬 (Skills) | ✅ | `Skill`, `SkillToolset`, 로컬/In-Memory/GCS 스킬 소스, 스킬 프롬프트 포맷팅 | 인라인 및 디렉토리 기반 스킬 구현 완료. 파일시스템 기반 로딩은 Flutter Web 미지원. |
-| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter 예제 앱 | Web-safe 런타임 API 노출, VM 전용 API(`dart:io`, `dart:ffi`, `dart:mirrors` 등)는 의도적으로 제외. |
+| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter 예제 앱 | Web-safe 런타임 API 인터페이스 노출, VM 전용 API(`dart:io`, `dart:ffi`, `dart:mirrors` 등)는 안전하게 분리. |
 | OpenAPI 외부 참조 | 🚧 | OpenAPI 파서/툴셋 | 인라인 및 로컬 스펙 처리 완료; 외부 멀티 파일 `$ref` 해석 지원 예정. |
 | Spanner PostgreSQL ANN | 🚧 | Spanner 벡터 도구 | Spanner/Vector 핵심 경로 구현 완료; PostgreSQL ANN 동작은 향후 지원 예정. |
-| 음성 인식 부트스트랩 | ⚠️ | 오디오 전사 런타임 | 전사 오케스트레이션 제공; 인스턴스별 인식기 전달 또는 기본 인식기 등록 필요. |
+| 음성 텍스트 변환 런타임 | ⚠️ | 오디오 음성 인식(STT) 런타임 | 음성 텍스트 변환(Speech-to-Text) 오케스트레이션 제공; 인스턴스별 인식기 전달 또는 기본 인식기 등록 필요. |
 | Python 샘플 트리 커버리지 | 🚧 | 예제, `flutter_adk/example`, 문서 | 대표적인 Dart/Flutter 예제 제공; Python 전체 샘플 트리는 점진적 확장 중. |
 
 ## 어떤 패키지를 사용해야 하나요?
 
 | 개발 환경 | 권장 패키지 | 사용 이유 |
 | --- | --- | --- |
-| Dart VM/CLI 환경 (서버, 툴링, 테스트, 전체 런타임 API) | `adk_dart` | ADK Dart의 전체 런타임 표면을 제공하는 메인 패키지 |
+| Dart VM/CLI 환경 (서버, 툴링, 테스트, 전체 런타임 API) | `adk_dart` | ADK Dart의 전체 런타임 API 인터페이스를 제공하는 메인 패키지 |
 | Dart VM/CLI 환경이지만 짧은 import 경로 선호 | `adk` | `adk_dart`를 재노출하는 파사드 패키지 (`package:adk/adk.dart`) |
-| Flutter 앱 개발 (Android/iOS/Web/Linux/macOS/Windows) | `flutter_adk` | `adk_core` 기반의 Flutter/Web-safe 표면을 단일 import로 제공 |
+| Flutter 앱 개발 (Android/iOS/Web/Linux/macOS/Windows) | `flutter_adk` | `adk_core` 기반의 Flutter/Web-safe API 인터페이스를 단일 import로 제공 |
 
 빠른 선택 가이드:
 
@@ -84,8 +84,8 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 
 | 기능 / 영역 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
 | --- | --- | --- | --- | --- |
-| `package:adk_dart/adk_dart.dart` 전체 API | Y | Partial | N | 전체 표면에는 `dart:io`, `dart:ffi`, `dart:mirrors` 경로가 포함되어 웹에서는 직접 사용 불가. |
-| `package:adk_dart/adk_core.dart` Web-safe API | Y | Y | Y | `adk_core`는 IO/FFI/mirrors 전용 API를 의도적으로 제외. |
+| `package:adk_dart/adk_dart.dart` 전체 API | Y | Partial | N | 전체 API에는 `dart:io`, `dart:ffi`, `dart:mirrors` 경로가 포함되어 웹에서는 직접 사용 불가. |
+| `package:adk_dart/adk_core.dart` Web-safe API | Y | Y | Y | `adk_core`는 IO/FFI/mirrors 전용 API를 안전하게 분리. |
 | 에이전트 런타임 (`Agent`, `Runner`, Workflows) | Y | Y | Y | In-memory 오케스트레이션 경로는 완전한 크로스플랫폼. |
 | MCP over Streamable HTTP (`StreamableHTTPConnectionParams`) | Y | Y | Y | HTTP가 가능한 환경에서 동작 (웹은 MCP 서버 CORS 설정 필요 가능). |
 | MCP over stdio (`StdioConnectionParams`) | Y | Partial | N | `dart:io` `Process`를 통한 로컬 프로세스 실행 필요 (웹 미지원). |

@@ -35,7 +35,7 @@
 - [adk_dart](https://pub.dev/packages/adk_dart): 전체 ADK Dart VM/CLI
   런타임을 제공하는 코어 패키지입니다.
 - [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
-  멀티플랫폼에서 Web-safe ADK 표면을 제공하는 패키지입니다.
+  멀티플랫폼에서 Web-safe ADK API를 제공하는 패키지입니다.
 
 ## 플랫폼 지원 매트릭스 (현재)
 
@@ -45,12 +45,12 @@
 - `Partial` 부분 지원/환경 의존
 - `N` 미지원
 
-| 기능/표면 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
+| 기능 / 영역 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
 | --- | --- | --- | --- | --- |
-| `package:adk/adk.dart` facade import | Y | Partial | N | `adk_dart` 전체 API 표면을 재노출 |
+| `package:adk/adk.dart` facade import | Y | Partial | N | `adk_dart` 전체 API를 재노출 |
 | `adk` CLI 실행 파일 | Y | N | N | VM/터미널 전용 |
 | facade 경유 런타임/도구 기능 (MCP, skills, sessions 등) | Y | Partial | N | 실제 제약은 `adk_dart`와 동일 |
-| Web-safe 전용 엔트리포인트 제공 | N | N | N | Web-safe 표면은 `adk_dart/adk_core.dart` 또는 `flutter_adk` 사용 |
+| Web-safe 전용 엔트리포인트 제공 | N | N | N | Web-safe API는 `adk_dart/adk_core.dart` 또는 `flutter_adk` 사용 |
 
 ## 설치
 

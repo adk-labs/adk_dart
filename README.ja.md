@@ -40,12 +40,12 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 - `⚠️` プラットフォーム、認証情報、環境制約付きで実装済み。
 - `🚧` 計画中 / 未実装。
 
-| `adk-python` 領域 | Dart ステータス | Dart 実装サーフェス | 備考 |
+| `adk-python` 領域 | Dart ステータス | Dart 実装 API およびインターフェース | 備考 |
 | --- | --- | --- | --- |
 | パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk` 最新アライメント完了; ADK基準は `2.7.0`。 |
-| エージェントおよびランナー | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 呼び出し、フォールバック、巻き戻し（Rewind）、セッション状態、コールバック、Agent Transfer実装完了。 |
-| LLM フロープロセッサ | ✅ | `flows/llm_flows` 配下の要求/応答プロセッサ | 指示、ID、コンテンツ、コンパクション、コンテキストキャッシュ、コード実行、出力スキーマ、ツール確認（HITL）、エージェント移行。 |
-| ワークフローランタイム | ✅ | `Workflow`, `BaseNode`, 関数/ツール/LLMノード, `NodeTool`, ジョイン, ルーティング, 動的ノード, リプレイ | リトライ、タイムアウト、入力要求/HITL、並列ワーカー、リプレイ/再水和、グラフシリアライズ、DOT可視化。 |
+| エージェントおよびランナー | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 呼び出し、フォールバック、セッションロールバック/リワインド（Rewind）、セッション状態、コールバック、Agent Transfer実装完了。 |
+| LLM フロープロセッサ | ✅ | `flows/llm_flows` 配下の要求/応答プロセッサ | 指示、ID、コンテンツ、トークンコンパクション、コンテキストキャッシュ、コード実行、出力スキーマ、ツール確認（HITL）、エージェント移行。 |
+| ワークフローランタイム | ✅ | `Workflow`, `BaseNode`, 関数/ツール/LLMノード, `NodeTool`, ジョイン, ルーティング, 動的ノード, リプレイ | リトライ、タイムアウト、入力要求/HITL、並列ワーカー、ワークフローリプレイおよび状態復元 (State Restoration)、グラフシリアライズ、DOT可視化。 |
 | イベントおよびコンテンツ変換 | ✅ | `Event`, `EventActions`, コンテンツ/パートモデル, ノードパスヘルパー | 構造化イベントアクション、ノードパス構築、関数/ツール応答変換、A2Aメタデータ保持。 |
 | セッションおよび状態 | ✅ | In-Memory, SQLite, Database, Vertex AI セッションサービス, 移行ヘルパー | ローカルおよびリモートセッションAPI実装完了。 |
 | メモリおよびアーティファクト | ✅ | In-Memoryメモリ, Vertex AI メモリ/RAG, In-Memory/ファイル/GCSアーティファクト | GCS/Vertexパスは環境設定およびクレデンシャルに依存。 |
@@ -60,15 +60,15 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 | コード実行 | ⚠️ | ローカルプロセス, コンテナ/Docker, GKE, Vertex AI, Cloud Runサンドボックス | 実行ロジック実装済み。実環境のDocker/K8s/Vertex/Cloud Runに依存。 |
 | データ/クラウド統合 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Slack, Toolbox | ランタイムクライアントおよびファサード実装済み。 |
 | スキル (Skills) | ✅ | `Skill`, `SkillToolset`, インメモリ/GCSスキルソース, スキルプロンプト整形 | インラインおよびディレクトリ読み込み対応（ファイルシステムはFlutter Web未対応）。 |
-| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter サンプルアプリ | Web-safe APIを公開、VM専用API（`dart:io`等）は安全に除外。 |
+| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter サンプルアプリ | Web-safe APIインターフェースを公開、VM専用API（`dart:io`等）は安全に分離。 |
 
 ## どのパッケージを使うべきか？
 
 | 開発環境 | 推奨パッケージ | 理由 |
 | --- | --- | --- |
-| Dart VM/CLI環境（サーバー、ツール、テスト、フルAPI） | `adk_dart` | フルランタイムサーフェスを提供するプライマリパッケージ |
+| Dart VM/CLI環境（サーバー、ツール、テスト、フルAPI） | `adk_dart` | フルランタイムAPIインターフェースを提供するプライマリパッケージ |
 | Dart VM/CLI環境で短いimportパスを好む場合 | `adk` | `adk_dart`を再エクスポートするファサードパッケージ（`package:adk/adk.dart`） |
-| Flutterアプリ開発（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | `adk_core`ベースのWeb-safeサーフェスを単一importで提供 |
+| Flutterアプリ開発（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | `adk_core`ベースのWeb-safe APIインターフェースを単一importで提供 |
 
 ## プラットフォームサポートマトリクス
 

@@ -2,13 +2,13 @@
 
 [English](README.md) | 한국어 | [日本語](README.ja.md) | [中文](README.zh.md)
 
-Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe 표면으로 사용하기 위한 파사드 패키지입니다.
+Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe API 계층으로 사용하기 위한 파사드 패키지입니다.
 
 ## 제공 항목
 
 - `package:adk_dart/adk_core.dart` 재노출
 - Flutter 단일 import 경로: `package:flutter_adk/flutter_adk.dart`
-- `AgentTool`, `UrlContextTool`, Vertex retrieval tool 같은 최신 Web-safe ADK 표면 포함
+- `AgentTool`, `UrlContextTool`, Vertex retrieval tool 같은 최신 Web-safe ADK API 포함
 - 주요 Flutter 플랫폼(Android/iOS/Web/Linux/macOS/Windows) 플러그인 등록
 
 ## 언제 `flutter_adk`를 쓰면 좋나요?
@@ -16,7 +16,7 @@ Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe 표면으로 사용하�
 `flutter_adk`를 선택하세요:
 
 - Flutter 앱에서 모바일/데스크톱/Web을 하나의 import로 다루고 싶을 때
-- VM 전용 API를 기본으로 끌어오지 않고 Web-safe `adk_core` 표면을 쓰고 싶을 때
+- VM 전용 API를 기본으로 끌어오지 않고 Web-safe `adk_core` API 계층을 쓰고 싶을 때
 
 다른 패키지를 선택하세요:
 
@@ -25,13 +25,13 @@ Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe 표면으로 사용하�
 설계 의도:
 
 - `flutter_adk`는 단순 래퍼 이름이 아니라 Flutter 호환 계층입니다.
-- 전체 VM 전용 API를 그대로 노출하기보다 Web-safe 런타임 표면(`adk_core`)을
+- 전체 VM 전용 API를 그대로 노출하기보다 Web-safe 런타임 API(`adk_core`)를
   중심으로 제공해 Flutter 멀티플랫폼에서 동작 일관성을 우선합니다.
 
 ## 패키지 링크
 
 - [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
-  멀티플랫폼에서 사용할 Web-safe ADK 표면을 제공하는 패키지입니다.
+  멀티플랫폼에서 사용할 Web-safe ADK API를 제공하는 패키지입니다.
 - [adk_dart](https://pub.dev/packages/adk_dart): 전체 ADK Dart VM/CLI
   런타임 API를 제공하는 코어 패키지입니다.
 - [adk](https://pub.dev/packages/adk): `adk_dart`를 짧은 이름으로
@@ -51,7 +51,7 @@ Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe 표면으로 사용하�
 
 | 기능 | Android | iOS | Web | Linux | macOS | Windows | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `flutter_adk` 단일 import | Y | Y | Y | Y | Y | Y | Web-safe `adk_core` 표면 재노출 |
+| `flutter_adk` 단일 import | Y | Y | Y | Y | Y | Y | Web-safe `adk_core` API 재노출 |
 | Agent 런타임 (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | in-memory 경로는 공통 |
 | `Gemini` 모델 사용 | Y | Y | Partial | Y | Y | Y | Web BYOK/CORS/보안 정책 고려 필요 |
 | Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | Gemini/Vertex backend에서 tool 실행 |

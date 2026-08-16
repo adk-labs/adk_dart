@@ -40,12 +40,12 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 - `⚠️` 已实现，但受平台、凭据或环境约束。
 - `🚧` 计划中 / 尚未完全实现。
 
-| `adk-python` 领域 | Dart 状态 | Dart 实现表面 | 说明 |
+| `adk-python` 领域 | Dart 状态 | Dart 实现 API 与接口层 | 说明 |
 | --- | --- | --- | --- |
 | 包/版本基线 | ✅ | `adkVersion`, 包版本 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk` 保持对齐；ADK 基线版本为 `2.7.0`。 |
-| Agent 与 Runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 核心调用、实时回退、回溯（Rewind）、会话状态、回调及 Agent Transfer 均已移植。 |
-| LLM 流程处理器 | ✅ | `flows/llm_flows` 下的请求/响应处理器 | 涵盖指令、身份、内容、压缩、上下文缓存、代码执行、输出结构模式、工具确认（HITL）及 Agent 转移。 |
-| 工作流运行时 | ✅ | `Workflow`, `BaseNode`, 函数/工具/LLM 节点, `NodeTool`, 合并, 路由, 动态节点, 回放 | 重试、超时、输入请求/HITL、并行工作器、回放/重新水化、图序列化及 DOT 可视化均已实现。 |
+| Agent 与 Runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 核心调用、实时回退、会话回滚/重退（Rewind）、会话状态、回调及 Agent Transfer 均已移植。 |
+| LLM 流程处理器 | ✅ | `flows/llm_flows` 下的请求/响应处理器 | 涵盖指令、身份、内容、Token 压缩、上下文缓存、代码执行、输出结构模式、工具确认（HITL）及 Agent 转移。 |
+| 工作流运行时 | ✅ | `Workflow`, `BaseNode`, 函数/工具/LLM 节点, `NodeTool`, 合并, 路由, 动态节点, 回放 | 重试、超时、输入请求/HITL、并行工作器、工作流回放与状态恢复 (State Restoration)、图序列化及 DOT 可视化均已实现。 |
 | 事件与内容转换 | ✅ | `Event`, `EventActions`, 内容/Part 模型, 节点路径构建器 | 包括结构化事件动作、节点路径、函数/工具响应转换与 A2A 元数据保留。 |
 | 会话与状态 | ✅ | In-Memory, SQLite, Database, Vertex AI 会话服务, 迁移工具 | 本地及远程会话 API 均已实现。 |
 | 内存与制品 | ✅ | In-Memory 内存, Vertex AI 内存/RAG, In-Memory/文件/GCS 制品 | GCS/Vertex 路径依赖 HTTP/Auth 提供者及真实云环境配置。 |
@@ -60,15 +60,15 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 | 代码执行器 | ⚠️ | 本地进程, 容器/Docker, GKE, Vertex AI, Cloud Run 沙箱 | 运行时逻辑已完成，依赖外部 Docker/K8s/Vertex/Cloud Run 环境。 |
 | 数据/云集成 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Slack, Toolbox | 运行时客户端与门面均已就绪。 |
 | 技能 (Skills) | ✅ | `Skill`, `SkillToolset`, 本地/内存/GCS 技能源, 技能提示词格式化 | 支持内联与目录加载（文件系统加载不支持 Flutter Web）。 |
-| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter 示例应用 | 暴露 Web-safe API，安全排除 `dart:io` 等 VM 专属依赖。 |
+| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter 示例应用 | 暴露 Web-safe API 接口层，安全排除 `dart:io` 等 VM 专属依赖。 |
 
 ## 我该选用哪个 Package？
 
 | 开发场景 | 推荐 Package | 选用原因 |
 | --- | --- | --- |
-| 在 Dart VM/CLI 环境下构建 Agent（服务器、命令行工具、测试、完整 API） | `adk_dart` | 提供 ADK Dart 全部运行时能力的基石包 |
+| 在 Dart VM/CLI 环境下构建 Agent（服务器、命令行工具、测试、完整 API） | `adk_dart` | 提供 ADK Dart 全部运行时 API 接口层的基石包 |
 | 在 Dart VM/CLI 环境下但希望使用更短的 import 路径 | `adk` | 重新导出 `adk_dart` 的门面包（`package:adk/adk.dart`） |
-| 开发 Flutter 跨平台应用（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | 基于 `adk_core` 的 Flutter/Web-safe 包，单 import 即可使用 |
+| 开发 Flutter 跨平台应用（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | 基于 `adk_core` 的 Flutter/Web-safe API 接口层，单 import 即可使用 |
 
 ## 平台支持矩阵
 

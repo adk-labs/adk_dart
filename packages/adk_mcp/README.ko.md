@@ -18,7 +18,7 @@
 - `Partial` 부분 지원/환경 의존
 - `N` 미지원
 
-| 기능/표면 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
+| 기능 / 영역 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
 | --- | --- | --- | --- | --- |
 | `McpRemoteClient` (Streamable HTTP) | Y | Y | Y | HTTP/HTTPS 전송 |
 | 프로토콜 버전 협상 + JSON-RPC 헬퍼 | Y | Y | Y | 전 플랫폼 동일 동작 |
