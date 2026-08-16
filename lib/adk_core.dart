@@ -30,6 +30,8 @@ export 'src/artifacts/in_memory_artifact_service.dart';
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
+export 'src/errors/session_not_found_error.dart';
+export 'src/errors/stale_session_error.dart';
 export 'src/errors/tool_execution_error.dart';
 
 export 'src/events/event.dart';
@@ -43,6 +45,7 @@ export 'src/memory/base_memory_service.dart';
 export 'src/memory/in_memory_memory_service.dart';
 export 'src/memory/memory_entry.dart';
 
+export 'src/models/capabilities.dart';
 export 'src/models/llm_request.dart';
 export 'src/models/llm_response.dart';
 export 'src/models/base_llm.dart';
@@ -50,6 +53,8 @@ export 'src/models/google_llm.dart';
 
 export 'src/plugins/base_plugin.dart';
 export 'src/plugins/plugin_manager.dart';
+export 'src/plugins/reflect_retry_model_plugin.dart';
+export 'src/plugins/reflect_retry_tool_plugin.dart';
 
 export 'src/runners/runner.dart';
 
@@ -69,6 +74,7 @@ export 'src/tools/base_tool.dart';
 export 'src/tools/agent_tool.dart';
 export 'src/tools/node_tool.dart';
 export 'src/tools/function_tool.dart';
+export 'src/tools/get_user_choice_tool.dart';
 export 'src/tools/google_search_tool.dart';
 export 'src/tools/load_mcp_resource_tool.dart';
 export 'src/tools/mcp_tool/mcp_session_manager.dart';

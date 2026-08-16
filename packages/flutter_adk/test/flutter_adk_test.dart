@@ -174,4 +174,12 @@ void main() {
     expect(searchTool.name, 'vertex_ai_search');
     expect(ragTool.name, 'vertex_rag_retrieval');
   });
+
+  test('exports new parity symbols (capabilities, choice tool, session errors, reflect plugin)', () {
+    expect(const LlmCapabilities().outputSchemaAndTools, isFalse);
+    expect(getUserChoice.name, equals('get_user_choice'));
+    expect(SessionNotFoundError('missing').message, equals('missing'));
+    expect(StaleSessionError('stale').message, equals('stale'));
+    expect(ReflectAndRetryModelPlugin(maxRetries: 2).maxRetries, equals(2));
+  });
 }
