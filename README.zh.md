@@ -8,7 +8,7 @@
 
 ADK Dart 是一个开源的代码优先（Code-First）Dart 工程框架，用于构建和运行具备模块化运行时原语、工具编排以及 MCP（Model Context Protocol）集成的自主 AI Agent。
 
-它是专注于实用运行时兼容性、异步管道完整性与开发者人体工学体验（Developer Ergonomics）的 Google ADK 架构的 Dart 原生移植版。
+它是专注于实用运行时兼容性、异步管道完整性与优秀开发体验（DX）及直观易用性的 Google ADK 架构的 Dart 原生移植版。
 
 ---
 
