@@ -6,33 +6,33 @@
 [![pub package](https://img.shields.io/pub/v/adk_dart.svg)](https://pub.dev/packages/adk_dart)
 [![Package Sync](https://github.com/adk-labs/adk_dart/actions/workflows/package-sync.yml/badge.svg)](https://github.com/adk-labs/adk_dart/actions/workflows/package-sync.yml)
 
-ADK Dartは、モジュール型ランタイムプリミティブ、ツールオーケストレーション、MCP（Model Context Protocol）連携を備えた、AIエージェント構築・実行のためのオープンソースかつコードファースト（Code-First）なDartフレームワークです。
+ADK Dartは、モジュール型ランタイムプリミティブ、ツールオーケストレーション、MCP（Model Context Protocol）連携を備えた、自律型AIエージェント構築および実行のためのオープンソースかつコードファースト（Code-First）なDartエンジニアリングフレームワークです。
 
-実用的なランタイム互換性と開発者エクスペリエンス（Ergonomics）に焦点を当てたADKアーキテクチャのDartポートです。
+実用的なランタイム互換性、非同期パイプラインの完全性、および開発者エクスペリエンス（Ergonomics）に焦点を当てたGoogle ADKアーキテクチャのDartネイティブポートです。
 
 ---
 
 ## 最新アップデート
 
-- **ADK 2.0 ワークフローおよび Managed Agent サポート**: コアなADK 2.0機能をネイティブサポート:
-  - **v2 ワークフロー**: `Workflow`, `BaseNode`, `JoinNode`等による宣言型ノードグラフスケジューリング、依存関係管理、条件分岐ルーティング、状態マージ。
-  - **Managed Agents**: `ManagedAgent`および`RemoteMcpServer`設定を介したGCP Managed Agents Interactions APIとの直接連携。
-- **MCP プロトコルコアパッケージ分離**: `packages/adk_mcp`を追加し、Streamable HTTP MCPトランスポートを独立パッケージとして提供。
-- **MCP 仕様強化**: セッション復元、リクエストIDに基づくSSE応答マッチング、キャンセル通知、機能（Capability）認識RPCによる安定性向上。
-- **互換性拡張**: セッション、ツールセット、モデル/ツール統合レイヤー全体にわたる広範なランタイム互換性を確保。
+- **ADK 2.0 ワークフローおよび Managed Agent サポート**: コアなADK 2.0アーキテクチャを完全サポート:
+  - **v2 ワークフロー**: `Workflow`, `BaseNode`, `JoinNode`等による宣言型DAGノードグラフスケジューリング、依存関係管理、条件分岐ルーティング、状態マージ。
+  - **Managed Agents**: `ManagedAgent`および`RemoteMcpServer`設定を介したGCP Vertex AI Managed Agents Interactions APIとの直接RPC連携。
+- **MCP プロトコルコアパッケージ分離**: `packages/adk_mcp`を追加し、Streamable HTTP MCPトランスポート層を独立パッケージとしてモジュール化。
+- **MCP 仕様強化**: セッション復元、リクエストIDに基づくSSE応答マッチング、キャンセル通知割り込み、機能（Capability）認識RPCによる安定性向上。
+- **互換性拡張**: セッション永続化ストレージ、ツールセットリフレクション、モデル/ツール統合レイヤー全体にわたる広範なランタイム互換性を確保。
 
 ## 主な機能
 
-- **コードファーストなエージェントランタイム**: `BaseAgent`, `LlmAgent`（`Agent`エイリアス）および明示的なコンテキストオブジェクトによる構築。
-- **イベント駆動型実行**: `Runner` / `InMemoryRunner`による非同期実行と`Event`ストリーミング出力。
-- **マルチエージェント構成**: `subAgents`による階層的エージェント連携とワークフローオーケストレーション。
-- **豊富なツールエコシステム**: Functionツール、OpenAPIツール、Google APIツールセット、データツール（BigQuery/Bigtable/Spanner）、MCPツールセットを標準搭載。
-- **MCP 統合**: `adk_mcp`を基盤とする`McpToolset`および`McpSessionManager`によりStreamable HTTPでリモートMCPサーバーと連携。
-- **開発者 CLI + Web UI**: `adk` CLI（`create`, `run`, `web`, `api_server`）によるプロジェクト作成、対話型実行、Web UI機能。
+- **コードファーストなエージェントランタイム**: `BaseAgent`, `LlmAgent`（`Agent`エイリアス）および明示的な呼び出し/セッションコンテキストオブジェクトによる構築。
+- **イベント駆動型実行パイプライン**: `Runner` / `InMemoryRunner`による非同期エージェント実行と`Event`ストリームディスパッチ。
+- **階層型マルチエージェントオーケストレーション**: `subAgents`による階層的エージェントツリー構成および自律的Hand-off状態遷移。
+- **豊富なツールエコシステム**: `FunctionTool`、OpenAPIツール、Google APIツールセット、エンタープライズデータツール（BigQuery/Bigtable/Spanner）、MCPツールセットを標準搭載。
+- **MCP プロトコル統合**: `adk_mcp`を基盤とする`McpToolset`および`McpSessionManager`によりStreamable HTTPでリモートMCPサーバーと連携。
+- **開発者 CLI + Dev Server UI**: `adk` CLI（`create`, `run`, `web`, `api_server`, `deploy`）によるスキャフォールディング、対話型ターミナル実行、WebデバッグUI機能。
 
 ## ADK Python 互換性ステータス
 
-ADK Dartは、Dartのネイティブ型、非同期ストリーム、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.7.0`に準拠しています。
+ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.7.0`に準拠しています。
 
 ステータス凡例:
 
@@ -70,6 +70,21 @@ ADK Dartは、Dartのネイティブ型、非同期ストリーム、パッケ�
 | Dart VM/CLI環境で短いimportパスを好む場合 | `adk` | `adk_dart`を再エクスポートするファサードパッケージ（`package:adk/adk.dart`） |
 | Flutterアプリ開発（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | `adk_core`ベースのWeb-safeサーフェスを単一importで提供 |
 
+## プラットフォームサポートマトリクス
+
+| 機能 / サーフェス | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 備考 |
+| --- | --- | --- | --- | --- |
+| `package:adk_dart/adk_dart.dart` フルAPI | Y | Partial | N | `dart:io`, `dart:ffi`, `dart:mirrors` 等のVM専用パスを含むためWeb直接利用不可。 |
+| `package:adk_dart/adk_core.dart` Web-safe API | Y | Y | Y | `adk_core` はIO/FFI依存を安全に除外。 |
+| エージェントランタイム (`Agent`, `Runner`, Workflows) | Y | Y | Y | インメモリオーケストレーションは完全なクロスプラットフォーム。 |
+| MCP over Streamable HTTP (`StreamableHTTPConnectionParams`) | Y | Y | Y | HTTPアクセス可能な環境で動作（WebはCORS設定が必要な場合あり）。 |
+| MCP over stdio (`StdioConnectionParams`) | Y | Partial | N | `dart:io` `Process` によるローカルプロセス実行が必要。 |
+| インラインスキル (`Skill` + `SkillToolset`) | Y | Y | Y | インラインスキル定義はWeb-safe。 |
+| ディレクトリベーススキル読み込み (`loadSkillFromDir`) | Y | Partial | N | ファイルシステムAPIを使用（Webでは `UnsupportedError`）。 |
+| CLI (`adk create/run/web/api_server/deploy`) | Y | N | N | CLIはVM/ターミナル専用。 |
+| 開発Webサーバー + A2Aサービスエンドポイント | Y | N | N | サーバーホスティングはVM専用。 |
+| DB/ファイルベースサービス (SQLite/Postgres/MySQL, ファイルアーティファクト) | Y | Partial | N | IO/ネットワークプリミティブに依存。 |
+
 ## インストール
 
 ### 最新安定版（推奨）
@@ -98,12 +113,13 @@ dependencies:
 dart pub get
 ```
 
-## Gemini API キー設定
+## Gemini API 環境変数の設定
 
-ADK Dartでは以下の環境変数を推奨します:
+ADK Dartは以下の環境変数名を推奨します:
 
 - `GOOGLE_API_KEY`（推奨）
-- `GEMINI_API_KEY`（互換用エイリアス）
+
+互換性のため `GEMINI_API_KEY` エイリアスもサポートしています。
 
 ### オプション A: Gemini API モード（デフォルト）
 
@@ -121,16 +137,16 @@ GOOGLE_CLOUD_LOCATION=us-central1
 GOOGLE_API_KEY=your_google_api_key
 ```
 
-## Model Context Protocol (MCP)
+## MCP (Model Context Protocol)
 
-ADK Dartは最新のMCP仕様を完全にサポートしており、プロトコルプリミティブを専用パッケージとして提供しています:
+ADK DartはMCPサポートを標準内蔵し、プロトコルプリミティブを専用パッケージとして提供します:
 
 - `packages/adk_mcp`: Dart用MCPトランスポート/ライフサイクルコア
-- `adk_dart` MCP層: ADKツール/ランタイム統合（`McpToolset`, `McpSessionManager`等）
+- `adk_dart` MCP層: ADKツール/ランタイム統合 (`McpToolset`, `McpSessionManager`, `LoadMcpResourceTool`, `McpInstructionProvider`)
 
-## コード例
+## 機能ハイライトコード例
 
-### 1. 単一エージェントの定義と実行
+### 単一エージェントの定義
 
 ```dart
 import 'package:adk_dart/adk_dart.dart';
@@ -174,7 +190,48 @@ Future<void> main() async {
 }
 ```
 
-### 2. 開発 CLI および Web UI の実行
+### マルチエージェントシステムの構成
+
+```dart
+import 'package:adk_dart/adk_dart.dart';
+
+class StubModel extends BaseLlm {
+  StubModel() : super(model: 'stub');
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    yield LlmResponse(content: Content.modelText('done'));
+  }
+}
+
+void main() {
+  final Agent greeter = Agent(
+    name: 'greeter',
+    model: StubModel(),
+    instruction: 'Handle greetings.',
+  );
+
+  final Agent worker = Agent(
+    name: 'worker',
+    model: StubModel(),
+    instruction: 'Handle execution tasks.',
+  );
+
+  final Agent coordinator = Agent(
+    name: 'coordinator',
+    model: StubModel(),
+    instruction: 'Route requests to sub-agents.',
+    subAgents: <BaseAgent>[greeter, worker],
+  );
+
+  print('Coordinator configured: ${coordinator.name}');
+}
+```
+
+### 開発用 CLI および Web UI
 
 ```bash
 dart pub global activate adk_dart
@@ -184,7 +241,7 @@ adk run .
 adk web --port 8000 .
 ```
 
-`adk web`コマンドにより、`http://127.0.0.1:8000`でローカル開発サーバーおよびWeb UIが起動します。
+`adk web` コマンドは `http://127.0.0.1:8000` でローカル開発サーバーと対話型デバッグUIを起動します。
 
 ## テスト
 
@@ -195,4 +252,4 @@ dart analyze
 
 ## ライセンス
 
-Apache 2.0 ライセンス（[LICENSE](LICENSE)）。
+本プロジェクトは Apache 2.0 ライセンスの下で配布されています。詳細は [LICENSE](LICENSE) ファイルをご参照ください。

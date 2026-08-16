@@ -6,33 +6,33 @@
 [![pub package](https://img.shields.io/pub/v/adk_dart.svg)](https://pub.dev/packages/adk_dart)
 [![Package Sync](https://github.com/adk-labs/adk_dart/actions/workflows/package-sync.yml/badge.svg)](https://github.com/adk-labs/adk_dart/actions/workflows/package-sync.yml)
 
-ADK Dart는 모듈형 런타임 프리미티브, 도구 오케스트레이션 및 MCP 연동을 제공하는 AI 에이전트 구축 및 실행을 위한 오픈소스, 코드 중심(Code-First) Dart 프레임워크입니다.
+ADK Dart는 모듈형 런타임 프리미티브, 도구 오케스트레이션 및 MCP(Model Context Protocol) 연동을 제공하는 자율 AI 에이전트 구축 및 런타임 실행을 위한 오픈소스, 코드 중심(Code-First) Dart 엔지니어링 프레임워크입니다.
 
-실질적인 런타임 호환성과 개발자 생산성(Ergonomics)에 중점을 둔 ADK 아키텍처의 Dart 포트입니다.
+실질적인 런타임 호환성, 비동기 파이프라인 무결성 및 개발자 인체공학(Ergonomics)에 중점을 둔 Google ADK 아키텍처의 Dart 네이티브 포트입니다.
 
 ---
 
 ## 최신 업데이트
 
-- **ADK 2.0 워크플로 및 Managed Agent 지원**: 핵심 ADK 2.0 기능 완벽 지원:
-  - **v2 워크플로**: `Workflow`, `BaseNode`, `JoinNode` 등을 활용한 선언적 노드 그래프 스케줄링, 의존성 관리, 조건부 라우팅 및 상태 병합 지원.
-  - **Managed Agents**: `ManagedAgent` 및 `RemoteMcpServer` 설정을 통한 GCP Managed Agents Interactions API 직접 연동 지원.
-- **MCP 프로토콜 코어 패키지 분리**: `packages/adk_mcp` 패키지를 추가하고 Streamable HTTP MCP 전송 프로토콜을 독립 패키지로 분리.
-- **MCP 스펙 고도화**: 세션 복구, 요청 ID 기반 SSE 응답 매칭, 취소 알림, 기능(Capability) 기반 RPC 사용 등 MCP 생명주기 및 전송 안정성 강화.
-- **호환성 확장**: 세션, 툴셋, 모델/도구 통합 계층 전반에 걸친 광범위한 런타임 호환성 확보.
+- **ADK 2.0 워크플로우 및 Managed Agent 지원**: 핵심 ADK 2.0 아키텍처 완벽 지원:
+  - **v2 워크플로우**: `Workflow`, `BaseNode`, `JoinNode` 등을 활용한 선언적 DAG 노드 그래프 스케줄링, 의존성 관리, 조건부 분기 라우팅 및 상태 병합 지원.
+  - **Managed Agents**: `ManagedAgent` 및 `RemoteMcpServer` 설정을 통한 GCP Vertex AI Managed Agents Interactions API 직접 RPC 연동 지원.
+- **MCP 프로토콜 코어 패키지 분리**: `packages/adk_mcp` 패키지를 추가하고 Streamable HTTP MCP 전송 계층을 독립 패키지로 모듈화.
+- **MCP 스펙 고도화**: 세션 복구, 요청 ID 기반 SSE 응답 매칭, 취소 알림 인터럽트, 기능(Capability) 기반 RPC 사용 등 MCP 생명주기 및 전송 안정성 강화.
+- **호환성 확장**: 세션 영속 스토리지, 툴셋 리플렉션, 모델/도구 통합 계층 전반에 걸친 광범위한 런타임 호환성 확보.
 
 ## 핵심 기능
 
-- **코드 중심 에이전트 런타임**: `BaseAgent`, `LlmAgent`(`Agent` 별칭) 및 명시적 호출/세션 컨텍스트 객체를 사용한 에이전트 구축.
-- **이벤트 기반 실행**: `Runner` / `InMemoryRunner`를 통한 비동기 에이전트 실행 및 `Event` 스트리밍.
-- **멀티 에이전트 구성**: `subAgents`를 사용한 계층적 에이전트 구성 및 워크플로 오케스트레이션.
-- **풍부한 도구 생태계**: Function 도구, OpenAPI 도구, Google API 툴셋, 데이터 도구(BigQuery/Bigtable/Spanner), MCP 툴셋 기본 제공.
-- **MCP 통합**: `adk_mcp` 기반의 `McpToolset` 및 `McpSessionManager`를 통해 Streamable HTTP로 원격 MCP 서버 연동.
-- **개발자 CLI + Web UI**: `adk` CLI(`create`, `run`, `web`, `api_server`)를 통한 프로젝트 생성, 대화형 실행 및 웹 UI 지원.
+- **코드 중심 에이전트 런타임**: `BaseAgent`, `LlmAgent`(`Agent` 별칭) 및 명시적 인보케이션/세션 컨텍스트 객체를 사용한 에이전트 구축.
+- **이벤트 기반 실행 파이프라인**: `Runner` / `InMemoryRunner`를 통한 비동기 에이전트 실행 및 `Event` 스트림 디스패치.
+- **계층형 멀티 에이전트 오케스트레이션**: `subAgents`를 사용한 계층적 에이전트 트리 구성 및 자율 Hand-off 상태 전이.
+- **풍부한 도구 생태계**: `FunctionTool`, OpenAPI 도구, Google API 툴셋, 엔터프라이즈 데이터 도구(BigQuery/Bigtable/Spanner), MCP 툴셋 기본 제공.
+- **MCP 프로토콜 연동**: `adk_mcp` 기반의 `McpToolset` 및 `McpSessionManager`를 통해 Streamable HTTP로 원격 MCP 서버 연동.
+- **개발자 CLI + Dev Server UI**: `adk` CLI(`create`, `run`, `web`, `api_server`, `deploy`)를 통한 스캐폴딩, 대화형 터미널 런타임 및 웹 디버그 UI 지원.
 
 ## ADK Python 호환성 현황
 
-ADK Dart는 Dart 네이티브 타입, 비동기 스트림, 패키지 구조 및 플랫폼 제약 조건을 준수하면서 `adk-python`과 동일하게 동작하도록 설계되었습니다. 현재 릴리즈 기준선은 `adk-python` `2.7.0`을 추적합니다.
+ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stream<Event>`), 패키지 구조 및 플랫폼 제약 조건을 준수하면서 `adk-python`과 동일하게 동작하도록 설계되었습니다. 현재 릴리즈 기준선은 `adk-python` `2.7.0`을 추적합니다.
 
 상태 범례:
 
@@ -45,7 +45,7 @@ ADK Dart는 Dart 네이티브 타입, 비동기 스트림, 패키지 구조 및 
 | 패키지/버전 기준선 | ✅ | `adkVersion`, 패키지 버전 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk` 최신 정렬 완료; ADK 기준 버전은 `2.7.0`. |
 | 에이전트 및 런너 | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 핵심 호출, 실시간 폴백, 되감기(Rewind), 세션 상태, 콜백 및 Agent Transfer 구현 완료. |
 | LLM 플로우 프로세서 | ✅ | `flows/llm_flows` 하위 요청/응답 프로세서 | 지침, 정체성, 컨텐츠, 컴팩션, 컨텍스트 캐시, 코드 실행, 출력 스키마, 툴 확인(HITL), 사전 인증 및 에이전트 전환 처리. |
-| 워크플로 런타임 | ✅ | `Workflow`, `BaseNode`, 함수/도구/LLM-Agent 노드, `NodeTool`(도구화된 워크플로), 조인, 라우트, 동적 노드, 리플레이 헬퍼 | 재시도, 타임아웃, 입력 요청/HITL, 병렬 워커, 리플레이/재수화, START 라우팅 가드, 완료 태스크 배칭, 엄격한 입력 스키마 검증, 그래프 직렬화, DOT 시각화 포팅 완료. |
+| 워크플로우 런타임 | ✅ | `Workflow`, `BaseNode`, 함수/도구/LLM-Agent 노드, `NodeTool`(도구화된 워크플로우), 조인, 라우트, 동적 노드, 리플레이 헬퍼 | 재시도, 타임아웃, 입력 요청/HITL, 병렬 워커, 리플레이/재수화, START 라우팅 가드, 완료 태스크 배칭, 엄격한 입력 스키마 검증, 그래프 직렬화, DOT 시각화 포팅 완료. |
 | 이벤트 및 컨텐츠 변환 | ✅ | `Event`, `EventActions`, 컨텐츠/파트 모델, 노드 경로 헬퍼 | 구조화 이벤트 액션, 노드 경로 빌더, 함수/도구 응답 변환, A2A 메타데이터 보존 포함. |
 | 세션 및 상태 | ✅ | In-Memory, SQLite, Database, Vertex AI 세션 서비스, 마이그레이션 헬퍼 | 로컬 및 원격 세션 API 구현 완료; 네트워크/클라우드 백엔드는 적절한 자격증명 및 엔드포인트 필요. |
 | 메모리 및 아티팩트 | ✅ | In-Memory 메모리, Vertex AI 메모리/RAG, In-Memory/파일/GCS 아티팩트 | GCS/Vertex 경로는 HTTP/인증 프로바이더 연동을 사용하며 실제 클라우드 호출 시 환경 의존. |
@@ -103,15 +103,13 @@ ADK Dart는 Dart 네이티브 타입, 비동기 스트림, 패키지 구조 및 
 dart pub add adk_dart
 ```
 
-짧은 import 경로를 원하시면 파사드 패키지를 사용하세요:
+짧은 import 패키지(`adk`)를 사용하는 경우:
 
 ```bash
 dart pub add adk
 ```
 
-### 개발 버전 (Git 직접 참조)
-
-`pubspec.yaml`에 git 의존성을 추가합니다:
+### 개발 버전 (Git 참조)
 
 ```yaml
 dependencies:
@@ -121,15 +119,13 @@ dependencies:
       ref: main
 ```
 
-이후 패키지를 가져옵니다:
-
 ```bash
 dart pub get
 ```
 
-## Gemini API 키 설정
+## Gemini API 환경 변수 설정
 
-ADK Dart는 다음 환경 변수 이름을 기본으로 권장합니다:
+ADK Dart는 다음 환경 변수명을 기본으로 권장합니다:
 
 - `GOOGLE_API_KEY` (권장)
 
@@ -137,13 +133,9 @@ ADK Dart는 다음 환경 변수 이름을 기본으로 권장합니다:
 
 ### 옵션 A: Gemini API 모드 (기본값)
 
-`.env` 파일을 생성하거나 셸 환경 변수를 설정합니다:
-
 ```env
 GOOGLE_GENAI_USE_VERTEXAI=0
 GOOGLE_API_KEY=your_google_api_key
-# 호환 별칭 (둘 다 설정된 경우 GEMINI_API_KEY가 우선 적용됨):
-# GEMINI_API_KEY=your_google_api_key
 ```
 
 ### 옵션 B: Vertex AI 모드
@@ -155,18 +147,16 @@ GOOGLE_CLOUD_LOCATION=us-central1
 GOOGLE_API_KEY=your_google_api_key
 ```
 
-## Model Context Protocol (MCP)
+## MCP (Model Context Protocol)
 
-ADK Dart는 최신 MCP 프로토콜을 완벽 지원하며, 전송 프로토콜 프리미티브를 별도 패키지로 제공합니다:
+ADK Dart는 MCP 지원을 기본 내장하며, 프로토콜 프리미티브를 별도 패키지로 제공합니다:
 
-- `packages/adk_mcp`: Dart용 MCP 전송/생명주기 코어 라이브러리
-- `adk_dart` MCP 계층: ADK 도구 및 런타임 통합 (`McpToolset`, `McpSessionManager`, `LoadMcpResourceTool`, `McpInstructionProvider`)
+- `packages/adk_mcp`: Dart용 MCP 전송/생명주기 코어
+- `adk_dart` MCP 계층: ADK 도구/런타임 연동 (`McpToolset`, `McpSessionManager`, `LoadMcpResourceTool`, `McpInstructionProvider`)
 
-대부분의 경우 `package:adk_dart/adk_dart.dart`만 import하면 충분합니다.
+## 기능 하이라이트 코드 예제
 
-## 코드 예제
-
-### 1. 단일 에이전트 정의 및 실행
+### 단일 에이전트 정의
 
 ```dart
 import 'package:adk_dart/adk_dart.dart';
@@ -210,7 +200,7 @@ Future<void> main() async {
 }
 ```
 
-### 2. 멀티 에이전트 시스템 구성
+### 멀티 에이전트 시스템 구성
 
 ```dart
 import 'package:adk_dart/adk_dart.dart';
@@ -231,27 +221,27 @@ void main() {
   final Agent greeter = Agent(
     name: 'greeter',
     model: StubModel(),
-    instruction: '인사 및 초기 응대를 담당합니다.',
+    instruction: 'Handle greetings.',
   );
 
   final Agent worker = Agent(
     name: 'worker',
     model: StubModel(),
-    instruction: '실제 작업 실행을 담당합니다.',
+    instruction: 'Handle execution tasks.',
   );
 
   final Agent coordinator = Agent(
     name: 'coordinator',
     model: StubModel(),
-    instruction: '요청을 분석하고 적절한 서브 에이전트로 라우팅합니다.',
+    instruction: 'Route requests to sub-agents.',
     subAgents: <BaseAgent>[greeter, worker],
   );
 
-  print('Coordinator 준비 완료: ${coordinator.name}');
+  print('Coordinator configured: ${coordinator.name}');
 }
 ```
 
-### 3. 개발 CLI 및 Web UI 실행
+### 개발용 CLI 및 Web UI
 
 ```bash
 dart pub global activate adk_dart
@@ -261,16 +251,15 @@ adk run .
 adk web --port 8000 .
 ```
 
-`adk web` 명령은 `http://127.0.0.1:8000`에서 로컬 개발 서버와 웹 UI를 구동합니다.
+`adk web` 명령은 `http://127.0.0.1:8000`에서 로컬 개발 서버 및 대화형 디버그 UI를 호스팅합니다.
 
-## 테스트 및 검증
+## 테스트
 
 ```bash
 dart test
 dart analyze
 ```
 
-## 기여 및 라이선스
+## 라이선스
 
-- 이슈 및 풀 리퀘스트: <https://github.com/adk-labs/adk_dart/issues>
-- 라이선스: Apache 2.0 ([LICENSE](LICENSE))
+이 프로젝트는 Apache 2.0 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
