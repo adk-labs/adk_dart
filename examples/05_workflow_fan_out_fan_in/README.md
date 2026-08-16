@@ -1,8 +1,8 @@
 # 05. Workflow Fan-Out / Fan-In
 
-Demonstrates ADK 2.0 graph workflows with parallel branch execution (`Fan-Out`) and synchronization joins (`Fan-In`).
+Demonstrates ADK 2.0 Directed Acyclic Graph (DAG) workflows featuring parallel branch scheduling (`Fan-Out`) and deterministic synchronization barriers (`Fan-In`).
 
-## How to Run
+## Execution
 
 ```bash
 cd examples/05_workflow_fan_out_fan_in
@@ -14,10 +14,10 @@ dart run bin/main.dart
 ---
 
 ### 한국어
-ADK 2.0 노드 그래프 워크플로우를 사용하여 여러 분석 노드를 병렬로 동시 실행(Fan-Out)하고, 결과를 종합 노드로 합류(Fan-In)시키는 예제입니다.
+ADK 2.0 유향 비순환 그래프(DAG) 워크플로우를 구성하여 다중 추론 노드의 비동기 동시 실행(`Fan-Out`) 및 결과 합류 동기화 배리어(`Fan-In`)를 구현하는 오케스트레이션 예제입니다.
 
 ### 日本語
-ADK 2.0 ノードグラフワークフローを使用して、複数の分析ノードを並行実行 (Fan-Out) し、結果を集約ノードに合流 (Fan-In) させるサンプルです。
+ADK 2.0 有向非巡回グラフ (DAG) ワークフローを構築し、複数推論ノードの非同期並行実行 (`Fan-Out`) および結果集約同期バリア (`Fan-In`) を実装するオーケストレーションサンプルです。
 
 ### 中文
-使用 ADK 2.0 节点图工作流并行执行多个分析节点 (Fan-Out) 并将结果汇总到聚合节点 (Fan-In) 的示例。
+构建 ADK 2.0 有向无环图 (DAG) 工作流，实现多推理节点的异步并发执行 (`Fan-Out`) 与结果聚合同步屏障 (`Fan-In`) 的编排示例。

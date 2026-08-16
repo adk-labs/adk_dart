@@ -1,8 +1,8 @@
 # 02. Weather Agent (Tool Calling)
 
-Demonstrates how to bind external Dart functions to an agent using `FunctionTool` and execute automated tool calls via Gemini.
+Demonstrates declarative Dart function binding via `FunctionTool`, parameter JSON Schema reflection, and automated LLM Tool Calling loops with Gemini.
 
-## How to Run
+## Execution
 
 ```bash
 cd examples/02_weather_agent
@@ -14,10 +14,10 @@ dart run bin/main.dart
 ---
 
 ### 한국어
-`FunctionTool`을 사용하여 일반 Dart 함수(날씨 조회 함수)를 에이전트 도구로 등록하고 Gemini 모델이 자동으로 도구를 호출(Tool Calling)하도록 하는 예제입니다.
+`FunctionTool`을 활용한 선언적 Dart 함수 바인딩, 파라미터 JSON Schema 리플렉션, 그리고 Gemini 모델의 자동화된 Function/Tool Calling 루프를 실증하는 예제입니다.
 
 ### 日本語
-`FunctionTool` を使用して Dart 関数をエージェントツールとしてバインドし、Gemini による自動ツール呼び出し (Tool Calling) を実行するサンプルです。
+`FunctionTool` を使用した宣言的 Dart 関数バインディング、パラメータ JSON Schema リフレクション、および Gemini モデルによる自動 Function/Tool Calling ループを実証するサンプルです。
 
 ### 中文
-使用 `FunctionTool` 将 Dart 函数绑定为智能体工具，并通过 Gemini 自动执行工具调用 (Tool Calling) 的示例。
+演示通过 `FunctionTool` 进行声明式 Dart 函数绑定、参数 JSON Schema 反射以及 Gemini 自动化 Function/Tool Calling 循环的示例。

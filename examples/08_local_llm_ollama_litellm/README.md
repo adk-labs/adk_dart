@@ -1,8 +1,8 @@
-# 08. Local LLM (Ollama & LiteLLM)
+# 08. Local LLM (Ollama & LiteLLM Proxy)
 
-Demonstrates connecting ADK agents to local Ollama (port 11434) or LiteLLM proxy servers (port 4000) for private, offline LLM inference.
+Demonstrates integrating ADK pipelines with OpenAI-compatible reverse proxies using local Ollama (`http://localhost:11434`) and LiteLLM (`http://localhost:4000`) for air-gapped, zero-egress LLM inference.
 
-## How to Run
+## Execution
 
 ```bash
 cd examples/08_local_llm_ollama_litellm
@@ -13,10 +13,10 @@ dart run bin/main.dart
 ---
 
 ### 한국어
-로컬에 실행 중인 Ollama(포트 11434) 또는 LiteLLM 프록시 서버(포트 4000)와 에이전트를 연결하여 오프라인에서 안전하게 추론하는 예제입니다.
+로컬 호스트의 Ollama(`:11434`) 및 LiteLLM(`:4000`) 프록시 서버와 ADK 파이프라인을 바인딩하여 외부 네트워크 통신이 배제된 에어갭(Air-gapped) 오프라인 환경에서 안전하게 추론하는 예제입니다.
 
 ### 日本語
-ローカルで稼働している Ollama (ポート 11434) または LiteLLM プロキシサーバー (ポート 4000) とエージェントを連携させ、オフラインで安全に推論を実行するサンプルです。
+ローカルホストの Ollama (`:11434`) および LiteLLM (`:4000`) プロキシサーバーと ADK パイプラインを接続し、外部通信を遮断したエアギャップ環境で安全に推論を実行するサンプルです。
 
 ### 中文
-将智能体连接到本地运行的 Ollama (端口 11434) 或 LiteLLM 代理服务器 (端口 4000) 进行私有离线大模型推理的示例。
+将 ADK 管道与本地主机上的 Ollama (`:11434`) 及 LiteLLM (`:4000`) 代理服务器绑定，在完全隔离外部网络的物理隔绝 (Air-gapped) 环境下安全执行大模型推理的示例。

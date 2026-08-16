@@ -1,8 +1,8 @@
 # 04. Local Environment
 
-Demonstrates giving an agent safe shell execution and filesystem manipulation capabilities via `LocalEnvironment`.
+Demonstrates providing agents with isolated host execution capabilities, subprocess I/O pipes, and local filesystem abstraction via `LocalEnvironment`.
 
-## How to Run
+## Execution
 
 ```bash
 cd examples/04_local_environment
@@ -14,10 +14,10 @@ dart run bin/main.dart
 ---
 
 ### 한국어
-`LocalEnvironment`를 통해 에이전트에게 로컬 터미널 명령 실행 및 파일시스템 제어 도구를 부여하는 예제입니다.
+`LocalEnvironment`를 통해 호스트 서브프로세스 쉘 커맨드 실행, 표준 입출력(stdio) 파이핑 및 파일시스템 I/O 도구를 에이전트에 주입하는 런타임 환경 연동 예제입니다.
 
 ### 日本語
-`LocalEnvironment` を介して、エージェントにローカルシェル実行やファイルシステム制御ツールを提供するサンプルです。
+`LocalEnvironment` を介して、ホストサブプロセスシェルコマンド実行、標準入出力 (stdio) パイプ処理、およびファイルシステム I/O ツールをエージェントに注入する環境統合サンプルです。
 
 ### 中文
-通过 `LocalEnvironment` 为智能体提供本地 Shell 命令执行与文件系统操作能力的示例。
+通过 `LocalEnvironment` 为智能体注入宿主子进程 Shell 命令执行、标准输入输出 (stdio) 管道及文件系统 I/O 工具的运行时环境集成示例。

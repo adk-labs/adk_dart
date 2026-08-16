@@ -1,8 +1,8 @@
-# 11. Human-In-The-Loop (Interactive Choices)
+# 11. Human-In-The-Loop (Interactive Choice Interceptor)
 
-Demonstrates Human-In-The-Loop (HITL) workflows where the agent pauses execution to request structured user choices via `GetUserChoiceTool` before proceeding.
+Demonstrates deterministic Human-In-The-Loop (HITL) runtime interception where the agent emits structured choice options via `GetUserChoiceTool`, suspends execution, and resumes seamlessly upon user input.
 
-## How to Run
+## Execution
 
 ```bash
 cd examples/11_hitl_user_choice
@@ -14,10 +14,10 @@ dart run bin/main.dart
 ---
 
 ### 한국어
-`GetUserChoiceTool`을 활용하여 에이전트가 실행 중 사용자에게 선택 옵션을 제시하고, 사용자의 선택 결과를 받아 다음 작업을 이어가는 인터랙티브 HITL 예제입니다.
+`GetUserChoiceTool`을 활용하여 에이전트 추론 루프를 일시 중단(Suspension)하고, 구조화된 사용자 선택지 인터럽트를 처리한 후 컨텍스트를 안전하게 재개(Resumption)하는 HITL 예제입니다.
 
 ### 日本語
-`GetUserChoiceTool` を活用し、エージェントが実行中にユーザーへ選択肢を提示して結果を受け取り、次の処理へ進むインタラクティブな HITL サンプルです。
+`GetUserChoiceTool` を使用してエージェント推論ループを一時中断 (Suspension) し、構造化されたユーザー選択肢割り込みを処理してコンテキストを安全に再開 (Resumption) する HITL サンプルです。
 
 ### 中文
-利用 `GetUserChoiceTool` 演示智能体在执行过程中向用户提供结构化选项并在获取用户选择后继续执行的人机协同 (HITL) 示例。
+利用 `GetUserChoiceTool` 挂起 (Suspend) 智能体推理循环，处理结构化用户选项中断并在接收输入后无缝恢复 (Resume) 上下文的人机协同 (HITL) 示例。
