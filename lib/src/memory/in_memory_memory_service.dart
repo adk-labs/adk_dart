@@ -71,6 +71,7 @@ class InMemoryMemoryService extends BaseMemoryService {
         _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
 
     final Set<String> queryWords = _extractWordsLower(query);
+    final bool matchAll = queryWords.isEmpty;
     final List<(int, MemoryEntry)> scoredMemories = <(int, MemoryEntry)>[];
 
     for (final List<Event> events in sessions.values) {
@@ -83,7 +84,9 @@ class InMemoryMemoryService extends BaseMemoryService {
         if (eventWords.isEmpty) {
           continue;
         }
-        final int matchedWords = queryWords.intersection(eventWords).length;
+        final int matchedWords = matchAll
+            ? 1
+            : queryWords.intersection(eventWords).length;
         if (matchedWords > 0) {
           scoredMemories.add((
             matchedWords,

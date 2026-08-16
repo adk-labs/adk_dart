@@ -384,6 +384,7 @@ export 'src/tools/load_artifacts_tool.dart';
 export 'src/tools/load_mcp_resource_tool.dart';
 export 'src/tools/load_memory_tool.dart';
 export 'src/tools/load_web_page.dart';
+export 'src/tools/vertex_ai_load_profiles_tool.dart';
 export 'src/tools/langchain_tool.dart';
 export 'src/tools/long_running_tool.dart';
 export 'src/tools/mcp_tool/conversion_utils.dart';
