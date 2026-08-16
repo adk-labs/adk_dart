@@ -664,10 +664,15 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
       continue;
     }
     if (part.functionCall != null) {
+      final Map<String, dynamic> rawArgs = part.functionCall!.args;
+      final List<String> sortedKeys = rawArgs.keys.toList()..sort();
+      final Map<String, dynamic> sortedArgs = <String, dynamic>{
+        for (final String k in sortedKeys) k: rawArgs[k],
+      };
       content.parts.add(
         Part.text(
           '[${event.author}] called tool `${part.functionCall!.name}` with '
-          'parameters: ${part.functionCall!.args}',
+          'parameters: $sortedArgs',
         ),
       );
       continue;

@@ -324,4 +324,127 @@ void main() {
       expect(appended.parts[1].text, 'Hello from DOCX!');
     },
   );
+
+  test(
+    'LoadArtifactsTool extracts XLSX spreadsheet files when enabled',
+    () async {
+      final InvocationContext invocationContext = InvocationContext(
+        invocationId: 'inv-spreadsheet',
+        session: Session(id: 's-spreadsheet', appName: 'app', userId: 'user'),
+        agent: LlmAgent(name: 'agent'),
+        artifactService: InMemoryArtifactService(),
+        sessionService: InMemorySessionService(),
+      );
+      final Context toolContext = Context(
+        invocationContext,
+        functionCallId: 'call-xlsx',
+      );
+
+      final Archive archive = Archive();
+      archive.addFile(
+        ArchiveFile(
+          'xl/sharedStrings.xml',
+          utf8.encode('<sst><si><t>Header1</t></si><si><t>Header2</t></si></sst>').length,
+          utf8.encode('<sst><si><t>Header1</t></si><si><t>Header2</t></si></sst>'),
+        ),
+      );
+      archive.addFile(
+        ArchiveFile(
+          'xl/worksheets/sheet1.xml',
+          utf8.encode('<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row></sheetData>').length,
+          utf8.encode('<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row></sheetData>'),
+        ),
+      );
+      final List<int>? zipBytes = ZipEncoder().encode(archive);
+
+      await toolContext.saveArtifact(
+        'data.xlsx',
+        Part.fromInlineData(
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          data: zipBytes!,
+        ),
+      );
+
+      final LoadArtifactsTool tool = LoadArtifactsTool(
+        enableSpreadsheetParsing: true,
+      );
+      final LlmRequest request = LlmRequest(
+        contents: <Content>[
+          Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: 'load_artifacts',
+                response: <String, dynamic>{
+                  'artifact_names': <String>['data.xlsx'],
+                },
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tool.processLlmRequest(
+        toolContext: toolContext,
+        llmRequest: request,
+      );
+
+      final Content appended = request.contents.last;
+      expect(appended.parts.first.text, 'Artifact data.xlsx is:');
+      expect(appended.parts[1].text, equals('Header1\tHeader2'));
+    },
+  );
+
+  test(
+    'LoadArtifactsTool uses custom processArtifact callback when provided',
+    () async {
+      final InvocationContext invocationContext = InvocationContext(
+        invocationId: 'inv-proc',
+        session: Session(id: 's-proc', appName: 'app', userId: 'user'),
+        agent: LlmAgent(name: 'agent'),
+        artifactService: InMemoryArtifactService(),
+        sessionService: InMemorySessionService(),
+      );
+      final Context toolContext = Context(
+        invocationContext,
+        functionCallId: 'call-proc',
+      );
+
+      await toolContext.saveArtifact(
+        'custom.txt',
+        Part.text('original content'),
+      );
+
+      final LoadArtifactsTool tool = LoadArtifactsTool(
+        processArtifact: (Part part, String name) async {
+          return Part.text('custom-processed: $name -> ${part.text}');
+        },
+      );
+
+      final LlmRequest request = LlmRequest(
+        contents: <Content>[
+          Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: 'load_artifacts',
+                response: <String, dynamic>{
+                  'artifact_names': <String>['custom.txt'],
+                },
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tool.processLlmRequest(
+        toolContext: toolContext,
+        llmRequest: request,
+      );
+
+      final Content appended = request.contents.last;
+      expect(appended.parts.first.text, 'Artifact custom.txt is:');
+      expect(appended.parts[1].text, 'custom-processed: custom.txt -> original content');
+    },
+  );
 }

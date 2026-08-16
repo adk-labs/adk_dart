@@ -72,7 +72,7 @@ class McpToolset extends BaseToolset {
       tools = descriptors
           .map((Map<String, Object?> descriptor) {
             final String name = _readString(descriptor['name']);
-            if (name.isEmpty) {
+            if (name.isEmpty || mcpReservedToolNames.contains(name)) {
               return null;
             }
             final String description = _readString(descriptor['description']);

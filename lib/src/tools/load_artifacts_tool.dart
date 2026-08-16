@@ -1,6 +1,7 @@
 /// Tool that loads stored artifacts into model-visible context.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
@@ -30,18 +31,35 @@ const Set<String> _textLikeMimeTypes = <String>{
   'image/svg+xml',
   'image/xml',
 };
+const Set<String> _spreadsheetMimeTypes = <String>{
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+};
+
+/// Signature for custom artifact preprocessing callback.
+typedef ProcessArtifactCallback =
+    FutureOr<Part?> Function(Part artifact, String artifactName);
 
 /// Tool that loads saved artifacts into the current turn.
 class LoadArtifactsTool extends BaseTool {
   /// Creates a tool that loads saved artifacts into the current request.
-  LoadArtifactsTool()
-    : super(
-        name: 'load_artifacts',
-        description: '''Loads artifacts into the session for this request.
+  LoadArtifactsTool({
+    this.processArtifact,
+    this.enableSpreadsheetParsing = false,
+  }) : super(
+         name: 'load_artifacts',
+         description: '''Loads artifacts into the session for this request.
 
 NOTE: Call when you need access to artifacts (for example, uploads saved by the
 web UI).''',
-      );
+       );
+
+  /// Optional callback to customize or filter artifact parts before adding them
+  /// to the LLM request.
+  final ProcessArtifactCallback? processArtifact;
+
+  /// Whether to parse spreadsheet artifacts (.xlsx, .xls) into textual representations.
+  final bool enableSpreadsheetParsing;
 
   @override
   FunctionDeclaration? getDeclaration() {
@@ -121,15 +139,28 @@ web UI).''',
         continue;
       }
 
-      llmRequest.contents.add(
-        Content(
-          role: 'user',
-          parts: <Part>[
-            Part.text('Artifact $artifactName is:'),
-            _asSafePart(artifact, artifactName),
-          ],
-        ),
-      );
+      Part? processed;
+      if (processArtifact != null) {
+        processed = await processArtifact!(artifact, artifactName);
+      } else {
+        processed = _asSafePart(
+          artifact,
+          artifactName,
+          enableSpreadsheetParsing: enableSpreadsheetParsing,
+        );
+      }
+
+      if (processed != null) {
+        llmRequest.contents.add(
+          Content(
+            role: 'user',
+            parts: <Part>[
+              Part.text('Artifact $artifactName is:'),
+              processed,
+            ],
+          ),
+        );
+      }
     }
   }
 }
@@ -153,9 +184,17 @@ String _jsonDumpsStringList(List<String> values) {
   return '[${values.map(jsonEncode).join(', ')}]';
 }
 
-Part _asSafePart(Part artifact, String artifactName) {
+Part _asSafePart(
+  Part artifact,
+  String artifactName, {
+  bool enableSpreadsheetParsing = false,
+}) {
   if (artifact.inlineData != null) {
-    return _asSafeInlineDataPart(artifact, artifactName);
+    return _asSafeInlineDataPart(
+      artifact,
+      artifactName,
+      enableSpreadsheetParsing: enableSpreadsheetParsing,
+    );
   }
   if (artifact.text != null && artifact.text!.isNotEmpty) {
     return artifact.copyWith();
@@ -176,7 +215,11 @@ Part _asSafePart(Part artifact, String artifactName) {
   return Part.text('[Artifact $artifactName was loaded.]');
 }
 
-Part _asSafeInlineDataPart(Part artifact, String artifactName) {
+Part _asSafeInlineDataPart(
+  Part artifact,
+  String artifactName, {
+  bool enableSpreadsheetParsing = false,
+}) {
   final InlineData inlineData = artifact.inlineData!;
   if (_isInlineMimeTypeSupported(inlineData.mimeType)) {
     return artifact.copyWith();
@@ -192,7 +235,8 @@ Part _asSafeInlineDataPart(Part artifact, String artifactName) {
   }
 
   // Attempt DOCX extraction
-  final bool isDocx = mimeType ==
+  final bool isDocx =
+      mimeType ==
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       mimeType == 'application/octet-stream' ||
       artifactName.toLowerCase().endsWith('.docx');
@@ -203,7 +247,19 @@ Part _asSafeInlineDataPart(Part artifact, String artifactName) {
     }
   }
 
-  final bool isTextLike = mimeType.startsWith('text/') ||
+  // Attempt Spreadsheet extraction if enabled
+  if (enableSpreadsheetParsing &&
+      (_spreadsheetMimeTypes.contains(mimeType) ||
+          artifactName.toLowerCase().endsWith('.xlsx') ||
+          artifactName.toLowerCase().endsWith('.xls'))) {
+    final String? extractedSpreadsheet = _tryExtractXlsxText(data);
+    if (extractedSpreadsheet != null) {
+      return Part.text(extractedSpreadsheet);
+    }
+  }
+
+  final bool isTextLike =
+      mimeType.startsWith('text/') ||
       _textLikeMimeTypes.contains(mimeType) ||
       artifactName.toLowerCase().endsWith('.csv') ||
       artifactName.toLowerCase().endsWith('.txt') ||
@@ -220,22 +276,23 @@ Part _asSafeInlineDataPart(Part artifact, String artifactName) {
   );
 }
 
-String? _tryExtractDocxText(List<int> data) {
+String? _tryExtractDocxText(List<int> bytes) {
   try {
-    final Archive archive = ZipDecoder().decodeBytes(data);
-    final ArchiveFile? file = archive.findFile('word/document.xml');
-    if (file == null) {
+    final Archive archive = ZipDecoder().decodeBytes(bytes);
+    final ArchiveFile? documentFile = archive.findFile('word/document.xml');
+    if (documentFile == null) {
       return null;
     }
-    if (file.size > 10 * 1024 * 1024) {
+    final Object? rawContent = documentFile.content;
+    final List<int> contentBytes = rawContent is List<int>
+        ? rawContent
+        : (rawContent is String ? utf8.encode(rawContent) : <int>[]);
+    if (contentBytes.isEmpty) {
       return null;
     }
-    final List<int> xmlBytes = file.content as List<int>;
-    final String xmlContent = utf8.decode(xmlBytes, allowMalformed: true);
+    final String xmlContent = utf8.decode(contentBytes, allowMalformed: true);
 
-    final RegExp nsRegex = RegExp(
-      r'xmlns:(\w+)="http://schemas.openxmlformats.org/wordprocessingml/2006/main"',
-    );
+    final RegExp nsRegex = RegExp(r'xmlns:([a-zA-Z0-9]+)="[^"]*wordprocessingml');
     final RegExpMatch? nsMatch = nsRegex.firstMatch(xmlContent);
     final String prefix = nsMatch != null ? nsMatch.group(1)! : 'w';
 
@@ -259,6 +316,72 @@ String? _tryExtractDocxText(List<int> data) {
     }
 
     return paragraphs.join('\n');
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _tryExtractXlsxText(List<int> bytes) {
+  try {
+    final Archive archive = ZipDecoder().decodeBytes(bytes);
+    final List<String> sharedStrings = <String>[];
+    final ArchiveFile? ssFile = archive.findFile('xl/sharedStrings.xml');
+    if (ssFile != null) {
+      final Object? content = ssFile.content;
+      final List<int> ssBytes = content is List<int>
+          ? content
+          : (content is String ? utf8.encode(content) : <int>[]);
+      final String ssXml = utf8.decode(ssBytes, allowMalformed: true);
+      final RegExp tRegex = RegExp(r'<t(?:[^>]*)>([^<]*)</t>');
+      for (final RegExpMatch m in tRegex.allMatches(ssXml)) {
+        sharedStrings.add(m.group(1) ?? '');
+      }
+    }
+
+    final ArchiveFile? sheetFile = archive.findFile('xl/worksheets/sheet1.xml');
+    if (sheetFile == null) {
+      return null;
+    }
+    final Object? sContent = sheetFile.content;
+    final List<int> sheetBytes = sContent is List<int>
+        ? sContent
+        : (sContent is String ? utf8.encode(sContent) : <int>[]);
+    final String sheetXml = utf8.decode(sheetBytes, allowMalformed: true);
+
+    final List<String> rows = <String>[];
+    final RegExp rowRegex = RegExp(r'<row(?:[^>]*)>(.*?)</row>', dotAll: true);
+    final RegExp cellRegex = RegExp(
+      r'<c\s+([^>]*?)>(?:<v>([^<]*)</v>)?',
+      dotAll: true,
+    );
+    final RegExp tAttrRegex = RegExp(r't="([^"]*)"');
+
+    for (final RegExpMatch rowMatch in rowRegex.allMatches(sheetXml)) {
+      final String rowXml = rowMatch.group(1) ?? '';
+      final List<String> cellValues = <String>[];
+      for (final RegExpMatch cellMatch in cellRegex.allMatches(rowXml)) {
+        final String attrs = cellMatch.group(1) ?? '';
+        final String? val = cellMatch.group(2);
+        if (val == null) continue;
+        final RegExpMatch? tMatch = tAttrRegex.firstMatch(attrs);
+        final String? type = tMatch?.group(1);
+        if (type == 's') {
+          final int idx = int.tryParse(val) ?? -1;
+          if (idx >= 0 && idx < sharedStrings.length) {
+            cellValues.add(sharedStrings[idx]);
+          } else {
+            cellValues.add(val);
+          }
+        } else {
+          cellValues.add(val);
+        }
+      }
+      if (cellValues.isNotEmpty) {
+        rows.add(cellValues.join('\t'));
+      }
+    }
+
+    return rows.isNotEmpty ? rows.join('\n') : null;
   } catch (_) {
     return null;
   }

@@ -12,24 +12,23 @@ class InMemoryMemoryService extends BaseMemoryService {
   /// Creates an in-memory memory service.
   InMemoryMemoryService();
 
+  static const int _maxSearchResults = 10;
+
   final Map<(String, String), Map<String, List<Event>>> _sessionEventsByUserKey =
       <(String, String), Map<String, List<Event>>>{};
 
   @override
   Future<void> addSessionToMemory(Session session) async {
     final (String, String) key = _userKey(session.appName, session.userId);
-    final List<Event> events = session.events
+    final Map<String, List<Event>> sessions =
+        _sessionEventsByUserKey[key] ??= <String, List<Event>>{};
+    sessions[session.id] = session.events
         .where(
           (Event event) =>
               event.content != null && event.content!.parts.isNotEmpty,
         )
         .map((Event event) => event.copyWith())
         .toList();
-
-    _sessionEventsByUserKey.putIfAbsent(
-      key,
-      () => <String, List<Event>>{},
-    )[session.id] = events;
   }
 
   @override
@@ -40,12 +39,11 @@ class InMemoryMemoryService extends BaseMemoryService {
     String? sessionId,
     Map<String, Object?>? customMetadata,
   }) async {
-    final Map<String, Object?>? _ = customMetadata;
     final (String, String) key = _userKey(appName, userId);
-    final String scopedSessionId = sessionId ?? '__unknown_session_id__';
-    final List<Event> target = _sessionEventsByUserKey
-        .putIfAbsent(key, () => <String, List<Event>>{})
-        .putIfAbsent(scopedSessionId, () => <Event>[]);
+    final Map<String, List<Event>> sessions =
+        _sessionEventsByUserKey[key] ??= <String, List<Event>>{};
+    final String targetSessionId = sessionId ?? 'unknown_session';
+    final List<Event> target = sessions[targetSessionId] ??= <Event>[];
 
     final Set<String> existingIds = target
         .map((Event event) => event.id)
@@ -73,7 +71,7 @@ class InMemoryMemoryService extends BaseMemoryService {
         _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
 
     final Set<String> queryWords = _extractWordsLower(query);
-    final List<MemoryEntry> found = <MemoryEntry>[];
+    final List<(int, MemoryEntry)> scoredMemories = <(int, MemoryEntry)>[];
 
     for (final List<Event> events in sessions.values) {
       for (final Event event in events) {
@@ -85,21 +83,30 @@ class InMemoryMemoryService extends BaseMemoryService {
         if (eventWords.isEmpty) {
           continue;
         }
-        if (!_hasAnyWordOverlap(queryWords, eventWords)) {
-          continue;
+        final int matchedWords = queryWords.intersection(eventWords).length;
+        if (matchedWords > 0) {
+          scoredMemories.add((
+            matchedWords,
+            MemoryEntry(
+              content: event.content!.copyWith(),
+              author: event.author,
+              timestamp: formatTimestamp(event.timestamp),
+            ),
+          ));
         }
-
-        found.add(
-          MemoryEntry(
-            content: event.content!.copyWith(),
-            author: event.author,
-            timestamp: formatTimestamp(event.timestamp),
-          ),
-        );
       }
     }
 
-    return SearchMemoryResponse(memories: found);
+    scoredMemories.sort(
+      ((int, MemoryEntry) a, (int, MemoryEntry) b) => b.$1.compareTo(a.$1),
+    );
+
+    final List<MemoryEntry> topMemories = scoredMemories
+        .take(_maxSearchResults)
+        .map(((int, MemoryEntry) item) => item.$2)
+        .toList();
+
+    return SearchMemoryResponse(memories: topMemories);
   }
 }
 
@@ -124,14 +131,3 @@ Set<String> _extractWordsLower(String text) {
       .toSet();
 }
 
-bool _hasAnyWordOverlap(Set<String> left, Set<String> right) {
-  if (left.isEmpty || right.isEmpty) {
-    return false;
-  }
-  for (final String word in left) {
-    if (right.contains(word)) {
-      return true;
-    }
-  }
-  return false;
-}

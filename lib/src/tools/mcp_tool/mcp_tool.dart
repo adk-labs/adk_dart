@@ -57,6 +57,14 @@ class McpBaseTool {
   }
 }
 
+/// Reserved tool names that cannot be overridden by external MCP tools.
+const Set<String> mcpReservedToolNames = <String>{
+  'request_euc',
+  'request_confirmation',
+  'request_input',
+  'transfer_to_agent',
+};
+
 /// Auth-aware MCP tool wrapper that delegates calls through [McpSessionManager].
 class McpTool extends BaseAuthenticatedTool {
   /// Creates an MCP-backed tool.
@@ -71,7 +79,13 @@ class McpTool extends BaseAuthenticatedTool {
        _connectionParams = connectionParams,
        _sessionManager = sessionManager,
        _requireConfirmation = requireConfirmation,
-       super(name: mcpTool.name, description: mcpTool.description);
+       super(name: mcpTool.name, description: mcpTool.description) {
+    if (mcpReservedToolNames.contains(mcpTool.name)) {
+      throw ArgumentError(
+        "MCP tool name '${mcpTool.name}' is reserved by the ADK framework.",
+      );
+    }
+  }
 
   final McpBaseTool _mcpTool;
   final McpConnectionParams _connectionParams;
