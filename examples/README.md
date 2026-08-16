@@ -21,6 +21,9 @@ ADK (Agent Development Kit) Dart 패키지를 사용하여 AI 에이전트를 �
 7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (원격 에이전트) 구성
 8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — 로컬 Ollama / LiteLLM 서버 연동
 9. **[09_local_llm_litert](./09_local_llm_litert)** — 온디바이스 Gemma (LiteRT-LM) 추론
+10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP 서버 및 도구 연동
+11. **[11_hitl_user_choice](./11_hitl_user_choice)** — GetUserChoiceTool 기반 휴먼 인 더 루프(HITL) 상호작용
+12. **[12_structured_output_schema](./12_structured_output_schema)** — outputSchema 기반 구조화된 JSON 응답 생성
 
 ### 빠른 시작
 
@@ -31,7 +34,7 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> 예제 `02` ~ `07`은 실행 전 `GEMINI_API_KEY` 환경 변수를 설정해야 합니다.
+> 예제 `02` ~ `07`, `10` ~ `12`는 실행 전 `GEMINI_API_KEY` 환경 변수를 설정해야 합니다.
 > 예제 `08`, `09`는 로컬/온디바이스 모델을 사용하므로 API 키가 필요하지 않습니다.
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
@@ -56,6 +59,9 @@ Each example is a self-contained **Dart CLI project** you can download and run i
 7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (remote agent) setup
 8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — Local Ollama / LiteLLM server integration
 9. **[09_local_llm_litert](./09_local_llm_litert)** — On-device Gemma inference via LiteRT-LM
+10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP server & tool integration
+11. **[11_hitl_user_choice](./11_hitl_user_choice)** — Human-In-The-Loop interactive choices with GetUserChoiceTool
+12. **[12_structured_output_schema](./12_structured_output_schema)** — Typed JSON responses via outputSchema
 
 ### Quick Start
 
@@ -66,7 +72,7 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> Examples `02` through `07` require a `GEMINI_API_KEY` environment variable before running.
+> Examples `02` through `07`, `10` through `12` require a `GEMINI_API_KEY` environment variable before running.
 > Examples `08` and `09` use local/on-device models and do not require an API key.
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
@@ -91,6 +97,9 @@ ADK (Agent Development Kit) Dart パッケージを使用して AI エージェ�
 7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent (リモートエージェント) の設定
 8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — ローカル Ollama / LiteLLM サーバー連携
 9. **[09_local_llm_litert](./09_local_llm_litert)** — LiteRT-LM によるオンデバイス Gemma 推論
+10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP サーバー連携
+11. **[11_hitl_user_choice](./11_hitl_user_choice)** — GetUserChoiceTool による Human-In-The-Loop 選択対話
+12. **[12_structured_output_schema](./12_structured_output_schema)** — outputSchema による構造化 JSON レスポンス生成
 
 ### クイックスタート
 
@@ -101,7 +110,7 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> サンプル `02` ～ `07` を実行する前に、環境変数 `GEMINI_API_KEY` を設定してください。
+> サンプル `02` ～ `07`、`10` ～ `12` を実行する前に、環境変数 `GEMINI_API_KEY` を設定してください。
 > サンプル `08`、`09` はローカル/オンデバイスモデルを使用するため、API キーは不要です。
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"
@@ -126,6 +135,9 @@ dart run bin/main.dart
 7. **[07_managed_agent_basic](./07_managed_agent_basic)** — ManagedAgent（远程智能体）配置
 8. **[08_local_llm_ollama_litellm](./08_local_llm_ollama_litellm)** — 本地 Ollama / LiteLLM 服务器集成
 9. **[09_local_llm_litert](./09_local_llm_litert)** — 通过 LiteRT-LM 进行设备端 Gemma 推理
+10. **[10_mcp_streamable_http](./10_mcp_streamable_http)** — Streamable HTTP MCP 协议与远程工具集成
+11. **[11_hitl_user_choice](./11_hitl_user_choice)** — 基于 GetUserChoiceTool 的人机协同选择交互
+12. **[12_structured_output_schema](./12_structured_output_schema)** — 基于 outputSchema 的类型安全 JSON 输出
 
 ### 快速开始
 
@@ -136,7 +148,7 @@ dart run bin/main.dart
 ```
 
 > [!IMPORTANT]
-> 示例 `02` 至 `07` 在运行前需要设置环境变量 `GEMINI_API_KEY`。
+> 示例 `02` 至 `07`、`10` 至 `12` 在运行前需要设置环境变量 `GEMINI_API_KEY`。
 > 示例 `08` 和 `09` 使用本地/设备端模型，无需 API 密钥。
 > ```bash
 > export GEMINI_API_KEY="your-gemini-api-key"

@@ -331,5 +331,80 @@ List<ExampleMenuItem> buildExampleMenuItems() {
       ],
       agentBuilder: AgentService.buildSkills,
     ),
+    ExampleMenuItem(
+      id: 'hitl',
+      icon: Icons.touch_app_outlined,
+      category: ExampleCategory.general,
+      titleKey: 'hitl.title',
+      summaryKey: 'hitl.summary',
+      initialKey: 'hitl.initial',
+      emptyKey: 'hitl.empty',
+      hintKey: 'hitl.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.hitl.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.hitl.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.hitl.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildHumanInTheLoop,
+    ),
+    ExampleMenuItem(
+      id: 'self_healing',
+      icon: Icons.healing_outlined,
+      category: ExampleCategory.integrations,
+      titleKey: 'self_healing.title',
+      summaryKey: 'self_healing.summary',
+      initialKey: 'self_healing.initial',
+      emptyKey: 'self_healing.empty',
+      hintKey: 'self_healing.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.self_healing.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.self_healing.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.self_healing.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildSelfHealing,
+    ),
+    ExampleMenuItem(
+      id: 'structured_output',
+      icon: Icons.data_object_outlined,
+      category: ExampleCategory.general,
+      titleKey: 'structured_output.title',
+      summaryKey: 'structured_output.summary',
+      initialKey: 'structured_output.initial',
+      emptyKey: 'structured_output.empty',
+      hintKey: 'structured_output.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.structured_output.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.structured_output.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.structured_output.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildStructuredOutput,
+    ),
   ];
 }

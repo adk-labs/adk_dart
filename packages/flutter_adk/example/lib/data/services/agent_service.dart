@@ -1360,6 +1360,148 @@ ${responseLanguageInstruction(language)}
     );
   }
 
+  static BaseAgent buildHumanInTheLoop({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    return Agent(
+      name: 'TravelAdvisor',
+      model: _createGeminiModel(apiKey),
+      description: 'Human-in-the-loop interactive travel advisor.',
+      instruction:
+          '''
+You are a helpful travel planning assistant with Human-In-The-Loop support.
+- When the user asks for recommendations, present 2-3 options and ask the user to choose using get_user_choice tool.
+- Once the user makes a choice, provide a detailed day itinerary for that selected destination.
+- Keep recommendations realistic and appealing.
+${responseLanguageInstruction(language)}
+''',
+      tools: <Object>[getUserChoice],
+    );
+  }
+
+  static BaseAgent buildSelfHealing({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    final ReflectAndRetryToolPlugin plugin = ReflectAndRetryToolPlugin(
+      maxRetries: 3,
+    );
+    return Agent(
+      name: 'SelfHealingAgent',
+      model: _createGeminiModel(apiKey),
+      description: 'Self-healing agent with ReflectAndRetryToolPlugin.',
+      instruction:
+          '''
+You are an intelligent data-processing agent.
+- When the user gives an expression or calculation, use the calculate_safely tool.
+- If the tool fails with an error or invalid format, reflect on the feedback and retry with corrected parameters.
+${responseLanguageInstruction(language)}
+''',
+      afterToolCallback: (
+        BaseTool tool,
+        Map<String, dynamic> args,
+        ToolContext toolContext,
+        Map<String, dynamic> toolResponse,
+      ) {
+        return plugin.afterToolCallback(
+          tool: tool,
+          toolArgs: args,
+          toolContext: toolContext,
+          result: toolResponse,
+        );
+      },
+      tools: <Object>[
+        FunctionTool(
+          name: 'calculate_safely',
+          description: 'Calculates the division or product of two numbers (requires a and b as numbers, b cannot be 0).',
+          func: ({required dynamic a, required dynamic b, String operation = 'divide'}) {
+            final num? numA = a is num ? a : num.tryParse('$a');
+            final num? numB = b is num ? b : num.tryParse('$b');
+            if (numA == null || numB == null) {
+              return <String, Object?>{
+                'status': 'error',
+                'error': 'Both parameters a and b must be valid numeric values.',
+              };
+            }
+            if (operation == 'divide') {
+              if (numB == 0) {
+                return <String, Object?>{
+                  'status': 'error',
+                  'error': 'Division by zero is not allowed. Please provide a non-zero denominator b.',
+                };
+              }
+              return <String, Object?>{
+                'status': 'success',
+                'result': numA / numB,
+              };
+            }
+            return <String, Object?>{
+              'status': 'success',
+              'result': numA * numB,
+            };
+          },
+        ),
+      ],
+    );
+  }
+
+  static BaseAgent buildStructuredOutput({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+  }) {
+    return Agent(
+      name: 'RecipeStructuredAgent',
+      model: _createGeminiModel(apiKey),
+      description: 'Agent that outputs strictly formatted JSON recipe data.',
+      outputSchema: const <String, dynamic>{
+        'type': 'object',
+        'properties': <String, dynamic>{
+          'recipe_name': <String, dynamic>{
+            'type': 'string',
+            'description': 'The name of the recipe.',
+          },
+          'cooking_time_minutes': <String, dynamic>{
+            'type': 'integer',
+            'description': 'Estimated cooking time in minutes.',
+          },
+          'difficulty': <String, dynamic>{
+            'type': 'string',
+            'enum': <String>['Easy', 'Medium', 'Hard'],
+          },
+          'ingredients': <String, dynamic>{
+            'type': 'array',
+            'items': <String, dynamic>{'type': 'string'},
+            'description': 'List of ingredients with quantities.',
+          },
+          'instructions': <String, dynamic>{
+            'type': 'array',
+            'items': <String, dynamic>{'type': 'string'},
+            'description': 'Step-by-step preparation steps.',
+          },
+        },
+        'required': <String>[
+          'recipe_name',
+          'cooking_time_minutes',
+          'difficulty',
+          'ingredients',
+          'instructions',
+        ],
+      },
+      instruction:
+          '''
+You are a professional chef. When the user asks for a dish or cuisine, generate a delicious recipe in strictly formatted JSON adhering to the provided schema.
+${responseLanguageInstruction(language)}
+''',
+    );
+  }
+
   static Gemini _createGeminiModel(String apiKey) {
     return Gemini(
       model: 'gemini-3-flash-preview',

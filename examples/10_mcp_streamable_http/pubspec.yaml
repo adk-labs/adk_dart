@@ -1,0 +1,14 @@
+name: mcp_streamable_http_example
+description: An example demonstrating how to connect an ADK Dart agent to an MCP server via Streamable HTTP.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0
