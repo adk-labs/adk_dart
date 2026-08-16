@@ -333,6 +333,67 @@ Future<Event?> _executeSingleFunctionCallAsync(
     );
   }
 
+  if (invocationContext.liveRequestQueue != null &&
+      (tool.responseScheduling == FunctionResponseScheduling.whenIdle ||
+          tool.responseScheduling == FunctionResponseScheduling.silent)) {
+    final String taskKey =
+        '${tool.name}_${functionCall.id ?? generateClientFunctionCallId()}';
+    invocationContext.activeNonBlockingToolTasks ??= <String, Future<void>>{};
+
+    final Completer<void> taskCompleter = Completer<void>();
+    invocationContext.activeNonBlockingToolTasks![taskKey] =
+        taskCompleter.future;
+
+    unawaited(() async {
+      try {
+        final Event? responseEvent = await _runToolExecutionPipeline(
+          invocationContext: invocationContext,
+          functionCall: functionCall,
+          functionArgs: functionArgs,
+          tool: tool,
+          toolContext: toolContext,
+          agent: agent,
+        );
+        if (responseEvent?.content != null &&
+            invocationContext.liveRequestQueue != null) {
+          final Content responseContent = responseEvent!.content!.copyWith();
+          for (final Part part in responseContent.parts) {
+            if (part.functionResponse != null) {
+              part.functionResponse!.scheduling = tool.responseScheduling;
+            }
+          }
+          invocationContext.liveRequestQueue!.sendContent(responseContent);
+        }
+      } catch (_) {
+      } finally {
+        invocationContext.activeNonBlockingToolTasks?.remove(taskKey);
+        if (!taskCompleter.isCompleted) {
+          taskCompleter.complete();
+        }
+      }
+    }());
+
+    return null;
+  }
+
+  return _runToolExecutionPipeline(
+    invocationContext: invocationContext,
+    functionCall: functionCall,
+    functionArgs: functionArgs,
+    tool: tool,
+    toolContext: toolContext,
+    agent: agent,
+  );
+}
+
+Future<Event?> _runToolExecutionPipeline({
+  required InvocationContext invocationContext,
+  required FunctionCall functionCall,
+  required Map<String, dynamic> functionArgs,
+  required BaseTool tool,
+  required ToolContext toolContext,
+  required LlmAgent agent,
+}) async {
   Map<String, dynamic>? functionResponse = await invocationContext.pluginManager
       .runBeforeToolCallback(
         tool: tool,

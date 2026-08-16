@@ -29,6 +29,7 @@ class LlmResponse {
     this.liveSessionId,
     this.liveSessionResumptionUpdate,
     this.goAway,
+    this.voiceActivity,
   });
 
   /// Backend model version that produced this response.
@@ -97,6 +98,9 @@ class LlmResponse {
   /// Provider go-away control payload for live reconnects.
   Object? goAway;
 
+  /// Optional voice activity payload received from Live API.
+  VoiceActivity? voiceActivity;
+
   /// Returns function-call parts embedded in [content].
   List<FunctionCall> getFunctionCalls() {
     final Content? value = content;
@@ -153,6 +157,7 @@ class LlmResponse {
     Object? liveSessionId = _sentinel,
     Object? liveSessionResumptionUpdate = _sentinel,
     Object? goAway = _sentinel,
+    Object? voiceActivity = _sentinel,
   }) {
     return LlmResponse(
       modelVersion: identical(modelVersion, _sentinel)
@@ -220,6 +225,9 @@ class LlmResponse {
           ? this.liveSessionResumptionUpdate
           : liveSessionResumptionUpdate,
       goAway: identical(goAway, _sentinel) ? this.goAway : goAway,
+      voiceActivity: identical(voiceActivity, _sentinel)
+          ? this.voiceActivity?.copyWith()
+          : voiceActivity as VoiceActivity?,
     );
   }
 }

@@ -23,6 +23,14 @@ typedef DataAgentHttpGet =
       required Map<String, String> headers,
     });
 
+/// Performs a Data Agent JSON POST request.
+typedef DataAgentHttpPost =
+    Future<Map<String, Object?>> Function({
+      required Uri uri,
+      required Map<String, Object?> payload,
+      required Map<String, String> headers,
+    });
+
 /// Performs a Data Agent streaming POST request and returns raw lines.
 typedef DataAgentStreamPost =
     Future<List<String>> Function({
@@ -30,6 +38,38 @@ typedef DataAgentStreamPost =
       required Map<String, Object?> payload,
       required Map<String, String> headers,
     });
+
+/// Creates a new data agent resource for [projectId].
+Future<Map<String, Object?>> createDataAgent({
+  required String projectId,
+  required String displayName,
+  required Object credentials,
+  String? description,
+  Map<String, Object?>? dataSource,
+  Object? settings,
+  ToolContext? toolContext,
+  DataAgentHttpPost? httpPost,
+}) async {
+  try {
+    final Map<String, String> headers = _getHttpHeaders(credentials);
+    final Uri uri = Uri.parse(
+      '$dataAgentBaseUrl/projects/$projectId/locations/global/dataAgents',
+    );
+    final Map<String, Object?> payload = <String, Object?>{
+      'displayName': displayName,
+      if (description != null) 'description': description,
+      if (dataSource != null) 'dataSource': dataSource,
+    };
+    final Map<String, Object?> response = await (httpPost ?? _defaultHttpPost)(
+      uri: uri,
+      payload: payload,
+      headers: headers,
+    );
+    return <String, Object?>{'status': 'SUCCESS', 'response': response};
+  } catch (error) {
+    return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
+  }
+}
 
 /// Lists accessible data agents for [projectId].
 Future<Map<String, Object?>> listAccessibleDataAgents({
@@ -368,7 +408,32 @@ Future<Map<String, Object?>> _defaultHttpGet({
     }
     final Object? decoded = body.isEmpty
         ? <String, Object?>{}
-        : jsonDecode(body);
+        : _tryDecodeJson(body);
+    return _readMap(decoded);
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<Map<String, Object?>> _defaultHttpPost({
+  required Uri uri,
+  required Map<String, Object?> payload,
+  required Map<String, String> headers,
+}) async {
+  final HttpClient client = HttpClient();
+  try {
+    final HttpClientRequest request = await client.postUrl(uri);
+    headers.forEach(request.headers.set);
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode(payload));
+    final HttpClientResponse response = await request.close();
+    final String body = await utf8.decodeStream(response);
+    if (response.statusCode >= 400) {
+      throw HttpException('POST $uri failed (${response.statusCode}): $body');
+    }
+    final Object? decoded = body.isEmpty
+        ? <String, Object?>{}
+        : _tryDecodeJson(body);
     return _readMap(decoded);
   } finally {
     client.close(force: true);

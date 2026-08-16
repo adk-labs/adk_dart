@@ -53,6 +53,7 @@ class InvocationContext {
     this.endInvocation = false,
     this.liveRequestQueue,
     this.activeStreamingTools,
+    this.activeNonBlockingToolTasks,
     this.transcriptionCache,
     this.liveSessionResumptionHandle,
     this.inputRealtimeCache,
@@ -122,6 +123,9 @@ class InvocationContext {
 
   /// Active streaming tool handles by function call ID.
   Map<String, ActiveStreamingTool>? activeStreamingTools;
+
+  /// Active background tasks executing non-blocking tools in Live mode.
+  Map<String, Future<void>>? activeNonBlockingToolTasks;
 
   /// Cached transcription payloads across realtime turns.
   List<Object?>? transcriptionCache;
@@ -592,6 +596,9 @@ class InvocationContext {
       activeStreamingTools: activeStreamingTools == null
           ? null
           : Map<String, ActiveStreamingTool>.from(activeStreamingTools!),
+      activeNonBlockingToolTasks: activeNonBlockingToolTasks == null
+          ? null
+          : Map<String, Future<void>>.from(activeNonBlockingToolTasks!),
       transcriptionCache: transcriptionCache == null
           ? null
           : List<Object?>.from(transcriptionCache!),

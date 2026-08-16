@@ -463,6 +463,7 @@ class LiveConnectConfig {
     this.sessionResumption,
     this.historyConfig,
     this.contextWindowCompression,
+    this.explicitVadSignal,
   });
 
   /// Requested response modalities, such as text or audio.
@@ -504,6 +505,9 @@ class LiveConnectConfig {
   /// Provider context window compression configuration.
   Object? contextWindowCompression;
 
+  /// Whether explicit Voice Activity Detection (VAD) signals should be returned.
+  bool? explicitVadSignal;
+
   /// Returns a copy of this live configuration.
   LiveConnectConfig copyWith({
     List<String>? responseModalities,
@@ -519,6 +523,7 @@ class LiveConnectConfig {
     Object? sessionResumption = _sentinel,
     Object? historyConfig = _sentinel,
     Object? contextWindowCompression = _sentinel,
+    Object? explicitVadSignal = _sentinel,
   }) {
     return LiveConnectConfig(
       responseModalities:
@@ -539,7 +544,9 @@ class LiveConnectConfig {
           ? this.systemInstruction
           : systemInstruction,
       tools: identical(tools, _sentinel)
-          ? this.tools?.map((ToolDeclaration tool) => tool.copyWith()).toList()
+          ? (this.tools == null
+                ? null
+                : this.tools!.map((t) => t.copyWith()).toList())
           : tools as List<ToolDeclaration>?,
       httpOptions: identical(httpOptions, _sentinel)
           ? this.httpOptions?.copyWith()
@@ -562,6 +569,9 @@ class LiveConnectConfig {
       contextWindowCompression: identical(contextWindowCompression, _sentinel)
           ? this.contextWindowCompression
           : contextWindowCompression,
+      explicitVadSignal: identical(explicitVadSignal, _sentinel)
+          ? this.explicitVadSignal
+          : explicitVadSignal as bool?,
     );
   }
 }

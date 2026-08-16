@@ -182,6 +182,7 @@ class BaseLlmFlow {
       }
     } finally {
       context.liveRequestQueue?.close();
+      context.activeNonBlockingToolTasks?.clear();
     }
   }
 
@@ -427,7 +428,8 @@ class BaseLlmFlow {
         response.usageMetadata == null &&
         response.liveSessionResumptionUpdate == null &&
         response.goAway == null &&
-        response.groundingMetadata == null) {
+        response.groundingMetadata == null &&
+        response.voiceActivity == null) {
       return;
     }
 
@@ -1428,6 +1430,7 @@ class BaseLlmFlow {
       liveSessionId: response.liveSessionId,
       liveSessionResumptionUpdate: response.liveSessionResumptionUpdate,
       goAway: response.goAway,
+      voiceActivity: response.voiceActivity,
     );
 
     if (finalized.content != null) {

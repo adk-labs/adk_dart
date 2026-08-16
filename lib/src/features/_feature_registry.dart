@@ -16,7 +16,9 @@ enum FeatureName {
   computerUse('COMPUTER_USE'),
   dataAgentToolConfig('DATA_AGENT_TOOL_CONFIG'),
   dataAgentToolset('DATA_AGENT_TOOLSET'),
+  daytonaEnvironment('DAYTONA_ENVIRONMENT'),
   environmentSimulation('ENVIRONMENT_SIMULATION'),
+  eventarcToolset('EVENTARC_TOOLSET'),
   gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
   googleCredentialsConfig('GOOGLE_CREDENTIALS_CONFIG'),
   googleTool('GOOGLE_TOOL'),
@@ -112,7 +114,15 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: true,
       ),
+      FeatureName.daytonaEnvironment: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.environmentSimulation: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.eventarcToolset: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),

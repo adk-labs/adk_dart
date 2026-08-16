@@ -119,6 +119,83 @@ class FunctionCall {
   }
 }
 
+/// Controls when a function response should be scheduled and delivered during Live mode.
+enum FunctionResponseScheduling {
+  /// Delivered when model finishes speaking or is idle.
+  whenIdle,
+
+  /// Silently absorbed without prompting the model to speak.
+  silent,
+
+  /// Immediately interrupts the model output.
+  interrupt,
+}
+
+/// Type of voice activity detected on the audio channel.
+enum VoiceActivityType {
+  /// Unspecified activity state.
+  unspecified,
+
+  /// Voice activity has started.
+  activityStart,
+
+  /// Voice activity has ended.
+  activityEnd,
+}
+
+/// Voice activity event payload received from Live bidirectional stream.
+class VoiceActivity {
+  /// Creates a voice activity event.
+  VoiceActivity({
+    this.voiceActivityType = VoiceActivityType.unspecified,
+    this.audioOffset,
+  });
+
+  /// The voice activity state.
+  final VoiceActivityType voiceActivityType;
+
+  /// Audio offset string or time representation (e.g. "1.5s").
+  final String? audioOffset;
+
+  /// Serializes to JSON.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'voice_activity_type': voiceActivityType.name,
+        if (audioOffset != null) 'audio_offset': audioOffset,
+      };
+
+  /// Deserializes from JSON.
+  factory VoiceActivity.fromJson(Map<String, dynamic> json) {
+    final String? typeStr = json['voice_activity_type'] as String? ??
+        json['voiceActivityType'] as String?;
+    VoiceActivityType parsedType = VoiceActivityType.unspecified;
+    if (typeStr != null) {
+      for (final VoiceActivityType val in VoiceActivityType.values) {
+        if (val.name.toLowerCase() == typeStr.toLowerCase()) {
+          parsedType = val;
+          break;
+        }
+      }
+    }
+    return VoiceActivity(
+      voiceActivityType: parsedType,
+      audioOffset: json['audio_offset'] as String? ?? json['audioOffset'] as String?,
+    );
+  }
+
+  /// Copies instance with optional overrides.
+  VoiceActivity copyWith({
+    VoiceActivityType? voiceActivityType,
+    Object? audioOffset = _sentinel,
+  }) {
+    return VoiceActivity(
+      voiceActivityType: voiceActivityType ?? this.voiceActivityType,
+      audioOffset: identical(audioOffset, _sentinel)
+          ? this.audioOffset
+          : audioOffset as String?,
+    );
+  }
+}
+
 /// Function-response payload sent back to the model.
 class FunctionResponse {
   /// Creates a function-response payload.
@@ -127,6 +204,7 @@ class FunctionResponse {
     JsonMap? response,
     this.id,
     this.parts,
+    this.scheduling,
   }) : response = response ?? <String, dynamic>{};
 
   /// Function name this response corresponds to.
@@ -141,12 +219,16 @@ class FunctionResponse {
   /// Optional media/multimodal parts associated with this function response.
   List<Part>? parts;
 
+  /// Optional Live response scheduling behavior.
+  FunctionResponseScheduling? scheduling;
+
   /// Returns a copy of this function-response payload.
   FunctionResponse copyWith({
     String? name,
     JsonMap? response,
     Object? id = _sentinel,
     Object? parts = _sentinel,
+    Object? scheduling = _sentinel,
   }) {
     return FunctionResponse(
       name: name ?? this.name,
@@ -155,6 +237,9 @@ class FunctionResponse {
       parts: identical(parts, _sentinel)
           ? this.parts?.map((p) => p.copyWith()).toList()
           : parts as List<Part>?,
+      scheduling: identical(scheduling, _sentinel)
+          ? this.scheduling
+          : scheduling as FunctionResponseScheduling?,
     );
   }
 }

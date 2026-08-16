@@ -106,6 +106,7 @@ class GeminiLiveSessionMessage {
     this.toolCall,
     this.sessionResumptionUpdate,
     this.goAway,
+    this.voiceActivity,
   });
 
   /// Usage metadata update, when available.
@@ -122,6 +123,9 @@ class GeminiLiveSessionMessage {
 
   /// Go-away control payload requesting client reconnection.
   final Object? goAway;
+
+  /// Voice activity event payload, when available.
+  final VoiceActivity? voiceActivity;
 }
 
 /// Runtime contract for Gemini live session transports.
@@ -382,6 +386,15 @@ class GeminiLlmConnection extends BaseLlmConnection {
       _responses.add(
         LlmResponse(
           goAway: message.goAway,
+          liveSessionId: _liveSession?.liveSessionId,
+        ),
+      );
+    }
+
+    if (message.voiceActivity != null) {
+      _responses.add(
+        LlmResponse(
+          voiceActivity: message.voiceActivity,
           liveSessionId: _liveSession?.liveSessionId,
         ),
       );

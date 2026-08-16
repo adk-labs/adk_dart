@@ -54,6 +54,8 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
       llmRequest.liveConnectConfig.historyConfig = runConfig.historyConfig;
       llmRequest.liveConnectConfig.contextWindowCompression =
           runConfig.contextWindowCompression;
+      llmRequest.liveConnectConfig.explicitVadSignal =
+          runConfig.explicitVadSignal;
     }
   }
 }

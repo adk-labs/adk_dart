@@ -14,6 +14,7 @@ import 'base_memory_service.dart';
 import 'memory_entry.dart';
 
 const Set<String> _generateMemoriesConfigFallbackKeys = <String>{
+  'allowed_topics',
   'disable_consolidation',
   'disable_memory_revisions',
   'http_options',
@@ -31,6 +32,7 @@ const Set<String> _createMemoryConfigFallbackKeys = <String>{
   'display_name',
   'expire_time',
   'http_options',
+  'memory_id',
   'metadata',
   'revision_labels',
   'revision_expire_time',
@@ -775,6 +777,7 @@ class VertexAiMemoryBankService extends BaseMemoryService {
       final Map<String, Object?> config = _buildCreateMemoryConfig(
         memoryMetadata,
         memoryRevisionLabels: memoryRevisionLabels,
+        memoryId: memory.id,
       );
 
       await apiClient.createMemory(
@@ -940,10 +943,14 @@ Map<String, Object?> _buildGenerateMemoriesConfig(
 Map<String, Object?> _buildCreateMemoryConfig(
   Map<String, Object?>? customMetadata, {
   Map<String, String>? memoryRevisionLabels,
+  String? memoryId,
 }) {
   final Map<String, Object?> config = <String, Object?>{
     'wait_for_completion': false,
   };
+  if (memoryId != null && memoryId.isNotEmpty) {
+    config['memory_id'] = memoryId;
+  }
   final bool supportsMetadata = _supportsCreateMemoryMetadata();
   final Set<String> configKeys = _getCreateMemoryConfigKeys();
   final bool supportsRevisionLabels = configKeys.contains('revision_labels');

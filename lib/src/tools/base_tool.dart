@@ -2,6 +2,7 @@
 library;
 
 import '../models/llm_request.dart';
+import '../types/content.dart';
 import 'tool_context.dart';
 
 /// Base contract for one callable tool exposed to the model runtime.
@@ -13,6 +14,7 @@ abstract class BaseTool {
     this.isLongRunning = false,
     this.defersResponse = false,
     this.customMetadata,
+    this.responseScheduling,
   });
 
   /// Unique tool name used in function-calling payloads.
@@ -29,6 +31,9 @@ abstract class BaseTool {
 
   /// Arbitrary metadata attached to this tool declaration.
   Map<String, dynamic>? customMetadata;
+
+  /// Live response scheduling policy for this tool.
+  FunctionResponseScheduling? responseScheduling;
 
   /// Returns the function declaration exposed to the model, if any.
   FunctionDeclaration? getDeclaration() => null;

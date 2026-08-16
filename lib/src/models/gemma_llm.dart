@@ -20,7 +20,7 @@ class GemmaLlm extends BaseLlm {
 
   /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
-    return <RegExp>[RegExp(r'gemma-3.*')];
+    return <RegExp>[RegExp(r'gemma-(3|4).*'), RegExp(r'gemma-.*')];
   }
 
   /// Generates responses from Gemma-compatible requests.

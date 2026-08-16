@@ -194,6 +194,7 @@ void main() {
         'list_accessible_data_agents',
         'get_data_agent_info',
         'ask_data_agent',
+        'create_data_agent',
       });
 
       final DataAgentToolset filtered = DataAgentToolset(

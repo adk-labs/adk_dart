@@ -96,6 +96,12 @@ abstract class BaseSessionService {
   /// Non-buffering implementations can keep this no-op default.
   Future<void> flush() async {}
 
+  /// Eagerly prepares and initializes underlying database tables/schemas.
+  ///
+  /// Database-backed implementations can create tables and indexes proactively
+  /// before processing incoming user requests.
+  Future<void> prepareTables() async {}
+
   /// Returns the persistable form of [event].
   ///
   /// Transient `temp:` keys stay visible in the live session state during the

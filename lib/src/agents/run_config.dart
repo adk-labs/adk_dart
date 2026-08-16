@@ -62,6 +62,7 @@ class RunConfig {
     this.modelInputContext,
     this.includeThoughtsFromOtherAgents = false,
     this.labels,
+    this.explicitVadSignal,
   }) {
     maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
   }
@@ -139,6 +140,9 @@ class RunConfig {
 
   /// User labels for the current invocation (e.g. for billing/attribution).
   Map<String, String>? labels;
+
+  /// Whether to request explicit Voice Activity Detection (VAD) signals from Live mode.
+  bool? explicitVadSignal;
 
   /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {

@@ -46,6 +46,12 @@ class DataAgentToolset extends BaseToolset {
         credentialsConfig: _credentialsConfig,
         toolSettings: _toolSettings,
       ),
+      GoogleTool(
+        func: data_agent_tool.createDataAgent,
+        name: 'create_data_agent',
+        credentialsConfig: _credentialsConfig,
+        toolSettings: _toolSettings,
+      ),
     ];
 
     return allTools

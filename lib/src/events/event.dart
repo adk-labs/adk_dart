@@ -48,6 +48,7 @@ class Event extends LlmResponse {
     super.liveSessionId,
     super.liveSessionResumptionUpdate,
     super.goAway,
+    super.voiceActivity,
   }) : actions = actions ?? EventActions(),
        nodeInfo = nodeInfo ?? NodeInfo(),
        output = identical(output, _sentinel) ? null : output,
@@ -202,6 +203,7 @@ class Event extends LlmResponse {
     Object? liveSessionId = _sentinel,
     Object? liveSessionResumptionUpdate = _sentinel,
     Object? goAway = _sentinel,
+    Object? voiceActivity = _sentinel,
   }) {
     final bool nextHasOutput = identical(output, _sentinel) ? hasOutput : true;
     return Event(
@@ -294,6 +296,9 @@ class Event extends LlmResponse {
           ? this.liveSessionResumptionUpdate
           : liveSessionResumptionUpdate,
       goAway: identical(goAway, _sentinel) ? this.goAway : goAway,
+      voiceActivity: identical(voiceActivity, _sentinel)
+          ? this.voiceActivity?.copyWith()
+          : voiceActivity as VoiceActivity?,
     );
   }
 

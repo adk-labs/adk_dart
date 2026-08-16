@@ -196,4 +196,9 @@ class DatabaseSessionService extends BaseSessionService {
   Future<Event> appendEvent({required Session session, required Event event}) {
     return _delegate.appendEvent(session: session, event: event);
   }
+
+  @override
+  Future<void> prepareTables() {
+    return _delegate.prepareTables();
+  }
 }

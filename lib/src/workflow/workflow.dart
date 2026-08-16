@@ -20,6 +20,7 @@ import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_tool.dart';
 import '../types/content.dart';
+import 'workflow_tool.dart';
 
 /// Sentinel node name used for workflow start edges.
 // ignore: constant_identifier_names
@@ -1109,6 +1110,22 @@ class Workflow extends BaseAgent {
       staticNodes: byName,
       invocationId: invocationId,
       workflowPath: workflowPath,
+    );
+  }
+
+  /// Wraps this workflow into an invokable [BaseTool].
+  BaseTool asTool({
+    String? name,
+    String? description,
+    Map<String, dynamic>? inputSchema,
+    Map<String, dynamic>? outputSchema,
+  }) {
+    return WorkflowTool(
+      workflow: this,
+      name: name,
+      description: description,
+      inputSchema: inputSchema,
+      outputSchema: outputSchema,
     );
   }
 
