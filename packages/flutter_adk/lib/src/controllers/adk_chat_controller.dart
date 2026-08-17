@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:adk_dart/adk_core.dart' as adk;
 import 'package:flutter/foundation.dart';
 
 import '../models/adk_chat_message.dart';
+import '../storage/adk_storage.dart';
+import '../storage/adk_storage_session_service.dart';
 
 /// State controller that manages conversation events, streaming responses,
 /// and message history for ADK agents in Flutter.
@@ -18,6 +21,7 @@ class AdkChatController extends ChangeNotifier {
   })  : userId = userId ?? 'default_user',
         appName = appName ?? 'default_app',
         sessionId = sessionId ?? 'default_session',
+        sessionService = sessionService ?? (runner?.sessionService ?? adk.InMemorySessionService()),
         _runner = runner ??
             (agent != null
                 ? adk.Runner(
@@ -28,6 +32,24 @@ class AdkChatController extends ChangeNotifier {
                     autoCreateSession: true,
                   )
                 : null);
+
+  /// Creates an [AdkChatController] persisted by [AdkKeyValueStorage].
+  factory AdkChatController.fromStorage({
+    required adk.BaseAgent agent,
+    required AdkKeyValueStorage storage,
+    String? userId,
+    String? appName,
+    String? sessionId,
+  }) {
+    final sessionService = AdkStorageSessionService(storage: storage);
+    return AdkChatController(
+      agent: agent,
+      userId: userId,
+      appName: appName,
+      sessionId: sessionId,
+      sessionService: sessionService,
+    );
+  }
 
   /// The active runner instance.
   final adk.Runner? _runner;
@@ -40,6 +62,9 @@ class AdkChatController extends ChangeNotifier {
 
   /// Active session identifier.
   final String sessionId;
+
+  /// Active session persistence service.
+  final adk.BaseSessionService sessionService;
 
   final List<AdkChatMessage> _messages = <AdkChatMessage>[];
   bool _isLoading = false;
@@ -217,6 +242,79 @@ class AdkChatController extends ChangeNotifier {
     if (state != null && state.isNotEmpty) {
       notifyListeners();
     }
+  }
+
+  /// Loads previous messages and state from the underlying [sessionService].
+  Future<void> loadSession({String? targetSessionId}) async {
+    final id = targetSessionId ?? sessionId;
+    final session = await sessionService.getSession(
+      appName: appName,
+      userId: userId,
+      sessionId: id,
+    );
+
+    if (session == null) return;
+
+    _messages.clear();
+    for (final event in session.events) {
+      final content = event.content;
+      if (content == null) continue;
+
+      for (final part in content.parts) {
+        if (part.text != null && part.text!.isNotEmpty) {
+          final isUser = content.role == 'user' || event.author == 'user';
+          _messages.add(
+            AdkChatMessage(
+              id: 'hist_${event.id ?? DateTime.now().microsecondsSinceEpoch}',
+              role: isUser ? AdkMessageRole.user : AdkMessageRole.model,
+              text: part.text!,
+              author: event.author,
+              timestamp: event.timestamp != null
+                  ? DateTime.fromMillisecondsSinceEpoch((event.timestamp! * 1000).toInt())
+                  : null,
+            ),
+          );
+        } else if (part.functionCall != null) {
+          _messages.add(
+            AdkChatMessage.tool(
+              id: 'hist_call_${part.functionCall!.name}',
+              toolName: part.functionCall!.name,
+              toolArgs: part.functionCall!.args,
+              text: 'Called tool: ${part.functionCall!.name}',
+              author: event.author,
+            ),
+          );
+        } else if (part.functionResponse != null) {
+          _messages.add(
+            AdkChatMessage.tool(
+              id: 'hist_resp_${part.functionResponse!.name}',
+              toolName: part.functionResponse!.name,
+              toolResult: part.functionResponse!.response,
+              text: 'Tool result: ${part.functionResponse!.name}',
+              author: 'Tool',
+            ),
+          );
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Exports current chat messages as a formatted JSON string.
+  String exportTranscriptJson({bool pretty = true}) {
+    final list = _messages.map((m) => {
+      'id': m.id,
+      'role': m.role.name,
+      'text': m.text,
+      'author': m.author,
+      'timestamp': m.timestamp.toIso8601String(),
+      if (m.toolName != null) 'tool_name': m.toolName,
+      if (m.toolArgs != null) 'tool_args': m.toolArgs,
+      if (m.toolResult != null) 'tool_result': m.toolResult,
+      if (m.errorMessage != null) 'error_message': m.errorMessage,
+    }).toList();
+
+    return pretty ? const JsonEncoder.withIndent('  ').convert(list) : jsonEncode(list);
   }
 
   /// Clears the message history and resets error state.

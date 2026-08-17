@@ -61,8 +61,12 @@ export 'src/runners/runner.dart';
 
 export 'src/sessions/base_session_service.dart';
 export 'src/sessions/in_memory_session_service.dart';
+export 'src/sessions/schemas/v1.dart';
+export 'src/sessions/schemas/shared.dart';
 export 'src/sessions/session.dart';
+export 'src/sessions/session_util.dart';
 export 'src/sessions/state.dart';
+export 'src/types/id.dart';
 
 export 'src/telemetry/base_telemetry_service.dart';
 export 'src/telemetry/in_memory_telemetry_service.dart';

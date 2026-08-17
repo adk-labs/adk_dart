@@ -4,11 +4,11 @@ import 'package:flutter_adk/flutter_adk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _MockRunner extends adk.Runner {
-  _MockRunner({this.mockStream})
+  _MockRunner({this.mockStream, adk.BaseSessionService? sessionService})
       : super(
           appName: 'mock_app',
           agent: adk.LlmAgent(name: 'mock_agent', model: 'mock_model'),
-          sessionService: adk.InMemorySessionService(),
+          sessionService: sessionService ?? adk.InMemorySessionService(),
           autoCreateSession: true,
         );
 
@@ -149,6 +149,9 @@ void main() {
       expect(modelMsgs, isNotEmpty);
       expect(modelMsgs.last.text, equals('The weather in Seoul is sunny today.'));
       expect(modelMsgs.last.isStreaming, isFalse);
+
+      final jsonTranscript = controller.exportTranscriptJson();
+      expect(jsonTranscript, contains('Seoul'));
     });
 
     test('handles stream error gracefully', () async {
@@ -190,6 +193,106 @@ void main() {
 
       await streamController.close();
       controller.dispose();
+    });
+  });
+
+  group('AdkStorageSessionService Tests', () {
+    test('in-memory storage operations and session roundtrip', () async {
+      final storage = AdkMemoryStorage();
+      final sessionService = AdkStorageSessionService(storage: storage);
+
+      final session = await sessionService.createSession(
+        appName: 'test_app',
+        userId: 'test_user',
+        sessionId: 'sess_123',
+        state: {'theme': 'dark'},
+      );
+
+      expect(session.id, equals('sess_123'));
+      expect(session.state['theme'], equals('dark'));
+
+      final event = adk.Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        content: adk.Content.modelText('Hello from saved session'),
+      );
+      await sessionService.appendEvent(session: session, event: event);
+
+      final retrieved = await sessionService.getSession(
+        appName: 'test_app',
+        userId: 'test_user',
+        sessionId: 'sess_123',
+      );
+      expect(retrieved, isNotNull);
+      expect(retrieved!.events.length, equals(1));
+
+      final list = await sessionService.listSessions(
+        appName: 'test_app',
+        userId: 'test_user',
+      );
+      expect(list.sessions.length, equals(1));
+
+      await sessionService.deleteSession(
+        appName: 'test_app',
+        userId: 'test_user',
+        sessionId: 'sess_123',
+      );
+      final afterDelete = await sessionService.getSession(
+        appName: 'test_app',
+        userId: 'test_user',
+        sessionId: 'sess_123',
+      );
+      expect(afterDelete, isNull);
+    });
+
+    test('custom storage delegate adapter', () async {
+      final map = <String, String>{};
+      final customService = AdkStorageSessionService.custom(
+        read: (k) => map[k],
+        write: (k, v) => map[k] = v,
+        delete: (k) => map.remove(k),
+        getKeys: ({prefix = ''}) => map.keys.where((k) => k.startsWith(prefix)).toList(),
+      );
+
+      final session = await customService.createSession(
+        appName: 'app_custom',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+      expect(session.id, equals('s1'));
+      expect(map.keys, isNotEmpty);
+    });
+
+    test('AdkChatController.fromStorage loads previous messages', () async {
+      final storage = AdkMemoryStorage();
+      final agent = adk.LlmAgent(name: 'assistant', model: 'gemini');
+      final sessionService = AdkStorageSessionService(storage: storage);
+
+      final session = await sessionService.createSession(
+        appName: 'app1',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+      await sessionService.appendEvent(
+        session: session,
+        event: adk.Event(
+          invocationId: 'inv_1',
+          author: 'user',
+          content: adk.Content.userText('Initial stored prompt'),
+        ),
+      );
+
+      final controller = AdkChatController.fromStorage(
+        agent: agent,
+        storage: storage,
+        appName: 'app1',
+        userId: 'u1',
+        sessionId: 's1',
+      );
+
+      await controller.loadSession();
+      expect(controller.messages.length, equals(1));
+      expect(controller.messages.first.text, equals('Initial stored prompt'));
     });
   });
 }
