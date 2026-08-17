@@ -99,7 +99,7 @@ class AdkAgentLoggerView extends StatefulWidget {
 }
 
 class _AdkAgentLoggerViewState extends State<AdkAgentLoggerView> {
-  AdkLogCategory _selectedCategory = AdkLogCategory.all;
+  AdkLogCategory _selectedCategory = .all;
   String _searchQuery = '';
   final ScrollController _scrollController = ScrollController();
   bool _autoScroll = true;
@@ -128,7 +128,7 @@ class _AdkAgentLoggerViewState extends State<AdkAgentLoggerView> {
 
   List<AdkAgentLogEntry> get _filteredLogs {
     return widget.logs.where((AdkAgentLogEntry log) {
-      if (_selectedCategory != AdkLogCategory.all &&
+      if (_selectedCategory != .all &&
           log.category != _selectedCategory) {
         return false;
       }
@@ -292,17 +292,17 @@ class _AdkAgentLoggerViewState extends State<AdkAgentLoggerView> {
 
   String _getCategoryLabel(AdkLogCategory category) {
     switch (category) {
-      case AdkLogCategory.all:
+      case .all:
         return 'All';
-      case AdkLogCategory.userInput:
+      case .userInput:
         return 'User Inputs';
-      case AdkLogCategory.modelResponse:
+      case .modelResponse:
         return 'Model LLM';
-      case AdkLogCategory.toolCall:
+      case .toolCall:
         return 'Tool Calls';
-      case AdkLogCategory.stateUpdate:
+      case .stateUpdate:
         return 'State Deltas';
-      case AdkLogCategory.error:
+      case .error:
         return 'Errors';
     }
   }
@@ -474,17 +474,17 @@ class _AdkLogEntryTileState extends State<_AdkLogEntryTile> {
 
   IconData _getCategoryIcon(AdkLogCategory category) {
     switch (category) {
-      case AdkLogCategory.userInput:
+      case .userInput:
         return Icons.person_outline;
-      case AdkLogCategory.modelResponse:
+      case .modelResponse:
         return Icons.auto_awesome;
-      case AdkLogCategory.toolCall:
+      case .toolCall:
         return Icons.build_circle_outlined;
-      case AdkLogCategory.stateUpdate:
+      case .stateUpdate:
         return Icons.data_object;
-      case AdkLogCategory.error:
+      case .error:
         return Icons.error_outline;
-      case AdkLogCategory.all:
+      case .all:
         return Icons.list_alt;
     }
   }
@@ -492,17 +492,17 @@ class _AdkLogEntryTileState extends State<_AdkLogEntryTile> {
   Color _getCategoryColor(ThemeData theme, AdkLogCategory category, bool isError) {
     if (isError) return theme.colorScheme.error;
     switch (category) {
-      case AdkLogCategory.userInput:
+      case .userInput:
         return theme.colorScheme.primary;
-      case AdkLogCategory.modelResponse:
+      case .modelResponse:
         return theme.colorScheme.secondary;
-      case AdkLogCategory.toolCall:
+      case .toolCall:
         return theme.colorScheme.tertiary;
-      case AdkLogCategory.stateUpdate:
+      case .stateUpdate:
         return Colors.teal;
-      case AdkLogCategory.error:
+      case .error:
         return theme.colorScheme.error;
-      case AdkLogCategory.all:
+      case .all:
         return theme.colorScheme.onSurface;
     }
   }

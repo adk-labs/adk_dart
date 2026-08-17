@@ -132,14 +132,14 @@ class _AdkDevStudioViewState extends State<AdkDevStudioView>
 
   AdkLogCategory _mapMessageRoleToCategory(AdkMessageRole role) {
     switch (role) {
-      case AdkMessageRole.user:
-        return AdkLogCategory.userInput;
-      case AdkMessageRole.model:
-        return AdkLogCategory.modelResponse;
-      case AdkMessageRole.tool:
-        return AdkLogCategory.toolCall;
-      case AdkMessageRole.system:
-        return AdkLogCategory.error;
+      case .user:
+        return .userInput;
+      case .model:
+        return .modelResponse;
+      case .tool:
+        return .toolCall;
+      case .system:
+        return .error;
     }
   }
 

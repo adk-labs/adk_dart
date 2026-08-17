@@ -42,9 +42,9 @@ class AdkMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final bool isUser = message.role == AdkMessageRole.user;
-    final bool isTool = message.role == AdkMessageRole.tool;
-    final bool isSystem = message.role == AdkMessageRole.system;
+    final bool isUser = message.role == .user;
+    final bool isTool = message.role == .tool;
+    final bool isSystem = message.role == .system;
 
     if (isSystem) {
       return _buildSystemCard(theme);

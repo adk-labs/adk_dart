@@ -23,7 +23,7 @@ class AdkWorkflowStep {
     required this.id,
     required this.label,
     this.description = '',
-    this.status = AdkStepStatus.pending,
+    this.status = .pending,
     this.output,
     this.errorMessage,
     this.startTime,

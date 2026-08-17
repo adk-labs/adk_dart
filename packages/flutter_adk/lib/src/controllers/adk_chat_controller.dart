@@ -265,13 +265,13 @@ class AdkChatController extends ChangeNotifier {
           final isUser = content.role == 'user' || event.author == 'user';
           _messages.add(
             AdkChatMessage(
-              id: 'hist_${event.id ?? DateTime.now().microsecondsSinceEpoch}',
-              role: isUser ? AdkMessageRole.user : AdkMessageRole.model,
+              id: 'hist_${event.id}',
+              role: isUser ? .user : .model,
               text: part.text!,
               author: event.author,
-              timestamp: event.timestamp != null
-                  ? DateTime.fromMillisecondsSinceEpoch((event.timestamp! * 1000).toInt())
-                  : null,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(
+                (event.timestamp * 1000).toInt(),
+              ),
             ),
           );
         } else if (part.functionCall != null) {

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:adk_dart/adk_core.dart' as adk;
 import 'package:flutter/foundation.dart';
 

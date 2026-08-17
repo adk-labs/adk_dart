@@ -20,7 +20,7 @@ enum AdkVoiceStatus {
 class AdkVoiceState {
   /// Creates an [AdkVoiceState].
   const AdkVoiceState({
-    this.status = AdkVoiceStatus.idle,
+    this.status = .idle,
     this.decibels = 0.0,
     this.isMuted = false,
     this.errorMessage,
@@ -40,9 +40,9 @@ class AdkVoiceState {
 
   /// Whether recording or playback is active.
   bool get isActive =>
-      status == AdkVoiceStatus.listening ||
-      status == AdkVoiceStatus.processing ||
-      status == AdkVoiceStatus.speaking;
+      status == .listening ||
+      status == .processing ||
+      status == .speaking;
 
   /// Copies this [AdkVoiceState] with updated values.
   AdkVoiceState copyWith({

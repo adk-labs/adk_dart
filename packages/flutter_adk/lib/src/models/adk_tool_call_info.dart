@@ -21,7 +21,7 @@ class AdkToolCallInfo {
     this.callId,
     this.arguments = const <String, dynamic>{},
     this.result,
-    this.status = AdkToolStatus.success,
+    this.status = .success,
     this.startTime,
     this.endTime,
     this.errorMessage,

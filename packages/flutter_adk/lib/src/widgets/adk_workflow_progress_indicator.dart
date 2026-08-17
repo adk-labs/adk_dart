@@ -63,7 +63,7 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
                         Text(
                           step.label,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: step.status == AdkStepStatus.running
+                            fontWeight: step.status == .running
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                           ),
@@ -102,7 +102,7 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
                 Text(
                   step.label,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: step.status == AdkStepStatus.running
+                    fontWeight: step.status == .running
                         ? FontWeight.bold
                         : FontWeight.normal,
                   ),
@@ -124,7 +124,7 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
 
   Widget _buildStatusIcon(ThemeData theme, AdkStepStatus status) {
     switch (status) {
-      case AdkStepStatus.running:
+      case .running:
         return SizedBox(
           width: 16.0,
           height: 16.0,
@@ -133,25 +133,25 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
             color: theme.colorScheme.primary,
           ),
         );
-      case AdkStepStatus.completed:
+      case .completed:
         return Icon(
           Icons.check_circle,
           size: 18.0,
           color: theme.colorScheme.primary,
         );
-      case AdkStepStatus.failed:
+      case .failed:
         return Icon(
           Icons.cancel,
           size: 18.0,
           color: theme.colorScheme.error,
         );
-      case AdkStepStatus.skipped:
+      case .skipped:
         return Icon(
           Icons.skip_next,
           size: 18.0,
           color: theme.colorScheme.outlineVariant,
         );
-      case AdkStepStatus.pending:
+      case .pending:
         return Icon(
           Icons.radio_button_unchecked,
           size: 18.0,
@@ -161,7 +161,7 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
   }
 
   Color _getLineColor(ThemeData theme, AdkStepStatus status) {
-    return status == AdkStepStatus.completed
+    return status == .completed
         ? theme.colorScheme.primary
         : theme.colorScheme.outlineVariant.withValues(alpha: 0.5);
   }
