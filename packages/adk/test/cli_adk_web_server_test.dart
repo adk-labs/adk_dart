@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:adk_dart/adk_dart.dart';
 import 'package:adk/src/cli/adk_web_server.dart';
 import 'package:adk/src/dev/project.dart';
 import 'package:test/test.dart';
