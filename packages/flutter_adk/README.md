@@ -110,9 +110,18 @@ class MyApp extends StatelessWidget {
 
 ## Built-in UI Components & Controllers
 
-`flutter_adk` provides ready-to-use widgets and reactive controllers:
-- **`AdkChatView`**: Full-featured chat UI with autoscroll, input bar, and loading states.
+`flutter_adk` provides 10+ ready-to-use widgets and reactive controllers:
+- **`AdkChatView`**: Full-featured chat UI with autoscroll, input bar, prompt suggestions, and voice triggers.
 - **`AdkChatController`**: ChangeNotifier-based state controller for managing messages and streaming turns.
+- **`AdkFloatingChatButton`**: Floating Action Button (FAB) that opens an AI assistant modal bottom sheet.
+- **`AdkPromptSuggestionsBar`**: Horizontal scrollable bar with quick-tap prompt chips.
+- **`AdkToolCallCard`**: Expandable card displaying tool name, execution status, JSON arguments, and results.
+- **`AdkConfirmationBanner` & `AdkConfirmationDialog`**: Human-in-the-loop (HITL) approval banner and modal dialog.
+- **`AdkSessionDrawer`**: Chat session history sidebar with create, switch, and delete actions.
+- **`AdkAgentHierarchyBadge`**: Breadcrumb badge showing active agent in a multi-agent hierarchy.
+- **`AdkWorkflowProgressIndicator`**: Step-by-step workflow timeline progress tracker.
+- **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`**: Interactive voice input button and animated waveform visualizer.
+- **`AdkTokenUsageBadge`**: Compact badge displaying prompt and completion token counts.
 - **`AdkMessageBubble`**: Material 3 message bubble for user, model, and tool outputs.
 - **`AdkTypingIndicator`**: Smooth pulsing typing indicator.
 - **`AdkEventStreamBuilder`**: Reactive widget builder for listening directly to `Stream<Event>`.

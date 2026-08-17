@@ -113,9 +113,18 @@ class MyApp extends StatelessWidget {
 
 ## 내장 UI 컴포넌트 및 컨트롤러
 
-`flutter_adk`는 Flutter 앱에 즉시 적용 가능한 UI 위젯과 상태 컨트롤러를 제공합니다:
-- **`AdkChatView`**: 자동 스크롤, 입력창, 로딩 인디케이터가 통합된 완성형 챗 위젯
+`flutter_adk`는 Flutter 앱에 즉시 적용 가능한 10종 이상의 UI 위젯과 상태 컨트롤러를 제공합니다:
+- **`AdkChatView`**: 자동 스크롤, 입력창, 추천 질문 바, 음성 트리거가 통합된 완성형 챗 위젯
 - **`AdkChatController`**: 세션 및 스트리밍 상태 관리를 지원하는 ChangeNotifier 기반 컨트롤러
+- **`AdkFloatingChatButton`**: 탭 시 모달 바텀시트 챗창이 열리는 플로팅 액션 버튼(FAB)
+- **`AdkPromptSuggestionsBar`**: 클릭 한 번으로 질문을 발화할 수 있는 추천 프롬프트 칩 바
+- **`AdkToolCallCard`**: 툴 이름, 인자, 실행 상태, 결과를 시각화하는 아코디언 카드
+- **`AdkConfirmationBanner` & `AdkConfirmationDialog`**: 인간 참여(HITL) 작업 승인/거부 배너 및 모달 팝업
+- **`AdkSessionDrawer`**: 대화 세션 히스토리 목록 탐색, 생성(+), 삭제 드로어
+- **`AdkAgentHierarchyBadge`**: 멀티 에이전트 계층 구조에서 현재 활성 에이전트를 보여주는 브레드크럼 뱃지
+- **`AdkWorkflowProgressIndicator`**: ADK 2.0 워크플로우 노드 실행 타임라인 진행률 바
+- **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`**: 음성 마이크 버튼 및 실시간 오디오 파형 애니메이션 위젯
+- **`AdkTokenUsageBadge`**: 입력/출력 토큰 소모량을 작게 보여주는 뱃지
 - **`AdkMessageBubble`**: 유저, 모델, 툴 실행 결과를 미려하게 렌더링하는 Material 3 메시지 버블
 - **`AdkTypingIndicator`**: 모델 생성 중 상태를 보여주는 부드러운 타이핑 인디케이터
 - **`AdkEventStreamBuilder`**: 에이전트의 `Stream<Event>`를 위젯 트리에 직접 바인딩하는 반응형 빌더

@@ -11,10 +11,19 @@ export 'package:adk_dart/adk_core.dart' hide State;
 
 export 'src/controllers/adk_chat_controller.dart';
 export 'src/models/adk_chat_message.dart';
+export 'src/widgets/adk_agent_hierarchy_badge.dart';
 export 'src/widgets/adk_chat_view.dart';
+export 'src/widgets/adk_confirmation_dialog.dart';
 export 'src/widgets/adk_event_stream_builder.dart';
+export 'src/widgets/adk_floating_chat_button.dart';
 export 'src/widgets/adk_message_bubble.dart';
+export 'src/widgets/adk_prompt_suggestions_bar.dart';
+export 'src/widgets/adk_session_drawer.dart';
+export 'src/widgets/adk_token_usage_badge.dart';
+export 'src/widgets/adk_tool_call_card.dart';
 export 'src/widgets/adk_typing_indicator.dart';
+export 'src/widgets/adk_voice_widgets.dart';
+export 'src/widgets/adk_workflow_progress_indicator.dart';
 
 /// Provides the Flutter-facing entry point for ADK platform features.
 class FlutterAdk {

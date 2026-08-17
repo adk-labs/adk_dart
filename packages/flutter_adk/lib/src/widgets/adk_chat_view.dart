@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../controllers/adk_chat_controller.dart';
 import '../models/adk_chat_message.dart';
 import 'adk_message_bubble.dart';
+import 'adk_prompt_suggestions_bar.dart';
 import 'adk_typing_indicator.dart';
 
 /// A complete, turnkey Chat UI widget for interacting with ADK agents and workflows.
@@ -16,8 +17,10 @@ class AdkChatView extends StatefulWidget {
     this.runner,
     this.title = 'AI Assistant',
     this.inputPlaceholder = 'Ask something...',
+    this.suggestions,
     this.emptyStateWidget,
     this.messageBubbleBuilder,
+    this.onVoicePressed,
     this.showAppBar = false,
   }) : assert(
           controller != null || agent != null || runner != null,
@@ -39,12 +42,18 @@ class AdkChatView extends StatefulWidget {
   /// Placeholder hint in the text input box.
   final String inputPlaceholder;
 
+  /// Optional prompt suggestion chips displayed above the input bar.
+  final List<String>? suggestions;
+
   /// Custom widget displayed when no messages have been sent yet.
   final Widget? emptyStateWidget;
 
   /// Optional builder to override message bubble rendering.
   final Widget Function(BuildContext context, AdkChatMessage message)?
       messageBubbleBuilder;
+
+  /// Optional callback for triggering voice input.
+  final VoidCallback? onVoicePressed;
 
   /// Whether to include an internal AppBar.
   final bool showAppBar;
@@ -94,8 +103,8 @@ class _AdkChatViewState extends State<AdkChatView> {
     });
   }
 
-  void _handleSend() {
-    final String text = _textEditingController.text;
+  void _handleSend([String? textOverride]) {
+    final String text = textOverride ?? _textEditingController.text;
     if (text.trim().isEmpty) return;
 
     _textEditingController.clear();
@@ -153,6 +162,13 @@ class _AdkChatViewState extends State<AdkChatView> {
                     ),
                   ],
                 ),
+              ),
+            if (widget.suggestions != null &&
+                widget.suggestions!.isNotEmpty &&
+                !_controller.isLoading)
+              AdkPromptSuggestionsBar(
+                suggestions: widget.suggestions!,
+                onSelected: (String prompt) => _handleSend(prompt),
               ),
             _buildInputBar(theme),
           ],
@@ -214,6 +230,14 @@ class _AdkChatViewState extends State<AdkChatView> {
       ),
       child: Row(
         children: <Widget>[
+          if (widget.onVoicePressed != null) ...<Widget>[
+            IconButton(
+              icon: const Icon(Icons.mic_none_rounded),
+              tooltip: 'Voice Input',
+              onPressed: widget.onVoicePressed,
+            ),
+            const SizedBox(width: 4.0),
+          ],
           Expanded(
             child: TextField(
               controller: _textEditingController,
@@ -264,7 +288,7 @@ class _AdkChatViewState extends State<AdkChatView> {
                     ),
                   )
                 : const Icon(Icons.send_rounded, size: 20.0),
-            onPressed: _controller.isLoading ? null : _handleSend,
+            onPressed: _controller.isLoading ? null : () => _handleSend(),
           ),
         ],
       ),

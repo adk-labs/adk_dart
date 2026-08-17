@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.8.17+4
+
+- Added complete Flutter AI Agent UI Kit:
+  - `AdkPromptSuggestionsBar`: Quick-tap prompt suggestion chips.
+  - `AdkToolCallCard`: Expandable tool call inspector with args, status, and results.
+  - `AdkConfirmationBanner` & `AdkConfirmationDialog`: Human-in-the-loop (HITL) approval banner and dialog.
+  - `AdkFloatingChatButton`: Floating AI assistant action button opening modal bottom sheets.
+  - `AdkSessionDrawer`: Session history manager with create, switch, and delete operations.
+  - `AdkAgentHierarchyBadge`: Multi-agent breadcrumb navigation badge.
+  - `AdkWorkflowProgressIndicator`: Step-by-step workflow timeline progress tracker.
+  - `AdkVoiceMicButton` & `AdkAudioWaveVisualizer`: Interactive mic button and animated waveform visualizer.
+  - `AdkTokenUsageBadge`: Token usage counter with tooltip cost breakdown.
+- Added suggestions and voice mic triggers directly to `AdkChatView`.
+
 ## 2026.8.17+3
 
 - Added full-featured Flutter UI Kit: `AdkChatView`, `AdkChatController`, `AdkMessageBubble`, `AdkTypingIndicator`, and `AdkEventStreamBuilder`.
