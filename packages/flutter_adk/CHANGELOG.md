@@ -1,8 +1,11 @@
 # Changelog
 
-## 2026.8.17+2
+## 2026.8.17+3
 
-- Added Installation section to README with `flutter pub add` and `pubspec.yaml` dependency specifications.
+- Added full-featured Flutter UI Kit: `AdkChatView`, `AdkChatController`, `AdkMessageBubble`, `AdkTypingIndicator`, and `AdkEventStreamBuilder`.
+- Expose built-in turnkey AI agent chat interface for all Flutter mobile, web, and desktop platforms.
+
+## 2026.8.17+2
 
 ## 2026.8.17+1
 

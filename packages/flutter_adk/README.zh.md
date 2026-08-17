@@ -72,13 +72,41 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+1
+  flutter_adk: ^2026.8.17+3
 ```
 
-## 使用
+## 快速上手 (开箱即用的聊天 UI)
+
+只需几行代码即可在 Flutter 应用中直接嵌入 AI 智能体对话界面：
 
 ```dart
+import 'package:flutter/material.dart';
 import 'package:flutter_adk/flutter_adk.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final agent = LlmAgent(
+      name: 'assistant',
+      model: 'gemini-2.5-flash',
+      instruction: '你是一个乐于助人且友好的 Flutter 助手。',
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('ADK Flutter 聊天')),
+        body: AdkChatView(
+          agent: agent,
+          inputPlaceholder: '请输入问题...',
+        ),
+      ),
+    );
+  }
+}
 ```
 
 ## 参考

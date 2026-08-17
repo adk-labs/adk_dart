@@ -74,13 +74,41 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+1
+  flutter_adk: ^2026.8.17+3
 ```
 
-## Usage
+## クイックスタート (ターンキーチャットUI)
+
+わずか数行のコードでFlutterアプリに対話型AIエージェントチャット画面を即座に導入できます:
 
 ```dart
+import 'package:flutter/material.dart';
 import 'package:flutter_adk/flutter_adk.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final agent = LlmAgent(
+      name: 'assistant',
+      model: 'gemini-2.5-flash',
+      instruction: '親切で役立つFlutterアシスタントです。',
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('ADK Flutter Chat')),
+        body: AdkChatView(
+          agent: agent,
+          inputPlaceholder: '質問を入力してください...',
+        ),
+      ),
+    );
+  }
+}
 ```
 
 ## Links

@@ -72,14 +72,53 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+1
+  flutter_adk: ^2026.8.17+3
 ```
 
-## 사용 예
+## 빠른 시작 (완성형 챗 UI)
+
+단 몇 줄의 코드로 Flutter 앱에 대화형 AI 에이전트 챗 화면을 즉시 탑재할 수 있습니다:
 
 ```dart
+import 'package:flutter/material.dart';
 import 'package:flutter_adk/flutter_adk.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. AI 에이전트 정의
+    final agent = LlmAgent(
+      name: 'assistant',
+      model: 'gemini-2.5-flash',
+      instruction: '친절하고 유용한 Flutter 어시스턴트입니다.',
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('ADK Flutter 챗')),
+        // 2. 완성형 챗 위젯 임베드
+        body: AdkChatView(
+          agent: agent,
+          inputPlaceholder: '무엇이든 물어보세요...',
+        ),
+      ),
+    );
+  }
+}
 ```
+
+## 내장 UI 컴포넌트 및 컨트롤러
+
+`flutter_adk`는 Flutter 앱에 즉시 적용 가능한 UI 위젯과 상태 컨트롤러를 제공합니다:
+- **`AdkChatView`**: 자동 스크롤, 입력창, 로딩 인디케이터가 통합된 완성형 챗 위젯
+- **`AdkChatController`**: 세션 및 스트리밍 상태 관리를 지원하는 ChangeNotifier 기반 컨트롤러
+- **`AdkMessageBubble`**: 유저, 모델, 툴 실행 결과를 미려하게 렌더링하는 Material 3 메시지 버블
+- **`AdkTypingIndicator`**: 모델 생성 중 상태를 보여주는 부드러운 타이핑 인디케이터
+- **`AdkEventStreamBuilder`**: 에이전트의 `Stream<Event>`를 위젯 트리에 직접 바인딩하는 반응형 빌더
 
 ## 참고
 

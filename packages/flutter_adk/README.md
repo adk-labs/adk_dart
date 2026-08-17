@@ -69,20 +69,53 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+1
+  flutter_adk: ^2026.8.17+3
 ```
 
-## Usage
+## Quick Start (Turnkey Chat UI)
+
+Drop an interactive AI agent chat screen into your Flutter app with just a few lines of code:
 
 ```dart
+import 'package:flutter/material.dart';
 import 'package:flutter_adk/flutter_adk.dart';
 
-void main() {
-  final Session session = Session(id: 's1', appName: 'app', userId: 'u1');
-  final InMemorySessionService sessions = InMemorySessionService();
-  print('${session.id}:${sessions.runtimeType}');
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Define your AI Agent
+    final agent = LlmAgent(
+      name: 'assistant',
+      model: 'gemini-2.5-flash',
+      instruction: 'You are a helpful and friendly Flutter assistant.',
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('ADK Flutter Chat')),
+        // 2. Embed the turnkey chat view
+        body: AdkChatView(
+          agent: agent,
+          inputPlaceholder: 'Ask anything...',
+        ),
+      ),
+    );
+  }
 }
 ```
+
+## Built-in UI Components & Controllers
+
+`flutter_adk` provides ready-to-use widgets and reactive controllers:
+- **`AdkChatView`**: Full-featured chat UI with autoscroll, input bar, and loading states.
+- **`AdkChatController`**: ChangeNotifier-based state controller for managing messages and streaming turns.
+- **`AdkMessageBubble`**: Material 3 message bubble for user, model, and tool outputs.
+- **`AdkTypingIndicator`**: Smooth pulsing typing indicator.
+- **`AdkEventStreamBuilder`**: Reactive widget builder for listening directly to `Stream<Event>`.
 
 ## Full Runtime Surface
 - For VM/CLI-only APIs, import `package:adk_dart/adk_dart.dart`.
