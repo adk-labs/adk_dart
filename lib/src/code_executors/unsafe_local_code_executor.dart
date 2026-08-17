@@ -15,6 +15,10 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
   UnsafeLocalCodeExecutor({
     this.defaultTimeout = const Duration(seconds: 30),
     this.executable = 'python3',
+    this.dartCommandPath,
+    this.pythonCommandPath = 'python3',
+    this.nodeCommandPath = 'node',
+    this.shellCommandPath,
     bool stateful = false,
     bool optimizeDataFile = false,
     super.errorRetryAttempts = 2,
@@ -39,11 +43,24 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
   /// Program or runtime executable to run (e.g. `'python3'`, `'dart'`, `'node'`).
   final String executable;
 
+  /// Custom path to Dart executable. Defaults to [Platform.resolvedExecutable].
+  final String? dartCommandPath;
+
+  /// Custom path to Python executable. Defaults to `'python3'`.
+  final String pythonCommandPath;
+
+  /// Custom path to Node.js executable. Defaults to `'node'`.
+  final String nodeCommandPath;
+
+  /// Custom path to shell executable. Defaults to `cmd.exe` on Windows and `/bin/sh` on Unix.
+  final String? shellCommandPath;
+
   @override
   /// Executes a raw command using the local shell.
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
+    final String shell = shellCommandPath ?? _shellProgram();
     final Process process = await Process.start(
-      _shellProgram(),
+      shell,
       _shellArgs(request.command),
       workingDirectory: request.workingDirectory,
       environment: request.environment,
@@ -102,7 +119,7 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
         final File entryFile = File('${tempDirectory.path}/main.dart');
         await entryFile.writeAsString(codeExecutionInput.code);
         process = await Process.start(
-          Platform.resolvedExecutable,
+          dartCommandPath ?? Platform.resolvedExecutable,
           <String>['run', 'main.dart'],
           workingDirectory: tempDirectory.path,
           runInShell: false,
@@ -111,14 +128,14 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
         final File entryFile = File('${tempDirectory.path}/main.js');
         await entryFile.writeAsString(codeExecutionInput.code);
         process = await Process.start(
-          'node',
+          nodeCommandPath,
           <String>['main.js'],
           workingDirectory: tempDirectory.path,
           runInShell: false,
         );
       } else {
         process = await Process.start(
-          executable,
+          pythonCommandPath.isNotEmpty ? pythonCommandPath : executable,
           <String>['-c', codeExecutionInput.code],
           workingDirectory: tempDirectory.path,
           runInShell: false,
