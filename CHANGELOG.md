@@ -1,3 +1,21 @@
+## 2026.8.17+1
+
+- **Full Decoupling & Migration of `packages/adk` CLI Toolchain**:
+  - Physically migrated all CLI submodules (`lib/src/cli/`, `lib/src/dev/`, `lib/src/cli/browser/`, Angular Web UI static bundle) and 19 CLI/Dev test suites into `packages/adk`.
+  - Fully purged all CLI/Dev/WebServer code and executables from `adk_dart`, establishing `adk_dart` as a 100% pure Core SDK library package.
+  - Configured `packages/adk` as a standalone binary package publishable to pub.dev with direct dependency declarations.
+- **100% CLI Parity with `adk-python`**:
+  - Created official parity matrix documentation in `docs/architecture/cli_parity_matrix.md`.
+  - Implemented `adk telemetry` (`enable`, `disable`, `status`) subcommands for telemetry preference management.
+  - Implemented `adk test [folder]` for executing agent test suites.
+  - Added Dart-ecosystem diagnostic command `adk doctor` / `adk diag` displaying system, SDK, architecture, and path diagnostics.
+- **Examples Modernization & `gemini-3.7-flash` Upgrade**:
+  - Upgraded all 18 examples in `adk_dart/examples` and CLI starter templates to use `gemini-3.7-flash` by default.
+  - Applied Dart 3.8+ dot-shorthands (`.userText(...)`, `.modelText(...)`, `.user`, `.text(...)`) across all example entrypoints.
+- **Quality Assurance**:
+  - 100% test pass rate across all workspace packages: 1,369 tests in `adk_dart`, 159 tests in `packages/adk`, 11 tests in `flutter_adk`, 12 tests in `adk_mcp`, 5 tests in `adk_litertlm` (1,556 tests total).
+  - 0 analyzer warnings / errors across `packages/adk`, `packages/flutter_adk`, `packages/adk_mcp`, `packages/adk_litertlm`, and `examples`.
+
 ## 2026.8.17
 
 - Synced latest core features & bug fixes from `adk-python` v2.7.0, `adk-js` v1.6.0, `adk-go` v2.2.0, and `adk-kotlin` v0.7.0:
