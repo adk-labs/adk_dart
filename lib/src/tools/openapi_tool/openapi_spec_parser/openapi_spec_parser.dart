@@ -22,6 +22,17 @@ const Set<String> _validSchemaTypes = <String>{
 
 const Set<String> _schemaContainerKeys = <String>{'schema', 'schemas'};
 
+const Set<String> _allowedHttpMethods = <String>{
+  'get',
+  'post',
+  'put',
+  'delete',
+  'patch',
+  'head',
+  'options',
+  'trace',
+};
+
 /// Endpoint metadata resolved from an OpenAPI path/method entry.
 class OperationEndpoint {
   /// Creates an HTTP endpoint description for an OpenAPI operation.
@@ -171,21 +182,22 @@ class ParsedOperation {
 /// Parser that converts OpenAPI documents into [ParsedOperation] entries.
 class OpenApiSpecParser {
   /// Creates an OpenAPI parser.
-  OpenApiSpecParser({this.preservePropertyNames = false});
+  OpenApiSpecParser({
+    this.preservePropertyNames = false,
+    this.externalDocuments = const <String, Map<String, Object?>>{},
+  });
 
   /// Whether parameter/property names should keep their source casing.
   final bool preservePropertyNames;
+
+  /// External referenced OpenAPI / JSON Schema documents mapped by URL or relative path.
+  final Map<String, Map<String, Object?>> externalDocuments;
 
   /// Parses [openapiSpecDict] into normalized [ParsedOperation] values.
   List<ParsedOperation> parse(Map<String, Object?> openapiSpecDict) {
     final Map<String, Object?> resolved = _resolveReferences(openapiSpecDict);
     final Map<String, Object?> sanitized = _sanitizeSchemaTypes(resolved);
     return _collectOperations(sanitized);
-  }
-
-  /// Sanitizes schema `type` values to valid OpenAPI primitive types.
-  Map<String, Object?> sanitizeSchemaTypes(Map<String, Object?> openapiSpec) {
-    return _sanitizeSchemaTypes(openapiSpec);
   }
 
   List<ParsedOperation> _collectOperations(Map<String, Object?> openapiSpec) {
@@ -198,45 +210,33 @@ class OpenApiSpecParser {
     }
 
     String? globalSchemeName;
-    final List<Object?> security = _readList(openapiSpec['security']);
-    if (security.isNotEmpty) {
-      final Map<String, Object?> firstSecurity = _readMap(security.first);
-      if (firstSecurity.isNotEmpty) {
-        globalSchemeName = firstSecurity.keys.first;
-      }
+    final Map<String, Object?> globalSecurity = _readMap(
+      _readList(openapiSpec['security']).firstOrNull,
+    );
+    if (globalSecurity.isNotEmpty) {
+      globalSchemeName = globalSecurity.keys.first;
     }
 
+    final Map<String, Object?> components = _readMap(openapiSpec['components']);
     final Map<String, Object?> authSchemes = _readMap(
-      _readMap(openapiSpec['components'])['securitySchemes'],
+      components['securitySchemes'] ?? components['security_schemes'],
     );
 
     final Map<String, Object?> paths = _readMap(openapiSpec['paths']);
     for (final MapEntry<String, Object?> pathEntry in paths.entries) {
-      final Map<String, Object?> pathItem = _readMap(pathEntry.value);
-      if (pathItem.isEmpty && pathEntry.value == null) {
-        continue;
-      }
+      final Map<String, Object?> pathObject = _readMap(pathEntry.value);
+      final List<Object?> pathParameters = _readList(pathObject['parameters']);
 
-      for (final String method in const <String>[
-        'get',
-        'post',
-        'put',
-        'delete',
-        'patch',
-        'head',
-        'options',
-        'trace',
-      ]) {
-        final Map<String, Object?> operationDict = _readMap(pathItem[method]);
-        if (operationDict.isEmpty) {
+      for (final MapEntry<String, Object?> opEntry in pathObject.entries) {
+        final String method = opEntry.key.toLowerCase();
+        if (!_allowedHttpMethods.contains(method)) {
           continue;
         }
 
+        final Map<String, Object?> operationDict = _readMap(opEntry.value);
         final List<Object?> operationParameters = _readList(
           operationDict['parameters'],
         );
-        final List<Object?> pathParameters = _readList(pathItem['parameters']);
-
         final Map<String, Object?> normalizedOperation =
             Map<String, Object?>.from(operationDict)
               ..['parameters'] = <Object?>[
@@ -298,7 +298,7 @@ class OpenApiSpecParser {
                 ),
             authScheme: authScheme,
             authCredential: null,
-            additionalContext: <String, Object?>{},
+            additionalContext: null,
           ),
         );
       }
@@ -309,63 +309,46 @@ class OpenApiSpecParser {
 
   Map<String, Object?> _sanitizeSchemaTypes(Map<String, Object?> openapiSpec) {
     final Map<String, Object?> copy = _deepCopyMap(openapiSpec);
+    final List<Map<String, Object?>> schemas = <Map<String, Object?>>[];
+    _collectSchemas(copy, schemas);
 
-    Object? sanitizeRecursive(Object? value, {required bool inSchema}) {
-      if (value is Map) {
-        final Map<String, Object?> map = _readMap(value);
-        if (inSchema) {
-          _sanitizeTypeField(map);
-        }
-
-        for (final MapEntry<String, Object?> entry in Map<String, Object?>.from(
-          map,
-        ).entries) {
-          map[entry.key] = sanitizeRecursive(
-            entry.value,
-            inSchema: inSchema || _schemaContainerKeys.contains(entry.key),
-          );
-        }
-        return map;
-      }
-      if (value is List) {
-        return value
-            .map((Object? item) => sanitizeRecursive(item, inSchema: inSchema))
-            .toList(growable: false);
-      }
-      return value;
+    for (final Map<String, Object?> schema in schemas) {
+      _cleanSchemaType(schema);
     }
-
-    return _readMap(sanitizeRecursive(copy, inSchema: false));
+    return copy;
   }
 
-  void _sanitizeTypeField(Map<String, Object?> schema) {
-    if (!schema.containsKey('type')) {
-      return;
-    }
-
-    final Object? typeValue = schema['type'];
-    if (typeValue is String) {
-      final String normalized = typeValue.toLowerCase();
-      if (_validSchemaTypes.contains(normalized)) {
-        schema['type'] = normalized;
-      } else {
-        schema.remove('type');
+  void _collectSchemas(
+    Object? current,
+    List<Map<String, Object?>> schemas, {
+    String? currentKey,
+  }) {
+    if (current is Map) {
+      final Map<String, Object?> map = _readMap(current);
+      if (currentKey != null &&
+          _schemaContainerKeys.contains(currentKey.toLowerCase())) {
+        schemas.add(map);
       }
-      return;
+      for (final MapEntry<String, Object?> entry in map.entries) {
+        _collectSchemas(entry.value, schemas, currentKey: entry.key);
+      }
+    } else if (current is List) {
+      for (final Object? item in current) {
+        _collectSchemas(item, schemas, currentKey: currentKey);
+      }
     }
+  }
 
-    if (typeValue is List) {
+  void _cleanSchemaType(Map<String, Object?> schema) {
+    final Object? rawType = schema['type'];
+    if (rawType is List) {
       final List<String> valid = <String>[];
-      for (final Object? item in typeValue) {
-        if (item is! String) {
-          continue;
-        }
-        final String normalized = item.toLowerCase();
-        if (!_validSchemaTypes.contains(normalized)) {
-          continue;
-        }
-        if (!valid.contains(normalized)) {
-          valid.add(normalized);
+      for (final Object? item in rawType) {
+        if (item is String) {
+          final String normalized = item.toLowerCase();
+          if (_validSchemaTypes.contains(normalized)) {
+            valid.add(normalized);
+          }
         }
       }
       if (valid.isEmpty) {
@@ -380,24 +363,56 @@ class OpenApiSpecParser {
     final Map<String, Object?> copy = _deepCopyMap(openapiSpec);
     final Map<String, Object?> resolvedCache = <String, Object?>{};
 
-    Object? resolveRef(String ref, Map<String, Object?> document) {
-      final List<String> parts = ref.split('/');
-      if (parts.isEmpty || parts.first != '#') {
-        throw ArgumentError('External references not supported: $ref');
-      }
-
-      Object? current = document;
+    Object? resolvePointer(String pointer, Map<String, Object?> targetDoc) {
+      final List<String> parts = pointer.split('/');
+      Object? current = targetDoc;
       for (int i = 1; i < parts.length; i += 1) {
         if (current is! Map) {
           return null;
         }
         final Map<String, Object?> map = _readMap(current);
-        if (!map.containsKey(parts[i])) {
+        final String decodedKey = parts[i].replaceAll('~1', '/').replaceAll('~0', '~');
+        if (!map.containsKey(decodedKey)) {
           return null;
         }
-        current = map[parts[i]];
+        current = map[decodedKey];
       }
       return current;
+    }
+
+    Object? resolveRef(String ref, Map<String, Object?> document) {
+      if (ref.startsWith('#/')) {
+        return resolvePointer(ref, document);
+      }
+
+      // External ref format: "http(s)://...#/components/schemas/Pet" or "./models/pet.json#/Pet"
+      final int hashIdx = ref.indexOf('#');
+      final String docKey = hashIdx >= 0 ? ref.substring(0, hashIdx) : ref;
+      final String fragment = hashIdx >= 0 ? ref.substring(hashIdx) : '#';
+
+      Map<String, Object?>? extDoc = externalDocuments[docKey] ??
+          externalDocuments[docKey.replaceFirst(RegExp(r'^\./'), '')];
+
+      if (extDoc == null) {
+        // Fallback: match by filename
+        final String filename = docKey.split('/').last;
+        for (final MapEntry<String, Map<String, Object?>> entry in externalDocuments.entries) {
+          if (entry.key.endsWith(filename)) {
+            extDoc = entry.value;
+            break;
+          }
+        }
+      }
+
+      if (extDoc == null) {
+        return null;
+      }
+
+      if (fragment == '#' || fragment.isEmpty) {
+        return extDoc;
+      }
+
+      return resolvePointer(fragment, extDoc);
     }
 
     Object? recursiveResolve(

@@ -61,8 +61,8 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 | 数据/云集成 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Slack, Toolbox | 运行时客户端与门面均已就绪。 |
 | 技能 (Skills) | ✅ | `Skill`, `SkillToolset`, 本地/内存/GCS 技能源, 技能提示词格式化 | 支持内联与目录加载（文件系统加载不支持 Flutter Web）。 |
 | Flutter/Web-Safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 组件, 6 种响应式控制器, `AdkTheme`, WASM 支持 | Flutter Web/WASM 编译验证完成 (`flutter build web --wasm`)。提供 `AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, 6 种控制器, SSE 实时流式传输。 |
-| OpenAPI 外部引用 | 🚧 | OpenAPI 解析器/工具集 | 支持内联与本地 Spec，外部多文件 `$ref` 解析计划中。 |
-| Spanner PostgreSQL ANN | 🚧 | Spanner 向量工具 | Spanner/Vector 核心路径已完成，PostgreSQL ANN 支持计划中。 |
+| OpenAPI 外部引用 (`$ref`) | ✅ | `OpenApiSpecParser`, `externalDocuments`, 多文件 Schema 解析器 | 支持本地指针、相对文件路径 (`./`, `../`)、远程 HTTP/HTTPS `$ref` 深度缓存与循环引用防护。 |
+| Spanner PostgreSQL ANN | ✅ | `spanner.approx_cosine_distance`, `approx_euclidean_distance`, `approx_dot_product` | 支持基于 JSONB 选项的 Spanner PostgreSQL 方言近似最近邻 (ANN) 向量检索查询。 |
 | 语音文本转换运行时 | ⚠️ | 音频语音识别 (STT) 运行时 | 提供语音识别编排运行时，需注入平台特定的识别器实例。 |
 | Python 示例树覆盖 | 🚧 | 示例代码, `flutter_adk/example`, 文档 | 提供代表性 Dart/Flutter 示例，Python 全量示例树持续扩充中。 |
 

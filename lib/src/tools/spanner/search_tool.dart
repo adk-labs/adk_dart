@@ -117,7 +117,15 @@ List<double> _getEmbeddingForQuery({
   return _asDoubleList(values[0]);
 }
 
-String _getPostgresqlDistanceFunction(String distanceType) {
+String _getPostgresqlDistanceFunction(String distanceType, {bool ann = false}) {
+  if (ann) {
+    return <String, String>{
+          'COSINE': 'spanner.approx_cosine_distance',
+          'EUCLIDEAN': 'spanner.approx_euclidean_distance',
+          'DOT_PRODUCT': 'spanner.approx_dot_product',
+        }[distanceType] ??
+        (throw ArgumentError('Unsupported distance type: $distanceType'));
+  }
   return <String, String>{
         'COSINE': 'spanner.cosine_distance',
         'EUCLIDEAN': 'spanner.euclidean_distance',
@@ -192,25 +200,31 @@ String _generateSqlForAnn({
   required int topK,
   required int numLeavesToSearch,
 }) {
-  if (dialect == SpannerDatabaseDialect.postgresql) {
-    throw UnsupportedError(
-      '$approximateNearestNeighbors is not supported for PostgreSQL dialect.',
-    );
-  }
+  final List<String> selectColumns = <String>[...columns];
 
-  final String distanceFunction = _getGooglesqlDistanceFunction(
-    distanceType,
-    true,
-  );
-  final List<String> selectColumns = <String>[
-    ...columns,
-    '''$distanceFunction(
+  if (dialect == SpannerDatabaseDialect.postgresql) {
+    final String distanceFunction = _getPostgresqlDistanceFunction(
+      distanceType,
+      ann: true,
+    );
+    selectColumns.add('''$distanceFunction(
+      $embeddingColumnToSearch,
+      \$$_postgresqlParameterQueryEmbedding,
+      JSONB_BUILD_OBJECT('num_leaves_to_search', $numLeavesToSearch)
+  ) AS $_distanceAlias
+  ''');
+  } else {
+    final String distanceFunction = _getGooglesqlDistanceFunction(
+      distanceType,
+      true,
+    );
+    selectColumns.add('''$distanceFunction(
       $embeddingColumnToSearch,
       @$_googlesqlParameterQueryEmbedding,
       options => JSON '{"num_leaves_to_search": $numLeavesToSearch}'
   ) AS $_distanceAlias
-  ''',
-  ];
+  ''');
+  }
 
   String queryFilter = '$embeddingColumnToSearch IS NOT NULL';
   if (additionalFilter != null) {
@@ -349,20 +363,6 @@ Future<Map<String, Object?>> similaritySearch({
             exactNearestNeighbors,
             approximateNearestNeighbors,
           ],
-        },
-      );
-    }
-
-    if (dialect == SpannerDatabaseDialect.postgresql &&
-        nearestNeighborsAlgorithm == approximateNearestNeighbors) {
-      return _structuredErrorResult(
-        code: 'UNSUPPORTED_SEARCH_COMBINATION',
-        details:
-            '$approximateNearestNeighbors is not supported for PostgreSQL '
-            'dialect.',
-        context: <String, Object?>{
-          'dialect': '$dialect',
-          'nearest_neighbors_algorithm': nearestNeighborsAlgorithm,
         },
       );
     }

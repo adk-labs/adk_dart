@@ -836,7 +836,7 @@ void main() {
           );
         });
 
-        final Map<String, Object?> unsupportedCombination =
+        final Map<String, Object?> pgAnnResult =
             await similaritySearch(
               projectId: 'p',
               instanceId: 'inst',
@@ -851,19 +851,13 @@ void main() {
               credentials: Object(),
               searchOptions: <String, Object?>{
                 'nearest_neighbors_algorithm': approximateNearestNeighbors,
+                'num_leaves_to_search': 500,
               },
             );
 
-        expect(unsupportedCombination['status'], 'ERROR');
-        expect(
-          unsupportedCombination['error_code'],
-          'UNSUPPORTED_SEARCH_COMBINATION',
-        );
-        expect(
-          '${unsupportedCombination['error_details']}',
-          contains('not supported for PostgreSQL dialect'),
-        );
-        expect(embedderCalled, isFalse);
+        expect(pgAnnResult['status'], 'SUCCESS');
+        expect(postgresqlDatabase.sqlInvocations.last.sql, contains('spanner.approx_cosine_distance'));
+        expect(postgresqlDatabase.sqlInvocations.last.sql, contains("JSONB_BUILD_OBJECT('num_leaves_to_search', 500)"));
       },
     );
 

@@ -76,8 +76,8 @@ Status legend:
 | Data/cloud integrations | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | Runtime clients and facades are implemented; live behavior depends on cloud credentials, service enablement, and environment configuration. |
 | Skills | ✅ | `Skill`, `SkillToolset`, local/in-memory/GCS skill sources, skill prompt formatting | Inline and directory-backed skills are implemented. Filesystem-backed loading is not available on Flutter Web. |
 | Flutter/Web-safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 Widgets, 6 Reactive Controllers, `AdkTheme`, WASM Support | Fully Web/WASM compiled (`flutter build web --wasm` clean). Features `AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, `AdkSplitPaneView`, 6 controllers, SSE real-time streaming, and customizable theme system. |
-| OpenAPI external refs | 🚧 | OpenAPI parser/toolset | Inline and local spec handling are implemented; external multi-file `$ref` resolution is still planned. |
-| Spanner PostgreSQL ANN | 🚧 | Spanner vector tooling | Core Spanner/vector paths are implemented, but PostgreSQL ANN behavior is not yet supported. |
+| OpenAPI external refs | ✅ | `OpenApiSpecParser`, `externalDocuments`, multi-file schema resolver | Supports local pointers, relative file imports (`./`, `../`), and remote HTTP/HTTPS `$ref` resolution with deep caching and circular ref prevention. |
+| Spanner PostgreSQL ANN | ✅ | `spanner.approx_cosine_distance`, `approx_euclidean_distance`, `approx_dot_product` | Approximate Nearest Neighbor vector search queries supported for Spanner PostgreSQL dialect via JSONB options. |
 | Speech transcription bootstrap | ⚠️ | audio transcription runtime | Transcription orchestration is present; a recognizer must be supplied per instance or through the default recognizer registration hook. |
 | Python sample tree coverage | 🚧 | examples, `flutter_adk/example`, docs/worklog | Runtime behavior is prioritized first. Representative Dart/Flutter examples exist, but the full Python sample tree is not mirrored one-for-one yet. |
 

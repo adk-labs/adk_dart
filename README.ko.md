@@ -61,8 +61,8 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | 데이터/클라우드 연동 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | 런타임 클라이언트 및 파사드 구현 완료; 실제 동작은 클라우드 자격증명 필요. |
 | 스킬 (Skills) | ✅ | `Skill`, `SkillToolset`, 로컬/In-Memory/GCS 스킬 소스, 스킬 프롬프트 포맷팅 | 인라인 및 디렉토리 기반 스킬 구현 완료. 파일시스템 기반 로딩은 Flutter Web 미지원. |
 | Flutter/Web-Safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 위젯, 6종 리액티브 컨트롤러, `AdkTheme`, WASM 지원 | Flutter Web/WASM 컴파일 검증 완료(`flutter build web --wasm`). `AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, 6종 컨트롤러, SSE 실시간 스트리밍 제공. |
-| OpenAPI 외부 참조 | 🚧 | OpenAPI 파서/툴셋 | 인라인 및 로컬 스펙 처리 완료; 외부 멀티 파일 `$ref` 해석 지원 예정. |
-| Spanner PostgreSQL ANN | 🚧 | Spanner 벡터 도구 | Spanner/Vector 핵심 경로 구현 완료; PostgreSQL ANN 동작은 향후 지원 예정. |
+| OpenAPI 외부 참조 (`$ref`) | ✅ | `OpenApiSpecParser`, `externalDocuments`, 멀티 파일 스키마 해석기 | 로컬 포인터, 상대 경로 파일 참조 (`./`, `../`), 원격 HTTP/HTTPS `$ref` 심층 캐싱 및 순환 참조 방지 지원. |
+| Spanner PostgreSQL ANN | ✅ | `spanner.approx_cosine_distance`, `approx_euclidean_distance`, `approx_dot_product` | Spanner PostgreSQL 방언(Dialect)의 JSONB 옵션 기반 근사 최근접 이웃(ANN) 벡터 검색 쿼리 완벽 지원. |
 | 음성 텍스트 변환 런타임 | ⚠️ | 오디오 음성 인식(STT) 런타임 | 음성 텍스트 변환(Speech-to-Text) 오케스트레이션 제공; 인스턴스별 인식기 전달 또는 기본 인식기 등록 필요. |
 | Python 샘플 트리 커버리지 | 🚧 | 예제, `flutter_adk/example`, 문서 | 대표적인 Dart/Flutter 예제 제공; Python 전체 샘플 트리는 점진적 확장 중. |
 
