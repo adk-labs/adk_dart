@@ -18,21 +18,9 @@ ADK Dartは、モジュール型ランタイムプリミティブ、ツールオ
   - **v2 ワークフロー**: `Workflow`, `BaseNode`, `JoinNode`等による宣言型DAGノードグラフスケジューリング、依存関係管理、条件分岐ルーティング、状態マージ。
   - **Managed Agents**: `ManagedAgent`および`RemoteMcpServer`設定を介したGCP Vertex AI Managed Agents Interactions APIとの直接RPC連携。
 - **MCP プロトコルコアパッケージ分離**: `packages/adk_mcp`を追加し、Streamable HTTP MCPトランスポート層を独立パッケージとしてモジュール化。
-- **MCP 仕様強化**: セッション復元、リクエストIDに基づくSSE応答マッチング、キャンセル通知割り込み、機能（Capability）認識RPCによる安定性向上。
-- **互換性拡張**: セッション永続化ストレージ、ツールセットリフレクション、モデル/ツール統合レイヤー全体にわたる広範なランタイム互換性を確保。
+- **MCP 仕様強化**: セッション復元、リクエストIDに基づくSSE応答マッチング、キャンセ�## ADK Python 互換性ステータス
 
-## 主な機能
-
-- **コードファーストなエージェントランタイム**: `BaseAgent`, `LlmAgent`（`Agent`エイリアス）および明示的な呼び出し/セッションコンテキストオブジェクトによる構築。
-- **イベント駆動型実行パイプライン**: `Runner` / `InMemoryRunner`による非同期エージェント実行と`Event`ストリームディスパッチ。
-- **階層型マルチエージェントオーケストレーション**: `subAgents`による階層的エージェントツリー構成および自律的Hand-off状態遷移。
-- **豊富なツールエコシステム**: `FunctionTool`、OpenAPIツール、Google APIツールセット、エンタープライズデータツール（BigQuery/Bigtable/Spanner）、MCPツールセットを標準搭載。
-- **MCP プロトコル統合**: `adk_mcp`を基盤とする`McpToolset`および`McpSessionManager`によりStreamable HTTPでリモートMCPサーバーと連携。
-- **開発者 CLI + Dev Server UI**: `adk` CLI（`create`, `run`, `web`, `api_server`, `deploy`）によるスキャフォールディング、対話型ターミナル実行、WebデバッグUI機能。
-
-## ADK Python 互換性ステータス
-
-ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.7.0`に準拠しています。
+ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.2.0`に準拠しています。
 
 ステータス凡例:
 
@@ -42,10 +30,43 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 
 | `adk-python` 領域 | Dart ステータス | Dart 実装 API およびインターフェース | 備考 |
 | --- | --- | --- | --- |
-| パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk` 最新アライメント完了; ADK基準は `2.7.0`。 |
+| パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 最新アライメント完了; ADK基準は `2.2.0`。 |
 | エージェントおよびランナー | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 呼び出し、フォールバック、セッションロールバック/リワインド（Rewind）、セッション状態、コールバック、Agent Transfer実装完了。 |
 | LLM フロープロセッサ | ✅ | `flows/llm_flows` 配下の要求/応答プロセッサ | 指示、ID、コンテンツ、トークンコンパクション、コンテキストキャッシュ、コード実行、出力スキーマ、ツール確認（HITL）、エージェント移行。 |
 | ワークフローランタイム | ✅ | `Workflow`, `BaseNode`, 関数/ツール/LLMノード, `NodeTool`, ジョイン, ルーティング, 動的ノード, リプレイ | リトライ、タイムアウト、入力要求/HITL、並列ワーカー、ワークフローリプレイおよび状態復元 (State Restoration)、グラフシリアライズ、DOT可視化。 |
+| イベントおよびコンテンツ変換 | ✅ | `Event`, `EventActions`, コンテンツ/パートモデル, ノードパスヘルパー | 構造化イベントアクション、ノードパス構築、関数/ツール応答変換、A2Aメタデータ保持。 |
+| セッションおよび状態 | ✅ | In-Memory, SQLite, Database, Vertex AI セッションサービス, 移行ヘルパー | ローカルおよびリモートセッションAPI実装完了。 |
+| メモリおよびアーティファクト | ✅ | In-Memoryメモリ, Vertex AI メモリ/RAG, In-Memory/ファイル/GCSアーティファクト | GCS/Vertexパスは環境設定およびクレデンシャルに依存。 |
+| ツールおよびツールセット | ✅ | 関数ツール, エージェントツール, OpenAPIツール, Google APIツール, 検索/RAGツール, データツール | Google検索、URL Context、コード実行、Computer Use、Google Maps、Vertex AI Search、Vertex RAG対応。 |
+| MCP 統合 | ⚠️ | `adk_mcp`, `McpToolset`, `McpSessionManager`, `StreamableHTTPConnectionParams`, `StdioConnectionParams` | Streamable HTTPはVM/Flutter/Webで動作。Stdioはプロセス実行が必要なためVM専用。 |
+| モデル/プロバイダ | ✅ | Gemini REST/Live SSE, Anthropic Claude (`AnthropicLlm`), LiteLLM/OpenAI (`LiteLlm` - GPT-4o, o3-mini, Ollama, DeepSeek, Groq), Gemma, Apigee, Chat Completions, `LLMRegistry` | 全プロバイダでSSEリアルタイムトークンストリーミングおよび動的モデルルーティングを提供。 |
+| 認証およびクレデンシャル | ✅ | 認証スキーム, クレデンシャルマネージャ, OAuth2交換/更新, サービスアカウントフック | ツール認証、OAuthディスカバリ、トークン交換/更新、セッション状態でのクレデンシャル保存対応。 |
+| 評価およびシミュレーション | ✅ | 評価マネージャ/サービス, メトリクス評価器, LLM-as-a-judge, ユーザーシミュレータ | 軌跡/最終応答/ルーブリック/安全性メトリクス、シミュレータ生成を実装。 |
+| プラグインおよびテレメトリ | ✅ | プラグインマネージャ, デバッグ/グローバル/リフレクション/アーティファクト保存, OpenTelemetry/SQLite | SQLiteトレース永続化、メトリクス計測、自動トレース、プラグインライフサイクルフック。 |
+| CLI, 開発サーバー, デプロイ | ✅ | `adk create/run/web/api_server/deploy/eval/eval_set/conformance/migrate` | Dart CLI環境向けに移植完了。 |
+| A2A プロトコル | ✅ | A2Aコンバータ, エグゼキュータ, エージェントカード, JSON-RPC/RESTタスクルート, リモートA2Aエージェント | ストリーミング、タスク再開/キャンセル/再購読、プッシュ通知設定、SQLite永続プッシュキュー。 |
+| コード実行 | ⚠️ | ローカルプロセス, コンテナ/Docker, GKE, Vertex AI, Cloud Runサンドボックス | 実行ロジック実装済み。実環境のDocker/K8s/Vertex/Cloud Runに依存。 |
+| データ/クラウド統合 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Slack, Toolbox | ランタイムクライアントおよびファサード実装済み。 |
+| スキル (Skills) | ✅ | `Skill`, `SkillToolset`, インメモリ/GCSスキルソース, スキルプロンプト整形 | インラインおよびディレクトリ読み込み対応（ファイルシステムはFlutter Web未対応）。 |
+| Flutter/Web-Safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 ウィジェット, 6種のリアクティブコントローラ, `AdkTheme`, WASM対応 | Flutter Web/WASM コンパイル検証済み (`flutter build web --wasm`)。`AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, 6種のコントローラ, SSEストリーミングを標準提供。 |
+| OpenAPI 外部参照 | 🚧 | OpenAPI パーサー/ツールセット | インライン/ローカル仕様対応済み。外部マルチファイル `$ref` 解決は対応予定。 |
+| Spanner PostgreSQL ANN | 🚧 | Spanner ベクトルツール | Spanner/Vectorコアパス対応済み。PostgreSQL ANN 動作は今後対応予定。 |
+| 音声テキスト変換ランタイム | ⚠️ | オーディオ音声認識(STT) ランタイム | 音声認識(STT) オーケストレーション提供。認識器のインスタンス登録が必要。 |
+| Python サンプルツリー網羅 | 🚧 | サンプルコード, `flutter_adk/example`, ドキュメント | 代表的なDart/Flutterサンプルを提供。Python全サンプルツリーは順次拡充中。 |
+
+## どのパッケージを使うべきか？
+
+| 開発環境 | 推奨パッケージ | 理由 |
+| --- | --- | --- |
+| Dart VM/CLI環境（サーバー、ツール、テスト、フルAPI） | [`adk_dart`](https://pub.dev/packages/adk_dart) | フルランタイムAPIインターフェースを提供するプライマリパッケージ |
+| Dart VM/CLI環境で短いimportパスを好む場合 | [`adk`](https://pub.dev/packages/adk) | `adk_dart`を再エクスポートするファサードパッケージ（`package:adk/adk.dart`） |
+| Flutterアプリ開発（Android/iOS/Web/WASM/Linux/macOS/Windows） | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 20+ ウィジェット、6種コントローラ、`AdkTheme`、WASM/SSE完全対応のUI Kit |
+| MCP(Model Context Protocol) クライアント/サーバー統合 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 独立型標準MCPプロトコルトランスポートパッケージ |
+| オンデバイスエッジAI (Gemini Nano / LiteRT) | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | オンデバイスLLMアクセラレータ統合パッケージ |パッケージ | 理由 |
+| --- | --- | --- |
+| Dart VM/CLI環境（サーバー、ツール、テスト、フルAPI） | [`adk_dart`](https://pub.dev/packages/adk_dart) | フルランタイムAPIインターフェースを提供するプライマリパッケージ |
+| Dart VM/CLI環境で短いimportパスを好む場合 | [`adk`](https://pub.dev/packages/adk) | `adk_dart`を再エクスポートするファサードパッケージ（`package:adk/adk.dart`） |
+| Flutterアプリ開発（Android/iOS/Web/WASM/Linux/macOS/Windows） | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 20+ ウィジェット、6種コントローラ、`AdkTheme`、WASM/SSE完全対応のUI Kit | (State Restoration)、グラフシリアライズ、DOT可視化。 |
 | イベントおよびコンテンツ変換 | ✅ | `Event`, `EventActions`, コンテンツ/パートモデル, ノードパスヘルパー | 構造化イベントアクション、ノードパス構築、関数/ツール応答変換、A2Aメタデータ保持。 |
 | セッションおよび状態 | ✅ | In-Memory, SQLite, Database, Vertex AI セッションサービス, 移行ヘルパー | ローカルおよびリモートセッションAPI実装完了。 |
 | メモリおよびアーティファクト | ✅ | In-Memoryメモリ, Vertex AI メモリ/RAG, In-Memory/ファイル/GCSアーティファクト | GCS/Vertexパスは環境設定およびクレデンシャルに依存。 |

@@ -51,7 +51,7 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 | 内存与制品 | ✅ | In-Memory 内存, Vertex AI 内存/RAG, In-Memory/文件/GCS 制品 | GCS/Vertex 路径依赖 HTTP/Auth 提供者及真实云环境配置。 |
 | 工具与工具集 | ✅ | Function 工具, Agent 工具, OpenAPI 工具, Google API 工具, 检索工具, 环境工具, 数据工具 | 内置对 Google Search、URL Context、代码执行、Computer Use、Google Maps、Vertex AI Search 与 Vertex RAG 的支持。 |
 | MCP 集成 | ⚠️ | `adk_mcp`, `McpToolset`, `McpSessionManager`, `StreamableHTTPConnectionParams`, `StdioConnectionParams` | Streamable HTTP 在 VM/Flutter/Web 均可用。Stdio 需本地进程执行，仅限 VM。 |
-| 模型/供应商 | ✅ | Gemini REST/Live, Anthropic, LiteLLM, Gemma, Apigee, Chat Completions, OpenAI labs | 可插拔传输层，需配置对应 API Key。 |
+| 模型/供应商 | ✅ | Gemini REST/Live SSE, Anthropic Claude (`AnthropicLlm`), LiteLLM/OpenAI (`LiteLlm` - GPT-4o, o3-mini, Ollama, DeepSeek, Groq), Gemma, Apigee, Chat Completions, `LLMRegistry` | 全供应商支持 SSE 实时 Token 流式传输与动态模型路由。 |
 | 认证与凭据 | ✅ | 认证方案, 凭据管理器, OAuth2 交换/刷新, 服务账号钩子 | 工具认证、OAuth 发现、Token 交换/刷新及会话状态凭据存储均已支持。 |
 | 评估与模拟 | ✅ | 评估管理器/服务, 指标评估器, LLM-as-a-judge, 用户模拟器 | 本地/GCS 评估集管理器、多维度指标与模拟器生成均已实现。 |
 | 插件与遥测 | ✅ | 插件管理器, 调试/全局/反思/制品保存插件, OpenTelemetry/SQLite | SQLite Trace 持久化、指标度量、自动追踪及生命周期钩子均已就绪。 |
@@ -60,15 +60,21 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 | 代码执行器 | ⚠️ | 本地进程, 容器/Docker, GKE, Vertex AI, Cloud Run 沙箱 | 运行时逻辑已完成，依赖外部 Docker/K8s/Vertex/Cloud Run 环境。 |
 | 数据/云集成 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Slack, Toolbox | 运行时客户端与门面均已就绪。 |
 | 技能 (Skills) | ✅ | `Skill`, `SkillToolset`, 本地/内存/GCS 技能源, 技能提示词格式化 | 支持内联与目录加载（文件系统加载不支持 Flutter Web）。 |
-| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter 示例应用 | 暴露 Web-safe API 接口层，安全排除 `dart:io` 等 VM 专属依赖。 |
+| Flutter/Web-Safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 组件, 6 种响应式控制器, `AdkTheme`, WASM 支持 | Flutter Web/WASM 编译验证完成 (`flutter build web --wasm`)。提供 `AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, 6 种控制器, SSE 实时流式传输。 |
+| OpenAPI 外部引用 | 🚧 | OpenAPI 解析器/工具集 | 支持内联与本地 Spec，外部多文件 `$ref` 解析计划中。 |
+| Spanner PostgreSQL ANN | 🚧 | Spanner 向量工具 | Spanner/Vector 核心路径已完成，PostgreSQL ANN 支持计划中。 |
+| 语音文本转换运行时 | ⚠️ | 音频语音识别 (STT) 运行时 | 提供语音识别编排运行时，需注入平台特定的识别器实例。 |
+| Python 示例树覆盖 | 🚧 | 示例代码, `flutter_adk/example`, 文档 | 提供代表性 Dart/Flutter 示例，Python 全量示例树持续扩充中。 |
 
 ## 我该选用哪个 Package？
 
 | 开发场景 | 推荐 Package | 选用原因 |
 | --- | --- | --- |
-| 在 Dart VM/CLI 环境下构建 Agent（服务器、命令行工具、测试、完整 API） | `adk_dart` | 提供 ADK Dart 全部运行时 API 接口层的基石包 |
-| 在 Dart VM/CLI 环境下但希望使用更短的 import 路径 | `adk` | 重新导出 `adk_dart` 的门面包（`package:adk/adk.dart`） |
-| 开发 Flutter 跨平台应用（Android/iOS/Web/Linux/macOS/Windows） | `flutter_adk` | 基于 `adk_core` 的 Flutter/Web-safe API 接口层，单 import 即可使用 |
+| 在 Dart VM/CLI 环境下构建 Agent（服务器、命令行工具、测试、完整 API） | [`adk_dart`](https://pub.dev/packages/adk_dart) | 提供 ADK Dart 全部运行时 API 接口层的基石包 |
+| 在 Dart VM/CLI 环境下但希望使用更短的 import 路径 | [`adk`](https://pub.dev/packages/adk) | 重新导出 `adk_dart` 的门面包（`package:adk/adk.dart`） |
+| 开发 Flutter 跨平台应用（Android/iOS/Web/WASM/Linux/macOS/Windows） | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 包含 20+ 开箱即用组件、6 种控制器、`AdkTheme`、WASM/SSE 全面支持的 UI Kit |
+| MCP(Model Context Protocol) 客户端/服务端集成 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 独立标准 MCP 协议传输与会话包 |
+| 端侧 Edge AI 硬件加速 (Gemini Nano / LiteRT) | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | 端侧轻量 LLM 运行时加速包 |
 
 ## 平台支持矩阵
 
