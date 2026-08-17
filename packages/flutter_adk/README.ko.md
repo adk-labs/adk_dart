@@ -179,6 +179,12 @@ AdkTheme(
 
 | 컴포넌트 | 설명 | 사용 예시 |
 |---|---|---|
+| **`showAdkChatBottomSheet`** | 한 줄로 호출하는 대화형 AI 상담원 모달 바텀시트 | `showAdkChatBottomSheet(context: context, agent: myAgent);` |
+| **`AdkSplitPaneView`** | 웹/태블릿/데스크톱용 적응형 분할 뷰 (좌: 챗 / 우: 로거 & 도구 인스펙터) | `AdkSplitPaneView(agent: myAgent, splitRatio: 0.55);` |
+| **`AdkReasoningExpander`** | Gemini 3.7 Thinking 사고 과정 아코디언 확장 뷰어 | `AdkReasoningExpander(thought: msg.thought!, durationMs: 1200);` |
+| **`AdkAgentPersonaSelector`** | 멀티 에이전트 페르소나 선택 그리드/캐러셀 카드 템플릿 | `AdkAgentPersonaSelector(personas: [...], onPersonaSelected: (p) => ...);` |
+| **`AdkInlineAssistantBar`** | 입력창용 인라인 Copilot 툴바 (문법 교정, 톤 변경, 요약, 번역) | `AdkInlineAssistantBar(agent: copyAgent, targetController: textCtrl);` |
+| **`AdkSmartFormView`** | 대화를 통해 폼 필드가 실시간으로 채워지는 스마트 폼 템플릿 | `AdkSmartFormView(agent: formAgent, fields: [...], onSubmit: (data) => ...);` |
 | **`AdkConfirmationBanner`** | 민감한 도구 실행 전 사용자 승인을 받는 인간 참여(HITL) 배너 및 모달 다이얼로그 | `AdkConfirmationBanner.showAsDialog(context, title: '도구 승인', description: '...');` |
 | **`AdkSessionDrawer`** | 대화 세션 히스토리 목록 탐색, 세션 전환, 생성(`+`), 삭제 지원 드로어 | `AdkSessionDrawer(sessions: sessions, activeSessionId: id, onSessionSelected: (s) => ...);` |
 | **`AdkFloatingChatButton`** | 탭 시 모달 바텀시트 챗창이 열리는 플로팅 액션 버튼(FAB) | `AdkFloatingChatButton(agent: myAgent);` |
@@ -188,7 +194,7 @@ AdkTheme(
 | **`AdkAgentHierarchyBadge`** | 멀티 에이전트 트리 계층에서 현재 활성 에이전트를 표시하는 뱃지 | `AdkAgentHierarchyBadge(agentPath: ['Supervisor', 'Researcher']);` |
 | **`AdkTokenUsageBadge`** | 입력/출력 토큰 소모량을 작게 보여주는 뱃지 | `AdkTokenUsageBadge(promptTokens: 120, completionTokens: 80);` |
 | **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`** | 실시간 음성 마이크 버튼 및 오디오 파형 애니메이션 위젯 | `AdkVoiceMicButton(isListening: true, onPressed: () => ...);` |
-| **`AdkMessageBubble`** | 사용자, 모델, 툴, 에러 메시지를 명확히 구분하는 Material 3 스타일 메시지 버블 | `AdkMessageBubble(message: chatMessage);` |
+| **`AdkMessageBubble`** | 사용자, 모델, 툴, 추론 과정, 에러를 명확히 구분하는 Material 3 메시지 버블 | `AdkMessageBubble(message: chatMessage);` |
 | **`AdkTypingIndicator`** | AI 생각/타이핑 펄스 인디케이터 | `AdkTypingIndicator();` |
 | **`AdkEventStreamBuilder`** | ADK의 실시간 `Stream<Event>`를 즉시 수신하여 반응형 UI를 구성하는 전용 빌더 | `AdkEventStreamBuilder(stream: runner.runAsync(...), builder: (ctx, events) => ...);` |
 

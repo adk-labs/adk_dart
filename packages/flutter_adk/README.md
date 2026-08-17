@@ -179,6 +179,12 @@ AdkTheme(
 
 | Component | Description | Usage Example |
 |---|---|---|
+| **`showAdkChatBottomSheet`** | Turnkey modal draggable bottom sheet hosting an interactive AI assistant. | `showAdkChatBottomSheet(context: context, agent: myAgent);` |
+| **`AdkSplitPaneView`** | Adaptive split-pane layout (Chat on left, Live Logger & Tools on right) for Web/Desktop/Tablet. | `AdkSplitPaneView(agent: myAgent, splitRatio: 0.55);` |
+| **`AdkReasoningExpander`** | Collapsible accordion for viewing Gemini 3.7 Thinking and reasoning steps. | `AdkReasoningExpander(thought: msg.thought!, durationMs: 1200);` |
+| **`AdkAgentPersonaSelector`** | Responsive Grid/Carousel card selector for multi-agent persona switching. | `AdkAgentPersonaSelector(personas: [...], onPersonaSelected: (p) => ...);` |
+| **`AdkInlineAssistantBar`** | Copilot-style inline toolbar for one-click Grammar, Polish, Summary, and Translate. | `AdkInlineAssistantBar(agent: copyAgent, targetController: textCtrl);` |
+| **`AdkSmartFormView`** | Conversational form filling view that auto-populates fields through dialogue. | `AdkSmartFormView(agent: formAgent, fields: [...], onSubmit: (data) => ...);` |
 | **`AdkConfirmationBanner`** | Human-in-the-Loop (HITL) inline banner and modal dialog for sensitive tool approvals. | `AdkConfirmationBanner.showAsDialog(context, title: 'Approve Tool', description: '...');` |
 | **`AdkSessionDrawer`** | Sidebar drawer for switching, creating (`+`), and deleting conversation sessions. | `AdkSessionDrawer(sessions: sessions, activeSessionId: id, onSessionSelected: (s) => ...);` |
 | **`AdkFloatingChatButton`** | Floating Action Button (FAB) that opens an AI assistant modal bottom sheet. | `AdkFloatingChatButton(agent: myAgent);` |
@@ -188,7 +194,7 @@ AdkTheme(
 | **`AdkAgentHierarchyBadge`** | Breadcrumb badge indicating the active sub-agent in a multi-agent tree. | `AdkAgentHierarchyBadge(agentPath: ['Supervisor', 'Researcher']);` |
 | **`AdkTokenUsageBadge`** | Compact badge showing prompt and completion token counts. | `AdkTokenUsageBadge(promptTokens: 120, completionTokens: 80);` |
 | **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`** | Voice interaction button and reactive audio waveform animation. | `AdkVoiceMicButton(isListening: true, onPressed: () => ...);` |
-| **`AdkMessageBubble`** | Material 3 chat bubble supporting user, model, tool, and error roles. | `AdkMessageBubble(message: chatMessage);` |
+| **`AdkMessageBubble`** | Material 3 chat bubble supporting user, model, tool, reasoning, and error roles. | `AdkMessageBubble(message: chatMessage);` |
 | **`AdkTypingIndicator`** | Smooth pulsing animated dots displayed during AI generation. | `AdkTypingIndicator();` |
 | **`AdkEventStreamBuilder`** | Reactive widget builder for listening directly to `Stream<Event>`. | `AdkEventStreamBuilder(stream: runner.runAsync(...), builder: (ctx, events) => ...);` |
 

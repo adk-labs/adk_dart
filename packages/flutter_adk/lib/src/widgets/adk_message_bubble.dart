@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/adk_attachment_model.dart';
 import '../models/adk_chat_message.dart';
 import '../theme/adk_theme.dart';
+import 'adk_reasoning_expander.dart';
 import 'adk_typing_indicator.dart';
 
 /// A customizable message bubble widget representing user, model, tool, or system messages.
@@ -164,6 +165,10 @@ class AdkMessageBubble extends StatelessWidget {
                     ),
               ),
             ),
+          if (message.thought != null && message.thought!.isNotEmpty) ...<Widget>[
+            AdkReasoningExpander(thought: message.thought!),
+            const SizedBox(height: 4.0),
+          ],
           if (message.attachments.isNotEmpty) ...<Widget>[
             _buildAttachmentsList(flutterTheme, isUser),
             if (message.text.isNotEmpty) const SizedBox(height: 6.0),
