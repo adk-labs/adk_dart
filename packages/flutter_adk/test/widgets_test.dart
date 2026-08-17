@@ -213,16 +213,19 @@ void main() {
             body: AdkWorkflowProgressIndicator(
               steps: <AdkWorkflowStep>[
                 AdkWorkflowStep(
-                  name: 'Fetch Data',
-                  status: AdkWorkflowNodeStatus.completed,
+                  id: 'step_1',
+                  label: 'Fetch Data',
+                  status: AdkStepStatus.completed,
                 ),
                 AdkWorkflowStep(
-                  name: 'Analyze Data',
-                  status: AdkWorkflowNodeStatus.running,
+                  id: 'step_2',
+                  label: 'Analyze Data',
+                  status: AdkStepStatus.running,
                 ),
                 AdkWorkflowStep(
-                  name: 'Generate Report',
-                  status: AdkWorkflowNodeStatus.pending,
+                  id: 'step_3',
+                  label: 'Generate Report',
+                  status: AdkStepStatus.pending,
                 ),
               ],
             ),
@@ -402,6 +405,52 @@ void main() {
 
       expect(find.text('get_weather'), findsOneWidget);
       expect(find.text('Fetches weather for location'), findsOneWidget);
+    });
+
+    test('validates UI models properties and methods', () {
+      const toolInfo = AdkToolCallInfo(
+        toolName: 'search_web',
+        arguments: {'query': 'flutter'},
+        result: {'count': 10},
+        status: AdkToolStatus.success,
+      );
+      expect(toolInfo.toolName, equals('search_web'));
+      expect(toolInfo.status, equals(AdkToolStatus.success));
+
+      const step = AdkWorkflowStep(
+        id: 'node_1',
+        label: 'Search',
+        status: AdkStepStatus.completed,
+      );
+      expect(step.id, equals('node_1'));
+      expect(step.status, equals(AdkStepStatus.completed));
+
+      const session = AdkSessionInfo(
+        id: 's_1',
+        title: 'Session 1',
+        messageCount: 5,
+      );
+      expect(session.id, equals('s_1'));
+      expect(session.messageCount, equals(5));
+
+      const suggestion = AdkPromptSuggestion(
+        text: 'Tell me a joke',
+        label: 'Joke',
+      );
+      expect(suggestion.displayLabel, equals('Joke'));
+
+      const usage = AdkTokenUsage(
+        promptTokens: 1200,
+        completionTokens: 300,
+        totalTokens: 1500,
+      );
+      expect(usage.formattedTotal, equals('1.5k'));
+
+      const voice = AdkVoiceState(
+        status: AdkVoiceStatus.listening,
+        decibels: 0.8,
+      );
+      expect(voice.isActive, isTrue);
     });
   });
 }

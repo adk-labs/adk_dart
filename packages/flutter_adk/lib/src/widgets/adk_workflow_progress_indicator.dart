@@ -1,38 +1,10 @@
 import 'package:flutter/material.dart';
+import '../models/adk_workflow_step_model.dart';
 
-/// Node execution status for [AdkWorkflowProgressIndicator].
-enum AdkWorkflowNodeStatus {
-  /// Node has not started yet.
-  pending,
+export '../models/adk_workflow_step_model.dart';
 
-  /// Node is currently executing.
-  running,
-
-  /// Node has completed successfully.
-  completed,
-
-  /// Node failed with an error.
-  failed,
-}
-
-/// A single step item representing a workflow node.
-class AdkWorkflowStep {
-  /// Creates an [AdkWorkflowStep].
-  const AdkWorkflowStep({
-    required this.name,
-    this.status = AdkWorkflowNodeStatus.pending,
-    this.description,
-  });
-
-  /// Name or identifier of the node.
-  final String name;
-
-  /// Current execution status.
-  final AdkWorkflowNodeStatus status;
-
-  /// Optional description.
-  final String? description;
-}
+/// Legacy alias for [AdkStepStatus].
+typedef AdkWorkflowNodeStatus = AdkStepStatus;
 
 /// A horizontal or vertical timeline progress indicator for ADK 2.0 Workflows.
 class AdkWorkflowProgressIndicator extends StatelessWidget {
@@ -89,16 +61,16 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          step.name,
+                          step.label,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: step.status == AdkWorkflowNodeStatus.running
+                            fontWeight: step.status == AdkStepStatus.running
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                           ),
                         ),
-                        if (step.description != null)
+                        if (step.description.isNotEmpty)
                           Text(
-                            step.description!,
+                            step.description,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -128,9 +100,9 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
                 _buildStatusIcon(theme, step.status),
                 const SizedBox(width: 6.0),
                 Text(
-                  step.name,
+                  step.label,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: step.status == AdkWorkflowNodeStatus.running
+                    fontWeight: step.status == AdkStepStatus.running
                         ? FontWeight.bold
                         : FontWeight.normal,
                   ),
@@ -150,9 +122,9 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusIcon(ThemeData theme, AdkWorkflowNodeStatus status) {
+  Widget _buildStatusIcon(ThemeData theme, AdkStepStatus status) {
     switch (status) {
-      case AdkWorkflowNodeStatus.running:
+      case AdkStepStatus.running:
         return SizedBox(
           width: 16.0,
           height: 16.0,
@@ -161,19 +133,25 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
             color: theme.colorScheme.primary,
           ),
         );
-      case AdkWorkflowNodeStatus.completed:
+      case AdkStepStatus.completed:
         return Icon(
           Icons.check_circle,
           size: 18.0,
           color: theme.colorScheme.primary,
         );
-      case AdkWorkflowNodeStatus.failed:
+      case AdkStepStatus.failed:
         return Icon(
           Icons.cancel,
           size: 18.0,
           color: theme.colorScheme.error,
         );
-      case AdkWorkflowNodeStatus.pending:
+      case AdkStepStatus.skipped:
+        return Icon(
+          Icons.skip_next,
+          size: 18.0,
+          color: theme.colorScheme.outlineVariant,
+        );
+      case AdkStepStatus.pending:
         return Icon(
           Icons.radio_button_unchecked,
           size: 18.0,
@@ -182,8 +160,8 @@ class AdkWorkflowProgressIndicator extends StatelessWidget {
     }
   }
 
-  Color _getLineColor(ThemeData theme, AdkWorkflowNodeStatus status) {
-    return status == AdkWorkflowNodeStatus.completed
+  Color _getLineColor(ThemeData theme, AdkStepStatus status) {
+    return status == AdkStepStatus.completed
         ? theme.colorScheme.primary
         : theme.colorScheme.outlineVariant.withValues(alpha: 0.5);
   }

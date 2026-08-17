@@ -11,6 +11,12 @@ export 'package:adk_dart/adk_core.dart' hide State;
 
 export 'src/controllers/adk_chat_controller.dart';
 export 'src/models/adk_chat_message.dart';
+export 'src/models/adk_prompt_suggestion_model.dart';
+export 'src/models/adk_session_info.dart';
+export 'src/models/adk_token_usage_model.dart';
+export 'src/models/adk_tool_call_info.dart';
+export 'src/models/adk_voice_state_model.dart';
+export 'src/models/adk_workflow_step_model.dart';
 export 'src/widgets/adk_agent_hierarchy_badge.dart';
 export 'src/widgets/adk_agent_logger_view.dart';
 export 'src/widgets/adk_chat_view.dart';
