@@ -66,7 +66,7 @@ Status legend:
 | Memory and artifacts | ✅ | in-memory memory, Vertex AI memory/RAG, in-memory/file/GCS artifacts | GCS/Vertex paths use HTTP/auth provider wiring and remain environment-dependent for live cloud calls. |
 | Tools and toolsets | ✅ | function tools, agent tools, OpenAPI tools, Google API tools, retrieval tools, environment tools, data tools | Includes built-in Gemini tool payload compatibility for Google Search, URL Context, code execution, computer use, Google Maps, Enterprise Web Search, Vertex AI Search, and Vertex RAG. |
 | MCP integration | ⚠️ | `adk_mcp`, `McpToolset`, `McpSessionManager`, `StreamableHTTPConnectionParams`, `StdioConnectionParams` | Streamable HTTP works across VM/Flutter/Web when HTTP/CORS allows it. Stdio requires local process execution and is VM-only. |
-| Models/providers | ✅ | Gemini REST/live, Anthropic, LiteLLM, Gemma, Apigee, Chat Completions, OpenAI labs adapter | Provider behavior is ported with injectable transports; real provider calls still require API keys, project settings, and provider availability. |
+| Models/providers | ✅ | Gemini REST/live SSE, Anthropic Claude (`AnthropicLlm`), LiteLLM/OpenAI (`LiteLlm` for GPT-4o, o3-mini, Ollama, DeepSeek, Groq), Gemma, Apigee, Chat Completions, `LLMRegistry` | Universal multi-model architecture with real-time SSE token streaming across all providers. Real provider calls require API keys or local endpoint availability. |
 | Auth and credentials | ✅ | auth schemes, credential manager/service, OAuth2 exchanger/refresher, service-account hooks | Ported for tool auth, auth response persistence, OAuth discovery, token exchange/refresh, and session-state credential storage. |
 | Evaluation and simulation | ✅ | eval managers/services, metric evaluators, LLM-as-judge, user simulators | Local/GCS eval-set managers, trajectory/final-response/rubric/safety metrics, and simulator-driven generation are implemented. |
 | Plugins and telemetry | ✅ | plugin manager, debug/global/reflection/save-artifact plugins, OpenTelemetry/SQLite/cloud telemetry | SQLite trace persistence, metrics instrumentation, auto tracing, and plugin lifecycle hooks are implemented. |
@@ -75,7 +75,7 @@ Status legend:
 | Code execution | ⚠️ | unsafe local, built-in, container/Docker, GKE, Vertex AI, Cloud Run sandbox code executor paths | Runtime behavior is implemented, but live execution depends on local process/Docker/Kubernetes/Vertex AI/Cloud Run availability and policy. |
 | Data/cloud integrations | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | Runtime clients and facades are implemented; live behavior depends on cloud credentials, service enablement, and environment configuration. |
 | Skills | ✅ | `Skill`, `SkillToolset`, local/in-memory/GCS skill sources, skill prompt formatting | Inline and directory-backed skills are implemented. Filesystem-backed loading is not available on Flutter Web. |
-| Flutter/Web-safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter example app | Web-safe runtime APIs are exposed, but VM-only APIs (`dart:io`, `dart:ffi`, `dart:mirrors`, local process execution, local filesystem servers) are intentionally excluded. |
+| Flutter/Web-safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 Widgets, 6 Reactive Controllers, `AdkTheme`, WASM Support | Fully Web/WASM compiled (`flutter build web --wasm` clean). Features `AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, `AdkSplitPaneView`, 6 controllers, SSE real-time streaming, and customizable theme system. |
 | OpenAPI external refs | 🚧 | OpenAPI parser/toolset | Inline and local spec handling are implemented; external multi-file `$ref` resolution is still planned. |
 | Spanner PostgreSQL ANN | 🚧 | Spanner vector tooling | Core Spanner/vector paths are implemented, but PostgreSQL ANN behavior is not yet supported. |
 | Speech transcription bootstrap | ⚠️ | audio transcription runtime | Transcription orchestration is present; a recognizer must be supplied per instance or through the default recognizer registration hook. |
@@ -110,7 +110,9 @@ Status legend:
 | :--- | :--- | :--- |
 | Running CLI commands in terminal (`adk create`, `adk run`, `adk web`) or building server agents | [`adk`](https://pub.dev/packages/adk) | Official CLI toolchain executable and unified entrypoint for Dart VM. |
 | Building Dart backend, cloud, or VM agents with core SDK primitives | [`adk_dart`](https://pub.dev/packages/adk_dart) | Core SDK runtime library providing the fundamental agent, runner, and workflow engine. |
-| Building a Flutter client app (Mobile, Desktop, Web) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | Flutter-focused, web-safe surface (`adk_core`) with platform interface channels. |
+| Building a Flutter client app (Mobile, Desktop, Web, WASM) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | Full UI Kit with 20+ turnkey widgets, 6 reactive controllers, `AdkTheme`, and WASM support. |
+| Integrating Model Context Protocol (MCP) clients / servers | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | Standalone MCP client/server protocol transport package. |
+| Running on-device LLM acceleration on edge devices | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | On-device LiteRT / Gemini Nano accelerator integration. |
 | Integrating Model Context Protocol (MCP) clients / servers | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | Standalone MCP client/server protocol transport package. |
 | Running on-device LLM acceleration on edge devices | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | On-device LiteRT / Gemini Nano accelerator integration. |
 

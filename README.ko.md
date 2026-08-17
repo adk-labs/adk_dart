@@ -51,7 +51,7 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | 메모리 및 아티팩트 | ✅ | In-Memory 메모리, Vertex AI 메모리/RAG, In-Memory/파일/GCS 아티팩트 | GCS/Vertex 경로는 HTTP/인증 프로바이더 연동을 사용하며 실제 클라우드 호출 시 환경 설정 필요. |
 | 도구 및 툴셋 | ✅ | 함수 도구, 에이전트 도구, OpenAPI 도구, Google API 도구, 검색/검색증강 도구, 환경 도구, 데이터 도구 | Google 검색, URL 컨텍스트, 코드 실행, 컴퓨터 사용, Google Maps, 엔터프라이즈 웹 검색, Vertex AI 검색, Vertex RAG 내장 지원. |
 | MCP 통합 | ⚠️ | `adk_mcp`, `McpToolset`, `McpSessionManager`, `StreamableHTTPConnectionParams`, `StdioConnectionParams` | Streamable HTTP는 HTTP/CORS가 허용되는 VM/Flutter/Web 전반에서 동작. Stdio는 로컬 프로세스 실행이 필요하여 VM 전용. |
-| 모델/제공자 | ✅ | Gemini REST/Live, Anthropic, LiteLLM, Gemma, Apigee, Chat Completions, OpenAI labs 어댑터 | 주입 가능한 전송 계층으로 포팅 완료; 실제 호출 시 API 키 및 프로바이더 설정 필요. |
+| 모델/제공자 | ✅ | Gemini REST/Live SSE, Anthropic Claude (`AnthropicLlm`), LiteLLM/OpenAI (`LiteLlm` for GPT-4o, o3-mini, Ollama, DeepSeek, Groq), Gemma, Apigee, Chat Completions, `LLMRegistry` | 모든 프로바이더에 걸쳐 SSE 실시간 토큰 스트리밍 및 동적 모델 라우팅 제공. |
 | 인증 및 자격증명 | ✅ | 인증 스키마, 자격증명 매니저/서비스, OAuth2 교환/갱신, 서비스 계정 훅 | 도구 인증, 인증 응답 영속화, OAuth 검색, 토큰 교환/갱신 및 세션 상태 자격증명 저장 지원. |
 | 평가 및 시뮬레이션 | ✅ | 평가 매니저/서비스, 지표 평가기, LLM-as-a-judge, 사용자 시뮬레이터 | 로컬/GCS 평가 세트 매니저, 궤적/최종응답/루브릭/안전성 지표, 시뮬레이터 기반 응답 생성 구현. |
 | 플러그인 및 텔레메트리 | ✅ | 플러그인 매니저, 디버그/글로벌/반추/아티팩트저장 플러그인, OpenTelemetry/SQLite/클라우드 텔레메트리 | SQLite 트레이스 영속화, 메트릭스 계측, 자동 트레이싱 및 플러그인 생명주기 훅 지원. |
@@ -60,7 +60,7 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | 코드 실행기 | ⚠️ | 로컬 프로세스, 컨테이너/Docker, GKE, Vertex AI, Cloud Run 샌드박스 실행기 | 런타임 로직 구현 완료; 실제 실행은 로컬 Docker/K8s/Vertex/Cloud Run 환경에 의존. |
 | 데이터/클라우드 연동 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Skill Registry, Slack, Toolbox | 런타임 클라이언트 및 파사드 구현 완료; 실제 동작은 클라우드 자격증명 필요. |
 | 스킬 (Skills) | ✅ | `Skill`, `SkillToolset`, 로컬/In-Memory/GCS 스킬 소스, 스킬 프롬프트 포맷팅 | 인라인 및 디렉토리 기반 스킬 구현 완료. 파일시스템 기반 로딩은 Flutter Web 미지원. |
-| Flutter/Web-Safe API | ⚠️ | `adk_core`, `flutter_adk`, Flutter 예제 앱 | Web-safe 런타임 API 인터페이스 노출, VM 전용 API(`dart:io`, `dart:ffi`, `dart:mirrors` 등)는 안전하게 분리. |
+| Flutter/Web-Safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 위젯, 6종 리액티브 컨트롤러, `AdkTheme`, WASM 지원 | Flutter Web/WASM 컴파일 검증 완료(`flutter build web --wasm`). `AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, 6종 컨트롤러, SSE 실시간 스트리밍 제공. |
 | OpenAPI 외부 참조 | 🚧 | OpenAPI 파서/툴셋 | 인라인 및 로컬 스펙 처리 완료; 외부 멀티 파일 `$ref` 해석 지원 예정. |
 | Spanner PostgreSQL ANN | 🚧 | Spanner 벡터 도구 | Spanner/Vector 핵심 경로 구현 완료; PostgreSQL ANN 동작은 향후 지원 예정. |
 | 음성 텍스트 변환 런타임 | ⚠️ | 오디오 음성 인식(STT) 런타임 | 음성 텍스트 변환(Speech-to-Text) 오케스트레이션 제공; 인스턴스별 인식기 전달 또는 기본 인식기 등록 필요. |
@@ -95,7 +95,9 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | :--- | :--- | :--- |
 | 터미널에서 CLI 도구 실행 (`adk create`, `adk run`, `adk web`) 또는 백엔드 에이전트 개발 | [`adk`](https://pub.dev/packages/adk) | 공식 CLI 실행 바이너리 및 Dart VM 최상위 통합 엔트리포인트 |
 | 코어 SDK 프리미티브 기반 백엔드/클라우드/서버 에이전트 개발 | [`adk_dart`](https://pub.dev/packages/adk_dart) | 에이전트, 러너, 워크플로우 2.0 엔진을 제공하는 SDK 핵심 라이브러리 |
-| Flutter 클라이언트 앱 개발 (모바일, 데스크톱, 웹) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 플랫폼 채널 및 Web-safe 정제 런타임(`adk_core`) 제공 |
+| Flutter 클라이언트 앱 개발 (모바일, 데스크톱, Web, WASM) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 20+ Turnkey 위젯, 6종 리액티브 컨트롤러, `AdkTheme`, WASM 및 SSE 스트리밍 지원 UI Kit |
+| MCP(Model Context Protocol) 클라이언트/서버 연동 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 독립형 표준 MCP 프로토콜 전송/세션 패키지 |
+| 온디바이스 엣지 디바이스 Gemini Nano / LiteRT 가속 | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | 온디바이스 경량 LLM 런타임 통합 패키지 |
 | MCP(Model Context Protocol) 클라이언트/서버 연동 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 독립형 표준 MCP 프로토콜 전송/세션 패키지 |
 | 온디바이스 엣지 디바이스 Gemini Nano / LiteRT 가속 | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | 온디바이스 경량 LLM 런타임 통합 패키지 |
 
