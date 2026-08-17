@@ -380,9 +380,9 @@ class OpenApiSpecParser {
       return current;
     }
 
-    Object? resolveRef(String ref, Map<String, Object?> document) {
+    (Object?, Map<String, Object?>) resolveRefWithDoc(String ref, Map<String, Object?> currentDoc) {
       if (ref.startsWith('#/')) {
-        return resolvePointer(ref, document);
+        return (resolvePointer(ref, currentDoc), currentDoc);
       }
 
       // External ref format: "http(s)://...#/components/schemas/Pet" or "./models/pet.json#/Pet"
@@ -405,19 +405,19 @@ class OpenApiSpecParser {
       }
 
       if (extDoc == null) {
-        return null;
+        return (null, currentDoc);
       }
 
       if (fragment == '#' || fragment.isEmpty) {
-        return extDoc;
+        return (extDoc, extDoc);
       }
 
-      return resolvePointer(fragment, extDoc);
+      return (resolvePointer(fragment, extDoc), extDoc);
     }
 
     Object? recursiveResolve(
       Object? value,
-      Map<String, Object?> document,
+      Map<String, Object?> activeDoc,
       Set<String> seenRefs,
     ) {
       if (value is Map) {
@@ -435,14 +435,15 @@ class OpenApiSpecParser {
             return _deepCopyObject(resolvedCache[ref]);
           }
 
-          final Object? resolvedValue = resolveRef(ref, document);
+          final (Object? resolvedValue, Map<String, Object?> sourceDoc) =
+              resolveRefWithDoc(ref, activeDoc);
           if (resolvedValue == null) {
             return map;
           }
 
           final Object? nested = recursiveResolve(
             resolvedValue,
-            document,
+            sourceDoc,
             seenRefs,
           );
           resolvedCache[ref] = _deepCopyObject(nested);
@@ -451,14 +452,14 @@ class OpenApiSpecParser {
 
         final Map<String, Object?> output = <String, Object?>{};
         for (final MapEntry<String, Object?> entry in map.entries) {
-          output[entry.key] = recursiveResolve(entry.value, document, seenRefs);
+          output[entry.key] = recursiveResolve(entry.value, activeDoc, seenRefs);
         }
         return output;
       }
 
       if (value is List) {
         return value
-            .map((Object? item) => recursiveResolve(item, document, seenRefs))
+            .map((Object? item) => recursiveResolve(item, activeDoc, seenRefs))
             .toList(growable: false);
       }
       return value;
