@@ -11,6 +11,10 @@ class AdkVoiceController extends ChangeNotifier {
     this.agent,
     this.userId = 'voice_user',
     String? sessionId,
+    this.onListenStart,
+    this.onListenStop,
+    this.onSpeak,
+    this.onSpeechInterrupt,
   }) : sessionId = sessionId ?? 'voice_session_${DateTime.now().millisecondsSinceEpoch}';
 
   /// Optional agent associated with this voice session.
@@ -21,6 +25,18 @@ class AdkVoiceController extends ChangeNotifier {
 
   /// Session identifier.
   final String sessionId;
+
+  /// Optional delegate called when speech recognition starts.
+  final Future<void> Function()? onListenStart;
+
+  /// Optional delegate called when speech recognition stops.
+  final Future<String?> Function()? onListenStop;
+
+  /// Optional delegate called to synthesize speech audio from text.
+  final Future<void> Function(String text)? onSpeak;
+
+  /// Optional delegate called when speech playback is interrupted.
+  final Future<void> Function()? onSpeechInterrupt;
 
   AdkVoiceState _state = const AdkVoiceState(status: .idle);
   String _userTranscript = '';
@@ -56,6 +72,19 @@ class AdkVoiceController extends ChangeNotifier {
     );
     notifyListeners();
 
+    if (onListenStart != null) {
+      try {
+        await onListenStart!();
+      } catch (e) {
+        _state = _state.copyWith(
+          status: .error,
+          errorMessage: 'STT start error: $e',
+        );
+        notifyListeners();
+        return;
+      }
+    }
+
     _amplitudeTimer?.cancel();
     // Lightweight amplitude pulse simulator for smooth UI reactivity if no native recorder hooked
     double phase = 0.0;
@@ -76,13 +105,41 @@ class AdkVoiceController extends ChangeNotifier {
       decibels: 0.0,
     );
     notifyListeners();
+
+    if (onListenStop != null) {
+      try {
+        final String? transcript = await onListenStop!();
+        if (transcript != null && transcript.isNotEmpty) {
+          updateUserTranscript(transcript);
+        }
+      } catch (e) {
+        _state = _state.copyWith(
+          status: .error,
+          errorMessage: 'STT stop error: $e',
+        );
+        notifyListeners();
+        return;
+      }
+    }
   }
 
   /// Sets audio playback as active when agent speaks.
-  void startSpeaking({String? text}) {
+  Future<void> startSpeaking({String? text}) async {
     if (text != null) _agentTranscript = text;
     _state = _state.copyWith(status: .speaking);
     notifyListeners();
+
+    if (text != null && onSpeak != null) {
+      try {
+        await onSpeak!(text);
+      } catch (e) {
+        _state = _state.copyWith(
+          status: .error,
+          errorMessage: 'TTS playback error: $e',
+        );
+        notifyListeners();
+      }
+    }
   }
 
   /// Finishes speaking and returns to idle state.
@@ -93,6 +150,7 @@ class AdkVoiceController extends ChangeNotifier {
 
   /// Interrupts ongoing agent speech and immediately returns to listening or idle.
   void interrupt() {
+    onSpeechInterrupt?.call();
     _state = _state.copyWith(status: .idle, decibels: 0.0);
     notifyListeners();
   }
