@@ -17,7 +17,7 @@ import '../../auth/auth_tool.dart';
 import '../../auth/credential_manager.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
-import '../../cli/plugins/conformance_recordings_schema.dart';
+import '../../plugins/conformance/conformance_recordings_schema.dart';
 import '../../models/base_llm.dart';
 import '../../models/base_llm_connection.dart';
 import '../../models/conformance_replay_llm.dart';

@@ -1,8 +1,8 @@
 /// Replay-only LLM used by conformance tests.
 library;
 
-import '../cli/plugins/conformance_recordings_schema.dart';
-import '../cli/plugins/conformance_replay_plugin.dart'
+import '../plugins/conformance/conformance_recordings_schema.dart';
+import '../plugins/conformance/conformance_replay_plugin.dart'
     show ReplayConfigError, ReplayVerificationError;
 import 'base_llm.dart';
 import 'llm_request.dart';

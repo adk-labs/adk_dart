@@ -91,20 +91,6 @@ export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
 export 'src/labs/openai.dart';
 
-export 'src/cli/__init__.dart' hide main;
-export 'src/cli/adk_web_server.dart';
-export 'src/cli/agent_graph.dart';
-export 'src/cli/cli_create.dart';
-export 'src/cli/cli_deploy.dart';
-export 'src/cli/cli_eval.dart';
-export 'src/cli/cli_tools_click.dart' hide main;
-export 'src/cli/conformance/__init__.dart';
-export 'src/cli/fast_api.dart';
-export 'src/cli/plugins/__init__.dart';
-export 'src/cli/service_registry.dart';
-export 'src/cli/utils/__init__.dart' hide createEmptyState;
-export 'src/cli/utils/state.dart' show createEmptyState;
-
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';

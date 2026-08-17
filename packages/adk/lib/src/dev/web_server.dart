@@ -4663,7 +4663,7 @@ bool _isSingleAppRoot(Directory root) {
 
 Future<Directory?> _resolveWebAssetsDir() async {
   final Uri? resolved = await Isolate.resolvePackageUri(
-    Uri.parse('package:adk_dart/src/cli/browser/index.html'),
+    Uri.parse('package:adk/src/cli/browser/index.html'),
   );
   if (resolved == null || resolved.scheme != 'file') {
     return null;
