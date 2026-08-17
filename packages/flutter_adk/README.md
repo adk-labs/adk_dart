@@ -153,9 +153,29 @@ final sessionService = AdkStorageSessionService.custom(
 );
 ```
 
+#### `AdkTheme` & `AdkChatThemeData` (Theming System)
+Wrap your app or screen with `AdkTheme` to customize colors, corner radiuses, paddings, and font styles across all widgets:
+
+```dart
+AdkTheme(
+  data: const AdkChatThemeData(
+    userBubbleColor: Colors.deepPurple,
+    modelBubbleColor: Color(0xFFF1F5F9),
+    userTextColor: Colors.white,
+    modelTextColor: Colors.black87,
+    borderRadius: BorderRadius.all(Radius.circular(20.0)),
+    inputBackgroundColor: Colors.white,
+    sendButtonColor: Colors.deepPurple,
+    showTimestamp: true,
+    showAvatars: true,
+  ),
+  child: AdkChatView(agent: myAgent),
+)
+```
+
 ---
 
-### 3. Interactive UI Components
+### 3. Interactive UI Components & Builder Slots
 
 | Component | Description | Usage Example |
 |---|---|---|

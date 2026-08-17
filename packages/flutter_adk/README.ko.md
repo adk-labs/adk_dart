@@ -153,9 +153,29 @@ final sessionService = AdkStorageSessionService.custom(
 );
 ```
 
+#### `AdkTheme` & `AdkChatThemeData` (테마 커스터마이징)
+앱 또는 특정 화면을 `AdkTheme`으로 감싸면 말풍선 색상, 코너 라운딩, 폰트 스타일, 패딩을 일괄 적용할 수 있습니다:
+
+```dart
+AdkTheme(
+  data: const AdkChatThemeData(
+    userBubbleColor: Colors.deepPurple,
+    modelBubbleColor: Color(0xFFF1F5F9),
+    userTextColor: Colors.white,
+    modelTextColor: Colors.black87,
+    borderRadius: BorderRadius.all(Radius.circular(20.0)),
+    inputBackgroundColor: Colors.white,
+    sendButtonColor: Colors.deepPurple,
+    showTimestamp: true,
+    showAvatars: true,
+  ),
+  child: AdkChatView(agent: myAgent),
+)
+```
+
 ---
 
-### 3. 인터랙티브 UI 컴포넌트
+### 3. 인터랙티브 UI 컴포넌트 및 커스텀 빌더 슬롯
 
 | 컴포넌트 | 설명 | 사용 예시 |
 |---|---|---|
