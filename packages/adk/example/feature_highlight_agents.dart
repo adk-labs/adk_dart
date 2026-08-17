@@ -104,7 +104,7 @@ Future<void> _runTurn({
   await for (final Event event in runner.runAsync(
     userId: userId,
     sessionId: session.id,
-    newMessage: Content.userText(message),
+    newMessage: .userText(message),
   )) {
     _printEvent(event);
   }

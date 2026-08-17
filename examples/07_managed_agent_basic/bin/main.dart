@@ -37,7 +37,7 @@ Future<void> main() async {
     await for (final Event event in runner.runAsync(
       userId: 'managed_user',
       sessionId: session.id,
-      newMessage: Content.userText('What is the current stock price of Google?'),
+      newMessage: .userText('What is the current stock price of Google?'),
     )) {
       final String text =
           event.content?.parts

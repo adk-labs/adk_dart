@@ -48,7 +48,7 @@ Analyze large codebases or documents with automatic context cache reuse across c
   await for (final Event event in runner.runAsync(
     userId: 'user_1',
     sessionId: session.id,
-    newMessage: Content.userText('Explain the benefits of Gemini Context Caching in ADK Dart.'),
+    newMessage: .userText('Explain the benefits of Gemini Context Caching in ADK Dart.'),
   )) {
     final String text = event.content?.parts
             .where((Part p) => p.text != null)

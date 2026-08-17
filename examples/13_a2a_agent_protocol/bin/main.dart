@@ -49,9 +49,9 @@ Future<void> main() async {
     contextId: 'ctx_001',
     message: A2aMessage(
       messageId: 'msg_001',
-      role: A2aRole.user,
+      role: .user,
       parts: <A2aPart>[
-        A2aPart.text('Hello from client agent over A2A!'),
+        .text('Hello from client agent over A2A!'),
       ],
     ),
   );

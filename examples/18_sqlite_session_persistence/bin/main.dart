@@ -65,7 +65,7 @@ Future<void> main() async {
   await for (final Event event in runner.runAsync(
     userId: userId,
     sessionId: session.id,
-    newMessage: Content.userText('My favorite color is Blue.'),
+    newMessage: .userText('My favorite color is Blue.'),
   )) {
     final String text = event.content?.parts
             .where((Part p) => p.text != null)

@@ -40,7 +40,7 @@ Future<void> main() async {
     await for (final Event event in runner.runAsync(
       userId: 'local_user',
       sessionId: session.id,
-      newMessage: Content.userText(prompt),
+      newMessage: .userText(prompt),
     )) {
       final String text =
           event.content?.parts

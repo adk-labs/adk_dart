@@ -46,7 +46,7 @@ Use the provided MCP tools to inspect resources, execute commands, or query data
   await for (final Event event in runner.runAsync(
     userId: 'user_1',
     sessionId: session.id,
-    newMessage: Content.userText('List available tools and execute a test query.'),
+    newMessage: .userText('List available tools and execute a test query.'),
   )) {
     final String text = event.content?.parts
             .where((Part p) => p.text != null)

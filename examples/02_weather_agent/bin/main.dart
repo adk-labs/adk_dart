@@ -42,7 +42,7 @@ Future<void> main() async {
     await for (final Event event in runner.runAsync(
       userId: 'test_user',
       sessionId: session.id,
-      newMessage: Content.userText('What is the weather in Seoul?'),
+      newMessage: .userText('What is the weather in Seoul?'),
     )) {
       final String text =
           event.content?.parts

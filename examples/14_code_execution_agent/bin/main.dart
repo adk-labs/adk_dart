@@ -35,7 +35,7 @@ When asked to perform complex calculations, data analysis, or numerical algorith
   await for (final Event event in runner.runAsync(
     userId: 'user_1',
     sessionId: session.id,
-    newMessage: Content.userText(
+    newMessage: .userText(
       'Calculate the 50th Fibonacci number using code execution.',
     ),
   )) {

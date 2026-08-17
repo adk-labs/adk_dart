@@ -15,7 +15,7 @@ class EchoModel extends BaseLlm {
               .map((Part part) => part.text!)
               .join(' ');
 
-    yield LlmResponse(content: Content.modelText('echo: $lastUserText'));
+    yield LlmResponse(content: .modelText('echo: $lastUserText'));
   }
 }
 
@@ -32,7 +32,7 @@ Future<void> main() async {
   await for (final Event event in runner.runAsync(
     userId: 'example_user',
     sessionId: session.id,
-    newMessage: Content.userText('hello adk_dart'),
+    newMessage: .userText('hello adk_dart'),
   )) {
     final String text =
         event.content?.parts
