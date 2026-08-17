@@ -44,6 +44,7 @@ import '../evaluation/local_eval_sets_manager.dart'
 import '../features/_feature_registry.dart';
 import '../optimization/gepa_root_agent_prompt_optimizer.dart';
 import '../optimization/local_eval_sampler.dart';
+import '../utils/telemetry_config.dart';
 import '../utils/yaml_utils.dart';
 import 'project.dart';
 import 'runtime.dart';
@@ -63,6 +64,8 @@ Commands:
   optimize              Optimize root agent instructions with GEPA.
   conformance           Conformance record/test helpers.
   migrate session       Migrate session DB schema.
+  telemetry             Manage telemetry settings (enable/disable/status).
+  test [folder]         Run tests for agent projects.
   api_server [project_dir]
                        Start the ADK API server (alias of `web`).
 
@@ -528,6 +531,54 @@ Future<int> runAdkCli(
       err.writeln('Argument error: $error');
       return 1;
     }
+  }
+
+  if (args.first == 'telemetry') {
+    if (args.length < 2 || args[1] == 'status') {
+      final bool? consent = readTelemetryConsent();
+      if (consent == true) {
+        out.writeln('Telemetry collection is enabled.');
+      } else if (consent == false) {
+        out.writeln('Telemetry collection is disabled.');
+      } else {
+        out.writeln('Telemetry collection is not configured (defaults to OFF).');
+      }
+      return 0;
+    }
+    final String sub = args[1].toLowerCase();
+    if (sub == 'enable' || sub == 'on') {
+      try {
+        writeTelemetryConsent(true);
+        out.writeln('Telemetry collection has been enabled.');
+        return 0;
+      } catch (e) {
+        err.writeln('Failed to enable telemetry: $e');
+        return 1;
+      }
+    } else if (sub == 'disable' || sub == 'off') {
+      try {
+        writeTelemetryConsent(false);
+        out.writeln('Telemetry collection has been disabled.');
+        return 0;
+      } catch (e) {
+        err.writeln('Failed to disable telemetry: $e');
+        return 1;
+      }
+    } else {
+      err.writeln('Unknown telemetry command: $sub. Expected enable, disable, or status.');
+      return 64;
+    }
+  }
+
+  if (args.first == 'test') {
+    final List<String> rest = args.skip(1).toList();
+    out.writeln('Running test suite for agent project...');
+    final Process process = await Process.start(
+      Platform.resolvedExecutable,
+      <String>['test', ...rest],
+      mode: ProcessStartMode.inheritStdio,
+    );
+    return await process.exitCode;
   }
 
   final ParsedAdkCommand parsed;

@@ -30,6 +30,17 @@ void main() {
       expect(exitCode, 0);
     });
 
+    test('AdkCliRunner handles telemetry commands', () async {
+      final int statusCode = await AdkCliRunner.run(<String>['telemetry', 'status']);
+      expect(statusCode, 0);
+
+      final int enableCode = await AdkCliRunner.run(<String>['telemetry', 'enable']);
+      expect(enableCode, 0);
+
+      final int disableCode = await AdkCliRunner.run(<String>['telemetry', 'disable']);
+      expect(disableCode, 0);
+    });
+
     test('AdkCliRunner returns exit code for help flag', () async {
       final int exitCode = await AdkCliRunner.run(<String>['--help']);
       expect(exitCode, 0);
