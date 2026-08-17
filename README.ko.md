@@ -107,20 +107,20 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 - 코어 SDK 라이브러리에 직접 의존할 때는 `adk_dart`를 선택하세요.
 - Flutter 앱 개발 시에는 `flutter_adk`를 선택하세요.
 
-## 플랫폼 지원 매트릭스
+## 플랫폼별 세부 지원 및 제약 사항 (Platform Matrix & Limitations)
 
-| 기능 / 영역 | Dart VM / CLI | Flutter (Android/iOS/Linux/macOS/Windows) | Flutter Web | 비고 |
-| --- | --- | --- | --- | --- |
-| `package:adk_dart/adk_dart.dart` 전체 API | Y | Partial | N | 전체 API에는 `dart:io`, `dart:ffi`, `dart:mirrors` 경로가 포함되어 웹에서는 직접 사용 불가. |
-| `package:adk_dart/adk_core.dart` Web-safe API | Y | Y | Y | `adk_core`는 IO/FFI/mirrors 전용 API를 안전하게 분리. |
-| 에이전트 런타임 (`Agent`, `Runner`, Workflows) | Y | Y | Y | In-memory 오케스트레이션 경로는 완전한 크로스플랫폼. |
-| MCP over Streamable HTTP (`StreamableHTTPConnectionParams`) | Y | Y | Y | HTTP가 가능한 환경에서 동작 (웹은 MCP 서버 CORS 설정 필요 가능). |
-| MCP over stdio (`StdioConnectionParams`) | Y | Partial | N | `dart:io` `Process`를 통한 로컬 프로세스 실행 필요 (웹 미지원). |
-| 인라인 스킬 (`Skill` + `SkillToolset`) | Y | Y | Y | 인라인 스킬 정의는 Web-safe. |
-| 디렉토리 기반 스킬 로딩 (`loadSkillFromDir`) | Y | Partial | N | 파일시스템 API 사용 (웹에서는 `UnsupportedError` 발생). |
-| CLI (`adk create/run/web/api_server/deploy`) | Y | N | N | CLI는 VM/터미널 전용. |
-| 개발 웹 서버 + A2A 서비스 엔드포인트 | Y | N | N | 서버 호스팅 경로는 VM 런타임 전용. |
-| DB/파일 기반 서비스 (SQLite/Postgres/MySQL 세션, 파일 아티팩트) | Y | Partial | N | IO/네트워크/파일 프리미티브에 의존. |
+| 기능 영역 | Dart VM (서버/CLI/데스크톱) | Flutter 모바일 (iOS/Android) | Flutter Web / WASM | 제약 사항 및 필요 환경 |
+| :--- | :---: | :---: | :---: | :--- |
+| **멀티 에이전트 및 워크플로우 2.0** | ✅ 완벽 지원 | ✅ 완벽 지원 | ✅ 완벽 지원 | DAG 그래프, 순차/병렬/루프 에이전트, HITL 일시정지 전 플랫폼 동작. |
+| **Multi-LLM & SSE 실시간 스트리밍** | ✅ 완벽 지원 | ✅ 완벽 지원 | ✅ 완벽 지원 | Gemini, Claude, OpenAI, Ollama, Groq 토큰 단위 실시간 SSE 수신. |
+| **OpenAPI 스펙 및 외부 `$ref` 해석** | ✅ 완벽 지원 | ✅ 완벽 지원 | ✅ 완벽 지원 | 인라인, 상대 경로, 원격 HTTP/HTTPS `$ref` 스키마 캐싱 및 순환 참조 방지. |
+| **Gemini 내장 코드 실행기 (`BuiltIn`)** | ✅ 완벽 지원 | ✅ 완벽 지원 | ✅ 완벽 지원 | Google 서버 샌드박스에서 실행; 로컬 환경 설치 불필요. |
+| **로컬 코드 실행기 (`UnsafeLocal`)** | ✅ 완벽 지원 | ⚠️ 권한 제약 | ❌ 브라우저 제약 | Dart, Python, Node, Shell 서브프로세스 실행. 브라우저/모바일 OS 프로세스 격리 정책 적용. |
+| **컨테이너 / K8s / Cloud Run 샌드박스** | ⚠️ 인프라 필요 | ⚠️ 인프라 필요 | ⚠️ 인프라 필요 | 호스트 머신의 Docker 데몬, Kubernetes 클러스터, GCP 인증/IAM 권한 필요. |
+| **MCP 연동 (Streamable HTTP)** | ✅ 완벽 지원 | ✅ 완벽 지원 | ✅ 완벽 지원 | 표준 HTTP/SSE 기반 JSON-RPC 통신 (웹은 서버의 CORS 허용 필요). |
+| **MCP 연동 (Stdio 파이프)** | ✅ 완벽 지원 | ❌ 프로세스 제약 | ❌ 샌드박스 제약 | `dart:io` `Process` 기반 파이프 통신 (Dart VM / Desktop / Server 전용). |
+| **GCP 데이터 연동 (Spanner/BQ 등)** | ⚠️ 인증 필요 | ⚠️ 인증 필요 | ⚠️ 인증 필요 | 클라이언트 SDK 로직 완비; 실제 호출 시 서비스 계정 JSON 또는 ADC 필요. |
+| **음성 대화 (STT / TTS)** | 🔌 델리게이트 | 🔌 델리게이트 | 🔌 델리게이트 | 상태 제어 및 음파 UI 완비; 기기별 STT 패키지(`speech_to_text`, Web Speech API) 주입. |
 
 ## 설치 방법
 

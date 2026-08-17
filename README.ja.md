@@ -18,7 +18,7 @@ ADK Dartは、モジュール型ランタイムプリミティブ、ツールオ
   - **v2 ワークフロー**: `Workflow`, `BaseNode`, `JoinNode`等による宣言型DAGノードグラフスケジューリング、依存関係管理、条件分岐ルーティング、状態マージ。
   - **Managed Agents**: `ManagedAgent`および`RemoteMcpServer`設定を介したGCP Vertex AI Managed Agents Interactions APIとの直接RPC連携。
 - **MCP プロトコルコアパッケージ分離**: `packages/adk_mcp`を追加し、Streamable HTTP MCPトランスポート層を独立パッケージとしてモジュール化。
-- **MCP 仕様強化**: セッション復元、リクエストIDに基づくSSE応答マッチング、キャンセ�## ADK Python 互換性ステータス
+- **MCP 仕様強化**: セッション復元、リクエストIDに基づくSSE応答マッチング、キャンセ�## ADK Python 互換性ステータス
 
 ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.2.0`に準拠しています。
 
@@ -283,3 +283,19 @@ dart analyze
 ## ライセンス
 
 本プロジェクトは Apache 2.0 ライセンスの下で配布されています。詳細は [LICENSE](LICENSE) ファイルをご参照ください。
+
+
+## プラットフォーム機能、制限および環境要件 (Platform Matrix & Limitations)
+
+| 機能領域 | Dart VM (Server/CLI/Desktop) | Flutter Mobile (iOS/Android) | Flutter Web / WASM | 制限事項および環境要件 |
+| :--- | :---: | :---: | :---: | :--- |
+| **マルチエージェント & ワークフロー 2.0** | ✅ 完全対応 | ✅ 完全対応 | ✅ 完全対応 | DAGグラフ、順次/並列/ループエージェント、HITL一時停止の全環境動作。 |
+| **Multi-LLM & SSE リアルタイムストリーミング** | ✅ 完全対応 | ✅ 完全対応 | ✅ 完全対応 | Gemini, Claude, OpenAI, Ollama, Groq トークン単位リアルタイムストリーミング。 |
+| **OpenAPI 仕様 & 外部 `$ref` 解決** | ✅ 完全対応 | ✅ 完全対応 | ✅ 完全対応 | インライン、相対パス、リモートHTTP/HTTPS `$ref` スキーマ解決と循環参照防止。 |
+| **Gemini 内蔵コード実行 (`BuiltIn`)** | ✅ 完全対応 | ✅ 完全対応 | ✅ 完全対応 | Google クラウドサンドボックスで実行。ローカルインフラ不要。 |
+| **ローカルコード実行 (`UnsafeLocal`)** | ✅ 完全対応 | ⚠️ 権限制限 | ❌ ブラウザ制限 | Dart, Python, Node, Shell サブプロセス実行。ブラウザのプロセス生成制限に準拠。 |
+| **コンテナ / K8s / Cloud Run サンドボックス** | ⚠️ インフラ要 | ⚠️ インフラ要 | ⚠️ インフラ要 | ホストの Docker デーモン、Kubernetes クラスタ、GCP 認証/IAM 権限が必要。 |
+| **MCP 連携 (Streamable HTTP)** | ✅ 完全対応 | ✅ 完全対応 | ✅ 完全対応 | 標準 HTTP/SSE ベース JSON-RPC 通信 (Web はサーバーの CORS 許可が必要)。 |
+| **MCP 連携 (Stdio パイプ)** | ✅ 完全対応 | ❌ プロセス制限 | ❌ サンドボックス制限 | `dart:io` `Process` パイプ通信 (Dart VM / Desktop / Server 専用)。 |
+| **GCP データ連携 (Spanner/BQ 等)** | ⚠️ 認証要 | ⚠️ 認証要 | ⚠️ 認証要 | クライアント SDK 実装完了。呼出時にサービスアカウント JSON または ADC が必要。 |
+| **音声会話 (STT / TTS)** | 🔌 デリゲート | 🔌 デリゲート | 🔌 デリゲート | 状態制御と波形 UI 完備。端末固有 STT (`speech_to_text`, Web Speech API) を注入。 |

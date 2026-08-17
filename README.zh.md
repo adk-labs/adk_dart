@@ -268,3 +268,19 @@ dart analyze
 ## 许可证
 
 本项目基于 Apache 2.0 许可证分发。详情请参阅 [LICENSE](LICENSE) 文件。
+
+
+## 平台功能支持、限制与环境要求 (Platform Matrix & Limitations)
+
+| 功能领域 | Dart VM (Server/CLI/Desktop) | Flutter Mobile (iOS/Android) | Flutter Web / WASM | 限制说明与环境要求 |
+| :--- | :---: | :---: | :---: | :--- |
+| **多 Agent 运行时与工作流 2.0** | ✅ 完全支持 | ✅ 完全支持 | ✅ 完全支持 | DAG 图编排、顺序/并行/循环 Agent、HITL 暂停全环境支持。 |
+| **Multi-LLM & SSE 实时流式传输** | ✅ 完全支持 | ✅ 完全支持 | ✅ 完全支持 | Gemini, Claude, OpenAI, Ollama, Groq 逐 Token 实时流式响应。 |
+| **OpenAPI 规范与外部 `$ref` 解析** | ✅ 完全支持 | ✅ 完全支持 | ✅ 完全支持 | 支持内联、相对路径与远程 HTTP/HTTPS `$ref` Schema 缓存与防循环。 |
+| **Gemini 内置代码执行器 (`BuiltIn`)** | ✅ 完全支持 | ✅ 完全支持 | ✅ 完全支持 | 在 Google 云端沙箱中执行，本地无需配置基础设施。 |
+| **本地代码执行器 (`UnsafeLocal`)** | ✅ 完全支持 | ⚠️ 权限受限 | ❌ 浏览器限制 | 支持 Dart, Python, Node, Shell 子进程。遵循浏览器/移动端系统安全隔离。 |
+| **容器 / K8s / Cloud Run 沙箱** | ⚠️ 需要基础设施 | ⚠️ 需要基础设施 | ⚠️ 需要基础设施 | 依赖主机 Docker 守护进程、Kubernetes 集群或 GCP 认证/IAM 权限。 |
+| **MCP 集成 (Streamable HTTP)** | ✅ 完全支持 | ✅ 完全支持 | ✅ 完全支持 | 基于标准 HTTP/SSE 的 JSON-RPC 通信 (Web 端需服务器允许 CORS)。 |
+| **MCP 集成 (Stdio 管道)** | ✅ 完全支持 | ❌ 进程限制 | ❌ 沙箱限制 | 基于 `dart:io` `Process` 管道通信 (仅限 Dart VM / Desktop / Server)。 |
+| **GCP 企业数据集成 (Spanner/BQ等)** | ⚠️ 需要凭据 | ⚠️ 需要凭据 | ⚠️ 需要凭据 | 客户端 SDK 逻辑完整，实际调用需注入 Service Account JSON 或 ADC。 |
+| **语音对话 (STT / TTS)** | 🔌 委托注入 | 🔌 委托注入 | 🔌 委托注入 | 状态机与波形 UI 完备，可通过委托钩子注入平台 STT (`speech_to_text`, Web Speech API)。 |

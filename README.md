@@ -122,6 +122,21 @@ Quick rule:
 - Use `adk_dart` when depending directly on low-level SDK primitives.
 - Use `flutter_adk` for Flutter apps (Android/iOS/Web/macOS/Windows/Linux).
 
+## Platform Capabilities, Limitations & Environment Constraints
+
+| Feature Area | Dart VM (Server/CLI/Desktop) | Flutter Mobile (iOS/Android) | Flutter Web / WASM | Notes & Requirements |
+| :--- | :---: | :---: | :---: | :--- |
+| **Multi-Agent Runtime & Workflows** | ✅ Full | ✅ Full | ✅ Full | Core orchestration, DAG graphs, HITL, parallel/loop agents run everywhere. |
+| **Multi-LLM & SSE Streaming** | ✅ Full | ✅ Full | ✅ Full | Gemini, Claude, OpenAI, Ollama, Groq chunk-by-chunk real-time streaming. |
+| **OpenAPI Spec & External `$ref`** | ✅ Full | ✅ Full | ✅ Full | Inlined, relative files, and remote HTTP/HTTPS schemas with deep caching. |
+| **Built-in Code Execution** | ✅ Full | ✅ Full | ✅ Full | Executes in Gemini cloud sandbox; zero local infrastructure needed. |
+| **Local Code Execution (`UnsafeLocal`)**| ✅ Full | ⚠️ Limited | ❌ Sandbox | Runs Dart, Python, Node, Shell via subprocess. Browser security forbids OS process spawning. |
+| **Container / GKE / Cloud Run Sandbox** | ⚠️ Config | ⚠️ Config | ⚠️ Config | Requires host Docker daemon, Kubernetes cluster, or GCP credentials/IAM. |
+| **MCP Integration (Streamable HTTP)** | ✅ Full | ✅ Full | ✅ Full | Standard JSON-RPC over HTTP/SSE works everywhere (subject to CORS on Web). |
+| **MCP Integration (Stdio Process)** | ✅ Full | ❌ OS Process | ❌ Sandbox | Spawns local CLI MCP servers via `dart:io` pipes (VM/Desktop only). |
+| **GCP Enterprise Data (Spanner/BQ/etc.)**| ⚠️ Auth | ⚠️ Auth | ⚠️ Auth | Full client API implemented; requires valid Service Account / ADC credentials. |
+| **Voice & Speech-to-Text (STT/TTS)** | 🔌 Delegate | 🔌 Delegate | 🔌 Delegate | Reactive state & waveforms ready; inject device STT (`speech_to_text`, Web Speech API) via 1st-class delegate hooks. |
+
 ## Design Philosophy
 
 - `adk_dart` is the Python-compatible runtime core package.
