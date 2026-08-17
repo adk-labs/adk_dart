@@ -170,7 +170,7 @@ void main() {
                 AdkSessionItem(id: 's2', title: 'Second Chat'),
               ],
               activeSessionId: 's1',
-              onSessionSelected: (String id) => selectedSession = id,
+              onSessionSelected: (AdkSessionInfo session) => selectedSession = session.id,
               onNewSession: () {},
             ),
           ),
