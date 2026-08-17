@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.8.17+2
+
+- Added Installation section to README with `flutter pub add` and `pubspec.yaml` dependency specifications.
+
 ## 2026.8.17+1
 
 - Bumped package version to `2026.8.17+1` and dependency `adk_dart: ^2026.8.17`.

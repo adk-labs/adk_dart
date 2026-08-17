@@ -64,6 +64,19 @@ Status legend:
 | Plugin helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | Platform channel / browser user-agent |
 | VM/CLI tooling (`adk`, dev server, deploy path) | N | N | N | N | N | N | Out of Flutter package scope |
 
+## Install
+
+```bash
+flutter pub add flutter_adk
+```
+
+または `pubspec.yaml`:
+
+```yaml
+dependencies:
+  flutter_adk: ^2026.8.17+1
+```
+
 ## Usage
 
 ```dart

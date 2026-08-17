@@ -128,6 +128,15 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 dart pub add adk_dart
 ```
 
+또는 `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_dart: ^2026.8.17+1
+  # 또는 통합 CLI 퍼사드 패키지:
+  # adk: ^2026.8.17+1
+```
+
 짧은 import 패키지(`adk`)를 사용하는 경우:
 
 ```bash

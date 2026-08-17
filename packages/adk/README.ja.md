@@ -59,6 +59,13 @@ Status legend:
 dart pub add adk
 ```
 
+または `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk: ^2026.8.17+1
+```
+
 ## Links
 
 - Full details: [README.md](README.md)

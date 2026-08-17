@@ -93,6 +93,15 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 dart pub add adk_dart
 ```
 
+または `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_dart: ^2026.8.17+1
+  # または統合CLIファサードパッケージ:
+  # adk: ^2026.8.17+1
+```
+
 短いimportパッケージ（`adk`）を使用する場合:
 
 ```bash

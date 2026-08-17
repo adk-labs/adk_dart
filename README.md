@@ -230,6 +230,15 @@ Status legend:
 dart pub add adk_dart
 ```
 
+Or add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_dart: ^2026.8.17+1
+  # Or use the unified facade + CLI package:
+  # adk: ^2026.8.17+1
+```
+
 If you prefer a shorter import path, use the facade package:
 
 ```bash

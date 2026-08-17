@@ -12,6 +12,19 @@ ADK Dart パッケージ用の LiteRT-LM モデル統合パッケージです。
 - **ADK ランタイム統合**: `LlmAgent` および全体の ADK パイプラインと互換性のあるドロップインの `BaseLlm` 実装を提供します。
 - **ストリーミングサポート**: リアルタイムでトークン単位のストリーミング応答をサポートします。
 
+## インストール
+
+```bash
+dart pub add adk_litertlm
+```
+
+または `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_litertlm: ^2026.8.17+1
+```
+
 ## はじめに
 
 ```dart

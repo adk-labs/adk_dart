@@ -1,3 +1,7 @@
+## 2026.8.17+2
+
+- Updated all README installation and dependency configuration sections across all ecosystem packages to `2026.8.17+2`.
+
 ## 2026.8.17+1
 
 - **Full Decoupling & Migration of `packages/adk` CLI Toolchain**:

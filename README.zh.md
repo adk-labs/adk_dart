@@ -93,6 +93,15 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 dart pub add adk_dart
 ```
 
+或在 `pubspec.yaml` 中配置：
+
+```yaml
+dependencies:
+  adk_dart: ^2026.8.17+1
+  # 或使用统一 CLI 门面包：
+  # adk: ^2026.8.17+1
+```
+
 若需使用短别名门面包：
 
 ```bash

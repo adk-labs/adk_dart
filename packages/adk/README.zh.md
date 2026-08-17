@@ -58,6 +58,13 @@
 dart pub add adk
 ```
 
+或在 `pubspec.yaml` 中配置：
+
+```yaml
+dependencies:
+  adk: ^2026.8.17+1
+```
+
 ## 参考
 
 - 详细说明: [README.md](README.md)

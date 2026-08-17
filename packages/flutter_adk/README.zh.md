@@ -62,6 +62,19 @@
 | 插件 helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | 平台通道/浏览器 user-agent |
 | VM/CLI 能力 (`adk`/dev server/deploy) | N | N | N | N | N | N | 不在 Flutter 包范围内 |
 
+## 安装
+
+```bash
+flutter pub add flutter_adk
+```
+
+或在 `pubspec.yaml` 中配置：
+
+```yaml
+dependencies:
+  flutter_adk: ^2026.8.17+1
+```
+
 ## 使用
 
 ```dart

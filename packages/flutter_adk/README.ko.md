@@ -62,6 +62,19 @@ Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe API 계층으로 사용�
 | 플러그인 채널 helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | 플랫폼 채널 / 브라우저 user-agent |
 | VM/CLI 도구 (`adk`, dev server, deploy path) | N | N | N | N | N | N | Flutter 패키지 범위 밖 |
 
+## 설치
+
+```bash
+flutter pub add flutter_adk
+```
+
+또는 `pubspec.yaml`:
+
+```yaml
+dependencies:
+  flutter_adk: ^2026.8.17+1
+```
+
 ## 사용 예
 
 ```dart

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.8.17+2
+
+- Updated README installation guides with latest `pubspec.yaml` dependency specifications.
+
 ## 2026.8.17+1
 
 - Physically migrated all CLI submodules, Dev WebServer, and Angular Web UI static bundle into `packages/adk` as a standalone official CLI package.

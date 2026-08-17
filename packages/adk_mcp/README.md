@@ -69,6 +69,13 @@ This package is fully aligned with ADK 2.0, supporting remote MCP server integra
 dart pub add adk_mcp
 ```
 
+Or add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_mcp: ^2026.8.17+1
+```
+
 ## Usage
 
 ```dart

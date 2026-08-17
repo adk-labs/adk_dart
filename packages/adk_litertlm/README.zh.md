@@ -12,6 +12,19 @@
 - **ADK 运行时集成**: 提供即插即用的 `BaseLlm` 实现，兼容 `LlmAgent` 和整个 ADK 流水线。
 - **支持流式传输**: 实时按 Token 的流式响应。
 
+## 安装
+
+```bash
+dart pub add adk_litertlm
+```
+
+或在 `pubspec.yaml` 中配置：
+
+```yaml
+dependencies:
+  adk_litertlm: ^2026.8.17+1
+```
+
 ## 快速上手
 
 ```dart

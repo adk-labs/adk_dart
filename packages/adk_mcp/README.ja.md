@@ -38,6 +38,13 @@ Status legend:
 dart pub add adk_mcp
 ```
 
+または `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_mcp: ^2026.8.17+1
+```
+
 ## Links
 
 - Full details: [README.md](README.md)

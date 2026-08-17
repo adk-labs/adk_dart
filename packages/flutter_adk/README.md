@@ -59,6 +59,19 @@ Design intent:
 
 This package is fully aligned with ADK 2.0, supporting v2 Workflows (declarative node-graph scheduling, conditional routing, and state merging) and GCP Managed Agents (including `ManagedAgent` and `RemoteMcpServer` configuration mapping) for hybrid on-device and cloud execution.
 
+## Installation
+
+```bash
+flutter pub add flutter_adk
+```
+
+Or add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  flutter_adk: ^2026.8.17+1
+```
+
 ## Usage
 
 ```dart

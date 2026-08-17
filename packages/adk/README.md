@@ -106,7 +106,7 @@ Or with `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk: ^2026.7.11
+  adk: ^2026.8.17+1
 ```
 
 For local repository development:
@@ -189,7 +189,7 @@ adk --help
 Local package execution:
 
 ```bash
-dart run adk:adk --help
+dart run adk --help
 ```
 
 ## Related Package

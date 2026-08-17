@@ -12,6 +12,19 @@ ADK Dart 패키지용 LiteRT-LM 모델 통합 패키지입니다.
 - **ADK 런타임 통합**: `LlmAgent` 및 전체 ADK 파이프라인과 호환되는 드롭인 `BaseLlm` 구현을 제공합니다.
 - **스트리밍 지원**: 실시간 토큰 단위 스트리밍 응답을 지원합니다.
 
+## 설치
+
+```bash
+dart pub add adk_litertlm
+```
+
+또는 `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_litertlm: ^2026.8.17+1
+```
+
 ## 시작하기
 
 ```dart

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.8.17+2
+
+- Added `pubspec.yaml` dependency specifications in README files.
+
 ## 2026.8.17+1
 
 - Bumped package version to `2026.8.17+1`.

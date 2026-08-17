@@ -12,6 +12,19 @@ This package provides a `LiteRtModel` implementation that connects [LiteRT-LM](h
 - **ADK runtime integration**: Drop-in `BaseLlm` implementation compatible with `LlmAgent` and the full ADK pipeline.
 - **Streaming support**: Real-time token-by-token streaming responses.
 
+## Installation
+
+```bash
+dart pub add adk_litertlm
+```
+
+Or add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk_litertlm: ^2026.8.17+1
+```
+
 ## Getting Started
 
 ```dart

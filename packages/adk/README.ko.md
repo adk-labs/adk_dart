@@ -62,6 +62,13 @@
 dart pub add adk
 ```
 
+또는 `pubspec.yaml`:
+
+```yaml
+dependencies:
+  adk: ^2026.8.17+1
+```
+
 ## 참고
 
 - 상세 기능: [README.md](README.md)
