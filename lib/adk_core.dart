@@ -49,8 +49,11 @@ export 'src/models/capabilities.dart';
 export 'src/models/llm_request.dart';
 export 'src/models/llm_response.dart';
 export 'src/models/base_llm.dart';
+export 'src/models/anthropic_llm.dart';
+export 'src/models/gemma_llm.dart';
 export 'src/models/google_llm.dart';
 export 'src/models/lite_llm.dart';
+export 'src/models/registry.dart';
 
 export 'src/plugins/base_plugin.dart';
 export 'src/plugins/plugin_manager.dart';
