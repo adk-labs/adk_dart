@@ -1,5 +1,5 @@
 name: adk
-description: Package alias that re-exports adk_dart under the adk package name.
+description: Command-line interface (CLI) toolchain and unified entrypoint for the Agent Development Kit (ADK) in Dart.
 version: 2026.8.17
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart

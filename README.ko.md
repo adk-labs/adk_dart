@@ -66,19 +66,44 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | 음성 텍스트 변환 런타임 | ⚠️ | 오디오 음성 인식(STT) 런타임 | 음성 텍스트 변환(Speech-to-Text) 오케스트레이션 제공; 인스턴스별 인식기 전달 또는 기본 인식기 등록 필요. |
 | Python 샘플 트리 커버리지 | 🚧 | 예제, `flutter_adk/example`, 문서 | 대표적인 Dart/Flutter 예제 제공; Python 전체 샘플 트리는 점진적 확장 중. |
 
-## 어떤 패키지를 사용해야 하나요?
+## 생태계 아키텍처 및 패키지 선택 가이드
 
-| 개발 환경 | 권장 패키지 | 사용 이유 |
-| --- | --- | --- |
-| Dart VM/CLI 환경 (서버, 툴링, 테스트, 전체 런타임 API) | `adk_dart` | ADK Dart의 전체 런타임 API 인터페이스를 제공하는 메인 패키지 |
-| Dart VM/CLI 환경이지만 짧은 import 경로 선호 | `adk` | `adk_dart`를 재노출하는 파사드 패키지 (`package:adk/adk.dart`) |
-| Flutter 앱 개발 (Android/iOS/Web/Linux/macOS/Windows) | `flutter_adk` | `adk_core` 기반의 Flutter/Web-safe API 인터페이스를 단일 import로 제공 |
+```
++-------------------------------------------------------------------------------+
+|                                    adk                                        |
+|              (공식 CLI 툴체인 실행 바이너리 & 최상위 통합 엔트리포인트)               |
++-------------------------------------------------------------------------------+
+       |                                                    |
+       v (의존)                                              v (의존)
++------------------------------------+   +------------------------------------+
+|             adk_dart               |   |            flutter_adk             |
+|   (에이전트 코어 런타임 및 SDK 엔진)  |   |  (Flutter 멀티플랫폼 & Web Safe API)|
++------------------------------------+   +------------------------------------+
+       |                                                    |
+       +--------------------+-------------------------------+
+                            |
+             +--------------+--------------+
+             |                             |
+             v                             v
++--------------------------+  +--------------------------+
+|         adk_mcp          |  |       adk_litertlm       |
+| (Model Context Protocol) |  | (온디바이스 LiteRT/Gemini) |
++--------------------------+  +--------------------------+
+```
+
+| 개발 환경 및 목적 | 권장 패키지 | 역할 및 핵심 가치 |
+| :--- | :--- | :--- |
+| 터미널에서 CLI 도구 실행 (`adk create`, `adk run`, `adk web`) 또는 백엔드 에이전트 개발 | [`adk`](https://pub.dev/packages/adk) | 공식 CLI 실행 바이너리 및 Dart VM 최상위 통합 엔트리포인트 |
+| 코어 SDK 프리미티브 기반 백엔드/클라우드/서버 에이전트 개발 | [`adk_dart`](https://pub.dev/packages/adk_dart) | 에이전트, 러너, 워크플로우 2.0 엔진을 제공하는 SDK 핵심 라이브러리 |
+| Flutter 클라이언트 앱 개발 (모바일, 데스크톱, 웹) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 플랫폼 채널 및 Web-safe 정제 런타임(`adk_core`) 제공 |
+| MCP(Model Context Protocol) 클라이언트/서버 연동 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 독립형 표준 MCP 프로토콜 전송/세션 패키지 |
+| 온디바이스 엣지 디바이스 Gemini Nano / LiteRT 가속 | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | 온디바이스 경량 LLM 런타임 통합 패키지 |
 
 빠른 선택 가이드:
 
-- 기본적으로 `adk_dart`를 선택하세요.
-- 동일한 기능에 패키지명만 짧게 쓰려면 `adk`를 선택하세요.
-- Flutter 앱 코드(특히 웹 호환성이 중요할 때)에는 `flutter_adk`를 선택하세요.
+- 터미널에서 `adk` CLI를 사용하거나 통합 패키지를 쓸 때는 `adk`를 선택하세요.
+- 코어 SDK 라이브러리에 직접 의존할 때는 `adk_dart`를 선택하세요.
+- Flutter 앱 개발 시에는 `flutter_adk`를 선택하세요.
 
 ## 플랫폼 지원 매트릭스
 

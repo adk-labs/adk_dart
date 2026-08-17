@@ -2,31 +2,35 @@
 
 [English](README.md) | 한국어 | [日本語](README.ja.md) | [中文](README.zh.md)
 
-`adk`는 `adk_dart`를 짧은 import 경로로 재노출하는 파사드 패키지입니다.
+`adk`는 Dart용 Agent Development Kit (ADK)의 공식 CLI 툴체인 및 최상위 통합 엔트리포인트 패키지입니다.
 
-## 역할
+글로벌/로컬 CLI 도구(`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`)를 제공하며, `package:adk/adk.dart`를 통해 ADK의 모든 런타임 기능을 직관적으로 사용할 수 있도록 지원합니다.
 
-- 짧은 import: `package:adk/adk.dart`
-- `adk_dart` API 재노출
-- `adk` CLI 엔트리포인트 제공
+## 주요 기능
 
-## 언제 `adk`를 쓰면 좋나요?
+- **CLI 툴체인 기본 제공**: `dart pub global activate adk`를 통해 터미널에서 `adk` 명령어를 즉시 실행
+- **통합 SDK 엔트리포인트**: 에이전트, 워크플로우(Workflow 2.0), LLM 연동, 툴셋 API를 `import 'package:adk/adk.dart';`로 일원화
+- **MCP 및 고성능 런타임 지원**: 최신 MCP(Model Context Protocol) 툴셋 및 멀티 에이전트 오케스트레이션 지원
+
+## 생태계 패키지 구성 및 역할
+
+- **`adk`** (본 패키지): CLI 실행 바이너리 및 서버/백엔드 Dart 환경을 위한 최상위 통합 엔트리포인트
+- **`adk_dart`**: 에이전트 핵심 프리미티브, 오케스트레이터, 워크플로우 엔진을 제공하는 SDK 코어 라이브러리
+- **`flutter_adk`**: Flutter 멀티플랫폼 앱을 위한 플랫폼 채널, Web-safe 런타임, UI 전용 플러그인
+- **`adk_mcp`**: 표준 MCP 클라이언트 및 서버 확장을 위한 전용 패키지
+- **`adk_litertlm`**: 모바일/온디바이스 Gemini Nano 및 LiteRT 가속을 위한 온디바이스 전용 패키지
+
+## 언제 `adk`를 사용하나요?
 
 `adk`를 선택하세요:
 
-- Dart VM/CLI 환경에서 짧은 import(`package:adk/adk.dart`)를 원할 때
-- `adk_dart`와 동일 동작을 유지하면서 패키지 이름만 간결하게 쓰고 싶을 때
+- 터미널에서 `adk` CLI 도구를 사용하고 싶을 때
+- Dart VM, 백엔드 서버, CLI 에이전트 애플리케이션을 개발할 때
 
 다른 패키지를 선택하세요:
 
-- Flutter 앱 코드(특히 Web 포함): `flutter_adk`
-- 코어 패키지명을 명시적으로 쓰고 싶다면: `adk_dart`
-
-설계 의도:
-
-- `adk`는 런타임 분기가 아니라 네이밍/사용성(짧은 import) 목적의 파사드입니다.
-- 즉, `adk_dart`와 동일한 VM 중심 런타임을 더 간결한 패키지명으로 쓰고 싶을 때
-  선택하는 패키지입니다.
+- Flutter 클라이언트 앱(Mobile/Desktop/Web)을 개발할 때: `flutter_adk`
+- SDK 코어 라이브러리에 직접 의존하는 모듈식 확장을 개발할 때: `adk_dart`
 
 ## 패키지 링크
 

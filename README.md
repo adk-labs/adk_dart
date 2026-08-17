@@ -81,19 +81,44 @@ Status legend:
 | Speech transcription bootstrap | ⚠️ | audio transcription runtime | Transcription orchestration is present; a recognizer must be supplied per instance or through the default recognizer registration hook. |
 | Python sample tree coverage | 🚧 | examples, `flutter_adk/example`, docs/worklog | Runtime behavior is prioritized first. Representative Dart/Flutter examples exist, but the full Python sample tree is not mirrored one-for-one yet. |
 
-## Which Package Should I Use?
+## Ecosystem Architecture & Package Guide
 
-| If you are... | Use this package | Why |
-| --- | --- | --- |
-| Building Dart agents on VM/CLI (server, tooling, tests, full runtime APIs) | `adk_dart` | Primary package with the full ADK Dart runtime surface. |
-| Building Dart agents on VM/CLI but prefer a short import path | `adk` | Facade package that re-exports `adk_dart` (`package:adk/adk.dart`). |
-| Building a Flutter app (Android/iOS/Web/Linux/macOS/Windows) | `flutter_adk` | Flutter-focused, web-safe surface via `adk_core` with single-import ergonomics. |
+```
++-------------------------------------------------------------------------------+
+|                                    adk                                        |
+|             (CLI Executable Toolchain & Unified Top-Level Entrypoint)         |
++-------------------------------------------------------------------------------+
+       |                                                    |
+       v (depends on)                                       v (depends on)
++------------------------------------+   +------------------------------------+
+|             adk_dart               |   |            flutter_adk             |
+|   (Core Runtime & Multi-Agent SDK) |   |  (Flutter Multiplatform & Web Safe)|
++------------------------------------+   +------------------------------------+
+       |                                                    |
+       +--------------------+-------------------------------+
+                            |
+             +--------------+--------------+
+             |                             |
+             v                             v
++--------------------------+  +--------------------------+
+|         adk_mcp          |  |       adk_litertlm       |
+| (Model Context Protocol) |  | (On-Device LiteRT/Gemini)|
++--------------------------+  +--------------------------+
+```
+
+| If you are... | Use this package | Role & Key Value |
+| :--- | :--- | :--- |
+| Running CLI commands in terminal (`adk create`, `adk run`, `adk web`) or building server agents | [`adk`](https://pub.dev/packages/adk) | Official CLI toolchain executable and unified entrypoint for Dart VM. |
+| Building Dart backend, cloud, or VM agents with core SDK primitives | [`adk_dart`](https://pub.dev/packages/adk_dart) | Core SDK runtime library providing the fundamental agent, runner, and workflow engine. |
+| Building a Flutter client app (Mobile, Desktop, Web) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | Flutter-focused, web-safe surface (`adk_core`) with platform interface channels. |
+| Integrating Model Context Protocol (MCP) clients / servers | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | Standalone MCP client/server protocol transport package. |
+| Running on-device LLM acceleration on edge devices | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | On-device LiteRT / Gemini Nano accelerator integration. |
 
 Quick rule:
 
-- Choose `adk_dart` by default.
-- Choose `adk` only when you want the short package name but same behavior.
-- Choose `flutter_adk` for Flutter app code, especially when Web compatibility matters.
+- Use `adk` when activating the global CLI tool (`dart pub global activate adk`) or building server agents.
+- Use `adk_dart` when depending directly on low-level SDK primitives.
+- Use `flutter_adk` for Flutter apps (Android/iOS/Web/macOS/Windows/Linux).
 
 ## Design Philosophy
 
