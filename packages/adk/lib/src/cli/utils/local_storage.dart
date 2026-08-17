@@ -1,0 +1,183 @@
+/// Local `.adk` storage-backed service factories for CLI runtime.
+library;
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
+import 'package:adk_dart/src/artifacts/file_artifact_service.dart';
+import 'package:adk_dart/src/events/event.dart';
+import 'package:adk_dart/src/sessions/base_session_service.dart';
+import 'package:adk_dart/src/sessions/session.dart';
+import 'package:adk_dart/src/sessions/sqlite_session_service.dart';
+import 'dot_adk_folder.dart';
+
+/// Internal app key used for CLI built-in agents.
+const String builtInSessionServiceKey = '__adk_built_in_session_service__';
+
+bool _isAbsolutePath(String path) {
+  final String normalized = path.trim();
+  if (normalized.isEmpty) {
+    return false;
+  }
+  if (normalized.startsWith('/') || normalized.startsWith(r'\')) {
+    return true;
+  }
+  return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(normalized);
+}
+
+/// Creates a SQLite-backed session service rooted at [baseDir].
+BaseSessionService createLocalDatabaseSessionService({
+  required Object baseDir,
+}) {
+  final DotAdkFolder manager = DotAdkFolder(baseDir);
+  manager.dotAdkDir.createSync(recursive: true);
+  return SqliteSessionService(manager.sessionDbPath.path);
+}
+
+/// Creates a local session service for CLI usage.
+///
+/// When [perAgent] is `true`, each app uses its own underlying database.
+BaseSessionService createLocalSessionService({
+  required Object baseDir,
+  bool perAgent = false,
+  Map<String, String>? appNameToDir,
+}) {
+  if (perAgent) {
+    return PerAgentDatabaseSessionService(
+      agentsRoot: baseDir,
+      appNameToDir: appNameToDir,
+    );
+  }
+  return createLocalDatabaseSessionService(baseDir: baseDir);
+}
+
+/// Creates a file-backed artifact service rooted at [baseDir].
+BaseArtifactService createLocalArtifactService({required Object baseDir}) {
+  final DotAdkFolder manager = DotAdkFolder(baseDir);
+  manager.artifactsDir.createSync(recursive: true);
+  return FileArtifactService(manager.artifactsDir.path);
+}
+
+/// Routes session operations to per-agent local database services.
+class PerAgentDatabaseSessionService extends BaseSessionService {
+  /// Creates a per-agent database session service.
+  PerAgentDatabaseSessionService({
+    required Object agentsRoot,
+    Map<String, String>? appNameToDir,
+  }) : _agentsRoot = directoryFromArg(agentsRoot, parameterName: 'agentsRoot'),
+       _appNameToDir = appNameToDir ?? <String, String>{};
+
+  final Directory _agentsRoot;
+  final Map<String, String> _appNameToDir;
+  final Map<String, BaseSessionService> _services =
+      <String, BaseSessionService>{};
+  Future<void> _lock = Future<void>.value();
+
+  Future<T> _withLock<T>(Future<T> Function() action) async {
+    final Completer<void> next = Completer<void>();
+    final Future<void> previous = _lock;
+    _lock = next.future;
+    await previous;
+    try {
+      return await action();
+    } finally {
+      next.complete();
+    }
+  }
+
+  Future<BaseSessionService> _getService(String appName) async {
+    return _withLock<BaseSessionService>(() async {
+      final String key = appName.startsWith('__')
+          ? builtInSessionServiceKey
+          : (_appNameToDir[appName] ?? appName);
+      final BaseSessionService? existing = _services[key];
+      if (existing != null) {
+        return existing;
+      }
+
+      final BaseSessionService created;
+      if (key == builtInSessionServiceKey) {
+        created = createLocalDatabaseSessionService(baseDir: _agentsRoot.path);
+      } else if (_isAbsolutePath(key)) {
+        // appNameToDir entries may already be absolute paths (for example from
+        // web server directory discovery); avoid prefixing agentsRoot again.
+        created = createLocalDatabaseSessionService(baseDir: key);
+      } else {
+        final DotAdkFolder folder = dotAdkFolderForAgent(
+          agentsRoot: _agentsRoot.path,
+          appName: key,
+        );
+        created = createLocalDatabaseSessionService(
+          baseDir: folder.agentDir.path,
+        );
+      }
+      _services[key] = created;
+      return created;
+    });
+  }
+
+  @override
+  Future<Session> createSession({
+    required String appName,
+    required String userId,
+    Map<String, Object?>? state,
+    String? sessionId,
+  }) async {
+    final BaseSessionService service = await _getService(appName);
+    return service.createSession(
+      appName: appName,
+      userId: userId,
+      state: state,
+      sessionId: sessionId,
+    );
+  }
+
+  @override
+  Future<Session?> getSession({
+    required String appName,
+    required String userId,
+    required String sessionId,
+    GetSessionConfig? config,
+  }) async {
+    final BaseSessionService service = await _getService(appName);
+    return service.getSession(
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+      config: config,
+    );
+  }
+
+  @override
+  Future<ListSessionsResponse> listSessions({
+    required String appName,
+    String? userId,
+  }) async {
+    final BaseSessionService service = await _getService(appName);
+    return service.listSessions(appName: appName, userId: userId);
+  }
+
+  @override
+  Future<void> deleteSession({
+    required String appName,
+    required String userId,
+    required String sessionId,
+  }) async {
+    final BaseSessionService service = await _getService(appName);
+    await service.deleteSession(
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+    );
+  }
+
+  @override
+  Future<Event> appendEvent({
+    required Session session,
+    required Event event,
+  }) async {
+    final BaseSessionService service = await _getService(session.appName);
+    return service.appendEvent(session: session, event: event);
+  }
+}

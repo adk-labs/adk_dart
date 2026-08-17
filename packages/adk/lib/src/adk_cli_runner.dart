@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:adk_dart/cli.dart' as upstream_cli;
+import 'cli/cli_tools_click.dart' as local_cli;
 
 import 'system_info.dart';
 import 'version.dart';
@@ -34,7 +34,7 @@ class AdkCliRunner {
       return 0;
     }
 
-    return upstream_cli.main(
+    return local_cli.main(
       args,
       outSink: outSink,
       errSink: errSink,
