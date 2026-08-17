@@ -2,62 +2,22 @@
 
 English | [한국어](README.ko.md) | [日本語](README.ja.md) | [中文](README.zh.md)
 
-Flutter facade package for ADK Dart core runtime.
+Flutter facade package and turnkey UI Kit for the ADK Dart core runtime.
+
+[![pub package](https://img.shields.io/pub/v/flutter_adk.svg)](https://pub.dev/packages/flutter_adk)
+[![WASM Ready](https://img.shields.io/badge/Flutter%20Web-WASM%20100%25-brightgreen.svg)](https://flutter.dev/to/wasm)
 
 ## What This Package Provides
-- Re-exports `package:adk_dart/adk_core.dart` so Flutter apps can use the Web-safe ADK surface through `package:flutter_adk/flutter_adk.dart`.
-- Exposes core runtime APIs needed for Flutter app usage:
-  - `Agent` / `LlmAgent`
-  - `SequentialAgent` / `ParallelAgent` / `LoopAgent`
-  - `Runner` / `InMemoryRunner`
-  - `FunctionTool`
-  - `AgentTool`
-  - `McpToolset` (remote MCP over Streamable HTTP)
-  - `SkillToolset` + inline `Skill`
-  - Gemini built-in retrieval tools: `UrlContextTool`, `VertexAiSearchTool`,
-    `VertexRagRetrievalTool`
-  - `Gemini` (BYOK-style key injection)
-- Includes a Flutter plugin scaffold registered for all major Flutter platforms:
-  - Android
-  - iOS
-  - Web
-  - Linux
-  - macOS
-  - Windows
+- **Single Import Facade**: Re-exports `package:adk_dart/adk_core.dart` with Web-safe APIs for seamless use across iOS, Android, macOS, Windows, Linux, and **Flutter Web (WASM / dart2wasm)**.
+- **Turnkey UI Kit**: Complete suite of AI chat, developer studio, logger, tool inspectors, workflow progress bars, and voice interaction widgets.
+- **Pluggable Persistence**: 2-line storage adapters (`AdkStorageSessionService`) for `SharedPreferences`, `FlutterSecureStorage`, SQLite, and Hive.
+- **Core Runtime**:
+  - `Agent` / `LlmAgent` (Default: `gemini-3.7-flash`, local `LiteLlm` Ollama/LM Studio)
+  - Workflows: `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `ManagedAgent`
+  - Tools: `FunctionTool`, `AgentTool`, `McpToolset` (Streamable HTTP), `SkillToolset`
+  - Retrieval: `UrlContextTool`, `VertexAiSearchTool`, `VertexRagRetrievalTool`
 
-## When To Use `flutter_adk`
-
-Use `flutter_adk` when:
-
-- You are building a Flutter app and want one import that works across mobile,
-  desktop, and web.
-- You want the web-safe ADK runtime surface (`adk_core`) without pulling in
-  VM-only APIs by default.
-
-Use another package when:
-
-- You are building VM/CLI agents, tools, or servers: use `adk_dart` (or `adk`
-  for shorter imports).
-
-Design intent:
-
-- `flutter_adk` is not just a wrapper name; it is the Flutter-oriented
-  compatibility layer.
-- It prioritizes consistent multi-platform behavior in Flutter by exposing the
-  web-safe runtime surface (`adk_core`) instead of the full VM-only API set.
-
-## Package Links
-
-- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter-focused package
-  for web-safe ADK usage across Flutter platforms.
-- [adk_dart](https://pub.dev/packages/adk_dart): Core runtime package with the
-  full ADK Dart VM/CLI API surface.
-- [adk](https://pub.dev/packages/adk): Short-name facade package that
-  re-exports `adk_dart`.
-
-## ADK 2.0 Compatibility
-
-This package is fully aligned with ADK 2.0, supporting v2 Workflows (declarative node-graph scheduling, conditional routing, and state merging) and GCP Managed Agents (including `ManagedAgent` and `RemoteMcpServer` configuration mapping) for hybrid on-device and cloud execution.
+---
 
 ## Installation
 
@@ -69,8 +29,10 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+3
+  flutter_adk: ^2026.8.17+7
 ```
+
+---
 
 ## Quick Start (Turnkey Chat UI)
 
@@ -108,9 +70,11 @@ class MyApp extends StatelessWidget {
 }
 ```
 
+---
+
 ## Local LLM Quickstart (Ollama / LM Studio)
 
-You can run AI agents completely offline on local models without any cloud API keys:
+Run AI agents completely offline on local models without cloud API keys:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -145,59 +109,96 @@ class LocalAiApp extends StatelessWidget {
 }
 ```
 
-## Built-in UI Components & Controllers
+---
 
-`flutter_adk` provides 12+ ready-to-use widgets and reactive controllers:
-- **`AdkDevStudioView`**: Turnkey ADK Web / Dev Studio inspector in Flutter (Tabs for Playground, Live Logger, Agent Graph, and State).
-- **`AdkAgentLoggerView`**: Real-time agent I/O logger (User inputs, LLM responses, Tool calls, State deltas, Latency, Token counts).
-- **`AdkChatView`**: Full-featured chat UI with autoscroll, input bar, prompt suggestions, and voice triggers.
-- **`AdkChatController`**: ChangeNotifier-based state controller for managing messages and streaming turns.
-- **`AdkFloatingChatButton`**: Floating Action Button (FAB) that opens an AI assistant modal bottom sheet.
-- **`AdkPromptSuggestionsBar`**: Horizontal scrollable bar with quick-tap prompt chips.
-- **`AdkToolCallCard`**: Expandable card displaying tool name, execution status, JSON arguments, and results.
-- **`AdkConfirmationBanner` & `AdkConfirmationDialog`**: Human-in-the-loop (HITL) approval banner and modal dialog.
-- **`AdkSessionDrawer`**: Chat session history sidebar with create, switch, and delete actions.
-- **`AdkAgentHierarchyBadge`**: Breadcrumb badge showing active agent in a multi-agent hierarchy.
-- **`AdkWorkflowProgressIndicator`**: Step-by-step workflow timeline progress tracker.
-- **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`**: Interactive voice input button and animated waveform visualizer.
-- **`AdkTokenUsageBadge`**: Compact badge displaying prompt and completion token counts.
-- **`AdkStructuredDataView`**: Pretty-printed, copyable structured JSON inspector for outputSchema responses.
-- **`AdkToolInspectorView`**: Visual registry inspector listing all agent tools and their parameter schemas.
-- **`AdkMessageBubble`**: Material 3 message bubble for user, model, and tool outputs.
-- **`AdkTypingIndicator`**: Smooth pulsing typing indicator.
-- **`AdkEventStreamBuilder`**: Reactive widget builder for listening directly to `Stream<Event>`.
+# 📚 Widget & API Specification
 
-## Full Runtime Surface
-- For VM/CLI-only APIs, import `package:adk_dart/adk_dart.dart`.
+### 1. Turnkey Views & Developer Tools
 
-## Platform Scope (Current)
-- `flutter_adk` is a Flutter-focused runtime surface built on top of `adk_core`.
-- It targets single-import usage across Flutter platforms while leaving VM/CLI-only APIs outside this package.
+| Widget | Description | Key Parameters |
+|---|---|---|
+| **`AdkChatView`** | Full-featured chat UI with autoscroll, input box, suggestions bar, and tool cards. | `agent`, `controller`, `suggestions`, `showVoiceButton`, `customBubbleBuilder`, `inputPlaceholder` |
+| **`AdkDevStudioView`** | Embedded ADK Web developer studio with Playground, Live Logger, Agent Graph, and Session State tabs. | `agent`, `controller`, `initialTab`, `showLogs` |
+| **`AdkAgentLoggerView`** | Real-time I/O & telemetry inspector for prompts, model completions, tool calls, latencies, and token counts. | `logs`, `onClearLogs`, `showHeader`, `title` |
+| **`AdkToolInspectorView`** | Visual registry inspector detailing all available tools and their JSON parameter schemas. | `tools`, `title`, `showHeader` |
+| **`AdkStructuredDataView`** | Pretty-printer and syntax-styled viewer for JSON objects and `outputSchema` structured outputs. | `data`, `title`, `allowCopy`, `initialExpanded` |
 
-Status legend:
+---
 
-- `Y` Supported
-- `Partial` Supported with caveats
-- `N` Not supported
+### 2. State Controller & Storage Services
 
-| Feature | Android | iOS | Web | Linux | macOS | Windows | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `flutter_adk` single import (`package:flutter_adk/flutter_adk.dart`) | Y | Y | Y | Y | Y | Y | Re-exports the Web-safe `adk_core` surface. |
-| Agent runtime (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | In-memory orchestration path is cross-platform. |
-| `Gemini` model usage | Y | Y | Partial | Y | Y | Y | Web requires BYOK/CORS/security policy consideration. |
-| Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | Tool execution is handled by Gemini/Vertex backends. |
-| MCP Toolset via Streamable HTTP | Y | Y | Y | Y | Y | Y | Works with remote MCP HTTP servers. |
-| MCP Toolset via stdio (`StdioConnectionParams`) | Partial | Partial | N | Y | Y | Y | Web cannot spawn local processes; mobile runtime support can depend on sandbox/process policy. |
-| Skills (`Skill`, `SkillToolset`) with inline definitions | Y | Y | Y | Y | Y | Y | Inline skills are platform-agnostic. |
-| Directory-based skill loading (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web throws `UnsupportedError` for filesystem-based loading. |
-| Plugin channel helper (`FlutterAdk().getPlatformVersion()`) | Y | Y | Y | Y | Y | Y | Uses platform channel / browser user-agent path. |
-| VM/CLI tooling (`adk` executable, dev server, CLI deploy path) | N | N | N | N | N | N | Not part of the Flutter package surface. |
+#### `AdkChatController`
+ChangeNotifier-based controller managing conversation history, streaming responses, tool executions, and storage synchronization.
 
-Reference matrix and rollout notes:
-- `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
+- **Constructors**:
+  - `AdkChatController({BaseAgent? agent, Runner? runner, String? userId, String? appName, String? sessionId, BaseSessionService? sessionService})`
+  - `AdkChatController.fromStorage({required BaseAgent agent, required AdkKeyValueStorage storage, ...})`
+- **Methods**:
+  - `Future<void> sendMessage(String text)`: Sends a user prompt and streams model/tool events into `messages`.
+  - `Future<void> loadSession({String? targetSessionId})`: Loads previous messages from the persistence layer.
+  - `String exportTranscriptJson({bool pretty = true})`: Exports conversation messages as a JSON string.
+  - `void stopGeneration()`: Cancels any active streaming generation turn.
+  - `void clearMessages()`: Clears message history and resets errors.
 
-## Limitations
-- Features requiring `dart:io`, `dart:ffi`, or `dart:mirrors` are outside the current `flutter_adk` surface.
-- MCP stdio transport (`StdioConnectionParams`) is not supported on Web.
-- Directory-based skill loading (`loadSkillFromDir`) is not supported on Web. Use inline `Skill` definitions.
-- For browser BYOK (user-entered API key), document security risks before production rollout.
+#### `AdkStorageSessionService`
+Plug-and-play session persistence backed by any key-value store (e.g. `shared_preferences`, `flutter_secure_storage`).
+
+```dart
+// 2-line SharedPreferences integration:
+final sessionService = AdkStorageSessionService.custom(
+  read: (key) => prefs.getString(key),
+  write: (key, value) => prefs.setString(key, value),
+  delete: (key) => prefs.remove(key),
+  getKeys: ({prefix = ''}) => prefs.getKeys().where((k) => k.startsWith(prefix)).toList(),
+);
+```
+
+---
+
+### 3. Interactive UI Components
+
+| Component | Description | Usage Example |
+|---|---|---|
+| **`AdkConfirmationBanner`** | Human-in-the-Loop (HITL) inline banner and modal dialog for sensitive tool approvals. | `AdkConfirmationBanner.showAsDialog(context, title: 'Approve Tool', description: '...');` |
+| **`AdkSessionDrawer`** | Sidebar drawer for switching, creating (`+`), and deleting conversation sessions. | `AdkSessionDrawer(sessions: sessions, activeSessionId: id, onSessionSelected: (s) => ...);` |
+| **`AdkFloatingChatButton`** | Floating Action Button (FAB) that opens an AI assistant modal bottom sheet. | `AdkFloatingChatButton(agent: myAgent);` |
+| **`AdkPromptSuggestionsBar`** | Horizontally scrollable bar with quick-tap prompt chips. | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
+| **`AdkToolCallCard`** | Accordion card displaying tool name, arguments, execution status, and return values. | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
+| **`AdkWorkflowProgressIndicator`**| Step-by-step timeline progress bar tracking workflow node statuses. | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
+| **`AdkAgentHierarchyBadge`** | Breadcrumb badge indicating the active sub-agent in a multi-agent tree. | `AdkAgentHierarchyBadge(agentPath: ['Supervisor', 'Researcher']);` |
+| **`AdkTokenUsageBadge`** | Compact badge showing prompt and completion token counts. | `AdkTokenUsageBadge(promptTokens: 120, completionTokens: 80);` |
+| **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`** | Voice interaction button and reactive audio waveform animation. | `AdkVoiceMicButton(isListening: true, onPressed: () => ...);` |
+| **`AdkMessageBubble`** | Material 3 chat bubble supporting user, model, tool, and error roles. | `AdkMessageBubble(message: chatMessage);` |
+| **`AdkTypingIndicator`** | Smooth pulsing animated dots displayed during AI generation. | `AdkTypingIndicator();` |
+| **`AdkEventStreamBuilder`** | Reactive widget builder for listening directly to `Stream<Event>`. | `AdkEventStreamBuilder(stream: runner.runAsync(...), builder: (ctx, events) => ...);` |
+
+---
+
+### 4. UI Data Models (`package:flutter_adk/flutter_adk.dart`)
+
+- **`AdkChatMessage`**: Immutable chat message (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `metadata`).
+- **`AdkToolCallInfo`**: Tool execution state model (`callId`, `toolName`, `arguments`, `result`, `status`, `durationMs`).
+- **`AdkWorkflowStep`**: Workflow step model (`id`, `label`, `description`, `status`, `durationMs`, `output`).
+- **`AdkSessionInfo`**: Session history model (`id`, `title`, `messageCount`, `lastMessagePreview`, `updatedAt`).
+- **`AdkPromptSuggestion`**: Suggestion model (`text`, `label`, `icon`, `category`).
+- **`AdkTokenUsage`**: Token telemetry model (`promptTokens`, `completionTokens`, `totalTokens`, `formattedTotal`).
+- **`AdkVoiceState`**: Real-time voice state model (`status`, `decibels`, `isMuted`, `isActive`).
+
+---
+
+## Platform Support Matrix
+
+| Feature | Android | iOS | Web (WASM) | Linux | macOS | Windows | Notes |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | --- |
+| `flutter_adk` single import | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Re-exports Web-safe `adk_core` |
+| Turnkey UI Kit (14+ Widgets) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100% Flutter Material 3 |
+| Agent runtime (`LlmAgent`, workflows) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Pure Dart async stream orchestration |
+| `Gemini` (3.7 / 2.0) & `LiteLlm` (Local) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Cross-platform REST & WebSocket |
+| MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Remote MCP server connections |
+| Storage Services (`AdkStorageSessionService`)| ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Works with any key-value store |
+
+---
+
+## License
+
+Apache License 2.0. Developed with ❤️ by Deepmind & ADK Labs.

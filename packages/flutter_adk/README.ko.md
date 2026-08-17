@@ -2,67 +2,24 @@
 
 [English](README.md) | 한국어 | [日本語](README.ja.md) | [中文](README.zh.md)
 
-Flutter 앱에서 ADK Dart 코어 런타임을 Web-safe API 계층으로 사용하기 위한 파사드 패키지입니다.
+ADK Dart 코어 런타임을 위한 Flutter 파사드 패키지 및 완성형 UI Kit입니다.
 
-## 제공 항목
+[![pub package](https://img.shields.io/pub/v/flutter_adk.svg)](https://pub.dev/packages/flutter_adk)
+[![WASM Ready](https://img.shields.io/badge/Flutter%20Web-WASM%20100%25-brightgreen.svg)](https://flutter.dev/to/wasm)
 
-- `package:adk_dart/adk_core.dart` 재노출
-- Flutter 단일 import 경로: `package:flutter_adk/flutter_adk.dart`
-- `AgentTool`, `UrlContextTool`, Vertex retrieval tool 같은 최신 Web-safe ADK API 포함
-- 주요 Flutter 플랫폼(Android/iOS/Web/Linux/macOS/Windows) 플러그인 등록
+## 주요 제공 기능
+- **단일 import 파사드**: `package:adk_dart/adk_core.dart`를 재노출하여 iOS, Android, macOS, Windows, Linux, **Flutter Web(WASM / dart2wasm)** 전체 플랫폼에서 안전하게 동작합니다.
+- **완성형 UI Kit**: 대화창, 개발자 스튜디오, I/O 로거, 툴 인스펙터, 구조화 데이터 뷰어, 워크플로우 진행률 바, 음성 인터랙션 위젯 제공.
+- **플러그앤플레이 세션 영구화**: `SharedPreferences`, `FlutterSecureStorage`, SQLite, Hive 등과 2줄로 연동되는 `AdkStorageSessionService`.
+- **코어 런타임**:
+  - `Agent` / `LlmAgent` (기본 모델: `gemini-3.7-flash`, 로컬 `LiteLlm` Ollama/LM Studio)
+  - 워크플로우: `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `ManagedAgent`
+  - 도구(Tools): `FunctionTool`, `AgentTool`, `McpToolset` (Streamable HTTP), `SkillToolset`
+  - 정보 검색: `UrlContextTool`, `VertexAiSearchTool`, `VertexRagRetrievalTool`
 
-## 언제 `flutter_adk`를 쓰면 좋나요?
+---
 
-`flutter_adk`를 선택하세요:
-
-- Flutter 앱에서 모바일/데스크톱/Web을 하나의 import로 다루고 싶을 때
-- VM 전용 API를 기본으로 끌어오지 않고 Web-safe `adk_core` API 계층을 쓰고 싶을 때
-
-다른 패키지를 선택하세요:
-
-- VM/CLI 에이전트/도구/서버 개발: `adk_dart` (짧은 import는 `adk`)
-
-설계 의도:
-
-- `flutter_adk`는 단순 래퍼 이름이 아니라 Flutter 호환 계층입니다.
-- 전체 VM 전용 API를 그대로 노출하기보다 Web-safe 런타임 API(`adk_core`)를
-  중심으로 제공해 Flutter 멀티플랫폼에서 동작 일관성을 우선합니다.
-
-## 패키지 링크
-
-- [flutter_adk](https://pub.dev/packages/flutter_adk): Flutter
-  멀티플랫폼에서 사용할 Web-safe ADK API를 제공하는 패키지입니다.
-- [adk_dart](https://pub.dev/packages/adk_dart): 전체 ADK Dart VM/CLI
-  런타임 API를 제공하는 코어 패키지입니다.
-- [adk](https://pub.dev/packages/adk): `adk_dart`를 짧은 이름으로
-  재노출하는 파사드 패키지입니다.
-
-## ADK 2.0 호환성
-
-이 패키지는 ADK 2.0과 정렬되어 있어, v2 워크플로(선언적 노드 그래프 스케줄링, 조건부 라우팅 및 상태 병합)와 하이브리드 온디바이스 + 클라우드 실행을 위한 GCP Managed Agent 연동(`ManagedAgent` 및 `RemoteMcpServer` 설정 매핑)을 지원합니다.
-
-## 플랫폼 지원 매트릭스 (현재)
-
-상태 표기:
-
-- `Y` 지원
-- `Partial` 주의사항과 함께 지원
-- `N` 미지원
-
-| 기능 | Android | iOS | Web | Linux | macOS | Windows | 비고 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `flutter_adk` 단일 import | Y | Y | Y | Y | Y | Y | Web-safe `adk_core` API 재노출 |
-| Agent 런타임 (`Agent`, `Runner`, workflows) | Y | Y | Y | Y | Y | Y | in-memory 경로는 공통 |
-| `Gemini` 모델 사용 | Y | Y | Partial | Y | Y | Y | Web BYOK/CORS/보안 정책 고려 필요 |
-| Built-in model tools (`UrlContextTool`, Vertex retrieval) | Y | Y | Y | Y | Y | Y | Gemini/Vertex backend에서 tool 실행 |
-| MCP Toolset (Streamable HTTP) | Y | Y | Y | Y | Y | Y | 원격 MCP HTTP 서버 연결 |
-| MCP Toolset (stdio) | Partial | Partial | N | Y | Y | Y | Web 불가, 모바일은 프로세스 정책 영향 가능 |
-| Skills (inline) | Y | Y | Y | Y | Y | Y | 인라인 스킬은 크로스플랫폼 |
-| 디렉토리 스킬 로딩 (`loadSkillFromDir`) | Y | Y | N | Y | Y | Y | Web에서 `UnsupportedError` |
-| 플러그인 채널 helper (`getPlatformVersion`) | Y | Y | Y | Y | Y | Y | 플랫폼 채널 / 브라우저 user-agent |
-| VM/CLI 도구 (`adk`, dev server, deploy path) | N | N | N | N | N | N | Flutter 패키지 범위 밖 |
-
-## 설치
+## 설치 방법
 
 ```bash
 flutter pub add flutter_adk
@@ -72,12 +29,14 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+3
+  flutter_adk: ^2026.8.17+7
 ```
+
+---
 
 ## 빠른 시작 (완성형 챗 UI)
 
-단 몇 줄의 코드로 Flutter 앱에 대화형 AI 에이전트 챗 화면을 즉시 탑재할 수 있습니다:
+단 몇 줄의 코드로 Flutter 앱에 대화형 AI 에이전트 챗 화면을 즉시 배치할 수 있습니다:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -94,13 +53,13 @@ class MyApp extends StatelessWidget {
     final agent = LlmAgent(
       name: 'assistant',
       model: 'gemini-3.7-flash',
-      instruction: '친절하고 똑똑한 플러터 어시스턴트입니다.',
+      instruction: '친절하고 똑똑한 Flutter 어시스턴트입니다.',
     );
 
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('ADK AI Assistant')),
-        // 2. 완성형 챗 위젯 배치 (또는 AdkDevStudioView로 대시보드 전체 임베드 가능)
+        appBar: AppBar(title: const Text('ADK Flutter Chat')),
+        // 2. 완성형 챗 위젯 배치 (또는 AdkDevStudioView로 대시보드 전체 임베드)
         body: AdkChatView(
           agent: agent,
           inputPlaceholder: '무엇이든 질문해 보세요...',
@@ -110,6 +69,8 @@ class MyApp extends StatelessWidget {
   }
 }
 ```
+
+---
 
 ## 로컬 LLM 빠른 시작 (Ollama / LM Studio)
 
@@ -148,29 +109,96 @@ class LocalAiApp extends StatelessWidget {
 }
 ```
 
-## 내장 UI 컴포넌트 및 컨트롤러
+---
 
-`flutter_adk`는 Flutter 앱에 즉시 적용 가능한 12종 이상의 UI 위젯과 상태 컨트롤러를 제공합니다:
-- **`AdkDevStudioView`**: `adk web`을 플러터 화면에 그대로 이식한 완성형 개발자 스튜디오 (Playground, Live Logger, Agent Graph, State 통합 탭)
-- **`AdkAgentLoggerView`**: 에이전트 입출력, LLM 응답, 툴 호출, 지연 시간(ms), 상태 변화를 실시간으로 모니터링하고 JSON 복사를 지원하는 전문 로거
-- **`AdkChatView`**: 자동 스크롤, 입력창, 추천 질문 바, 음성 트리거가 통합된 완성형 챗 위젯
-- **`AdkChatController`**: 세션 및 스트리밍 상태 관리를 지원하는 ChangeNotifier 기반 컨트롤러
-- **`AdkFloatingChatButton`**: 탭 시 모달 바텀시트 챗창이 열리는 플로팅 액션 버튼(FAB)
-- **`AdkPromptSuggestionsBar`**: 클릭 한 번으로 질문을 발화할 수 있는 추천 프롬프트 칩 바
-- **`AdkToolCallCard`**: 툴 이름, 인자, 실행 상태, 결과를 시각화하는 아코디언 카드
-- **`AdkConfirmationBanner` & `AdkConfirmationDialog`**: 인간 참여(HITL) 작업 승인/거부 배너 및 모달 팝업
-- **`AdkSessionDrawer`**: 대화 세션 히스토리 목록 탐색, 생성(+), 삭제 드로어
-- **`AdkAgentHierarchyBadge`**: 멀티 에이전트 계층 구조에서 현재 활성 에이전트를 보여주는 브레드크럼 뱃지
-- **`AdkWorkflowProgressIndicator`**: ADK 2.0 워크플로우 노드 실행 타임라인 진행률 바
-- **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`**: 음성 마이크 버튼 및 실시간 오디오 파형 애니메이션 위젯
-- **`AdkTokenUsageBadge`**: 입력/출력 토큰 소모량을 작게 보여주는 뱃지
-- **`AdkStructuredDataView`**: `outputSchema` 기반 구조화된 JSON 응답을 위한 프리티 프린팅 및 복사 기능 지원 뷰어.
-- **`AdkToolInspectorView`**: 에이전트에 등록된 모든 툴 목록과 JSON 파라미터 스키마를 트리 형태로 조회하는 인스펙터.
-- **`AdkMessageBubble`**: 사용자, 모델, 툴 실행 결과를 명확히 구분하는 Material 3 스타일 메시지 버블.
-- **`AdkTypingIndicator`**: 부드러운 펄스 애니메이션이 적용된 AI 생각/타이핑 인디케이터.
-- **`AdkEventStreamBuilder`**: ADK의 실시간 `Stream<Event>`를 즉시 수신하여 반응형 UI를 구성하는 전용 빌더.
+# 📚 위젯 및 API 상세 명세서 (Specification)
 
-## 참고
+### 1. 완성형 뷰 및 개발자 도구 (Turnkey Views)
 
-- 상세 기능/제약: [README.md](README.md)
-- 플랫폼 심화 노트: `knowledge/2026-03-01_18-20-00_flutter_adk_platform_support_matrix.md`
+| 위젯 명 | 설명 | 주요 파라미터 |
+|---|---|---|
+| **`AdkChatView`** | 자동 스크롤, 입력창, 추천 질문 칩, 도구 실행 카드가 통합된 완성형 대화창 | `agent`, `controller`, `suggestions`, `showVoiceButton`, `customBubbleBuilder`, `inputPlaceholder` |
+| **`AdkDevStudioView`** | ADK Web을 플러터에 이식한 개발자 스튜디오 (Playground, Live Logger, Agent Graph, Session State 탭 통합) | `agent`, `controller`, `initialTab`, `showLogs` |
+| **`AdkAgentLoggerView`** | 프롬프트, 모델 응답, 도구 호출/결과, 지연 시간(ms), 토큰 소모량을 실시간 추적하고 검색/필터링/복사 지원 | `logs`, `onClearLogs`, `showHeader`, `title` |
+| **`AdkToolInspectorView`** | 에이전트에 등록된 모든 도구 목록과 각 도구의 JSON 파라미터 스키마를 시각화 | `tools`, `title`, `showHeader` |
+| **`AdkStructuredDataView`** | `outputSchema` 기반 JSON 구조화 응답을 위한 프리티 프린팅 및 원클릭 복사 뷰어 | `data`, `title`, `allowCopy`, `initialExpanded` |
+
+---
+
+### 2. 상태 컨트롤러 및 스토리지 서비스
+
+#### `AdkChatController`
+대화 히스토리, 멀티 청크 실시간 스트리밍, 도구 실행, 스토리지 저장을 통합 관리하는 `ChangeNotifier` 기반 컨트롤러입니다.
+
+- **생성자**:
+  - `AdkChatController({BaseAgent? agent, Runner? runner, String? userId, String? appName, String? sessionId, BaseSessionService? sessionService})`
+  - `AdkChatController.fromStorage({required BaseAgent agent, required AdkKeyValueStorage storage, ...})`
+- **핵심 메서드**:
+  - `Future<void> sendMessage(String text)`: 사용자 입력을 전송하고 모델/도구 스트림을 `messages`에 실시간 반영합니다.
+  - `Future<void> loadSession({String? targetSessionId})`: 스토리지에 저장된 이전 대화 기록을 불러옵니다.
+  - `String exportTranscriptJson({bool pretty = true})`: 대화 전체를 JSON 문자열로 내보냅니다.
+  - `void stopGeneration()`: 현재 진행 중인 스트리밍 생성을 즉시 취소합니다.
+  - `void clearMessages()`: 메시지 목록을 비우고 에러 상태를 초기화합니다.
+
+#### `AdkStorageSessionService`
+`SharedPreferences`, `FlutterSecureStorage` 등 모든 Key-Value 저장소를 2줄로 연결하는 세션 영구화 서비스입니다.
+
+```dart
+// SharedPreferences 2줄 연동:
+final sessionService = AdkStorageSessionService.custom(
+  read: (key) => prefs.getString(key),
+  write: (key, value) => prefs.setString(key, value),
+  delete: (key) => prefs.remove(key),
+  getKeys: ({prefix = ''}) => prefs.getKeys().where((k) => k.startsWith(prefix)).toList(),
+);
+```
+
+---
+
+### 3. 인터랙티브 UI 컴포넌트
+
+| 컴포넌트 | 설명 | 사용 예시 |
+|---|---|---|
+| **`AdkConfirmationBanner`** | 민감한 도구 실행 전 사용자 승인을 받는 인간 참여(HITL) 배너 및 모달 다이얼로그 | `AdkConfirmationBanner.showAsDialog(context, title: '도구 승인', description: '...');` |
+| **`AdkSessionDrawer`** | 대화 세션 히스토리 목록 탐색, 세션 전환, 생성(`+`), 삭제 지원 드로어 | `AdkSessionDrawer(sessions: sessions, activeSessionId: id, onSessionSelected: (s) => ...);` |
+| **`AdkFloatingChatButton`** | 탭 시 모달 바텀시트 챗창이 열리는 플로팅 액션 버튼(FAB) | `AdkFloatingChatButton(agent: myAgent);` |
+| **`AdkPromptSuggestionsBar`** | 가로 스크롤 추천 질문 칩 바 | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
+| **`AdkToolCallCard`** | 도구 이름, 전달 인자, 실행 상태, 반환 결과를 보여주는 아코디언 카드 | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
+| **`AdkWorkflowProgressIndicator`**| 워크플로우 각 노드의 실행 타임라인 진행률 바 | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
+| **`AdkAgentHierarchyBadge`** | 멀티 에이전트 트리 계층에서 현재 활성 에이전트를 표시하는 뱃지 | `AdkAgentHierarchyBadge(agentPath: ['Supervisor', 'Researcher']);` |
+| **`AdkTokenUsageBadge`** | 입력/출력 토큰 소모량을 작게 보여주는 뱃지 | `AdkTokenUsageBadge(promptTokens: 120, completionTokens: 80);` |
+| **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`** | 실시간 음성 마이크 버튼 및 오디오 파형 애니메이션 위젯 | `AdkVoiceMicButton(isListening: true, onPressed: () => ...);` |
+| **`AdkMessageBubble`** | 사용자, 모델, 툴, 에러 메시지를 명확히 구분하는 Material 3 스타일 메시지 버블 | `AdkMessageBubble(message: chatMessage);` |
+| **`AdkTypingIndicator`** | AI 생각/타이핑 펄스 인디케이터 | `AdkTypingIndicator();` |
+| **`AdkEventStreamBuilder`** | ADK의 실시간 `Stream<Event>`를 즉시 수신하여 반응형 UI를 구성하는 전용 빌더 | `AdkEventStreamBuilder(stream: runner.runAsync(...), builder: (ctx, events) => ...);` |
+
+---
+
+### 4. UI 데이터 모델 (`package:flutter_adk/flutter_adk.dart`)
+
+- **`AdkChatMessage`**: 불변 대화 메시지 모델 (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `metadata`).
+- **`AdkToolCallInfo`**: 도구 실행 상태 모델 (`callId`, `toolName`, `arguments`, `result`, `status`, `durationMs`).
+- **`AdkWorkflowStep`**: 워크플로우 단계 모델 (`id`, `label`, `description`, `status`, `durationMs`, `output`).
+- **`AdkSessionInfo`**: 세션 정보 모델 (`id`, `title`, `messageCount`, `lastMessagePreview`, `updatedAt`).
+- **`AdkPromptSuggestion`**: 추천 질문 모델 (`text`, `label`, `icon`, `category`).
+- **`AdkTokenUsage`**: 토큰 사용량 모델 (`promptTokens`, `completionTokens`, `totalTokens`, `formattedTotal`).
+- **`AdkVoiceState`**: 실시간 음성 상태 모델 (`status`, `decibels`, `isMuted`, `isActive`).
+
+---
+
+## 플랫폼 지원 매트릭스
+
+| 기능 | Android | iOS | Web (WASM) | Linux | macOS | Windows | 비고 |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | --- |
+| `flutter_adk` 단일 import | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web-safe `adk_core` 재노출 |
+| 완성형 UI Kit (14+종 위젯) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100% Flutter Material 3 |
+| Agent 런타임 (`LlmAgent`, 워크플로우) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Pure Dart 비동기 스트림 오케스트레이션 |
+| `Gemini` (3.7 / 2.0) & `LiteLlm` (로컬) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 크로스플랫폼 REST & WebSocket |
+| MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 원격 MCP HTTP 서버 연결 |
+| 스토리지 서비스 (`AdkStorageSessionService`)| ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 모든 Key-Value 저장소 호환 |
+
+---
+
+## 라이선스
+
+Apache License 2.0. Developed with ❤️ by Deepmind & ADK Labs.
