@@ -130,15 +130,52 @@ class LocalAiApp extends StatelessWidget {
 #### `AdkChatController`
 대화 히스토리, 멀티 청크 실시간 스트리밍, 도구 실행, 스토리지 저장을 통합 관리하는 `ChangeNotifier` 기반 컨트롤러입니다.
 
-- **생성자**:
-  - `AdkChatController({BaseAgent? agent, Runner? runner, String? userId, String? appName, String? sessionId, BaseSessionService? sessionService})`
-  - `AdkChatController.fromStorage({required BaseAgent agent, required AdkKeyValueStorage storage, ...})`
-- **핵심 메서드**:
-  - `Future<void> sendMessage(String text)`: 사용자 입력을 전송하고 모델/도구 스트림을 `messages`에 실시간 반영합니다.
-  - `Future<void> loadSession({String? targetSessionId})`: 스토리지에 저장된 이전 대화 기록을 불러옵니다.
-  - `String exportTranscriptJson({bool pretty = true})`: 대화 전체를 JSON 문자열로 내보냅니다.
-  - `void stopGeneration()`: 현재 진행 중인 스트리밍 생성을 즉시 취소합니다.
-  - `void clearMessages()`: 메시지 목록을 비우고 에러 상태를 초기화합니다.
+#### `AdkWorkflowController`
+멀티 에이전트 파이프라인(`SequentialAgent`, `ParallelAgent`, `LoopAgent`)의 실행, 인간 참여(HITL) 일시 정지 및 재개, 단계별 상태 추적 컨트롤러입니다.
+
+```dart
+final wfCtrl = AdkWorkflowController(workflowAgent: mySequentialPipeline, initialSteps: steps);
+await wfCtrl.execute();
+wfCtrl.approveAndResume(stepId: 'step_2', input: {'approved': true});
+```
+
+#### `AdkVoiceController`
+실시간 음성 마이크 녹음 상태(`listening`), 오디오 데시벨(`decibels`), 음소거(`isMuted`), 발화 중단(`interrupt`)을 반응형으로 관리하는 컨트롤러입니다.
+
+```dart
+final voiceCtrl = AdkVoiceController();
+await voiceCtrl.startListening();
+voiceCtrl.toggleMute();
+await voiceCtrl.stopListening();
+```
+
+#### `AdkSessionController`
+Key-Value 스토리지와 연동되어 이전 대화 목록 탐색, 세션 신규 생성, 세션 전환, 제목 수정, 삭제, 검색을 전담하는 멀티 세션 컨트롤러입니다.
+
+```dart
+final sessionCtrl = AdkSessionController(storage: storage);
+await sessionCtrl.loadAllSessions();
+await sessionCtrl.createNewSession(title: '새 대화');
+sessionCtrl.switchSession('session_123');
+```
+
+#### `AdkSmartFormController`
+대화 중 도구 인자나 텍스트로부터 폼 필드를 실시간 자동 추출하고, 필수 필드 검증 및 최종 제출을 처리하는 스마트 폼 컨트롤러입니다.
+
+```dart
+final formCtrl = AdkSmartFormController(initialFields: fields, onSubmitted: (data) => ...);
+formCtrl.populateFromMap({'user_name': 'Alice', 'date': '2026-08-20'});
+await formCtrl.submit();
+```
+
+#### `AdkAgentLoggerController`
+실시간 에이전트 I/O 이벤트를 버퍼링하고, 카테고리/검색어 필터링 및 포맷팅된 JSON 내보내기를 지원하는 텔레메트리 컨트롤러입니다.
+
+```dart
+final loggerCtrl = AdkAgentLoggerController(maxLogEntries: 500);
+loggerCtrl.setCategory(AdkLogCategory.toolCall);
+final String jsonLogs = loggerCtrl.exportJson();
+```
 
 #### `AdkStorageSessionService`
 `SharedPreferences`, `FlutterSecureStorage` 등 모든 Key-Value 저장소를 2줄로 연결하는 세션 영구화 서비스입니다.

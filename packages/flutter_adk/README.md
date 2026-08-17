@@ -130,15 +130,52 @@ class LocalAiApp extends StatelessWidget {
 #### `AdkChatController`
 ChangeNotifier-based controller managing conversation history, streaming responses, tool executions, and storage synchronization.
 
-- **Constructors**:
-  - `AdkChatController({BaseAgent? agent, Runner? runner, String? userId, String? appName, String? sessionId, BaseSessionService? sessionService})`
-  - `AdkChatController.fromStorage({required BaseAgent agent, required AdkKeyValueStorage storage, ...})`
-- **Methods**:
-  - `Future<void> sendMessage(String text)`: Sends a user prompt and streams model/tool events into `messages`.
-  - `Future<void> loadSession({String? targetSessionId})`: Loads previous messages from the persistence layer.
-  - `String exportTranscriptJson({bool pretty = true})`: Exports conversation messages as a JSON string.
-  - `void stopGeneration()`: Cancels any active streaming generation turn.
-  - `void clearMessages()`: Clears message history and resets errors.
+#### `AdkWorkflowController`
+Reactive controller for executing, pausing (HITL approval), resuming, and tracking step progress in multi-agent workflows and pipelines.
+
+```dart
+final wfCtrl = AdkWorkflowController(workflowAgent: mySequentialPipeline, initialSteps: steps);
+await wfCtrl.execute();
+wfCtrl.approveAndResume(stepId: 'step_2', input: {'approved': true});
+```
+
+#### `AdkVoiceController`
+Reactive controller for managing real-time microphone recording, audio levels (decibels), speech transcripts, and speaking states.
+
+```dart
+final voiceCtrl = AdkVoiceController();
+await voiceCtrl.startListening();
+voiceCtrl.toggleMute();
+await voiceCtrl.stopListening();
+```
+
+#### `AdkSessionController`
+Dedicated multi-session controller for loading, creating, switching, renaming, deleting, and searching chat sessions with Key-Value storage sync.
+
+```dart
+final sessionCtrl = AdkSessionController(storage: storage);
+await sessionCtrl.loadAllSessions();
+await sessionCtrl.createNewSession(title: 'New Chat');
+sessionCtrl.switchSession('session_123');
+```
+
+#### `AdkSmartFormController`
+Reactive controller for conversational form filling, field auto-extraction from tool arguments, required field validation, and submission.
+
+```dart
+final formCtrl = AdkSmartFormController(initialFields: fields, onSubmitted: (data) => ...);
+formCtrl.populateFromMap({'user_name': 'Alice', 'date': '2026-08-20'});
+await formCtrl.submit();
+```
+
+#### `AdkAgentLoggerController`
+Telemetry and I/O logging controller for buffering agent events, filtering by category/search, and exporting logs to formatted JSON.
+
+```dart
+final loggerCtrl = AdkAgentLoggerController(maxLogEntries: 500);
+loggerCtrl.setCategory(AdkLogCategory.toolCall);
+final String jsonLogs = loggerCtrl.exportJson();
+```
 
 #### `AdkStorageSessionService`
 Plug-and-play session persistence backed by any key-value store (e.g. `shared_preferences`, `flutter_secure_storage`).
