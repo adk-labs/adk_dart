@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.8.17+1
+
+- Bumped package version to `2026.8.17+1`.
+- Synced MCP protocol client stability improvements with `adk_dart` `2026.8.17+1`.
+
 ## 2026.8.17
 
 - Bumped package version to `2026.8.17`.

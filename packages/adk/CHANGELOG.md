@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.8.17+1
+
+- Physically migrated all CLI submodules, Dev WebServer, and Angular Web UI static bundle into `packages/adk` as a standalone official CLI package.
+- 100% parity with `adk-python` click commands including `adk telemetry`, `adk test`, and `adk doctor`.
+- Upgraded default model in starter templates to `gemini-3.7-flash`.
+- Updated dependency alignment to `adk_dart: ^2026.8.17`.
+
 ## 2026.8.17
 
 - Bumped package version to `2026.8.17` and dependency `adk_dart: ^2026.8.17`.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.8.17+1
+
+- Bumped package version to `2026.8.17+1` and dependency `adk_dart: ^2026.8.17`.
+- Synced release with `adk_dart` `2026.8.17+1` rollout.
+
 ## 2026.8.17
 
 - Bumped package version to `2026.8.17` and dependency `adk_dart: ^2026.8.17`.
