@@ -1,3 +1,8 @@
+## 2026.8.17+3
+
+- Updated default model baseline across `LlmAgent` to `gemini-3.7-flash`.
+- Exported `LiteLlm` in `adk_core.dart` for Web-safe local LLM (Ollama / LM Studio) integration without `dart:io` dependencies.
+
 ## 2026.8.17+2
 
 - Updated all README installation and dependency configuration sections across all ecosystem packages to `2026.8.17+2`.

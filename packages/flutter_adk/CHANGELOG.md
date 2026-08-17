@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.8.17+6
+
+- Added Local LLM (Ollama / LM Studio) interactive example and documentation.
+- Enabled Web-safe `LiteLlm` runtime integration for Flutter without native `dart:io` constraints.
+
 ## 2026.8.17+5
 
 - Updated default model baseline across ADK to `gemini-3.7-flash`.

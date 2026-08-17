@@ -108,6 +108,43 @@ class MyApp extends StatelessWidget {
 }
 ```
 
+## Local LLM Quickstart (Ollama / LM Studio)
+
+You can run AI agents completely offline on local models without any cloud API keys:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_adk/flutter_adk.dart';
+
+void main() => runApp(const LocalAiApp());
+
+class LocalAiApp extends StatelessWidget {
+  const LocalAiApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Connect to local Ollama (http://localhost:11434/v1) or LM Studio (http://localhost:1234/v1)
+    final localModel = LiteLlm(
+      model: 'ollama_chat/gemma2:2b',
+      baseUrl: 'http://localhost:11434/v1',
+    );
+
+    final agent = Agent(
+      name: 'local_assistant',
+      model: localModel,
+      instruction: 'You are a fast, private offline AI assistant.',
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Offline Local LLM Assistant')),
+        body: AdkChatView(agent: agent),
+      ),
+    );
+  }
+}
+```
+
 ## Built-in UI Components & Controllers
 
 `flutter_adk` provides 12+ ready-to-use widgets and reactive controllers:

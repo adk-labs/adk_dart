@@ -31,6 +31,31 @@ List<ExampleMenuItem> buildExampleMenuItems() {
       agentBuilder: AgentService.buildBasic,
     ),
     ExampleMenuItem(
+      id: 'local_llm',
+      icon: Icons.memory_outlined,
+      category: ExampleCategory.general,
+      titleKey: 'local_llm.title',
+      summaryKey: 'local_llm.summary',
+      initialKey: 'local_llm.initial',
+      emptyKey: 'local_llm.empty',
+      hintKey: 'local_llm.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.local_llm.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.local_llm.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.local_llm.3',
+          difficulty: ExamplePromptDifficulty.advanced,
+        ),
+      ],
+      agentBuilder: AgentService.buildLocalLlm,
+    ),
+    ExampleMenuItem(
       id: 'custom_agent',
       icon: Icons.tune_outlined,
       category: ExampleCategory.general,

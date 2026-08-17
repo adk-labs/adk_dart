@@ -1502,9 +1502,35 @@ ${responseLanguageInstruction(language)}
     );
   }
 
+  static BaseAgent buildLocalLlm({
+    required String apiKey,
+    required AppLanguage language,
+    required String mcpUrl,
+    required String mcpBearerToken,
+    String baseUrl = 'http://localhost:11434/v1',
+    String modelName = 'ollama_chat/gemma2:2b',
+  }) {
+    final LiteLlm localModel = LiteLlm(
+      model: modelName,
+      baseUrl: baseUrl,
+    );
+
+    return Agent(
+      name: 'local_llm_agent',
+      model: localModel,
+      description: 'Local LLM assistant using Ollama, LM Studio, or local proxy.',
+      instruction: '''
+You are a helpful local assistant powered by a local LLM.
+- Answer user questions clearly and concisely.
+- Local inference runs completely offline without cloud API keys.
+${responseLanguageInstruction(language)}
+''',
+    );
+  }
+
   static Gemini _createGeminiModel(String apiKey) {
     return Gemini(
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.7-flash',
       environment: <String, String>{'GEMINI_API_KEY': apiKey},
     );
   }

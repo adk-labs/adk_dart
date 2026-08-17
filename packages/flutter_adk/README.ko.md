@@ -111,6 +111,43 @@ class MyApp extends StatelessWidget {
 }
 ```
 
+## 로컬 LLM 빠른 시작 (Ollama / LM Studio)
+
+클라우드 API 키 없이 완전히 오프라인으로 로컬 모델 기반 AI 에이전트를 구동할 수 있습니다:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_adk/flutter_adk.dart';
+
+void main() => runApp(const LocalAiApp());
+
+class LocalAiApp extends StatelessWidget {
+  const LocalAiApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 로컬 Ollama(http://localhost:11434/v1) 또는 LM Studio(http://localhost:1234/v1) 연결
+    final localModel = LiteLlm(
+      model: 'ollama_chat/gemma2:2b',
+      baseUrl: 'http://localhost:11434/v1',
+    );
+
+    final agent = Agent(
+      name: 'local_assistant',
+      model: localModel,
+      instruction: '빠르고 안전한 오프라인 로컬 AI 어시스턴트입니다.',
+    );
+
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('오프라인 로컬 LLM 챗')),
+        body: AdkChatView(agent: agent),
+      ),
+    );
+  }
+}
+```
+
 ## 내장 UI 컴포넌트 및 컨트롤러
 
 `flutter_adk`는 Flutter 앱에 즉시 적용 가능한 12종 이상의 UI 위젯과 상태 컨트롤러를 제공합니다:

@@ -1,15 +1,27 @@
-/// LiteLLM-compatible OpenAI-style model adapter.
-library;
-
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
 import '../types/content.dart';
+import '../utils/system_environment/system_environment.dart';
 import 'base_llm.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
+
+/// Exception thrown when a LiteLLM/Ollama HTTP request fails.
+class LiteLlmException implements Exception {
+  /// Creates a [LiteLlmException].
+  const LiteLlmException(this.message, {this.uri});
+
+  /// Error description.
+  final String message;
+
+  /// Target URI.
+  final Uri? uri;
+
+  @override
+  String toString() => 'LiteLlmException: $message${uri != null ? ' (uri: $uri)' : ''}';
+}
 
 /// Hook for overriding LiteLLM generation behavior.
 typedef LiteLlmGenerateHook =
@@ -281,26 +293,25 @@ class LiteLlm extends BaseLlm {
     required Map<String, Object?> payload,
     required bool stream,
   }) async {
+    final Map<String, String> env = readSystemEnvironment();
     final String resolvedBaseUrl = baseUrl ??
-        Platform.environment['LITELLM_API_BASE'] ??
-        Platform.environment['OLLAMA_API_BASE'] ??
-        Platform.environment['OPENAI_API_BASE'] ??
+        env['LITELLM_API_BASE'] ??
+        env['OLLAMA_API_BASE'] ??
+        env['OPENAI_API_BASE'] ??
         'http://localhost:4000/v1';
 
     final String resolvedApiKey = apiKey ??
-        Platform.environment['LITELLM_API_KEY'] ??
-        Platform.environment['OLLAMA_API_KEY'] ??
-        Platform.environment['OPENAI_API_KEY'] ??
+        env['LITELLM_API_KEY'] ??
+        env['OLLAMA_API_KEY'] ??
+        env['OPENAI_API_KEY'] ??
         'no-key';
 
     final Uri uri = Uri.parse('$resolvedBaseUrl/chat/completions');
 
     final Map<String, String> headers = <String, String>{
       'Content-Type': 'application/json',
+      if (resolvedApiKey != 'no-key') 'Authorization': 'Bearer $resolvedApiKey',
     };
-    if (resolvedApiKey != 'no-key') {
-      headers['Authorization'] = 'Bearer $resolvedApiKey';
-    }
 
     if (stream) {
       final http.Request httpRequest = http.Request('POST', uri)
@@ -313,7 +324,7 @@ class LiteLlm extends BaseLlm {
       if (streamedResponse.statusCode != 200) {
         final String errorBody = await streamedResponse.stream.bytesToString();
         client.close();
-        throw HttpException(
+        throw LiteLlmException(
           'LiteLlm HTTP error ${streamedResponse.statusCode}: $errorBody',
           uri: uri,
         );
@@ -352,7 +363,7 @@ class LiteLlm extends BaseLlm {
       );
 
       if (response.statusCode != 200) {
-        throw HttpException(
+        throw LiteLlmException(
           'LiteLlm HTTP error ${response.statusCode}: ${response.body}',
           uri: uri,
         );
