@@ -4,7 +4,7 @@ import 'package:adk_dart/adk_dart.dart';
 // 1. Define agents that will be called dynamically
 final Agent generateHeadline = Agent(
   name: 'generate_headline',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.7-flash',
   instruction: '''
 Write a short, engaging news headline about the given topic.
 If feedback is provided, improve the headline to resolve it.
@@ -15,7 +15,7 @@ Feedback: {feedback?}
 
 final Agent evaluateHeadline = Agent(
   name: 'evaluate_headline',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.7-flash',
   instruction: '''
 Grade whether the given headline is related to technology or software engineering.
 Respond with a JSON object conforming to the schema:
@@ -42,7 +42,7 @@ final FunctionNode orchestrator = node(
         generateHeadline,
         input: <String, Object?>{
           'input': topic,
-          if (feedback != null) 'feedback': feedback,
+          'feedback': ?feedback,
         },
       );
       print('[GenerateAgent] Generated: "$headline"');

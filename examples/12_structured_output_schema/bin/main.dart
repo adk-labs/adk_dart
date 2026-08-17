@@ -14,7 +14,7 @@ Future<void> main() async {
   final Agent agent = Agent(
     name: 'recipe_chef',
     model: Gemini(
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       environment: <String, String>{'GEMINI_API_KEY': apiKey},
     ),
     outputSchema: const <String, dynamic>{

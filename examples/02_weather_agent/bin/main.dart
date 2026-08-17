@@ -16,11 +16,11 @@ Future<void> main() async {
     );
   }
 
-  // Define an agent with Gemini 2.5 Flash
+  // Define an agent with Gemini 3.7 Flash
   final Agent agent = Agent(
     name: 'weather_agent',
-    model: 'gemini-2.5-flash',
-    tools: [
+    model: 'gemini-3.7-flash',
+    tools: <Object>[
       FunctionTool(
         func: getWeather,
         name: 'getWeather',

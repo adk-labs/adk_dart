@@ -24,7 +24,7 @@ Future<void> main() async {
 Future<void> _runSingleAgentExample() async {
   final Agent searchAssistant = Agent(
     name: 'search_assistant',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.7-flash',
     instruction:
         'You are a helpful assistant. Answer user questions using Google Search when needed.',
     description: 'An assistant that can search the web.',
@@ -43,7 +43,7 @@ Future<void> _runSingleAgentExample() async {
 Future<void> _runMultiAgentExample() async {
   final Agent greeter = Agent(
     name: 'greeter',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.7-flash',
     description: 'Greets users and handles small talk.',
     instruction:
         'Handle greetings and short small-talk politely. Keep replies short.',
@@ -51,7 +51,7 @@ Future<void> _runMultiAgentExample() async {
 
   final Agent taskExecutor = Agent(
     name: 'task_executor',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.7-flash',
     description: 'Executes user tasks and uses search when needed.',
     instruction:
         'Handle execution-focused tasks. Use Google Search when fresh web facts are needed.',
@@ -60,7 +60,7 @@ Future<void> _runMultiAgentExample() async {
 
   final Agent coordinator = Agent(
     name: 'coordinator',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.7-flash',
     description: 'I coordinate greetings and tasks.',
     instruction: '''
 You coordinate between sub-agents.

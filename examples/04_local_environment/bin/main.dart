@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 
 final Agent rootAgent = Agent(
-  model: 'gemini-2.5-pro',
+  model: 'gemini-3.7-flash',
   name: 'local_environment_agent',
   description: 'A simple agent that demonstrates local environment usage.',
   instruction: '''
