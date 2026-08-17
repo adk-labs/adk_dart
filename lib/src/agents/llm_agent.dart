@@ -122,7 +122,7 @@ class LlmAgent extends BaseAgent {
   }
 
   /// Built-in default model name.
-  static const String defaultModel = 'gemini-2.5-flash';
+  static const String defaultModel = 'gemini-3.7-flash';
   static Object _defaultModel = defaultModel;
 
   /// Model configuration as a model name or [BaseLlm].

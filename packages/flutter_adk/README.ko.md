@@ -90,20 +90,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. AI 에이전트 정의
+    // 1. AI 에이전트 정의 (기본 모델: gemini-3.7-flash)
     final agent = LlmAgent(
       name: 'assistant',
-      model: 'gemini-2.5-flash',
-      instruction: '친절하고 유용한 Flutter 어시스턴트입니다.',
+      model: 'gemini-3.7-flash',
+      instruction: '친절하고 똑똑한 플러터 어시스턴트입니다.',
     );
 
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('ADK Flutter 챗')),
-        // 2. 완성형 챗 위젯 임베드
+        appBar: AppBar(title: const Text('ADK AI Assistant')),
+        // 2. 완성형 챗 위젯 배치 (또는 AdkDevStudioView로 대시보드 전체 임베드 가능)
         body: AdkChatView(
           agent: agent,
-          inputPlaceholder: '무엇이든 물어보세요...',
+          inputPlaceholder: '무엇이든 질문해 보세요...',
         ),
       ),
     );
@@ -113,7 +113,9 @@ class MyApp extends StatelessWidget {
 
 ## 내장 UI 컴포넌트 및 컨트롤러
 
-`flutter_adk`는 Flutter 앱에 즉시 적용 가능한 10종 이상의 UI 위젯과 상태 컨트롤러를 제공합니다:
+`flutter_adk`는 Flutter 앱에 즉시 적용 가능한 12종 이상의 UI 위젯과 상태 컨트롤러를 제공합니다:
+- **`AdkDevStudioView`**: `adk web`을 플러터 화면에 그대로 이식한 완성형 개발자 스튜디오 (Playground, Live Logger, Agent Graph, State 통합 탭)
+- **`AdkAgentLoggerView`**: 에이전트 입출력, LLM 응답, 툴 호출, 지연 시간(ms), 상태 변화를 실시간으로 모니터링하고 JSON 복사를 지원하는 전문 로거
 - **`AdkChatView`**: 자동 스크롤, 입력창, 추천 질문 바, 음성 트리거가 통합된 완성형 챗 위젯
 - **`AdkChatController`**: 세션 및 스트리밍 상태 관리를 지원하는 ChangeNotifier 기반 컨트롤러
 - **`AdkFloatingChatButton`**: 탭 시 모달 바텀시트 챗창이 열리는 플로팅 액션 버튼(FAB)

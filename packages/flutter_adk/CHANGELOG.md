@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.8.17+5
+
+- Updated default model baseline across ADK to `gemini-3.7-flash`.
+- Added **`AdkDevStudioView`**: Flutter ADK Web developer studio with Playground, Live Logger, Agent Graph, and State tabs.
+- Added **`AdkAgentLoggerView`**: Real-time agent I/O logger with filter categories, latency, token usage, and JSON export/copy.
+
 ## 2026.8.17+4
 
 - Added complete Flutter AI Agent UI Kit:

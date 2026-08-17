@@ -87,17 +87,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Define your AI Agent
+    // 1. Define your AI Agent (Default model is gemini-3.7-flash)
     final agent = LlmAgent(
       name: 'assistant',
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       instruction: 'You are a helpful and friendly Flutter assistant.',
     );
 
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(title: const Text('ADK Flutter Chat')),
-        // 2. Embed the turnkey chat view
+        // 2. Embed the turnkey chat view or use AdkDevStudioView(agent: agent)
         body: AdkChatView(
           agent: agent,
           inputPlaceholder: 'Ask anything...',
@@ -110,7 +110,9 @@ class MyApp extends StatelessWidget {
 
 ## Built-in UI Components & Controllers
 
-`flutter_adk` provides 10+ ready-to-use widgets and reactive controllers:
+`flutter_adk` provides 12+ ready-to-use widgets and reactive controllers:
+- **`AdkDevStudioView`**: Turnkey ADK Web / Dev Studio inspector in Flutter (Tabs for Playground, Live Logger, Agent Graph, and State).
+- **`AdkAgentLoggerView`**: Real-time agent I/O logger (User inputs, LLM responses, Tool calls, State deltas, Latency, Token counts).
 - **`AdkChatView`**: Full-featured chat UI with autoscroll, input bar, prompt suggestions, and voice triggers.
 - **`AdkChatController`**: ChangeNotifier-based state controller for managing messages and streaming turns.
 - **`AdkFloatingChatButton`**: Floating Action Button (FAB) that opens an AI assistant modal bottom sheet.

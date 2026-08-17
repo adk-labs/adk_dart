@@ -279,7 +279,7 @@ void main() {
     testWidgets('renders AdkChatView with suggestions and input', (WidgetTester tester) async {
       final agent = LlmAgent(
         name: 'simple_agent',
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.7-flash',
       );
 
       await tester.pumpWidget(
@@ -300,6 +300,63 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'Hello AI');
       expect(find.text('Hello AI'), findsOneWidget);
+    });
+
+    testWidgets('renders AdkAgentLoggerView and displays logs', (WidgetTester tester) async {
+      final logs = <AdkAgentLogEntry>[
+        AdkAgentLogEntry(
+          id: 'log1',
+          timestamp: DateTime.now(),
+          agentName: 'researcher',
+          category: AdkLogCategory.modelResponse,
+          title: 'Generated analysis',
+          payload: <String, dynamic>{'status': 'ok'},
+          durationMs: 145,
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdkAgentLoggerView(logs: logs),
+          ),
+        ),
+      );
+
+      expect(find.text('Agent I/O Logger'), findsOneWidget);
+      expect(find.text('researcher'), findsOneWidget);
+      expect(find.text('Generated analysis'), findsOneWidget);
+      expect(find.text('145ms'), findsOneWidget);
+    });
+
+    testWidgets('renders AdkDevStudioView with tabs and components', (WidgetTester tester) async {
+      final agent = LlmAgent(
+        name: 'studio_agent',
+        model: 'gemini-3.7-flash',
+        description: 'Test Studio Agent',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdkDevStudioView(
+            agent: agent,
+            title: 'Custom Dev Studio',
+          ),
+        ),
+      );
+
+      expect(find.text('Custom Dev Studio'), findsOneWidget);
+      expect(find.text('Playground'), findsOneWidget);
+      expect(find.text('Live Logger'), findsOneWidget);
+      expect(find.text('Agent Graph'), findsOneWidget);
+      expect(find.text('State & Session'), findsOneWidget);
+
+      // Switch to Agent Graph tab
+      await tester.tap(find.text('Agent Graph'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('studio_agent'), findsOneWidget);
+      expect(find.text('Test Studio Agent'), findsOneWidget);
     });
   });
 }
