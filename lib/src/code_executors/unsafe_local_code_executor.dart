@@ -9,11 +9,12 @@ import '../agents/invocation_context.dart';
 import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
-/// Executes code locally via shell/Python processes.
+/// Executes code locally via shell, Python, Dart, or Node processes.
 class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
   /// Creates an unsafe local code executor.
   UnsafeLocalCodeExecutor({
     this.defaultTimeout = const Duration(seconds: 30),
+    this.executable = 'python3',
     bool stateful = false,
     bool optimizeDataFile = false,
     super.errorRetryAttempts = 2,
@@ -34,6 +35,9 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
 
   /// Default execution timeout.
   final Duration defaultTimeout;
+
+  /// Program or runtime executable to run (e.g. `'python3'`, `'dart'`, `'node'`).
+  final String executable;
 
   @override
   /// Executes a raw command using the local shell.
@@ -93,12 +97,33 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
         await output.writeAsBytes(_fileContentToBytes(file.content));
       }
 
-      final Process process = await Process.start(
-        'python3',
-        <String>['-c', codeExecutionInput.code],
-        workingDirectory: tempDirectory.path,
-        runInShell: false,
-      );
+      final Process process;
+      if (executable == 'dart') {
+        final File entryFile = File('${tempDirectory.path}/main.dart');
+        await entryFile.writeAsString(codeExecutionInput.code);
+        process = await Process.start(
+          Platform.resolvedExecutable,
+          <String>['run', 'main.dart'],
+          workingDirectory: tempDirectory.path,
+          runInShell: false,
+        );
+      } else if (executable == 'node') {
+        final File entryFile = File('${tempDirectory.path}/main.js');
+        await entryFile.writeAsString(codeExecutionInput.code);
+        process = await Process.start(
+          'node',
+          <String>['main.js'],
+          workingDirectory: tempDirectory.path,
+          runInShell: false,
+        );
+      } else {
+        process = await Process.start(
+          executable,
+          <String>['-c', codeExecutionInput.code],
+          workingDirectory: tempDirectory.path,
+          runInShell: false,
+        );
+      }
 
       final Future<String> stdoutFuture = process.stdout
           .transform(SystemEncoding().decoder)
