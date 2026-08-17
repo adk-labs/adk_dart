@@ -164,9 +164,11 @@ class LocalAiApp extends StatelessWidget {
 - **`AdkWorkflowProgressIndicator`**: ADK 2.0 워크플로우 노드 실행 타임라인 진행률 바
 - **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`**: 음성 마이크 버튼 및 실시간 오디오 파형 애니메이션 위젯
 - **`AdkTokenUsageBadge`**: 입력/출력 토큰 소모량을 작게 보여주는 뱃지
-- **`AdkMessageBubble`**: 유저, 모델, 툴 실행 결과를 미려하게 렌더링하는 Material 3 메시지 버블
-- **`AdkTypingIndicator`**: 모델 생성 중 상태를 보여주는 부드러운 타이핑 인디케이터
-- **`AdkEventStreamBuilder`**: 에이전트의 `Stream<Event>`를 위젯 트리에 직접 바인딩하는 반응형 빌더
+- **`AdkStructuredDataView`**: `outputSchema` 기반 구조화된 JSON 응답을 위한 프리티 프린팅 및 복사 기능 지원 뷰어.
+- **`AdkToolInspectorView`**: 에이전트에 등록된 모든 툴 목록과 JSON 파라미터 스키마를 트리 형태로 조회하는 인스펙터.
+- **`AdkMessageBubble`**: 사용자, 모델, 툴 실행 결과를 명확히 구분하는 Material 3 스타일 메시지 버블.
+- **`AdkTypingIndicator`**: 부드러운 펄스 애니메이션이 적용된 AI 생각/타이핑 인디케이터.
+- **`AdkEventStreamBuilder`**: ADK의 실시간 `Stream<Event>`를 즉시 수신하여 반응형 UI를 구성하는 전용 빌더.
 
 ## 참고
 

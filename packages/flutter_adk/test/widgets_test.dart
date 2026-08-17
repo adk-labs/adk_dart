@@ -358,5 +358,50 @@ void main() {
       expect(find.text('studio_agent'), findsOneWidget);
       expect(find.text('Test Studio Agent'), findsOneWidget);
     });
+
+    testWidgets('renders AdkStructuredDataView with JSON formatting', (WidgetTester tester) async {
+      final jsonPayload = <String, dynamic>{
+        'name': 'Sarah',
+        'role': 'Engineer',
+        'skills': <String>['Flutter', 'Dart'],
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdkStructuredDataView(
+              data: jsonPayload,
+              title: 'Profile JSON',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Profile JSON'), findsOneWidget);
+      expect(find.textContaining('Sarah'), findsOneWidget);
+      expect(find.textContaining('Flutter'), findsOneWidget);
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+    });
+
+    testWidgets('renders AdkToolInspectorView with tool parameters', (WidgetTester tester) async {
+      final tools = <Object>[
+        FunctionTool(
+          name: 'get_weather',
+          description: 'Fetches weather for location',
+          func: ({required String city}) => 'Sunny in $city',
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdkToolInspectorView(tools: tools),
+          ),
+        ),
+      );
+
+      expect(find.text('get_weather'), findsOneWidget);
+      expect(find.text('Fetches weather for location'), findsOneWidget);
+    });
   });
 }

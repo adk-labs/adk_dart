@@ -161,6 +161,8 @@ class LocalAiApp extends StatelessWidget {
 - **`AdkWorkflowProgressIndicator`**: Step-by-step workflow timeline progress tracker.
 - **`AdkVoiceMicButton` & `AdkAudioWaveVisualizer`**: Interactive voice input button and animated waveform visualizer.
 - **`AdkTokenUsageBadge`**: Compact badge displaying prompt and completion token counts.
+- **`AdkStructuredDataView`**: Pretty-printed, copyable structured JSON inspector for outputSchema responses.
+- **`AdkToolInspectorView`**: Visual registry inspector listing all agent tools and their parameter schemas.
 - **`AdkMessageBubble`**: Material 3 message bubble for user, model, and tool outputs.
 - **`AdkTypingIndicator`**: Smooth pulsing typing indicator.
 - **`AdkEventStreamBuilder`**: Reactive widget builder for listening directly to `Stream<Event>`.

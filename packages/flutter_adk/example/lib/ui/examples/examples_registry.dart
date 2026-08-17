@@ -56,6 +56,27 @@ List<ExampleMenuItem> buildExampleMenuItems() {
       agentBuilder: AgentService.buildLocalLlm,
     ),
     ExampleMenuItem(
+      id: 'structured_output',
+      icon: Icons.data_object_rounded,
+      category: ExampleCategory.general,
+      titleKey: 'structured_output.title',
+      summaryKey: 'structured_output.summary',
+      initialKey: 'structured_output.initial',
+      emptyKey: 'structured_output.empty',
+      hintKey: 'structured_output.hint',
+      prompts: const <ExamplePromptItem>[
+        ExamplePromptItem(
+          textKey: 'prompt.structured_output.1',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+        ExamplePromptItem(
+          textKey: 'prompt.structured_output.2',
+          difficulty: ExamplePromptDifficulty.basic,
+        ),
+      ],
+      agentBuilder: AgentService.buildStructuredOutput,
+    ),
+    ExampleMenuItem(
       id: 'custom_agent',
       icon: Icons.tune_outlined,
       category: ExampleCategory.general,

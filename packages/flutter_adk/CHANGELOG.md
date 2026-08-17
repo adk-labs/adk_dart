@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.8.17+7
+
+- Added `AdkStructuredDataView` widget for pretty-printing, inspecting, and copying JSON structured outputs.
+- Added `AdkToolInspectorView` widget for visual tree inspection of registered agent tools and parameter schemas.
+- Added `Structured Output` interactive recipe/profile extraction example to Flutter example app.
+
 ## 2026.8.17+6
 
 - Added Local LLM (Ollama / LM Studio) interactive example and documentation.
