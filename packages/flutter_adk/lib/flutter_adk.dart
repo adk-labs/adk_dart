@@ -10,6 +10,7 @@ import 'flutter_adk_platform_interface.dart';
 export 'package:adk_dart/adk_core.dart' hide State;
 
 export 'src/controllers/adk_chat_controller.dart';
+export 'src/models/adk_attachment_model.dart';
 export 'src/models/adk_chat_message.dart';
 export 'src/models/adk_prompt_suggestion_model.dart';
 export 'src/models/adk_session_info.dart';

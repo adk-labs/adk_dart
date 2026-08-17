@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/adk_attachment_model.dart';
 import '../models/adk_chat_message.dart';
 import 'adk_typing_indicator.dart';
 
@@ -102,13 +103,18 @@ class AdkMessageBubble extends StatelessWidget {
                   ),
                 ),
               ),
-            SelectableText(
-              message.text,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: fgColor,
-                height: 1.4,
+            if (message.attachments.isNotEmpty) ...<Widget>[
+              _buildAttachmentsList(theme, isUser),
+              if (message.text.isNotEmpty) const SizedBox(height: 6.0),
+            ],
+            if (message.text.isNotEmpty)
+              SelectableText(
+                message.text,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: fgColor,
+                  height: 1.4,
+                ),
               ),
-            ),
             if (message.isPartial)
               Padding(
                 padding: const EdgeInsets.only(top: 6.0),
@@ -120,6 +126,60 @@ class AdkMessageBubble extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAttachmentsList(ThemeData theme, bool isUser) {
+    return Wrap(
+      spacing: 6.0,
+      runSpacing: 6.0,
+      children: message.attachments.map((AdkAttachment att) {
+        if (att.isImage && att.bytes != null) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8.0),
+            child: Image.memory(
+              att.bytes!,
+              width: 140.0,
+              height: 140.0,
+              fit: BoxFit.cover,
+            ),
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          decoration: BoxDecoration(
+            color: isUser
+                ? Colors.white.withValues(alpha: 0.2)
+                : theme.colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(6.0),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                att.isPdf
+                    ? Icons.picture_as_pdf
+                    : (att.isAudio ? Icons.audiotrack : Icons.attach_file),
+                size: 16.0,
+                color: isUser ? Colors.white : theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 4.0),
+              Flexible(
+                child: Text(
+                  att.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.0,
+                    color: isUser ? Colors.white : theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -140,19 +200,19 @@ class AdkMessageBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(
-              Icons.build_circle_outlined,
+              Icons.construction,
               size: 16.0,
-              color: theme.colorScheme.tertiary,
+              color: theme.colorScheme.primary,
             ),
             const SizedBox(width: 8.0),
             Flexible(
               child: Text(
-                message.text.isNotEmpty
-                    ? message.text
-                    : 'Tool: ${message.toolName ?? "unknown"}',
+                message.toolName != null
+                    ? 'Tool Execution: ${message.toolName}'
+                    : message.text,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'monospace',
-                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -163,32 +223,34 @@ class AdkMessageBubble extends StatelessWidget {
   }
 
   Widget _buildSystemCard(ThemeData theme) {
-    return Align(
-      alignment: Alignment.center,
+    final bool isErr = message.errorMessage != null;
+
+    return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 16.0),
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
         decoration: BoxDecoration(
-          color: message.errorMessage != null
-              ? theme.colorScheme.errorContainer
-              : theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8.0),
+          color: isErr
+              ? theme.colorScheme.errorContainer.withValues(alpha: 0.7)
+              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(16.0),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            if (message.errorMessage != null)
-              Icon(
-                Icons.error_outline,
-                size: 16.0,
-                color: theme.colorScheme.error,
-              ),
-            if (message.errorMessage != null) const SizedBox(width: 6.0),
+            Icon(
+              isErr ? Icons.error_outline : Icons.info_outline,
+              size: 14.0,
+              color: isErr
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6.0),
             Flexible(
               child: Text(
                 message.errorMessage ?? message.text,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: message.errorMessage != null
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: isErr
                       ? theme.colorScheme.onErrorContainer
                       : theme.colorScheme.onSurfaceVariant,
                 ),

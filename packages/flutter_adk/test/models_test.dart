@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_adk/flutter_adk.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -231,6 +232,40 @@ void main() {
       final updated = idle.copyWith(status: AdkVoiceStatus.listening, isMuted: true);
       expect(updated.status, equals(AdkVoiceStatus.listening));
       expect(updated.isMuted, isTrue);
+    });
+  });
+
+  group('AdkAttachment Model Tests', () {
+    test('creates image, file, and uri attachments and converts to Part', () {
+      final img = AdkAttachment.imageBytes(
+        name: 'chart.png',
+        bytes: Uint8List.fromList([1, 2, 3, 4]),
+      );
+      expect(img.isImage, isTrue);
+      expect(img.isPdf, isFalse);
+      expect(img.sizeBytes, equals(4));
+
+      final part1 = img.toPart();
+      expect(part1.inlineData, isNotNull);
+      expect(part1.inlineData!.mimeType, equals('image/png'));
+
+      final pdf = AdkAttachment.fileBytes(
+        name: 'doc.pdf',
+        bytes: Uint8List.fromList([5, 6]),
+        mimeType: 'application/pdf',
+      );
+      expect(pdf.isPdf, isTrue);
+      expect(pdf.isImage, isFalse);
+
+      final remote = AdkAttachment.uri(
+        name: 'cloud.mp3',
+        uri: 'https://storage.googleapis.com/audio.mp3',
+        mimeType: 'audio/mp3',
+      );
+      expect(remote.isAudio, isTrue);
+      final part2 = remote.toPart();
+      expect(part2.fileData, isNotNull);
+      expect(part2.fileData!.fileUri, contains('audio.mp3'));
     });
   });
 }

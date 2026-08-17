@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'adk_attachment_model.dart';
 
 /// The sender role of a chat message.
 enum AdkMessageRole {
@@ -30,6 +31,7 @@ class AdkChatMessage {
     this.toolArgs,
     this.toolResult,
     this.errorMessage,
+    this.attachments = const <AdkAttachment>[],
     this.metadata = const <String, dynamic>{},
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
@@ -39,6 +41,7 @@ class AdkChatMessage {
     required String id,
     required String text,
     String author = 'User',
+    List<AdkAttachment> attachments = const <AdkAttachment>[],
     DateTime? timestamp,
     Map<String, dynamic> metadata = const <String, dynamic>{},
   }) {
@@ -47,6 +50,7 @@ class AdkChatMessage {
       role: AdkMessageRole.user,
       text: text,
       author: author,
+      attachments: attachments,
       timestamp: timestamp,
       metadata: metadata,
     );
@@ -59,6 +63,7 @@ class AdkChatMessage {
     String author = 'Agent',
     bool isPartial = false,
     String? thought,
+    List<AdkAttachment> attachments = const <AdkAttachment>[],
     DateTime? timestamp,
     Map<String, dynamic> metadata = const <String, dynamic>{},
   }) {
@@ -69,6 +74,7 @@ class AdkChatMessage {
       author: author,
       isPartial: isPartial,
       thought: thought,
+      attachments: attachments,
       timestamp: timestamp,
       metadata: metadata,
     );
@@ -149,6 +155,9 @@ class AdkChatMessage {
   /// Error message, if an error occurred.
   final String? errorMessage;
 
+  /// Attached media or document files.
+  final List<AdkAttachment> attachments;
+
   /// Custom metadata map.
   final Map<String, dynamic> metadata;
 
@@ -188,6 +197,7 @@ class AdkChatMessage {
     Map<String, dynamic>? toolArguments,
     dynamic toolResult,
     String? errorMessage,
+    List<AdkAttachment>? attachments,
     Map<String, dynamic>? metadata,
     DateTime? timestamp,
   }) {
@@ -202,6 +212,7 @@ class AdkChatMessage {
       toolArgs: toolArguments ?? toolArgs ?? this.toolArgs,
       toolResult: toolResult ?? this.toolResult,
       errorMessage: errorMessage ?? this.errorMessage,
+      attachments: attachments ?? this.attachments,
       metadata: metadata ?? this.metadata,
       timestamp: timestamp ?? this.timestamp,
     );
@@ -216,10 +227,11 @@ class AdkChatMessage {
         other.text == text &&
         other.isPartial == isPartial &&
         other.toolName == toolName &&
-        other.errorMessage == errorMessage;
+        other.errorMessage == errorMessage &&
+        listEquals(other.attachments, attachments);
   }
 
   @override
   int get hashCode =>
-      Object.hash(id, role, text, isPartial, toolName, errorMessage);
+      Object.hash(id, role, text, isPartial, toolName, errorMessage, Object.hashAll(attachments));
 }
