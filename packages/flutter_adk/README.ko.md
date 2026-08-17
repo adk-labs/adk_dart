@@ -177,6 +177,16 @@ loggerCtrl.setCategory(AdkLogCategory.toolCall);
 final String jsonLogs = loggerCtrl.exportJson();
 ```
 
+#### `AdkAgentManagerController` (에이전트 중앙 관리 컨트롤러)
+앱에 등록된 모든 에이전트를 중앙에서 등록, 런타임 활성/비활성화(ON/OFF), 프롬프트 핫스왑, 누적 토큰 및 지연 시간 메트릭을 집계하는 컨트롤러입니다.
+
+```dart
+final managerCtrl = AdkAgentManagerController();
+managerCtrl.registerAgent(researchAgent, id: 'researcher', tags: ['research', 'web']);
+managerCtrl.toggleAgent('researcher', true);
+print('평균 지연시간: ${managerCtrl.getAgent("researcher")?.metrics.avgLatencyMs} ms');
+```
+
 #### `AdkStorageSessionService`
 `SharedPreferences`, `FlutterSecureStorage` 등 모든 Key-Value 저장소를 2줄로 연결하는 세션 영구화 서비스입니다.
 
@@ -217,6 +227,7 @@ AdkTheme(
 | 컴포넌트 | 설명 | 사용 예시 |
 |---|---|---|
 | **`showAdkChatBottomSheet`** | 한 줄로 호출하는 대화형 AI 상담원 모달 바텀시트 | `showAdkChatBottomSheet(context: context, agent: myAgent);` |
+| **`AdkAgentManagementView`** | 에이전트 ON/OFF 토글, 프롬프트 인스펙터, 성능 메트릭 통합 대시보드 | `AdkAgentManagementView(controller: managerCtrl);` |
 | **`AdkSplitPaneView`** | 웹/태블릿/데스크톱용 적응형 분할 뷰 (좌: 챗 / 우: 로거 & 도구 인스펙터) | `AdkSplitPaneView(agent: myAgent, splitRatio: 0.55);` |
 | **`AdkReasoningExpander`** | Gemini 3.7 Thinking 사고 과정 아코디언 확장 뷰어 | `AdkReasoningExpander(thought: msg.thought!, durationMs: 1200);` |
 | **`AdkAgentPersonaSelector`** | 멀티 에이전트 페르소나 선택 그리드/캐러셀 카드 템플릿 | `AdkAgentPersonaSelector(personas: [...], onPersonaSelected: (p) => ...);` |

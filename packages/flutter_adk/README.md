@@ -177,6 +177,16 @@ loggerCtrl.setCategory(AdkLogCategory.toolCall);
 final String jsonLogs = loggerCtrl.exportJson();
 ```
 
+#### `AdkAgentManagerController` (Central Agent Fleet Manager)
+Central registry controller for registering, toggling (ON/OFF), hot-swapping prompts, and tracking cumulative token and latency telemetry across all agents.
+
+```dart
+final managerCtrl = AdkAgentManagerController();
+managerCtrl.registerAgent(researchAgent, id: 'researcher', tags: ['research', 'web']);
+managerCtrl.toggleAgent('researcher', true);
+print('Avg Latency: ${managerCtrl.getAgent("researcher")?.metrics.avgLatencyMs}');
+```
+
 #### `AdkStorageSessionService`
 Plug-and-play session persistence backed by any key-value store (e.g. `shared_preferences`, `flutter_secure_storage`).
 
@@ -217,6 +227,7 @@ AdkTheme(
 | Component | Description | Usage Example |
 |---|---|---|
 | **`showAdkChatBottomSheet`** | Turnkey modal draggable bottom sheet hosting an interactive AI assistant. | `showAdkChatBottomSheet(context: context, agent: myAgent);` |
+| **`AdkAgentManagementView`** | Administrative fleet dashboard for toggling agents, inspecting prompts, and monitoring telemetry. | `AdkAgentManagementView(controller: managerCtrl);` |
 | **`AdkSplitPaneView`** | Adaptive split-pane layout (Chat on left, Live Logger & Tools on right) for Web/Desktop/Tablet. | `AdkSplitPaneView(agent: myAgent, splitRatio: 0.55);` |
 | **`AdkReasoningExpander`** | Collapsible accordion for viewing Gemini 3.7 Thinking and reasoning steps. | `AdkReasoningExpander(thought: msg.thought!, durationMs: 1200);` |
 | **`AdkAgentPersonaSelector`** | Responsive Grid/Carousel card selector for multi-agent persona switching. | `AdkAgentPersonaSelector(personas: [...], onPersonaSelected: (p) => ...);` |
