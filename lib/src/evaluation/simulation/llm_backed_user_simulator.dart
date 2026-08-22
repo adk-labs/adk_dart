@@ -110,7 +110,7 @@ class LlmBackedUserSimulator
     extends UserSimulator<LlmBackedUserSimulatorConfig> {
   /// Creates an LLM-backed simulator for [conversationScenario].
   LlmBackedUserSimulator({
-    required BaseUserSimulatorConfig config,
+    required super.config,
     required ConversationScenario conversationScenario,
     BaseLlm Function(String model)? llmFactory,
   }) : _conversationScenario = conversationScenario,
@@ -118,10 +118,9 @@ class LlmBackedUserSimulator
        _llmFactory = llmFactory ?? _defaultLlmFactory,
        _invocationCount = 0,
        super(
-         config: config,
          configDecoder: LlmBackedUserSimulatorConfig.fromBase,
        ) {
-    _llm = _llmFactory(this.config.model);
+    _llm = _llmFactory(config.model);
   }
 
   final ConversationScenario _conversationScenario;

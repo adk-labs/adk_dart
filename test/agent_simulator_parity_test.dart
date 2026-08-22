@@ -331,8 +331,8 @@ class _FakeTool extends BaseTool {
   _FakeTool({
     required super.name,
     this.declaration,
-    String description = 'fake tool',
-  }) : super(description: description);
+    super.description = 'fake tool',
+  });
 
   final FunctionDeclaration? declaration;
 

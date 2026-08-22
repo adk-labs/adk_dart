@@ -16,10 +16,9 @@ const String llmRequestIdKey = '__llm_request_key__';
 class RequestIntercepterPlugin extends BasePlugin {
   /// Creates a request-capture plugin with bounded cache size.
   RequestIntercepterPlugin({
-    String name = 'request_intercepter_plugin',
+    super.name = 'request_intercepter_plugin',
     int maxCachedRequests = 1000,
-  }) : _maxCachedRequests = maxCachedRequests,
-       super(name: name) {
+  }) : _maxCachedRequests = maxCachedRequests {
     if (maxCachedRequests <= 0) {
       throw ArgumentError.value(
         maxCachedRequests,

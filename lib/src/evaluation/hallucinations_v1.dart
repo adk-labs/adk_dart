@@ -239,9 +239,7 @@ class HallucinationsV1Evaluator extends Evaluator {
       return EvaluationResult();
     }
 
-    final List<Invocation?> expected = expectedInvocations == null
-        ? List<Invocation?>.filled(actualInvocations.length, null)
-        : expectedInvocations;
+    final List<Invocation?> expected = expectedInvocations ?? List<Invocation?>.filled(actualInvocations.length, null);
 
     final int count = expectedInvocations == null
         ? actualInvocations.length

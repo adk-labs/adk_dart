@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:test/test.dart';
 import 'package:adk_dart/adk_dart.dart';
 import 'package:adk_dart/src/models/gemini_rest_api_client.dart';
-import 'package:adk_dart/src/sessions/in_memory_session_service.dart';
 
 class MockGeminiRestTransport implements GeminiRestTransport {
   MockGeminiRestTransport(this.streamResponse);

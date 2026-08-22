@@ -99,14 +99,13 @@ class FinalResponseMatchV2Evaluator extends LlmAsJudge {
   /// Creates an LLM-judge evaluator for semantic response matching.
   FinalResponseMatchV2Evaluator(
     this._evalMetric, {
-    AutoRaterInvoker? autoRaterInvoker,
+    super.autoRaterInvoker,
     String? autoRaterPromptTemplate,
   }) : _autoRaterPromptTemplate =
            autoRaterPromptTemplate ?? _finalResponseMatchV2Prompt,
        super(
          evalMetric: _evalMetric,
          expectedInvocationsRequired: true,
-         autoRaterInvoker: autoRaterInvoker,
        ) {
     if (_evalMetric.criterion == null) {
       throw ArgumentError(

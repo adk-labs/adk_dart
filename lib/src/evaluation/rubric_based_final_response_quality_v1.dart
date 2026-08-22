@@ -5,7 +5,6 @@ import 'app_details.dart';
 import 'eval_case.dart';
 import 'eval_metrics.dart';
 import 'eval_rubrics.dart';
-import 'llm_as_judge.dart';
 import 'llm_as_judge_utils.dart';
 import 'rubric_based_evaluator.dart';
 
@@ -208,11 +207,10 @@ class RubricBasedFinalResponseQualityV1Evaluator extends RubricBasedEvaluator {
   /// Creates a rubric-based final-response evaluator from [evalMetric].
   RubricBasedFinalResponseQualityV1Evaluator(
     EvalMetricSpec evalMetric, {
-    AutoRaterInvoker? autoRaterInvoker,
+    super.autoRaterInvoker,
   }) : super(
          evalMetric: evalMetric,
          rubricType: 'FINAL_RESPONSE_QUALITY',
-         autoRaterInvoker: autoRaterInvoker,
        );
 
   @override

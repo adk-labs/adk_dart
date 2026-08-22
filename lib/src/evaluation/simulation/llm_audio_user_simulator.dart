@@ -69,7 +69,7 @@ class LlmAudioUserSimulator
     extends UserSimulator<LlmAudioUserSimulatorConfig> {
   /// Creates an LLM audio user simulator.
   LlmAudioUserSimulator({
-    required BaseUserSimulatorConfig config,
+    required super.config,
     required ConversationScenario conversationScenario,
     BaseLlm Function(String model)? llmFactory,
     BaseLlm? audioLlm,
@@ -80,7 +80,6 @@ class LlmAudioUserSimulator
          llmFactory: llmFactory,
        ),
        super(
-         config: config,
          configDecoder: LlmAudioUserSimulatorConfig.fromBase,
        );
 

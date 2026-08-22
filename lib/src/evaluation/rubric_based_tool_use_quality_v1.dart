@@ -4,7 +4,6 @@ library;
 import 'eval_case.dart';
 import 'eval_metrics.dart';
 import 'eval_rubrics.dart';
-import 'llm_as_judge.dart';
 import 'llm_as_judge_utils.dart';
 import 'rubric_based_evaluator.dart';
 
@@ -106,11 +105,10 @@ class RubricBasedToolUseV1Evaluator extends RubricBasedEvaluator {
   /// Creates a rubric-based tool-use evaluator from [evalMetric].
   RubricBasedToolUseV1Evaluator(
     EvalMetricSpec evalMetric, {
-    AutoRaterInvoker? autoRaterInvoker,
+    super.autoRaterInvoker,
   }) : super(
          evalMetric: evalMetric,
          rubricType: 'TOOL_USE_QUALITY',
-         autoRaterInvoker: autoRaterInvoker,
        );
 
   @override

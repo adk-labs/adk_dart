@@ -57,7 +57,7 @@ class _SuccessAgent extends BaseAgent {
 }
 
 class _ErrorTrackingPlugin extends BasePlugin {
-  _ErrorTrackingPlugin({String name = 'error_tracker'}) : super(name: name);
+  _ErrorTrackingPlugin({super.name = 'error_tracker'});
 
   final List<({String agentName, Object error})> agentErrors =
       <({String agentName, Object error})>[];

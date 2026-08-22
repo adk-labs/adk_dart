@@ -4,8 +4,7 @@ import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
 class _QueuedLlm extends BaseLlm {
-  _QueuedLlm({required this.outputs, required String model})
-    : super(model: model);
+  _QueuedLlm({required this.outputs, required super.model});
 
   final Queue<String> outputs;
   final List<LlmRequest> requests = <LlmRequest>[];

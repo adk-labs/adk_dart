@@ -24,8 +24,8 @@ class _EchoAgent extends BaseAgent {
 }
 
 class _RootAgent extends BaseAgent {
-  _RootAgent({List<BaseAgent>? subAgents})
-    : super(name: 'root_agent', subAgents: subAgents);
+  _RootAgent({super.subAgents})
+    : super(name: 'root_agent');
 
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
@@ -39,12 +39,10 @@ class _RootAgent extends BaseAgent {
 
 class _BinaryJudgeEvaluator extends LlmAsJudge {
   _BinaryJudgeEvaluator({
-    required EvalMetricSpec evalMetric,
-    required AutoRaterInvoker autoRaterInvoker,
+    required super.evalMetric,
+    required AutoRaterInvoker super.autoRaterInvoker,
   }) : super(
-         evalMetric: evalMetric,
          expectedInvocationsRequired: true,
-         autoRaterInvoker: autoRaterInvoker,
        );
 
   @override

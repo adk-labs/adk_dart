@@ -21,8 +21,8 @@ class _QueuedLlm extends BaseLlm {
 }
 
 class _RegistryJudgeEvaluator extends LlmAsJudge {
-  _RegistryJudgeEvaluator({required EvalMetricSpec evalMetric})
-    : super(evalMetric: evalMetric, expectedInvocationsRequired: true);
+  _RegistryJudgeEvaluator({required super.evalMetric})
+    : super(expectedInvocationsRequired: true);
 
   @override
   String formatAutoRaterPrompt(

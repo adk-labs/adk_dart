@@ -190,7 +190,7 @@ void main() {
                   },
             ),
             A2aRequestInterceptor(
-              afterRequest: (InvocationContext _, Object __, Event event) {
+              afterRequest: (InvocationContext _, Object _, Event event) {
                 event.customMetadata ??= <String, dynamic>{};
                 event.customMetadata!['after_interceptor'] = true;
                 return event;
@@ -251,7 +251,7 @@ void main() {
                   (
                     InvocationContext ctx,
                     A2aMessage _,
-                    A2aRequestParametersConfig __,
+                    A2aRequestParametersConfig _,
                   ) {
                     return A2aBeforeRequestResult.event(
                       Event(
