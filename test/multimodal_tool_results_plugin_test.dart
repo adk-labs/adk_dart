@@ -107,4 +107,57 @@ void main() {
       expect(callbackResult, same(result));
     },
   );
+
+  test('validates retention parameter', () {
+    expect(
+      () => MultimodalToolResultsPlugin(retention: 'invalid'),
+      throwsArgumentError,
+    );
+    final MultimodalToolResultsPlugin plugin = MultimodalToolResultsPlugin(
+      retention: 'session',
+    );
+    expect(plugin.retention, MultimodalToolResultsRetention.session);
+  });
+
+  test('session retention preserves parts across multiple model calls', () async {
+    final MultimodalToolResultsPlugin plugin = MultimodalToolResultsPlugin(
+      retention: 'session',
+    );
+    final Context context = _newContext();
+    final _FakeTool tool = _FakeTool();
+
+    await plugin.afterToolCallback(
+      tool: tool,
+      toolArgs: <String, dynamic>{},
+      toolContext: context,
+      result: <String, dynamic>{
+        'result': <Part>[Part.text('retained text')],
+      },
+    );
+
+    final LlmRequest req1 = LlmRequest(
+      contents: <Content>[
+        Content(role: 'user', parts: <Part>[Part.text('turn 1')]),
+      ],
+    );
+    await plugin.beforeModelCallback(
+      callbackContext: context,
+      llmRequest: req1,
+    );
+    expect(req1.contents.last.parts, hasLength(2));
+    expect(req1.contents.last.parts[1].text, 'retained text');
+
+    // Second model call in session should still attach the retained session part
+    final LlmRequest req2 = LlmRequest(
+      contents: <Content>[
+        Content(role: 'user', parts: <Part>[Part.text('turn 2')]),
+      ],
+    );
+    await plugin.beforeModelCallback(
+      callbackContext: context,
+      llmRequest: req2,
+    );
+    expect(req2.contents.last.parts, hasLength(2));
+    expect(req2.contents.last.parts[1].text, 'retained text');
+  });
 }

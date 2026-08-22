@@ -127,19 +127,26 @@ class GcpSkillRegistry extends SkillRegistry {
         continue;
       }
       final Map<String, Object?> skill = _toStringObjectMap(item);
-      final String skillName =
+      final String rawName =
           _readString(skill['skillName']) ??
           _readString(skill['skill_name']) ??
+          _readString(skill['name']) ??
           '';
-      results.add(
-        Frontmatter(
-          name: skillName.split('/').last,
-          description:
-              _readString(skill['description']) ??
-              _readString(skill['displayDescription']) ??
-              '',
-        ),
-      );
+      final String name = rawName.split('/').last;
+      final String description =
+          _readString(skill['description']) ??
+          _readString(skill['displayDescription']) ??
+          '';
+      try {
+        results.add(
+          Frontmatter(
+            name: name,
+            description: description,
+          ),
+        );
+      } catch (_) {
+        // Skip search results failing frontmatter validation
+      }
     }
     return results;
   }

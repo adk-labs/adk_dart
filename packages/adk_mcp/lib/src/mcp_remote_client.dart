@@ -438,7 +438,7 @@ class McpRemoteClient {
         _negotiatedProtocolVersionByUrl[url] ?? latestProtocolVersion;
     final Map<String, String> mergedHeaders = <String, String>{
       ...connectionParams.headers,
-      if (headers != null) ...headers,
+      ...?headers,
       'MCP-Session-Id': sessionId,
       'MCP-Protocol-Version': protocolVersion,
       _httpHeaderAccept: 'application/json, text/event-stream',
@@ -1199,7 +1199,7 @@ class McpRemoteClient {
 
     final Map<String, String> mergedHeaders = <String, String>{
       ...connectionParams.headers,
-      if (headers != null) ...headers,
+      ...?headers,
       if (includeProtocolHeader) 'MCP-Protocol-Version': protocolVersion,
       if (includeSessionHeaders && _sessionIdByUrl[url] != null)
         'MCP-Session-Id': _sessionIdByUrl[url]!,
