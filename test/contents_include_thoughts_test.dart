@@ -39,8 +39,12 @@ void main() {
     final Iterable<String> texts = contents
         .expand((Content content) => content.parts)
         .map((Part part) => part.text ?? '');
-    expect(texts.any((String t) => t.contains('said: the visible answer')),
-        isTrue);
+    expect(
+      texts.any(
+        (String t) => t.contains('said:') && t.contains('the visible answer'),
+      ),
+      isTrue,
+    );
     expect(texts.any((String t) => t.contains('thought:')), isFalse);
   });
 
@@ -60,12 +64,17 @@ void main() {
       expect(
         texts.any(
           (String t) =>
-              t.contains('[other_agent] thought: let me reason about this'),
+              t.contains('[other_agent] thought:') &&
+              t.contains('let me reason about this'),
         ),
         isTrue,
       );
-      expect(texts.any((String t) => t.contains('said: the visible answer')),
-          isTrue);
+      expect(
+        texts.any(
+          (String t) => t.contains('said:') && t.contains('the visible answer'),
+        ),
+        isTrue,
+      );
     },
   );
 

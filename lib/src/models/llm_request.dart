@@ -544,9 +544,7 @@ class LiveConnectConfig {
           ? this.systemInstruction
           : systemInstruction,
       tools: identical(tools, _sentinel)
-          ? (this.tools == null
-                ? null
-                : this.tools!.map((t) => t.copyWith()).toList())
+          ? (this.tools?.map((t) => t.copyWith()).toList())
           : tools as List<ToolDeclaration>?,
       httpOptions: identical(httpOptions, _sentinel)
           ? this.httpOptions?.copyWith()

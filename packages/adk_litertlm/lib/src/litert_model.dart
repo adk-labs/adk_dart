@@ -12,8 +12,8 @@ class LiteRtLmModel extends adk.BaseLlm {
   LiteRtLmModel(
     this.engine, {
     this.ownsEngine = false,
-    required String model,
-  }) : super(model: model);
+    required super.model,
+  });
 
   /// Creates a [LiteRtLmModel] instance that owns the [Engine].
   factory LiteRtLmModel.fromConfig(

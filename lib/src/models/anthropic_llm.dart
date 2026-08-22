@@ -683,7 +683,7 @@ class AnthropicLlm extends BaseLlm {
     return <String, Object?>{
       'model': request.model,
       'max_tokens': maxTokens,
-      if (thinking != null) 'thinking': thinking,
+      'thinking': ?thinking,
       if (stream) 'stream': true,
       if ((request.config.systemInstruction ?? '').isNotEmpty)
         'system': request.config.systemInstruction,

@@ -10,6 +10,7 @@ import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../errors/tool_execution_error.dart';
 import '../events/event.dart';
+import '../models/cache_metadata.dart';
 import '../models/google_llm.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
@@ -31,6 +32,22 @@ const String otelInstrumentationGenaiCaptureMessageContent =
 
 /// Placeholder used when user content logging is disabled.
 const String userContentElided = '<elided>';
+
+/// Attribute key indicating whether a cached content entry was hit.
+const String adkExperimentalContextCacheHit =
+    'adk.experimental.context_cache.hit';
+
+/// Attribute key recording context cache content fingerprint.
+const String adkExperimentalContextCacheFingerprint =
+    'adk.experimental.context_cache.fingerprint';
+
+/// Attribute key recording context cache contents count.
+const String adkExperimentalContextCacheContentsCount =
+    'adk.experimental.context_cache.contents_count';
+
+/// Attribute key recording number of invocations that used the context cache.
+const String adkExperimentalContextCacheInvocationsUsed =
+    'adk.experimental.context_cache.invocations_used';
 
 /// In-memory representation of a trace span and its attributes.
 class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
@@ -403,12 +420,60 @@ void traceCallLlm(
   }
 
   _setUsageMetadataAttributes(targetSpan, llmResponse.usageMetadata);
+  _setContextCacheAttributes(
+    targetSpan,
+    llmResponse.cacheMetadata,
+    environment: environment,
+  );
 
   final String? finishReason = llmResponse.finishReason;
   if (finishReason != null && finishReason.isNotEmpty) {
     targetSpan.setAttribute('gen_ai.response.finish_reasons', <String>[
       finishReason.toLowerCase(),
     ]);
+  }
+}
+
+void _setContextCacheAttributes(
+  TraceSpanRecord span,
+  Object? rawCacheMetadata, {
+  Map<String, String>? environment,
+}) {
+  if (rawCacheMetadata == null) {
+    return;
+  }
+  CacheMetadata? cacheMetadata;
+  if (rawCacheMetadata is CacheMetadata) {
+    cacheMetadata = rawCacheMetadata;
+  }
+  if (cacheMetadata == null) {
+    return;
+  }
+  final Map<String, String> env = environment ?? Platform.environment;
+  final bool shouldEmit =
+      env['ADK_EXPERIMENTAL_TELEMETRY_OPT_IN'] == 'true' ||
+      env['adk_experimental_telemetry_opt_in'] == 'true';
+  if (!shouldEmit) {
+    return;
+  }
+  span
+    ..setAttribute(
+      adkExperimentalContextCacheHit,
+      cacheMetadata.cacheName != null,
+    )
+    ..setAttribute(
+      adkExperimentalContextCacheFingerprint,
+      cacheMetadata.fingerprint,
+    )
+    ..setAttribute(
+      adkExperimentalContextCacheContentsCount,
+      cacheMetadata.contentsCount,
+    );
+  if (cacheMetadata.invocationsUsed != null) {
+    span.setAttribute(
+      adkExperimentalContextCacheInvocationsUsed,
+      cacheMetadata.invocationsUsed!,
+    );
   }
 }
 
@@ -600,6 +665,11 @@ void traceInferenceResult(
     ]);
   }
   _setUsageMetadataAttributes(targetSpan, llmResponse.usageMetadata);
+  _setContextCacheAttributes(
+    targetSpan,
+    llmResponse.cacheMetadata,
+    environment: environment,
+  );
 
   if (experimental_semconv.isExperimentalSemconv(environment: environment) &&
       generateContentSpan != null) {

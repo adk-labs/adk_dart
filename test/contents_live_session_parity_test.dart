@@ -21,10 +21,17 @@ void main() {
 
         expect(contents, hasLength(1));
         expect(contents.single.role, 'user');
-        expect(contents.single.parts.first.text, 'For context:');
+        expect(
+          contents.single.parts.first.text,
+          startsWith('For context: below is a transcript'),
+        );
         expect(
           contents.single.parts[1].text,
-          '[current_agent] said: Transferred back to current agent',
+          contains('[current_agent] said:'),
+        );
+        expect(
+          contents.single.parts[1].text,
+          contains('Transferred back to current agent'),
         );
       },
     );

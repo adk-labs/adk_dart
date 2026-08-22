@@ -65,13 +65,19 @@ void main() {
       expect(contents[0].parts.first.text, 'First user message');
       // The transfer events are still included, presented as context.
       expect(contents[1].role, 'user');
-      expect(contents[1].parts.first.text, 'For context:');
+      expect(
+        contents[1].parts.first.text,
+        startsWith('For context: below is a transcript'),
+      );
       expect(
         contents[1].parts[1].text,
         contains('[parent] called tool `transfer_to_agent` with parameters:'),
       );
       expect(contents[2].role, 'user');
-      expect(contents[2].parts.first.text, 'For context:');
+      expect(
+        contents[2].parts.first.text,
+        startsWith('For context: below is a transcript'),
+      );
       expect(
         contents[2].parts[1].text,
         contains('[parent] `transfer_to_agent` tool returned result:'),
@@ -103,10 +109,17 @@ void main() {
       );
 
       expect(contents, hasLength(1));
-      expect(contents[0].parts.first.text, 'For context:');
+      expect(
+        contents[0].parts.first.text,
+        startsWith('For context: below is a transcript'),
+      );
       expect(
         contents[0].parts[1].text,
-        contains('[other_agent] said: a plain reply'),
+        contains('[other_agent] said:'),
+      );
+      expect(
+        contents[0].parts[1].text,
+        contains('a plain reply'),
       );
     },
   );

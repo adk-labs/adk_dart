@@ -62,9 +62,7 @@ class ContextCacheRequestProcessor extends BaseLlmRequestProcessor {
       }
     }
 
-    if (previousTokenCount == null) {
-      previousTokenCount = _extractPromptTokenCount(event.usageMetadata);
-    }
+    previousTokenCount ??= _extractPromptTokenCount(event.usageMetadata);
 
     if (cacheMetadata != null && previousTokenCount != null) {
       break;

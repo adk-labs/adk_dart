@@ -11,6 +11,7 @@ import '../../events/rewind_events.dart';
 import '../../models/anthropic_llm.dart';
 import '../../models/llm_request.dart';
 import '../../types/content.dart';
+import '_fencing.dart';
 import 'base_llm_flow.dart';
 import 'functions.dart';
 
@@ -646,7 +647,7 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
 
   final Content content = Content(
     role: 'user',
-    parts: <Part>[Part.text('For context:')],
+    parts: <Part>[Part.text(otherAgentContextPreamble)],
   );
   for (final Part part in original.parts) {
     if (part.thought) {
@@ -654,13 +655,15 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
           part.text != null &&
           part.text!.trim().isNotEmpty) {
         content.parts.add(
-          Part.text('[${event.author}] thought: ${part.text}'),
+          Part.text('[${event.author}] thought:\n${quoteUntrusted(part.text!)}'),
         );
       }
       continue;
     }
     if (part.text != null && part.text!.trim().isNotEmpty) {
-      content.parts.add(Part.text('[${event.author}] said: ${part.text}'));
+      content.parts.add(
+        Part.text('[${event.author}] said:\n${quoteUntrusted(part.text!)}'),
+      );
       continue;
     }
     if (part.functionCall != null) {
@@ -671,8 +674,8 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
       };
       content.parts.add(
         Part.text(
-          '[${event.author}] called tool `${part.functionCall!.name}` with '
-          'parameters: $sortedArgs',
+          '[${event.author}] called tool `${elideQuoteMarkers(part.functionCall!.name)}` with parameters:\n'
+          '${quoteUntrusted(sortedArgs.toString())}',
         ),
       );
       continue;
@@ -680,16 +683,17 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
     if (part.functionResponse != null) {
       content.parts.add(
         Part.text(
-          '[${event.author}] `${part.functionResponse!.name}` tool returned '
-          'result: ${part.functionResponse!.response}',
+          '[${event.author}] `${elideQuoteMarkers(part.functionResponse!.name)}` tool returned result:\n'
+          '${quoteUntrusted(part.functionResponse!.response.toString())}',
         ),
       );
       continue;
     }
-    if (part.codeExecutionResult != null) {
-      content.parts.add(
-        Part.text('[${event.author}] code execution result was provided.'),
-      );
+    if (part.codeExecutionResult != null ||
+        part.inlineData != null ||
+        part.fileData != null ||
+        part.executableCode != null) {
+      content.parts.add(part.copyWith());
       continue;
     }
   }

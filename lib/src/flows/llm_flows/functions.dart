@@ -622,7 +622,7 @@ Event _buildResponseEvent({
   final Map<String, dynamic> normalizedResult =
       _normalizeFunctionResult(remainingResult);
 
-  final Object? displayResult = rawResult ?? normalizedResult;
+  final Object displayResult = rawResult ?? normalizedResult;
   final Part functionResponsePart = Part.fromFunctionResponse(
     name: tool.name,
     response: normalizedResult,
@@ -637,8 +637,7 @@ Event _buildResponseEvent({
   // Control-flow tools (e.g. exit_loop) set skipSummarization but return no
   // meaningful output; their null result is normalized to {'result': null}, so
   // skip those to avoid emitting a noisy "null" text part.
-  final bool hasDisplayableResult = displayResult != null &&
-      !(displayResult is Map &&
+  final bool hasDisplayableResult = !(displayResult is Map &&
           displayResult.length == 1 &&
           displayResult.containsKey('result') &&
           displayResult['result'] == null);
