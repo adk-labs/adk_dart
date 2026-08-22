@@ -1,46 +1,10 @@
-# google/adk-python Daily Change Report
+# ADK Python Daily Change Report
 
 - Date (UTC): 2026-08-22
 - Source: `google/adk-python`
 - Latest SHA: `d9f4d3d288257593471fc708a9ab851779005ca5`
-- Previous SHA: `775c1bd36e205eec65e207ad29fdc4cf2184e47e`
+- Previous SHA: `d9f4d3d288257593471fc708a9ab851779005ca5`
 
-## Summary
+## Result
 
-- New commits: 8
-
-## Commits
-
-- [d9f4d3d2](https://github.com/google/adk-python/commit/d9f4d3d288257593471fc708a9ab851779005ca5) fix: stop the session liveness probe from crashing when the SDK moves its streams (Kathy Wu, 2026-08-21)
-- [e577c301](https://github.com/google/adk-python/commit/e577c301d5f4a50b2a3c827631c53463268bb5fc) feat(cli): Support Cloud Build worker pools for Agent Engine deploy (Aarav Mittal, 2026-08-21)
-- [e3ae4ac2](https://github.com/google/adk-python/commit/e3ae4ac2b431c589887e9bf2d70b452e8360f0c5) fix(sessions): stop dropping event actions on v0 PostgreSQL migration (George Weale, 2026-08-21)
-- [c0614d65](https://github.com/google/adk-python/commit/c0614d65806be5e7525b72e662e0987378996b53) feat: record context cache state on the LLM call span (George Weale, 2026-08-21)
-- [26110c75](https://github.com/google/adk-python/commit/26110c75596cb7743e0614eebb8267221003303a) fix: reject negative recent-event limits (jun weijia, 2026-08-21)
-- [d18df2fa](https://github.com/google/adk-python/commit/d18df2fa1c9cd8ceaad7e54c79a5acbcff95b812) fix: detect MCP tool errors under either field spelling (Kathy Wu, 2026-08-21)
-- [574da43d](https://github.com/google/adk-python/commit/574da43d658265c4bb94480008aa3ef739bf4b00) refactor: build the MCP read timeout in one place (Kathy Wu, 2026-08-21)
-- [98896eb2](https://github.com/google/adk-python/commit/98896eb2aaafb57577c02fc00b62db4367cb003c) feat(live): let a live streaming tool send messages to the user directly (Liang Wu, 2026-08-21)
-
-## Changed Files
-
-- `A	contributing/samples/live/streaming_tool_events/README.md`
-- `A	contributing/samples/live/streaming_tool_events/__init__.py`
-- `A	contributing/samples/live/streaming_tool_events/agent.py`
-- `M	src/google/adk/cli/cli_deploy.py`
-- `M	src/google/adk/cli/cli_tools_click.py`
-- `M	src/google/adk/flows/llm_flows/functions.py`
-- `M	src/google/adk/runners.py`
-- `M	src/google/adk/sessions/base_session_service.py`
-- `M	src/google/adk/sessions/migration/migrate_from_sqlalchemy_pickle.py`
-- `M	src/google/adk/telemetry/_adk_attributes.py`
-- `M	src/google/adk/telemetry/tracing.py`
-- `M	src/google/adk/tools/mcp_tool/mcp_session_manager.py`
-- `M	src/google/adk/tools/mcp_tool/mcp_tool.py`
-- `M	src/google/adk/tools/mcp_tool/session_context.py`
-- `M	tests/unittests/cli/utils/test_cli_deploy.py`
-- `M	tests/unittests/sessions/migration/test_migration.py`
-- `M	tests/unittests/sessions/test_session_service.py`
-- `A	tests/unittests/streaming/test_streaming_tool_events.py`
-- `M	tests/unittests/telemetry/test_spans.py`
-- `M	tests/unittests/tools/mcp_tool/test_mcp_session_manager.py`
-- `M	tests/unittests/tools/mcp_tool/test_mcp_tool.py`
-- `M	tests/unittests/tools/mcp_tool/test_session_context.py`
+No upstream changes since the last check.
