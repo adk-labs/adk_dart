@@ -468,5 +468,51 @@ paths:
         containsAll(<String>['user_id', 'first_name']),
       );
     });
+
+    test('RestApiTool percent-encodes path parameters', () {
+      final OpenAPIToolset toolset = OpenAPIToolset(
+        specDict: <String, Object?>{
+          'openapi': '3.1.0',
+          'info': <String, Object?>{'title': 'Users API', 'version': '1.0.0'},
+          'servers': <Object?>[
+            <String, Object?>{'url': 'https://example.com'},
+          ],
+          'paths': <String, Object?>{
+            '/users/{user_id}/messages': <String, Object?>{
+              'get': <String, Object?>{
+                'operationId': 'getUserMessages',
+                'parameters': <Object?>[
+                  <String, Object?>{
+                    'name': 'user_id',
+                    'in': 'path',
+                    'required': true,
+                    'schema': <String, Object?>{'type': 'string'},
+                  },
+                ],
+                'responses': <String, Object?>{
+                  '200': <String, Object?>{'description': 'ok'},
+                },
+              },
+            },
+          },
+        },
+      );
+
+      final RestApiTool tool = toolset.getTool('get_user_messages')!;
+      final Map<String, Object?> params = tool.prepareRequestParams(
+        <ApiParameter>[
+          ApiParameter(
+            originalName: 'user_id',
+            paramLocation: 'path',
+            paramSchema: <String, Object?>{'type': 'string'},
+          ),
+        ],
+        <String, dynamic>{'user_id': '../../admin/v1/tenants'},
+      );
+      expect(
+        params['url'],
+        'https://example.com/users/..%2F..%2Fadmin%2Fv1%2Ftenants/messages',
+      );
+    });
   });
 }

@@ -289,7 +289,8 @@ class RestApiTool extends BaseTool {
       final String originalName = parameter.originalName;
       switch (parameter.paramLocation) {
         case 'path':
-          pathParams[originalName] = entry.value;
+          pathParams[originalName] =
+              Uri.encodeComponent('${entry.value ?? ''}');
           break;
         case 'query':
           if (_isTruthy(entry.value)) {
