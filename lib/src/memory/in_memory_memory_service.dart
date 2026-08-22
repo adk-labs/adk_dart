@@ -70,6 +70,7 @@ class InMemoryMemoryService extends BaseMemoryService {
     final Map<String, List<Event>> sessions =
         _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
 
+    final String queryLower = query.toLowerCase();
     final Set<String> queryWords = _extractWordsLower(query);
     final bool matchAll = queryWords.isEmpty;
     final List<(int, MemoryEntry)> scoredMemories = <(int, MemoryEntry)>[];
@@ -80,13 +81,22 @@ class InMemoryMemoryService extends BaseMemoryService {
         if (text.isEmpty) {
           continue;
         }
+        final String textLower = text.toLowerCase();
         final Set<String> eventWords = _extractWordsLower(text);
-        if (eventWords.isEmpty) {
+        if (eventWords.isEmpty && _isAscii(text)) {
           continue;
         }
-        final int matchedWords = matchAll
-            ? 1
-            : queryWords.intersection(eventWords).length;
+        int matchedWords = 0;
+        if (matchAll) {
+          matchedWords = 1;
+        } else {
+          for (final String queryWord in queryWords) {
+            if (eventWords.contains(queryWord) ||
+                (!_isAscii(queryWord) && textLower.contains(queryWord))) {
+              matchedWords += 1;
+            }
+          }
+        }
         if (matchedWords > 0) {
           scoredMemories.add((
             matchedWords,
@@ -126,8 +136,17 @@ String _eventText(Event event) {
       .join(' ');
 }
 
+bool _isAscii(String str) {
+  for (int i = 0; i < str.length; i += 1) {
+    if (str.codeUnitAt(i) > 127) {
+      return false;
+    }
+  }
+  return true;
+}
+
 Set<String> _extractWordsLower(String text) {
-  final RegExp exp = RegExp(r'[A-Za-z]+');
+  final RegExp exp = RegExp(r'[\p{L}\p{N}_]+', unicode: true);
   return exp
       .allMatches(text)
       .map((Match match) => match.group(0)!.toLowerCase())
