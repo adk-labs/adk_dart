@@ -17,6 +17,7 @@ environment:
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.29.0
+  analyzer: any
 dependencies:
   crypto: ^3.0.6
   google_generative_ai: ^0.4.7

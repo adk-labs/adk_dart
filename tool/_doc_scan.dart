@@ -51,61 +51,75 @@ void main(List<String> args) {
 
     for (final CompilationUnitMember member in unit.declarations) {
       if (member is ClassDeclaration) {
-        final String name = member.name.lexeme;
+        final dynamic classDecl = member;
+        final String name = classDecl.name?.lexeme ?? '${classDecl.name ?? ''}';
         final bool classPublic = _isPublic(name);
         if (classPublic && !_hasDocs(member)) {
-          issues.add(Issue(path, lineInfo.getLocation(member.name.offset).lineNumber, 'class', name));
+          issues.add(Issue(path, lineInfo.getLocation(member.offset).lineNumber, 'class', name));
         }
-        if (classPublic) for (final ClassMember cm in member.members) {
-          if (cm is FieldDeclaration) {
-            for (final VariableDeclaration v in cm.fields.variables) {
-              final String n = v.name.lexeme;
-              if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
-                issues.add(Issue(path, lineInfo.getLocation(v.name.offset).lineNumber, 'field', '$name.$n'));
+        if (classPublic) {
+          final dynamic members = classDecl.members;
+          if (members is Iterable) {
+            for (final dynamic cm in members) {
+              if (cm is FieldDeclaration) {
+                for (final dynamic v in cm.fields.variables) {
+                  final String n = v.name?.lexeme ?? '${v.name ?? ''}';
+                  if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
+                    issues.add(Issue(path, lineInfo.getLocation(cm.offset).lineNumber, 'field', '$name.$n'));
+                  }
+                }
+              } else if (cm is MethodDeclaration) {
+                final String n = cm.name.lexeme ?? '${cm.name ?? ''}';
+                if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
+                  issues.add(Issue(path, lineInfo.getLocation(cm.offset).lineNumber, 'method', '$name.$n'));
+                }
+              } else if (cm is ConstructorDeclaration) {
+                final String n = cm.name?.lexeme ?? name;
+                if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
+                  issues.add(Issue(path, lineInfo.getLocation(cm.offset).lineNumber, 'ctor', '$name.$n'));
+                }
               }
-            }
-          } else if (cm is MethodDeclaration) {
-            final String n = cm.name.lexeme;
-            if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
-              issues.add(Issue(path, lineInfo.getLocation(cm.name.offset).lineNumber, 'method', '$name.$n'));
-            }
-          } else if (cm is ConstructorDeclaration) {
-            final String n = cm.name?.lexeme ?? member.name.lexeme;
-            if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
-              issues.add(Issue(path, lineInfo.getLocation(cm.offset).lineNumber, 'ctor', '$name.$n'));
             }
           }
         }
       } else if (member is MixinDeclaration) {
-        final String name = member.name.lexeme;
+        final dynamic mixinDecl = member;
+        final String name = mixinDecl.name?.lexeme ?? '${mixinDecl.name ?? ''}';
         final bool mixinPublic = _isPublic(name);
         if (mixinPublic && !_hasDocs(member)) {
-          issues.add(Issue(path, lineInfo.getLocation(member.name.offset).lineNumber, 'mixin', name));
+          issues.add(Issue(path, lineInfo.getLocation(member.offset).lineNumber, 'mixin', name));
         }
-        if (mixinPublic) for (final ClassMember cm in member.members) {
-          if (cm is FieldDeclaration) {
-            for (final VariableDeclaration v in cm.fields.variables) {
-              final String n = v.name.lexeme;
-              if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
-                issues.add(Issue(path, lineInfo.getLocation(v.name.offset).lineNumber, 'field', '$name.$n'));
+        if (mixinPublic) {
+          final dynamic members = mixinDecl.members;
+          if (members is Iterable) {
+            for (final dynamic cm in members) {
+              if (cm is FieldDeclaration) {
+                for (final dynamic v in cm.fields.variables) {
+                  final String n = v.name?.lexeme ?? '${v.name ?? ''}';
+                  if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
+                    issues.add(Issue(path, lineInfo.getLocation(cm.offset).lineNumber, 'field', '$name.$n'));
+                  }
+                }
+              } else if (cm is MethodDeclaration) {
+                final String n = cm.name.lexeme ?? '${cm.name ?? ''}';
+                if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
+                  issues.add(Issue(path, lineInfo.getLocation(cm.offset).lineNumber, 'method', '$name.$n'));
+                }
               }
-            }
-          } else if (cm is MethodDeclaration) {
-            final String n = cm.name.lexeme;
-            if (_isPublic(n) && !_hasDocs(cm) && !_hasOverride(cm)) {
-              issues.add(Issue(path, lineInfo.getLocation(cm.name.offset).lineNumber, 'method', '$name.$n'));
             }
           }
         }
       } else if (member is EnumDeclaration) {
-        final String name = member.name.lexeme;
+        final dynamic enumDecl = member;
+        final String name = enumDecl.name?.lexeme ?? '${enumDecl.name ?? ''}';
         if (_isPublic(name) && !_hasDocs(member)) {
-          issues.add(Issue(path, lineInfo.getLocation(member.name.offset).lineNumber, 'enum', name));
+          issues.add(Issue(path, lineInfo.getLocation(member.offset).lineNumber, 'enum', name));
         }
       } else if (member is ExtensionDeclaration) {
-        final String? extName = member.name?.lexeme;
+        final dynamic extDecl = member;
+        final String? extName = extDecl.name?.lexeme ?? extDecl.name?.toString();
         if (extName != null && _isPublic(extName) && !_hasDocs(member)) {
-          issues.add(Issue(path, lineInfo.getLocation(member.name!.offset).lineNumber, 'extension', extName));
+          issues.add(Issue(path, lineInfo.getLocation(member.offset).lineNumber, 'extension', extName));
         }
       } else if (member is FunctionDeclaration) {
         final String name = member.name.lexeme;
