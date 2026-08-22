@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:adk_dart/adk_dart.dart';
-import 'package:adk_dart/src/flows/llm_flows/functions.dart';
 import 'package:adk_dart/src/workflow/workflow.dart' as wf;
 import 'package:test/test.dart';
 
@@ -3185,9 +3184,7 @@ class _MockReturnArgsTool extends BaseTool {
 ///
 /// Extracted to enable unit testing without triggering the full LLM pipeline.
 void _applyAgentNodeDefaults(LlmAgent agent) {
-  if (agent.mode == null) {
-    agent.mode = 'single_turn';
-  }
+  agent.mode ??= 'single_turn';
   if (agent.mode == 'single_turn' && agent.includeContents == 'default') {
     agent.includeContents = 'none';
   }

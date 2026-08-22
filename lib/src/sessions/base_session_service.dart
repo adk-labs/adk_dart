@@ -8,10 +8,22 @@ import 'state.dart';
 /// Options for narrowing session retrieval results.
 class GetSessionConfig {
   /// Creates session query options.
-  GetSessionConfig({this.numRecentEvents, this.afterTimestamp});
+  GetSessionConfig({int? numRecentEvents, this.afterTimestamp}) {
+    if (numRecentEvents != null) {
+      this.numRecentEvents = numRecentEvents;
+    }
+  }
+
+  int? _numRecentEvents;
 
   /// Maximum number of most recent events to return.
-  int? numRecentEvents;
+  int? get numRecentEvents => _numRecentEvents;
+  set numRecentEvents(int? value) {
+    if (value != null && value < 0) {
+      throw ArgumentError('num_recent_events must be greater than or equal to 0.');
+    }
+    _numRecentEvents = value;
+  }
 
   /// Minimum event timestamp (seconds since epoch) to include.
   double? afterTimestamp;

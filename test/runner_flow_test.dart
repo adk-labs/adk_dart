@@ -1116,10 +1116,10 @@ void main() {
       );
 
       int functionCalled = 0;
-      final int Function(int) increaseByOne = (int x) {
+      int increaseByOne(int x) {
         functionCalled++;
         return x + 1;
-      };
+      }
 
       final MockModel model = MockModel(responses: <LlmResponse>[turn1, turn2]);
       final Agent agent = Agent(

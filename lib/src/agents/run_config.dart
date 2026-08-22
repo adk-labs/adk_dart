@@ -1,6 +1,8 @@
 /// Runtime configuration models used by agent runs.
 library;
 
+import 'dart:io';
+
 import '../sessions/base_session_service.dart';
 import '../types/content.dart';
 
@@ -23,6 +25,19 @@ enum ToolExecutionMode {
 }
 
 final BigInt _pythonSysMaxSize = BigInt.parse('9223372036854775807');
+const int _defaultMaxLlmCallsValue = 500;
+
+int _defaultMaxLlmCalls() {
+  final String? envVal = Platform.environment['ADK_MAX_LLM_CALLS'];
+  if (envVal != null && envVal.isNotEmpty) {
+    try {
+      return int.parse(envVal);
+    } catch (_) {
+      // Fallback on invalid integer format
+    }
+  }
+  return _defaultMaxLlmCallsValue;
+}
 
 /// Thread-pool configuration for concurrent tool execution.
 class ToolThreadPoolConfig {
@@ -44,7 +59,7 @@ class RunConfig {
     this.supportCfc = false,
     this.streamingMode = StreamingMode.none,
     this.toolExecutionMode = ToolExecutionMode.none,
-    this.maxLlmCalls = 500,
+    int? maxLlmCalls,
     this.speechConfig,
     this.saveLiveBlob = false,
     this.toolThreadPoolConfig,
@@ -63,9 +78,9 @@ class RunConfig {
     this.includeThoughtsFromOtherAgents = false,
     this.labels,
     this.explicitVadSignal,
-  }) {
-    maxLlmCalls = validateMaxLlmCalls(maxLlmCalls);
-  }
+  }) : maxLlmCalls = validateMaxLlmCalls(
+         maxLlmCalls ?? _defaultMaxLlmCalls(),
+       );
 
   /// Whether CFC behavior is enabled.
   bool supportCfc;

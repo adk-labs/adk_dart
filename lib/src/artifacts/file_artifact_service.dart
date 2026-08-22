@@ -10,6 +10,7 @@ import 'artifact_util.dart';
 import 'base_artifact_service.dart';
 
 const String _userNamespacePrefix = 'user:';
+const String _metadataFilename = 'metadata.json';
 
 List<Directory> _iterArtifactDirs(Directory root) {
   if (!root.existsSync()) {
@@ -412,47 +413,77 @@ class FileArtifactService extends BaseArtifactService {
     final Directory artifactDir = artifactPath.artifactDir;
     artifactDir.createSync(recursive: true);
 
-    final List<int> versions = _listVersionsOnDisk(artifactDir);
-    final int nextVersion = versions.isEmpty ? 0 : (versions.last + 1);
+    final Directory versionsDir = _versionsDir(artifactDir);
+    versionsDir.createSync(recursive: true);
 
-    final Directory versionDir = Directory(
-      _appendPath(_versionsDir(artifactDir).path, '$nextVersion'),
-    );
-    versionDir.createSync(recursive: true);
+    int nextVersion;
+    late Directory stagingDir;
+    late Directory versionDir;
+
+    final List<int> versions = _listVersionsOnDisk(artifactDir);
+    int candidate = versions.isEmpty ? 0 : (versions.last + 1);
+
+    while (true) {
+      versionDir = Directory(_appendPath(versionsDir.path, '$candidate'));
+      stagingDir = Directory(
+        _appendPath(versionsDir.path, '.$candidate.pending'),
+      );
+      if (!versionDir.existsSync() && !stagingDir.existsSync()) {
+        try {
+          stagingDir.createSync(recursive: false);
+          nextVersion = candidate;
+          break;
+        } catch (_) {
+          // Concurrent conflict, increment candidate and try next
+        }
+      }
+      candidate += 1;
+    }
 
     final String storedFilename = artifactDir.uri.pathSegments
         .where((String segment) => segment.isNotEmpty)
         .last;
-    final File contentPath = File(_appendPath(versionDir.path, storedFilename));
+    final File contentPath = File(_appendPath(stagingDir.path, storedFilename));
 
-    String? mimeType;
-    if (artifact.inlineData != null) {
-      contentPath.writeAsBytesSync(artifact.inlineData!.data);
-      mimeType = artifact.inlineData!.mimeType.isEmpty
-          ? 'application/octet-stream'
-          : artifact.inlineData!.mimeType;
-    } else if (artifact.text != null) {
-      contentPath.writeAsStringSync(artifact.text!, encoding: utf8);
-    } else {
-      throw InputValidationError(
-        'Artifact must have either inline_data or text content.',
+    try {
+      String? mimeType;
+      if (artifact.inlineData != null) {
+        contentPath.writeAsBytesSync(artifact.inlineData!.data);
+        mimeType = artifact.inlineData!.mimeType.isEmpty
+            ? 'application/octet-stream'
+            : artifact.inlineData!.mimeType;
+      } else if (artifact.text != null) {
+        contentPath.writeAsStringSync(artifact.text!, encoding: utf8);
+      } else {
+        throw InputValidationError(
+          'Artifact must have either inline_data or text content.',
+        );
+      }
+
+      final String canonicalUri = _canonicalUri(
+        userId,
+        sessionId,
+        filename,
+        nextVersion,
       );
-    }
+      _writeMetadata(
+        File(_appendPath(stagingDir.path, _metadataFilename)),
+        filename: filename,
+        mimeType: mimeType,
+        version: nextVersion,
+        canonicalUri: canonicalUri,
+        customMetadata: customMetadata ?? <String, Object?>{},
+      );
 
-    final String canonicalUri = _canonicalUri(
-      userId,
-      sessionId,
-      filename,
-      nextVersion,
-    );
-    _writeMetadata(
-      _metadataPath(artifactDir, nextVersion),
-      filename: filename,
-      mimeType: mimeType,
-      version: nextVersion,
-      canonicalUri: canonicalUri,
-      customMetadata: customMetadata ?? <String, Object?>{},
-    );
+      stagingDir.renameSync(versionDir.path);
+    } catch (_) {
+      try {
+        if (stagingDir.existsSync()) {
+          stagingDir.deleteSync(recursive: true);
+        }
+      } catch (_) {}
+      rethrow;
+    }
 
     return nextVersion;
   }

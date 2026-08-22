@@ -2,6 +2,20 @@ import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('GetSessionConfig', () {
+    test('rejects negative numRecentEvents', () {
+      expect(
+        () => GetSessionConfig(numRecentEvents: -1),
+        throwsArgumentError,
+      );
+      final GetSessionConfig config = GetSessionConfig();
+      expect(
+        () => config.numRecentEvents = -5,
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('InMemorySessionService', () {
     test('create and get session', () async {
       final InMemorySessionService service = InMemorySessionService();

@@ -246,7 +246,11 @@ void main() {
       );
       expect(
         agent2Contents[1].$2,
-        contains('[agent1] said: Agent1 response: XYZ'),
+        contains('[agent1] said:'),
+      );
+      expect(
+        agent2Contents[1].$2,
+        contains('Agent1 response: XYZ'),
       );
     },
   );

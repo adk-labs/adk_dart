@@ -93,6 +93,7 @@ class ParallelAgent extends BaseAgent {
     }
 
     bool pauseInvocation = false;
+    bool escalated = false;
 
     try {
       while (running.isNotEmpty) {
@@ -125,6 +126,10 @@ class ParallelAgent extends BaseAgent {
           pauseInvocation = true;
           break;
         }
+        if (event.actions.escalate == true) {
+          escalated = true;
+          break;
+        }
 
         current.pending = _nextResult(result.index, current.iterator);
       }
@@ -138,12 +143,16 @@ class ParallelAgent extends BaseAgent {
       return;
     }
 
-    if (context.isResumable &&
-        subAgents.every(
-          (BaseAgent subAgent) => context.endOfAgents[subAgent.name] == true,
-        )) {
-      context.setAgentState(name, endOfAgent: true);
-      yield createAgentStateEvent(context);
+    if (escalated ||
+        (context.isResumable &&
+            subAgents.every(
+              (BaseAgent subAgent) =>
+                  context.endOfAgents[subAgent.name] == true,
+            ))) {
+      if (context.isResumable) {
+        context.setAgentState(name, endOfAgent: true);
+        yield createAgentStateEvent(context);
+      }
     }
   }
 

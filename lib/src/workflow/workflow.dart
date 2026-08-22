@@ -937,9 +937,7 @@ class AgentNode extends BaseNode {
     // Matches adk-python _llm_agent_wrapper.run_llm_agent_as_node.
     if (agent is LlmAgent) {
       final LlmAgent llmAgent = agent as LlmAgent;
-      if (llmAgent.mode == null) {
-        llmAgent.mode = 'single_turn';
-      }
+      llmAgent.mode ??= 'single_turn';
       // Only default includeContents to 'none' when the user has not
       // explicitly set it (i.e. it is still at the constructor default
       // value of 'default').
@@ -1668,6 +1666,12 @@ class Workflow extends BaseAgent {
       Event event = output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
           : output;
+      if (event.invocationId.isEmpty) {
+        event = event.copyWith(invocationId: context.invocationId);
+      }
+      if (event.author.isEmpty) {
+        event = event.copyWith(author: author);
+      }
       if (event.branch == null) {
         event = event.copyWith(branch: state?.branch ?? context.branch);
       }
@@ -1850,13 +1854,12 @@ void _validateNoDuplicateEdges(Iterable<Edge> edges) {
   final Set<String> seen = <String>{};
   for (final Edge edge in edges) {
     final String key = '${edge.fromNode}\u0000${edge.toNode}';
-    if (seen.add(key)) {
-      continue;
+    if (!seen.add(key)) {
+      throw ArgumentError(
+        'Graph validation failed. Duplicate edge found: '
+        'from=${edge.fromNode}, to=${edge.toNode}',
+      );
     }
-    throw ArgumentError(
-      'Graph validation failed. Duplicate edge found: '
-      'from=${edge.fromNode}, to=${edge.toNode}',
-    );
   }
 }
 

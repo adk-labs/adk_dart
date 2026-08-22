@@ -1143,7 +1143,7 @@ class GcsArtifactService extends BaseArtifactService {
         uri: uri,
         headers: <String, String>{
           ...authHeaders,
-          if (headers != null) ...headers,
+          ...?headers,
         },
         bodyBytes: bodyBytes,
       ),

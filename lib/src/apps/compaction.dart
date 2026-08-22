@@ -1,5 +1,4 @@
-/// Event compaction helpers for app-level history management.
-library;
+import 'dart:convert';
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
@@ -351,17 +350,48 @@ int? latestPromptTokenCount({
   );
   int totalChars = 0;
   for (final Content content in effectiveContents) {
-    for (final Part part in content.parts) {
-      final String? text = part.text;
-      if (text != null && text.isNotEmpty) {
-        totalChars += text.length;
-      }
-    }
+    totalChars += _countCharsInContent(content);
   }
   if (totalChars <= 0) {
     return null;
   }
   return totalChars ~/ 4;
+}
+
+int _countCharsInContent(Content? content) {
+  if (content == null || content.parts.isEmpty) {
+    return 0;
+  }
+  int totalChars = 0;
+  for (final Part part in content.parts) {
+    final String? text = part.text;
+    if (text != null && text.isNotEmpty) {
+      totalChars += text.length;
+    }
+    final FunctionCall? call = part.functionCall;
+    if (call != null) {
+      totalChars += call.name.length;
+      if (call.args.isNotEmpty) {
+        try {
+          totalChars += jsonEncode(call.args).length;
+        } catch (_) {
+          totalChars += call.args.toString().length;
+        }
+      }
+    }
+    final FunctionResponse? resp = part.functionResponse;
+    if (resp != null) {
+      totalChars += resp.name.length;
+      if (resp.response.isNotEmpty) {
+        try {
+          totalChars += jsonEncode(resp.response).length;
+        } catch (_) {
+          totalChars += resp.response.toString().length;
+        }
+      }
+    }
+  }
+  return totalChars;
 }
 
 /// Returns the latest end timestamp among compaction events.
