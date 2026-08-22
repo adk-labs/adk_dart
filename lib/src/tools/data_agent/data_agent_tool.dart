@@ -39,6 +39,21 @@ typedef DataAgentStreamPost =
       required Map<String, String> headers,
     });
 
+/// Performs a Data Agent JSON PATCH request.
+typedef DataAgentHttpPatch =
+    Future<Map<String, Object?>> Function({
+      required Uri uri,
+      required Map<String, Object?> payload,
+      required Map<String, String> headers,
+    });
+
+/// Performs a Data Agent HTTP DELETE request.
+typedef DataAgentHttpDelete =
+    Future<Map<String, Object?>> Function({
+      required Uri uri,
+      required Map<String, String> headers,
+    });
+
 /// Creates a new data agent resource for [projectId].
 Future<Map<String, Object?>> createDataAgent({
   required String projectId,
@@ -46,19 +61,32 @@ Future<Map<String, Object?>> createDataAgent({
   required Object credentials,
   String? description,
   Map<String, Object?>? dataSource,
+  String? location,
   Object? settings,
   ToolContext? toolContext,
   DataAgentHttpPost? httpPost,
 }) async {
   try {
+    final DataAgentToolConfig config = settings is DataAgentToolConfig
+        ? settings
+        : DataAgentToolConfig.fromObject(settings);
+    if (!config.enableDataAgentModification) {
+      return <String, Object?>{
+        'status': 'ERROR',
+        'error_details':
+            'Data agent mutation is disabled. Enable it by setting '
+            '`enable_data_agent_modification=True` in DataAgentToolConfig.',
+      };
+    }
+    final String effectiveLocation = location ?? config.location ?? 'global';
     final Map<String, String> headers = _getHttpHeaders(credentials);
     final Uri uri = Uri.parse(
-      '$dataAgentBaseUrl/projects/$projectId/locations/global/dataAgents',
+      '$dataAgentBaseUrl/projects/$projectId/locations/$effectiveLocation/dataAgents',
     );
     final Map<String, Object?> payload = <String, Object?>{
       'displayName': displayName,
-      if (description != null) 'description': description,
-      if (dataSource != null) 'dataSource': dataSource,
+      'description': ?description,
+      'dataSource': ?dataSource,
     };
     final Map<String, Object?> response = await (httpPost ?? _defaultHttpPost)(
       uri: uri,
@@ -75,14 +103,19 @@ Future<Map<String, Object?>> createDataAgent({
 Future<Map<String, Object?>> listAccessibleDataAgents({
   required String projectId,
   required Object credentials,
+  String? location,
   Object? settings,
   ToolContext? toolContext,
   DataAgentHttpGet? httpGet,
 }) async {
   try {
+    final DataAgentToolConfig config = settings is DataAgentToolConfig
+        ? settings
+        : DataAgentToolConfig.fromObject(settings);
+    final String effectiveLocation = location ?? config.location ?? 'global';
     final Map<String, String> headers = _getHttpHeaders(credentials);
     final Uri uri = Uri.parse(
-      '$dataAgentBaseUrl/projects/$projectId/locations/global/dataAgents:listAccessible',
+      '$dataAgentBaseUrl/projects/$projectId/locations/$effectiveLocation/dataAgents:listAccessible',
     );
     final Map<String, Object?> response = await (httpGet ?? _defaultHttpGet)(
       uri: uri,
@@ -90,6 +123,95 @@ Future<Map<String, Object?>> listAccessibleDataAgents({
     );
     final List<Object?> agents = _readList(response['dataAgents']);
     return <String, Object?>{'status': 'SUCCESS', 'response': agents};
+  } catch (error) {
+    return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
+  }
+}
+
+/// Deletes an existing data agent resource.
+Future<Map<String, Object?>> deleteDataAgent({
+  required String dataAgentName,
+  required Object credentials,
+  Object? settings,
+  ToolContext? toolContext,
+  DataAgentHttpDelete? httpDelete,
+}) async {
+  try {
+    final DataAgentToolConfig config = settings is DataAgentToolConfig
+        ? settings
+        : DataAgentToolConfig.fromObject(settings);
+    if (!config.enableDataAgentModification) {
+      return <String, Object?>{
+        'status': 'ERROR',
+        'error_details':
+            'Data agent mutation is disabled. Enable it by setting '
+            '`enable_data_agent_modification=True` in DataAgentToolConfig.',
+      };
+    }
+    final Map<String, String> headers = _getHttpHeaders(credentials);
+    final Uri uri = Uri.parse('$dataAgentBaseUrl/$dataAgentName');
+    final Map<String, Object?> response =
+        await (httpDelete ?? _defaultHttpDelete)(
+          uri: uri,
+          headers: headers,
+        );
+    return <String, Object?>{'status': 'SUCCESS', 'response': response};
+  } catch (error) {
+    return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
+  }
+}
+
+/// Updates an existing data agent resource.
+Future<Map<String, Object?>> updateDataAgent({
+  required String dataAgentName,
+  required Object agentConfig,
+  required String updateMask,
+  required Object credentials,
+  Object? settings,
+  ToolContext? toolContext,
+  DataAgentHttpPatch? httpPatch,
+}) async {
+  try {
+    final DataAgentToolConfig config = settings is DataAgentToolConfig
+        ? settings
+        : DataAgentToolConfig.fromObject(settings);
+    if (!config.enableDataAgentModification) {
+      return <String, Object?>{
+        'status': 'ERROR',
+        'error_details':
+            'Data agent mutation is disabled. Enable it by setting '
+            '`enable_data_agent_modification=True` in DataAgentToolConfig.',
+      };
+    }
+    final List<String> fields = updateMask
+        .split(',')
+        .map((String f) => f.trim())
+        .where((String f) => f.isNotEmpty)
+        .toList();
+    if (fields.isEmpty) {
+      return <String, Object?>{
+        'status': 'ERROR',
+        'error_details':
+            'update_mask must be a non-empty comma-separated list of fields, e.g. "displayName,description".',
+      };
+    }
+    final Map<String, Object?> payload = agentConfig is String
+        ? (_tryDecodeJson(agentConfig) as Map<String, Object?>? ??
+            <String, Object?>{})
+        : _readMap(agentConfig);
+
+    final Map<String, String> headers = _getHttpHeaders(credentials);
+    final String cleanMask = fields.join(',');
+    final Uri uri = Uri.parse(
+      '$dataAgentBaseUrl/$dataAgentName?updateMask=$cleanMask',
+    );
+    final Map<String, Object?> response =
+        await (httpPatch ?? _defaultHttpPatch)(
+          uri: uri,
+          payload: payload,
+          headers: headers,
+        );
+    return <String, Object?>{'status': 'SUCCESS', 'response': response};
   } catch (error) {
     return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
   }
@@ -430,6 +552,53 @@ Future<Map<String, Object?>> _defaultHttpPost({
     final String body = await utf8.decodeStream(response);
     if (response.statusCode >= 400) {
       throw HttpException('POST $uri failed (${response.statusCode}): $body');
+    }
+    final Object? decoded = body.isEmpty
+        ? <String, Object?>{}
+        : _tryDecodeJson(body);
+    return _readMap(decoded);
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<Map<String, Object?>> _defaultHttpPatch({
+  required Uri uri,
+  required Map<String, Object?> payload,
+  required Map<String, String> headers,
+}) async {
+  final HttpClient client = HttpClient();
+  try {
+    final HttpClientRequest request = await client.patchUrl(uri);
+    headers.forEach(request.headers.set);
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode(payload));
+    final HttpClientResponse response = await request.close();
+    final String body = await utf8.decodeStream(response);
+    if (response.statusCode >= 400) {
+      throw HttpException('PATCH $uri failed (${response.statusCode}): $body');
+    }
+    final Object? decoded = body.isEmpty
+        ? <String, Object?>{}
+        : _tryDecodeJson(body);
+    return _readMap(decoded);
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<Map<String, Object?>> _defaultHttpDelete({
+  required Uri uri,
+  required Map<String, String> headers,
+}) async {
+  final HttpClient client = HttpClient();
+  try {
+    final HttpClientRequest request = await client.deleteUrl(uri);
+    headers.forEach(request.headers.set);
+    final HttpClientResponse response = await request.close();
+    final String body = await utf8.decodeStream(response);
+    if (response.statusCode >= 400) {
+      throw HttpException('DELETE $uri failed (${response.statusCode}): $body');
     }
     final Object? decoded = body.isEmpty
         ? <String, Object?>{}

@@ -10,8 +10,7 @@ import 'base_environment.dart';
 /// Local environment that executes commands and accesses files on disk.
 class LocalEnvironment extends BaseEnvironment {
   /// Creates a local environment rooted at [workingDirectory].
-  LocalEnvironment({Directory? workingDirectory})
-    : super(workingDirectory: workingDirectory);
+  LocalEnvironment({super.workingDirectory});
 
   @override
   Future<void> initialize() async {

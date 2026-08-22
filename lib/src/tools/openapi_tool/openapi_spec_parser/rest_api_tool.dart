@@ -80,7 +80,7 @@ class RestApiTool extends BaseTool {
   /// Creates a REST API tool for a parsed OpenAPI [operation].
   RestApiTool({
     required String name,
-    required String description,
+    required super.description,
     required this.endpoint,
     required Object operation,
     Object? authScheme,
@@ -98,7 +98,6 @@ class RestApiTool extends BaseTool {
        credentialExchanger = AutoAuthCredentialExchanger(),
        super(
          name: name.length > 60 ? name.substring(0, 60) : name,
-         description: description,
        ) {
     configureAuthCredential(authCredential);
     configureAuthScheme(authScheme);
@@ -127,7 +126,7 @@ class RestApiTool extends BaseTool {
 
   final Map<String, String> _defaultHeaders = <String, String>{};
   Object? _sslVerify;
-  HeaderProvider? _headerProvider;
+  final HeaderProvider? _headerProvider;
   String? _credentialKey;
 
   /// Creates a [RestApiTool] from a typed [ParsedOperation].
@@ -483,7 +482,7 @@ class RestApiTool extends BaseTool {
     }
 
     if (_headerProvider != null && toolContext != null) {
-      final Map<String, String> providerHeaders = _headerProvider!(toolContext);
+      final Map<String, String> providerHeaders = _headerProvider(toolContext);
       if (providerHeaders.isNotEmpty) {
         final Map<String, Object?> headers = _readMap(requestParams['headers']);
         headers.addAll(providerHeaders);
@@ -593,9 +592,7 @@ Future<RestApiResponse> _request({
     }
 
     if (requestParams.containsKey('json')) {
-      if (request.headers.contentType == null) {
-        request.headers.contentType = ContentType.json;
-      }
+      request.headers.contentType ??= ContentType.json;
       request.write(jsonEncode(requestParams['json']));
     } else if (requestParams.containsKey('data')) {
       final Object? data = requestParams['data'];
@@ -674,7 +671,7 @@ HttpClient _buildHttpClient(Object? verify) {
 
   final HttpClient client = HttpClient();
   if (verify == false) {
-    client.badCertificateCallback = (X509Certificate _, String __, int ___) =>
+    client.badCertificateCallback = (X509Certificate _, String _, int _) =>
         true;
   }
   return client;

@@ -331,7 +331,7 @@ class _ToolboxHttpTool extends BaseTool {
     }
 
     final Map<String, String> headers = <String, String>{
-      if (additionalHeaders != null) ...additionalHeaders!,
+      ...?additionalHeaders,
     };
 
     if (authTokenGetters != null) {

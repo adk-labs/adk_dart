@@ -45,20 +45,52 @@ class SetModelResponseTool extends BaseTool {
 
   Object _normalizeParameters(Object schema) {
     if (schema is Map<String, dynamic>) {
-      return Map<String, dynamic>.from(schema);
+      return _deepCopySchema(schema);
     }
     if (schema is Map) {
-      return <String, dynamic>{
+      final Map<String, dynamic> converted = <String, dynamic>{
         for (final MapEntry<Object?, Object?> entry in schema.entries)
           if (entry.key is String) entry.key as String: entry.value,
       };
+      return _deepCopySchema(converted);
     }
     return <String, dynamic>{
       'type': 'object',
       'properties': <String, dynamic>{
-        'response': <String, dynamic>{'type': 'string'},
+        'response': <String, dynamic>{
+          'type': 'string',
+          'description': 'The model response payload.',
+        },
       },
       'required': <String>['response'],
     };
+  }
+
+  Map<String, dynamic> _deepCopySchema(Map<String, dynamic> schema) {
+    final Map<String, dynamic> copy = <String, dynamic>{};
+    for (final MapEntry<String, dynamic> entry in schema.entries) {
+      final Object? value = entry.value;
+      if (value is Map<String, dynamic>) {
+        copy[entry.key] = _deepCopySchema(value);
+      } else if (value is Map) {
+        copy[entry.key] = _deepCopySchema(
+          value.map((Object? k, Object? v) => MapEntry('$k', v)),
+        );
+      } else if (value is List) {
+        copy[entry.key] = value.map((Object? item) {
+          if (item is Map<String, dynamic>) {
+            return _deepCopySchema(item);
+          } else if (item is Map) {
+            return _deepCopySchema(
+              item.map((Object? k, Object? v) => MapEntry('$k', v)),
+            );
+          }
+          return item;
+        }).toList();
+      } else {
+        copy[entry.key] = value;
+      }
+    }
+    return copy;
   }
 }

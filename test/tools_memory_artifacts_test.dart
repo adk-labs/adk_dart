@@ -287,13 +287,13 @@ void main() {
           '</w:document>';
       final List<int> xmlBytes = utf8.encode(xml);
       archive.addFile(ArchiveFile('word/document.xml', xmlBytes.length, xmlBytes));
-      final List<int>? zipBytes = ZipEncoder().encode(archive);
+      final List<int> zipBytes = ZipEncoder().encode(archive);
 
       await toolContext.saveArtifact(
         'doc.docx',
         Part.fromInlineData(
           mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          data: zipBytes!,
+          data: zipBytes,
         ),
       );
 
@@ -355,13 +355,13 @@ void main() {
           utf8.encode('<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row></sheetData>'),
         ),
       );
-      final List<int>? zipBytes = ZipEncoder().encode(archive);
+      final List<int> zipBytes = ZipEncoder().encode(archive);
 
       await toolContext.saveArtifact(
         'data.xlsx',
         Part.fromInlineData(
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          data: zipBytes!,
+          data: zipBytes,
         ),
       );
 

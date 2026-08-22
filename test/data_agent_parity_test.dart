@@ -188,13 +188,19 @@ void main() {
 
   group('data agent toolset parity', () {
     test('toolset returns all tools and honors list filter', () async {
-      final DataAgentToolset all = DataAgentToolset();
+      final DataAgentToolset all = DataAgentToolset(
+        dataAgentToolConfig: DataAgentToolConfig(
+          enableDataAgentModification: true,
+        ),
+      );
       final List<BaseTool> allTools = await all.getTools();
       expect(allTools.map((BaseTool tool) => tool.name).toSet(), <String>{
         'list_accessible_data_agents',
         'get_data_agent_info',
         'ask_data_agent',
         'create_data_agent',
+        'delete_data_agent',
+        'update_data_agent',
       });
 
       final DataAgentToolset filtered = DataAgentToolset(
@@ -256,5 +262,62 @@ void main() {
         expect(((payload['response'] as List).first as Map)['Answer'], 'ok');
       },
     );
+
+    test('delete_data_agent and update_data_agent honor modification setting', () async {
+      final Map<String, Object?> deleteDisabled = await deleteDataAgent(
+        dataAgentName: 'projects/p/locations/global/dataAgents/a1',
+        credentials: GoogleOAuthCredential(accessToken: 'token-del'),
+      );
+      expect(deleteDisabled['status'], 'ERROR');
+      expect('${deleteDisabled['error_details']}', contains('mutation is disabled'));
+
+      final Map<String, Object?> deleteSuccess = await deleteDataAgent(
+        dataAgentName: 'projects/p/locations/global/dataAgents/a1',
+        credentials: GoogleOAuthCredential(accessToken: 'token-del'),
+        settings: DataAgentToolConfig(enableDataAgentModification: true),
+        httpDelete: ({required Uri uri, required Map<String, String> headers}) async {
+          expect(uri.path, '/v1/projects/p/locations/global/dataAgents/a1');
+          expect(headers['authorization'], 'Bearer token-del');
+          return <String, Object?>{'done': true};
+        },
+      );
+      expect(deleteSuccess['status'], 'SUCCESS');
+
+      final Map<String, Object?> updateSuccess = await updateDataAgent(
+        dataAgentName: 'projects/p/locations/global/dataAgents/a1',
+        agentConfig: <String, Object?>{'displayName': 'new name'},
+        updateMask: 'displayName',
+        credentials: GoogleOAuthCredential(accessToken: 'token-up'),
+        settings: DataAgentToolConfig(enableDataAgentModification: true),
+        httpPatch: ({
+          required Uri uri,
+          required Map<String, Object?> payload,
+          required Map<String, String> headers,
+        }) async {
+          expect(uri.path, '/v1/projects/p/locations/global/dataAgents/a1');
+          expect(uri.queryParameters['updateMask'], 'displayName');
+          expect(payload['displayName'], 'new name');
+          return <String, Object?>{'displayName': 'new name'};
+        },
+      );
+      expect(updateSuccess['status'], 'SUCCESS');
+    });
+
+    test('DataAgentToolset includes mutation tools only when enabled', () async {
+      final DataAgentToolset disabled = DataAgentToolset(
+        dataAgentToolConfig: DataAgentToolConfig(enableDataAgentModification: false),
+      );
+      final List<BaseTool> disabledTools = await disabled.getTools();
+      expect(disabledTools.map((BaseTool t) => t.name), isNot(contains('delete_data_agent')));
+      expect(disabledTools.map((BaseTool t) => t.name), isNot(contains('update_data_agent')));
+
+      final DataAgentToolset enabled = DataAgentToolset(
+        dataAgentToolConfig: DataAgentToolConfig(enableDataAgentModification: true),
+      );
+      final List<BaseTool> enabledTools = await enabled.getTools();
+      expect(enabledTools.map((BaseTool t) => t.name), contains('delete_data_agent'));
+      expect(enabledTools.map((BaseTool t) => t.name), contains('update_data_agent'));
+      expect(enabledTools.map((BaseTool t) => t.name), contains('create_data_agent'));
+    });
   });
 }

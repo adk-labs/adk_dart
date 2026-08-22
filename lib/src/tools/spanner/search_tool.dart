@@ -240,6 +240,49 @@ String _generateSqlForAnn({
   ''';
 }
 
+final RegExp _identifierPartRe = RegExp(
+  r'^(?:[A-Za-z_][A-Za-z0-9_]*|`[^`\\]+`|"[^"\\]+")$',
+);
+
+String _validateIdentifier(String identifier, String fieldName) {
+  final String trimmed = identifier.trim();
+  if (trimmed.isEmpty) {
+    throw ArgumentError("Invalid SQL identifier for $fieldName: '$identifier'");
+  }
+  final List<String> parts = trimmed.split('.');
+  for (final String part in parts) {
+    if (!_identifierPartRe.hasMatch(part)) {
+      throw ArgumentError("Invalid SQL identifier for $fieldName: '$identifier'");
+    }
+  }
+  return trimmed;
+}
+
+List<String> _validateColumnList(List<String> columns, String fieldName) {
+  return columns.map((String col) => _validateIdentifier(col, fieldName)).toList();
+}
+
+final RegExp _unsafeSqlPatternsRe = RegExp(
+  r'(?:;|--|/\*|\*/|#|\bUNION\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\bEXECUTE\b|\bTRUNCATE\b)',
+  caseSensitive: false,
+);
+
+String? _validateAdditionalFilter(String? filterStr) {
+  if (filterStr == null) {
+    return null;
+  }
+  final String trimmed = filterStr.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (_unsafeSqlPatternsRe.hasMatch(trimmed)) {
+    throw ArgumentError(
+      "additional_filter contains unsafe or unsupported patterns: '$filterStr'",
+    );
+  }
+  return trimmed;
+}
+
 /// Executes vector similarity search against a Spanner table.
 ///
 /// The [embeddingOptions] map must define exactly one embedding source:
@@ -264,6 +307,14 @@ Future<Map<String, Object?>> similaritySearch({
   Map<String, Object?>? searchOptions,
 }) async {
   try {
+    final String validatedTableName = _validateIdentifier(tableName, 'table_name');
+    final String validatedEmbeddingCol = _validateIdentifier(
+      embeddingColumnToSearch,
+      'embedding_column_to_search',
+    );
+    final List<String> validatedColumns = _validateColumnList(columns, 'columns');
+    final String? validatedFilter = _validateAdditionalFilter(additionalFilter);
+
     final SpannerClient spannerClient = getSpannerClient(
       project: projectId,
       credentials: credentials,
@@ -391,10 +442,10 @@ Future<Map<String, Object?>> similaritySearch({
     if (nearestNeighborsAlgorithm == exactNearestNeighbors) {
       sql = _generateSqlForKnn(
         dialect: dialect,
-        tableName: tableName,
-        embeddingColumnToSearch: embeddingColumnToSearch,
-        columns: columns,
-        additionalFilter: additionalFilter,
+        tableName: validatedTableName,
+        embeddingColumnToSearch: validatedEmbeddingCol,
+        columns: validatedColumns,
+        additionalFilter: validatedFilter,
         distanceType: distanceType,
         topK: topK,
       );
@@ -403,10 +454,10 @@ Future<Map<String, Object?>> similaritySearch({
           _asInt(searchOpts[_numLeavesToSearchKey]) ?? 1000;
       sql = _generateSqlForAnn(
         dialect: dialect,
-        tableName: tableName,
-        embeddingColumnToSearch: embeddingColumnToSearch,
-        columns: columns,
-        additionalFilter: additionalFilter,
+        tableName: validatedTableName,
+        embeddingColumnToSearch: validatedEmbeddingCol,
+        columns: validatedColumns,
+        additionalFilter: validatedFilter,
         distanceType: distanceType,
         topK: topK,
         numLeavesToSearch: numLeavesToSearch,

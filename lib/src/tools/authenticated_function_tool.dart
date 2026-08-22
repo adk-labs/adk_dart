@@ -2,7 +2,6 @@
 library;
 
 import '../auth/auth_credential.dart';
-import '../auth/auth_tool.dart';
 import '../models/llm_request.dart';
 import 'base_authenticated_tool.dart';
 import 'function_tool.dart';
@@ -13,22 +12,16 @@ class AuthenticatedFunctionTool extends BaseAuthenticatedTool {
   /// Creates an authenticated wrapper around a function tool delegate.
   AuthenticatedFunctionTool({
     required Function func,
-    required String name,
-    String description = '',
-    AuthConfig? authConfig,
-    Object? responseForAuthRequired,
+    required super.name,
+    super.description = '',
+    super.authConfig,
+    super.responseForAuthRequired,
     Object requireConfirmation = false,
   }) : _delegate = FunctionTool(
          func: func,
          name: name,
          description: description,
          requireConfirmation: requireConfirmation,
-       ),
-       super(
-         name: name,
-         description: description,
-         authConfig: authConfig,
-         responseForAuthRequired: responseForAuthRequired,
        );
 
   final FunctionTool _delegate;

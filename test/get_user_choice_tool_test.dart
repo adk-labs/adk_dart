@@ -8,7 +8,7 @@ void main() {
       final decl = tool.getDeclaration();
       expect(decl, isNotNull);
       expect(decl!.name, equals('get_user_choice'));
-      expect(decl.parameters!['required'], contains('options'));
+      expect(decl.parameters['required'], contains('options'));
     });
 
     test('run sets skipSummarization and returns null', () async {

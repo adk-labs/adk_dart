@@ -8,7 +8,6 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../../features/_feature_registry.dart';
-import '../../utils/env_utils.dart';
 import 'base_environment.dart';
 
 /// A persistent remote workspace sandbox backed by Daytona.

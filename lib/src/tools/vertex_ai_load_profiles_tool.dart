@@ -13,10 +13,9 @@ class VertexAiLoadProfilesTool extends BaseTool {
   /// Initializes the [VertexAiLoadProfilesTool].
   VertexAiLoadProfilesTool({
     required BaseMemoryService memoryService,
-    String name = 'load_profiles',
-    String description = 'Loads structured user profiles for the current user.',
-  }) : _memoryService = memoryService,
-       super(name: name, description: description);
+    super.name = 'load_profiles',
+    super.description = 'Loads structured user profiles for the current user.',
+  }) : _memoryService = memoryService;
 
   final BaseMemoryService _memoryService;
 

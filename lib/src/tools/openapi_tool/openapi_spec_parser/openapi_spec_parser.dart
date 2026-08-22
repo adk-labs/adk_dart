@@ -196,7 +196,7 @@ class OpenApiSpecParser {
   /// Parses [openapiSpecDict] into normalized [ParsedOperation] values.
   List<ParsedOperation> parse(Map<String, Object?> openapiSpecDict) {
     final Map<String, Object?> resolved = _resolveReferences(openapiSpecDict);
-    final Map<String, Object?> sanitized = _sanitizeSchemaTypes(resolved);
+    final Map<String, Object?> sanitized = sanitizeSchemaTypes(resolved);
     return _collectOperations(sanitized);
   }
 
@@ -307,56 +307,67 @@ class OpenApiSpecParser {
     return operations;
   }
 
-  Map<String, Object?> _sanitizeSchemaTypes(Map<String, Object?> openapiSpec) {
+  /// Normalizes invalid JSON schema types in [openapiSpec].
+  Map<String, Object?> sanitizeSchemaTypes(Map<String, Object?> openapiSpec) {
     final Map<String, Object?> copy = _deepCopyMap(openapiSpec);
-    final List<Map<String, Object?>> schemas = <Map<String, Object?>>[];
-    _collectSchemas(copy, schemas);
 
-    for (final Map<String, Object?> schema in schemas) {
-      _cleanSchemaType(schema);
-    }
-    return copy;
-  }
-
-  void _collectSchemas(
-    Object? current,
-    List<Map<String, Object?>> schemas, {
-    String? currentKey,
-  }) {
-    if (current is Map) {
-      final Map<String, Object?> map = _readMap(current);
-      if (currentKey != null &&
-          _schemaContainerKeys.contains(currentKey.toLowerCase())) {
-        schemas.add(map);
+    void sanitizeTypeField(Map<String, Object?> schemaDict) {
+      if (!schemaDict.containsKey('type')) {
+        return;
       }
-      for (final MapEntry<String, Object?> entry in map.entries) {
-        _collectSchemas(entry.value, schemas, currentKey: entry.key);
+      final Object? typeValue = schemaDict['type'];
+      if (typeValue is String) {
+        final String normalizedType = typeValue.toLowerCase();
+        if (_validSchemaTypes.contains(normalizedType)) {
+          schemaDict['type'] = normalizedType;
+        } else {
+          schemaDict.remove('type');
+        }
+        return;
       }
-    } else if (current is List) {
-      for (final Object? item in current) {
-        _collectSchemas(item, schemas, currentKey: currentKey);
-      }
-    }
-  }
-
-  void _cleanSchemaType(Map<String, Object?> schema) {
-    final Object? rawType = schema['type'];
-    if (rawType is List) {
-      final List<String> valid = <String>[];
-      for (final Object? item in rawType) {
-        if (item is String) {
-          final String normalized = item.toLowerCase();
-          if (_validSchemaTypes.contains(normalized)) {
-            valid.add(normalized);
+      if (typeValue is List) {
+        final List<String> validTypes = <String>[];
+        for (final Object? entry in typeValue) {
+          if (entry is String) {
+            final String normalizedEntry = entry.toLowerCase();
+            if (_validSchemaTypes.contains(normalizedEntry) &&
+                !validTypes.contains(normalizedEntry)) {
+              validTypes.add(normalizedEntry);
+            }
           }
         }
-      }
-      if (valid.isEmpty) {
-        schema.remove('type');
-      } else {
-        schema['type'] = valid;
+        if (validTypes.isNotEmpty) {
+          schemaDict['type'] = validTypes;
+        } else {
+          schemaDict.remove('type');
+        }
       }
     }
+
+    Object? sanitizeRecursive(Object? obj, {required bool inSchema}) {
+      if (obj is Map) {
+        final Map<String, Object?> map = _readMap(obj);
+        if (inSchema) {
+          sanitizeTypeField(map);
+        }
+        for (final MapEntry<String, Object?> entry in map.entries.toList()) {
+          final bool nextInSchema = inSchema ||
+              _schemaContainerKeys.contains(entry.key.toLowerCase());
+          map[entry.key] = sanitizeRecursive(
+            entry.value,
+            inSchema: nextInSchema,
+          );
+        }
+        return map;
+      } else if (obj is List) {
+        return obj
+            .map((Object? item) => sanitizeRecursive(item, inSchema: inSchema))
+            .toList();
+      }
+      return obj;
+    }
+
+    return sanitizeRecursive(copy, inSchema: false) as Map<String, Object?>;
   }
 
   Map<String, Object?> _resolveReferences(Map<String, Object?> openapiSpec) {
@@ -381,8 +392,8 @@ class OpenApiSpecParser {
     }
 
     (Object?, Map<String, Object?>) resolveRefWithDoc(String ref, Map<String, Object?> currentDoc) {
-      if (ref.startsWith('#/')) {
-        return (resolvePointer(ref, currentDoc), currentDoc);
+      if (ref.startsWith('#/') || ref == '#') {
+        return (resolvePointer(ref == '#' ? '#/' : ref, currentDoc), currentDoc);
       }
 
       // External ref format: "http(s)://...#/components/schemas/Pet" or "./models/pet.json#/Pet"
@@ -405,7 +416,7 @@ class OpenApiSpecParser {
       }
 
       if (extDoc == null) {
-        return (null, currentDoc);
+        throw ArgumentError('External references not supported: $ref');
       }
 
       if (fragment == '#' || fragment.isEmpty) {

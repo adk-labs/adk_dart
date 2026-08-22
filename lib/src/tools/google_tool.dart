@@ -11,16 +11,15 @@ import '_google_credentials.dart';
 class GoogleTool extends FunctionTool {
   /// Creates a function tool that injects Google credentials and settings.
   GoogleTool({
-    required Function func,
+    required super.func,
     BaseGoogleCredentialsConfig? credentialsConfig,
     this.toolSettings,
-    String? name,
-    String? description,
+    super.name,
+    super.description,
     super.requireConfirmation,
   }) : _credentialsManager = credentialsConfig == null
            ? null
-           : GoogleCredentialsManager(credentialsConfig),
-       super(func: func, name: name, description: description);
+           : GoogleCredentialsManager(credentialsConfig);
 
   final GoogleCredentialsManager? _credentialsManager;
 

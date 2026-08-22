@@ -214,7 +214,8 @@ class McpTool extends BaseAuthenticatedTool {
 
   @override
   String? detectErrorInResponse(Object? response) {
-    if (response is Map && response['isError'] == true) {
+    if (response is Map &&
+        (response['isError'] == true || response['is_error'] == true)) {
       return 'MCP_TOOL_ERROR';
     }
     return null;

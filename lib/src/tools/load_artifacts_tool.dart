@@ -283,7 +283,7 @@ String? _tryExtractDocxText(List<int> bytes) {
     if (documentFile == null) {
       return null;
     }
-    final Object? rawContent = documentFile.content;
+    final Object rawContent = documentFile.content;
     final List<int> contentBytes = rawContent is List<int>
         ? rawContent
         : (rawContent is String ? utf8.encode(rawContent) : <int>[]);
@@ -327,7 +327,7 @@ String? _tryExtractXlsxText(List<int> bytes) {
     final List<String> sharedStrings = <String>[];
     final ArchiveFile? ssFile = archive.findFile('xl/sharedStrings.xml');
     if (ssFile != null) {
-      final Object? content = ssFile.content;
+      final Object content = ssFile.content;
       final List<int> ssBytes = content is List<int>
           ? content
           : (content is String ? utf8.encode(content) : <int>[]);
@@ -342,7 +342,7 @@ String? _tryExtractXlsxText(List<int> bytes) {
     if (sheetFile == null) {
       return null;
     }
-    final Object? sContent = sheetFile.content;
+    final Object sContent = sheetFile.content;
     final List<int> sheetBytes = sContent is List<int>
         ? sContent
         : (sContent is String ? utf8.encode(sContent) : <int>[]);

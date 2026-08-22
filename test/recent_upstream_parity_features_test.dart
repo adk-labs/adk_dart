@@ -136,12 +136,18 @@ void main() {
     });
   });
 
-  group('DataAgent create_data_agent parity', () {
-    test('DataAgentToolset provides create_data_agent tool', () async {
-      final DataAgentToolset toolset = DataAgentToolset();
+  group('DataAgent modification parity', () {
+    test('DataAgentToolset provides modification tools when enabled', () async {
+      final DataAgentToolset toolset = DataAgentToolset(
+        dataAgentToolConfig: DataAgentToolConfig(
+          enableDataAgentModification: true,
+        ),
+      );
       final List<BaseTool> tools = await toolset.getTools();
       final List<String> toolNames = tools.map((BaseTool t) => t.name).toList();
       expect(toolNames, contains('create_data_agent'));
+      expect(toolNames, contains('delete_data_agent'));
+      expect(toolNames, contains('update_data_agent'));
       expect(toolNames, contains('ask_data_agent'));
       expect(toolNames, contains('get_data_agent_info'));
       expect(toolNames, contains('list_accessible_data_agents'));
