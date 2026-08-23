@@ -960,7 +960,8 @@ class AgentNode extends BaseNode {
 
     final InvocationContext parentContext =
         context.invocationContext ?? _standaloneInvocationContext(name);
-    final Content? userContent = validatedInput == null
+    final bool isResuming = context.resumeInputs.isNotEmpty;
+    final Content? userContent = (validatedInput == null || isResuming)
         ? null
         : _contentFromNodeInput(validatedInput);
     final String? nodeKey = context._currentNodeKey;

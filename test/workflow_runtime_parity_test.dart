@@ -3162,6 +3162,39 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('AgentNode skips synthetic user content when resuming with resumeInputs', () async {
+      final _EchoAgent agent = _EchoAgent(name: 'worker');
+      final wf.AgentNode node = wf.AgentNode(agent: agent);
+      final InvocationContext ic = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_resume',
+        agent: agent,
+        session: Session(
+          id: 's_resume',
+          appName: 'app',
+          userId: 'u1',
+          events: <Event>[
+            Event(
+              invocationId: 'inv_prev',
+              author: 'user',
+              content: Content.userText('turn 1 initial input'),
+            ),
+          ],
+        ),
+      );
+
+      final wf.WorkflowContext ctx = wf.WorkflowContext(
+        invocationContext: ic,
+        resumeInputs: <String, Object?>{
+          'worker@1': <String, Object?>{'confirmed': true},
+        },
+      );
+
+      final Object? result = await node.run(ctx, 'turn 2 synthetic input');
+      // When resuming, synthetic input is skipped so userContent is null
+      expect(result, 'agent:');
+    });
   });
 }
 
