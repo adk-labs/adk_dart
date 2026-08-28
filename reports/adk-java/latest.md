@@ -2,34 +2,19 @@
 
 - Date (UTC): 2026-08-28
 - Source: `google/adk-java`
-- Latest SHA: `23fecad1c617c1aded2540615ed1423997f81575`
-- Previous SHA: `6eef47800baf57e2446e69febaa22fe11faf8f58`
+- Latest SHA: `fed5344f00c98e5d6f72bc425b4c904193abd977`
+- Previous SHA: `23fecad1c617c1aded2540615ed1423997f81575`
 
 ## Summary
 
-- New commits: 9
+- New commits: 2
 
 ## Commits
 
-- [23fecad](https://github.com/google/adk-java/commit/23fecad1c617c1aded2540615ed1423997f81575) Merge pull request #1449 from shoemoney:fix/inmemory-artifact-user-namespace (Copybara-Service, 2026-08-27)
-- [8dc4060](https://github.com/google/adk-java/commit/8dc406092120f61e31acc25c7b8db3b477bba5b6) Merge pull request #1452 from AnupamKumar-1:fix/chat-completions-http-typed-exception (Copybara-Service, 2026-08-27)
-- [de82dd2](https://github.com/google/adk-java/commit/de82dd22d6b7f66928ce19d3970f79a1c6eb6a1f) Merge pull request #1447 from hemasekhar-p:issue1444-fix (Copybara-Service, 2026-08-27)
-- [4893482](https://github.com/google/adk-java/commit/4893482806f302dd5e63f5419f30dc127e77496a) Merge pull request #1439 from hemasekhar-p:issue1421-fix (Copybara-Service, 2026-08-27)
-- [c05206f](https://github.com/google/adk-java/commit/c05206fa76792ec1d0f759cf53e99af9d1a72fbd) fix: avoid setting Part.partMetadata when metadata is empty (Hemasekhar Puchuginjala, 2026-08-18)
-- [8c06011](https://github.com/google/adk-java/commit/8c06011ef20e45f081ada54e675eca6963ba255c) fix: support typed responseSchema in ChatCompletionsRequest (Hemasekhar Puchuginjala, 2026-08-21)
-- [052f31a](https://github.com/google/adk-java/commit/052f31ad3799124a36bb3bb732458d748fcc6586) fix(chat): expose non-success HTTP status via typed exception (AnupamKumar-1, 2026-08-26)
-- [01e1e41](https://github.com/google/adk-java/commit/01e1e41d4cb4cbd9b29d85bb1ef78110ccf575ba) fix(artifacts): honor user: namespace, prevent phantom keys, sort listing (Jeremy Schoemaker, 2026-08-25)
-- [0f46d5c](https://github.com/google/adk-java/commit/0f46d5c57ad6eba4496e93e694a0e34b010b2f30) fix(artifacts): honor the "user:" namespace in InMemoryArtifactService (Jeremy Schoemaker, 2026-08-23)
+- [fed5344](https://github.com/google/adk-java/commit/fed5344f00c98e5d6f72bc425b4c904193abd977) Merge pull request #1417 from svetanis:fix/partless-candidate (Copybara-Service, 2026-08-28)
+- [e0e9425](https://github.com/google/adk-java/commit/e0e9425a89d3df44b8b4868a489f4f5eceefc6cc) fix(models): treat a part-less candidate as an error, not a success (svetanis, 2026-08-08)
 
 ## Changed Files
 
-- `M	a2a/src/main/java/com/google/adk/a2a/converters/PartConverter.java`
-- `M	a2a/src/test/java/com/google/adk/a2a/converters/PartConverterTest.java`
-- `M	core/src/main/java/com/google/adk/artifacts/InMemoryArtifactService.java`
-- `M	core/src/main/java/com/google/adk/models/chat/ChatCompletionsClient.java`
-- `M	core/src/main/java/com/google/adk/models/chat/ChatCompletionsHttpClient.java`
-- `A	core/src/main/java/com/google/adk/models/chat/ChatCompletionsHttpException.java`
-- `M	core/src/main/java/com/google/adk/models/chat/ChatCompletionsRequest.java`
-- `M	core/src/test/java/com/google/adk/artifacts/InMemoryArtifactServiceTest.java`
-- `M	core/src/test/java/com/google/adk/models/chat/ChatCompletionsHttpClientTest.java`
-- `M	core/src/test/java/com/google/adk/models/chat/ChatCompletionsRequestTest.java`
+- `M	core/src/main/java/com/google/adk/models/LlmResponse.java`
+- `M	core/src/test/java/com/google/adk/models/LlmResponseTest.java`

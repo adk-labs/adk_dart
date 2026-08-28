@@ -2,38 +2,18 @@
 
 - Date (UTC): 2026-08-28
 - Source: `google/adk-js`
-- Latest SHA: `e9f187fc54bf1f26397d0dbd476b68d15a38e4f5`
-- Previous SHA: `3aaf49bbd22eadc5dbfd6b957623598e4d3f7def`
+- Latest SHA: `071f795b9dc57449f95e8cba51615d75566cf02e`
+- Previous SHA: `e9f187fc54bf1f26397d0dbd476b68d15a38e4f5`
 
 ## Summary
 
-- New commits: 6
+- New commits: 1
 
 ## Commits
 
-- [e9f187f](https://github.com/google/adk-js/commit/e9f187fc54bf1f26397d0dbd476b68d15a38e4f5) Fix: drop the redundant ExtendedInteractionSSEEvent self-cast in the streaming loop (#827) (adk-foundry-bot, 2026-08-27)
-- [321a2bc](https://github.com/google/adk-js/commit/321a2bc02077d3e8cc1feec74e33c7ddd35989db) fix(test): import Client from the @google-cloud/vertexai package root (#825) (adk-foundry-bot, 2026-08-27)
-- [549c21d](https://github.com/google/adk-js/commit/549c21db34e9bc7c4585011d19192d8ac79ae147) chore(test): prefix node:http and node:net type imports (#826) (adk-foundry-bot, 2026-08-27)
-- [fab19d0](https://github.com/google/adk-js/commit/fab19d04cd1231567d363b49f5c657223e6842ba) feat: Port the typed-errors module (errors/) from adk-python (#583) (Amaad Martin, 2026-08-27)
-- [9566743](https://github.com/google/adk-js/commit/9566743ffaa5fcc29b5a97d2a823837fa8319627) Fix: remove the no-op @ts-ignore on the esbuild-shim-plugin import (#805) (Amaad Martin, 2026-08-26)
-- [d0745b7](https://github.com/google/adk-js/commit/d0745b74bdbeecfd93ec0e687c4f4e0f738c4ca3) docs: state an explicit minimum Node.js version in the README (#800) (Amaad Martin, 2026-08-26)
+- [071f795](https://github.com/google/adk-js/commit/071f795b9dc57449f95e8cba51615d75566cf02e) Fix: type the load_mcp_resource LlmRequest fixtures instead of double-casting (#836) (adk-foundry-bot, 2026-08-28)
 
 ## Changed Files
 
-- `M	README.md`
-- `M	core/src/common.ts`
-- `A	core/src/errors/already_exists_error.ts`
-- `A	core/src/errors/input_validation_error.ts`
-- `A	core/src/errors/not_found_error.ts`
-- `A	core/src/errors/session_not_found_error.ts`
-- `A	core/src/errors/tool_execution_error.ts`
-- `M	core/src/models/interactions_utils.ts`
-- `M	core/test/a2a/agent_to_a2a_body_parsing_test.ts`
-- `A	core/test/errors/already_exists_error_test.ts`
-- `A	core/test/errors/input_validation_error_test.ts`
-- `A	core/test/errors/not_found_error_test.ts`
-- `A	core/test/errors/session_not_found_error_test.ts`
-- `A	core/test/errors/tool_execution_error_test.ts`
-- `M	dev/src/utils/agent_loader.ts`
-- `M	tests/integration/memory/vertex_ai_memory_bank_service_test.ts`
-- `M	tests/integration/tools/agent_tool_vertexai_test.ts`
+- `M	core/test/tools/mcp/load_mcp_resource_tool_test.ts`
+- `M	tests/e2e/tools/mcp/load_mcp_resource_e2e_test.ts`
