@@ -254,4 +254,23 @@ void main() {
       );
     },
   );
+
+  group('RunConfig maxLlmCalls validation', () {
+    test('rejects values greater than or equal to sys.maxsize', () {
+      expect(
+        () => RunConfig.validateMaxLlmCalls(0x7FFFFFFFFFFFFFFF),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => RunConfig(maxLlmCalls: 0x7FFFFFFFFFFFFFFF),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('accepts valid maxLlmCalls values', () {
+      expect(RunConfig.validateMaxLlmCalls(10), 10);
+      final RunConfig config = RunConfig(maxLlmCalls: 50);
+      expect(config.maxLlmCalls, 50);
+    });
+  });
 }

@@ -161,7 +161,7 @@ class RunConfig {
 
   /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {
-    if (BigInt.from(value) == _pythonSysMaxSize) {
+    if (BigInt.from(value) >= _pythonSysMaxSize) {
       throw ArgumentError.value(
         value,
         'maxLlmCalls',
