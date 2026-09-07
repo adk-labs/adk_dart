@@ -90,6 +90,15 @@ class _FakeVertexAiSessionApiClient implements VertexAiSessionApiClient {
     }
   }
 
+  Future<void> Function({
+    required String reasoningEngineId,
+    required String sessionId,
+    required String author,
+    required String invocationId,
+    required double timestamp,
+    required Map<String, Object?> config,
+  })? onAppendEvent;
+
   @override
   Future<void> appendEvent({
     required String reasoningEngineId,
@@ -99,6 +108,17 @@ class _FakeVertexAiSessionApiClient implements VertexAiSessionApiClient {
     required double timestamp,
     required Map<String, Object?> config,
   }) async {
+    if (onAppendEvent != null) {
+      await onAppendEvent!(
+        reasoningEngineId: reasoningEngineId,
+        sessionId: sessionId,
+        author: author,
+        invocationId: invocationId,
+        timestamp: timestamp,
+        config: config,
+      );
+      return;
+    }
     final Map<String, Object?>? session = _sessionsById[sessionId];
     if (session == null) {
       throw StateError('Session $sessionId not found.');
@@ -2066,6 +2086,185 @@ CREATE TABLE events (
         () => service.listSessions(appName: 'invalid-name'),
         throwsArgumentError,
       );
+    });
+
+    test('appendEvent retries once on 429 and succeeds', () async {
+      vertexAiAppendRetryDelayForTest = Duration.zero;
+      addTearDown(() => vertexAiAppendRetryDelayForTest = null);
+
+      int appendCalls = 0;
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      fakeClient.onAppendEvent = ({
+        required String reasoningEngineId,
+        required String sessionId,
+        required String author,
+        required String invocationId,
+        required double timestamp,
+        required Map<String, Object?> config,
+      }) async {
+        appendCalls += 1;
+        if (appendCalls == 1) {
+          throw const HttpException(
+            'Vertex Session API call failed (429): Resource exhausted',
+          );
+        }
+      };
+
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) =>
+            fakeClient,
+      );
+      final Session session = Session(
+        id: 'sess_1',
+        appName: 'projects/p/locations/l/reasoningEngines/123',
+        userId: 'u1',
+      );
+      final Event event = Event(
+        invocationId: 'inv_429',
+        author: 'model',
+        content: Content.modelText('retry test'),
+      );
+
+      final Event result = await service.appendEvent(
+        session: session,
+        event: event,
+      );
+      expect(result.invocationId, 'inv_429');
+      expect(appendCalls, 2);
+    });
+
+    test('appendEvent raises after retry on persistent 429', () async {
+      vertexAiAppendRetryDelayForTest = Duration.zero;
+      addTearDown(() => vertexAiAppendRetryDelayForTest = null);
+
+      int appendCalls = 0;
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      fakeClient.onAppendEvent = ({
+        required String reasoningEngineId,
+        required String sessionId,
+        required String author,
+        required String invocationId,
+        required double timestamp,
+        required Map<String, Object?> config,
+      }) async {
+        appendCalls += 1;
+        throw const HttpException(
+          'Vertex Session API call failed (429): Resource exhausted',
+        );
+      };
+
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) =>
+            fakeClient,
+      );
+      final Session session = Session(
+        id: 'sess_1',
+        appName: 'projects/p/locations/l/reasoningEngines/123',
+        userId: 'u1',
+      );
+
+      await expectLater(
+        service.appendEvent(
+          session: session,
+          event: Event(invocationId: 'inv_429_persistent', author: 'model'),
+        ),
+        throwsA(
+          isA<HttpException>().having(
+            (HttpException e) => e.message,
+            'message',
+            contains('429'),
+          ),
+        ),
+      );
+      expect(appendCalls, 2);
+    });
+
+    test('appendEvent does not retry on non-429 client error', () async {
+      vertexAiAppendRetryDelayForTest = Duration.zero;
+      addTearDown(() => vertexAiAppendRetryDelayForTest = null);
+
+      int appendCalls = 0;
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      fakeClient.onAppendEvent = ({
+        required String reasoningEngineId,
+        required String sessionId,
+        required String author,
+        required String invocationId,
+        required double timestamp,
+        required Map<String, Object?> config,
+      }) async {
+        appendCalls += 1;
+        throw const HttpException(
+          'Vertex Session API call failed (400): Bad request',
+        );
+      };
+
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) =>
+            fakeClient,
+      );
+      final Session session = Session(
+        id: 'sess_1',
+        appName: 'projects/p/locations/l/reasoningEngines/123',
+        userId: 'u1',
+      );
+
+      await expectLater(
+        service.appendEvent(
+          session: session,
+          event: Event(invocationId: 'inv_400', author: 'model'),
+        ),
+        throwsA(
+          isA<HttpException>().having(
+            (HttpException e) => e.message,
+            'message',
+            contains('400'),
+          ),
+        ),
+      );
+      expect(appendCalls, 1);
+    });
+
+    test('appendEvent does not retry on network error or timeout', () async {
+      vertexAiAppendRetryDelayForTest = Duration.zero;
+      addTearDown(() => vertexAiAppendRetryDelayForTest = null);
+
+      int appendCalls = 0;
+      final _FakeVertexAiSessionApiClient fakeClient =
+          _FakeVertexAiSessionApiClient();
+      fakeClient.onAppendEvent = ({
+        required String reasoningEngineId,
+        required String sessionId,
+        required String author,
+        required String invocationId,
+        required double timestamp,
+        required Map<String, Object?> config,
+      }) async {
+        appendCalls += 1;
+        throw const SocketException('Connection timed out');
+      };
+
+      final VertexAiSessionService service = VertexAiSessionService(
+        clientFactory: ({String? project, String? location, String? apiKey}) =>
+            fakeClient,
+      );
+      final Session session = Session(
+        id: 'sess_1',
+        appName: 'projects/p/locations/l/reasoningEngines/123',
+        userId: 'u1',
+      );
+
+      await expectLater(
+        service.appendEvent(
+          session: session,
+          event: Event(invocationId: 'inv_timeout', author: 'model'),
+        ),
+        throwsA(isA<SocketException>()),
+      );
+      expect(appendCalls, 1);
     });
   });
 }

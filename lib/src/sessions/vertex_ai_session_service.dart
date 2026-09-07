@@ -478,6 +478,34 @@ Uri _defaultVertexAiSessionUriBuilder({
   );
 }
 
+/// Optional test hook to override the 429 retry delay in [VertexAiSessionService.appendEvent].
+Duration? vertexAiAppendRetryDelayForTest;
+
+bool _is429Error(Object error) {
+  if (error is HttpException) {
+    final String msg = error.message;
+    if (msg.contains('(429)') || msg.contains('429')) {
+      return true;
+    }
+  }
+  try {
+    final dynamic dyn = error;
+    final Object? code = dyn.code;
+    if (code == 429 || code == '429') {
+      return true;
+    }
+    final Object? statusCode = dyn.statusCode;
+    if (statusCode == 429 || statusCode == '429') {
+      return true;
+    }
+    final Object? status = dyn.status;
+    if (status == 429 || status == '429') {
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 /// Session service implementation backed by Vertex AI.
 class VertexAiSessionService extends BaseSessionService {
   /// Creates a Vertex AI-backed session service.
@@ -820,14 +848,30 @@ class VertexAiSessionService extends BaseSessionService {
     metadata.removeWhere((String _, Object? value) => value == null);
     config['event_metadata'] = metadata;
 
-    await apiClient.appendEvent(
-      reasoningEngineId: reasoningEngineId,
-      sessionId: session.id,
-      author: persistedEvent.author,
-      invocationId: persistedEvent.invocationId,
-      timestamp: persistedEvent.timestamp,
-      config: config,
-    );
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        await apiClient.appendEvent(
+          reasoningEngineId: reasoningEngineId,
+          sessionId: session.id,
+          author: persistedEvent.author,
+          invocationId: persistedEvent.invocationId,
+          timestamp: persistedEvent.timestamp,
+          config: config,
+        );
+        return persistedEvent;
+      } catch (e) {
+        if (attempt == 0 && _is429Error(e)) {
+          final Duration delay =
+              vertexAiAppendRetryDelayForTest ??
+              const Duration(milliseconds: 1000);
+          if (delay > Duration.zero) {
+            await Future<void>.delayed(delay);
+          }
+          continue;
+        }
+        rethrow;
+      }
+    }
     return persistedEvent;
   }
 
