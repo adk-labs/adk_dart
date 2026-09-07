@@ -302,19 +302,26 @@ class ToolTrajectoryCriterion extends BaseCriterion {
   ToolTrajectoryCriterion({
     required super.threshold,
     this.matchType = MatchType.exact,
+    this.ignoreArgs = false,
     super.extra,
   });
 
   /// Matching mode used for expected versus actual tool paths.
   final MatchType matchType;
 
+  /// If True, only tool names are compared; arguments are ignored.
+  final bool ignoreArgs;
+
   /// Creates a criterion from JSON.
   factory ToolTrajectoryCriterion.fromJson(Object? value) {
     final BaseCriterion base = BaseCriterion.fromJson(value);
     final Map<String, Object?> map = asEvalJson(value);
+    final Object? rawIgnoreArgs = map['ignoreArgs'] ?? map['ignore_args'];
+    final bool ignoreArgs = rawIgnoreArgs is bool ? rawIgnoreArgs : false;
     return ToolTrajectoryCriterion(
       threshold: base.threshold,
       matchType: MatchTypeX.fromObject(map['matchType'] ?? map['match_type']),
+      ignoreArgs: ignoreArgs,
       extra: base.extra,
     );
   }
@@ -325,6 +332,7 @@ class ToolTrajectoryCriterion extends BaseCriterion {
     return <String, Object?>{
       ...super.toJson(),
       'match_type': matchType.wireName,
+      'ignore_args': ignoreArgs,
     };
   }
 }

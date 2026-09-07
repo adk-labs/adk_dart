@@ -189,6 +189,244 @@ void main() {
           );
       expect(anyOrderResult.overallScore, 1.0);
     });
+
+    group('ignoreArgs tests', () {
+      Invocation invocationWithToolUses(List<Map<String, Object?>> toolUses) {
+        return Invocation(
+          userContent: <String, Object?>{
+            'role': 'user',
+            'parts': <Object?>[
+              <String, Object?>{'text': 'prompt'},
+            ],
+          },
+          intermediateData: IntermediateData(
+            toolUses: toolUses,
+          ),
+        );
+      }
+
+      TrajectoryEvaluator makeEvaluator(MatchType matchType, {bool ignoreArgs = true}) {
+        return TrajectoryEvaluator(
+          evalMetric: EvalMetricSpec(
+            metricName: PrebuiltMetricNames.toolTrajectoryAvgScore,
+            criterion: ToolTrajectoryCriterion(
+              threshold: 0.5,
+              matchType: matchType,
+              ignoreArgs: ignoreArgs,
+            ),
+          ),
+        );
+      }
+
+      test('EXACT with ignoreArgs=true matches tool names and ignores args', () async {
+        final TrajectoryEvaluator evaluator = makeEvaluator(MatchType.exact);
+
+        // Different args, same names -> pass
+        final EvaluationResult pass = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'a': 1}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{'b': 2}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'x': 99}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{'y': 100}},
+            ]),
+          ],
+        );
+        expect(pass.overallScore, 1.0);
+
+        // Different names -> fail
+        final EvaluationResult diffName = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{}},
+            ]),
+          ],
+        );
+        expect(diffName.overallScore, 0.0);
+
+        // Different count -> fail
+        final EvaluationResult diffCount = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+            ]),
+          ],
+        );
+        expect(diffCount.overallScore, 0.0);
+
+        // Empty lists -> pass
+        final EvaluationResult empty = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[]),
+          ],
+        );
+        expect(empty.overallScore, 1.0);
+      });
+
+      test('IN_ORDER with ignoreArgs=true matches tool names in order', () async {
+        final TrajectoryEvaluator evaluator = makeEvaluator(MatchType.inOrder);
+
+        // Different args with extra tools -> pass
+        final EvaluationResult pass = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'a': 1}},
+              <String, Object?>{'name': 'extra', 'args': <String, Object?>{}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{'b': 2}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'x': 99}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{'y': 100}},
+            ]),
+          ],
+        );
+        expect(pass.overallScore, 1.0);
+
+        // Wrong order -> fail
+        final EvaluationResult wrongOrder = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{}},
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{}},
+            ]),
+          ],
+        );
+        expect(wrongOrder.overallScore, 0.0);
+
+        // Missing tool -> fail
+        final EvaluationResult missing = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{}},
+            ]),
+          ],
+        );
+        expect(missing.overallScore, 0.0);
+      });
+
+      test('ANY_ORDER with ignoreArgs=true matches tool names in any order', () async {
+        final TrajectoryEvaluator evaluator = makeEvaluator(MatchType.anyOrder);
+
+        // Different args, swapped order -> pass
+        final EvaluationResult pass = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{'b': 2}},
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'a': 1}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'x': 99}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{'y': 100}},
+            ]),
+          ],
+        );
+        expect(pass.overallScore, 1.0);
+
+        // Missing tool -> fail
+        final EvaluationResult missing = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{}},
+              <String, Object?>{'name': 't2', 'args': <String, Object?>{}},
+            ]),
+          ],
+        );
+        expect(missing.overallScore, 0.0);
+      });
+
+      test('ignoreArgs=false still checks args', () async {
+        final TrajectoryEvaluator evaluator = makeEvaluator(MatchType.exact, ignoreArgs: false);
+        final EvaluationResult fail = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'a': 1}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'a': 2}},
+            ]),
+          ],
+        );
+        expect(fail.overallScore, 0.0);
+      });
+
+      test('supports camelCase and snake_case in ToolTrajectoryCriterion JSON', () async {
+        final ToolTrajectoryCriterion criterionCamel = ToolTrajectoryCriterion.fromJson(<String, Object?>{
+          'threshold': 0.5,
+          'matchType': 'EXACT',
+          'ignoreArgs': true,
+        });
+        expect(criterionCamel.ignoreArgs, isTrue);
+
+        final ToolTrajectoryCriterion criterionSnake = ToolTrajectoryCriterion.fromJson(<String, Object?>{
+          'threshold': 0.5,
+          'match_type': 'EXACT',
+          'ignore_args': true,
+        });
+        expect(criterionSnake.ignoreArgs, isTrue);
+        expect(criterionSnake.toJson()['ignore_args'], isTrue);
+
+        final TrajectoryEvaluator evaluator = TrajectoryEvaluator(
+          evalMetric: EvalMetricSpec(
+            metricName: PrebuiltMetricNames.toolTrajectoryAvgScore,
+            criterion: criterionCamel,
+          ),
+        );
+        final EvaluationResult result = await evaluator.evaluateInvocations(
+          actualInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'a': 1}},
+            ]),
+          ],
+          expectedInvocations: <Invocation>[
+            invocationWithToolUses(<Map<String, Object?>>[
+              <String, Object?>{'name': 't1', 'args': <String, Object?>{'z': 999}},
+            ]),
+          ],
+        );
+        expect(result.overallScore, 1.0);
+      });
+    });
   });
 
   group('metric evaluator registry', () {

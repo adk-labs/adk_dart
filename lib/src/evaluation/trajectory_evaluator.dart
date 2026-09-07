@@ -24,24 +24,29 @@ class TrajectoryEvaluator extends Evaluator {
       if (criterion is ToolTrajectoryCriterion) {
         _threshold = criterion.threshold;
         _matchType = criterion.matchType;
+        _ignoreArgs = criterion.ignoreArgs;
       } else {
         final ToolTrajectoryCriterion parsed = ToolTrajectoryCriterion.fromJson(
           criterion.toJson(),
         );
         _threshold = parsed.threshold;
         _matchType = parsed.matchType;
+        _ignoreArgs = parsed.ignoreArgs;
       }
     } else if (evalMetric != null) {
       _threshold = evalMetric.threshold ?? 1.0;
       _matchType = MatchType.exact;
+      _ignoreArgs = false;
     } else {
       _threshold = threshold ?? 1.0;
       _matchType = MatchType.exact;
+      _ignoreArgs = false;
     }
   }
 
   late final double _threshold;
   late final MatchType _matchType;
+  late final bool _ignoreArgs;
 
   @override
   Type get criterionType => ToolTrajectoryCriterion;
@@ -200,6 +205,9 @@ class TrajectoryEvaluator extends Evaluator {
     final String rhsName = (rhs['name'] ?? '').toString();
     if (lhsName != rhsName) {
       return false;
+    }
+    if (_ignoreArgs) {
+      return true;
     }
     return _jsonDeepEqual(lhs['args'], rhs['args']);
   }
