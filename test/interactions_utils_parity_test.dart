@@ -100,4 +100,137 @@ void main() {
       },
     );
   });
+
+  group('buildGenerationConfig parity', () {
+    setUp(() {
+      resetWarnedSamplingParamsForTest();
+      interactionsLogHandlerForTest = null;
+    });
+
+    tearDown(() {
+      resetWarnedSamplingParamsForTest();
+      interactionsLogHandlerForTest = null;
+    });
+
+    test('only parameters that reach interactions API are kept', () {
+      final GenerateContentConfig config = GenerateContentConfig(
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+        maxOutputTokens: 100,
+        stopSequences: <String>['END'],
+        presencePenalty: 0.5,
+        frequencyPenalty: 0.3,
+        seed: 7,
+      );
+
+      final Map<String, Object?> result = buildGenerationConfig(config);
+      expect(result, <String, Object?>{
+        'max_output_tokens': 100,
+        'stop_sequences': <String>['END'],
+        'seed': 7,
+      });
+    });
+
+    test('empty config returns empty map', () {
+      final GenerateContentConfig config = GenerateContentConfig();
+      final Map<String, Object?> result = buildGenerationConfig(config);
+      expect(result, isEmpty);
+    });
+
+    test('undeclared parameters point at client library', () {
+      final List<String> warnings = <String>[];
+      interactionsLogHandlerForTest = (String message, {int? level, String? name}) {
+        warnings.add(message);
+      };
+
+      final GenerateContentConfig config = GenerateContentConfig(
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+      );
+      buildGenerationConfig(config);
+
+      expect(warnings, hasLength(1));
+      expect(warnings.first, contains('temperature'));
+      expect(warnings.first, contains('top_p'));
+      expect(warnings.first, contains('top_k'));
+      expect(warnings.first, contains('google-genai'));
+      expect(warnings.first, isNot(contains('use_interactions_api')));
+    });
+
+    test('unsupported parameters point at interactions api', () {
+      final List<String> warnings = <String>[];
+      interactionsLogHandlerForTest = (String message, {int? level, String? name}) {
+        warnings.add(message);
+      };
+
+      final GenerateContentConfig config = GenerateContentConfig(
+        presencePenalty: 0.5,
+        frequencyPenalty: 0.3,
+      );
+      buildGenerationConfig(config);
+
+      expect(warnings, hasLength(1));
+      expect(warnings.first, contains('presence_penalty'));
+      expect(warnings.first, contains('frequency_penalty'));
+      expect(warnings.first, contains('use_interactions_api'));
+    });
+
+    test('the two causes are reported separately', () {
+      final List<String> warnings = <String>[];
+      interactionsLogHandlerForTest = (String message, {int? level, String? name}) {
+        warnings.add(message);
+      };
+
+      final GenerateContentConfig config = GenerateContentConfig(
+        temperature: 0.7,
+        presencePenalty: 0.5,
+      );
+      buildGenerationConfig(config);
+
+      expect(warnings, hasLength(2));
+      final String client = warnings.firstWhere(
+        (String w) => !w.contains('use_interactions_api'),
+      );
+      final String api = warnings.firstWhere(
+        (String w) => w.contains('use_interactions_api'),
+      );
+      expect(client, contains('temperature'));
+      expect(client, isNot(contains('presence_penalty')));
+      expect(api, contains('presence_penalty'));
+      expect(api, isNot(contains('temperature')));
+    });
+
+    test('dropped parameters are logged once', () {
+      final List<String> warnings = <String>[];
+      interactionsLogHandlerForTest = (String message, {int? level, String? name}) {
+        warnings.add(message);
+      };
+
+      final GenerateContentConfig config = GenerateContentConfig(
+        temperature: 0.7,
+      );
+      buildGenerationConfig(config);
+      buildGenerationConfig(config);
+
+      expect(warnings, hasLength(1));
+    });
+
+    test('supported parameters only do not warn', () {
+      final List<String> warnings = <String>[];
+      interactionsLogHandlerForTest = (String message, {int? level, String? name}) {
+        warnings.add(message);
+      };
+
+      final GenerateContentConfig config = GenerateContentConfig(
+        maxOutputTokens: 100,
+        stopSequences: <String>['END'],
+        seed: 7,
+      );
+      buildGenerationConfig(config);
+
+      expect(warnings, isEmpty);
+    });
+  });
 }

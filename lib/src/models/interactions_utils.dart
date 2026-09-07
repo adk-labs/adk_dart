@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../types/content.dart';
 import 'gemini_rest_api_client.dart';
@@ -146,18 +147,48 @@ List<Map<String, Object?>> convertToolsConfigToInteractionsFormat(
   return output;
 }
 
+/// Sampling knobs already reported as dropped, so each warning is emitted
+/// once per process instead of once per model turn.
+final Set<String> _warnedSamplingParams = <String>{};
+
+/// Test hook to clear warned sampling parameters.
+void resetWarnedSamplingParamsForTest() {
+  _warnedSamplingParams.clear();
+}
+
+/// Optional callback to intercept warnings emitted by interactions utils (for testing).
+typedef InteractionsLogHandler = void Function(
+  String message, {
+  int level,
+  String name,
+});
+
+/// Test hook to intercept log warnings.
+InteractionsLogHandler? interactionsLogHandlerForTest;
+
+void _logWarning(String message) {
+  if (interactionsLogHandlerForTest != null) {
+    interactionsLogHandlerForTest!(
+      message,
+      level: 900,
+      name: 'adk_dart.models.interactions_utils',
+    );
+  }
+  developer.log(
+    message,
+    name: 'adk_dart.models.interactions_utils',
+    level: 900,
+  );
+}
+
 /// Builds interactions generation config from [config].
+///
+/// Only the parameters that reach the interactions API are carried over. A
+/// sampling parameter that would be discarded before the request is sent is
+/// logged as ignored, once per parameter per process, naming whether the client
+/// or the API is the one that cannot carry it.
 Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
   final Map<String, Object?> generationConfig = <String, Object?>{};
-  if (config.temperature != null) {
-    generationConfig['temperature'] = config.temperature;
-  }
-  if (config.topP != null) {
-    generationConfig['top_p'] = config.topP;
-  }
-  if (config.topK != null) {
-    generationConfig['top_k'] = config.topK;
-  }
   if (config.maxOutputTokens != null) {
     generationConfig['max_output_tokens'] = config.maxOutputTokens;
   }
@@ -166,12 +197,46 @@ Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
       config.stopSequences,
     );
   }
-  if (config.presencePenalty != null) {
-    generationConfig['presence_penalty'] = config.presencePenalty;
+  if (config.seed != null) {
+    generationConfig['seed'] = config.seed;
   }
-  if (config.frequencyPenalty != null) {
-    generationConfig['frequency_penalty'] = config.frequencyPenalty;
+
+  final List<String> undeclared = <String>[];
+  if (config.temperature != null && !_warnedSamplingParams.contains('temperature')) {
+    undeclared.add('temperature');
   }
+  if (config.topP != null && !_warnedSamplingParams.contains('top_p')) {
+    undeclared.add('top_p');
+  }
+  if (config.topK != null && !_warnedSamplingParams.contains('top_k')) {
+    undeclared.add('top_k');
+  }
+  if (undeclared.isNotEmpty) {
+    _warnedSamplingParams.addAll(undeclared);
+    _logWarning(
+      'The installed google-genai has no field for ${undeclared.join(', ')} on the interactions'
+      ' request, so they are dropped before the request is sent even though'
+      ' the API itself applies them. Applying them needs a google-genai'
+      ' release that declares those fields.',
+    );
+  }
+
+  final List<String> unsupported = <String>[];
+  if (config.presencePenalty != null && !_warnedSamplingParams.contains('presence_penalty')) {
+    unsupported.add('presence_penalty');
+  }
+  if (config.frequencyPenalty != null && !_warnedSamplingParams.contains('frequency_penalty')) {
+    unsupported.add('frequency_penalty');
+  }
+  if (unsupported.isNotEmpty) {
+    _warnedSamplingParams.addAll(unsupported);
+    _logWarning(
+      'The interactions API has no equivalent for ${unsupported.join(', ')}, so the model decodes'
+      ' with its own defaults instead. Unset them, or turn off'
+      ' use_interactions_api to have them applied.',
+    );
+  }
+
   return generationConfig;
 }
 
