@@ -163,6 +163,7 @@ class McpTool extends BaseAuthenticatedTool {
           hint:
               'Please approve or reject the tool call $name() with a tool confirmation payload.',
         );
+        toolContext.actions.skipSummarization = true;
         return <String, Object>{
           'error':
               'This tool call requires confirmation, please approve or reject.',

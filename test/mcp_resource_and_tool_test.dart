@@ -512,6 +512,7 @@ void main() {
       context.actions.requestedToolConfirmations.containsKey('call_confirm'),
       isTrue,
     );
+    expect(context.actions.skipSummarization, isTrue);
 
     final Context approved = await _newContext(
       functionCallId: 'call_confirm',
