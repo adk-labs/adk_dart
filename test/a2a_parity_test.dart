@@ -584,6 +584,58 @@ void main() {
         expect(event.content?.parts.single.text, 'artifact text');
       },
     );
+
+    test(
+      'terminal A2A task states set skipSummarization to true when output parts exist',
+      () {
+        for (final A2aTaskState state in <A2aTaskState>[
+          A2aTaskState.completed,
+          A2aTaskState.failed,
+          A2aTaskState.canceled,
+        ]) {
+          final A2aTask task = A2aTask(
+            id: 'task_1',
+            contextId: 'ctx_1',
+            status: A2aTaskStatus(state: state),
+            artifacts: <A2aArtifact>[
+              A2aArtifact(
+                artifactId: 'art_1',
+                parts: <A2aPart>[A2aPart.text('terminal result')],
+              ),
+            ],
+          );
+
+          final Event event = convertA2aTaskToEvent(task, author: 'test-author');
+          expect(event.actions.skipSummarization, isTrue);
+          expect(event.content?.parts.single.text, 'terminal result');
+        }
+      },
+    );
+
+    test(
+      'non-terminal A2A task states do not set skipSummarization',
+      () {
+        for (final A2aTaskState state in <A2aTaskState>[
+          A2aTaskState.submitted,
+          A2aTaskState.working,
+        ]) {
+          final A2aTask task = A2aTask(
+            id: 'task_1',
+            contextId: 'ctx_1',
+            status: A2aTaskStatus(state: state),
+            artifacts: <A2aArtifact>[
+              A2aArtifact(
+                artifactId: 'art_1',
+                parts: <A2aPart>[A2aPart.text('interim result')],
+              ),
+            ],
+          );
+
+          final Event event = convertA2aTaskToEvent(task, author: 'test-author');
+          expect(event.actions.skipSummarization, isNot(true));
+        }
+      },
+    );
   });
 
   group('a2a app wrapper', () {

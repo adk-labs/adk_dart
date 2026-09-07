@@ -6022,6 +6022,9 @@ A2aTaskState _a2aTaskStateFromWire(String raw) {
       return A2aTaskState.failed;
     case 'completed':
       return A2aTaskState.completed;
+    case 'canceled':
+    case 'cancelled':
+      return A2aTaskState.canceled;
   }
   return A2aTaskState.completed;
 }
@@ -6048,6 +6051,8 @@ String _a2aTaskStateToWire(A2aTaskState state) {
       return 'failed';
     case A2aTaskState.completed:
       return 'completed';
+    case A2aTaskState.canceled:
+      return 'canceled';
   }
 }
 

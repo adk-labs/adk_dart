@@ -295,6 +295,13 @@ Event convertA2aTaskToEvent(
     longRunningToolIds,
   );
 
+  if ((a2aTask.status.state == A2aTaskState.completed ||
+          a2aTask.status.state == A2aTaskState.failed ||
+          a2aTask.status.state == A2aTaskState.canceled) &&
+      processedParts.isNotEmpty) {
+    actions.skipSummarization = true;
+  }
+
   return Event(
     invocationId: invocationId,
     author: author ?? 'a2a_agent',

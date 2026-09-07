@@ -16,6 +16,7 @@ enum A2aTaskState {
   authRequired,
   failed,
   completed,
+  canceled,
 }
 
 /// End-user identity attached to a call context.
