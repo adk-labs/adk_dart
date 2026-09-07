@@ -1295,4 +1295,45 @@ void main() {
     expect(error, contains('no_such_tool'));
     expect(error, contains('get_weather'));
   });
+
+  test('handleFunctionCallsAsync does not execute tools on partial event', () async {
+    final InvocationContext context = InvocationContext(
+      sessionService: InMemorySessionService(),
+      invocationId: 'inv_partial_tool',
+      agent: LlmAgent(name: 'test_agent', model: 'gemini-2.5-flash'),
+      session: Session(id: 's', appName: 'app', userId: 'u'),
+    );
+    int toolCallCount = 0;
+    final FunctionTool testTool = FunctionTool(
+      name: 'my_tool',
+      description: 'test tool',
+      func: () async {
+        toolCallCount++;
+        return 'done';
+      },
+    );
+    final Event partialEvent = Event(
+      invocationId: 'inv_partial_tool',
+      author: 'test_agent',
+      partial: true,
+      content: Content(
+        role: 'model',
+        parts: <Part>[
+          Part.fromFunctionCall(
+            name: 'my_tool',
+            args: <String, Object?>{'param': 'val'},
+          ),
+        ],
+      ),
+    );
+
+    final Event? response = await handleFunctionCallsAsync(
+      context,
+      partialEvent,
+      <String, BaseTool>{'my_tool': testTool},
+    );
+
+    expect(response, isNull);
+    expect(toolCallCount, 0);
+  });
 }

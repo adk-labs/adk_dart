@@ -201,6 +201,9 @@ Future<Event?> handleFunctionCallsAsync(
   Set<String>? filters,
   Map<String, ToolConfirmation>? toolConfirmationDict,
 }) async {
+  if (functionCallEvent.partial == true) {
+    return null;
+  }
   final List<FunctionCall> calls = functionCallEvent.getFunctionCalls();
   return handleFunctionCallListAsync(
     invocationContext,

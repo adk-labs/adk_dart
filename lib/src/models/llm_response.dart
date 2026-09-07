@@ -38,7 +38,8 @@ class LlmResponse {
   /// Generated content payload.
   Content? content;
 
-  /// Whether this event is a partial streaming chunk.
+  /// Marks this response as an incomplete fragment of a larger response.
+  /// Only used for streaming mode.
   bool? partial;
 
   /// Whether the model turn has completed.

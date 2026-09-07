@@ -600,6 +600,9 @@ abstract class BaseNode {
   /// Optional per-attempt timeout.
   final Duration? timeout;
 
+  /// Whether this node requires all predecessor nodes to complete before running.
+  bool get requiresAllPredecessors => false;
+
   /// Runs this node with [nodeInput].
   FutureOr<Object?> run(WorkflowContext context, Object? nodeInput);
 }
@@ -766,6 +769,9 @@ class JoinNode extends BaseNode {
     super.retryConfig,
     super.timeout,
   });
+
+  @override
+  bool get requiresAllPredecessors => true;
 
   @override
   Object? run(WorkflowContext context, Object? nodeInput) => nodeInput;
@@ -1201,6 +1207,9 @@ class Workflow extends BaseAgent {
 
     for (final MapEntry<String, Object?> entry
         in workflowContext.outputs.entries) {
+      if (entry.key == START) {
+        continue;
+      }
       final List<Event>? nodeEvents = workflowContext._nodeEvents[entry.key];
       if (workflowContext.requestInputNodeKeys.contains(entry.key)) {
         continue;
@@ -1245,11 +1254,13 @@ class Workflow extends BaseAgent {
     final Map<String, Set<String>> dependencies = _dependencies(byName);
     _seedResumeInputs(context, byName);
     final Set<String> completed = <String>{
+      START,
       for (final MapEntry<String, NodeState> entry
           in context.nodeStates.entries)
         if (_isCompletedNodeState(entry.value) && byName.containsKey(entry.key))
           entry.key,
     };
+    context.outputs[START] = context.input;
     final Set<String> pending = <String>{
       for (final String name in byName.keys)
         if (!completed.contains(name) &&
@@ -1260,6 +1271,9 @@ class Workflow extends BaseAgent {
         ? byName.keys.toSet()
         : _initialActiveNodes(byName);
     for (final String completedNode in completed) {
+      if (completedNode == START) {
+        continue;
+      }
       final Set<String> activatedTargets = _activateDownstream(
         fromNode: completedNode,
         route: context.nodeStates[completedNode]?.route,
@@ -1496,6 +1510,7 @@ class Workflow extends BaseAgent {
     final Object? nodeInput = _nodeInput(
       context: context,
       dependencies: dependencies[name]!,
+      node: node,
     );
     final NodeState? state = context.nodeStates[name];
     final WorkflowContext nodeContext = context._childExecutionContext(
@@ -1560,6 +1575,7 @@ class Workflow extends BaseAgent {
       }
       _validateChatModeEdge(edge, byName);
       if (edge.fromNode == START) {
+        dependencies[edge.toNode]!.add(START);
         continue;
       }
       if (!byName.containsKey(edge.fromNode)) {
@@ -1636,11 +1652,12 @@ class Workflow extends BaseAgent {
   Object? _nodeInput({
     required WorkflowContext context,
     required Set<String> dependencies,
+    BaseNode? node,
   }) {
     if (dependencies.isEmpty) {
       return context.input;
     }
-    if (dependencies.length == 1) {
+    if (dependencies.length == 1 && node is! JoinNode) {
       return context.outputs[dependencies.single];
     }
     return <String, Object?>{
@@ -2908,6 +2925,9 @@ void _validateNodeValue(
 }
 
 Object? _outputFromAgentEvent(Event event) {
+  if (event.partial == true) {
+    return null;
+  }
   if (event.hasOutput) {
     return event.output;
   }
@@ -2916,8 +2936,7 @@ Object? _outputFromAgentEvent(Event event) {
     return null;
   }
   if (event.getFunctionCalls().isNotEmpty ||
-      event.getFunctionResponses().isNotEmpty ||
-      event.partial == true) {
+      event.getFunctionResponses().isNotEmpty) {
     return event;
   }
   final String text = content.parts

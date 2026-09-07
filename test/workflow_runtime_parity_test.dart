@@ -3195,7 +3195,84 @@ void main() {
       // When resuming, synthetic input is skipped so userContent is null
       expect(result, 'agent:');
     });
+
+    test('JoinNode waits when START is a predecessor alongside other branches', () async {
+      final FunctionNode nodeA = node(
+        (WorkflowContext _, Object? _) => <String, Object?>{'a': 1},
+        name: 'NodeA',
+      );
+      final FunctionNode nodeB = node(
+        (WorkflowContext _, Object? _) => <String, Object?>{'b': 2},
+        name: 'NodeB',
+      );
+      final JoinNode nodeJoin = JoinNode(name: 'NodeJoin');
+      Object? capturedInput;
+      final FunctionNode nodeCapture = node(
+        (WorkflowContext _, Object? input) {
+          capturedInput = input;
+          return 'captured';
+        },
+        name: 'NodeCapture',
+      );
+
+      final Workflow workflow = Workflow(
+        name: 'test_join_node_start_predecessor',
+        nodes: <BaseNode>[nodeA, nodeB, nodeJoin, nodeCapture],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: nodeA),
+          Edge(fromNode: START, toNode: nodeB),
+          Edge(fromNode: START, toNode: nodeJoin),
+          Edge(fromNode: nodeA, toNode: nodeJoin),
+          Edge(fromNode: nodeB, toNode: nodeJoin),
+          Edge(fromNode: nodeJoin, toNode: nodeCapture),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow(input: 'start_payload');
+
+      expect(capturedInput, <String, Object?>{
+        START: 'start_payload',
+        'NodeA': <String, Object?>{'a': 1},
+        'NodeB': <String, Object?>{'b': 2},
+      });
+      expect(result.outputs['NodeCapture'], 'captured');
+    });
+
+    test('AgentNode does not promote partial fragment event as task output', () async {
+      final _PartialStreamingAgent streamingAgent = _PartialStreamingAgent();
+      final AgentNode node = AgentNode(agent: streamingAgent);
+      final InvocationContext ic = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_partial',
+        agent: streamingAgent,
+        session: Session(id: 's', appName: 'app', userId: 'u'),
+      );
+      final wf.WorkflowContext ctx = wf.WorkflowContext(invocationContext: ic);
+
+      final Object? output = await node.run(ctx, 'input');
+      expect(output, 'completed final text');
+    });
   });
+}
+
+class _PartialStreamingAgent extends BaseAgent {
+  _PartialStreamingAgent() : super(name: 'streaming_agent');
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      partial: true,
+      content: Content.modelText('incomplete...'),
+    );
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      partial: false,
+      content: Content.modelText('completed final text'),
+    );
+  }
 }
 
 class _MockReturnArgsTool extends BaseTool {
