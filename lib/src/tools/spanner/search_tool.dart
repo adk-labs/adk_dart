@@ -544,7 +544,7 @@ Future<Map<String, Object?>> vectorStoreSimilaritySearch({
       searchOptions[_numLeavesToSearchKey] = vectorSettings.numLeavesToSearch;
     }
 
-    return similaritySearch(
+    return await similaritySearch(
       projectId: vectorSettings.projectId,
       instanceId: vectorSettings.instanceId,
       databaseId: vectorSettings.databaseId,

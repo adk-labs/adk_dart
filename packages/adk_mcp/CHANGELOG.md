@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.7
+
+- Bumped package version to `2026.9.7`.
+- Synced MCP protocol client primitives and stability enhancements with `adk_dart` `2026.9.7` rollout.
+- Verified MCP sampling, elicitation, and notification pipelines.
+
 ## 2026.8.17+2
 
 - Added `pubspec.yaml` dependency specifications in README files.

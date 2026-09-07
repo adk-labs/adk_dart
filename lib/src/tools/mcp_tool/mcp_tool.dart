@@ -256,7 +256,7 @@ class McpTool extends BaseAuthenticatedTool {
           plan.named,
         );
         if (value is Future<bool>) {
-          return value;
+          return await value;
         }
         if (value is Future) {
           final Object? resolved = await value;

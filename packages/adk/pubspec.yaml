@@ -1,6 +1,6 @@
 name: adk
 description: Command-line interface (CLI) toolchain and unified entrypoint for the Agent Development Kit (ADK) in Dart.
-version: 2026.8.17+2
+version: 2026.9.7
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart
 issue_tracker: https://github.com/adk-labs/adk_dart/issues
@@ -15,7 +15,7 @@ environment:
   sdk: ^3.11.0
 
 dependencies:
-  adk_dart: ^2026.8.17
+  adk_dart: ^2026.9.7
   crypto: ^3.0.6
   sqlite3: ^3.5.1
   yaml: ^3.1.3

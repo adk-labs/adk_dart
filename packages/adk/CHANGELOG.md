@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.7
+
+- Bumped package version to `2026.9.7` and dependency `adk_dart: ^2026.9.7`.
+- Synced fresh `adk-web` Angular bundle into `lib/src/cli/browser/` featuring Live video response streaming and updated trace inspector.
+- Updated CLI tooling to support fallback models and latest workflow engine orchestration.
+
 ## 2026.8.17+2
 
 - Updated README installation guides with latest `pubspec.yaml` dependency specifications.

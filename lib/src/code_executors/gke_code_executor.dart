@@ -305,7 +305,7 @@ class GkeCodeExecutor extends BaseCodeExecutor {
         await out.writeAsBytes(_toBytes(file.content));
       }
 
-      return execute(
+      return await execute(
         CodeExecutionRequest(
           command: codeExecutionInput.code,
           workingDirectory: tempDir.path,

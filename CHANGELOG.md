@@ -1,3 +1,25 @@
+## 2026.9.7
+
+- **Model Fallbacks & Resilience**:
+  - Added `FallbackModel` (`lib/src/models/fallback_model.dart`): transparently retries requests across fallback models upon transient failures, rate limits, or service unavailability.
+  - Added Anthropic Claude `modelVersion` metadata support in `AnthropicLlm`.
+- **Workflow & Graph Orchestration**:
+  - Supported direct transition from `START` node to `JoinNode` in Workflow Graph builder.
+  - Enhanced graph cycle detection and topological ordering for complex multi-agent DAGs.
+- **Interactions API & Streaming Parity**:
+  - Added indexed delta tracking in `InteractionsLlmRequestProcessor` to ensure reliable streaming chunk sequencing and index mapping during multi-part streaming responses.
+- **Tooling & MCP Enhancements**:
+  - Added `skipSummarization` support on `McpTool` and `A2aClient` terminal nodes, bypassing redundant LLM summarization passes after deterministic tool executions.
+  - Unified `SkillToolset` tool filtering logic (`toolFilter`) for consistent function exposure across skill namespaces.
+  - Resolved `unawaited_return_in_try_block` lint warnings across sandbox code executors (`AgentEngineSandboxCodeExecutor`, `ContainerCodeExecutor`, `GkeCodeExecutor`), `GcpSkillRegistry`, `McpTool`, and `Tracing` to prevent early resource cleanup race conditions.
+- **Agent Evaluation (Eval) Framework**:
+  - Implemented `not_evaluated` metric reporting in `EvalSetResultsManager` and evaluation rubrics.
+- **ADK Web UI & Developer Experience**:
+  - Rebuilt and synced `adk-web` Angular bundle into `packages/adk/lib/src/cli/browser/`, featuring multimodal Live video response streaming, improved execution trace inspector, and updated session timelines.
+- **Dependencies & Engine Stability**:
+  - Upgraded dependencies: `archive: ^4.2.0`, `sqlite3: ^3.5.2`, `yaml: ^3.1.4`, `test: ^1.32.0`, `analyzer: ^14.3.0`.
+  - Maintained 100% test pass rate (1,462 tests) and clean static analysis.
+
 ## 2026.8.17+3
 
 - Updated default model baseline across `LlmAgent` to `gemini-3.7-flash`.

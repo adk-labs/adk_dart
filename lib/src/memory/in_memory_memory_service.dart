@@ -70,7 +70,6 @@ class InMemoryMemoryService extends BaseMemoryService {
     final Map<String, List<Event>> sessions =
         _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
 
-    final String queryLower = query.toLowerCase();
     final Set<String> queryWords = _extractWordsLower(query);
     final bool matchAll = queryWords.isEmpty;
     final List<(int, MemoryEntry)> scoredMemories = <(int, MemoryEntry)>[];

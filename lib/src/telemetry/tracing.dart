@@ -202,7 +202,7 @@ class AdkTracer {
       attributes: attributes,
     );
     try {
-      return body(span);
+      return await body(span);
     } finally {
       endCurrentSpan();
     }

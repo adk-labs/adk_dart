@@ -245,7 +245,7 @@ Future<GcpSkillRegistryHttpResponse> _defaultGcpSkillRegistryHttpGetProvider(
     final HttpClientRequest request = await client.getUrl(uri);
     headers.forEach(request.headers.set);
     final HttpClientResponse response = await request.close();
-    return _decodeHttpResponse(response);
+    return await _decodeHttpResponse(response);
   } finally {
     client.close(force: true);
   }
@@ -263,7 +263,7 @@ Future<GcpSkillRegistryHttpResponse> _defaultGcpSkillRegistryHttpPostProvider(
     headers.forEach(request.headers.set);
     request.write(jsonEncode(body));
     final HttpClientResponse response = await request.close();
-    return _decodeHttpResponse(response);
+    return await _decodeHttpResponse(response);
   } finally {
     client.close(force: true);
   }

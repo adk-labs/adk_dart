@@ -54,7 +54,7 @@ class GoogleTool extends FunctionTool {
         if (!_isInvocationMismatchError(stackTrace)) {
           rethrow;
         }
-        return super.run(args: args, toolContext: toolContext);
+        return await super.run(args: args, toolContext: toolContext);
       }
     } catch (error) {
       return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
