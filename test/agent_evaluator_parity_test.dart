@@ -100,6 +100,25 @@ class _BinaryJudgeEvaluator extends LlmAsJudge {
   }
 }
 
+class _NotEvaluatedEvaluator extends Evaluator {
+  _NotEvaluatedEvaluator(this.evalMetric);
+
+  final EvalMetricSpec evalMetric;
+
+  @override
+  Future<EvaluationResult> evaluateInvocations({
+    required List<Invocation> actualInvocations,
+    List<Invocation>? expectedInvocations,
+    ConversationScenario? conversationScenario,
+  }) async {
+    return EvaluationResult(
+      overallScore: null,
+      overallEvalStatus: EvalStatus.notEvaluated,
+      perInvocationResults: const <PerInvocationResult>[],
+    );
+  }
+}
+
 EvalSet _singleTurnEvalSet() {
   return EvalSet(
     evalSetId: 'set1',
@@ -458,6 +477,94 @@ void main() {
         ),
         throwsA(isA<ArgumentError>()),
       );
+    });
+
+    test('reports not evaluated metric separately without score regression wording', () async {
+      final MetricEvaluatorRegistry registry = MetricEvaluatorRegistry();
+      registry.registerEvaluator(
+        metricInfo: MetricInfo(metricName: 'unreachable_judge'),
+        evaluatorFactory: (EvalMetricSpec spec) => _NotEvaluatedEvaluator(spec),
+      );
+
+      final List<AgentEvalCaseSummary> summaries =
+          await AgentEvaluator.evaluateEvalSet(
+            agentModule: 'dynamic.module',
+            evalSet: _singleTurnEvalSet(),
+            evalConfig: EvalConfig(
+              criteria: <String, Object?>{
+                'unreachable_judge': 0.8,
+              },
+            ),
+            repeatNum: 1,
+            metricRegistry: registry,
+            agentModuleLoader: (String moduleName) async => _EchoAgent(),
+          );
+
+      expect(summaries, hasLength(1));
+      expect(summaries.first.passed, isFalse);
+      final AgentMetricAggregate metric = summaries.first.metrics.first;
+      expect(metric.evalStatus, EvalStatus.notEvaluated);
+      expect(metric.hasScore, isFalse);
+    });
+
+    test('evaluate formats not evaluated metrics with explanatory message', () async {
+      final Directory tempDir =
+          Directory.systemTemp.createTempSync('eval_not_eval_');
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      File('${tempDir.path}/case_a.test.json').writeAsStringSync(
+        jsonEncode(<Map<String, Object?>>[
+          <String, Object?>{'query': 'hello', 'reference': 'Echo: hello'},
+        ]),
+      );
+      File('${tempDir.path}/test_config.json').writeAsStringSync(
+        jsonEncode(<String, Object?>{
+          'criteria': <String, Object?>{
+            PrebuiltMetricNames.responseMatchScore: 0.8,
+          },
+        }),
+      );
+
+      final MetricEvaluatorRegistry registry = MetricEvaluatorRegistry();
+      registry.registerEvaluator(
+        metricInfo:
+            MetricInfo(metricName: PrebuiltMetricNames.responseMatchScore),
+        evaluatorFactory: (EvalMetricSpec spec) => _NotEvaluatedEvaluator(spec),
+      );
+
+      AgentEvaluator.registerAgentModule(
+        'sample.eval.agent',
+        () => _EchoAgent(),
+      );
+
+      try {
+        await AgentEvaluator.evaluate(
+          agentModule: 'sample.eval.agent',
+          evalDatasetFilePathOrDir: tempDir.path,
+          repeatNum: 1,
+          metricRegistry: registry,
+          failOnFailure: true,
+        );
+        fail('Expected StateError with failure explanation');
+      } on StateError catch (e) {
+        expect(
+          e.message,
+          contains(
+            '${PrebuiltMetricNames.responseMatchScore} for sample.eval.agent was not evaluated',
+          ),
+        );
+        expect(
+          e.message,
+          contains(
+            'No score was produced, so the threshold of 0.8 was never checked',
+          ),
+        );
+        expect(e.message, isNot(contains('Failed. Expected 0.8, but got 0.0')));
+      }
     });
   });
 }

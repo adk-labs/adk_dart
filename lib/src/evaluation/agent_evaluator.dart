@@ -8,6 +8,7 @@ import '../agents/base_agent.dart';
 import 'eval_case.dart';
 import 'eval_config.dart';
 import 'eval_metrics.dart';
+import 'eval_result.dart';
 import 'eval_set.dart';
 import 'evaluation_generator.dart';
 import 'local_eval_sets_manager.dart' as local_eval_sets_manager;
@@ -43,6 +44,8 @@ class AgentMetricAggregate {
     required this.threshold,
     required this.averageScore,
     required this.passed,
+    this.hasScore = true,
+    this.evalStatus = EvalStatus.passed,
   });
 
   /// The metric identifier.
@@ -56,6 +59,12 @@ class AgentMetricAggregate {
 
   /// Whether [averageScore] meets or exceeds [threshold].
   final bool passed;
+
+  /// Whether a valid score was produced for this metric.
+  final bool hasScore;
+
+  /// The evaluation status.
+  final EvalStatus evalStatus;
 }
 
 /// Evaluation summary for a single eval case.
@@ -178,11 +187,28 @@ class AgentEvaluator {
       if (failOnFailure) {
         for (final AgentEvalCaseSummary summary in summaries) {
           if (!summary.passed) {
-            final String metricDump = summary.metrics
-                .map((AgentMetricAggregate metric) {
-                  return '${metric.metricName}(${metric.averageScore} < ${metric.threshold})';
-                })
-                .join(', ');
+            final List<String> metricFailures = <String>[];
+            for (final AgentMetricAggregate metric in summary.metrics) {
+              if (metric.evalStatus == EvalStatus.notEvaluated) {
+                metricFailures.add(
+                  '${metric.metricName} for ${agentModule ?? summary.evalCaseId} was not evaluated. '
+                  'No score was produced, so the threshold of ${metric.threshold} was never '
+                  'checked and this is not a score regression. See the logs for why the metric could not run.',
+                );
+              } else if (!metric.passed) {
+                metricFailures.add(
+                  '${metric.metricName} for ${agentModule ?? summary.evalCaseId} Failed. '
+                  'Expected ${metric.threshold}, but got ${metric.averageScore}.',
+                );
+              }
+            }
+            final String metricDump = metricFailures.isNotEmpty
+                ? metricFailures.join('; ')
+                : summary.metrics
+                    .map((AgentMetricAggregate metric) {
+                      return '${metric.metricName}(${metric.averageScore} < ${metric.threshold})';
+                    })
+                    .join(', ');
             failures.add(
               'Eval case `${summary.evalCaseId}` failed in `$testFile`: $metricDump',
             );
@@ -275,18 +301,26 @@ class AgentEvaluator {
             runScores.add(evaluationResult.overallScore!);
           }
         }
-        final double average = runScores.isEmpty
-            ? 0.0
+        final double? average = runScores.isEmpty
+            ? null
             : runScores.reduce((double a, double b) => a + b) /
                   runScores.length;
         final double threshold =
             metric.threshold ?? metric.criterion?.threshold ?? 0.0;
+        final EvalStatus status;
+        if (average != null) {
+          status = average >= threshold ? EvalStatus.passed : EvalStatus.failed;
+        } else {
+          status = EvalStatus.notEvaluated;
+        }
         metricSummaries.add(
           AgentMetricAggregate(
             metricName: metric.metricName,
             threshold: threshold,
-            averageScore: average,
-            passed: average >= threshold,
+            averageScore: average ?? 0.0,
+            hasScore: average != null,
+            passed: status == EvalStatus.passed,
+            evalStatus: status,
           ),
         );
       }
