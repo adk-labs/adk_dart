@@ -92,6 +92,9 @@ class ParallelAgent extends BaseAgent {
       );
     }
 
+    final Set<String> subAgentNames = <String>{
+      for (final BaseAgent subAgent in subAgents) subAgent.name,
+    };
     bool pauseInvocation = false;
     bool escalated = false;
 
@@ -126,7 +129,8 @@ class ParallelAgent extends BaseAgent {
           pauseInvocation = true;
           break;
         }
-        if (event.actions.escalate == true) {
+        if (event.actions.escalate == true &&
+            subAgentNames.contains(event.author)) {
           escalated = true;
           break;
         }

@@ -465,6 +465,73 @@ void main() {
       expect(resumedRun[1].actions.endOfAgent, isTrue);
       expect(resumedRun[2].actions.endOfAgent, isTrue);
     });
+
+    test('keeps siblings when a nested loop ends itself via escalate', () async {
+      final _LoopingEscalateAgent fastAgent = _LoopingEscalateAgent(
+        name: 'fast_agent',
+        escalateOn: 1,
+      );
+      final _LoopingEscalateAgent slowAgent = _LoopingEscalateAgent(
+        name: 'slow_agent',
+        delay: const Duration(milliseconds: 20),
+        escalateOn: 3,
+      );
+      final ParallelAgent parallelAgent = ParallelAgent(
+        name: 'parallel_agent',
+        subAgents: <BaseAgent>[
+          LoopAgent(
+            name: 'fast_loop',
+            subAgents: <BaseAgent>[fastAgent],
+            maxIterations: 5,
+          ),
+          LoopAgent(
+            name: 'slow_loop',
+            subAgents: <BaseAgent>[slowAgent],
+            maxIterations: 5,
+          ),
+        ],
+      );
+      final InvocationContext context = await _newContext(
+        agent: parallelAgent,
+        resumable: false,
+      );
+
+      final List<Event> events = await parallelAgent.runAsync(context).toList();
+      final List<String?> texts = events
+          .map((Event e) => e.content?.parts.firstOrNull?.text)
+          .where((String? t) => t != null)
+          .toList();
+
+      expect(texts, containsAllInOrder(<String>[
+        'slow_agent#1',
+        'slow_agent#2',
+        'slow_agent#3',
+      ]));
+      expect(texts, contains('fast_agent#1'));
+      expect(fastAgent.tick, 1);
+      expect(slowAgent.tick, 3);
+    });
+
+    test('surfaces sub-agent error directly to caller', () async {
+      final _FailingAgent failing = _FailingAgent(name: 'failing_agent');
+      final ParallelAgent parallel = ParallelAgent(
+        name: 'parallel',
+        subAgents: <BaseAgent>[failing],
+      );
+      final InvocationContext context = await _newContext(
+        agent: parallel,
+        resumable: false,
+      );
+
+      await expectLater(
+        parallel.runAsync(context).toList(),
+        throwsA(isA<FormatException>().having(
+          (FormatException e) => e.message,
+          'message',
+          'simulated sub-agent failure',
+        )),
+      );
+    });
   });
 
   group('LoopAgent', () {
@@ -577,4 +644,44 @@ void main() {
       expect(events.single.author, 'worker');
     });
   });
+}
+
+class _LoopingEscalateAgent extends BaseAgent {
+  _LoopingEscalateAgent({
+    required super.name,
+    this.delay = Duration.zero,
+    this.escalateOn = 1,
+  });
+
+  final Duration delay;
+  final int escalateOn;
+  int tick = 0;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    tick += 1;
+    final bool escalating = tick >= escalateOn;
+    yield Event(
+      invocationId: context.invocationId,
+      author: name,
+      content: Content.modelText('$name#$tick'),
+      actions: EventActions(escalate: escalating ? true : null),
+    );
+  }
+}
+
+class _FailingAgent extends BaseAgent {
+  _FailingAgent({required super.name, this.delay = Duration.zero});
+  final Duration delay;
+
+  @override
+  Stream<Event> runAsyncImpl(InvocationContext context) async* {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    throw FormatException('simulated sub-agent failure');
+  }
 }
