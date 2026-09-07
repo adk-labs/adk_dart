@@ -120,6 +120,12 @@ class Event extends LlmResponse {
         (longRunningToolIds != null && longRunningToolIds!.isNotEmpty)) {
       return true;
     }
+    if (errorCode != null &&
+        errorCode!.isNotEmpty &&
+        partial != true &&
+        getFunctionCalls().isEmpty) {
+      return true;
+    }
     return getFunctionCalls().isEmpty &&
         getFunctionResponses().isEmpty &&
         partial != true &&

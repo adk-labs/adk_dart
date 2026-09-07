@@ -43,6 +43,66 @@ void main() {
       expect(event.isFinalResponse(), isTrue);
     });
 
+    test('isFinalResponse returns true for error event with text', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        content: Content.modelText('error details'),
+        errorCode: 'SOME_ERROR',
+        errorMessage: 'Something went wrong',
+      );
+
+      expect(event.isFinalResponse(), isTrue);
+    });
+
+    test('isFinalResponse returns true for error event with function response', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        content: Content(
+          role: 'user',
+          parts: <Part>[
+            Part.fromFunctionResponse(
+              name: 'tool',
+              response: {'error': 'failed'},
+            ),
+          ],
+        ),
+        errorCode: 'SOME_ERROR',
+        errorMessage: 'Something went wrong',
+      );
+
+      expect(event.isFinalResponse(), isTrue);
+    });
+
+    test('isFinalResponse returns false for error event with function call', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        content: Content(
+          role: 'model',
+          parts: <Part>[Part.fromFunctionCall(name: 'tool', args: {})],
+        ),
+        errorCode: 'SOME_ERROR',
+        errorMessage: 'Something went wrong',
+      );
+
+      expect(event.isFinalResponse(), isFalse);
+    });
+
+    test('isFinalResponse returns false for partial error event', () {
+      final Event event = Event(
+        invocationId: 'inv_1',
+        author: 'agent',
+        content: Content.modelText('error details'),
+        errorCode: 'SOME_ERROR',
+        errorMessage: 'Something went wrong',
+        partial: true,
+      );
+
+      expect(event.isFinalResponse(), isFalse);
+    });
+
     test('copyWith preserves and overrides isolationScope', () {
       final Event event = Event(
         invocationId: 'inv_1',
