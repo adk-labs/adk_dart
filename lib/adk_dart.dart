@@ -207,6 +207,7 @@ export 'src/flows/llm_flows/transcription_manager.dart';
 export 'src/flows/llm_flows/output_schema_processor.dart';
 
 export 'src/models/base_llm.dart';
+export 'src/models/fallback_model.dart';
 export 'src/models/capabilities.dart';
 export 'src/models/base_llm_connection.dart';
 export 'src/models/cache_metadata.dart';
