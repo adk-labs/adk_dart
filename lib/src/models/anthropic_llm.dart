@@ -588,6 +588,8 @@ class AnthropicLlm extends BaseLlm {
     final int inputTokens = (usage['input_tokens'] as num?)?.toInt() ?? 0;
     final int outputTokens = (usage['output_tokens'] as num?)?.toInt() ?? 0;
 
+    final String? model = message['model'] as String?;
+
     return LlmResponse(
       content: Content(role: 'model', parts: parts),
       usageMetadata: <String, Object?>{
@@ -596,6 +598,7 @@ class AnthropicLlm extends BaseLlm {
         'total_token_count': inputTokens + outputTokens,
       },
       finishReason: toGoogleFinishReason(message['stop_reason'] as String?),
+      modelVersion: model,
     );
   }
 
@@ -620,9 +623,11 @@ class AnthropicLlm extends BaseLlm {
         stream: stream,
       );
       for (final Map<String, Object?> message in messages) {
-        yield messageToLlmResponse(
-          message,
-        ).copyWith(modelVersion: prepared.model, turnComplete: true);
+        final LlmResponse resp = messageToLlmResponse(message);
+        yield resp.copyWith(
+          modelVersion: resp.modelVersion ?? prepared.model,
+          turnComplete: true,
+        );
       }
       return;
     }
@@ -654,9 +659,11 @@ class AnthropicLlm extends BaseLlm {
           apiVersion: _resolveApiVersion(prepared),
           headers: _resolveHeaders(prepared),
         );
-    yield messageToLlmResponse(
-      message,
-    ).copyWith(modelVersion: prepared.model, turnComplete: true);
+    final LlmResponse resp = messageToLlmResponse(message);
+    yield resp.copyWith(
+      modelVersion: resp.modelVersion ?? prepared.model,
+      turnComplete: true,
+    );
   }
 
   Map<String, Object?> _buildAnthropicRequest(
@@ -747,6 +754,7 @@ class AnthropicLlm extends BaseLlm {
     int inputTokens = 0;
     int outputTokens = 0;
     String? finishReason;
+    String? modelVersion;
 
     await for (final Map<String, Object?> event in rawStream) {
       final String type = '${event['type'] ?? ''}';
@@ -756,6 +764,7 @@ class AnthropicLlm extends BaseLlm {
           final Map<String, Object?> usage = _mapOf(message['usage']);
           inputTokens = _intValue(usage['input_tokens']);
           outputTokens = _intValue(usage['output_tokens']);
+          modelVersion = message['model'] as String?;
           break;
         case 'content_block_start':
           final int index = _intValue(event['index']);
@@ -795,7 +804,7 @@ class AnthropicLlm extends BaseLlm {
             );
             buffer.write(text);
             yield LlmResponse(
-              modelVersion: request.model,
+              modelVersion: modelVersion ?? request.model,
               content: Content(role: 'model', parts: <Part>[Part.text(text)]),
               partial: true,
               turnComplete: false,
@@ -809,7 +818,7 @@ class AnthropicLlm extends BaseLlm {
                 .putIfAbsent(index, _AnthropicThinkingAccumulator.new);
             accumulator.text.write(thinking);
             yield LlmResponse(
-              modelVersion: request.model,
+              modelVersion: modelVersion ?? request.model,
               content: Content(
                 role: 'model',
                 parts: <Part>[Part.text(thinking, thought: true)],
@@ -829,29 +838,36 @@ class AnthropicLlm extends BaseLlm {
             tool.argsJson += '${delta['partial_json'] ?? ''}';
           }
           break;
+        case 'content_block_stop':
+          break;
         case 'message_delta':
           final Map<String, Object?> delta = _mapOf(event['delta']);
-          finishReason = toGoogleFinishReason(delta['stop_reason'] as String?);
+          final String? reason = delta['stop_reason'] as String?;
+          if (reason != null) {
+            finishReason = toGoogleFinishReason(reason);
+          }
           final Map<String, Object?> usage = _mapOf(event['usage']);
-          outputTokens = _intValue(
-            usage['output_tokens'],
-            fallback: outputTokens,
-          );
+          final int deltaOutput = _intValue(usage['output_tokens']);
+          if (deltaOutput > 0) {
+            outputTokens = deltaOutput;
+          }
           break;
         case 'message_stop':
-        case 'content_block_stop':
+          break;
+        default:
           break;
       }
     }
 
-    final List<Part> parts = <Part>[];
-    final List<int> indices = <int>{
+    final List<int> sortedIndices = <int>{
       ...textBlocks.keys,
       ...toolUseBlocks.keys,
       ...thinkingBlocks.keys,
       ...redactedThinkingBlocks.keys,
     }.toList()..sort();
-    for (final int index in indices) {
+
+    final List<Part> parts = <Part>[];
+    for (final int index in sortedIndices) {
       final _AnthropicThinkingAccumulator? thinking = thinkingBlocks[index];
       if (thinking != null && thinking.text.isNotEmpty) {
         parts.add(
@@ -888,7 +904,7 @@ class AnthropicLlm extends BaseLlm {
     }
 
     yield LlmResponse(
-      modelVersion: request.model,
+      modelVersion: modelVersion ?? request.model,
       content: Content(role: 'model', parts: parts),
       usageMetadata: <String, Object?>{
         'prompt_token_count': inputTokens,

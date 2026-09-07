@@ -371,5 +371,83 @@ void main() {
         expect(finalParts.last.text, 'answer');
       },
     );
+
+    test('messageToLlmResponse sets modelVersion from concrete message model', () {
+      final Map<String, Object?> message = <String, Object?>{
+        'id': 'msg_1',
+        'model': 'claude-sonnet-4-20250514',
+        'content': <Object?>[
+          <String, Object?>{'type': 'text', 'text': 'hi'},
+        ],
+        'usage': <String, Object?>{'input_tokens': 100, 'output_tokens': 20},
+        'stop_reason': 'end_turn',
+      };
+
+      final LlmResponse response = AnthropicLlm.messageToLlmResponse(message);
+      expect(response.modelVersion, 'claude-sonnet-4-20250514');
+    });
+
+    test('streaming sets modelVersion on partial deltas and final response', () async {
+      final AnthropicLlm llm = AnthropicLlm(
+        model: 'claude-3-5-sonnet-latest',
+        streamInvoker: ({required Map<String, Object?> request}) {
+          return Stream<Map<String, Object?>>.fromIterable(
+            <Map<String, Object?>>[
+              <String, Object?>{
+                'type': 'message_start',
+                'message': <String, Object?>{
+                  'model': 'claude-sonnet-4-20250514',
+                  'usage': <String, Object?>{
+                    'input_tokens': 10,
+                    'output_tokens': 0,
+                  },
+                },
+              },
+              <String, Object?>{
+                'type': 'content_block_start',
+                'index': 0,
+                'content_block': <String, Object?>{
+                  'type': 'text',
+                  'text': '',
+                },
+              },
+              <String, Object?>{
+                'type': 'content_block_delta',
+                'index': 0,
+                'delta': <String, Object?>{
+                  'type': 'text_delta',
+                  'text': 'Hi',
+                },
+              },
+              <String, Object?>{'type': 'content_block_stop', 'index': 0},
+              <String, Object?>{
+                'type': 'message_delta',
+                'delta': <String, Object?>{'stop_reason': 'end_turn'},
+                'usage': <String, Object?>{'output_tokens': 5},
+              },
+              <String, Object?>{'type': 'message_stop'},
+            ],
+          );
+        },
+      );
+
+      final List<LlmResponse> responses = await llm
+          .generateContent(
+            LlmRequest(
+              model: 'claude-3-5-sonnet-latest',
+              contents: <Content>[Content.userText('Hi')],
+            ),
+            stream: true,
+          )
+          .toList();
+
+      expect(responses, hasLength(2));
+      final LlmResponse partial = responses[0];
+      final LlmResponse finalResp = responses[1];
+      expect(partial.partial, isTrue);
+      expect(partial.modelVersion, 'claude-sonnet-4-20250514');
+      expect(finalResp.partial, isFalse);
+      expect(finalResp.modelVersion, 'claude-sonnet-4-20250514');
+    });
   });
 }
