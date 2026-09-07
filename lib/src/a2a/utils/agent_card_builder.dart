@@ -27,7 +27,7 @@ class AgentCardBuilder {
     Map<String, SecurityScheme>? securitySchemes,
   }) : _agent = agent,
        _rpcUrl = rpcUrl ?? 'http://localhost:80/a2a',
-       _capabilities = capabilities ?? AgentCapabilities(),
+       _capabilities = capabilities ?? AgentCapabilities(streaming: true),
        _agentVersion = agentVersion ?? '0.0.1',
        _securitySchemes = securitySchemes ?? <String, SecurityScheme>{};
 

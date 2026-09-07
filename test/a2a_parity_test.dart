@@ -1171,5 +1171,24 @@ void main() {
         );
       },
     );
+
+    test('AgentCardBuilder defaults capabilities to streaming true', () async {
+      final Agent agent = Agent(name: 'test_agent', model: _FinalTextModel());
+      final AgentCardBuilder builder = AgentCardBuilder(agent: agent);
+      final AgentCard card = await builder.build();
+      expect(card.capabilities.streaming, isTrue);
+      expect(card.capabilities.values['streaming'], isTrue);
+    });
+
+    test('AgentCapabilities streaming getter and setter round trip', () {
+      final AgentCapabilities capabilities = AgentCapabilities(streaming: false);
+      expect(capabilities.streaming, isFalse);
+      capabilities.streaming = true;
+      expect(capabilities.streaming, isTrue);
+      expect(capabilities.values['streaming'], isTrue);
+      capabilities.streaming = null;
+      expect(capabilities.streaming, isNull);
+      expect(capabilities.values.containsKey('streaming'), isFalse);
+    });
   });
 }
