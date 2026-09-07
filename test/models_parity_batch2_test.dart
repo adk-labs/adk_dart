@@ -1787,5 +1787,82 @@ void main() {
       );
       expect(payload.containsKey('tools'), isFalse);
     });
+
+    test('lite llm parity parseCompletionResponse uses first choice when multiple present', () {
+      final LlmResponse response = LiteLlm.parseCompletionResponse(<String, Object?>{
+        'model': 'openai/gpt-4o',
+        'choices': <Object?>[
+          <String, Object?>{
+            'index': 0,
+            'message': <String, Object?>{
+              'role': 'assistant',
+              'content': 'First response',
+            },
+            'finish_reason': 'stop',
+          },
+          <String, Object?>{
+            'index': 1,
+            'message': <String, Object?>{
+              'role': 'assistant',
+              'content': 'Second response',
+            },
+            'finish_reason': 'stop',
+          },
+        ],
+      });
+
+      expect(response.content?.parts.single.text, 'First response');
+    });
+
+    test('lite llm parity streaming skips secondary candidate chunks', () async {
+      final LiteLlm model = LiteLlm(
+        model: 'openai/gpt-4o',
+        completionsInvoker: ({required Map<String, Object?> payload, required bool stream}) async {
+          return <Map<String, Object?>>[
+            <String, Object?>{
+              'model': 'openai/gpt-4o',
+              'choices': <Object?>[
+                <String, Object?>{
+                  'index': 0,
+                  'message': <String, Object?>{'role': 'assistant', 'content': 'Hello'},
+                },
+                <String, Object?>{
+                  'index': 1,
+                  'message': <String, Object?>{'role': 'assistant', 'content': 'Other'},
+                },
+              ],
+            },
+            <String, Object?>{
+              'model': 'openai/gpt-4o',
+              'choices': <Object?>[
+                <String, Object?>{
+                  'index': 1,
+                  'message': <String, Object?>{'role': 'assistant', 'content': ' candidate'},
+                },
+              ],
+            },
+            <String, Object?>{
+              'model': 'openai/gpt-4o',
+              'choices': <Object?>[
+                <String, Object?>{
+                  'index': 0,
+                  'message': <String, Object?>{'role': 'assistant', 'content': ' world'},
+                  'finish_reason': 'stop',
+                },
+              ],
+            },
+          ];
+        },
+      );
+
+      final List<LlmResponse> responses = await model.generateContent(
+        LlmRequest(model: 'openai/gpt-4o', contents: <Content>[Content.userText('hi')]),
+        stream: true,
+      ).toList();
+
+      expect(responses.length, 2);
+      expect(responses[0].content?.parts.single.text, 'Hello');
+      expect(responses[1].content?.parts.single.text, ' world');
+    });
   });
 }

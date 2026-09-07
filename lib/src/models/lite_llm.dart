@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:http/http.dart' as http;
 
@@ -210,6 +211,13 @@ class LiteLlm extends BaseLlm {
     if (choices.isEmpty) {
       return LlmResponse();
     }
+    if (choices.length > 1) {
+      developer.log(
+        'Multiple choices found in response but only the first one will be used.',
+        name: 'adk_dart.models.lite_llm',
+        level: 1000,
+      );
+    }
     final Map<String, Object?> first = _asMap(choices.first);
     final Map<String, Object?> message = _asMap(first['message']);
     final String role = message['role'] == 'assistant'
@@ -284,8 +292,38 @@ class LiteLlm extends BaseLlm {
       payload: buildPayload(prepared, stream: stream),
       stream: stream,
     );
+    bool multipleChoicesLogged = false;
     for (final Map<String, Object?> response in responses) {
-      yield parseCompletionResponse(response);
+      if (stream) {
+        final List<Object?> choices =
+            (response['choices'] as List<Object?>?) ?? <Object?>[];
+        if (!multipleChoicesLogged &&
+            (choices.length > 1 ||
+                choices.any((Object? c) {
+                  final Object? idx = _asMap(c)['index'];
+                  return idx != null && idx != 0;
+                }))) {
+          multipleChoicesLogged = true;
+          developer.log(
+            'Multiple choices found in streaming response but only the first one will be used.',
+            name: 'adk_dart.models.lite_llm',
+            level: 1000,
+          );
+        }
+        final List<Object?> filteredChoices = choices.where((Object? c) {
+          final Object? idx = _asMap(c)['index'];
+          return idx == null || idx == 0;
+        }).toList(growable: false);
+        if (choices.isNotEmpty && filteredChoices.isEmpty) {
+          continue;
+        }
+        final Map<String, Object?> modified = choices.isEmpty
+            ? response
+            : <String, Object?>{...response, 'choices': filteredChoices};
+        yield parseCompletionResponse(modified);
+      } else {
+        yield parseCompletionResponse(response);
+      }
     }
   }
 
@@ -756,6 +794,11 @@ Part _parseFunctionCall(Map<String, Object?> callMap) {
       parsedArgs = decoded.cast<String, dynamic>();
     }
   } catch (_) {
+    developer.log(
+      "Malformed JSON in tool call arguments for function '$name'; dispatching with empty arguments so the tool can return a structured error and the model can retry.",
+      name: 'adk_dart.models.lite_llm',
+      level: 900,
+    );
     parsedArgs = <String, dynamic>{};
   }
   final String? callId = callMap['id'] == null ? null : '${callMap['id']}';

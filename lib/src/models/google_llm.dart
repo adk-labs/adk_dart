@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../types/content.dart';
 import '../utils/google_client_headers.dart';
@@ -239,6 +240,8 @@ class Gemini extends BaseLlm {
       if (stream) {
         final StreamingResponseAggregator aggregator =
             StreamingResponseAggregator();
+        bool multipleCandidatesLogged = false;
+        Object? lastUsageMetadata;
         await for (final Map<String, Object?> chunk
             in _resolvedRestTransport.streamGenerateContent(
               model: computedModel,
@@ -249,8 +252,36 @@ class Gemini extends BaseLlm {
               headers: prepared.config.httpOptions?.headers,
               retryOptions: resolvedRetryOptions,
             )) {
+          if (chunk['usageMetadata'] != null) {
+            lastUsageMetadata = chunk['usageMetadata'];
+          }
+          final List<Object?> rawCandidates = _asList(chunk['candidates']);
+          if (!multipleCandidatesLogged &&
+              rawCandidates.isNotEmpty &&
+              (rawCandidates.length > 1 ||
+                  rawCandidates.any((Object? c) {
+                    final Object? idx = _asMap(c)['index'];
+                    return idx != null && idx != 0;
+                  }))) {
+            multipleCandidatesLogged = true;
+            developer.log(
+              'Multiple candidates found in streaming response but only the first one will be used.',
+              name: 'adk_dart.models.gemini',
+              level: 1000,
+            );
+          }
+          final List<Object?> filteredCandidates = rawCandidates.where((Object? c) {
+            final Object? idx = _asMap(c)['index'];
+            return idx == null || idx == 0;
+          }).toList(growable: false);
+          if (rawCandidates.isNotEmpty && filteredCandidates.isEmpty) {
+            continue;
+          }
+          final Map<String, Object?> modifiedChunk = rawCandidates.isEmpty
+              ? chunk
+              : <String, Object?>{...chunk, 'candidates': filteredCandidates};
           final LlmResponse response = _responseFromGeminiApi(
-            chunk,
+            modifiedChunk,
             fallbackModelVersion: computedModel,
           );
           await for (final LlmResponse aggregated in aggregator.processResponse(
@@ -272,6 +303,9 @@ class Gemini extends BaseLlm {
 
         final LlmResponse? finalResponse = aggregator.close();
         if (finalResponse != null) {
+          if (lastUsageMetadata != null) {
+            finalResponse.usageMetadata ??= lastUsageMetadata;
+          }
           finalResponse.partial ??= false;
           finalResponse.turnComplete ??= true;
           if (cacheMetadata != null) {
@@ -294,6 +328,14 @@ class Gemini extends BaseLlm {
               headers: prepared.config.httpOptions?.headers,
               retryOptions: resolvedRetryOptions,
             );
+        final List<Object?> candidates = _asList(rawResponse['candidates']);
+        if (candidates.length > 1) {
+          developer.log(
+            'Multiple candidates found in response but only the first one will be used.',
+            name: 'adk_dart.models.gemini',
+            level: 1000,
+          );
+        }
         final LlmResponse response = _responseFromGeminiApi(
           rawResponse,
           fallbackModelVersion: computedModel,

@@ -895,6 +895,127 @@ void main() {
         )),
       );
     });
+
+    test('streaming secondary candidates with non-zero index are skipped and usage metadata preserved', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        streamResponses: <Map<String, Object?>>[
+          <String, Object?>{
+            'modelVersion': 'gemini-2.5-flash',
+            'candidates': <Object?>[
+              <String, Object?>{
+                'index': 0,
+                'content': <String, Object?>{
+                  'role': 'model',
+                  'parts': <Object?>[
+                    <String, Object?>{'text': 'Hello'},
+                  ],
+                },
+              },
+            ],
+          },
+          <String, Object?>{
+            'modelVersion': 'gemini-2.5-flash',
+            'candidates': <Object?>[
+              <String, Object?>{
+                'index': 1,
+                'content': <String, Object?>{
+                  'role': 'model',
+                  'parts': <Object?>[
+                    <String, Object?>{'text': 'Other'},
+                  ],
+                },
+                'finishReason': 'STOP',
+              },
+            ],
+            'usageMetadata': <String, Object?>{
+              'promptTokenCount': 10,
+              'candidatesTokenCount': 5,
+              'totalTokenCount': 15,
+            },
+          },
+          <String, Object?>{
+            'modelVersion': 'gemini-2.5-flash',
+            'candidates': <Object?>[
+              <String, Object?>{
+                'index': 0,
+                'content': <String, Object?>{
+                  'role': 'model',
+                  'parts': <Object?>[
+                    <String, Object?>{'text': ' world'},
+                  ],
+                },
+                'finishReason': 'STOP',
+              },
+            ],
+          },
+        ],
+      );
+
+      final Gemini model = Gemini(
+        restTransport: transport,
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      final List<LlmResponse> responses = await model.generateContent(
+        LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+        ),
+        stream: true,
+      ).toList();
+
+      expect(responses.length, 3);
+      expect(responses[0].content?.parts[0].text, 'Hello');
+      expect(responses[1].content?.parts[0].text, ' world');
+      expect(responses[2].content?.parts[0].text, 'Hello world');
+      expect(responses[2].usageMetadata, isNotNull);
+      expect((responses[2].usageMetadata as Map)['totalTokenCount'], 15);
+    });
+
+    test('non-stream multiple candidates uses first candidate only', () async {
+      final _FakeGeminiRestTransport transport = _FakeGeminiRestTransport(
+        nonStreamResponse: <String, Object?>{
+          'modelVersion': 'gemini-2.5-flash',
+          'candidates': <Object?>[
+            <String, Object?>{
+              'index': 0,
+              'content': <String, Object?>{
+                'role': 'model',
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'First candidate'},
+                ],
+              },
+              'finishReason': 'STOP',
+            },
+            <String, Object?>{
+              'index': 1,
+              'content': <String, Object?>{
+                'role': 'model',
+                'parts': <Object?>[
+                  <String, Object?>{'text': 'Second candidate'},
+                ],
+              },
+              'finishReason': 'STOP',
+            },
+          ],
+        },
+      );
+
+      final Gemini model = Gemini(
+        restTransport: transport,
+        environment: <String, String>{'GEMINI_API_KEY': 'test-key'},
+      );
+
+      final List<LlmResponse> responses = await model.generateContent(
+        LlmRequest(
+          model: 'gemini-2.5-flash',
+          contents: <Content>[Content.userText('hello')],
+        ),
+      ).toList();
+
+      expect(responses.length, 1);
+      expect(responses.single.content?.parts.single.text, 'First candidate');
+    });
   });
 }
 
