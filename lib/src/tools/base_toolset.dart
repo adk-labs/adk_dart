@@ -71,8 +71,8 @@ abstract class BaseToolset {
       return predicate(tool, readonlyContext);
     }
 
-    if (toolFilter is List<String>) {
-      return (toolFilter as List<String>).contains(tool.name);
+    if (toolFilter is Iterable) {
+      return (toolFilter as Iterable).contains(tool.name);
     }
 
     return false;

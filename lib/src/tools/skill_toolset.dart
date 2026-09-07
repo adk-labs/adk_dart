@@ -42,30 +42,138 @@ This is very important:
 7. Loading a skill only retrieves its instructions; it does NOT complete your turn. After a `load_skill` call returns, continue in the SAME turn: call whatever tools the skill's steps require (search, data retrieval, render), then write your reply. Never end your turn with an empty response right after loading a skill.
 """;
 
-String _buildSkillSystemInstruction(String? prefix) {
+/// Tool name constant for [ListSkillsTool].
+const String listSkillsToolName = 'list_skills';
+
+/// Tool name constant for [SearchSkillsTool].
+const String searchSkillsToolName = 'search_skills';
+
+/// Tool name constant for [LoadSkillTool].
+const String loadSkillToolName = 'load_skill';
+
+/// Tool name constant for [LoadSkillResourceTool].
+const String loadSkillResourceToolName = 'load_skill_resource';
+
+/// Tool name constant for [RunSkillScriptTool].
+const String runSkillScriptToolName = 'run_skill_script';
+
+/// Builds the system instruction for skill tools.
+String buildSkillSystemInstruction({
+  String? prefix,
+  Set<String>? allowedTools,
+  String? skillsFolder,
+  bool scriptExecutionEnabled = true,
+}) {
   final String p = prefix == null || prefix.isEmpty ? '' : '${prefix}_';
-  if (p.isEmpty) {
-    return defaultSkillSystemInstruction;
+  final String? skillsFolderPosix = skillsFolder?.replaceAll(r'\', '/');
+
+  final String scriptsDesc = scriptExecutionEnabled
+      ? '- **scripts/** (Optional): Executable scripts that can be run via bash.\n\n'
+      : '- **scripts/** (Optional): Scripts bundled with the skill. You cannot run them; '
+          'use `$p$loadSkillResourceToolName` to read one and follow it yourself.\n\n';
+
+  final List<String> steps = <String>[
+    'If a skill seems relevant to the current user query, you MUST use '
+        'the `$p$loadSkillToolName` tool with `skill_name="<SKILL_NAME>"` to read '
+        'its full instructions before proceeding.',
+    'Once you have read the instructions, follow them exactly as '
+        'documented before replying to the user. For example, If the '
+        'instruction lists multiple steps, please make sure you complete all '
+        'of them in order.',
+    'The `$p$loadSkillResourceToolName` tool is for viewing files within a '
+        "skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). "
+        'It is ONLY for skill-bundled files — do NOT use it to access '
+        'documents or files provided by the user at runtime. Do NOT use '
+        'other tools to access skill files.',
+  ];
+
+  if (scriptExecutionEnabled) {
+    steps.add(
+      'Use `$p$runSkillScriptToolName` to run scripts from a skill\'s '
+      '`scripts/` directory. Use `$p$loadSkillResourceToolName` to view '
+      'script content first if needed.',
+    );
   }
 
-  return """You can use specialized 'skills' to help you with complex tasks. You MUST use the skill tools to interact with these skills.
+  steps.add(
+    'If `$p$loadSkillResourceToolName` returns any error, do not retry any '
+    'path. Report the error to the user and stop.',
+  );
 
-Skills are folders of instructions and resources that extend your capabilities for specialized tasks. Each skill folder contains:
-- **SKILL.md** (required): The main instruction file with skill metadata and detailed markdown instructions.
-- **references/** (Optional): Additional documentation or examples for skill usage.
-- **assets/** (Optional): Templates, scripts or other resources used by the skill.
-- **scripts/** (Optional): Executable scripts that can be run via bash.
+  if (scriptExecutionEnabled) {
+    steps.add(
+      'If `$p$runSkillScriptToolName` returns an error (for example '
+      '`SCRIPT_NOT_FOUND`), do not retry the same script or guess a '
+      'different script path. Report the error to the user and stop.',
+    );
+  }
 
-This is very important:
+  steps.add(
+    'Loading a skill only retrieves its instructions; it does NOT complete '
+    'your turn. After a `$p$loadSkillToolName` call returns, continue in the '
+    'SAME turn: call whatever tools the skill\'s steps require (search, data '
+    'retrieval, render), then write your reply. Never end your turn with an '
+    'empty response right after loading a skill.',
+  );
 
-1. If a skill seems relevant to the current user query, you MUST use the `${p}load_skill` tool with `skill_name="<SKILL_NAME>"` to read its full instructions before proceeding.
-2. Once you have read the instructions, follow them exactly as documented before replying to the user. For example, If the instruction lists multiple steps, please make sure you complete all of them in order.
-3. The `${p}load_skill_resource` tool is for viewing files within a skill's directory (e.g., `references/*`, `assets/*`, `scripts/*`). It is ONLY for skill-bundled files — do NOT use it to access documents or files provided by the user at runtime. Do NOT use other tools to access skill files.
-4. Use `${p}run_skill_script` to run scripts from a skill's `scripts/` directory. Use `${p}load_skill_resource` to view script content first if needed.
-5. If `${p}load_skill_resource` returns any error, do not retry any path. Report the error to the user and stop.
-6. If `${p}run_skill_script` returns an error (for example `SCRIPT_NOT_FOUND`), do not retry the same script or guess a different script path. Report the error to the user and stop.
-7. Loading a skill only retrieves its instructions; it does NOT complete your turn. After a `${p}load_skill` call returns, continue in the SAME turn: call whatever tools the skill's steps require (search, data retrieval, render), then write your reply. Never end your turn with an empty response right after loading a skill.
-""";
+  if (scriptExecutionEnabled && skillsFolderPosix != null) {
+    steps.add(
+      'NOTE ON ENVIRONMENT EXECUTION: When using '
+      '`$p$runSkillScriptToolName` with the `command` parameter, all '
+      'skill resources (including scripts and assets) are materialized in the '
+      'execution environment under `$skillsFolderPosix/<skill_name>/`. '
+      'Always specify file and script paths relative to or starting with '
+      '`$skillsFolderPosix/<skill_name>/` (e.g., '
+      '`$skillsFolderPosix/<skill_name>/scripts/<script_name>`).',
+    );
+  }
+
+  final StringBuffer buffer = StringBuffer()
+    ..write(
+      "You can use specialized 'skills' to help you with complex tasks. "
+      'You MUST use the skill tools to interact with these skills.\n\n'
+      'Skills are folders of instructions and resources that extend your '
+      'capabilities for specialized tasks. Each skill folder contains:\n'
+      '- **SKILL.md** (required): The main instruction file with skill '
+      'metadata and detailed markdown instructions.\n'
+      '- **references/** (Optional): Additional documentation or examples '
+      'for skill usage.\n'
+      '- **assets/** (Optional): Templates, scripts or other resources '
+      'used by the skill.\n',
+    )
+    ..write(scriptsDesc)
+    ..write('This is very important:\n\n');
+
+  for (var i = 0; i < steps.length; i++) {
+    buffer.write('${i + 1}. ${steps[i]}\n');
+  }
+
+  String instruction = buffer.toString();
+
+  if (allowedTools != null) {
+    final List<String> banned = <String>[];
+    for (final String toolName in <String>[
+      runSkillScriptToolName,
+      loadSkillResourceToolName,
+      loadSkillToolName,
+      listSkillsToolName,
+    ]) {
+      if (!allowedTools.contains(toolName)) {
+        banned.add('`$p$toolName`');
+      }
+    }
+    if (banned.isNotEmpty) {
+      final String bannedCsv = banned.join(', ');
+      instruction +=
+          '\n\nNote: The following tools are NOT available: $bannedCsv. '
+          'Do NOT call them. After loading a skill (if available), apply '
+          'its instructions in context and write your final reply as '
+          'normal model text. Never wrap the user-facing answer inside a '
+          'tool call.\n';
+    }
+  }
+
+  return instruction;
 }
 
 String? _detectSkillToolError(Object? response) {
@@ -80,10 +188,13 @@ String? _detectSkillToolError(Object? response) {
 
 /// Tool to list all locally available skills.
 class ListSkillsTool extends BaseTool {
+  /// Canonical tool name.
+  static const String toolName = listSkillsToolName;
+
   /// Creates a list-skills tool backed by [toolset].
   ListSkillsTool(this._toolset)
     : super(
-        name: 'list_skills',
+        name: toolName,
         description:
             'Lists all available skills with their names and descriptions.',
       );
@@ -113,10 +224,13 @@ class ListSkillsTool extends BaseTool {
 
 /// Tool to search a configured skill registry for relevant skills.
 class SearchSkillsTool extends BaseTool {
+  /// Canonical tool name.
+  static const String toolName = searchSkillsToolName;
+
   /// Creates a registry-backed skill search tool.
   SearchSkillsTool(this._toolset)
     : super(
-        name: 'search_skills',
+        name: toolName,
         description:
             _toolset._registry?.getSearchDescription() ??
             'Searches for relevant skills in the registry based on a semantic or keyword query.',
@@ -204,10 +318,13 @@ class SearchSkillsTool extends BaseTool {
 
 /// Tool to load a skill's main instructions.
 class LoadSkillTool extends BaseTool {
+  /// Canonical tool name.
+  static const String toolName = loadSkillToolName;
+
   /// Creates a load-skill tool backed by [toolset].
   LoadSkillTool(this._toolset)
     : super(
-        name: 'load_skill',
+        name: toolName,
         description: 'Loads the SKILL.md instructions for a given skill.',
       );
 
@@ -296,10 +413,13 @@ class LoadSkillTool extends BaseTool {
 
 /// Tool to load a resource from a skill bundle.
 class LoadSkillResourceTool extends BaseTool {
+  /// Canonical tool name.
+  static const String toolName = loadSkillResourceToolName;
+
   /// Creates a load-skill-resource tool backed by [toolset].
   LoadSkillResourceTool(this._toolset)
     : super(
-        name: 'load_skill_resource',
+        name: toolName,
         description:
             'Loads a resource file (from references/, assets/, or scripts/) from within a skill.',
       );
@@ -777,10 +897,13 @@ class _SkillScriptCodeExecutor {
 
 /// Tool to execute scripts from a skill bundle.
 class RunSkillScriptTool extends BaseTool {
+  /// Canonical tool name.
+  static const String toolName = runSkillScriptToolName;
+
   /// Creates a run-skill-script tool backed by [toolset].
   RunSkillScriptTool(this._toolset)
     : super(
-        name: 'run_skill_script',
+        name: toolName,
         description: "Executes a script from a skill's scripts/ directory.",
       );
 
@@ -964,6 +1087,7 @@ class SkillToolset extends BaseToolset {
     List<Object>? additionalTools,
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
+    this.skillsFolder,
     super.toolNamePrefix,
     super.toolFilter,
   }) : _registry = registry,
@@ -1015,13 +1139,40 @@ class SkillToolset extends BaseToolset {
   final int _scriptTimeout;
   static const int _maxCacheTurns = 16;
 
+  /// Optional environment directory where skill files are materialized.
+  final String? skillsFolder;
+
+  bool _hasScriptExecution(ReadonlyContext? context) {
+    if (_codeExecutor != null) {
+      return true;
+    }
+    if (context == null) {
+      return true;
+    }
+    try {
+      final dynamic agent = context.invocationContext.agent;
+      if (agent == null) {
+        return true;
+      }
+      return agent.codeExecutor != null;
+    } catch (_) {
+      return true;
+    }
+  }
+
   @override
   /// Returns skill tools filtered by [toolFilter], if configured.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     final List<BaseTool> dynamicTools = await _resolveAdditionalToolsFromState(
       readonlyContext,
     );
-    return <BaseTool>[..._tools, ...dynamicTools]
+    var allTools = <BaseTool>[..._tools, ...dynamicTools];
+    if (!_hasScriptExecution(readonlyContext)) {
+      allTools = allTools
+          .where((BaseTool t) => t is! RunSkillScriptTool)
+          .toList(growable: false);
+    }
+    return allTools
         .where((BaseTool tool) => isToolSelected(tool, readonlyContext))
         .toList(growable: false);
   }
@@ -1154,22 +1305,30 @@ class SkillToolset extends BaseToolset {
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
+    final Set<String> selectedCoreTools = _tools
+        .where((BaseTool tool) => isToolSelected(tool, toolContext))
+        .map((BaseTool tool) => tool.name)
+        .toSet();
+
     final List<String> instructions = <String>[
-      _buildSkillSystemInstruction(toolNamePrefix),
+      buildSkillSystemInstruction(
+        prefix: toolNamePrefix,
+        allowedTools: selectedCoreTools,
+        skillsFolder: skillsFolder,
+        scriptExecutionEnabled: _hasScriptExecution(toolContext),
+      ),
     ];
-    final bool hasListSkills = _tools.any(
-      (BaseTool tool) => tool is ListSkillsTool,
-    );
+    final bool hasListSkills = selectedCoreTools.contains(listSkillsToolName);
     if (!hasListSkills) {
       instructions.add(formatSkillsAsXml(_listSkills()));
     }
-    if (_registry != null) {
+    if (_registry != null && selectedCoreTools.contains(searchSkillsToolName)) {
       final String p = toolNamePrefix == null || toolNamePrefix!.isEmpty
           ? ''
           : '${toolNamePrefix}_';
       instructions.add(
         '\nIf the locally available skills are not sufficient to complete your task, '
-        'you can use the `${p}search_skills` tool to discover additional skills from the registry.',
+        'you can use the `$p$searchSkillsToolName` tool to discover additional skills from the registry.',
       );
     }
     llmRequest.appendInstructions(instructions);

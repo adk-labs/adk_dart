@@ -1,11 +1,15 @@
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 
-Context _newToolContext() {
+Context _newToolContext({BaseCodeExecutor? codeExecutor}) {
   final InvocationContext invocationContext = InvocationContext(
     sessionService: InMemorySessionService(),
     invocationId: 'inv_skill_toolset',
-    agent: LlmAgent(name: 'root', instruction: 'root'),
+    agent: LlmAgent(
+      name: 'root',
+      instruction: 'root',
+      codeExecutor: codeExecutor,
+    ),
     session: Session(
       id: 's_skill_toolset',
       appName: 'app',
@@ -945,7 +949,11 @@ void main() {
         final LlmRequest request = LlmRequest(model: 'gemini-2.5-flash');
 
         await toolset.processLlmRequest(
-          toolContext: _newToolContext(),
+          toolContext: _newToolContext(
+            codeExecutor: _FakeCodeExecutor(
+              CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+            ),
+          ),
           llmRequest: request,
         );
 
@@ -1038,7 +1046,11 @@ void main() {
       );
       final LlmRequest request = LlmRequest();
       await toolset.processLlmRequest(
-        toolContext: _newToolContext(),
+        toolContext: _newToolContext(
+          codeExecutor: _FakeCodeExecutor(
+            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+          ),
+        ),
         llmRequest: request,
       );
 
@@ -1046,6 +1058,232 @@ void main() {
       expect(systemInstruction, contains('does NOT complete your turn'));
       expect(systemInstruction, contains('my_load_skill'));
       expect(systemInstruction, contains('my_run_skill_script'));
+    });
+  });
+
+  group('tool_filter vs system instruction consistency', () {
+    test('filtered system instruction appends banned notice', () {
+      final String instruction = buildSkillSystemInstruction(
+        allowedTools: <String>{'list_skills', 'load_skill'},
+      );
+      expect(instruction, contains('Use `run_skill_script` to run scripts'));
+      expect(instruction, contains('The `load_skill_resource` tool is for viewing'));
+      expect(instruction, contains('`load_skill`'));
+      expect(instruction, contains('NOT available'));
+      expect(instruction, contains('Do NOT call them'));
+      expect(instruction, contains('normal model text'));
+      expect(instruction, contains('`run_skill_script`'));
+      expect(instruction, contains('`load_skill_resource`'));
+    });
+
+    test('filtered system instruction bans load and list skills', () {
+      final String instruction = buildSkillSystemInstruction(
+        allowedTools: <String>{'run_skill_script'},
+      );
+      expect(
+        instruction,
+        contains(
+          'The following tools are NOT available: `load_skill_resource`, `load_skill`, `list_skills`.',
+        ),
+      );
+      expect(instruction, contains('Do NOT call them'));
+    });
+
+    test('tool classes define toolName constants', () {
+      expect(ListSkillsTool.toolName, 'list_skills');
+      expect(SearchSkillsTool.toolName, 'search_skills');
+      expect(LoadSkillTool.toolName, 'load_skill');
+      expect(LoadSkillResourceTool.toolName, 'load_skill_resource');
+      expect(RunSkillScriptTool.toolName, 'run_skill_script');
+    });
+
+    test('unfiltered system instruction documents all tools', () {
+      final String instruction = buildSkillSystemInstruction();
+      expect(instruction, defaultSkillSystemInstruction);
+      expect(instruction, contains('Use `run_skill_script` to run scripts'));
+      expect(instruction, contains('The `load_skill_resource` tool is for viewing'));
+      expect(instruction, isNot(contains('NOT available')));
+    });
+
+    test('default skill system instruction contract unchanged', () {
+      expect(defaultSkillSystemInstruction, contains('run_skill_script'));
+      expect(defaultSkillSystemInstruction, contains('load_skill_resource'));
+      expect(
+        defaultSkillSystemInstruction,
+        contains('does NOT complete your turn'),
+      );
+    });
+
+    test('processLlmRequest respects list tool filter', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        toolFilter: <String>['list_skills', 'load_skill'],
+      );
+      final LlmRequest req = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(
+          codeExecutor: _FakeCodeExecutor(
+            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+          ),
+        ),
+        llmRequest: req,
+      );
+
+      final String instruction = req.config.systemInstruction!;
+      expect(instruction, contains('Use `run_skill_script` to run scripts'));
+      expect(instruction, contains('The `load_skill_resource` tool is for viewing'));
+      expect(instruction, contains('Do NOT call them'));
+      expect(instruction, contains('normal model text'));
+      expect(instruction, isNot(defaultSkillSystemInstruction));
+    });
+
+    test('processLlmRequest injects skills xml when list_skills filtered', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        toolFilter: <String>['load_skill'],
+      );
+      final LlmRequest req = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: req,
+      );
+
+      final String instruction = req.config.systemInstruction!;
+      expect(instruction, contains('<available_skills>'));
+      expect(instruction, contains('my-skill'));
+    });
+
+    test('processLlmRequest omits search_skills hint when filtered', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        registry: _RecordingSkillRegistry(<Skill>[_skillWithAdditionalTool()]),
+        toolFilter: <String>['list_skills', 'load_skill'],
+      );
+      final LlmRequest req = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: req,
+      );
+
+      final String instruction = req.config.systemInstruction!;
+      expect(instruction, isNot(contains('search_skills')));
+    });
+
+    test('processLlmRequest includes search_skills hint when allowed', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        registry: _RecordingSkillRegistry(<Skill>[_skillWithAdditionalTool()]),
+        toolFilter: <String>['list_skills', 'load_skill', 'search_skills'],
+      );
+      final LlmRequest req = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(),
+        llmRequest: req,
+      );
+
+      final String instruction = req.config.systemInstruction!;
+      expect(instruction, contains('search_skills'));
+    });
+
+    test('processLlmRequest with prefix and tool filter', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        toolNamePrefix: 'my',
+        toolFilter: <String>['list_skills', 'load_skill'],
+      );
+      final LlmRequest req = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(
+          codeExecutor: _FakeCodeExecutor(
+            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+          ),
+        ),
+        llmRequest: req,
+      );
+
+      final String instruction = req.config.systemInstruction!;
+      expect(instruction, contains('`my_load_skill`'));
+      expect(instruction, contains('Use `my_run_skill_script` to run scripts'));
+      expect(instruction, contains('The `my_load_skill_resource` tool is for viewing'));
+      expect(instruction, contains('`my_run_skill_script`'));
+      expect(instruction, contains('Do NOT call them'));
+    });
+
+    test('processLlmRequest respects predicate tool filter', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        toolFilter: (BaseTool tool, ReadonlyContext? ctx) =>
+            tool.name == 'list_skills' || tool.name == 'load_skill',
+      );
+      final LlmRequest req = LlmRequest();
+      await toolset.processLlmRequest(
+        toolContext: _newToolContext(
+          codeExecutor: _FakeCodeExecutor(
+            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+          ),
+        ),
+        llmRequest: req,
+      );
+
+      final String instruction = req.config.systemInstruction!;
+      expect(instruction, contains('Use `run_skill_script` to run scripts'));
+      expect(instruction, contains('Do NOT call them'));
+    });
+
+    test('getTools hides run_skill_script without backend', () async {
+      final SkillToolset toolset = SkillToolset(skills: <Skill>[_sampleSkill()]);
+      final List<BaseTool> tools = await toolset.getTools(
+        readonlyContext: _newToolContext(codeExecutor: null),
+      );
+      expect(
+        tools.map((BaseTool t) => t.runtimeType).toList(),
+        <Type>[ListSkillsTool, LoadSkillTool, LoadSkillResourceTool],
+      );
+    });
+
+    test('getTools keeps run_skill_script with toolset code executor', () async {
+      final SkillToolset toolset = SkillToolset(
+        skills: <Skill>[_sampleSkill()],
+        codeExecutor: _FakeCodeExecutor(
+          CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+        ),
+      );
+      final List<BaseTool> tools = await toolset.getTools(
+        readonlyContext: _newToolContext(codeExecutor: null),
+      );
+      expect(
+        tools.map((BaseTool t) => t.runtimeType).toList(),
+        contains(RunSkillScriptTool),
+      );
+    });
+
+    test('getTools keeps run_skill_script with agent code executor', () async {
+      final SkillToolset toolset = SkillToolset(skills: <Skill>[_sampleSkill()]);
+      final List<BaseTool> tools = await toolset.getTools(
+        readonlyContext: _newToolContext(
+          codeExecutor: _FakeCodeExecutor(
+            CodeExecutionResult(stdout: '', stderr: '', exitCode: 0),
+          ),
+        ),
+      );
+      expect(
+        tools.map((BaseTool t) => t.runtimeType).toList(),
+        contains(RunSkillScriptTool),
+      );
+    });
+
+    test('script execution disabled changes scripts bullet and omits script steps', () {
+      final String instruction = buildSkillSystemInstruction(
+        scriptExecutionEnabled: false,
+      );
+      expect(
+        instruction,
+        contains(
+          'cannot run them; use `load_skill_resource` to read one and follow it yourself.',
+        ),
+      );
+      expect(instruction, isNot(contains('Use `run_skill_script`')));
+      expect(instruction, isNot(contains('SCRIPT_NOT_FOUND')));
     });
   });
 }
