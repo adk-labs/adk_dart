@@ -86,6 +86,9 @@ class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
       if (!hasMatchingCall) {
         continue;
       }
+      if (event.author != context.agent.name) {
+        continue;
+      }
 
       final Event? resumed = await flow_functions.handleFunctionCallsAsync(
         context,

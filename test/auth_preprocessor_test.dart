@@ -247,4 +247,104 @@ void main() {
       expect(resumedEvents, isEmpty);
     },
   );
+
+  test(
+    'AuthLlmRequestProcessor does not resume tool call authored by another agent',
+    () async {
+      Map<String, Object?> secureTool({ToolContext? toolContext}) {
+        return <String, Object?>{'ok': true};
+      }
+
+      final LlmAgent agent = LlmAgent(
+        name: 'current_agent',
+        model: _NoopModel(),
+        tools: <Object>[
+          FunctionTool(
+            func: secureTool,
+            name: 'secure_tool',
+            description: 'Tool requiring auth',
+          ),
+        ],
+      );
+
+      final Session session = Session(
+        id: 's1',
+        appName: 'app',
+        userId: 'u1',
+        events: <Event>[
+          Event(
+            invocationId: 'inv_1',
+            author: 'different_agent',
+            content: Content(
+              role: 'model',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'secure_tool',
+                  id: 'tool_call_1',
+                  args: <String, dynamic>{},
+                ),
+              ],
+            ),
+          ),
+          Event(
+            invocationId: 'inv_1',
+            author: 'different_agent',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionCall(
+                  name: 'adk_request_credential',
+                  id: 'auth_call_1',
+                  args: <String, dynamic>{
+                    'function_call_id': 'tool_call_1',
+                    'auth_config': AuthConfig(
+                      authScheme: 'oauth2',
+                      credentialKey: 'cred_1',
+                    ),
+                  },
+                ),
+              ],
+            ),
+          ),
+          Event(
+            invocationId: 'inv_1',
+            author: 'user',
+            content: Content(
+              role: 'user',
+              parts: <Part>[
+                Part.fromFunctionResponse(
+                  name: 'adk_request_credential',
+                  id: 'auth_call_1',
+                  response: <String, Object?>{
+                    'authScheme': 'oauth2',
+                    'credentialKey': 'cred_1',
+                    'exchangedAuthCredential': <String, Object?>{
+                      'authType': 'oauth2',
+                      'oauth2': <String, Object?>{
+                        'accessToken': 'token-abc',
+                      },
+                    },
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+      final InvocationContext invocationContext = InvocationContext(
+        sessionService: InMemorySessionService(),
+        invocationId: 'inv_1',
+        agent: agent,
+        session: session,
+      );
+
+      final AuthLlmRequestProcessor processor = AuthLlmRequestProcessor();
+      final List<Event> resumedEvents = await processor
+          .runAsync(invocationContext, LlmRequest())
+          .toList();
+
+      expect(resumedEvents, isEmpty);
+    },
+  );
 }
