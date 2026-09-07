@@ -312,18 +312,18 @@ Future<Event?> _executeSingleFunctionCallAsync(
         : Exception(error.toString());
     final BaseTool missing = _MissingTool(functionCall.name);
 
-    final Map<String, dynamic>? onError = await _runOnToolErrorCallbacks(
-      invocationContext: invocationContext,
-      agent: agent,
-      tool: missing,
-      toolArgs: functionArgs,
-      toolContext: toolContext,
-      error: exception,
-    );
+    final Map<String, dynamic>? callbackResponse =
+        await _runOnToolErrorCallbacks(
+          invocationContext: invocationContext,
+          agent: agent,
+          tool: missing,
+          toolArgs: functionArgs,
+          toolContext: toolContext,
+          error: exception,
+        );
 
-    if (onError == null) {
-      rethrow;
-    }
+    final Map<String, dynamic> onError =
+        callbackResponse ?? _buildToolNotFoundResponse(missing.name, toolsDict);
 
     return _buildResponseEvent(
       tool: missing,
@@ -568,6 +568,21 @@ BaseTool _getTool(FunctionCall functionCall, Map<String, BaseTool> toolsDict) {
     );
   }
   return tool;
+}
+
+Map<String, String> _buildToolNotFoundResponse(
+  String toolName,
+  Map<String, BaseTool> toolsDict,
+) {
+  final String available = toolsDict.keys.isEmpty
+      ? 'none'
+      : toolsDict.keys.join(', ');
+  return <String, String>{
+    'error':
+        'Invoking `$toolName()` failed as no tool with that name is available. '
+        'The tools you can call are: $available. You could retry, but it is '
+        'IMPORTANT that you only call a tool from that list.',
+  };
 }
 
 (Object?, List<Part>?) _extractMultimodalParts(Object? functionResult) {

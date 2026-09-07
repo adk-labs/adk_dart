@@ -142,6 +142,37 @@ class _CodeExecutionLoopModel extends BaseLlm {
   }
 }
 
+class _UnknownToolModel extends BaseLlm {
+  _UnknownToolModel() : super(model: 'unknown-tool-model');
+
+  int callCount = 0;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    callCount += 1;
+    if (callCount == 1) {
+      yield LlmResponse(
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'no_such_tool',
+              args: <String, dynamic>{},
+            ),
+          ],
+        ),
+      );
+    } else {
+      yield LlmResponse(
+        content: Content.modelText('sorry, let me try again'),
+      );
+    }
+  }
+}
+
 class _AuthRequiredToolset extends BaseToolset {
   bool getToolsCalled = false;
 
@@ -1221,5 +1252,47 @@ void main() {
     expect(mergedEvent.actions.stateDelta, equals(<String, Object?>{
       'items': <Object?>['a', 'b'],
     }));
+  });
+
+  test('unknown tool name is reported to the model as error payload instead of throwing', () async {
+    final _UnknownToolModel model = _UnknownToolModel();
+    final Agent agent = Agent(
+      name: 'root_agent',
+      model: model,
+      tools: <Object>[
+        FunctionTool(
+          name: 'get_weather',
+          description: 'Get weather',
+          func: ({String? city}) async => 'sunny',
+        ),
+      ],
+    );
+    final InMemoryRunner runner = InMemoryRunner(agent: agent);
+    final Session session = await runner.sessionService.createSession(
+      appName: runner.appName,
+      userId: 'user_1',
+      sessionId: 's_unknown_tool',
+    );
+
+    final List<Event> events = await _collect(
+      runner.runAsync(
+        userId: 'user_1',
+        sessionId: session.id,
+        newMessage: Content.userText('what is the weather'),
+      ),
+    );
+
+    expect(model.callCount, 2);
+    final Event finalResponse = events.lastWhere((Event e) => e.isFinalResponse());
+    expect(finalResponse.content?.parts.first.text, 'sorry, let me try again');
+
+    final Event toolResponseEvent = events.firstWhere(
+      (Event e) => e.getFunctionResponses().isNotEmpty,
+    );
+    final FunctionResponse response = toolResponseEvent.getFunctionResponses().first;
+    expect(response.name, 'no_such_tool');
+    final String error = response.response['error'] as String;
+    expect(error, contains('no_such_tool'));
+    expect(error, contains('get_weather'));
   });
 }
