@@ -439,13 +439,48 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
   return null;
 }
 
+/// State accumulator across Gemini Interactions API streaming events.
+class InteractionsStreamState {
+  /// Creates an interactions stream state.
+  InteractionsStreamState({
+    List<Part>? parts,
+    Map<int, Part>? fcPartsByIndex,
+  }) : parts = parts ?? <Part>[],
+       fcPartsByIndex = fcPartsByIndex ?? <int, Part>{};
+
+  /// Multimodal parts accumulated so far.
+  final List<Part> parts;
+
+  /// Function-call parts indexed by step index.
+  final Map<int, Part> fcPartsByIndex;
+}
+
+Part? _resolveStreamingFunctionCallPart(
+  int? index,
+  List<Part> parts,
+  Map<int, Part>? fcPartsByIndex,
+) {
+  if (index != null) {
+    return fcPartsByIndex?[index];
+  }
+  if (parts.isNotEmpty && parts.last.functionCall != null) {
+    return parts.last;
+  }
+  return null;
+}
+
 /// Converts one interactions streaming event into an [LlmResponse].
 LlmResponse? convertInteractionEventToLlmResponse(
   Map<String, Object?> event,
   List<Part> aggregatedParts, {
   required String? interactionId,
   String? fallbackModelVersion,
+  Map<int, Part>? fcPartsByIndex,
+  InteractionsStreamState? streamState,
 }) {
+  final List<Part> targetParts = streamState?.parts ?? aggregatedParts;
+  final Map<int, Part>? targetFcMap = streamState?.fcPartsByIndex ?? fcPartsByIndex;
+
   final String? eventType = _stringValue(
     event['event_type'] ?? event['eventType'],
   );
@@ -467,6 +502,147 @@ LlmResponse? convertInteractionEventToLlmResponse(
     return null;
   }
 
+  if (eventType == 'step.start') {
+    final Map<String, Object?> step = _asMap(event['step']);
+    final String? stepType = _stringValue(step['type']);
+    if (stepType == 'function_call') {
+      final String? name = _stringValue(step['name']);
+      if (name != null && name.isNotEmpty) {
+        final Part part = Part.fromFunctionCall(
+          name: name,
+          id: _stringValue(step['id']),
+          partialArgs: <Map<String, Object?>>[],
+        );
+        targetParts.add(part);
+        final int? index = _intValue(event['index']);
+        if (index != null && targetFcMap != null) {
+          targetFcMap[index] = part;
+        }
+        return LlmResponse(
+          modelVersion: fallbackModelVersion,
+          content: Content(role: 'model', parts: <Part>[part]),
+          partial: true,
+          turnComplete: false,
+          interactionId: interactionId,
+        );
+      }
+    }
+    return null;
+  }
+
+  if (eventType == 'step.delta') {
+    final Map<String, Object?> delta = _asMap(event['delta']);
+    if (delta.isEmpty) {
+      return null;
+    }
+    final String? deltaType = _stringValue(delta['type']);
+    if (deltaType == 'arguments_delta') {
+      final int? index = _intValue(event['index']);
+      final Part? targetPart = _resolveStreamingFunctionCallPart(
+        index,
+        targetParts,
+        targetFcMap,
+      );
+      if (targetPart == null || targetPart.functionCall == null) {
+        developer.log(
+          'Interactions streaming converter dropped an arguments delta: step'
+          ' index $index has no function-call part; skipping.',
+        );
+        return null;
+      }
+      final FunctionCall fc = targetPart.functionCall!;
+      final Object? deltaArgs = delta['arguments'];
+      if (deltaArgs == null) {
+        return null;
+      }
+      if (fc.partialArgs == null) {
+        developer.log(
+          'Interactions streaming converter dropped an arguments delta: step'
+          ' index $index was already finalized; skipping.',
+        );
+        return null;
+      }
+      final String deltaArgStr = deltaArgs.toString();
+      final List<Map<String, Object?>> mutablePartialArgs =
+          List<Map<String, Object?>>.from(fc.partialArgs!);
+      mutablePartialArgs.add(<String, Object?>{'string_value': deltaArgStr});
+      fc.partialArgs = mutablePartialArgs;
+
+      final Part chunkPart = Part.fromFunctionCall(
+        name: fc.name,
+        partialArgs: <Map<String, Object?>>[
+          <String, Object?>{'string_value': deltaArgStr},
+        ],
+      );
+      return LlmResponse(
+        modelVersion: fallbackModelVersion,
+        content: Content(role: 'model', parts: <Part>[chunkPart]),
+        partial: true,
+        turnComplete: false,
+        interactionId: interactionId,
+      );
+    }
+    if (deltaType == 'text') {
+      final String text = _stringValue(delta['text']) ?? '';
+      if (text.isEmpty) {
+        return null;
+      }
+      final Part part = Part.text(text);
+      targetParts.add(part.copyWith());
+      return LlmResponse(
+        modelVersion: fallbackModelVersion,
+        content: Content(role: 'model', parts: <Part>[part]),
+        partial: true,
+        turnComplete: false,
+        interactionId: interactionId,
+      );
+    }
+    return null;
+  }
+
+  if (eventType == 'step.stop') {
+    final int? index = _intValue(event['index']);
+    final Part? targetPart = _resolveStreamingFunctionCallPart(
+      index,
+      targetParts,
+      targetFcMap,
+    );
+    if (targetPart != null && targetPart.functionCall != null) {
+      final FunctionCall fc = targetPart.functionCall!;
+      if (fc.partialArgs != null) {
+        final String argStr = fc.partialArgs!
+            .map((Map<String, Object?> pa) => (pa['string_value'] ?? '').toString())
+            .join();
+        Map<String, dynamic> args = <String, dynamic>{};
+        if (argStr.isNotEmpty) {
+          try {
+            final Object? decoded = jsonDecode(argStr);
+            if (decoded is Map) {
+              args = Map<String, dynamic>.from(decoded);
+            }
+          } catch (e) {
+            developer.log(
+              'Failed to parse function call args: $e. arg_str: $argStr',
+            );
+            fc.args = args;
+            fc.partialArgs = null;
+            return LlmResponse(
+              modelVersion: fallbackModelVersion,
+              errorCode: 'JSON_PARSE_ERROR',
+              errorMessage: 'Failed to parse function call arguments',
+              turnComplete: true,
+              finishReason: 'STOP',
+              interactionId: interactionId,
+            );
+          }
+        }
+        fc.args = args;
+        fc.partialArgs = null;
+      }
+    }
+    return null;
+  }
+
   if (eventType == 'content.delta') {
     final Map<String, Object?> delta = _asMap(event['delta']);
     if (delta.isEmpty) {
@@ -479,7 +655,7 @@ LlmResponse? convertInteractionEventToLlmResponse(
         return null;
       }
       final Part part = Part.text(text);
-      aggregatedParts.add(part.copyWith());
+      targetParts.add(part.copyWith());
       return LlmResponse(
         modelVersion: fallbackModelVersion,
         content: Content(role: 'model', parts: <Part>[part]),
@@ -491,7 +667,7 @@ LlmResponse? convertInteractionEventToLlmResponse(
     if (deltaType == 'function_call') {
       final Part? part = convertInteractionOutputToPart(delta);
       if (part != null) {
-        aggregatedParts.add(part.copyWith());
+        targetParts.add(part.copyWith());
       }
       // Interaction ID can arrive later, so only include in final aggregate.
       return null;
@@ -504,7 +680,7 @@ LlmResponse? convertInteractionEventToLlmResponse(
       if (part == null) {
         return null;
       }
-      aggregatedParts.add(part.copyWith());
+      targetParts.add(part.copyWith());
       return LlmResponse(
         modelVersion: fallbackModelVersion,
         content: Content(role: 'model', parts: <Part>[part]),
@@ -517,14 +693,14 @@ LlmResponse? convertInteractionEventToLlmResponse(
   }
 
   if (eventType == 'content.stop') {
-    if (aggregatedParts.isEmpty) {
+    if (targetParts.isEmpty) {
       return null;
     }
     return LlmResponse(
       modelVersion: fallbackModelVersion,
       content: Content(
         role: 'model',
-        parts: aggregatedParts.map((Part part) => part.copyWith()).toList(),
+        parts: targetParts.map((Part part) => part.copyWith()).toList(),
       ),
       partial: false,
       turnComplete: false,
@@ -656,6 +832,7 @@ Stream<LlmResponse> generateContentViaInteractions({
 
   if (stream) {
     final List<Part> aggregatedParts = <Part>[];
+    final Map<int, Part> fcPartsByIndex = <int, Part>{};
     String? currentInteractionId;
     bool emittedTerminal = false;
     await for (final Map<String, Object?> event
@@ -676,6 +853,7 @@ Stream<LlmResponse> generateContentViaInteractions({
       final LlmResponse? response = convertInteractionEventToLlmResponse(
         event,
         aggregatedParts,
+        fcPartsByIndex: fcPartsByIndex,
         interactionId: currentInteractionId,
         fallbackModelVersion: model,
       );
