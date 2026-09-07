@@ -1355,7 +1355,161 @@ void main() {
 
       expect(plugin.afterRunCalls, 1);
     });
+
+    test('tool-driven transfer to parent refused when disallowed', () async {
+      final _TransferMockModel model = _TransferMockModel(
+        responses: <List<Part>>[
+          <Part>[
+            Part.fromFunctionCall(
+              name: 'transfer_to_agent',
+              args: <String, dynamic>{'agent_name': 'sub_agent_1'},
+            ),
+          ],
+          <Part>[
+            Part.fromFunctionCall(
+              name: 'force_transfer',
+              args: <String, dynamic>{},
+            ),
+          ],
+        ],
+      );
+
+      final Agent subAgent1 = Agent(
+        name: 'sub_agent_1',
+        model: model,
+        disallowTransferToParent: true,
+        tools: <Object>[_ForceTransferTool('root_agent')],
+      );
+
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: model,
+        subAgents: <BaseAgent>[subAgent1],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: rootAgent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_disallow_parent',
+      );
+
+      expect(
+        () async => await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content.userText('start'),
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.message,
+            'message',
+            contains("Cannot transfer from 'sub_agent_1' to parent agent 'root_agent'"),
+          ),
+        ),
+      );
+    });
+
+    test('tool-driven transfer to peer refused when disallowed', () async {
+      final _TransferMockModel model = _TransferMockModel(
+        responses: <List<Part>>[
+          <Part>[
+            Part.fromFunctionCall(
+              name: 'transfer_to_agent',
+              args: <String, dynamic>{'agent_name': 'sub_agent_1'},
+            ),
+          ],
+          <Part>[
+            Part.fromFunctionCall(
+              name: 'force_transfer',
+              args: <String, dynamic>{},
+            ),
+          ],
+        ],
+      );
+
+      final Agent subAgent1 = Agent(
+        name: 'sub_agent_1',
+        model: model,
+        disallowTransferToPeers: true,
+        tools: <Object>[_ForceTransferTool('sub_agent_2')],
+      );
+      final Agent subAgent2 = Agent(name: 'sub_agent_2', model: model);
+
+      final Agent rootAgent = Agent(
+        name: 'root_agent',
+        model: model,
+        subAgents: <BaseAgent>[subAgent1, subAgent2],
+      );
+
+      final InMemoryRunner runner = InMemoryRunner(agent: rootAgent);
+      final Session session = await runner.sessionService.createSession(
+        appName: runner.appName,
+        userId: 'user_1',
+        sessionId: 'session_disallow_peers',
+      );
+
+      expect(
+        () async => await _collect(
+          runner.runAsync(
+            userId: 'user_1',
+            sessionId: session.id,
+            newMessage: Content.userText('start'),
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.message,
+            'message',
+            contains("Cannot transfer from 'sub_agent_1' to peer agent 'sub_agent_2'"),
+          ),
+        ),
+      );
+    });
   });
+}
+
+class _ForceTransferTool extends BaseTool {
+  _ForceTransferTool(this.targetName)
+      : super(name: 'force_transfer', description: 'force transfer');
+
+  final String targetName;
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    return FunctionDeclaration(name: name, description: description);
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    toolContext.actions.transferToAgent = targetName;
+    return <String, dynamic>{'status': 'ok'};
+  }
+}
+
+class _TransferMockModel extends BaseLlm {
+  _TransferMockModel({required this.responses}) : super(model: 'mock');
+
+  final List<List<Part>> responses;
+  int callIndex = 0;
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {
+    if (callIndex < responses.length) {
+      final List<Part> parts = responses[callIndex++];
+      yield LlmResponse(
+        content: Content(role: 'model', parts: parts),
+      );
+    }
+  }
 }
 
 class _SkipSummarizationTool extends BaseTool {

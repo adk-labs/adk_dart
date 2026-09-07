@@ -1494,9 +1494,30 @@ class BaseLlmFlow {
   }
 
   BaseAgent _getAgentToRun(InvocationContext context, String agentName) {
-    final BaseAgent? agent = context.agent.rootAgent.findAgent(agentName);
+    final BaseAgent currentAgent = context.agent;
+    final BaseAgent? agent = currentAgent.rootAgent.findAgent(agentName);
     if (agent == null) {
       throw StateError('Agent $agentName not found in the agent tree.');
+    }
+    if (agent.name == currentAgent.name) {
+      throw ArgumentError("Agent '$agentName' cannot transfer to itself.");
+    }
+    if (agent.parentAgent != null &&
+        currentAgent.parentAgent != null &&
+        agent.parentAgent!.name == currentAgent.parentAgent!.name) {
+      if (currentAgent is LlmAgent && currentAgent.disallowTransferToPeers) {
+        throw ArgumentError(
+          "Cannot transfer from '${currentAgent.name}' to peer agent '$agentName': disallow_transfer_to_peers is set.",
+        );
+      }
+    }
+    if (currentAgent.parentAgent != null &&
+        currentAgent.parentAgent!.name == agent.name) {
+      if (currentAgent is LlmAgent && currentAgent.disallowTransferToParent) {
+        throw ArgumentError(
+          "Cannot transfer from '${currentAgent.name}' to parent agent '$agentName': disallow_transfer_to_parent is set.",
+        );
+      }
     }
     return agent;
   }
