@@ -120,9 +120,28 @@ void main() {
 
       expect(agentName['enum'], <String>['agent_a', 'agent_b']);
       expect(parameters['required'], <String>['agent_name']);
+      expect(properties.containsKey('transfer_reason'), isFalse);
+      expect(declaration.description, isNot(contains('transfer_reason')));
     });
 
-    test('run sets transferToAgent action', () async {
+    test('supports includeTransferReason in declaration', () {
+      final TransferToAgentTool tool = TransferToAgentTool(
+        agentNames: <String>['agent_a', 'agent_b'],
+        includeTransferReason: true,
+      );
+
+      final FunctionDeclaration? declaration = tool.getDeclaration();
+      expect(declaration, isNotNull);
+      final Map<String, dynamic> parameters = declaration!.parameters;
+      final Map<String, dynamic> properties =
+          parameters['properties'] as Map<String, dynamic>;
+
+      expect(properties.containsKey('transfer_reason'), isTrue);
+      expect(parameters['required'], <String>['agent_name']);
+      expect(declaration.description, contains('transfer_reason'));
+    });
+
+    test('run sets transferToAgent action without reason', () async {
       final TransferToAgentTool tool = TransferToAgentTool(
         agentNames: <String>['agent_a', 'agent_b'],
       );
@@ -134,6 +153,26 @@ void main() {
       );
 
       expect(toolContext.actions.transferToAgent, 'agent_b');
+      expect(toolContext.actions.transferReason, isNull);
+    });
+
+    test('run sets transferReason action when provided', () async {
+      final TransferToAgentTool tool = TransferToAgentTool(
+        agentNames: <String>['agent_a', 'agent_b'],
+        includeTransferReason: true,
+      );
+      final Context toolContext = await _newToolContext();
+
+      await tool.run(
+        args: <String, dynamic>{
+          'agent_name': 'agent_b',
+          'transfer_reason': 'escalation to specialist',
+        },
+        toolContext: toolContext,
+      );
+
+      expect(toolContext.actions.transferToAgent, 'agent_b');
+      expect(toolContext.actions.transferReason, 'escalation to specialist');
     });
   });
 

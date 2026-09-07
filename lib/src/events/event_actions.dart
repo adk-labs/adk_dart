@@ -31,6 +31,7 @@ class EventActions {
     Map<String, Object?>? stateDelta,
     Map<String, int>? artifactDelta,
     this.transferToAgent,
+    this.transferReason,
     this.escalate,
     Map<String, Object>? requestedAuthConfigs,
     Map<String, Object>? requestedToolConfirmations,
@@ -58,6 +59,9 @@ class EventActions {
 
   /// Optional target agent name for transfer.
   String? transferToAgent;
+
+  /// The reason for transferring to the target agent.
+  String? transferReason;
 
   /// Whether escalation was requested.
   bool? escalate;
@@ -92,6 +96,7 @@ class EventActions {
     Map<String, Object?>? stateDelta,
     Map<String, int>? artifactDelta,
     Object? transferToAgent = _sentinel,
+    Object? transferReason = _sentinel,
     Object? escalate = _sentinel,
     Map<String, Object>? requestedAuthConfigs,
     Map<String, Object>? requestedToolConfirmations,
@@ -111,6 +116,9 @@ class EventActions {
       transferToAgent: identical(transferToAgent, _sentinel)
           ? this.transferToAgent
           : transferToAgent as String?,
+      transferReason: identical(transferReason, _sentinel)
+          ? this.transferReason
+          : transferReason as String?,
       escalate: identical(escalate, _sentinel)
           ? this.escalate
           : escalate as bool?,
@@ -153,6 +161,8 @@ Map<String, Object?> eventActionsToJson(EventActions actions) {
     'artifactDelta': Map<String, int>.from(actions.artifactDelta),
     if (actions.transferToAgent != null)
       'transferToAgent': actions.transferToAgent,
+    if (actions.transferReason != null)
+      'transferReason': actions.transferReason,
     if (actions.escalate != null) 'escalate': actions.escalate,
     if (actions.requestedAuthConfigs.isNotEmpty)
       'requestedAuthConfigs': Map<String, Object>.from(
@@ -204,7 +214,10 @@ EventActions eventActionsFromJson(Map<String, Object?> json) {
     skipSummarization: json['skipSummarization'] as bool?,
     stateDelta: _castMap(json['stateDelta']) ?? <String, Object?>{},
     artifactDelta: _castIntMap(json['artifactDelta']),
-    transferToAgent: json['transferToAgent'] as String?,
+    transferToAgent: (json['transferToAgent'] ?? json['transfer_to_agent'])
+        as String?,
+    transferReason: (json['transferReason'] ?? json['transfer_reason'])
+        as String?,
     escalate: json['escalate'] as bool?,
     requestedAuthConfigs: _castObjectMap(json['requestedAuthConfigs']),
     requestedToolConfirmations: _castObjectMap(

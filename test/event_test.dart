@@ -252,5 +252,37 @@ void main() {
       expect(emptyPath.runId, '');
       expect(emptyPath.parentRunId, isNull);
     });
+
+    test('EventActions supports transferReason and roundtrips json', () {
+      final EventActions actions = EventActions(
+        transferToAgent: 'specialist_agent',
+        transferReason: 'needs specialist capabilities',
+      );
+
+      expect(actions.transferToAgent, 'specialist_agent');
+      expect(actions.transferReason, 'needs specialist capabilities');
+
+      final EventActions copied = actions.copyWith(
+        transferReason: 'updated reason',
+      );
+      expect(copied.transferToAgent, 'specialist_agent');
+      expect(copied.transferReason, 'updated reason');
+
+      final Map<String, Object?> json = eventActionsToJson(actions);
+      expect(json['transferToAgent'], 'specialist_agent');
+      expect(json['transferReason'], 'needs specialist capabilities');
+
+      final EventActions deserialized = eventActionsFromJson(json);
+      expect(deserialized.transferToAgent, 'specialist_agent');
+      expect(deserialized.transferReason, 'needs specialist capabilities');
+
+      // Also verify snake_case deserialization
+      final EventActions snakeDeserialized = eventActionsFromJson({
+        'transfer_to_agent': 'target_agent',
+        'transfer_reason': 'reason_str',
+      });
+      expect(snakeDeserialized.transferToAgent, 'target_agent');
+      expect(snakeDeserialized.transferReason, 'reason_str');
+    });
   });
 }
