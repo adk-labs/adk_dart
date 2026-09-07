@@ -696,6 +696,10 @@ class BaseLlmFlow {
     InvocationContext context,
     int reconnectAttempts,
   ) {
+    final bool clientClosed = context.liveRequestQueue?.closed ?? false;
+    if (clientClosed) {
+      return false;
+    }
     return _hasLiveSessionResumptionHandle(context) &&
         reconnectAttempts < _defaultMaxReconnectAttempts;
   }

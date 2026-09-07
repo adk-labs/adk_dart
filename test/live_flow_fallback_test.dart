@@ -145,4 +145,26 @@ void main() {
       expect(context.liveSessionResumptionHandle, 'next-live-handle');
     },
   );
+
+  test(
+    'closed live request queue prevents connection retry',
+    () async {
+      final LlmAgent agent = LlmAgent(
+        name: 'agent',
+        model: _EchoLiveModel(),
+      );
+      final LiveRequestQueue queue = LiveRequestQueue();
+      queue.close();
+      expect(queue.closed, isTrue);
+
+      final InvocationContext context = await _newInvocationContext(
+        agent: agent,
+        invocationId: 'inv_fallback_closed',
+        liveRequestQueue: queue,
+      )..liveSessionResumptionHandle = 'resumption-handle';
+
+      final List<Event> events = await BaseLlmFlow().runLive(context).toList();
+      expect(events, isEmpty);
+    },
+  );
 }

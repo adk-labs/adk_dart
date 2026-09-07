@@ -80,5 +80,32 @@ void main() {
       expect(received.activityEnd, isNull);
       expect(received.close, isFalse);
     });
+
+    test('closed is false before close', () {
+      final LiveRequestQueue queue = LiveRequestQueue();
+      expect(queue.closed, isFalse);
+    });
+
+    test('close sets closed stickily', () async {
+      final LiveRequestQueue queue = LiveRequestQueue();
+      queue.close();
+      expect(queue.closed, isTrue);
+
+      final LiveRequest sentinel = await queue.get();
+      expect(sentinel.close, isTrue);
+      expect(queue.closed, isTrue);
+    });
+
+    test('send with close request sets closed', () {
+      final LiveRequestQueue queue = LiveRequestQueue();
+      queue.send(LiveRequest(close: true));
+      expect(queue.closed, isTrue);
+    });
+
+    test('send without close request leaves queue open', () {
+      final LiveRequestQueue queue = LiveRequestQueue();
+      queue.send(LiveRequest(content: Content.userText('hi')));
+      expect(queue.closed, isFalse);
+    });
   });
 }

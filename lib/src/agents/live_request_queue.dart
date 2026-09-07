@@ -54,6 +54,9 @@ class LiveRequestQueue {
   Completer<LiveRequest>? _pending;
   bool _closed = false;
 
+  /// Whether the client has closed this queue.
+  bool get closed => _closed;
+
   /// Closes the queue and enqueues a terminal request.
   void close() {
     if (_closed) {
