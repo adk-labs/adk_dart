@@ -65,12 +65,18 @@ class AdkToolInspectorView extends StatelessWidget {
         String name = 'Tool #${index + 1}';
         String description = '';
         dynamic parameters;
+        dynamic outputSchema;
 
         if (tool is adk.BaseTool) {
           name = tool.name;
           description = tool.description;
           final decl = tool.getDeclaration();
           parameters = decl?.parameters;
+
+          if (tool is adk.NodeTool) {
+            parameters = tool.inputSchema ?? parameters;
+            outputSchema = tool.outputSchema;
+          }
         }
 
         return Card(
@@ -109,7 +115,7 @@ class AdkToolInspectorView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Parameter Schema:',
+                      outputSchema != null ? 'Input Schema:' : 'Parameter Schema:',
                       style: theme.textTheme.labelSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -130,6 +136,31 @@ class AdkToolInspectorView extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (outputSchema != null) ...<Widget>[
+                      const SizedBox(height: 10.0),
+                      Text(
+                        'Output Schema:',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6.0),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8.0),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: SelectableText(
+                          _formatSchema(outputSchema),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 11.0,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

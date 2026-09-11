@@ -4,6 +4,7 @@ import '../models/adk_attachment_model.dart';
 import '../models/adk_chat_message.dart';
 import '../theme/adk_theme.dart';
 import 'adk_reasoning_expander.dart';
+import 'adk_tool_call_card.dart';
 import 'adk_typing_indicator.dart';
 
 /// A customizable message bubble widget representing user, model, tool, or system messages.
@@ -29,6 +30,7 @@ class AdkMessageBubble extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.customContentBuilder,
+    this.useToolCallCard = true,
   });
 
   /// The chat message to render.
@@ -84,6 +86,9 @@ class AdkMessageBubble extends StatelessWidget {
 
   /// Optional builder to override internal message body content.
   final Widget Function(BuildContext context, AdkChatMessage message)? customContentBuilder;
+
+  /// Whether to render tool messages using [AdkToolCallCard] with expandable args and results.
+  final bool useToolCallCard;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +314,16 @@ class AdkMessageBubble extends StatelessWidget {
   }
 
   Widget _buildToolCard(ThemeData theme, AdkChatThemeData adkTheme) {
+    if (useToolCallCard && (message.toolName != null || message.toolArgs != null || message.toolResult != null)) {
+      return AdkToolCallCard(
+        toolName: message.toolName ?? 'Unnamed Tool',
+        toolArgs: message.toolArgs,
+        toolResult: message.toolResult,
+        errorMessage: message.errorMessage,
+        isRunning: message.isPartial,
+      );
+    }
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
