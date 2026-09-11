@@ -1,3 +1,34 @@
+## 2026.9.11
+
+- **Upstream `adk-python` v2.9.0 Feature Parity**:
+  - **`LlmAgent` & `BaseNode` / `BaseAgent` Tool Interop**:
+    - Automatically adapts `BaseNode` instances passed in `LlmAgent(tools: ...)` or `tool_union` into `NodeTool(node: t, description: t.description)`.
+    - Explicitly rejects `BaseAgent` instances passed into `tools` with `ArgumentError`, guiding users to invoke agents as sub-agents.
+    - Preserved list object identity when no tools need adaptation to avoid shallow copy discrepancies during clone operations.
+  - **`Workflow` & `NodeTool` Unwrapping & State Propagation**:
+    - `buildNode` in `workflow.dart` unwraps `NodeTool` directly to its underlying `nodeLike.node` (`BaseNode`), preventing nested wrapper overhead.
+    - `ToolNode.run` falls back to `invocationContext.session.state` for missing required parameters declared in tool schema.
+    - `ToolNode.run` persists and merges `toolContext.actions.stateDelta` directly into `session.state`.
+  - **`LoadArtifactsTool` Scope Guard & Resolution**:
+    - Guarded artifact loading against untrusted model requests for out-of-scope files by cross-checking against session-listed artifact names.
+    - Added user namespace auto-resolution (resolving `user:filename` when requested as `filename`, and vice-versa) while preserving requested labels in model prompt feedback.
+    - Discards malformed or non-list `artifact_names` tool parameters gracefully.
+  - **`Runner` State Delta on Resume without New Message**:
+    - Supported applying `stateDelta` when resuming an invocation by `invocationId` with `newMessage: null`, recording an actions-only event in session event history.
+  - **Workflow Failure Rehydration on Resume**:
+    - Rehydrates failed nodes without output as `NodeStatus.failed` with stale outputs removed, correctly scheduling them for retry on invocation resume.
+    - A succeeded retry cleanly clears prior node errors and marks the status as `NodeStatus.completed`.
+  - **Streaming Control Flag Inheritance in Model Callbacks**:
+    - Added `_inheritUnsetStreamingFields` in `BaseLlmFlow` so `afterModelCallback` replacements inherit `partial` and `turnComplete` flags when omitted.
+  - **Agent Transfer Authorization Guard**:
+    - Restricted `transfer_to_agent` execution to declared transfer targets, preventing unauthorized agent escalation and giving explicit error messages when transferring to disallowed parent or peer agents.
+  - **Prune Orphaned Function Calls on Interrupted Turns**:
+    - Implemented `_dropOrphanedFunctionCalls` in `contents.dart` to prune unanswered tool calls when a turn is interrupted by a user message, while properly preserving long-running tool IDs (`longRunningToolIds`).
+- **Quality Assurance**:
+  - Added dedicated comprehensive parity test suite `test/upstream_v2_9_parity_test.dart` (12 test cases).
+  - 100% test pass rate across entire test suite (1,474 passing tests).
+  - 0 analyzer warnings / 0 analyzer errors.
+
 ## 2026.9.7
 
 - **Model Fallbacks & Resilience**:

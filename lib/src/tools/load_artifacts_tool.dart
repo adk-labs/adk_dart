@@ -129,11 +129,26 @@ web UI).''',
     }
 
     final Object? payloadNames = response.response['artifact_names'];
-    final List<String> requestedNames = _coerceArtifactNames(payloadNames);
-    for (final String artifactName in requestedNames) {
+    if (payloadNames is! List ||
+        !payloadNames.every((dynamic item) => item is String)) {
+      return;
+    }
+    final List<String> rawArtifactNames = payloadNames.cast<String>();
+    final Set<String> availableNames = artifactNames.toSet();
+    for (final String requestedName in rawArtifactNames) {
+      final String? resolvedName = _resolveRequestedArtifactName(
+        requestedName,
+        availableNames,
+      );
+      if (resolvedName == null) {
+        continue;
+      }
+
+      String artifactName = resolvedName;
       Part? artifact = await toolContext.loadArtifact(artifactName);
-      if (artifact == null && !artifactName.startsWith('user:')) {
-        artifact = await toolContext.loadArtifact('user:$artifactName');
+      if (artifact == null && !artifactName.startsWith(_userNamespacePrefix)) {
+        artifactName = '$_userNamespacePrefix$artifactName';
+        artifact = await toolContext.loadArtifact(artifactName);
       }
       if (artifact == null) {
         continue;
@@ -145,7 +160,7 @@ web UI).''',
       } else {
         processed = _asSafePart(
           artifact,
-          artifactName,
+          requestedName,
           enableSpreadsheetParsing: enableSpreadsheetParsing,
         );
       }
@@ -155,7 +170,7 @@ web UI).''',
           Content(
             role: 'user',
             parts: <Part>[
-              Part.text('Artifact $artifactName is:'),
+              Part.text('Artifact $requestedName is:'),
               processed,
             ],
           ),
@@ -163,6 +178,29 @@ web UI).''',
       }
     }
   }
+}
+
+const String _userNamespacePrefix = 'user:';
+
+String? _resolveRequestedArtifactName(
+  String requestedName,
+  Set<String> availableNames,
+) {
+  if (availableNames.contains(requestedName)) {
+    return requestedName;
+  }
+  if (requestedName.startsWith(_userNamespacePrefix)) {
+    final String bareName = requestedName.substring(_userNamespacePrefix.length);
+    if (availableNames.contains(bareName)) {
+      return requestedName;
+    }
+  } else {
+    final String prefixedName = '$_userNamespacePrefix$requestedName';
+    if (availableNames.contains(prefixedName)) {
+      return prefixedName;
+    }
+  }
+  return null;
 }
 
 List<String> _coerceArtifactNames(Object? value) {

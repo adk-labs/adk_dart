@@ -16,9 +16,11 @@ import '../events/event_actions.dart';
 import '../events/node_path_builder.dart';
 import '../events/request_input.dart';
 import '../flows/llm_flows/functions.dart';
+import '../models/llm_request.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_tool.dart';
+import '../tools/node_tool.dart';
 import '../types/content.dart';
 import 'workflow_tool.dart';
 
@@ -683,6 +685,9 @@ BaseNode buildNode(
   RetryConfig? retryConfig,
   Duration? timeout,
 }) {
+  if (nodeLike is NodeTool) {
+    return nodeLike.node;
+  }
   if (nodeLike is BaseNode) {
     if (name == null &&
         description.isEmpty &&
@@ -914,7 +919,25 @@ class ToolNode extends BaseNode {
       invocationContext,
       functionCallId: 'workflow-$name-${DateTime.now().microsecondsSinceEpoch}',
     );
-    return tool.run(args: args, toolContext: toolContext);
+
+    final FunctionDeclaration? decl = tool.getDeclaration();
+    if (decl != null) {
+      final Object? req = decl.parameters['required'];
+      if (req is List) {
+        final Map<String, Object?> sessionState = invocationContext.session.state;
+        for (final Object? p in req) {
+          if (p is String && !args.containsKey(p) && sessionState.containsKey(p)) {
+            args[p] = sessionState[p];
+          }
+        }
+      }
+    }
+
+    final Object? result = await tool.run(args: args, toolContext: toolContext);
+    if (toolContext.actions.stateDelta.isNotEmpty) {
+      invocationContext.session.state.addAll(toolContext.actions.stateDelta);
+    }
+    return result;
   }
 }
 
@@ -2337,32 +2360,33 @@ WorkflowResult _workflowResultFromEvents(
     final bool hasRoute = route != null;
     if (hasRoute) {
       state.route = route;
-      if (state.status != NodeStatus.waiting) {
-        state.status = NodeStatus.completed;
-      }
     }
 
     final Object? eventOutput = _workflowOutputFromEvent(event);
     final bool hasOutput = event.hasOutput || _hasMessageAsOutput(event);
     if (hasOutput) {
       outputs[owner.key] = eventOutput;
+    }
+
+    final bool hasResult = hasOutput || hasRoute;
+    final bool hasError = event.errorCode != null;
+    if (hasResult) {
+      state.error = null;
       if (state.status != NodeStatus.waiting) {
         state.status = NodeStatus.completed;
       }
-    }
-
-    final bool hasError = event.errorCode != null;
-    if (hasError) {
+    } else if (hasError) {
       state.status = NodeStatus.failed;
       state.error = event.errorMessage ?? event.errorCode;
+      outputs.remove(owner.key);
     }
 
     final Set<String> interruptIds = _interruptIdsFromEvent(event);
     if (interruptIds.isEmpty) {
-      if (!hasOutput &&
-          !hasRoute &&
+      if (!hasResult &&
           !hasError &&
-          state.status != NodeStatus.waiting) {
+          state.status != NodeStatus.waiting &&
+          state.status != NodeStatus.failed) {
         state.status = NodeStatus.completed;
       }
       continue;

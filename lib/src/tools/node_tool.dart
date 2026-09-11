@@ -23,20 +23,25 @@ class NodeTool extends BaseTool {
   ///
   /// [name] and [description] default to the wrapped node's own values. A
   /// non-empty description is required so the model understands the tool.
-  NodeTool({required this.node, String? name, String? description})
-    : super(
-        name: name ?? node.name,
-        description: description == null || description.isEmpty
-            ? (node.description.isEmpty
-                  ? 'Executes the node: ${node.name}'
-                  : node.description)
-            : description,
-        isLongRunning: true,
-      ) {
+  NodeTool({
+    required this.node,
+    String? name,
+    String? description,
+    this.inputSchema,
+    this.outputSchema,
+  }) : super(
+         name: name ?? node.name,
+         description: description == null || description.isEmpty
+             ? (node.description.isEmpty
+                   ? 'Executes the node: ${node.name}'
+                   : node.description)
+             : description,
+         isLongRunning: true,
+       ) {
     if (node is BaseAgent) {
       throw ArgumentError(
-        "Agent '${(node as BaseAgent).name}' cannot be wrapped as a NodeTool. "
-        'Agents should be invoked as sub-agents instead.',
+        "Agent '${(node as BaseAgent).name}' cannot be used directly as a tool. "
+        'Agents should be invoked as sub-agents.',
       );
     }
   }
@@ -44,17 +49,24 @@ class NodeTool extends BaseTool {
   /// The node executed by this tool.
   final BaseNode node;
 
+  /// Optional JSON schema for input parameters.
+  final Map<String, dynamic>? inputSchema;
+
+  /// Optional JSON schema for returned outputs.
+  final Map<String, dynamic>? outputSchema;
+
   @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
       description: description,
-      parameters: <String, dynamic>{
-        'type': 'object',
-        'properties': <String, dynamic>{
-          'request': <String, dynamic>{'type': 'string'},
-        },
-      },
+      parameters: inputSchema ??
+          <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'request': <String, dynamic>{'type': 'string'},
+            },
+          },
     );
   }
 

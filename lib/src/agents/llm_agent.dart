@@ -21,9 +21,11 @@ import '../tools/discovery_engine_search_tool.dart';
 import '../tools/function_tool.dart';
 import '../tools/google_search_agent_tool.dart';
 import '../tools/google_search_tool.dart';
+import '../tools/node_tool.dart';
 import '../tools/tool_context.dart';
 import '../tools/vertex_ai_search_tool.dart';
 import '../types/content.dart';
+import '../workflow/workflow.dart';
 import 'agent_state.dart';
 import 'base_agent.dart';
 import 'callback_context.dart';
@@ -114,11 +116,41 @@ class LlmAgent extends BaseAgent {
     this.beforeToolCallback,
     this.afterToolCallback,
     this.onToolErrorCallback,
-  }) : tools = tools ?? <Object>[] {
+  }) : tools = _adaptTools(tools) {
     _validateGenerateContentConfig(generateContentConfig);
     _warnOnThinkingConfigPrecedence();
     _installTaskModeToolIfNeeded();
     _installModeSubAgentToolsIfNeeded();
+  }
+
+  static List<Object> _adaptTools(List<Object>? rawTools) {
+    if (rawTools == null) {
+      return <Object>[];
+    }
+    bool needsAdapt = false;
+    for (final Object t in rawTools) {
+      if (t is BaseAgent || t is BaseNode) {
+        needsAdapt = true;
+        break;
+      }
+    }
+    if (!needsAdapt) {
+      return rawTools;
+    }
+    final List<Object> adapted = <Object>[];
+    for (final Object t in rawTools) {
+      if (t is BaseAgent) {
+        throw ArgumentError(
+          "Agent '${t.name}' cannot be used directly as a tool. "
+          'Agents should be invoked as sub-agents.',
+        );
+      } else if (t is BaseNode) {
+        adapted.add(NodeTool(node: t, description: t.description));
+      } else {
+        adapted.add(t);
+      }
+    }
+    return adapted;
   }
 
   /// Built-in default model name.
@@ -903,6 +935,23 @@ Future<List<BaseTool>> _convertToolUnionToTools(
     final String generatedName =
         'tool_${toolUnion.hashCode.toUnsigned(32).toRadixString(16)}';
     return <BaseTool>[FunctionTool(func: toolUnion, name: generatedName)];
+  }
+
+  if (toolUnion is BaseAgent) {
+    throw ArgumentError(
+      "Agent '${toolUnion.name}' cannot be used directly as a tool. "
+      'Agents should be invoked as sub-agents.',
+    );
+  }
+
+  if (toolUnion is BaseNode) {
+    return <BaseTool>[
+      NodeTool(
+        node: toolUnion,
+        name: toolUnion.name,
+        description: toolUnion.description,
+      ),
+    ];
   }
 
   if (toolUnion is BaseToolset) {

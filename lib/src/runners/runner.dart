@@ -714,6 +714,8 @@ class Runner {
       if (context.isAborted) {
         return context;
       }
+    } else if (stateDelta != null && stateDelta.isNotEmpty) {
+      await _appendStateDeltaEvent(context, stateDelta);
     }
 
     context.populateInvocationAgentStates();
@@ -910,6 +912,34 @@ class Runner {
     context.stampEventBranchContext(event);
 
     await _appendEventWithPersistBarrier(context, event);
+  }
+
+  Future<Event> _appendStateDeltaEvent(
+    InvocationContext context,
+    Map<String, Object?> stateDelta,
+  ) async {
+    final Event event = Event(
+      invocationId: context.invocationId,
+      author: 'user',
+      isolationScope: context.isolationScope,
+      actions: EventActions(stateDelta: stateDelta),
+    );
+
+    if (context.runConfig?.customMetadata != null) {
+      event.customMetadata = <String, dynamic>{
+        ...context.runConfig!.customMetadata!,
+        ...(event.customMetadata ?? <String, dynamic>{}),
+      };
+    }
+
+    context.stampEventBranchContext(event);
+
+    stateDelta.forEach((String key, Object? value) {
+      context.session.state[key] = value;
+    });
+
+    await _appendEventWithPersistBarrier(context, event);
+    return event;
   }
 
   Stream<Event> _execWithPlugin({

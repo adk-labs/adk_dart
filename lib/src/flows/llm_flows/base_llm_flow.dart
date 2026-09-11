@@ -27,6 +27,7 @@ import '../../tools/base_tool.dart';
 import '../../tools/base_toolset.dart';
 import '../../tools/tool_context.dart';
 import '../../types/content.dart';
+import 'agent_transfer.dart';
 import 'audio_cache_manager.dart';
 import 'functions.dart' as flow_functions;
 import 'output_schema_processor.dart' as output_schema;
@@ -1330,7 +1331,12 @@ class BaseLlmFlow {
           llmResponse: response,
         );
     if (pluginOverride != null) {
-      return _maybeAddGroundingMetadata(context, response, pluginOverride);
+      final LlmResponse? withGrounding = await _maybeAddGroundingMetadata(
+        context,
+        response,
+        pluginOverride,
+      );
+      return _inheritUnsetStreamingFields(response, withGrounding);
     }
 
     for (final AfterModelCallback callback
@@ -1339,11 +1345,37 @@ class BaseLlmFlow {
         callback(callbackContext, response),
       );
       if (altered != null) {
-        return _maybeAddGroundingMetadata(context, response, altered);
+        final LlmResponse? withGrounding = await _maybeAddGroundingMetadata(
+          context,
+          response,
+          altered,
+        );
+        return _inheritUnsetStreamingFields(response, withGrounding);
       }
     }
 
     return _maybeAddGroundingMetadata(context, response);
+  }
+
+  static LlmResponse? _inheritUnsetStreamingFields(
+    LlmResponse original,
+    LlmResponse? replacement,
+  ) {
+    if (replacement == null || identical(replacement, original)) {
+      return replacement;
+    }
+    final bool inheritPartial =
+        replacement.partial == null && original.partial != null;
+    final bool inheritTurnComplete =
+        replacement.turnComplete == null && original.turnComplete != null;
+    if (!inheritPartial && !inheritTurnComplete) {
+      return replacement;
+    }
+    return replacement.copyWith(
+      partial: inheritPartial ? original.partial : replacement.partial,
+      turnComplete:
+          inheritTurnComplete ? original.turnComplete : replacement.turnComplete,
+    );
   }
 
   Future<LlmResponse?> _maybeAddGroundingMetadata(
@@ -1506,20 +1538,27 @@ class BaseLlmFlow {
     if (agent.name == currentAgent.name) {
       throw ArgumentError("Agent '$agentName' cannot transfer to itself.");
     }
-    if (agent.parentAgent != null &&
-        currentAgent.parentAgent != null &&
-        agent.parentAgent!.name == currentAgent.parentAgent!.name) {
-      if (currentAgent is LlmAgent && currentAgent.disallowTransferToPeers) {
+    if (currentAgent is LlmAgent) {
+      if (agent.parentAgent != null &&
+          currentAgent.parentAgent != null &&
+          agent.parentAgent!.name == currentAgent.parentAgent!.name &&
+          currentAgent.disallowTransferToPeers) {
         throw ArgumentError(
           "Cannot transfer from '${currentAgent.name}' to peer agent '$agentName': disallow_transfer_to_peers is set.",
         );
       }
-    }
-    if (currentAgent.parentAgent != null &&
-        currentAgent.parentAgent!.name == agent.name) {
-      if (currentAgent is LlmAgent && currentAgent.disallowTransferToParent) {
+      if (currentAgent.parentAgent != null &&
+          currentAgent.parentAgent!.name == agent.name &&
+          currentAgent.disallowTransferToParent) {
         throw ArgumentError(
           "Cannot transfer from '${currentAgent.name}' to parent agent '$agentName': disallow_transfer_to_parent is set.",
+        );
+      }
+      final Set<String> allowedNames =
+          getTransferTargets(currentAgent).map((BaseAgent a) => a.name).toSet();
+      if (!allowedNames.contains(agent.name)) {
+        throw ArgumentError(
+          "Agent '${currentAgent.name}' is not allowed to transfer to agent '$agentName'.",
         );
       }
     }

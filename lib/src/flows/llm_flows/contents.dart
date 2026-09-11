@@ -107,6 +107,7 @@ List<Content> getContents({
   }
 
   eventsToProcess = _dropOrphanedFunctionResponses(eventsToProcess);
+  eventsToProcess = _dropOrphanedFunctionCalls(eventsToProcess);
 
   final List<Event> filtered = <Event>[];
   for (final Event event in eventsToProcess) {
@@ -582,6 +583,57 @@ List<Event> _dropOrphanedFunctionResponses(List<Event> events) {
           response.id != null &&
           response.id!.isNotEmpty &&
           !callIds.contains(response.id)) {
+        continue;
+      }
+      keptParts.add(part);
+    }
+
+    if (keptParts.isEmpty) {
+      continue;
+    }
+    if (keptParts.length != parts.length) {
+      final Event updatedEvent = event.copyWith(
+        content: content?.copyWith(parts: keptParts),
+      );
+      resultEvents.add(updatedEvent);
+    } else {
+      resultEvents.add(event);
+    }
+  }
+  return resultEvents;
+}
+
+List<Event> _dropOrphanedFunctionCalls(List<Event> events) {
+  final Set<String> responseIds = <String>{};
+  final Set<String> longRunningIds = <String>{};
+  for (final Event event in events) {
+    for (final FunctionResponse response in event.getFunctionResponses()) {
+      if (response.id != null && response.id!.isNotEmpty) {
+        responseIds.add(response.id!);
+      }
+    }
+    if (event.longRunningToolIds != null) {
+      longRunningIds.addAll(event.longRunningToolIds!);
+    }
+  }
+
+  final List<Event> resultEvents = <Event>[];
+  for (final Event event in events) {
+    final Content? content = event.content;
+    final List<Part>? parts = content?.parts;
+    if (parts == null || event.getFunctionCalls().isEmpty) {
+      resultEvents.add(event);
+      continue;
+    }
+
+    final List<Part> keptParts = <Part>[];
+    for (final Part part in parts) {
+      final FunctionCall? call = part.functionCall;
+      if (call != null &&
+          call.id != null &&
+          call.id!.isNotEmpty &&
+          !responseIds.contains(call.id) &&
+          !longRunningIds.contains(call.id)) {
         continue;
       }
       keptParts.add(part);
