@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.9.11
+
+- Bumped package version to `2026.9.11` and dependency `adk_dart: ^2026.9.11`.
+- Updated CLI runtime to support upstream v2.9.0 parity features.
+
 ## 2026.9.7
 
 - Bumped package version to `2026.9.7` and dependency `adk_dart: ^2026.9.7`.

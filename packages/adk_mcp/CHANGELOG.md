@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.9.11
+
+- Bumped package version to `2026.9.11`.
+- Synced compatibility with `adk_dart` `2026.9.11` release.
+
 ## 2026.9.7
 
 - Bumped package version to `2026.9.7`.
