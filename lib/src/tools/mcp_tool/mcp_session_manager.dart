@@ -5,6 +5,8 @@ import 'dart:async';
 
 import 'package:adk_mcp/adk_mcp.dart'
     show
+        McpHttpStatusException,
+        McpJsonRpcException,
         McpRemoteClient,
         McpResourceContent,
         McpServerMessage,
@@ -46,9 +48,7 @@ typedef McpSamplingCallback =
 
 /// Callback invoked when an MCP server requests client elicitation (`elicitation/create`).
 typedef McpElicitationCallback =
-    FutureOr<Object?> Function(
-      Map<String, Object?> params,
-    );
+    FutureOr<Object?> Function(Map<String, Object?> params);
 
 /// Central registry and transport manager for MCP sessions.
 class McpSessionManager {
@@ -233,6 +233,14 @@ class McpSessionManager {
       await _stdioClient.close();
       return;
     }
+  }
+
+  /// Discards the session for [connectionParams] when the server has terminated it.
+  Future<void> discardSession(
+    McpConnectionParams connectionParams, {
+    Map<String, String>? headers,
+  }) async {
+    await closeConnection(connectionParams);
   }
 
   /// Returns locally cached resource names for [connectionParams].
@@ -826,4 +834,42 @@ String _connectionLabel(McpConnectionParams connectionParams) {
     return connectionParams.resolvedConnectionId;
   }
   return '${connectionParams.runtimeType}';
+}
+
+/// Legacy MCP session terminated error code.
+const int mcpSessionTerminatedLegacyCode = 32600;
+
+/// Standard JSON-RPC invalid request error code.
+const int mcpInvalidRequestErrorCode = -32600;
+
+/// Message indicating the server discarded or terminated the session.
+const String mcpSessionTerminatedMessage = 'Session terminated';
+
+/// Checks whether an error is an MCP server reporting it no longer holds our session.
+bool isSessionTerminatedError(Object? error) {
+  if (error == null) {
+    return false;
+  }
+  if (error is McpJsonRpcException) {
+    if (error.code == mcpSessionTerminatedLegacyCode) {
+      return true;
+    }
+    if (error.code == mcpInvalidRequestErrorCode &&
+        error.message.contains(mcpSessionTerminatedMessage)) {
+      return true;
+    }
+  }
+  if (error is McpHttpStatusException) {
+    if (error.statusCode == 404 &&
+        error.body.toLowerCase().contains('session terminated')) {
+      return true;
+    }
+  }
+  final String msg = error.toString();
+  if (msg.contains(mcpSessionTerminatedMessage)) {
+    if (msg.contains('32600') || msg.contains('-32600')) {
+      return true;
+    }
+  }
+  return false;
 }

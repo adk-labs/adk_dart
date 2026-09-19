@@ -1141,10 +1141,7 @@ class GcsArtifactService extends BaseArtifactService {
       GcsArtifactHttpRequest(
         method: method,
         uri: uri,
-        headers: <String, String>{
-          ...authHeaders,
-          ...?headers,
-        },
+        headers: <String, String>{...authHeaders, ...?headers},
         bodyBytes: bodyBytes,
       ),
     );

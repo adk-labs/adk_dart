@@ -22,18 +22,17 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
 
     // Keep parity with Python behavior: set output schema directly when tools
     // are absent or when model supports native schema+tools together.
-    if (agent.mode != 'task' &&
-        agent.outputSchema != null &&
-        (agent.tools.isEmpty ||
-            canUseOutputSchemaWithTools(agent.canonicalModel))) {
+    if (agent.mode != 'task' && canSetNativeOutputSchema(agent)) {
       llmRequest.setOutputSchema(agent.outputSchema!);
     }
 
     final runConfig = invocationContext.runConfig;
     if (runConfig != null) {
+      llmRequest.serviceTier = runConfig.serviceTier;
       if (runConfig.labels != null && runConfig.labels!.isNotEmpty) {
-        final Map<String, String> labels =
-            Map<String, String>.from(llmRequest.config.labels);
+        final Map<String, String> labels = Map<String, String>.from(
+          llmRequest.config.labels,
+        );
         labels.addAll(runConfig.labels!);
         llmRequest.config.labels = labels;
       }

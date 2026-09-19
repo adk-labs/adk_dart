@@ -65,8 +65,7 @@ class LlmAudioUserSimulatorConfig extends BaseUserSimulatorConfig {
 }
 
 /// A multimodal [UserSimulator] that synthesizes speech audio user messages.
-class LlmAudioUserSimulator
-    extends UserSimulator<LlmAudioUserSimulatorConfig> {
+class LlmAudioUserSimulator extends UserSimulator<LlmAudioUserSimulatorConfig> {
   /// Creates an LLM audio user simulator.
   LlmAudioUserSimulator({
     required super.config,
@@ -79,9 +78,7 @@ class LlmAudioUserSimulator
          conversationScenario: conversationScenario,
          llmFactory: llmFactory,
        ),
-       super(
-         configDecoder: LlmAudioUserSimulatorConfig.fromBase,
-       );
+       super(configDecoder: LlmAudioUserSimulatorConfig.fromBase);
 
   final BaseLlm? _audioLlm;
   final LlmBackedUserSimulator _textSimulator;
@@ -92,8 +89,9 @@ class LlmAudioUserSimulator
 
   @override
   Future<NextUserMessage> getNextUserMessage(List<Event> history) async {
-    final NextUserMessage textNext =
-        await _textSimulator.getNextUserMessage(history);
+    final NextUserMessage textNext = await _textSimulator.getNextUserMessage(
+      history,
+    );
 
     if (textNext.status != Status.success || textNext.userMessage == null) {
       return textNext;
@@ -121,8 +119,9 @@ class LlmAudioUserSimulator
         contents: <Content>[Content.userText(text)],
         config: config.audioModelConfiguration ?? GenerateContentConfig(),
       );
-      final LlmResponse audioResp =
-          await audioModel.generateContent(audioReq).first;
+      final LlmResponse audioResp = await audioModel
+          .generateContent(audioReq)
+          .first;
       if (audioResp.content?.parts.isNotEmpty == true) {
         final Part firstPart = audioResp.content!.parts.first;
         if (firstPart.inlineData != null) {
@@ -135,10 +134,7 @@ class LlmAudioUserSimulator
     }
 
     final List<Part> parts = <Part>[
-      Part.fromInlineData(
-        mimeType: mimeType,
-        data: audioBytes,
-      ),
+      Part.fromInlineData(mimeType: mimeType, data: audioBytes),
     ];
 
     if (config.includeTextWithAudio) {

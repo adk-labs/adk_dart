@@ -190,7 +190,9 @@ class BranchPath {
     required String name,
     String? runId,
   }) {
-    return BranchPath.fromString(baseBranch).append(name, runId: runId).toString();
+    return BranchPath.fromString(
+      baseBranch,
+    ).append(name, runId: runId).toString();
   }
 
   @override

@@ -137,9 +137,7 @@ class OpenAPIToolset extends BaseToolset {
   List<RestApiTool> _parse(Map<String, Object?> openapiSpecDict) {
     final List<ParsedOperation> operations = OpenApiSpecParser(
       preservePropertyNames: preservePropertyNames,
-    ).parse(
-      openapiSpecDict,
-    );
+    ).parse(openapiSpecDict);
 
     final List<RestApiTool> tools = <RestApiTool>[];
     for (final ParsedOperation operation in operations) {

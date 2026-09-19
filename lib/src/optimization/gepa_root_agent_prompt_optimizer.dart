@@ -55,13 +55,16 @@ class GepaRootAgentPromptOptimizerConfig {
                 '${modelConfig['systemInstruction'] ?? modelConfig['system_instruction'] ?? ''}',
               ),
               temperature: _asDoubleOrNull(modelConfig['temperature']),
-              topP: _asDoubleOrNull(modelConfig['topP'] ?? modelConfig['top_p']),
+              topP: _asDoubleOrNull(
+                modelConfig['topP'] ?? modelConfig['top_p'],
+              ),
               topK: _asIntOrNull(modelConfig['topK'] ?? modelConfig['top_k']),
               maxOutputTokens: _asIntOrNull(
                 modelConfig['maxOutputTokens'] ??
                     modelConfig['max_output_tokens'],
               ),
-              stopSequences: _asStringList(
+              stopSequences:
+                  _asStringList(
                     modelConfig['stopSequences'] ??
                         modelConfig['stop_sequences'],
                   ) ??
@@ -76,8 +79,7 @@ class GepaRootAgentPromptOptimizerConfig {
               ),
               seed: _asIntOrNull(modelConfig['seed']),
               candidateCount: _asIntOrNull(
-                modelConfig['candidateCount'] ??
-                    modelConfig['candidate_count'],
+                modelConfig['candidateCount'] ?? modelConfig['candidate_count'],
               ),
               responseLogprobs: _asBoolOrNull(
                 modelConfig['responseLogprobs'] ??
@@ -85,7 +87,8 @@ class GepaRootAgentPromptOptimizerConfig {
               ),
               logprobs: _asIntOrNull(modelConfig['logprobs']),
               thinkingConfig:
-                  modelConfig['thinkingConfig'] ?? modelConfig['thinking_config'],
+                  modelConfig['thinkingConfig'] ??
+                  modelConfig['thinking_config'],
               responseSchema:
                   modelConfig['responseSchema'] ??
                   modelConfig['response_schema'],
@@ -100,11 +103,11 @@ class GepaRootAgentPromptOptimizerConfig {
               ),
               labels: _asStringStringMap(modelConfig['labels']),
             ),
-      maxMetricCalls: _asIntOrNull(
-            json['maxMetricCalls'] ?? json['max_metric_calls'],
-          ) ??
+      maxMetricCalls:
+          _asIntOrNull(json['maxMetricCalls'] ?? json['max_metric_calls']) ??
           100,
-      reflectionMinibatchSize: _asIntOrNull(
+      reflectionMinibatchSize:
+          _asIntOrNull(
             json['reflectionMinibatchSize'] ??
                 json['reflection_minibatch_size'],
           ) ??
@@ -131,7 +134,9 @@ class GepaRootAgentPromptOptimizerConfig {
   /// Serializes this config to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
-      'optimizer_model': optimizerModel is String ? optimizerModel : '$optimizerModel',
+      'optimizer_model': optimizerModel is String
+          ? optimizerModel
+          : '$optimizerModel',
       'model_configuration': <String, Object?>{
         if (modelConfiguration.systemInstruction != null)
           'system_instruction': modelConfiguration.systemInstruction,
@@ -335,11 +340,11 @@ class GepaRootAgentPromptOptimizer
 
     for (int iteration = 0; iteration < iterations; iteration += 1) {
       final List<String> batch = _sampleBatch(trainIds, minibatchSize);
-      final UnstructuredSamplingResult reflectionResult =
-          await sampler.sampleAndScore(
-            initialAgent.clone(update: <String, Object?>{
-              'instruction': bestPrompt,
-            }),
+      final UnstructuredSamplingResult reflectionResult = await sampler
+          .sampleAndScore(
+            initialAgent.clone(
+              update: <String, Object?>{'instruction': bestPrompt},
+            ),
             exampleSet: ExampleSet.train,
             batch: batch,
             captureFullEvalData: true,
@@ -451,7 +456,9 @@ class GepaRootAgentPromptOptimizer
     );
   }
 
-  Future<void> _maybePersistRunArtifacts(Map<String, Object?> gepaResult) async {
+  Future<void> _maybePersistRunArtifacts(
+    Map<String, Object?> gepaResult,
+  ) async {
     final String? runDir = _config.runDir;
     if (runDir == null || runDir.isEmpty) {
       return;
@@ -532,17 +539,19 @@ Return only the improved prompt text.
     List<String> batch,
     UnstructuredSamplingResult result,
   ) {
-    return batch.map((String exampleId) {
-      final Map<String, Object?> evalData = Map<String, Object?>.from(
-        result.data?[exampleId] ?? <String, Object?>{},
-      );
-      return <String, Object?>{
-        _agentPromptName: candidatePrompt,
-        'example_id': exampleId,
-        'score': result.scores[exampleId] ?? 0,
-        'eval_data': evalData,
-      };
-    }).toList(growable: false);
+    return batch
+        .map((String exampleId) {
+          final Map<String, Object?> evalData = Map<String, Object?>.from(
+            result.data?[exampleId] ?? <String, Object?>{},
+          );
+          return <String, Object?>{
+            _agentPromptName: candidatePrompt,
+            'example_id': exampleId,
+            'score': result.scores[exampleId] ?? 0,
+            'eval_data': evalData,
+          };
+        })
+        .toList(growable: false);
   }
 
   Future<double> _scorePrompt(

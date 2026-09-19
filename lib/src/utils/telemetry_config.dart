@@ -56,7 +56,9 @@ void writeTelemetryConsent(bool enabled, {File? configFile}) {
       }
     }
     config['telemetry'] = enabled;
-    file.writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(config)}\n');
+    file.writeAsStringSync(
+      '${const JsonEncoder.withIndent('  ').convert(config)}\n',
+    );
   } catch (e) {
     rethrow;
   }

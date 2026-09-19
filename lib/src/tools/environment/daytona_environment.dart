@@ -53,9 +53,10 @@ class DaytonaEnvironment extends BaseEnvironment {
       'https://app.daytona.io/api';
 
   Map<String, String> get _headers => <String, String>{
-        'Content-Type': 'application/json',
-        if (_effectiveApiKey.isNotEmpty) 'Authorization': 'Bearer $_effectiveApiKey',
-      };
+    'Content-Type': 'application/json',
+    if (_effectiveApiKey.isNotEmpty)
+      'Authorization': 'Bearer $_effectiveApiKey',
+  };
 
   @override
   Future<void> initialize() async {
@@ -154,14 +155,13 @@ class DaytonaEnvironment extends BaseEnvironment {
       }
 
       return EnvironmentExecutionResult(
-        exitCode: response.statusCode >= 200 && response.statusCode < 300 ? 0 : 1,
+        exitCode: response.statusCode >= 200 && response.statusCode < 300
+            ? 0
+            : 1,
         stdout: response.body,
       );
     } catch (error) {
-      return EnvironmentExecutionResult(
-        exitCode: -1,
-        stderr: error.toString(),
-      );
+      return EnvironmentExecutionResult(exitCode: -1, stderr: error.toString());
     } finally {
       if (_httpClient == null) {
         client.close();

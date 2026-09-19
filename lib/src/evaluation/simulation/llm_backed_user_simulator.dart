@@ -117,9 +117,7 @@ class LlmBackedUserSimulator
        _userPersona = conversationScenario.userPersona,
        _llmFactory = llmFactory ?? _defaultLlmFactory,
        _invocationCount = 0,
-       super(
-         configDecoder: LlmBackedUserSimulatorConfig.fromBase,
-       ) {
+       super(configDecoder: LlmBackedUserSimulatorConfig.fromBase) {
     _llm = _llmFactory(config.model);
   }
 

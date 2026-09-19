@@ -48,6 +48,9 @@ class ReadonlyContext {
   /// Cooperative cancellation signal for this invocation.
   AdkAbortSignal? get abortSignal => _invocationContext.abortSignal;
 
+  /// Whether this invocation has been requested to abort.
+  bool get isAborted => _invocationContext.isAborted;
+
   /// Returns an invocation-scoped credential for [key], if available.
   AuthCredential? getCredential(String key) {
     return _invocationContext.credentialByKey[key];

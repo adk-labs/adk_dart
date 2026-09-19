@@ -124,6 +124,9 @@ class CodeExecutionUtils {
 
     for (int i = 0; i < content.parts.length; i += 1) {
       final Part part = content.parts[i];
+      if (part.thought) {
+        continue;
+      }
       final String? code = _extractExecutableCode(part.executableCode);
       final bool hasAssociatedResult =
           i + 1 < content.parts.length &&
@@ -135,7 +138,10 @@ class CodeExecutionUtils {
     }
 
     final List<Part> textParts = content.parts
-        .where((Part part) => part.text != null && part.text!.isNotEmpty)
+        .where(
+          (Part part) =>
+              part.text != null && part.text!.isNotEmpty && !part.thought,
+        )
         .toList(growable: false);
     if (textParts.isEmpty) {
       return null;
@@ -188,6 +194,26 @@ class CodeExecutionUtils {
 
     content.parts.add(buildExecutableCodePart(bestCode));
     return bestCode;
+  }
+
+  /// Returns the content without the model's private reasoning, and those parts.
+  static (Content, List<Part>) splitThoughts(
+    Content content, {
+    bool signedOnly = false,
+  }) {
+    final List<Part> kept = <Part>[];
+    final List<Part> thoughts = <Part>[];
+    for (final Part part in content.parts) {
+      if (part.thought && (part.thoughtSignature != null || !signedOnly)) {
+        thoughts.add(part);
+      } else {
+        kept.add(part);
+      }
+    }
+    if (thoughts.isEmpty) {
+      return (content, <Part>[]);
+    }
+    return (Content(role: content.role, parts: kept), thoughts);
   }
 
   /// Builds an executable-code [Part] from [code].

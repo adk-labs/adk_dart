@@ -23,8 +23,8 @@ class ReflectAndRetryModelPlugin extends BasePlugin {
     this.throwExceptionIfRetryExceeded = true,
     this.trackingScope = TrackingScope.invocation,
     List<String>? onModelErrors,
-  })  : assert(maxRetries >= 0, 'maxRetries must be a non-negative integer.'),
-        onModelErrors = onModelErrors ?? <String>['MALFORMED_FUNCTION_CALL'];
+  }) : assert(maxRetries >= 0, 'maxRetries must be a non-negative integer.'),
+       onModelErrors = onModelErrors ?? <String>['MALFORMED_FUNCTION_CALL'];
 
   /// Maximum consecutive model failures before giving up.
   final int maxRetries;
@@ -64,7 +64,8 @@ class ReflectAndRetryModelPlugin extends BasePlugin {
     required int retryCount,
   }) {
     return <String, dynamic>{
-      'reflection_guidance': '''
+      'reflection_guidance':
+          '''
 The call to the model failed.
 
 **Reflection Guidance:**
@@ -72,7 +73,8 @@ The call to the model failed.
 - Analyze the error and the arguments you provided. Do not repeat the exact same call.
 
 Formulate a new plan based on your analysis and try a corrected or different approach.
-'''.trim(),
+'''
+              .trim(),
     };
   }
 
@@ -190,8 +192,10 @@ Formulate a new plan based on your analysis and try a corrected or different app
     final String scopeKey = _getModelScopeKey(callbackContext);
     final String modelName = _getModelNameFromContext(callbackContext);
 
-    final int currentRetries =
-        await _incrementModelFailureCount(scopeKey, modelName);
+    final int currentRetries = await _incrementModelFailureCount(
+      scopeKey,
+      modelName,
+    );
 
     if (currentRetries <= maxRetries) {
       final Part retryPart = _generateModelRetryPart(
@@ -201,10 +205,7 @@ Formulate a new plan based on your analysis and try a corrected or different app
         finishReason: finishReason,
       );
       return LlmResponse(
-        content: Content(
-          role: 'model',
-          parts: <Part>[retryPart],
-        ),
+        content: Content(role: 'model', parts: <Part>[retryPart]),
       );
     }
 
@@ -247,10 +248,14 @@ Formulate a new plan based on your analysis and try a corrected or different app
   }
 
   Future<int> _incrementModelFailureCount(
-      String scopeKey, String modelName) async {
+    String scopeKey,
+    String modelName,
+  ) async {
     return _synchronized<int>(() {
-      final Map<String, int> counter =
-          _scopedFailureCounters.putIfAbsent(scopeKey, () => <String, int>{});
+      final Map<String, int> counter = _scopedFailureCounters.putIfAbsent(
+        scopeKey,
+        () => <String, int>{},
+      );
       final int newCount = (counter[modelName] ?? 0) + 1;
       counter[modelName] = newCount;
       return newCount;
@@ -258,7 +263,9 @@ Formulate a new plan based on your analysis and try a corrected or different app
   }
 
   Future<void> _resetModelFailureCount(
-      String scopeKey, String modelName) async {
+    String scopeKey,
+    String modelName,
+  ) async {
     await _synchronized<void>(() {
       final Map<String, int>? counter = _scopedFailureCounters[scopeKey];
       counter?.remove(modelName);

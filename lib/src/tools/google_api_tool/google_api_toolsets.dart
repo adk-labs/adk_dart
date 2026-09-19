@@ -16,10 +16,7 @@ class BigQueryToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'bigquery',
-         'v2',
-       );
+  }) : super('bigquery', 'v2');
 }
 
 /// Google Calendar API toolset wrapper.
@@ -35,10 +32,7 @@ class CalendarToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'calendar',
-         'v3',
-       );
+  }) : super('calendar', 'v3');
 }
 
 /// Google Gmail API toolset wrapper.
@@ -54,10 +48,7 @@ class GmailToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'gmail',
-         'v1',
-       );
+  }) : super('gmail', 'v1');
 }
 
 /// YouTube Data API toolset wrapper.
@@ -73,10 +64,7 @@ class YoutubeToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'youtube',
-         'v3',
-       );
+  }) : super('youtube', 'v3');
 }
 
 /// Google Slides API toolset wrapper.
@@ -92,10 +80,7 @@ class SlidesToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'slides',
-         'v1',
-       );
+  }) : super('slides', 'v1');
 }
 
 /// Google Sheets API toolset wrapper.
@@ -111,10 +96,7 @@ class SheetsToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'sheets',
-         'v4',
-       );
+  }) : super('sheets', 'v4');
 }
 
 /// Google Docs API toolset wrapper.
@@ -130,8 +112,5 @@ class DocsToolset extends GoogleApiToolset {
     super.openApiSpec,
     super.specFetcher,
     super.requestExecutor,
-  }) : super(
-         'docs',
-         'v1',
-       );
+  }) : super('docs', 'v1');
 }

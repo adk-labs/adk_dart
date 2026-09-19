@@ -191,6 +191,12 @@ class McpTool extends BaseAuthenticatedTool {
         headers: headers.isEmpty ? null : headers,
       );
     } catch (error) {
+      if (isSessionTerminatedError(error)) {
+        await _sessionManager.discardSession(
+          _connectionParams,
+          headers: headers.isEmpty ? null : headers,
+        );
+      }
       if (!isFeatureEnabled(FeatureName.mcpGracefulErrorHandling)) {
         rethrow;
       }

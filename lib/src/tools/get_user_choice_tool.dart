@@ -11,11 +11,11 @@ const String getUserChoiceFunctionName = 'get_user_choice';
 class GetUserChoiceTool extends BaseTool {
   /// Creates a get_user_choice tool instance.
   GetUserChoiceTool()
-      : super(
-          name: getUserChoiceFunctionName,
-          description:
-              'Presents a list of options to the user and awaits their selection.',
-        );
+    : super(
+        name: getUserChoiceFunctionName,
+        description:
+            'Presents a list of options to the user and awaits their selection.',
+      );
 
   @override
   FunctionDeclaration? getDeclaration() {

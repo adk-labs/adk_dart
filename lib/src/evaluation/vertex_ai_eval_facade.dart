@@ -241,7 +241,9 @@ class MultiTurnVertexAiEvalFacade extends Evaluator {
     }
 
     final Invocation actual = actualInvocations.last;
-    final Invocation? expectedInvocation = expected.isEmpty ? null : expected.last;
+    final Invocation? expectedInvocation = expected.isEmpty
+        ? null
+        : expected.last;
     final Map<String, String?> row = <String, String?>{
       'prompt': _serializeConversation(
         actualInvocations,

@@ -80,9 +80,11 @@ class CloudRunSandboxCodeExecutor extends BaseCodeExecutor {
     // We run the same python binary as the current process, using its
     // absolute path to avoid PATH resolution issues inside the sandbox
     // (where PATH might be empty).
-    command.add(Platform.resolvedExecutable.isNotEmpty
-        ? Platform.resolvedExecutable
-        : 'python3');
+    command.add(
+      Platform.resolvedExecutable.isNotEmpty
+          ? Platform.resolvedExecutable
+          : 'python3',
+    );
 
     try {
       final Process process = await Process.start(

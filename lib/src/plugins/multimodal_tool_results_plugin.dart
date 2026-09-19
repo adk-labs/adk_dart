@@ -34,11 +34,13 @@ Map<String, Object?> _partToJson(Part part) {
   return <String, Object?>{
     if (part.text != null) 'text': part.text,
     if (part.thought) 'thought': true,
-    if (part.thoughtSignature != null) 'thought_signature': part.thoughtSignature,
+    if (part.thoughtSignature != null)
+      'thought_signature': part.thoughtSignature,
     if (part.fileData != null)
       'file_data': <String, Object?>{
         'file_uri': part.fileData!.fileUri,
-        if (part.fileData!.mimeType != null) 'mime_type': part.fileData!.mimeType,
+        if (part.fileData!.mimeType != null)
+          'mime_type': part.fileData!.mimeType,
         if (part.fileData!.displayName != null)
           'display_name': part.fileData!.displayName,
       },
@@ -74,16 +76,13 @@ Part _partFromJson(Map<String, Object?> map) {
       mimeType: (inlineDataObj['mime_type'] ?? inlineDataObj['mimeType'] ?? '')
           .toString(),
       data: bytes,
-      displayName: (inlineDataObj['display_name'] ??
-              inlineDataObj['displayName'])
-          ?.toString(),
+      displayName:
+          (inlineDataObj['display_name'] ?? inlineDataObj['displayName'])
+              ?.toString(),
     );
   }
   final String? text = map['text']?.toString();
-  return Part.text(
-    text ?? '',
-    thought: map['thought'] == true,
-  );
+  return Part.text(text ?? '', thought: map['thought'] == true);
 }
 
 List<Part>? _extractParts(Object? value) {
@@ -246,8 +245,7 @@ class MultimodalToolResultsPlugin extends BasePlugin {
 
       final List<Part> currentParts = <Part>[];
       if (callbackContext.state.containsKey(_currentTurnPartsKey)) {
-        final Object? current =
-            callbackContext.state[_currentTurnPartsKey];
+        final Object? current = callbackContext.state[_currentTurnPartsKey];
         final List<Part>? extracted = _extractParts(current);
         if (extracted != null) {
           currentParts.addAll(extracted);
@@ -255,7 +253,9 @@ class MultimodalToolResultsPlugin extends BasePlugin {
       }
 
       final List<Part> filteredSessionParts = sessionParts
-          .where((Part sp) => !currentParts.any((Part cp) => _isSamePart(cp, sp)))
+          .where(
+            (Part sp) => !currentParts.any((Part cp) => _isSamePart(cp, sp)),
+          )
           .toList();
 
       final List<Part> partsToAttach = <Part>[

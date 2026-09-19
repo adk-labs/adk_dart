@@ -1,10 +1,19 @@
-/// Capability checks for structured output schema support.
-library;
-
+import '../agents/llm_agent.dart';
 import '../models/base_llm.dart';
 import '../models/lite_llm.dart';
 import 'model_name_utils.dart';
 import 'variant_utils.dart';
+
+/// Single source of truth for whether output schema can be set natively on LlmRequest.
+bool canSetNativeOutputSchema(LlmAgent agent) {
+  if (agent.outputSchema == null) {
+    return false;
+  }
+  if (agent.tools.isEmpty) {
+    return true;
+  }
+  return canUseOutputSchemaWithTools(agent.canonicalModel);
+}
 
 /// Whether [model] can use output schema together with tool calling.
 ///

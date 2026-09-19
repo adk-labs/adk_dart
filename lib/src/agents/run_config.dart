@@ -24,6 +24,38 @@ enum ToolExecutionMode {
   parallelSubscribe,
 }
 
+/// Serving tiers the Gemini/interactions API offers for a model call.
+enum ServiceTier {
+  /// Best-effort capacity at a lower cost, with no latency guarantee.
+  flex('flex'),
+
+  /// The default tier.
+  standard('standard'),
+
+  /// Reserved capacity for latency-sensitive calls.
+  priority('priority'),
+
+  /// Queued to run on off-peak capacity.
+  ///
+  /// The call waits for room instead of being turned away when capacity is
+  /// tight. Cannot be combined with streaming.
+  deferred('deferred');
+
+  const ServiceTier(this.value);
+
+  /// The string wire value.
+  final String value;
+
+  /// Resolves a [ServiceTier] from string, or returns `null`.
+  static ServiceTier? fromString(String? value) {
+    if (value == null) return null;
+    for (final ServiceTier tier in ServiceTier.values) {
+      if (tier.value == value) return tier;
+    }
+    return null;
+  }
+}
+
 final BigInt _pythonSysMaxSize = BigInt.parse('9223372036854775807');
 const int _defaultMaxLlmCallsValue = 500;
 
@@ -78,9 +110,8 @@ class RunConfig {
     this.includeThoughtsFromOtherAgents = false,
     this.labels,
     this.explicitVadSignal,
-  }) : maxLlmCalls = validateMaxLlmCalls(
-         maxLlmCalls ?? _defaultMaxLlmCalls(),
-       );
+    this.serviceTier,
+  }) : maxLlmCalls = validateMaxLlmCalls(maxLlmCalls ?? _defaultMaxLlmCalls());
 
   /// Whether CFC behavior is enabled.
   bool supportCfc;
@@ -159,6 +190,11 @@ class RunConfig {
   /// Whether to request explicit Voice Activity Detection (VAD) signals from Live mode.
   bool? explicitVadSignal;
 
+  /// Serving tier for model calls of this run (e.g., 'flex', 'standard', 'priority', 'deferred').
+  ///
+  /// Corresponds to [ServiceTier.value] or a custom tier string.
+  String? serviceTier;
+
   /// Validates [value] for [maxLlmCalls].
   static int validateMaxLlmCalls(int value) {
     if (BigInt.from(value) >= _pythonSysMaxSize) {
@@ -202,6 +238,7 @@ class RunConfig {
     Object? modelInputContext = _sentinel,
     bool? includeThoughtsFromOtherAgents,
     Map<String, String>? labels,
+    String? serviceTier,
   }) {
     return RunConfig(
       supportCfc: supportCfc ?? this.supportCfc,
@@ -267,13 +304,11 @@ class RunConfig {
                 .toList()
           : modelInputContext as List<Content>?,
       includeThoughtsFromOtherAgents:
-          includeThoughtsFromOtherAgents ??
-          this.includeThoughtsFromOtherAgents,
+          includeThoughtsFromOtherAgents ?? this.includeThoughtsFromOtherAgents,
       labels:
           labels ??
-          (this.labels == null
-              ? null
-              : Map<String, String>.from(this.labels!)),
+          (this.labels == null ? null : Map<String, String>.from(this.labels!)),
+      serviceTier: serviceTier ?? this.serviceTier,
     );
   }
 }

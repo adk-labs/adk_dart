@@ -23,6 +23,7 @@ class FunctionTool extends BaseTool {
     String? description,
     this.requireConfirmation = false,
     List<String>? toolContextParamNames,
+    super.behavior,
   }) : toolContextParamNames = _normalizeToolContextParamNames(
          toolContextParamNames,
        ),
@@ -45,8 +46,33 @@ class FunctionTool extends BaseTool {
   @override
   /// Returns a simple declaration derived from [name] and [description].
   FunctionDeclaration? getDeclaration() {
-    return _cachedDeclaration ??=
-        FunctionDeclaration(name: name, description: description);
+    return _cachedDeclaration ??= FunctionDeclaration(
+      name: name,
+      description: description,
+    );
+  }
+
+  @override
+  Future<bool> checkRequireConfirmation(
+    Map<String, dynamic> args,
+    ToolContext toolContext,
+  ) async {
+    if (requireConfirmation is bool) {
+      return requireConfirmation as bool;
+    }
+    if (requireConfirmation is Function) {
+      try {
+        final Object? result = await _invokeFunction(
+          target: requireConfirmation as Function,
+          args: args,
+          toolContext: toolContext,
+        );
+        return result == true;
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
   }
 
   @override

@@ -10,8 +10,7 @@ import '../tool_context.dart';
 import 'config.dart';
 
 /// Base REST endpoint for Data Agent API calls.
-const String dataAgentBaseUrl =
-    'https://geminidataanalytics.googleapis.com/v1';
+const String dataAgentBaseUrl = 'https://geminidataanalytics.googleapis.com/v1';
 
 /// Client identifier value sent in Data Agent request headers.
 const String dataAgentClientId = 'GOOGLE_ADK';
@@ -151,10 +150,7 @@ Future<Map<String, Object?>> deleteDataAgent({
     final Map<String, String> headers = _getHttpHeaders(credentials);
     final Uri uri = Uri.parse('$dataAgentBaseUrl/$dataAgentName');
     final Map<String, Object?> response =
-        await (httpDelete ?? _defaultHttpDelete)(
-          uri: uri,
-          headers: headers,
-        );
+        await (httpDelete ?? _defaultHttpDelete)(uri: uri, headers: headers);
     return <String, Object?>{'status': 'SUCCESS', 'response': response};
   } catch (error) {
     return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
@@ -197,7 +193,7 @@ Future<Map<String, Object?>> updateDataAgent({
     }
     final Map<String, Object?> payload = agentConfig is String
         ? (_tryDecodeJson(agentConfig) as Map<String, Object?>? ??
-            <String, Object?>{})
+              <String, Object?>{})
         : _readMap(agentConfig);
 
     final Map<String, String> headers = _getHttpHeaders(credentials);

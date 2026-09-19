@@ -52,8 +52,6 @@ class VertexAiLoadProfilesTool extends BaseTool {
         .where((String text) => text.isNotEmpty)
         .toList(growable: false);
 
-    return <String, Object?>{
-      'profiles': profiles,
-    };
+    return <String, Object?>{'profiles': profiles};
   }
 }

@@ -138,6 +138,9 @@ BaseCodeExecutor? _getCodeExecutor(InvocationContext invocationContext) {
 /// Extracts the first fenced code block from [content].
 String? _extractFirstCodeBlock(Content content) {
   for (final Part part in content.parts) {
+    if (part.thought) {
+      continue;
+    }
     final String? text = part.text;
     if (text == null || text.isEmpty) {
       continue;

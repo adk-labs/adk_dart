@@ -71,9 +71,7 @@ class LlmEventSummarizer extends BaseEventsSummarizer {
         final FunctionResponse? functionResponse = part.functionResponse;
         if (functionResponse != null) {
           final String response = _truncate('${functionResponse.response}');
-          history.add(
-            'Tool response from ${functionResponse.name}: $response',
-          );
+          history.add('Tool response from ${functionResponse.name}: $response');
         }
       }
     }

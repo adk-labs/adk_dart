@@ -208,10 +208,7 @@ class RubricBasedFinalResponseQualityV1Evaluator extends RubricBasedEvaluator {
   RubricBasedFinalResponseQualityV1Evaluator(
     EvalMetricSpec evalMetric, {
     super.autoRaterInvoker,
-  }) : super(
-         evalMetric: evalMetric,
-         rubricType: 'FINAL_RESPONSE_QUALITY',
-       );
+  }) : super(evalMetric: evalMetric, rubricType: 'FINAL_RESPONSE_QUALITY');
 
   @override
   String formatAutoRaterPrompt(

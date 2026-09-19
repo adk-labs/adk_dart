@@ -881,7 +881,8 @@ class BaseLlmFlow {
     if (context.isResumable &&
         events.isNotEmpty &&
         events.last.partial != true &&
-        events.last.getFunctionCalls().isNotEmpty) {
+        events.last.getFunctionCalls().isNotEmpty &&
+        events.last.author == context.agent.name) {
       final Event functionCallEvent = events.last;
       await for (final Event event in _postprocessHandleFunctionCallsAsync(
         context,
@@ -1097,7 +1098,8 @@ class BaseLlmFlow {
         (response.content == null || response.content!.parts.isEmpty) &&
         context.runConfig?.streamingMode != StreamingMode.sse) {
       response.errorCode = 'MODEL_RETURNED_NO_CONTENT';
-      response.errorMessage = response.errorMessage ??
+      response.errorMessage =
+          response.errorMessage ??
           'The model returned no content (finish_reason=STOP with empty parts).';
     }
 
@@ -1373,8 +1375,9 @@ class BaseLlmFlow {
     }
     return replacement.copyWith(
       partial: inheritPartial ? original.partial : replacement.partial,
-      turnComplete:
-          inheritTurnComplete ? original.turnComplete : replacement.turnComplete,
+      turnComplete: inheritTurnComplete
+          ? original.turnComplete
+          : replacement.turnComplete,
     );
   }
 
@@ -1554,8 +1557,9 @@ class BaseLlmFlow {
           "Cannot transfer from '${currentAgent.name}' to parent agent '$agentName': disallow_transfer_to_parent is set.",
         );
       }
-      final Set<String> allowedNames =
-          getTransferTargets(currentAgent).map((BaseAgent a) => a.name).toSet();
+      final Set<String> allowedNames = getTransferTargets(
+        currentAgent,
+      ).map((BaseAgent a) => a.name).toSet();
       if (!allowedNames.contains(agent.name)) {
         throw ArgumentError(
           "Agent '${currentAgent.name}' is not allowed to transfer to agent '$agentName'.",

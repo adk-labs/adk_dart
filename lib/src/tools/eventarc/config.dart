@@ -41,18 +41,16 @@ class EventarcCredentialsConfig extends BaseGoogleCredentialsConfig {
     String? accessToken,
     this.serviceAccountEmail,
   }) : super(
-         credentials:
-             accessToken != null
-                 ? GoogleOAuthCredential(accessToken: accessToken)
-                 : credentials,
+         credentials: accessToken != null
+             ? GoogleOAuthCredential(accessToken: accessToken)
+             : credentials,
        );
 
   /// Optional service account email.
   final String? serviceAccountEmail;
 
   /// Explicit access token, when present.
-  String? get accessToken =>
-      credentials is GoogleOAuthCredential
-          ? (credentials! as GoogleOAuthCredential).accessToken
-          : null;
+  String? get accessToken => credentials is GoogleOAuthCredential
+      ? (credentials! as GoogleOAuthCredential).accessToken
+      : null;
 }

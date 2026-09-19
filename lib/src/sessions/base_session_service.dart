@@ -20,7 +20,9 @@ class GetSessionConfig {
   int? get numRecentEvents => _numRecentEvents;
   set numRecentEvents(int? value) {
     if (value != null && value < 0) {
-      throw ArgumentError('num_recent_events must be greater than or equal to 0.');
+      throw ArgumentError(
+        'num_recent_events must be greater than or equal to 0.',
+      );
     }
     _numRecentEvents = value;
   }
@@ -88,6 +90,14 @@ abstract class BaseSessionService {
     );
   }
 
+  /// Commits [event] to the in-memory [session], updating state and appending it to events.
+  Event commitEventToSession({required Session session, required Event event}) {
+    _updateSessionState(session: session, event: event);
+    final Event persisted = eventForPersistence(event);
+    session.events.add(persisted);
+    return persisted;
+  }
+
   /// Appends [event] to [session] and updates persisted session state.
   Future<Event> appendEvent({
     required Session session,
@@ -97,10 +107,7 @@ abstract class BaseSessionService {
       return event;
     }
 
-    _updateSessionState(session: session, event: event);
-    final Event persisted = eventForPersistence(event);
-    session.events.add(persisted);
-    return persisted;
+    return commitEventToSession(session: session, event: event);
   }
 
   /// Flushes buffered events for session services that batch writes.

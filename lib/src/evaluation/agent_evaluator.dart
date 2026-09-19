@@ -205,10 +205,10 @@ class AgentEvaluator {
             final String metricDump = metricFailures.isNotEmpty
                 ? metricFailures.join('; ')
                 : summary.metrics
-                    .map((AgentMetricAggregate metric) {
-                      return '${metric.metricName}(${metric.averageScore} < ${metric.threshold})';
-                    })
-                    .join(', ');
+                      .map((AgentMetricAggregate metric) {
+                        return '${metric.metricName}(${metric.averageScore} < ${metric.threshold})';
+                      })
+                      .join(', ');
             failures.add(
               'Eval case `${summary.evalCaseId}` failed in `$testFile`: $metricDump',
             );

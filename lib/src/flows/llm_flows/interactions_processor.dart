@@ -13,8 +13,7 @@ class InteractionsRequestProcessor extends BaseLlmRequestProcessor {
     InvocationContext invocationContext,
     LlmRequest llmRequest,
   ) async* {
-    final (String? previousInteractionId, _) =
-        findPreviousInteractionState(
+    final (String? previousInteractionId, _) = findPreviousInteractionState(
       events: invocationContext.session.events,
       agentName: invocationContext.agent.name,
       currentBranch: invocationContext.branch,

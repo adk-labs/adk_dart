@@ -21,7 +21,8 @@ class LiteLlmException implements Exception {
   final Uri? uri;
 
   @override
-  String toString() => 'LiteLlmException: $message${uri != null ? ' (uri: $uri)' : ''}';
+  String toString() =>
+      'LiteLlmException: $message${uri != null ? ' (uri: $uri)' : ''}';
 }
 
 /// Hook for overriding LiteLLM generation behavior.
@@ -152,7 +153,8 @@ class LiteLlm extends BaseLlm {
       final List<Map<String, Object?>> tools = <Map<String, Object?>>[];
       for (final ToolDeclaration tool in requestTools) {
         if (tool.functionDeclarations.isNotEmpty) {
-          for (final FunctionDeclaration declaration in tool.functionDeclarations) {
+          for (final FunctionDeclaration declaration
+              in tool.functionDeclarations) {
             tools.add(<String, Object?>{
               'type': 'function',
               'function': <String, Object?>{
@@ -169,25 +171,33 @@ class LiteLlm extends BaseLlm {
             if (tool.googleSearch != null)
               'google_search': _deepCopyJsonValue(tool.googleSearch),
             if (tool.googleSearchRetrieval != null)
-              'google_search_retrieval': _deepCopyJsonValue(tool.googleSearchRetrieval),
+              'google_search_retrieval': _deepCopyJsonValue(
+                tool.googleSearchRetrieval,
+              ),
             if (tool.codeExecution != null)
               'code_execution': _deepCopyJsonValue(tool.codeExecution),
             if (tool.googleMaps != null)
               'google_maps': _deepCopyJsonValue(tool.googleMaps),
             if (tool.enterpriseWebSearch != null)
-              'enterprise_web_search': _deepCopyJsonValue(tool.enterpriseWebSearch),
+              'enterprise_web_search': _deepCopyJsonValue(
+                tool.enterpriseWebSearch,
+              ),
             if (tool.computerUse != null)
               'computer_use': _deepCopyJsonValue(tool.computerUse),
             if (tool.googleSearch != null)
               'googleSearch': _deepCopyJsonValue(tool.googleSearch),
             if (tool.googleSearchRetrieval != null)
-              'googleSearchRetrieval': _deepCopyJsonValue(tool.googleSearchRetrieval),
+              'googleSearchRetrieval': _deepCopyJsonValue(
+                tool.googleSearchRetrieval,
+              ),
             if (tool.codeExecution != null)
               'codeExecution': _deepCopyJsonValue(tool.codeExecution),
             if (tool.googleMaps != null)
               'googleMaps': _deepCopyJsonValue(tool.googleMaps),
             if (tool.enterpriseWebSearch != null)
-              'enterpriseWebSearch': _deepCopyJsonValue(tool.enterpriseWebSearch),
+              'enterpriseWebSearch': _deepCopyJsonValue(
+                tool.enterpriseWebSearch,
+              ),
             if (tool.computerUse != null)
               'computerUse': _deepCopyJsonValue(tool.computerUse),
           };
@@ -286,7 +296,8 @@ class LiteLlm extends BaseLlm {
       return;
     }
 
-    final LiteLlmCompletionsInvoker invoker = completionsInvoker ?? _defaultHttpCompletionsInvoker;
+    final LiteLlmCompletionsInvoker invoker =
+        completionsInvoker ?? _defaultHttpCompletionsInvoker;
 
     final List<Map<String, Object?>> responses = await invoker(
       payload: buildPayload(prepared, stream: stream),
@@ -310,10 +321,12 @@ class LiteLlm extends BaseLlm {
             level: 1000,
           );
         }
-        final List<Object?> filteredChoices = choices.where((Object? c) {
-          final Object? idx = _asMap(c)['index'];
-          return idx == null || idx == 0;
-        }).toList(growable: false);
+        final List<Object?> filteredChoices = choices
+            .where((Object? c) {
+              final Object? idx = _asMap(c)['index'];
+              return idx == null || idx == 0;
+            })
+            .toList(growable: false);
         if (choices.isNotEmpty && filteredChoices.isEmpty) {
           continue;
         }
@@ -332,13 +345,15 @@ class LiteLlm extends BaseLlm {
     required bool stream,
   }) async {
     final Map<String, String> env = readSystemEnvironment();
-    final String resolvedBaseUrl = baseUrl ??
+    final String resolvedBaseUrl =
+        baseUrl ??
         env['LITELLM_API_BASE'] ??
         env['OLLAMA_API_BASE'] ??
         env['OPENAI_API_BASE'] ??
         'http://localhost:4000/v1';
 
-    final String resolvedApiKey = apiKey ??
+    final String resolvedApiKey =
+        apiKey ??
         env['LITELLM_API_KEY'] ??
         env['OLLAMA_API_KEY'] ??
         env['OPENAI_API_KEY'] ??
@@ -357,7 +372,9 @@ class LiteLlm extends BaseLlm {
         ..body = jsonEncode(payload);
 
       final http.Client client = http.Client();
-      final http.StreamedResponse streamedResponse = await client.send(httpRequest);
+      final http.StreamedResponse streamedResponse = await client.send(
+        httpRequest,
+      );
 
       if (streamedResponse.statusCode != 200) {
         final String errorBody = await streamedResponse.stream.bytesToString();
@@ -384,7 +401,8 @@ class LiteLlm extends BaseLlm {
             continue;
           }
           try {
-            final Map<String, Object?> parsed = jsonDecode(dataContent) as Map<String, Object?>;
+            final Map<String, Object?> parsed =
+                jsonDecode(dataContent) as Map<String, Object?>;
             chunks.add(parsed);
           } catch (_) {
             // Ignore malformed chunks
@@ -407,7 +425,8 @@ class LiteLlm extends BaseLlm {
         );
       }
 
-      final Map<String, Object?> data = jsonDecode(response.body) as Map<String, Object?>;
+      final Map<String, Object?> data =
+          jsonDecode(response.body) as Map<String, Object?>;
       return <Map<String, Object?>>[data];
     }
   }
@@ -474,8 +493,7 @@ List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {
       }
       final String text = '${block['thinking'] ?? ''}'.trim();
       final Object? signature = block['signature'];
-      final bool hasSignature =
-          signature != null && '$signature'.isNotEmpty;
+      final bool hasSignature = signature != null && '$signature'.isNotEmpty;
       // Anthropic streams a signature in a final chunk with empty text.
       // Preserve signature-only blocks so the signature survives aggregation;
       // blocks with neither text nor signature are still skipped. Only apply
@@ -549,9 +567,10 @@ List<Part> _aggregateStreamingThoughtParts(Iterable<Part> thoughtParts) {
     }
     if (part.thoughtSignature != null) {
       aggregated.add(
-        Part.text(currentTexts.join(), thought: true).copyWith(
-          thoughtSignature: part.thoughtSignature,
-        ),
+        Part.text(
+          currentTexts.join(),
+          thought: true,
+        ).copyWith(thoughtSignature: part.thoughtSignature),
       );
       currentTexts.clear();
     }

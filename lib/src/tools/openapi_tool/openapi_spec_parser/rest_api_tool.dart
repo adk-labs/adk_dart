@@ -96,9 +96,7 @@ class RestApiTool extends BaseTool {
        _credentialKey = credentialKey,
        _requestExecutor = requestExecutor ?? _request,
        credentialExchanger = AutoAuthCredentialExchanger(),
-       super(
-         name: name.length > 60 ? name.substring(0, 60) : name,
-       ) {
+       super(name: name.length > 60 ? name.substring(0, 60) : name) {
     configureAuthCredential(authCredential);
     configureAuthScheme(authScheme);
     if (shouldParseOperation) {
@@ -289,8 +287,9 @@ class RestApiTool extends BaseTool {
       final String originalName = parameter.originalName;
       switch (parameter.paramLocation) {
         case 'path':
-          pathParams[originalName] =
-              Uri.encodeComponent('${entry.value ?? ''}');
+          pathParams[originalName] = Uri.encodeComponent(
+            '${entry.value ?? ''}',
+          );
           break;
         case 'query':
           if (_isTruthy(entry.value)) {

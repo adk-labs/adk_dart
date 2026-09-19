@@ -103,10 +103,7 @@ class FinalResponseMatchV2Evaluator extends LlmAsJudge {
     String? autoRaterPromptTemplate,
   }) : _autoRaterPromptTemplate =
            autoRaterPromptTemplate ?? _finalResponseMatchV2Prompt,
-       super(
-         evalMetric: _evalMetric,
-         expectedInvocationsRequired: true,
-       ) {
+       super(evalMetric: _evalMetric, expectedInvocationsRequired: true) {
     if (_evalMetric.criterion == null) {
       throw ArgumentError(
         '`${_evalMetric.metricName}` metric expects a criterion of type '

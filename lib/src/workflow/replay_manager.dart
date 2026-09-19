@@ -40,8 +40,9 @@ class ReplayManager {
       }
 
       final NodePathBuilder pathBuilder = NodePathBuilder.fromString(path);
-      final String parentPath =
-          pathBuilder.parent != null ? pathBuilder.parent.toString() : '';
+      final String parentPath = pathBuilder.parent != null
+          ? pathBuilder.parent.toString()
+          : '';
 
       _addEventToIndex(parentPath, event);
 
@@ -135,12 +136,18 @@ class ReplayManager {
 
   /// Ensure a sequence barrier is set up for dynamic nodes under parentPath.
   ReplaySequenceBarrier prepareParentSequenceBarrier(
-      Context ctx, String parentPath) {
+    Context ctx,
+    String parentPath,
+  ) {
     return _parentSequenceBarriers.putIfAbsent(parentPath, () {
       _ensureIndex(ctx);
       final List<Event> events = _eventsByParent[parentPath] ?? <Event>[];
-      final List<String> seq =
-          _scanSequence(events, ctx, parentPath, strictDirectChild: true);
+      final List<String> seq = _scanSequence(
+        events,
+        ctx,
+        parentPath,
+        strictDirectChild: true,
+      );
       return ReplaySequenceBarrier(seq);
     });
   }
@@ -151,20 +158,24 @@ class ReplayManager {
     String basePath, {
     required bool strictDirectChild,
   }) {
-    final NodePathBuilder basePathBuilder = NodePathBuilder.fromString(basePath);
+    final NodePathBuilder basePathBuilder = NodePathBuilder.fromString(
+      basePath,
+    );
     final List<String> sequence = <String>[];
 
     for (final Event event in events) {
       final String eventNodePath = event.nodeInfo.path;
-      final NodePathBuilder eventPathBuilder =
-          NodePathBuilder.fromString(eventNodePath);
+      final NodePathBuilder eventPathBuilder = NodePathBuilder.fromString(
+        eventNodePath,
+      );
 
       if (!eventPathBuilder.isDescendantOf(basePathBuilder)) {
         continue;
       }
 
-      final NodePathBuilder childPath =
-          basePathBuilder.getDirectChild(eventPathBuilder);
+      final NodePathBuilder childPath = basePathBuilder.getDirectChild(
+        eventPathBuilder,
+      );
       if (strictDirectChild && eventPathBuilder != childPath) {
         continue;
       }

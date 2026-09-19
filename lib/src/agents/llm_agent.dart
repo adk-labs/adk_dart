@@ -427,8 +427,10 @@ class LlmAgent extends BaseAgent {
         return;
       }
       _maybeSaveOutputToState(event);
-      outputAccumulator =
-          _maybeAccumulateStreamingOutput(event, outputAccumulator);
+      outputAccumulator = _maybeAccumulateStreamingOutput(
+        event,
+        outputAccumulator,
+      );
       yield event;
       if (context.shouldPauseInvocation(event)) {
         shouldPause = true;
@@ -464,8 +466,10 @@ class LlmAgent extends BaseAgent {
         return;
       }
       _maybeSaveOutputToState(event);
-      outputAccumulator =
-          _maybeAccumulateStreamingOutput(event, outputAccumulator);
+      outputAccumulator = _maybeAccumulateStreamingOutput(
+        event,
+        outputAccumulator,
+      );
       yield event;
     }
   }
@@ -711,7 +715,10 @@ class LlmAgent extends BaseAgent {
     }
 
     final String text = event.content!.parts
-        .where((Part part) => part.text != null && part.text!.isNotEmpty && !part.thought)
+        .where(
+          (Part part) =>
+              part.text != null && part.text!.isNotEmpty && !part.thought,
+        )
         .map((Part part) => part.text!)
         .join();
 

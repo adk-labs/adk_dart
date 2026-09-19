@@ -79,10 +79,7 @@ class GeminiContextCacheManager {
     return scope;
   }
 
-  int _estimateRequestTokens(
-    LlmRequest request, [
-    int? cacheContentsCount,
-  ]) {
+  int _estimateRequestTokens(LlmRequest request, [int? cacheContentsCount]) {
     int totalChars = 0;
 
     final String? systemInstruction = request.config.systemInstruction;
@@ -93,7 +90,8 @@ class GeminiContextCacheManager {
     final List<ToolDeclaration>? tools = request.config.tools;
     if (tools != null) {
       for (final ToolDeclaration tool in tools) {
-        for (final FunctionDeclaration declaration in tool.functionDeclarations) {
+        for (final FunctionDeclaration declaration
+            in tool.functionDeclarations) {
           totalChars += declaration.name.length;
           totalChars += declaration.description.length;
           totalChars += jsonEncode(declaration.parameters).length;
@@ -131,8 +129,10 @@ class GeminiContextCacheManager {
       return fullTokens;
     }
 
-    final int prefixEstimate =
-        _estimateRequestTokens(request, cacheContentsCount);
+    final int prefixEstimate = _estimateRequestTokens(
+      request,
+      cacheContentsCount,
+    );
     final double ratio = (prefixEstimate / fullEstimate).clamp(0.0, 1.0);
     return (fullTokens * ratio).toInt();
   }
@@ -294,8 +294,10 @@ class GeminiContextCacheManager {
         ? cacheConfig.minTokens
         : _geminiMinimumCacheTokens;
 
-    final int cacheablePrefixTokens =
-        _estimateCacheablePrefixTokens(request, cacheContentsCount);
+    final int cacheablePrefixTokens = _estimateCacheablePrefixTokens(
+      request,
+      cacheContentsCount,
+    );
     if (cacheablePrefixTokens < minimumTokenCount) {
       return null;
     }

@@ -5,7 +5,8 @@ import 'dart:async';
 import '../agents/readonly_context.dart';
 
 /// Callback signature for dynamic MCP headers.
-typedef RemoteMcpHeaderProvider = FutureOr<Map<String, String>?> Function(ReadonlyContext context);
+typedef RemoteMcpHeaderProvider =
+    FutureOr<Map<String, String>?> Function(ReadonlyContext context);
 
 /// A remote MCP server executed server-side by the Managed Agents API.
 class RemoteMcpServer {

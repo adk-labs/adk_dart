@@ -169,10 +169,7 @@ web UI).''',
         llmRequest.contents.add(
           Content(
             role: 'user',
-            parts: <Part>[
-              Part.text('Artifact $requestedName is:'),
-              processed,
-            ],
+            parts: <Part>[Part.text('Artifact $requestedName is:'), processed],
           ),
         );
       }
@@ -190,7 +187,9 @@ String? _resolveRequestedArtifactName(
     return requestedName;
   }
   if (requestedName.startsWith(_userNamespacePrefix)) {
-    final String bareName = requestedName.substring(_userNamespacePrefix.length);
+    final String bareName = requestedName.substring(
+      _userNamespacePrefix.length,
+    );
     if (availableNames.contains(bareName)) {
       return requestedName;
     }
@@ -330,7 +329,9 @@ String? _tryExtractDocxText(List<int> bytes) {
     }
     final String xmlContent = utf8.decode(contentBytes, allowMalformed: true);
 
-    final RegExp nsRegex = RegExp(r'xmlns:([a-zA-Z0-9]+)="[^"]*wordprocessingml');
+    final RegExp nsRegex = RegExp(
+      r'xmlns:([a-zA-Z0-9]+)="[^"]*wordprocessingml',
+    );
     final RegExpMatch? nsMatch = nsRegex.firstMatch(xmlContent);
     final String prefix = nsMatch != null ? nsMatch.group(1)! : 'w';
 

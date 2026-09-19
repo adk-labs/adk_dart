@@ -35,8 +35,8 @@ Object? transferToAgent(Map<String, dynamic> args, ToolContext toolContext) {
   toolContext.actions.transferToAgent = agentName;
   toolContext.actions.transferReason =
       (transferReason != null && transferReason.isNotEmpty)
-          ? transferReason
-          : null;
+      ? transferReason
+      : null;
   return null;
 }
 
@@ -46,14 +46,14 @@ class TransferToAgentTool extends FunctionTool {
   TransferToAgentTool({
     required List<String> agentNames,
     this.includeTransferReason = false,
-  })  : _agentNames = List<String>.from(agentNames),
-        super(
-          func: transferToAgent,
-          name: 'transfer_to_agent',
-          description: includeTransferReason
-              ? _docstringWithReason
-              : _docstringWithoutReason,
-        );
+  }) : _agentNames = List<String>.from(agentNames),
+       super(
+         func: transferToAgent,
+         name: 'transfer_to_agent',
+         description: includeTransferReason
+             ? _docstringWithReason
+             : _docstringWithoutReason,
+       );
 
   final List<String> _agentNames;
 
@@ -76,9 +76,7 @@ class TransferToAgentTool extends FunctionTool {
     };
 
     if (includeTransferReason) {
-      properties['transfer_reason'] = <String, dynamic>{
-        'type': 'string',
-      };
+      properties['transfer_reason'] = <String, dynamic>{'type': 'string'};
     }
 
     final Map<String, dynamic> parameters = <String, dynamic>{

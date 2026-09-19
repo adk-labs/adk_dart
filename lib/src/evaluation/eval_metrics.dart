@@ -95,7 +95,15 @@ class JudgeModelOptions {
     this.judgeModel = 'gemini-2.5-flash',
     this.judgeModelConfig,
     this.numSamples = 5,
-  });
+  }) {
+    if (numSamples < 1) {
+      throw ArgumentError.value(
+        numSamples,
+        'numSamples',
+        'Must be greater than or equal to 1',
+      );
+    }
+  }
 
   /// Judge model identifier.
   final String judgeModel;

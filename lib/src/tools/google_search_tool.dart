@@ -58,7 +58,9 @@ class GoogleSearchTool extends BaseTool {
       return;
     }
 
-    if (isGeminiModel(modelName) || modelCheckDisabled || llmRequest.isManagedAgent) {
+    if (isGeminiModel(modelName) ||
+        modelCheckDisabled ||
+        llmRequest.isManagedAgent) {
       llmRequest.config.tools!.add(
         ToolDeclaration(googleSearch: const <String, Object?>{}),
       );

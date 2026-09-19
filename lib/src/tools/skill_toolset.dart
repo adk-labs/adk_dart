@@ -57,6 +57,59 @@ const String loadSkillResourceToolName = 'load_skill_resource';
 /// Tool name constant for [RunSkillScriptTool].
 const String runSkillScriptToolName = 'run_skill_script';
 
+/// Tool name constant for [UnloadSkillTool].
+const String unloadSkillToolName = 'unload_skill';
+
+/// Modes for managing the lifecycle of an active skill.
+enum SkillLifecycleMode {
+  /// The skill remains active indefinitely across turns until explicitly unloaded.
+  persistent,
+
+  /// The skill remains active until evicted by [SkillLifecycleConfig.maxActiveSkills] (FIFO).
+  bounded,
+
+  /// The skill is active only for the turn (invocation) in which it was loaded.
+  ephemeral,
+}
+
+/// Configuration for skill lifecycle management in [SkillToolset].
+class SkillLifecycleConfig {
+  /// Creates a skill lifecycle configuration.
+  SkillLifecycleConfig({
+    this.enabled = true,
+    this.defaultMode = SkillLifecycleMode.persistent,
+    this.maxActiveSkills = 3,
+    Map<String, SkillLifecycleMode>? skillOverrides,
+  }) : skillOverrides = skillOverrides == null
+           ? const <String, SkillLifecycleMode>{}
+           : Map<String, SkillLifecycleMode>.unmodifiable(skillOverrides) {
+    if (maxActiveSkills < 1) {
+      throw ArgumentError('maxActiveSkills must be at least 1.');
+    }
+  }
+
+  /// Whether lifecycle management is enabled.
+  final bool enabled;
+
+  /// Default lifecycle mode applied to skills without an override.
+  final SkillLifecycleMode defaultMode;
+
+  /// Maximum number of active bounded skills allowed simultaneously.
+  final int maxActiveSkills;
+
+  /// Per-skill lifecycle mode overrides.
+  final Map<String, SkillLifecycleMode> skillOverrides;
+}
+
+/// Discovery mode for how skills are presented to the model.
+enum SkillDiscoveryMode {
+  /// Skills catalog is available via [ListSkillsTool] tool call.
+  lazy,
+
+  /// Skills catalog is inlined in system instructions, omitting [ListSkillsTool].
+  eager,
+}
+
 /// Builds the system instruction for skill tools.
 String buildSkillSystemInstruction({
   String? prefix,
@@ -70,7 +123,7 @@ String buildSkillSystemInstruction({
   final String scriptsDesc = scriptExecutionEnabled
       ? '- **scripts/** (Optional): Executable scripts that can be run via bash.\n\n'
       : '- **scripts/** (Optional): Scripts bundled with the skill. You cannot run them; '
-          'use `$p$loadSkillResourceToolName` to read one and follow it yourself.\n\n';
+            'use `$p$loadSkillResourceToolName` to read one and follow it yourself.\n\n';
 
   final List<String> steps = <String>[
     'If a skill seems relevant to the current user query, you MUST use '
@@ -330,10 +383,6 @@ class LoadSkillTool extends BaseTool {
 
   final SkillToolset _toolset;
 
-  String _activationStateKey(String agentName) {
-    return '_adk_activated_skill_$agentName';
-  }
-
   @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
@@ -385,23 +434,94 @@ class LoadSkillTool extends BaseTool {
       };
     }
 
-    final String stateKey = _activationStateKey(toolContext.agentName);
-    final Object? rawActivated = toolContext.state[stateKey];
-    final List<Object?> activated = rawActivated is List
-        ? List<Object?>.from(rawActivated)
-        : <Object?>[];
-    final List<String> activatedSkillNames = activated
-        .whereType<String>()
-        .toList(growable: true);
-    if (!activatedSkillNames.contains(skill.name)) {
-      activatedSkillNames.add(skill.name);
-      toolContext.state[stateKey] = activatedSkillNames;
-    }
+    final List<String> unloadedSkills = _toolset._recordActivation(
+      toolContext.state,
+      toolContext.agentName,
+      skill.name,
+      toolContext.invocationId,
+    );
 
-    return <String, Object?>{
+    final Map<String, Object?> result = <String, Object?>{
       'skill_name': skillName.trim(),
       'instructions': skill.instructions,
       'frontmatter': skill.frontmatter.toMap(),
+    };
+    if (unloadedSkills.isNotEmpty) {
+      result['unloaded_skills'] = unloadedSkills;
+    }
+    final SkillLifecycleMode lifecycle = _toolset._lifecycleFor(skill.name);
+    if (lifecycle == SkillLifecycleMode.ephemeral) {
+      result['lifecycle_notice'] =
+          'This skill is ephemeral and its dynamic tools will be released at the end of the current turn.';
+    }
+
+    return result;
+  }
+
+  @override
+  String? detectErrorInResponse(Object? response) {
+    return _detectSkillToolError(response);
+  }
+}
+
+/// Tool to unload an active skill, releasing its additional tools.
+class UnloadSkillTool extends BaseTool {
+  /// Canonical tool name.
+  static const String toolName = unloadSkillToolName;
+
+  /// Creates an unload-skill tool backed by [toolset].
+  UnloadSkillTool(this._toolset)
+    : super(
+        name: toolName,
+        description:
+            'Unloads an active skill once its task is complete, releasing its dynamic tools from the context.',
+      );
+
+  final SkillToolset _toolset;
+
+  @override
+  FunctionDeclaration? getDeclaration() {
+    return FunctionDeclaration(
+      name: name,
+      description: description,
+      parameters: <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'skill_name': <String, Object?>{
+            'type': 'string',
+            'description': 'The name of the skill to unload.',
+          },
+        },
+        'required': <String>['skill_name'],
+      },
+    );
+  }
+
+  @override
+  Future<Object?> run({
+    required Map<String, dynamic> args,
+    required ToolContext toolContext,
+  }) async {
+    final Object? skillName = args['skill_name'] ?? args['name'];
+    if (skillName is! String || skillName.trim().isEmpty) {
+      return <String, Object?>{
+        'error': "Argument 'skill_name' is required.",
+        'error_code': 'INVALID_ARGUMENTS',
+      };
+    }
+
+    final String name = skillName.trim();
+    if (!_toolset.unloadSkill(toolContext, name)) {
+      return <String, Object?>{
+        'error': "Skill '$name' is not active.",
+        'error_code': 'SKILL_NOT_ACTIVE',
+      };
+    }
+
+    return <String, Object?>{
+      'skill_name': name,
+      'unloaded': true,
+      'active_skills': _toolset.listActiveSkills(toolContext),
     };
   }
 
@@ -1088,11 +1208,15 @@ class SkillToolset extends BaseToolset {
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
     this.skillsFolder,
+    SkillLifecycleConfig? lifecycleConfig,
+    this.discoveryMode = SkillDiscoveryMode.lazy,
     super.toolNamePrefix,
     super.toolFilter,
   }) : _registry = registry,
        _codeExecutor = codeExecutor,
-       _scriptTimeout = scriptTimeout {
+       _scriptTimeout = scriptTimeout,
+       lifecycleConfig =
+           lifecycleConfig ?? SkillLifecycleConfig(enabled: false) {
     final Set<String> seen = <String>{};
     final List<Skill> localSkills = skills ?? const <Skill>[];
     for (final Skill skill in localSkills) {
@@ -1105,11 +1229,12 @@ class SkillToolset extends BaseToolset {
       for (final Skill skill in localSkills) skill.name: skill,
     };
     _tools = <BaseTool>[
-      ListSkillsTool(this),
+      if (discoveryMode == SkillDiscoveryMode.lazy) ListSkillsTool(this),
       LoadSkillTool(this),
       LoadSkillResourceTool(this),
       RunSkillScriptTool(this),
       if (registry != null) SearchSkillsTool(this),
+      if (this.lifecycleConfig.enabled) UnloadSkillTool(this),
     ];
     _providedToolsByName = <String, BaseTool>{};
     _providedToolsets = <BaseToolset>[];
@@ -1141,6 +1266,12 @@ class SkillToolset extends BaseToolset {
 
   /// Optional environment directory where skill files are materialized.
   final String? skillsFolder;
+
+  /// Lifecycle configuration governing skill eviction and expiration.
+  final SkillLifecycleConfig lifecycleConfig;
+
+  /// Discovery mode for how skills are presented to the model.
+  final SkillDiscoveryMode discoveryMode;
 
   bool _hasScriptExecution(ReadonlyContext? context) {
     if (_codeExecutor != null) {
@@ -1215,6 +1346,293 @@ class SkillToolset extends BaseToolset {
 
   List<Skill> _listSkills() => _skills.values.toList(growable: false);
 
+  SkillLifecycleMode _lifecycleFor(String skillName) {
+    if (!lifecycleConfig.enabled) {
+      return SkillLifecycleMode.persistent;
+    }
+    return lifecycleConfig.skillOverrides[skillName] ??
+        lifecycleConfig.defaultMode;
+  }
+
+  bool get _tracksEphemeralSkills {
+    if (!lifecycleConfig.enabled) {
+      return false;
+    }
+    if (lifecycleConfig.defaultMode == SkillLifecycleMode.ephemeral) {
+      return true;
+    }
+    return lifecycleConfig.skillOverrides.values.contains(
+      SkillLifecycleMode.ephemeral,
+    );
+  }
+
+  List<String> _readActivatedSkills(
+    Map<String, dynamic> state,
+    String agentName,
+  ) {
+    final String key = '_adk_activated_skill_$agentName';
+    final Object? raw = state[key];
+    if (raw is List) {
+      return raw.whereType<String>().toList(growable: true);
+    }
+    return <String>[];
+  }
+
+  void _writeActivatedSkills(
+    Map<String, dynamic> state,
+    String agentName,
+    List<String> skills,
+  ) {
+    state['_adk_activated_skill_$agentName'] = skills.toList(growable: true);
+  }
+
+  Map<String, Map<String, Object?>> _readLifecycleRecords(
+    Map<String, dynamic> state,
+    String agentName,
+  ) {
+    final String key = '_adk_skill_lifecycle_$agentName';
+    final Object? raw = state[key];
+    if (raw is Map) {
+      final Map<String, Map<String, Object?>> result =
+          <String, Map<String, Object?>>{};
+      raw.forEach((Object? k, Object? v) {
+        if (k is String && v is Map) {
+          result[k] = Map<String, Object?>.from(v);
+        }
+      });
+      return result;
+    }
+    return <String, Map<String, Object?>>{};
+  }
+
+  bool _isExpired(Map<String, Object?> record, String? invocationId) {
+    if (record['lifecycle'] != SkillLifecycleMode.ephemeral.name) {
+      return false;
+    }
+    final Object? activatedIn = record['activated_in'];
+    if (activatedIn == null || activatedIn is! String || activatedIn.isEmpty) {
+      return false;
+    }
+    return invocationId != null &&
+        invocationId.isNotEmpty &&
+        activatedIn != invocationId;
+  }
+
+  List<String> _activeSkills(
+    Map<String, dynamic> state,
+    String agentName,
+    String? invocationId,
+  ) {
+    final List<String> activated = _readActivatedSkills(state, agentName);
+    if (activated.isEmpty || !_tracksEphemeralSkills) {
+      return activated;
+    }
+    final Map<String, Map<String, Object?>> records = _readLifecycleRecords(
+      state,
+      agentName,
+    );
+    return activated
+        .where(
+          (String name) => !_isExpired(
+            records[name] ?? const <String, Object?>{},
+            invocationId,
+          ),
+        )
+        .toList(growable: true);
+  }
+
+  /// Returns the names of currently active skills for [context].
+  List<String> listActiveSkills(Object context) {
+    if (context is ToolContext) {
+      return _activeSkills(
+        context.state,
+        context.agentName,
+        context.invocationId,
+      );
+    }
+    if (context is ReadonlyContext) {
+      return _activeSkills(
+        context.state,
+        context.agentName,
+        context.invocationId,
+      );
+    }
+    throw ArgumentError('Expected ToolContext or ReadonlyContext.');
+  }
+
+  /// Deactivates [skillName] for [context], returning true if it was active.
+  bool unloadSkill(Object context, String skillName) {
+    final Map<String, dynamic> state;
+    final String agentName;
+    final String? invocationId;
+    if (context is ToolContext) {
+      state = context.state;
+      agentName = context.agentName;
+      invocationId = context.invocationId;
+    } else if (context is ReadonlyContext) {
+      state = context.state;
+      agentName = context.agentName;
+      invocationId = context.invocationId;
+    } else {
+      throw ArgumentError('Expected ToolContext or ReadonlyContext.');
+    }
+
+    final List<String> storedSkills = _readActivatedSkills(state, agentName);
+    if (!storedSkills.contains(skillName)) {
+      return false;
+    }
+    final bool wasActive = _activeSkills(
+      state,
+      agentName,
+      invocationId,
+    ).contains(skillName);
+    storedSkills.remove(skillName);
+    _writeActivatedSkills(state, agentName, storedSkills);
+    _forgetLifecycleRecords(state, agentName, storedSkills);
+    return wasActive;
+  }
+
+  /// Activates [skillName] for [context], returning true if freshly activated.
+  Future<bool> loadSkill(Object context, String skillName) async {
+    final Map<String, dynamic> state;
+    final String agentName;
+    final String? invocationId;
+    if (context is ToolContext) {
+      state = context.state;
+      agentName = context.agentName;
+      invocationId = context.invocationId;
+    } else if (context is ReadonlyContext) {
+      state = context.state;
+      agentName = context.agentName;
+      invocationId = context.invocationId;
+    } else {
+      throw ArgumentError('Expected ToolContext or ReadonlyContext.');
+    }
+
+    final List<String> previouslyActive = _activeSkills(
+      state,
+      agentName,
+      invocationId,
+    );
+    final bool alreadyActive = previouslyActive.contains(skillName);
+    _recordActivation(state, agentName, skillName, invocationId);
+    return !alreadyActive;
+  }
+
+  List<String> _recordActivation(
+    Map<String, dynamic> state,
+    String agentName,
+    String skillName,
+    String? invocationId,
+  ) {
+    final List<String> storedSkills = _readActivatedSkills(state, agentName);
+    final List<String> activated = _activeSkills(
+      state,
+      agentName,
+      invocationId,
+    );
+    final List<String> expired = storedSkills
+        .where((String name) => !activated.contains(name) && name != skillName)
+        .toList();
+
+    final SkillLifecycleMode lifecycle = _lifecycleFor(skillName);
+    if (!activated.contains(skillName)) {
+      activated.add(skillName);
+    } else if (lifecycle == SkillLifecycleMode.persistent) {
+      if (expired.isEmpty) {
+        return const <String>[];
+      }
+    } else {
+      // Reloading is a use: move it to the end so the cap spares it.
+      activated.remove(skillName);
+      activated.add(skillName);
+    }
+
+    final List<String> evicted = _evictOverCap(activated);
+    _writeActivatedSkills(state, agentName, activated);
+    _recordLifecycle(state, agentName, skillName, lifecycle, invocationId);
+    _forgetLifecycleRecords(state, agentName, activated);
+    return <String>[...expired, ...evicted];
+  }
+
+  void _recordLifecycle(
+    Map<String, dynamic> state,
+    String agentName,
+    String skillName,
+    SkillLifecycleMode lifecycle,
+    String? invocationId,
+  ) {
+    if (lifecycle != SkillLifecycleMode.ephemeral) {
+      return;
+    }
+    final Map<String, Map<String, Object?>> records = _readLifecycleRecords(
+      state,
+      agentName,
+    );
+    records[skillName] = <String, Object?>{
+      'lifecycle': lifecycle.name,
+      'activated_in': invocationId,
+    };
+    state['_adk_skill_lifecycle_$agentName'] = records;
+  }
+
+  void _forgetLifecycleRecords(
+    Map<String, dynamic> state,
+    String agentName,
+    List<String> activatedSkills,
+  ) {
+    final String key = '_adk_skill_lifecycle_$agentName';
+    final Map<String, Map<String, Object?>> records = _readLifecycleRecords(
+      state,
+      agentName,
+    );
+    final Map<String, Map<String, Object?>> kept =
+        <String, Map<String, Object?>>{};
+    records.forEach((String name, Map<String, Object?> record) {
+      if (activatedSkills.contains(name)) {
+        kept[name] = record;
+      }
+    });
+    if (kept.length != records.length) {
+      state[key] = kept;
+    }
+  }
+
+  List<String> _evictOverCap(List<String> activatedSkills) {
+    final List<String> bounded = activatedSkills
+        .where(
+          (String name) => _lifecycleFor(name) == SkillLifecycleMode.bounded,
+        )
+        .toList();
+    final int overflow = bounded.length - lifecycleConfig.maxActiveSkills;
+    if (overflow <= 0) {
+      return const <String>[];
+    }
+    final List<String> evicted = bounded.take(overflow).toList();
+    final Set<String> dropped = evicted.toSet();
+    activatedSkills.removeWhere((String name) => dropped.contains(name));
+    return evicted;
+  }
+
+  /// Clones this toolset with a replaced [skills] collection while retaining lifecycle and discovery settings.
+  SkillToolset cloneWithUpdatedSkills(List<Skill> updatedSkills) {
+    return SkillToolset(
+      skills: updatedSkills,
+      registry: _registry,
+      additionalTools: <Object>[
+        ..._providedToolsByName.values,
+        ..._providedToolsets,
+      ],
+      codeExecutor: _codeExecutor,
+      scriptTimeout: _scriptTimeout,
+      skillsFolder: skillsFolder,
+      lifecycleConfig: lifecycleConfig,
+      discoveryMode: discoveryMode,
+      toolNamePrefix: toolNamePrefix,
+      toolFilter: toolFilter,
+    );
+  }
+
   Future<List<BaseTool>> _resolveAdditionalToolsFromState(
     ReadonlyContext? readonlyContext,
   ) async {
@@ -1222,11 +1640,11 @@ class SkillToolset extends BaseToolset {
       return const <BaseTool>[];
     }
 
-    final String stateKey = '_adk_activated_skill_${readonlyContext.agentName}';
-    final Object? rawActivated = readonlyContext.state[stateKey];
-    final List<Object?> activated = rawActivated is List
-        ? List<Object?>.from(rawActivated)
-        : <Object?>[];
+    final List<String> activated = _activeSkills(
+      readonlyContext.state,
+      readonlyContext.agentName,
+      readonlyContext.invocationId,
+    );
     if (activated.isEmpty) {
       return const <BaseTool>[];
     }
@@ -1319,7 +1737,7 @@ class SkillToolset extends BaseToolset {
       ),
     ];
     final bool hasListSkills = selectedCoreTools.contains(listSkillsToolName);
-    if (!hasListSkills) {
+    if (discoveryMode == SkillDiscoveryMode.eager || !hasListSkills) {
       instructions.add(formatSkillsAsXml(_listSkills()));
     }
     if (_registry != null && selectedCoreTools.contains(searchSkillsToolName)) {
@@ -1332,6 +1750,18 @@ class SkillToolset extends BaseToolset {
       );
     }
     llmRequest.appendInstructions(instructions);
+
+    if (lifecycleConfig.enabled) {
+      final Set<String> activeSkills = listActiveSkills(toolContext).toSet();
+      final String p = toolNamePrefix == null || toolNamePrefix!.isEmpty
+          ? ''
+          : '${toolNamePrefix}_';
+      _pruneUnloadedSkillInstructions(
+        contents: llmRequest.contents,
+        loadSkillToolName: '$p$loadSkillToolName',
+        activeSkills: activeSkills,
+      );
+    }
   }
 
   @override
@@ -1342,6 +1772,56 @@ class SkillToolset extends BaseToolset {
     }
     await super.close();
   }
+}
+
+const String _unloadedSkillStatus = 'unloaded';
+const String _unloadedSkillNotice =
+    'This skill has been unloaded. Its instructions no longer apply and the tools it contributed are no longer available. Load it again if you need them.';
+
+List<String> _pruneUnloadedSkillInstructions({
+  required List<Content> contents,
+  required String loadSkillToolName,
+  required Set<String> activeSkills,
+}) {
+  if (contents.isEmpty) {
+    return const <String>[];
+  }
+  final List<String> pruned = <String>[];
+  for (int i = 0; i < contents.length; i += 1) {
+    final Content content = contents[i];
+    List<Part>? newParts;
+    for (int p = 0; p < content.parts.length; p += 1) {
+      final Part part = content.parts[p];
+      final FunctionResponse? funcResp = part.functionResponse;
+      if (funcResp == null || funcResp.name != loadSkillToolName) {
+        continue;
+      }
+      final Map<String, Object?> responseMap = funcResp.response;
+      if (!responseMap.containsKey('instructions')) {
+        continue;
+      }
+      final Object? skillNameObj = responseMap['skill_name'];
+      if (skillNameObj is! String || activeSkills.contains(skillNameObj)) {
+        continue;
+      }
+      newParts ??= List<Part>.from(content.parts);
+      newParts[p] = part.copyWith(
+        functionResponse: FunctionResponse(
+          name: funcResp.name,
+          response: <String, Object?>{
+            'skill_name': skillNameObj,
+            'status': _unloadedSkillStatus,
+            'detail': _unloadedSkillNotice,
+          },
+        ),
+      );
+      pruned.add(skillNameObj);
+    }
+    if (newParts != null) {
+      contents[i] = content.copyWith(parts: newParts);
+    }
+  }
+  return pruned;
 }
 
 const Map<String, String> _skillResourceMimeTypes = <String, String>{

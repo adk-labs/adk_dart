@@ -20,7 +20,10 @@ bool isEnvEnabled(
 bool isEnterpriseModeEnabled({Map<String, String>? environment}) {
   final Map<String, String> env = environment ?? readSystemEnvironment();
   if (env.containsKey('GOOGLE_GENAI_USE_ENTERPRISE')) {
-    return isEnvEnabled('GOOGLE_GENAI_USE_ENTERPRISE', environment: environment);
+    return isEnvEnabled(
+      'GOOGLE_GENAI_USE_ENTERPRISE',
+      environment: environment,
+    );
   }
   if (env.containsKey('GOOGLE_GENAI_USE_VERTEXAI')) {
     return isEnvEnabled('GOOGLE_GENAI_USE_VERTEXAI', environment: environment);

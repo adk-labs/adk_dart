@@ -184,9 +184,14 @@ class Context extends ReadonlyContext {
     }
 
     _eventActions.requestedToolConfirmations[callId] = ToolConfirmation(
-      hint: hint,
+      hint: hint ?? '',
       payload: payload,
     );
+  }
+
+  /// Requests cancellation of this invocation.
+  void abort([Object? reason]) {
+    invocationContext.abort(reason);
   }
 
   /// Requests authentication input for the current tool call.

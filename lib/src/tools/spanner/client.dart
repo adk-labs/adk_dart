@@ -572,8 +572,7 @@ class _RestSpannerSnapshot implements SpannerSnapshot {
     final Map<String, Object?> payload = client.requestJson(
       method: 'POST',
       path: '/v1/$databaseName/sessions',
-      queryParameters:
-          databaseRole == null || databaseRole!.isEmpty
+      queryParameters: databaseRole == null || databaseRole!.isEmpty
           ? null
           : <String, String>{'databaseRole': databaseRole!},
       body: const <String, Object?>{},

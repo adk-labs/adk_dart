@@ -14,14 +14,14 @@ class InMemoryMemoryService extends BaseMemoryService {
 
   static const int _maxSearchResults = 10;
 
-  final Map<(String, String), Map<String, List<Event>>> _sessionEventsByUserKey =
-      <(String, String), Map<String, List<Event>>>{};
+  final Map<(String, String), Map<String, List<Event>>>
+  _sessionEventsByUserKey = <(String, String), Map<String, List<Event>>>{};
 
   @override
   Future<void> addSessionToMemory(Session session) async {
     final (String, String) key = _userKey(session.appName, session.userId);
-    final Map<String, List<Event>> sessions =
-        _sessionEventsByUserKey[key] ??= <String, List<Event>>{};
+    final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
+        <String, List<Event>>{};
     sessions[session.id] = session.events
         .where(
           (Event event) =>
@@ -40,8 +40,8 @@ class InMemoryMemoryService extends BaseMemoryService {
     Map<String, Object?>? customMetadata,
   }) async {
     final (String, String) key = _userKey(appName, userId);
-    final Map<String, List<Event>> sessions =
-        _sessionEventsByUserKey[key] ??= <String, List<Event>>{};
+    final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
+        <String, List<Event>>{};
     final String targetSessionId = sessionId ?? 'unknown_session';
     final List<Event> target = sessions[targetSessionId] ??= <Event>[];
 
@@ -151,4 +151,3 @@ Set<String> _extractWordsLower(String text) {
       .map((Match match) => match.group(0)!.toLowerCase())
       .toSet();
 }
-

@@ -60,9 +60,7 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
       _addModelInputContextToUserContent(
         invocationContext,
         llmRequest,
-        modelInputContext
-            .map((Content content) => content.copyWith())
-            .toList(),
+        modelInputContext.map((Content content) => content.copyWith()).toList(),
       );
     }
 
@@ -707,7 +705,9 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
           part.text != null &&
           part.text!.trim().isNotEmpty) {
         content.parts.add(
-          Part.text('[${event.author}] thought:\n${quoteUntrusted(part.text!)}'),
+          Part.text(
+            '[${event.author}] thought:\n${quoteUntrusted(part.text!)}',
+          ),
         );
       }
       continue;

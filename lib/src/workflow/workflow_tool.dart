@@ -21,12 +21,11 @@ class WorkflowTool extends BaseTool {
     this.outputSchema,
   }) : super(
          name: name ?? workflow.name,
-         description:
-             description == null || description.isEmpty
-                 ? (workflow.description.isEmpty
-                     ? 'Executes workflow: ${workflow.name}'
-                     : workflow.description)
-                 : description,
+         description: description == null || description.isEmpty
+             ? (workflow.description.isEmpty
+                   ? 'Executes workflow: ${workflow.name}'
+                   : workflow.description)
+             : description,
          isLongRunning: true,
        );
 
@@ -62,8 +61,8 @@ class WorkflowTool extends BaseTool {
   }) async {
     final Object? workflowInput =
         args.length == 1 && args.containsKey('request')
-            ? args['request']
-            : args;
+        ? args['request']
+        : args;
 
     try {
       final WorkflowResult result = await workflow.runWorkflow(

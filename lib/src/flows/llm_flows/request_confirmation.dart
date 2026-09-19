@@ -68,6 +68,10 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
 
     for (int i = events.length - 2; i >= 0; i -= 1) {
       final Event event = events[i];
+      // SECURITY: Only replay a call event that the current agent authored.
+      if (event.author != agent.name) {
+        continue;
+      }
       final List<FunctionCall> calls = event.getFunctionCalls();
       if (calls.isEmpty) {
         continue;

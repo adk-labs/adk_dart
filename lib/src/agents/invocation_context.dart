@@ -61,7 +61,7 @@ class InvocationContext {
     this.runConfig,
     this.resumabilityConfig,
     this.eventsCompactionConfig,
-    this.abortSignal,
+    AdkAbortSignal? abortSignal,
     this.tokenCompactionChecked = false,
     PluginManager? pluginManager,
     this.canonicalToolsCache,
@@ -71,7 +71,8 @@ class InvocationContext {
        endOfAgents = endOfAgents ?? <String, bool>{},
        pluginManager = pluginManager ?? PluginManager(),
        credentialByKey = credentialByKey ?? <String, AuthCredential>{},
-       callbackContextData = callbackContextData ?? <String, Object?>{};
+       callbackContextData = callbackContextData ?? <String, Object?>{},
+       abortSignal = abortSignal ?? AdkAbortSignal();
 
   /// Artifact service used for persistence and retrieval.
   BaseArtifactService? artifactService;
@@ -151,8 +152,16 @@ class InvocationContext {
   /// Cooperative cancellation signal for this invocation.
   AdkAbortSignal? abortSignal;
 
+  bool _aborted = false;
+
   /// Whether this invocation has been cancelled.
-  bool get isAborted => abortSignal?.aborted ?? false;
+  bool get isAborted => _aborted || (abortSignal?.aborted ?? false);
+
+  /// Requests cancellation of this invocation.
+  void abort([Object? reason]) {
+    _aborted = true;
+    abortSignal?.abort(reason);
+  }
 
   /// Whether token compaction checks already ran.
   bool tokenCompactionChecked;
@@ -467,9 +476,11 @@ class InvocationContext {
                 .toSet();
             if (frIds.isNotEmpty) {
               final List<Event> branchEvents = session.events
-                  .where((Event e) =>
-                      e.branch != null &&
-                      (e.branch == br || e.branch!.startsWith('$br.')))
+                  .where(
+                    (Event e) =>
+                        e.branch != null &&
+                        (e.branch == br || e.branch!.startsWith('$br.')),
+                  )
                   .toList();
               final Set<String> branchFcIds = branchEvents
                   .expand((Event e) => e.getFunctionCalls())

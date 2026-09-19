@@ -385,13 +385,11 @@ class InMemoryA2aEventQueue implements A2aEventQueue {
 /// Extensible capability map for agent cards.
 class AgentCapabilities {
   /// Creates an agent capability map.
-  AgentCapabilities({
-    bool? streaming,
-    Map<String, Object?>? values,
-  }) : values = <String, Object?>{
-         if (streaming != null) 'streaming': streaming,
-         ...?values,
-       };
+  AgentCapabilities({bool? streaming, Map<String, Object?>? values})
+    : values = <String, Object?>{
+        if (streaming != null) 'streaming': streaming,
+        ...?values,
+      };
 
   /// Capability values keyed by name.
   Map<String, Object?> values;

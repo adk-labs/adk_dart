@@ -7,7 +7,9 @@ import 'package:http/http.dart' as http;
 import '../../types/id.dart';
 import 'config.dart';
 
-final RegExp _busRegex = RegExp(r'^projects/[^/]+/locations/[^/]+/messageBuses/[^/]+$');
+final RegExp _busRegex = RegExp(
+  r'^projects/[^/]+/locations/[^/]+/messageBuses/[^/]+$',
+);
 
 /// Publishes a structured CloudEvent to Google Cloud Eventarc Advanced.
 Future<Map<String, dynamic>> publishEventarcMessage({
@@ -36,11 +38,19 @@ Future<Map<String, dynamic>> publishEventarcMessage({
   }
 
   if (type.trim().isEmpty) {
-    throw ArgumentError.value(type, 'type', 'CloudEvent type must not be empty.');
+    throw ArgumentError.value(
+      type,
+      'type',
+      'CloudEvent type must not be empty.',
+    );
   }
 
   if (source.trim().isEmpty) {
-    throw ArgumentError.value(source, 'source', 'CloudEvent source must not be empty.');
+    throw ArgumentError.value(
+      source,
+      'source',
+      'CloudEvent source must not be empty.',
+    );
   }
 
   final String eventId = id ?? newAdkId(prefix: 'ce-');

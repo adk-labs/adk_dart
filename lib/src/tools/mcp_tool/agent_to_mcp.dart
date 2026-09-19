@@ -29,10 +29,7 @@ Runner buildMcpRunner(BaseAgent agent) {
 /// Structured MCP Content Block produced from ADK content parts.
 class McpContentBlock {
   /// Creates a text content block.
-  McpContentBlock.text(this.text)
-      : type = 'text',
-        data = null,
-        mimeType = null;
+  McpContentBlock.text(this.text) : type = 'text', data = null, mimeType = null;
 
   /// Creates a binary data content block.
   McpContentBlock.data({
@@ -58,11 +55,7 @@ class McpContentBlock {
     if (type == 'text') {
       return <String, dynamic>{'type': 'text', 'text': text ?? ''};
     }
-    return <String, dynamic>{
-      'type': type,
-      'data': data,
-      'mimeType': mimeType,
-    };
+    return <String, dynamic>{'type': type, 'data': data, 'mimeType': mimeType};
   }
 }
 
@@ -96,8 +89,8 @@ class AdkAgentMcpServer {
     String? name,
     this.description,
     Runner? runner,
-  })  : name = name ?? (agent.name.isNotEmpty ? agent.name : 'adk_agent'),
-        runner = runner ?? buildMcpRunner(agent);
+  }) : name = name ?? (agent.name.isNotEmpty ? agent.name : 'adk_agent'),
+       runner = runner ?? buildMcpRunner(agent);
 
   /// Target agent served by this MCP server wrapper.
   final BaseAgent agent;

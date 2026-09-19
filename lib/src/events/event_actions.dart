@@ -214,10 +214,10 @@ EventActions eventActionsFromJson(Map<String, Object?> json) {
     skipSummarization: json['skipSummarization'] as bool?,
     stateDelta: _castMap(json['stateDelta']) ?? <String, Object?>{},
     artifactDelta: _castIntMap(json['artifactDelta']),
-    transferToAgent: (json['transferToAgent'] ?? json['transfer_to_agent'])
-        as String?,
-    transferReason: (json['transferReason'] ?? json['transfer_reason'])
-        as String?,
+    transferToAgent:
+        (json['transferToAgent'] ?? json['transfer_to_agent']) as String?,
+    transferReason:
+        (json['transferReason'] ?? json['transfer_reason']) as String?,
     escalate: json['escalate'] as bool?,
     requestedAuthConfigs: _castObjectMap(json['requestedAuthConfigs']),
     requestedToolConfirmations: _castObjectMap(

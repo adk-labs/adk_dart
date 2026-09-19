@@ -59,7 +59,8 @@ class ManagedAgent extends BaseAgent {
   final String? _baseUrl;
 
   /// The REST transport client wrapper used to send request payloads.
-  GeminiRestTransport get restClient => _restClient ?? GeminiRestHttpTransport();
+  GeminiRestTransport get restClient =>
+      _restClient ?? GeminiRestHttpTransport();
 
   String _resolveApiKey() {
     if (_apiKey != null && _apiKey.isNotEmpty) {
@@ -85,7 +86,9 @@ class ManagedAgent extends BaseAgent {
   }
 
   /// Resolve tools into interaction ToolParams (server-side only).
-  Future<List<Map<String, Object?>>> resolveBackendTools(InvocationContext ctx) async {
+  Future<List<Map<String, Object?>>> resolveBackendTools(
+    InvocationContext ctx,
+  ) async {
     final LlmRequest llmRequest = LlmRequest(config: GenerateContentConfig());
     llmRequest.isManagedAgent = true;
     final ToolContext toolContext = ToolContext(ctx);
@@ -93,9 +96,12 @@ class ManagedAgent extends BaseAgent {
 
     for (final Object tool in tools) {
       if (tool is RemoteMcpServer) {
-        final Map<String, String> resolvedHeaders = Map<String, String>.from(tool.headers ?? <String, String>{});
+        final Map<String, String> resolvedHeaders = Map<String, String>.from(
+          tool.headers ?? <String, String>{},
+        );
         if (tool.headerProvider != null) {
-          final Map<String, String>? dynamicHeaders = await tool.headerProvider!(ReadonlyContext(ctx));
+          final Map<String, String>? dynamicHeaders =
+              await tool.headerProvider!(ReadonlyContext(ctx));
           if (dynamicHeaders != null) {
             resolvedHeaders.addAll(dynamicHeaders);
           }
@@ -107,7 +113,7 @@ class ManagedAgent extends BaseAgent {
           if (resolvedHeaders.isNotEmpty) 'headers': resolvedHeaders,
           if (tool.allowedTools != null)
             'allowed_tools': <Map<String, Object?>>[
-              <String, Object?>{'tools': tool.allowedTools}
+              <String, Object?>{'tools': tool.allowedTools},
             ],
         };
         mcpParams.add(param);
@@ -199,8 +205,10 @@ class ManagedAgent extends BaseAgent {
     final String apiKey = _resolveApiKey();
     final String baseUrl = _resolveBaseUrl();
 
-    final (String? prevInteractionId, String? prevEnvironmentId) =
-        findPreviousInteractionState(
+    final (
+      String? prevInteractionId,
+      String? prevEnvironmentId,
+    ) = findPreviousInteractionState(
       events: context.session.events,
       agentName: name,
       currentBranch: context.branch,
@@ -232,7 +240,8 @@ class ManagedAgent extends BaseAgent {
     headers.addAll(trackingHeaders);
 
     final RunConfig? runConfig = context.runConfig;
-    final bool isSse = runConfig != null && runConfig.streamingMode == StreamingMode.sse;
+    final bool isSse =
+        runConfig != null && runConfig.streamingMode == StreamingMode.sse;
 
     try {
       final List<Part> aggregatedParts = <Part>[];
@@ -247,12 +256,14 @@ class ManagedAgent extends BaseAgent {
             baseUrl: baseUrl,
             headers: headers,
           )) {
-        currentInteractionId ??= _stringValue(event['id']) ??
+        currentInteractionId ??=
+            _stringValue(event['id']) ??
             _stringValue(event['interaction_id']) ??
             _stringValue(event['interactionId']) ??
             _stringValue(_asMap(event['interaction'])['id']);
 
-        currentEnvironmentId ??= _stringValue(event['environment_id']) ??
+        currentEnvironmentId ??=
+            _stringValue(event['environment_id']) ??
             _stringValue(event['environmentId']) ??
             _stringValue(_asMap(event['environment'])['id']);
 

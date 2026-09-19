@@ -164,6 +164,11 @@ class Gemini extends BaseLlm {
   }) async* {
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model = prepared.model ?? model;
+    if (prepared.serviceTier == 'deferred' && stream) {
+      throw ArgumentError(
+        "serviceTier='deferred' cannot be used with streaming. A deferred request is queued to run on off-peak capacity and returns an interaction id rather than a result stream.",
+      );
+    }
     _preprocessRequest(prepared);
     maybeAppendUserContent(prepared);
     prepared.config.httpOptions ??= HttpOptions();
@@ -270,10 +275,12 @@ class Gemini extends BaseLlm {
               level: 1000,
             );
           }
-          final List<Object?> filteredCandidates = rawCandidates.where((Object? c) {
-            final Object? idx = _asMap(c)['index'];
-            return idx == null || idx == 0;
-          }).toList(growable: false);
+          final List<Object?> filteredCandidates = rawCandidates
+              .where((Object? c) {
+                final Object? idx = _asMap(c)['index'];
+                return idx == null || idx == 0;
+              })
+              .toList(growable: false);
           if (rawCandidates.isNotEmpty && filteredCandidates.isEmpty) {
             continue;
           }

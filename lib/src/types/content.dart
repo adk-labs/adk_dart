@@ -159,13 +159,14 @@ class VoiceActivity {
 
   /// Serializes to JSON.
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'voice_activity_type': voiceActivityType.name,
-        if (audioOffset != null) 'audio_offset': audioOffset,
-      };
+    'voice_activity_type': voiceActivityType.name,
+    if (audioOffset != null) 'audio_offset': audioOffset,
+  };
 
   /// Deserializes from JSON.
   factory VoiceActivity.fromJson(Map<String, dynamic> json) {
-    final String? typeStr = json['voice_activity_type'] as String? ??
+    final String? typeStr =
+        json['voice_activity_type'] as String? ??
         json['voiceActivityType'] as String?;
     VoiceActivityType parsedType = VoiceActivityType.unspecified;
     if (typeStr != null) {
@@ -178,7 +179,8 @@ class VoiceActivity {
     }
     return VoiceActivity(
       voiceActivityType: parsedType,
-      audioOffset: json['audio_offset'] as String? ?? json['audioOffset'] as String?,
+      audioOffset:
+          json['audio_offset'] as String? ?? json['audioOffset'] as String?,
     );
   }
 

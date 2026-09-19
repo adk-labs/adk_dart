@@ -18,7 +18,8 @@ class AdkAbortException implements Exception {
 
 /// Read-only cancellation signal propagated through an invocation.
 class AdkAbortSignal {
-  AdkAbortSignal._();
+  /// Creates an abort signal.
+  AdkAbortSignal();
 
   bool _aborted = false;
   Object? _reason;
@@ -54,6 +55,11 @@ class AdkAbortSignal {
     }
   }
 
+  /// Trips the cancellation signal.
+  void abort([Object? reason]) {
+    _abort(reason);
+  }
+
   void _abort(Object? reason) {
     if (_aborted) {
       return;
@@ -72,7 +78,7 @@ class AdkAbortSignal {
 /// Controller used by callers to cancel an ADK invocation.
 class AdkAbortController {
   /// Creates a cancellation controller.
-  AdkAbortController() : signal = AdkAbortSignal._();
+  AdkAbortController() : signal = AdkAbortSignal();
 
   /// Signal passed to runner APIs and exposed through invocation contexts.
   final AdkAbortSignal signal;

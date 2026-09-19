@@ -106,12 +106,11 @@ class FallbackModel extends BaseLlm {
     required List<Object> models,
     Set<int>? retriableStatusCodes,
     String? model,
-  })  : models = List<Object>.unmodifiable(models),
-        retriableStatusCodes =
-            retriableStatusCodes != null
-                ? Set<int>.unmodifiable(retriableStatusCodes)
-                : defaultStatusCodes,
-        super(model: _deriveModelName(models, model));
+  }) : models = List<Object>.unmodifiable(models),
+       retriableStatusCodes = retriableStatusCodes != null
+           ? Set<int>.unmodifiable(retriableStatusCodes)
+           : defaultStatusCodes,
+       super(model: _deriveModelName(models, model));
 
   static String _deriveModelName(List<Object> models, String? model) {
     if (models.isEmpty) {
@@ -161,8 +160,9 @@ class FallbackModel extends BaseLlm {
 
     for (int index = 0; index < models.length; index++) {
       final BaseLlm delegate = _delegate(models[index]);
-      final _RequestSnapshot? pristine =
-          index < lastIndex ? _RequestSnapshot.of(request) : null;
+      final _RequestSnapshot? pristine = index < lastIndex
+          ? _RequestSnapshot.of(request)
+          : null;
       request.model = delegate.model;
       bool responseYielded = false;
 
@@ -197,8 +197,9 @@ class FallbackModel extends BaseLlm {
 
     for (int index = 0; index < models.length; index++) {
       final BaseLlm delegate = _delegate(models[index]);
-      final _RequestSnapshot? pristine =
-          index < lastIndex ? _RequestSnapshot.of(request) : null;
+      final _RequestSnapshot? pristine = index < lastIndex
+          ? _RequestSnapshot.of(request)
+          : null;
       request.model = delegate.model;
 
       try {

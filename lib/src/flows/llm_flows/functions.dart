@@ -336,9 +336,7 @@ Future<Event?> _executeSingleFunctionCallAsync(
     );
   }
 
-  if (invocationContext.liveRequestQueue != null &&
-      (tool.responseScheduling == FunctionResponseScheduling.whenIdle ||
-          tool.responseScheduling == FunctionResponseScheduling.silent)) {
+  if (invocationContext.liveRequestQueue != null && _isNonBlockingTool(tool)) {
     final String taskKey =
         '${tool.name}_${functionCall.id ?? generateClientFunctionCallId()}';
     invocationContext.activeNonBlockingToolTasks ??= <String, Future<void>>{};
@@ -435,17 +433,44 @@ Future<Event?> _runToolExecutionPipeline({
       if (invocationContext.isAborted) {
         return null;
       }
-      final Object? result = await tool.run(
-        args: functionArgs,
-        toolContext: toolContext,
+      final bool requiresConfirmation = await tool.checkRequireConfirmation(
+        functionArgs,
+        toolContext,
       );
-      if (invocationContext.isAborted) {
-        return null;
+      if (requiresConfirmation == true) {
+        final ToolConfirmation? confirmation = toolContext.toolConfirmation;
+        if (confirmation == null) {
+          toolContext.requestConfirmation(
+            hint:
+                'Please approve or reject the tool call ${tool.name}() by '
+                'responding with a FunctionResponse with an expected '
+                'ToolConfirmation payload.',
+          );
+          toolContext.actions.skipSummarization = true;
+          functionResponse = <String, dynamic>{
+            'error':
+                'This tool call requires confirmation, please approve or reject.',
+          };
+        } else if (confirmation.confirmed != true) {
+          functionResponse = <String, dynamic>{
+            'error': 'This tool call is rejected.',
+          };
+        }
       }
-      rawResult = result;
-      functionResponse = tool.defersResponse && result == null
-          ? <String, dynamic>{}
-          : _normalizeFunctionResult(result);
+
+      if (functionResponse == null) {
+        final Object? result = await tool.run(
+          args: functionArgs,
+          toolContext: toolContext,
+        );
+        if (invocationContext.isAborted) {
+          return null;
+        }
+        rawResult = result;
+        functionResponse = tool.defersResponse && result == null
+            ? <String, dynamic>{}
+            : _normalizeFunctionResult(result);
+      }
     } catch (error) {
       final Exception exception = error is Exception
           ? error
@@ -637,8 +662,9 @@ Event _buildResponseEvent({
 }) {
   final (Object? remainingResult, List<Part>? extractedParts) =
       _extractMultimodalParts(rawResult ?? functionResult);
-  final Map<String, dynamic> normalizedResult =
-      _normalizeFunctionResult(remainingResult);
+  final Map<String, dynamic> normalizedResult = _normalizeFunctionResult(
+    remainingResult,
+  );
 
   final Object displayResult = rawResult ?? normalizedResult;
   final Part functionResponsePart = Part.fromFunctionResponse(
@@ -655,7 +681,8 @@ Event _buildResponseEvent({
   // Control-flow tools (e.g. exit_loop) set skipSummarization but return no
   // meaningful output; their null result is normalized to {'result': null}, so
   // skip those to avoid emitting a noisy "null" text part.
-  final bool hasDisplayableResult = !(displayResult is Map &&
+  final bool hasDisplayableResult =
+      !(displayResult is Map &&
           displayResult.length == 1 &&
           displayResult.containsKey('result') &&
           displayResult['result'] == null);
@@ -868,4 +895,14 @@ class _MissingTool extends BaseTool {
   }) {
     throw StateError('Tool not found: $name');
   }
+}
+
+bool _isNonBlockingTool(BaseTool? tool) {
+  if (tool == null) {
+    return false;
+  }
+  if (tool.behavior != null) {
+    return tool.behavior == ToolBehavior.nonBlocking;
+  }
+  return tool.responseScheduling != null;
 }

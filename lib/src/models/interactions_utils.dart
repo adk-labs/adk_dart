@@ -157,11 +157,8 @@ void resetWarnedSamplingParamsForTest() {
 }
 
 /// Optional callback to intercept warnings emitted by interactions utils (for testing).
-typedef InteractionsLogHandler = void Function(
-  String message, {
-  int level,
-  String name,
-});
+typedef InteractionsLogHandler =
+    void Function(String message, {int level, String name});
 
 /// Test hook to intercept log warnings.
 InteractionsLogHandler? interactionsLogHandlerForTest;
@@ -202,7 +199,8 @@ Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
   }
 
   final List<String> undeclared = <String>[];
-  if (config.temperature != null && !_warnedSamplingParams.contains('temperature')) {
+  if (config.temperature != null &&
+      !_warnedSamplingParams.contains('temperature')) {
     undeclared.add('temperature');
   }
   if (config.topP != null && !_warnedSamplingParams.contains('top_p')) {
@@ -222,10 +220,12 @@ Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
   }
 
   final List<String> unsupported = <String>[];
-  if (config.presencePenalty != null && !_warnedSamplingParams.contains('presence_penalty')) {
+  if (config.presencePenalty != null &&
+      !_warnedSamplingParams.contains('presence_penalty')) {
     unsupported.add('presence_penalty');
   }
-  if (config.frequencyPenalty != null && !_warnedSamplingParams.contains('frequency_penalty')) {
+  if (config.frequencyPenalty != null &&
+      !_warnedSamplingParams.contains('frequency_penalty')) {
     unsupported.add('frequency_penalty');
   }
   if (unsupported.isNotEmpty) {
@@ -442,11 +442,9 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
 /// State accumulator across Gemini Interactions API streaming events.
 class InteractionsStreamState {
   /// Creates an interactions stream state.
-  InteractionsStreamState({
-    List<Part>? parts,
-    Map<int, Part>? fcPartsByIndex,
-  }) : parts = parts ?? <Part>[],
-       fcPartsByIndex = fcPartsByIndex ?? <int, Part>{};
+  InteractionsStreamState({List<Part>? parts, Map<int, Part>? fcPartsByIndex})
+    : parts = parts ?? <Part>[],
+      fcPartsByIndex = fcPartsByIndex ?? <int, Part>{};
 
   /// Multimodal parts accumulated so far.
   final List<Part> parts;
@@ -479,7 +477,8 @@ LlmResponse? convertInteractionEventToLlmResponse(
   InteractionsStreamState? streamState,
 }) {
   final List<Part> targetParts = streamState?.parts ?? aggregatedParts;
-  final Map<int, Part>? targetFcMap = streamState?.fcPartsByIndex ?? fcPartsByIndex;
+  final Map<int, Part>? targetFcMap =
+      streamState?.fcPartsByIndex ?? fcPartsByIndex;
 
   final String? eventType = _stringValue(
     event['event_type'] ?? event['eventType'],
@@ -611,7 +610,10 @@ LlmResponse? convertInteractionEventToLlmResponse(
       final FunctionCall fc = targetPart.functionCall!;
       if (fc.partialArgs != null) {
         final String argStr = fc.partialArgs!
-            .map((Map<String, Object?> pa) => (pa['string_value'] ?? '').toString())
+            .map(
+              (Map<String, Object?> pa) =>
+                  (pa['string_value'] ?? '').toString(),
+            )
             .join();
         Map<String, dynamic> args = <String, dynamic>{};
         if (argStr.isNotEmpty) {

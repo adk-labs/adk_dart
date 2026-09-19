@@ -60,7 +60,8 @@ class NodeTool extends BaseTool {
     return FunctionDeclaration(
       name: name,
       description: description,
-      parameters: inputSchema ??
+      parameters:
+          inputSchema ??
           <String, dynamic>{
             'type': 'object',
             'properties': <String, dynamic>{

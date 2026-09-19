@@ -795,7 +795,9 @@ class ParallelWorker extends BaseNode {
     final BaseNode wrappedNode = _buildParallelWorkerNode(node);
     final int? resolvedLimit = maxParallelWorkers ?? maxConcurrency;
     if (resolvedLimit != null && resolvedLimit < 1) {
-      throw ArgumentError('maxParallelWorkers must be greater than or equal to 1.');
+      throw ArgumentError(
+        'maxParallelWorkers must be greater than or equal to 1.',
+      );
     }
     return ParallelWorker._(
       wrappedNode: wrappedNode,
@@ -924,9 +926,12 @@ class ToolNode extends BaseNode {
     if (decl != null) {
       final Object? req = decl.parameters['required'];
       if (req is List) {
-        final Map<String, Object?> sessionState = invocationContext.session.state;
+        final Map<String, Object?> sessionState =
+            invocationContext.session.state;
         for (final Object? p in req) {
-          if (p is String && !args.containsKey(p) && sessionState.containsKey(p)) {
+          if (p is String &&
+              !args.containsKey(p) &&
+              sessionState.containsKey(p)) {
             args[p] = sessionState[p];
           }
         }
@@ -1163,7 +1168,8 @@ class Workflow extends BaseAgent {
       return;
     }
     final Map<String, Object?> nodes = <String, Object?>{
-      for (final MapEntry<String, NodeState> entry in context.nodeStates.entries)
+      for (final MapEntry<String, NodeState> entry
+          in context.nodeStates.entries)
         entry.key: <String, Object?>{
           'status': entry.value.status.name,
           'interrupts': entry.value.interrupts,
@@ -1211,15 +1217,17 @@ class Workflow extends BaseAgent {
           ? null
           : _copyNodeStates(previousResult.nodeStates),
     );
-    workflowContext.onNodeStateChange = () => _emitNodeCheckpoint(workflowContext);
-    
+    workflowContext.onNodeStateChange = () =>
+        _emitNodeCheckpoint(workflowContext);
+
     // Emit initial checkpoint of recovered node states when workflow starts
     _emitNodeCheckpoint(workflowContext);
 
     await _execute(workflowContext);
 
-    final bool hasPendingInterrupts = workflowContext.nodeStates.values
-        .any((NodeState state) => _hasUnresolvedWaitingInterrupts(state));
+    final bool hasPendingInterrupts = workflowContext.nodeStates.values.any(
+      (NodeState state) => _hasUnresolvedWaitingInterrupts(state),
+    );
     if (!hasPendingInterrupts) {
       _emitEndOfAgent(workflowContext);
     }
@@ -1354,16 +1362,17 @@ class Workflow extends BaseAgent {
       final Map<String, Future<_TaskOutcome>> running =
           <String, Future<_TaskOutcome>>{
             for (final String name in ready)
-              name: _runReadyNode(
-                context: context,
-                byName: byName,
-                dependencies: dependencies,
-                name: name,
-              ).then(
-                (_NodeRunResult result) => _TaskOutcome.success(result),
-                onError: (Object error, StackTrace stackTrace) =>
-                    _TaskOutcome.failure(name, error, stackTrace),
-              ),
+              name:
+                  _runReadyNode(
+                    context: context,
+                    byName: byName,
+                    dependencies: dependencies,
+                    name: name,
+                  ).then(
+                    (_NodeRunResult result) => _TaskOutcome.success(result),
+                    onError: (Object error, StackTrace stackTrace) =>
+                        _TaskOutcome.failure(name, error, stackTrace),
+                  ),
           };
 
       _TaskOutcome? firstFailure;
@@ -1448,16 +1457,17 @@ class Workflow extends BaseAgent {
         }
         for (final String name in ready.take(availableSlots)) {
           pending.remove(name);
-          running[name] = _runReadyNode(
-            context: context,
-            byName: byName,
-            dependencies: dependencies,
-            name: name,
-          ).then(
-            (_NodeRunResult result) => _TaskOutcome.success(result),
-            onError: (Object error, StackTrace stackTrace) =>
-                _TaskOutcome.failure(name, error, stackTrace),
-          );
+          running[name] =
+              _runReadyNode(
+                context: context,
+                byName: byName,
+                dependencies: dependencies,
+                name: name,
+              ).then(
+                (_NodeRunResult result) => _TaskOutcome.success(result),
+                onError: (Object error, StackTrace stackTrace) =>
+                    _TaskOutcome.failure(name, error, stackTrace),
+              );
         }
       }
       if (running.isEmpty) {
@@ -1804,7 +1814,9 @@ bool _isPreviouslyCompletedOutput(
     return false;
   }
   final String nodePath = key.contains('@') ? key : '$key@1';
-  final String fullNodePath = workflowPath.isEmpty ? nodePath : '$workflowPath/$nodePath';
+  final String fullNodePath = workflowPath.isEmpty
+      ? nodePath
+      : '$workflowPath/$nodePath';
   return historyEvents.any((Event event) {
     if (event.nodeInfo.path != fullNodePath) {
       return false;
@@ -2176,7 +2188,8 @@ _NodeRunResult _resultFromRawNodeOutput(
       ..._interruptIdsFromOutput(rawOutput),
       ...?context?.interruptIds,
     },
-    waiting: (node.waitForOutput ||
+    waiting:
+        (node.waitForOutput ||
             node is Workflow ||
             (node is AgentNode && node.agent is Workflow)) &&
         !hasOutput &&
@@ -2292,7 +2305,8 @@ WorkflowResult _workflowResultFromEvents(
   final String effectiveWorkflowName = workflowName.isEmpty
       ? 'workflow'
       : workflowName;
-  final String effectiveWorkflowPath = workflowPath ?? '$effectiveWorkflowName@1';
+  final String effectiveWorkflowPath =
+      workflowPath ?? '$effectiveWorkflowName@1';
   final Map<String, Object?> outputs = <String, Object?>{};
   final Map<String, NodeState> states = <String, NodeState>{};
   final Map<String, String> interruptOwner = <String, String>{};
@@ -2484,13 +2498,17 @@ _WorkflowEventOwner? _workflowEventOwnerForPath(
     }
   }
   final String directChildSegment = segments[workflowPathSegments.length];
-  final String directChildName = _workflowNodeNameFromSegment(directChildSegment);
+  final String directChildName = _workflowNodeNameFromSegment(
+    directChildSegment,
+  );
   final bool hasDescendants = segments.length > workflowPathSegments.length + 1;
   final String leaf = segments.last;
   final String leafName = _workflowNodeNameFromSegment(leaf);
 
   if (hasDescendants) {
-    final String key = staticNodes.containsKey(directChildName) ? directChildName : directChildSegment;
+    final String key = staticNodes.containsKey(directChildName)
+        ? directChildName
+        : directChildSegment;
     return _WorkflowEventOwner(
       key: key,
       runId: _workflowRunIdFromSegment(directChildSegment),

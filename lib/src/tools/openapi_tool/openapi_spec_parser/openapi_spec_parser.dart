@@ -351,7 +351,8 @@ class OpenApiSpecParser {
           sanitizeTypeField(map);
         }
         for (final MapEntry<String, Object?> entry in map.entries.toList()) {
-          final bool nextInSchema = inSchema ||
+          final bool nextInSchema =
+              inSchema ||
               _schemaContainerKeys.contains(entry.key.toLowerCase());
           map[entry.key] = sanitizeRecursive(
             entry.value,
@@ -382,7 +383,9 @@ class OpenApiSpecParser {
           return null;
         }
         final Map<String, Object?> map = _readMap(current);
-        final String decodedKey = parts[i].replaceAll('~1', '/').replaceAll('~0', '~');
+        final String decodedKey = parts[i]
+            .replaceAll('~1', '/')
+            .replaceAll('~0', '~');
         if (!map.containsKey(decodedKey)) {
           return null;
         }
@@ -391,9 +394,15 @@ class OpenApiSpecParser {
       return current;
     }
 
-    (Object?, Map<String, Object?>) resolveRefWithDoc(String ref, Map<String, Object?> currentDoc) {
+    (Object?, Map<String, Object?>) resolveRefWithDoc(
+      String ref,
+      Map<String, Object?> currentDoc,
+    ) {
       if (ref.startsWith('#/') || ref == '#') {
-        return (resolvePointer(ref == '#' ? '#/' : ref, currentDoc), currentDoc);
+        return (
+          resolvePointer(ref == '#' ? '#/' : ref, currentDoc),
+          currentDoc,
+        );
       }
 
       // External ref format: "http(s)://...#/components/schemas/Pet" or "./models/pet.json#/Pet"
@@ -401,13 +410,15 @@ class OpenApiSpecParser {
       final String docKey = hashIdx >= 0 ? ref.substring(0, hashIdx) : ref;
       final String fragment = hashIdx >= 0 ? ref.substring(hashIdx) : '#';
 
-      Map<String, Object?>? extDoc = externalDocuments[docKey] ??
+      Map<String, Object?>? extDoc =
+          externalDocuments[docKey] ??
           externalDocuments[docKey.replaceFirst(RegExp(r'^\./'), '')];
 
       if (extDoc == null) {
         // Fallback: match by filename
         final String filename = docKey.split('/').last;
-        for (final MapEntry<String, Map<String, Object?>> entry in externalDocuments.entries) {
+        for (final MapEntry<String, Map<String, Object?>> entry
+            in externalDocuments.entries) {
           if (entry.key.endsWith(filename)) {
             extDoc = entry.value;
             break;
@@ -463,7 +474,11 @@ class OpenApiSpecParser {
 
         final Map<String, Object?> output = <String, Object?>{};
         for (final MapEntry<String, Object?> entry in map.entries) {
-          output[entry.key] = recursiveResolve(entry.value, activeDoc, seenRefs);
+          output[entry.key] = recursiveResolve(
+            entry.value,
+            activeDoc,
+            seenRefs,
+          );
         }
         return output;
       }

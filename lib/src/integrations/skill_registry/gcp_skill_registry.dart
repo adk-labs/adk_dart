@@ -138,12 +138,7 @@ class GcpSkillRegistry extends SkillRegistry {
           _readString(skill['displayDescription']) ??
           '';
       try {
-        results.add(
-          Frontmatter(
-            name: name,
-            description: description,
-          ),
-        );
+        results.add(Frontmatter(name: name, description: description));
       } catch (_) {
         // Skip search results failing frontmatter validation
       }

@@ -5,6 +5,20 @@ import '../models/llm_request.dart';
 import '../types/content.dart';
 import 'tool_context.dart';
 
+/// Controls whether a tool is blocking or non-blocking in Live API mode.
+enum ToolBehavior {
+  /// The model waits for the tool response before continuing.
+  blocking('BLOCKING'),
+
+  /// The model continues the conversation while the tool executes in the background.
+  nonBlocking('NON_BLOCKING');
+
+  const ToolBehavior(this.wireValue);
+
+  /// Wire format string representation.
+  final String wireValue;
+}
+
 /// Base contract for one callable tool exposed to the model runtime.
 abstract class BaseTool {
   /// Creates a tool with a stable [name] and user-visible [description].
@@ -14,6 +28,7 @@ abstract class BaseTool {
     this.isLongRunning = false,
     this.defersResponse = false,
     this.customMetadata,
+    this.behavior,
     this.responseScheduling,
   });
 
@@ -32,11 +47,22 @@ abstract class BaseTool {
   /// Arbitrary metadata attached to this tool declaration.
   Map<String, dynamic>? customMetadata;
 
+  /// Controls whether the tool is blocking or non-blocking in Live mode.
+  ToolBehavior? behavior;
+
   /// Live response scheduling policy for this tool.
   FunctionResponseScheduling? responseScheduling;
 
   /// Returns the function declaration exposed to the model, if any.
   FunctionDeclaration? getDeclaration() => null;
+
+  /// Whether this tool call requires human confirmation before execution.
+  ///
+  /// When returning `true`, the framework confirmation gate holds the call back.
+  Future<bool> checkRequireConfirmation(
+    Map<String, dynamic> args,
+    ToolContext toolContext,
+  ) async => false;
 
   /// Executes the tool and returns a JSON-like response payload.
   Future<Object?> run({

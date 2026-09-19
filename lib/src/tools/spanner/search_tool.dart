@@ -252,14 +252,18 @@ String _validateIdentifier(String identifier, String fieldName) {
   final List<String> parts = trimmed.split('.');
   for (final String part in parts) {
     if (!_identifierPartRe.hasMatch(part)) {
-      throw ArgumentError("Invalid SQL identifier for $fieldName: '$identifier'");
+      throw ArgumentError(
+        "Invalid SQL identifier for $fieldName: '$identifier'",
+      );
     }
   }
   return trimmed;
 }
 
 List<String> _validateColumnList(List<String> columns, String fieldName) {
-  return columns.map((String col) => _validateIdentifier(col, fieldName)).toList();
+  return columns
+      .map((String col) => _validateIdentifier(col, fieldName))
+      .toList();
 }
 
 final RegExp _unsafeSqlPatternsRe = RegExp(
@@ -307,12 +311,18 @@ Future<Map<String, Object?>> similaritySearch({
   Map<String, Object?>? searchOptions,
 }) async {
   try {
-    final String validatedTableName = _validateIdentifier(tableName, 'table_name');
+    final String validatedTableName = _validateIdentifier(
+      tableName,
+      'table_name',
+    );
     final String validatedEmbeddingCol = _validateIdentifier(
       embeddingColumnToSearch,
       'embedding_column_to_search',
     );
-    final List<String> validatedColumns = _validateColumnList(columns, 'columns');
+    final List<String> validatedColumns = _validateColumnList(
+      columns,
+      'columns',
+    );
     final String? validatedFilter = _validateAdditionalFilter(additionalFilter);
 
     final SpannerClient spannerClient = getSpannerClient(

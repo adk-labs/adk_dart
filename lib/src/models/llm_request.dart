@@ -588,6 +588,7 @@ class LlmRequest {
     this.cacheableContentsTokenCount,
     this.previousInteractionId,
     this.isManagedAgent = false,
+    this.serviceTier,
   }) : contents = contents ?? <Content>[],
        config = config ?? GenerateContentConfig(),
        liveConnectConfig = liveConnectConfig ?? LiveConnectConfig(),
@@ -598,6 +599,9 @@ class LlmRequest {
 
   /// Target model identifier.
   String? model;
+
+  /// Serving tier for this request, copied from `RunConfig.serviceTier`.
+  String? serviceTier;
 
   /// Conversation contents sent to the model.
   List<Content> contents;
@@ -782,6 +786,7 @@ class LlmRequest {
       cacheMetadata: cacheMetadata,
       cacheableContentsTokenCount: cacheableContentsTokenCount,
       previousInteractionId: previousInteractionId,
+      serviceTier: serviceTier,
     );
 
     for (final Content content in clone.contents) {

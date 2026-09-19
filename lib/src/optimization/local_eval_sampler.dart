@@ -56,12 +56,10 @@ class LocalEvalSamplerConfig {
       evalConfig: EvalConfig.fromJson(
         _asObjectMap(json['evalConfig'] ?? json['eval_config']),
       ),
-      appName:
-          (json['appName'] ?? json['app_name'] ?? '').toString().trim(),
-      trainEvalSet:
-          (json['trainEvalSet'] ?? json['train_eval_set'] ?? '')
-              .toString()
-              .trim(),
+      appName: (json['appName'] ?? json['app_name'] ?? '').toString().trim(),
+      trainEvalSet: (json['trainEvalSet'] ?? json['train_eval_set'] ?? '')
+          .toString()
+          .trim(),
       trainEvalCaseIds: _asStringList(
         json['trainEvalCaseIds'] ?? json['train_eval_case_ids'],
       ),
@@ -106,7 +104,10 @@ class LocalEvalSampler extends Sampler<UnstructuredSamplingResult> {
         config.validationEvalSet ?? config.trainEvalSet;
     final EvalSet validationEvalSet = validationEvalSetId == config.trainEvalSet
         ? trainEvalSet
-        : await evalSetsManager.getEvalSet(config.appName, validationEvalSetId) ??
+        : await evalSetsManager.getEvalSet(
+                config.appName,
+                validationEvalSetId,
+              ) ??
               (throw StateError(
                 'Eval set `$validationEvalSetId` does not exist for app '
                 '`${config.appName}`.',
@@ -206,8 +207,8 @@ class LocalEvalSampler extends Sampler<UnstructuredSamplingResult> {
       final List<Invocation> expectedInvocations = _resolveExpectedInvocations(
         evalCase,
       );
-      final List<Invocation> actualInvocations = evalCaseResponses.responses
-          .isEmpty
+      final List<Invocation> actualInvocations =
+          evalCaseResponses.responses.isEmpty
           ? <Invocation>[]
           : evalCaseResponses.responses.first;
       final Map<int, List<Map<String, Object?>>> perInvocationMetricResults =
@@ -227,7 +228,11 @@ class LocalEvalSampler extends Sampler<UnstructuredSamplingResult> {
         if (evaluationResult.overallEvalStatus != EvalStatus.passed) {
           passed = false;
         }
-        for (int i = 0; i < evaluationResult.perInvocationResults.length; i += 1) {
+        for (
+          int i = 0;
+          i < evaluationResult.perInvocationResults.length;
+          i += 1
+        ) {
           final PerInvocationResult perInvocation =
               evaluationResult.perInvocationResults[i];
           perInvocationMetricResults
@@ -283,7 +288,8 @@ List<String> _resolveEvalCaseIds(
 
 List<EvalCase> _selectEvalCases(EvalSet evalSet, List<String> selectedIds) {
   final Map<String, EvalCase> casesById = <String, EvalCase>{
-    for (final EvalCase evalCase in evalSet.evalCases) evalCase.evalId: evalCase,
+    for (final EvalCase evalCase in evalSet.evalCases)
+      evalCase.evalId: evalCase,
   };
   final List<String> missing = selectedIds
       .where((String id) => !casesById.containsKey(id))
@@ -294,9 +300,7 @@ List<EvalCase> _selectEvalCases(EvalSet evalSet, List<String> selectedIds) {
       '${missing.join(', ')}.',
     );
   }
-  return selectedIds
-      .map((String id) => casesById[id]!)
-      .toList(growable: false);
+  return selectedIds.map((String id) => casesById[id]!).toList(growable: false);
 }
 
 List<Invocation> _resolveExpectedInvocations(EvalCase evalCase) {
@@ -345,8 +349,10 @@ Map<String, Object?> _buildEvalData({
         : null;
     invocations.add(<String, Object?>{
       'actual_invocation': _extractInvocationInfo(actual),
-      if (expected != null) 'expected_invocation': _extractInvocationInfo(expected),
-      'eval_metric_results': perInvocationMetricResults[i] ?? <Map<String, Object?>>[],
+      if (expected != null)
+        'expected_invocation': _extractInvocationInfo(expected),
+      'eval_metric_results':
+          perInvocationMetricResults[i] ?? <Map<String, Object?>>[],
     });
   }
   data['invocations'] = invocations;
@@ -365,7 +371,9 @@ Map<String, Object?> _extractInvocationInfo(Invocation invocation) {
             return <String, Object?>{
               'name': '${call['name'] ?? ''}',
               'args': _asObjectMap(call['args']),
-              'response': response == null ? null : _asObjectMap(response['response']),
+              'response': response == null
+                  ? null
+                  : _asObjectMap(response['response']),
             };
           })
           .toList(growable: false),

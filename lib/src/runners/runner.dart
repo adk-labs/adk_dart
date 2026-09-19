@@ -418,7 +418,9 @@ class Runner {
         continue;
       }
       delta.forEach((String key, Object? value) {
-        if (key.startsWith('app:') || key.startsWith('user:')) {
+        if (key.startsWith('app:') ||
+            key.startsWith('user:') ||
+            key.startsWith('temp:')) {
           return;
         }
         if (value == null) {
@@ -440,7 +442,9 @@ class Runner {
     });
 
     for (final String key in currentState.keys) {
-      if (key.startsWith('app:') || key.startsWith('user:')) {
+      if (key.startsWith('app:') ||
+          key.startsWith('user:') ||
+          key.startsWith('temp:')) {
         continue;
       }
       if (!stateAtRewindPoint.containsKey(key)) {

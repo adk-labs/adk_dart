@@ -106,10 +106,7 @@ class RubricBasedToolUseV1Evaluator extends RubricBasedEvaluator {
   RubricBasedToolUseV1Evaluator(
     EvalMetricSpec evalMetric, {
     super.autoRaterInvoker,
-  }) : super(
-         evalMetric: evalMetric,
-         rubricType: 'TOOL_USE_QUALITY',
-       );
+  }) : super(evalMetric: evalMetric, rubricType: 'TOOL_USE_QUALITY');
 
   @override
   String formatAutoRaterPrompt(

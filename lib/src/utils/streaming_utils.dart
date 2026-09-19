@@ -406,8 +406,9 @@ class StreamingResponseAggregator {
           if (part.thoughtSignature != null &&
               part.thoughtSignature!.isNotEmpty &&
               _currentTextThoughtSignature == null) {
-            _currentTextThoughtSignature =
-                List<int>.from(part.thoughtSignature!);
+            _currentTextThoughtSignature = List<int>.from(
+              part.thoughtSignature!,
+            );
           }
         } else if (part.functionCall != null) {
           _processFunctionCallPart(part);
