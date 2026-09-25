@@ -1865,7 +1865,7 @@ void main() {
       );
     });
 
-    test('rejects multiple DEFAULT_ROUTE edges from one source', () {
+    test('multiple DEFAULT_ROUTE edges pass validation and fan out', () async {
       final FunctionNode router = node(
         (WorkflowContext _, Object? _) => null,
         name: 'router',
@@ -1878,18 +1878,49 @@ void main() {
         (WorkflowContext _, Object? _) => 'second',
         name: 'second_fallback',
       );
+      final JoinNode gate = JoinNode(name: 'gate');
+
+      final Workflow workflow = Workflow(
+        name: 'multiple_default_routes',
+        nodes: <BaseNode>[router, firstFallback, secondFallback, gate],
+        edges: <Edge>[
+          Edge(fromNode: START, toNode: router),
+          Edge(fromNode: router, toNode: firstFallback, route: DEFAULT_ROUTE),
+          Edge(
+            fromNode: router,
+            toNode: secondFallback,
+            route: DEFAULT_ROUTE,
+          ),
+          Edge(fromNode: firstFallback, toNode: gate),
+          Edge(fromNode: secondFallback, toNode: gate),
+        ],
+      );
+
+      final WorkflowResult result = await workflow.runWorkflow(input: 'start');
+      expect(result.outputs['first_fallback'], equals('first'));
+      expect(result.outputs['second_fallback'], equals('second'));
+    });
+
+    test('DEFAULT_ROUTE in route list fails validation', () {
+      final FunctionNode router = node(
+        (WorkflowContext _, Object? _) => null,
+        name: 'router',
+      );
+      final FunctionNode target = node(
+        (WorkflowContext _, Object? _) => 'ok',
+        name: 'target',
+      );
 
       expect(
         () => Workflow(
-          name: 'multiple_default_routes',
-          nodes: <BaseNode>[router, firstFallback, secondFallback],
+          name: 'invalid_default_route_list',
+          nodes: <BaseNode>[router, target],
           edges: <Edge>[
             Edge(fromNode: START, toNode: router),
-            Edge(fromNode: router, toNode: firstFallback, route: DEFAULT_ROUTE),
             Edge(
               fromNode: router,
-              toNode: secondFallback,
-              route: DEFAULT_ROUTE,
+              toNode: target,
+              route: <String>['another_route', DEFAULT_ROUTE],
             ),
           ],
         ),
@@ -1897,9 +1928,8 @@ void main() {
           isA<ArgumentError>().having(
             (ArgumentError error) => error.message,
             'message',
-            allOf(
-              contains('Multiple DEFAULT_ROUTE edges'),
-              contains('node router to first_fallback and second_fallback'),
+            contains(
+              'DEFAULT_ROUTE cannot be combined with other routes in a list',
             ),
           ),
         ),

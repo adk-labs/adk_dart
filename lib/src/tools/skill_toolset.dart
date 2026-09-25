@@ -3,6 +3,9 @@ library;
 
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 
 import '../agents/readonly_context.dart';
 import '../code_executors/base_code_executor.dart';
@@ -79,6 +82,7 @@ class SkillLifecycleConfig {
     this.enabled = true,
     this.defaultMode = SkillLifecycleMode.persistent,
     this.maxActiveSkills = 3,
+    this.revalidateSkills = false,
     Map<String, SkillLifecycleMode>? skillOverrides,
   }) : skillOverrides = skillOverrides == null
            ? const <String, SkillLifecycleMode>{}
@@ -96,6 +100,9 @@ class SkillLifecycleConfig {
 
   /// Maximum number of active bounded skills allowed simultaneously.
   final int maxActiveSkills;
+
+  /// Whether to revalidate active skills against their source definition on each request.
+  final bool revalidateSkills;
 
   /// Per-skill lifecycle mode overrides.
   final Map<String, SkillLifecycleMode> skillOverrides;
@@ -439,6 +446,7 @@ class LoadSkillTool extends BaseTool {
       toolContext.agentName,
       skill.name,
       toolContext.invocationId,
+      skill,
     );
 
     final Map<String, Object?> result = <String, Object?>{
@@ -1291,6 +1299,18 @@ class SkillToolset extends BaseToolset {
     }
   }
 
+  bool _offersScriptTool(ReadonlyContext? context) {
+    if (!_hasScriptExecution(context)) {
+      return false;
+    }
+    if (context == null || _registry != null) {
+      return true;
+    }
+    return _listSkills().any(
+      (Skill skill) => skill.resources.listScripts().isNotEmpty,
+    );
+  }
+
   @override
   /// Returns skill tools filtered by [toolFilter], if configured.
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
@@ -1298,7 +1318,7 @@ class SkillToolset extends BaseToolset {
       readonlyContext,
     );
     var allTools = <BaseTool>[..._tools, ...dynamicTools];
-    if (!_hasScriptExecution(readonlyContext)) {
+    if (!_offersScriptTool(readonlyContext)) {
       allTools = allTools
           .where((BaseTool t) => t is! RunSkillScriptTool)
           .toList(growable: false);
@@ -1515,16 +1535,25 @@ class SkillToolset extends BaseToolset {
       invocationId,
     );
     final bool alreadyActive = previouslyActive.contains(skillName);
-    _recordActivation(state, agentName, skillName, invocationId);
-    return !alreadyActive;
+    if (alreadyActive) {
+      _recordActivation(state, agentName, skillName, invocationId);
+      return false;
+    }
+    final Skill? skill = await _getOrFetchSkill(
+      skillName,
+      invocationId: invocationId,
+    );
+    _recordActivation(state, agentName, skillName, invocationId, skill);
+    return true;
   }
 
   List<String> _recordActivation(
     Map<String, dynamic> state,
     String agentName,
     String skillName,
-    String? invocationId,
-  ) {
+    String? invocationId, [
+    Skill? skill,
+  ]) {
     final List<String> storedSkills = _readActivatedSkills(state, agentName);
     final List<String> activated = _activeSkills(
       state,
@@ -1550,7 +1579,14 @@ class SkillToolset extends BaseToolset {
 
     final List<String> evicted = _evictOverCap(activated);
     _writeActivatedSkills(state, agentName, activated);
-    _recordLifecycle(state, agentName, skillName, lifecycle, invocationId);
+    _recordLifecycle(
+      state,
+      agentName,
+      skillName,
+      lifecycle,
+      invocationId,
+      skill,
+    );
     _forgetLifecycleRecords(state, agentName, activated);
     return <String>[...expired, ...evicted];
   }
@@ -1560,19 +1596,30 @@ class SkillToolset extends BaseToolset {
     String agentName,
     String skillName,
     SkillLifecycleMode lifecycle,
-    String? invocationId,
-  ) {
-    if (lifecycle != SkillLifecycleMode.ephemeral) {
+    String? invocationId, [
+    Skill? skill,
+  ]) {
+    final Map<String, Object?> record = <String, Object?>{};
+    if (lifecycle == SkillLifecycleMode.ephemeral) {
+      record['lifecycle'] = lifecycle.name;
+      record['activated_in'] = invocationId;
+    }
+    if (lifecycleConfig.enabled &&
+        lifecycleConfig.revalidateSkills &&
+        skill != null) {
+      record['version_hash'] = _skillContentHash(skill);
+    }
+    if (record.isEmpty) {
       return;
     }
     final Map<String, Map<String, Object?>> records = _readLifecycleRecords(
       state,
       agentName,
     );
-    records[skillName] = <String, Object?>{
-      'lifecycle': lifecycle.name,
-      'activated_in': invocationId,
-    };
+    final Map<String, Object?> existing =
+        records[skillName] ?? <String, Object?>{};
+    existing.addAll(record);
+    records[skillName] = existing;
     state['_adk_skill_lifecycle_$agentName'] = records;
   }
 
@@ -1733,7 +1780,7 @@ class SkillToolset extends BaseToolset {
         prefix: toolNamePrefix,
         allowedTools: selectedCoreTools,
         skillsFolder: skillsFolder,
-        scriptExecutionEnabled: _hasScriptExecution(toolContext),
+        scriptExecutionEnabled: _offersScriptTool(toolContext),
       ),
     ];
     final bool hasListSkills = selectedCoreTools.contains(listSkillsToolName);
@@ -1749,6 +1796,9 @@ class SkillToolset extends BaseToolset {
         'you can use the `$p$searchSkillsToolName` tool to discover additional skills from the registry.',
       );
     }
+    if (lifecycleConfig.enabled && lifecycleConfig.revalidateSkills) {
+      instructions.addAll(await _restateChangedSkills(toolContext));
+    }
     llmRequest.appendInstructions(instructions);
 
     if (lifecycleConfig.enabled) {
@@ -1762,6 +1812,74 @@ class SkillToolset extends BaseToolset {
         activeSkills: activeSkills,
       );
     }
+  }
+
+  Future<List<String>> _restateChangedSkills(ToolContext toolContext) async {
+    final Map<String, Map<String, Object?>> records = _readLifecycleRecords(
+      toolContext.state,
+      toolContext.agentName,
+    );
+    if (records.isEmpty) {
+      return const <String>[];
+    }
+
+    final List<({String name, String hash})> toCheck =
+        <({String name, String hash})>[];
+    for (final String skillName in _activeSkills(
+      toolContext.state,
+      toolContext.agentName,
+      toolContext.invocationId,
+    )) {
+      final Object? loadedHash = records[skillName]?['version_hash'];
+      if (loadedHash is String && loadedHash.isNotEmpty) {
+        toCheck.add((name: skillName, hash: loadedHash));
+      }
+    }
+    if (toCheck.isEmpty) {
+      return const <String>[];
+    }
+
+    final List<Skill?> fetched = await Future.wait(
+      toCheck.map(
+        (({String name, String hash}) item) => _getOrFetchSkill(
+          item.name,
+          invocationId: toolContext.invocationId,
+        ).catchError((Object error, StackTrace stack) {
+          developer.log(
+            "Could not revalidate skill '${item.name}': $error",
+            name: 'adk_dart.skill_toolset',
+            error: error,
+            stackTrace: stack,
+          );
+          return null;
+        }),
+      ),
+    );
+
+    final String p = toolNamePrefix == null || toolNamePrefix!.isEmpty
+        ? ''
+        : '${toolNamePrefix}_';
+    final List<String> restatedInstructions = <String>[];
+    for (int i = 0; i < toCheck.length; i++) {
+      final ({String name, String hash}) item = toCheck[i];
+      final Skill? skill = fetched[i];
+      if (skill == null) {
+        continue;
+      }
+      final String currentHash = _skillContentHash(skill);
+      if (currentHash == item.hash) {
+        continue;
+      }
+      developer.log(
+        "Skill '${item.name}' changed since it was loaded; re-stating it.",
+        name: 'adk_dart.skill_toolset',
+      );
+      restatedInstructions.add(
+        '\nThe skill `${item.name}` has changed since it was loaded. These instructions '
+        'replace the ones the earlier `$p$loadSkillToolName` response gave you:\n\n${skill.instructions}',
+      );
+    }
+    return restatedInstructions;
   }
 
   @override
@@ -1877,4 +1995,51 @@ BaseCodeExecutor? _resolveCodeExecutor(
     // Ignore missing property and keep searching fallback.
   }
   return null;
+}
+
+String _skillContentHash(Skill skill) {
+  final List<int> bytes = <int>[];
+
+  void feed(List<Object?> values) {
+    for (final Object? value in values) {
+      final List<int> data;
+      if (value is String) {
+        data = utf8.encode(value);
+      } else if (value is List<int>) {
+        data = value;
+      } else {
+        data = utf8.encode('$value');
+      }
+      final ByteData lenBytes = ByteData(8)..setUint64(0, data.length);
+      bytes.addAll(lenBytes.buffer.asUint8List());
+      bytes.addAll(data);
+    }
+  }
+
+  feed(<Object?>[skill.name, skill.instructions]);
+  feed(<Object?>[jsonEncode(skill.frontmatter.toMap())]);
+  final Resources resources = skill.resources;
+  final List<String> refNames = resources.listReferences()..sort();
+  for (final String name in refNames) {
+    final String? content = resources.getReference(name);
+    if (content != null) {
+      feed(<Object?>['references', name, content]);
+    }
+  }
+  final List<String> assetNames = resources.listAssets()..sort();
+  for (final String name in assetNames) {
+    final String? content = resources.getAsset(name);
+    if (content != null) {
+      feed(<Object?>['assets', name, content]);
+    }
+  }
+  final List<String> scriptNames = resources.listScripts()..sort();
+  for (final String name in scriptNames) {
+    final Script? script = resources.getScript(name);
+    if (script != null) {
+      feed(<Object?>['scripts', name, script.src]);
+    }
+  }
+
+  return sha256.convert(bytes).toString();
 }

@@ -21,7 +21,11 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
     InvocationContext invocationContext,
     LlmRequest llmRequest,
   ) async* {
-    final LlmAgent agent = invocationContext.agent as LlmAgent;
+    final Object maybeAgent = invocationContext.agent;
+    if (maybeAgent is! LlmAgent) {
+      return;
+    }
+    final LlmAgent agent = maybeAgent;
     final List<Event> events = invocationContext.getEvents(currentBranch: true);
     if (events.isEmpty) {
       return;

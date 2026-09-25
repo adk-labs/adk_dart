@@ -1917,20 +1917,15 @@ void _validateNoDuplicateEdges(Iterable<Edge> edges) {
 }
 
 void _validateDefaultRoutes(Iterable<Edge> edges) {
-  final Map<String, String> defaultRouteTargets = <String, String>{};
   for (final Edge edge in edges) {
-    if (edge.route != DEFAULT_ROUTE) {
-      continue;
+    if (edge.route is Iterable &&
+        (edge.route as Iterable).contains(DEFAULT_ROUTE)) {
+      throw ArgumentError(
+        'Graph validation failed. DEFAULT_ROUTE cannot be combined with '
+        'other routes in a list (edge from=${edge.fromNode}, to=${edge.toNode}). '
+        'Use a separate edge for DEFAULT_ROUTE.',
+      );
     }
-    final String? previousTarget = defaultRouteTargets[edge.fromNode];
-    if (previousTarget == null) {
-      defaultRouteTargets[edge.fromNode] = edge.toNode;
-      continue;
-    }
-    throw ArgumentError(
-      'Graph validation failed. Multiple DEFAULT_ROUTE edges found from '
-      'node ${edge.fromNode} to $previousTarget and ${edge.toNode}',
-    );
   }
 }
 

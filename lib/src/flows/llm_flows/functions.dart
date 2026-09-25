@@ -282,7 +282,10 @@ Future<Event?> handleFunctionCallListAsync(
     return null;
   }
 
-  return mergeParallelFunctionResponseEvents(events);
+  return mergeParallelFunctionResponseEvents(
+    events,
+    invocationContext.session.state,
+  );
 }
 
 Future<Event?> _executeSingleFunctionCallAsync(
@@ -756,7 +759,10 @@ Map<String, dynamic> _normalizeFunctionResult(Object? result) {
 }
 
 /// Merges multiple parallel function response events into one event.
-Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
+Event mergeParallelFunctionResponseEvents(
+  List<Event> functionResponseEvents, [
+  Map<String, dynamic>? sessionState,
+]) {
   if (functionResponseEvents.isEmpty) {
     throw ArgumentError('No function response events provided.');
   }
@@ -821,8 +827,70 @@ Event mergeParallelFunctionResponseEvents(List<Event> functionResponseEvents) {
     actions: mergedActions,
   );
 
+  _applyLatestStateWrites(merged, functionResponseEvents, sessionState);
+
   merged.timestamp = base.timestamp;
   return merged;
+}
+
+void _applyLatestStateWrites(
+  Event mergedEvent,
+  List<Event> functionResponseEvents,
+  Map<String, dynamic>? sessionState,
+) {
+  if (sessionState == null) {
+    return;
+  }
+  final Map<String, Object?> mergedDelta = mergedEvent.actions.stateDelta;
+  final Map<String, Object?> latestWrites = <String, Object?>{};
+  for (final String key in mergedDelta.keys) {
+    final Object? latest = sessionState[key];
+    if (latest is! Map && latest is! List) {
+      continue;
+    }
+    final List<Object?> writes = <Object?>[];
+    for (final Event event in functionResponseEvents) {
+      if (event.actions.stateDelta.containsKey(key)) {
+        writes.add(event.actions.stateDelta[key]);
+      }
+    }
+    if (writes.length > 1 &&
+        writes.any((Object? write) => _areValuesEqual(write, latest))) {
+      latestWrites[key] = latest;
+    }
+  }
+  if (latestWrites.isNotEmpty) {
+    mergedDelta.addAll(latestWrites);
+  }
+}
+
+bool _areValuesEqual(Object? a, Object? b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i += 1) {
+      if (!_areValuesEqual(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (a is Map && b is Map) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (final Object? key in a.keys) {
+      if (!b.containsKey(key) || !_areValuesEqual(a[key], b[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return a == b;
 }
 
 void _deepMergeStateDelta(

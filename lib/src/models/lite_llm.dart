@@ -705,6 +705,18 @@ List<Map<String, Object?>> _contentToMessages(
       }
     } else if (part.fileData != null && part.fileData!.fileUri.isNotEmpty) {
       final String mimeType = part.fileData!.mimeType ?? '';
+      if (mimeType.isEmpty || mimeType == 'application/octet-stream') {
+        final String typeLabel = mimeType.isEmpty ? '(unknown)' : mimeType;
+        final String redactedFileUri = redactFileUriForLog(
+          part.fileData!.fileUri,
+          displayName: part.fileData!.displayName,
+        );
+        throw ArgumentError(
+          "Cannot process file_uri '$redactedFileUri': MIME type "
+          "'$typeLabel' is not supported. Please set a specific MIME "
+          "type on `file_data.mime_type`.",
+        );
+      }
       final String provider = LiteLlm.getProviderFromModel(model);
       if (_isAudioMimeType(mimeType) &&
           (provider == 'openai' || provider == 'azure')) {
@@ -1050,3 +1062,31 @@ List<int>? _decodeThoughtSignature(Object? value) {
     }
   }
 }
+
+/// Returns a privacy-preserving identifier for logs and error messages.
+String redactFileUriForLog(String fileUri, {String? displayName}) {
+  if (displayName != null && displayName.isNotEmpty) {
+    return displayName;
+  }
+  if (fileUri.startsWith('assistant-')) {
+    return 'assistant-<redacted>';
+  }
+  final RegExp openAiPrefixRegex =
+      RegExp(r'^(file|cfile|batch|model|vs|asst)-[A-Za-z0-9]+');
+  if (openAiPrefixRegex.hasMatch(fileUri)) {
+    final String prefix = fileUri.split('-').first;
+    return '$prefix-<redacted>';
+  }
+  final Uri? parsed = Uri.tryParse(fileUri);
+  if (parsed == null || !parsed.hasScheme) {
+    return '<unknown>';
+  }
+  final List<String> segments =
+      parsed.pathSegments.where((String s) => s.isNotEmpty).toList();
+  final String tail = segments.isNotEmpty ? segments.last : '';
+  if (tail.isNotEmpty) {
+    return '${parsed.scheme}://<redacted>/$tail';
+  }
+  return '${parsed.scheme}://<redacted>';
+}
+

@@ -111,6 +111,24 @@ class InMemoryArtifactService extends BaseArtifactService {
     String? sessionId,
     int? version,
   }) async {
+    return _loadArtifactInternal(
+      appName: appName,
+      userId: userId,
+      filename: filename,
+      sessionId: sessionId,
+      version: version,
+      remainingDepth: maxArtifactReferenceDepth,
+    );
+  }
+
+  Future<Part?> _loadArtifactInternal({
+    required String appName,
+    required String userId,
+    required String filename,
+    String? sessionId,
+    int? version,
+    required int remainingDepth,
+  }) async {
     final String path = _artifactPath(
       appName: appName,
       userId: userId,
@@ -131,26 +149,20 @@ class InMemoryArtifactService extends BaseArtifactService {
 
     // Resolve artifact reference if needed.
     if (isArtifactRef(value)) {
-      final ParsedArtifactUri? parsedUri = parseArtifactUri(
-        value.fileData!.fileUri,
-      );
-      if (parsedUri == null) {
-        throw InputValidationError(
-          'Invalid artifact reference URI: ${value.fileData!.fileUri}',
-        );
-      }
-      validateArtifactReferenceScope(
+      final ParsedArtifactUri parsedUri = resolveArtifactReference(
+        fileUri: value.fileData!.fileUri,
         appName: appName,
         userId: userId,
         sessionId: sessionId,
-        parsedUri: parsedUri,
+        remainingDepth: remainingDepth,
       );
-      return loadArtifact(
+      return _loadArtifactInternal(
         appName: parsedUri.appName,
         userId: parsedUri.userId,
         filename: parsedUri.filename,
         sessionId: parsedUri.sessionId,
         version: parsedUri.version,
+        remainingDepth: remainingDepth - 1,
       );
     }
 

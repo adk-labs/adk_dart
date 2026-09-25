@@ -18,6 +18,7 @@ import 'package:adk_mcp/adk_mcp.dart'
         mcpMethodElicitationCreate,
         mcpMethodNotFoundCode;
 
+import '../../utils/google_client_headers.dart';
 import '../../version.dart';
 import '../base_tool.dart';
 
@@ -55,13 +56,13 @@ class McpSessionManager {
   /// Creates an MCP session manager singleton.
   McpSessionManager._() {
     _remoteClient = McpRemoteClient(
-      clientInfoName: 'adk_dart',
+      clientInfoName: 'google-adk',
       clientInfoVersion: adkVersion,
       onServerMessage: _handleServerMessage,
       onServerRequest: _handleServerRequest,
     );
     _stdioClient = McpStdioClient(
-      clientInfoName: 'adk_dart',
+      clientInfoName: 'google-adk',
       clientInfoVersion: adkVersion,
       onServerMessage: _handleServerMessage,
       onServerRequest: _handleServerRequest,
@@ -526,6 +527,25 @@ class McpSessionManager {
     return result;
   }
 
+  /// Merges base connection headers with additional headers and ADK tracking tokens.
+  Map<String, String>? mergeHeaders(
+    McpConnectionParams connectionParams, {
+    Map<String, String>? additionalHeaders,
+  }) {
+    if (connectionParams is StdioConnectionParams) {
+      return null;
+    }
+    final Map<String, String> baseHeaders = <String, String>{};
+    if (connectionParams is StreamableHTTPConnectionParams &&
+        connectionParams.headers.isNotEmpty) {
+      baseHeaders.addAll(connectionParams.headers);
+    }
+    if (additionalHeaders != null && additionalHeaders.isNotEmpty) {
+      baseHeaders.addAll(additionalHeaders);
+    }
+    return mergeTrackingHeaders(baseHeaders);
+  }
+
   Future<void> _ensureInitialized(
     McpConnectionParams connectionParams, {
     Map<String, String>? headers,
@@ -536,7 +556,7 @@ class McpSessionManager {
       }
       await _remoteClient.ensureInitialized(
         connectionParams,
-        headers: headers,
+        headers: mergeHeaders(connectionParams, additionalHeaders: headers),
         clientCapabilitiesOverride: _clientCapabilitiesFor(connectionParams),
       );
       return;
@@ -581,7 +601,7 @@ class McpSessionManager {
         connectionParams: connectionParams,
         method: method,
         resultArrayField: resultArrayField,
-        headers: headers,
+        headers: mergeHeaders(connectionParams, additionalHeaders: headers),
         suppressJsonRpcErrorCodes: suppressJsonRpcErrorCodes,
         suppressErrors: suppressErrors,
       );
@@ -611,7 +631,7 @@ class McpSessionManager {
         connectionParams: connectionParams,
         method: method,
         params: params,
-        headers: headers,
+        headers: mergeHeaders(connectionParams, additionalHeaders: headers),
       );
     }
     if (connectionParams is StdioConnectionParams) {
@@ -639,7 +659,7 @@ class McpSessionManager {
         connectionParams: connectionParams,
         method: method,
         params: params,
-        headers: headers,
+        headers: mergeHeaders(connectionParams, additionalHeaders: headers),
         suppressJsonRpcErrorCodes: suppressJsonRpcErrorCodes,
         suppressErrors: suppressErrors,
       );

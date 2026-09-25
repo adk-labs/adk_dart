@@ -138,3 +138,36 @@ void validatePathSegment(String value, String fieldName) {
     );
   }
 }
+
+/// The maximum number of `artifact://` references a single lookup may follow
+/// before giving up. Shared by every artifact service so that a self-referential
+/// or cyclic reference chain fails with a clear error instead of exhausting
+/// the stack.
+const int maxArtifactReferenceDepth = 5;
+
+/// Validates an artifact reference URI before following it.
+ParsedArtifactUri resolveArtifactReference({
+  required String fileUri,
+  required String appName,
+  required String userId,
+  required String? sessionId,
+  required int remainingDepth,
+}) {
+  if (remainingDepth <= 0) {
+    throw InputValidationError(
+      'Exceeded maximum recursion depth resolving artifact reference: $fileUri',
+    );
+  }
+  final ParsedArtifactUri? parsedUri = parseArtifactUri(fileUri);
+  if (parsedUri == null) {
+    throw InputValidationError('Invalid artifact reference URI: $fileUri');
+  }
+  validateArtifactReferenceScope(
+    appName: appName,
+    userId: userId,
+    sessionId: sessionId,
+    parsedUri: parsedUri,
+  );
+  return parsedUri;
+}
+

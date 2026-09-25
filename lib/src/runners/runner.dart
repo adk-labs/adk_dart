@@ -13,6 +13,7 @@ import '../apps/app.dart';
 import '../apps/compaction.dart' as app_compaction;
 import '../artifacts/base_artifact_service.dart';
 import '../artifacts/in_memory_artifact_service.dart';
+import '../errors/invocation_not_found_error.dart';
 import '../errors/session_not_found_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
@@ -382,7 +383,9 @@ class Runner {
     }
 
     if (rewindEventIndex == -1) {
-      throw ArgumentError('Invocation ID not found: $rewindBeforeInvocationId');
+      throw InvocationNotFoundError(
+        'Invocation ID not found: $rewindBeforeInvocationId',
+      );
     }
 
     final Map<String, Object?> stateDelta = _computeStateDeltaForRewind(

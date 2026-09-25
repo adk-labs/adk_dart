@@ -7,6 +7,7 @@ import '../../agents/readonly_context.dart';
 import '../../auth/auth_credential.dart';
 import '../../events/ui_widget.dart';
 import '../../features/_feature_registry.dart';
+import '../../flows/llm_flows/_fencing.dart';
 import '../../models/llm_request.dart';
 import '../_function_tool_declarations.dart';
 import '../base_authenticated_tool.dart';
@@ -126,24 +127,84 @@ class McpTool extends BaseAuthenticatedTool {
     return null;
   }
 
-  @override
-  /// Returns a function declaration using MCP input schema as parameters.
-  FunctionDeclaration? getDeclaration() {
+  FunctionDeclaration _buildDeclaration({bool fenced = false}) {
+    final String resolvedDescription =
+        fenced ? fenceToolDescription(description) : description;
+    final Map<String, dynamic> rawInputSchema =
+        Map<String, dynamic>.from(_mcpTool.inputSchema);
+    final Object? fencedInput = fenced ? fenceSchemaDescriptions(rawInputSchema) : null;
+    final Map<String, dynamic> inputSchema =
+        fencedInput is Map
+            ? Map<String, dynamic>.from(fencedInput)
+            : rawInputSchema;
+
     if (isFeatureEnabled(FeatureName.jsonSchemaForFuncDecl)) {
+      final Map<String, dynamic> rawOutputSchema =
+          Map<String, dynamic>.from(_mcpTool.outputSchema);
+      final Object? fencedOutput =
+          fenced && _mcpTool.outputSchema.isNotEmpty
+              ? fenceSchemaDescriptions(rawOutputSchema)
+              : null;
+      final Map<String, dynamic>? outputSchema =
+          _mcpTool.outputSchema.isEmpty
+              ? null
+              : (fencedOutput is Map
+                  ? Map<String, dynamic>.from(fencedOutput)
+                  : rawOutputSchema);
       return buildFunctionDeclarationWithJsonSchema(
         name: name,
-        description: description,
-        parametersJsonSchema: Map<String, dynamic>.from(_mcpTool.inputSchema),
-        responseJsonSchema: _mcpTool.outputSchema.isEmpty
-            ? null
-            : Map<String, dynamic>.from(_mcpTool.outputSchema),
+        description: resolvedDescription,
+        parametersJsonSchema: inputSchema,
+        responseJsonSchema: outputSchema,
       );
     }
     return FunctionDeclaration(
       name: name,
-      description: description,
-      parameters: Map<String, dynamic>.from(_mcpTool.inputSchema),
+      description: resolvedDescription,
+      parameters: inputSchema,
     );
+  }
+
+  FunctionDeclaration _buildFencedDeclaration() =>
+      _buildDeclaration(fenced: true);
+
+  @override
+  /// Returns a function declaration using MCP input schema as parameters.
+  FunctionDeclaration? getDeclaration() => _buildDeclaration(fenced: false);
+
+  @override
+  Future<void> processLlmRequest({
+    required ToolContext toolContext,
+    required LlmRequest llmRequest,
+  }) async {
+    await super.processLlmRequest(
+      toolContext: toolContext,
+      llmRequest: llmRequest,
+    );
+
+    bool replaced = false;
+    final List<ToolDeclaration>? tools = llmRequest.config.tools;
+    if (tools != null) {
+      for (final ToolDeclaration tool in tools.reversed) {
+        final List<FunctionDeclaration> declarations = tool.functionDeclarations;
+        for (int i = declarations.length - 1; i >= 0; i--) {
+          if (declarations[i].name == name) {
+            declarations[i] = _buildFencedDeclaration();
+            replaced = true;
+            break;
+          }
+        }
+        if (replaced) {
+          break;
+        }
+      }
+    }
+
+    final String currentInstruction =
+        llmRequest.config.systemInstruction ?? '';
+    if (!currentInstruction.contains(toolDescriptionPreamble)) {
+      llmRequest.appendInstructions(<String>[toolDescriptionPreamble]);
+    }
   }
 
   @override

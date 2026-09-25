@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import '../models/llm_request.dart';
 import 'base_tool.dart';
@@ -23,8 +24,10 @@ class FunctionTool extends BaseTool {
     String? description,
     this.requireConfirmation = false,
     List<String>? toolContextParamNames,
+    FunctionDeclaration? declaration,
     super.behavior,
-  }) : toolContextParamNames = _normalizeToolContextParamNames(
+  }) : _cachedDeclaration = declaration,
+       toolContextParamNames = _normalizeToolContextParamNames(
          toolContextParamNames,
        ),
        super(name: name ?? 'function_tool', description: description ?? '');
@@ -57,6 +60,11 @@ class FunctionTool extends BaseTool {
     Map<String, dynamic> args,
     ToolContext toolContext,
   ) async {
+    final FunctionDeclaration? declaration = getDeclaration();
+    final Map<String, dynamic> processedArgs = _preprocessArgs(
+      args,
+      declaration,
+    );
     if (requireConfirmation is bool) {
       return requireConfirmation as bool;
     }
@@ -64,7 +72,7 @@ class FunctionTool extends BaseTool {
       try {
         final Object? result = await _invokeFunction(
           target: requireConfirmation as Function,
-          args: args,
+          args: processedArgs,
           toolContext: toolContext,
         );
         return result == true;
@@ -82,12 +90,16 @@ class FunctionTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final FunctionDeclaration? declaration = getDeclaration();
+    final Map<String, dynamic> processedArgs = _preprocessArgs(
+      args,
+      declaration,
+    );
     if (declaration != null) {
       final Object? requiredRaw = declaration.parameters['required'];
       if (requiredRaw is List) {
         final List<String> missingParams = requiredRaw
             .map((Object? p) => '$p')
-            .where((String p) => p.isNotEmpty && !args.containsKey(p))
+            .where((String p) => p.isNotEmpty && !processedArgs.containsKey(p))
             .toList();
         if (missingParams.isNotEmpty) {
           final String missingStr = missingParams.join('\n');
@@ -99,7 +111,7 @@ class FunctionTool extends BaseTool {
       }
     }
 
-    if (await _requiresConfirmation(args)) {
+    if (await _requiresConfirmation(processedArgs)) {
       final confirmation = toolContext.toolConfirmation;
       if (confirmation == null) {
         toolContext.requestConfirmation(
@@ -118,7 +130,81 @@ class FunctionTool extends BaseTool {
       }
     }
 
-    return _invokeCallable(args, toolContext);
+    return _invokeCallable(processedArgs, toolContext);
+  }
+
+  Map<String, dynamic> _preprocessArgs(
+    Map<String, dynamic> args,
+    FunctionDeclaration? declaration,
+  ) {
+    if (declaration == null) {
+      return args;
+    }
+    final Object? rawProps = declaration.parameters['properties'];
+    if (rawProps is! Map) {
+      return args;
+    }
+    final Map<String, dynamic> converted = Map<String, dynamic>.of(args);
+    for (final MapEntry<Object?, Object?> entry in rawProps.entries) {
+      final String paramName = entry.key.toString();
+      if (!converted.containsKey(paramName)) {
+        continue;
+      }
+      final Object? propSchema = entry.value;
+      if (propSchema is! Map) {
+        continue;
+      }
+
+      final Object? type = propSchema['type'];
+      final Object? value = converted[paramName];
+
+      if (type == 'integer' && value is num) {
+        if (value % 1 == 0) {
+          converted[paramName] = value.toInt();
+        } else {
+          developer.log(
+            "Argument '$paramName' is typed int but got non-integral $value; "
+            "passing it through unchanged.",
+            name: 'google-adk',
+            level: 900,
+          );
+        }
+      } else if (type == 'array') {
+        final Object? items = propSchema['items'];
+        final bool isIntArray = items is Map && items['type'] == 'integer';
+        if (isIntArray && value is List) {
+          final List<Object?> coercedItems = <Object?>[];
+          final List<Object?> nonIntegralItems = <Object?>[];
+          for (final Object? item in value) {
+            if (item is num) {
+              if (item % 1 == 0) {
+                coercedItems.add(item.toInt());
+              } else {
+                nonIntegralItems.add(item);
+                coercedItems.add(item);
+              }
+            } else {
+              coercedItems.add(item);
+            }
+          }
+          if (nonIntegralItems.isNotEmpty) {
+            developer.log(
+              "Argument '$paramName' is typed list[int] but contains non-integral "
+              "$nonIntegralItems; passing through unchanged.",
+              name: 'google-adk',
+              level: 900,
+            );
+          }
+          if (nonIntegralItems.isEmpty &&
+              coercedItems.every((Object? e) => e is int)) {
+            converted[paramName] = coercedItems.cast<int>();
+          } else {
+            converted[paramName] = coercedItems;
+          }
+        }
+      }
+    }
+    return converted;
   }
 
   Future<bool> _requiresConfirmation(Map<String, dynamic> args) async {

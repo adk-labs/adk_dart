@@ -19,6 +19,11 @@ Map<String, String> getTrackingHeaders({
   };
 }
 
+const Set<String> _trackingHeaderNames = <String>{
+  'user-agent',
+  'x-goog-api-client',
+};
+
 /// The [headers] map merged with SDK tracking header values.
 ///
 /// Existing header tokens are preserved and deduplicated.
@@ -27,7 +32,17 @@ Map<String, String> mergeTrackingHeaders(
   String? frameworkLabel,
   Map<String, String>? environment,
 }) {
-  final Map<String, String> merged = <String, String>{...?headers};
+  final Map<String, String> merged = <String, String>{};
+  if (headers != null) {
+    for (final MapEntry<String, String> entry in headers.entries) {
+      final String lower = entry.key.toLowerCase();
+      if (_trackingHeaderNames.contains(lower)) {
+        merged[lower] = entry.value;
+      } else {
+        merged[entry.key] = entry.value;
+      }
+    }
+  }
   final Map<String, String> tracking = getTrackingHeaders(
     frameworkLabel: frameworkLabel,
     environment: environment,

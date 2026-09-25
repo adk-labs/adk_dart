@@ -93,6 +93,7 @@ export 'src/labs/openai.dart';
 
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
+export 'src/errors/invocation_not_found_error.dart';
 export 'src/errors/not_found_error.dart';
 export 'src/errors/session_not_found_error.dart';
 export 'src/errors/stale_session_error.dart';
@@ -205,6 +206,7 @@ export 'src/flows/llm_flows/request_confirmation.dart';
 export 'src/flows/llm_flows/single_flow.dart';
 export 'src/flows/llm_flows/transcription_manager.dart';
 export 'src/flows/llm_flows/output_schema_processor.dart';
+export 'src/flows/llm_flows/_fencing.dart';
 
 export 'src/models/base_llm.dart';
 export 'src/models/fallback_model.dart';

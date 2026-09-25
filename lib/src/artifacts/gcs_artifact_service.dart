@@ -164,26 +164,25 @@ class GcsArtifactService extends BaseArtifactService {
     required String appName,
     required String userId,
     required String? sessionId,
+    required int remainingDepth,
   }) {
     if (!fileUri.startsWith('artifact://')) {
       return null;
     }
-    final ParsedArtifactUri? parsedUri = parseArtifactUri(fileUri);
-    if (parsedUri == null) {
-      throw InputValidationError('Invalid artifact reference URI: $fileUri');
-    }
-    validateArtifactReferenceScope(
+    final ParsedArtifactUri parsedUri = resolveArtifactReference(
+      fileUri: fileUri,
       appName: appName,
       userId: userId,
       sessionId: sessionId,
-      parsedUri: parsedUri,
+      remainingDepth: remainingDepth,
     );
-    return loadArtifact(
+    return _loadArtifactInternal(
       appName: parsedUri.appName,
       userId: parsedUri.userId,
       filename: parsedUri.filename,
       sessionId: parsedUri.sessionId,
       version: parsedUri.version,
+      remainingDepth: remainingDepth - 1,
     );
   }
 
@@ -263,12 +262,31 @@ class GcsArtifactService extends BaseArtifactService {
   ///
   /// Returns `null` when the artifact or version does not exist.
   @override
+  @override
   Future<Part?> loadArtifact({
     required String appName,
     required String userId,
     required String filename,
     String? sessionId,
     int? version,
+  }) async {
+    return _loadArtifactInternal(
+      appName: appName,
+      userId: userId,
+      filename: filename,
+      sessionId: sessionId,
+      version: version,
+      remainingDepth: maxArtifactReferenceDepth,
+    );
+  }
+
+  Future<Part?> _loadArtifactInternal({
+    required String appName,
+    required String userId,
+    required String filename,
+    String? sessionId,
+    int? version,
+    required int remainingDepth,
   }) async {
     if (_mode == GcsArtifactMode.inMemory) {
       return _loadArtifactInMemory(
@@ -277,6 +295,7 @@ class GcsArtifactService extends BaseArtifactService {
         filename: filename,
         sessionId: sessionId,
         version: version,
+        remainingDepth: remainingDepth,
       );
     }
     return _loadArtifactLive(
@@ -285,6 +304,7 @@ class GcsArtifactService extends BaseArtifactService {
       filename: filename,
       sessionId: sessionId,
       version: version,
+      remainingDepth: remainingDepth,
     );
   }
 
@@ -586,6 +606,7 @@ class GcsArtifactService extends BaseArtifactService {
     required String filename,
     String? sessionId,
     int? version,
+    required int remainingDepth,
   }) async {
     int? versionToLoad = version;
     if (versionToLoad == null) {
@@ -619,6 +640,7 @@ class GcsArtifactService extends BaseArtifactService {
         appName: appName,
         userId: userId,
         sessionId: sessionId,
+        remainingDepth: remainingDepth,
       );
       if (dereferenced != null) {
         return dereferenced;
@@ -641,6 +663,7 @@ class GcsArtifactService extends BaseArtifactService {
     required String filename,
     String? sessionId,
     int? version,
+    required int remainingDepth,
   }) async {
     int? versionToLoad = version;
     if (versionToLoad == null) {
@@ -681,6 +704,7 @@ class GcsArtifactService extends BaseArtifactService {
         appName: appName,
         userId: userId,
         sessionId: sessionId,
+        remainingDepth: remainingDepth,
       );
       if (dereferenced != null) {
         return dereferenced;
