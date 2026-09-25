@@ -103,6 +103,14 @@ Future<HttpServer> startAdkDevWebServer({
     throw ArgumentError.value(port, 'port', 'Port must be between 0 and 65535');
   }
 
+  final bool hasLogoText = logoText != null && logoText.isNotEmpty;
+  final bool hasLogoImage = logoImageUrl != null && logoImageUrl.isNotEmpty;
+  if (hasLogoText != hasLogoImage) {
+    throw ArgumentError(
+      'Both --logo-text and --logo-image-url must be defined when using logo config.',
+    );
+  }
+
   final _AdkDevWebContext context = await _AdkDevWebContext.create(
     runtime: runtime,
     project: project,
@@ -355,6 +363,14 @@ class _AdkDevWebContext {
     required List<String> extraPlugins,
     Map<String, String>? environment,
   }) async {
+    final bool hasLogoText = logoText != null && logoText.isNotEmpty;
+    final bool hasLogoImage = logoImageUrl != null && logoImageUrl.isNotEmpty;
+    if (hasLogoText != hasLogoImage) {
+      throw ArgumentError(
+        'Both --logo-text and --logo-image-url must be defined when using logo config.',
+      );
+    }
+
     final Directory agentsRoot = Directory(agentsDir).absolute;
     loadServicesModule(agentsRoot.path);
     final Map<String, String> appNameToDir = _buildAppNameToDir(
@@ -3623,6 +3639,26 @@ Future<bool> _handleWebUi(
 
   if (routedPath == '/') {
     await _redirect(request, context, '$prefix/dev-ui/');
+    return true;
+  }
+
+  if (routedPath == '/dev-ui/assets/config/runtime-config.json') {
+    final Map<String, Object?> config = <String, Object?>{
+      'backendUrl': context.urlPrefix ?? '',
+      'telemetry': readTelemetryConsent(),
+    };
+    if (context.logoText != null && context.logoText!.isNotEmpty) {
+      config['logo'] = <String, Object?>{
+        'text': context.logoText,
+        'imageUrl': context.logoImageUrl,
+      };
+    }
+    request.response.headers.set('Cache-Control', 'no-store');
+    await _writeJson(
+      request,
+      context,
+      payload: config,
+    );
     return true;
   }
 

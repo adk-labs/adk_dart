@@ -339,5 +339,82 @@ void main() {
       expect(result.outputs['node_b'], equals('B'));
       expect(result.outputs['node_c'], equals('C'));
     });
+
+    test('11. LlmEventSummarizer formatEventsForPrompt skips credential-request events', () {
+      final LlmEventSummarizer summarizer = LlmEventSummarizer(
+        llm: _CompactionTestLlm(),
+      );
+
+      final events = <Event>[
+        Event(
+          invocationId: 'inv_1',
+          author: 'user',
+          content: Content.userText('Read my mail'),
+        ),
+        Event(
+          invocationId: 'inv_1',
+          author: 'model',
+          content: Content(
+            role: 'model',
+            parts: <Part>[
+              Part.fromFunctionCall(
+                name: requestEucFunctionCallName,
+                id: 'call_1',
+                args: <String, Object?>{
+                  'code_verifier': 'pkce-verifier',
+                },
+              ),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv_1',
+          author: 'user',
+          content: Content(
+            role: 'user',
+            parts: <Part>[
+              Part.fromFunctionResponse(
+                name: requestEucFunctionCallName,
+                id: 'call_1',
+                response: <String, Object?>{
+                  'auth_response_uri': 'https://example.com/callback?code=auth-code',
+                  'access_token': 'granted-token',
+                },
+              ),
+            ],
+          ),
+        ),
+        Event(
+          invocationId: 'inv_1',
+          author: 'model',
+          content: Content.modelText('Here is your mail.'),
+        ),
+      ];
+
+      final String formatted = summarizer.formatEventsForPrompt(events);
+      expect(formatted.contains('pkce-verifier'), isFalse);
+      expect(formatted.contains('auth-code'), isFalse);
+      expect(formatted.contains('granted-token'), isFalse);
+      expect(formatted, equals('user: Read my mail\nmodel: Here is your mail.'));
+    });
+
+    test('12. createGoogleSearchAgent directs model to built-in grounding without client-side call', () {
+      final LlmAgent agent = createGoogleSearchAgent('gemini-2.5-flash');
+      expect(agent.description, contains('built-in search grounding'));
+      final String instruction = agent.instruction.toString();
+      expect(instruction, contains('built-in Google Search'));
+      expect(instruction, contains('Do not attempt to invoke a client-side function'));
+      expect(instruction.contains('use the `google_search` tool'), isFalse);
+    });
   });
+}
+
+class _CompactionTestLlm extends BaseLlm {
+  _CompactionTestLlm() : super(model: 'test');
+
+  @override
+  Stream<LlmResponse> generateContent(
+    LlmRequest request, {
+    bool stream = false,
+  }) async* {}
 }

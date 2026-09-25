@@ -16,12 +16,15 @@ LlmAgent createGoogleSearchAgent(Object model) {
     name: 'google_search_agent',
     model: model,
     description:
-        'An agent for performing Google search using the `google_search` tool',
+        'An agent for performing Google search using built-in search'
+        ' grounding',
     instruction:
         '\n'
         '        You are a specialized Google search agent.\n'
         '\n'
-        '        When given a search query, use the `google_search` tool to find the related information.\n'
+        '        Answer the given search query directly using your built-in Google Search\n'
+        '        grounding capabilities. Do not attempt to invoke a client-side function\n'
+        '        call.\n'
         '      ',
     tools: <Object>[googleSearch],
   );

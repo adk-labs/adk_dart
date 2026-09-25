@@ -3,6 +3,7 @@ library;
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../flows/llm_flows/contents.dart';
 import '../models/base_llm.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
@@ -43,12 +44,17 @@ class LlmEventSummarizer extends BaseEventsSummarizer {
   /// Thoughts carry the agent's analysis of tool responses, and tool calls and
   /// responses carry the evidence retrieved so far, so all three are included.
   /// Thoughts emitted by a compaction event are skipped so a prior summary's
-  /// reasoning does not leak into the next summary.
+  /// reasoning does not leak into the next summary. Credential-request events
+  /// are skipped because their payload is the end user's credential rather than
+  /// conversation context, which is why the request path drops them too.
   String formatEventsForPrompt(List<Event> events) {
     final List<String> history = <String>[];
     for (final Event event in events) {
       final Content? content = event.content;
       if (content == null || content.parts.isEmpty) {
+        continue;
+      }
+      if (isAuthEvent(event)) {
         continue;
       }
       final bool isCompaction = event.actions.compaction != null;

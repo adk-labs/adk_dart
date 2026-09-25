@@ -266,7 +266,7 @@ bool shouldIncludeEventInContext(
       !containsEmptyContent(event) &&
       isEventBelongsToBranch(currentBranch, event) &&
       !_isAdkFrameworkEvent(event) &&
-      !_isAuthEvent(event) &&
+      !isAuthEvent(event) &&
       !_isRequestConfirmationEvent(event);
 }
 
@@ -782,7 +782,8 @@ bool _isFunctionCallEvent(Event event, String functionName) {
   return false;
 }
 
-bool _isAuthEvent(Event event) {
+/// Whether [event] is an end-user credential exchange event (adk_request_euc).
+bool isAuthEvent(Event event) {
   return _isFunctionCallEvent(event, requestEucFunctionCallName);
 }
 
