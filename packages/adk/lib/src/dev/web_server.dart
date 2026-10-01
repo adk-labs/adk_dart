@@ -20,6 +20,7 @@ import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/utils/agent_loader.dart';
 import 'package:adk_dart/src/errors/session_not_found_error.dart';
 import 'package:adk_dart/src/events/event.dart';
+import 'package:adk_dart/src/events/internal_metadata.dart';
 import '../cli/utils/evals.dart' as cli_evals;
 import '../cli/utils/graph_serialization.dart' as graph_serialization;
 import '../cli/service_registry.dart';
@@ -2873,7 +2874,10 @@ Future<void> _handleCreateSession(
     sessionId: session.id,
   );
   for (final Event event in seedEvents) {
-    await context.sessionService.appendEvent(session: session, event: event);
+    await context.sessionService.appendEvent(
+      session: session,
+      event: markRestored(event),
+    );
   }
 
   final Session? updated = await context.sessionService.getSession(
@@ -4086,23 +4090,24 @@ Map<String, Object?> _sessionToApiJson(
   Session session, {
   bool includeEvents = false,
 }) {
+  final Session public = publicSession(session);
   return <String, Object?>{
-    'id': session.id,
-    'app_name': session.appName,
-    'appName': session.appName,
-    'user_id': session.userId,
-    'userId': session.userId,
-    'state': session.state,
-    'last_update_time': session.lastUpdateTime,
-    'lastUpdateTime': session.lastUpdateTime,
+    'id': public.id,
+    'app_name': public.appName,
+    'appName': public.appName,
+    'user_id': public.userId,
+    'userId': public.userId,
+    'state': public.state,
+    'last_update_time': public.lastUpdateTime,
+    'lastUpdateTime': public.lastUpdateTime,
     if (includeEvents)
-      'events': session.events
+      'events': public.events
           .map<Map<String, Object?>>(
             (Event event) => _eventToApiJson(
               event,
-              appName: session.appName,
-              userId: session.userId,
-              sessionId: session.id,
+              appName: public.appName,
+              userId: public.userId,
+              sessionId: public.id,
             ),
           )
           .toList(growable: false),
@@ -4115,6 +4120,7 @@ Map<String, Object?> _eventToApiJson(
   required String userId,
   required String sessionId,
 }) {
+  final Event pubEvent = publicEvent(event);
   final Session shadowSession = Session(
     id: sessionId,
     appName: appName,
@@ -4122,7 +4128,7 @@ Map<String, Object?> _eventToApiJson(
   );
   final Map<String, Object?> snake = StorageEventV0.fromEvent(
     session: shadowSession,
-    event: event,
+    event: pubEvent,
   ).toJson();
 
   return <String, Object?>{

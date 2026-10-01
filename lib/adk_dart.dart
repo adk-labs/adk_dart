@@ -99,8 +99,10 @@ export 'src/errors/session_not_found_error.dart';
 export 'src/errors/stale_session_error.dart';
 export 'src/errors/tool_execution_error.dart';
 
+export 'src/events/abort_events.dart';
 export 'src/events/event.dart';
 export 'src/events/event_actions.dart';
+export 'src/events/internal_metadata.dart';
 export 'src/events/rewind_events.dart';
 export 'src/events/node_path_builder.dart';
 export 'src/events/request_input.dart';

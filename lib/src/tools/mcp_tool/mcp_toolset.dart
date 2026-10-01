@@ -27,6 +27,7 @@ class McpToolset extends BaseToolset {
     this.samplingCallback,
     this.elicitationCallback,
     Map<String, Object?>? samplingCapabilities,
+    this.propagateGroundingMetadata = false,
   }) : samplingCapabilities = samplingCapabilities ?? <String, Object?>{} {
     McpSessionManager.instance.configureConnection(
       connectionParams: connectionParams,
@@ -53,6 +54,10 @@ class McpToolset extends BaseToolset {
 
   /// Optional MCP client capabilities advertised for sampling support.
   final Map<String, Object?> samplingCapabilities;
+
+  /// If true, each listed tool copies `meta.adk_grounding_metadata` into
+  /// `temp:_adk_grounding_metadata`.
+  final bool propagateGroundingMetadata;
 
   @override
   /// Returns filtered MCP tools discovered from cache or remote server.
@@ -102,6 +107,7 @@ class McpToolset extends BaseToolset {
               sessionManager: manager,
               authConfig: authConfig?.copyWith(),
               headerProvider: headerProvider,
+              propagateGroundingMetadata: propagateGroundingMetadata,
             );
           })
           .whereType<BaseTool>()

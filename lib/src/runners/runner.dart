@@ -15,8 +15,10 @@ import '../artifacts/base_artifact_service.dart';
 import '../artifacts/in_memory_artifact_service.dart';
 import '../errors/invocation_not_found_error.dart';
 import '../errors/session_not_found_error.dart';
+import '../events/abort_events.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../events/internal_metadata.dart';
 import '../flows/llm_flows/persist_barrier.dart';
 import '../flows/llm_flows/functions.dart' as flow_functions;
 import '../plugins/base_plugin.dart';
@@ -909,12 +911,7 @@ class Runner {
           : EventActions(stateDelta: stateDelta),
     );
 
-    if (context.runConfig?.customMetadata != null) {
-      event.customMetadata = <String, dynamic>{
-        ...context.runConfig!.customMetadata!,
-        ...(event.customMetadata ?? <String, dynamic>{}),
-      };
-    }
+    _applyRunConfigCustomMetadata(event, context.runConfig);
 
     context.stampEventBranchContext(event);
 
@@ -932,12 +929,7 @@ class Runner {
       actions: EventActions(stateDelta: stateDelta),
     );
 
-    if (context.runConfig?.customMetadata != null) {
-      event.customMetadata = <String, dynamic>{
-        ...context.runConfig!.customMetadata!,
-        ...(event.customMetadata ?? <String, dynamic>{}),
-      };
-    }
+    _applyRunConfigCustomMetadata(event, context.runConfig);
 
     context.stampEventBranchContext(event);
 
@@ -947,6 +939,40 @@ class Runner {
 
     await _appendEventWithPersistBarrier(context, event);
     return event;
+  }
+
+  Future<List<Event>> _synthesizeAbortEventsIfNeeded(
+    InvocationContext context,
+  ) async {
+    if (context.abortEventSynthesized) {
+      return <Event>[];
+    }
+    context.abortEventSynthesized = true;
+    final List<Event> abortEvents = buildAbortEvents(
+      context.session.events,
+      invocationId: context.invocationId,
+      rootAgentName: agent.name,
+      branch: context.branch,
+    );
+    final List<Event> persistedEvents = <Event>[];
+    for (final Event abortEvent in abortEvents) {
+      _applyRunConfigCustomMetadata(abortEvent, context.runConfig);
+      final Event? modified = await context.pluginManager.runOnEventCallback(
+        invocationContext: context,
+        event: abortEvent,
+      );
+      final Event outputEvent = _buildOutputEvent(
+        originalEvent: abortEvent,
+        modifiedEvent: modified,
+        runConfig: context.runConfig,
+      );
+      await sessionService.appendEvent(
+        session: context.session,
+        event: outputEvent,
+      );
+      persistedEvents.add(outputEvent);
+    }
+    return persistedEvents;
   }
 
   Stream<Event> _execWithPlugin({
@@ -1000,7 +1026,7 @@ class Runner {
 
           await for (final Event event in execute(invocationContext)) {
             if (invocationContext.isAborted) {
-              return;
+              break;
             }
             event.isolationScope ??= invocationContext.isolationScope;
             _applyRunConfigCustomMetadata(event, invocationContext.runConfig);
@@ -1010,7 +1036,7 @@ class Runner {
                   event: event,
                 );
             if (invocationContext.isAborted) {
-              return;
+              break;
             }
             final Event outputEvent = _buildOutputEvent(
               originalEvent: event,
@@ -1045,13 +1071,13 @@ class Runner {
                       barrierEventId: event.id,
                     );
                     if (invocationContext.isAborted) {
-                      return;
+                      break;
                     }
                   }
 
                   for (final buffered in bufferedEvents) {
                     if (invocationContext.isAborted) {
-                      return;
+                      break;
                     }
                     if (_shouldAppendEvent(buffered.event, isLiveCall)) {
                       await _appendEventWithPersistBarrier(
@@ -1060,7 +1086,7 @@ class Runner {
                         barrierEventId: buffered.barrierEventId,
                       );
                       if (invocationContext.isAborted) {
-                        return;
+                        break;
                       }
                     }
                     output.add(buffered.event);
@@ -1073,7 +1099,7 @@ class Runner {
                     barrierEventId: event.id,
                   );
                   if (invocationContext.isAborted) {
-                    return;
+                    break;
                   }
                 }
               }
@@ -1085,17 +1111,30 @@ class Runner {
                 barrierEventId: event.id,
               );
               if (invocationContext.isAborted) {
-                return;
+                break;
               }
             }
 
             if (invocationContext.isAborted) {
-              return;
+              break;
             }
             output.add(outputEvent);
           }
+
+          if (!isLiveCall && invocationContext.isAborted) {
+            final List<Event> abortEvents =
+                await _synthesizeAbortEventsIfNeeded(invocationContext);
+            for (final Event abortEvent in abortEvents) {
+              output.add(abortEvent);
+            }
+          }
         }
       } catch (error) {
+        if (!isLiveCall && invocationContext.isAborted) {
+          try {
+            await _synthesizeAbortEventsIfNeeded(invocationContext);
+          } catch (_) {}
+        }
         // Notify plugins of the unhandled execution error. Covers failures in
         // before_run_callback, early-exit, and the main execution loop.
         // Notification-only; the original exception is always re-raised.
@@ -1120,7 +1159,15 @@ class Runner {
       ),
     );
 
-    yield* output.stream;
+    try {
+      yield* output.stream;
+    } finally {
+      if (!isLiveCall && invocationContext.isAborted) {
+        try {
+          await _synthesizeAbortEventsIfNeeded(invocationContext);
+        } catch (_) {}
+      }
+    }
 
     if (invocationContext.isAborted) {
       return;
@@ -1180,6 +1227,21 @@ class Runner {
       return originalEvent;
     }
 
+    final Map<String, Object?> internal =
+        internalMetadata(originalEvent.customMetadata);
+    final Map<String, dynamic>? baseMetadata =
+        modifiedEvent.customMetadata == null
+            ? (originalEvent.customMetadata == null
+                  ? null
+                  : Map<String, dynamic>.from(originalEvent.customMetadata!))
+            : Map<String, dynamic>.from(modifiedEvent.customMetadata!);
+    final Map<String, dynamic>? effectiveMetadata = internal.isEmpty
+        ? baseMetadata
+        : <String, dynamic>{
+            ...(baseMetadata ?? <String, dynamic>{}),
+            ...internal,
+          };
+
     final Event outputEvent = originalEvent.copyWith(
       author: modifiedEvent.author.isEmpty
           ? originalEvent.author
@@ -1203,11 +1265,7 @@ class Runner {
       errorCode: modifiedEvent.errorCode ?? originalEvent.errorCode,
       errorMessage: modifiedEvent.errorMessage ?? originalEvent.errorMessage,
       interrupted: modifiedEvent.interrupted ?? originalEvent.interrupted,
-      customMetadata: modifiedEvent.customMetadata == null
-          ? (originalEvent.customMetadata == null
-                ? null
-                : Map<String, dynamic>.from(originalEvent.customMetadata!))
-          : Map<String, dynamic>.from(modifiedEvent.customMetadata!),
+      customMetadata: effectiveMetadata,
       usageMetadata: modifiedEvent.usageMetadata ?? originalEvent.usageMetadata,
       inputTranscription:
           modifiedEvent.inputTranscription ?? originalEvent.inputTranscription,
@@ -1234,9 +1292,10 @@ class Runner {
   }
 
   BaseAgent _findAgentToRun(Session session, BaseAgent rootAgent) {
-    final Event? matchingFunctionCall = flow_functions.findMatchingFunctionCall(
-      session.events,
-    );
+    final Event? matchingFunctionCall =
+        session.events.isNotEmpty && !isAbortEvent(session.events.last)
+            ? flow_functions.findMatchingFunctionCall(session.events)
+            : null;
     if (matchingFunctionCall != null &&
         matchingFunctionCall.author.isNotEmpty) {
       final BaseAgent? agent = rootAgent.findAgent(matchingFunctionCall.author);
@@ -1246,7 +1305,7 @@ class Runner {
     }
 
     for (final Event event in session.events.reversed) {
-      if (event.author == 'user') {
+      if (event.author == 'user' || isAbortEvent(event)) {
         continue;
       }
       if (event.actions.agentState != null ||
@@ -1321,8 +1380,14 @@ class Runner {
       return;
     }
 
+    final Map<String, dynamic>? sanitized =
+        withoutInternalMetadata(runConfig.customMetadata);
+    if (sanitized == null || sanitized.isEmpty) {
+      return;
+    }
+
     event.customMetadata = <String, dynamic>{
-      ...runConfig.customMetadata!,
+      ...sanitized,
       ...(event.customMetadata ?? <String, dynamic>{}),
     };
   }

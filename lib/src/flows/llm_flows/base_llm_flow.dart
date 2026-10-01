@@ -17,14 +17,16 @@ import '../../auth/auth_tool.dart';
 import '../../auth/credential_manager.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
-import '../../plugins/conformance/conformance_recordings_schema.dart';
+import '../../features/_feature_registry.dart';
 import '../../models/base_llm.dart';
 import '../../models/base_llm_connection.dart';
 import '../../models/conformance_replay_llm.dart';
+import '../../plugins/conformance/conformance_recordings_schema.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/base_toolset.dart';
+import '../../tools/mcp_tool/mcp_tool.dart';
 import '../../tools/tool_context.dart';
 import '../../types/content.dart';
 import 'agent_transfer.dart';
@@ -1092,15 +1094,19 @@ class BaseLlmFlow {
       return;
     }
 
+    final bool hasParts =
+        response.content != null && response.content!.parts.isNotEmpty;
     if (response.partial != true &&
         response.errorCode == null &&
         response.finishReason == 'STOP' &&
-        (response.content == null || response.content!.parts.isEmpty) &&
-        context.runConfig?.streamingMode != StreamingMode.sse) {
+        !hasMeaningfulContent(response) &&
+        (context.runConfig?.streamingMode != StreamingMode.sse ||
+            (hasParts && isFeatureEnabled(FeatureName.progressiveSseStreaming)))) {
       response.errorCode = 'MODEL_RETURNED_NO_CONTENT';
-      response.errorMessage =
-          response.errorMessage ??
-          'The model returned no content (finish_reason=STOP with empty parts).';
+      final String defaultMessage = hasParts
+          ? 'The model returned no actionable content (finish_reason=STOP with thought-only or whitespace-only parts).'
+          : 'The model returned no content (finish_reason=STOP with empty parts).';
+      response.errorMessage = response.errorMessage ?? defaultMessage;
     }
 
     if (response.content == null &&
@@ -1392,7 +1398,12 @@ class BaseLlmFlow {
       tools = await agent.canonicalTools(ReadonlyContext(context));
       context.canonicalToolsCache = tools;
     }
-    if (!tools.any((BaseTool tool) => tool.name == 'google_search_agent')) {
+    final bool hasGroundingTool = tools.any(
+      (BaseTool tool) =>
+          tool.name == 'google_search_agent' ||
+          (tool is McpTool && tool.propagateGroundingMetadata),
+    );
+    if (!hasGroundingTool) {
       return override;
     }
 
@@ -1568,4 +1579,46 @@ class BaseLlmFlow {
     }
     return agent;
   }
+}
+
+/// Returns whether the LLM response contains meaningful, actionable content.
+///
+/// A response is considered to have meaningful content if it contains at least
+/// one part with:
+/// - An active function call or function response
+/// - Executable code or a code execution result
+/// - Inline data or file data
+/// - Non-thought, non-whitespace text
+bool hasMeaningfulContent(LlmResponse? response) {
+  if (response == null ||
+      response.content == null ||
+      response.content!.parts.isEmpty) {
+    return false;
+  }
+
+  for (final Part part in response.content!.parts) {
+    if (part.functionCall != null) {
+      return true;
+    }
+    if (part.functionResponse != null) {
+      return true;
+    }
+    if (part.executableCode != null) {
+      return true;
+    }
+    if (part.codeExecutionResult != null) {
+      return true;
+    }
+    if (part.inlineData != null) {
+      return true;
+    }
+    if (part.fileData != null) {
+      return true;
+    }
+    if (!part.thought && part.text != null && part.text!.trim().isNotEmpty) {
+      return true;
+    }
+  }
+
+  return false;
 }

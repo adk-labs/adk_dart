@@ -76,6 +76,7 @@ class McpTool extends BaseAuthenticatedTool {
     super.authConfig,
     Object requireConfirmation = false,
     this.headerProvider,
+    this.propagateGroundingMetadata = false,
   }) : _mcpTool = mcpTool,
        _connectionParams = connectionParams,
        _sessionManager = sessionManager,
@@ -95,6 +96,10 @@ class McpTool extends BaseAuthenticatedTool {
 
   /// Optional provider for dynamic per-request headers.
   final McpToolHeaderProvider? headerProvider;
+
+  /// If true, copy `meta.adk_grounding_metadata` from the MCP result into
+  /// `temp:_adk_grounding_metadata`.
+  final bool propagateGroundingMetadata;
 
   /// Raw MCP tool descriptor used by this wrapper.
   McpBaseTool get rawMcpTool => _mcpTool;
@@ -263,6 +268,7 @@ class McpTool extends BaseAuthenticatedTool {
       }
       return <String, Object?>{'error': 'MCP tool execution failed: $error'};
     }
+    _storeGroundingMetadataFromResult(response, toolContext);
     final String? resourceUri = mcpAppResourceUri;
     if (resourceUri != null) {
       toolContext.renderUiWidget(
@@ -278,6 +284,25 @@ class McpTool extends BaseAuthenticatedTool {
       );
     }
     return response;
+  }
+
+  void _storeGroundingMetadataFromResult(
+    Object? result,
+    ToolContext toolContext,
+  ) {
+    if (!propagateGroundingMetadata || result is! Map) {
+      return;
+    }
+    final Object? meta = result['meta'] ?? result['_meta'];
+    if (meta is! Map) {
+      return;
+    }
+    final Object? raw =
+        meta['adk_grounding_metadata'] ?? meta['adkGroundingMetadata'];
+    if (raw == null) {
+      return;
+    }
+    toolContext.state['temp:_adk_grounding_metadata'] = raw;
   }
 
   @override

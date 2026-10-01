@@ -866,7 +866,8 @@ void main() {
           ),
         );
 
-        expect(events, isEmpty);
+        expect(events, hasLength(1));
+        expect(events.single.errorCode, 'INVOCATION_ABORTED');
         expect(model.requests, hasLength(1));
         final Session? reloaded = await runner.sessionService.getSession(
           appName: runner.appName,
@@ -874,8 +875,9 @@ void main() {
           sessionId: session.id,
         );
         expect(reloaded, isNotNull);
-        expect(reloaded!.events, hasLength(1));
-        expect(reloaded.events.single.author, 'user');
+        expect(reloaded!.events, hasLength(2));
+        expect(reloaded.events.first.author, 'user');
+        expect(reloaded.events.last.errorCode, 'INVOCATION_ABORTED');
       },
     );
 

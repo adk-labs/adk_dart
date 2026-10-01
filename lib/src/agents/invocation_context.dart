@@ -152,6 +152,9 @@ class InvocationContext {
   /// Cooperative cancellation signal for this invocation.
   AdkAbortSignal? abortSignal;
 
+  /// Whether an abort event has already been synthesized for this invocation.
+  bool abortEventSynthesized = false;
+
   bool _aborted = false;
 
   /// Whether this invocation has been cancelled.
@@ -634,6 +637,8 @@ class InvocationContext {
             MapEntry<String, AuthCredential>(key, value.copyWith()),
       ),
       callbackContextData: callbackContextData,
-    ).._numberOfLlmCalls = _numberOfLlmCalls;
+    )
+      .._numberOfLlmCalls = _numberOfLlmCalls
+      ..abortEventSynthesized = abortEventSynthesized;
   }
 }
