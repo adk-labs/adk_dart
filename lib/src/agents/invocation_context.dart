@@ -44,6 +44,7 @@ class InvocationContext {
     this.contextCacheConfig,
     required this.invocationId,
     this.branch,
+    this.nodePath,
     this.isolationScope,
     required this.agent,
     this.userContent,
@@ -67,11 +68,13 @@ class InvocationContext {
     this.canonicalToolsCache,
     Map<String, AuthCredential>? credentialByKey,
     Map<String, Object?>? callbackContextData,
+    Map<String, Object?>? privateMetadata,
   }) : agentStates = agentStates ?? <String, Map<String, Object?>>{},
        endOfAgents = endOfAgents ?? <String, bool>{},
        pluginManager = pluginManager ?? PluginManager(),
        credentialByKey = credentialByKey ?? <String, AuthCredential>{},
        callbackContextData = callbackContextData ?? <String, Object?>{},
+       privateMetadata = privateMetadata ?? <String, Object?>{},
        abortSignal = abortSignal ?? AdkAbortSignal();
 
   /// Artifact service used for persistence and retrieval.
@@ -94,6 +97,9 @@ class InvocationContext {
 
   /// Branch identifier for branched execution, if any.
   String? branch;
+
+  /// Hierarchical node path in the workflow graph, if any.
+  String? nodePath;
 
   /// Internal logical scope tag for filtering task-agent conversation views.
   ///
@@ -183,6 +189,9 @@ class InvocationContext {
   /// This map is intentionally shared across shallow context copies so agent
   /// transfers and nested flows can coordinate on one invocation-level state.
   Map<String, Object?> callbackContextData;
+
+  /// Invocation-scoped private metadata cache shared across context copies.
+  Map<String, Object?> privateMetadata;
 
   int _numberOfLlmCalls = 0;
 
@@ -381,26 +390,39 @@ class InvocationContext {
     );
   }
 
+  /// Returns the key used to store agent state for [agentName].
+  ///
+  /// When [nodePath] is set and ends with [agentName], returns [nodePath] so
+  /// repeated sub-agent invocations in workflow graphs do not collide.
+  String agentStateKey(String agentName) {
+    final String? path = nodePath;
+    if (path != null && path.isNotEmpty && path.split('.').last == agentName) {
+      return path;
+    }
+    return agentName;
+  }
+
   /// Sets or clears serialized state for [agentName].
   void setAgentState(
     String agentName, {
     BaseAgentState? agentState,
     bool endOfAgent = false,
   }) {
+    final String key = agentStateKey(agentName);
     if (endOfAgent) {
-      endOfAgents[agentName] = true;
-      agentStates.remove(agentName);
+      endOfAgents[key] = true;
+      agentStates.remove(key);
       return;
     }
 
     if (agentState != null) {
-      agentStates[agentName] = agentState.toJson();
-      endOfAgents[agentName] = false;
+      agentStates[key] = agentState.toJson();
+      endOfAgents[key] = false;
       return;
     }
 
-    endOfAgents.remove(agentName);
-    agentStates.remove(agentName);
+    endOfAgents.remove(key);
+    agentStates.remove(key);
   }
 
   /// Clears cached states for all descendants of [agentName].
@@ -577,6 +599,7 @@ class InvocationContext {
   InvocationContext copyWith({
     BaseAgent? agent,
     String? branch,
+    Object? nodePath = _sentinel,
     Object? isolationScope = _sentinel,
     Content? userContent,
     String? invocationId,
@@ -591,6 +614,9 @@ class InvocationContext {
       contextCacheConfig: contextCacheConfig,
       invocationId: invocationId ?? this.invocationId,
       branch: branch ?? this.branch,
+      nodePath: identical(nodePath, _sentinel)
+          ? this.nodePath
+          : nodePath as String?,
       isolationScope: identical(isolationScope, _sentinel)
           ? this.isolationScope
           : isolationScope as String?,
@@ -637,6 +663,7 @@ class InvocationContext {
             MapEntry<String, AuthCredential>(key, value.copyWith()),
       ),
       callbackContextData: callbackContextData,
+      privateMetadata: privateMetadata,
     )
       .._numberOfLlmCalls = _numberOfLlmCalls
       ..abortEventSynthesized = abortEventSynthesized;

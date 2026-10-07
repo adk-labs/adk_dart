@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import '../models/llm_request.dart';
 import 'app_details.dart';
 import 'common.dart';
 import 'eval_case.dart';
@@ -15,6 +16,7 @@ enum Label {
   invalid('invalid'),
   valid('valid'),
   almost('almost'),
+  partiallyValid('partially_valid'),
   falseLabel('false'),
   notFound('label field not found');
 
@@ -22,6 +24,18 @@ enum Label {
 
   /// Serialized label value.
   final String value;
+}
+
+/// Builds a [GenerateContentConfig] for judge LLM calls with automatic function
+/// calling disabled while preserving caller settings.
+GenerateContentConfig buildJudgeRequestConfig(Object? userConfig) {
+  final GenerateContentConfig config = userConfig is GenerateContentConfig
+      ? userConfig.copyWith()
+      : GenerateContentConfig();
+  config.automaticFunctionCalling = AutomaticFunctionCallingConfig(
+    disable: true,
+  );
+  return config;
 }
 
 /// Extracts plain text from an evaluation content payload.
@@ -90,4 +104,29 @@ String getToolCallsAndResponsesAsJsonStr(Object? intermediateData) {
   return const JsonEncoder.withIndent(
     '  ',
   ).convert(<String, Object?>{'tool_calls_and_response': rows});
+}
+
+/// Serializes grounding metadata from [intermediateData] into indented JSON.
+String getGroundingMetadataAsJsonStr(Object? intermediateData) {
+  if (intermediateData is! InvocationEvents) {
+    return 'No grounding metadata was provided.';
+  }
+  final List<Map<String, Object?>> entries = <Map<String, Object?>>[];
+  for (int idx = 0; idx < intermediateData.invocationEvents.length; idx += 1) {
+    final InvocationEvent event = intermediateData.invocationEvents[idx];
+    if (event.groundingMetadata == null || event.groundingMetadata!.isEmpty) {
+      continue;
+    }
+    entries.add(<String, Object?>{
+      'step': idx,
+      if (event.author.isNotEmpty) 'author': event.author,
+      'grounding_metadata': event.groundingMetadata,
+    });
+  }
+  if (entries.isEmpty) {
+    return 'No grounding metadata was provided.';
+  }
+  return const JsonEncoder.withIndent(
+    '  ',
+  ).convert(<String, Object?>{'grounding_metadata': entries});
 }

@@ -118,11 +118,9 @@ class PerTurnUserSimulatorQualityV1 extends Evaluator {
       conversationScenario: conversationScenario,
     );
 
-    final Object? rawModelConfig = _llmOptions.judgeModelConfig;
-    final GenerateContentConfig modelConfig =
-        rawModelConfig is GenerateContentConfig
-        ? rawModelConfig.copyWith()
-        : GenerateContentConfig();
+    final GenerateContentConfig modelConfig = buildJudgeRequestConfig(
+      _llmOptions.judgeModelConfig,
+    );
     final LlmRequest llmRequest = LlmRequest(
       model: _llmOptions.judgeModel,
       contents: <Content>[Content.userText(autoRaterPrompt)],

@@ -83,7 +83,7 @@ class InvocationResponse {
 /// One invocation event entry.
 class InvocationEvent {
   /// Creates an invocation event.
-  InvocationEvent({required this.author, this.content});
+  InvocationEvent({required this.author, this.content, this.groundingMetadata});
 
   /// Event author.
   final String author;
@@ -91,11 +91,36 @@ class InvocationEvent {
   /// Optional content payload.
   final EvalJsonMap? content;
 
+  /// Grounding metadata captured from model-internal tools (e.g. Google Search).
+  final EvalJsonMap? groundingMetadata;
+
   /// Creates invocation event from JSON.
   factory InvocationEvent.fromJson(EvalJsonMap json) {
+    final Object? rawGroundingMetadata =
+        json['groundingMetadata'] ?? json['grounding_metadata'];
     return InvocationEvent(
       author: asNullableString(json['author']) ?? '',
       content: json['content'] == null ? null : asEvalJson(json['content']),
+      groundingMetadata: rawGroundingMetadata == null
+          ? null
+          : asEvalJson(rawGroundingMetadata),
+    );
+  }
+
+  /// Returns a copy of this event with optional overrides.
+  InvocationEvent copyWith({
+    String? author,
+    Object? content = _evalCaseSentinel,
+    Object? groundingMetadata = _evalCaseSentinel,
+  }) {
+    return InvocationEvent(
+      author: author ?? this.author,
+      content: identical(content, _evalCaseSentinel)
+          ? this.content
+          : content as EvalJsonMap?,
+      groundingMetadata: identical(groundingMetadata, _evalCaseSentinel)
+          ? this.groundingMetadata
+          : groundingMetadata as EvalJsonMap?,
     );
   }
 
@@ -104,9 +129,12 @@ class InvocationEvent {
     return <String, Object?>{
       'author': author,
       if (content != null) 'content': content,
+      if (groundingMetadata != null) 'grounding_metadata': groundingMetadata,
     };
   }
 }
+
+const Object _evalCaseSentinel = Object();
 
 /// Collection of invocation events.
 class InvocationEvents {

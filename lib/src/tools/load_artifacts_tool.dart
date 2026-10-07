@@ -221,6 +221,17 @@ String _jsonDumpsStringList(List<String> values) {
   return '[${values.map(jsonEncode).join(', ')}]';
 }
 
+/// Converts an [artifact] into a safe [Part] representation for LLM consumption.
+Part asSafePartForLlm(
+  Part artifact,
+  String artifactName, {
+  bool enableSpreadsheetParsing = false,
+}) => _asSafePart(
+  artifact,
+  artifactName,
+  enableSpreadsheetParsing: enableSpreadsheetParsing,
+);
+
 Part _asSafePart(
   Part artifact,
   String artifactName, {

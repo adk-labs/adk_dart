@@ -65,5 +65,35 @@ Future<void> main() async {
 
   await executor.execute(requestContext, eventQueue);
 
+  // 4. Resolve RemoteA2aAgent card description and skills for transfer instructions
+  final RemoteA2aAgent remoteTranslator = RemoteA2aAgent(
+    name: 'remote_translator',
+    agentCard: AgentCard(
+      name: 'remote_translator',
+      version: '1.0.0',
+      url: 'http://localhost:8000',
+      description: 'Remote A2A translation specialist.',
+      skills: <AgentSkill>[
+        AgentSkill(
+          id: 'ko_en',
+          name: 'Korean-English Translation',
+          description: 'Translates technical docs between Korean and English.',
+        ),
+      ],
+    ),
+  );
+  final InvocationContext invContext = InvocationContext(
+    sessionService: InMemorySessionService(),
+    invocationId: 'inv_a2a_demo',
+    agent: agent,
+    session: Session(id: 's_a2a', appName: 'a2a_demo', userId: 'u_1'),
+  );
+  final TransferTargetInfo targetInfo = await buildTransferTargetInfo(
+    remoteTranslator,
+    invContext,
+  );
+  print('\n=== RemoteA2aAgent Transfer Description ===');
+  print('${targetInfo.name}: ${targetInfo.description}');
+
   print('\nA2A Task execution finished successfully!');
 }

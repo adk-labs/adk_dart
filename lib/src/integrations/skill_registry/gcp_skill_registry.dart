@@ -113,10 +113,11 @@ class GcpSkillRegistry extends SkillRegistry {
     Map<String, Object?>? filters,
   }) async {
     final Map<String, Object?> response = await _makePostRequest(
-      'skills:retrieve',
-      body: <String, Object?>{'query': query},
+      'skills:search',
+      body: <String, Object?>{'search_string': query},
     );
     final List<Object?> retrievedSkills =
+        _readList(response['skills']) ??
         _readList(response['retrievedSkills']) ??
         _readList(response['retrieved_skills']) ??
         const <Object?>[];

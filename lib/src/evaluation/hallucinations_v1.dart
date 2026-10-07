@@ -92,7 +92,8 @@ Your task is to analyze sentence by sentence and classify each sentence accordin
 3. **For each label, provide a short rationale explaining your decision.** The rationale should be separate from the excerpt.
 4. **Be very strict with your `supported`, `contradictory` and `disputed` decisions.** Unless you can find straightforward, indisputable evidence excepts *in the context* that a sentence is `supported`, `contradictory` or `disputed`, consider it `unsupported`.  You should not employ world knowledge unless it is truly trivial.
 5. "tool_outputs" blocks contain code execution results of the "tool_code" blocks immediately above them. If any sentence is based on "tool_outputs" results, first analyze if the corresponding "tool_code" is supported and if the results are error-free. Only if the "tool_code" block is supported, you can treat code execution results as correct.
-6. If you need to cite multiple supporting excerpts, simply concatenate them. Excerpt could be summary from the context if it is too long.
+6. "Grounding metadata" contains source attribution from model-internal tools (e.g. search) whose results may not otherwise appear in "tool_outputs". A sentence attributed by "grounding_supports" in "Grounding metadata" should be treated as `supported`.
+7. If you need to cite multiple supporting excerpts, simply concatenate them. Excerpt could be summary from the context if it is too long.
 
 **Input Format:**
 
@@ -356,11 +357,9 @@ class HallucinationsV1Evaluator extends Evaluator {
   }
 
   Future<LlmResponse?> _invokeJudge(String prompt) async {
-    final Object? rawModelConfig = _judgeModelOptions.judgeModelConfig;
-    final GenerateContentConfig modelConfig =
-        rawModelConfig is GenerateContentConfig
-        ? rawModelConfig.copyWith()
-        : GenerateContentConfig();
+    final GenerateContentConfig modelConfig = buildJudgeRequestConfig(
+      _judgeModelOptions.judgeModelConfig,
+    );
 
     final LlmRequest llmRequest = LlmRequest(
       model: _judgeModelOptions.judgeModel,
@@ -407,6 +406,10 @@ class HallucinationsV1Evaluator extends Evaluator {
     );
     contextParts.add('Tool definitions:');
     contextParts.add('$toolDeclarations\n');
+    contextParts.add('Grounding metadata:');
+    contextParts.add(
+      '${getGroundingMetadataAsJsonStr(InvocationEvents(invocationEvents: events))}\n',
+    );
 
     for (final InvocationEvent event in events) {
       final EvalJsonMap? content = event.content;
@@ -487,10 +490,18 @@ class HallucinationsV1Evaluator extends Evaluator {
         }
 
         if (nlParts.isNotEmpty) {
+          final List<InvocationEvent> stepEvents =
+              event.groundingMetadata != null &&
+                  event.groundingMetadata!.isNotEmpty
+              ? <InvocationEvent>[
+                  ...eventsForContext,
+                  event.copyWith(content: null),
+                ]
+              : eventsForContext;
           final String context = _createContextForStep(
             actual.appDetails,
             actual,
-            eventsForContext,
+            stepEvents,
           );
           for (final String nlResponse in nlParts) {
             stepEvaluations.add(

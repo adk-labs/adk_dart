@@ -1,0 +1,14 @@
+name: skills_and_output_artifacts_example
+description: An example demonstrating SkillToolset, local SKILL.md discovery, and output artifact persistence.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  adk_dart:
+    path: ../../
+
+dev_dependencies:
+  lints: ^6.0.0

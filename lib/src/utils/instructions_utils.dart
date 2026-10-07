@@ -4,9 +4,10 @@ library;
 import '../agents/invocation_context.dart';
 import '../agents/readonly_context.dart';
 import '../sessions/state.dart';
+import '../tools/load_artifacts_tool.dart';
 import '../types/content.dart';
 
-final RegExp _templatePattern = RegExp(r'{+[^{}]*}+');
+final RegExp _templatePattern = RegExp(r'(?<![\$\{\\]){+[^{}]*}+');
 final RegExp _identifierPattern = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 
 /// The [template] string with session-state placeholders resolved.
@@ -67,7 +68,7 @@ Future<String> _replaceTemplateMatch(
       }
       throw StateError('Artifact $filename not found.');
     }
-    return _artifactToString(artifact);
+    return _artifactToText(artifact, filename);
   }
 
   if (!isValidStateName(varName)) {
@@ -85,9 +86,10 @@ Future<String> _replaceTemplateMatch(
   throw StateError('Context variable not found: `$varName`.');
 }
 
-String _artifactToString(Part artifact) {
-  if (artifact.text != null) {
-    return artifact.text!;
+String _artifactToText(Part artifact, String artifactName) {
+  final Part safe = asSafePartForLlm(artifact, artifactName);
+  if (safe.text != null) {
+    return safe.text!;
   }
   if (artifact.fileData != null) {
     return artifact.fileData!.fileUri;
@@ -95,19 +97,7 @@ String _artifactToString(Part artifact) {
   if (artifact.inlineData != null) {
     return 'inline_data:${artifact.inlineData!.mimeType}';
   }
-  if (artifact.functionResponse != null) {
-    return '${artifact.functionResponse!.response}';
-  }
-  if (artifact.functionCall != null) {
-    return '${artifact.functionCall!.args}';
-  }
-  if (artifact.codeExecutionResult != null) {
-    return '${artifact.codeExecutionResult}';
-  }
-  if (artifact.executableCode != null) {
-    return '${artifact.executableCode}';
-  }
-  return '';
+  return safe.toString();
 }
 
 /// Whether [varName] is a valid state key reference.

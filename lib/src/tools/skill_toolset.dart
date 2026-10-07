@@ -762,15 +762,23 @@ class LoadSkillResourceTool extends BaseTool {
   }
 }
 
+const String _generatedFilesMarkerStart = '__ADK_SKILL_GENERATED_FILES_START__';
+const String _generatedFilesMarkerEnd = '__ADK_SKILL_GENERATED_FILES_END__';
+const int _maxGeneratedArtifactBytes = 5 * 1024 * 1024;
+const int _maxTotalGeneratedArtifactBytes = 16 * 1024 * 1024;
+const int _maxGeneratedArtifactCount = 50;
+
 class _SkillScriptCodeExecutor {
   _SkillScriptCodeExecutor({
     required BaseCodeExecutor baseExecutor,
     required int scriptTimeout,
+    this.saveOutputArtifacts = false,
   }) : _baseExecutor = baseExecutor,
        _scriptTimeout = scriptTimeout;
 
   final BaseCodeExecutor _baseExecutor;
   final int _scriptTimeout;
+  final bool saveOutputArtifacts;
 
   Future<Map<String, Object?>> executeScript({
     required ToolContext toolContext,
@@ -807,6 +815,17 @@ class _SkillScriptCodeExecutor {
       String stdout = result.stdout;
       String stderr = result.stderr;
       int returnCode = result.exitCode;
+      List<CodeExecutionFile> generatedFiles = List<CodeExecutionFile>.from(
+        result.outputFiles,
+      );
+
+      if (saveOutputArtifacts && stdout.contains(_generatedFilesMarkerStart)) {
+        final ({String strippedStdout, List<CodeExecutionFile> extractedFiles})
+        extracted = _extractGeneratedFilesFromStdout(stdout);
+        stdout = extracted.strippedStdout;
+        generatedFiles.addAll(extracted.extractedFiles);
+      }
+
       final String loweredPath = scriptPath.toLowerCase();
       final bool isShell =
           loweredPath.endsWith('.sh') || loweredPath.endsWith('.bash');
@@ -830,6 +849,16 @@ class _SkillScriptCodeExecutor {
         }
       }
 
+      List<Map<String, Object?>> savedArtifacts = const <Map<String, Object?>>[];
+      if (saveOutputArtifacts && generatedFiles.isNotEmpty) {
+        savedArtifacts = await _saveGeneratedSkillArtifacts(
+          toolContext: toolContext,
+          skillName: skill.name,
+          scriptPath: scriptPath,
+          files: generatedFiles,
+        );
+      }
+
       String status = 'success';
       if (returnCode != 0) {
         status = 'error';
@@ -845,6 +874,7 @@ class _SkillScriptCodeExecutor {
         'stdout': stdout,
         'stderr': stderr,
         'status': status,
+        if (savedArtifacts.isNotEmpty) 'artifacts': savedArtifacts,
       };
     } catch (error, stackTrace) {
       developer.log(
@@ -863,6 +893,147 @@ class _SkillScriptCodeExecutor {
         'error_code': 'EXECUTION_ERROR',
       };
     }
+  }
+
+  ({String strippedStdout, List<CodeExecutionFile> extractedFiles})
+  _extractGeneratedFilesFromStdout(String stdout) {
+    final int startIdx = stdout.lastIndexOf(_generatedFilesMarkerStart);
+    if (startIdx < 0) {
+      return (
+        strippedStdout: stdout,
+        extractedFiles: const <CodeExecutionFile>[],
+      );
+    }
+    final int endIdx = stdout.indexOf(_generatedFilesMarkerEnd, startIdx);
+    if (endIdx < 0) {
+      return (
+        strippedStdout: stdout,
+        extractedFiles: const <CodeExecutionFile>[],
+      );
+    }
+
+    final String jsonPayload = stdout
+        .substring(startIdx + _generatedFilesMarkerStart.length, endIdx)
+        .trim();
+    String stripped =
+        stdout.substring(0, startIdx) +
+        stdout.substring(endIdx + _generatedFilesMarkerEnd.length);
+    if (stripped.endsWith('\n') && !stdout.substring(0, startIdx).endsWith('\n')) {
+      stripped = stripped.substring(0, stripped.length - 1);
+    }
+
+    final List<CodeExecutionFile> files = <CodeExecutionFile>[];
+    try {
+      final Object? decoded = jsonDecode(jsonPayload);
+      if (decoded is List) {
+        for (final Object? entry in decoded) {
+          if (entry is! Map) {
+            continue;
+          }
+          final Object? name = entry['name'];
+          final Object? contentB64 = entry['content_b64'] ?? entry['content'];
+          if (name is! String || name.isEmpty || contentB64 is! String) {
+            continue;
+          }
+          final Object? mimeType = entry['mime_type'] ?? entry['mimeType'];
+          files.add(
+            CodeExecutionFile(
+              name: name,
+              content: contentB64,
+              mimeType: mimeType is String && mimeType.isNotEmpty
+                  ? mimeType
+                  : _guessMimeType(name),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Ignore malformed marker blocks.
+    }
+    return (strippedStdout: stripped, extractedFiles: files);
+  }
+
+  Future<List<Map<String, Object?>>> _saveGeneratedSkillArtifacts({
+    required ToolContext toolContext,
+    required String skillName,
+    required String scriptPath,
+    required List<CodeExecutionFile> files,
+  }) async {
+    if (toolContext.invocationContext.artifactService == null) {
+      return const <Map<String, Object?>>[];
+    }
+
+    final List<Map<String, Object?>> saved = <Map<String, Object?>>[];
+    int totalSavedBytes = 0;
+
+    for (final CodeExecutionFile file in files) {
+      if (saved.length >= _maxGeneratedArtifactCount) {
+        break;
+      }
+      final String sanitizedName = file.name
+          .replaceAll(r'\', '/')
+          .split('/')
+          .where((String segment) => segment.isNotEmpty && segment != '.' && segment != '..')
+          .join('_');
+      if (sanitizedName.isEmpty) {
+        continue;
+      }
+
+      List<int> rawBytes;
+      if (file.content is List<int>) {
+        rawBytes = file.content as List<int>;
+      } else if (file.content is String) {
+        final String textOrB64 = file.content as String;
+        try {
+          rawBytes = base64Decode(textOrB64);
+        } catch (_) {
+          rawBytes = utf8.encode(textOrB64);
+        }
+      } else {
+        continue;
+      }
+
+      if (rawBytes.length > _maxGeneratedArtifactBytes) {
+        continue;
+      }
+      if (totalSavedBytes + rawBytes.length > _maxTotalGeneratedArtifactBytes) {
+        break;
+      }
+
+      final String mimeType = file.mimeType.isNotEmpty
+          ? file.mimeType
+          : _guessMimeType(sanitizedName);
+      final Part artifactPart = Part.fromInlineData(
+        mimeType: mimeType,
+        data: rawBytes,
+      );
+      try {
+        final int version = await toolContext.saveArtifact(
+          sanitizedName,
+          artifactPart,
+          customMetadata: <String, Object?>{
+            'skill_name': skillName,
+            'script_path': scriptPath,
+          },
+        );
+        totalSavedBytes += rawBytes.length;
+        saved.add(<String, Object?>{
+          'filename': sanitizedName,
+          'version': version,
+          'mime_type': mimeType,
+          'size_bytes': rawBytes.length,
+        });
+      } catch (error, stackTrace) {
+        developer.log(
+          "Failed to save generated skill artifact '$sanitizedName': $error",
+          name: 'adk_dart.skill_toolset',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+
+    return saved;
   }
 
   String? _buildWrapperCode({
@@ -924,18 +1095,22 @@ class _SkillScriptCodeExecutor {
       'import tempfile',
       'import sys',
       'import json as _json',
+      'import base64 as _b64',
       'import subprocess',
       'import runpy',
       '_files = _json.loads(${jsonEncode(filesJson)})',
       'def _materialize_and_run():',
       '  _orig_cwd = os.getcwd()',
       '  with tempfile.TemporaryDirectory() as td:',
+      '    _initial_snapshots = {}',
       '    for rel_path, content in _files.items():',
       '      full_path = os.path.join(td, rel_path)',
       '      os.makedirs(os.path.dirname(full_path), exist_ok=True)',
       "      mode = 'wb' if isinstance(content, bytes) else 'w'",
       '      with open(full_path, mode) as f:',
       '        f.write(content)',
+      '      with open(full_path, \'rb\') as rf:',
+      '        _initial_snapshots[os.path.relpath(full_path, td)] = rf.read()',
       '    os.chdir(td)',
       '    try:',
     ];
@@ -1010,6 +1185,39 @@ class _SkillScriptCodeExecutor {
         "            'returncode': -1,",
         "            'timeout': True,",
         '        }))',
+      ]);
+    }
+
+    if (saveOutputArtifacts) {
+      lines.addAll(<String>[
+        '      _generated = []',
+        '      _total_bytes = 0',
+        '      for _root, _dirs, _fnames in os.walk(td):',
+        '        _dirs[:] = [d for d in _dirs if d != \'__pycache__\' and not d.startswith(\'.\')]',
+        '        for _fn in sorted(_fnames):',
+        '          if _fn.startswith(\'.\') or _fn.endswith(\'.pyc\'):',
+        '            continue',
+        '          _fp = os.path.join(_root, _fn)',
+        '          if os.path.islink(_fp):',
+        '            continue',
+        '          _rel = os.path.relpath(_fp, td)',
+        '          try:',
+        '            with open(_fp, \'rb\') as _gf:',
+        '              _data = _gf.read($_maxGeneratedArtifactBytes + 1)',
+        '          except Exception:',
+        '            continue',
+        '          if len(_data) > $_maxGeneratedArtifactBytes:',
+        '            continue',
+        '          if _rel in _initial_snapshots and _initial_snapshots[_rel] == _data:',
+        '            continue',
+        '          if _total_bytes + len(_data) > $_maxTotalGeneratedArtifactBytes:',
+        '            break',
+        '          _total_bytes += len(_data)',
+        '          _generated.append({\'name\': _rel.replace(os.sep, \'/\'), \'content_b64\': _b64.b64encode(_data).decode(\'ascii\')})',
+        '          if len(_generated) >= $_maxGeneratedArtifactCount:',
+        '            break',
+        '      if _generated:',
+        '        sys.stdout.write(${jsonEncode(_generatedFilesMarkerStart)} + _json.dumps(_generated) + ${jsonEncode(_generatedFilesMarkerEnd)})',
       ]);
     }
 
@@ -1177,6 +1385,7 @@ class RunSkillScriptTool extends BaseTool {
     final _SkillScriptCodeExecutor scriptExecutor = _SkillScriptCodeExecutor(
       baseExecutor: codeExecutor,
       scriptTimeout: _toolset._scriptTimeout,
+      saveOutputArtifacts: _toolset.saveOutputArtifacts,
     );
     return scriptExecutor.executeScript(
       toolContext: toolContext,
@@ -1216,6 +1425,7 @@ class SkillToolset extends BaseToolset {
     BaseCodeExecutor? codeExecutor,
     int scriptTimeout = _defaultScriptTimeout,
     this.skillsFolder,
+    this.saveOutputArtifacts = false,
     SkillLifecycleConfig? lifecycleConfig,
     this.discoveryMode = SkillDiscoveryMode.lazy,
     super.toolNamePrefix,
@@ -1274,6 +1484,9 @@ class SkillToolset extends BaseToolset {
 
   /// Optional environment directory where skill files are materialized.
   final String? skillsFolder;
+
+  /// Whether files generated by `run_skill_script` are saved as artifacts.
+  final bool saveOutputArtifacts;
 
   /// Lifecycle configuration governing skill eviction and expiration.
   final SkillLifecycleConfig lifecycleConfig;
@@ -1673,6 +1886,7 @@ class SkillToolset extends BaseToolset {
       codeExecutor: _codeExecutor,
       scriptTimeout: _scriptTimeout,
       skillsFolder: skillsFolder,
+      saveOutputArtifacts: saveOutputArtifacts,
       lifecycleConfig: lifecycleConfig,
       discoveryMode: discoveryMode,
       toolNamePrefix: toolNamePrefix,

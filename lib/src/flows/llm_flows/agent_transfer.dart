@@ -1,16 +1,61 @@
 /// LLM flow processor that handles transfer-to-agent actions.
 library;
 
+import 'dart:async';
+
 import '../../agents/base_agent.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../agents/managed_agent.dart';
+import '../../agents/remote_a2a_agent.dart';
 import '../../events/event.dart';
 import '../../models/llm_request.dart';
 import '../../tools/tool_context.dart';
 import '../../tools/transfer_to_agent_tool.dart';
 import 'base_llm_flow.dart';
+
+/// Metadata describing an agent transfer target.
+class TransferTargetInfo {
+  /// Creates transfer target metadata.
+  const TransferTargetInfo({required this.name, required this.description});
+
+  /// Target agent name.
+  final String name;
+
+  /// Target agent description.
+  final String description;
+}
+
+/// Resolves and caches transfer target metadata for [targetAgent].
+Future<TransferTargetInfo> buildTransferTargetInfo(
+  BaseAgent targetAgent,
+  InvocationContext context,
+) async {
+  final String cacheKey = '_transfer_target_info_${targetAgent.name}';
+  final Object? cached = context.privateMetadata[cacheKey];
+  if (cached is TransferTargetInfo) {
+    return cached;
+  }
+
+  String description = targetAgent.description;
+  if (targetAgent is RemoteA2aAgent) {
+    try {
+      description = await targetAgent
+          .getTransferDescription(context)
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      description = targetAgent.description;
+    }
+  }
+
+  final TransferTargetInfo info = TransferTargetInfo(
+    name: targetAgent.name,
+    description: description,
+  );
+  context.privateMetadata[cacheKey] = info;
+  return info;
+}
 
 /// Injects transfer instructions/tool declarations into LLM requests.
 class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
@@ -36,13 +81,21 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
           .toList(growable: false),
     );
 
-    final String instructions = buildTransferInstructions(
-      transferToAgentTool.name,
-      agent,
-      transferTargets,
-    );
-    if (instructions.isNotEmpty) {
-      llmRequest.appendInstructions(<String>[instructions]);
+    if (!_usesTaskTransferMode(agent)) {
+      final List<TransferTargetInfo> targetInfos = await Future.wait(
+        transferTargets.map(
+          (BaseAgent target) =>
+              buildTransferTargetInfo(target, invocationContext),
+        ),
+      );
+      final String instructions = buildTransferInstructionsFromInfos(
+        transferToAgentTool.name,
+        agent,
+        targetInfos,
+      );
+      if (instructions.isNotEmpty) {
+        llmRequest.appendInstructions(<String>[instructions]);
+      }
     }
 
     final ToolContext toolContext = Context(invocationContext);
@@ -55,9 +108,19 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
 
 /// Builds one target-agent description block.
 String buildTargetAgentsInfo(BaseAgent targetAgent) {
+  return buildTargetAgentsInfoFromTargetInfo(
+    TransferTargetInfo(
+      name: targetAgent.name,
+      description: targetAgent.description,
+    ),
+  );
+}
+
+/// Builds one target-agent description block from [targetInfo].
+String buildTargetAgentsInfoFromTargetInfo(TransferTargetInfo targetInfo) {
   return '''
-Agent name: ${targetAgent.name}
-Agent description: ${targetAgent.description}
+Agent name: ${targetInfo.name}
+Agent description: ${targetInfo.description}
 ''';
 }
 
@@ -69,8 +132,27 @@ String buildTransferInstructionBody(
   String toolName,
   List<BaseAgent> targetAgents,
 ) {
+  return buildTransferInstructionBodyFromInfos(
+    toolName,
+    targetAgents
+        .map(
+          (BaseAgent target) => TransferTargetInfo(
+            name: target.name,
+            description: target.description,
+          ),
+        )
+        .toList(growable: false),
+  );
+}
+
+/// Builds shared transfer instruction text for resolved [targetInfos].
+String buildTransferInstructionBodyFromInfos(
+  String toolName,
+  List<TransferTargetInfo> targetInfos,
+) {
   final List<String> availableAgentNames =
-      targetAgents.map((BaseAgent target) => target.name).toList()..sort();
+      targetInfos.map((TransferTargetInfo target) => target.name).toList()
+        ..sort();
   final String formattedAgentNames = availableAgentNames
       .map((String name) => '`$name`')
       .join(', ');
@@ -78,7 +160,7 @@ String buildTransferInstructionBody(
   return '''
 You have a list of other agents to transfer to:
 
-${targetAgents.map(buildTargetAgentsInfo).join(lineBreak)}
+${targetInfos.map(buildTargetAgentsInfoFromTargetInfo).join(lineBreak)}
 
 If you are the best to answer the question according to your description,
 you can answer it.
@@ -99,10 +181,33 @@ String buildTransferInstructions(
   LlmAgent agent,
   List<BaseAgent> targetAgents,
 ) {
+  return buildTransferInstructionsFromInfos(
+    toolName,
+    agent,
+    targetAgents
+        .map(
+          (BaseAgent target) => TransferTargetInfo(
+            name: target.name,
+            description: target.description,
+          ),
+        )
+        .toList(growable: false),
+  );
+}
+
+/// Builds full transfer instructions for [agent] from resolved [targetInfos].
+String buildTransferInstructionsFromInfos(
+  String toolName,
+  LlmAgent agent,
+  List<TransferTargetInfo> targetInfos,
+) {
   if (_usesTaskTransferMode(agent)) {
     return '';
   }
-  String instruction = buildTransferInstructionBody(toolName, targetAgents);
+  String instruction = buildTransferInstructionBodyFromInfos(
+    toolName,
+    targetInfos,
+  );
 
   if (agent.parentAgent != null && !agent.disallowTransferToParent) {
     instruction +=

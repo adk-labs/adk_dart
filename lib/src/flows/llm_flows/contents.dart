@@ -338,14 +338,20 @@ bool containsEmptyContent(Event event) {
 
 /// Whether [event] belongs to [invocationBranch] context.
 bool isEventBelongsToBranch(String? invocationBranch, Event event) {
+  final String? eventBranch = event.branch;
+  if (eventBranch == null || eventBranch.isEmpty) {
+    return true;
+  }
   if (invocationBranch == null || invocationBranch.isEmpty) {
+    return !eventBranch.contains('@');
+  }
+  if (invocationBranch == eventBranch) {
     return true;
   }
-  if (event.branch == null || event.branch!.isEmpty) {
+  if (invocationBranch.startsWith('$eventBranch.')) {
     return true;
   }
-  return invocationBranch == event.branch ||
-      invocationBranch.startsWith('${event.branch}.');
+  return false;
 }
 
 bool _isPartInvisible(Part part) {

@@ -524,6 +524,20 @@ class RemoteA2aAgent extends BaseAgent {
     }
   }
 
+  /// Returns the description used for agent-transfer instructions, resolving
+  /// the remote agent card when the local [description] is empty.
+  Future<String> getTransferDescription(InvocationContext context) async {
+    if (description.isNotEmpty) {
+      return description;
+    }
+    try {
+      await _ensureResolved();
+      return _agentCard?.description ?? description;
+    } catch (_) {
+      return description;
+    }
+  }
+
   A2aMessage? _createA2aRequestForUserFunctionResponse(InvocationContext ctx) {
     if (ctx.session.events.isEmpty ||
         ctx.session.events.last.author != 'user') {

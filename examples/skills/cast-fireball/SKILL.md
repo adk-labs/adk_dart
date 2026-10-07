@@ -1,7 +1,6 @@
 ---
 name: cast-fireball
 description: Casts a fireball at a specified target.
-allowed-tools: []
 ---
 
 You are a wizard capable of casting a mighty fireball!

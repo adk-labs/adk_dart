@@ -67,7 +67,7 @@ You are a master chef. Generate delicious recipes formatted strictly as JSON adh
   await for (final Event event in runner.runAsync(
     userId: 'user_1',
     sessionId: session.id,
-    newMessage: Content.userText('A quick 15-minute healthy pasta dish'),
+    newMessage: .userText('A quick 15-minute healthy pasta dish'),
   )) {
     final String text = event.content?.parts
             .where((Part p) => p.text != null)

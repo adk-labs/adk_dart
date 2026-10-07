@@ -29,11 +29,20 @@ Analyze large codebases or documents with automatic context cache reuse across c
 ''',
   );
 
-  // 2. Attach context cache configuration via App
+  // 2. Configure Token & Sliding-Window Event Compaction
+  final EventsCompactionConfig compactionConfig = EventsCompactionConfig(
+    tokenThreshold: 4000,
+    eventRetentionSize: 4,
+    compactionInterval: 6,
+    overlapSize: 2,
+  );
+
+  // 3. Attach context cache and compaction configurations via App
   final App app = App(
     name: 'doc_cache_app',
     rootAgent: agent,
     contextCacheConfig: cacheConfig,
+    eventsCompactionConfig: compactionConfig,
   );
 
   final InMemoryRunner runner = InMemoryRunner(app: app);

@@ -71,10 +71,9 @@ abstract class LlmAsJudge extends Evaluator {
       return invoker(prompt: prompt, judgeModelOptions: _judgeModelOptions);
     }
 
-    final Object? rawModelConfig = _judgeModelOptions.judgeModelConfig;
-    final GenerateContentConfig config = rawModelConfig is GenerateContentConfig
-        ? rawModelConfig.copyWith()
-        : GenerateContentConfig();
+    final GenerateContentConfig config = buildJudgeRequestConfig(
+      _judgeModelOptions.judgeModelConfig,
+    );
     final LlmRequest llmRequest = LlmRequest(
       model: _judgeModelOptions.judgeModel,
       contents: <Content>[Content.userText(prompt)],

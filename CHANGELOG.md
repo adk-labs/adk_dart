@@ -1,3 +1,37 @@
+## 2026.10.7
+
+- **Upstream `adk-python` v2.11.0+ & Cross-SDK Parity**:
+  - **`BaseAgent` & `InvocationContext` Callback List Normalization & Resumability**:
+    - Added `canonicalBeforeAgentCallbacks` / `canonicalAfterAgentCallbacks` list normalization in `BaseAgent` to support single callbacks or lists seamlessly.
+    - Enabled `BaseAgent.runAsync` and `runLive` to skip directly to sub-agents when resuming an already-populated `agentStates` invocation without re-firing `beforeAgentCallback`.
+    - Reset child agent state cleanly upon completion (`resetSubAgentStates`) so `LoopAgent` and iterative workflows re-enter sub-agents fresh on subsequent iterations.
+  - **`RemoteA2aAgent` & `AgentTransfer` Description Resolution**:
+    - Exposed `resolvedDescription` on `RemoteA2aAgent` and updated `buildTransferTargetInfo` (`transfer_to_agent`) to prefer resolved A2A agent card descriptions when building transfer target instructions.
+  - **Compaction & Context Management (`EventsCompactionConfig`)**:
+    - Added pre-LLM sliding-window compaction (`runCompactionForSlidingWindow` with `skipTokenCompaction`) and exposed `appName` / `userId` on `BaseEventsSummarizer.maybeSummarizeEvents`.
+    - Removed deprecated `EventCompactor` aliases and added `LlmRequest.totalTokenCount()`.
+  - **Skills & Artifact Tooling (`SkillToolset`, `LoadArtifactsTool`, `GcpSkillRegistry`)**:
+    - Added `saveOutputArtifacts` option to `SkillToolset` (`RunSkillScriptTool`) to automatically persist files generated in `ADK_OUTPUT_DIR` to `ArtifactService`.
+    - Added binary-safe `Part.asSafePartForLlm()` placeholder formatting (`[Binary artifact: ...]`) across `LoadArtifactsTool` and `injectSessionState`.
+    - Hardened `injectSessionState` regex (`_validIdentifierPattern`) so shell variables like `${VAR}` are ignored rather than treated as session state templates.
+    - Added `SkillSource`, `parseSkillPath`, and path-prefix routing (`local:` vs `gcp:`) in `GcpSkillRegistry`.
+    - Added `customMetadata` persistence and preservation across `InMemoryArtifactService`.
+  - **Tooling & Security (`BashToolPolicy`, `McpTool`, `RestApiTool`, `PlanReActPlanner`)**:
+    - Hardened `BashToolPolicy.validateCommand` with shell-tokenized command boundary matching (`_commandMatchesPrefix`) to prevent prefix-Confusion bypasses (e.g., `git statusx` vs `git status`), and updated `ExecuteBashTool` description to emit `<none>` when no prefixes are allowed.
+    - Updated `McpTool` structured output handling to wrap non-Map JSON values (`{"result": parsed}`) and fall back to raw content blocks on invalid JSON.
+    - Fixed `RestApiTool.fromParsedOperation` to respect explicit `shouldParseResult` flags and preserve raw HTTP response strings when parsing is disabled.
+    - Updated `PlanReActPlanner` to preserve thought parts on the final model response so `thoughtSignature` metadata survives multi-turn history.
+  - **Evaluation Framework (`HallucinationsV1Evaluator`, `PerTurnUserSimulatorQualityV1`)**:
+    - Added `InvocationEvent.groundingMetadata` and `getGroundingMetadataAsJsonStr` to include search grounding chunks in `HallucinationsV1Evaluator` prompts, added `Label.partiallyValid` (`partially_valid`: 0.5), and disabled automatic function calling on judge requests via `buildJudgeRequestConfig`.
+    - Refined `PerTurnUserSimulatorQualityV1` stop-signal detection to match `stopSignal` on whole words / non-letter boundaries rather than arbitrary substrings.
+- **ADK Web UI & Built-in Agent Builder Assistant**:
+  - Updated `packages/adk/lib/src/cli/browser/` with the latest `adk-web` production bundle (`main-FSTPJ7PI.js`).
+  - Synced `packages/adk/lib/src/cli/built_in_agents/` with the latest upstream `adk_agent_builder_assistant`, adding `utils/_adk_symbols.py` symbol lookup and removing deprecated sub-agent stubs.
+- **Examples & Quality Assurance**:
+  - Added `examples/19_skills_and_output_artifacts` showcasing local skill discovery (`examples/skills`), `SkillToolset(saveOutputArtifacts: true)`, and safe binary artifact instruction injection.
+  - Updated examples (`04`, `11`, `12`, `13`, `15`, `17`, `packages/adk/example`) with Dart 3.10 dot-shorthand syntax and v2.11.0+ feature demonstrations.
+  - Added `test/upstream_v2_11_0_parity_test.dart` (19 new parity tests; 1,493 passing tests in `adk_dart` and 159 in `packages/adk`) with 0 analyzer issues.
+
 ## 2026.9.11
 
 - **Upstream `adk-python` v2.9.0 Feature Parity**:

@@ -253,9 +253,8 @@ class Runner {
       return;
     }
 
-    if (newMessage != null &&
-        (newMessage.role == null || newMessage.role!.isEmpty)) {
-      newMessage.role = 'user';
+    if (newMessage != null && newMessage.role != 'user') {
+      newMessage = newMessage.copyWith(role: 'user');
     }
 
     final Session session = await _getOrCreateSession(
@@ -345,7 +344,6 @@ class Runner {
                 app: app!,
                 session: context.session,
                 sessionService: sessionService,
-                skipTokenCompaction: context.tokenCompactionChecked,
               )) {
             await sessionService.appendEvent(
               session: context.session,
@@ -1169,11 +1167,7 @@ class Runner {
       }
     }
 
-    if (invocationContext.isAborted) {
-      return;
-    }
-
-    // Step: run the after_run callbacks (success path only). A failure here
+    // Step: run the after_run callbacks. A failure here
     // (e.g. an after_run plugin raising, surfaced by PluginManager as a
     // PluginManagerException) is still an unhandled runner error, so notify
     // on_run_error_callback once and re-raise. on_run_error is
@@ -1189,9 +1183,6 @@ class Runner {
         error,
       );
       rethrow;
-    }
-    if (invocationContext.isAborted) {
-      return;
     }
   }
 

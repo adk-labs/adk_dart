@@ -8,7 +8,7 @@ class EchoModel extends BaseLlm {
     LlmRequest request, {
     bool stream = false,
   }) async* {
-    yield LlmResponse(content: Content.modelText('hello from adk package'));
+    yield LlmResponse(content: .modelText('hello from adk package'));
   }
 }
 
@@ -25,7 +25,7 @@ Future<void> main() async {
       .runAsync(
         userId: 'user_1',
         sessionId: session.id,
-        newMessage: Content.userText('hi'),
+        newMessage: .userText('hi'),
       )
       .toList();
 

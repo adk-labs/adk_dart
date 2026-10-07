@@ -57,11 +57,6 @@ class InMemoryArtifactService extends BaseArtifactService {
       sessionId: sessionId,
     );
 
-    final List<_ArtifactEntry> versions = _artifacts.putIfAbsent(
-      path,
-      () => <_ArtifactEntry>[],
-    );
-
     if (isArtifactRef(artifact)) {
       final ParsedArtifactUri? parsedUri = parseArtifactUri(
         artifact.fileData!.fileUri,
@@ -79,6 +74,11 @@ class InMemoryArtifactService extends BaseArtifactService {
       );
     }
 
+    final List<_ArtifactEntry> versions = _artifacts.putIfAbsent(
+      path,
+      () => <_ArtifactEntry>[],
+    );
+
     final int version = versions.length;
     final String canonicalUri = _fileHasUserNamespace(filename)
         ? 'memory://apps/$appName/users/$userId/artifacts/$filename/versions/$version'
@@ -87,7 +87,9 @@ class InMemoryArtifactService extends BaseArtifactService {
     final ArtifactVersion artifactVersion = ArtifactVersion(
       version: version,
       canonicalUri: canonicalUri,
-      customMetadata: customMetadata,
+      customMetadata: customMetadata == null
+          ? null
+          : Map<String, Object?>.from(customMetadata),
       mimeType: _detectMimeType(artifact),
     );
 

@@ -36,7 +36,7 @@ After receiving the choice, provide a tailored 1-day itinerary for that destinat
   await for (final Event event in runner.runAsync(
     userId: 'user_1',
     sessionId: session.id,
-    newMessage: Content.userText('Where should I go for a weekend trip?'),
+    newMessage: .userText('Where should I go for a weekend trip?'),
   )) {
     final String text = event.content?.parts
             .where((Part p) => p.text != null)
@@ -52,7 +52,7 @@ After receiving the choice, provide a tailored 1-day itinerary for that destinat
   await for (final Event event in runner.runAsync(
     userId: 'user_1',
     sessionId: session.id,
-    newMessage: Content.userText('Option 1 sounds amazing!'),
+    newMessage: .userText('Option 1 sounds amazing!'),
   )) {
     final String text = event.content?.parts
             .where((Part p) => p.text != null)

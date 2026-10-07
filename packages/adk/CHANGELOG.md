@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.7
+
+- Bumped package version to `2026.10.7` and dependency `adk_dart: ^2026.10.7`.
+- Synced `adk-web` browser bundle (`main-FSTPJ7PI.js`) and `built_in_agents` (`adk_agent_builder_assistant` with `_adk_symbols.py`) with upstream v2.11.0+.
+
 ## 2026.9.11
 
 - Bumped package version to `2026.9.11` and dependency `adk_dart: ^2026.9.11`.

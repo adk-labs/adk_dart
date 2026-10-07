@@ -63,6 +63,7 @@ const Set<String> mcpReservedToolNames = <String>{
   'request_euc',
   'request_confirmation',
   'request_input',
+  'set_model_response',
   'transfer_to_agent',
 };
 

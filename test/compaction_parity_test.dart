@@ -449,6 +449,7 @@ void main() {
         invocationId: 'inv_1',
         author: 'root_agent',
         timestamp: 2.0,
+        longRunningToolIds: <String>{'call_1'},
         content: Content(
           role: 'model',
           parts: <Part>[

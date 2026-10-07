@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../events/event.dart';
 import '../events/event_actions.dart';
@@ -9,6 +10,7 @@ import '../sessions/session.dart';
 import '../telemetry/tracing.dart' as tracing;
 import '../types/content.dart';
 import 'app.dart';
+import 'base_events_summarizer.dart';
 
 /// Whether [config] has token-threshold compaction parameters configured.
 bool hasTokenThresholdConfig(EventsCompactionConfig? config) {
@@ -40,20 +42,133 @@ Set<String> _eventFunctionResponseIds(Event event) {
       .toSet();
 }
 
-List<Event> _longestSelfContainedPrefix(List<Event> events) {
-  final Set<String> openIds = <String>{};
-  int safeLength = 0;
-  for (int index = 0; index < events.length; index += 1) {
-    final Event event = events[index];
-    openIds.removeAll(_eventFunctionResponseIds(event));
-    openIds.addAll(_eventFunctionCallIds(event));
-    openIds.addAll(event.actions.requestedToolConfirmations.keys);
-    openIds.addAll(event.actions.requestedAuthConfigs.keys);
-    if (openIds.isEmpty) {
-      safeLength = index + 1;
+Set<String> _eventResolvedResponseIds(Event event) {
+  final Set<String> pendingInEvent = <String>{
+    ...event.actions.requestedToolConfirmations.keys,
+    ...event.actions.requestedAuthConfigs.keys,
+  };
+  return _eventFunctionResponseIds(event).difference(pendingInEvent);
+}
+
+const Set<String> _syntheticHitlToolNames = <String>{
+  'adk_request_confirmation',
+  'adk_request_credential',
+  'adk_request_input',
+};
+
+/// Returns function-call IDs opened in [events] that can never be answered.
+Set<String> _provablyDeadCallIds(
+  List<Event> events, {
+  required List<Event> allEvents,
+  required String? newestInvocationId,
+}) {
+  final Set<String> protectedIds = <String>{};
+  final Set<String> answeredIds = <String>{};
+
+  for (final Event event in allEvents) {
+    final bool isNewestOrUnscoped =
+        event.invocationId.isEmpty || event.invocationId == newestInvocationId;
+    final Set<String>? longRunningIds = event.longRunningToolIds;
+    if (longRunningIds != null && longRunningIds.isNotEmpty) {
+      if (isNewestOrUnscoped) {
+        protectedIds.addAll(longRunningIds);
+      } else {
+        final Set<String> syntheticHitlIds = event
+            .getFunctionCalls()
+            .where(
+              (FunctionCall fc) =>
+                  fc.id != null &&
+                  fc.id!.isNotEmpty &&
+                  _syntheticHitlToolNames.contains(fc.name),
+            )
+            .map((FunctionCall fc) => fc.id!)
+            .toSet();
+        protectedIds.addAll(longRunningIds.difference(syntheticHitlIds));
+      }
+    }
+    if (isNewestOrUnscoped) {
+      protectedIds.addAll(event.actions.requestedToolConfirmations.keys);
+      protectedIds.addAll(event.actions.requestedAuthConfigs.keys);
+    }
+    answeredIds.addAll(_eventResolvedResponseIds(event));
+  }
+
+  final Set<String> deadIds = <String>{};
+  for (final Event event in events) {
+    if (newestInvocationId != null &&
+        newestInvocationId.isNotEmpty &&
+        event.invocationId == newestInvocationId) {
+      continue;
+    }
+    for (final String callId in _eventFunctionCallIds(event)) {
+      if (!protectedIds.contains(callId) && !answeredIds.contains(callId)) {
+        deadIds.add(callId);
+      }
     }
   }
-  return events.take(safeLength).toList(growable: false);
+  return deadIds;
+}
+
+List<Event> _longestSelfContainedPrefix(
+  List<Event> events, {
+  List<Event>? allEvents,
+}) {
+  int runPass(Set<String> deadIds) {
+    final Set<String> openIds = <String>{};
+    int safeLength = 0;
+    for (int index = 0; index < events.length; index += 1) {
+      final Event event = events[index];
+      openIds.removeAll(_eventFunctionResponseIds(event));
+      openIds.addAll(_eventFunctionCallIds(event).difference(deadIds));
+      openIds.addAll(
+        event.actions.requestedToolConfirmations.keys.toSet().difference(
+          deadIds,
+        ),
+      );
+      openIds.addAll(
+        event.actions.requestedAuthConfigs.keys.toSet().difference(deadIds),
+      );
+      if (openIds.isEmpty) {
+        safeLength = index + 1;
+      }
+    }
+    return safeLength;
+  }
+
+  final int safeLength = runPass(const <String>{});
+  if (safeLength == events.length) {
+    return events;
+  }
+  if (allEvents == null) {
+    return events.take(safeLength).toList(growable: false);
+  }
+  if (safeLength > 0 &&
+      events[safeLength - 1].invocationId != events[safeLength].invocationId) {
+    return events.take(safeLength).toList(growable: false);
+  }
+
+  String? newestInvocationId;
+  for (int i = allEvents.length - 1; i >= 0; i -= 1) {
+    final Event event = allEvents[i];
+    if (event.invocationId.isNotEmpty && event.actions.compaction == null) {
+      newestInvocationId = event.invocationId;
+      break;
+    }
+  }
+
+  final Set<String> deadIds = _provablyDeadCallIds(
+    events,
+    allEvents: allEvents,
+    newestInvocationId: newestInvocationId,
+  );
+  if (deadIds.isEmpty) {
+    return events.take(safeLength).toList(growable: false);
+  }
+
+  final int secondPassLength = runPass(deadIds);
+  final int finalLength =
+      secondPassLength > safeLength ? secondPassLength : safeLength;
+  return events.take(finalLength).toList(growable: false);
 }
 
 int _safeTokenCompactionSplitIndex({
@@ -130,12 +245,15 @@ Future<bool> runCompactionForTokenThresholdConfig({
       .take(splitIndex)
       .map((Event event) => event.copyWith())
       .toList(growable: false);
-  eventsToCompact = _longestSelfContainedPrefix(eventsToCompact);
+  eventsToCompact = _longestSelfContainedPrefix(
+    eventsToCompact,
+    allEvents: events,
+  );
   if (eventsToCompact.isEmpty) {
     return false;
   }
 
-  final Event compactionEvent = await _createCompactionEventWithTrace(
+  final Event? compactionEvent = await _createCompactionEventWithTrace(
     session: session,
     config: config,
     eventsToCompact: eventsToCompact,
@@ -143,6 +261,9 @@ Future<bool> runCompactionForTokenThresholdConfig({
     author: agentName,
     branch: currentBranch,
   );
+  if (compactionEvent == null) {
+    return false;
+  }
   await sessionService.appendEvent(session: session, event: compactionEvent);
   return true;
 }
@@ -223,23 +344,28 @@ Stream<Event> runCompactionForSlidingWindow({
         (Event event) => invocationIdsToCompact.contains(event.invocationId),
       )
       .toList(growable: false);
-  eventsToCompact = _longestSelfContainedPrefix(eventsToCompact);
+  eventsToCompact = _longestSelfContainedPrefix(
+    eventsToCompact,
+    allEvents: events,
+  );
 
   if (eventsToCompact.isEmpty) {
     return;
   }
 
-  final Event compactionEvent = await _createCompactionEventWithTrace(
+  final Event? compactionEvent = await _createCompactionEventWithTrace(
     session: session,
     config: config,
     eventsToCompact: eventsToCompact,
     trigger: 'sliding_window',
     author: app.rootAgent.name,
   );
-  yield compactionEvent;
+  if (compactionEvent != null) {
+    yield compactionEvent;
+  }
 }
 
-Future<Event> _createCompactionEventWithTrace({
+Future<Event?> _createCompactionEventWithTrace({
   required Session session,
   required EventsCompactionConfig config,
   required List<Event> eventsToCompact,
@@ -247,13 +373,38 @@ Future<Event> _createCompactionEventWithTrace({
   required String author,
   String? branch,
 }) {
-  return tracing.tracer.inSpanAsync<Event>(
+  return tracing.tracer.inSpanAsync<Event?>(
     'compact_events $trigger',
     (tracing.TraceSpanRecord span) async {
-      final Content compacted = await summarizeEvents(
+      final Object? rawSummarizer = config.summarizer;
+      if (rawSummarizer is BaseEventsSummarizer) {
+        try {
+          final Event? summarizedEvent = await rawSummarizer
+              .maybeSummarizeEvents(events: eventsToCompact);
+          if (summarizedEvent != null) {
+            span.setAttributes(
+              _buildCompactionResultAttributes(summarizedEvent),
+            );
+          }
+          return summarizedEvent;
+        } catch (error, stackTrace) {
+          developer.log(
+            'Failed to compact events ($trigger); skipping compaction: $error',
+            name: 'adk_dart.compaction',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          return null;
+        }
+      }
+
+      final Content? compacted = await _summarizeEventsOrNull(
         eventsToCompact,
-        summarizer: config.summarizer,
+        summarizer: rawSummarizer,
       );
+      if (compacted == null) {
+        return null;
+      }
       final Event compactionEvent = Event(
         invocationId: 'compaction_${DateTime.now().microsecondsSinceEpoch}',
         author: author,
@@ -409,6 +560,34 @@ double latestCompactionEndTimestamp(List<Event> events) {
     }
   }
   return latestEnd;
+}
+
+Future<Content?> _summarizeEventsOrNull(
+  List<Event> events, {
+  Object? summarizer,
+}) async {
+  if (summarizer is Function) {
+    try {
+      final Object? result = Function.apply(summarizer, <Object>[events]);
+      final Object? resolved = result is Future ? await result : result;
+      if (resolved == null) {
+        return null;
+      }
+      final Content? content = _toContent(resolved);
+      if (content != null) {
+        return content;
+      }
+    } catch (error, stackTrace) {
+      developer.log(
+        'Summarizer failed during event compaction; skipping compaction: $error',
+        name: 'adk_dart.compaction',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
+  }
+  return summarizeEvents(events, summarizer: summarizer);
 }
 
 /// Summarizes [events] using [summarizer] or fallback default summarization.

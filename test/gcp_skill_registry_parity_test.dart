@@ -127,9 +127,11 @@ description: test
       ]);
       expect(
         requestedUris.single.toString(),
-        'https://example.com/v1beta1/projects/test-project/locations/us-central1/skills:retrieve',
+        'https://example.com/v1beta1/projects/test-project/locations/us-central1/skills:search',
       );
-      expect(requestedBodies.single, <String, Object?>{'query': 'query'});
+      expect(requestedBodies.single, <String, Object?>{
+        'search_string': 'query',
+      });
     });
 
     test('getSkill raises when zipped filesystem is missing', () async {

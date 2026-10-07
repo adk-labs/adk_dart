@@ -29,6 +29,78 @@ class BashToolPolicy {
   final int? timeoutSeconds;
 }
 
+List<String>? _splitShellTokens(String input) {
+  final List<String> tokens = <String>[];
+  final StringBuffer current = StringBuffer();
+  bool hasCurrent = false;
+  String? quote;
+  bool escaped = false;
+
+  for (int i = 0; i < input.length; i += 1) {
+    final String ch = input[i];
+    if (escaped) {
+      current.write(ch);
+      hasCurrent = true;
+      escaped = false;
+      continue;
+    }
+    if (ch == r'\' && quote != "'") {
+      escaped = true;
+      hasCurrent = true;
+      continue;
+    }
+    if (quote != null) {
+      if (ch == quote) {
+        quote = null;
+      } else {
+        current.write(ch);
+      }
+      hasCurrent = true;
+      continue;
+    }
+    if (ch == "'" || ch == '"') {
+      quote = ch;
+      hasCurrent = true;
+      continue;
+    }
+    if (ch.trim().isEmpty) {
+      if (hasCurrent) {
+        tokens.add(current.toString());
+        current.clear();
+        hasCurrent = false;
+      }
+      continue;
+    }
+    current.write(ch);
+    hasCurrent = true;
+  }
+
+  if (escaped || quote != null) {
+    return null;
+  }
+  if (hasCurrent) {
+    tokens.add(current.toString());
+  }
+  return tokens;
+}
+
+bool _matchesTokenPrefix(String command, String prefix) {
+  final List<String>? commandTokens = _splitShellTokens(command);
+  final List<String>? prefixTokens = _splitShellTokens(prefix);
+  if (commandTokens == null ||
+      prefixTokens == null ||
+      prefixTokens.isEmpty ||
+      commandTokens.length < prefixTokens.length) {
+    return false;
+  }
+  for (int i = 0; i < prefixTokens.length; i += 1) {
+    if (commandTokens[i] != prefixTokens[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 String? _validateCommand(String command, BashToolPolicy policy) {
   final String stripped = command.trim();
   if (stripped.isEmpty) {
@@ -42,12 +114,21 @@ String? _validateCommand(String command, BashToolPolicy policy) {
   if (policy.allowedCommandPrefixes.contains('*')) {
     return null;
   }
+  if (_splitShellTokens(stripped) == null) {
+    return 'Invalid command syntax: unclosed quotes or escape sequence.';
+  }
   for (final String prefix in policy.allowedCommandPrefixes) {
-    if (stripped.startsWith(prefix)) {
+    final String trimmedPrefix = prefix.trim();
+    if (trimmedPrefix.isEmpty) {
+      continue;
+    }
+    if (_matchesTokenPrefix(stripped, trimmedPrefix)) {
       return null;
     }
   }
-  final String allowed = policy.allowedCommandPrefixes.join(', ');
+  final String allowed = policy.allowedCommandPrefixes.isEmpty
+      ? '<none>'
+      : policy.allowedCommandPrefixes.join(', ');
   return 'Command blocked. Permitted prefixes are: $allowed';
 }
 
@@ -74,7 +155,10 @@ class ExecuteBashTool extends BaseTool {
     if (policy.allowedCommandPrefixes.contains('*')) {
       return 'any command';
     }
-    return 'commands matching prefixes: ${policy.allowedCommandPrefixes.join(', ')}';
+    final String allowed = policy.allowedCommandPrefixes.isEmpty
+        ? '<none>'
+        : policy.allowedCommandPrefixes.join(', ');
+    return 'commands matching prefixes: $allowed';
   }
 
   @override

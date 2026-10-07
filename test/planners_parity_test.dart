@@ -112,7 +112,7 @@ void main() {
       expect(processed!.first.text, 'plain response');
     });
 
-    test('keeps only first function call when function call appears first', () {
+    test('preserves all leading parallel function calls when function call appears first', () {
       final PlanReActPlanner planner = PlanReActPlanner();
       final List<Part>? processed = planner.processPlanningResponse(
         Context(_newInvocationContext(planner: planner)),
@@ -124,8 +124,9 @@ void main() {
       );
 
       expect(processed, isNotNull);
-      expect(processed, hasLength(1));
+      expect(processed, hasLength(2));
       expect(processed![0].functionCall?.name, 'tool_a');
+      expect(processed[1].functionCall?.name, 'tool_b');
     });
   });
 

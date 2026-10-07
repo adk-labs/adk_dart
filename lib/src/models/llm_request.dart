@@ -273,6 +273,34 @@ class LlmToolConfig {
   }
 }
 
+/// Configuration for SDK-managed automatic function calling.
+class AutomaticFunctionCallingConfig {
+  /// Creates an automatic function-calling configuration.
+  AutomaticFunctionCallingConfig({
+    this.disable = false,
+    this.maximumRemoteCalls,
+  });
+
+  /// Whether automatic function calling is disabled.
+  bool disable;
+
+  /// Maximum number of remote function calls allowed when enabled.
+  int? maximumRemoteCalls;
+
+  /// Returns a copy of this configuration with optional overrides.
+  AutomaticFunctionCallingConfig copyWith({
+    bool? disable,
+    Object? maximumRemoteCalls = _sentinel,
+  }) {
+    return AutomaticFunctionCallingConfig(
+      disable: disable ?? this.disable,
+      maximumRemoteCalls: identical(maximumRemoteCalls, _sentinel)
+          ? this.maximumRemoteCalls
+          : maximumRemoteCalls as int?,
+    );
+  }
+}
+
 /// Generation configuration for text/content model calls.
 class GenerateContentConfig {
   /// Creates generation settings for content requests.
@@ -295,6 +323,7 @@ class GenerateContentConfig {
     this.responseJsonSchema,
     this.responseMimeType,
     this.toolConfig,
+    this.automaticFunctionCalling,
     this.cachedContent,
     this.httpOptions,
     Map<String, String>? labels,
@@ -355,6 +384,9 @@ class GenerateContentConfig {
   /// Tool execution configuration.
   LlmToolConfig? toolConfig;
 
+  /// Automatic function-calling configuration.
+  AutomaticFunctionCallingConfig? automaticFunctionCalling;
+
   /// Cached content resource identifier.
   String? cachedContent;
 
@@ -384,6 +416,7 @@ class GenerateContentConfig {
     Object? responseJsonSchema = _sentinel,
     Object? responseMimeType = _sentinel,
     Object? toolConfig = _sentinel,
+    Object? automaticFunctionCalling = _sentinel,
     Object? cachedContent = _sentinel,
     Object? httpOptions = _sentinel,
     Map<String, String>? labels,
@@ -435,6 +468,9 @@ class GenerateContentConfig {
       toolConfig: identical(toolConfig, _sentinel)
           ? this.toolConfig?.copyWith()
           : toolConfig as LlmToolConfig?,
+      automaticFunctionCalling: identical(automaticFunctionCalling, _sentinel)
+          ? this.automaticFunctionCalling?.copyWith()
+          : automaticFunctionCalling as AutomaticFunctionCallingConfig?,
       cachedContent: identical(cachedContent, _sentinel)
           ? this.cachedContent
           : cachedContent as String?,

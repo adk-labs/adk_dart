@@ -364,8 +364,7 @@ class RestApiTool extends BaseTool {
         }
       } else {
         for (final ApiParameter parameter in parameters) {
-          if (parameter.paramLocation == 'body' &&
-              parameter.originalName.isEmpty) {
+          if (parameter.paramLocation == 'body') {
             bodyData = kwargs.containsKey(parameter.pyName)
                 ? kwargs[parameter.pyName]
                 : null;

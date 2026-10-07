@@ -17,6 +17,34 @@ user's instructions.
   ],
 );
 
-void main() {
+void main() async {
   print('Configured ${rootAgent.name} for ${Directory.current.path}');
+
+  final ExecuteBashTool bashTool = ExecuteBashTool(
+    policy: BashToolPolicy(
+      allowedCommandPrefixes: <String>['git status', 'dart --version'],
+    ),
+  );
+  final InMemorySessionService sessionService = InMemorySessionService();
+  final Session session = await sessionService.createSession(
+    appName: 'env_demo',
+    userId: 'user_1',
+  );
+  final InvocationContext context = InvocationContext(
+    sessionService: sessionService,
+    invocationId: 'inv_bash_1',
+    agent: rootAgent,
+    session: session,
+  );
+
+  final Object? blockedResult = await bashTool.run(
+    args: <String, dynamic>{'command': 'git statusx'},
+    toolContext: Context(context),
+  );
+  print('Tokenized prefix check for "git statusx": $blockedResult');
+
+  final ExecuteBashTool emptyPolicyTool = ExecuteBashTool(
+    policy: BashToolPolicy(allowedCommandPrefixes: const <String>[]),
+  );
+  print('Empty policy tool description:\n${emptyPolicyTool.description}');
 }

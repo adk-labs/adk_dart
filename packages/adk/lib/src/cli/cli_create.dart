@@ -1,6 +1,8 @@
 /// Scaffolding helpers for the `adk create` command.
 library;
 
+import 'dart:io';
+
 import '../dev/project.dart';
 
 /// Supported runtime backends for newly created agent projects.
@@ -15,8 +17,24 @@ enum CreateAgentType { basic, workflow }
 Future<int> runCreateCommand({
   required String projectDir,
   String? appName,
+  IOSink? outSink,
 }) async {
-  await createDevProject(projectDirPath: projectDir, appName: appName);
+  await createDevProject(
+    projectDirPath: projectDir,
+    appName: appName,
+  );
+  final String resolvedAppName =
+      (appName != null && appName.trim().isNotEmpty)
+      ? appName.trim()
+      : projectDirName(projectDir);
+  final IOSink sink = outSink ?? stdout;
+  sink.writeln('Agent created in ${projectDir.trim()}:');
+  sink.writeln('  - $resolvedAppName');
+  sink.writeln('');
+  sink.writeln('Next steps:');
+  sink.writeln('  1. Run in terminal:       adk run ${projectDir.trim()}');
+  sink.writeln('  2. Launch web UI:         adk web');
+  sink.writeln('  3. Serve as an API:       adk api_server');
   return 0;
 }
 

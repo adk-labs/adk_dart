@@ -61,7 +61,9 @@ abstract class BaseAgent {
 
   /// Loads this agent's serialized state from [context], if present.
   BaseAgentState? loadAgentState(InvocationContext context) {
-    final Map<String, Object?>? raw = context.agentStates[name];
+    final String key = context.agentStateKey(name);
+    final Map<String, Object?>? raw =
+        context.agentStates[key] ?? context.agentStates[name];
     if (raw == null) {
       return null;
     }
@@ -71,11 +73,16 @@ abstract class BaseAgent {
   /// Creates an event containing this agent's latest serialized state.
   Event createAgentStateEvent(InvocationContext context) {
     final EventActions actions = EventActions();
-    final Map<String, Object?>? state = context.agentStates[name];
+    final String key = context.agentStateKey(name);
+    final Map<String, Object?>? state =
+        context.agentStates[key] ?? context.agentStates[name];
     if (state != null) {
       actions.agentState = Map<String, Object?>.from(state);
     }
-    if (context.endOfAgents[name] == true) {
+    if (context.endOfAgents[key] == true ||
+        (key != name &&
+            !context.endOfAgents.containsKey(key) &&
+            context.endOfAgents[name] == true)) {
       actions.endOfAgent = true;
     }
 
