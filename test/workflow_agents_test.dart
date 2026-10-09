@@ -674,14 +674,10 @@ class _LoopingEscalateAgent extends BaseAgent {
 }
 
 class _FailingAgent extends BaseAgent {
-  _FailingAgent({required super.name, this.delay = Duration.zero});
-  final Duration delay;
+  _FailingAgent({required super.name});
 
   @override
   Stream<Event> runAsyncImpl(InvocationContext context) async* {
-    if (delay > Duration.zero) {
-      await Future<void>.delayed(delay);
-    }
     throw FormatException('simulated sub-agent failure');
   }
 }

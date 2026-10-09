@@ -3,6 +3,26 @@
 /// This library re-exports the Web-safe ADK runtime surface from
 /// `package:adk_dart/adk_core.dart`, plugin platform utilities, and
 /// ready-to-use Flutter UI widgets and controllers.
+///
+/// ```dart
+/// import 'package:flutter/material.dart';
+/// import 'package:flutter_adk/flutter_adk.dart';
+///
+/// class ChatScreen extends StatelessWidget {
+///   const ChatScreen({super.key, required this.agent});
+///
+///   final BaseAgent agent;
+///
+///   @override
+///   Widget build(BuildContext context) {
+///     return AdkChatView(
+///       agent: agent,
+///       title: 'ADK Assistant',
+///       showAppBar: true,
+///     );
+///   }
+/// }
+/// ```
 library;
 
 import 'flutter_adk_platform_interface.dart';

@@ -4,6 +4,13 @@ import 'package:flutter/foundation.dart';
 import '../models/adk_agent_metadata.dart';
 
 /// A centralized reactive controller for managing, toggling, observing, and hot-swapping multiple AI agents.
+///
+/// ```dart
+/// final manager = AdkAgentManagerController(
+///   initialAgents: [researchAgent, writerAgent],
+/// );
+/// manager.setActiveAgent(writerAgent.name);
+/// ```
 class AdkAgentManagerController extends ChangeNotifier {
   /// Creates an [AdkAgentManagerController].
   AdkAgentManagerController({

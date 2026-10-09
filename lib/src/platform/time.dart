@@ -1,6 +1,7 @@
 /// Platform helpers for abstracting system time generation.
 library;
 
+/// Signature for functions that return the current Unix timestamp in seconds.
 typedef TimeProvider = double Function();
 
 double _defaultTimeProvider() {

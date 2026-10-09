@@ -3,6 +3,17 @@ import 'package:flutter/foundation.dart';
 import '../widgets/adk_smart_form_view.dart';
 
 /// A reactive controller for managing conversational form fields, auto-extraction, validation, and submission.
+///
+/// ```dart
+/// final controller = AdkSmartFormController(
+///   initialFields: const [
+///     AdkFormField(key: 'name', label: 'Full Name'),
+///     AdkFormField(key: 'date', label: 'Booking Date'),
+///   ],
+///   onSubmitted: (data) => print('Submitted: $data'),
+/// );
+/// controller.updateFieldValue('name', 'Alice');
+/// ```
 class AdkSmartFormController extends ChangeNotifier {
   /// Creates an [AdkSmartFormController].
   AdkSmartFormController({
@@ -13,6 +24,8 @@ class AdkSmartFormController extends ChangeNotifier {
         };
 
   final Map<String, AdkFormField> _fields;
+
+  /// Callback invoked with the completed field values when [submit] succeeds.
   final ValueChanged<Map<String, String>>? onSubmitted;
   bool _isSubmitting = false;
   bool _isCompleted = false;

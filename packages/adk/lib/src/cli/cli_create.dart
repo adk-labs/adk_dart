@@ -6,14 +6,33 @@ import 'dart:io';
 import '../dev/project.dart';
 
 /// Supported runtime backends for newly created agent projects.
-enum CreateBackend { geminiApi, vertexAi }
+enum CreateBackend {
+  /// Google AI Studio Gemini API backend.
+  geminiApi,
+
+  /// Google Cloud Vertex AI backend.
+  vertexAi,
+}
 
 /// Supported starter agent templates for newly created projects.
-enum CreateAgentType { basic, workflow }
+enum CreateAgentType {
+  /// Single-agent starter template.
+  basic,
+
+  /// Multi-step workflow agent starter template.
+  workflow,
+}
 
 /// Creates a new ADK project at [projectDir].
 ///
 /// When [appName] is omitted, the project directory name is used.
+///
+/// ```dart
+/// final exitCode = await runCreateCommand(
+///   projectDir: './my_agent',
+///   appName: 'my_agent',
+/// );
+/// ```
 Future<int> runCreateCommand({
   required String projectDir,
   String? appName,

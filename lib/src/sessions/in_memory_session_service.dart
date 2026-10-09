@@ -12,6 +12,15 @@ import 'session_util.dart';
 import 'state.dart';
 
 /// Session service backed by process-local maps.
+///
+/// ```dart
+/// final sessionService = InMemorySessionService();
+/// final session = await sessionService.createSession(
+///   appName: 'my_app',
+///   userId: 'user_1',
+///   state: {'counter': 0},
+/// );
+/// ```
 class InMemorySessionService extends BaseSessionService {
   /// Creates an in-memory session service.
   InMemorySessionService();
@@ -32,14 +41,15 @@ class InMemorySessionService extends BaseSessionService {
     Map<String, Object?>? state,
     String? sessionId,
   }) async {
-    if (sessionId != null &&
-        await getSession(
-              appName: appName,
-              userId: userId,
-              sessionId: sessionId,
-            ) !=
-            null) {
-      throw AlreadyExistsError('Session with id $sessionId already exists.');
+    final String? trimmedSessionId =
+        (sessionId != null && sessionId.trim().isNotEmpty)
+        ? sessionId.trim()
+        : null;
+    if (trimmedSessionId != null &&
+        _sessions[appName]?[userId]?[trimmedSessionId] != null) {
+      throw AlreadyExistsError(
+        'Session with id $trimmedSessionId already exists.',
+      );
     }
 
     final SessionStateDelta deltas = extractStateDelta(state);
@@ -58,9 +68,7 @@ class InMemorySessionService extends BaseSessionService {
     }
 
     final String resolvedSessionId =
-        (sessionId != null && sessionId.trim().isNotEmpty)
-        ? sessionId.trim()
-        : newAdkId(prefix: 'session_');
+        trimmedSessionId ?? newAdkId(prefix: 'session_');
 
     final Session session = Session(
       id: resolvedSessionId,
@@ -94,26 +102,33 @@ class InMemorySessionService extends BaseSessionService {
       return null;
     }
 
-    final Session copied = session.copyWith();
+    if (config == null) {
+      return _mergeState(
+        appName: appName,
+        userId: userId,
+        session: session.copyWith(),
+      );
+    }
 
-    if (config != null) {
-      if (config.numRecentEvents != null && config.numRecentEvents! == 0) {
-        copied.events = <Event>[];
-      } else if (config.numRecentEvents != null &&
-          config.numRecentEvents! > 0) {
-        final int count = config.numRecentEvents!;
-        if (copied.events.length > count) {
-          copied.events = copied.events.sublist(copied.events.length - count);
-        }
-      }
-
-      if (config.afterTimestamp != null) {
-        copied.events = copied.events
-            .where((Event event) => event.timestamp >= config.afterTimestamp!)
-            .toList();
+    List<Event> events = session.events;
+    if (config.numRecentEvents != null && config.numRecentEvents! == 0) {
+      events = const <Event>[];
+    } else if (config.numRecentEvents != null && config.numRecentEvents! > 0) {
+      final int count = config.numRecentEvents!;
+      if (events.length > count) {
+        events = events.sublist(events.length - count);
       }
     }
 
+    if (config.afterTimestamp != null) {
+      events = events
+          .where((Event event) => event.timestamp >= config.afterTimestamp!)
+          .toList(growable: false);
+    }
+
+    final Session copied = session.copyWith(
+      events: events.map((Event event) => event.copyWith()).toList(),
+    );
     return _mergeState(appName: appName, userId: userId, session: copied);
   }
 
@@ -201,7 +216,14 @@ class InMemorySessionService extends BaseSessionService {
     );
     session.lastUpdateTime = appended.timestamp;
 
-    stored.events.add(appended.copyWith());
+    final int existingIndex = stored.events.indexWhere(
+      (Event existing) => existing.id == appended.id,
+    );
+    if (existingIndex != -1) {
+      stored.events[existingIndex] = appended.copyWith();
+    } else {
+      stored.events.add(appended.copyWith());
+    }
     stored.lastUpdateTime = appended.timestamp;
 
     if (appended.actions.stateDelta.isNotEmpty) {

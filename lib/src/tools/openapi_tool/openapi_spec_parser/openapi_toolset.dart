@@ -55,6 +55,8 @@ class OpenAPIToolset extends BaseToolset {
   final HeaderProvider? _headerProvider;
   final AuthConfig? _authConfig;
   final RestApiRequestExecutor? _requestExecutor;
+
+  /// Whether original OpenAPI property names are preserved in generated tool schemas.
   final bool preservePropertyNames;
 
   Object? _sslVerify;

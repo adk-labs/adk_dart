@@ -87,6 +87,23 @@ bool _isEmptyEventActions(EventActions actions) {
 }
 
 /// Coordinates session lifecycle, plugins, and agent execution.
+///
+/// ```dart
+/// final runner = Runner(
+///   appName: 'my_app',
+///   agent: myAgent,
+///   sessionService: InMemorySessionService(),
+///   autoCreateSession: true,
+/// );
+///
+/// await for (final event in runner.runAsync(
+///   userId: 'user_1',
+///   sessionId: 'session_1',
+///   newMessage: Content.userText('Hello!'),
+/// )) {
+///   // Process streamed events.
+/// }
+/// ```
 class Runner {
   /// Creates a runner from an [app] or direct [appName]/[agent] pair.
   Runner({
@@ -281,9 +298,16 @@ class Runner {
 
     InvocationContext context;
     if (!isResumable) {
+      final String? resolvedInvocationId =
+          _resolveInvocationIdFromFunctionResponses(
+            session: session,
+            newMessage: newMessage!,
+            strict: false,
+          );
       context = await _setupContextForNewInvocation(
         session: session,
-        newMessage: newMessage!,
+        newMessage: newMessage,
+        invocationId: resolvedInvocationId,
         stateDelta: stateDelta,
         runConfig: config,
         abortSignal: abortSignal,
@@ -645,11 +669,13 @@ class Runner {
     required Session session,
     required Content newMessage,
     required RunConfig runConfig,
+    String? invocationId,
     Map<String, Object?>? stateDelta,
     AdkAbortSignal? abortSignal,
   }) async {
     final InvocationContext context = _newInvocationContext(
       session,
+      invocationId: invocationId,
       newMessage: newMessage,
       runConfig: runConfig,
       abortSignal: abortSignal,
@@ -743,29 +769,67 @@ class Runner {
     required Content? newMessage,
     required String? invocationId,
   }) {
-    final List<FunctionResponse> responses = _functionResponsesFromContent(
-      newMessage,
-    );
-    if (responses.isEmpty) {
+    if (newMessage == null) {
       return invocationId;
     }
+    return _resolveInvocationIdFromFunctionResponses(
+          session: session,
+          newMessage: newMessage,
+          strict: true,
+        ) ??
+        invocationId;
+  }
 
-    final String? functionCallId = responses.first.id;
-    if (functionCallId == null || functionCallId.isEmpty) {
-      return invocationId;
+  String? _resolveInvocationIdFromFunctionResponses({
+    required Session session,
+    required Content newMessage,
+    bool strict = true,
+  }) {
+    final List<String> frIds = _functionResponsesFromContent(newMessage)
+        .map((FunctionResponse fr) => fr.id)
+        .whereType<String>()
+        .where((String id) => id.isNotEmpty)
+        .toList();
+    if (frIds.isEmpty) {
+      return null;
     }
 
-    final Event? functionCallEvent = _findEventByFunctionCallId(
-      session.events,
-      functionCallId,
-    );
-    if (functionCallEvent == null) {
-      throw ArgumentError(
-        'Function call event not found for function response id: $functionCallId',
-      );
+    final Set<String> remainingIds = frIds.toSet();
+    final Set<String> invocationIds = <String>{};
+    for (int i = session.events.length - 1; i >= 0; i -= 1) {
+      final Event event = session.events[i];
+      for (final FunctionCall call in event.getFunctionCalls()) {
+        final String? callId = call.id;
+        if (callId != null && remainingIds.remove(callId)) {
+          invocationIds.add(event.invocationId);
+        }
+      }
+      if (remainingIds.isEmpty) {
+        break;
+      }
     }
 
-    return functionCallEvent.invocationId;
+    if (remainingIds.isNotEmpty) {
+      if (strict) {
+        final String missingId = frIds.firstWhere(remainingIds.contains);
+        throw ArgumentError(
+          'Function call event not found for function response id: $missingId',
+        );
+      }
+      return null;
+    }
+
+    if (invocationIds.length > 1) {
+      if (strict) {
+        throw ArgumentError(
+          'Function responses in a single message must belong to the same '
+          'invocation, got: $invocationIds',
+        );
+      }
+      return null;
+    }
+
+    return invocationIds.isEmpty ? null : invocationIds.first;
   }
 
   List<FunctionResponse> _functionResponsesFromContent(Content? content) {
@@ -780,18 +844,6 @@ class Runner {
       }
     }
     return responses;
-  }
-
-  Event? _findEventByFunctionCallId(List<Event> events, String functionCallId) {
-    for (int i = events.length - 1; i >= 0; i -= 1) {
-      final Event event = events[i];
-      for (final FunctionCall call in event.getFunctionCalls()) {
-        if (call.id == functionCallId) {
-          return event;
-        }
-      }
-    }
-    return null;
   }
 
   Content? _findUserMessageForInvocation(
@@ -1427,6 +1479,22 @@ class Runner {
 }
 
 /// Runner wired with in-memory session and artifact services.
+///
+/// ```dart
+/// final runner = InMemoryRunner(agent: myAgent);
+/// final session = await runner.sessionService.createSession(
+///   appName: runner.appName,
+///   userId: 'user_1',
+/// );
+///
+/// await for (final event in runner.runAsync(
+///   userId: 'user_1',
+///   sessionId: session.id,
+///   newMessage: Content.userText('Hello!'),
+/// )) {
+///   // Process streamed events.
+/// }
+/// ```
 class InMemoryRunner extends Runner {
   /// Creates an in-memory runner.
   InMemoryRunner({

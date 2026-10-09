@@ -5,6 +5,7 @@ import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
+/// Default function name exposed by [GetUserChoiceTool].
 const String getUserChoiceFunctionName = 'get_user_choice';
 
 /// Long-running function tool that prompts user to select from a list of options.

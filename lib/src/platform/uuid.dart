@@ -3,6 +3,7 @@ library;
 
 import 'dart:math';
 
+/// Signature for functions that generate a unique identifier string.
 typedef IdProvider = String Function();
 
 final Random _random = Random();

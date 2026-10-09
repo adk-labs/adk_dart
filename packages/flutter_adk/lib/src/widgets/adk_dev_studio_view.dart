@@ -14,6 +14,13 @@ import 'adk_chat_view.dart';
 /// 2. Live Agent I/O & Telemetry Logger
 /// 3. Agent & Sub-Agent Graph Inspector
 /// 4. Session & State Variables Inspector
+///
+/// ```dart
+/// AdkDevStudioView(
+///   agent: myAgent,
+///   title: 'ADK Dev Studio',
+/// )
+/// ```
 class AdkDevStudioView extends StatefulWidget {
   /// Creates an [AdkDevStudioView].
   const AdkDevStudioView({

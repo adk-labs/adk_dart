@@ -2,7 +2,10 @@
 library;
 
 /// Externally managed authentication scheme types.
-enum ManagedAuthSchemeType { gcpIamConnectorAuth }
+enum ManagedAuthSchemeType {
+  /// Authentication managed through a Google Cloud IAM connector.
+  gcpIamConnectorAuth,
+}
 
 /// Authentication scheme that delegates OAuth flow handling to a GCP IAM connector.
 class GcpIamConnectorAuth {

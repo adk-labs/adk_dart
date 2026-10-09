@@ -9,6 +9,16 @@ import '../storage/adk_storage_session_service.dart';
 
 /// State controller that manages conversation events, streaming responses,
 /// and message history for ADK agents in Flutter.
+///
+/// ```dart
+/// final controller = AdkChatController(
+///   agent: myAgent,
+///   userId: 'user_1',
+///   sessionId: 'session_1',
+/// );
+/// await controller.sendMessage('Hello!');
+/// controller.dispose();
+/// ```
 class AdkChatController extends ChangeNotifier {
   /// Creates an [AdkChatController] bound to an agent or runner.
   AdkChatController({

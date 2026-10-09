@@ -226,7 +226,19 @@ class ToolDeclaration {
 }
 
 /// Function-calling modes recognized by model providers.
-enum FunctionCallingConfigMode { modeUnspecified, auto, any, none }
+enum FunctionCallingConfigMode {
+  /// Unspecified function-calling mode, deferring to the provider default.
+  modeUnspecified,
+
+  /// Allows the model to decide between generating text or calling functions.
+  auto,
+
+  /// Forces the model to predict at least one function call.
+  any,
+
+  /// Disables function calling for the request.
+  none,
+}
 
 /// Function-calling configuration attached to tool settings.
 class FunctionCallingConfig {

@@ -87,6 +87,13 @@ class AgentEvalCaseSummary {
 }
 
 /// Utilities for loading eval sets and evaluating agents against them.
+///
+/// ```dart
+/// final summaries = await AgentEvaluator.evaluate(
+///   rootAgent: myAgent,
+///   evalDatasetFilePathOrDir: 'test/evals/weather_agent.test.json',
+/// );
+/// ```
 class AgentEvaluator {
   /// The default number of repeated runs per eval case.
   static const int numRuns = 2;

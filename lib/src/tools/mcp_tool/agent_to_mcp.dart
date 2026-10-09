@@ -12,6 +12,7 @@ import '../../runners/runner.dart';
 import '../../sessions/in_memory_session_service.dart';
 import '../../types/content.dart';
 
+/// Default user identifier assigned to MCP-originated agent invocations.
 const String mcpUserId = 'mcp_user';
 
 /// Helper to wrap an ADK agent in a pre-configured in-memory Runner.

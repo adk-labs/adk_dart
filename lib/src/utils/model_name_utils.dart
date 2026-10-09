@@ -19,7 +19,7 @@ bool isGeminiModelIdCheckDisabled({Map<String, String>? environment}) {
 /// This strips known Vertex AI, Apigee, and `models/` path prefixes.
 String extractModelName(String modelString) {
   final RegExp vertexPath = RegExp(
-    r'^projects/[^/]+/locations/[^/]+/publishers/[^/]+/models/(.+)$',
+    r'^(?:projects/[^/]+/locations/[^/]+/)?publishers/[^/]+/models/(.+)$',
   );
   final RegExp apigeePath = RegExp(r'^apigee/(?:[^/]+/)?(?:[^/]+/)?(.+)$');
 
@@ -100,6 +100,30 @@ bool isGemini2OrAbove(String? modelString) {
   }
   final int major = int.parse(versionToken.split('.').first);
   return major >= 2;
+}
+
+/// Whether [modelString] supports combining built-in search tools with
+/// function calling (Gemini 3+).
+bool supportsBuiltinToolsWithFunctionCalling(String? modelString) {
+  if (modelString == null || modelString.isEmpty) {
+    return false;
+  }
+
+  final String modelName = extractModelName(modelString);
+  if (!modelName.startsWith('gemini-')) {
+    return false;
+  }
+
+  final String remainder = modelName.substring('gemini-'.length);
+  if (remainder.isEmpty) {
+    return false;
+  }
+  final String versionToken = remainder.split('-').first;
+  if (!RegExp(r'^\d+(?:\.\d+)*$').hasMatch(versionToken)) {
+    return false;
+  }
+  final int major = int.parse(versionToken.split('.').first);
+  return major >= 3;
 }
 
 bool _isGeminiEapModelName(String modelName) {

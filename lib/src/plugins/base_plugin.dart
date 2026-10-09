@@ -12,6 +12,24 @@ import '../tools/tool_context.dart';
 import '../types/content.dart';
 
 /// Base class for ADK runtime plugins.
+///
+/// Subclass [BasePlugin] to intercept user messages, agent execution, model
+/// requests, and tool calls across an invocation lifecycle.
+///
+/// ```dart
+/// class LoggingPlugin extends BasePlugin {
+///   LoggingPlugin() : super(name: 'logging_plugin');
+///
+///   @override
+///   Future<Event?> onEventCallback({
+///     required InvocationContext invocationContext,
+///     required Event event,
+///   }) async {
+///     print('Event from ${event.author}: ${event.id}');
+///     return null;
+///   }
+/// }
+/// ```
 abstract class BasePlugin {
   /// Creates a plugin with a unique [name].
   BasePlugin({required this.name});

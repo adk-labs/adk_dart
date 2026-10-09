@@ -115,8 +115,8 @@ abstract class LlmAsJudge extends Evaluator {
     List<PerInvocationResult> perInvocationResults,
   );
 
-  @override
   /// Evaluates actual invocations by prompting a judge model per invocation.
+  @override
   Future<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,

@@ -13,8 +13,8 @@ class AgentSimulatorPlugin extends BasePlugin {
 
   final AgentSimulatorEngine _simulatorEngine;
 
-  @override
   /// Attempts to simulate [tool] before the real tool call executes.
+  @override
   Future<Map<String, dynamic>?> beforeToolCallback({
     required BaseTool tool,
     required Map<String, dynamic> toolArgs,

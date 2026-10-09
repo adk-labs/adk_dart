@@ -296,6 +296,18 @@ class _ToolUseIdSanitizer {
 }
 
 /// Anthropic Claude adapter for ADK model requests.
+///
+/// ```dart
+/// final model = AnthropicLlm(
+///   model: 'claude-3-5-sonnet-20241022',
+///   maxTokens: 4096,
+/// );
+/// final agent = LlmAgent(
+///   name: 'claude_assistant',
+///   model: model,
+///   instruction: 'Answer concisely.',
+/// );
+/// ```
 class AnthropicLlm extends BaseLlm {
   /// Creates an Anthropic adapter for [model].
   AnthropicLlm({
@@ -316,9 +328,17 @@ class AnthropicLlm extends BaseLlm {
 
   /// Optional API invoker used for integration tests and custom transports.
   final AnthropicApiInvoker? apiInvoker;
+
+  /// Optional stream invoker for custom SSE event streams.
   final AnthropicStreamInvoker? streamInvoker;
+
+  /// Optional environment variable map used to resolve API keys and endpoints.
   final Map<String, String>? environment;
+
+  /// Optional base URL override for the Anthropic Messages API.
   final String? baseUrl;
+
+  /// Optional `anthropic-version` header override.
   final String? apiVersion;
   final AnthropicGenerateHook? _generateHook;
   final AnthropicRestTransport? _restTransport;

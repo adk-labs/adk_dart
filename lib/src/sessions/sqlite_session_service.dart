@@ -73,6 +73,14 @@ ON events (app_name, user_id, session_id, timestamp DESC);
 ''';
 
 /// Session service that stores sessions and events in SQLite.
+///
+/// ```dart
+/// final sessionService = SqliteSessionService('sessions.db');
+/// final session = await sessionService.createSession(
+///   appName: 'my_app',
+///   userId: 'user_1',
+/// );
+/// ```
 class SqliteSessionService extends BaseSessionService {
   /// Creates a session service from a SQLite [dbPath].
   SqliteSessionService(String dbPath)
@@ -313,12 +321,13 @@ class SqliteSessionService extends BaseSessionService {
       return _withDatabase<ListSessionsResponse>((_SqliteDatabase db) {
         final List<Map<String, Object?>> rows = userId == null
             ? db.query(
-                'SELECT id, user_id, state, update_time FROM sessions WHERE app_name=?',
+                'SELECT id, user_id, state, update_time FROM sessions '
+                'WHERE app_name=? ORDER BY update_time, user_id, id',
                 <Object?>[appName],
               )
             : db.query(
                 'SELECT id, user_id, state, update_time FROM sessions '
-                'WHERE app_name=? AND user_id=?',
+                'WHERE app_name=? AND user_id=? ORDER BY update_time, id',
                 <Object?>[appName, userId],
               );
 

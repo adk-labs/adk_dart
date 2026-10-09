@@ -34,6 +34,20 @@ class LoopAgentState extends BaseAgentState {
 }
 
 /// Workflow agent that iterates through sub-agents repeatedly.
+///
+/// ```dart
+/// final drafter = LlmAgent(
+///   name: 'drafter',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Refine the current answer.',
+/// );
+///
+/// final refinementLoop = LoopAgent(
+///   name: 'refinement_loop',
+///   subAgents: [drafter],
+///   maxIterations: 3,
+/// );
+/// ```
 class LoopAgent extends BaseAgent {
   /// Creates a loop agent.
   LoopAgent({

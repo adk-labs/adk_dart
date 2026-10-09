@@ -11,6 +11,15 @@ import 'google_llm.dart';
 import '../types/content.dart';
 
 /// Gemma model adapter implemented on top of Gemini transport behavior.
+///
+/// ```dart
+/// final model = GemmaLlm(model: 'gemma-3-27b-it');
+/// final agent = LlmAgent(
+///   name: 'gemma_agent',
+///   model: model,
+///   instruction: 'Help the user with coding questions.',
+/// );
+/// ```
 class GemmaLlm extends BaseLlm {
   /// Creates a Gemma adapter for [model].
   GemmaLlm({super.model = 'gemma-3-27b-it', GeminiGenerateHook? generateHook})

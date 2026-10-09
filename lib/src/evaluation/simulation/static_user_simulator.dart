@@ -25,8 +25,8 @@ class StaticUserSimulator extends UserSimulator<BaseUserSimulatorConfig> {
   final StaticConversation staticConversation;
   int _invocationIdx;
 
-  @override
   /// Returns the next scripted user message, or stop when exhausted.
+  @override
   Future<NextUserMessage> getNextUserMessage(List<Event> events) async {
     if (_invocationIdx >= staticConversation.length) {
       return NextUserMessage(status: Status.stopSignalDetected);
@@ -39,8 +39,8 @@ class StaticUserSimulator extends UserSimulator<BaseUserSimulatorConfig> {
     );
   }
 
-  @override
   /// Returns `null` because static simulation does not provide extra scoring.
+  @override
   Evaluator? getSimulationEvaluator() => null;
 }
 

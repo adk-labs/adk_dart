@@ -12,7 +12,16 @@ import '../../version.dart';
 const String spannerUserAgent = 'adk-spanner-tool google-adk/$adkVersion';
 
 /// Supported Spanner database dialects.
-enum SpannerDatabaseDialect { googleStandardSql, postgresql, unknown }
+enum SpannerDatabaseDialect {
+  /// Google Standard SQL dialect.
+  googleStandardSql,
+
+  /// PostgreSQL-compatible dialect.
+  postgresql,
+
+  /// Unrecognized or unspecified dialect.
+  unknown,
+}
 
 /// Table descriptor returned from schema queries.
 class SpannerTable {

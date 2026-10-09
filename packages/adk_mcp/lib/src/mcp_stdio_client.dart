@@ -16,6 +16,13 @@ import 'mcp_remote_client.dart'
         mcpSupportedProtocolVersions;
 
 /// Process launch options for an MCP stdio server.
+///
+/// ```dart
+/// final params = StdioConnectionParams(
+///   command: 'npx',
+///   arguments: ['-y', '@modelcontextprotocol/server-everything'],
+/// );
+/// ```
 class StdioConnectionParams {
   /// Creates options used to start an MCP stdio process.
   StdioConnectionParams({
@@ -62,6 +69,19 @@ class StdioConnectionParams {
 }
 
 /// JSON-RPC client for MCP servers that communicate over stdio.
+///
+/// ```dart
+/// final client = McpStdioClient(
+///   clientInfoName: 'adk-stdio-client',
+///   clientInfoVersion: '1.0.0',
+/// );
+/// final params = StdioConnectionParams(
+///   command: 'npx',
+///   arguments: ['-y', '@modelcontextprotocol/server-everything'],
+/// );
+/// final tools = await client.listTools(connectionParams: params);
+/// await client.close();
+/// ```
 class McpStdioClient {
   /// Creates an MCP stdio client.
   McpStdioClient({

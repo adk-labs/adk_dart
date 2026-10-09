@@ -21,6 +21,7 @@ enum Status {
   /// Conversation stopped because no message could be generated.
   noMessageGenerated('no_message_generated');
 
+  /// Creates a simulator turn status with its serialized [wireName].
   const Status(this.wireName);
 
   /// Wire-safe status value.

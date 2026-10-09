@@ -18,10 +18,16 @@ const String _gcpMcpServerDestinationIdKey = 'gcp.mcp.server.destination.id';
 
 /// Supported Agent Registry protocol types.
 enum AgentRegistryProtocolType {
+  /// Unspecified protocol type.
   typeUnspecified('TYPE_UNSPECIFIED'),
+
+  /// Agent-to-Agent (A2A) protocol.
   a2aAgent('A2A_AGENT'),
+
+  /// Custom protocol type.
   custom('CUSTOM');
 
+  /// Creates an Agent Registry protocol type with its wire [value].
   const AgentRegistryProtocolType(this.value);
 
   /// Wire value used by Agent Registry APIs.

@@ -6,6 +6,7 @@ import 'workflow.dart';
 
 /// ReplayManager - unified orchestrator for event rehydration, interception, and sequence barriers.
 class ReplayManager {
+  /// Creates a replay manager.
   ReplayManager();
 
   final Map<String, ReplaySequenceBarrier> _parentSequenceBarriers =

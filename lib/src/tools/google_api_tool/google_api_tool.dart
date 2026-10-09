@@ -165,8 +165,8 @@ class GoogleApiTool extends BaseTool {
     _restApiTool?.configureAuthScheme(value);
   }
 
-  @override
   /// Returns function declaration metadata for this tool.
+  @override
   FunctionDeclaration? getDeclaration() {
     final RestApiTool? delegate = _restApiTool;
     if (delegate != null) {
@@ -175,8 +175,8 @@ class GoogleApiTool extends BaseTool {
     return _operation?.toDeclaration();
   }
 
-  @override
   /// Executes the configured operation or delegated Rest API tool.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

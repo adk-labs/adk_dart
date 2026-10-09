@@ -8,6 +8,16 @@ import 'base_memory_service.dart';
 import 'memory_entry.dart';
 
 /// Memory service backed by process-local event collections.
+///
+/// ```dart
+/// final memoryService = InMemoryMemoryService();
+/// await memoryService.addSessionToMemory(session);
+/// final results = await memoryService.searchMemory(
+///   appName: 'my_app',
+///   userId: 'user_1',
+///   query: 'project deadline',
+/// );
+/// ```
 class InMemoryMemoryService extends BaseMemoryService {
   /// Creates an in-memory memory service.
   InMemoryMemoryService();

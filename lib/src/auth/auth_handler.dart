@@ -8,6 +8,12 @@ import 'exchanger/base_credential_exchanger.dart';
 import 'exchanger/oauth2_credential_exchanger.dart';
 
 /// Internal auth orchestration helper mirroring Python ADK behavior.
+///
+/// ```dart
+/// final handler = AuthHandler(authConfig: authConfig);
+/// final requestConfig = handler.generateAuthRequest();
+/// await handler.parseAndStoreAuthResponse(sessionState);
+/// ```
 class AuthHandler {
   /// Creates an auth flow coordinator for [authConfig].
   AuthHandler({
@@ -40,6 +46,37 @@ class AuthHandler {
       return;
     }
 
+    final OAuth2Auth? rawOauth2 = authConfig.rawAuthCredential?.oauth2;
+    final OAuth2Auth? exchangedOauth2 =
+        authConfig.exchangedAuthCredential?.oauth2;
+    if (rawOauth2 != null && exchangedOauth2 != null) {
+      if ((exchangedOauth2.clientId == null ||
+              exchangedOauth2.clientId!.isEmpty) &&
+          rawOauth2.clientId != null &&
+          rawOauth2.clientId!.isNotEmpty) {
+        exchangedOauth2.clientId = rawOauth2.clientId;
+      }
+      if ((exchangedOauth2.clientSecret == null ||
+              exchangedOauth2.clientSecret!.isEmpty) &&
+          rawOauth2.clientSecret != null &&
+          rawOauth2.clientSecret!.isNotEmpty) {
+        exchangedOauth2.clientSecret = rawOauth2.clientSecret;
+      }
+    }
+
+    if (exchangedOauth2 != null &&
+        (exchangedOauth2.authCode == null ||
+            exchangedOauth2.authCode!.isEmpty) &&
+        exchangedOauth2.authResponseUri != null &&
+        exchangedOauth2.authResponseUri!.isNotEmpty) {
+      final String? code = Uri.tryParse(
+        exchangedOauth2.authResponseUri!,
+      )?.queryParameters['code'];
+      if (code != null && code.isNotEmpty) {
+        exchangedOauth2.authCode = code;
+      }
+    }
+
     final String tempKey = authTemporaryStateKey(authConfig.credentialKey);
     final String authKey = authResponseStateKey(authConfig.credentialKey);
     AuthCredential parsed = credential.copyWith();
@@ -67,12 +104,12 @@ class AuthHandler {
   /// Produces an auth request config for interactive auth flows.
   AuthConfig generateAuthRequest() {
     if (!_isOAuthScheme(authConfig.authScheme)) {
-      return authConfig.copyWith();
+      return _redactConfiguredSecrets(authConfig.copyWith());
     }
 
     final AuthCredential? exchanged = authConfig.exchangedAuthCredential;
     if (exchanged?.oauth2?.authUri?.isNotEmpty == true) {
-      return authConfig.copyWith();
+      return _redactConfiguredSecrets(authConfig.copyWith());
     }
 
     final AuthCredential? raw = authConfig.rawAuthCredential;
@@ -98,7 +135,9 @@ class AuthHandler {
     }
 
     if (oauth2.authUri?.isNotEmpty == true) {
-      return authConfig.copyWith(exchangedAuthCredential: raw.copyWith());
+      return _redactConfiguredSecrets(
+        authConfig.copyWith(exchangedAuthCredential: raw.copyWith()),
+      );
     }
 
     final bool hasClientCredentials =
@@ -113,7 +152,30 @@ class AuthHandler {
 
     // Dart runtime currently does not synthesize provider-specific auth URI.
     // Keep parity with Python fallback behavior by forwarding credential info.
-    return authConfig.copyWith(exchangedAuthCredential: raw.copyWith());
+    return _redactConfiguredSecrets(
+      authConfig.copyWith(exchangedAuthCredential: raw.copyWith()),
+    );
+  }
+
+  AuthConfig _redactConfiguredSecrets(AuthConfig config) {
+    for (final AuthCredential? credential in <AuthCredential?>[
+      config.rawAuthCredential,
+      config.exchangedAuthCredential,
+    ]) {
+      if (credential == null) {
+        continue;
+      }
+      credential.apiKey = null;
+      if (credential.oauth2 != null) {
+        credential.oauth2!.clientSecret = null;
+      }
+      if (credential.http != null) {
+        credential.http!.credentials.password = null;
+        credential.http!.credentials.token = null;
+        credential.http!.additionalHeaders.clear();
+      }
+    }
+    return config;
   }
 
   bool _isOAuthScheme(String authScheme) {

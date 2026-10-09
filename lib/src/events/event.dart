@@ -9,6 +9,15 @@ import 'event_actions.dart';
 import 'node_path_builder.dart';
 
 /// One runtime event emitted during an invocation.
+///
+/// ```dart
+/// final event = Event(
+///   invocationId: 'inv_1',
+///   author: 'weather_agent',
+///   content: Content.modelText('Sunny and 22°C.'),
+/// );
+/// print(event.isFinalResponse()); // true
+/// ```
 class Event extends LlmResponse {
   /// Creates an event.
   Event({

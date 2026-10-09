@@ -15,16 +15,16 @@ class PreloadMemoryTool extends BaseTool {
         description: 'Preloads relevant memories into system instructions.',
       );
 
-  @override
   /// Returns `null` because this tool is not directly model-invokable.
+  @override
   FunctionDeclaration? getDeclaration() {
     // This tool is executed internally during request preprocessing and is not
     // intended for direct model function-calling.
     return null;
   }
 
-  @override
   /// Returns a no-op success payload.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -32,8 +32,8 @@ class PreloadMemoryTool extends BaseTool {
     return <String, Object?>{'status': 'ok'};
   }
 
-  @override
   /// Appends relevant past-conversation context into [llmRequest].
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

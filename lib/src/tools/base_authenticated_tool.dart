@@ -30,8 +30,8 @@ abstract class BaseAuthenticatedTool extends BaseTool {
   /// Fallback payload returned when user authorization is still required.
   final Object? responseForAuthRequired;
 
-  @override
   /// Resolves credentials and delegates to [runAuthenticated].
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

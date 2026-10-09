@@ -5,6 +5,13 @@ import 'package:flutter/foundation.dart';
 import '../models/adk_voice_state_model.dart';
 
 /// A reactive controller for managing real-time voice input/output state, audio levels, and live turns.
+///
+/// ```dart
+/// final voiceController = AdkVoiceController(agent: myAgent);
+/// await voiceController.startListening();
+/// await voiceController.stopListening();
+/// voiceController.dispose();
+/// ```
 class AdkVoiceController extends ChangeNotifier {
   /// Creates an [AdkVoiceController].
   AdkVoiceController({

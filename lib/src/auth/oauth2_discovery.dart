@@ -219,5 +219,5 @@ Future<({int statusCode, String body})> _defaultHttpGet(Uri uri) async {
 }
 
 String _normalizeUrl(String url) {
-  return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+  return url.replaceFirst(RegExp(r'/+$'), '');
 }

@@ -1,4 +1,12 @@
 /// Core A2A protocol models used by routing, execution, and transport layers.
+///
+/// ```dart
+/// final message = A2aMessage(
+///   messageId: 'msg-1',
+///   role: A2aRole.user,
+///   parts: <A2aPart>[A2aPart.text('Hello, agent!')],
+/// );
+/// ```
 library;
 
 import 'dart:async';
@@ -6,16 +14,35 @@ import 'dart:async';
 import '../platform/time.dart';
 
 /// Message author role in the A2A protocol.
-enum A2aRole { user, agent }
+enum A2aRole {
+  /// Message authored by the user or caller.
+  user,
+
+  /// Message authored by the agent.
+  agent,
+}
 
 /// Task lifecycle states in the A2A protocol.
 enum A2aTaskState {
+  /// Task has been submitted and awaits execution.
   submitted,
+
+  /// Task is actively being processed by the agent.
   working,
+
+  /// Task is paused waiting for additional user input.
   inputRequired,
+
+  /// Task is paused waiting for user authentication.
   authRequired,
+
+  /// Task execution terminated with an error.
   failed,
+
+  /// Task execution finished successfully.
   completed,
+
+  /// Task execution was canceled before completion.
   canceled,
 }
 
@@ -658,6 +685,20 @@ class AgentCard {
 }
 
 /// In-memory A2A application bundle of card, executor, and task store.
+///
+/// ```dart
+/// final app = A2aApplication(
+///   agentCard: AgentCard(
+///     name: 'helper_agent',
+///     description: 'Answers questions.',
+///     url: 'http://localhost:8080',
+///     version: '1.0.0',
+///   ),
+///   executor: myExecutor,
+///   taskStore: <String, A2aTask>{},
+/// );
+/// await app.start();
+/// ```
 class A2aApplication {
   /// Creates an A2A application bundle.
   A2aApplication({

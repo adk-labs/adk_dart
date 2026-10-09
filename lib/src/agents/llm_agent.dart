@@ -87,6 +87,21 @@ typedef InstructionProvider =
     FutureOr<String> Function(ReadonlyContext context);
 
 /// Core LLM agent that drives model and tool orchestration flows.
+///
+/// ```dart
+/// final weatherTool = FunctionTool(
+///   name: 'get_weather',
+///   description: 'Returns the current weather for a city.',
+///   func: ({required String city}) => 'Sunny in $city',
+/// );
+///
+/// final agent = LlmAgent(
+///   name: 'weather_assistant',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Help users check the weather.',
+///   tools: [weatherTool],
+/// );
+/// ```
 class LlmAgent extends BaseAgent {
   /// Creates an LLM agent.
   LlmAgent({

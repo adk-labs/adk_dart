@@ -94,7 +94,14 @@ abstract class BaseSessionService {
   Event commitEventToSession({required Session session, required Event event}) {
     _updateSessionState(session: session, event: event);
     final Event persisted = eventForPersistence(event);
-    session.events.add(persisted);
+    final int existingIndex = session.events.indexWhere(
+      (Event existing) => existing.id == persisted.id,
+    );
+    if (existingIndex != -1) {
+      session.events[existingIndex] = persisted;
+    } else {
+      session.events.add(persisted);
+    }
     return persisted;
   }
 

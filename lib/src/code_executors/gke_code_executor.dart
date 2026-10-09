@@ -11,7 +11,16 @@ import 'base_code_executor.dart';
 import 'code_execution_utils.dart';
 
 /// Outcome statuses returned while watching a GKE job.
-enum GkeJobStatus { succeeded, failed, timedOut }
+enum GkeJobStatus {
+  /// Job completed successfully.
+  succeeded,
+
+  /// Job terminated with a failure.
+  failed,
+
+  /// Job did not finish before the watch timeout elapsed.
+  timedOut,
+}
 
 /// Result payload returned by [GkeApiClient.watchJob].
 class GkeJobWatchResult {
@@ -176,8 +185,8 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     };
   }
 
-  @override
   /// Executes a raw command using local Python fallback.
+  @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     final ProcessResult result = await Process.run(
       _pythonBinary(),
@@ -200,8 +209,8 @@ class GkeCodeExecutor extends BaseCodeExecutor {
     );
   }
 
-  @override
   /// Executes code through the configured GKE client or local fallback.
+  @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

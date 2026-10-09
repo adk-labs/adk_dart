@@ -9,7 +9,16 @@ import 'base_agent.dart';
 import 'invocation_context.dart';
 
 /// Supported LangGraph chat message roles.
-enum LangGraphMessageRole { system, user, assistant }
+enum LangGraphMessageRole {
+  /// System instruction message role.
+  system,
+
+  /// End-user message role.
+  user,
+
+  /// Model or assistant response role.
+  assistant,
+}
 
 /// A single message sent to or received from LangGraph.
 class LangGraphMessage {

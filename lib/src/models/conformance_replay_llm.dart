@@ -18,6 +18,8 @@ class ConformanceReplayLlm extends BaseLlm {
        super(model: 'adk-conformance-replay');
 
   final ConformanceJson _config;
+
+  /// Name of the agent whose recorded LLM responses are replayed.
   final String agentName;
 
   @override

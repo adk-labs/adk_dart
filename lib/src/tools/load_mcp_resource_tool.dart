@@ -23,8 +23,8 @@ NOTE: Call when you need access to resources.''',
 
   final McpToolset _mcpToolset;
 
-  @override
   /// Declares resource-name arguments for model function-calling.
+  @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
@@ -41,8 +41,8 @@ NOTE: Call when you need access to resources.''',
     );
   }
 
-  @override
   /// Returns the requested resource names and load-status metadata.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -59,8 +59,8 @@ NOTE: Call when you need access to resources.''',
     };
   }
 
-  @override
   /// Appends available/requested MCP resources to [llmRequest].
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

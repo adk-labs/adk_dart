@@ -2,7 +2,19 @@
 library;
 
 /// Supported high-level auth scheme types.
-enum AuthSchemeType { apiKey, http, oauth2, openIdConnect }
+enum AuthSchemeType {
+  /// API key authentication passed in a header, query parameter, or cookie.
+  apiKey,
+
+  /// Standard HTTP authentication such as Basic or Bearer token.
+  http,
+
+  /// OAuth 2.0 authentication flow.
+  oauth2,
+
+  /// OpenID Connect discovery and authentication.
+  openIdConnect,
+}
 
 /// Base security-scheme descriptor.
 class SecurityScheme {
@@ -101,7 +113,19 @@ class OAuthFlows {
 }
 
 /// Supported OAuth grant types.
-enum OAuthGrantType { clientCredentials, authorizationCode, implicit, password }
+enum OAuthGrantType {
+  /// OAuth 2.0 client credentials grant.
+  clientCredentials,
+
+  /// OAuth 2.0 authorization code grant.
+  authorizationCode,
+
+  /// OAuth 2.0 implicit grant.
+  implicit,
+
+  /// OAuth 2.0 resource owner password credentials grant.
+  password,
+}
 
 /// Returns the first configured grant type in [flow], if any.
 OAuthGrantType? oauthGrantTypeFromFlow(OAuthFlows flow) {

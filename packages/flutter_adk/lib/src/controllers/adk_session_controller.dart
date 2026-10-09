@@ -5,6 +5,13 @@ import '../models/adk_session_info.dart';
 import '../storage/adk_storage.dart';
 
 /// A reactive controller for managing conversation sessions, history lists, and storage synchronization.
+///
+/// ```dart
+/// final sessionController = AdkSessionController(
+///   storage: AdkInMemoryStorage(),
+/// );
+/// await sessionController.createNewSession(title: 'Trip Planning');
+/// ```
 class AdkSessionController extends ChangeNotifier {
   /// Creates an [AdkSessionController].
   AdkSessionController({

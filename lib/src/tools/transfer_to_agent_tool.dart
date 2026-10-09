@@ -60,8 +60,8 @@ class TransferToAgentTool extends FunctionTool {
   /// Whether to include the transfer_reason parameter in the tool declaration.
   final bool includeTransferReason;
 
-  @override
   /// Returns declaration schema restricted to configured agent names.
+  @override
   FunctionDeclaration? getDeclaration() {
     final FunctionDeclaration? declaration = super.getDeclaration();
     if (declaration == null) {

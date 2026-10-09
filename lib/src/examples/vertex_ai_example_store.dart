@@ -46,8 +46,8 @@ class VertexAiExampleStore extends BaseExampleProvider {
   final String examplesStoreName;
   final VertexAiExampleSearcher? _searcher;
 
-  @override
   /// Returns relevant examples for [query].
+  @override
   List<Example> getExamples(String query) {
     final VertexAiExampleSearcher? searcher = _searcher;
     if (searcher == null) {

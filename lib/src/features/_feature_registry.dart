@@ -5,51 +5,121 @@ import '../utils/env_utils.dart';
 
 /// Identifiers for runtime-gated ADK features.
 enum FeatureName {
+  /// Declarative agent configuration support.
   agentConfig('AGENT_CONFIG'),
+
+  /// Persistent agent state management.
   agentState('AGENT_STATE'),
+
+  /// Function tools that require authentication.
   authenticatedFunctionTool('AUTHENTICATED_FUNCTION_TOOL'),
+
+  /// Base class support for authenticated tools.
   baseAuthenticatedTool('BASE_AUTHENTICATED_TOOL'),
+
+  /// BigQuery toolset integration.
   bigQueryToolset('BIG_QUERY_TOOLSET'),
+
+  /// Configuration options for BigQuery tools.
   bigQueryToolConfig('BIG_QUERY_TOOL_CONFIG'),
+
+  /// Settings for Bigtable tools.
   bigtableToolSettings('BIGTABLE_TOOL_SETTINGS'),
+
+  /// Bigtable toolset integration.
   bigtableToolset('BIGTABLE_TOOLSET'),
+
+  /// Computer use capability and toolset.
   computerUse('COMPUTER_USE'),
+
+  /// Configuration options for Data Agent tools.
   dataAgentToolConfig('DATA_AGENT_TOOL_CONFIG'),
+
+  /// Data Agent toolset integration.
   dataAgentToolset('DATA_AGENT_TOOLSET'),
+
+  /// Daytona sandbox environment integration.
   daytonaEnvironment('DAYTONA_ENVIRONMENT'),
+
+  /// Environment simulation support for evaluation and testing.
   environmentSimulation('ENVIRONMENT_SIMULATION'),
+
+  /// Eventarc toolset integration.
   eventarcToolset('EVENTARC_TOOLSET'),
+
+  /// Google Cloud IAM connector authentication.
   gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
+
+  /// Configuration for Google Cloud credentials.
   googleCredentialsConfig('GOOGLE_CREDENTIALS_CONFIG'),
+
+  /// Google API tool wrapper support.
   googleTool('GOOGLE_TOOL'),
+
+  /// JSON Schema support in function declarations.
   jsonSchemaForFuncDecl('JSON_SCHEMA_FOR_FUNC_DECL'),
+
+  /// Graceful error handling for MCP tool execution.
   mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
+
+  /// Pluggable authentication framework support.
   pluggableAuth('PLUGGABLE_AUTH'),
+
+  /// Progressive Server-Sent Events (SSE) streaming.
   progressiveSseStreaming('PROGRESSIVE_SSE_STREAMING'),
+
+  /// Configuration options for Cloud Pub/Sub tools.
   pubsubToolConfig('PUBSUB_TOOL_CONFIG'),
+
+  /// Cloud Pub/Sub toolset integration.
   pubsubToolset('PUBSUB_TOOLSET'),
+
+  /// Agent skill toolset support.
   skillToolset('SKILL_TOOLSET'),
+
+  /// Snake-case naming enforcement for skills.
   snakeCaseSkillName('SNAKE_CASE_SKILL_NAME'),
+
+  /// Cloud Spanner administrative toolset integration.
   spannerAdminToolset('SPANNER_ADMIN_TOOLSET'),
+
+  /// Cloud Spanner toolset integration.
   spannerToolset('SPANNER_TOOLSET'),
+
+  /// Settings for Cloud Spanner tools.
   spannerToolSettings('SPANNER_TOOL_SETTINGS'),
+
+  /// Cloud Spanner vector store integration.
   spannerVectorStore('SPANNER_VECTOR_STORE'),
+
+  /// General tool configuration support.
   toolConfig('TOOL_CONFIG'),
+
+  /// Interactive user confirmation before tool execution.
   toolConfirmation('TOOL_CONFIRMATION');
 
+  /// Creates a feature identifier with its environment variable [value].
   const FeatureName(this.value);
 
+  /// The uppercase identifier suffix used in feature environment variables.
   final String value;
 }
 
 /// Release stages used by feature-gating decisions.
 enum FeatureStage {
+  /// Work-in-progress stage for incomplete features.
   wip('wip'),
+
+  /// Experimental stage for preview features that may change.
   experimental('experimental'),
+
+  /// Stable stage for production-ready features.
   stable('stable');
 
+  /// Creates a feature release stage with its serialized [value].
   const FeatureStage(this.value);
 
+  /// The lowercase string representation of this release stage.
   final String value;
 }
 

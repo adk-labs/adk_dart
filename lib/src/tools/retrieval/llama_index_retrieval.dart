@@ -31,8 +31,8 @@ class LlamaIndexRetrieval extends BaseRetrievalTool {
   /// Backend retriever implementation.
   final BaseRetriever retriever;
 
-  @override
   /// Executes retrieval for the required `query` argument.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

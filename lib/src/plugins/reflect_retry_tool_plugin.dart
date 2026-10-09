@@ -16,7 +16,13 @@ const String reflectAndRetryResponseType =
 const String globalScopeKey = '__global_reflect_and_retry_scope__';
 
 /// Scope used to track per-tool retry counts.
-enum TrackingScope { invocation, global }
+enum TrackingScope {
+  /// Tracks failure counts per individual invocation.
+  invocation,
+
+  /// Tracks failure counts globally across invocations in the process.
+  global,
+}
 
 /// Structured tool failure payload returned by reflect-and-retry flows.
 class ToolFailureResponse {

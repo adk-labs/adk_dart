@@ -9,6 +9,15 @@ import 'adk_chat_view.dart';
 import 'adk_tool_inspector_view.dart';
 
 /// A multi-pane split layout widget tailored for Web, Desktop, and Tablet AI development and monitoring.
+///
+/// ```dart
+/// AdkSplitPaneView(
+///   agent: myAgent,
+///   splitRatio: 0.6,
+///   showLogger: true,
+///   showToolInspector: true,
+/// )
+/// ```
 class AdkSplitPaneView extends StatefulWidget {
   /// Creates an [AdkSplitPaneView].
   const AdkSplitPaneView({

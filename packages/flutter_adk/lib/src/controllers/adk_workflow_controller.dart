@@ -5,6 +5,14 @@ import 'package:flutter/foundation.dart';
 import '../models/adk_workflow_step_model.dart';
 
 /// A reactive controller for orchestrating and observing ADK 2.0 Workflows and multi-agent pipelines.
+///
+/// ```dart
+/// final workflowController = AdkWorkflowController(
+///   workflowAgent: pipelineAgent,
+/// );
+/// await workflowController.execute(inputPrompt: 'Run pipeline');
+/// workflowController.dispose();
+/// ```
 class AdkWorkflowController extends ChangeNotifier {
   /// Creates an [AdkWorkflowController].
   AdkWorkflowController({

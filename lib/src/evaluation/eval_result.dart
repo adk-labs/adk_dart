@@ -4,10 +4,28 @@ library;
 import 'eval_metric.dart';
 
 /// Inference execution status for one eval case.
-enum InferenceStatus { unknown, success, failure }
+enum InferenceStatus {
+  /// Inference status has not been determined.
+  unknown,
+
+  /// Inference completed without error.
+  success,
+
+  /// Inference failed with an error.
+  failure,
+}
 
 /// Evaluation pass/fail status.
-enum EvalStatus { passed, failed, notEvaluated }
+enum EvalStatus {
+  /// Metric score met or exceeded its threshold.
+  passed,
+
+  /// Metric score fell below its threshold.
+  failed,
+
+  /// Metric was not evaluated or produced no score.
+  notEvaluated,
+}
 
 /// Result of running model inference for an eval case.
 class InferenceResult {

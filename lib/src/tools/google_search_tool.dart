@@ -7,6 +7,15 @@ import 'base_tool.dart';
 import 'tool_context.dart';
 
 /// Tool wrapper for Google Search grounding.
+///
+/// ```dart
+/// final agent = LlmAgent(
+///   name: 'search_assistant',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Use Google Search to answer factual questions.',
+///   tools: [GoogleSearchTool()],
+/// );
+/// ```
 class GoogleSearchTool extends BaseTool {
   /// Creates a Google Search grounding tool wrapper.
   GoogleSearchTool({

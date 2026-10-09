@@ -66,8 +66,8 @@ class VertexAiEvalFacade extends Evaluator {
   final bool _expectedInvocationsRequired;
   final VertexAiEvalInvoker _evalInvoker;
 
-  @override
   /// Evaluates each invocation by calling the configured eval invoker.
+  @override
   Future<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,

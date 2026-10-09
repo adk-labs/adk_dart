@@ -7,6 +7,17 @@ import 'artifact_util.dart';
 import 'base_artifact_service.dart';
 
 /// Artifact service backed by process-local memory maps.
+///
+/// ```dart
+/// final artifactService = InMemoryArtifactService();
+/// final version = await artifactService.saveArtifact(
+///   appName: 'my_app',
+///   userId: 'user_1',
+///   sessionId: 'session_1',
+///   filename: 'notes.txt',
+///   artifact: Part.text('Meeting notes'),
+/// );
+/// ```
 class InMemoryArtifactService extends BaseArtifactService {
   /// Creates an in-memory artifact storage service.
   InMemoryArtifactService();
@@ -40,8 +51,8 @@ class InMemoryArtifactService extends BaseArtifactService {
     return '$appName/$userId/$sessionId/$filename';
   }
 
-  @override
   /// Saves [artifact] in memory and returns the next version number.
+  @override
   Future<int> saveArtifact({
     required String appName,
     required String userId,
@@ -102,10 +113,10 @@ class InMemoryArtifactService extends BaseArtifactService {
     return version;
   }
 
-  @override
   /// Loads one artifact version from memory.
   ///
   /// Returns the latest version when [version] is omitted.
+  @override
   Future<Part?> loadArtifact({
     required String appName,
     required String userId,
@@ -175,8 +186,8 @@ class InMemoryArtifactService extends BaseArtifactService {
     return value;
   }
 
-  @override
   /// Lists artifact keys visible in the user or session scope.
+  @override
   Future<List<String>> listArtifactKeys({
     required String appName,
     required String userId,
@@ -200,8 +211,8 @@ class InMemoryArtifactService extends BaseArtifactService {
     return sorted;
   }
 
-  @override
   /// Deletes all stored versions for [filename] in memory.
+  @override
   Future<void> deleteArtifact({
     required String appName,
     required String userId,
@@ -217,8 +228,8 @@ class InMemoryArtifactService extends BaseArtifactService {
     _artifacts.remove(path);
   }
 
-  @override
   /// Lists stored version numbers for [filename].
+  @override
   Future<List<int>> listVersions({
     required String appName,
     required String userId,
@@ -236,8 +247,8 @@ class InMemoryArtifactService extends BaseArtifactService {
     return List<int>.generate(count, (int index) => index);
   }
 
-  @override
   /// Lists metadata snapshots for all versions of [filename].
+  @override
   Future<List<ArtifactVersion>> listArtifactVersions({
     required String appName,
     required String userId,
@@ -260,10 +271,10 @@ class InMemoryArtifactService extends BaseArtifactService {
         .toList(growable: false);
   }
 
-  @override
   /// Returns metadata for one stored artifact version.
   ///
   /// Returns the latest version when [version] is omitted.
+  @override
   Future<ArtifactVersion?> getArtifactVersion({
     required String appName,
     required String userId,

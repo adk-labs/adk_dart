@@ -93,7 +93,13 @@ class ReadableSpan {
 }
 
 /// Export result status.
-enum SpanExportResult { success, failure }
+enum SpanExportResult {
+  /// Spans were exported and persisted without error.
+  success,
+
+  /// Exporting or persisting spans failed.
+  failure,
+}
 
 /// Span exporter interface.
 abstract class SpanExporter {

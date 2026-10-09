@@ -1,4 +1,12 @@
 /// ADK CLI toolchain entrypoints and programmatic runners.
+///
+/// ```dart
+/// import 'package:adk/cli.dart';
+///
+/// Future<void> main(List<String> args) async {
+///   final exitCode = await runAdkCli(args);
+/// }
+/// ```
 library;
 
 export 'src/cli/cli_tools_click.dart' show main;

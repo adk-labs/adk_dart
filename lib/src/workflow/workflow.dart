@@ -1068,6 +1068,20 @@ class Edge {
 }
 
 /// Node-based workflow agent.
+///
+/// ```dart
+/// final step1 = node((ctx, input) => 'Processed: $input', name: 'step_1');
+/// final step2 = node((ctx, input) => '$input -> done', name: 'step_2');
+///
+/// final workflow = Workflow(
+///   name: 'my_pipeline',
+///   nodes: [step1, step2],
+///   edges: [
+///     Edge(fromNode: START, toNode: step1),
+///     Edge(fromNode: step1, toNode: step2),
+///   ],
+/// );
+/// ```
 class Workflow extends BaseAgent {
   /// Creates a workflow.
   Workflow({
@@ -3117,6 +3131,8 @@ void _updateNodeStatus(
   }
 }
 
+/// Exception thrown when a dynamic workflow node pauses for user input or an interrupt.
 class NodeInterruptedError implements Exception {
+  /// Creates a node interrupted error.
   NodeInterruptedError();
 }

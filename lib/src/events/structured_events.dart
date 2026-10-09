@@ -36,6 +36,7 @@ enum EventType {
   /// Final response marker for the current turn.
   finished('finished');
 
+  /// Creates a structured event category with its serialized [wireName].
   const EventType(this.wireName);
 
   /// Stable wire name matching the upstream JS event type values.

@@ -174,8 +174,8 @@ class McpTool extends BaseAuthenticatedTool {
   FunctionDeclaration _buildFencedDeclaration() =>
       _buildDeclaration(fenced: true);
 
-  @override
   /// Returns a function declaration using MCP input schema as parameters.
+  @override
   FunctionDeclaration? getDeclaration() => _buildDeclaration(fenced: false);
 
   @override
@@ -213,8 +213,8 @@ class McpTool extends BaseAuthenticatedTool {
     }
   }
 
-  @override
   /// Executes an authenticated MCP tool call.
+  @override
   Future<Object?> runAuthenticated({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

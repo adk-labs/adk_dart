@@ -9,6 +9,15 @@ import 'adk_prompt_suggestions_bar.dart';
 import 'adk_typing_indicator.dart';
 
 /// A complete, turnkey and highly customizable Chat UI widget for interacting with ADK agents.
+///
+/// ```dart
+/// AdkChatView(
+///   agent: myAgent,
+///   title: 'AI Assistant',
+///   suggestions: const ['Summarize this', 'Show available tools'],
+///   showAppBar: true,
+/// )
+/// ```
 class AdkChatView extends StatefulWidget {
   /// Creates an [AdkChatView].
   const AdkChatView({

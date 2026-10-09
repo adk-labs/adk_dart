@@ -54,6 +54,11 @@ abstract class VertexCodeInterpreterClient {
 }
 
 /// Code executor that uses Vertex code interpreter or local fallback.
+@Deprecated(
+  'VertexAiCodeExecutor is deprecated because Vertex AI Code Interpreter '
+  'extension is being deprecated. Please use AgentEngineSandboxCodeExecutor '
+  'instead.',
+)
 class VertexAiCodeExecutor extends BaseCodeExecutor {
   /// Creates a Vertex AI code executor.
   VertexAiCodeExecutor({this.resourceName, VertexCodeInterpreterClient? client})
@@ -63,8 +68,8 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
   final String? resourceName;
   final VertexCodeInterpreterClient? _client;
 
-  @override
   /// Executes a raw command.
+  @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     if (_client != null) {
       final Map<String, Object?> response = await _executeCodeInterpreter(
@@ -87,8 +92,8 @@ class VertexAiCodeExecutor extends BaseCodeExecutor {
     );
   }
 
-  @override
   /// Executes code with optional input files and execution session.
+  @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

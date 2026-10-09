@@ -16,8 +16,8 @@ class UrlContextTool extends BaseTool {
 
   final bool Function() _modelIdCheckDisabledResolver;
 
-  @override
   /// Returns `null` because execution is handled as a built-in retrieval tool.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -25,8 +25,8 @@ class UrlContextTool extends BaseTool {
     return null;
   }
 
-  @override
   /// Adds URL context built-in tool declaration to [llmRequest].
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

@@ -20,12 +20,19 @@ const String _refusalPrefix = '[[REFUSAL]]: ';
 
 /// Apigee backend protocol families supported by this adapter.
 enum ApiType {
+  /// Unspecified or unrecognized protocol family.
   unknown('unknown'),
+
+  /// OpenAI-compatible chat completions protocol.
   chatCompletions('chat_completions'),
+
+  /// Google GenAI protocol.
   genai('genai');
 
+  /// Creates an [ApiType] with its wire [value].
   const ApiType(this.value);
 
+  /// The serialized wire string for this API type.
   final String value;
 
   /// Parses [raw] into an [ApiType], defaulting to [ApiType.unknown].

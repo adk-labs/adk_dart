@@ -27,8 +27,8 @@ class ExampleTool extends BaseTool {
   /// Example dataset source.
   final Object examples;
 
-  @override
   /// Returns `null` because this tool mutates prompt context only.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -36,8 +36,8 @@ class ExampleTool extends BaseTool {
     return null;
   }
 
-  @override
   /// Appends example-driven system instructions for the current user query.
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

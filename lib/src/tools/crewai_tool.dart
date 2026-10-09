@@ -57,8 +57,8 @@ class CrewaiTool extends FunctionTool {
   final List<String> _mandatoryArgs;
   final Map<String, dynamic>? _parametersJsonSchema;
 
-  @override
   /// Validates mandatory args before invoking the wrapped tool function.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -81,8 +81,8 @@ class CrewaiTool extends FunctionTool {
     return super.run(args: argsToCall, toolContext: toolContext);
   }
 
-  @override
   /// Returns the configured schema override when available.
+  @override
   FunctionDeclaration? getDeclaration() {
     final Map<String, dynamic>? schema = _parametersJsonSchema;
     if (schema != null) {

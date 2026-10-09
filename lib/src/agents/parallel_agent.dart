@@ -9,6 +9,24 @@ import 'base_agent.dart';
 import 'invocation_context.dart';
 
 /// Workflow agent that runs sub-agents concurrently.
+///
+/// ```dart
+/// final flightSearch = LlmAgent(
+///   name: 'flight_search',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Find available flights.',
+/// );
+/// final hotelSearch = LlmAgent(
+///   name: 'hotel_search',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Find available hotels.',
+/// );
+///
+/// final travelSearch = ParallelAgent(
+///   name: 'travel_search',
+///   subAgents: [flightSearch, hotelSearch],
+/// );
+/// ```
 class ParallelAgent extends BaseAgent {
   /// Creates a parallel agent.
   ParallelAgent({

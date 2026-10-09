@@ -79,6 +79,18 @@ class NodePathBuilder {
     return _startsWith(parent._segments);
   }
 
+  /// Whether [nodePath] is equal to or a descendant of this path.
+  ///
+  /// Root-level events (`nodePath == null || nodePath.isEmpty`) are always
+  /// included.
+  bool includesNodePath(String? nodePath) {
+    if (nodePath == null || nodePath.isEmpty) {
+      return true;
+    }
+    final NodePathBuilder path = NodePathBuilder.fromString(nodePath);
+    return path == this || path.isDescendantOf(this);
+  }
+
   /// Returns the direct child path from this path toward [descendant].
   NodePathBuilder getDirectChild(NodePathBuilder descendant) {
     if (descendant._segments.length <= _segments.length) {

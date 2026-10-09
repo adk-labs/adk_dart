@@ -12,8 +12,8 @@ class InMemoryTelemetryService extends BaseTelemetryService {
   final Map<String, TelemetrySpan> _spans = <String, TelemetrySpan>{};
   final List<String> _order = <String>[];
 
-  @override
   /// Starts and tracks a new in-memory span.
+  @override
   TelemetrySpan startSpan(
     String name, {
     String? parentSpanId,
@@ -31,8 +31,8 @@ class InMemoryTelemetryService extends BaseTelemetryService {
     return span;
   }
 
-  @override
   /// Ends an existing span if it is currently open.
+  @override
   void endSpan(
     String spanId, {
     Map<String, Object?>? attributes,
@@ -51,8 +51,8 @@ class InMemoryTelemetryService extends BaseTelemetryService {
     span.endTime = DateTime.now().toUtc();
   }
 
-  @override
   /// Records a log entry for the given [spanId].
+  @override
   void log(String spanId, String message, {Map<String, Object?>? attributes}) {
     final TelemetrySpan? span = _spans[spanId];
     if (span == null) {
@@ -67,8 +67,8 @@ class InMemoryTelemetryService extends BaseTelemetryService {
     );
   }
 
-  @override
   /// Returns deep-copied spans in creation order.
+  @override
   List<TelemetrySpan> snapshot() {
     return _order.map((String id) {
       final TelemetrySpan span = _spans[id]!;

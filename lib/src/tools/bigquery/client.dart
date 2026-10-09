@@ -365,6 +365,7 @@ const List<String> _dataplexScopes = <String>[
   'https://www.googleapis.com/auth/cloud-platform',
 ];
 
+/// Exception thrown when a Dataplex Catalog API request fails.
 class DataplexCatalogApiException implements Exception {
   /// Creates a Dataplex API exception.
   DataplexCatalogApiException(this.message);

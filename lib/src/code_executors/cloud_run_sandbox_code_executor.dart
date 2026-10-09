@@ -52,14 +52,14 @@ class CloudRunSandboxCodeExecutor extends BaseCodeExecutor {
   /// The fallback timeout in seconds for the code execution.
   final int? timeoutSeconds;
 
-  @override
   /// Executes a raw command request directly via the sandbox binary.
+  @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     return _runSandbox(request.command);
   }
 
-  @override
   /// Executes [codeExecutionInput] inside the Cloud Run sandbox.
+  @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

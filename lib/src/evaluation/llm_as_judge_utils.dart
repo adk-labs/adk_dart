@@ -12,14 +12,28 @@ import 'eval_rubrics.dart';
 
 /// Labels parsed from evaluator outputs.
 enum Label {
+  /// Affirmative boolean label (`true`).
   trueLabel('true'),
+
+  /// Invalid response or rubric judgment.
   invalid('invalid'),
+
+  /// Valid response or rubric judgment.
   valid('valid'),
+
+  /// Nearly valid response or rubric judgment.
   almost('almost'),
+
+  /// Partially valid response or rubric judgment.
   partiallyValid('partially_valid'),
+
+  /// Negative boolean label (`false`).
   falseLabel('false'),
+
+  /// Fallback when no label field is present in the output.
   notFound('label field not found');
 
+  /// Creates an evaluator output label with its serialized [value].
   const Label(this.value);
 
   /// Serialized label value.

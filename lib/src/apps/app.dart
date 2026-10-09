@@ -64,6 +64,18 @@ class EventsCompactionConfig {
 }
 
 /// App container describing root agent, plugins, and runtime options.
+///
+/// ```dart
+/// final app = App(
+///   name: 'support_app',
+///   rootAgent: LlmAgent(
+///     name: 'support_agent',
+///     model: 'gemini-2.5-flash',
+///     instruction: 'Assist customers with billing questions.',
+///   ),
+///   resumabilityConfig: ResumabilityConfig(isResumable: true),
+/// );
+/// ```
 class App {
   /// Creates an app configuration.
   App({

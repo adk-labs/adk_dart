@@ -11,8 +11,12 @@ import '../../agents/managed_agent.dart';
 import '../../agents/remote_a2a_agent.dart';
 import '../../events/event.dart';
 import '../../models/llm_request.dart';
+import '../../tools/enterprise_search_tool.dart';
+import '../../tools/google_search_tool.dart';
 import '../../tools/tool_context.dart';
 import '../../tools/transfer_to_agent_tool.dart';
+import '../../tools/vertex_ai_search_tool.dart';
+import '../../utils/model_name_utils.dart';
 import 'base_llm_flow.dart';
 
 /// Metadata describing an agent transfer target.
@@ -57,6 +61,37 @@ Future<TransferTargetInfo> buildTransferTargetInfo(
   return info;
 }
 
+String? _getIncompatibleBuiltinToolError(LlmAgent agent, [String? model]) {
+  for (final Object tool in agent.tools) {
+    String? toolTypeName;
+    String? workaroundHint;
+    if (tool is GoogleSearchTool && !tool.bypassMultiToolsLimit) {
+      toolTypeName = 'GoogleSearchTool';
+      workaroundHint =
+          'Set bypassMultiToolsLimit: true on GoogleSearchTool, or wrap it in '
+          'a sub-agent via GoogleSearchAgentTool / AgentTool.';
+    } else if (tool is VertexAiSearchTool && !tool.bypassMultiToolsLimit) {
+      toolTypeName = 'VertexAiSearchTool';
+      workaroundHint =
+          'Set bypassMultiToolsLimit: true on VertexAiSearchTool, or wrap it in '
+          'a sub-agent via AgentTool.';
+    } else if (tool is EnterpriseWebSearchTool) {
+      toolTypeName = 'EnterpriseWebSearchTool';
+      workaroundHint = 'Wrap EnterpriseWebSearchTool in a sub-agent via AgentTool.';
+    }
+    if (toolTypeName == null) {
+      continue;
+    }
+    if (supportsBuiltinToolsWithFunctionCalling(model)) {
+      continue;
+    }
+    return 'Agent "${agent.name}" cannot use built-in tool $toolTypeName '
+        'together with sub_agents transfer on model "${model ?? ''}". '
+        '$workaroundHint';
+  }
+  return null;
+}
+
 /// Injects transfer instructions/tool declarations into LLM requests.
 class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
   /// Appends transfer guidance and transfer tool configuration.
@@ -73,6 +108,18 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
     final List<BaseAgent> transferTargets = getTransferTargets(agent);
     if (transferTargets.isEmpty) {
       return;
+    }
+
+    final String effectiveModel = llmRequest.model ??
+        (agent.model is String ? agent.model as String : agent.canonicalModel.model);
+    if (transferTargets.any((BaseAgent t) => agent.subAgents.contains(t))) {
+      final String? errMsg = _getIncompatibleBuiltinToolError(
+        agent,
+        effectiveModel,
+      );
+      if (errMsg != null) {
+        throw ArgumentError(errMsg);
+      }
     }
 
     final TransferToAgentTool transferToAgentTool = TransferToAgentTool(

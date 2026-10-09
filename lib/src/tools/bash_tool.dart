@@ -161,8 +161,8 @@ class ExecuteBashTool extends BaseTool {
     return 'commands matching prefixes: $allowed';
   }
 
-  @override
   /// Returns the command-only function declaration schema.
+  @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
@@ -182,8 +182,8 @@ class ExecuteBashTool extends BaseTool {
     );
   }
 
-  @override
   /// Executes one bash command when policy and confirmation checks pass.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

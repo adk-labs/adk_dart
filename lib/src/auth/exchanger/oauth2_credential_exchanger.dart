@@ -19,8 +19,8 @@ class OAuth2CredentialExchanger extends BaseCredentialExchanger {
   /// Exchange handler implementation.
   final OAuth2ExchangeHandler? exchangeHandler;
 
-  @override
   /// Exchanges [authCredential] when OAuth2 tokens are missing.
+  @override
   Future<ExchangeResult> exchange({
     required AuthCredential authCredential,
     String? authScheme,

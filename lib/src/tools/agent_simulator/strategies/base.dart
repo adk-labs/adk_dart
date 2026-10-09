@@ -29,8 +29,8 @@ class TracingMockStrategy extends BaseMockStrategy {
   /// Model configuration associated with this strategy.
   final GenerateContentConfig llmConfig;
 
-  @override
   /// Returns a standardized error payload indicating tracing is unavailable.
+  @override
   Future<Map<String, Object?>> mock(
     BaseTool tool,
     Map<String, Object?> args,

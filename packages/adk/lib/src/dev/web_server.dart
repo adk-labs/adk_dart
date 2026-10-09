@@ -75,6 +75,22 @@ import 'runtime.dart';
 /// Starts the ADK development web server and returns the bound [HttpServer].
 ///
 /// The server exposes API routes and optionally serves the bundled web UI.
+///
+/// ```dart
+/// final project = DevProjectConfig(
+///   appName: 'my_agent',
+///   agentName: 'assistant',
+///   userId: 'user',
+/// );
+/// final runtime = DevAgentRuntime(config: project);
+/// final server = await startAdkDevWebServer(
+///   runtime: runtime,
+///   project: project,
+///   port: 8000,
+/// );
+/// await server.close(force: true);
+/// await runtime.runner.close();
+/// ```
 Future<HttpServer> startAdkDevWebServer({
   required DevAgentRuntime runtime,
   required DevProjectConfig project,
@@ -3528,17 +3544,7 @@ Future<void> _handleRunLive(
   // plain HTTP response.
   context._guardSpecialAgentAccess(appName);
 
-  final Session? session = await context.sessionService.getSession(
-    appName: appName,
-    userId: userId,
-    sessionId: sessionId,
-  );
-
   final WebSocket socket = await WebSocketTransformer.upgrade(request);
-  if (session == null) {
-    await socket.close(WebSocketStatus.protocolError, 'Session not found');
-    return;
-  }
 
   final LiveRequestQueue liveQueue = LiveRequestQueue();
   final AdkAbortController abortController = AdkAbortController();
@@ -3574,7 +3580,8 @@ Future<void> _handleRunLive(
   Future<void> forwardEvents() async {
     await for (final Event event in runner.runLive(
       liveRequestQueue: liveQueue,
-      session: session,
+      userId: userId,
+      sessionId: sessionId,
       runConfig: runConfig,
       abortSignal: abortController.signal,
     )) {
@@ -3619,6 +3626,8 @@ Future<void> _handleRunLive(
 
   try {
     await Future.any(<Future<void>>[forwardTask, messageTask]);
+  } on SessionNotFoundError {
+    await socket.close(WebSocketStatus.protocolError, 'Session not found');
   } finally {
     abortController.abort('WebSocket client disconnected');
     liveQueue.close();

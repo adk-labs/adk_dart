@@ -16,6 +16,21 @@ typedef McpHeaderProvider =
     Map<String, String> Function(ReadonlyContext readonlyContext);
 
 /// Toolset that exposes tools and resources from one MCP connection.
+///
+/// ```dart
+/// final mcpToolset = McpToolset(
+///   connectionParams: StreamableHTTPConnectionParams(
+///     url: 'http://localhost:3000/mcp',
+///   ),
+///   toolNamePrefix: 'remote',
+/// );
+///
+/// final agent = LlmAgent(
+///   name: 'mcp_agent',
+///   model: 'gemini-2.5-flash',
+///   tools: [mcpToolset],
+/// );
+/// ```
 class McpToolset extends BaseToolset {
   /// Creates an MCP toolset bound to [connectionParams].
   McpToolset({
@@ -59,8 +74,8 @@ class McpToolset extends BaseToolset {
   /// `temp:_adk_grounding_metadata`.
   final bool propagateGroundingMetadata;
 
-  @override
   /// Returns filtered MCP tools discovered from cache or remote server.
+  @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     final McpSessionManager manager = McpSessionManager.instance;
     final Map<String, String>? headers = _buildHeaders(readonlyContext);

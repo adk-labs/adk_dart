@@ -13,6 +13,14 @@ typedef ConfirmationPredicate =
     FutureOr<bool> Function(Map<String, dynamic> args);
 
 /// Wraps a Dart callable as a runtime tool.
+///
+/// ```dart
+/// final addTool = FunctionTool(
+///   name: 'add_numbers',
+///   description: 'Adds two integers together.',
+///   func: ({required int a, required int b}) => {'sum': a + b},
+/// );
+/// ```
 class FunctionTool extends BaseTool {
   /// Creates a function-backed tool.
   ///
@@ -46,8 +54,8 @@ class FunctionTool extends BaseTool {
 
   FunctionDeclaration? _cachedDeclaration;
 
-  @override
   /// Returns a simple declaration derived from [name] and [description].
+  @override
   FunctionDeclaration? getDeclaration() {
     return _cachedDeclaration ??= FunctionDeclaration(
       name: name,
@@ -83,8 +91,8 @@ class FunctionTool extends BaseTool {
     return false;
   }
 
-  @override
   /// Runs the wrapped function with argument-shape fallbacks.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

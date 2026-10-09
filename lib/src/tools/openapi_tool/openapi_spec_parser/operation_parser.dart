@@ -52,7 +52,10 @@ class OperationParser {
   }
 
   final Map<String, Object?> _operation;
+
+  /// Whether original OpenAPI property names are preserved instead of converted to snake_case.
   final bool preservePropertyNames;
+
   final List<ApiParameter> _params = <ApiParameter>[];
   ApiParameter? _returnValue;
 

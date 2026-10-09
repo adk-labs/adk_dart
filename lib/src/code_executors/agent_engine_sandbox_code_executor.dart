@@ -120,8 +120,8 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
     );
   }
 
-  @override
   /// Executes raw command with local Python fallback behavior.
+  @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     final ProcessResult result = await Process.run(
       _pythonBinary(),
@@ -141,8 +141,8 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
     );
   }
 
-  @override
   /// Executes code through sandbox APIs or local fallback.
+  @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

@@ -50,8 +50,8 @@ class LangchainTool extends FunctionTool {
 
   final Map<String, dynamic>? _parametersJsonSchema;
 
-  @override
   /// Removes `run_manager` arg before invoking the wrapped tool function.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -61,8 +61,8 @@ class LangchainTool extends FunctionTool {
     return super.run(args: sanitized, toolContext: toolContext);
   }
 
-  @override
   /// Returns the configured schema override when available.
+  @override
   FunctionDeclaration? getDeclaration() {
     final Map<String, dynamic>? schema = _parametersJsonSchema;
     if (schema != null) {

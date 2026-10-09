@@ -597,8 +597,8 @@ class VertexAiSessionService extends BaseSessionService {
     );
   }
 
-  @override
   /// Fetches one session and its events for [sessionId].
+  @override
   Future<Session?> getSession({
     required String appName,
     required String userId,
@@ -680,8 +680,8 @@ class VertexAiSessionService extends BaseSessionService {
     );
   }
 
-  @override
   /// Lists sessions for [appName] and optional [userId].
+  @override
   Future<ListSessionsResponse> listSessions({
     required String appName,
     String? userId,
@@ -715,8 +715,8 @@ class VertexAiSessionService extends BaseSessionService {
     return ListSessionsResponse(sessions: sessions);
   }
 
-  @override
   /// Deletes [sessionId] from Vertex session storage.
+  @override
   Future<void> deleteSession({
     required String appName,
     required String userId,
@@ -758,8 +758,8 @@ class VertexAiSessionService extends BaseSessionService {
     );
   }
 
-  @override
   /// Appends [event] to the remote session and returns [event].
+  @override
   Future<Event> appendEvent({
     required Session session,
     required Event event,

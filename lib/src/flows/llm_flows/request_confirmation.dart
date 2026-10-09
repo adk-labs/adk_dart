@@ -34,6 +34,7 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
     final Map<String, ToolConfirmation> confirmationByRequestId =
         <String, ToolConfirmation>{};
     int confirmationEventIndex = -1;
+    bool hasNonConfirmationResponse = false;
 
     for (int i = events.length - 1; i >= 0; i -= 1) {
       final Event event = events[i];
@@ -49,6 +50,7 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
       for (final FunctionResponse response in responses) {
         if (response.name !=
             flow_functions.requestConfirmationFunctionCallName) {
+          hasNonConfirmationResponse = true;
           continue;
         }
         final String? requestId = response.id;
@@ -67,6 +69,63 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
     }
 
     if (confirmationByRequestId.isEmpty) {
+      return;
+    }
+
+    // Map confirmation request fc.id -> original tool fc.id across history,
+    // and identify confirmations that were already answered and consumed.
+    final Map<String, String> originalIdByConfirmationFcId = <String, String>{};
+    final Set<String> answeredConfirmationFcIds = <String>{};
+    final Set<String> consumedConfirmationFcIds = <String>{};
+    bool consumedInCurrentTurn = false;
+
+    for (int i = 0; i < events.length; i += 1) {
+      final Event event = events[i];
+      for (final FunctionCall call in event.getFunctionCalls()) {
+        if (call.name == flow_functions.requestConfirmationFunctionCallName &&
+            call.id != null &&
+            call.id!.isNotEmpty) {
+          final FunctionCall? originalCall = _readOriginalFunctionCall(
+            call.args,
+          );
+          if (originalCall?.id != null && originalCall!.id!.isNotEmpty) {
+            originalIdByConfirmationFcId[call.id!] = originalCall.id!;
+          }
+        }
+      }
+      if (event.author == 'user') {
+        for (final FunctionResponse response in event.getFunctionResponses()) {
+          if (response.name ==
+                  flow_functions.requestConfirmationFunctionCallName &&
+              response.id != null &&
+              response.id!.isNotEmpty) {
+            answeredConfirmationFcIds.add(response.id!);
+          }
+        }
+      }
+      for (final FunctionResponse response in event.getFunctionResponses()) {
+        final String? respId = response.id;
+        if (respId == null || respId.isEmpty) {
+          continue;
+        }
+        for (final String confFcId in answeredConfirmationFcIds) {
+          if (originalIdByConfirmationFcId[confFcId] == respId) {
+            consumedConfirmationFcIds.add(confFcId);
+            if (i > confirmationEventIndex) {
+              consumedInCurrentTurn = true;
+            }
+          }
+        }
+      }
+    }
+
+    confirmationByRequestId.removeWhere(
+      (String reqId, _) => consumedConfirmationFcIds.contains(reqId),
+    );
+    if (confirmationByRequestId.isEmpty) {
+      if (!consumedInCurrentTurn && !hasNonConfirmationResponse) {
+        invocationContext.endInvocation = true;
+      }
       return;
     }
 

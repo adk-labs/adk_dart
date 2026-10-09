@@ -12,6 +12,7 @@ import '../types/content.dart';
 import 'base_plugin.dart';
 import 'reflect_retry_tool_plugin.dart';
 
+/// Error type marker emitted when a model invokes a framework-reserved tool directly.
 const String reservedToolCallErrorType = 'RESERVED_TOOL_CALL';
 
 /// Provides self-healing, concurrent-safe error recovery for model failures.

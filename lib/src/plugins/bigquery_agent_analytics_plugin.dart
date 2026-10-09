@@ -122,6 +122,8 @@ class BigQueryLoggerConfig {
     this.autoSchemaUpgrade = true,
     this.createViews = true,
     Set<String>? finalResponseToolNames,
+    this.onSchemaError,
+    this.onSchemaReady,
   }) : clusteringFields =
            clusteringFields ?? <String>['event_type', 'agent', 'user_id'],
        retryConfig = retryConfig ?? RetryConfig(),
@@ -194,6 +196,12 @@ class BigQueryLoggerConfig {
   /// When a completed tool's name is in this set, its call args are logged as
   /// an `AGENT_RESPONSE` event.
   Set<String> finalResponseToolNames;
+
+  /// Optional callback invoked when schema or view setup fails.
+  void Function(Object error, StackTrace stackTrace)? onSchemaError;
+
+  /// Optional callback invoked when schema and view setup succeeds.
+  void Function()? onSchemaReady;
 }
 
 /// Per-event metadata captured in BigQuery rows.
@@ -769,8 +777,26 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       return;
     }
     _started = true;
-    if (config.createViews && !_viewsCreated) {
-      await createAnalyticsViews();
+    try {
+      if (config.createViews && !_viewsCreated) {
+        await createAnalyticsViews();
+      }
+      if (config.onSchemaReady != null) {
+        try {
+          config.onSchemaReady!();
+        } catch (cbError) {
+          stderr.writeln('Error in onSchemaReady callback: $cbError');
+        }
+      }
+    } catch (error, stackTrace) {
+      if (config.onSchemaError != null) {
+        try {
+          config.onSchemaError!(error, stackTrace);
+        } catch (cbError) {
+          stderr.writeln('Error in onSchemaError callback: $cbError');
+        }
+      }
+      rethrow;
     }
   }
 

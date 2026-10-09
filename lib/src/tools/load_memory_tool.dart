@@ -15,8 +15,8 @@ class LoadMemoryTool extends BaseTool {
         description: 'Loads memories for the current user by query.',
       );
 
-  @override
   /// Returns the query-only function declaration schema.
+  @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,
@@ -31,8 +31,8 @@ class LoadMemoryTool extends BaseTool {
     );
   }
 
-  @override
   /// Loads memories matching the provided `query` argument.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -53,8 +53,8 @@ class LoadMemoryTool extends BaseTool {
     };
   }
 
-  @override
   /// Appends instructions describing when to call `load_memory`.
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

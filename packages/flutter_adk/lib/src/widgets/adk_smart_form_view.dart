@@ -55,6 +55,17 @@ class AdkFormField {
 }
 
 /// A turnkey conversational smart form view where an AI agent auto-populates form fields through dialogue.
+///
+/// ```dart
+/// AdkSmartFormView(
+///   agent: bookingAgent,
+///   fields: const [
+///     AdkFormField(key: 'guest_name', label: 'Guest Name'),
+///     AdkFormField(key: 'check_in', label: 'Check-in Date'),
+///   ],
+///   onSubmit: (values) => debugPrint('Submitted: $values'),
+/// )
+/// ```
 class AdkSmartFormView extends StatefulWidget {
   /// Creates an [AdkSmartFormView].
   const AdkSmartFormView({

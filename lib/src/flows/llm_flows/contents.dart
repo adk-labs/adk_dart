@@ -7,6 +7,7 @@ import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
+import '../../events/node_path_builder.dart';
 import '../../events/rewind_events.dart';
 import '../../models/anthropic_llm.dart';
 import '../../models/llm_request.dart';
@@ -14,6 +15,36 @@ import '../../types/content.dart';
 import '_fencing.dart';
 import 'base_llm_flow.dart';
 import 'functions.dart';
+
+List<Event> _filterSingleTurnNodeEvents(
+  String? currentBranch,
+  List<Event> events, {
+  bool isSingleTurn = false,
+  String? nodePath,
+}) {
+  if (currentBranch != null ||
+      !isSingleTurn ||
+      nodePath == null ||
+      nodePath.isEmpty) {
+    return events;
+  }
+  final NodePathBuilder selfPath = NodePathBuilder.fromString(nodePath);
+  return events
+      .where((Event e) => selfPath.includesNodePath(e.nodeInfo.path))
+      .toList(growable: false);
+}
+
+Set<String> _collectFunctionCallIds(List<Event> events) {
+  final Set<String> ids = <String>{};
+  for (final Event event in events) {
+    for (final FunctionCall call in event.getFunctionCalls()) {
+      if (call.id != null && call.id!.isNotEmpty) {
+        ids.add(call.id!);
+      }
+    }
+  }
+  return ids;
+}
 
 /// Builds request contents from session events with ADK-level filtering.
 class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
@@ -40,6 +71,7 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         isSingleTurn: agent.mode == 'single_turn',
         userContent: invocationContext.userContent,
         includeThoughtsFromOtherAgents: includeThoughtsFromOtherAgents,
+        nodePath: invocationContext.nodePath,
       );
     } else if (agent.includeContents == 'none' ||
         agent.includeContents == 'current_turn') {
@@ -51,6 +83,7 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
         isolationScope: invocationContext.isolationScope,
         isSingleTurn: agent.mode == 'single_turn',
         userContent: invocationContext.userContent,
+        nodePath: invocationContext.nodePath,
       );
     }
 
@@ -78,8 +111,14 @@ List<Content> getContents({
   bool isSingleTurn = false,
   Content? userContent,
   bool includeThoughtsFromOtherAgents = false,
+  String? nodePath,
 }) {
-  final List<Event> rewindFiltered = _filterRewoundEvents(events);
+  final List<Event> rewindFiltered = _filterSingleTurnNodeEvents(
+    currentBranch,
+    _filterRewoundEvents(events),
+    isSingleTurn: isSingleTurn,
+    nodePath: nodePath,
+  );
   final List<Event> rawFiltered = rewindFiltered
       .where(
         (Event event) => shouldIncludeEventInContext(
@@ -155,10 +194,34 @@ List<Content> getCurrentTurnContents({
   String? isolationScope,
   bool isSingleTurn = false,
   Content? userContent,
+  String? nodePath,
 }) {
-  for (int i = events.length - 1; i >= 0; i -= 1) {
-    final Event event = events[i];
-    if (shouldIncludeEventInContext(
+  final List<Event> scopedEvents = _filterSingleTurnNodeEvents(
+    currentBranch,
+    events,
+    isSingleTurn: isSingleTurn,
+    nodePath: nodePath,
+  );
+  final Set<String> toolCallIds = _collectFunctionCallIds(scopedEvents);
+  final Set<String> unmatchedResponseIds = <String>{};
+
+  for (int i = scopedEvents.length - 1; i >= 0; i -= 1) {
+    final Event event = scopedEvents[i];
+    for (final FunctionCall call in event.getFunctionCalls()) {
+      if (call.id != null) {
+        unmatchedResponseIds.remove(call.id);
+      }
+    }
+    if (event.author == 'user') {
+      for (final FunctionResponse response in event.getFunctionResponses()) {
+        if (response.id != null && toolCallIds.contains(response.id)) {
+          unmatchedResponseIds.add(response.id!);
+        }
+      }
+    }
+
+    if (unmatchedResponseIds.isEmpty &&
+        shouldIncludeEventInContext(
           currentBranch,
           event,
           isolationScope: isolationScope,
@@ -167,12 +230,13 @@ List<Content> getCurrentTurnContents({
         !_isDirectTransfer(event)) {
       return getContents(
         currentBranch: currentBranch,
-        events: events.sublist(i),
+        events: scopedEvents.sublist(i),
         agentName: agentName,
         preserveFunctionCallIds: preserveFunctionCallIds,
         isolationScope: isolationScope,
         isSingleTurn: isSingleTurn,
         userContent: userContent,
+        nodePath: nodePath,
       );
     }
   }
@@ -364,6 +428,10 @@ bool _isPartInvisible(Part part) {
 bool _hasCompactionEvents(List<Event> events) {
   return events.any((Event event) => event.actions.compaction != null);
 }
+
+/// Applies non-subsumed compaction events to [events].
+List<Event> processCompactionEvents(List<Event> events) =>
+    _processCompactionEvents(events);
 
 List<Event> _processCompactionEvents(List<Event> events) {
   final List<(int, double, double, Event)> compactions =

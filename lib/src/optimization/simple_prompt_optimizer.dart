@@ -245,8 +245,8 @@ class SimplePromptOptimizer
     return total / validation.scores.length;
   }
 
-  @override
   /// Optimizes [initialAgent] instructions using train and validation splits.
+  @override
   Future<OptimizerResult<BaseAgentWithScores>> optimize(
     Agent initialAgent,
     Sampler<UnstructuredSamplingResult> sampler,

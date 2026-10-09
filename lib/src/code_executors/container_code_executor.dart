@@ -295,8 +295,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     await _runtimeClient.stopContainer(containerId: containerId);
   }
 
-  @override
   /// Executes a raw command inside the container runtime.
+  @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     try {
       await _ensureContainerReady();
@@ -331,8 +331,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     }
   }
 
-  @override
   /// Executes code with temporary input file staging.
+  @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

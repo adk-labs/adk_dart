@@ -5,6 +5,12 @@ import 'package:flutter/foundation.dart';
 import '../widgets/adk_agent_logger_view.dart';
 
 /// A reactive controller for buffering, filtering, searching, and exporting AI Agent I/O logs and telemetry.
+///
+/// ```dart
+/// final logger = AdkAgentLoggerController(maxLogEntries: 200);
+/// logger.setSearchQuery('tool');
+/// final exported = logger.exportJson();
+/// ```
 class AdkAgentLoggerController extends ChangeNotifier {
   /// Creates an [AdkAgentLoggerController].
   AdkAgentLoggerController({

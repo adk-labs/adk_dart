@@ -109,19 +109,31 @@ class CachePerformanceAnalyzer {
         ? totalCachedTokens / totalRequests
         : 0.0;
 
-    final List<int> invocationsUsed = cacheHistory
-        .where((CacheMetadata metadata) => metadata.invocationsUsed != null)
-        .map((CacheMetadata metadata) => metadata.invocationsUsed!)
+    final List<CacheMetadata> activeCaches = cacheHistory
+        .where(
+          (CacheMetadata metadata) =>
+              metadata.cacheName != null &&
+              metadata.invocationsUsed != null &&
+              metadata.invocationsUsed! > 0,
+        )
+        .toList(growable: false);
+    final List<List<CacheMetadata>> cacheLifecycles = <List<CacheMetadata>>[];
+    for (final CacheMetadata metadata in activeCaches) {
+      if (cacheLifecycles.isEmpty ||
+          cacheLifecycles.last.last.cacheName != metadata.cacheName) {
+        cacheLifecycles.add(<CacheMetadata>[metadata]);
+      } else {
+        cacheLifecycles.last.add(metadata);
+      }
+    }
+    final List<int> invocationsUsed = cacheLifecycles
+        .map((List<CacheMetadata> group) => group.last.invocationsUsed ?? 0)
         .toList(growable: false);
     final int totalInvocations = invocationsUsed.fold(
       0,
       (int acc, int value) => acc + value,
     );
-    final int cacheRefreshes = cacheHistory
-        .map((CacheMetadata metadata) => metadata.cacheName)
-        .whereType<String>()
-        .toSet()
-        .length;
+    final int cacheRefreshes = cacheLifecycles.length;
 
     return <String, Object?>{
       'status': 'active',

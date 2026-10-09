@@ -17,7 +17,19 @@ class AdkLoggerConfig {
 }
 
 /// Supported log levels for CLI logging setup.
-enum Level { debug, info, warning, error }
+enum Level {
+  /// Verbose diagnostic messages for debugging.
+  debug,
+
+  /// Standard informational messages.
+  info,
+
+  /// Warnings about recoverable issues or deprecations.
+  warning,
+
+  /// Error messages for failures.
+  error,
+}
 
 /// Sets the process-wide ADK logger configuration.
 void setupAdkLogger({Level level = Level.info}) {

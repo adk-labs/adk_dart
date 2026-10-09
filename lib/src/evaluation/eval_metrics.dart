@@ -59,26 +59,51 @@ class PrebuiltMetricNames {
 
 /// Enum wrapper for built-in metric identifiers.
 enum PrebuiltMetrics {
+  /// Average score for tool trajectory quality.
   toolTrajectoryAvgScore(PrebuiltMetricNames.toolTrajectoryAvgScore),
+
+  /// LLM-judge score for response quality.
   responseEvaluationScore(PrebuiltMetricNames.responseEvaluationScore),
+
+  /// Deterministic response matching score.
   responseMatchScore(PrebuiltMetricNames.responseMatchScore),
+
+  /// Safety evaluation metric version 1.
   safetyV1(PrebuiltMetricNames.safetyV1),
+
+  /// Final response matching metric version 2.
   finalResponseMatchV2(PrebuiltMetricNames.finalResponseMatchV2),
+
+  /// Rubric-based final response quality metric version 1.
   rubricBasedFinalResponseQualityV1(
     PrebuiltMetricNames.rubricBasedFinalResponseQualityV1,
   ),
+
+  /// Hallucination detection metric version 1.
   hallucinationsV1(PrebuiltMetricNames.hallucinationsV1),
+
+  /// Rubric-based tool usage quality metric version 1.
   rubricBasedToolUseQualityV1(PrebuiltMetricNames.rubricBasedToolUseQualityV1),
+
+  /// Rubric-based multi-turn trajectory quality metric version 1.
   rubricBasedMultiTurnTrajectoryQualityV1(
     PrebuiltMetricNames.rubricBasedMultiTurnTrajectoryQualityV1,
   ),
+
+  /// Per-turn user simulator quality metric version 1.
   perTurnUserSimulatorQualityV1(
     PrebuiltMetricNames.perTurnUserSimulatorQualityV1,
   ),
+
+  /// Multi-turn task success metric version 1.
   multiTurnTaskSuccessV1(PrebuiltMetricNames.multiTurnTaskSuccessV1),
+
+  /// Multi-turn trajectory quality metric version 1.
   multiTurnTrajectoryQualityV1(
     PrebuiltMetricNames.multiTurnTrajectoryQualityV1,
   ),
+
+  /// Multi-turn tool use quality metric version 1.
   multiTurnToolUseQualityV1(PrebuiltMetricNames.multiTurnToolUseQualityV1);
 
   /// Creates a built-in metric enum value.
@@ -346,7 +371,16 @@ class ToolTrajectoryCriterion extends BaseCriterion {
 }
 
 /// Matching strategies for tool trajectories.
-enum MatchType { exact, inOrder, anyOrder }
+enum MatchType {
+  /// Requires the actual tool calls to match the expected list in exact order without extras.
+  exact,
+
+  /// Requires all expected tool calls to appear in order, allowing extra calls in between.
+  inOrder,
+
+  /// Requires all expected tool calls to appear in any order, allowing extra calls.
+  anyOrder,
+}
 
 /// Utility methods for [MatchType].
 extension MatchTypeX on MatchType {

@@ -4,6 +4,13 @@ import 'package:flutter/services.dart';
 
 /// A widget for displaying structured output data (JSON / Map / List) with
 /// formatted syntax styling, copy-to-clipboard, and key-value inspectability.
+///
+/// ```dart
+/// const AdkStructuredDataView(
+///   title: 'Tool Output',
+///   data: {'status': 'ok', 'items': [1, 2, 3]},
+/// )
+/// ```
 class AdkStructuredDataView extends StatelessWidget {
   /// Creates an [AdkStructuredDataView].
   const AdkStructuredDataView({

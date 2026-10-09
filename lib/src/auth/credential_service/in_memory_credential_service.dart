@@ -11,8 +11,8 @@ class InMemoryCredentialService extends BaseCredentialService {
   final Map<String, Map<String, Map<String, AuthCredential>>> _credentials =
       <String, Map<String, Map<String, AuthCredential>>>{};
 
-  @override
   /// Loads a credential copy for [authConfig], if present.
+  @override
   Future<AuthCredential?> loadCredential(
     AuthConfig authConfig,
     CallbackContext callbackContext,
@@ -21,8 +21,8 @@ class InMemoryCredentialService extends BaseCredentialService {
     return bucket[authConfig.credentialKey]?.copyWith();
   }
 
-  @override
   /// Saves a credential copy for [authConfig], when available.
+  @override
   Future<void> saveCredential(
     AuthConfig authConfig,
     CallbackContext callbackContext,

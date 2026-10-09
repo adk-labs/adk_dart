@@ -84,6 +84,8 @@ Run options:
       --save_session    Save session snapshot on exit
       --resume          Resume from a saved session snapshot json file
       --replay          Replay session input file json (state + queries)
+      --state           Initial state for the run as a JSON object string
+      --state_file      Path to a JSON file containing initial state for the run
   -m, --message         Single message mode (no interactive prompt)
 
 Web options:
@@ -170,6 +172,7 @@ class ParsedAdkCommand {
       resumeFilePath = null,
       replayFilePath = null,
       message = null,
+      initialState = null,
       usedDeprecatedSessionDbUrl = false,
       usedDeprecatedArtifactStorageUri = false,
       enableFeatures = const <String>[],
@@ -188,6 +191,7 @@ class ParsedAdkCommand {
     this.resumeFilePath,
     this.replayFilePath,
     this.message,
+    this.initialState,
     required this.enableFeatures,
     required this.disableFeatures,
   }) : type = AdkCommandType.run,
@@ -245,7 +249,8 @@ class ParsedAdkCommand {
        saveSession = false,
        resumeFilePath = null,
        replayFilePath = null,
-       message = null;
+       message = null,
+       initialState = null;
 
   /// Parsed command type.
   final AdkCommandType type;
@@ -334,6 +339,9 @@ class ParsedAdkCommand {
   /// Initial message passed to non-interactive run mode.
   final String? message;
 
+  /// Optional initial session state parsed from `--state` or `--state_file`.
+  final Map<String, Object?>? initialState;
+
   /// Whether deprecated `--session_db_url` was used.
   final bool usedDeprecatedSessionDbUrl;
 
@@ -376,6 +384,10 @@ ParsedAdkCommand parseAdkCliArgs(List<String> args) {
 ///
 /// Returns `0` for success, `64` for usage errors, and non-zero runtime exit
 /// codes for command failures.
+///
+/// ```dart
+/// final exitCode = await runAdkCli(['create', './my_agent']);
+/// ```
 Future<int> runAdkCli(
   List<String> args, {
   IOSink? outSink,
@@ -3185,6 +3197,8 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
   String? resumeFilePath;
   String? replayFilePath;
   String? message;
+  String? stateJson;
+  String? stateFilePath;
   bool saveSession = false;
   bool useLocalStorage = true;
   bool explicitUseLocalStorageFlag = false;
@@ -3283,6 +3297,28 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
       message = arg.substring('--message='.length);
       continue;
     }
+    if (arg == '--state') {
+      stateJson = _nextArg(args, i, '--state');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--state=')) {
+      stateJson = arg.substring('--state='.length);
+      continue;
+    }
+    if (arg == '--state_file' || arg == '--state-file') {
+      stateFilePath = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--state_file=')) {
+      stateFilePath = arg.substring('--state_file='.length);
+      continue;
+    }
+    if (arg.startsWith('--state-file=')) {
+      stateFilePath = arg.substring('--state-file='.length);
+      continue;
+    }
     if (arg == '--save_session') {
       saveSession = true;
       continue;
@@ -3317,6 +3353,33 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     seenProjectDir = true;
   }
 
+  if (stateJson != null && stateFilePath != null) {
+    throw CliUsageError(
+      "Options 'state' and 'state_file' cannot be set together.",
+    );
+  }
+  Map<String, Object?>? initialState;
+  if (stateFilePath != null) {
+    final String normalizedStateFilePath = stateFilePath.trim();
+    if (normalizedStateFilePath.isEmpty) {
+      throw CliUsageError('Missing value for --state_file.');
+    }
+    final String rawState;
+    try {
+      rawState = File(normalizedStateFilePath).readAsStringSync();
+    } on FileSystemException catch (error) {
+      throw CliUsageError(
+        "Failed to read --state_file '$normalizedStateFilePath': $error",
+      );
+    }
+    initialState = _parseInitialStateJson(
+      rawState,
+      sourceLabel: "--state_file '$normalizedStateFilePath'",
+    );
+  } else if (stateJson != null) {
+    initialState = _parseInitialStateJson(stateJson, sourceLabel: '--state');
+  }
+
   if (_emptyToNull(resumeFilePath) != null &&
       _emptyToNull(replayFilePath) != null) {
     throw CliUsageError('--resume and --replay cannot be used together.');
@@ -3348,9 +3411,28 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     resumeFilePath: _emptyToNull(resumeFilePath),
     replayFilePath: _emptyToNull(replayFilePath),
     message: _emptyToNull(message),
+    initialState: initialState,
     enableFeatures: _normalizeCsvValues(enableFeatures),
     disableFeatures: _normalizeCsvValues(disableFeatures),
   );
+}
+
+Map<String, Object?> _parseInitialStateJson(
+  String rawJson, {
+  required String sourceLabel,
+}) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(rawJson);
+  } on FormatException catch (error) {
+    throw CliUsageError('Invalid JSON for $sourceLabel: $error');
+  }
+  if (decoded is! Map) {
+    throw CliUsageError(
+      'Invalid JSON for $sourceLabel: expected a JSON object.',
+    );
+  }
+  return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
 }
 
 ParsedAdkCommand _parseWebCommand(
@@ -3926,6 +4008,7 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
     userId: userId,
     requestedSessionId: command.sessionId,
     resumeFilePath: command.resumeFilePath,
+    initialState: command.initialState,
   );
 
   if (command.message != null) {
@@ -4084,18 +4167,32 @@ Future<Session> _prepareRunSession({
   required String userId,
   required String? requestedSessionId,
   required String? resumeFilePath,
+  Map<String, Object?>? initialState,
 }) async {
   if (resumeFilePath == null) {
+    if (initialState != null) {
+      return runtime.createSessionWithState(
+        userId: userId,
+        sessionId: requestedSessionId,
+        state: Map<String, Object?>.from(initialState),
+      );
+    }
     return runtime.createSession(userId: userId, sessionId: requestedSessionId);
   }
 
   final Session loaded = await _loadSessionSnapshot(resumeFilePath);
+  final Map<String, Object?>? mergedState = loaded.events.isEmpty
+      ? <String, Object?>{
+          ...loaded.state,
+          ...?initialState,
+        }
+      : initialState == null
+      ? null
+      : Map<String, Object?>.from(initialState);
   final Session session = await runtime.createSessionWithState(
     userId: userId,
     sessionId: requestedSessionId,
-    state: loaded.events.isEmpty
-        ? Map<String, Object?>.from(loaded.state)
-        : null,
+    state: mergedState,
   );
 
   for (final Event event in loaded.events) {

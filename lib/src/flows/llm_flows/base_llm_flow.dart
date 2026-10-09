@@ -237,13 +237,13 @@ class BaseLlmFlow {
         yield blobEvent;
       }
 
-      final Content? content = liveRequest.content;
+      Content? content = liveRequest.content;
       if (content == null || content.parts.isEmpty) {
         continue;
       }
 
-      _normalizeLiveContentRole(content);
-      await _appendLiveUserContent(context, content);
+      content = _normalizeLiveContentRole(content);
+      content = await _appendLiveUserContent(context, content);
 
       final InvocationContext turnContext = context.copyWith(
         userContent: content.copyWith(),
@@ -330,7 +330,7 @@ class BaseLlmFlow {
         await connection.sendRealtime(realtimeBlob);
       }
 
-      final Content? content = liveRequest.content;
+      Content? content = liveRequest.content;
       if (content == null || content.parts.isEmpty) {
         continue;
       }
@@ -339,8 +339,8 @@ class BaseLlmFlow {
       if (content.parts.any((Part part) => part.functionCall != null)) {
         throw ArgumentError('User message cannot contain function calls.');
       }
-      _normalizeLiveContentRole(content);
-      await _appendLiveUserContent(context, content);
+      content = _normalizeLiveContentRole(content);
+      content = await _appendLiveUserContent(context, content);
       await connection.sendContent(content.copyWith());
     }
   }
@@ -546,11 +546,11 @@ class BaseLlmFlow {
     }
   }
 
-  void _normalizeLiveContentRole(Content content) {
-    content.role ??= 'user';
-    if (content.role!.isEmpty) {
-      content.role = 'user';
+  Content _normalizeLiveContentRole(Content content) {
+    if (content.role != 'user') {
+      return content.copyWith(role: 'user');
     }
+    return content;
   }
 
   RealtimeBlob _coerceRealtimeBlob(Object blob) {
@@ -792,7 +792,7 @@ class BaseLlmFlow {
     );
   }
 
-  Future<void> _appendLiveUserContent(
+  Future<Content> _appendLiveUserContent(
     InvocationContext context,
     Content content,
   ) async {
@@ -800,20 +800,28 @@ class BaseLlmFlow {
       (Part part) => part.functionResponse != null,
     );
     if (isFunctionResponse) {
-      return;
+      return content;
     }
+
+    final Content? modifiedContent = await context.pluginManager
+        .runOnUserMessageCallback(
+          userMessage: content,
+          invocationContext: context,
+        );
+    final Content resolvedContent = modifiedContent ?? content;
 
     final Event event = Event(
       invocationId: context.invocationId,
       author: 'user',
       branch: context.branch,
       isolationScope: context.isolationScope,
-      content: content.copyWith(),
+      content: resolvedContent.copyWith(),
     );
     await context.sessionService.appendEvent(
       session: context.session,
       event: event,
     );
+    return resolvedContent;
   }
 
   /// Runs the standard request-response flow until completion.
@@ -1376,7 +1384,9 @@ class BaseLlmFlow {
         replacement.partial == null && original.partial != null;
     final bool inheritTurnComplete =
         replacement.turnComplete == null && original.turnComplete != null;
-    if (!inheritPartial && !inheritTurnComplete) {
+    final bool inheritUsageMetadata =
+        replacement.usageMetadata == null && original.usageMetadata != null;
+    if (!inheritPartial && !inheritTurnComplete && !inheritUsageMetadata) {
       return replacement;
     }
     return replacement.copyWith(
@@ -1384,6 +1394,9 @@ class BaseLlmFlow {
       turnComplete: inheritTurnComplete
           ? original.turnComplete
           : replacement.turnComplete,
+      usageMetadata: inheritUsageMetadata
+          ? original.usageMetadata
+          : replacement.usageMetadata,
     );
   }
 

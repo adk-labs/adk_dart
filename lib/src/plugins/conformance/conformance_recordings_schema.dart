@@ -8,6 +8,7 @@ import 'package:adk_dart/src/models/llm_request.dart';
 import 'package:adk_dart/src/models/llm_response.dart';
 import 'package:adk_dart/src/types/content.dart';
 
+/// JSON-compatible map used for serialized conformance recordings.
 typedef ConformanceJson = Map<String, Object?>;
 
 /// One recorded LLM request with all streamed responses.
@@ -616,6 +617,7 @@ Part _deserializePart(ConformanceJson json) {
   );
 }
 
+/// Normalizes [value] into a JSON-encodable conformance representation.
 Object? normalizeConformanceJsonValue(Object? value) {
   if (value == null || value is String || value is num || value is bool) {
     return value;
@@ -657,6 +659,7 @@ Object? _sortJsonValue(Object? value) {
   return value;
 }
 
+/// Converts [value] into a string-keyed [ConformanceJson] map, or an empty map if not a [Map].
 ConformanceJson asConformanceObjectMap(Object? value) {
   if (value is Map) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
@@ -664,6 +667,7 @@ ConformanceJson asConformanceObjectMap(Object? value) {
   return <String, Object?>{};
 }
 
+/// Converts [value] into a list of objects, or an empty list if not a [List].
 List<Object?> asConformanceObjectList(Object? value) {
   if (value is List) {
     return List<Object?>.from(value);
@@ -671,6 +675,7 @@ List<Object?> asConformanceObjectList(Object? value) {
   return const <Object?>[];
 }
 
+/// Converts [value] into a dynamic string-keyed map, or `null` if not a [Map].
 Map<String, dynamic>? asConformanceDynamicMap(Object? value) {
   if (value is Map) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
@@ -678,6 +683,7 @@ Map<String, dynamic>? asConformanceDynamicMap(Object? value) {
   return null;
 }
 
+/// Extracts a list of integers from [value], or `null` if [value] is not a [List].
 List<int>? asConformanceIntList(Object? value) {
   if (value is! List) {
     return null;
@@ -691,6 +697,7 @@ List<int>? asConformanceIntList(Object? value) {
   return ints;
 }
 
+/// Parses [value] as an [int], defaulting to `0` when conversion fails.
 int asConformanceInt(Object? value) {
   if (value is num) {
     return value.toInt();
@@ -698,6 +705,7 @@ int asConformanceInt(Object? value) {
   return int.tryParse('$value') ?? 0;
 }
 
+/// Parses [value] as a [double], or returns `null` when conversion fails.
 double? asConformanceNullableDouble(Object? value) {
   if (value is num) {
     return value.toDouble();

@@ -41,6 +41,18 @@ const String _systemInstructionFallbackText =
     'Handle the requests as specified in the System Instruction.';
 
 /// OpenAI-compatible adapter that targets LiteLLM providers.
+///
+/// ```dart
+/// final model = LiteLlm(
+///   model: 'openai/gpt-4o-mini',
+///   baseUrl: 'https://api.openai.com/v1',
+/// );
+/// final agent = LlmAgent(
+///   name: 'litellm_agent',
+///   model: model,
+///   instruction: 'Provide concise answers.',
+/// );
+/// ```
 class LiteLlm extends BaseLlm {
   /// Creates a LiteLLM adapter for [model].
   LiteLlm({
@@ -104,6 +116,7 @@ class LiteLlm extends BaseLlm {
   static Map<String, Object?> buildPayload(
     LlmRequest request, {
     required bool stream,
+    String? baseUrl,
   }) {
     final List<Map<String, Object?>> messages = <Map<String, Object?>>[];
     final String? systemInstruction = request.config.systemInstruction;
@@ -114,12 +127,23 @@ class LiteLlm extends BaseLlm {
       });
     }
     for (final Content content in request.contents) {
-      messages.addAll(_contentToMessages(content, model: request.model ?? ''));
+      messages.addAll(
+        _contentToMessages(
+          content,
+          model: request.model ?? '',
+          baseUrl: baseUrl,
+        ),
+      );
     }
+    final List<Map<String, Object?>> normalizedMessages = _ensureToolResults(
+      messages,
+      model: request.model ?? '',
+      baseUrl: baseUrl,
+    );
 
     final Map<String, Object?> payload = <String, Object?>{
       'model': request.model ?? '',
-      'messages': messages,
+      'messages': normalizedMessages,
       'stream': stream,
     };
     if (request.config.temperature != null) {
@@ -230,9 +254,13 @@ class LiteLlm extends BaseLlm {
     }
     final Map<String, Object?> first = _asMap(choices.first);
     final Map<String, Object?> message = _asMap(first['message']);
-    final String role = message['role'] == 'assistant'
+    final Map<String, Object?> delta = _asMap(first['delta']);
+    final Map<String, Object?> effectiveMessage = message.isNotEmpty
+        ? message
+        : delta;
+    final String role = effectiveMessage['role'] == 'assistant'
         ? 'model'
-        : '${message['role'] ?? 'model'}';
+        : '${effectiveMessage['role'] ?? 'model'}';
     final List<Part> parts = <Part>[];
     final Set<String> reasoningTexts = <String>{};
     for (final String field in const <String>[
@@ -241,16 +269,19 @@ class LiteLlm extends BaseLlm {
       'reasoning',
     ]) {
       parts.addAll(
-        _extractReasoningParts(message[field], reasoningTexts: reasoningTexts),
+        _extractReasoningParts(
+          effectiveMessage[field],
+          reasoningTexts: reasoningTexts,
+        ),
       );
     }
-    final Object? contentRaw = message['content'];
+    final Object? contentRaw = effectiveMessage['content'];
     if (contentRaw is String && contentRaw.isNotEmpty) {
       parts.add(Part.text(contentRaw));
     }
 
     final List<Object?> toolCalls =
-        (message['tool_calls'] as List<Object?>?) ?? <Object?>[];
+        (effectiveMessage['tool_calls'] as List<Object?>?) ?? <Object?>[];
     for (final Object? call in toolCalls) {
       final Map<String, Object?> callMap = _asMap(call);
       parts.add(_parseFunctionCall(callMap));
@@ -300,7 +331,7 @@ class LiteLlm extends BaseLlm {
         completionsInvoker ?? _defaultHttpCompletionsInvoker;
 
     final List<Map<String, Object?>> responses = await invoker(
-      payload: buildPayload(prepared, stream: stream),
+      payload: buildPayload(prepared, stream: stream, baseUrl: baseUrl),
       stream: stream,
     );
     bool multipleChoicesLogged = false;
@@ -628,11 +659,90 @@ bool _isAnthropicModel(String model) {
   return false;
 }
 
+bool _isGemma4Model(String model, {String? baseUrl}) {
+  final String lower = model.toLowerCase();
+  if (!lower.contains('gemma-4') && !lower.contains('gemma4')) {
+    return false;
+  }
+  final String provider = LiteLlm.getProviderFromModel(model);
+  if (provider == 'openai' || provider == 'azure' || provider == 'lm_studio') {
+    return false;
+  }
+  if (baseUrl != null && baseUrl.isNotEmpty) {
+    return false;
+  }
+  return true;
+}
+
+String _toolResponseRoleForModel(String model, {String? baseUrl}) {
+  return _isGemma4Model(model, baseUrl: baseUrl) ? 'tool_responses' : 'tool';
+}
+
+const String _missingToolResultContent =
+    '{"error": "Tool execution was interrupted before a result was returned."}';
+
+List<Map<String, Object?>> _ensureToolResults(
+  List<Map<String, Object?>> messages, {
+  String model = '',
+  String? baseUrl,
+}) {
+  if (messages.isEmpty) {
+    return messages;
+  }
+  final String toolRole = _toolResponseRoleForModel(model, baseUrl: baseUrl);
+  final List<Map<String, Object?>> repaired = <Map<String, Object?>>[];
+  int i = 0;
+  while (i < messages.length) {
+    final Map<String, Object?> msg = messages[i];
+    repaired.add(msg);
+    final Object? rawToolCalls = msg['tool_calls'];
+    if (msg['role'] != 'assistant' ||
+        rawToolCalls is! List ||
+        rawToolCalls.isEmpty) {
+      i += 1;
+      continue;
+    }
+
+    int j = i + 1;
+    final Set<String> answeredIds = <String>{};
+    while (j < messages.length) {
+      final Object? nextRole = messages[j]['role'];
+      if (nextRole != 'tool' && nextRole != 'tool_responses') {
+        break;
+      }
+      final Object? callId = messages[j]['tool_call_id'];
+      if (callId is String && callId.isNotEmpty) {
+        answeredIds.add(callId);
+      }
+      repaired.add(messages[j]);
+      j += 1;
+    }
+
+    if (j < messages.length || answeredIds.isNotEmpty) {
+      for (final Object? tc in rawToolCalls) {
+        final Map<String, Object?> tcMap = _asMap(tc);
+        final String? tcId = tcMap['id'] == null ? null : '${tcMap['id']}';
+        if (tcId != null && tcId.isNotEmpty && !answeredIds.contains(tcId)) {
+          repaired.add(<String, Object?>{
+            'role': toolRole,
+            'tool_call_id': tcId,
+            'content': _missingToolResultContent,
+          });
+        }
+      }
+    }
+    i = j;
+  }
+  return repaired;
+}
+
 List<Map<String, Object?>> _contentToMessages(
   Content content, {
   String model = '',
+  String? baseUrl,
 }) {
   final String role = content.role == 'model' ? 'assistant' : '${content.role}';
+  final String toolRole = _toolResponseRoleForModel(model, baseUrl: baseUrl);
   final List<Map<String, Object?>> output = <Map<String, Object?>>[];
   final List<Map<String, Object?>> toolResponses = <Map<String, Object?>>[];
   final List<Map<String, Object?>> toolCalls = <Map<String, Object?>>[];
@@ -642,7 +752,7 @@ List<Map<String, Object?>> _contentToMessages(
   for (final Part part in content.parts) {
     if (part.functionResponse != null) {
       toolResponses.add(<String, Object?>{
-        'role': 'tool',
+        'role': toolRole,
         'tool_call_id': part.functionResponse!.id,
         'content': jsonEncode(part.functionResponse!.response),
       });
@@ -814,24 +924,228 @@ String _audioFormatFromMimeType(String mimeType) {
   }
 }
 
+final RegExp _markdownCodeBlockPattern = RegExp(
+  r'^\s*```(?:json)?\s*(.*?)\s*```\s*$',
+  dotAll: true,
+);
+
+String _quoteUnquotedJsonObjectKeys(String rawArguments) {
+  final StringBuffer result = StringBuffer();
+  bool inString = false;
+  String quoteChar = '';
+  bool escaped = false;
+  bool expectingKey = false;
+  final int length = rawArguments.length;
+  int i = 0;
+
+  while (i < length) {
+    final String ch = rawArguments[i];
+    if (inString) {
+      result.write(ch);
+      if (escaped) {
+        escaped = false;
+      } else if (ch == r'\') {
+        escaped = true;
+      } else if (ch == quoteChar) {
+        inString = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch == '"' || ch == "'") {
+      inString = true;
+      quoteChar = ch;
+      expectingKey = false;
+      result.write(ch);
+      i += 1;
+      continue;
+    }
+
+    if (ch == '{' || ch == ',') {
+      expectingKey = true;
+      result.write(ch);
+      i += 1;
+      continue;
+    }
+
+    if (expectingKey) {
+      if (ch.trim().isEmpty) {
+        result.write(ch);
+        i += 1;
+        continue;
+      }
+      if (ch == '}') {
+        expectingKey = false;
+        result.write(ch);
+        i += 1;
+        continue;
+      }
+      if (_isIdentifierStart(ch)) {
+        int j = i + 1;
+        while (j < length && _isIdentifierContinuation(rawArguments[j])) {
+          j += 1;
+        }
+        int k = j;
+        while (k < length && rawArguments[k].trim().isEmpty) {
+          k += 1;
+        }
+        if (k < length && rawArguments[k] == ':') {
+          final String key = rawArguments.substring(i, j);
+          result.write('"$key"');
+          result.write(rawArguments.substring(j, k));
+          result.write(':');
+          expectingKey = false;
+          i = k + 1;
+          continue;
+        }
+      }
+      expectingKey = false;
+    }
+
+    result.write(ch);
+    i += 1;
+  }
+
+  return result.toString();
+}
+
+bool _isIdentifierStart(String ch) {
+  final int code = ch.codeUnitAt(0);
+  return (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      ch == '_' ||
+      ch == r'$';
+}
+
+bool _isIdentifierContinuation(String ch) {
+  final int code = ch.codeUnitAt(0);
+  return _isIdentifierStart(ch) ||
+      (code >= 48 && code <= 57) ||
+      ch == '-' ||
+      ch == '.';
+}
+
+Map<String, dynamic> _parseToolCallArguments(Object? rawArgs, String toolName) {
+  if (rawArgs == null) {
+    return <String, dynamic>{};
+  }
+  if (rawArgs is Map) {
+    return rawArgs.map((Object? k, Object? v) => MapEntry('$k', v));
+  }
+  if (rawArgs is! String) {
+    return <String, dynamic>{};
+  }
+  String cleaned = rawArgs.trim();
+  if (cleaned.isEmpty) {
+    return <String, dynamic>{};
+  }
+  final RegExpMatch? fenceMatch = _markdownCodeBlockPattern.firstMatch(cleaned);
+  if (fenceMatch != null) {
+    cleaned = (fenceMatch.group(1) ?? '').trim();
+  }
+  final String quotedKeys = _quoteUnquotedJsonObjectKeys(cleaned);
+  for (final String candidate in <String>[
+    cleaned,
+    quotedKeys,
+    _normalizePythonLiteralJson(quotedKeys),
+  ]) {
+    try {
+      final Object? decoded = jsonDecode(candidate);
+      if (decoded is Map) {
+        return decoded.map((Object? k, Object? v) => MapEntry('$k', v));
+      }
+    } catch (_) {
+      // Try next fallback candidate.
+    }
+  }
+  developer.log(
+    "Malformed JSON in tool call arguments for function '$toolName'; dispatching with empty arguments so the tool can return a structured error and the model can retry.",
+    name: 'adk_dart.models.lite_llm',
+    level: 900,
+  );
+  return <String, dynamic>{};
+}
+
+String _normalizePythonLiteralJson(String input) {
+  final StringBuffer out = StringBuffer();
+  bool inDouble = false;
+  bool inSingle = false;
+  bool escaped = false;
+  for (int i = 0; i < input.length; i += 1) {
+    final String ch = input[i];
+    if (inDouble) {
+      out.write(ch);
+      if (escaped) {
+        escaped = false;
+      } else if (ch == r'\') {
+        escaped = true;
+      } else if (ch == '"') {
+        inDouble = false;
+      }
+      continue;
+    }
+    if (inSingle) {
+      if (escaped) {
+        if (ch == "'") {
+          out.write("'");
+        } else {
+          out.write(r'\');
+          out.write(ch);
+        }
+        escaped = false;
+      } else if (ch == r'\') {
+        escaped = true;
+      } else if (ch == "'") {
+        out.write('"');
+        inSingle = false;
+      } else if (ch == '"') {
+        out.write(r'\"');
+      } else {
+        out.write(ch);
+      }
+      continue;
+    }
+    if (ch == '"') {
+      inDouble = true;
+      out.write(ch);
+      continue;
+    }
+    if (ch == "'") {
+      inSingle = true;
+      out.write('"');
+      continue;
+    }
+    out.write(ch);
+  }
+  String normalized = out.toString();
+  normalized = normalized.replaceAllMapped(
+    RegExp(r'(?<=[:,\[\s])(True|False|None)(?=[,}\]\s])'),
+    (Match m) {
+      switch (m.group(1)) {
+        case 'True':
+          return 'true';
+        case 'False':
+          return 'false';
+        default:
+          return 'null';
+      }
+    },
+  );
+  normalized = normalized.replaceAllMapped(
+    RegExp(r',\s*([}\]])'),
+    (Match m) => m.group(1)!,
+  );
+  return normalized;
+}
+
 Part _parseFunctionCall(Map<String, Object?> callMap) {
   final Map<String, Object?> function = _asMap(callMap['function']);
   final String name = '${function['name'] ?? ''}';
-  final String argumentsRaw = '${function['arguments'] ?? '{}'}';
-  Map<String, dynamic> parsedArgs = <String, dynamic>{};
-  try {
-    final Object? decoded = jsonDecode(argumentsRaw);
-    if (decoded is Map) {
-      parsedArgs = decoded.cast<String, dynamic>();
-    }
-  } catch (_) {
-    developer.log(
-      "Malformed JSON in tool call arguments for function '$name'; dispatching with empty arguments so the tool can return a structured error and the model can retry.",
-      name: 'adk_dart.models.lite_llm',
-      level: 900,
-    );
-    parsedArgs = <String, dynamic>{};
-  }
+  final Map<String, dynamic> parsedArgs = _parseToolCallArguments(
+    function['arguments'],
+    name,
+  );
   final String? callId = callMap['id'] == null ? null : '${callMap['id']}';
   final Part part = Part.fromFunctionCall(
     name: name,

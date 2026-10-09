@@ -77,8 +77,8 @@ class ToolSpecMockStrategy extends BaseMockStrategy {
   final GenerateContentConfig llmConfig;
   final BaseLlm _llm;
 
-  @override
   /// Generates a simulated JSON response for [tool] using schema prompts.
+  @override
   Future<Map<String, Object?>> mock(
     BaseTool tool,
     Map<String, Object?> args,

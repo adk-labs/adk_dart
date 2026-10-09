@@ -9,8 +9,8 @@ abstract class BaseRetrievalTool extends BaseTool {
   /// Creates a retrieval tool with [name] and [description].
   BaseRetrievalTool({required super.name, required super.description});
 
-  @override
   /// Returns the standard query-only function declaration schema.
+  @override
   FunctionDeclaration? getDeclaration() {
     return FunctionDeclaration(
       name: name,

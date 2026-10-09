@@ -53,8 +53,8 @@ class CustomMetricEvaluator extends Evaluator {
   final EvalMetricSpec _evalMetric;
   final CustomMetricFunction _metricFunction;
 
-  @override
   /// Evaluates invocations using the custom metric callback.
+  @override
   Future<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,

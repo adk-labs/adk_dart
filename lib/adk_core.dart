@@ -4,6 +4,32 @@
 /// `dart:ffi`, `dart:mirrors`, local process execution, or local filesystem
 /// access. Use `package:adk_dart/adk_dart.dart` for the full VM and CLI
 /// surface.
+///
+/// ```dart
+/// import 'package:adk_dart/adk_core.dart';
+///
+/// Future<void> runCoreAgent() async {
+///   final agent = LlmAgent(
+///     name: 'core_assistant',
+///     model: Gemini(model: 'gemini-2.5-flash'),
+///     instruction: 'Provide helpful responses.',
+///   );
+///
+///   final runner = InMemoryRunner(agent: agent);
+///   final session = await runner.sessionService.createSession(
+///     appName: runner.appName,
+///     userId: 'user_1',
+///   );
+///
+///   await for (final event in runner.runAsync(
+///     userId: 'user_1',
+///     sessionId: session.id,
+///     newMessage: Content.userText('Hi from Flutter or Web!'),
+///   )) {
+///     // Handle streamed events in your UI.
+///   }
+/// }
+/// ```
 library;
 
 export 'src/agents/agent_state.dart';
@@ -105,3 +131,4 @@ export 'src/workflow/replay_manager.dart';
 // - Inline Skill objects are supported on all platforms.
 // - Directory-based Skill loading remains unavailable on Web.
 export 'src/skills/skill_runtime.dart';
+export 'src/utils/agent_mode.dart';

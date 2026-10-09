@@ -5,6 +5,7 @@ import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
 import '../auth/auth_credential.dart';
 import '../events/event.dart';
+import '../events/node_path_builder.dart';
 import '../memory/base_memory_service.dart';
 import '../memory/memory_entry.dart';
 import '../plugins/plugin_manager.dart';
@@ -490,7 +491,22 @@ class InvocationContext {
     }
     if (currentBranch) {
       final String? br = branch;
+      NodePathBuilder? selfNodePath;
+      String? agentMode;
+      try {
+        agentMode = (agent as dynamic).mode as String?;
+      } catch (_) {}
+      if (br == null &&
+          agentMode == 'single_turn' &&
+          nodePath != null &&
+          nodePath!.isNotEmpty) {
+        selfNodePath = NodePathBuilder.fromString(nodePath!);
+      }
       events = events.where((Event event) {
+        if (selfNodePath != null &&
+            !selfNodePath.includesNodePath(event.nodeInfo.path)) {
+          return false;
+        }
         if (event.author == 'user') {
           final List<FunctionResponse> frs = event.getFunctionResponses();
           if (frs.isNotEmpty && br != null) {

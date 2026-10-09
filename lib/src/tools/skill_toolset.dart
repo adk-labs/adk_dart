@@ -1416,6 +1416,19 @@ class RunSkillScriptTool extends BaseTool {
 }
 
 /// Toolset exposing skill-discovery, loading, and script-execution tools.
+///
+/// ```dart
+/// final reviewSkill = Skill(
+///   name: 'code-review',
+///   description: 'Checks pull requests for style and correctness.',
+///   instructions: '1. Inspect the diff.\n2. Summarize findings.',
+/// );
+///
+/// final skillToolset = SkillToolset(
+///   skills: [reviewSkill],
+///   discoveryMode: SkillDiscoveryMode.lazy,
+/// );
+/// ```
 class SkillToolset extends BaseToolset {
   /// Creates a toolset that exposes skill discovery/loading/script tools.
   SkillToolset({
@@ -1524,8 +1537,8 @@ class SkillToolset extends BaseToolset {
     );
   }
 
-  @override
   /// Returns skill tools filtered by [toolFilter], if configured.
+  @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     final List<BaseTool> dynamicTools = await _resolveAdditionalToolsFromState(
       readonlyContext,
@@ -1978,8 +1991,8 @@ class SkillToolset extends BaseToolset {
     return resolved;
   }
 
-  @override
   /// Appends skill guidance to [llmRequest].
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

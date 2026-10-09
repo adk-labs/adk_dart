@@ -7,7 +7,16 @@ import '../sessions/base_session_service.dart';
 import '../types/content.dart';
 
 /// Streaming transport mode used by a run.
-enum StreamingMode { none, sse, bidi }
+enum StreamingMode {
+  /// Disables token streaming and waits for full responses.
+  none,
+
+  /// Streams model responses over server-sent events (SSE).
+  sse,
+
+  /// Uses bidirectional live streaming.
+  bidi,
+}
 
 /// Execution mode used when a model requests multiple tools in one turn.
 enum ToolExecutionMode {
@@ -41,6 +50,7 @@ enum ServiceTier {
   /// tight. Cannot be combined with streaming.
   deferred('deferred');
 
+  /// Creates a [ServiceTier] with its wire [value].
   const ServiceTier(this.value);
 
   /// The string wire value.
@@ -85,6 +95,14 @@ class ToolThreadPoolConfig {
 }
 
 /// Configuration object controlling one agent run behavior.
+///
+/// ```dart
+/// final config = RunConfig(
+///   streamingMode: StreamingMode.sse,
+///   maxLlmCalls: 25,
+///   serviceTier: ServiceTier.standard,
+/// );
+/// ```
 class RunConfig {
   /// Creates a run configuration.
   RunConfig({

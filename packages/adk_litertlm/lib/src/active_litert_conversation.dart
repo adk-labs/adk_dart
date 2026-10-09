@@ -4,7 +4,10 @@ import 'package:litertlm/litertlm.dart' as litert;
 
 /// Tracks the active LiteRT-LM conversation session and matches history for KV cache reuse.
 class ActiveLiteRtLmConversation {
+  /// The currently active LiteRT-LM conversation session, if any.
   litert.Conversation? conversation;
+
+  /// The cached conversation history corresponding to [conversation].
   List<adk.Content>? history;
 
   /// Updates the active conversation and its history.

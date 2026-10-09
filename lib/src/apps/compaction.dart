@@ -249,13 +249,18 @@ Future<bool> runCompactionForTokenThresholdConfig({
     eventsToCompact,
     allEvents: events,
   );
-  if (eventsToCompact.isEmpty) {
+  if (eventsToCompact.isEmpty ||
+      !_isRangeWorthCompacting(
+        events: events,
+        eventsToCompact: eventsToCompact,
+      )) {
     return false;
   }
 
   final Event? compactionEvent = await _createCompactionEventWithTrace(
     session: session,
     config: config,
+    events: events,
     eventsToCompact: eventsToCompact,
     trigger: 'token_threshold',
     author: agentName,
@@ -349,13 +354,18 @@ Stream<Event> runCompactionForSlidingWindow({
     allEvents: events,
   );
 
-  if (eventsToCompact.isEmpty) {
+  if (eventsToCompact.isEmpty ||
+      !_isRangeWorthCompacting(
+        events: events,
+        eventsToCompact: eventsToCompact,
+      )) {
     return;
   }
 
   final Event? compactionEvent = await _createCompactionEventWithTrace(
     session: session,
     config: config,
+    events: events,
     eventsToCompact: eventsToCompact,
     trigger: 'sliding_window',
     author: app.rootAgent.name,
@@ -365,9 +375,106 @@ Stream<Event> runCompactionForSlidingWindow({
   }
 }
 
+Content? _requestContent(Event event) {
+  final EventCompaction? compaction = event.actions.compaction;
+  if (compaction != null) {
+    return compaction.compactedContent;
+  }
+  return event.content;
+}
+
+int _serializedSize(List<Event> events) {
+  int total = 0;
+  for (final Event event in events) {
+    total += _countCharsInContent(_requestContent(event));
+  }
+  return total;
+}
+
+int _promptCharsSaved({
+  required List<Event> events,
+  required Event compactionEvent,
+}) {
+  final List<Event> before = contents_flow.processCompactionEvents(events);
+  final List<Event> after = contents_flow.processCompactionEvents(<Event>[
+    ...events,
+    compactionEvent,
+  ]);
+  return _serializedSize(before) - _serializedSize(after);
+}
+
+int _removablePromptChars({
+  required List<Event> events,
+  required List<Event> eventsToCompact,
+}) {
+  if (eventsToCompact.isEmpty) {
+    return 0;
+  }
+  double startTs = eventsToCompact.first.timestamp;
+  double endTs = eventsToCompact.first.timestamp;
+  for (final Event event in eventsToCompact) {
+    if (event.timestamp < startTs) {
+      startTs = event.timestamp;
+    }
+    if (event.timestamp > endTs) {
+      endTs = event.timestamp;
+    }
+  }
+  final Event weightlessSummary = Event(
+    invocationId: '',
+    author: 'agent',
+    actions: EventActions(
+      compaction: EventCompaction(
+        startTimestamp: startTs,
+        endTimestamp: endTs,
+        compactedContent: Content(role: 'model', parts: <Part>[]),
+      ),
+    ),
+  );
+  return _promptCharsSaved(events: events, compactionEvent: weightlessSummary);
+}
+
+Event? _latestCompactionEvent(List<Event> events) {
+  double latestEnd = 0.0;
+  int latestIndex = -1;
+  Event? latest;
+  for (int i = 0; i < events.length; i += 1) {
+    final EventCompaction? compaction = events[i].actions.compaction;
+    if (compaction == null) {
+      continue;
+    }
+    if (i >= latestIndex && compaction.endTimestamp > latestEnd) {
+      latestIndex = i;
+      latestEnd = compaction.endTimestamp;
+      latest = events[i];
+    }
+  }
+  return latest;
+}
+
+int _previousSummaryChars(List<Event> events) {
+  final Event? latest = _latestCompactionEvent(events);
+  if (latest == null) {
+    return 0;
+  }
+  return _serializedSize(<Event>[latest]);
+}
+
+bool _isRangeWorthCompacting({
+  required List<Event> events,
+  required List<Event> eventsToCompact,
+}) {
+  return _removablePromptChars(
+        events: events,
+        eventsToCompact: eventsToCompact,
+      ) >
+      _previousSummaryChars(events);
+}
+
 Future<Event?> _createCompactionEventWithTrace({
   required Session session,
   required EventsCompactionConfig config,
+  required List<Event> events,
   required List<Event> eventsToCompact,
   required String trigger,
   required String author,
@@ -382,9 +489,14 @@ Future<Event?> _createCompactionEventWithTrace({
           final Event? summarizedEvent = await rawSummarizer
               .maybeSummarizeEvents(events: eventsToCompact);
           if (summarizedEvent != null) {
-            span.setAttributes(
-              _buildCompactionResultAttributes(summarizedEvent),
+            final int charsSaved = _promptCharsSaved(
+              events: events,
+              compactionEvent: summarizedEvent,
             );
+            span.setAttributes(<String, Object?>{
+              ..._buildCompactionResultAttributes(summarizedEvent),
+              'gen_ai.compaction.prompt_chars_saved': charsSaved,
+            });
           }
           return summarizedEvent;
         } catch (error, stackTrace) {
@@ -418,7 +530,14 @@ Future<Event?> _createCompactionEventWithTrace({
           ),
         ),
       );
-      span.setAttributes(_buildCompactionResultAttributes(compactionEvent));
+      final int charsSaved = _promptCharsSaved(
+        events: events,
+        compactionEvent: compactionEvent,
+      );
+      span.setAttributes(<String, Object?>{
+        ..._buildCompactionResultAttributes(compactionEvent),
+        'gen_ai.compaction.prompt_chars_saved': charsSaved,
+      });
       return compactionEvent;
     },
     attributes: _buildCompactionAttributes(

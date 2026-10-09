@@ -2,7 +2,22 @@
 library;
 
 /// Supported credential payload types.
-enum AuthCredentialType { apiKey, http, oauth2, openIdConnect, serviceAccount }
+enum AuthCredentialType {
+  /// Static API key credential.
+  apiKey,
+
+  /// HTTP authentication credential (such as Basic or Bearer).
+  http,
+
+  /// OAuth 2.0 token and flow credential.
+  oauth2,
+
+  /// OpenID Connect token and flow credential.
+  openIdConnect,
+
+  /// Google Cloud service account credential.
+  serviceAccount,
+}
 
 /// HTTP credential components.
 class HttpCredentials {
@@ -17,6 +32,23 @@ class HttpCredentials {
 
   /// Optional bearer/token value.
   String? token;
+
+  /// Returns a deep copy of these HTTP credentials.
+  HttpCredentials copyWith({
+    Object? username = _sentinel,
+    Object? password = _sentinel,
+    Object? token = _sentinel,
+  }) {
+    return HttpCredentials(
+      username: identical(username, _sentinel)
+          ? this.username
+          : username as String?,
+      password: identical(password, _sentinel)
+          ? this.password
+          : password as String?,
+      token: identical(token, _sentinel) ? this.token : token as String?,
+    );
+  }
 }
 
 /// HTTP authentication configuration.
@@ -36,6 +68,20 @@ class HttpAuth {
 
   /// Additional headers to attach to requests.
   Map<String, String> additionalHeaders;
+
+  /// Returns a deep copy of this HTTP auth configuration.
+  HttpAuth copyWith({
+    String? scheme,
+    HttpCredentials? credentials,
+    Map<String, String>? additionalHeaders,
+  }) {
+    return HttpAuth(
+      scheme: scheme ?? this.scheme,
+      credentials: credentials ?? this.credentials.copyWith(),
+      additionalHeaders:
+          additionalHeaders ?? Map<String, String>.from(this.additionalHeaders),
+    );
+  }
 }
 
 /// OAuth2 authentication payload.
@@ -117,6 +163,78 @@ class OAuth2Auth {
 
   /// Token endpoint auth method.
   String tokenEndpointAuthMethod;
+
+  /// Returns a deep copy of this OAuth2 auth payload.
+  OAuth2Auth copyWith({
+    Object? clientId = _sentinel,
+    Object? clientSecret = _sentinel,
+    Object? authUri = _sentinel,
+    Object? nonce = _sentinel,
+    Object? state = _sentinel,
+    Object? redirectUri = _sentinel,
+    Object? authResponseUri = _sentinel,
+    Object? authCode = _sentinel,
+    Object? accessToken = _sentinel,
+    Object? refreshToken = _sentinel,
+    Object? idToken = _sentinel,
+    Object? expiresAt = _sentinel,
+    Object? expiresIn = _sentinel,
+    Object? audience = _sentinel,
+    Object? prompt = _sentinel,
+    Object? codeVerifier = _sentinel,
+    Object? codeChallengeMethod = _sentinel,
+    String? tokenEndpointAuthMethod,
+  }) {
+    return OAuth2Auth(
+      clientId: identical(clientId, _sentinel)
+          ? this.clientId
+          : clientId as String?,
+      clientSecret: identical(clientSecret, _sentinel)
+          ? this.clientSecret
+          : clientSecret as String?,
+      authUri: identical(authUri, _sentinel)
+          ? this.authUri
+          : authUri as String?,
+      nonce: identical(nonce, _sentinel) ? this.nonce : nonce as String?,
+      state: identical(state, _sentinel) ? this.state : state as String?,
+      redirectUri: identical(redirectUri, _sentinel)
+          ? this.redirectUri
+          : redirectUri as String?,
+      authResponseUri: identical(authResponseUri, _sentinel)
+          ? this.authResponseUri
+          : authResponseUri as String?,
+      authCode: identical(authCode, _sentinel)
+          ? this.authCode
+          : authCode as String?,
+      accessToken: identical(accessToken, _sentinel)
+          ? this.accessToken
+          : accessToken as String?,
+      refreshToken: identical(refreshToken, _sentinel)
+          ? this.refreshToken
+          : refreshToken as String?,
+      idToken: identical(idToken, _sentinel)
+          ? this.idToken
+          : idToken as String?,
+      expiresAt: identical(expiresAt, _sentinel)
+          ? this.expiresAt
+          : expiresAt as int?,
+      expiresIn: identical(expiresIn, _sentinel)
+          ? this.expiresIn
+          : expiresIn as int?,
+      audience: identical(audience, _sentinel)
+          ? this.audience
+          : audience as String?,
+      prompt: identical(prompt, _sentinel) ? this.prompt : prompt as String?,
+      codeVerifier: identical(codeVerifier, _sentinel)
+          ? this.codeVerifier
+          : codeVerifier as String?,
+      codeChallengeMethod: identical(codeChallengeMethod, _sentinel)
+          ? this.codeChallengeMethod
+          : codeChallengeMethod as String?,
+      tokenEndpointAuthMethod:
+          tokenEndpointAuthMethod ?? this.tokenEndpointAuthMethod,
+    );
+  }
 }
 
 /// Google service account key fields.
@@ -152,6 +270,19 @@ class ServiceAccountCredential {
 
   /// Token URI.
   String tokenUri;
+
+  /// Returns a deep copy of this service-account credential.
+  ServiceAccountCredential copyWith() {
+    return ServiceAccountCredential(
+      projectId: projectId,
+      privateKeyId: privateKeyId,
+      privateKey: privateKey,
+      clientEmail: clientEmail,
+      clientId: clientId,
+      authUri: authUri,
+      tokenUri: tokenUri,
+    );
+  }
 }
 
 /// Service-account auth configuration.
@@ -186,6 +317,17 @@ class ServiceAccountAuth {
 
   /// Target audience when [useIdToken] is enabled.
   String? audience;
+
+  /// Returns a deep copy of this service-account auth configuration.
+  ServiceAccountAuth copyWith() {
+    return ServiceAccountAuth(
+      serviceAccountCredential: serviceAccountCredential?.copyWith(),
+      scopes: List<String>.from(scopes),
+      useDefaultCredential: useDefaultCredential,
+      useIdToken: useIdToken,
+      audience: audience,
+    );
+  }
 }
 
 /// Union model for all supported authentication credentials.
@@ -233,12 +375,14 @@ class AuthCredential {
           ? this.resourceRef
           : resourceRef as String?,
       apiKey: identical(apiKey, _sentinel) ? this.apiKey : apiKey as String?,
-      http: identical(http, _sentinel) ? this.http : http as HttpAuth?,
+      http: identical(http, _sentinel)
+          ? this.http?.copyWith()
+          : http as HttpAuth?,
       oauth2: identical(oauth2, _sentinel)
-          ? this.oauth2
+          ? this.oauth2?.copyWith()
           : oauth2 as OAuth2Auth?,
       serviceAccount: identical(serviceAccount, _sentinel)
-          ? this.serviceAccount
+          ? this.serviceAccount?.copyWith()
           : serviceAccount as ServiceAccountAuth?,
     );
   }

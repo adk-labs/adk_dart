@@ -39,6 +39,25 @@ class SequentialAgentState extends BaseAgentState {
 }
 
 /// Workflow agent that runs sub-agents one-by-one.
+///
+/// ```dart
+/// final writer = LlmAgent(
+///   name: 'writer',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Draft a short paragraph on the topic.',
+///   outputKey: 'draft',
+/// );
+/// final reviewer = LlmAgent(
+///   name: 'reviewer',
+///   model: 'gemini-2.5-flash',
+///   instruction: 'Polish the draft in {draft}.',
+/// );
+///
+/// final pipeline = SequentialAgent(
+///   name: 'write_and_review',
+///   subAgents: [writer, reviewer],
+/// );
+/// ```
 class SequentialAgent extends BaseAgent {
   /// Creates a sequential agent.
   SequentialAgent({

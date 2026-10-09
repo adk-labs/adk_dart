@@ -6,16 +6,29 @@ import 'package:litertlm/litertlm.dart' as litert;
 
 import 'active_litert_conversation.dart';
 
-/// A [BaseLlm] implementation that uses the LiteRT-LM runtime to generate content.
+/// A [adk.BaseLlm] implementation that uses the LiteRT-LM runtime to generate content.
+///
+/// ```dart
+/// final model = LiteRtLmModel.fromConfig(
+///   litert.EngineConfig(modelPath: '/path/to/model.litertlm'),
+///   model: 'gemma-3-1b',
+/// );
+/// final agent = adk.LlmAgent(
+///   name: 'on_device_agent',
+///   model: model,
+///   instruction: 'Answer questions concisely.',
+/// );
+/// await model.close();
+/// ```
 class LiteRtLmModel extends adk.BaseLlm {
-  /// Creates a [LiteRtLmModel] instance with a pre-created [Engine].
+  /// Creates a [LiteRtLmModel] instance with a pre-created [litert.Engine].
   LiteRtLmModel(
     this.engine, {
     this.ownsEngine = false,
     required super.model,
   });
 
-  /// Creates a [LiteRtLmModel] instance that owns the [Engine].
+  /// Creates a [LiteRtLmModel] instance that owns the [litert.Engine].
   factory LiteRtLmModel.fromConfig(
     litert.EngineConfig config, {
     required String model,

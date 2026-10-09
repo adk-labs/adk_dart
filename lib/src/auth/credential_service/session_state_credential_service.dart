@@ -14,8 +14,8 @@ class SessionStateCredentialService extends BaseCredentialService {
   /// State key prefix for persisted credentials.
   final String statePrefix;
 
-  @override
   /// Loads a credential copy for [authConfig], if present in state.
+  @override
   Future<AuthCredential?> loadCredential(
     AuthConfig authConfig,
     CallbackContext callbackContext,
@@ -28,8 +28,8 @@ class SessionStateCredentialService extends BaseCredentialService {
     return raw.copyWith();
   }
 
-  @override
   /// Saves a credential copy for [authConfig] into state.
+  @override
   Future<void> saveCredential(
     AuthConfig authConfig,
     CallbackContext callbackContext,

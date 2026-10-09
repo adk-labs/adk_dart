@@ -55,8 +55,8 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
   /// Custom path to shell executable. Defaults to `cmd.exe` on Windows and `/bin/sh` on Unix.
   final String? shellCommandPath;
 
-  @override
   /// Executes a raw command using the local shell.
+  @override
   Future<CodeExecutionResult> execute(CodeExecutionRequest request) async {
     final String shell = shellCommandPath ?? _shellProgram();
     final Process process = await Process.start(
@@ -97,8 +97,8 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
     );
   }
 
-  @override
   /// Executes code in an isolated temporary directory.
+  @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,

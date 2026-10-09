@@ -142,7 +142,7 @@ class AudioCacheManager {
     final List<int> combinedAudioData = builder.takeBytes();
     final String mimeType = audioCache.first.data.mimeType;
     final int timestamp = (audioCache.first.timestamp * 1000).floor();
-    final String extension = mimeType.split('/').last;
+    final String extension = mimeType.split(';').first.trim().split('/').last;
     final String filename =
         'adk_live_audio_storage_${cacheType}_$timestamp.$extension';
 

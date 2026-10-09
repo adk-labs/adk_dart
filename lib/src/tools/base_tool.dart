@@ -13,6 +13,7 @@ enum ToolBehavior {
   /// The model continues the conversation while the tool executes in the background.
   nonBlocking('NON_BLOCKING');
 
+  /// Creates a [ToolBehavior] with its [wireValue].
   const ToolBehavior(this.wireValue);
 
   /// Wire format string representation.

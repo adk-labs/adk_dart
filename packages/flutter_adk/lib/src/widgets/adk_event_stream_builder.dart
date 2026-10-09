@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 
 /// A reactive widget builder that listens to an ADK [Stream<adk.Event>] and
 /// updates the UI as events and state changes arrive.
+///
+/// ```dart
+/// AdkEventStreamBuilder(
+///   stream: eventStream,
+///   builder: (context, events) => Text('Latest author: ${events.last.author}'),
+/// )
+/// ```
 class AdkEventStreamBuilder extends StatelessWidget {
   /// Creates an [AdkEventStreamBuilder].
   const AdkEventStreamBuilder({

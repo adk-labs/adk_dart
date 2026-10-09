@@ -71,6 +71,15 @@ void _raiseForMalformedFunctionCall(LlmResponse response) {
 }
 
 /// Google Gemini model adapter with REST, interactions, and live support.
+///
+/// ```dart
+/// final model = Gemini(model: 'gemini-2.5-flash');
+/// final agent = LlmAgent(
+///   name: 'gemini_agent',
+///   model: model,
+///   instruction: 'Summarize the user request.',
+/// );
+/// ```
 class Gemini extends BaseLlm {
   /// Creates a Gemini adapter for [model].
   Gemini({

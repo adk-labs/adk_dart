@@ -2,7 +2,13 @@
 library;
 
 /// Built-in evaluation metrics supported by the evaluator.
-enum EvalMetric { finalResponseExactMatch, finalResponseContains }
+enum EvalMetric {
+  /// Checks whether the final response exactly matches the expected response.
+  finalResponseExactMatch,
+
+  /// Checks whether the final response contains the expected response substring.
+  finalResponseContains,
+}
 
 /// Runtime configuration for evaluation execution.
 class EvaluateConfig {

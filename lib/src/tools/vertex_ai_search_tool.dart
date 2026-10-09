@@ -118,8 +118,8 @@ class VertexAiSearchTool extends BaseTool {
     );
   }
 
-  @override
   /// Returns `null` because retrieval executes through model-side tooling.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
@@ -127,8 +127,8 @@ class VertexAiSearchTool extends BaseTool {
     return null;
   }
 
-  @override
   /// Injects Vertex AI Search retrieval declarations into [llmRequest].
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

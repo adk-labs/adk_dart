@@ -109,8 +109,8 @@ class ComputerUseToolset extends BaseToolset {
     }
   }
 
-  @override
   /// Returns generated computer-use tools, initializing lazily.
+  @override
   Future<List<ComputerUseTool>> getTools({
     ReadonlyContext? readonlyContext,
   }) async {
@@ -241,14 +241,14 @@ class ComputerUseToolset extends BaseToolset {
     return _tools!;
   }
 
-  @override
   /// Closes the underlying computer backend.
+  @override
   Future<void> close() async {
     await _computer.close();
   }
 
-  @override
   /// Injects computer-use tools and environment metadata into [llmRequest].
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,

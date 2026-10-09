@@ -8,9 +8,13 @@ const String _googleLlmVariantGeminiApi = 'GEMINI_API';
 
 /// Google LLM backend variants supported by ADK.
 enum GoogleLLMVariant {
+  /// Google Cloud Vertex AI backend (`VERTEX_AI`).
   vertexAi(_googleLlmVariantVertexAi),
+
+  /// Google Gemini Developer API backend (`GEMINI_API`).
   geminiApi(_googleLlmVariantGeminiApi);
 
+  /// Creates a Google LLM backend variant with its serialized [value].
   const GoogleLLMVariant(this.value);
 
   /// Serialized backend value used in metadata and logs.

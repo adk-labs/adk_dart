@@ -3,6 +3,34 @@
 /// This library exports the complete server-side SDK, including CLI,
 /// filesystem-backed services, deployment helpers, and integrations that may
 /// rely on `dart:io` or platform-specific capabilities.
+///
+/// ```dart
+/// import 'package:adk_dart/adk_dart.dart';
+///
+/// Future<void> main() async {
+///   final agent = LlmAgent(
+///     name: 'assistant',
+///     model: 'gemini-2.5-flash',
+///     instruction: 'Answer user questions concisely.',
+///   );
+///
+///   final runner = InMemoryRunner(agent: agent);
+///   final session = await runner.sessionService.createSession(
+///     appName: runner.appName,
+///     userId: 'user_1',
+///   );
+///
+///   await for (final event in runner.runAsync(
+///     userId: 'user_1',
+///     sessionId: session.id,
+///     newMessage: Content.userText('Hello!'),
+///   )) {
+///     if (event.content != null) {
+///       print(event.content!.parts.map((p) => p.text ?? '').join());
+///     }
+///   }
+/// }
+/// ```
 library;
 
 export 'src/agents/agent_state.dart';
@@ -60,6 +88,7 @@ export 'src/auth/auth_credential.dart';
 export 'src/auth/auth_handler.dart';
 export 'src/auth/auth_preprocessor.dart';
 export 'src/auth/auth_provider_registry.dart';
+export 'src/auth/auth_resume.dart';
 export 'src/auth/auth_schemes.dart';
 export 'src/auth/auth_tool.dart';
 export 'src/auth/base_auth_provider.dart';
@@ -429,6 +458,7 @@ export 'src/types/content.dart';
 export 'src/workflow/workflow.dart' hide RetryConfig;
 export 'src/workflow/workflow_tool.dart';
 export 'src/workflow/replay_manager.dart';
+export 'src/utils/agent_mode.dart';
 export 'src/utils/cache_performance_analyzer.dart';
 export 'src/utils/client_labels_utils.dart';
 export 'src/utils/content_utils.dart';

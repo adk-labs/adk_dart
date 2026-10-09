@@ -76,6 +76,20 @@ Map<String, dynamic> _defaultTaskInputSchema() {
 }
 
 /// Tool adapter that executes another agent as a tool call.
+///
+/// ```dart
+/// final mathSpecialist = LlmAgent(
+///   name: 'math_specialist',
+///   description: 'Solves arithmetic and algebra problems.',
+///   model: 'gemini-2.5-flash',
+/// );
+///
+/// final rootAgent = LlmAgent(
+///   name: 'coordinator',
+///   model: 'gemini-2.5-flash',
+///   tools: [AgentTool(agent: mathSpecialist)],
+/// );
+/// ```
 class AgentTool extends BaseTool {
   /// Creates a tool wrapper that delegates execution to [agent].
   AgentTool({

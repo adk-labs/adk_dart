@@ -14,6 +14,7 @@ enum Capabilities {
   /// Reads data from Spanner without mutating state.
   dataRead('data_read');
 
+  /// Creates a [Capabilities] constant with its serialized [value].
   const Capabilities(this.value);
 
   /// The serialized capability value used in JSON payloads.
@@ -40,6 +41,7 @@ enum QueryResultMode {
   /// Returns query results as a list of key-value maps.
   dictList('dict_list');
 
+  /// Creates a [QueryResultMode] with its serialized [value].
   const QueryResultMode(this.value);
 
   /// The serialized query mode value used in JSON payloads.

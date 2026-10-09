@@ -65,6 +65,9 @@ void printEvent(
   }
 
   for (final Part part in content.parts) {
+    if (part.thought) {
+      continue;
+    }
     if (part.text != null) {
       textBuffer.add(part.text!);
       continue;

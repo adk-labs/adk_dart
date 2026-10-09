@@ -24,8 +24,8 @@ class PubSubToolset extends BaseToolset {
   final PubSubCredentialsConfig? _credentialsConfig;
   final PubSubToolConfig _toolSettings;
 
-  @override
   /// Returns Pub/Sub tools filtered by the current context.
+  @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     isFeatureEnabled(FeatureName.pubsubToolset);
 
@@ -55,8 +55,8 @@ class PubSubToolset extends BaseToolset {
         .toList();
   }
 
-  @override
   /// Cleans up shared Pub/Sub client resources.
+  @override
   Future<void> close() async {
     await cleanupClients();
   }

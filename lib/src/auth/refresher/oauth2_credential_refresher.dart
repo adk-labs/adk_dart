@@ -19,8 +19,8 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
   /// Refresh handler implementation.
   final OAuth2RefreshHandler? refreshHandler;
 
-  @override
   /// Returns whether [authCredential] should be refreshed.
+  @override
   Future<bool> isRefreshNeeded({
     required AuthCredential authCredential,
     String? authScheme,
@@ -51,8 +51,8 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
     return false;
   }
 
-  @override
   /// Refreshes [authCredential] when a refresh is needed and possible.
+  @override
   Future<AuthCredential> refresh({
     required AuthCredential authCredential,
     String? authScheme,

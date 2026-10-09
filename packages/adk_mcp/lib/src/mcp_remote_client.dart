@@ -9,6 +9,13 @@ const int _httpStatusMethodNotAllowed = 405;
 const int _httpStatusNotFound = 404;
 
 /// Connection options for an MCP server that supports Streamable HTTP.
+///
+/// ```dart
+/// final params = StreamableHTTPConnectionParams(
+///   url: 'https://example.com/mcp',
+///   headers: {'Authorization': 'Bearer token'},
+/// );
+/// ```
 class StreamableHTTPConnectionParams {
   /// Creates connection options for a Streamable HTTP endpoint.
   StreamableHTTPConnectionParams({
@@ -103,6 +110,17 @@ typedef McpServerRequestHandler =
 typedef HttpClientFactory = http.Client Function();
 
 /// JSON-RPC client for MCP servers that expose the Streamable HTTP transport.
+///
+/// ```dart
+/// final client = McpRemoteClient(
+///   clientInfoName: 'adk-client',
+///   clientInfoVersion: '1.0.0',
+/// );
+/// final params = StreamableHTTPConnectionParams(
+///   url: 'https://example.com/mcp',
+/// );
+/// final tools = await client.listTools(connectionParams: params);
+/// ```
 class McpRemoteClient {
   /// Creates an MCP Streamable HTTP client.
   McpRemoteClient({

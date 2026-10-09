@@ -69,8 +69,8 @@ class VertexAiRagStore {
     };
   }
 
-  @override
   /// Returns JSON-encoded store configuration.
+  @override
   String toString() => jsonEncode(toJson());
 }
 
@@ -112,8 +112,8 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
   final VertexAiRagQueryHandler? queryHandler;
   final bool Function() _modelIdCheckDisabledResolver;
 
-  @override
   /// Injects model-side Vertex RAG retrieval for Gemini 2+ requests.
+  @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
@@ -136,8 +136,8 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
     );
   }
 
-  @override
   /// Executes retrieval through [queryHandler] when provided.
+  @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,

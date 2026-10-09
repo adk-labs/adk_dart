@@ -14,6 +14,7 @@ enum WriteMode {
   /// Allows mutating statements.
   allowed('allowed');
 
+  /// Creates a [WriteMode] with its serialized [value].
   const WriteMode(this.value);
 
   /// Serialized value used in JSON and environment config.

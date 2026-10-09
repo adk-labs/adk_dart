@@ -105,8 +105,10 @@ enum SearchResultMode {
   /// Results as documents.
   documents('DOCUMENTS');
 
+  /// Creates a [SearchResultMode] with its wire [value].
   const SearchResultMode(this.value);
 
+  /// The serialized wire string for this search result mode.
   final String value;
 }
 
