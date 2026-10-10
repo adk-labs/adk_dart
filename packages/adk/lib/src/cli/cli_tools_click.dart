@@ -43,6 +43,24 @@ Future<int> main(
 }
 
 /// Executes `adk create` behavior for compatibility wrappers.
-Future<int> cliCreateCmd({required String projectDir, String? appName}) {
-  return runCreateCommand(projectDir: projectDir, appName: appName);
+Future<int> cliCreateCmd({
+  required String projectDir,
+  String? appName,
+  String? model,
+  String? apiKey,
+  String? project,
+  String? region,
+  String? type,
+  IOSink? outSink,
+}) {
+  return runCreateCommand(
+    projectDir: projectDir,
+    appName: appName,
+    model: model,
+    apiKey: apiKey,
+    project: project,
+    region: region,
+    type: type,
+    outSink: outSink,
+  );
 }

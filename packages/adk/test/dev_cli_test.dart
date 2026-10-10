@@ -629,5 +629,272 @@ void main() {
       ]);
       expect(exitCode, 0);
     });
+
+    test('runs version and doctor/diag commands', () async {
+      for (final String flag in const <String>[
+        '--version',
+        '-V',
+        '-v',
+        'version',
+      ]) {
+        final _CapturedSink versionOut = _CapturedSink();
+        final _CapturedSink versionErr = _CapturedSink();
+        final int versionExit = await runAdkCli(
+          <String>[flag],
+          outSink: versionOut.sink,
+          errSink: versionErr.sink,
+        );
+        expect(versionExit, 0);
+        expect(await versionOut.closeAndRead(), isNotEmpty);
+        expect(await versionErr.closeAndRead(), isEmpty);
+      }
+
+      for (final String cmd in const <String>['doctor', 'diag']) {
+        final _CapturedSink doctorOut = _CapturedSink();
+        final _CapturedSink doctorErr = _CapturedSink();
+        final int doctorExit = await runAdkCli(
+          <String>[cmd],
+          outSink: doctorOut.sink,
+          errSink: doctorErr.sink,
+        );
+        expect(doctorExit, 0);
+        final String doctorText = await doctorOut.closeAndRead();
+        expect(doctorText, contains('ADK Dart CLI Environment Diagnostics'));
+        expect(await doctorErr.closeAndRead(), isEmpty);
+      }
+    });
+
+    test(
+      'create command supports --model, --api_key, --project, --region, and --type=CONFIG/WORKFLOW',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk_cli_create_parity_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+
+        final String configAgentDir =
+            '${tempDir.path}${Platform.pathSeparator}config_agent';
+        final int configExit = await runAdkCli(<String>[
+          'create',
+          configAgentDir,
+          '--model',
+          'gemini-2.5-pro',
+          '--api_key',
+          'test-api-key',
+          '--type=CONFIG',
+        ]);
+        expect(configExit, 0);
+        final File rootYaml = File(
+          '$configAgentDir${Platform.pathSeparator}root_agent.yaml',
+        );
+        final File envFile = File('$configAgentDir${Platform.pathSeparator}.env');
+        expect(await rootYaml.exists(), isTrue);
+        expect(await rootYaml.readAsString(), contains('gemini-2.5-pro'));
+        expect(await envFile.exists(), isTrue);
+        final String envText = await envFile.readAsString();
+        expect(envText, contains('GOOGLE_GENAI_USE_VERTEXAI=0'));
+        expect(envText, contains('GOOGLE_API_KEY=test-api-key'));
+
+        final String workflowAgentDir =
+            '${tempDir.path}${Platform.pathSeparator}workflow_agent';
+        final int workflowExit = await runAdkCli(<String>[
+          'create',
+          workflowAgentDir,
+          '--project',
+          'my-gcp-proj',
+          '--region',
+          'us-central1',
+          '--type',
+          'workflow',
+        ]);
+        expect(workflowExit, 0);
+        expect(
+          await File(
+            '$workflowAgentDir${Platform.pathSeparator}root_agent.yaml',
+          ).exists(),
+          isTrue,
+        );
+        expect(
+          await File(
+            '$workflowAgentDir${Platform.pathSeparator}sub_agent_1.yaml',
+          ).exists(),
+          isTrue,
+        );
+        expect(
+          await File(
+            '$workflowAgentDir${Platform.pathSeparator}sub_agent_2.yaml',
+          ).exists(),
+          isTrue,
+        );
+        final String workflowEnv = await File(
+          '$workflowAgentDir${Platform.pathSeparator}.env',
+        ).readAsString();
+        expect(workflowEnv, contains('GOOGLE_GENAI_USE_VERTEXAI=1'));
+        expect(workflowEnv, contains('GOOGLE_CLOUD_PROJECT=my-gcp-proj'));
+        expect(workflowEnv, contains('GOOGLE_CLOUD_LOCATION=us-central1'));
+      },
+    );
+
+    test(
+      'run command supports positional query, --timeout, --in_memory, --jsonl, --default_llm_model, and mutual-exclusivity rules',
+      () async {
+        final ParsedAdkCommand parsed = parseAdkCliArgs(<String>[
+          'run',
+          'my_agent',
+          'What is the weather?',
+          '--timeout=5m',
+          '--in_memory',
+          '--jsonl',
+          '--default_llm_model',
+          'gemini-2.5-flash',
+          '--no-save_session',
+          '-v',
+        ]);
+        expect(parsed.projectDir, 'my_agent');
+        expect(parsed.message, 'What is the weather?');
+        expect(parsed.timeout, 300);
+        expect(parsed.inMemory, isTrue);
+        expect(parsed.jsonl, isTrue);
+        expect(parsed.defaultLlmModel, 'gemini-2.5-flash');
+        expect(parsed.saveSession, isFalse);
+        expect(parsed.logLevel, 'DEBUG');
+
+        expect(
+          () => parseAdkCliArgs(<String>[
+            'run',
+            'my_agent',
+            'query1',
+            '--message',
+            'query2',
+          ]),
+          throwsA(isA<CliUsageError>()),
+        );
+        expect(
+          () => parseAdkCliArgs(<String>[
+            'run',
+            'my_agent',
+            '--in_memory',
+            '--session_service_uri',
+            'sqlite:///tmp/a.db',
+          ]),
+          throwsA(isA<CliUsageError>()),
+        );
+        expect(
+          () => parseAdkCliArgs(<String>[
+            'run',
+            'my_agent',
+            '--in_memory',
+            '--save_session',
+          ]),
+          throwsA(isA<CliUsageError>()),
+        );
+
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk_cli_run_jsonl_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+        await createDevProject(projectDirPath: tempDir.path);
+
+        final _CapturedSink outCapture = _CapturedSink();
+        final _CapturedSink errCapture = _CapturedSink();
+        final int exitCode = await runAdkCli(
+          <String>[
+            'run',
+            tempDir.path,
+            'hello from positional query',
+            '--in_memory',
+            '--jsonl',
+            '--timeout',
+            '30s',
+          ],
+          outSink: outCapture.sink,
+          errSink: errCapture.sink,
+        );
+        final String stdoutText = await outCapture.closeAndRead();
+        final String stderrText = await errCapture.closeAndRead();
+        expect(exitCode, 0);
+        expect(stderrText, isEmpty);
+        final List<String> lines = stdoutText
+            .split('\n')
+            .map((String l) => l.trim())
+            .where((String l) => l.isNotEmpty)
+            .toList();
+        expect(lines, isNotEmpty);
+        final Map<String, Object?> eventJson =
+            (jsonDecode(lines.last) as Map).cast<String, Object?>();
+        expect(eventJson['author'], isNotNull);
+        expect(eventJson['session_id'], isNotNull);
+      },
+    );
+
+    test(
+      'parses web and api_server parity options and validates express_mode and trigger OIDC',
+      () {
+        final ParsedAdkCommand webCmd = parseAdkCliArgs(<String>[
+          'web',
+          '--avatar_config',
+          'root_agent=/avatar.png,helper:https://example.com/h.png',
+          '--max_llm_calls=250',
+          '--default_llm_model',
+          'gemini-2.5-pro',
+          '--trigger_sources',
+          'pubsub,eventarc',
+          '--trigger_oidc_audience',
+          'https://service.example.com',
+          '--trigger_oidc_service_accounts=sa1@proj.iam.gserviceaccount.com,sa2@proj.iam.gserviceaccount.com',
+          '--gemini_enterprise_app_name',
+          'projects/p/locations/l/collections/c/engines/e',
+          '--express_mode',
+          '--host',
+          '0.0.0.0',
+        ]);
+        expect(webCmd.avatarConfig, <String, String>{
+          'root_agent': '/avatar.png',
+          'helper': 'https://example.com/h.png',
+        });
+        expect(webCmd.maxLlmCalls, 250);
+        expect(webCmd.defaultLlmModel, 'gemini-2.5-pro');
+        expect(webCmd.triggerOidcAudience, 'https://service.example.com');
+        expect(webCmd.triggerOidcServiceAccounts, <String>[
+          'sa1@proj.iam.gserviceaccount.com',
+          'sa2@proj.iam.gserviceaccount.com',
+        ]);
+        expect(
+          webCmd.geminiEnterpriseAppName,
+          'projects/p/locations/l/collections/c/engines/e',
+        );
+        expect(webCmd.expressMode, isTrue);
+
+        final ParsedAdkCommand apiWithUi = parseAdkCliArgs(<String>[
+          'api_server',
+          '--with_ui',
+        ]);
+        expect(apiWithUi.enableWebUi, isTrue);
+
+        expect(
+          () => parseAdkCliArgs(<String>['web', '--express_mode']),
+          throwsA(isA<CliUsageError>()),
+        );
+
+        expect(
+          () => parseAdkCliArgs(<String>[
+            'web',
+            '--host',
+            '0.0.0.0',
+            '--trigger_sources',
+            'pubsub',
+          ]),
+          throwsA(isA<CliUsageError>()),
+        );
+      },
+    );
   });
 }

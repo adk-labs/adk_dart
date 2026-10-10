@@ -24,7 +24,11 @@ class AdkCliRunner {
   }) async {
     final IOSink out = outSink ?? stdout;
 
-    if (args.length == 1 && (args.first == '--version' || args.first == '-v' || args.first == 'version')) {
+    if (args.length == 1 &&
+        (args.first == '--version' ||
+            args.first == '-V' ||
+            args.first == '-v' ||
+            args.first == 'version')) {
       out.writeln('adk version $adkPackageVersion (spec $adkSpecVersion)');
       return 0;
     }

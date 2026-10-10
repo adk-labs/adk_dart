@@ -21,6 +21,12 @@ enum CreateAgentType {
 
   /// Multi-step workflow agent starter template.
   workflow,
+
+  /// Code-based agent project (`agent.dart` + `root_agent.yaml`).
+  code,
+
+  /// Declarative YAML configuration agent project (`root_agent.yaml`).
+  config,
 }
 
 /// Creates a new ADK project at [projectDir].
@@ -36,14 +42,23 @@ enum CreateAgentType {
 Future<int> runCreateCommand({
   required String projectDir,
   String? appName,
+  String? model,
+  String? apiKey,
+  String? project,
+  String? region,
+  String? type,
   IOSink? outSink,
 }) async {
   await createDevProject(
     projectDirPath: projectDir,
     appName: appName,
+    model: model,
+    apiKey: apiKey,
+    project: project,
+    region: region,
+    type: type,
   );
-  final String resolvedAppName =
-      (appName != null && appName.trim().isNotEmpty)
+  final String resolvedAppName = (appName != null && appName.trim().isNotEmpty)
       ? appName.trim()
       : projectDirName(projectDir);
   final IOSink sink = outSink ?? stdout;
@@ -75,9 +90,11 @@ CreateBackend promptToChooseBackend({String? value}) {
   switch ((value ?? 'gemini-api').toLowerCase()) {
     case 'gemini-api':
     case 'gemini':
+    case '1':
       return CreateBackend.geminiApi;
     case 'vertex-ai':
     case 'vertex':
+    case '2':
       return CreateBackend.vertexAi;
     default:
       throw ArgumentError('Unsupported backend: $value');
@@ -93,6 +110,12 @@ CreateAgentType promptToChooseType({String? value}) {
       return CreateAgentType.basic;
     case 'workflow':
       return CreateAgentType.workflow;
+    case 'code':
+    case '1':
+      return CreateAgentType.code;
+    case 'config':
+    case '2':
+      return CreateAgentType.config;
     default:
       throw ArgumentError('Unsupported agent type: $value');
   }

@@ -19,7 +19,8 @@ import 'package:adk_dart/src/runners/runner.dart';
 import 'package:adk_dart/src/events/event.dart';
 import 'package:adk_dart/src/sessions/session.dart';
 import 'package:adk_dart/src/sessions/schemas/v0.dart';
-import 'package:adk_dart/src/sessions/migration/migration_runner.dart' as session_migration;
+import 'package:adk_dart/src/sessions/migration/migration_runner.dart'
+    as session_migration;
 import 'package:adk_dart/src/types/content.dart';
 import '../cli/service_registry.dart';
 import '../cli/utils/agent_loader.dart';
@@ -30,6 +31,7 @@ import '../cli/utils/service_factory.dart';
 import 'package:adk_dart/src/evaluation/base_eval_service.dart';
 import 'package:adk_dart/src/evaluation/conversation_scenarios.dart';
 import 'package:adk_dart/src/evaluation/eval_case.dart';
+import 'package:adk_dart/src/evaluation/eval_config.dart';
 import 'package:adk_dart/src/evaluation/eval_metric.dart';
 import 'package:adk_dart/src/evaluation/eval_result.dart';
 import 'package:adk_dart/src/evaluation/eval_set.dart';
@@ -46,6 +48,8 @@ import 'package:adk_dart/src/optimization/gepa_root_agent_prompt_optimizer.dart'
 import 'package:adk_dart/src/optimization/local_eval_sampler.dart';
 import 'package:adk_dart/src/utils/telemetry_config.dart';
 import 'package:adk_dart/src/utils/yaml_utils.dart';
+import '../system_info.dart';
+import '../version.dart';
 import 'project.dart';
 import 'runtime.dart';
 import 'web_server.dart';
@@ -54,46 +58,63 @@ import 'web_server.dart';
 const String adkUsage = '''
 Usage: adk <command> [options]
 
+Agent Development Kit CLI tools.
+
 Commands:
-  create <project_dir>  Create a new ADK Dart project scaffold.
-  run <project_dir>     Run an interactive CLI chat session.
-  web [project_dir]     Start the ADK dev web server.
-  deploy                Deploy app using gcloud command execution.
-  eval                  Evaluate an agent against eval sets.
-  eval_set              Manage eval sets.
-  optimize              Optimize root agent instructions with GEPA.
-  conformance           Conformance record/test helpers.
-  migrate session       Migrate session DB schema.
+  create <app_name>     Creates a new app in the current folder with prepopulated agent template.
+  run <agent> [query]   Runs an interactive CLI or single-step query for a certain agent.
+  test [folder]         Runs the test suite for an agent project.
+  eval <agent_module_file_path> [eval_set_file_path_or_id...]
+                        Evaluates an agent given the eval sets.
+  eval_set              Manage Eval Sets (create, add_eval_case, generate_eval_cases).
+  optimize <agent_module_file_path>
+                        Optimizes the root agent instructions based on a local evaluation set.
+  web [agents_dir]      Starts a web server with Web UI for agents.
+  api_server [agents_dir]
+                        Starts an API server for agents.
+  deploy                Deploys agent to hosted environments (cloud_run, docker, agent_engine, gke).
+  conformance           Conformance testing tools for ADK (record, test).
+  migrate               ADK migration commands (session).
   telemetry             Manage telemetry settings (enable/disable/status).
-  test [folder]         Run tests for agent projects.
-  api_server [project_dir]
-                       Start the ADK API server (alias of `web`).
+  doctor                Displays ADK Dart CLI environment diagnostics.
 
 Create options:
       --app-name        Logical app name (default: directory name)
+      --model           Optional. The model used for the root_agent.
+      --api_key         Optional. The API Key needed to access the model.
+      --project         Optional. The Google Cloud Project for VertexAI backend.
+      --region          Optional. The Google Cloud Region for VertexAI backend.
+      --type            Optional. Type of agent to create (CODE, CONFIG).
 
 Run options:
       --user-id         User id (default: from adk.json or "user")
-      --session_id      Reuse a session id (default: auto-generated)
+      --session_id      Reuse or save to a specific session ID
       --session_service_uri
       --artifact_service_uri
       --memory_service_uri
       --enable_features  Comma-separated features to force-enable
       --disable_features Comma-separated features to force-disable
       --use_local_storage / --no_use_local_storage
-      --save_session    Save session snapshot on exit
-      --resume          Resume from a saved session snapshot json file
-      --replay          Replay session input file json (state + queries)
+      --save_session    Whether to save the session to a json file on exit
+      --resume          The file path to load a previously saved session
+      --replay          The json file that contains the initial state of the session and user queries
       --state           Initial state for the run as a JSON object string
       --state_file      Path to a JSON file containing initial state for the run
-  -m, --message         Single message mode (no interactive prompt)
+  -m, --message         The message to send to the agent (skips interactive mode)
+      --timeout         Execution timeout (e.g., 10s, 5m, 30)
+      --in_memory       Force in-memory session, artifact, and memory storage
+      --jsonl           Output events as structured JSONL lines to stdout
+      --default_llm_model
+                        Default LLM model name for agents that do not specify one
+  -v, --verbose         Enable verbose (DEBUG) logging
+      --log_level       Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
-Web options:
-  -p, --port            Port to bind (default: 8000)
-      --host            Host to bind (default: 127.0.0.1)
+Web / API Server options:
+   -p, --port            Port of the server (default: 8000)
+      --host            Binding host of the server (default: 127.0.0.1)
       --user-id         User id used by default web session
-      --allow_origins   CORS origins (repeatable, supports regex: prefix)
-      --url_prefix      URL prefix (example: /adk)
+      --allow_origins   Additional origins to allow for CORS (repeatable, supports regex: prefix)
+      --url_prefix      Optional URL path prefix (example: /adk)
       --session_service_uri
       --artifact_service_uri
       --memory_service_uri
@@ -107,11 +128,25 @@ Web options:
       --a2a
       --extra_plugins
       --trigger_sources  Comma-separated trigger sources to enable (pubsub, eventarc)
+      --trigger_oidc_audience
+                        Expected OIDC audience for authenticating /apps/{app_name}/trigger/* requests
+      --trigger_oidc_service_accounts
+                        Comma-separated allowlist of service account emails permitted as OIDC subjects
       --enable_features  Comma-separated features to force-enable
       --disable_features Comma-separated features to force-disable
-      --logo-text
-      --logo-image-url
-  -v, --verbose         Enable verbose logging (parsed for parity)
+      --logo-text       Text to display in the header next to the logo
+      --logo-image-url  URL of the image to display as the logo in the header
+      --avatar_config   JSON object string or path to a .json file mapping agent names to avatar URLs
+      --max_llm_calls   Maximum number of LLM calls allowed per invocation
+      --default_llm_model
+                        Default LLM model name for agents that do not specify one
+      --with_ui         Enable the ADK Web UI alongside the API server
+      --gemini_enterprise_app_name
+                        Resource name of the Gemini Enterprise App to read settings from
+      --express_mode    Enable Gemini Enterprise Express Mode (requires --gemini_enterprise_app_name)
+  -v, --verbose         Enable verbose (DEBUG) logging
+      --log_level       Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  -V, --version         Show the version and exit.
   -h, --help            Show this help message.
 ''';
 
@@ -145,40 +180,57 @@ enum AdkCommandType {
 /// [ParsedAdkCommand.web] to build command-specific values.
 class ParsedAdkCommand {
   /// Creates parsed arguments for the `create` command.
-  ParsedAdkCommand.create({required this.projectDir, this.appName})
-    : type = AdkCommandType.create,
-      port = null,
-      host = null,
-      userId = null,
-      allowOrigins = const <String>[],
-      sessionServiceUri = null,
-      artifactServiceUri = null,
-      memoryServiceUri = null,
-      logLevel = null,
-      evalStorageUri = null,
-      useLocalStorage = true,
-      urlPrefix = null,
-      traceToCloud = false,
-      otelToCloud = false,
-      reload = true,
-      a2a = false,
-      reloadAgents = false,
-      extraPlugins = const <String>[],
-      triggerSources = const <String>[],
-      logoText = null,
-      logoImageUrl = null,
-      autoCreateSession = false,
-      enableWebUi = true,
-      sessionId = null,
-      saveSession = false,
-      resumeFilePath = null,
-      replayFilePath = null,
-      message = null,
-      initialState = null,
-      usedDeprecatedSessionDbUrl = false,
-      usedDeprecatedArtifactStorageUri = false,
-      enableFeatures = const <String>[],
-      disableFeatures = const <String>[];
+  ParsedAdkCommand.create({
+    required this.projectDir,
+    this.appName,
+    this.model,
+    this.apiKey,
+    this.project,
+    this.region,
+    this.agentType = 'CODE',
+  }) : type = AdkCommandType.create,
+       port = null,
+       host = null,
+       userId = null,
+       allowOrigins = const <String>[],
+       sessionServiceUri = null,
+       artifactServiceUri = null,
+       memoryServiceUri = null,
+       logLevel = null,
+       evalStorageUri = null,
+       useLocalStorage = true,
+       urlPrefix = null,
+       traceToCloud = false,
+       otelToCloud = false,
+       reload = true,
+       a2a = false,
+       reloadAgents = false,
+       extraPlugins = const <String>[],
+       triggerSources = const <String>[],
+       triggerOidcAudience = null,
+       triggerOidcServiceAccounts = const <String>[],
+       logoText = null,
+       logoImageUrl = null,
+       avatarConfig = null,
+       maxLlmCalls = null,
+       defaultLlmModel = null,
+       geminiEnterpriseAppName = null,
+       expressMode = false,
+       autoCreateSession = false,
+       enableWebUi = true,
+       sessionId = null,
+       saveSession = false,
+       resumeFilePath = null,
+       replayFilePath = null,
+       message = null,
+       initialState = null,
+       timeout = null,
+       inMemory = false,
+       jsonl = false,
+       usedDeprecatedSessionDbUrl = false,
+       usedDeprecatedArtifactStorageUri = false,
+       enableFeatures = const <String>[],
+       disableFeatures = const <String>[];
 
   /// Creates parsed arguments for the `run` command.
   ParsedAdkCommand.run({
@@ -194,14 +246,23 @@ class ParsedAdkCommand {
     this.replayFilePath,
     this.message,
     this.initialState,
+    this.timeout,
+    this.inMemory = false,
+    this.jsonl = false,
+    this.defaultLlmModel,
+    this.logLevel,
     required this.enableFeatures,
     required this.disableFeatures,
   }) : type = AdkCommandType.run,
        appName = null,
+       model = null,
+       apiKey = null,
+       project = null,
+       region = null,
+       agentType = 'CODE',
        port = null,
        host = null,
        allowOrigins = const <String>[],
-       logLevel = null,
        evalStorageUri = null,
        urlPrefix = null,
        traceToCloud = false,
@@ -211,8 +272,14 @@ class ParsedAdkCommand {
        reloadAgents = false,
        extraPlugins = const <String>[],
        triggerSources = const <String>[],
+       triggerOidcAudience = null,
+       triggerOidcServiceAccounts = const <String>[],
        logoText = null,
        logoImageUrl = null,
+       avatarConfig = null,
+       maxLlmCalls = null,
+       geminiEnterpriseAppName = null,
+       expressMode = false,
        autoCreateSession = false,
        enableWebUi = true,
        usedDeprecatedSessionDbUrl = false,
@@ -239,8 +306,15 @@ class ParsedAdkCommand {
     required this.reloadAgents,
     required this.extraPlugins,
     this.triggerSources = const <String>[],
+    this.triggerOidcAudience,
+    this.triggerOidcServiceAccounts = const <String>[],
     this.logoText,
     this.logoImageUrl,
+    this.avatarConfig,
+    this.maxLlmCalls,
+    this.defaultLlmModel,
+    this.geminiEnterpriseAppName,
+    this.expressMode = false,
     required this.autoCreateSession,
     required this.enableWebUi,
     required this.usedDeprecatedSessionDbUrl,
@@ -249,12 +323,20 @@ class ParsedAdkCommand {
     required this.disableFeatures,
   }) : type = AdkCommandType.web,
        appName = null,
+       model = null,
+       apiKey = null,
+       project = null,
+       region = null,
+       agentType = 'CODE',
        sessionId = null,
        saveSession = false,
        resumeFilePath = null,
        replayFilePath = null,
        message = null,
-       initialState = null;
+       initialState = null,
+       timeout = null,
+       inMemory = false,
+       jsonl = false;
 
   /// Parsed command type.
   final AdkCommandType type;
@@ -264,6 +346,21 @@ class ParsedAdkCommand {
 
   /// App name when a command targets a specific app.
   final String? appName;
+
+  /// Optional model name for `adk create`.
+  final String? model;
+
+  /// Optional API key for `adk create`.
+  final String? apiKey;
+
+  /// Optional Google Cloud project for `adk create`.
+  final String? project;
+
+  /// Optional Google Cloud region for `adk create`.
+  final String? region;
+
+  /// Agent scaffold type for `adk create` (`CODE` or `CONFIG`).
+  final String agentType;
 
   /// HTTP port for web and API server commands.
   final int? port;
@@ -319,11 +416,32 @@ class ParsedAdkCommand {
   /// Event trigger sources (`pubsub`, `eventarc`) enabled on the server.
   final List<String> triggerSources;
 
+  /// Expected OIDC audience for authenticating `/apps/{app_name}/trigger/*` requests.
+  final String? triggerOidcAudience;
+
+  /// Optional allowlist of service account emails permitted as OIDC token subjects.
+  final List<String> triggerOidcServiceAccounts;
+
   /// Optional logo text for the web UI.
   final String? logoText;
 
   /// Optional logo image URL for the web UI.
   final String? logoImageUrl;
+
+  /// Optional mapping of agent names to avatar URLs for the web UI.
+  final Map<String, String>? avatarConfig;
+
+  /// Optional maximum number of LLM calls per invocation.
+  final int? maxLlmCalls;
+
+  /// Optional default LLM model name for agents that do not specify one.
+  final String? defaultLlmModel;
+
+  /// Resource name of the Gemini Enterprise App to read settings from.
+  final String? geminiEnterpriseAppName;
+
+  /// Whether Gemini Enterprise Express Mode is enabled.
+  final bool expressMode;
 
   /// Whether missing sessions are created automatically.
   final bool autoCreateSession;
@@ -348,6 +466,15 @@ class ParsedAdkCommand {
 
   /// Optional initial session state parsed from `--state` or `--state_file`.
   final Map<String, Object?>? initialState;
+
+  /// Optional timeout in seconds (parsed from e.g. `10s`, `5m`, `30`) for `adk run`.
+  final int? timeout;
+
+  /// Whether `adk run` forces in-memory session, artifact, and memory services.
+  final bool inMemory;
+
+  /// Whether `adk run` emits events as structured JSONL lines.
+  final bool jsonl;
 
   /// Whether deprecated `--session_db_url` was used.
   final bool usedDeprecatedSessionDbUrl;
@@ -408,8 +535,21 @@ Future<int> runAdkCli(
     return 0;
   }
 
-  if (args.length > 1 && (args[1] == '-h' || args[1] == '--help')) {
-    out.writeln(adkUsage);
+  if (args.length == 1 &&
+      (args.first == '--version' ||
+          args.first == '-V' ||
+          args.first == '-v' ||
+          args.first == 'version')) {
+    out.writeln('adk version $adkPackageVersion (spec $adkSpecVersion)');
+    return 0;
+  }
+
+  if (args.first == 'doctor' || args.first == 'diag') {
+    if (args.contains('-h') || args.contains('--help')) {
+      out.writeln(adkUsage);
+      return 0;
+    }
+    out.write(AdkSystemInfo.formatSummary());
     return 0;
   }
 
@@ -422,11 +562,17 @@ Future<int> runAdkCli(
     );
   }
 
+  if (args.contains('-h') || args.contains('--help')) {
+    out.writeln(adkUsage);
+    return 0;
+  }
+
   if (args.first == 'eval') {
     try {
       return await _runEvalCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
+        err: err,
       );
     } on CliUsageError catch (error) {
       err.writeln(error.message);
@@ -505,6 +651,7 @@ Future<int> runAdkCli(
       return await _runOptimizeCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
+        err: err,
       );
     } on CliUsageError catch (error) {
       err.writeln(error.message);
@@ -560,7 +707,9 @@ Future<int> runAdkCli(
       } else if (consent == false) {
         out.writeln('Telemetry collection is disabled.');
       } else {
-        out.writeln('Telemetry collection is not configured (defaults to OFF).');
+        out.writeln(
+          'Telemetry collection is not configured (defaults to OFF).',
+        );
       }
       return 0;
     }
@@ -584,20 +733,25 @@ Future<int> runAdkCli(
         return 1;
       }
     } else {
-      err.writeln('Unknown telemetry command: $sub. Expected enable, disable, or status.');
+      err.writeln(
+        'Unknown telemetry command: $sub. Expected enable, disable, or status.',
+      );
       return 64;
     }
   }
 
   if (args.first == 'test') {
-    final List<String> rest = args.skip(1).toList();
-    out.writeln('Running test suite for agent project...');
-    final Process process = await Process.start(
-      Platform.resolvedExecutable,
-      <String>['test', ...rest],
-      mode: ProcessStartMode.inheritStdio,
-    );
-    return await process.exitCode;
+    try {
+      return await _runTestCliCommand(
+        args.skip(1).toList(growable: false),
+        out: out,
+      );
+    } on CliUsageError catch (error) {
+      err.writeln(error.message);
+      err.writeln('');
+      err.writeln(adkUsage);
+      return 64;
+    }
   }
 
   final ParsedAdkCommand parsed;
@@ -623,7 +777,7 @@ Future<int> runAdkCli(
         exitCode = await _runCreateCommand(parsed, out);
         break;
       case AdkCommandType.run:
-        exitCode = await _runRunCommand(parsed, out);
+        exitCode = await _runRunCommand(parsed, out, err: err);
         break;
       case AdkCommandType.web:
         exitCode = await _runWebCommand(parsed, out, err);
@@ -646,6 +800,55 @@ Future<int> runAdkCli(
     err.writeln('Argument error: $error');
     return 1;
   }
+}
+
+Future<int> _runTestCliCommand(
+  List<String> args, {
+  required IOSink out,
+}) async {
+  String folder = '.';
+  bool seenFolder = false;
+  bool rebuild = false;
+  final List<String> testRunnerArgs = <String>[];
+  bool passthrough = false;
+
+  for (int i = 0; i < args.length; i += 1) {
+    final String arg = args[i];
+    if (passthrough) {
+      testRunnerArgs.add(arg);
+      continue;
+    }
+    if (arg == '--') {
+      passthrough = true;
+      continue;
+    }
+    if (arg == '--rebuild') {
+      rebuild = true;
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      testRunnerArgs.add(arg);
+      continue;
+    }
+    if (!seenFolder) {
+      folder = arg;
+      seenFolder = true;
+    } else {
+      testRunnerArgs.add(arg);
+    }
+  }
+
+  if (rebuild) {
+    out.writeln('Rebuilding agent project at $folder...');
+  }
+  out.writeln('Running test suite for agent project...');
+  final Process process = await Process.start(
+    Platform.resolvedExecutable,
+    <String>['test', ...testRunnerArgs],
+    workingDirectory: folder,
+    mode: ProcessStartMode.inheritStdio,
+  );
+  return await process.exitCode;
 }
 
 /// CLI selection target for one eval source and optional case ids.
@@ -682,6 +885,8 @@ class _ParsedEvalCliCommand {
     required this.printDetailedResults,
     this.evalStorageUri,
     this.logLevel,
+    this.enableFeatures = const <String>[],
+    this.disableFeatures = const <String>[],
   });
 
   /// Agent directory path.
@@ -701,6 +906,12 @@ class _ParsedEvalCliCommand {
 
   /// Optional log verbosity level.
   final String? logLevel;
+
+  /// Feature flags forced to enabled.
+  final List<String> enableFeatures;
+
+  /// Feature flags forced to disabled.
+  final List<String> disableFeatures;
 }
 
 /// Parsed arguments for `adk optimize`.
@@ -712,6 +923,8 @@ class _ParsedOptimizeCliCommand {
     this.optimizerConfigFilePath,
     required this.printDetailedResults,
     required this.logLevel,
+    this.enableFeatures = const <String>[],
+    this.disableFeatures = const <String>[],
   });
 
   /// Agent directory path.
@@ -728,6 +941,12 @@ class _ParsedOptimizeCliCommand {
 
   /// Log level applied while optimizing.
   final String logLevel;
+
+  /// Feature flags forced to enabled.
+  final List<String> enableFeatures;
+
+  /// Feature flags forced to disabled.
+  final List<String> disableFeatures;
 }
 
 /// Parsed arguments for `adk eval_set create`.
@@ -782,6 +1001,83 @@ class _ParsedEvalSetAddEvalCaseCommand {
 
   /// Optional log verbosity level.
   final String? logLevel;
+}
+
+/// Parsed arguments for `adk eval_set generate_eval_cases`.
+class _ParsedEvalSetGenerateEvalCasesCommand {
+  /// Creates parsed `eval_set generate_eval_cases` command arguments.
+  _ParsedEvalSetGenerateEvalCasesCommand({
+    required this.agentPath,
+    required this.evalSetId,
+    required this.conversationGenerationConfigFilePath,
+    required this.sessionInputFilePath,
+    this.repeatNum = 1,
+    this.evalStorageUri,
+    this.logLevel,
+  });
+
+  /// Agent directory path.
+  final String agentPath;
+
+  /// Target eval set identifier.
+  final String evalSetId;
+
+  /// Conversation generation config file path.
+  final String conversationGenerationConfigFilePath;
+
+  /// Session input file path.
+  final String sessionInputFilePath;
+
+  /// Number of times to repeat generation.
+  final int repeatNum;
+
+  /// Optional eval storage backend URI.
+  final String? evalStorageUri;
+
+  /// Optional log verbosity level.
+  final String? logLevel;
+}
+
+class _ConversationGenerationConfig {
+  _ConversationGenerationConfig({
+    required this.count,
+    required this.generationPrompt,
+    required this.scenarios,
+    this.startingPrompt,
+  });
+
+  final int count;
+  final String generationPrompt;
+  final List<String> scenarios;
+  final String? startingPrompt;
+
+  factory _ConversationGenerationConfig.fromJson(Map<String, Object?> json) {
+    final Object? rawCount = json['count'] ?? json['num_scenarios'];
+    final int count = rawCount is int && rawCount > 0 ? rawCount : 1;
+    final String generationPrompt =
+        '${json['generation_prompt'] ?? json['generationPrompt'] ?? json['conversation_plan'] ?? ''}'
+            .trim();
+    final String? startingPrompt = _emptyToNull(
+      '${json['starting_prompt'] ?? json['startingPrompt'] ?? ''}',
+    );
+    final List<String> scenarios = <String>[];
+    final Object? rawScenarios = json['scenarios'];
+    if (rawScenarios is List) {
+      for (final Object? item in rawScenarios) {
+        if (item is String && item.trim().isNotEmpty) {
+          scenarios.add(item.trim());
+        } else if (item is Map && item['conversation_plan'] != null) {
+          scenarios.add('${item['conversation_plan']}'.trim());
+        }
+      }
+    }
+    return _ConversationGenerationConfig(
+      count: count,
+      generationPrompt: generationPrompt,
+      scenarios: scenarios,
+      startingPrompt: startingPrompt,
+    );
+  }
 }
 
 /// Helper container for eval set/result manager dependencies.
@@ -1004,8 +1300,20 @@ class _ConformanceTestSummary {
   }
 }
 
-Future<int> _runEvalCliCommand(List<String> args, {required IOSink out}) async {
+Future<int> _runEvalCliCommand(
+  List<String> args, {
+  required IOSink out,
+  IOSink? err,
+}) async {
   final _ParsedEvalCliCommand command = _parseEvalCliCommand(args);
+  if (command.logLevel != null) {
+    cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel!));
+  }
+  _applyFeatureOverridesFromCli(
+    enableFeatures: command.enableFeatures,
+    disableFeatures: command.disableFeatures,
+    err: err ?? stderr,
+  );
   final _LoadedCliAgent loadedAgent = await _loadAgentForCli(command.agentPath);
 
   final bool usesFileTargets = _usesEvalSetFileTargets(command.selections);
@@ -1020,6 +1328,19 @@ Future<int> _runEvalCliCommand(List<String> args, {required IOSink out}) async {
     evalSetsManager: managers.evalSetsManager,
     usesFileTargets: usesFileTargets,
   );
+
+  String? effectiveConfigFilePath = command.configFilePath;
+  if (effectiveConfigFilePath == null &&
+      usesFileTargets &&
+      command.selections.isNotEmpty) {
+    final File firstEvalSetFile = File(command.selections.first.source).absolute;
+    final File defaultConfigFile = File(
+      '${firstEvalSetFile.parent.path}${Platform.pathSeparator}test_config.json',
+    );
+    if (defaultConfigFile.existsSync()) {
+      effectiveConfigFilePath = defaultConfigFile.path;
+    }
+  }
 
   final List<EvalCaseResult> allResults = <EvalCaseResult>[];
   for (final _EvalTarget target in evalTargets) {
@@ -1049,6 +1370,7 @@ Future<int> _runEvalCliCommand(List<String> args, {required IOSink out}) async {
         evalSetId: target.evalSetId,
         evalCases: selectedCases,
         evalSetResultsManager: managers.evalSetResultsManager,
+        configFilePath: effectiveConfigFilePath,
       ),
     );
   }
@@ -1089,9 +1411,15 @@ Future<int> _runEvalCliCommand(List<String> args, {required IOSink out}) async {
 Future<int> _runOptimizeCliCommand(
   List<String> args, {
   required IOSink out,
+  IOSink? err,
 }) async {
   final _ParsedOptimizeCliCommand command = _parseOptimizeCliCommand(args);
   cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel));
+  _applyFeatureOverridesFromCli(
+    enableFeatures: command.enableFeatures,
+    disableFeatures: command.disableFeatures,
+    err: err ?? stderr,
+  );
 
   final _LoadedCliAgent loadedAgent = await _loadAgentForCli(command.agentPath);
   final LocalEvalSamplerConfig samplerConfig = LocalEvalSamplerConfig.fromJson(
@@ -1157,7 +1485,7 @@ Future<int> _runEvalSetCliCommand(
 }) async {
   if (args.isEmpty) {
     throw CliUsageError(
-      'Missing eval_set subcommand. Supported: create, add_eval_case.',
+      'Missing eval_set subcommand. Supported: create, add_eval_case, generate_eval_cases.',
     );
   }
 
@@ -1168,6 +1496,9 @@ Future<int> _runEvalSetCliCommand(
       final _ParsedEvalSetCreateCommand command = _parseEvalSetCreateCommand(
         commandArgs,
       );
+      if (command.logLevel != null) {
+        cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel!));
+      }
       final Directory agentDir = Directory(command.agentPath).absolute;
       final String appName = projectDirName(agentDir.path);
       final _EvalManagers managers = _createEvalManagers(
@@ -1183,6 +1514,9 @@ Future<int> _runEvalSetCliCommand(
     case 'add_eval_case':
       final _ParsedEvalSetAddEvalCaseCommand command =
           _parseEvalSetAddEvalCaseCommand(commandArgs);
+      if (command.logLevel != null) {
+        cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel!));
+      }
       final Directory agentDir = Directory(command.agentPath).absolute;
       final String appName = projectDirName(agentDir.path);
       final _EvalManagers managers = _createEvalManagers(
@@ -1227,6 +1561,73 @@ Future<int> _runEvalSetCliCommand(
         out.writeln(
           "Eval case '$evalId' added to eval set '${command.evalSetId}'.",
         );
+      }
+      return 0;
+    case 'generate_eval_cases':
+      final _ParsedEvalSetGenerateEvalCasesCommand command =
+          _parseEvalSetGenerateEvalCasesCommand(commandArgs);
+      if (command.logLevel != null) {
+        cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel!));
+      }
+      final Directory agentDir = Directory(command.agentPath).absolute;
+      final String appName = projectDirName(agentDir.path);
+      final _EvalManagers managers = _createEvalManagers(
+        evalStorageUri: command.evalStorageUri,
+        agentsDir: agentDir.parent.absolute.path,
+        useInMemory: false,
+      );
+      final _ConversationGenerationConfig config =
+          _ConversationGenerationConfig.fromJson(
+            await _readJsonObjectFile(
+              command.conversationGenerationConfigFilePath,
+              label: 'conversation generation config file',
+            ),
+          );
+      final SessionInput sessionInput = SessionInput.fromJson(
+        await _readJsonObjectFile(
+          command.sessionInputFilePath,
+          label: 'session input file',
+        ),
+      );
+      try {
+        await managers.evalSetsManager.createEvalSet(
+          appName,
+          command.evalSetId,
+        );
+      } on ArgumentError {
+        // Eval set already exists; proceed to add generated cases.
+      }
+      for (int r = 0; r < command.repeatNum; r += 1) {
+        for (int i = 0; i < config.count; i += 1) {
+          final String prompt = config.generationPrompt.isNotEmpty
+              ? config.generationPrompt
+              : (config.scenarios.isNotEmpty
+                    ? config.scenarios[i % config.scenarios.length]
+                    : 'Generate a realistic user conversation.');
+          final ConversationScenario scenario = ConversationScenario(
+            startingPrompt: config.startingPrompt ?? 'Hello!',
+            conversationPlan: prompt,
+          );
+          final String evalId = _stableScenarioId(
+            ConversationScenario(
+              startingPrompt: '${scenario.startingPrompt}#$r#$i',
+              conversationPlan: scenario.conversationPlan,
+            ),
+          );
+          await managers.evalSetsManager.addEvalCase(
+            appName,
+            command.evalSetId,
+            EvalCase(
+              evalId: evalId,
+              conversationScenario: scenario,
+              sessionInput: sessionInput,
+              creationTimestamp: DateTime.now().millisecondsSinceEpoch / 1000,
+            ),
+          );
+          out.writeln(
+            "Eval case '$evalId' added to eval set '${command.evalSetId}'.",
+          );
+        }
       }
       return 0;
     default:
@@ -2282,6 +2683,9 @@ Future<int> _runMigrateCliCommand(
 
   String? sourceDbUrl;
   String? destDbUrl;
+  String? logLevel;
+  bool verbose = false;
+  bool allowUnsafeUnpickling = false;
   for (int i = 1; i < args.length; i += 1) {
     final String arg = args[i];
     if (arg == '--source_db_url') {
@@ -2302,12 +2706,22 @@ Future<int> _runMigrateCliCommand(
       destDbUrl = arg.substring('--dest_db_url='.length);
       continue;
     }
-    if (arg == '--log_level') {
-      _nextArg(args, i, '--log_level');
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--log_level=')) {
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
+      continue;
+    }
+    if (arg == '--allow-unsafe-unpickling' ||
+        arg == '--allow_unsafe_unpickling') {
+      allowUnsafeUnpickling = true;
       continue;
     }
     if (arg.startsWith('-')) {
@@ -2318,6 +2732,12 @@ Future<int> _runMigrateCliCommand(
     );
   }
 
+  final String resolvedLogLevel = _resolveCliLogLevel(
+    explicit: _emptyToNull(logLevel),
+    verbose: verbose,
+  );
+  cli_logs.setupAdkLogger(level: _toCliLogEnum(resolvedLogLevel));
+
   final String? normalizedSource = _emptyToNull(sourceDbUrl);
   final String? normalizedDest = _emptyToNull(destDbUrl);
   if (normalizedSource == null) {
@@ -2327,7 +2747,11 @@ Future<int> _runMigrateCliCommand(
     throw CliUsageError('Missing required option --dest_db_url.');
   }
 
-  await session_migration.upgrade(normalizedSource, normalizedDest);
+  await session_migration.upgrade(
+    normalizedSource,
+    normalizedDest,
+    allowUnsafeUnpickling: allowUnsafeUnpickling,
+  );
   out.writeln('Migration check and upgrade process finished.');
   return 0;
 }
@@ -2337,6 +2761,9 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
   bool printDetailedResults = false;
   String? evalStorageUri;
   String? logLevel;
+  bool verbose = false;
+  final List<String> enableFeatures = <String>[];
+  final List<String> disableFeatures = <String>[];
   final List<String> positionals = <String>[];
 
   for (int i = 0; i < args.length; i += 1) {
@@ -2363,13 +2790,35 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
       evalStorageUri = arg.substring('--eval_storage_uri='.length);
       continue;
     }
-    if (arg == '--log_level') {
-      logLevel = _nextArg(args, i, '--log_level');
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--log_level=')) {
-      logLevel = arg.substring('--log_level='.length);
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
+      continue;
+    }
+    if (arg == '--enable_features') {
+      enableFeatures.add(_nextArg(args, i, '--enable_features'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--enable_features=')) {
+      enableFeatures.add(arg.substring('--enable_features='.length));
+      continue;
+    }
+    if (arg == '--disable_features') {
+      disableFeatures.add(_nextArg(args, i, '--disable_features'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--disable_features=')) {
+      disableFeatures.add(arg.substring('--disable_features='.length));
       continue;
     }
     if (arg.startsWith('-')) {
@@ -2388,13 +2837,18 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
       .skip(1)
       .map(_parseEvalSelection)
       .toList(growable: false);
+  final String? resolvedLogLevel = (logLevel != null || verbose)
+      ? _resolveCliLogLevel(explicit: _emptyToNull(logLevel), verbose: verbose)
+      : null;
   return _ParsedEvalCliCommand(
     agentPath: positionals.first,
     selections: selections,
     configFilePath: _emptyToNull(configFilePath),
     printDetailedResults: printDetailedResults,
     evalStorageUri: _emptyToNull(evalStorageUri),
-    logLevel: _emptyToNull(logLevel),
+    logLevel: resolvedLogLevel,
+    enableFeatures: _normalizeCsvValues(enableFeatures),
+    disableFeatures: _normalizeCsvValues(disableFeatures),
   );
 }
 
@@ -2402,7 +2856,10 @@ _ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
   String? samplerConfigFilePath;
   String? optimizerConfigFilePath;
   String? logLevel;
+  bool verbose = false;
   bool printDetailedResults = false;
+  final List<String> enableFeatures = <String>[];
+  final List<String> disableFeatures = <String>[];
   final List<String> positionals = <String>[];
 
   for (int i = 0; i < args.length; i += 1) {
@@ -2437,13 +2894,35 @@ _ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
       printDetailedResults = true;
       continue;
     }
-    if (arg == '--log_level') {
-      logLevel = _nextArg(args, i, '--log_level');
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--log_level=')) {
-      logLevel = arg.substring('--log_level='.length);
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
+      continue;
+    }
+    if (arg == '--enable_features') {
+      enableFeatures.add(_nextArg(args, i, '--enable_features'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--enable_features=')) {
+      enableFeatures.add(arg.substring('--enable_features='.length));
+      continue;
+    }
+    if (arg == '--disable_features') {
+      disableFeatures.add(_nextArg(args, i, '--disable_features'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--disable_features=')) {
+      disableFeatures.add(arg.substring('--disable_features='.length));
       continue;
     }
     if (arg.startsWith('-')) {
@@ -2469,8 +2948,10 @@ _ParsedOptimizeCliCommand _parseOptimizeCliCommand(List<String> args) {
     printDetailedResults: printDetailedResults,
     logLevel: _resolveCliLogLevel(
       explicit: _emptyToNull(logLevel),
-      verbose: false,
+      verbose: verbose,
     ),
+    enableFeatures: _normalizeCsvValues(enableFeatures),
+    disableFeatures: _normalizeCsvValues(disableFeatures),
   );
 }
 
@@ -2631,6 +3112,7 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   required String evalSetId,
   required List<EvalCase> evalCases,
   required EvalSetResultsManager evalSetResultsManager,
+  String? configFilePath,
 }) async {
   final LocalEvalService evalService = LocalEvalService(
     rootAgent: rootAgent,
@@ -2650,7 +3132,11 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   final Map<String, EvalCase> evalCasesById = <String, EvalCase>{
     for (final EvalCase evalCase in evalCases) evalCase.evalId: evalCase,
   };
-  final List<EvalMetric> evalMetrics = cli_eval.getDefaultMetricInfo();
+  final EvalConfig evalConfig = cli_eval.getEvaluationCriteriaOrDefault(
+    configFilePath,
+  );
+  final List<EvalMetric> evalMetrics =
+      cli_eval.resolveCliEvalMetricsFromConfig(evalConfig);
   final List<EvalCaseResult> rawResults = await evalService
       .evaluate(
         EvaluateRequest(
@@ -2766,6 +3252,7 @@ int _bestOptimizedAgentIndex(GepaRootAgentPromptOptimizerResult result) {
 _ParsedEvalSetCreateCommand _parseEvalSetCreateCommand(List<String> args) {
   String? evalStorageUri;
   String? logLevel;
+  bool verbose = false;
   final List<String> positionals = <String>[];
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
@@ -2778,13 +3265,17 @@ _ParsedEvalSetCreateCommand _parseEvalSetCreateCommand(List<String> args) {
       evalStorageUri = arg.substring('--eval_storage_uri='.length);
       continue;
     }
-    if (arg == '--log_level') {
-      logLevel = _nextArg(args, i, '--log_level');
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--log_level=')) {
-      logLevel = arg.substring('--log_level='.length);
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
       continue;
     }
     if (arg.startsWith('-')) {
@@ -2797,11 +3288,14 @@ _ParsedEvalSetCreateCommand _parseEvalSetCreateCommand(List<String> args) {
       'eval_set create requires <project_dir> <eval_set_id>.',
     );
   }
+  final String? resolvedLogLevel = (logLevel != null || verbose)
+      ? _resolveCliLogLevel(explicit: _emptyToNull(logLevel), verbose: verbose)
+      : null;
   return _ParsedEvalSetCreateCommand(
     agentPath: positionals[0],
     evalSetId: positionals[1],
     evalStorageUri: _emptyToNull(evalStorageUri),
-    logLevel: _emptyToNull(logLevel),
+    logLevel: resolvedLogLevel,
   );
 }
 
@@ -2810,6 +3304,7 @@ _ParsedEvalSetAddEvalCaseCommand _parseEvalSetAddEvalCaseCommand(
 ) {
   String? evalStorageUri;
   String? logLevel;
+  bool verbose = false;
   String? scenariosFilePath;
   String? sessionInputFilePath;
   final List<String> positionals = <String>[];
@@ -2824,13 +3319,17 @@ _ParsedEvalSetAddEvalCaseCommand _parseEvalSetAddEvalCaseCommand(
       evalStorageUri = arg.substring('--eval_storage_uri='.length);
       continue;
     }
-    if (arg == '--log_level') {
-      logLevel = _nextArg(args, i, '--log_level');
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--log_level=')) {
-      logLevel = arg.substring('--log_level='.length);
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
       continue;
     }
     if (arg == '--scenarios_file') {
@@ -2869,13 +3368,129 @@ _ParsedEvalSetAddEvalCaseCommand _parseEvalSetAddEvalCaseCommand(
       'eval_set add_eval_case requires --session_input_file.',
     );
   }
+  final String? resolvedLogLevel = (logLevel != null || verbose)
+      ? _resolveCliLogLevel(explicit: _emptyToNull(logLevel), verbose: verbose)
+      : null;
   return _ParsedEvalSetAddEvalCaseCommand(
     agentPath: positionals[0],
     evalSetId: positionals[1],
     scenariosFilePath: _emptyToNull(scenariosFilePath)!,
     sessionInputFilePath: _emptyToNull(sessionInputFilePath)!,
     evalStorageUri: _emptyToNull(evalStorageUri),
-    logLevel: _emptyToNull(logLevel),
+    logLevel: resolvedLogLevel,
+  );
+}
+
+_ParsedEvalSetGenerateEvalCasesCommand _parseEvalSetGenerateEvalCasesCommand(
+  List<String> args,
+) {
+  String? evalStorageUri;
+  String? logLevel;
+  bool verbose = false;
+  String? configFilePath;
+  String? sessionInputFilePath;
+  int repeatNum = 1;
+  final List<String> positionals = <String>[];
+  for (int i = 0; i < args.length; i += 1) {
+    final String arg = args[i];
+    if (arg == '--eval_storage_uri') {
+      evalStorageUri = _nextArg(args, i, '--eval_storage_uri');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--eval_storage_uri=')) {
+      evalStorageUri = arg.substring('--eval_storage_uri='.length);
+      continue;
+    }
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
+      continue;
+    }
+    if (arg == '--conversation_generation_config_file') {
+      configFilePath = _nextArg(
+        args,
+        i,
+        '--conversation_generation_config_file',
+      );
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--conversation_generation_config_file=')) {
+      configFilePath = arg.substring(
+        '--conversation_generation_config_file='.length,
+      );
+      continue;
+    }
+    if (arg == '--session_input_file') {
+      sessionInputFilePath = _nextArg(args, i, '--session_input_file');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--session_input_file=')) {
+      sessionInputFilePath = arg.substring('--session_input_file='.length);
+      continue;
+    }
+    if (arg == '--repeat_num') {
+      final String rawRepeat = _nextArg(args, i, '--repeat_num');
+      final int? parsed = int.tryParse(rawRepeat.trim());
+      if (parsed == null || parsed <= 0) {
+        throw CliUsageError('Invalid value for --repeat_num: $rawRepeat');
+      }
+      repeatNum = parsed;
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--repeat_num=')) {
+      final String rawRepeat = arg.substring('--repeat_num='.length);
+      final int? parsed = int.tryParse(rawRepeat.trim());
+      if (parsed == null || parsed <= 0) {
+        throw CliUsageError('Invalid value for --repeat_num: $rawRepeat');
+      }
+      repeatNum = parsed;
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      throw CliUsageError(
+        'Unknown option for eval_set generate_eval_cases: $arg',
+      );
+    }
+    positionals.add(arg);
+  }
+  if (positionals.length != 2) {
+    throw CliUsageError(
+      'eval_set generate_eval_cases requires <project_dir> <eval_set_id>.',
+    );
+  }
+  if (_emptyToNull(configFilePath) == null) {
+    throw CliUsageError(
+      'eval_set generate_eval_cases requires --conversation_generation_config_file.',
+    );
+  }
+  if (_emptyToNull(sessionInputFilePath) == null) {
+    throw CliUsageError(
+      'eval_set generate_eval_cases requires --session_input_file.',
+    );
+  }
+  final String? resolvedLogLevel = (logLevel != null || verbose)
+      ? _resolveCliLogLevel(explicit: _emptyToNull(logLevel), verbose: verbose)
+      : null;
+  return _ParsedEvalSetGenerateEvalCasesCommand(
+    agentPath: positionals[0],
+    evalSetId: positionals[1],
+    conversationGenerationConfigFilePath: _emptyToNull(configFilePath)!,
+    sessionInputFilePath: _emptyToNull(sessionInputFilePath)!,
+    repeatNum: repeatNum,
+    evalStorageUri: _emptyToNull(evalStorageUri),
+    logLevel: resolvedLogLevel,
   );
 }
 
@@ -3159,16 +3774,66 @@ String? _extractSessionIdFromCreateSession(Map<String, Object?> response) {
 ParsedAdkCommand _parseCreateCommand(List<String> args) {
   String? projectDir;
   String? appName;
+  String? model;
+  String? apiKey;
+  String? project;
+  String? region;
+  String? agentType;
 
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
-    if (arg == '--app-name') {
-      appName = _nextArg(args, i, '--app-name');
+    if (arg == '--app-name' || arg == '--app_name') {
+      appName = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--app-name=')) {
-      appName = arg.substring('--app-name='.length).trim();
+    if (arg.startsWith('--app-name=') || arg.startsWith('--app_name=')) {
+      appName = arg.substring(arg.indexOf('=') + 1).trim();
+      continue;
+    }
+    if (arg == '--model' || arg == '-m') {
+      model = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--model=')) {
+      model = arg.substring('--model='.length).trim();
+      continue;
+    }
+    if (arg == '--api_key' || arg == '--api-key') {
+      apiKey = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--api_key=') || arg.startsWith('--api-key=')) {
+      apiKey = arg.substring(arg.indexOf('=') + 1).trim();
+      continue;
+    }
+    if (arg == '--project') {
+      project = _nextArg(args, i, '--project');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--project=')) {
+      project = arg.substring('--project='.length).trim();
+      continue;
+    }
+    if (arg == '--region') {
+      region = _nextArg(args, i, '--region');
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--region=')) {
+      region = arg.substring('--region='.length).trim();
+      continue;
+    }
+    if (arg == '--type') {
+      agentType = _nextArg(args, i, '--type').trim().toUpperCase();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--type=')) {
+      agentType = arg.substring('--type='.length).trim().toUpperCase();
       continue;
     }
 
@@ -3186,14 +3851,52 @@ ParsedAdkCommand _parseCreateCommand(List<String> args) {
     throw CliUsageError('Missing project directory for create.');
   }
 
+  final String? normalizedType = _emptyToNull(agentType);
+  if (normalizedType != null &&
+      normalizedType != 'CODE' &&
+      normalizedType != 'CONFIG' &&
+      normalizedType != 'BASIC' &&
+      normalizedType != 'WORKFLOW') {
+    throw CliUsageError(
+      'Invalid value for --type: $normalizedType. Supported: CODE, CONFIG, BASIC, WORKFLOW.',
+    );
+  }
+
   return ParsedAdkCommand.create(
     projectDir: projectDir,
-    appName: appName?.trim().isEmpty == true ? null : appName?.trim(),
+    appName: _emptyToNull(appName),
+    model: _emptyToNull(model),
+    apiKey: _emptyToNull(apiKey),
+    project: _emptyToNull(project),
+    region: _emptyToNull(region),
+    agentType: normalizedType ?? 'CODE',
   );
+}
+
+int _parseTimeoutSeconds(String rawTimeout) {
+  final String trimmed = rawTimeout.trim().toLowerCase();
+  if (trimmed.isEmpty) {
+    throw CliUsageError('Invalid value for --timeout: $rawTimeout');
+  }
+  final RegExpMatch? match = RegExp(r'^(\d+)([smh]?)$').firstMatch(trimmed);
+  if (match == null) {
+    throw CliUsageError('Invalid value for --timeout: $rawTimeout');
+  }
+  final int? value = int.tryParse(match.group(1)!);
+  if (value == null || value <= 0) {
+    throw CliUsageError('Invalid value for --timeout: $rawTimeout');
+  }
+  final String unit = match.group(2) ?? '';
+  return switch (unit) {
+    'm' => value * 60,
+    'h' => value * 3600,
+    _ => value,
+  };
 }
 
 ParsedAdkCommand _parseRunCommand(List<String> args) {
   String? projectDir;
+  String? positionalQuery;
   String? userId;
   String? sessionId;
   String? sessionServiceUri;
@@ -3206,38 +3909,35 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
   String? message;
   String? stateJson;
   String? stateFilePath;
+  String? defaultLlmModel;
+  String? logLevel;
+  bool verbose = false;
+  int? timeout;
+  bool inMemory = false;
+  bool jsonl = false;
   bool saveSession = false;
   bool useLocalStorage = true;
   bool explicitUseLocalStorageFlag = false;
-  bool seenProjectDir = false;
+  final List<String> positionals = <String>[];
 
   for (int i = 0; i < args.length; i += 1) {
     final String arg = args[i];
-    if (arg == '--user-id') {
-      userId = _nextArg(args, i, '--user-id');
+    if (arg == '--user-id' || arg == '--user_id') {
+      userId = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--user-id=')) {
-      userId = arg.substring('--user-id='.length);
+    if (arg.startsWith('--user-id=') || arg.startsWith('--user_id=')) {
+      userId = arg.substring(arg.indexOf('=') + 1);
       continue;
     }
-    if (arg == '--session-id') {
-      sessionId = _nextArg(args, i, '--session-id');
+    if (arg == '--session-id' || arg == '--session_id') {
+      sessionId = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg == '--session_id') {
-      sessionId = _nextArg(args, i, '--session_id');
-      i += 1;
-      continue;
-    }
-    if (arg.startsWith('--session-id=')) {
-      sessionId = arg.substring('--session-id='.length);
-      continue;
-    }
-    if (arg.startsWith('--session_id=')) {
-      sessionId = arg.substring('--session_id='.length);
+    if (arg.startsWith('--session-id=') || arg.startsWith('--session_id=')) {
+      sessionId = arg.substring(arg.indexOf('=') + 1);
       continue;
     }
     if (arg == '--session_service_uri') {
@@ -3295,6 +3995,47 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
       explicitUseLocalStorageFlag = true;
       continue;
     }
+    if (arg == '--in_memory' || arg == '--in-memory') {
+      inMemory = true;
+      useLocalStorage = false;
+      continue;
+    }
+    if (arg == '--jsonl') {
+      jsonl = true;
+      continue;
+    }
+    if (arg == '--timeout') {
+      timeout = _parseTimeoutSeconds(_nextArg(args, i, '--timeout'));
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--timeout=')) {
+      timeout = _parseTimeoutSeconds(arg.substring('--timeout='.length));
+      continue;
+    }
+    if (arg == '--default_llm_model' || arg == '--default-llm-model') {
+      defaultLlmModel = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--default_llm_model=') ||
+        arg.startsWith('--default-llm-model=')) {
+      defaultLlmModel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '--log_level' || arg == '--verbosity') {
+      logLevel = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+      logLevel = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '-v' || arg == '--verbose') {
+      verbose = true;
+      continue;
+    }
     if (arg == '-m' || arg == '--message') {
       message = _nextArg(args, i, arg);
       i += 1;
@@ -3330,6 +4071,10 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
       saveSession = true;
       continue;
     }
+    if (arg == '--no-save_session' || arg == '--no_save_session') {
+      saveSession = false;
+      continue;
+    }
     if (arg == '--resume') {
       resumeFilePath = _nextArg(args, i, '--resume');
       i += 1;
@@ -3353,11 +4098,17 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
       throw CliUsageError('Unknown option for run: $arg');
     }
 
-    if (seenProjectDir) {
-      throw CliUsageError('run accepts only one project directory.');
-    }
-    projectDir = arg;
-    seenProjectDir = true;
+    positionals.add(arg);
+  }
+
+  if (positionals.length > 2) {
+    throw CliUsageError('run accepts <agent_dir> and optional [query].');
+  }
+  if (positionals.isNotEmpty) {
+    projectDir = positionals[0];
+  }
+  if (positionals.length == 2) {
+    positionalQuery = positionals[1];
   }
 
   if (stateJson != null && stateFilePath != null) {
@@ -3387,12 +4138,20 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     initialState = _parseInitialStateJson(stateJson, sourceLabel: '--state');
   }
 
+  if (_emptyToNull(message) != null && _emptyToNull(positionalQuery) != null) {
+    throw CliUsageError(
+      'Positional [query] and --message cannot be used together.',
+    );
+  }
+  final String? effectiveMessage =
+      _emptyToNull(message) ?? _emptyToNull(positionalQuery);
+
   if (_emptyToNull(resumeFilePath) != null &&
       _emptyToNull(replayFilePath) != null) {
     throw CliUsageError('--resume and --replay cannot be used together.');
   }
-  if (_emptyToNull(message) != null && _emptyToNull(replayFilePath) != null) {
-    throw CliUsageError('--message and --replay cannot be used together.');
+  if (effectiveMessage != null && _emptyToNull(replayFilePath) != null) {
+    throw CliUsageError('--message/query and --replay cannot be used together.');
   }
   if (projectDir == null || projectDir.trim().isEmpty) {
     throw CliUsageError('Missing agent directory for run.');
@@ -3405,6 +4164,22 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
       '--session_service_uri or --artifact_service_uri.',
     );
   }
+  if (inMemory &&
+      (_emptyToNull(sessionServiceUri) != null ||
+          _emptyToNull(artifactServiceUri) != null ||
+          _emptyToNull(memoryServiceUri) != null)) {
+    throw CliUsageError(
+      '--in_memory cannot be used with --session_service_uri, '
+      '--artifact_service_uri, or --memory_service_uri.',
+    );
+  }
+  if (inMemory && saveSession) {
+    throw CliUsageError('--in_memory cannot be used with --save_session.');
+  }
+
+  final String? resolvedLogLevel = (logLevel != null || verbose)
+      ? _resolveCliLogLevel(explicit: _emptyToNull(logLevel), verbose: verbose)
+      : null;
 
   return ParsedAdkCommand.run(
     projectDir: projectDir,
@@ -3417,10 +4192,15 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     saveSession: saveSession,
     resumeFilePath: _emptyToNull(resumeFilePath),
     replayFilePath: _emptyToNull(replayFilePath),
-    message: _emptyToNull(message),
+    message: effectiveMessage,
     initialState: initialState,
     enableFeatures: _normalizeCsvValues(enableFeatures),
     disableFeatures: _normalizeCsvValues(disableFeatures),
+    defaultLlmModel: _emptyToNull(defaultLlmModel),
+    logLevel: resolvedLogLevel,
+    timeout: timeout,
+    inMemory: inMemory,
+    jsonl: jsonl,
   );
 }
 
@@ -3470,8 +4250,16 @@ ParsedAdkCommand _parseWebCommand(
   bool reloadAgents = false;
   final List<String> extraPlugins = <String>[];
   final List<String> triggerSources = <String>[];
+  final List<String> triggerOidcServiceAccounts = <String>[];
+  String? triggerOidcAudience;
   String? logoText;
   String? logoImageUrl;
+  String? avatarConfigRaw;
+  int maxLlmCalls = 500;
+  String? defaultLlmModel;
+  String? geminiEnterpriseAppName;
+  bool expressMode = false;
+  bool effectiveEnableWebUi = enableWebUi;
   bool autoCreateSession = false;
   bool verbose = false;
   bool seenProjectDir = false;
@@ -3496,13 +4284,13 @@ ParsedAdkCommand _parseWebCommand(
       host = _parseHost(arg.substring('--host='.length));
       continue;
     }
-    if (arg == '--user-id') {
-      userId = _nextArg(args, i, '--user-id');
+    if (arg == '--user-id' || arg == '--user_id') {
+      userId = _nextArg(args, i, arg);
       i += 1;
       continue;
     }
-    if (arg.startsWith('--user-id=')) {
-      userId = arg.substring('--user-id='.length);
+    if (arg.startsWith('--user-id=') || arg.startsWith('--user_id=')) {
+      userId = arg.substring(arg.indexOf('=') + 1);
       continue;
     }
     if (arg == '--allow_origins') {
@@ -3616,6 +4404,29 @@ ParsedAdkCommand _parseWebCommand(
       triggerSources.add(arg.substring('--trigger-sources='.length).trim());
       continue;
     }
+    if (arg == '--trigger_oidc_audience' || arg == '--trigger-oidc-audience') {
+      triggerOidcAudience = _nextArg(args, i, arg).trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--trigger_oidc_audience=') ||
+        arg.startsWith('--trigger-oidc-audience=')) {
+      triggerOidcAudience = arg.substring(arg.indexOf('=') + 1).trim();
+      continue;
+    }
+    if (arg == '--trigger_oidc_service_accounts' ||
+        arg == '--trigger-oidc-service-accounts') {
+      triggerOidcServiceAccounts.add(_nextArg(args, i, arg).trim());
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--trigger_oidc_service_accounts=') ||
+        arg.startsWith('--trigger-oidc-service-accounts=')) {
+      triggerOidcServiceAccounts.add(
+        arg.substring(arg.indexOf('=') + 1).trim(),
+      );
+      continue;
+    }
     if (arg == '--logo_text' || arg == '--logo-text') {
       logoText = _nextArg(args, i, arg).trim();
       i += 1;
@@ -3642,6 +4453,77 @@ ParsedAdkCommand _parseWebCommand(
       logoImageUrl = arg.substring('--logo-image-url='.length).trim();
       continue;
     }
+    if (arg == '--avatar_config' || arg == '--avatar-config') {
+      avatarConfigRaw = _nextArg(args, i, arg);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--avatar_config=') ||
+        arg.startsWith('--avatar-config=')) {
+      avatarConfigRaw = arg.substring(arg.indexOf('=') + 1);
+      continue;
+    }
+    if (arg == '--max_llm_calls' || arg == '--max-llm-calls') {
+      final String rawMax = _nextArg(args, i, arg);
+      final int? parsed = int.tryParse(rawMax.trim());
+      if (parsed == null) {
+        throw CliUsageError('Invalid value for --max_llm_calls: $rawMax');
+      }
+      maxLlmCalls = parsed;
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--max_llm_calls=') ||
+        arg.startsWith('--max-llm-calls=')) {
+      final String rawMax = arg.substring(arg.indexOf('=') + 1);
+      final int? parsed = int.tryParse(rawMax.trim());
+      if (parsed == null) {
+        throw CliUsageError('Invalid value for --max_llm_calls: $rawMax');
+      }
+      maxLlmCalls = parsed;
+      continue;
+    }
+    if (arg == '--default_llm_model' || arg == '--default-llm-model') {
+      defaultLlmModel = _nextArg(args, i, arg).trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--default_llm_model=') ||
+        arg.startsWith('--default-llm-model=')) {
+      defaultLlmModel = arg.substring(arg.indexOf('=') + 1).trim();
+      continue;
+    }
+    if (arg == '--with_ui' || arg == '--with-ui') {
+      effectiveEnableWebUi = true;
+      continue;
+    }
+    if (arg == '--no-with_ui' ||
+        arg == '--no_with_ui' ||
+        arg == '--no-with-ui') {
+      effectiveEnableWebUi = false;
+      continue;
+    }
+    if (arg == '--gemini_enterprise_app_name' ||
+        arg == '--gemini-enterprise-app-name') {
+      geminiEnterpriseAppName = _nextArg(args, i, arg).trim();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--gemini_enterprise_app_name=') ||
+        arg.startsWith('--gemini-enterprise-app-name=')) {
+      geminiEnterpriseAppName = arg.substring(arg.indexOf('=') + 1).trim();
+      continue;
+    }
+    if (arg == '--express_mode' || arg == '--express-mode') {
+      expressMode = true;
+      continue;
+    }
+    if (arg == '--no-express_mode' ||
+        arg == '--no_express_mode' ||
+        arg == '--no-express-mode') {
+      expressMode = false;
+      continue;
+    }
     if (arg == '--use_local_storage') {
       useLocalStorage = true;
       explicitUseLocalStorageFlag = true;
@@ -3664,7 +4546,7 @@ ParsedAdkCommand _parseWebCommand(
       reload = true;
       continue;
     }
-    if (arg == '--no-reload') {
+    if (arg == '--no-reload' || arg == '--no_reload') {
       reload = false;
       continue;
     }
@@ -3747,6 +4629,79 @@ ParsedAdkCommand _parseWebCommand(
     }
   }
 
+  final String? normalizedOidcAudience = _emptyToNull(triggerOidcAudience);
+  final List<String> normalizedOidcServiceAccounts = _normalizeCsvValues(
+    triggerOidcServiceAccounts,
+  );
+  if (normalizedTriggerSources.isNotEmpty &&
+      !host.isLoopback &&
+      normalizedOidcAudience == null &&
+      normalizedOidcServiceAccounts.isEmpty) {
+    throw CliUsageError(
+      'When --trigger_sources is used on a non-loopback host (${host.address}), '
+      'at least one of --trigger_oidc_audience or '
+      '--trigger_oidc_service_accounts must be specified.',
+    );
+  }
+
+  final String? normalizedEnterpriseAppName = _emptyToNull(
+    geminiEnterpriseAppName,
+  );
+  if (expressMode && normalizedEnterpriseAppName == null) {
+    throw CliUsageError(
+      '--express_mode requires --gemini_enterprise_app_name.',
+    );
+  }
+
+  Map<String, String>? parsedAvatarConfig;
+  if (_emptyToNull(avatarConfigRaw) != null) {
+    final String rawAvatar = avatarConfigRaw!.trim();
+    String jsonText = rawAvatar;
+    final File avatarFile = File(rawAvatar);
+    if (avatarFile.existsSync()) {
+      jsonText = avatarFile.readAsStringSync().trim();
+    }
+    if (jsonText.startsWith('{')) {
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(jsonText);
+      } on FormatException catch (error) {
+        throw CliUsageError('Invalid JSON for --avatar_config: $error');
+      }
+      if (decoded is! Map) {
+        throw CliUsageError(
+          'Invalid --avatar_config: expected a JSON object mapping agent names to avatar configs.',
+        );
+      }
+      parsedAvatarConfig = decoded.map(
+        (Object? key, Object? value) => MapEntry('$key', '${value ?? ''}'),
+      );
+    } else {
+      final Map<String, String> kvMap = <String, String>{};
+      for (final String entry in jsonText.split(',')) {
+        final String trimmed = entry.trim();
+        if (trimmed.isEmpty) {
+          continue;
+        }
+        final int eqIdx = trimmed.indexOf('=');
+        final int colonIdx = trimmed.indexOf(':');
+        final int sepIdx = (eqIdx > 0 && (colonIdx <= 0 || eqIdx < colonIdx))
+            ? eqIdx
+            : colonIdx;
+        if (sepIdx <= 0 || sepIdx == trimmed.length - 1) {
+          throw CliUsageError('Invalid --avatar_config entry: $trimmed');
+        }
+        final String k = trimmed.substring(0, sepIdx).trim();
+        final String v = trimmed.substring(sepIdx + 1).trim();
+        if (k.isEmpty || v.isEmpty) {
+          throw CliUsageError('Invalid --avatar_config entry: $trimmed');
+        }
+        kvMap[k] = v;
+      }
+      parsedAvatarConfig = kvMap;
+    }
+  }
+
   return ParsedAdkCommand.web(
     projectDir: projectDir,
     port: port,
@@ -3769,8 +4724,15 @@ ParsedAdkCommand _parseWebCommand(
     triggerSources: normalizedTriggerSources,
     logoText: _emptyToNull(logoText),
     logoImageUrl: _emptyToNull(logoImageUrl),
+    avatarConfig: parsedAvatarConfig,
+    maxLlmCalls: maxLlmCalls,
+    defaultLlmModel: _emptyToNull(defaultLlmModel),
+    triggerOidcAudience: normalizedOidcAudience,
+    triggerOidcServiceAccounts: normalizedOidcServiceAccounts,
+    geminiEnterpriseAppName: normalizedEnterpriseAppName,
+    expressMode: expressMode,
     autoCreateSession: autoCreateSession,
-    enableWebUi: enableWebUi,
+    enableWebUi: effectiveEnableWebUi,
     usedDeprecatedSessionDbUrl: usedDeprecatedSessionDbUrl,
     usedDeprecatedArtifactStorageUri: usedDeprecatedArtifactStorageUri,
     enableFeatures: _normalizeCsvValues(enableFeatures),
@@ -3849,6 +4811,11 @@ Future<int> _runCreateCommand(ParsedAdkCommand command, IOSink out) async {
   await createDevProject(
     projectDirPath: command.projectDir,
     appName: command.appName,
+    model: command.model,
+    apiKey: command.apiKey,
+    project: command.project,
+    region: command.region,
+    type: command.agentType,
   );
   out.writeln('Created ADK project at ${command.projectDir}');
   out.writeln('Next steps:');
@@ -3880,6 +4847,10 @@ class _RunCommandContext {
 Future<_RunCommandContext> _loadRunCommandContext(
   ParsedAdkCommand command,
 ) async {
+  if (command.defaultLlmModel != null &&
+      command.defaultLlmModel!.trim().isNotEmpty) {
+    LlmAgent.setDefaultModel(command.defaultLlmModel!.trim());
+  }
   final Directory requestedDir = Directory(command.projectDir).absolute;
   final FileSystemEntityType entityType = await FileSystemEntity.type(
     requestedDir.path,
@@ -3919,6 +4890,9 @@ Future<_RunCommandContext> _loadRunCommandContext(
       ? <String, String>{loaded.name: agentFolderName}
       : null;
 
+  final bool effectiveUseLocalStorage =
+      command.useLocalStorage && !command.inMemory;
+
   final Runner runner = loaded is App
       ? Runner(
           app: loaded,
@@ -3927,12 +4901,12 @@ Future<_RunCommandContext> _loadRunCommandContext(
             baseDir: agentsParentDir.path,
             sessionServiceUri: command.sessionServiceUri,
             appNameToDir: appNameToDir,
-            useLocalStorage: command.useLocalStorage,
+            useLocalStorage: effectiveUseLocalStorage,
           ),
           artifactService: createArtifactServiceFromOptions(
             baseDir: agentDir.path,
             artifactServiceUri: command.artifactServiceUri,
-            useLocalStorage: command.useLocalStorage,
+            useLocalStorage: effectiveUseLocalStorage,
           ),
           memoryService: createMemoryServiceFromOptions(
             baseDir: agentsParentDir.path,
@@ -3947,12 +4921,12 @@ Future<_RunCommandContext> _loadRunCommandContext(
             baseDir: agentsParentDir.path,
             sessionServiceUri: command.sessionServiceUri,
             appNameToDir: appNameToDir,
-            useLocalStorage: command.useLocalStorage,
+            useLocalStorage: effectiveUseLocalStorage,
           ),
           artifactService: createArtifactServiceFromOptions(
             baseDir: agentDir.path,
             artifactServiceUri: command.artifactServiceUri,
-            useLocalStorage: command.useLocalStorage,
+            useLocalStorage: effectiveUseLocalStorage,
           ),
           memoryService: createMemoryServiceFromOptions(
             baseDir: agentsParentDir.path,
@@ -4010,7 +4984,15 @@ String _yamlScalar(String value) {
   return "'$escaped'";
 }
 
-Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
+Future<int> _runRunCommand(
+  ParsedAdkCommand command,
+  IOSink out, {
+  IOSink? err,
+}) async {
+  if (command.logLevel != null) {
+    cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel!));
+  }
+  final IOSink errSink = err ?? stderr;
   final _RunCommandContext context = await _loadRunCommandContext(command);
   final DevAgentRuntime runtime = context.runtime;
   final String userId = context.userId;
@@ -4022,6 +5004,9 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
       userId: userId,
       replayFilePath: command.replayFilePath!,
       out: out,
+      jsonl: command.jsonl,
+      timeout: command.timeout,
+      err: errSink,
     );
     if (command.saveSession) {
       await _saveSessionSnapshot(
@@ -4044,13 +5029,32 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
     initialState: command.initialState,
   );
 
+  Future<List<Event>?> sendMessageToSession(String msg) async {
+    try {
+      final Future<List<Event>> future = runtime.sendMessage(
+        userId: userId,
+        sessionId: session.id,
+        message: msg,
+      );
+      if (command.timeout != null) {
+        return await future.timeout(Duration(seconds: command.timeout!));
+      }
+      return await future;
+    } on TimeoutException {
+      errSink.writeln(
+        'ERROR: Execution timed out after ${command.timeout} seconds.',
+      );
+      return null;
+    }
+  }
+
   if (command.message != null) {
-    final List<Event> events = await runtime.sendMessage(
-      userId: userId,
-      sessionId: session.id,
-      message: command.message!,
-    );
-    _writeEventTexts(events, out: out);
+    final List<Event>? events = await sendMessageToSession(command.message!);
+    if (events == null) {
+      await runtime.runner.close();
+      return 1;
+    }
+    _writeRunEvents(events, out: out, jsonl: command.jsonl, session: session);
     if (command.saveSession) {
       await _saveSessionSnapshot(
         runtime: runtime,
@@ -4060,15 +5064,43 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
         out: out,
       );
     }
+    final bool pausedForInput = events.any(
+      (Event event) => (event.longRunningToolIds?.isNotEmpty ?? false),
+    );
     await runtime.runner.close();
-    return 0;
+    return pausedForInput ? 2 : 0;
   }
 
-  out.writeln('Running agent $rootAgentName, type exit to exit.');
+  if (command.resumeFilePath != null && session.events.isNotEmpty) {
+    final Event lastEvent = session.events.last;
+    if (lastEvent.author == 'user' &&
+        lastEvent.content != null &&
+        _textFromContent(lastEvent.content!).isNotEmpty) {
+      final List<Event>? resumedEvents = await sendMessageToSession(
+        _textFromContent(lastEvent.content!),
+      );
+      if (resumedEvents == null) {
+        await runtime.runner.close();
+        return 1;
+      }
+      _writeRunEvents(
+        resumedEvents,
+        out: out,
+        jsonl: command.jsonl,
+        session: session,
+      );
+    }
+  }
+
+  if (!command.jsonl) {
+    out.writeln('Running agent $rootAgentName, type exit to exit.');
+  }
 
   while (true) {
-    out.write('[user]: ');
-    await out.flush();
+    if (!command.jsonl) {
+      out.write('[user]: ');
+      await out.flush();
+    }
 
     final String? line = stdin.readLineSync();
     if (line == null) {
@@ -4082,12 +5114,12 @@ Future<int> _runRunCommand(ParsedAdkCommand command, IOSink out) async {
       break;
     }
 
-    final List<Event> events = await runtime.sendMessage(
-      userId: userId,
-      sessionId: session.id,
-      message: input,
-    );
-    _writeEventTexts(events, out: out);
+    final List<Event>? events = await sendMessageToSession(input);
+    if (events == null) {
+      await runtime.runner.close();
+      return 1;
+    }
+    _writeRunEvents(events, out: out, jsonl: command.jsonl, session: session);
   }
 
   if (command.saveSession) {
@@ -4149,6 +5181,9 @@ Future<Session> _runReplayFile({
   required String userId,
   required String replayFilePath,
   required IOSink out,
+  bool jsonl = false,
+  int? timeout,
+  IOSink? err,
 }) async {
   final File replayFile = File(replayFilePath);
   if (!await replayFile.exists()) {
@@ -4170,12 +5205,22 @@ Future<Session> _runReplayFile({
   );
 
   for (final String query in replayInput.queries) {
-    out.writeln('[user]: $query');
-    final List<Event> events = await runtime.sendMessage(
+    if (!jsonl) {
+      out.writeln('[user]: $query');
+    }
+    Future<List<Event>> sendFuture = runtime.sendMessage(
       userId: userId,
       sessionId: session.id,
       message: query,
     );
+    if (timeout != null) {
+      sendFuture = sendFuture.timeout(Duration(seconds: timeout));
+    }
+    final List<Event> events = await sendFuture;
+    if (jsonl) {
+      _writeRunEvents(events, out: out, jsonl: true, session: session);
+      continue;
+    }
     for (final Event event in events) {
       final Content? content = event.content;
       if (content == null || content.parts.isEmpty) {
@@ -4203,6 +5248,18 @@ Future<Session> _prepareRunSession({
   Map<String, Object?>? initialState,
 }) async {
   if (resumeFilePath == null) {
+    if (requestedSessionId != null && requestedSessionId.trim().isNotEmpty) {
+      final Session? existing = await runtime.getSession(
+        userId: userId,
+        sessionId: requestedSessionId.trim(),
+      );
+      if (existing != null) {
+        if (initialState != null && initialState.isNotEmpty) {
+          existing.state.addAll(initialState);
+        }
+        return existing;
+      }
+    }
     if (initialState != null) {
       return runtime.createSessionWithState(
         userId: userId,
@@ -4330,6 +5387,11 @@ Future<int> _runWebCommand(
     );
   }
 
+  if (command.defaultLlmModel != null &&
+      command.defaultLlmModel!.trim().isNotEmpty) {
+    LlmAgent.setDefaultModel(command.defaultLlmModel!.trim());
+  }
+
   final DevProjectConfig loadedConfig = await loadDevProjectConfig(
     command.projectDir,
     validateProjectDir: true,
@@ -4388,6 +5450,13 @@ Future<int> _runWebCommand(
       enableWebUi: command.enableWebUi,
       logoText: command.logoText,
       logoImageUrl: command.logoImageUrl,
+      avatarConfig: command.avatarConfig,
+      maxLlmCalls: command.maxLlmCalls,
+      defaultLlmModel: command.defaultLlmModel,
+      triggerOidcAudience: command.triggerOidcAudience,
+      triggerOidcServiceAccounts: command.triggerOidcServiceAccounts,
+      geminiEnterpriseAppName: command.geminiEnterpriseAppName,
+      expressMode: command.expressMode,
       reload: command.reload,
       reloadAgents: command.reloadAgents,
       traceToCloud: command.traceToCloud,
@@ -4542,6 +5611,68 @@ void _writeUnknownFeatureNameWarning(String rawFeature, IOSink err) {
   err.writeln(
     "WARNING: Unknown feature name '$rawFeature'. Valid names are: $validNames",
   );
+}
+
+void _writeRunEvents(
+  List<Event> events, {
+  required IOSink out,
+  bool jsonl = false,
+  Session? session,
+}) {
+  if (jsonl) {
+    final Session fallbackSession =
+        session ??
+        Session(appName: 'adk', userId: 'user', id: 'session');
+    for (final Event event in events) {
+      final Map<String, Object?> raw = StorageEventV0.fromEvent(
+        session: fallbackSession,
+        event: event,
+      ).toJson();
+      raw.remove('app_name');
+      raw.remove('user_id');
+      if (session == null) {
+        raw.remove('session_id');
+      }
+      if (event.nodeInfo.path.isNotEmpty) {
+        raw['node_path'] = event.nodeInfo.path;
+      }
+      final Object? actionsObj = raw['actions'];
+      if (actionsObj is Map) {
+        final Map<String, Object?> filteredActions = <String, Object?>{};
+        actionsObj.forEach((Object? k, Object? v) {
+          if (v != null &&
+              !(v is Map && v.isEmpty) &&
+              !(v is List && v.isEmpty)) {
+            filteredActions['$k'] = v;
+          }
+        });
+        if (filteredActions.isEmpty) {
+          raw.remove('actions');
+        } else {
+          raw['actions'] = filteredActions;
+        }
+      }
+      final Map<String, Object?> ordered = <String, Object?>{};
+      for (final String key in const <String>[
+        'author',
+        'session_id',
+        'node_path',
+        'id',
+      ]) {
+        if (raw.containsKey(key)) {
+          ordered[key] = raw[key];
+        }
+      }
+      raw.forEach((String k, Object? v) {
+        if (!ordered.containsKey(k)) {
+          ordered[k] = v;
+        }
+      });
+      out.writeln(jsonEncode(ordered));
+    }
+    return;
+  }
+  _writeEventTexts(events, out: out);
 }
 
 void _writeEventTexts(List<Event> events, {required IOSink out}) {

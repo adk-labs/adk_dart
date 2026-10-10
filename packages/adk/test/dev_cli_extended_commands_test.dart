@@ -772,5 +772,87 @@ user_messages:
         expect(stderrText, isEmpty);
       },
     );
+
+    test(
+      'eval_set generate_eval_cases generates simulated cases into eval set',
+      () async {
+        final Directory tempDir = await Directory.systemTemp.createTemp(
+          'adk_cli_generate_eval_cases_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+        await createDevProject(projectDirPath: tempDir.path);
+
+        final int createExit = await runAdkCli(<String>[
+          'eval_set',
+          'create',
+          tempDir.path,
+          'gen_set',
+        ]);
+        expect(createExit, 0);
+
+        final File genConfig = File(
+          '${tempDir.path}${Platform.pathSeparator}gen_config.json',
+        );
+        await genConfig.writeAsString(
+          jsonEncode(<String, Object?>{
+            'count': 1,
+            'scenarios': <Map<String, Object?>>[
+              <String, Object?>{
+                'starting_prompt': 'hello',
+                'conversation_plan': 'Ask a greeting question.',
+              },
+            ],
+          }),
+        );
+        final File sessionInput = File(
+          '${tempDir.path}${Platform.pathSeparator}session_input.json',
+        );
+        await sessionInput.writeAsString(
+          jsonEncode(<String, Object?>{
+            'app_name': projectDirName(tempDir.path),
+            'user_id': 'test_user',
+            'state': <String, Object?>{},
+          }),
+        );
+
+        final _CapturedSink outCapture = _CapturedSink();
+        final _CapturedSink errCapture = _CapturedSink();
+        final int genExit = await runAdkCli(
+          <String>[
+            'eval_set',
+            'generate_eval_cases',
+            tempDir.path,
+            'gen_set',
+            '--conversation_generation_config_file',
+            genConfig.path,
+            '--session_input_file',
+            sessionInput.path,
+            '--repeat_num=2',
+            '--log_level=INFO',
+          ],
+          outSink: outCapture.sink,
+          errSink: errCapture.sink,
+        );
+        await outCapture.closeAndRead();
+        final String stderrText = await errCapture.closeAndRead();
+        expect(genExit, 0);
+        expect(stderrText, isEmpty);
+
+        final File evalSetFile = File(
+          '${tempDir.path}${Platform.pathSeparator}gen_set.evalset.json',
+        );
+        expect(await evalSetFile.exists(), isTrue);
+        final Map<String, Object?> decoded =
+            (jsonDecode(await evalSetFile.readAsString()) as Map)
+                .cast<String, Object?>();
+        final List<dynamic> cases =
+            (decoded['eval_cases'] as List?) ?? <dynamic>[];
+        expect(cases, hasLength(2));
+      },
+    );
   });
 }

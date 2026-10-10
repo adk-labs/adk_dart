@@ -187,5 +187,90 @@ void main() {
       expect(stdoutText, isEmpty);
       expect(stderrText, contains('GOOGLE_CLOUD_PROJECT is not set.'));
     });
+
+    test('supports docker target with dry-run and options', () async {
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final int exitCode = await runDeployCommand(
+        const <String>[
+          'docker',
+          '--project=proj-docker',
+          '--service_name=my-docker-svc',
+          '--port=8080',
+          '--with_ui',
+          '--a2a',
+          '--trace_to_cloud',
+          '--allow_origins=https://example.com',
+          '--adk_version=1.2.0',
+          '--no-use_local_storage',
+          '--log_level=DEBUG',
+          '--env=FOO=BAR',
+          '--dry-run',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+      expect(exitCode, 0);
+      expect(stderrText, contains('WARNING: --with_ui is enabled'));
+      expect(stdoutText, contains('docker run --rm -p 8080:8080 --name my-docker-svc'));
+      expect(stdoutText, contains('-e FOO=BAR'));
+    });
+
+    test('supports gke target with dry-run and cluster options', () async {
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final int exitCode = await runDeployCommand(
+        const <String>[
+          'gke',
+          '--project=proj-gke',
+          '--region=us-central1',
+          '--cluster_name=my-cluster',
+          '--service_name=my-gke-svc',
+          '--port=8080',
+          '--with_ui',
+          '--a2a',
+          '--trace_to_cloud',
+          '--otel_to_cloud',
+          '--trigger_sources=pubsub',
+          '--dry-run',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+
+      final String stdoutText = await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+      expect(exitCode, 0);
+      expect(stderrText, contains('WARNING: --with_ui is enabled'));
+      expect(
+        stdoutText,
+        contains(
+          'gcloud container clusters get-credentials my-cluster --project proj-gke --region us-central1',
+        ),
+      );
+    });
+
+    test('validates mutually exclusive --use_local_storage and service URIs in deploy', () async {
+      final _CapturedSink outCapture = _CapturedSink();
+      final _CapturedSink errCapture = _CapturedSink();
+      final int exitCode = await runDeployCommand(
+        const <String>[
+          'cloud_run',
+          '--project=proj-123',
+          '--no-use_local_storage',
+          '--session_service_uri=memory://',
+          '--dry-run',
+        ],
+        outSink: outCapture.sink,
+        errSink: errCapture.sink,
+      );
+      await outCapture.closeAndRead();
+      final String stderrText = await errCapture.closeAndRead();
+      expect(exitCode, 64);
+      expect(stderrText, contains('--use_local_storage'));
+    });
   });
 }

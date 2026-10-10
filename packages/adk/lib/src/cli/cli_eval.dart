@@ -1,10 +1,42 @@
 /// Helpers used by CLI evaluation and reporting commands.
 library;
 
+import 'package:adk_dart/src/evaluation/eval_config.dart'
+    as core_eval_config
+    show EvalConfig;
 import 'package:adk_dart/src/evaluation/eval_metric.dart';
 import 'package:adk_dart/src/evaluation/eval_result.dart';
 import 'package:adk_dart/src/agents/llm_agent.dart';
 import 'package:adk_dart/src/types/content.dart';
+
+export 'package:adk_dart/src/evaluation/eval_config.dart'
+    show getEvaluationCriteriaOrDefault, getEvalMetricsFromConfig;
+
+/// Converts [evalConfig] criteria into [EvalMetric] values used by the CLI.
+List<EvalMetric> resolveCliEvalMetricsFromConfig(
+  core_eval_config.EvalConfig evalConfig,
+) {
+  if (evalConfig.criteria.isEmpty) {
+    return getDefaultMetricInfo();
+  }
+  final List<EvalMetric> metrics = <EvalMetric>[];
+  for (final String metricName in evalConfig.criteria.keys) {
+    switch (metricName) {
+      case 'final_response_exact_match':
+        if (!metrics.contains(EvalMetric.finalResponseExactMatch)) {
+          metrics.add(EvalMetric.finalResponseExactMatch);
+        }
+      case 'final_response_contains':
+      case 'response_match_score':
+      case 'tool_trajectory_avg_score':
+      default:
+        if (!metrics.contains(EvalMetric.finalResponseContains)) {
+          metrics.add(EvalMetric.finalResponseContains);
+        }
+    }
+  }
+  return metrics.isEmpty ? getDefaultMetricInfo() : metrics;
+}
 
 /// Default metrics used by CLI evaluation runs.
 ///

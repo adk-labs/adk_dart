@@ -148,10 +148,27 @@ Future<DevProjectConfig> loadDevProjectConfig(
 Future<void> createDevProject({
   required String projectDirPath,
   String? appName,
+  String? model,
+  String? apiKey,
+  String? project,
+  String? region,
+  String? type,
 }) async {
   final Directory dir = Directory(projectDirPath);
   final String dirName = projectDirName(projectDirPath);
   final String resolvedAppName = _normalizeName(appName ?? dirName);
+  final String resolvedModel = (model != null && model.trim().isNotEmpty)
+      ? model.trim()
+      : 'gemini-2.5-flash';
+  final String normalizedType = (type ?? 'CODE').trim().toUpperCase();
+  if (normalizedType != 'CODE' &&
+      normalizedType != 'CONFIG' &&
+      normalizedType != 'BASIC' &&
+      normalizedType != 'WORKFLOW') {
+    throw ArgumentError(
+      "Invalid value for '--type': '$type' is not one of 'CODE', 'CONFIG'.",
+    );
+  }
   final DevProjectConfig config = DevProjectConfig(
     appName: resolvedAppName,
     agentName: 'root_agent',
@@ -173,16 +190,67 @@ Future<void> createDevProject({
   await File(
     _joinPath(dir.path, _configFileName),
   ).writeAsString(const JsonEncoder.withIndent('  ').convert(config.toJson()));
-  await File(
-    _joinPath(dir.path, '.env'),
-  ).writeAsString('GOOGLE_API_KEY="YOUR_API_KEY"\n');
-  await File(
-    _joinPath(dir.path, 'root_agent.yaml'),
-  ).writeAsString(_rootAgentConfigTemplate());
-  await File(_joinPath(dir.path, 'agent.dart')).writeAsString(_agentTemplate());
+  await File(_joinPath(dir.path, '.env')).writeAsString(
+    _dotenvTemplate(apiKey: apiKey, project: project, region: region),
+  );
+  if (normalizedType == 'WORKFLOW') {
+    await File(
+      _joinPath(dir.path, 'root_agent.yaml'),
+    ).writeAsString(_workflowRootAgentConfigTemplate());
+    await File(
+      _joinPath(dir.path, 'sub_agent_1.yaml'),
+    ).writeAsString(
+      _workflowSubAgentConfigTemplate(
+        name: 'sub_agent_1',
+        description: 'First step in the workflow.',
+        instruction: 'Handle the first step of the user request.',
+        model: resolvedModel,
+      ),
+    );
+    await File(
+      _joinPath(dir.path, 'sub_agent_2.yaml'),
+    ).writeAsString(
+      _workflowSubAgentConfigTemplate(
+        name: 'sub_agent_2',
+        description: 'Second step in the workflow.',
+        instruction: 'Synthesize the final answer for the user.',
+        model: resolvedModel,
+      ),
+    );
+  } else {
+    await File(
+      _joinPath(dir.path, 'root_agent.yaml'),
+    ).writeAsString(_rootAgentConfigTemplate(model: resolvedModel));
+  }
+  if (normalizedType != 'CONFIG' && normalizedType != 'WORKFLOW') {
+    await File(
+      _joinPath(dir.path, 'agent.dart'),
+    ).writeAsString(_agentTemplate(model: resolvedModel));
+  }
   await File(
     _joinPath(dir.path, 'README.md'),
   ).writeAsString(_projectReadmeTemplate(projectName: dirName));
+}
+
+String _dotenvTemplate({String? apiKey, String? project, String? region}) {
+  final String? trimmedApiKey = apiKey?.trim();
+  final String? trimmedProject = project?.trim();
+  final String? trimmedRegion = region?.trim();
+  if (trimmedApiKey != null && trimmedApiKey.isNotEmpty) {
+    return 'GOOGLE_GENAI_USE_VERTEXAI=0\nGOOGLE_API_KEY=$trimmedApiKey\n';
+  }
+  if ((trimmedProject != null && trimmedProject.isNotEmpty) ||
+      (trimmedRegion != null && trimmedRegion.isNotEmpty)) {
+    final StringBuffer buf = StringBuffer('GOOGLE_GENAI_USE_VERTEXAI=1\n');
+    if (trimmedProject != null && trimmedProject.isNotEmpty) {
+      buf.writeln('GOOGLE_CLOUD_PROJECT=$trimmedProject');
+    }
+    if (trimmedRegion != null && trimmedRegion.isNotEmpty) {
+      buf.writeln('GOOGLE_CLOUD_LOCATION=$trimmedRegion');
+    }
+    return buf.toString();
+  }
+  return 'GOOGLE_API_KEY="YOUR_API_KEY"\n';
 }
 
 String _normalizeName(String raw) {
@@ -200,13 +268,13 @@ String _joinPath(String left, String right) {
   return '$left${Platform.pathSeparator}$right';
 }
 
-String _agentTemplate() {
+String _agentTemplate({String model = 'gemini-2.5-flash'}) {
   return '''
 import 'package:adk_dart/adk_dart.dart';
 
 /// Example echo model used in generated starter projects.
 class EchoModel extends BaseLlm {
-  EchoModel() : super(model: 'echo');
+  EchoModel() : super(model: '$model');
 
   @override
   Stream<LlmResponse> generateContent(
@@ -228,13 +296,40 @@ Future<void> main() async {
 ''';
 }
 
-String _rootAgentConfigTemplate() {
+String _rootAgentConfigTemplate({String model = 'gemini-2.5-flash'}) {
   return '''
 # yaml-language-server: \$schema=https://raw.githubusercontent.com/google/adk-python/refs/heads/main/src/google/adk/agents/config_schemas/AgentConfig.json
 name: root_agent
 description: A helpful assistant for user questions.
 instruction: Answer user questions to the best of your knowledge
-model: gemini-2.5-flash
+model: $model
+''';
+}
+
+String _workflowRootAgentConfigTemplate() {
+  return '''
+# yaml-language-server: \$schema=https://raw.githubusercontent.com/google/adk-python/refs/heads/main/src/google/adk/agents/config_schemas/AgentConfig.json
+agent_class: SequentialAgent
+name: root_agent
+description: Executes a sequence of sub-agents.
+sub_agents:
+  - config_path: sub_agent_1.yaml
+  - config_path: sub_agent_2.yaml
+''';
+}
+
+String _workflowSubAgentConfigTemplate({
+  required String name,
+  required String description,
+  required String instruction,
+  required String model,
+}) {
+  return '''
+# yaml-language-server: \$schema=https://raw.githubusercontent.com/google/adk-python/refs/heads/main/src/google/adk/agents/config_schemas/AgentConfig.json
+name: $name
+description: $description
+instruction: $instruction
+model: $model
 ''';
 }
 

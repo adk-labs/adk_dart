@@ -109,6 +109,9 @@ Future<HttpServer> startAdkDevWebServer({
   bool enableWebUi = true,
   String? logoText,
   String? logoImageUrl,
+  Map<String, String>? avatarConfig,
+  int? maxLlmCalls,
+  String? defaultLlmModel,
   bool reload = true,
   bool reloadAgents = false,
   bool traceToCloud = false,
@@ -116,7 +119,11 @@ Future<HttpServer> startAdkDevWebServer({
   bool a2a = false,
   List<String> extraPlugins = const <String>[],
   List<String> triggerSources = const <String>[],
+  String? triggerOidcAudience,
+  List<String> triggerOidcServiceAccounts = const <String>[],
   TriggerAuthVerifier? triggerAuthVerifier,
+  String? geminiEnterpriseAppName,
+  bool expressMode = false,
   Map<String, String>? environment,
   int maxLiveMessageBytes = 16 * 1024 * 1024,
   Duration liveKeepaliveTimeout = const Duration(seconds: 40),
@@ -126,11 +133,54 @@ Future<HttpServer> startAdkDevWebServer({
     throw ArgumentError.value(port, 'port', 'Port must be between 0 and 65535');
   }
 
+  if (expressMode &&
+      (geminiEnterpriseAppName == null ||
+          geminiEnterpriseAppName.trim().isEmpty)) {
+    throw ArgumentError(
+      '--express_mode is only supported when --gemini_enterprise_app_name is set.',
+    );
+  }
+
+  if (defaultLlmModel != null && defaultLlmModel.trim().isNotEmpty) {
+    LlmAgent.setDefaultModel(defaultLlmModel.trim());
+  }
+
   final bool hasLogoText = logoText != null && logoText.isNotEmpty;
   final bool hasLogoImage = logoImageUrl != null && logoImageUrl.isNotEmpty;
   if (hasLogoText != hasLogoImage) {
     throw ArgumentError(
       'Both --logo-text and --logo-image-url must be defined when using logo config.',
+    );
+  }
+
+  final InternetAddress resolvedHost = host ?? InternetAddress.loopbackIPv4;
+  final Map<String, String> resolvedEnv = environment ?? Platform.environment;
+  final List<String> normalizedTriggers = triggerSources
+      .map((String s) => s.trim().toLowerCase())
+      .where((String s) => s.isNotEmpty)
+      .toList(growable: false);
+  final bool isLoopback =
+      resolvedHost.isLoopback ||
+      resolvedHost.address == '127.0.0.1' ||
+      resolvedHost.address == '::1' ||
+      resolvedHost.address.toLowerCase() == 'localhost';
+  final String allowUnauthEnv =
+      (resolvedEnv['ADK_ALLOW_UNAUTHENTICATED_TRIGGERS'] ?? '')
+          .trim()
+          .toLowerCase();
+  final bool allowUnauthenticatedTriggers =
+      allowUnauthEnv == '1' ||
+      allowUnauthEnv == 'true' ||
+      allowUnauthEnv == 'yes';
+  if (normalizedTriggers.isNotEmpty &&
+      !isLoopback &&
+      triggerAuthVerifier == null &&
+      (triggerOidcAudience == null || triggerOidcAudience.trim().isEmpty) &&
+      !allowUnauthenticatedTriggers) {
+    throw ArgumentError(
+      '--trigger_sources requires --trigger_oidc_audience when --host is not loopback. '
+      'Pass --trigger_oidc_audience=<expected-audience> (or set '
+      'ADK_ALLOW_UNAUTHENTICATED_TRIGGERS=1 to bypass).',
     );
   }
 
@@ -149,6 +199,9 @@ Future<HttpServer> startAdkDevWebServer({
     enableWebUi: enableWebUi,
     logoText: logoText,
     logoImageUrl: logoImageUrl,
+    avatarConfig: avatarConfig,
+    maxLlmCalls: maxLlmCalls,
+    defaultLlmModel: defaultLlmModel,
     reload: reload,
     reloadAgents: reloadAgents,
     traceToCloud: traceToCloud,
@@ -156,14 +209,17 @@ Future<HttpServer> startAdkDevWebServer({
     a2a: a2a,
     extraPlugins: extraPlugins,
     triggerSources: triggerSources,
+    triggerOidcAudience: triggerOidcAudience,
+    triggerOidcServiceAccounts: triggerOidcServiceAccounts,
     triggerAuthVerifier: triggerAuthVerifier,
+    geminiEnterpriseAppName: geminiEnterpriseAppName,
+    expressMode: expressMode,
     environment: environment,
     maxLiveMessageBytes: maxLiveMessageBytes,
     liveKeepaliveTimeout: liveKeepaliveTimeout,
     maxLiveSessions: maxLiveSessions,
   );
 
-  final InternetAddress resolvedHost = host ?? InternetAddress.loopbackIPv4;
   final HttpServer server = await HttpServer.bind(resolvedHost, port);
   context.serverHost = resolvedHost.address;
   unawaited(_handleRequests(server, context));
@@ -309,6 +365,13 @@ class _AdkDevWebContext {
     required this.enableWebUi,
     required this.logoText,
     required this.logoImageUrl,
+    this.avatarConfig,
+    this.maxLlmCalls,
+    this.defaultLlmModel,
+    this.triggerOidcAudience,
+    this.triggerOidcServiceAccounts = const <String>[],
+    this.geminiEnterpriseAppName,
+    this.expressMode = false,
     required this.reload,
     required this.reloadAgents,
     required this.traceToCloud,
@@ -341,6 +404,13 @@ class _AdkDevWebContext {
   final bool enableWebUi;
   final String? logoText;
   final String? logoImageUrl;
+  final Map<String, String>? avatarConfig;
+  final int? maxLlmCalls;
+  final String? defaultLlmModel;
+  final String? triggerOidcAudience;
+  final List<String> triggerOidcServiceAccounts;
+  final String? geminiEnterpriseAppName;
+  final bool expressMode;
   final bool reload;
   final bool reloadAgents;
   final bool traceToCloud;
@@ -394,6 +464,13 @@ class _AdkDevWebContext {
     required bool enableWebUi,
     required String? logoText,
     required String? logoImageUrl,
+    Map<String, String>? avatarConfig,
+    int? maxLlmCalls,
+    String? defaultLlmModel,
+    String? triggerOidcAudience,
+    List<String> triggerOidcServiceAccounts = const <String>[],
+    String? geminiEnterpriseAppName,
+    bool expressMode = false,
     required bool reload,
     required bool reloadAgents,
     required bool traceToCloud,
@@ -413,6 +490,10 @@ class _AdkDevWebContext {
       throw ArgumentError(
         'Both --logo-text and --logo-image-url must be defined when using logo config.',
       );
+    }
+
+    if (defaultLlmModel != null && defaultLlmModel.trim().isNotEmpty) {
+      LlmAgent.setDefaultModel(defaultLlmModel.trim());
     }
 
     final Directory agentsRoot = Directory(agentsDir).absolute;
@@ -497,6 +578,17 @@ class _AdkDevWebContext {
       enableWebUi: enableWebUi,
       logoText: logoText,
       logoImageUrl: logoImageUrl,
+      avatarConfig: avatarConfig == null
+          ? null
+          : Map<String, String>.unmodifiable(avatarConfig),
+      maxLlmCalls: maxLlmCalls,
+      defaultLlmModel: defaultLlmModel,
+      triggerOidcAudience: triggerOidcAudience,
+      triggerOidcServiceAccounts: List<String>.unmodifiable(
+        triggerOidcServiceAccounts,
+      ),
+      geminiEnterpriseAppName: geminiEnterpriseAppName,
+      expressMode: expressMode,
       reload: reload,
       reloadAgents: reloadAgents,
       traceToCloud: traceToCloud,
@@ -3525,6 +3617,9 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
           newMessage: runRequest.newMessage,
           stateDelta: runRequest.stateDelta,
           invocationId: runRequest.invocationId,
+          runConfig: context.maxLlmCalls == null
+              ? null
+              : RunConfig(maxLlmCalls: context.maxLlmCalls!),
         )
         .toList();
     for (final Event event in events) {
@@ -3691,6 +3786,7 @@ Future<void> _handleRunSse(
         streamingMode: runRequest.streaming
             ? StreamingMode.sse
             : StreamingMode.none,
+        maxLlmCalls: context.maxLlmCalls ?? 500,
       ),
       abortSignal: abortController.signal,
     )) {
@@ -3826,6 +3922,7 @@ Future<void> _handleRunLive(
           ? null
           : <String, Object?>{'transparent': enableSessionResumption},
       saveLiveBlob: saveLiveBlob,
+      maxLlmCalls: context.maxLlmCalls ?? 500,
     );
 
     Future<void> forwardEvents() async {
@@ -3933,6 +4030,9 @@ Future<bool> _handleWebUi(
         'imageUrl': context.logoImageUrl,
       };
     }
+    if (context.avatarConfig != null && context.avatarConfig!.isNotEmpty) {
+      config['avatarConfig'] = context.avatarConfig;
+    }
     request.response.headers.set('Cache-Control', 'no-store');
     await _writeJson(
       request,
@@ -3949,6 +4049,7 @@ Future<bool> _handleWebUi(
       payload: <String, Object?>{
         'logo_text': context.logoText,
         'logo_image_url': context.logoImageUrl,
+        if (context.avatarConfig != null) 'avatar_config': context.avatarConfig,
       },
     );
     return true;

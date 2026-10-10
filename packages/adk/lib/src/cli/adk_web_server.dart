@@ -19,13 +19,27 @@ class AdkWebServer {
     this.sessionServiceUri,
     this.artifactServiceUri,
     this.memoryServiceUri,
+    this.evalStorageUri,
     this.useLocalStorage = true,
     this.urlPrefix,
     this.autoCreateSession = false,
     this.enableWebUi = true,
     this.logoText,
     this.logoImageUrl,
+    this.avatarConfig,
+    this.maxLlmCalls,
+    this.defaultLlmModel,
+    this.reload = false,
+    this.reloadAgents = false,
+    this.traceToCloud = false,
+    this.otelToCloud = false,
+    this.a2a = false,
+    this.extraPlugins = const <String>[],
     this.triggerSources = const <String>[],
+    this.triggerOidcAudience,
+    this.triggerOidcServiceAccounts = const <String>[],
+    this.geminiEnterpriseAppName,
+    this.expressMode = false,
     this.maxLiveMessageBytes = 16 * 1024 * 1024,
     this.liveKeepaliveTimeout = const Duration(seconds: 40),
     this.maxLiveSessions = 0,
@@ -55,6 +69,9 @@ class AdkWebServer {
   /// Optional memory service URI.
   final String? memoryServiceUri;
 
+  /// Optional eval storage URI.
+  final String? evalStorageUri;
+
   /// Whether to persist local `.adk` state when service URIs are unset.
   final bool useLocalStorage;
 
@@ -73,8 +90,47 @@ class AdkWebServer {
   /// Optional image URL for the Dev UI logo.
   final String? logoImageUrl;
 
+  /// Optional mapping of agent names to avatar URLs for the Dev UI.
+  final Map<String, String>? avatarConfig;
+
+  /// Optional maximum number of LLM calls per invocation.
+  final int? maxLlmCalls;
+
+  /// Optional default LLM model name for agents that do not specify one.
+  final String? defaultLlmModel;
+
+  /// Whether server auto-reload is enabled.
+  final bool reload;
+
+  /// Whether local agent definitions are reloaded on change.
+  final bool reloadAgents;
+
+  /// Whether Cloud Trace export is enabled.
+  final bool traceToCloud;
+
+  /// Whether OpenTelemetry Google Cloud export is enabled.
+  final bool otelToCloud;
+
+  /// Whether A2A protocol endpoints are enabled.
+  final bool a2a;
+
+  /// Extra plugin specifications loaded at startup.
+  final List<String> extraPlugins;
+
   /// Event trigger sources to enable (`pubsub`, `eventarc`).
   final List<String> triggerSources;
+
+  /// Expected OIDC audience for authenticating `/apps/{app_name}/trigger/*` requests.
+  final String? triggerOidcAudience;
+
+  /// Optional allowlist of service account emails permitted as OIDC token subjects.
+  final List<String> triggerOidcServiceAccounts;
+
+  /// Resource name of the Gemini Enterprise App to read settings from.
+  final String? geminiEnterpriseAppName;
+
+  /// Whether Gemini Enterprise Express Mode is enabled.
+  final bool expressMode;
 
   /// Maximum allowed `/run_live` WebSocket message size in bytes (`< 0` disables).
   final int maxLiveMessageBytes;
@@ -106,13 +162,27 @@ class AdkWebServer {
       sessionServiceUri: sessionServiceUri,
       artifactServiceUri: artifactServiceUri,
       memoryServiceUri: memoryServiceUri,
+      evalStorageUri: evalStorageUri,
       useLocalStorage: useLocalStorage,
       urlPrefix: urlPrefix,
       autoCreateSession: autoCreateSession,
       enableWebUi: enableWebUi,
       logoText: logoText,
       logoImageUrl: logoImageUrl,
+      avatarConfig: avatarConfig,
+      maxLlmCalls: maxLlmCalls,
+      defaultLlmModel: defaultLlmModel,
+      reload: reload,
+      reloadAgents: reloadAgents,
+      traceToCloud: traceToCloud,
+      otelToCloud: otelToCloud,
+      a2a: a2a,
+      extraPlugins: extraPlugins,
       triggerSources: triggerSources,
+      triggerOidcAudience: triggerOidcAudience,
+      triggerOidcServiceAccounts: triggerOidcServiceAccounts,
+      geminiEnterpriseAppName: geminiEnterpriseAppName,
+      expressMode: expressMode,
       maxLiveMessageBytes: maxLiveMessageBytes,
       liveKeepaliveTimeout: liveKeepaliveTimeout,
       maxLiveSessions: maxLiveSessions,
@@ -157,13 +227,27 @@ Future<HttpServer> startAdkWebServer({
   String? sessionServiceUri,
   String? artifactServiceUri,
   String? memoryServiceUri,
+  String? evalStorageUri,
   bool useLocalStorage = true,
   String? urlPrefix,
   bool autoCreateSession = false,
   bool enableWebUi = true,
   String? logoText,
   String? logoImageUrl,
+  Map<String, String>? avatarConfig,
+  int? maxLlmCalls,
+  String? defaultLlmModel,
+  bool reload = false,
+  bool reloadAgents = false,
+  bool traceToCloud = false,
+  bool otelToCloud = false,
+  bool a2a = false,
+  List<String> extraPlugins = const <String>[],
   List<String> triggerSources = const <String>[],
+  String? triggerOidcAudience,
+  List<String> triggerOidcServiceAccounts = const <String>[],
+  String? geminiEnterpriseAppName,
+  bool expressMode = false,
   int maxLiveMessageBytes = 16 * 1024 * 1024,
   Duration liveKeepaliveTimeout = const Duration(seconds: 40),
   int maxLiveSessions = 0,
@@ -177,13 +261,27 @@ Future<HttpServer> startAdkWebServer({
     sessionServiceUri: sessionServiceUri,
     artifactServiceUri: artifactServiceUri,
     memoryServiceUri: memoryServiceUri,
+    evalStorageUri: evalStorageUri,
     useLocalStorage: useLocalStorage,
     urlPrefix: urlPrefix,
     autoCreateSession: autoCreateSession,
     enableWebUi: enableWebUi,
     logoText: logoText,
     logoImageUrl: logoImageUrl,
+    avatarConfig: avatarConfig,
+    maxLlmCalls: maxLlmCalls,
+    defaultLlmModel: defaultLlmModel,
+    reload: reload,
+    reloadAgents: reloadAgents,
+    traceToCloud: traceToCloud,
+    otelToCloud: otelToCloud,
+    a2a: a2a,
+    extraPlugins: extraPlugins,
     triggerSources: triggerSources,
+    triggerOidcAudience: triggerOidcAudience,
+    triggerOidcServiceAccounts: triggerOidcServiceAccounts,
+    geminiEnterpriseAppName: geminiEnterpriseAppName,
+    expressMode: expressMode,
     maxLiveMessageBytes: maxLiveMessageBytes,
     liveKeepaliveTimeout: liveKeepaliveTimeout,
     maxLiveSessions: maxLiveSessions,
