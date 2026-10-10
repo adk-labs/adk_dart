@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (2026-10-10)
+
+- **Full 1:1 `adk-python` CLI Option & Subcommand Parity**:
+  - **`adk create`**: Added `--model` / `-m`, `--api_key` / `-k`, `--project` / `-p`, `--region` / `-r`, and `--type` (`CODE` | `CONFIG` | `BASIC` | `WORKFLOW`) with `root_agent.yaml`, `sub_agent_1.yaml`, `sub_agent_2.yaml`, and `.env` generation.
+  - **`adk run [query]`**: Added optional positional `[query]`, `--timeout` (`30`, `10s`, `5m`, `1h`), `--in_memory`, `--jsonl` (structured JSONL event output), `--default_llm_model`, `--save_session` / `--no-save_session`, `-v` / `--verbose`, `--log_level` / `--verbosity`, auto-resume on trailing user event, and exit code `2` on HITL pause.
+  - **`adk web` & `adk api_server`**: Added `--avatar_config`, `--max_llm_calls`, `--default_llm_model`, `--trigger_sources` (`pubsub`, `eventarc`, `webhook`), `--trigger_oidc_audience`, `--trigger_oidc_service_accounts`, `--with_ui` / `--no-with_ui`, `--gemini_enterprise_app_name`, `--express_mode`, `/dev/apps/...` routes, and `/run_live` WebSocket message/keepalive/concurrency bounds.
+  - **`adk deploy`**: Added `adk deploy docker` (`toDocker`), `--cluster_name`, `--service_type`, `--worker_pool`, `--with_cloud_run_sandbox`, `--extra_packages`, `--provider_args`, `--env KEY=VALUE`, `--trigger_sources`, `--trigger_oidc_audience`, `--trigger_oidc_service_accounts`, `--adk_version`, mutual-exclusivity validation (`--use_local_storage` vs service URIs), and `--with_ui` production warning.
+  - **`adk eval_set` / `adk migrate session` / `adk test`**: Added `adk eval_set generate_eval_cases`, `adk migrate session --allow-unsafe-unpickling`, `adk test [folder] --rebuild -- <args>`, `adk --version`, and `adk doctor` / `adk diag`.
+- Synced `adk-web` browser bundle (`main-NZEGJ4FM.js`) and completed 100% API doc comments and examples.
+
 ## 2026.10.7
 
 - Bumped package version to `2026.10.7` and dependency `adk_dart: ^2026.10.7`.

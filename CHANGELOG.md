@@ -1,3 +1,23 @@
+## Unreleased (2026-10-10)
+
+- **`CascadeLive` & `ElevenLabs` Cascaded Speech Pipeline (`adk-python` `128faabb6`)**:
+  - Added `CascadeLive`, `CascadeLiveConnection`, `IngressEvent` (`PartialTranscript`, `UserTurnFinished`, `UserSpeechStarted`), `EgressEvent` (`AudioChunk`, `AgentSpokenOutput`), `CancelSignal`, `LiveIngress`, and `LiveEgress` in `lib/src/live/`.
+  - Added `ElevenLabsSTT`, `ElevenLabsTTS` (with sentence boundary splitting and `audio/pcm;rate=<rate>` MIME formatting), and `ElevenLabsSpeechClient` in `lib/src/integrations/eleven_labs/eleven_labs.dart`.
+  - Registered `FeatureName.cascadeLive` (`CASCADE_LIVE`) and `FeatureName.elevenLabs` (`ELEVEN_LABS`), and added `sendActivityStart()` / `sendActivityEnd()` on `BaseLlmConnection`.
+- **Skill Tool Telemetry & Built-in Function Constants (`c11060cca`, `cb6d67997`)**:
+  - Added `TraceSpanRecord.updateName` and `formatSkillToolSpanName` so `execute_tool` spans for `load_skill`, `load_skill_resource`, and `run_skill_script` are dynamically named after the confirmed skill/resource/script.
+  - Added centralized client and HITL function call constants in `lib/src/utils/function_call_names.dart`.
+- **Core Runtime, Models, Tools, Auth & Session Hardening (`adk-python`, `adk-go`, `adk-java`, `adk-kotlin`, `adk-js`)**:
+  - Updated `RestApiTool` (`b9308284a`) to return a structured `{error: ...}` map when a required path parameter is missing or empty.
+  - Updated `FunctionTool` (`6a60d6a2e`) to preserve callable object metadata and prevent partial tool name collisions.
+  - Updated `LiteLlm` (`b158f9f84`) and `ApigeeLlm` (`f5db3104c`) to preserve all assistant text parts and text sent alongside function responses.
+  - Guarded concurrent lazy initialization in `ComputerUseToolset` and `EnvironmentToolset` (`15486dbb2`).
+  - Added `Secret`, `ExperimentalAuthApi`, and `SecretAccess` (`lib/src/auth/secret.dart`), `NodeConfig` and `RetryConfig` defaults/validation (`lib/src/workflow/workflow.dart`), `beforeRunReplyKey` preservation (`Runner` / `RemoteA2aAgent`), `FOR UPDATE` row locking in `NetworkDatabaseSessionService.appendEvent`, and `allowUnsafeUnpickling` in `migrateSessionDatabase`.
+- **Full 1:1 `adk-python` CLI Option & Subcommand Parity (`packages/adk`)**:
+  - Expanded `adk create`, `adk run [query]`, `adk web`, `adk api_server`, `adk deploy` (`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval_set generate_eval_cases`, `adk migrate session --allow-unsafe-unpickling`, `adk test --rebuild -- <args>`, `adk --version`, and `adk doctor` / `adk diag`.
+- **100% API Documentation & Code Examples**:
+  - Completed `///` documentation comments and runnable `/// ```dart` examples across all public declarations in `adk_dart`, `packages/adk`, `packages/flutter_adk`, `packages/adk_mcp`, and `packages/adk_litertlm` with 0 analyzer issues.
+
 ## 2026.10.7
 
 - **Upstream `adk-python` v2.11.0+ & Cross-SDK Parity**:
