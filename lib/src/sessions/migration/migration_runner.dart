@@ -20,7 +20,11 @@ final Map<String, (String endVersion, MigrationFunction migrate)> migrations =
 const String latestVersion = latestSchemaVersion;
 
 /// Upgrades [sourceDbUrl] schema into [destDbUrl] using migration steps.
-Future<void> upgrade(String sourceDbUrl, String destDbUrl) async {
+Future<void> upgrade(
+  String sourceDbUrl,
+  String destDbUrl, {
+  bool allowUnsafeUnpickling = false,
+}) async {
   if (sourceDbUrl == destDbUrl) {
     throw StateError(
       'In-place migration is not supported. '

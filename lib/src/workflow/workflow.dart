@@ -821,7 +821,7 @@ class ParallelWorker extends BaseNode {
   final int? maxParallelWorkers;
 
   /// Deprecated. Use [maxParallelWorkers] instead.
-  @deprecated
+  @Deprecated('Use maxParallelWorkers instead.')
   int? get maxConcurrency => maxParallelWorkers;
 
   @override

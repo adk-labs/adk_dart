@@ -414,7 +414,7 @@ class AgentCapabilities {
   /// Creates an agent capability map.
   AgentCapabilities({bool? streaming, Map<String, Object?>? values})
     : values = <String, Object?>{
-        if (streaming != null) 'streaming': streaming,
+        'streaming': ?streaming,
         ...?values,
       };
 

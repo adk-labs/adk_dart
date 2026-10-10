@@ -1,3 +1,5 @@
+// ignore_for_file: non_constant_identifier_names
+
 /// Google Maps grounding tool definitions and aliases.
 library;
 

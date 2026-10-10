@@ -1,3 +1,5 @@
+// ignore_for_file: non_constant_identifier_names
+
 /// Toolset that adapts base computer interfaces into ADK tools.
 library;
 
