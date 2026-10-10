@@ -253,9 +253,16 @@ class GoogleApiToOpenApiConverter {
 
   List<String> _extractPathParameters(String path) {
     final List<String> params = <String>[];
-    for (final String segment in path.split('/')) {
-      if (segment.startsWith('{') && segment.endsWith('}')) {
-        params.add(segment.substring(1, segment.length - 1));
+    for (final RegExpMatch match in RegExp(r'\{([^}]+)\}').allMatches(path)) {
+      final String rawName = match.group(1) ?? '';
+      if (rawName.isEmpty) {
+        continue;
+      }
+      final String paramName = rawName.startsWith('+')
+          ? rawName.substring(1)
+          : rawName;
+      if (paramName.isNotEmpty) {
+        params.add(paramName);
       }
     }
     return params;

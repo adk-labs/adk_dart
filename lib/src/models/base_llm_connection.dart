@@ -47,6 +47,12 @@ abstract class BaseLlmConnection {
   /// Sends realtime binary [blob] content to the model connection.
   Future<void> sendRealtime(RealtimeBlob blob);
 
+  /// Signals the start of user speech activity when manual VAD is enabled.
+  Future<void> sendActivityStart() async {}
+
+  /// Signals the end of user speech activity when manual VAD is enabled.
+  Future<void> sendActivityEnd() async {}
+
   /// Receives responses emitted by the model connection.
   Stream<LlmResponse> receive();
 

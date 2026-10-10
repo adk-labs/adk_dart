@@ -70,7 +70,7 @@ class _TestModel extends BaseLlm {
   }
 }
 
-class _TestConnection implements BaseLlmConnection {
+class _TestConnection extends BaseLlmConnection {
   @override
   Future<void> sendHistory(List<Content> history) async {}
 

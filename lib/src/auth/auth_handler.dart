@@ -1,6 +1,9 @@
 /// Auth flow coordinator for exchanging and storing credentials in state.
 library;
 
+import 'dart:convert';
+import 'dart:math';
+
 import '../sessions/state.dart';
 import 'auth_credential.dart';
 import 'auth_tool.dart';
@@ -150,11 +153,139 @@ class AuthHandler {
       );
     }
 
-    // Dart runtime currently does not synthesize provider-specific auth URI.
-    // Keep parity with Python fallback behavior by forwarding credential info.
-    return _redactConfiguredSecrets(
-      authConfig.copyWith(exchangedAuthCredential: raw.copyWith()),
+    final OAuth2Auth synthesizedOauth2 = _synthesizeOAuth2Auth(
+      oauth2,
+      authConfig.authScheme,
     );
+    return _redactConfiguredSecrets(
+      authConfig.copyWith(
+        exchangedAuthCredential: raw.copyWith(oauth2: synthesizedOauth2),
+      ),
+    );
+  }
+
+  OAuth2Auth _synthesizeOAuth2Auth(OAuth2Auth oauth2, String authScheme) {
+    final _ExtractedSchemeAuthEndpoint? endpoint =
+        _extractSchemeAuthorizationEndpoint(authScheme);
+    if (endpoint == null || endpoint.authorizationUrl.isEmpty) {
+      return oauth2.copyWith();
+    }
+
+    final Uri? parsedBase = Uri.tryParse(endpoint.authorizationUrl);
+    if (parsedBase == null) {
+      return oauth2.copyWith();
+    }
+
+    final String state = (oauth2.state != null && oauth2.state!.isNotEmpty)
+        ? oauth2.state!
+        : _generateRandomState();
+    final Map<String, String> queryParams = <String, String>{
+      ...parsedBase.queryParameters,
+      'response_type': endpoint.isImplicit ? 'token' : 'code',
+      if (oauth2.clientId != null && oauth2.clientId!.isNotEmpty)
+        'client_id': oauth2.clientId!,
+      if (oauth2.redirectUri != null && oauth2.redirectUri!.isNotEmpty)
+        'redirect_uri': oauth2.redirectUri!,
+      'state': state,
+      if (endpoint.scopes.isNotEmpty) 'scope': endpoint.scopes.join(' '),
+      if (oauth2.audience != null && oauth2.audience!.isNotEmpty)
+        'audience': oauth2.audience!,
+      if (oauth2.prompt != null && oauth2.prompt!.isNotEmpty)
+        'prompt': oauth2.prompt!,
+      if (oauth2.nonce != null && oauth2.nonce!.isNotEmpty)
+        'nonce': oauth2.nonce!,
+    };
+    final Uri authUri = parsedBase.replace(queryParameters: queryParams);
+    return oauth2.copyWith(authUri: authUri.toString(), state: state);
+  }
+
+  _ExtractedSchemeAuthEndpoint? _extractSchemeAuthorizationEndpoint(
+    String authScheme,
+  ) {
+    final String trimmed = authScheme.trim();
+    if (!trimmed.startsWith('{')) {
+      return null;
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(trimmed);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) {
+      return null;
+    }
+
+    final String? directEndpoint = _nonEmptyString(
+      decoded['authorization_endpoint'] ??
+          decoded['authorizationEndpoint'] ??
+          decoded['authorization_url'] ??
+          decoded['authorizationUrl'] ??
+          decoded['open_id_connect_url'] ??
+          decoded['openIdConnectUrl'],
+    );
+    if (directEndpoint != null) {
+      return _ExtractedSchemeAuthEndpoint(
+        authorizationUrl: directEndpoint,
+        scopes: _extractScopeList(decoded['scopes']),
+      );
+    }
+
+    final Object? flowsRaw = decoded['flows'];
+    if (flowsRaw is Map) {
+      for (final String flowKey in <String>[
+        'authorization_code',
+        'authorizationCode',
+        'implicit',
+        'client_credentials',
+        'clientCredentials',
+        'password',
+      ]) {
+        final Object? flow = flowsRaw[flowKey];
+        if (flow is Map) {
+          final String? url = _nonEmptyString(
+            flow['authorization_url'] ?? flow['authorizationUrl'],
+          );
+          if (url != null) {
+            return _ExtractedSchemeAuthEndpoint(
+              authorizationUrl: url,
+              scopes: _extractScopeList(flow['scopes'] ?? decoded['scopes']),
+              isImplicit: flowKey == 'implicit',
+            );
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  List<String> _extractScopeList(Object? rawScopes) {
+    if (rawScopes is List) {
+      return rawScopes
+          .map((Object? item) => '$item'.trim())
+          .where((String item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    if (rawScopes is Map) {
+      return rawScopes.keys
+          .map((Object? key) => '$key'.trim())
+          .where((String key) => key.isNotEmpty)
+          .toList(growable: false);
+    }
+    return const <String>[];
+  }
+
+  String? _nonEmptyString(Object? value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+    return null;
+  }
+
+  String _generateRandomState() {
+    final Random random = Random.secure();
+    final List<int> bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
   AuthConfig _redactConfiguredSecrets(AuthConfig config) {
@@ -202,3 +333,16 @@ class AuthHandler {
         (oauth2.authResponseUri?.isNotEmpty == true);
   }
 }
+
+class _ExtractedSchemeAuthEndpoint {
+  const _ExtractedSchemeAuthEndpoint({
+    required this.authorizationUrl,
+    this.scopes = const <String>[],
+    this.isImplicit = false,
+  });
+
+  final String authorizationUrl;
+  final List<String> scopes;
+  final bool isImplicit;
+}
+

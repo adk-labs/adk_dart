@@ -25,6 +25,10 @@ class AdkWebServer {
     this.enableWebUi = true,
     this.logoText,
     this.logoImageUrl,
+    this.triggerSources = const <String>[],
+    this.maxLiveMessageBytes = 16 * 1024 * 1024,
+    this.liveKeepaliveTimeout = const Duration(seconds: 40),
+    this.maxLiveSessions = 0,
   });
 
   /// Root directory containing one or more app folders.
@@ -69,6 +73,18 @@ class AdkWebServer {
   /// Optional image URL for the Dev UI logo.
   final String? logoImageUrl;
 
+  /// Event trigger sources to enable (`pubsub`, `eventarc`).
+  final List<String> triggerSources;
+
+  /// Maximum allowed `/run_live` WebSocket message size in bytes (`< 0` disables).
+  final int maxLiveMessageBytes;
+
+  /// Keepalive timeout for `/run_live` WebSocket connections (`<= Duration.zero` disables).
+  final Duration liveKeepaliveTimeout;
+
+  /// Maximum concurrent `/run_live` WebSocket sessions (`<= 0` means unlimited).
+  final int maxLiveSessions;
+
   DevAgentRuntime? _runtime;
   HttpServer? _server;
 
@@ -96,6 +112,10 @@ class AdkWebServer {
       enableWebUi: enableWebUi,
       logoText: logoText,
       logoImageUrl: logoImageUrl,
+      triggerSources: triggerSources,
+      maxLiveMessageBytes: maxLiveMessageBytes,
+      liveKeepaliveTimeout: liveKeepaliveTimeout,
+      maxLiveSessions: maxLiveSessions,
     );
     _runtime = runtime;
     _server = server;
@@ -143,6 +163,10 @@ Future<HttpServer> startAdkWebServer({
   bool enableWebUi = true,
   String? logoText,
   String? logoImageUrl,
+  List<String> triggerSources = const <String>[],
+  int maxLiveMessageBytes = 16 * 1024 * 1024,
+  Duration liveKeepaliveTimeout = const Duration(seconds: 40),
+  int maxLiveSessions = 0,
 }) async {
   final AdkWebServer server = AdkWebServer(
     agentsDir: agentsDir,
@@ -159,6 +183,10 @@ Future<HttpServer> startAdkWebServer({
     enableWebUi: enableWebUi,
     logoText: logoText,
     logoImageUrl: logoImageUrl,
+    triggerSources: triggerSources,
+    maxLiveMessageBytes: maxLiveMessageBytes,
+    liveKeepaliveTimeout: liveKeepaliveTimeout,
+    maxLiveSessions: maxLiveSessions,
   );
   return server.start();
 }

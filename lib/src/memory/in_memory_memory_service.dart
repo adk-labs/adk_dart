@@ -81,7 +81,7 @@ class InMemoryMemoryService extends BaseMemoryService {
         _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
 
     final Set<String> queryWords = _extractWordsLower(query);
-    final bool matchAll = queryWords.isEmpty;
+    final bool matchAll = query.trim().isEmpty;
     final List<(int, MemoryEntry)> scoredMemories = <(int, MemoryEntry)>[];
 
     for (final List<Event> events in sessions.values) {
@@ -155,7 +155,7 @@ bool _isAscii(String str) {
 }
 
 Set<String> _extractWordsLower(String text) {
-  final RegExp exp = RegExp(r'[\p{L}\p{N}_]+', unicode: true);
+  final RegExp exp = RegExp(r'[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*', unicode: true);
   return exp
       .allMatches(text)
       .map((Match match) => match.group(0)!.toLowerCase())

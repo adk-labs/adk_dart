@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adk/flutter_adk.dart';
 import 'package:flutter_adk/flutter_adk_platform_interface.dart';
@@ -181,5 +182,54 @@ void main() {
     expect(SessionNotFoundError('missing').message, equals('missing'));
     expect(StaleSessionError('stale').message, equals('stale'));
     expect(ReflectAndRetryModelPlugin(maxRetries: 2).maxRetries, equals(2));
+  });
+
+  testWidgets('AdkMessageBubble renders AdkCodeExecutionCard and AdkGroundingSourcesBar', (
+    WidgetTester tester,
+  ) async {
+    AdkGroundingSource? tappedSource;
+    final AdkChatMessage msg = AdkChatMessage.model(
+      id: 'm1',
+      text: 'The result is 42.',
+      codeExecution: const AdkCodeExecution(
+        language: 'PYTHON',
+        code: 'print(6 * 7)',
+        output: '42\n',
+        outcome: 'OUTCOME_OK',
+      ),
+      grounding: const AdkGroundingInfo(
+        searchQueries: <String>['meaning of life'],
+        sources: <AdkGroundingSource>[
+          AdkGroundingSource(
+            title: 'ADK Docs',
+            uri: 'https://google.github.io/adk-docs/',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AdkMessageBubble(
+            message: msg,
+            onGroundingSourceTap: (AdkGroundingSource src) {
+              tappedSource = src;
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(AdkCodeExecutionCard), findsOneWidget);
+    expect(find.text('PYTHON'), findsOneWidget);
+    expect(find.text('print(6 * 7)'), findsOneWidget);
+    expect(find.text('42'), findsOneWidget);
+    expect(find.byType(AdkGroundingSourcesBar), findsOneWidget);
+    expect(find.text('meaning of life'), findsOneWidget);
+    expect(find.text('ADK Docs'), findsOneWidget);
+
+    await tester.tap(find.text('ADK Docs'));
+    expect(tappedSource?.uri, 'https://google.github.io/adk-docs/');
   });
 }

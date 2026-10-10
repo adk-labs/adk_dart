@@ -19,6 +19,7 @@ export 'src/cli/conformance/__init__.dart';
 export 'src/cli/fast_api.dart';
 export 'src/cli/plugins/__init__.dart';
 export 'src/cli/service_registry.dart';
+export 'src/cli/trigger_routes.dart';
 export 'src/cli/utils/__init__.dart';
 export 'src/cli/utils/dot_adk_folder.dart';
 export 'src/cli/utils/service_factory.dart';

@@ -466,12 +466,15 @@ class SqliteSessionService extends BaseSessionService {
           }
 
           if (delta.session.isNotEmpty) {
+            final String deltaJson = jsonEncode(delta.session);
             db.execute(
               'UPDATE sessions '
-              'SET state=json_patch(state, ?), update_time=? '
+              'SET state=${_mergeStateSql(stateExpr: 'state', deltaExpr: '?')}, '
+              'update_time=? '
               'WHERE app_name=? AND user_id=? AND id=?',
               <Object?>[
-                jsonEncode(delta.session),
+                deltaJson,
+                deltaJson,
                 event.timestamp,
                 session.appName,
                 session.userId,
@@ -626,6 +629,33 @@ class SqliteSessionService extends BaseSessionService {
     }
   }
 
+  static String _mergeStateSql({
+    required String stateExpr,
+    required String deltaExpr,
+  }) {
+    return '('
+        'SELECT json_group_object('
+        'key, '
+        'CASE '
+        "WHEN type IN ('object','array') THEN json(value) "
+        "WHEN type IN ('true','false') THEN json(type) "
+        "WHEN type = 'real' THEN json("
+        'CASE '
+        "WHEN CAST(printf('%!.15g', value) AS REAL) = value "
+        "THEN printf('%!.15g', value) "
+        "ELSE printf('%!.17g', value) "
+        'END) '
+        'ELSE value '
+        'END) '
+        'FROM ('
+        'SELECT key, value, type FROM json_each($deltaExpr) '
+        'UNION ALL '
+        'SELECT key, value, type FROM json_each($stateExpr) '
+        'WHERE key NOT IN (SELECT key FROM json_each($deltaExpr))'
+        ')'
+        ')';
+  }
+
   void _upsertAppState(
     _SqliteDatabase db, {
     required String appName,
@@ -635,7 +665,7 @@ class SqliteSessionService extends BaseSessionService {
     db.execute(
       'INSERT INTO app_states (app_name, state, update_time) VALUES (?, ?, ?) '
       'ON CONFLICT(app_name) DO UPDATE '
-      'SET state=json_patch(state, excluded.state), '
+      'SET state=${_mergeStateSql(stateExpr: 'state', deltaExpr: 'excluded.state')}, '
       'update_time=excluded.update_time',
       <Object?>[appName, jsonEncode(delta), updateTime],
     );
@@ -652,7 +682,7 @@ class SqliteSessionService extends BaseSessionService {
       'INSERT INTO user_states (app_name, user_id, state, update_time) '
       'VALUES (?, ?, ?, ?) '
       'ON CONFLICT(app_name, user_id) DO UPDATE '
-      'SET state=json_patch(state, excluded.state), '
+      'SET state=${_mergeStateSql(stateExpr: 'state', deltaExpr: 'excluded.state')}, '
       'update_time=excluded.update_time',
       <Object?>[appName, userId, jsonEncode(delta), updateTime],
     );

@@ -23,6 +23,7 @@ import '../tools/mcp_tool/mcp_tool.dart';
 import '../tools/tool_context.dart';
 import '../tools/transfer_to_agent_tool.dart';
 import '../types/content.dart';
+import '../utils/function_call_names.dart';
 import '../version.dart';
 import 'base_plugin.dart';
 
@@ -31,9 +32,9 @@ const String _schemaVersionLabelKey = 'adk_schema_version';
 const String _cycleDetectedMessage = '[cycle detected]';
 
 const Map<String, String> _hitlEventMap = <String, String>{
-  'adk_request_credential': 'HITL_CREDENTIAL_REQUEST',
-  'adk_request_confirmation': 'HITL_CONFIRMATION_REQUEST',
-  'adk_request_input': 'HITL_INPUT_REQUEST',
+  requestEucFunctionCallName: 'HITL_CREDENTIAL_REQUEST',
+  requestConfirmationFunctionCallName: 'HITL_CONFIRMATION_REQUEST',
+  requestInputFunctionCallName: 'HITL_INPUT_REQUEST',
 };
 
 const List<String> _analyticsViewEventTypes = <String>[

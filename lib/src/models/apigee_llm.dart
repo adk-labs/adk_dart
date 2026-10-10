@@ -802,6 +802,16 @@ class ApigeeLlm extends Gemini {
     }
 
     if (toolResponses.isNotEmpty) {
+      if (contentParts.isNotEmpty) {
+        final Object followUpContent =
+            contentParts.length == 1 && contentParts.first['type'] == 'text'
+            ? contentParts.first['text'] as Object
+            : contentParts;
+        return <Map<String, Object?>>[
+          ...toolResponses,
+          <String, Object?>{'role': 'user', 'content': followUpContent},
+        ];
+      }
       return toolResponses;
     }
 

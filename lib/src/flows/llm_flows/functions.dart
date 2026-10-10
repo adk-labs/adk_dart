@@ -17,18 +17,9 @@ import '../../tools/tool_context.dart';
 import '../../types/content.dart';
 import '../../types/id.dart';
 import '../../agents/llm_agent.dart';
+import '../../utils/function_call_names.dart';
 
-/// Prefix for ADK-generated client-side function call identifiers.
-const String afFunctionCallIdPrefix = 'adk-';
-
-/// Internal function name used to request credentials.
-const String requestEucFunctionCallName = 'adk_request_credential';
-
-/// Internal function name used to request tool confirmation.
-const String requestConfirmationFunctionCallName = 'adk_request_confirmation';
-
-/// Internal function name used to request additional user input.
-const String requestInputFunctionCallName = 'adk_request_input';
+export '../../utils/function_call_names.dart';
 
 /// Generates a new ADK client function-call identifier.
 String generateClientFunctionCallId() {

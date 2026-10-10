@@ -119,7 +119,7 @@ class APIHubClient implements BaseAPIHubClient {
       return _fetchSpec(apiSpecResourceName);
     }
 
-    throw ArgumentError('No API Hub resource found in path: {path}');
+    throw ArgumentError('No API Hub resource found in path: $path');
   }
 
   /// Lists APIs under [project]/[location].

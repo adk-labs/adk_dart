@@ -500,9 +500,10 @@ class NetworkDatabaseSessionService extends BaseSessionService {
         session.storageUpdateMarker = storedUpdateMarker;
 
         if (delta.app.isNotEmpty) {
-          final Map<String, Object?> current = await _getAppState(
+          final Map<String, Object?> current = await _lockAndGetAppState(
             db: db,
             appName: session.appName,
+            updateTime: event.timestamp,
           );
           await _upsertAppState(
             db: db,
@@ -513,10 +514,11 @@ class NetworkDatabaseSessionService extends BaseSessionService {
         }
 
         if (delta.user.isNotEmpty) {
-          final Map<String, Object?> current = await _getUserState(
+          final Map<String, Object?> current = await _lockAndGetUserState(
             db: db,
             appName: session.appName,
             userId: session.userId,
+            updateTime: event.timestamp,
           );
           await _upsertUserState(
             db: db,
@@ -667,6 +669,75 @@ class NetworkDatabaseSessionService extends BaseSessionService {
       return rawValue.toUtc().toIso8601String();
     }
     return '$rawValue';
+  }
+
+  Future<Map<String, Object?>> _lockAndGetAppState({
+    required _NetworkDbExecutor db,
+    required String appName,
+    required double updateTime,
+  }) async {
+    if (_driver == _NetworkDriver.postgres) {
+      await db.execute(
+        'INSERT INTO app_states (app_name, state, update_time) '
+        'VALUES (?, ?, ?) '
+        'ON CONFLICT (app_name) DO NOTHING',
+        <Object?>[appName, jsonEncode(const <String, Object?>{}), updateTime],
+      );
+    } else {
+      await db.execute(
+        'INSERT IGNORE INTO app_states (app_name, state, update_time) '
+        'VALUES (?, ?, ?)',
+        <Object?>[appName, jsonEncode(const <String, Object?>{}), updateTime],
+      );
+    }
+    final List<Map<String, Object?>> rows = await db.query(
+      'SELECT state FROM app_states WHERE app_name=? FOR UPDATE',
+      <Object?>[appName],
+    );
+    if (rows.isEmpty) {
+      return <String, Object?>{};
+    }
+    return _decodeJsonMap(rows.first['state']);
+  }
+
+  Future<Map<String, Object?>> _lockAndGetUserState({
+    required _NetworkDbExecutor db,
+    required String appName,
+    required String userId,
+    required double updateTime,
+  }) async {
+    if (_driver == _NetworkDriver.postgres) {
+      await db.execute(
+        'INSERT INTO user_states (app_name, user_id, state, update_time) '
+        'VALUES (?, ?, ?, ?) '
+        'ON CONFLICT (app_name, user_id) DO NOTHING',
+        <Object?>[
+          appName,
+          userId,
+          jsonEncode(const <String, Object?>{}),
+          updateTime,
+        ],
+      );
+    } else {
+      await db.execute(
+        'INSERT IGNORE INTO user_states (app_name, user_id, state, update_time) '
+        'VALUES (?, ?, ?, ?)',
+        <Object?>[
+          appName,
+          userId,
+          jsonEncode(const <String, Object?>{}),
+          updateTime,
+        ],
+      );
+    }
+    final List<Map<String, Object?>> rows = await db.query(
+      'SELECT state FROM user_states WHERE app_name=? AND user_id=? FOR UPDATE',
+      <Object?>[appName, userId],
+    );
+    if (rows.isEmpty) {
+      return <String, Object?>{};
+    }
+    return _decodeJsonMap(rows.first['state']);
   }
 
   Future<Map<String, Object?>> _getAppState({

@@ -49,6 +49,9 @@ const String adkExperimentalContextCacheContentsCount =
 const String adkExperimentalContextCacheInvocationsUsed =
     'adk.experimental.context_cache.invocations_used';
 
+/// Alias for [TraceSpanRecord].
+typedef TraceSpan = TraceSpanRecord;
+
 /// In-memory representation of a trace span and its attributes.
 class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
   /// Creates a trace span record.
@@ -56,10 +59,15 @@ class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
     : attributes = attributes ?? <String, Object?>{};
 
   /// Span name.
-  final String name;
+  String name;
 
   /// Mutable span attributes.
   final Map<String, Object?> attributes;
+
+  /// Updates the span [name] to [newName].
+  void updateName(String newName) {
+    name = newName;
+  }
 
   @override
   void setAttribute(String key, Object? value) {
@@ -69,6 +77,86 @@ class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
   /// Sets multiple [values] on this span.
   void setAttributes(Map<String, Object?> values) {
     attributes.addAll(values);
+  }
+}
+
+/// Formats an `execute_tool` span name for skill tools using confirmed
+/// (non-hallucinated) skill and resource/script identifiers.
+String formatSkillToolSpanName({
+  required String toolName,
+  String? confirmedSkillName,
+  String? confirmedResourceOrScriptPath,
+}) {
+  final String? skill = confirmedSkillName?.trim();
+  if (skill == null || skill.isEmpty) {
+    return 'execute_tool $toolName';
+  }
+  final String? resource = confirmedResourceOrScriptPath?.trim();
+  if (resource == null || resource.isEmpty) {
+    return 'execute_tool $toolName $skill';
+  }
+  return 'execute_tool $toolName $skill $resource';
+}
+
+/// Telemetry helper for naming and updating skill tool execution spans.
+///
+/// ```dart
+/// final spanName = SkillTelemetry.formatSpanName(
+///   toolName: 'load_skill',
+///   confirmedSkillName: 'my-skill',
+/// );
+/// ```
+class SkillTelemetry {
+  /// Creates a skill telemetry descriptor.
+  const SkillTelemetry({
+    required this.toolName,
+    this.confirmedSkillName,
+    this.confirmedResourceOrScriptPath,
+  });
+
+  /// The name of the skill tool (`load_skill`, `load_skill_resource`, `run_skill_script`).
+  final String toolName;
+
+  /// The skill name once confirmed not hallucinated.
+  final String? confirmedSkillName;
+
+  /// The resource or script path once confirmed not hallucinated.
+  final String? confirmedResourceOrScriptPath;
+
+  /// Computed span name for this skill tool invocation.
+  String get spanName => formatSkillToolSpanName(
+    toolName: toolName,
+    confirmedSkillName: confirmedSkillName,
+    confirmedResourceOrScriptPath: confirmedResourceOrScriptPath,
+  );
+
+  /// Formats an `execute_tool` span name for skill tools.
+  static String formatSpanName({
+    required String toolName,
+    String? confirmedSkillName,
+    String? confirmedResourceOrScriptPath,
+  }) => formatSkillToolSpanName(
+    toolName: toolName,
+    confirmedSkillName: confirmedSkillName,
+    confirmedResourceOrScriptPath: confirmedResourceOrScriptPath,
+  );
+
+  /// Updates [span] (or [tracer.currentSpan] when omitted) with the
+  /// formatted skill tool span name.
+  static void updateCurrentSpanName({
+    required String toolName,
+    String? confirmedSkillName,
+    String? confirmedResourceOrScriptPath,
+    TraceSpanRecord? span,
+  }) {
+    final TraceSpanRecord? target = span ?? tracer.currentSpan;
+    target?.updateName(
+      formatSkillToolSpanName(
+        toolName: toolName,
+        confirmedSkillName: confirmedSkillName,
+        confirmedResourceOrScriptPath: confirmedResourceOrScriptPath,
+      ),
+    );
   }
 }
 

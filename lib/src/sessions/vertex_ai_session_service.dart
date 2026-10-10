@@ -12,6 +12,7 @@ import '../events/event_actions.dart';
 import '../events/ui_widget.dart';
 import '../platform/time.dart';
 import '../types/content.dart';
+import '../utils/system_environment/system_environment.dart';
 import '../utils/vertex_ai_utils.dart';
 import 'base_session_service.dart';
 import 'session.dart';
@@ -515,20 +516,32 @@ class VertexAiSessionService extends BaseSessionService {
     String? agentEngineId,
     String? expressModeApiKey,
     VertexAiSessionApiClientFactory? clientFactory,
-  }) : _project = project,
-       _location = location,
-       _agentEngineId = agentEngineId,
-       _expressModeApiKey = getExpressModeApiKey(
-         project: project,
-         location: location,
-         expressModeApiKey: expressModeApiKey,
-       ),
-       _clientFactory = clientFactory ?? _defaultSessionApiClientFactory;
+  }) : _agentEngineId = agentEngineId,
+       _clientFactory = clientFactory ?? _defaultSessionApiClientFactory {
+    final String? resolvedExpressModeApiKey = getExpressModeApiKey(
+      project: project,
+      location: location,
+      expressModeApiKey: expressModeApiKey,
+    );
+    _expressModeApiKey = resolvedExpressModeApiKey;
+    if (resolvedExpressModeApiKey == null) {
+      final Map<String, String> env = readSystemEnvironment();
+      _project = (project != null && project.isNotEmpty)
+          ? project
+          : env['GOOGLE_CLOUD_PROJECT'];
+      _location = (location != null && location.isNotEmpty)
+          ? location
+          : env['GOOGLE_CLOUD_LOCATION'];
+    } else {
+      _project = project;
+      _location = location;
+    }
+  }
 
-  final String? _project;
-  final String? _location;
+  late final String? _project;
+  late final String? _location;
   final String? _agentEngineId;
-  final String? _expressModeApiKey;
+  late final String? _expressModeApiKey;
   final VertexAiSessionApiClientFactory _clientFactory;
 
   /// Project used by this service, when configured.

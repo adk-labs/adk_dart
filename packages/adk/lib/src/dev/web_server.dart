@@ -17,6 +17,7 @@ import 'package:adk_dart/src/agents/run_config.dart';
 import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
 import '../cli/agent_graph.dart' as agent_graph;
+import '../cli/trigger_routes.dart';
 import '../cli/utils/agent_loader.dart';
 import 'package:adk_dart/src/errors/session_not_found_error.dart';
 import 'package:adk_dart/src/events/event.dart';
@@ -114,7 +115,12 @@ Future<HttpServer> startAdkDevWebServer({
   bool otelToCloud = false,
   bool a2a = false,
   List<String> extraPlugins = const <String>[],
+  List<String> triggerSources = const <String>[],
+  TriggerAuthVerifier? triggerAuthVerifier,
   Map<String, String>? environment,
+  int maxLiveMessageBytes = 16 * 1024 * 1024,
+  Duration liveKeepaliveTimeout = const Duration(seconds: 40),
+  int maxLiveSessions = 0,
 }) async {
   if (port < 0 || port > 65535) {
     throw ArgumentError.value(port, 'port', 'Port must be between 0 and 65535');
@@ -149,7 +155,12 @@ Future<HttpServer> startAdkDevWebServer({
     otelToCloud: otelToCloud,
     a2a: a2a,
     extraPlugins: extraPlugins,
+    triggerSources: triggerSources,
+    triggerAuthVerifier: triggerAuthVerifier,
     environment: environment,
+    maxLiveMessageBytes: maxLiveMessageBytes,
+    liveKeepaliveTimeout: liveKeepaliveTimeout,
+    maxLiveSessions: maxLiveSessions,
   );
 
   final InternetAddress resolvedHost = host ?? InternetAddress.loopbackIPv4;
@@ -304,8 +315,13 @@ class _AdkDevWebContext {
     required this.otelToCloud,
     required this.a2a,
     required this.extraPluginSpecs,
+    required this.triggerSources,
+    required this.triggerRouter,
     required this.a2aPushQueue,
     required this.webAssetsDir,
+    this.maxLiveMessageBytes = 16 * 1024 * 1024,
+    this.liveKeepaliveTimeout = const Duration(seconds: 40),
+    this.maxLiveSessions = 0,
   });
 
   final DevAgentRuntime runtime;
@@ -331,8 +347,14 @@ class _AdkDevWebContext {
   final bool otelToCloud;
   final bool a2a;
   final List<_ExtraPluginSpec> extraPluginSpecs;
+  final List<String> triggerSources;
+  final TriggerRouter? triggerRouter;
   final A2aPushDeliveryQueue? a2aPushQueue;
   final Directory? webAssetsDir;
+  final int maxLiveMessageBytes;
+  final Duration liveKeepaliveTimeout;
+  final int maxLiveSessions;
+  int activeLiveSessions = 0;
 
   /// Address the server is bound to, set once [HttpServer.bind] resolves.
   ///
@@ -378,7 +400,12 @@ class _AdkDevWebContext {
     required bool otelToCloud,
     required bool a2a,
     required List<String> extraPlugins,
+    List<String> triggerSources = const <String>[],
+    TriggerAuthVerifier? triggerAuthVerifier,
     Map<String, String>? environment,
+    int maxLiveMessageBytes = 16 * 1024 * 1024,
+    Duration liveKeepaliveTimeout = const Duration(seconds: 40),
+    int maxLiveSessions = 0,
   }) async {
     final bool hasLogoText = logoText != null && logoText.isNotEmpty;
     final bool hasLogoImage = logoImageUrl != null && logoImageUrl.isNotEmpty;
@@ -436,7 +463,20 @@ class _AdkDevWebContext {
                 '${agentsRoot.path}${Platform.pathSeparator}.adk${Platform.pathSeparator}a2a_push_delivery.db',
           )
         : null;
-    final _AdkDevWebContext context = _AdkDevWebContext(
+    final List<String> normalizedTriggerSources = triggerSources
+        .map((String s) => s.trim().toLowerCase())
+        .where((String s) => s.isNotEmpty)
+        .toList(growable: false);
+    late final _AdkDevWebContext context;
+    final TriggerRouter? triggerRouter = normalizedTriggerSources.isEmpty
+        ? null
+        : TriggerRouter(
+            getRunnerAsync: (String appName) => context.getRunner(appName),
+            sessionService: sessionService,
+            triggerSources: normalizedTriggerSources,
+            verifyAuth: triggerAuthVerifier,
+          );
+    context = _AdkDevWebContext(
       runtime: runtime,
       project: project,
       agentsDir: agentsRoot.path,
@@ -463,8 +503,13 @@ class _AdkDevWebContext {
       otelToCloud: otelToCloud,
       a2a: a2a,
       extraPluginSpecs: parsedExtraPlugins,
+      triggerSources: normalizedTriggerSources,
+      triggerRouter: triggerRouter,
       a2aPushQueue: a2aPushQueue,
       webAssetsDir: webAssetsDir,
+      maxLiveMessageBytes: maxLiveMessageBytes,
+      liveKeepaliveTimeout: liveKeepaliveTimeout,
+      maxLiveSessions: maxLiveSessions,
     );
     context._startA2aPushDeliveryLoop();
     return context;
@@ -1305,6 +1350,7 @@ Future<void> _handleRequest(
         'extra_plugins': context.extraPluginSpecs
             .map((_ExtraPluginSpec spec) => spec.raw)
             .toList(growable: false),
+        'trigger_sources': context.triggerSources,
         'eval_storage_uri': context.evalStorageUri,
         'trace_to_cloud': context.traceToCloud,
         'otel_to_cloud': context.otelToCloud,
@@ -1360,6 +1406,22 @@ Future<void> _handleRequest(
     return;
   }
 
+  if (segments.length == 3 &&
+      segments[0] == 'dev' &&
+      segments[1] == 'build_graph' &&
+      request.method == 'GET') {
+    await _handleGetAppGraph(request, context, appName: segments[2]);
+    return;
+  }
+
+  if (segments.length == 3 &&
+      segments[0] == 'dev' &&
+      segments[1] == 'build_graph_image' &&
+      request.method == 'GET') {
+    await _handleGetAppGraphImage(request, context, appName: segments[2]);
+    return;
+  }
+
   if (await _handlePythonStyleRoutes(request, context, segments)) {
     return;
   }
@@ -1375,13 +1437,36 @@ Future<void> _handleRequest(
 Future<bool> _handlePythonStyleRoutes(
   HttpRequest request,
   _AdkDevWebContext context,
-  List<String> segments,
+  List<String> rawSegments,
 ) async {
+  final List<String> segments =
+      (rawSegments.length >= 3 &&
+          rawSegments[0] == 'dev' &&
+          rawSegments[1] == 'apps')
+      ? rawSegments.sublist(1)
+      : rawSegments;
   if (segments.length < 2 || segments[0] != 'apps') {
     return false;
   }
 
   final String appName = segments[1];
+  if (segments.length == 4 &&
+      segments[2] == 'trigger' &&
+      request.method == 'POST') {
+    final String triggerSource = segments[3].toLowerCase();
+    final TriggerRouter? triggerRouter = context.triggerRouter;
+    if (triggerRouter == null || !triggerRouter.isSourceEnabled(triggerSource)) {
+      return false;
+    }
+    await _handleTriggerRoute(
+      request,
+      context,
+      triggerRouter: triggerRouter,
+      appName: appName,
+      triggerSource: triggerSource,
+    );
+    return true;
+  }
   if (segments.length == 3 &&
       segments[2] == 'app-info' &&
       request.method == 'GET') {
@@ -1389,7 +1474,7 @@ Future<bool> _handlePythonStyleRoutes(
     return true;
   }
   if (segments.length == 3 &&
-      segments[2] == 'graph' &&
+      (segments[2] == 'graph' || segments[2] == 'build_graph') &&
       request.method == 'GET') {
     await _handleGetAppGraph(request, context, appName: appName);
     return true;
@@ -1397,7 +1482,25 @@ Future<bool> _handlePythonStyleRoutes(
   if (segments.length == 3 &&
       segments[2] == 'build_graph_image' &&
       request.method == 'GET') {
-    await _handleBuildGraphImage(request, context, appName: appName);
+    await _handleGetAppGraphImage(request, context, appName: appName);
+    return true;
+  }
+  if (segments.length == 5 &&
+      segments[2] == 'debug' &&
+      segments[3] == 'trace' &&
+      segments[4] != 'session' &&
+      request.method == 'GET') {
+    context._guardSpecialAgentAccess(appName);
+    await _handleGetTraceDict(request, context, eventId: segments[4]);
+    return true;
+  }
+  if (segments.length == 6 &&
+      segments[2] == 'debug' &&
+      segments[3] == 'trace' &&
+      segments[4] == 'session' &&
+      request.method == 'GET') {
+    context._guardSpecialAgentAccess(appName);
+    await _handleGetSessionTrace(request, context, sessionId: segments[5]);
     return true;
   }
   if (await _handleEvalRoutes(request, context, segments, appName: appName)) {
@@ -1695,6 +1798,112 @@ Map<String, Object?> _serializeAppSummary(Map<String, Object?> detail) {
   };
 }
 
+Future<void> _handleTriggerRoute(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required TriggerRouter triggerRouter,
+  required String appName,
+  required String triggerSource,
+}) async {
+  try {
+    if (triggerRouter.verifyAuth != null) {
+      await triggerRouter.verifyAuth!(request);
+    }
+  } on TriggerAuthException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: error.statusCode,
+      message: error.message,
+    );
+    return;
+  }
+
+  final Map<String, Object?> body;
+  try {
+    final Map<String, dynamic> decoded = await _readJsonBody(request);
+    body = decoded.map((String key, dynamic value) => MapEntry(key, value));
+  } on FormatException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: error.message,
+    );
+    return;
+  }
+
+  try {
+    late final TriggerResponse response;
+    if (triggerSource == 'pubsub') {
+      final PubSubTriggerRequest triggerRequest =
+          PubSubTriggerRequest.fromJson(body);
+      response = await triggerRouter.handlePubSubRequest(
+        appName: appName,
+        triggerRequest: triggerRequest,
+      );
+    } else if (triggerSource == 'eventarc') {
+      final Map<String, String> headers = <String, String>{};
+      request.headers.forEach((String name, List<String> values) {
+        if (values.isNotEmpty) {
+          headers[name.toLowerCase()] = values.first;
+        }
+      });
+      final EventarcTriggerRequest triggerRequest =
+          EventarcTriggerRequest.fromJson(body, headers: headers);
+      response = await triggerRouter.handleEventarcRequest(
+        appName: appName,
+        triggerRequest: triggerRequest,
+      );
+    } else {
+      await _writeError(
+        request,
+        context,
+        statusCode: HttpStatus.notFound,
+        message: 'Unknown trigger source: $triggerSource',
+      );
+      return;
+    }
+
+    await _writeJson(request, context, payload: response.toJson());
+  } on SpecialAgentAccessDeniedException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.forbidden,
+      message: error.message,
+    );
+  } on FormatException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: error.message,
+    );
+  } on ArgumentError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '${error.message}',
+    );
+  } on StateError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+  } catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.internalServerError,
+      message: 'Trigger execution failed: $error',
+    );
+  }
+}
+
 Future<void> _handleGetAppInfo(
   HttpRequest request,
   _AdkDevWebContext context, {
@@ -1923,6 +2132,14 @@ Future<void> _handleGetTraceByEventId(
   await _writeJson(request, context, payload: trace);
 }
 
+Future<void> _handleGetTraceDict(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String eventId,
+}) {
+  return _handleGetTraceByEventId(request, context, eventId: eventId);
+}
+
 Future<void> _handleGetTraceBySessionId(
   HttpRequest request,
   _AdkDevWebContext context, {
@@ -1932,6 +2149,14 @@ Future<void> _handleGetTraceBySessionId(
     sessionId,
   );
   await _writeJson(request, context, payload: trace);
+}
+
+Future<void> _handleGetSessionTrace(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String sessionId,
+}) {
+  return _handleGetTraceBySessionId(request, context, sessionId: sessionId);
 }
 
 Future<void> _handleGetEventGraph(
@@ -1997,6 +2222,14 @@ Future<void> _handleGetAppGraph(
     context,
     payload: <String, Object?>{'dot_src': dotSrc},
   );
+}
+
+Future<void> _handleGetAppGraphImage(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+}) {
+  return _handleBuildGraphImage(request, context, appName: appName);
 }
 
 Future<void> _handleBuildGraphImage(
@@ -3544,94 +3777,128 @@ Future<void> _handleRunLive(
   // plain HTTP response.
   context._guardSpecialAgentAccess(appName);
 
-  final WebSocket socket = await WebSocketTransformer.upgrade(request);
+  if (context.maxLiveSessions > 0 &&
+      context.activeLiveSessions >= context.maxLiveSessions) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.serviceUnavailable,
+      message: 'too many concurrent live sessions',
+    );
+    return;
+  }
 
-  final LiveRequestQueue liveQueue = LiveRequestQueue();
-  final AdkAbortController abortController = AdkAbortController();
-  final Runner runner = await context.getRunner(appName);
-  final bool? proactiveAudio = _readOptionalBoolQuery(
-    request,
-    'proactive_audio',
-  );
-  final bool? enableAffectiveDialog = _readOptionalBoolQuery(
-    request,
-    'enable_affective_dialog',
-  );
-  final bool? enableSessionResumption = _readOptionalBoolQuery(
-    request,
-    'enable_session_resumption',
-  );
-  final bool saveLiveBlob =
-      _readOptionalBoolQuery(request, 'save_live_blob') ?? false;
-  final RunConfig runConfig = RunConfig(
-    responseModalities: _parseModalities(
-      request.uri.queryParameters['modalities'],
-    ),
-    proactivity: proactiveAudio == null
-        ? null
-        : <String, Object?>{'proactiveAudio': proactiveAudio},
-    enableAffectiveDialog: enableAffectiveDialog,
-    sessionResumption: enableSessionResumption == null
-        ? null
-        : <String, Object?>{'transparent': enableSessionResumption},
-    saveLiveBlob: saveLiveBlob,
-  );
+  context.activeLiveSessions += 1;
+  try {
+    final WebSocket socket = await WebSocketTransformer.upgrade(request);
+    if (context.liveKeepaliveTimeout > Duration.zero) {
+      socket.pingInterval = Duration(
+        milliseconds: context.liveKeepaliveTimeout.inMilliseconds ~/ 2,
+      );
+    }
 
-  Future<void> forwardEvents() async {
-    await for (final Event event in runner.runLive(
-      liveRequestQueue: liveQueue,
-      userId: userId,
-      sessionId: sessionId,
-      runConfig: runConfig,
-      abortSignal: abortController.signal,
-    )) {
-      if (abortController.signal.aborted) {
-        break;
-      }
-      context.recordTraceEvent(
-        appName: appName,
+    final LiveRequestQueue liveQueue = LiveRequestQueue();
+    final AdkAbortController abortController = AdkAbortController();
+    final Runner runner = await context.getRunner(appName);
+    final bool? proactiveAudio = _readOptionalBoolQuery(
+      request,
+      'proactive_audio',
+    );
+    final bool? enableAffectiveDialog = _readOptionalBoolQuery(
+      request,
+      'enable_affective_dialog',
+    );
+    final bool? enableSessionResumption = _readOptionalBoolQuery(
+      request,
+      'enable_session_resumption',
+    );
+    final bool saveLiveBlob =
+        _readOptionalBoolQuery(request, 'save_live_blob') ?? false;
+    final RunConfig runConfig = RunConfig(
+      responseModalities: _parseModalities(
+        request.uri.queryParameters['modalities'],
+      ),
+      proactivity: proactiveAudio == null
+          ? null
+          : <String, Object?>{'proactiveAudio': proactiveAudio},
+      enableAffectiveDialog: enableAffectiveDialog,
+      sessionResumption: enableSessionResumption == null
+          ? null
+          : <String, Object?>{'transparent': enableSessionResumption},
+      saveLiveBlob: saveLiveBlob,
+    );
+
+    Future<void> forwardEvents() async {
+      await for (final Event event in runner.runLive(
+        liveRequestQueue: liveQueue,
         userId: userId,
         sessionId: sessionId,
-        event: event,
-      );
-      socket.add(
-        jsonEncode(
-          _eventToApiJson(
-            event,
-            appName: appName,
-            userId: userId,
-            sessionId: sessionId,
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> processMessages() async {
-    await for (final dynamic data in socket) {
-      if (data is String) {
-        final Object? decoded = jsonDecode(data);
-        if (decoded is! Map) {
-          continue;
+        runConfig: runConfig,
+        abortSignal: abortController.signal,
+      )) {
+        if (abortController.signal.aborted) {
+          break;
         }
-        liveQueue.send(_liveRequestFromJson(_toDynamicMap(decoded)));
-      } else {
-        liveQueue.sendRealtime(data);
+        context.recordTraceEvent(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+          event: event,
+        );
+        socket.add(
+          jsonEncode(
+            _eventToApiJson(
+              event,
+              appName: appName,
+              userId: userId,
+              sessionId: sessionId,
+            ),
+          ),
+        );
       }
     }
-  }
 
-  final Future<void> forwardTask = forwardEvents();
-  final Future<void> messageTask = processMessages();
+    Future<void> processMessages() async {
+      await for (final dynamic data in socket) {
+        final int byteLength = data is String
+            ? utf8.encode(data).length
+            : (data is List<int> ? data.length : 0);
+        if (context.maxLiveMessageBytes > 0 &&
+            byteLength > context.maxLiveMessageBytes) {
+          abortController.abort();
+          liveQueue.close();
+          await socket.close(
+            WebSocketStatus.messageTooBig,
+            'Live message exceeds maximum allowed size',
+          );
+          break;
+        }
+        if (data is String) {
+          final Object? decoded = jsonDecode(data);
+          if (decoded is! Map) {
+            continue;
+          }
+          liveQueue.send(_liveRequestFromJson(_toDynamicMap(decoded)));
+        } else {
+          liveQueue.sendRealtime(data);
+        }
+      }
+    }
 
-  try {
-    await Future.any(<Future<void>>[forwardTask, messageTask]);
-  } on SessionNotFoundError {
-    await socket.close(WebSocketStatus.protocolError, 'Session not found');
+    final Future<void> forwardTask = forwardEvents();
+    final Future<void> messageTask = processMessages();
+
+    try {
+      await Future.any(<Future<void>>[forwardTask, messageTask]);
+    } on SessionNotFoundError {
+      await socket.close(WebSocketStatus.protocolError, 'Session not found');
+    } finally {
+      abortController.abort('WebSocket client disconnected');
+      liveQueue.close();
+      await socket.close();
+    }
   } finally {
-    abortController.abort('WebSocket client disconnected');
-    liveQueue.close();
-    await socket.close();
+    context.activeLiveSessions -= 1;
   }
 }
 

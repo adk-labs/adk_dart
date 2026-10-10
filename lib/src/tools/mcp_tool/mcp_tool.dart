@@ -9,6 +9,7 @@ import '../../events/ui_widget.dart';
 import '../../features/_feature_registry.dart';
 import '../../flows/llm_flows/_fencing.dart';
 import '../../models/llm_request.dart';
+import '../../utils/function_call_names.dart';
 import '../_function_tool_declarations.dart';
 import '../base_authenticated_tool.dart';
 import '../tool_context.dart';
@@ -60,9 +61,9 @@ class McpBaseTool {
 
 /// Reserved tool names that cannot be overridden by external MCP tools.
 const Set<String> mcpReservedToolNames = <String>{
-  'request_euc',
-  'request_confirmation',
-  'request_input',
+  requestEucFunctionCallName,
+  requestConfirmationFunctionCallName,
+  requestInputFunctionCallName,
   'set_model_response',
   'transfer_to_agent',
 };

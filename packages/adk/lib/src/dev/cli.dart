@@ -106,6 +106,7 @@ Web options:
       --reload_agents
       --a2a
       --extra_plugins
+      --trigger_sources  Comma-separated trigger sources to enable (pubsub, eventarc)
       --enable_features  Comma-separated features to force-enable
       --disable_features Comma-separated features to force-disable
       --logo-text
@@ -163,6 +164,7 @@ class ParsedAdkCommand {
       a2a = false,
       reloadAgents = false,
       extraPlugins = const <String>[],
+      triggerSources = const <String>[],
       logoText = null,
       logoImageUrl = null,
       autoCreateSession = false,
@@ -208,6 +210,7 @@ class ParsedAdkCommand {
        a2a = false,
        reloadAgents = false,
        extraPlugins = const <String>[],
+       triggerSources = const <String>[],
        logoText = null,
        logoImageUrl = null,
        autoCreateSession = false,
@@ -235,6 +238,7 @@ class ParsedAdkCommand {
     required this.a2a,
     required this.reloadAgents,
     required this.extraPlugins,
+    this.triggerSources = const <String>[],
     this.logoText,
     this.logoImageUrl,
     required this.autoCreateSession,
@@ -311,6 +315,9 @@ class ParsedAdkCommand {
 
   /// Extra plugin specs passed from the command line.
   final List<String> extraPlugins;
+
+  /// Event trigger sources (`pubsub`, `eventarc`) enabled on the server.
+  final List<String> triggerSources;
 
   /// Optional logo text for the web UI.
   final String? logoText;
@@ -3462,6 +3469,7 @@ ParsedAdkCommand _parseWebCommand(
   bool a2a = false;
   bool reloadAgents = false;
   final List<String> extraPlugins = <String>[];
+  final List<String> triggerSources = <String>[];
   String? logoText;
   String? logoImageUrl;
   bool autoCreateSession = false;
@@ -3595,6 +3603,19 @@ ParsedAdkCommand _parseWebCommand(
       extraPlugins.add(arg.substring('--extra_plugins='.length).trim());
       continue;
     }
+    if (arg == '--trigger_sources' || arg == '--trigger-sources') {
+      triggerSources.add(_nextArg(args, i, arg).trim());
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--trigger_sources=')) {
+      triggerSources.add(arg.substring('--trigger_sources='.length).trim());
+      continue;
+    }
+    if (arg.startsWith('--trigger-sources=')) {
+      triggerSources.add(arg.substring('--trigger-sources='.length).trim());
+      continue;
+    }
     if (arg == '--logo_text' || arg == '--logo-text') {
       logoText = _nextArg(args, i, arg).trim();
       i += 1;
@@ -3715,6 +3736,17 @@ ParsedAdkCommand _parseWebCommand(
     );
   }
 
+  final List<String> normalizedTriggerSources = _normalizeCsvValues(
+    triggerSources,
+  ).map((String item) => item.toLowerCase()).toList(growable: false);
+  for (final String source in normalizedTriggerSources) {
+    if (source != 'pubsub' && source != 'eventarc') {
+      throw CliUsageError(
+        'Invalid trigger source "$source". Supported: pubsub, eventarc.',
+      );
+    }
+  }
+
   return ParsedAdkCommand.web(
     projectDir: projectDir,
     port: port,
@@ -3734,6 +3766,7 @@ ParsedAdkCommand _parseWebCommand(
     a2a: a2a,
     reloadAgents: reloadAgents,
     extraPlugins: _normalizeCsvValues(extraPlugins),
+    triggerSources: normalizedTriggerSources,
     logoText: _emptyToNull(logoText),
     logoImageUrl: _emptyToNull(logoImageUrl),
     autoCreateSession: autoCreateSession,
@@ -4361,6 +4394,7 @@ Future<int> _runWebCommand(
       otelToCloud: command.otelToCloud,
       a2a: command.a2a,
       extraPlugins: command.extraPlugins,
+      triggerSources: command.triggerSources,
       environment: Platform.environment,
     );
   } on SocketException catch (error) {

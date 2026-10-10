@@ -84,7 +84,10 @@ class Context extends ReadonlyContext {
       artifact: artifact,
       customMetadata: customMetadata,
     );
-    _eventActions.artifactDelta[filename] = version;
+    final int? existingVersion = _eventActions.artifactDelta[filename];
+    if (existingVersion == null || version > existingVersion) {
+      _eventActions.artifactDelta[filename] = version;
+    }
     return version;
   }
 

@@ -29,6 +29,9 @@ enum FeatureName {
   /// Bigtable toolset integration.
   bigtableToolset('BIGTABLE_TOOLSET'),
 
+  /// Cascaded STT -> LLM -> TTS live audio pipeline.
+  cascadeLive('CASCADE_LIVE'),
+
   /// Computer use capability and toolset.
   computerUse('COMPUTER_USE'),
 
@@ -40,6 +43,9 @@ enum FeatureName {
 
   /// Daytona sandbox environment integration.
   daytonaEnvironment('DAYTONA_ENVIRONMENT'),
+
+  /// ElevenLabs speech-to-text and text-to-speech integration.
+  elevenLabs('ELEVEN_LABS'),
 
   /// Environment simulation support for evaluation and testing.
   environmentSimulation('ENVIRONMENT_SIMULATION'),
@@ -172,6 +178,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: true,
       ),
+      FeatureName.cascadeLive: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.computerUse: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
@@ -185,6 +195,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.daytonaEnvironment: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.elevenLabs: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),

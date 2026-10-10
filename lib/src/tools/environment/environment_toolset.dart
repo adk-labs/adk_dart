@@ -1,6 +1,7 @@
 /// Toolset that exposes command execution and file I/O through an environment.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -95,13 +96,28 @@ class EnvironmentToolset extends BaseToolset {
   final int? _maxOutputChars;
 
   bool _initialized = false;
+  Future<void> _lock = Future<void>.value();
+
+  Future<T> _withLock<T>(Future<T> Function() action) async {
+    final Completer<void> next = Completer<void>();
+    final Future<void> previous = _lock;
+    _lock = next.future;
+    try {
+      await previous;
+      return await action();
+    } finally {
+      next.complete();
+    }
+  }
 
   Future<void> _ensureInitialized() async {
-    if (_initialized) {
-      return;
-    }
-    await _environment.initialize();
-    _initialized = true;
+    await _withLock<void>(() async {
+      if (_initialized) {
+        return;
+      }
+      await _environment.initialize();
+      _initialized = true;
+    });
   }
 
   @override
@@ -130,11 +146,16 @@ class EnvironmentToolset extends BaseToolset {
 
   @override
   Future<void> close() async {
-    if (!_initialized) {
-      return;
-    }
-    await _environment.close();
-    _initialized = false;
+    await _withLock<void>(() async {
+      if (!_initialized) {
+        return;
+      }
+      try {
+        await _environment.close();
+      } finally {
+        _initialized = false;
+      }
+    });
   }
 }
 

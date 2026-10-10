@@ -149,16 +149,44 @@ class AdkChatController extends ChangeNotifier {
   Future<void> _consumeEventStream(Stream<adk.Event> eventStream) async {
     String? currentModelMsgId;
     final StringBuffer textAccumulator = StringBuffer();
+    final StringBuffer thoughtAccumulator = StringBuffer();
+    AdkCodeExecution? pendingCodeExecution;
+    AdkGroundingInfo? latestGrounding;
 
     _subscription = eventStream.listen(
       (adk.Event event) {
+        final adk.EventCompaction? compaction = event.actions.compaction;
+        if (compaction != null) {
+          final String summaryText = compaction.compactedContent.parts
+              .map((adk.Part p) => p.text ?? '')
+              .join('')
+              .trim();
+          if (summaryText.isNotEmpty) {
+            _messages.add(
+              AdkChatMessage.system(
+                id: 'compaction_${event.id}',
+                text: 'Session compacted: $summaryText',
+                isCompaction: true,
+              ),
+            );
+            notifyListeners();
+          }
+        }
+
+        final AdkGroundingInfo? eventGrounding = _extractGroundingInfo(
+          event.groundingMetadata,
+        );
+        if (eventGrounding != null) {
+          latestGrounding = eventGrounding;
+        }
+
         final adk.Content? content = event.content;
         if (content == null) {
           _maybeHandleToolActions(event);
           return;
         }
 
-        // Handle function calls inside content
+        // Handle function calls, responses, and code execution inside content
         for (final adk.Part part in content.parts) {
           final adk.FunctionCall? fc = part.functionCall;
           if (fc != null) {
@@ -187,16 +215,53 @@ class AdkChatController extends ChangeNotifier {
             );
             notifyListeners();
           }
+
+          final Object? execCode = part.executableCode;
+          if (execCode != null) {
+            final (String language, String code) = _parseExecutableCode(
+              execCode,
+            );
+            pendingCodeExecution = (pendingCodeExecution ?? const AdkCodeExecution())
+                .copyWith(language: language, code: code);
+          }
+
+          final Object? execResult = part.codeExecutionResult;
+          if (execResult != null) {
+            final (String? outcome, String? output) =
+                _parseCodeExecutionResult(execResult);
+            pendingCodeExecution = (pendingCodeExecution ?? const AdkCodeExecution())
+                .copyWith(outcome: outcome, output: output);
+          }
         }
 
-        // Extract text chunks for model responses
+        // Extract thought and regular text chunks for model responses
+        final String thoughtChunk = content.parts
+            .where((adk.Part p) => p.thought && p.text != null)
+            .map((adk.Part p) => p.text!)
+            .join('');
+        if (thoughtChunk.isNotEmpty) {
+          thoughtAccumulator.write(thoughtChunk);
+        }
+
         final String chunkText = content.parts
+            .where((adk.Part p) => !p.thought)
             .map((adk.Part p) => p.text ?? '')
             .join('');
 
-        if (chunkText.isNotEmpty) {
+        final bool hasModelUpdate =
+            chunkText.isNotEmpty ||
+            thoughtChunk.isNotEmpty ||
+            pendingCodeExecution != null ||
+            eventGrounding != null;
+
+        if (hasModelUpdate) {
           _isStreaming = true;
-          textAccumulator.write(chunkText);
+          if (chunkText.isNotEmpty) {
+            textAccumulator.write(chunkText);
+          }
+          final String? currentThought = thoughtAccumulator.isEmpty
+              ? null
+              : thoughtAccumulator.toString();
 
           if (currentModelMsgId == null) {
             currentModelMsgId = 'model_${DateTime.now().millisecondsSinceEpoch}';
@@ -206,6 +271,9 @@ class AdkChatController extends ChangeNotifier {
                 text: textAccumulator.toString(),
                 author: event.author.isNotEmpty ? event.author : 'Agent',
                 isPartial: true,
+                thought: currentThought,
+                codeExecution: pendingCodeExecution,
+                grounding: latestGrounding,
               ),
             );
           } else {
@@ -215,6 +283,9 @@ class AdkChatController extends ChangeNotifier {
               _messages[index] = _messages[index].copyWith(
                 text: textAccumulator.toString(),
                 isPartial: true,
+                thought: currentThought,
+                codeExecution: pendingCodeExecution,
+                grounding: latestGrounding,
               );
             }
           }
@@ -267,11 +338,57 @@ class AdkChatController extends ChangeNotifier {
 
     _messages.clear();
     for (final event in session.events) {
+      final compaction = event.actions.compaction;
+      if (compaction != null) {
+        final summaryText = compaction.compactedContent.parts
+            .map((p) => p.text ?? '')
+            .join('')
+            .trim();
+        if (summaryText.isNotEmpty) {
+          _messages.add(
+            AdkChatMessage.system(
+              id: 'hist_compaction_${event.id}',
+              text: 'Session compacted: $summaryText',
+              isCompaction: true,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(
+                (event.timestamp * 1000).toInt(),
+              ),
+            ),
+          );
+        }
+      }
+
       final content = event.content;
       if (content == null) continue;
 
+      final AdkGroundingInfo? grounding = _extractGroundingInfo(
+        event.groundingMetadata,
+      );
+      AdkCodeExecution? codeExec;
       for (final part in content.parts) {
-        if (part.text != null && part.text!.isNotEmpty) {
+        if (part.executableCode != null) {
+          final (String lang, String code) = _parseExecutableCode(
+            part.executableCode!,
+          );
+          codeExec = (codeExec ?? const AdkCodeExecution()).copyWith(
+            language: lang,
+            code: code,
+          );
+        }
+        if (part.codeExecutionResult != null) {
+          final (String? outcome, String? output) = _parseCodeExecutionResult(
+            part.codeExecutionResult!,
+          );
+          codeExec = (codeExec ?? const AdkCodeExecution()).copyWith(
+            outcome: outcome,
+            output: output,
+          );
+        }
+      }
+
+      bool attachedExtrasToModelMessage = false;
+      for (final part in content.parts) {
+        if (part.text != null && part.text!.isNotEmpty && !part.thought) {
           final isUser = content.role == 'user' || event.author == 'user';
           _messages.add(
             AdkChatMessage(
@@ -279,11 +396,20 @@ class AdkChatController extends ChangeNotifier {
               role: isUser ? .user : .model,
               text: part.text!,
               author: event.author,
+              codeExecution: !isUser && !attachedExtrasToModelMessage
+                  ? codeExec
+                  : null,
+              grounding: !isUser && !attachedExtrasToModelMessage
+                  ? grounding
+                  : null,
               timestamp: DateTime.fromMillisecondsSinceEpoch(
                 (event.timestamp * 1000).toInt(),
               ),
             ),
           );
+          if (!isUser) {
+            attachedExtrasToModelMessage = true;
+          }
         } else if (part.functionCall != null) {
           _messages.add(
             AdkChatMessage.tool(
@@ -306,8 +432,80 @@ class AdkChatController extends ChangeNotifier {
           );
         }
       }
+      if (!attachedExtrasToModelMessage &&
+          (codeExec != null || grounding != null)) {
+        _messages.add(
+          AdkChatMessage.model(
+            id: 'hist_exec_${event.id}',
+            text: '',
+            author: event.author.isNotEmpty ? event.author : 'Agent',
+            codeExecution: codeExec,
+            grounding: grounding,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              (event.timestamp * 1000).toInt(),
+            ),
+          ),
+        );
+      }
     }
     notifyListeners();
+  }
+
+  (String, String) _parseExecutableCode(Object raw) {
+    if (raw is Map) {
+      final String language = '${raw['language'] ?? 'PYTHON'}'.trim();
+      final String code = '${raw['code'] ?? ''}'.trim();
+      return (language.isEmpty ? 'PYTHON' : language, code);
+    }
+    return ('PYTHON', '$raw');
+  }
+
+  (String?, String?) _parseCodeExecutionResult(Object raw) {
+    if (raw is Map) {
+      final String? outcome = raw['outcome']?.toString();
+      final String? output = raw['output']?.toString();
+      return (outcome, output);
+    }
+    return ('OUTCOME_OK', '$raw');
+  }
+
+  AdkGroundingInfo? _extractGroundingInfo(Object? rawGrounding) {
+    if (rawGrounding is! Map) {
+      return null;
+    }
+    final List<String> queries = <String>[];
+    final Object? rawQueries =
+        rawGrounding['webSearchQueries'] ?? rawGrounding['web_search_queries'];
+    if (rawQueries is List) {
+      for (final Object? item in rawQueries) {
+        final String text = '${item ?? ''}'.trim();
+        if (text.isNotEmpty) {
+          queries.add(text);
+        }
+      }
+    }
+
+    final List<AdkGroundingSource> sources = <AdkGroundingSource>[];
+    final Object? rawChunks =
+        rawGrounding['groundingChunks'] ?? rawGrounding['grounding_chunks'];
+    if (rawChunks is List) {
+      for (final Object? chunk in rawChunks) {
+        if (chunk is! Map) continue;
+        final Object? web = chunk['web'] ?? chunk['retrievedContext'] ?? chunk['retrieved_context'];
+        if (web is Map) {
+          final String uri = '${web['uri'] ?? ''}'.trim();
+          final String title = '${web['title'] ?? uri}'.trim();
+          if (uri.isNotEmpty) {
+            sources.add(AdkGroundingSource(title: title, uri: uri));
+          }
+        }
+      }
+    }
+
+    if (queries.isEmpty && sources.isEmpty) {
+      return null;
+    }
+    return AdkGroundingInfo(searchQueries: queries, sources: sources);
   }
 
   /// Exports current chat messages as a formatted JSON string.
@@ -321,6 +519,22 @@ class AdkChatController extends ChangeNotifier {
       if (m.toolName != null) 'tool_name': m.toolName,
       if (m.toolArgs != null) 'tool_args': m.toolArgs,
       if (m.toolResult != null) 'tool_result': m.toolResult,
+      if (m.codeExecution != null)
+        'code_execution': {
+          'language': m.codeExecution!.language,
+          'code': m.codeExecution!.code,
+          if (m.codeExecution!.output != null)
+            'output': m.codeExecution!.output,
+          if (m.codeExecution!.outcome != null)
+            'outcome': m.codeExecution!.outcome,
+        },
+      if (m.grounding != null && m.grounding!.isNotEmpty)
+        'grounding': {
+          'search_queries': m.grounding!.searchQueries,
+          'sources': m.grounding!.sources
+              .map((s) => {'title': s.title, 'uri': s.uri})
+              .toList(),
+        },
       if (m.errorMessage != null) 'error_message': m.errorMessage,
     }).toList();
 

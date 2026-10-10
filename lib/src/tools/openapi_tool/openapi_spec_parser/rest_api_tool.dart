@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../../../agents/readonly_context.dart';
 import '../../../auth/auth_credential.dart';
+import '../../../errors/input_validation_error.dart';
 import '../../../features/_feature_registry.dart';
 import '../../../models/llm_request.dart';
 import '../../../version.dart';
@@ -308,7 +309,8 @@ class RestApiTool extends BaseTool {
     final String normalizedBaseUrl = endpoint.baseUrl.endsWith('/')
         ? endpoint.baseUrl.substring(0, endpoint.baseUrl.length - 1)
         : endpoint.baseUrl;
-    String url = '$normalizedBaseUrl${_formatPath(endpoint.path, pathParams)}';
+    String url =
+        '$normalizedBaseUrl${_formatPath(endpoint.path, pathParams, parameters)}';
 
     // Preserve query params that may be embedded in the OpenAPI path itself.
     final Uri parsedUrl = Uri.parse(url);
@@ -472,25 +474,29 @@ class RestApiTool extends BaseTool {
       }
     }
 
-    final Map<String, Object?> requestParams = _prepareRequestParams(
-      apiParams,
-      apiArgs,
-    );
-    if (_sslVerify != null) {
-      requestParams['verify'] = _sslVerify;
-    }
-
-    if (_headerProvider != null && toolContext != null) {
-      final Map<String, String> providerHeaders = _headerProvider(toolContext);
-      if (providerHeaders.isNotEmpty) {
-        final Map<String, Object?> headers = _readMap(requestParams['headers']);
-        headers.addAll(providerHeaders);
-        requestParams['headers'] = headers;
-      }
-    }
-
     RestApiResponse response;
     try {
+      final Map<String, Object?> requestParams = _prepareRequestParams(
+        apiParams,
+        apiArgs,
+      );
+      if (_sslVerify != null) {
+        requestParams['verify'] = _sslVerify;
+      }
+
+      if (_headerProvider != null && toolContext != null) {
+        final Map<String, String> providerHeaders = _headerProvider(
+          toolContext,
+        );
+        if (providerHeaders.isNotEmpty) {
+          final Map<String, Object?> headers = _readMap(
+            requestParams['headers'],
+          );
+          headers.addAll(providerHeaders);
+          requestParams['headers'] = headers;
+        }
+      }
+
       response = await _requestExecutor(requestParams: requestParams);
     } catch (error) {
       return <String, Object?>{
@@ -676,11 +682,26 @@ HttpClient _buildHttpClient(Object? verify) {
   return client;
 }
 
-String _formatPath(String path, Map<String, Object?> pathParams) {
+String _formatPath(
+  String path,
+  Map<String, Object?> pathParams, [
+  List<ApiParameter> parameters = const <ApiParameter>[],
+]) {
   return path.replaceAllMapped(RegExp(r'\{([^}]+)\}'), (Match match) {
     final String key = match.group(1) ?? '';
     if (!pathParams.containsKey(key)) {
-      return match.group(0) ?? '';
+      String missingParam = key;
+      for (final ApiParameter param in parameters) {
+        if (param.paramLocation == 'path' &&
+            param.originalName == key &&
+            param.pyName.isNotEmpty) {
+          missingParam = param.pyName;
+          break;
+        }
+      }
+      throw InputValidationError(
+        "Missing required path parameter '$missingParam'.",
+      );
     }
     return '${pathParams[key] ?? ''}';
   });

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/adk_attachment_model.dart';
 import '../models/adk_chat_message.dart';
 import '../theme/adk_theme.dart';
+import 'adk_code_execution_card.dart';
+import 'adk_grounding_sources_bar.dart';
 import 'adk_reasoning_expander.dart';
 import 'adk_tool_call_card.dart';
 import 'adk_typing_indicator.dart';
@@ -29,6 +31,7 @@ class AdkMessageBubble extends StatelessWidget {
     this.timestampFormatter,
     this.onTap,
     this.onLongPress,
+    this.onGroundingSourceTap,
     this.customContentBuilder,
     this.useToolCallCard = true,
   });
@@ -83,6 +86,9 @@ class AdkMessageBubble extends StatelessWidget {
 
   /// Callback when the message bubble is long-pressed.
   final VoidCallback? onLongPress;
+
+  /// Callback invoked when a grounding citation source chip is tapped.
+  final void Function(AdkGroundingSource source)? onGroundingSourceTap;
 
   /// Optional builder to override internal message body content.
   final Widget Function(BuildContext context, AdkChatMessage message)? customContentBuilder;
@@ -174,6 +180,10 @@ class AdkMessageBubble extends StatelessWidget {
             AdkReasoningExpander(thought: message.thought!),
             const SizedBox(height: 4.0),
           ],
+          if (message.codeExecution != null) ...<Widget>[
+            AdkCodeExecutionCard(execution: message.codeExecution!),
+            if (message.text.isNotEmpty) const SizedBox(height: 6.0),
+          ],
           if (message.attachments.isNotEmpty) ...<Widget>[
             _buildAttachmentsList(flutterTheme, isUser),
             if (message.text.isNotEmpty) const SizedBox(height: 6.0),
@@ -184,6 +194,11 @@ class AdkMessageBubble extends StatelessWidget {
             SelectableText(
               message.text,
               style: defaultTextStyle,
+            ),
+          if (message.grounding != null && message.grounding!.isNotEmpty)
+            AdkGroundingSourcesBar(
+              grounding: message.grounding!,
+              onSourceTap: onGroundingSourceTap,
             ),
           if (message.isPartial)
             Padding(

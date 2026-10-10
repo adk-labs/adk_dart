@@ -12,6 +12,7 @@ import '../code_executors/base_code_executor.dart';
 import '../code_executors/code_execution_utils.dart';
 import '../models/llm_request.dart';
 import '../skills/skill_runtime.dart';
+import '../telemetry/tracing.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
 import 'base_toolset.dart';
@@ -441,6 +442,11 @@ class LoadSkillTool extends BaseTool {
       };
     }
 
+    SkillTelemetry.updateCurrentSpanName(
+      toolName: name,
+      confirmedSkillName: skill.name,
+    );
+
     final List<String> unloadedSkills = _toolset._recordActivation(
       toolContext.state,
       toolContext.agentName,
@@ -620,6 +626,11 @@ class LoadSkillResourceTool extends BaseTool {
       };
     }
 
+    SkillTelemetry.updateCurrentSpanName(
+      toolName: name,
+      confirmedSkillName: skill.name,
+    );
+
     Object? content;
     if (resourcePath.startsWith('references/')) {
       final String referenceName = resourcePath.substring('references/'.length);
@@ -659,6 +670,12 @@ class LoadSkillResourceTool extends BaseTool {
         'error_code': 'RESOURCE_NOT_FOUND',
       };
     }
+
+    SkillTelemetry.updateCurrentSpanName(
+      toolName: name,
+      confirmedSkillName: skill.name,
+      confirmedResourceOrScriptPath: resourcePath,
+    );
 
     if (content is List<int>) {
       return <String, Object?>{
@@ -1360,6 +1377,11 @@ class RunSkillScriptTool extends BaseTool {
       };
     }
 
+    SkillTelemetry.updateCurrentSpanName(
+      toolName: name,
+      confirmedSkillName: skill.name,
+    );
+
     final Script? script = scriptPath.startsWith('scripts/')
         ? skill.resources.getScript(scriptPath.substring('scripts/'.length))
         : skill.resources.getScript(scriptPath);
@@ -1369,6 +1391,12 @@ class RunSkillScriptTool extends BaseTool {
         'error_code': 'SCRIPT_NOT_FOUND',
       };
     }
+
+    SkillTelemetry.updateCurrentSpanName(
+      toolName: name,
+      confirmedSkillName: skill.name,
+      confirmedResourceOrScriptPath: scriptPath,
+    );
 
     final BaseCodeExecutor? codeExecutor = _resolveCodeExecutor(
       _toolset._codeExecutor,

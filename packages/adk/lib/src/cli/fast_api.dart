@@ -23,6 +23,7 @@ class FastApiApp {
     this.enableWebUi = true,
     this.logoText,
     this.logoImageUrl,
+    this.triggerSources = const <String>[],
   });
 
   /// Root directory that contains ADK agent projects.
@@ -67,6 +68,9 @@ class FastApiApp {
   /// Optional image URL shown in the web UI logo area.
   final String? logoImageUrl;
 
+  /// Event trigger sources to enable (`pubsub`, `eventarc`).
+  final List<String> triggerSources;
+
   AdkWebServer? _server;
 
   /// Starts the wrapped [AdkWebServer] instance.
@@ -86,6 +90,7 @@ class FastApiApp {
       enableWebUi: enableWebUi,
       logoText: logoText,
       logoImageUrl: logoImageUrl,
+      triggerSources: triggerSources,
     );
     _server = server;
     return server.start();
@@ -114,6 +119,7 @@ FastApiApp getFastApiApp({
   bool enableWebUi = true,
   String? logoText,
   String? logoImageUrl,
+  List<String> triggerSources = const <String>[],
 }) {
   return FastApiApp(
     agentsDir: agentsDir,
@@ -130,5 +136,6 @@ FastApiApp getFastApiApp({
     enableWebUi: enableWebUi,
     logoText: logoText,
     logoImageUrl: logoImageUrl,
+    triggerSources: triggerSources,
   );
 }

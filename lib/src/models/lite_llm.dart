@@ -891,7 +891,20 @@ List<Map<String, Object?>> _contentToMessages(
     }
   }
   if (parts.isNotEmpty) {
-    if (parts.length == 1 && parts.first['type'] == 'text') {
+    if (role == 'assistant') {
+      final List<String> textBlocks = <String>[
+        for (final Map<String, Object?> block in parts)
+          if (block['type'] == 'text' && block['text'] is String)
+            block['text'] as String,
+      ];
+      if (textBlocks.isNotEmpty && textBlocks.length == parts.length) {
+        message['content'] = textBlocks.join('\n');
+      } else if (parts.length == 1 && parts.first['type'] == 'text') {
+        message['content'] = parts.first['text'];
+      } else {
+        message['content'] = parts;
+      }
+    } else if (parts.length == 1 && parts.first['type'] == 'text') {
       message['content'] = parts.first['text'];
     } else {
       message['content'] = parts;

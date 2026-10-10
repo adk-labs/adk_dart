@@ -237,13 +237,27 @@ class ToolAuthHandler {
 
   Future<AuthCredential?> _exchangeCredential(AuthCredential credential) async {
     try {
-      return await credentialExchanger.exchangeCredential(
-        authScheme ?? '',
-        credential,
-      );
+      final AuthCredential? exchanged = await credentialExchanger
+          .exchangeCredential(authScheme ?? '', credential);
+      if (exchanged == null || _isUnexchangedOAuthCredential(exchanged)) {
+        return null;
+      }
+      return exchanged;
     } catch (_) {
       return null;
     }
+  }
+
+  bool _isUnexchangedOAuthCredential(AuthCredential credential) {
+    if (credential.authType != AuthCredentialType.oauth2 &&
+        credential.authType != AuthCredentialType.openIdConnect) {
+      return false;
+    }
+    if (credential.http != null) {
+      return false;
+    }
+    final String? accessToken = credential.oauth2?.accessToken;
+    return accessToken == null || accessToken.isEmpty;
   }
 
   void _storeCredential(AuthCredential credential) {
@@ -301,8 +315,13 @@ class ToolAuthHandler {
         credential.authType != AuthCredentialType.openIdConnect) {
       return false;
     }
+    if (credential.http != null) {
+      return false;
+    }
     final String? accessToken = credential.oauth2?.accessToken;
-    return accessToken == null || accessToken.isEmpty;
+    final String? refreshToken = credential.oauth2?.refreshToken;
+    return (accessToken == null || accessToken.isEmpty) &&
+        (refreshToken == null || refreshToken.isEmpty);
   }
 
   /// Prepares credentials for tool execution, requesting auth when needed.
@@ -318,18 +337,27 @@ class ToolAuthHandler {
     AuthCredential? credential =
         existingCredential ?? authCredential?.copyWith();
 
-    if (credential == null || _externalExchangeRequired(credential)) {
-      credential = _getAuthResponse();
-      if (credential != null) {
-        _storeCredential(credential);
-      } else {
-        _requestCredential();
+    if (credential != null && !_externalExchangeRequired(credential)) {
+      final AuthCredential? exchanged = await _exchangeCredential(credential);
+      if (exchanged != null) {
         return AuthPreparationResult(
-          state: 'pending',
+          state: 'done',
           authScheme: authScheme,
-          authCredential: authCredential,
+          authCredential: exchanged,
         );
       }
+    }
+
+    credential = _getAuthResponse();
+    if (credential != null) {
+      _storeCredential(credential);
+    } else {
+      _requestCredential();
+      return AuthPreparationResult(
+        state: 'pending',
+        authScheme: authScheme,
+        authCredential: authCredential,
+      );
     }
 
     final AuthCredential? exchangedCredential = await _exchangeCredential(

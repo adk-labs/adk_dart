@@ -16,6 +16,156 @@ enum AdkMessageRole {
   system,
 }
 
+/// Code execution snippet and terminal output attached to a chat message.
+///
+/// ```dart
+/// const execution = AdkCodeExecution(
+///   language: 'PYTHON',
+///   code: 'print(2 + 2)',
+///   output: '4\n',
+///   outcome: 'OUTCOME_OK',
+/// );
+/// ```
+@immutable
+class AdkCodeExecution {
+  /// Creates an [AdkCodeExecution] payload.
+  const AdkCodeExecution({
+    this.language = 'PYTHON',
+    this.code = '',
+    this.output,
+    this.outcome,
+  });
+
+  /// Programming language identifier (for example `'PYTHON'`).
+  final String language;
+
+  /// Source code executed by the agent.
+  final String code;
+
+  /// Standard output or error text produced by the execution, if available.
+  final String? output;
+
+  /// Execution outcome status (for example `'OUTCOME_OK'` or `'OUTCOME_FAILED'`).
+  final String? outcome;
+
+  /// Whether the code execution completed without a failure outcome.
+  bool get isSuccess =>
+      outcome == null ||
+      outcome!.isEmpty ||
+      outcome!.toUpperCase().contains('OK') ||
+      outcome!.toUpperCase() == 'SUCCESS';
+
+  /// Returns a copy of this [AdkCodeExecution] with updated fields.
+  AdkCodeExecution copyWith({
+    String? language,
+    String? code,
+    String? output,
+    String? outcome,
+  }) {
+    return AdkCodeExecution(
+      language: language ?? this.language,
+      code: code ?? this.code,
+      output: output ?? this.output,
+      outcome: outcome ?? this.outcome,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AdkCodeExecution &&
+        other.language == language &&
+        other.code == code &&
+        other.output == output &&
+        other.outcome == outcome;
+  }
+
+  @override
+  int get hashCode => Object.hash(language, code, output, outcome);
+}
+
+/// A single grounding citation source attached to a model response.
+///
+/// ```dart
+/// const source = AdkGroundingSource(
+///   title: 'ADK Documentation',
+///   uri: 'https://google.github.io/adk-docs/',
+/// );
+/// ```
+@immutable
+class AdkGroundingSource {
+  /// Creates an [AdkGroundingSource].
+  const AdkGroundingSource({
+    required this.title,
+    required this.uri,
+  });
+
+  /// Display title of the cited source or domain.
+  final String title;
+
+  /// Target URI of the cited web page or document.
+  final String uri;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AdkGroundingSource &&
+        other.title == title &&
+        other.uri == uri;
+  }
+
+  @override
+  int get hashCode => Object.hash(title, uri);
+}
+
+/// Search queries and citation sources from model grounding metadata.
+///
+/// ```dart
+/// const grounding = AdkGroundingInfo(
+///   searchQueries: ['dart adk agents'],
+///   sources: [
+///     AdkGroundingSource(
+///       title: 'ADK Docs',
+///       uri: 'https://google.github.io/adk-docs/',
+///     ),
+///   ],
+/// );
+/// ```
+@immutable
+class AdkGroundingInfo {
+  /// Creates an [AdkGroundingInfo].
+  const AdkGroundingInfo({
+    this.searchQueries = const <String>[],
+    this.sources = const <AdkGroundingSource>[],
+  });
+
+  /// Search queries issued by the model during grounding.
+  final List<String> searchQueries;
+
+  /// Grounded web or document sources cited by the response.
+  final List<AdkGroundingSource> sources;
+
+  /// Whether there is no grounding query or source data.
+  bool get isEmpty => searchQueries.isEmpty && sources.isEmpty;
+
+  /// Whether at least one search query or citation source is present.
+  bool get isNotEmpty => !isEmpty;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AdkGroundingInfo &&
+        listEquals(other.searchQueries, searchQueries) &&
+        listEquals(other.sources, sources);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        Object.hashAll(searchQueries),
+        Object.hashAll(sources),
+      );
+}
+
 /// A structured chat message displayed in the ADK Flutter chat UI.
 @immutable
 class AdkChatMessage {
@@ -30,6 +180,9 @@ class AdkChatMessage {
     this.toolName,
     this.toolArgs,
     this.toolResult,
+    this.codeExecution,
+    this.grounding,
+    this.isCompaction = false,
     this.errorMessage,
     this.attachments = const <AdkAttachment>[],
     this.metadata = const <String, dynamic>{},
@@ -63,6 +216,9 @@ class AdkChatMessage {
     String author = 'Agent',
     bool isPartial = false,
     String? thought,
+    AdkCodeExecution? codeExecution,
+    AdkGroundingInfo? grounding,
+    bool isCompaction = false,
     List<AdkAttachment> attachments = const <AdkAttachment>[],
     DateTime? timestamp,
     Map<String, dynamic> metadata = const <String, dynamic>{},
@@ -74,6 +230,9 @@ class AdkChatMessage {
       author: author,
       isPartial: isPartial,
       thought: thought,
+      codeExecution: codeExecution,
+      grounding: grounding,
+      isCompaction: isCompaction,
       attachments: attachments,
       timestamp: timestamp,
       metadata: metadata,
@@ -109,6 +268,7 @@ class AdkChatMessage {
     required String id,
     required String text,
     String? errorMessage,
+    bool isCompaction = false,
     DateTime? timestamp,
     Map<String, dynamic> metadata = const <String, dynamic>{},
   }) {
@@ -117,6 +277,7 @@ class AdkChatMessage {
       role: .system,
       text: text,
       errorMessage: errorMessage,
+      isCompaction: isCompaction,
       timestamp: timestamp,
       metadata: metadata,
     );
@@ -151,6 +312,15 @@ class AdkChatMessage {
 
   /// Result returned by the tool, if any.
   final dynamic toolResult;
+
+  /// Code execution snippet and output, if any.
+  final AdkCodeExecution? codeExecution;
+
+  /// Search grounding queries and citation sources, if any.
+  final AdkGroundingInfo? grounding;
+
+  /// Whether this message represents a compacted conversation summary.
+  final bool isCompaction;
 
   /// Error message, if an error occurred.
   final String? errorMessage;
@@ -196,6 +366,9 @@ class AdkChatMessage {
     Map<String, dynamic>? toolArgs,
     Map<String, dynamic>? toolArguments,
     dynamic toolResult,
+    AdkCodeExecution? codeExecution,
+    AdkGroundingInfo? grounding,
+    bool? isCompaction,
     String? errorMessage,
     List<AdkAttachment>? attachments,
     Map<String, dynamic>? metadata,
@@ -211,6 +384,9 @@ class AdkChatMessage {
       toolName: toolName ?? this.toolName,
       toolArgs: toolArguments ?? toolArgs ?? this.toolArgs,
       toolResult: toolResult ?? this.toolResult,
+      codeExecution: codeExecution ?? this.codeExecution,
+      grounding: grounding ?? this.grounding,
+      isCompaction: isCompaction ?? this.isCompaction,
       errorMessage: errorMessage ?? this.errorMessage,
       attachments: attachments ?? this.attachments,
       metadata: metadata ?? this.metadata,
@@ -227,11 +403,24 @@ class AdkChatMessage {
         other.text == text &&
         other.isPartial == isPartial &&
         other.toolName == toolName &&
+        other.codeExecution == codeExecution &&
+        other.grounding == grounding &&
+        other.isCompaction == isCompaction &&
         other.errorMessage == errorMessage &&
         listEquals(other.attachments, attachments);
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, role, text, isPartial, toolName, errorMessage, Object.hashAll(attachments));
+  int get hashCode => Object.hash(
+        id,
+        role,
+        text,
+        isPartial,
+        toolName,
+        codeExecution,
+        grounding,
+        isCompaction,
+        errorMessage,
+        Object.hashAll(attachments),
+      );
 }

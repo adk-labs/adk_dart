@@ -9,6 +9,7 @@ import '../sessions/base_session_service.dart';
 import '../sessions/session.dart';
 import '../telemetry/tracing.dart' as tracing;
 import '../types/content.dart';
+import '../utils/function_call_names.dart';
 import 'app.dart';
 import 'base_events_summarizer.dart';
 
@@ -50,11 +51,7 @@ Set<String> _eventResolvedResponseIds(Event event) {
   return _eventFunctionResponseIds(event).difference(pendingInEvent);
 }
 
-const Set<String> _syntheticHitlToolNames = <String>{
-  'adk_request_confirmation',
-  'adk_request_credential',
-  'adk_request_input',
-};
+const Set<String> _syntheticHitlToolNames = clientFunctionCallNames;
 
 /// Returns function-call IDs opened in [events] that can never be answered.
 Set<String> _provablyDeadCallIds(

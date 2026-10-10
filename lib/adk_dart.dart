@@ -116,9 +116,11 @@ export 'src/integrations/bigquery/bigquery.dart'
         BigQueryToolset,
         ExecuteSqlTool,
         bigQuerySessionInfoKey;
+export 'src/integrations/eleven_labs/eleven_labs.dart';
 export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
 export 'src/labs/openai.dart';
+export 'src/live/live.dart';
 
 export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';

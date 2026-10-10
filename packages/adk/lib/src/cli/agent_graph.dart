@@ -3,6 +3,8 @@ library;
 
 import 'package:adk_dart/src/agents/base_agent.dart';
 import 'package:adk_dart/src/agents/llm_agent.dart';
+import 'package:adk_dart/src/agents/loop_agent.dart';
+import 'package:adk_dart/src/agents/sequential_agent.dart';
 import 'package:adk_dart/src/tools/base_tool.dart';
 import 'package:adk_dart/src/tools/function_tool.dart';
 import 'package:adk_dart/src/workflow/workflow.dart';
@@ -73,9 +75,32 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       ),
     );
 
-    for (final BaseAgent subAgent in agent.subAgents) {
-      await visitAgent(subAgent);
-      addEdge(agent.name, subAgent.name);
+    if (agent is SequentialAgent && agent.subAgents.isNotEmpty) {
+      for (int i = 0; i < agent.subAgents.length; i += 1) {
+        final BaseAgent subAgent = agent.subAgents[i];
+        await visitAgent(subAgent);
+        if (i == 0) {
+          addEdge(agent.name, subAgent.name);
+        } else {
+          addEdge(agent.subAgents[i - 1].name, subAgent.name);
+        }
+      }
+    } else if (agent is LoopAgent && agent.subAgents.isNotEmpty) {
+      for (int i = 0; i < agent.subAgents.length; i += 1) {
+        final BaseAgent subAgent = agent.subAgents[i];
+        await visitAgent(subAgent);
+        if (i == 0) {
+          addEdge(agent.name, subAgent.name);
+        } else {
+          addEdge(agent.subAgents[i - 1].name, subAgent.name);
+        }
+      }
+      addEdge(agent.subAgents.last.name, agent.subAgents.first.name);
+    } else {
+      for (final BaseAgent subAgent in agent.subAgents) {
+        await visitAgent(subAgent);
+        addEdge(agent.name, subAgent.name);
+      }
     }
 
     if (agent is LlmAgent) {
