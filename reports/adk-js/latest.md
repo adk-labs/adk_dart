@@ -1,21 +1,10 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-10-10
+- Date (UTC): 2026-10-11
 - Source: `google/adk-js`
 - Latest SHA: `86d1cfeff3b868e23ff8335475148c0ceb07b60f`
-- Previous SHA: `0e7819345a26a600d3e02214785304c6889c62fc`
+- Previous SHA: `86d1cfeff3b868e23ff8335475148c0ceb07b60f`
 
-## Summary
+## Result
 
-- New commits: 3
-
-## Commits
-
-- [86d1cfe](https://github.com/google/adk-js/commit/86d1cfeff3b868e23ff8335475148c0ceb07b60f) chore(dev): drop the dead @ts-ignore suppression from dev/build.js (#1012) (adk-foundry-bot, 2026-10-09)
-- [ff9186c](https://github.com/google/adk-js/commit/ff9186c9822b251048672616fab28ab427816cfb) fix(test): stop Vitest inlining compiled agent bundles in the integration project (#1011) (adk-foundry-bot, 2026-10-09)
-- [72c4444](https://github.com/google/adk-js/commit/72c4444c13cf29100c8052d13db80b8306fa796b) fix(test): set an explicit testTimeout for the unit:core and unit:dev vitest projects (#1010) (adk-foundry-bot, 2026-10-09)
-
-## Changed Files
-
-- `M	dev/build.js`
-- `M	vitest.config.ts`
+No upstream changes since the last check.

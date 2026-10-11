@@ -1,6 +1,6 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-10-10
+- Date (UTC): 2026-10-11
 - Source: `google/adk-go`
 - Latest SHA: `987c7bc0bed6af5a4bae305df54c00019033d6d0`
 - Previous SHA: `987c7bc0bed6af5a4bae305df54c00019033d6d0`

@@ -1,38 +1,27 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-10
+- Date (UTC): 2026-10-11
 - Source: `google/adk-python`
-- Latest SHA: `3c31fa5100a617d03a19f8a9495b8b93d2e47628`
-- Previous SHA: `f5db3104c51b76a0dea9aafbe2ffc702d2523892`
+- Latest SHA: `bca4a425b1b0abccddf8af26735773394a808427`
+- Previous SHA: `3c31fa5100a617d03a19f8a9495b8b93d2e47628`
 
 ## Summary
 
-- New commits: 7
+- New commits: 3
 
 ## Commits
 
-- [3c31fa51](https://github.com/google/adk-python/commit/3c31fa5100a617d03a19f8a9495b8b93d2e47628) perf(flows): stop importing unused providers on the first LLM request (Yi Liu, 2026-10-09)
-- [15486dbb](https://github.com/google/adk-python/commit/15486dbb2ac26284f4384857acc0d4002f4e4fc4) fix(tools): guard concurrent lazy initialization in ComputerUseToolset and EnvironmentToolset (Shangjie Chen, 2026-10-09)
-- [10b24434](https://github.com/google/adk-python/commit/10b24434ec076cd3f8bb0266717fc7754b7deb7e) chore(workflow): remove stale TODO comments across node runner, runner, and agent router (Shangjie Chen, 2026-10-09)
-- [eb536752](https://github.com/google/adk-python/commit/eb5367522744a301c1d2357abfbbd638f577514d) test(litellm): scope caplog to google_adk in tool call parsing tests (Shangjie Chen, 2026-10-09)
-- [ff757838](https://github.com/google/adk-python/commit/ff75783884d4b7d0bbabbe3edec746a78f047b8e) fix(samples): use behavior instead of response_scheduling in non-blocking tool sample (Jason Zhang, 2026-10-09)
-- [f03015c9](https://github.com/google/adk-python/commit/f03015c9f7ceacc00f63548395c1faaa4fc8d1e3) docs(api): consider new fields under storage services as breaking changes (Shangjie Chen, 2026-10-09)
-- [8af46523](https://github.com/google/adk-python/commit/8af46523edf9d641d4088f197f7ec3be5a0f6368) docs(samples): enhance Model Consult sample README with inspection guide and architecture graph (Google Team Member, 2026-10-09)
+- [bca4a425](https://github.com/google/adk-python/commit/bca4a425b1b0abccddf8af26735773394a808427) refactor(agents): remove Python <3.11 merge fallback in ParallelAgent (Shangjie Chen, 2026-10-10)
+- [bcac35a6](https://github.com/google/adk-python/commit/bcac35a6efb21f176eef9d28d663db247f4e5afd) fix(workflow): wait for all direct interrupts before rerunning rerun_on_resume nodes (Shangjie Chen, 2026-10-10)
+- [531a86a1](https://github.com/google/adk-python/commit/531a86a194c910ec5bfdfc9f7de09be80c5aaada) fix(workflow): wait for in-flight workers on HITL interrupt in ParallelWorker (Shangjie Chen, 2026-10-10)
 
 ## Changed Files
 
-- `M	.agents/skills/adk-architecture/references/api-principles.md`
-- `M	.agents/skills/adk-review/SKILL.md`
-- `M	contributing/samples/live/non_blocking_tool_agent/README.md`
-- `M	contributing/samples/live/non_blocking_tool_agent/agent.py`
-- `M	contributing/samples/tools/model_consult/README.md`
-- `M	src/google/adk/agents/_agent_router.py`
-- `M	src/google/adk/flows/llm_flows/context/_contents.py`
-- `M	src/google/adk/runners.py`
-- `M	src/google/adk/tools/computer_use/computer_use_toolset.py`
-- `M	src/google/adk/tools/environment/_environment_toolset.py`
-- `M	src/google/adk/workflow/_node_runner.py`
-- `M	tests/unittests/flows/llm_flows/context/test_contents.py`
-- `M	tests/unittests/models/test_litellm.py`
-- `M	tests/unittests/tools/computer_use/test_computer_use_toolset.py`
-- `M	tests/unittests/tools/test_environment_toolset.py`
+- `M	src/google/adk/agents/parallel_agent.py`
+- `M	src/google/adk/workflow/_parallel_worker.py`
+- `M	src/google/adk/workflow/utils/_rehydration_utils.py`
+- `M	src/google/adk/workflow/utils/_replay_interceptor.py`
+- `M	tests/unittests/agents/test_parallel_agent.py`
+- `M	tests/unittests/workflow/test_workflow_hitl.py`
+- `M	tests/unittests/workflow/test_workflow_parallel_worker.py`
+- `M	tests/unittests/workflow/utils/test_replay_interceptor.py`

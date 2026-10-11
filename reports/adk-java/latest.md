@@ -1,6 +1,6 @@
 # ADK Java Daily Change Report
 
-- Date (UTC): 2026-10-10
+- Date (UTC): 2026-10-11
 - Source: `google/adk-java`
 - Latest SHA: `189d463a9988d5235ccf34de6a6fab1aae779d20`
 - Previous SHA: `189d463a9988d5235ccf34de6a6fab1aae779d20`
