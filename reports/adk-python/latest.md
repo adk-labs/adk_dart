@@ -1,27 +1,126 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-11
+- Date (UTC): 2026-10-12
 - Source: `google/adk-python`
-- Latest SHA: `bca4a425b1b0abccddf8af26735773394a808427`
-- Previous SHA: `3c31fa5100a617d03a19f8a9495b8b93d2e47628`
+- Latest SHA: `b3cbb4727727f5bc60e0161e850ce6c105cca952`
+- Previous SHA: `bca4a425b1b0abccddf8af26735773394a808427`
 
 ## Summary
 
-- New commits: 3
+- New commits: 18
 
 ## Commits
 
-- [bca4a425](https://github.com/google/adk-python/commit/bca4a425b1b0abccddf8af26735773394a808427) refactor(agents): remove Python <3.11 merge fallback in ParallelAgent (Shangjie Chen, 2026-10-10)
-- [bcac35a6](https://github.com/google/adk-python/commit/bcac35a6efb21f176eef9d28d663db247f4e5afd) fix(workflow): wait for all direct interrupts before rerunning rerun_on_resume nodes (Shangjie Chen, 2026-10-10)
-- [531a86a1](https://github.com/google/adk-python/commit/531a86a194c910ec5bfdfc9f7de09be80c5aaada) fix(workflow): wait for in-flight workers on HITL interrupt in ParallelWorker (Shangjie Chen, 2026-10-10)
+- [b3cbb472](https://github.com/google/adk-python/commit/b3cbb4727727f5bc60e0161e850ce6c105cca952) feat: resume Gemini generations paused with a continuation token (George Weale, 2026-10-12)
+- [ac3f0245](https://github.com/google/adk-python/commit/ac3f0245dad02133c36ac3708f6cbed32754d791) test: catch runtime boundary and regression bugs in unit tests (George Weale, 2026-10-12)
+- [068610f2](https://github.com/google/adk-python/commit/068610f272ecfe3d235ea5995e5168609d41d94b) feat(tools): tag model_consult advisor requests with client label (Xuan Yang, 2026-10-12)
+- [608ce2dd](https://github.com/google/adk-python/commit/608ce2dd5a07e15e1804965bd15249a4bb93c938) fix: raise ValueError instead of assert in Gemma model check (chelsealong, 2026-10-12)
+- [988fd1a7](https://github.com/google/adk-python/commit/988fd1a73d174f9e3acb6d2e1bec102f9ec02238) feat(workflow): support require_confirmation in @node and FunctionNode (Shangjie Chen, 2026-10-12)
+- [5ee5cf85](https://github.com/google/adk-python/commit/5ee5cf8534f3e894f78cc37d3f46a51f6d0963ce) fix(workflow): rerun rerun_on_resume nodes as soon as any interrupt is resolved (Shangjie Chen, 2026-10-12)
+- [7d107090](https://github.com/google/adk-python/commit/7d1070902627159d8ad071f026e71d7a1143b984) fix: raise SessionNotFoundError when appending to unknown Redis session (DDT, 2026-10-12)
+- [2b8b6d53](https://github.com/google/adk-python/commit/2b8b6d5358eb6f1b0a9304f110ca55378cea941f) fix(workflow): support retry_config on dynamic node failures in NodeRunner (Shangjie Chen, 2026-10-12)
+- [1ab2fe8e](https://github.com/google/adk-python/commit/1ab2fe8e4921bd45312897371f98d3903d80e028) fix: cancel sibling tools on child-originated cancellation (Anusha, 2026-10-12)
+- [b4cf70ca](https://github.com/google/adk-python/commit/b4cf70ca6d5e88be5e4f56e9961eb3e17f538408) fix: serialize path, header, and cookie parameters and omit None values (Naveen Chatlapalli, 2026-10-12)
+- [a116c225](https://github.com/google/adk-python/commit/a116c22580c42a3240739dbba995d9b49bf30f07) fix: load artifacts removed by a rewind as None in file and GCS services (Spandan Keche, 2026-10-12)
+- [6aa1fdd9](https://github.com/google/adk-python/commit/6aa1fdd9630afced1b9511df7ea337dfa2c973d0) fix: stabilize unit tests in test_litellm and test_gke_code_executor (Google Team Member, 2026-10-12)
+- [2d437017](https://github.com/google/adk-python/commit/2d4370170cc2d773ebe5047108a9e5d2b971ca4a) fix: exclude thoughts from typed workflow node inputs (Jeeho Lee, 2026-10-12)
+- [a334baca](https://github.com/google/adk-python/commit/a334bacaae1ec0e116c74eb275fb3128ee5f913b) fix(a2a): support tool_call and tool_response in A2A part converter (Google Team Member, 2026-10-12)
+- [e6ea8d91](https://github.com/google/adk-python/commit/e6ea8d91bffa75f3447f84d460fb7302c61cbaa9) refactor(runner): remove dead code and deduplicate early-exit event handling (Shangjie Chen, 2026-10-12)
+- [d2cb22ed](https://github.com/google/adk-python/commit/d2cb22edd7fbaf9edba1cd324f8576a060ecec0e) fix: warn when session state is dropped (Sylvester Kaczmarek, 2026-10-12)
+- [7a50a859](https://github.com/google/adk-python/commit/7a50a8591b057b73ee6a572cb06ba4380360ef1d) fix: stop to_a2a from overriding the application's log level (Ankit Kumar, 2026-10-12)
+- [ca3b4903](https://github.com/google/adk-python/commit/ca3b4903f090dd1c8233a3330603b6112b906006) test: verify MCP stdio tool execution and cleanup during evaluation (Sankalp Gilda, 2026-10-11)
 
 ## Changed Files
 
-- `M	src/google/adk/agents/parallel_agent.py`
+- `M	.agents/skills/adk-agent-builder/references/function-nodes.md`
+- `M	constraints-3.11.txt`
+- `M	constraints-3.12.txt`
+- `M	constraints-3.13.txt`
+- `M	constraints-3.14.txt`
+- `M	docs/guides/agents/remote_a2a_agent/task.md`
+- `M	docs/guides/tools/node_tool/index.md`
+- `M	docs/guides/workflow/base_node/index.md`
+- `M	docs/guides/workflow/function_node/index.md`
+- `M	docs/guides/workflow/node/index.md`
+- `M	pyproject.toml`
+- `M	src/google/adk/a2a/agent/_remote_a2a_agent.py`
+- `M	src/google/adk/a2a/converters/part_converter.py`
+- `M	src/google/adk/a2a/converters/to_adk_event.py`
+- `M	src/google/adk/a2a/utils/agent_to_a2a.py`
+- `M	src/google/adk/artifacts/artifact_util.py`
+- `M	src/google/adk/artifacts/file_artifact_service.py`
+- `M	src/google/adk/artifacts/gcs_artifact_service.py`
+- `M	src/google/adk/artifacts/in_memory_artifact_service.py`
+- `M	src/google/adk/flows/llm_flows/tools/_batch_executor.py`
+- `M	src/google/adk/integrations/redis/_redis_session_service.py`
+- `A	src/google/adk/models/_continuation.py`
+- `M	src/google/adk/models/gemma_llm.py`
+- `M	src/google/adk/models/google_llm.py`
+- `M	src/google/adk/runners.py`
+- `M	src/google/adk/sessions/_rewind_utils.py`
+- `M	src/google/adk/tools/model_consult/_advisor.py`
+- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py`
+- `M	src/google/adk/utils/_client_labels_utils.py`
+- `M	src/google/adk/utils/_schema_utils.py`
+- `M	src/google/adk/workflow/_dynamic_node_scheduler.py`
+- `M	src/google/adk/workflow/_function_node.py`
+- `M	src/google/adk/workflow/_node.py`
+- `M	src/google/adk/workflow/_node_runner.py`
+- `M	src/google/adk/workflow/_node_runner_utils.py`
 - `M	src/google/adk/workflow/_parallel_worker.py`
+- `M	src/google/adk/workflow/_tool_node.py`
 - `M	src/google/adk/workflow/utils/_rehydration_utils.py`
 - `M	src/google/adk/workflow/utils/_replay_interceptor.py`
-- `M	tests/unittests/agents/test_parallel_agent.py`
+- `M	src/google/adk/workflow/utils/_workflow_graph_utils.py`
+- `M	src/google/adk/workflow/utils/_workflow_hitl_utils.py`
+- `M	tests/unittests/a2a/agent/test_remote_a2a_agent.py`
+- `M	tests/unittests/a2a/converters/test_part_converter.py`
+- `M	tests/unittests/a2a/converters/test_to_adk.py`
+- `M	tests/unittests/a2a/integration/client.py`
+- `M	tests/unittests/a2a/integration/server.py`
+- `M	tests/unittests/a2a/integration/test_client_server.py`
+- `M	tests/unittests/a2a/integration/test_client_server_v1.py`
+- `M	tests/unittests/a2a/utils/test_agent_to_a2a.py`
+- `M	tests/unittests/agents/test_base_agent.py`
+- `M	tests/unittests/agents/test_loop_agent.py`
+- `M	tests/unittests/agents/test_readonly_context.py`
+- `M	tests/unittests/artifacts/test_artifact_service.py`
+- `M	tests/unittests/artifacts/test_artifact_util.py`
+- `M	tests/unittests/code_executors/test_gke_code_executor.py`
+- `M	tests/unittests/evaluation/test_local_eval_service.py`
+- `M	tests/unittests/events/test_branch_path.py`
+- `M	tests/unittests/events/test_event.py`
+- `M	tests/unittests/events/test_event_actions.py`
+- `M	tests/unittests/events/test_node_path_builder.py`
+- `M	tests/unittests/flows/llm_flows/tools/test_batch_executor.py`
+- `M	tests/unittests/flows/llm_flows/tools/test_functions_parallel_error.py`
+- `M	tests/unittests/integrations/redis/_fake_redis.py`
+- `M	tests/unittests/integrations/redis/test_redis_session_service.py`
+- `M	tests/unittests/memory/test_in_memory_memory_service.py`
+- `M	tests/unittests/models/test_gemma_llm.py`
+- `M	tests/unittests/models/test_google_llm.py`
+- `M	tests/unittests/models/test_llm_request.py`
+- `M	tests/unittests/models/test_llm_response.py`
+- `M	tests/unittests/plugins/test_context_filtering_plugin.py`
+- `M	tests/unittests/plugins/test_global_instruction_plugin.py`
+- `M	tests/unittests/sessions/_conformance.py`
+- `M	tests/unittests/sessions/test_rewind_utils.py`
+- `M	tests/unittests/sessions/test_session_service.py`
+- `M	tests/unittests/tools/model_consult/test_advisor.py`
+- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_rest_api_tool.py`
+- `M	tests/unittests/tools/test_agent_tool.py`
+- `M	tests/unittests/tools/test_function_tool.py`
+- `M	tests/unittests/utils/test_client_labels_utils.py`
+- `M	tests/unittests/utils/test_schema_utils.py`
+- `M	tests/unittests/workflow/test_base_node.py`
+- `M	tests/unittests/workflow/test_function_node.py`
+- `M	tests/unittests/workflow/test_graph.py`
+- `M	tests/unittests/workflow/test_node_runner_failure.py`
+- `M	tests/unittests/workflow/test_state_schema.py`
+- `M	tests/unittests/workflow/test_tool_node.py`
+- `M	tests/unittests/workflow/test_workflow_agent_as_node.py`
+- `M	tests/unittests/workflow/test_workflow_concurrency.py`
 - `M	tests/unittests/workflow/test_workflow_hitl.py`
+- `M	tests/unittests/workflow/test_workflow_node.py`
 - `M	tests/unittests/workflow/test_workflow_parallel_worker.py`
 - `M	tests/unittests/workflow/utils/test_replay_interceptor.py`
