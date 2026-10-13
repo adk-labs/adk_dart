@@ -1,60 +1,57 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-10-12
+- Date (UTC): 2026-10-13
 - Source: `google/adk-go`
-- Latest SHA: `40d37cad8feffd20f6790961a604789b9b5049ac`
-- Previous SHA: `987c7bc0bed6af5a4bae305df54c00019033d6d0`
+- Latest SHA: `5226417e7591bb75d680047b01578e0fa6078f09`
+- Previous SHA: `40d37cad8feffd20f6790961a604789b9b5049ac`
 
 ## Summary
 
-- New commits: 12
+- New commits: 7
 
 ## Commits
 
-- [40d37ca](https://github.com/google/adk-go/commit/40d37cad8feffd20f6790961a604789b9b5049ac) Align vertexai session service via ADK REST API with other impl (#1571) (Karol Droste, 2026-10-12)
-- [bd42144](https://github.com/google/adk-go/commit/bd421447f90c60bfe08a411f4f7a2bf805075169) fix(model/gemini): turn off the genai SDK's automatic continuation (#1813) (João Westerberg, 2026-10-12)
-- [01a97e7](https://github.com/google/adk-go/commit/01a97e7502a56bc658c963cbd0617e68c6a04587) chore(deps): bump google.golang.org/grpc (#1814) (dependabot[bot], 2026-10-12)
-- [457663d](https://github.com/google/adk-go/commit/457663d29337cd844a8d4c487411ab45b9006505) fix(model/gemini): resume a MAX_TOKENS stop when the request sets no maxOutputTokens (#1759) (João Westerberg, 2026-10-12)
-- [7397a5d](https://github.com/google/adk-go/commit/7397a5dec303efbbc0604868a86edd094d885fce) fix(loopagent): return when there are no sub-agents (#1780) (Anzal Husain Abidi, 2026-10-12)
-- [c4eb00b](https://github.com/google/adk-go/commit/c4eb00bc6e59b212968fe8f8375322a36766a143) feat(exp): add the experimental /apps/{app_name}/app-info endpoint (#1404) (Jan Wojtas, 2026-10-12)
-- [e0edbfb](https://github.com/google/adk-go/commit/e0edbfbb3892014ca2d4f45f4f3ab41808ba2e91) docs(mcptoolset): fix constructor example and schema comment (#1779) (ktsoator, 2026-10-12)
-- [1862aae](https://github.com/google/adk-go/commit/1862aaea60724b16784a55c01d51edadb2629470) fix(llminternal): guard nil first candidate in streaming aggregator (#1802) (PratikDhanave, 2026-10-12)
-- [212cc58](https://github.com/google/adk-go/commit/212cc58e6739e7503ce641bb30e37ee41218e3a4) docs(telemetry): fix StartNodeSpan doc for invoke_workflow (#1805) (PratikDhanave, 2026-10-12)
-- [bfaab17](https://github.com/google/adk-go/commit/bfaab17b5edeec6c6c04be17e8613b5fdde2a161) fix(agenttool): wrap the runner.New error instead of discarding it (#1803) (PratikDhanave, 2026-10-12)
-- [a3afd7f](https://github.com/google/adk-go/commit/a3afd7f99f31f0720c0e09e201e23717571d02e2) fix(llminternal): correct misleading "global" in appendInstructions error (#1804) (PratikDhanave, 2026-10-12)
-- [7245ee5](https://github.com/google/adk-go/commit/7245ee5cf12104b770afa9d8ca501d6bc8fa1eb1) chore(deps): bump the go-minor-patch group with 12 updates (#1798) (dependabot[bot], 2026-10-12)
+- [5226417](https://github.com/google/adk-go/commit/5226417e7591bb75d680047b01578e0fa6078f09) fix(model/gemini): let the genai SDK resume paused generations (#1822) (João Westerberg, 2026-10-13)
+- [cc4495a](https://github.com/google/adk-go/commit/cc4495a85242a96b458493929fc8e6d0fc6c5600) fix(server/triggers): let the Pub/Sub and Eventarc endpoints require a Google OIDC token (#1737) (wolo, 2026-10-13)
+- [893687b](https://github.com/google/adk-go/commit/893687bfa24e032be0413c3fcd774caecc83694b) fix(runner): drop nil parts from live requests (#1795) (Trainingcqy, 2026-10-13)
+- [a161b71](https://github.com/google/adk-go/commit/a161b7135de3c430f5290289052bf18f8868a438) docs(artifact): clarify missing-version deletion behavior (#1767) (ktsoator, 2026-10-13)
+- [5381399](https://github.com/google/adk-go/commit/5381399b87b72859402db7a0d803953c699f7dd8) feat(auth): refresh and retry once on a downstream 401/403 (#1136) (wolo, 2026-10-13)
+- [1064032](https://github.com/google/adk-go/commit/106403207c4c22471dc077fa8b380ba1bd836283) chore(version): bump the tagged version constant to 2.6.0 (#1817) (wolo, 2026-10-13)
+- [5294837](https://github.com/google/adk-go/commit/52948375397a35dbd7896b832816401e063058eb) fix: reject Cloud Run service name beginning with '-' (#1505) (herdiyanitdev, 2026-10-13)
 
 ## Changed Files
 
-- `M	AGENTS.md`
-- `M	CONTRIBUTING.md`
-- `M	agent/workflowagents/loopagent/agent.go`
-- `M	agent/workflowagents/loopagent/agent_test.go`
-- `A	exp/appinfo/appinfo.go`
-- `A	exp/appinfo/appinfo_test.go`
-- `A	exp/appinfo/handler.go`
-- `A	exp/appinfo/handler_test.go`
-- `A	exp/appinfo/launcher.go`
-- `A	exp/appinfo/launcher_test.go`
-- `A	exp/doc.go`
+- `M	artifact/gcsartifact/gcs_test.go`
+- `M	artifact/service.go`
+- `M	auth/credential.go`
+- `M	auth/credential_test.go`
+- `M	auth/gcp/agentidentity.go`
+- `M	auth/gcp/client.go`
+- `M	auth/gcp/client_test.go`
+- `M	auth/gcp/connector.go`
+- `M	auth/gcp/provider.go`
+- `M	auth/gcp/provider_internal_test.go`
+- `M	auth/gcp/provider_test.go`
+- `M	auth/gcp/redact.go`
+- `M	auth/providers.go`
+- `M	auth/store.go`
+- `M	auth/transport.go`
+- `M	auth/transport_test.go`
+- `M	cmd/adkgo/internal/deploy/cloudrun/cloudrun.go`
+- `M	cmd/adkgo/internal/deploy/cloudrun/cloudrun_test.go`
+- `M	cmd/launcher/web/triggers/eventarc/eventarc.go`
+- `A	cmd/launcher/web/triggers/eventarc/eventarc_test.go`
+- `A	cmd/launcher/web/triggers/internal/triggerauth/triggerauth.go`
+- `A	cmd/launcher/web/triggers/internal/triggerauth/triggerauth_test.go`
+- `M	cmd/launcher/web/triggers/pubsub/pubsub.go`
+- `M	cmd/launcher/web/triggers/pubsub/pubsub_test.go`
 - `M	go.mod`
 - `M	go.sum`
-- `M	internal/llminternal/instruction_processor.go`
-- `M	internal/llminternal/stream_aggregator.go`
-- `M	internal/llminternal/stream_aggregator_test.go`
-- `M	internal/telemetry/node_tracing.go`
-- `A	internal/workflowwalk/walk.go`
-- `M	model/gemini/continuation.go`
+- `M	internal/version/version.go`
+- `D	model/gemini/continuation.go`
 - `M	model/gemini/continuation_test.go`
 - `M	model/gemini/gemini.go`
-- `M	plugin/agentanalytics/go.mod`
-- `M	plugin/agentanalytics/go.sum`
-- `M	session/service.go`
-- `M	session/vertexai/delete_ownership_test.go`
-- `M	session/vertexai/notfound_test.go`
-- `M	session/vertexai/vertexai_client.go`
-- `M	tool/agenttool/agent_tool.go`
-- `M	tool/mcptoolset/set.go`
-- `M	tool/mcptoolset/tool.go`
-- `A	workflow/walk.go`
-- `A	workflow/walk_test.go`
+- `M	model/openaimodel/doc.go`
+- `M	model/openaimodel/internal/responses/request_test.go`
+- `M	runner/live_runner_test.go`
+- `M	runner/runner.go`

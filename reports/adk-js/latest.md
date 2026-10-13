@@ -1,95 +1,84 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-10-12
+- Date (UTC): 2026-10-13
 - Source: `google/adk-js`
-- Latest SHA: `14c9c3d58b915dc834306f851bb25c71d3f243c5`
-- Previous SHA: `86d1cfeff3b868e23ff8335475148c0ceb07b60f`
+- Latest SHA: `ad0540e65706bc6593798bcfce35298448747df7`
+- Previous SHA: `14c9c3d58b915dc834306f851bb25c71d3f243c5`
 
 ## Summary
 
-- New commits: 11
+- New commits: 14
 
 ## Commits
 
-- [14c9c3d](https://github.com/google/adk-js/commit/14c9c3d58b915dc834306f851bb25c71d3f243c5) fix(dev): install the cli_create console spies per test (#1028) (adk-foundry-bot, 2026-10-12)
-- [ee3e740](https://github.com/google/adk-js/commit/ee3e740d6467d39ac28d2edfe71032a0843b7c2c) fix(test): size the vitest worker heap ceiling off a measurement (#1027) (adk-foundry-bot, 2026-10-12)
-- [2ad6c5e](https://github.com/google/adk-js/commit/2ad6c5ec2594ac2e2d5bb16c05a85f086104cadc) chore(dev): remove debug scaffolding from cli_deploy_agent_engine_test (#1026) (adk-foundry-bot, 2026-10-12)
-- [ecb6bd1](https://github.com/google/adk-js/commit/ecb6bd13d69ad9e442d1936e5c23da08cd0d398e) feat(cli): bring cli to parity with adk-python v0.1.0 (#1049) (adk-foundry-bot, 2026-10-12)
-- [94b547b](https://github.com/google/adk-js/commit/94b547be3a1807bcc7979044a9ad269b642453bf) feat(flows): bring flows to parity with adk-python v0.1.0 (#1048) (adk-foundry-bot, 2026-10-12)
-- [6362192](https://github.com/google/adk-js/commit/63621924f009acd6421fce030b4c76d812148fd8) feat(tools): bring mcp_tool to parity with adk-python v0.1.0 (#1047) (adk-foundry-bot, 2026-10-12)
-- [e4bb8ee](https://github.com/google/adk-js/commit/e4bb8ee66f966d95c85569401389e785f4736680) feat(tools): bring tools to parity with adk-python v0.1.0 (#1046) (adk-foundry-bot, 2026-10-12)
-- [ce75d16](https://github.com/google/adk-js/commit/ce75d1639cb2cbb650a46ed90422daafc946705b) fix(models): respect explicit vertexai: false when enterprise env vars are set (#1044) (Varun-S10, 2026-10-12)
-- [6eabc04](https://github.com/google/adk-js/commit/6eabc04c0569bc49dd98b177459a05646ba983b4) test: raise vitest coverage thresholds to the measured floor (#1024) (adk-foundry-bot, 2026-10-11)
-- [83bf5e3](https://github.com/google/adk-js/commit/83bf5e34f7f24b5f962aa7fcdd21a422f3d2492e) test(memory): name the project and location constants in the memory bank test (#1023) (adk-foundry-bot, 2026-10-11)
-- [7a8020c](https://github.com/google/adk-js/commit/7a8020cada4db3159c2a7d49dbe7d2b9a5b5f232) ci: check license headers in .mjs and .cjs files (#1022) (adk-foundry-bot, 2026-10-11)
+- [ad0540e](https://github.com/google/adk-js/commit/ad0540e65706bc6593798bcfce35298448747df7) Release: v2.3.0 (#975) (Alexey Kalenkevich, 2026-10-13)
+- [31a56e8](https://github.com/google/adk-js/commit/31a56e8eded2f7ab5b09c4f3d9548f2e710f41eb) feat(agents): port agents features from adk-python (#1070) (adk-foundry-bot, 2026-10-13)
+- [146a4df](https://github.com/google/adk-js/commit/146a4df22377dd509cf310f81388b793be52f02b) test(sessions): remove the dead nodejs-vertexai mock from VertexAiSessionService tests (#1020) (adk-foundry-bot, 2026-10-13)
+- [966d49c](https://github.com/google/adk-js/commit/966d49c7eb072611fc49766d09355a11823680d9) fix(core): end call_llm span in finally when runAsync exits early (#1068) (hirematha, 2026-10-14)
+- [bda36c1](https://github.com/google/adk-js/commit/bda36c1c131bc084c01057d41111a3203d3c324a) refactor(models): drop Gemini continuation handling now done by @google/genai (#1050) (Alexey Kalenkevich, 2026-10-13)
+- [245ba2e](https://github.com/google/adk-js/commit/245ba2e2931153ca85d71e84cf5b406c0182efd1) fix(sessions): follow nextPageToken when listing events in VertexAiSessionService.getSession (#1029) (#1043) (Varun-S10, 2026-10-13)
+- [5e7af7e](https://github.com/google/adk-js/commit/5e7af7e767f29c13de30320403fe84b26b163a94) fix(core): set llmRequest.model to selected route model in RoutedLlm (#1062) (Varun-S10, 2026-10-13)
+- [f42e5c2](https://github.com/google/adk-js/commit/f42e5c29cda850063e0f7cab4abbb688d5fe7c8d) fix(core): stop parent step loop after transfer_to_agent in SSE mode (#1063) (Varun-S10, 2026-10-13)
+- [43ba911](https://github.com/google/adk-js/commit/43ba9117415806ef85767f07b635c2839b9f9c42) fix(core): normalize tool responses before afterToolCallback runs (#1035) (#1061) (Varun-S10, 2026-10-13)
+- [8efe0fe](https://github.com/google/adk-js/commit/8efe0fe60e1c743aed929b96aec9953f784a1ae1) fix(models): forward abortSignal in RoutedLlm.generateContentAsync (#1038) (#1064) (Varun-S10, 2026-10-13)
+- [3700444](https://github.com/google/adk-js/commit/370044469b74497885403fc690e3943a9ab163ae) fix(core): persist sandbox name in _code_execution_context state delta (#1039) (#1065) (Varun-S10, 2026-10-13)
+- [67ea8a6](https://github.com/google/adk-js/commit/67ea8a6e99ce7e79d6a567c2895734f30ce6025e) fix(core): prefer explicit appName over app.name in Runner (#1040) (#1066) (Varun-S10, 2026-10-13)
+- [47fadc9](https://github.com/google/adk-js/commit/47fadc9ab1855ea03bc2ef75d8295d3fa4a03da8) fix(core): use ^1.9.0 range for @opentelemetry/api (#1041) (#1067) (Varun-S10, 2026-10-13)
+- [5e31749](https://github.com/google/adk-js/commit/5e317493a1b7291920b03daa3b0a33a7a10e401e) fix(core): keep one event id across partial chunks of a streamed response (#1042) (#1069) (Varun-S10, 2026-10-13)
 
 ## Changed Files
 
+- `M	.release-please-manifest.json`
+- `M	core/CHANGELOG.md`
+- `M	core/package.json`
 - `M	core/src/agents/functions.ts`
 - `M	core/src/agents/invocation_context.ts`
+- `A	core/src/agents/langgraph_agent.ts`
 - `M	core/src/agents/llm_agent.ts`
-- `A	core/src/cli/cli_eval.ts`
-- `A	core/src/cli/utils/envs.ts`
-- `A	core/src/cli/utils/evals.ts`
-- `A	core/src/cli/utils/logs.ts`
+- `A	core/src/agents/remote_agent.ts`
+- `M	core/src/code_executors/agent_engine_sandbox_code_executor.ts`
+- `M	core/src/code_executors/code_executor_context.ts`
 - `M	core/src/common.ts`
-- `A	core/src/flows/llm_flows/audio_transcriber.ts`
-- `M	core/src/index.ts`
+- `M	core/src/context/summarizers/llm_summarizer.ts`
+- `M	core/src/context/token_based_context_compactor.ts`
+- `M	core/src/events/event.ts`
+- `D	core/src/models/gemini_continuation.ts`
 - `M	core/src/models/google_llm.ts`
-- `M	core/src/tools/agent_tool.ts`
-- `A	core/src/tools/crewai_tool.ts`
-- `M	core/src/tools/function_tool.ts`
-- `A	core/src/tools/langchain_tool.ts`
-- `M	core/src/tools/mcp/index.ts`
-- `M	core/src/tools/mcp/mcp_session_manager.ts`
-- `M	core/src/tools/mcp/mcp_toolset.ts`
-- `M	core/src/tools/retrieval/base_retrieval_tool.ts`
-- `A	core/src/tools/toolbox_tool.ts`
-- `M	core/src/utils/gemini_schema_util.ts`
+- `M	core/src/models/llm_response.ts`
+- `M	core/src/models/routed_llm.ts`
+- `M	core/src/runner/in_memory_runner.ts`
+- `M	core/src/runner/runner.ts`
+- `M	core/src/sessions/vertex_ai_session_service.ts`
+- `M	core/src/utils/streaming_utils.ts`
+- `M	core/src/version.ts`
 - `M	core/test/agents/functions_test.ts`
+- `M	core/test/agents/invocation_context_test.ts`
+- `A	core/test/agents/langgraph_agent_test.ts`
+- `M	core/test/agents/llm_agent_live_telemetry_test.ts`
 - `M	core/test/agents/llm_agent_test.ts`
-- `A	core/test/cli/cli_eval_test.ts`
-- `A	core/test/cli/utils/envs_test.ts`
-- `A	core/test/cli/utils/evals_test.ts`
-- `A	core/test/cli/utils/logs_test.ts`
-- `A	core/test/flows/llm_flows/audio_transcriber_test.ts`
-- `M	core/test/memory/vertex_ai_memory_bank_service_test.ts`
-- `M	core/test/models/google_llm_test.ts`
-- `M	core/test/tools/agent_tool_test.ts`
-- `A	core/test/tools/crewai_tool_test.ts`
-- `M	core/test/tools/function_tool_test.ts`
-- `A	core/test/tools/langchain_tool_test.ts`
-- `M	core/test/tools/mcp/mcp_session_manager_test.ts`
-- `M	core/test/tools/mcp/mcp_toolset_test.ts`
-- `M	core/test/tools/retrieval/base_retrieval_tool_test.ts`
-- `A	core/test/tools/toolbox_tool_test.ts`
-- `M	dev/src/cli/cli.ts`
-- `M	dev/src/cli/cli_run.ts`
-- `M	dev/src/cli/deploy/cli_deploy_cloud_run.ts`
-- `M	dev/src/server/adk_api_server.ts`
-- `M	dev/src/server/agent_graph.ts`
-- `M	dev/test/cli/cli_create_test.ts`
-- `M	dev/test/cli/cli_deploy_agent_engine_test.ts`
-- `M	dev/test/cli/cli_deploy_cloud_run_test.ts`
-- `M	dev/test/cli/cli_run_test.ts`
-- `M	dev/test/cli/cli_test.ts`
+- `A	core/test/agents/remote_agent_test.ts`
+- `M	core/test/code_executors/agent_engine_sandbox_code_executor_test.ts`
+- `M	core/test/context/anchored_context_compactor_test.ts`
+- `M	core/test/context/summarizers/llm_summarizer_test.ts`
+- `M	core/test/context/token_based_context_compactor_test.ts`
+- `D	core/test/models/gemini_continuation_test.ts`
+- `M	core/test/models/llm_response_test.ts`
+- `M	core/test/models/routed_llm_test.ts`
+- `M	core/test/package_install_weight_test.ts`
+- `M	core/test/runner/in_memory_runner_test.ts`
+- `M	core/test/runner/runner_test.ts`
+- `M	core/test/sessions/vertex_ai_session_service_test.ts`
+- `M	dev/CHANGELOG.md`
+- `M	dev/package.json`
+- `M	dev/src/version.ts`
 - `M	dev/test/server/adk_api_server_test.ts`
-- `M	dev/test/server/agent_graph_test.ts`
 - `M	docs/guides/README.md`
-- `A	docs/guides/cli/index.md`
-- `A	docs/guides/flows/index.md`
-- `A	docs/guides/tools/index.md`
-- `A	docs/guides/tools/mcp_tool/index.md`
-- `A	samples/cli/README.md`
-- `A	samples/cli/agent.ts`
-- `A	samples/flows/README.md`
-- `A	samples/flows/agent.ts`
-- `M	samples/tools/README.md`
-- `A	samples/tools/agent.ts`
-- `A	samples/tools/mcp_tool/README.md`
-- `A	samples/tools/mcp_tool/agent.ts`
-- `A	samples/tools/mcp_tool/mcp_server.mjs`
-- `M	scripts/check_license.sh`
-- `M	tests/integration/build_setup/ts_commonjs_native_addon/fake-onnxruntime-node/index.cjs`
-- `M	tests/integration/build_setup/ts_esm_native_addon/fake-onnxruntime-node/index.cjs`
-- `M	vitest.config.ts`
+- `A	docs/guides/agents/index.md`
+- `M	integrations/CHANGELOG.md`
+- `M	integrations/package.json`
+- `M	integrations/src/version.ts`
+- `M	package-lock.json`
+- `M	package.json`
+- `A	samples/agents/README.md`
+- `A	samples/agents/agent.ts`
+- `D	tests/integration/models/gemini_continuation/gemini_continuation_test.ts`
