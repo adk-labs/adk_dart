@@ -443,6 +443,37 @@ void main() {
         'Intro one. Intro two.Progress.Conclusion one. Conclusion two.',
       );
     });
+
+    test(
+      'falls back to raw string in outputKey when outputSchema jsonDecode fails',
+      () async {
+        final sessionService = InMemorySessionService();
+        final session = await sessionService.createSession(
+          appName: 'app',
+          userId: 'user',
+        );
+
+        final agent = LlmAgent(
+          name: 'raw_fallback_agent',
+          model: _StaticTextModel('not-a-valid-json-response'),
+          outputKey: 'result',
+          outputSchema: const {'type': 'object'},
+        );
+
+        final ctx = InvocationContext(
+          sessionService: sessionService,
+          invocationId: 'inv',
+          agent: agent,
+          session: session,
+        );
+
+        await for (final event in agent.runAsync(ctx)) {
+          await sessionService.appendEvent(session: session, event: event);
+        }
+
+        expect(session.state['result'], equals('not-a-valid-json-response'));
+      },
+    );
   });
 }
 

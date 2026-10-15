@@ -1,13 +1,13 @@
 # ADK CLI Comparison Matrix (Python / Dart / JS / Go / Java / Kotlin)
 
-Snapshot date: 2026-10-10  
+Snapshot date: 2026-10-15  
 Compared versions / snapshots:
-- `adk-python`: `v2.11.0+` (`15486dbb2`)
-- `adk_dart` / `packages/adk`: `2026.10.7+` (`2026-10-10` parity)
-- `adk-js` devtools CLI package (`@google/adk-devtools`): `86d1cfef`
-- `adk-go`: `987c7bc0`
-- `adk-java`: `189d463a`
-- `adk-kotlin`: `89c796cd`
+- `adk-python`: `v2.12.0+` (`156f007ce`)
+- `adk_dart` / `packages/adk`: `2026.10.7+` (`2026-10-15` parity)
+- `adk-js` devtools CLI package (`@google/adk-devtools`): `0f3e5f22` (v2.3.0+)
+- `adk-go`: `9a43519e` (v2.6.0)
+- `adk-java`: `bad4f4c3` (v1.12.0)
+- `adk-kotlin`: `d93eb795` (v1.4.0)
 
 Status legend:
 - `Y`: supported as CLI command with full option parity

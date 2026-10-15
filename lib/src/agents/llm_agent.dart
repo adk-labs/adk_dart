@@ -711,7 +711,11 @@ class LlmAgent extends BaseAgent {
       if (value.trim().isEmpty) {
         return;
       }
-      event.actions.stateDelta[outputKey!] = jsonDecode(value);
+      try {
+        event.actions.stateDelta[outputKey!] = jsonDecode(value);
+      } catch (_) {
+        event.actions.stateDelta[outputKey!] = value;
+      }
       return;
     }
 

@@ -1,6 +1,6 @@
 # ADK CLI Parity Matrix (Python vs Dart)
 
-이 문서는 Google 원천 `adk-python` (CLI baseline `v2.11.0+`, commit `15486dbb2`)과 `adk-dart` (`packages/adk`) 간의 **CLI 명령어, 서브커맨드 및 전체 옵션 1:1 완벽 호환성(100% Parity) 매트릭스**를 상세히 기록한 공식 문서입니다.
+이 문서는 Google 원천 `adk-python` (CLI baseline `v2.12.0+`, commit `156f007ce`)과 `adk-dart` (`packages/adk`) 간의 **CLI 명령어, 서브커맨드 및 전체 옵션 1:1 완벽 호환성(100% Parity) 매트릭스**를 상세히 기록한 공식 문서입니다.
 
 ---
 
