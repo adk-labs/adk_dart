@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased (2026-10-10)
+## 2026.10.15
 
-- Added `AdkCodeExecutionCard` and `AdkGroundingSourcesBar` widgets, and wired `AdkAudioRecordingBar`, `AdkMarkdownText`, `AdkToolConfirmationCard`, and `AdkTraceWaterfallView` into `AdkChatController` and `AdkMessageBubble` for full `adk-web` (`9e7aa4c`) parity.
+- Bumped package version to `2026.10.15` and dependency `adk_dart: ^2026.10.15`.
+- Added `AdkCodeExecutionCard` and `AdkGroundingSourcesBar` widgets, and wired `AdkAudioRecordingBar`, `AdkMarkdownText`, `AdkToolConfirmationCard`, and `AdkTraceWaterfallView` into `AdkChatController` and `AdkMessageBubble` for full `adk-web` parity.
 - Re-exported `CascadeLive`, `ElevenLabsSTT`, `ElevenLabsTTS`, and `Secret` via `package:adk_dart/adk_core.dart`.
 - Completed 100% `///` API documentation comments and runnable `/// ```dart` examples across all controllers, models, and widgets.
 

@@ -1,4 +1,4 @@
-## Unreleased (2026-10-15)
+## 2026.10.15
 
 - **Classifiers & Workflow Routing (`lib/src/labs/classifiers/`, `workflow.dart`)**:
   - Added `BaseClassifier`, `ClassifierNode`, and typed probability distribution representations (`Choice`, `Binary`, `Score`, `ChoiceAnswer`, `BinaryAnswer`, `ScoreAnswer`, `ClassifierResponse`).

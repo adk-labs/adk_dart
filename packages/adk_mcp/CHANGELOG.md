@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.10.15
+
+- Bumped package version to `2026.10.15`.
+- Synced compatibility with `adk_dart` `2026.10.15` release.
+- Added 100% Effective Dart API documentation comments and examples across stdio and remote MCP client primitives.
+
 ## 2026.10.7
 
 - Bumped package version to `2026.10.7`.

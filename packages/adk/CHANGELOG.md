@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (2026-10-15)
+## 2026.10.15
+
+- Bumped package version to `2026.10.15` and dependency `adk_dart: ^2026.10.15`.
 
 - **Web Server & Graph Serialization (`web_server.dart`, `agent_graph.dart`)**:
   - Added screencast WebSocket endpoint (`/apps/{appName}/screencast`) for live computer use and browser screencast streaming.
