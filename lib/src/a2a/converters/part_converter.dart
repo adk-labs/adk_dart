@@ -26,6 +26,12 @@ const String a2aDataPartMetadataTypeCodeExecutionResult =
 /// Metadata type value for executable-code payloads.
 const String a2aDataPartMetadataTypeExecutableCode = 'executable_code';
 
+/// Metadata type value for server-side tool-call payloads.
+const String a2aDataPartMetadataTypeToolCall = 'tool_call';
+
+/// Metadata type value for server-side tool-response payloads.
+const String a2aDataPartMetadataTypeToolResponse = 'tool_response';
+
 /// Mime type used for encoded fallback data-part payloads.
 const String a2aDataPartTextMimeType = 'text/plain';
 
@@ -97,14 +103,16 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
   if (root is A2aDataPart) {
     final String metadataKey = getAdkMetadataKey(a2aDataPartMetadataTypeKey);
     final String? type = root.metadata[metadataKey] as String?;
+    final List<int>? thoughtSignature = _parseThoughtSignature(
+      root.metadata[getAdkMetadataKey('thought_signature')] ??
+          root.data['thought_signature'] ??
+          root.data['thoughtSignature'],
+    );
 
     if (type == a2aDataPartMetadataTypeFunctionCall) {
       final String name = '${root.data['name'] ?? ''}';
       final Map<String, dynamic> args = _asMap(root.data['args']);
       final String? id = root.data['id'] as String?;
-      final List<int>? thoughtSignature = _parseThoughtSignature(
-        root.data['thought_signature'] ?? root.data['thoughtSignature'],
-      );
       if (name.isNotEmpty) {
         return Part.fromFunctionCall(
           name: name,
@@ -120,9 +128,6 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
       final String name = '${root.data['name'] ?? ''}';
       final Map<String, dynamic> response = _asMap(root.data['response']);
       final String? id = root.data['id'] as String?;
-      final List<int>? thoughtSignature = _parseThoughtSignature(
-        root.data['thought_signature'] ?? root.data['thoughtSignature'],
-      );
       if (name.isNotEmpty) {
         final Part converted = Part.fromFunctionResponse(
           name: name,
@@ -139,6 +144,7 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
 
     if (type == a2aDataPartMetadataTypeCodeExecutionResult) {
       return Part(
+        thoughtSignature: thoughtSignature,
         codeExecutionResult: Map<String, Object?>.from(root.data),
         partMetadata: _metadataOrNull(root.metadata),
       );
@@ -146,8 +152,31 @@ Object? convertA2aPartToGenaiPart(A2aPart a2aPart) {
 
     if (type == a2aDataPartMetadataTypeExecutableCode) {
       return Part(
+        thoughtSignature: thoughtSignature,
         executableCode: Map<String, Object?>.from(root.data),
         partMetadata: _metadataOrNull(root.metadata),
+      );
+    }
+
+    if (type == a2aDataPartMetadataTypeToolCall) {
+      return Part(
+        thoughtSignature: thoughtSignature,
+        partMetadata: <String, Object?>{
+          ...?_metadataOrNull(root.metadata),
+          a2aDataPartMetadataTypeToolCall: Map<String, Object?>.from(root.data),
+        },
+      );
+    }
+
+    if (type == a2aDataPartMetadataTypeToolResponse) {
+      return Part(
+        thoughtSignature: thoughtSignature,
+        partMetadata: <String, Object?>{
+          ...?_metadataOrNull(root.metadata),
+          a2aDataPartMetadataTypeToolResponse: Map<String, Object?>.from(
+            root.data,
+          ),
+        },
       );
     }
 
@@ -234,11 +263,12 @@ Object? convertGenaiPartToA2aPart(Part part) {
     );
   }
 
+  final String? thoughtSignature = _serializeThoughtSignature(
+    part.thoughtSignature,
+  );
+
   if (part.functionCall != null) {
     final FunctionCall call = part.functionCall!;
-    final String? thoughtSignature = _serializeThoughtSignature(
-      part.thoughtSignature,
-    );
     return A2aPart.data(
       <String, Object?>{
         'name': call.name,
@@ -250,15 +280,13 @@ Object? convertGenaiPartToA2aPart(Part part) {
       metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeFunctionCall,
+        getAdkMetadataKey('thought_signature'): ?thoughtSignature,
       }, part.partMetadata),
     );
   }
 
   if (part.functionResponse != null) {
     final FunctionResponse response = part.functionResponse!;
-    final String? thoughtSignature = _serializeThoughtSignature(
-      part.thoughtSignature,
-    );
     return A2aPart.data(
       <String, Object?>{
         'name': response.name,
@@ -270,6 +298,7 @@ Object? convertGenaiPartToA2aPart(Part part) {
       metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeFunctionResponse,
+        getAdkMetadataKey('thought_signature'): ?thoughtSignature,
       }, part.partMetadata),
     );
   }
@@ -280,6 +309,7 @@ Object? convertGenaiPartToA2aPart(Part part) {
       metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeCodeExecutionResult,
+        getAdkMetadataKey('thought_signature'): ?thoughtSignature,
       }, part.partMetadata),
     );
   }
@@ -290,7 +320,39 @@ Object? convertGenaiPartToA2aPart(Part part) {
       metadata: _mergePartMetadata(<String, Object?>{
         getAdkMetadataKey(a2aDataPartMetadataTypeKey):
             a2aDataPartMetadataTypeExecutableCode,
+        getAdkMetadataKey('thought_signature'): ?thoughtSignature,
       }, part.partMetadata),
+    );
+  }
+
+  final Object? rawToolCall = part.partMetadata?[a2aDataPartMetadataTypeToolCall];
+  if (rawToolCall is Map) {
+    final Map<String, Object?> forwardedMetadata = <String, Object?>{
+      ...?part.partMetadata,
+    }..remove(a2aDataPartMetadataTypeToolCall);
+    return A2aPart.data(
+      _asMapObject(rawToolCall),
+      metadata: _mergePartMetadata(<String, Object?>{
+        getAdkMetadataKey(a2aDataPartMetadataTypeKey):
+            a2aDataPartMetadataTypeToolCall,
+        getAdkMetadataKey('thought_signature'): ?thoughtSignature,
+      }, forwardedMetadata),
+    );
+  }
+
+  final Object? rawToolResponse =
+      part.partMetadata?[a2aDataPartMetadataTypeToolResponse];
+  if (rawToolResponse is Map) {
+    final Map<String, Object?> forwardedMetadata = <String, Object?>{
+      ...?part.partMetadata,
+    }..remove(a2aDataPartMetadataTypeToolResponse);
+    return A2aPart.data(
+      _asMapObject(rawToolResponse),
+      metadata: _mergePartMetadata(<String, Object?>{
+        getAdkMetadataKey(a2aDataPartMetadataTypeKey):
+            a2aDataPartMetadataTypeToolResponse,
+        getAdkMetadataKey('thought_signature'): ?thoughtSignature,
+      }, forwardedMetadata),
     );
   }
 

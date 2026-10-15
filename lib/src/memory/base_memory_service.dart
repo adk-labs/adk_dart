@@ -21,7 +21,10 @@ abstract class BaseMemoryService {
   BaseMemoryService();
 
   /// Adds all events from [session] to memory storage.
-  Future<void> addSessionToMemory(Session session);
+  Future<void> addSessionToMemory(
+    Session session, {
+    Map<String, Object?>? customMetadata,
+  });
 
   /// Adds scoped [events] to memory storage.
   ///

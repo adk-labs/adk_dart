@@ -83,18 +83,32 @@ ON events (app_name, user_id, session_id, timestamp DESC);
 /// ```
 class SqliteSessionService extends BaseSessionService {
   /// Creates a session service from a SQLite [dbPath].
-  SqliteSessionService(String dbPath)
-    : this._(_resolveStorePath(dbPath), dbPath);
+  ///
+  /// When [cascadeDelete] is `true`, deleting a session also cleans up orphaned
+  /// `user_states` and `app_states` rows when no sessions remain for the user
+  /// or application.
+  SqliteSessionService(String dbPath, {bool cascadeDelete = false})
+    : this._(
+        _resolveStorePath(dbPath),
+        dbPath,
+        cascadeDelete: cascadeDelete,
+      );
 
   /// Internal constructor with resolved path metadata.
-  SqliteSessionService._(_ResolvedStorePath resolved, String originalDbPath)
-    : _storePath = resolved.path,
-      _connectPath = resolved.connectPath,
-      _connectAsUri = resolved.connectUri,
-      _readOnly = resolved.readOnly,
-      _inMemory = resolved.inMemory {
+  SqliteSessionService._(
+    _ResolvedStorePath resolved,
+    String originalDbPath, {
+    required this.cascadeDelete,
+  }) : _storePath = resolved.path,
+       _connectPath = resolved.connectPath,
+       _connectAsUri = resolved.connectUri,
+       _readOnly = resolved.readOnly,
+       _inMemory = resolved.inMemory {
     _ensureNotLegacySchema(originalDbPath);
   }
+
+  /// Whether deleting a session also deletes orphaned user and app states.
+  final bool cascadeDelete;
 
   final String _storePath;
   final String _connectPath;
@@ -384,10 +398,38 @@ class SqliteSessionService extends BaseSessionService {
   }) {
     return _withLock<void>(() async {
       _withDatabase<void>((_SqliteDatabase db) {
-        db.execute(
-          'DELETE FROM sessions WHERE app_name=? AND user_id=? AND id=?',
-          <Object?>[appName, userId, sessionId],
-        );
+        _runTransaction(db, () {
+          db.execute(
+            'DELETE FROM events WHERE app_name=? AND user_id=? AND session_id=?',
+            <Object?>[appName, userId, sessionId],
+          );
+          db.execute(
+            'DELETE FROM sessions WHERE app_name=? AND user_id=? AND id=?',
+            <Object?>[appName, userId, sessionId],
+          );
+          if (cascadeDelete) {
+            final List<Map<String, Object?>> remainingUserSessions = db.query(
+              'SELECT 1 FROM sessions WHERE app_name=? AND user_id=? LIMIT 1',
+              <Object?>[appName, userId],
+            );
+            if (remainingUserSessions.isEmpty) {
+              db.execute(
+                'DELETE FROM user_states WHERE app_name=? AND user_id=?',
+                <Object?>[appName, userId],
+              );
+            }
+            final List<Map<String, Object?>> remainingAppSessions = db.query(
+              'SELECT 1 FROM sessions WHERE app_name=? LIMIT 1',
+              <Object?>[appName],
+            );
+            if (remainingAppSessions.isEmpty) {
+              db.execute(
+                'DELETE FROM app_states WHERE app_name=?',
+                <Object?>[appName],
+              );
+            }
+          }
+        });
       });
     });
   }

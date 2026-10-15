@@ -211,7 +211,10 @@ class VertexAiRagMemoryService extends BaseMemoryService {
   final VertexRagStore _vertexRagStore;
 
   @override
-  Future<void> addSessionToMemory(Session session) async {
+  Future<void> addSessionToMemory(
+    Session session, {
+    Map<String, Object?>? customMetadata,
+  }) async {
     final StringBuffer output = StringBuffer();
     for (final Event event in session.events) {
       final Content? content = event.content;

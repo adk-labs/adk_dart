@@ -150,6 +150,43 @@ class _AsyncQueue<T> {
   }
 }
 
+const int _defaultPcmRate = 24000;
+
+final Stopwatch _monotonicClock = Stopwatch()..start();
+
+double _defaultNow() => _monotonicClock.elapsedMicroseconds / 1000000.0;
+
+double _pcmDurationMs(InlineData blob) {
+  int rate = _defaultPcmRate;
+  for (final String token in blob.mimeType.split(';')) {
+    final String trimmed = token.trim();
+    if (trimmed.startsWith('rate=')) {
+      final int? parsed = int.tryParse(trimmed.substring('rate='.length));
+      if (parsed != null && parsed > 0) {
+        rate = parsed;
+      }
+      break;
+    }
+  }
+  return blob.data.length / 2 / rate * 1000.0;
+}
+
+String _playedPrefix(String text, double frac) {
+  final double clamped = frac < 0.0 ? 0.0 : (frac > 1.0 ? 1.0 : frac);
+  final double budget = clamped * text.length;
+  int cut = 0;
+  for (final RegExpMatch match in RegExp(r'\S+').allMatches(text)) {
+    if (match.end <= budget) {
+      cut = match.end;
+    } else {
+      break;
+    }
+  }
+  return text.substring(0, cut);
+}
+
+enum _CascadeState { listening, thinking, agentSpeaking }
+
 /// Live connection bridging STT ingress, text reasoning, and TTS egress.
 ///
 /// Audio input from the client is processed by the [LiveIngress] transform.
@@ -177,10 +214,12 @@ class CascadeLiveConnection extends BaseLlmConnection {
     LiveIngress stt,
     LiveEgress tts, {
     this.onEmit,
+    double Function()? clock,
   }) : _llmRequest = llmRequest,
        _llm = llm,
        _stt = stt,
        _tts = tts,
+       _clock = clock ?? _defaultNow,
        _contents = llmRequest.contents
            .map((Content c) => c.copyWith())
            .toList() {
@@ -196,6 +235,7 @@ class CascadeLiveConnection extends BaseLlmConnection {
   final BaseLlm _llm;
   final LiveIngress _stt;
   final LiveEgress _tts;
+  final double Function() _clock;
 
   /// Optional observer invoked whenever a response is emitted.
   void Function(LlmResponse response)? onEmit;
@@ -205,7 +245,14 @@ class CascadeLiveConnection extends BaseLlmConnection {
   final Set<String?> _droppedMimeTypes = <String?>{};
   final _AsyncQueue<LlmResponse?> _out = _AsyncQueue<LlmResponse?>();
 
-  final CancelSignal _cancel = CancelSignal();
+  CancelSignal _cancel = CancelSignal();
+  _CascadeState _state = _CascadeState.listening;
+  final List<({double startMs, String text})> _spokenMarks =
+      <({double startMs, String text})>[];
+  double _turnAudioMs = 0.0;
+  double _sentenceStartMs = 0.0;
+  double? _playbackStart;
+
   bool _closed = false;
   Object? _error;
   StackTrace? _errorStackTrace;
@@ -213,6 +260,7 @@ class CascadeLiveConnection extends BaseLlmConnection {
   bool _rerunRequested = false;
 
   Future<void>? _reasoningTask;
+  Completer<void>? _activeEgressDone;
   StreamSubscription<EgressEvent>? _activeEgressSubscription;
   Future<void> Function()? _activeTextStreamCloser;
 
@@ -373,6 +421,11 @@ class CascadeLiveConnection extends BaseLlmConnection {
     _closed = true;
 
     _cancel.set();
+    final Completer<void>? egressDone = _activeEgressDone;
+    _activeEgressDone = null;
+    if (egressDone != null && !egressDone.isCompleted) {
+      egressDone.complete();
+    }
     _audioIn.add(null);
 
     final StreamSubscription<EgressEvent>? egressSub =
@@ -503,7 +556,39 @@ class CascadeLiveConnection extends BaseLlmConnection {
   }
 
   Future<void> _onSpeechStarted(UserSpeechStarted event) async {
-    // Reserved for speech-onset barge-in handling.
+    if (_state != _CascadeState.thinking &&
+        _state != _CascadeState.agentSpeaking) {
+      return;
+    }
+
+    // Stop synthesis and tear down the in-flight turn.
+    _cancel.set();
+    _rerunRequested = false;
+    _pendingFunctionCall = null;
+
+    final Completer<void>? egressDone = _activeEgressDone;
+    _activeEgressDone = null;
+    if (egressDone != null && !egressDone.isCompleted) {
+      egressDone.complete();
+    }
+
+    final StreamSubscription<EgressEvent>? egressSub =
+        _activeEgressSubscription;
+    _activeEgressSubscription = null;
+    if (egressSub != null) {
+      unawaited(egressSub.cancel().catchError((Object _) {}));
+    }
+
+    final Future<void> Function()? textCloser = _activeTextStreamCloser;
+    _activeTextStreamCloser = null;
+    if (textCloser != null) {
+      unawaited(textCloser().catchError((Object _) {}));
+    }
+
+    // Record only the prefix the user actually heard, then report the interrupt.
+    _recordSpoken(heardOnly: true);
+    _state = _CascadeState.listening;
+    _emit(LlmResponse(interrupted: true));
   }
 
   Future<void> _onUserTurnFinished(UserTurnFinished event) async {
@@ -528,19 +613,22 @@ class CascadeLiveConnection extends BaseLlmConnection {
       _rerunRequested = true;
       return;
     }
-    _cancel.reset();
+    _cancel = CancelSignal();
+    _state = _CascadeState.thinking;
     _reasoningTask = _driveTurns();
   }
 
   Future<void> _driveTurns() async {
     try {
       while (true) {
-        await _runTurn();
+        final CancelSignal turnCancel = _cancel;
+        await _runTurn(turnCancel);
         if (_closed || !_rerunRequested) {
           return;
         }
         _rerunRequested = false;
-        _cancel.reset();
+        _cancel = CancelSignal();
+        _state = _CascadeState.thinking;
       }
     } finally {
       _reasoningTask = null;
@@ -551,23 +639,31 @@ class CascadeLiveConnection extends BaseLlmConnection {
     }
   }
 
-  Future<void> _runTurn() async {
+  Future<void> _runTurn(CancelSignal turnCancel) async {
     _pendingFunctionCall = null;
-    final List<String> spoken = <String>[];
+    _spokenMarks.clear();
+    _turnAudioMs = 0.0;
+    _sentenceStartMs = 0.0;
+    _playbackStart = null;
+
     final ({Stream<String> stream, Future<void> Function() close}) textPipe =
-        _createClosableTextStream();
+        _createClosableTextStream(turnCancel);
     _activeTextStreamCloser = textPipe.close;
 
     try {
       final Completer<void> egressDone = Completer<void>();
+      _activeEgressDone = egressDone;
       final StreamSubscription<EgressEvent> sub = _tts
-          .call(textPipe.stream, cancel: _cancel)
+          .call(textPipe.stream, cancel: turnCancel)
           .listen(
             (EgressEvent event) {
-              if (_closed) {
+              if (_closed || turnCancel.isSet) {
                 return;
               }
               if (event is AudioChunk) {
+                _state = _CascadeState.agentSpeaking;
+                _playbackStart ??= _clock();
+                _turnAudioMs += _pcmDurationMs(event.blob);
                 _emit(
                   LlmResponse(
                     content: Content(
@@ -582,7 +678,8 @@ class CascadeLiveConnection extends BaseLlmConnection {
                   ),
                 );
               } else if (event is AgentSpokenOutput) {
-                spoken.add(event.text);
+                _spokenMarks.add((startMs: _sentenceStartMs, text: event.text));
+                _sentenceStartMs = _turnAudioMs;
                 _emit(
                   LlmResponse(
                     outputTranscription: LiveTranscription(
@@ -615,6 +712,9 @@ class CascadeLiveConnection extends BaseLlmConnection {
       try {
         await egressDone.future;
       } finally {
+        if (identical(_activeEgressDone, egressDone)) {
+          _activeEgressDone = null;
+        }
         if (identical(_activeEgressSubscription, sub)) {
           _activeEgressSubscription = null;
         }
@@ -627,11 +727,16 @@ class CascadeLiveConnection extends BaseLlmConnection {
         }
       }
 
-      if (_closed) {
+      if (_closed || turnCancel.isSet) {
         return;
       }
 
-      _recordSpoken(spoken);
+      await _awaitPlayback(turnCancel);
+      if (_closed || turnCancel.isSet) {
+        return;
+      }
+
+      _recordSpoken(heardOnly: false);
 
       if (_pendingFunctionCall != null) {
         final LlmResponse response = _pendingFunctionCall!;
@@ -644,14 +749,16 @@ class CascadeLiveConnection extends BaseLlmConnection {
           ],
         );
         _contents.add(functionCalls);
+        _state = _CascadeState.listening;
         _emit(response.copyWith(content: functionCalls));
         return;
       }
 
+      _state = _CascadeState.listening;
       _emit(LlmResponse(turnComplete: true));
     } catch (error, stackTrace) {
       await textPipe.close();
-      if (_closed) {
+      if (_closed || turnCancel.isSet) {
         return;
       }
       developer.log(
@@ -660,7 +767,12 @@ class CascadeLiveConnection extends BaseLlmConnection {
         error: error,
         stackTrace: stackTrace,
       );
-      _recordSpoken(spoken);
+      await _awaitPlayback(turnCancel);
+      if (_closed || turnCancel.isSet) {
+        return;
+      }
+      _recordSpoken(heardOnly: false);
+      _state = _CascadeState.listening;
       _emit(
         LlmResponse(
           errorCode: 'CASCADE_TURN_FAILED',
@@ -671,11 +783,43 @@ class CascadeLiveConnection extends BaseLlmConnection {
     }
   }
 
-  void _recordSpoken(List<String> spoken) {
-    if (spoken.isEmpty) {
+  Future<void> _awaitPlayback(CancelSignal turnCancel) async {
+    final double? playbackStart = _playbackStart;
+    if (playbackStart == null) {
       return;
     }
-    final String spokenText = spoken.join();
+    final double remainingSeconds =
+        (playbackStart + _turnAudioMs / 1000.0) - _clock();
+    if (remainingSeconds <= 0) {
+      return;
+    }
+    final int remainingMicros = (remainingSeconds * 1000000).round();
+    if (remainingMicros <= 0) {
+      return;
+    }
+    await Future.any<void>(<Future<void>>[
+      turnCancel.wait(),
+      Future<void>.delayed(Duration(microseconds: remainingMicros)),
+    ]);
+  }
+
+  void _recordSpoken({required bool heardOnly}) {
+    final List<String> texts;
+    if (!heardOnly) {
+      texts = <String>[
+        for (final ({double startMs, String text}) mark in _spokenMarks)
+          mark.text,
+      ];
+    } else if (_playbackStart == null) {
+      texts = const <String>[];
+    } else {
+      texts = _extractHeardSentences(_playbackStart!);
+    }
+    _spokenMarks.clear();
+    if (texts.isEmpty) {
+      return;
+    }
+    final String spokenText = texts.join();
     _contents.add(
       Content(role: 'model', parts: <Part>[Part.text(spokenText)]),
     );
@@ -690,8 +834,33 @@ class CascadeLiveConnection extends BaseLlmConnection {
     );
   }
 
+  List<String> _extractHeardSentences(double playbackStart) {
+    final double elapsedMs = (_clock() - playbackStart) * 1000.0;
+    final List<String> texts = <String>[];
+    for (int i = 0; i < _spokenMarks.length; i += 1) {
+      final ({double startMs, String text}) mark = _spokenMarks[i];
+      if (mark.startMs >= elapsedMs) {
+        break;
+      }
+      final double endMs = i + 1 < _spokenMarks.length
+          ? _spokenMarks[i + 1].startMs
+          : _sentenceStartMs;
+      if (endMs <= elapsedMs) {
+        texts.add(mark.text);
+      } else {
+        final double frac = (elapsedMs - mark.startMs) / (endMs - mark.startMs);
+        final String prefix = _playedPrefix(mark.text, frac);
+        if (prefix.isNotEmpty) {
+          texts.add(prefix);
+        }
+        break;
+      }
+    }
+    return texts;
+  }
+
   ({Stream<String> stream, Future<void> Function() close})
-  _createClosableTextStream() {
+  _createClosableTextStream(CancelSignal turnCancel) {
     StreamSubscription<String>? innerSub;
     late final StreamController<String> controller;
     bool closed = false;
@@ -713,20 +882,20 @@ class CascadeLiveConnection extends BaseLlmConnection {
 
     controller = StreamController<String>(
       onListen: () {
-        if (closed) {
+        if (closed || turnCancel.isSet) {
           if (!controller.isClosed) {
             unawaited(controller.close());
           }
           return;
         }
-        innerSub = _streamText().listen(
+        innerSub = _streamText(turnCancel).listen(
           (String chunk) {
-            if (!closed && !controller.isClosed) {
+            if (!closed && !turnCancel.isSet && !controller.isClosed) {
               controller.add(chunk);
             }
           },
           onError: (Object error, StackTrace stackTrace) {
-            if (!closed && !controller.isClosed) {
+            if (!closed && !turnCancel.isSet && !controller.isClosed) {
               controller.addError(error, stackTrace);
               unawaited(controller.close());
             }
@@ -745,7 +914,7 @@ class CascadeLiveConnection extends BaseLlmConnection {
     return (stream: controller.stream, close: closeStream);
   }
 
-  Stream<String> _streamText() async* {
+  Stream<String> _streamText(CancelSignal turnCancel) async* {
     final LlmRequest request = _buildRequest();
     bool streamed = false;
 
@@ -753,6 +922,9 @@ class CascadeLiveConnection extends BaseLlmConnection {
       request,
       stream: true,
     )) {
+      if (turnCancel.isSet || _closed) {
+        return;
+      }
       if (response.errorCode != null) {
         _emit(response);
         return;

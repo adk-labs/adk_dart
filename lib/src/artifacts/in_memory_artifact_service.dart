@@ -193,6 +193,11 @@ class InMemoryArtifactService extends BaseArtifactService {
     required String userId,
     String? sessionId,
   }) async {
+    validatePathSegment(appName, 'app_name');
+    validatePathSegment(userId, 'user_id');
+    if (sessionId != null) {
+      validatePathSegment(sessionId, 'session_id');
+    }
     final String userPrefix = '$appName/$userId/user/';
     final String? sessionPrefix = sessionId == null
         ? null
@@ -315,8 +320,7 @@ class InMemoryArtifactService extends BaseArtifactService {
   }
 
   bool _isEmptyPart(Part artifact) {
-    final bool noText = artifact.text == null || artifact.text!.isEmpty;
-    return noText &&
+    return artifact.text == null &&
         artifact.functionCall == null &&
         artifact.functionResponse == null &&
         artifact.inlineData == null &&

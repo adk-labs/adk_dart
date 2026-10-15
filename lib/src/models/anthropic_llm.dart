@@ -19,6 +19,270 @@ const String _anthropicBaseUrlEnv = 'ANTHROPIC_BASE_URL';
 const String _anthropicVersionEnv = 'ANTHROPIC_VERSION';
 const String _defaultAnthropicBaseUrl = 'https://api.anthropic.com/v1';
 const String _defaultAnthropicVersion = '2023-06-01';
+const String _outputSchemaToolName = 'structured_output';
+const String _outputSchemaToolDescription =
+    'Provide your final answer. Call this tool exactly once, with your whole '
+    'answer in the structure its input describes.';
+const String _outputSchemaValueKey = 'response';
+const Set<String> _validAnthropicEfforts = <String>{
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+};
+
+/// Specialized generation configuration for Anthropic Claude models.
+class AnthropicGenerateContentConfig extends GenerateContentConfig {
+  /// Creates an Anthropic generation configuration.
+  AnthropicGenerateContentConfig({
+    this.effort,
+    super.tools,
+    super.systemInstruction,
+    super.temperature,
+    super.topP,
+    super.topK,
+    super.maxOutputTokens,
+    super.stopSequences,
+    super.frequencyPenalty,
+    super.presencePenalty,
+    super.seed,
+    super.candidateCount,
+    super.responseLogprobs,
+    super.logprobs,
+    super.thinkingConfig,
+    super.responseSchema,
+    super.responseJsonSchema,
+    super.responseMimeType,
+    super.toolConfig,
+    super.automaticFunctionCalling,
+    super.cachedContent,
+    super.httpOptions,
+    super.labels,
+  }) {
+    if (effort != null && !_validAnthropicEfforts.contains(effort)) {
+      throw ArgumentError.value(
+        effort,
+        'effort',
+        'Must be one of ${_validAnthropicEfforts.join(", ")}.',
+      );
+    }
+    if (_thinkingLevelValue(thinkingConfig) != null) {
+      throw ArgumentError(
+        'thinking_level is not supported in AnthropicGenerateContentConfig. '
+        'Use the `effort` field directly to configure reasoning effort.',
+      );
+    }
+  }
+
+  /// Reasoning effort level for adaptive extended thinking (`low`, `medium`,
+  /// `high`, `xhigh`, `max`).
+  String? effort;
+
+  @override
+  AnthropicGenerateContentConfig copyWith({
+    Object? effort = _configSentinel,
+    Object? tools = _configSentinel,
+    Object? systemInstruction = _configSentinel,
+    Object? temperature = _configSentinel,
+    Object? topP = _configSentinel,
+    Object? topK = _configSentinel,
+    Object? maxOutputTokens = _configSentinel,
+    List<String>? stopSequences,
+    Object? frequencyPenalty = _configSentinel,
+    Object? presencePenalty = _configSentinel,
+    Object? seed = _configSentinel,
+    Object? candidateCount = _configSentinel,
+    Object? responseLogprobs = _configSentinel,
+    Object? logprobs = _configSentinel,
+    Object? thinkingConfig = _configSentinel,
+    Object? responseSchema = _configSentinel,
+    Object? responseJsonSchema = _configSentinel,
+    Object? responseMimeType = _configSentinel,
+    Object? toolConfig = _configSentinel,
+    Object? automaticFunctionCalling = _configSentinel,
+    Object? cachedContent = _configSentinel,
+    Object? httpOptions = _configSentinel,
+    Map<String, String>? labels,
+  }) {
+    final GenerateContentConfig base = super.copyWith(
+      tools: identical(tools, _configSentinel) ? this.tools : tools,
+      systemInstruction: identical(systemInstruction, _configSentinel)
+          ? this.systemInstruction
+          : systemInstruction,
+      temperature: identical(temperature, _configSentinel)
+          ? this.temperature
+          : temperature,
+      topP: identical(topP, _configSentinel) ? this.topP : topP,
+      topK: identical(topK, _configSentinel) ? this.topK : topK,
+      maxOutputTokens: identical(maxOutputTokens, _configSentinel)
+          ? this.maxOutputTokens
+          : maxOutputTokens,
+      stopSequences: stopSequences,
+      frequencyPenalty: identical(frequencyPenalty, _configSentinel)
+          ? this.frequencyPenalty
+          : frequencyPenalty,
+      presencePenalty: identical(presencePenalty, _configSentinel)
+          ? this.presencePenalty
+          : presencePenalty,
+      seed: identical(seed, _configSentinel) ? this.seed : seed,
+      candidateCount: identical(candidateCount, _configSentinel)
+          ? this.candidateCount
+          : candidateCount,
+      responseLogprobs: identical(responseLogprobs, _configSentinel)
+          ? this.responseLogprobs
+          : responseLogprobs,
+      logprobs: identical(logprobs, _configSentinel) ? this.logprobs : logprobs,
+      thinkingConfig: identical(thinkingConfig, _configSentinel)
+          ? this.thinkingConfig
+          : thinkingConfig,
+      responseSchema: identical(responseSchema, _configSentinel)
+          ? this.responseSchema
+          : responseSchema,
+      responseJsonSchema: identical(responseJsonSchema, _configSentinel)
+          ? this.responseJsonSchema
+          : responseJsonSchema,
+      responseMimeType: identical(responseMimeType, _configSentinel)
+          ? this.responseMimeType
+          : responseMimeType,
+      toolConfig: identical(toolConfig, _configSentinel)
+          ? this.toolConfig
+          : toolConfig,
+      automaticFunctionCalling:
+          identical(automaticFunctionCalling, _configSentinel)
+          ? this.automaticFunctionCalling
+          : automaticFunctionCalling,
+      cachedContent: identical(cachedContent, _configSentinel)
+          ? this.cachedContent
+          : cachedContent,
+      httpOptions: identical(httpOptions, _configSentinel)
+          ? this.httpOptions
+          : httpOptions,
+      labels: labels,
+    );
+    return AnthropicGenerateContentConfig(
+      effort: identical(effort, _configSentinel)
+          ? this.effort
+          : effort as String?,
+      tools: base.tools,
+      systemInstruction: base.systemInstruction,
+      temperature: base.temperature,
+      topP: base.topP,
+      topK: base.topK,
+      maxOutputTokens: base.maxOutputTokens,
+      stopSequences: base.stopSequences,
+      frequencyPenalty: base.frequencyPenalty,
+      presencePenalty: base.presencePenalty,
+      seed: base.seed,
+      candidateCount: base.candidateCount,
+      responseLogprobs: base.responseLogprobs,
+      logprobs: base.logprobs,
+      thinkingConfig: base.thinkingConfig,
+      responseSchema: base.responseSchema,
+      responseJsonSchema: base.responseJsonSchema,
+      responseMimeType: base.responseMimeType,
+      toolConfig: base.toolConfig,
+      automaticFunctionCalling: base.automaticFunctionCalling,
+      cachedContent: base.cachedContent,
+      httpOptions: base.httpOptions,
+      labels: base.labels,
+    );
+  }
+}
+
+const Object _configSentinel = Object();
+
+class _OutputSchemaTool {
+  const _OutputSchemaTool({required this.param, required this.nestsValue});
+
+  final Map<String, Object?> param;
+  final bool nestsValue;
+
+  factory _OutputSchemaTool.forSchema(Object responseSchema) {
+    Map<String, Object?> inputSchema = _schemaToMap(responseSchema);
+    _updateTypeStrings(inputSchema);
+
+    final bool nestsValue = inputSchema['type'] != 'object';
+    if (nestsValue) {
+      final Object? defs = inputSchema.remove(r'$defs');
+      inputSchema = <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{_outputSchemaValueKey: inputSchema},
+        'required': <String>[_outputSchemaValueKey],
+        r'$defs': ?defs,
+      };
+    }
+
+    return _OutputSchemaTool(
+      param: <String, Object?>{
+        'name': _outputSchemaToolName,
+        'description': _outputSchemaToolDescription,
+        'input_schema': inputSchema,
+      },
+      nestsValue: nestsValue,
+    );
+  }
+
+  Map<String, Object?> choice({required bool thinkingEnabled}) {
+    if (thinkingEnabled) {
+      return <String, Object?>{
+        'type': 'auto',
+        'disable_parallel_tool_use': true,
+      };
+    }
+    return <String, Object?>{
+      'type': 'tool',
+      'name': _outputSchemaToolName,
+      'disable_parallel_tool_use': true,
+    };
+  }
+
+  String toText(Map<String, dynamic> args) {
+    final Object? value = nestsValue ? args[_outputSchemaValueKey] : args;
+    return jsonEncode(value);
+  }
+
+  LlmResponse unwrap(LlmResponse response) {
+    final Content? content = response.content;
+    if (content == null || content.parts.isEmpty) {
+      return response;
+    }
+    FunctionCall? call;
+    for (final Part part in content.parts) {
+      if (part.functionCall != null &&
+          part.functionCall!.name == _outputSchemaToolName) {
+        call = part.functionCall;
+        break;
+      }
+    }
+    if (call == null) {
+      return response;
+    }
+    final List<Part> parts = <Part>[
+      for (final Part part in content.parts)
+        if (part.thought) part,
+      Part.text(toText(call.args)),
+    ];
+    content.parts = parts;
+    return response;
+  }
+}
+
+Map<String, Object?> _schemaToMap(Object schema) {
+  if (schema is Map) {
+    return _deepCopyJsonMap(schema.cast<String, Object?>());
+  }
+  try {
+    final dynamic dynamicSchema = schema;
+    final Object? json = dynamicSchema.toJson();
+    if (json is Map) {
+      return _deepCopyJsonMap(json.cast<String, Object?>());
+    }
+  } catch (_) {
+    // Fall through.
+  }
+  return <String, Object?>{'type': 'object', 'properties': <String, Object?>{}};
+}
 
 /// Callback that invokes Anthropic message APIs and returns raw responses.
 typedef AnthropicApiInvoker =
@@ -632,9 +896,13 @@ class AnthropicLlm extends BaseLlm {
     prepared.model ??= model;
     maybeAppendUserContent(prepared);
     prepared.config.httpOptions ??= HttpOptions();
+    final _OutputSchemaTool? outputSchemaTool = _resolveOutputSchemaTool(
+      prepared,
+    );
     final Map<String, Object?> anthropicRequest = _buildAnthropicRequest(
       prepared,
       stream: stream,
+      outputSchemaTool: outputSchemaTool,
     );
 
     if (!stream && apiInvoker != null) {
@@ -643,7 +911,10 @@ class AnthropicLlm extends BaseLlm {
         stream: stream,
       );
       for (final Map<String, Object?> message in messages) {
-        final LlmResponse resp = messageToLlmResponse(message);
+        LlmResponse resp = messageToLlmResponse(message);
+        if (outputSchemaTool != null) {
+          resp = outputSchemaTool.unwrap(resp);
+        }
         yield resp.copyWith(
           modelVersion: resp.modelVersion ?? prepared.model,
           turnComplete: true,
@@ -667,7 +938,11 @@ class AnthropicLlm extends BaseLlm {
               apiVersion: _resolveApiVersion(prepared),
               headers: _resolveHeaders(prepared),
             );
-      yield* _streamAnthropicResponses(rawStream, prepared);
+      yield* _streamAnthropicResponses(
+        rawStream,
+        prepared,
+        outputSchemaTool: outputSchemaTool,
+      );
       return;
     }
 
@@ -679,22 +954,44 @@ class AnthropicLlm extends BaseLlm {
           apiVersion: _resolveApiVersion(prepared),
           headers: _resolveHeaders(prepared),
         );
-    final LlmResponse resp = messageToLlmResponse(message);
+    LlmResponse resp = messageToLlmResponse(message);
+    if (outputSchemaTool != null) {
+      resp = outputSchemaTool.unwrap(resp);
+    }
     yield resp.copyWith(
       modelVersion: resp.modelVersion ?? prepared.model,
       turnComplete: true,
     );
   }
 
+  _OutputSchemaTool? _resolveOutputSchemaTool(LlmRequest request) {
+    final Object? schema =
+        request.config.responseSchema ?? request.config.responseJsonSchema;
+    if (schema == null) {
+      return null;
+    }
+    final List<ToolDeclaration>? declarations = request.config.tools;
+    final bool hasFunctionDeclarations =
+        declarations != null &&
+        declarations.any(
+          (ToolDeclaration tool) => tool.functionDeclarations.isNotEmpty,
+        );
+    if (hasFunctionDeclarations) {
+      return null;
+    }
+    return _OutputSchemaTool.forSchema(schema);
+  }
+
   Map<String, Object?> _buildAnthropicRequest(
     LlmRequest request, {
     required bool stream,
+    _OutputSchemaTool? outputSchemaTool,
   }) {
     final _ToolUseIdSanitizer sanitizer = _ToolUseIdSanitizer();
     final List<Map<String, Object?>> messages = request.contents
         .map((Content content) => _contentToMessageParam(content, sanitizer))
         .toList();
-    final List<Map<String, Object?>> tools = <Map<String, Object?>>[];
+    List<Map<String, Object?>> tools = <Map<String, Object?>>[];
     final List<ToolDeclaration>? declarations = request.config.tools;
     if (declarations != null) {
       for (final ToolDeclaration tool in declarations) {
@@ -707,17 +1004,38 @@ class AnthropicLlm extends BaseLlm {
     final Map<String, Object?>? thinking = _anthropicThinkingConfig(
       request.config.thinkingConfig,
     );
+    final bool thinkingEnabled = _thinkingIsEnabled(thinking);
+    final String? effort = _extractEffort(request.config);
+    final bool excludeSampling = thinkingEnabled || effort != null;
+
+    Map<String, Object?>? toolChoice = request.toolsDict.isNotEmpty
+        ? <String, Object?>{'type': 'auto'}
+        : null;
+    if (outputSchemaTool != null) {
+      tools = <Map<String, Object?>>[outputSchemaTool.param];
+      toolChoice = outputSchemaTool.choice(thinkingEnabled: thinkingEnabled);
+    }
+
     return <String, Object?>{
       'model': request.model,
-      'max_tokens': maxTokens,
+      'max_tokens': request.config.maxOutputTokens ?? maxTokens,
       'thinking': ?thinking,
+      if (effort != null)
+        'output_config': <String, Object?>{'effort': effort},
+      if (!excludeSampling && request.config.temperature != null)
+        'temperature': request.config.temperature,
+      if (!excludeSampling && request.config.topP != null)
+        'top_p': request.config.topP,
+      if (!excludeSampling && request.config.topK != null)
+        'top_k': request.config.topK,
+      if (request.config.stopSequences.isNotEmpty)
+        'stop_sequences': List<String>.from(request.config.stopSequences),
       if (stream) 'stream': true,
       if ((request.config.systemInstruction ?? '').isNotEmpty)
         'system': request.config.systemInstruction,
       'messages': messages,
       if (tools.isNotEmpty) 'tools': tools,
-      if (request.toolsDict.isNotEmpty)
-        'tool_choice': <String, Object?>{'type': 'auto'},
+      'tool_choice': ?toolChoice,
     };
   }
 
@@ -741,8 +1059,37 @@ class AnthropicLlm extends BaseLlm {
     if (thinkingConfig == null) {
       return null;
     }
+    if (thinkingConfig is Map) {
+      final Object? explicitType = thinkingConfig['type'];
+      if (explicitType == 'adaptive') {
+        return <String, Object?>{
+          'type': 'adaptive',
+          if (thinkingConfig['display'] != null)
+            'display': thinkingConfig['display'],
+        };
+      }
+      if (explicitType == 'disabled') {
+        return <String, Object?>{'type': 'disabled'};
+      }
+      if (explicitType == 'enabled' &&
+          thinkingConfig['budget_tokens'] != null) {
+        final int? explicitBudget = _intValueOrNull(
+          thinkingConfig['budget_tokens'],
+        );
+        if (explicitBudget == null) {
+          throw ArgumentError('Anthropic thinking budget must be numeric.');
+        }
+        return <String, Object?>{
+          'type': 'enabled',
+          'budget_tokens': explicitBudget,
+        };
+      }
+    }
     final Object? rawBudget = _thinkingBudgetValue(thinkingConfig);
     if (rawBudget == null) {
+      if (thinkingConfig is Map && thinkingConfig.containsKey('effort')) {
+        return null;
+      }
       throw ArgumentError(
         'Anthropic thinkingConfig requires a thinking_budget, thinkingBudget, or budget value.',
       );
@@ -752,7 +1099,11 @@ class AnthropicLlm extends BaseLlm {
       throw ArgumentError('Anthropic thinking budget must be numeric.');
     }
     if (budget < 0) {
-      throw ArgumentError('Anthropic thinking budget must be non-negative.');
+      return <String, Object?>{
+        'type': 'adaptive',
+        if (thinkingConfig is Map && thinkingConfig['display'] != null)
+          'display': thinkingConfig['display'],
+      };
     }
     if (budget == 0) {
       return <String, Object?>{'type': 'disabled'};
@@ -762,8 +1113,9 @@ class AnthropicLlm extends BaseLlm {
 
   Stream<LlmResponse> _streamAnthropicResponses(
     Stream<Map<String, Object?>> rawStream,
-    LlmRequest request,
-  ) async* {
+    LlmRequest request, {
+    _OutputSchemaTool? outputSchemaTool,
+  }) async* {
     final Map<int, StringBuffer> textBlocks = <int, StringBuffer>{};
     final Map<int, _AnthropicToolUseAccumulator> toolUseBlocks =
         <int, _AnthropicToolUseAccumulator>{};
@@ -855,7 +1207,23 @@ class AnthropicLlm extends BaseLlm {
             if (tool == null) {
               continue;
             }
-            tool.argsJson += '${delta['partial_json'] ?? ''}';
+            final String partialJson = '${delta['partial_json'] ?? ''}';
+            tool.argsJson += partialJson;
+            if (outputSchemaTool != null &&
+                tool.name == _outputSchemaToolName) {
+              if (partialJson.isNotEmpty && !outputSchemaTool.nestsValue) {
+                yield LlmResponse(
+                  modelVersion: modelVersion ?? request.model,
+                  content: Content(
+                    role: 'model',
+                    parts: <Part>[Part.text(partialJson)],
+                  ),
+                  partial: true,
+                  turnComplete: false,
+                );
+              }
+              continue;
+            }
           }
           break;
         case 'content_block_stop':
@@ -923,7 +1291,7 @@ class AnthropicLlm extends BaseLlm {
       }
     }
 
-    yield LlmResponse(
+    LlmResponse finalResponse = LlmResponse(
       modelVersion: modelVersion ?? request.model,
       content: Content(role: 'model', parts: parts),
       usageMetadata: <String, Object?>{
@@ -935,6 +1303,10 @@ class AnthropicLlm extends BaseLlm {
       partial: false,
       turnComplete: true,
     );
+    if (outputSchemaTool != null) {
+      finalResponse = outputSchemaTool.unwrap(finalResponse);
+    }
+    yield finalResponse;
   }
 
   Map<String, dynamic> _decodeToolArgs(String jsonText) {
@@ -1104,6 +1476,45 @@ Map<String, Object?> _mapOf(Object? value) {
     return value.map((Object? key, Object? nested) => MapEntry('$key', nested));
   }
   return const <String, Object?>{};
+}
+
+bool _thinkingIsEnabled(Map<String, Object?>? thinking) {
+  if (thinking == null) {
+    return false;
+  }
+  final Object? type = thinking['type'];
+  return type == 'enabled' || type == 'adaptive';
+}
+
+Object? _thinkingLevelValue(Object? thinkingConfig) {
+  if (thinkingConfig is Map) {
+    return thinkingConfig['thinking_level'] ?? thinkingConfig['thinkingLevel'];
+  }
+  try {
+    final dynamic dynamicConfig = thinkingConfig;
+    return dynamicConfig.thinkingLevel;
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _extractEffort(GenerateContentConfig config) {
+  if (config is AnthropicGenerateContentConfig && config.effort != null) {
+    return config.effort;
+  }
+  final Object? thinkingConfig = config.thinkingConfig;
+  if (thinkingConfig is Map && thinkingConfig['effort'] != null) {
+    final String effort = '${thinkingConfig['effort']}';
+    if (!_validAnthropicEfforts.contains(effort)) {
+      throw ArgumentError.value(
+        effort,
+        'effort',
+        'Must be one of ${_validAnthropicEfforts.join(", ")}.',
+      );
+    }
+    return effort;
+  }
+  return null;
 }
 
 Object? _thinkingBudgetValue(Object? thinkingConfig) {

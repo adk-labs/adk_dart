@@ -110,6 +110,7 @@ class GcsArtifactService extends BaseArtifactService {
       'https://storage.googleapis.com/upload/storage/v1';
   static const String _fileUriMetadataKey = 'adk_artifact_file_uri';
   static const String _fileMimeTypeMetadataKey = 'adk_artifact_mime_type';
+  static const String _isTextMetadataKey = 'adk_artifact_is_text';
 
   /// GCS bucket name used for artifact objects.
   final String bucketName;
@@ -262,7 +263,6 @@ class GcsArtifactService extends BaseArtifactService {
   ///
   /// Returns `null` when the artifact or version does not exist.
   @override
-  @override
   Future<Part?> loadArtifact({
     required String appName,
     required String userId,
@@ -315,6 +315,11 @@ class GcsArtifactService extends BaseArtifactService {
     required String userId,
     String? sessionId,
   }) async {
+    validatePathSegment(appName, 'app_name');
+    validatePathSegment(userId, 'user_id');
+    if (sessionId != null) {
+      validatePathSegment(sessionId, 'session_id');
+    }
     if (_mode == GcsArtifactMode.inMemory) {
       return _listArtifactKeysInMemory(
         appName: appName,
@@ -447,6 +452,7 @@ class GcsArtifactService extends BaseArtifactService {
     late final List<int> data;
     String? contentType;
     String? fileUri;
+    bool isText = false;
     if (artifact.inlineData != null) {
       data = List<int>.from(artifact.inlineData!.data);
       contentType =
@@ -455,6 +461,7 @@ class GcsArtifactService extends BaseArtifactService {
     } else if (artifact.text != null) {
       data = utf8.encode(artifact.text!);
       contentType = 'text/plain';
+      isText = true;
     } else if (artifact.fileData != null) {
       final String parsedUri = artifact.fileData!.fileUri.trim();
       if (parsedUri.isEmpty) {
@@ -492,6 +499,7 @@ class GcsArtifactService extends BaseArtifactService {
           ? <String, Object?>{}
           : Map<String, Object?>.from(customMetadata),
       fileUri: fileUri,
+      isText: isText,
     );
 
     return version;
@@ -516,6 +524,7 @@ class GcsArtifactService extends BaseArtifactService {
     late final List<int> data;
     String? contentType;
     String? fileUri;
+    bool isText = false;
     if (artifact.inlineData != null) {
       data = List<int>.from(artifact.inlineData!.data);
       contentType =
@@ -524,6 +533,7 @@ class GcsArtifactService extends BaseArtifactService {
     } else if (artifact.text != null) {
       data = utf8.encode(artifact.text!);
       contentType = 'text/plain';
+      isText = true;
     } else if (artifact.fileData != null) {
       final String parsedUri = artifact.fileData!.fileUri.trim();
       if (parsedUri.isEmpty) {
@@ -577,6 +587,9 @@ class GcsArtifactService extends BaseArtifactService {
       metadata[_fileMimeTypeMetadataKey] = contentType;
     }
     if (metadata.isNotEmpty) {
+      if (isText) {
+        metadata[_isTextMetadataKey] = 'true';
+      }
       final Map<String, Object?> patchBody = <String, Object?>{
         'metadata': metadata,
       };
@@ -647,6 +660,9 @@ class GcsArtifactService extends BaseArtifactService {
       }
       return Part.fromFileData(fileUri: fileUri, mimeType: blob.contentType);
     }
+    if (blob.isText) {
+      return Part.text(utf8.decode(blob.data, allowMalformed: true));
+    }
     if (blob.data.isEmpty) {
       return null;
     }
@@ -694,10 +710,13 @@ class GcsArtifactService extends BaseArtifactService {
     }
 
     final Map<String, String> metadata = _asStringMap(blobMetadata['metadata']);
-    final String? fileUri = _normalizeMimeType(metadata[_fileUriMetadataKey]);
+    final String? fileUri =
+        _normalizeMimeType(metadata[_fileUriMetadataKey]) ??
+        _normalizeMimeType(metadata['adkFileUri']);
     final String? resolvedMimeType =
         _normalizeMimeType(_asNullableString(blobMetadata['contentType'])) ??
-        _normalizeMimeType(metadata[_fileMimeTypeMetadataKey]);
+        _normalizeMimeType(metadata[_fileMimeTypeMetadataKey]) ??
+        _normalizeMimeType(metadata['adkFileMimeType']);
     if (fileUri != null) {
       final Future<Part?>? dereferenced = _dereferenceFileUri(
         fileUri,
@@ -726,6 +745,15 @@ class GcsArtifactService extends BaseArtifactService {
       throw StateError(
         'GCS artifact load failed (${mediaResponse.statusCode}) for '
         'gs://$bucketName/$blobName.',
+      );
+    }
+    final bool isText =
+        metadata[_isTextMetadataKey] == 'true' ||
+        metadata['adkIsText'] == 'true' ||
+        resolvedMimeType == 'text/plain';
+    if (isText) {
+      return Part.text(
+        utf8.decode(mediaResponse.bodyBytes, allowMalformed: true),
       );
     }
     if (mediaResponse.bodyBytes.isEmpty) {
@@ -1250,7 +1278,12 @@ class GcsArtifactService extends BaseArtifactService {
     final Map<String, Object?> custom = <String, Object?>{};
     for (final MapEntry<String, String> entry in metadata.entries) {
       if (entry.key == _fileUriMetadataKey ||
-          entry.key == _fileMimeTypeMetadataKey) {
+          entry.key == _fileMimeTypeMetadataKey ||
+          entry.key == _isTextMetadataKey ||
+          entry.key == 'adkFileUri' ||
+          entry.key == 'adkFileMimeType' ||
+          entry.key == 'adkIsText' ||
+          entry.key == 'adkDisplayName') {
         continue;
       }
       custom[entry.key] = entry.value;
@@ -1372,6 +1405,7 @@ class _GcsBlob {
     required this.createTime,
     required this.metadata,
     this.fileUri,
+    this.isText = false,
   });
 
   final List<int> data;
@@ -1379,6 +1413,7 @@ class _GcsBlob {
   final DateTime createTime;
   final Map<String, Object?> metadata;
   final String? fileUri;
+  final bool isText;
 }
 
 Future<GcsArtifactHttpResponse> _defaultGcsArtifactHttpRequestProvider(

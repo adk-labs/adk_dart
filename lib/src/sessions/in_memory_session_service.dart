@@ -111,6 +111,12 @@ class InMemorySessionService extends BaseSessionService {
     }
 
     List<Event> events = session.events;
+    if (config.afterTimestamp != null) {
+      events = events
+          .where((Event event) => event.timestamp >= config.afterTimestamp!)
+          .toList(growable: false);
+    }
+
     if (config.numRecentEvents != null && config.numRecentEvents! == 0) {
       events = const <Event>[];
     } else if (config.numRecentEvents != null && config.numRecentEvents! > 0) {
@@ -118,12 +124,6 @@ class InMemorySessionService extends BaseSessionService {
       if (events.length > count) {
         events = events.sublist(events.length - count);
       }
-    }
-
-    if (config.afterTimestamp != null) {
-      events = events
-          .where((Event event) => event.timestamp >= config.afterTimestamp!)
-          .toList(growable: false);
     }
 
     final Session copied = session.copyWith(

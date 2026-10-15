@@ -42,19 +42,26 @@ class GemmaLlm extends BaseLlm {
   }) async* {
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model ??= model;
-    assert(
-      (prepared.model ?? '').startsWith('gemma-'),
-      'Requesting a non-Gemma model (${prepared.model}) with GemmaLlm is not supported.',
-    );
+    final String? targetModel = prepared.model;
+    if (targetModel == null || !targetModel.startsWith('gemma-')) {
+      throw ArgumentError(
+        'Requesting a non-Gemma model ($targetModel) with GemmaLlm is not supported.',
+      );
+    }
 
-    _moveFunctionCallsIntoSystemInstruction(prepared);
-    _moveSystemInstructionToInitialUserMessage(prepared);
+    final bool isGemma4 = targetModel.startsWith('gemma-4');
+    if (!isGemma4) {
+      _moveFunctionCallsIntoSystemInstruction(prepared);
+      _moveSystemInstructionToInitialUserMessage(prepared);
+    }
 
     await for (final LlmResponse response in _delegate.generateContent(
       prepared,
       stream: stream,
     )) {
-      _extractFunctionCallsFromResponse(response);
+      if (!isGemma4) {
+        _extractFunctionCallsFromResponse(response);
+      }
       yield response;
     }
   }

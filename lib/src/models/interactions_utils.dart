@@ -147,6 +147,16 @@ List<Map<String, Object?>> convertToolsConfigToInteractionsFormat(
   return output;
 }
 
+/// Sampling knobs the interactions API applies when declared by the client.
+const List<String> _clientDependentSamplingParams = <String>[
+  'temperature',
+  'top_p',
+  'top_k',
+];
+
+/// Sampling knobs declared by the active client configuration.
+Set<String> declaredInteractionsSamplingParams = <String>{};
+
 /// Sampling knobs already reported as dropped, so each warning is emitted
 /// once per process instead of once per model turn.
 final Set<String> _warnedSamplingParams = <String>{};
@@ -154,6 +164,7 @@ final Set<String> _warnedSamplingParams = <String>{};
 /// Test hook to clear warned sampling parameters.
 void resetWarnedSamplingParamsForTest() {
   _warnedSamplingParams.clear();
+  declaredInteractionsSamplingParams = <String>{};
 }
 
 /// Optional callback to intercept warnings emitted by interactions utils (for testing).
@@ -184,7 +195,12 @@ void _logWarning(String message) {
 /// sampling parameter that would be discarded before the request is sent is
 /// logged as ignored, once per parameter per process, naming whether the client
 /// or the API is the one that cannot carry it.
-Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
+Map<String, Object?> buildGenerationConfig(
+  GenerateContentConfig config, {
+  Set<String>? declaredSamplingParams,
+}) {
+  final Set<String> declared =
+      declaredSamplingParams ?? declaredInteractionsSamplingParams;
   final Map<String, Object?> generationConfig = <String, Object?>{};
   if (config.maxOutputTokens != null) {
     generationConfig['max_output_tokens'] = config.maxOutputTokens;
@@ -198,16 +214,22 @@ Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
     generationConfig['seed'] = config.seed;
   }
 
+  final Map<String, Object?> samplingValues = <String, Object?>{
+    'temperature': config.temperature,
+    'top_p': config.topP,
+    'top_k': config.topK,
+  };
   final List<String> undeclared = <String>[];
-  if (config.temperature != null &&
-      !_warnedSamplingParams.contains('temperature')) {
-    undeclared.add('temperature');
-  }
-  if (config.topP != null && !_warnedSamplingParams.contains('top_p')) {
-    undeclared.add('top_p');
-  }
-  if (config.topK != null && !_warnedSamplingParams.contains('top_k')) {
-    undeclared.add('top_k');
+  for (final String name in _clientDependentSamplingParams) {
+    final Object? value = samplingValues[name];
+    if (value == null) {
+      continue;
+    }
+    if (declared.contains(name)) {
+      generationConfig[name] = value;
+    } else if (!_warnedSamplingParams.contains(name)) {
+      undeclared.add(name);
+    }
   }
   if (undeclared.isNotEmpty) {
     _warnedSamplingParams.addAll(undeclared);
@@ -217,6 +239,31 @@ Map<String, Object?> buildGenerationConfig(GenerateContentConfig config) {
       ' the API itself applies them. Applying them needs a google-genai'
       ' release that declares those fields.',
     );
+  }
+
+  final Object? thinkingConfig = config.thinkingConfig;
+  if (thinkingConfig is Map) {
+    final Object? thinkingLevel =
+        thinkingConfig['thinking_level'] ?? thinkingConfig['thinkingLevel'];
+    if (thinkingLevel != null) {
+      generationConfig['thinking_level'] = thinkingLevel;
+    }
+    final Object? thinkingSummaries =
+        thinkingConfig['thinking_summaries'] ??
+        thinkingConfig['thinkingSummaries'];
+    if (thinkingSummaries != null) {
+      generationConfig['thinking_summaries'] = thinkingSummaries;
+    } else if (thinkingConfig['include_thoughts'] != null ||
+        thinkingConfig['includeThoughts'] != null) {
+      final Object? includeThoughts =
+          thinkingConfig['include_thoughts'] ??
+          thinkingConfig['includeThoughts'];
+      if (includeThoughts is bool) {
+        generationConfig['thinking_summaries'] = includeThoughts
+            ? 'auto'
+            : 'none';
+      }
+    }
   }
 
   final List<String> unsupported = <String>[];
@@ -303,6 +350,61 @@ List<Content> getLatestUserContents(List<Content> contents) {
   return <Content>[preceding, ...latestUserContents];
 }
 
+Map<String, Object?>? _buildUsageMetadata(Map<String, Object?>? usage) {
+  if (usage == null || usage.isEmpty) {
+    return null;
+  }
+  final int? inputTokens =
+      _intValue(usage['total_input_tokens']) ??
+      _intValue(usage['promptTokenCount']) ??
+      _intValue(usage['prompt_token_count']);
+  final int? outputTokens =
+      _intValue(usage['total_output_tokens']) ??
+      _intValue(usage['candidatesTokenCount']) ??
+      _intValue(usage['candidates_token_count']);
+  final int? cachedTokens =
+      _intValue(usage['total_cached_tokens']) ??
+      _intValue(usage['cachedContentTokenCount']) ??
+      _intValue(usage['cached_content_token_count']);
+  final int? thoughtTokens =
+      _intValue(usage['total_thought_tokens']) ??
+      _intValue(usage['thoughtsTokenCount']) ??
+      _intValue(usage['thoughts_token_count']);
+  final int? toolUseTokens =
+      _intValue(usage['total_tool_use_tokens']) ??
+      _intValue(usage['toolUsePromptTokenCount']) ??
+      _intValue(usage['tool_use_prompt_token_count']);
+  final int totalTokens =
+      _intValue(usage['total_tokens']) ??
+      _intValue(usage['totalTokenCount']) ??
+      _intValue(usage['total_token_count']) ??
+      ((inputTokens ?? 0) + (outputTokens ?? 0));
+  final Object? cacheTokensDetails =
+      usage['cache_tokens_details'] ??
+      usage['cacheTokensDetails'] ??
+      usage['cached_tokens_by_modality'];
+  final Object? candidatesTokensDetails =
+      usage['candidates_tokens_details'] ??
+      usage['candidatesTokensDetails'] ??
+      usage['output_tokens_by_modality'];
+  final Object? promptTokensDetails =
+      usage['prompt_tokens_details'] ??
+      usage['promptTokensDetails'] ??
+      usage['input_tokens_by_modality'];
+
+  return <String, Object?>{
+    'promptTokenCount': inputTokens ?? 0,
+    'candidatesTokenCount': outputTokens ?? 0,
+    'cachedContentTokenCount': ?cachedTokens,
+    'thoughtsTokenCount': ?thoughtTokens,
+    'toolUsePromptTokenCount': ?toolUseTokens,
+    'cacheTokensDetails': ?cacheTokensDetails,
+    'candidatesTokensDetails': ?candidatesTokensDetails,
+    'promptTokensDetails': ?promptTokensDetails,
+    'totalTokenCount': totalTokens,
+  };
+}
+
 /// Converts a full interactions API object into an [LlmResponse].
 LlmResponse convertInteractionToLlmResponse(
   Map<String, Object?> interaction, {
@@ -327,7 +429,9 @@ LlmResponse convertInteractionToLlmResponse(
     );
   }
 
-  final List<Object?> outputsRaw = _asList(interaction['outputs']);
+  final List<Object?> outputsRaw = _asList(
+    interaction['outputs'] ?? interaction['steps'],
+  );
   final List<Part> parts = outputsRaw
       .map(_asMap)
       .map(convertInteractionOutputToPart)
@@ -335,16 +439,7 @@ LlmResponse convertInteractionToLlmResponse(
       .toList(growable: false);
 
   final Map<String, Object?> usage = _asMap(interaction['usage']);
-  Object? usageMetadata;
-  if (usage.isNotEmpty) {
-    final int inputTokens = _intValue(usage['total_input_tokens']) ?? 0;
-    final int outputTokens = _intValue(usage['total_output_tokens']) ?? 0;
-    usageMetadata = <String, Object?>{
-      'promptTokenCount': inputTokens,
-      'candidatesTokenCount': outputTokens,
-      'totalTokenCount': inputTokens + outputTokens,
-    };
-  }
+  final Object? usageMetadata = _buildUsageMetadata(usage);
 
   final bool turnComplete =
       status == 'completed' || status == 'requires_action';
@@ -442,15 +537,21 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
 /// State accumulator across Gemini Interactions API streaming events.
 class InteractionsStreamState {
   /// Creates an interactions stream state.
-  InteractionsStreamState({List<Part>? parts, Map<int, Part>? fcPartsByIndex})
-    : parts = parts ?? <Part>[],
-      fcPartsByIndex = fcPartsByIndex ?? <int, Part>{};
+  InteractionsStreamState({
+    List<Part>? parts,
+    Map<int, Part>? fcPartsByIndex,
+    this.totalUsage,
+  }) : parts = parts ?? <Part>[],
+       fcPartsByIndex = fcPartsByIndex ?? <int, Part>{};
 
   /// Multimodal parts accumulated so far.
   final List<Part> parts;
 
   /// Function-call parts indexed by step index.
   final Map<int, Part> fcPartsByIndex;
+
+  /// Latest usage metadata reported by `step.delta` events.
+  Map<String, Object?>? totalUsage;
 }
 
 Part? _resolveStreamingFunctionCallPart(
@@ -530,6 +631,14 @@ LlmResponse? convertInteractionEventToLlmResponse(
   }
 
   if (eventType == 'step.delta') {
+    final Map<String, Object?> metadata = _asMap(event['metadata']);
+    final Map<String, Object?> totalUsage = _asMap(
+      metadata['total_usage'] ?? metadata['totalUsage'],
+    );
+    if (totalUsage.isNotEmpty && streamState != null) {
+      streamState.totalUsage = totalUsage;
+    }
+
     final Map<String, Object?> delta = _asMap(event['delta']);
     if (delta.isEmpty) {
       return null;
@@ -710,18 +819,28 @@ LlmResponse? convertInteractionEventToLlmResponse(
     );
   }
 
-  if (eventType == 'interaction' || eventType == 'interaction.complete') {
+  if (eventType == 'interaction' ||
+      eventType == 'interaction.complete' ||
+      eventType == 'interaction.completed') {
     final Map<String, Object?> interaction = _asMap(event['interaction']);
-    if (interaction.isNotEmpty) {
-      return convertInteractionToLlmResponse(
-        interaction,
-        fallbackModelVersion: fallbackModelVersion,
-      );
-    }
-    return convertInteractionToLlmResponse(
-      event,
+    final Map<String, Object?> targetInteraction = interaction.isNotEmpty
+        ? interaction
+        : event;
+    final LlmResponse response = convertInteractionToLlmResponse(
+      targetInteraction,
       fallbackModelVersion: fallbackModelVersion,
     );
+    if (response.content == null && targetParts.isNotEmpty) {
+      response.content = Content(
+        role: 'model',
+        parts: targetParts
+            .map((Part part) => part.copyWith())
+            .toList(growable: false),
+      );
+    }
+    response.usageMetadata ??= _buildUsageMetadata(streamState?.totalUsage);
+    response.interactionId ??= interactionId;
+    return response;
   }
 
   if (eventType == 'interaction.status_update') {
@@ -729,14 +848,15 @@ LlmResponse? convertInteractionEventToLlmResponse(
     if (status == 'completed' || status == 'requires_action') {
       return LlmResponse(
         modelVersion: fallbackModelVersion,
-        content: aggregatedParts.isEmpty
+        content: targetParts.isEmpty
             ? null
             : Content(
                 role: 'model',
-                parts: aggregatedParts
+                parts: targetParts
                     .map((Part part) => part.copyWith())
                     .toList(growable: false),
               ),
+        usageMetadata: _buildUsageMetadata(streamState?.totalUsage),
         partial: false,
         turnComplete: true,
         finishReason: 'STOP',
@@ -833,8 +953,9 @@ Stream<LlmResponse> generateContentViaInteractions({
   };
 
   if (stream) {
-    final List<Part> aggregatedParts = <Part>[];
-    final Map<int, Part> fcPartsByIndex = <int, Part>{};
+    final InteractionsStreamState streamState = InteractionsStreamState();
+    final List<Part> aggregatedParts = streamState.parts;
+    final Map<int, Part> fcPartsByIndex = streamState.fcPartsByIndex;
     String? currentInteractionId;
     bool emittedTerminal = false;
     await for (final Map<String, Object?> event
@@ -856,6 +977,7 @@ Stream<LlmResponse> generateContentViaInteractions({
         event,
         aggregatedParts,
         fcPartsByIndex: fcPartsByIndex,
+        streamState: streamState,
         interactionId: currentInteractionId,
         fallbackModelVersion: model,
       );
@@ -877,6 +999,7 @@ Stream<LlmResponse> generateContentViaInteractions({
               .map((Part part) => part.copyWith())
               .toList(growable: false),
         ),
+        usageMetadata: _buildUsageMetadata(streamState.totalUsage),
         partial: false,
         turnComplete: true,
         finishReason: 'STOP',

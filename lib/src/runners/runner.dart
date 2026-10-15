@@ -8,6 +8,7 @@ import '../agents/base_agent.dart';
 import '../agents/invocation_context.dart';
 import '../agents/live_request_queue.dart';
 import '../agents/llm_agent.dart';
+import '../agents/managed_agent.dart';
 import '../agents/run_config.dart';
 import '../apps/app.dart';
 import '../apps/compaction.dart' as app_compaction;
@@ -19,6 +20,7 @@ import '../events/abort_events.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../events/internal_metadata.dart';
+import '../flows/llm_flows/agent_transfer.dart';
 import '../flows/llm_flows/persist_barrier.dart';
 import '../flows/llm_flows/functions.dart' as flow_functions;
 import '../plugins/base_plugin.dart';
@@ -385,17 +387,18 @@ class Runner {
   }
 
   /// Rewinds session state and artifact versions to before an invocation.
+  ///
+  /// [runConfig] is retained for backward compatibility; its
+  /// `getSessionConfig` is ignored so that the full session history is loaded.
   Future<void> rewindAsync({
     required String userId,
     required String sessionId,
     required String rewindBeforeInvocationId,
     RunConfig? runConfig,
   }) async {
-    final RunConfig config = runConfig ?? RunConfig();
     final Session session = await _getOrCreateSession(
       userId: userId,
       sessionId: sessionId,
-      getSessionConfig: config.getSessionConfig,
     );
 
     int rewindEventIndex = -1;
@@ -1334,6 +1337,25 @@ class Runner {
     return outputEvent;
   }
 
+  BaseAgent _resolveTaskDelegator(BaseAgent candidate, BaseAgent rootAgent) {
+    BaseAgent delegator = candidate;
+    BaseAgent? current = candidate;
+    while (current != null &&
+        !identical(current, rootAgent) &&
+        current.parentAgent != null) {
+      final String? mode = switch (current) {
+        LlmAgent(:final String? mode) => mode,
+        ManagedAgent(:final String? mode) => mode,
+        _ => null,
+      };
+      if (mode == 'task') {
+        delegator = current.parentAgent!;
+      }
+      current = current.parentAgent;
+    }
+    return delegator;
+  }
+
   BaseAgent _findAgentToRun(Session session, BaseAgent rootAgent) {
     final Event? matchingFunctionCall =
         session.events.isNotEmpty && !isAbortEvent(session.events.last)
@@ -1343,7 +1365,7 @@ class Runner {
         matchingFunctionCall.author.isNotEmpty) {
       final BaseAgent? agent = rootAgent.findAgent(matchingFunctionCall.author);
       if (agent != null) {
-        return agent;
+        return _resolveTaskDelegator(agent, rootAgent);
       }
     }
 
@@ -1354,6 +1376,24 @@ class Runner {
       if (event.actions.agentState != null ||
           event.actions.endOfAgent == true) {
         continue;
+      }
+      if (event.errorCode != null &&
+          event.errorCode!.isNotEmpty &&
+          (event.content == null || event.content!.parts.isEmpty)) {
+        continue;
+      }
+
+      final String? targetName = event.actions.transferToAgent;
+      if (targetName != null && targetName.isNotEmpty) {
+        final BaseAgent? source = rootAgent.findAgent(event.author);
+        if (source is LlmAgent) {
+          for (final BaseAgent target in getTransferTargets(source)) {
+            if (target.name == targetName &&
+                _isTransferableAcrossAgentTree(target)) {
+              return _resolveTaskDelegator(target, rootAgent);
+            }
+          }
+        }
       }
 
       if (event.author == rootAgent.name) {
@@ -1366,7 +1406,7 @@ class Runner {
       }
 
       if (_isTransferableAcrossAgentTree(candidate)) {
-        return candidate;
+        return _resolveTaskDelegator(candidate, rootAgent);
       }
     }
 
@@ -1457,24 +1497,55 @@ class Runner {
     Set<BaseToolset> toolsets, {
     bool ignoreErrors = false,
   }) async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
     for (final BaseToolset toolset in toolsets) {
-      if (!ignoreErrors) {
-        await toolset.close();
-        continue;
-      }
       try {
         await toolset.close();
-      } catch (_) {
-        // Invocation cleanup should not mask agent execution results.
+      } catch (error, stackTrace) {
+        if (!ignoreErrors && firstError == null) {
+          firstError = error;
+          firstStackTrace = stackTrace;
+        }
       }
+    }
+    if (!ignoreErrors && firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
   }
 
-  /// Closes toolsets and plugin manager resources.
+  /// Closes toolsets, plugin manager resources, and flushes the session service.
   Future<void> close() async {
-    await _cleanupToolsets(_collectToolsets(agent));
-    await pluginManager.close();
-    await sessionService.flush();
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    try {
+      await _cleanupToolsets(_collectToolsets(agent));
+    } catch (error, stackTrace) {
+      firstError = error;
+      firstStackTrace = stackTrace;
+    }
+
+    try {
+      await pluginManager.close();
+    } catch (error, stackTrace) {
+      if (firstError == null) {
+        firstError = error;
+        firstStackTrace = stackTrace;
+      }
+    } finally {
+      try {
+        await sessionService.flush();
+      } catch (error, stackTrace) {
+        if (firstError == null) {
+          firstError = error;
+          firstStackTrace = stackTrace;
+        }
+      }
+    }
+
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
+    }
   }
 }
 

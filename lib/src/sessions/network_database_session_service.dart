@@ -130,7 +130,11 @@ enum _NetworkDriver { postgres, mysql }
 /// Session service backed by PostgreSQL or MySQL-compatible databases.
 class NetworkDatabaseSessionService extends BaseSessionService {
   /// Creates a network database session service from [dbUrl].
-  NetworkDatabaseSessionService(String dbUrl)
+  ///
+  /// When [cascadeDelete] is `true`, deleting a session also cleans up orphaned
+  /// `user_states` and `app_states` rows when no sessions remain for the user
+  /// or application.
+  NetworkDatabaseSessionService(String dbUrl, {this.cascadeDelete = false})
     : _dbUrl = dbUrl.trim(),
       _normalizedDbUrl = _normalizeDbUrl(dbUrl.trim()),
       _driver = _parseDriver(_normalizeDbUrl(dbUrl.trim())) {
@@ -138,6 +142,9 @@ class NetworkDatabaseSessionService extends BaseSessionService {
       throw ArgumentError('Database url must not be empty.');
     }
   }
+
+  /// Whether deleting a session also deletes orphaned user and app states.
+  final bool cascadeDelete;
 
   final String _dbUrl;
   final String _normalizedDbUrl;
@@ -432,11 +439,39 @@ class NetworkDatabaseSessionService extends BaseSessionService {
   }) {
     return _withLock<void>(() async {
       await _ensureInitialized();
-      await _withExecutor<void>((_NetworkDbExecutor db) {
-        return db.execute(
+      await _withTransaction<void>((_NetworkDbExecutor db) async {
+        await db.execute(
+          'DELETE FROM events WHERE app_name=? AND user_id=? AND session_id=?',
+          <Object?>[appName, userId, sessionId],
+        );
+        await db.execute(
           'DELETE FROM sessions WHERE app_name=? AND user_id=? AND id=?',
           <Object?>[appName, userId, sessionId],
         );
+        if (cascadeDelete) {
+          final List<Map<String, Object?>> remainingUserSessions = await db
+              .query(
+                'SELECT 1 FROM sessions WHERE app_name=? AND user_id=? LIMIT 1',
+                <Object?>[appName, userId],
+              );
+          if (remainingUserSessions.isEmpty) {
+            await db.execute(
+              'DELETE FROM user_states WHERE app_name=? AND user_id=?',
+              <Object?>[appName, userId],
+            );
+          }
+          final List<Map<String, Object?>> remainingAppSessions = await db
+              .query(
+                'SELECT 1 FROM sessions WHERE app_name=? LIMIT 1',
+                <Object?>[appName],
+              );
+          if (remainingAppSessions.isEmpty) {
+            await db.execute(
+              'DELETE FROM app_states WHERE app_name=?',
+              <Object?>[appName],
+            );
+          }
+        }
       });
     });
   }

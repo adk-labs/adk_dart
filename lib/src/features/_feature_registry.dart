@@ -8,6 +8,9 @@ enum FeatureName {
   /// Declarative agent configuration support.
   agentConfig('AGENT_CONFIG'),
 
+  /// Vertex AI Agent Engine sandbox environment integration.
+  agentEngineSandboxEnvironment('AGENT_ENGINE_SANDBOX_ENVIRONMENT'),
+
   /// Persistent agent state management.
   agentState('AGENT_STATE'),
 
@@ -31,6 +34,9 @@ enum FeatureName {
 
   /// Cascaded STT -> LLM -> TTS live audio pipeline.
   cascadeLive('CASCADE_LIVE'),
+
+  /// Probability-distribution classifiers and classifier routing nodes.
+  classifier('CLASSIFIER'),
 
   /// Computer use capability and toolset.
   computerUse('COMPUTER_USE'),
@@ -67,6 +73,9 @@ enum FeatureName {
 
   /// Graceful error handling for MCP tool execution.
   mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
+
+  /// OpenSandbox environment integration.
+  opensandboxEnvironment('OPENSANDBOX_ENVIRONMENT'),
 
   /// Pluggable authentication framework support.
   pluggableAuth('PLUGGABLE_AUTH'),
@@ -150,6 +159,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: true,
       ),
+      FeatureName.agentEngineSandboxEnvironment: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.agentState: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
@@ -179,6 +192,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.cascadeLive: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.classifier: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),
@@ -223,6 +240,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.jsonSchemaForFuncDecl: const FeatureConfig(FeatureStage.wip),
       FeatureName.mcpGracefulErrorHandling: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.opensandboxEnvironment: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),

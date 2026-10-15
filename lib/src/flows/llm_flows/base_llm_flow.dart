@@ -72,6 +72,9 @@ class BaseLlmFlow {
   /// Cache manager used for live audio blob handling.
   final AudioCacheManager audioCacheManager = AudioCacheManager();
 
+  /// Realtime cache manager used for live audio and media blob handling.
+  RealtimeCacheManager get realtimeCacheManager => audioCacheManager;
+
   /// Runs the flow in live mode when a live queue is available.
   Stream<Event> runLive(InvocationContext context) async* {
     if (context.isAborted) {
@@ -186,6 +189,14 @@ class BaseLlmFlow {
     } finally {
       context.liveRequestQueue?.close();
       context.activeNonBlockingToolTasks?.clear();
+      for (final ActiveBackgroundTool active
+          in context.activeBackgroundTools.values.toList(growable: false)) {
+        try {
+          await active.onCancel?.call();
+        } catch (_) {}
+        active.inputStream?.close();
+      }
+      context.activeBackgroundTools.clear();
     }
   }
 
@@ -532,16 +543,25 @@ class BaseLlmFlow {
   }
 
   void _fanOutLiveRequest(InvocationContext context, LiveRequest liveRequest) {
+    final Set<LiveRequestQueue> targetStreams = <LiveRequestQueue>{};
     final activeStreams = context.activeStreamingTools;
-    if (activeStreams == null || activeStreams.isEmpty) {
-      return;
+    if (activeStreams != null) {
+      for (final dynamic activeStream in activeStreams.values) {
+        final LiveRequestQueue? stream = activeStream.stream;
+        if (stream != null && !identical(stream, context.liveRequestQueue)) {
+          targetStreams.add(stream);
+        }
+      }
+    }
+    for (final ActiveBackgroundTool active
+        in context.activeBackgroundTools.values) {
+      final LiveRequestQueue? stream = active.inputStream;
+      if (stream != null && !identical(stream, context.liveRequestQueue)) {
+        targetStreams.add(stream);
+      }
     }
 
-    for (final dynamic activeStream in activeStreams.values) {
-      final LiveRequestQueue? stream = activeStream.stream;
-      if (stream == null || identical(stream, context.liveRequestQueue)) {
-        continue;
-      }
+    for (final LiveRequestQueue stream in targetStreams) {
       stream.send(liveRequest);
     }
   }
@@ -1175,12 +1195,22 @@ class BaseLlmFlow {
       return;
     }
 
-    final Event? functionResponseEvent = await flow_functions
-        .handleFunctionCallsAsync(
-          context,
-          functionCallEvent,
-          request.toolsDict,
-        );
+    final Event? functionResponseEvent;
+    try {
+      functionResponseEvent = await flow_functions.handleFunctionCallsAsync(
+        context,
+        functionCallEvent,
+        request.toolsDict,
+      );
+    } catch (error) {
+      final Event? keptEvent = flow_functions.popKeptFunctionResponseEvent(
+        error,
+      );
+      if (keptEvent != null && !context.isAborted) {
+        yield keptEvent;
+      }
+      rethrow;
+    }
     if (context.isAborted) {
       return;
     }

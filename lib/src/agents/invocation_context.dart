@@ -1,6 +1,8 @@
 /// Invocation-scoped execution context and state containers.
 library;
 
+import 'dart:async';
+
 import '../apps/app.dart';
 import '../artifacts/base_artifact_service.dart';
 import '../auth/auth_credential.dart';
@@ -34,6 +36,37 @@ class LlmCallsLimitExceededError implements Exception {
   String toString() => 'LlmCallsLimitExceededError: $message';
 }
 
+/// One tool call running in the background of a live invocation.
+class ActiveBackgroundTool {
+  /// Creates a background tool descriptor for [toolName] and [functionCallId].
+  ActiveBackgroundTool({
+    required this.toolName,
+    required this.functionCallId,
+    this.task,
+    this.inputStream,
+    this.isGenerator = false,
+    this.onCancel,
+  });
+
+  /// Name of the tool that was called.
+  final String toolName;
+
+  /// Identifier of the function call this entry runs.
+  final String functionCallId;
+
+  /// In-flight task running the tool call.
+  Future<Object?>? task;
+
+  /// Input stream the tool reads live requests from, if any.
+  LiveRequestQueue? inputStream;
+
+  /// Whether the tool is a streaming generator that yields multiple responses.
+  final bool isGenerator;
+
+  /// Optional cancellation callback invoked by `stop_streaming`.
+  FutureOr<void> Function()? onCancel;
+}
+
 /// Mutable invocation context shared across agent execution steps.
 class InvocationContext {
   /// Creates an invocation context for a single run.
@@ -56,6 +89,7 @@ class InvocationContext {
     this.liveRequestQueue,
     this.activeStreamingTools,
     this.activeNonBlockingToolTasks,
+    Map<String, ActiveBackgroundTool>? activeBackgroundTools,
     this.transcriptionCache,
     this.liveSessionResumptionHandle,
     this.inputRealtimeCache,
@@ -72,6 +106,8 @@ class InvocationContext {
     Map<String, Object?>? privateMetadata,
   }) : agentStates = agentStates ?? <String, Map<String, Object?>>{},
        endOfAgents = endOfAgents ?? <String, bool>{},
+       activeBackgroundTools =
+           activeBackgroundTools ?? <String, ActiveBackgroundTool>{},
        pluginManager = pluginManager ?? PluginManager(),
        credentialByKey = credentialByKey ?? <String, AuthCredential>{},
        callbackContextData = callbackContextData ?? <String, Object?>{},
@@ -129,11 +165,14 @@ class InvocationContext {
   /// Queue used by live-mode request handling.
   LiveRequestQueue? liveRequestQueue;
 
-  /// Active streaming tool handles by function call ID.
+  /// Active streaming tool handles by function call ID or tool name.
   Map<String, ActiveStreamingTool>? activeStreamingTools;
 
   /// Active background tasks executing non-blocking tools in Live mode.
   Map<String, Future<void>>? activeNonBlockingToolTasks;
+
+  /// Active background tool calls (streaming and non-blocking) keyed by function call ID.
+  Map<String, ActiveBackgroundTool> activeBackgroundTools;
 
   /// Cached transcription payloads across realtime turns.
   List<Object?>? transcriptionCache;
@@ -305,12 +344,14 @@ class InvocationContext {
   /// Adds the current session transcript to memory.
   ///
   /// Throws a [StateError] when memory services are unavailable.
-  Future<void> addSessionToMemory() async {
+  Future<void> addSessionToMemory({
+    Map<String, Object?>? customMetadata,
+  }) async {
     final Object? service = memoryService;
     if (service is! BaseMemoryService) {
       throw StateError('Memory service is not initialized.');
     }
-    await service.addSessionToMemory(session);
+    await service.addSessionToMemory(session, customMetadata: customMetadata);
   }
 
   /// Lists artifact filenames for this invocation session.
@@ -496,8 +537,7 @@ class InvocationContext {
       try {
         agentMode = (agent as dynamic).mode as String?;
       } catch (_) {}
-      if (br == null &&
-          agentMode == 'single_turn' &&
+      if (agentMode == 'single_turn' &&
           nodePath != null &&
           nodePath!.isNotEmpty) {
         selfNodePath = NodePathBuilder.fromString(nodePath!);
@@ -552,14 +592,26 @@ class InvocationContext {
       return false;
     }
 
-    final Set<String>? ids = event.longRunningToolIds;
-    if (ids == null || ids.isEmpty) {
+    final List<FunctionCall> calls = event.getFunctionCalls();
+    if (calls.isEmpty) {
       return false;
     }
 
-    for (final FunctionCall call in event.getFunctionCalls()) {
+    final Set<String> interruptIds = <String>{
+      ...?event.longRunningToolIds,
+      for (final FunctionCall call in calls)
+        if (call.id != null &&
+            (call.name == 'adk_request_input' ||
+                call.name == 'adk_request_credential'))
+          call.id!,
+    };
+    if (interruptIds.isEmpty) {
+      return false;
+    }
+
+    for (final FunctionCall call in calls) {
       final String? id = call.id;
-      if (id != null && ids.contains(id)) {
+      if (id != null && interruptIds.contains(id)) {
         return true;
       }
     }
@@ -655,6 +707,9 @@ class InvocationContext {
       activeNonBlockingToolTasks: activeNonBlockingToolTasks == null
           ? null
           : Map<String, Future<void>>.from(activeNonBlockingToolTasks!),
+      activeBackgroundTools: Map<String, ActiveBackgroundTool>.from(
+        activeBackgroundTools,
+      ),
       transcriptionCache: transcriptionCache == null
           ? null
           : List<Object?>.from(transcriptionCache!),

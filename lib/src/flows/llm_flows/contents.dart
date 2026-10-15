@@ -21,15 +21,30 @@ List<Event> _filterSingleTurnNodeEvents(
   List<Event> events, {
   bool isSingleTurn = false,
   String? nodePath,
+  bool allowAncestorNodePaths = false,
 }) {
-  if (currentBranch != null ||
-      !isSingleTurn ||
-      nodePath == null ||
-      nodePath.isEmpty) {
+  if (!isSingleTurn) {
     return events;
   }
+  final List<Event> filtered = events
+      .where((Event e) => isEventBelongsToBranch(currentBranch, e))
+      .toList(growable: false);
+  if (nodePath == null || nodePath.isEmpty) {
+    return filtered;
+  }
   final NodePathBuilder selfPath = NodePathBuilder.fromString(nodePath);
-  return events
+  if (allowAncestorNodePaths) {
+    return filtered
+        .where(
+          (Event e) =>
+              selfPath.includesNodePath(e.nodeInfo.path) ||
+              selfPath.isDescendantOf(
+                NodePathBuilder.fromString(e.nodeInfo.path),
+              ),
+        )
+        .toList(growable: false);
+  }
+  return filtered
       .where((Event e) => selfPath.includesNodePath(e.nodeInfo.path))
       .toList(growable: false);
 }
@@ -118,6 +133,7 @@ List<Content> getContents({
     _filterRewoundEvents(events),
     isSingleTurn: isSingleTurn,
     nodePath: nodePath,
+    allowAncestorNodePaths: true,
   );
   final List<Event> rawFiltered = rewindFiltered
       .where(

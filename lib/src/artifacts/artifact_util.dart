@@ -118,7 +118,7 @@ void validateArtifactReferenceScope({
 /// Throws [InputValidationError] if [value] contains traversal segments, null
 /// bytes, is empty, or starts with a slash or backslash.
 void validatePathSegment(String value, String fieldName) {
-  if (value.isEmpty) {
+  if (value.trim().isEmpty) {
     throw InputValidationError('$fieldName must not be empty.');
   }
   if (value.contains('\x00')) {

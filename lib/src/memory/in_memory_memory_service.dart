@@ -28,7 +28,10 @@ class InMemoryMemoryService extends BaseMemoryService {
   _sessionEventsByUserKey = <(String, String), Map<String, List<Event>>>{};
 
   @override
-  Future<void> addSessionToMemory(Session session) async {
+  Future<void> addSessionToMemory(
+    Session session, {
+    Map<String, Object?>? customMetadata,
+  }) async {
     final (String, String) key = _userKey(session.appName, session.userId);
     final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
         <String, List<Event>>{};

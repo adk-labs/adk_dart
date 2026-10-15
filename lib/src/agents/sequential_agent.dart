@@ -4,6 +4,7 @@ library;
 import '../events/event.dart';
 import '../tools/base_tool.dart';
 import '../tools/function_tool.dart';
+import '../workflow/workflow.dart';
 import 'agent_state.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
@@ -190,6 +191,9 @@ class SequentialAgent extends BaseAgent {
   bool _ensureTaskCompletedTool(LlmAgent agent) {
     final bool hasTaskCompletedTool = agent.tools.any((Object tool) {
       if (tool is BaseTool) {
+        return tool.name == _taskCompletedToolName;
+      }
+      if (tool is BaseNode) {
         return tool.name == _taskCompletedToolName;
       }
       final String toolLabel = '$tool';

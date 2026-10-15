@@ -19,7 +19,42 @@ enum A2aRole {
   user,
 
   /// Message authored by the agent.
-  agent,
+  agent;
+
+  /// Canonical A2A v0.3 wire value for this role.
+  String get wireValue => switch (this) {
+    A2aRole.user => 'user',
+    A2aRole.agent => 'agent',
+  };
+
+  /// Canonical A2A v1.0 wire value for this role.
+  String get v1WireValue => switch (this) {
+    A2aRole.user => 'ROLE_USER',
+    A2aRole.agent => 'ROLE_AGENT',
+  };
+
+  /// Parses an [A2aRole] from an A2A v0.3 or v1.0 wire value, or returns null.
+  static A2aRole? tryParseWire(Object? value) {
+    if (value is A2aRole) {
+      return value;
+    }
+    if (value is! String) {
+      return null;
+    }
+    return switch (value.trim()) {
+      'user' || 'ROLE_USER' => A2aRole.user,
+      'agent' || 'ROLE_AGENT' => A2aRole.agent,
+      _ => null,
+    };
+  }
+
+  /// Parses an [A2aRole] from an A2A v0.3 or v1.0 wire value.
+  static A2aRole fromWire(
+    Object? value, {
+    A2aRole fallback = A2aRole.user,
+  }) {
+    return tryParseWire(value) ?? fallback;
+  }
 }
 
 /// Task lifecycle states in the A2A protocol.
@@ -44,6 +79,74 @@ enum A2aTaskState {
 
   /// Task execution was canceled before completion.
   canceled,
+
+  /// Task execution was rejected by the agent.
+  rejected,
+
+  /// Task state is unknown or unspecified.
+  unknown;
+
+  /// Canonical A2A v0.3 wire value for this task state.
+  String get wireValue => switch (this) {
+    A2aTaskState.submitted => 'submitted',
+    A2aTaskState.working => 'working',
+    A2aTaskState.inputRequired => 'input-required',
+    A2aTaskState.authRequired => 'auth-required',
+    A2aTaskState.failed => 'failed',
+    A2aTaskState.completed => 'completed',
+    A2aTaskState.canceled => 'canceled',
+    A2aTaskState.rejected => 'rejected',
+    A2aTaskState.unknown => 'unknown',
+  };
+
+  /// Canonical A2A v1.0 wire value for this task state.
+  String get v1WireValue => switch (this) {
+    A2aTaskState.submitted => 'TASK_STATE_SUBMITTED',
+    A2aTaskState.working => 'TASK_STATE_WORKING',
+    A2aTaskState.inputRequired => 'TASK_STATE_INPUT_REQUIRED',
+    A2aTaskState.authRequired => 'TASK_STATE_AUTH_REQUIRED',
+    A2aTaskState.failed => 'TASK_STATE_FAILED',
+    A2aTaskState.completed => 'TASK_STATE_COMPLETED',
+    A2aTaskState.canceled => 'TASK_STATE_CANCELED',
+    A2aTaskState.rejected => 'TASK_STATE_REJECTED',
+    A2aTaskState.unknown => 'TASK_STATE_UNSPECIFIED',
+  };
+
+  /// Parses an [A2aTaskState] from an A2A v0.3 or v1.0 wire value, or returns null.
+  static A2aTaskState? tryParseWire(Object? value) {
+    if (value is A2aTaskState) {
+      return value;
+    }
+    if (value is! String) {
+      return null;
+    }
+    return switch (value.trim()) {
+      'submitted' || 'TASK_STATE_SUBMITTED' => A2aTaskState.submitted,
+      'working' || 'TASK_STATE_WORKING' => A2aTaskState.working,
+      'input-required' ||
+      'input_required' ||
+      'inputRequired' ||
+      'TASK_STATE_INPUT_REQUIRED' => A2aTaskState.inputRequired,
+      'auth-required' ||
+      'auth_required' ||
+      'authRequired' ||
+      'TASK_STATE_AUTH_REQUIRED' => A2aTaskState.authRequired,
+      'failed' || 'TASK_STATE_FAILED' => A2aTaskState.failed,
+      'completed' || 'TASK_STATE_COMPLETED' => A2aTaskState.completed,
+      'canceled' || 'TASK_STATE_CANCELED' => A2aTaskState.canceled,
+      'rejected' || 'TASK_STATE_REJECTED' => A2aTaskState.rejected,
+      'unknown' || 'TASK_STATE_UNSPECIFIED' => A2aTaskState.unknown,
+      _ => null,
+    };
+  }
+
+  /// Parses an [A2aTaskState] from an A2A v0.3 or v1.0 wire value.
+  static A2aTaskState fromWire(
+    Object? value, {
+    A2aTaskState fallback = A2aTaskState.unknown,
+  }) {
+    return tryParseWire(value) ?? fallback;
+  }
 }
 
 /// End-user identity attached to a call context.

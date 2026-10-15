@@ -26,10 +26,10 @@ class RealtimeCacheEntry {
   final double timestamp;
 }
 
-/// Configuration for [AudioCacheManager].
-class AudioCacheConfig {
-  /// Creates audio cache configuration.
-  AudioCacheConfig({
+/// Configuration for [RealtimeCacheManager].
+class RealtimeCacheConfig {
+  /// Creates realtime cache configuration.
+  RealtimeCacheConfig({
     this.maxCacheSizeBytes = 10 * 1024 * 1024,
     this.maxCacheDurationSeconds = 300.0,
     this.autoFlushThreshold = 100,
@@ -45,14 +45,20 @@ class AudioCacheConfig {
   final int autoFlushThreshold;
 }
 
+/// Backward-compatible alias for [RealtimeCacheConfig].
+typedef AudioCacheConfig = RealtimeCacheConfig;
+
+/// Backward-compatible alias for [RealtimeCacheManager].
+typedef AudioCacheManager = RealtimeCacheManager;
+
 /// Manages input/output realtime audio caches for live flows.
-class AudioCacheManager {
-  /// Creates an audio cache manager with optional [config].
-  AudioCacheManager({AudioCacheConfig? config})
-    : config = config ?? AudioCacheConfig();
+class RealtimeCacheManager {
+  /// Creates a realtime cache manager with optional [config].
+  RealtimeCacheManager({RealtimeCacheConfig? config})
+    : config = config ?? RealtimeCacheConfig();
 
   /// Active cache configuration.
-  final AudioCacheConfig config;
+  final RealtimeCacheConfig config;
 
   /// Adds [audioBlob] to the selected cache type.
   ///

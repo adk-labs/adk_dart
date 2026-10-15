@@ -19,7 +19,15 @@ typedef DatabaseSessionServiceResolver =
 /// Session service that dispatches to concrete implementations by URL scheme.
 class DatabaseSessionService extends BaseSessionService {
   /// Creates a database-backed session service from [dbUrl].
-  DatabaseSessionService(String dbUrl) : _delegate = _buildDelegate(dbUrl);
+  ///
+  /// When [cascadeDelete] is `true`, deleting a session also cleans up orphaned
+  /// `user_states` and `app_states` rows when no sessions remain for the user
+  /// or application.
+  DatabaseSessionService(String dbUrl, {this.cascadeDelete = false})
+    : _delegate = _buildDelegate(dbUrl, cascadeDelete: cascadeDelete);
+
+  /// Whether deleting a session also deletes orphaned user and app states.
+  final bool cascadeDelete;
 
   final BaseSessionService _delegate;
   static final Map<String, DatabaseSessionServiceFactory> _customFactories =
@@ -60,14 +68,17 @@ class DatabaseSessionService extends BaseSessionService {
     _customResolvers.clear();
   }
 
-  static BaseSessionService _buildDelegate(String dbUrl) {
+  static BaseSessionService _buildDelegate(
+    String dbUrl, {
+    bool cascadeDelete = false,
+  }) {
     final String normalizedDbUrl = dbUrl.trim();
     if (normalizedDbUrl.isEmpty) {
       throw ArgumentError('Database url must not be empty.');
     }
     if (normalizedDbUrl.startsWith('sqlite:') ||
         normalizedDbUrl.startsWith('sqlite+aiosqlite:')) {
-      return SqliteSessionService(normalizedDbUrl);
+      return SqliteSessionService(normalizedDbUrl, cascadeDelete: cascadeDelete);
     }
     if (normalizedDbUrl == ':memory:' ||
         normalizedDbUrl.startsWith('memory:')) {
@@ -91,7 +102,10 @@ class DatabaseSessionService extends BaseSessionService {
     }
 
     if (scheme != null && _isBuiltInNetworkScheme(scheme)) {
-      return NetworkDatabaseSessionService(normalizedDbUrl);
+      return NetworkDatabaseSessionService(
+        normalizedDbUrl,
+        cascadeDelete: cascadeDelete,
+      );
     }
 
     throw UnsupportedError(

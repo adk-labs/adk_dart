@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../events/event.dart';
+import '../flows/llm_flows/contents.dart' show isAuthEvent;
 import '../sessions/session.dart';
 import '../types/content.dart';
 import '../utils/vertex_ai_utils.dart';
@@ -667,11 +668,15 @@ class VertexAiMemoryBankService extends BaseMemoryService {
   }
 
   @override
-  Future<void> addSessionToMemory(Session session) async {
+  Future<void> addSessionToMemory(
+    Session session, {
+    Map<String, Object?>? customMetadata,
+  }) async {
     await _addEventsToMemoryFromEvents(
       appName: session.appName,
       userId: session.userId,
       eventsToProcess: session.events,
+      customMetadata: customMetadata,
     );
   }
 
@@ -724,7 +729,7 @@ class VertexAiMemoryBankService extends BaseMemoryService {
   }) async {
     final List<Map<String, Object?>> directEvents = <Map<String, Object?>>[];
     for (final Event event in eventsToProcess) {
-      if (_shouldFilterOutEvent(event.content)) {
+      if (_shouldFilterOutEvent(event)) {
         continue;
       }
       final Content? content = event.content;
@@ -851,7 +856,11 @@ class VertexAiMemoryBankService extends BaseMemoryService {
   }
 }
 
-bool _shouldFilterOutEvent(Content? content) {
+bool _shouldFilterOutEvent(Event event) {
+  return _isEmptyContent(event.content) || isAuthEvent(event);
+}
+
+bool _isEmptyContent(Content? content) {
   if (content == null || content.parts.isEmpty) {
     return true;
   }
@@ -1032,7 +1041,7 @@ List<MemoryEntry> _normalizeMemoriesForCreate(List<MemoryEntry> memories) {
 }
 
 String _memoryEntryToFact(MemoryEntry memory, {required int index}) {
-  if (_shouldFilterOutEvent(memory.content)) {
+  if (_isEmptyContent(memory.content)) {
     throw ArgumentError('memories[$index] must include text.');
   }
 

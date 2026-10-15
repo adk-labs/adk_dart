@@ -135,7 +135,7 @@ bool _isUserScoped(String? sessionId, String filename) {
 /// Throws [InputValidationError] when [value] is empty or contains null bytes,
 /// path separators, or traversal segments.
 void _validatePathSegment(String value, String fieldName) {
-  if (value.isEmpty) {
+  if (value.trim().isEmpty) {
     throw InputValidationError('$fieldName must not be empty.');
   }
   if (value.contains('\x00')) {
@@ -314,7 +314,13 @@ _FileArtifactMetadata? _readMetadata(File path) {
   if (!path.existsSync()) {
     return null;
   }
-  return _FileArtifactMetadata.fromJsonString(path.readAsStringSync());
+  try {
+    return _FileArtifactMetadata.fromJsonString(
+      path.readAsStringSync(encoding: utf8),
+    );
+  } on Object {
+    return null;
+  }
 }
 
 /// File-system-backed artifact service for persisting session artifacts.
@@ -555,13 +561,21 @@ class FileArtifactService extends BaseArtifactService {
     }
 
     if (mimeType != null && mimeType.isNotEmpty) {
-      return Part.fromInlineData(
-        mimeType: mimeType,
-        data: contentPath.readAsBytesSync(),
-      );
+      try {
+        return Part.fromInlineData(
+          mimeType: mimeType,
+          data: contentPath.readAsBytesSync(),
+        );
+      } on Object {
+        return null;
+      }
     }
 
-    return Part.text(contentPath.readAsStringSync(encoding: utf8));
+    try {
+      return Part.text(contentPath.readAsStringSync(encoding: utf8));
+    } on Object {
+      return null;
+    }
   }
 
   /// Lists artifact keys available to [userId] and optional [sessionId].

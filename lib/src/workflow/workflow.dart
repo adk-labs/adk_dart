@@ -21,6 +21,7 @@ import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_tool.dart';
 import '../tools/node_tool.dart';
+import '../tools/tool_confirmation.dart';
 import '../types/content.dart';
 import 'workflow_tool.dart';
 
@@ -32,7 +33,32 @@ const String START = 'START';
 // ignore: constant_identifier_names
 const String DEFAULT_ROUTE = '__DEFAULT__';
 
+/// Lower-camel alias for [DEFAULT_ROUTE].
+const String defaultRoute = DEFAULT_ROUTE;
+
 const String _workflowOutputOwner = r'$workflow';
+
+/// Returns the confirmation interrupt identifier for [nodePath].
+String confirmationInterruptId(String nodePath) =>
+    'wf_tool_confirmation:$nodePath';
+
+/// Error thrown when a workflow graph fails static validation.
+class GraphValidationError extends ArgumentError {
+  /// Creates a graph validation error with [message].
+  GraphValidationError([super.message]);
+}
+
+/// Error thrown when a workflow, node, or edge is configured invalidly.
+class WorkflowConfigurationError extends ArgumentError {
+  /// Creates a workflow configuration error with [message].
+  WorkflowConfigurationError([super.message]);
+}
+
+/// Error thrown when runtime workflow data does not match node expectations.
+class WorkflowDataError extends ArgumentError {
+  /// Creates a workflow data error with [message].
+  WorkflowDataError([super.message]);
+}
 
 /// Chronological barrier used to coordinate deterministic replay ordering.
 ///
@@ -58,27 +84,25 @@ class ReplaySequenceBarrier {
   int currentIndex = 0;
 
   final Map<String, Completer<void>> _events = <String, Completer<void>>{};
+  final Set<String> _completed = <String>{};
 
   /// Waits until [key] is released, or returns immediately for unknown keys.
   Future<void> wait(String key) {
     return _events[key]?.future ?? Future<void>.value();
   }
 
-  /// Advances the barrier if [key] is the current expected replay key.
+  /// Advances the barrier through all completed keys at the head of [sequence].
   void checkAndAdvance(String key) {
-    if (currentIndex >= sequence.length) {
-      return;
-    }
-    if (key != sequence[currentIndex]) {
-      return;
-    }
-    currentIndex += 1;
-    if (currentIndex >= sequence.length) {
-      return;
-    }
-    final Completer<void>? next = _events[sequence[currentIndex]];
-    if (next != null && !next.isCompleted) {
-      next.complete();
+    _completed.add(key);
+    while (currentIndex < sequence.length &&
+        _completed.contains(sequence[currentIndex])) {
+      currentIndex += 1;
+      if (currentIndex < sequence.length) {
+        final Completer<void>? next = _events[sequence[currentIndex]];
+        if (next != null && !next.isCompleted) {
+          next.complete();
+        }
+      }
     }
   }
 
@@ -194,6 +218,7 @@ class NodeState {
     this.runCounter = 0,
     this.runId,
     this.parentRunId,
+    this.parentKey,
     this.route,
     this.error,
   }) : interrupts = interrupts ?? <String>[],
@@ -230,6 +255,9 @@ class NodeState {
   /// Parent dynamic node run identifier, when applicable.
   String? parentRunId;
 
+  /// Parent node state key when scheduled dynamically via [WorkflowContext.runNode].
+  String? parentKey;
+
   /// Last route emitted by this node.
   Object? route;
 
@@ -249,6 +277,8 @@ class WorkflowContext {
     Map<String, List<Event>>? nodeEvents,
     Map<String, Event>? nodeOutputEvents,
     Set<String>? requestInputNodeKeys,
+    Map<String, Object?>? fallbackState,
+    String? workflowRoot,
     this.onNodeStateChange,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
@@ -256,6 +286,8 @@ class WorkflowContext {
        _nodeEvents = nodeEvents ?? <String, List<Event>>{},
        _nodeOutputEvents = nodeOutputEvents ?? <String, Event>{},
        requestInputNodeKeys = requestInputNodeKeys ?? <String>{},
+       _fallbackState = fallbackState ?? <String, Object?>{},
+       _workflowRoot = workflowRoot,
        _cancellation = _WorkflowCancelToken();
 
   WorkflowContext._({
@@ -268,6 +300,8 @@ class WorkflowContext {
     Map<String, List<Event>>? nodeEvents,
     Map<String, Event>? nodeOutputEvents,
     Set<String>? requestInputNodeKeys,
+    required Map<String, Object?> fallbackState,
+    String? workflowRoot,
     this.onNodeStateChange,
   }) : outputs = outputs ?? <String, Object?>{},
        nodeStates = nodeStates ?? <String, NodeState>{},
@@ -275,6 +309,8 @@ class WorkflowContext {
        _nodeEvents = nodeEvents ?? <String, List<Event>>{},
        _nodeOutputEvents = nodeOutputEvents ?? <String, Event>{},
        requestInputNodeKeys = requestInputNodeKeys ?? <String>{},
+       _fallbackState = fallbackState,
+       _workflowRoot = workflowRoot,
        _cancellation = cancellation;
 
   bool _hasDirectOutput = false;
@@ -285,6 +321,8 @@ class WorkflowContext {
   bool? _currentNodeRerunOnResume;
   final Map<String, List<Event>> _nodeEvents;
   final Map<String, Event> _nodeOutputEvents;
+  final Map<String, Object?> _fallbackState;
+  final String? _workflowRoot;
   final _WorkflowCancelToken _cancellation;
 
   /// ADK invocation context when running as an agent.
@@ -310,6 +348,33 @@ class WorkflowContext {
 
   /// Resume payloads keyed by interrupt identifier.
   final Map<String, Object?> resumeInputs;
+
+  /// Resumed tool confirmation for the current node run, when present.
+  ToolConfirmation? toolConfirmation;
+
+  /// Mutable session state map (or a fallback map when running standalone).
+  Map<String, Object?> get state =>
+      invocationContext?.session.state ?? _fallbackState;
+
+  /// Path of the currently executing node within its workflow.
+  String get nodePath {
+    final String key = _currentNodeKey ?? '';
+    final String runId = nodeStates[key]?.runId ?? '1';
+    final String segment = key.isEmpty
+        ? 'node@$runId'
+        : (key.contains('@') ? key : '$key@$runId');
+    final String? root =
+        _workflowRoot ??
+        (invocationContext != null
+            ? (invocationContext!.branch?.isNotEmpty == true
+                  ? invocationContext!.branch!
+                  : '${invocationContext!.agent.name.isEmpty ? 'workflow' : invocationContext!.agent.name}@1')
+            : null);
+    if (root == null || root.isEmpty) {
+      return segment;
+    }
+    return '$root/$segment';
+  }
 
   /// Whether this workflow context has observed cancellation.
   bool get isCancelled =>
@@ -433,14 +498,19 @@ class WorkflowContext {
       overrideBranch: overrideBranch,
     );
     final NodeState? state = nodeStates[stateKey];
-    if (branch != null && state != null) {
-      state.branch = branch;
-    }
     if (state != null) {
+      state.parentKey ??= parentKey;
+      if (branch != null) {
+        state.branch = branch;
+      }
       if (_isCompletedNodeState(state) && outputs.containsKey(stateKey)) {
         return outputs[stateKey];
       }
-      _seedNodeResumeInputs(state, resumeInputs);
+      _seedNodeResumeInputs(
+        state,
+        resumeInputs,
+        rerunOnResume: node.rerunOnResume,
+      );
       if (_hasUnresolvedWaitingInterrupts(state)) {
         interruptIds.addAll(state.interrupts);
         if (raiseOnWait) {
@@ -470,6 +540,7 @@ class WorkflowContext {
       nodeInput: input,
       stateKey: stateKey,
       runId: effectiveRunId,
+      parentKey: parentKey,
     );
     if (branch != null) {
       nodeStates[stateKey]?.branch = branch;
@@ -534,6 +605,8 @@ class WorkflowContext {
       nodeEvents: _nodeEvents,
       nodeOutputEvents: _nodeOutputEvents,
       requestInputNodeKeys: requestInputNodeKeys,
+      fallbackState: _fallbackState,
+      workflowRoot: _workflowRoot,
       onNodeStateChange: onNodeStateChange,
     );
   }
@@ -605,6 +678,9 @@ abstract class BaseNode {
   /// Whether this node requires all predecessor nodes to complete before running.
   bool get requiresAllPredecessors => false;
 
+  /// Validates outgoing [edges] originating from this node during graph validation.
+  void validateOutgoingEdges(List<Edge> edges) {}
+
   /// Runs this node with [nodeInput].
   FutureOr<Object?> run(WorkflowContext context, Object? nodeInput);
 }
@@ -626,23 +702,241 @@ abstract class Node extends BaseNode {
 /// Function-backed workflow node.
 class FunctionNode extends BaseNode {
   /// Creates a function-backed node.
+  ///
+  /// When [requireConfirmation] is configured (not `null` and not `false`),
+  /// [rerunOnResume] defaults to `true` and cannot be `false`.
   FunctionNode({
     required this.function,
     required super.name,
     super.description,
     super.dependsOn,
-    super.rerunOnResume,
+    bool? rerunOnResume,
     super.waitForOutput,
     super.retryConfig,
     super.timeout,
-  });
+    this.requireConfirmation = false,
+  }) : super(
+         rerunOnResume:
+             rerunOnResume ?? _hasConfirmationFlag(requireConfirmation),
+       ) {
+    if (requireConfirmation != null &&
+        requireConfirmation is! bool &&
+        requireConfirmation is! Function) {
+      throw WorkflowConfigurationError(
+        'requireConfirmation must be a bool or Function.',
+      );
+    }
+    if (_hasConfirmationFlag(requireConfirmation) && rerunOnResume == false) {
+      throw WorkflowConfigurationError(
+        'FunctionNode with require_confirmation requires '
+        'rerun_on_resume=True. The node must rerun after confirmation is '
+        'provided.',
+      );
+    }
+  }
 
   /// Function invoked for this node.
   final WorkflowFunction function;
 
+  /// Whether this node requires user confirmation (`bool` or predicate `Function`).
+  final Object? requireConfirmation;
+
   @override
   FutureOr<Object?> run(WorkflowContext context, Object? nodeInput) {
-    return function(context, nodeInput);
+    return _executeFunctionNode(this, context, nodeInput);
+  }
+}
+
+bool _hasConfirmationFlag(Object? requireConfirmation) {
+  return requireConfirmation != null && requireConfirmation != false;
+}
+
+FutureOr<Object?> _executeFunctionNode(
+  FunctionNode node,
+  WorkflowContext context,
+  Object? nodeInput,
+) async {
+  bool resumedConfirmation = false;
+  if (_hasConfirmationFlag(node.requireConfirmation)) {
+    final String interruptId = confirmationInterruptId(context.nodePath);
+    final Object? confResponse = context.resumeInputs[interruptId];
+    if (confResponse != null) {
+      resumedConfirmation = true;
+      context.toolConfirmation = _parseWorkflowToolConfirmation(confResponse);
+    }
+    if (context.toolConfirmation != null) {
+      if (context.toolConfirmation!.confirmed != true) {
+        return Event(
+          invocationId: context.invocationContext?.invocationId ?? '',
+          author: node.name,
+          output: <String, Object?>{'error': 'This tool call is rejected.'},
+        );
+      }
+    } else {
+      final bool needsConfirmation = await _evaluateRequireConfirmation(
+        node.requireConfirmation,
+        context,
+        nodeInput,
+      );
+      if (needsConfirmation) {
+        final Map<String, Object?> payloadArgs = _confirmationArgsFromInput(
+          nodeInput,
+        );
+        return RequestInput(
+          interruptId: interruptId,
+          message: 'Please approve or reject the tool call ${node.name}().',
+          payload: <String, Object?>{
+            'tool_name': node.name,
+            'args': payloadArgs,
+          },
+          responseSchema: <String, Object?>{
+            'type': 'object',
+            'properties': <String, Object?>{
+              'hint': <String, Object?>{'type': 'string'},
+              'confirmed': <String, Object?>{'type': 'boolean'},
+              'payload': <String, Object?>{},
+            },
+          },
+        );
+      }
+    }
+  }
+
+  final Object? result = await node.function(context, nodeInput);
+  if (result == null &&
+      resumedConfirmation &&
+      !context._hasDirectOutput &&
+      context.route == null) {
+    return Event(
+      invocationId: context.invocationContext?.invocationId ?? '',
+      author: node.name,
+    );
+  }
+  return result;
+}
+
+ToolConfirmation _parseWorkflowToolConfirmation(Object? response) {
+  if (response is ToolConfirmation) {
+    return response;
+  }
+  if (response is bool) {
+    return ToolConfirmation(confirmed: response);
+  }
+  if (response is Map) {
+    final Object? confirmedValue = response['confirmed'];
+    if (confirmedValue != null && confirmedValue is! bool) {
+      throw WorkflowDataError(
+        'Invalid tool confirmation response: $response',
+      );
+    }
+    final Object? hintValue = response['hint'];
+    if (hintValue != null && hintValue is! String) {
+      throw WorkflowDataError(
+        'Invalid tool confirmation response: $response',
+      );
+    }
+    return ToolConfirmation(
+      confirmed: confirmedValue as bool? ?? false,
+      hint: hintValue as String?,
+      payload: response['payload'],
+    );
+  }
+  throw WorkflowDataError(
+    'A tool confirmation response must be a ToolConfirmation payload, '
+    'but got ${response.runtimeType}.',
+  );
+}
+
+Future<bool> _evaluateRequireConfirmation(
+  Object? requireConfirmation,
+  WorkflowContext context,
+  Object? nodeInput,
+) async {
+  if (requireConfirmation is bool) {
+    return requireConfirmation;
+  }
+  if (requireConfirmation is Function) {
+    Object? rawResult;
+    if (requireConfirmation is FutureOr<Object?> Function(
+      WorkflowContext,
+      Object?,
+    )) {
+      rawResult = await requireConfirmation(context, nodeInput);
+    } else if (requireConfirmation is FutureOr<Object?> Function(
+      WorkflowContext,
+    )) {
+      rawResult = await requireConfirmation(context);
+    } else if (requireConfirmation is FutureOr<Object?> Function()) {
+      rawResult = await requireConfirmation();
+    } else {
+      try {
+        rawResult = await Function.apply(
+          requireConfirmation,
+          <Object?>[context, nodeInput],
+        );
+      } on NoSuchMethodError {
+        try {
+          rawResult = await Function.apply(
+            requireConfirmation,
+            <Object?>[nodeInput],
+          );
+        } on NoSuchMethodError {
+          rawResult = await Function.apply(requireConfirmation, const <Object?>[]);
+        }
+      }
+    }
+    if (rawResult is bool) {
+      return rawResult;
+    }
+    if (rawResult is String) {
+      return rawResult.isNotEmpty;
+    }
+    if (rawResult is num) {
+      return rawResult != 0;
+    }
+    if (rawResult is Iterable) {
+      return rawResult.isNotEmpty;
+    }
+    if (rawResult is Map) {
+      return rawResult.isNotEmpty;
+    }
+    return rawResult != null;
+  }
+  return false;
+}
+
+Map<String, Object?> _confirmationArgsFromInput(Object? nodeInput) {
+  if (nodeInput == null || nodeInput is Content) {
+    return <String, Object?>{};
+  }
+  if (nodeInput is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in nodeInput.entries)
+        '${entry.key}': _jsonSafeConfirmationValue(entry.value),
+    };
+  }
+  return <String, Object?>{
+    'node_input': _jsonSafeConfirmationValue(nodeInput),
+  };
+}
+
+Object? _jsonSafeConfirmationValue(Object? value) {
+  if (value == null || value is String || value is num || value is bool) {
+    return value;
+  }
+  if (value is List) {
+    return value.map(_jsonSafeConfirmationValue).toList(growable: false);
+  }
+  if (value is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': _jsonSafeConfirmationValue(entry.value),
+    };
+  }
+  try {
+    return (value as dynamic).toJson();
+  } catch (_) {
+    return '$value';
   }
 }
 
@@ -652,9 +946,10 @@ FunctionNode node(
   required String name,
   String description = '',
   List<String>? dependsOn,
-  bool rerunOnResume = false,
+  bool? rerunOnResume,
   RetryConfig? retryConfig,
   Duration? timeout,
+  Object? requireConfirmation,
 }) {
   return buildNode(
         function,
@@ -664,6 +959,7 @@ FunctionNode node(
         rerunOnResume: rerunOnResume,
         retryConfig: retryConfig,
         timeout: timeout,
+        requireConfirmation: requireConfirmation,
       )
       as FunctionNode;
 }
@@ -673,7 +969,8 @@ FunctionNode node(
 /// Supports existing [BaseNode] instances, [BaseTool] values, [BaseAgent]
 /// values, and [WorkflowFunction] callbacks.
 ///
-/// Throws an [UnsupportedError] when overriding an existing node is requested
+/// Throws an [UnsupportedError] when overriding an existing node is requested,
+/// a [WorkflowConfigurationError] for invalid `requireConfirmation` settings,
 /// and an [ArgumentError] for unsupported values.
 BaseNode buildNode(
   Object nodeLike, {
@@ -684,25 +981,79 @@ BaseNode buildNode(
   bool? waitForOutput,
   RetryConfig? retryConfig,
   Duration? timeout,
+  Object? requireConfirmation,
 }) {
   if (nodeLike is NodeTool) {
-    return nodeLike.node;
+    return buildNode(
+      nodeLike.node,
+      name: name,
+      description: description,
+      dependsOn: dependsOn,
+      rerunOnResume: rerunOnResume,
+      waitForOutput: waitForOutput,
+      retryConfig: retryConfig,
+      timeout: timeout,
+      requireConfirmation: requireConfirmation,
+    );
   }
   if (nodeLike is BaseNode) {
+    if (nodeLike is FunctionNode) {
+      final Object? effectiveConfirmation =
+          requireConfirmation ?? nodeLike.requireConfirmation;
+      if (_hasConfirmationFlag(effectiveConfirmation) &&
+          rerunOnResume == false) {
+        throw WorkflowConfigurationError(
+          'FunctionNode with require_confirmation requires '
+          'rerun_on_resume=True. The node must rerun after confirmation is '
+          'provided.',
+        );
+      }
+    } else if (_hasConfirmationFlag(requireConfirmation)) {
+      throw WorkflowConfigurationError(
+        'require_confirmation is only supported on FunctionNode, got '
+        '${nodeLike.runtimeType}.',
+      );
+    }
     if (name == null &&
         description.isEmpty &&
         dependsOn == null &&
         rerunOnResume == null &&
         waitForOutput == null &&
         retryConfig == null &&
-        timeout == null) {
+        timeout == null &&
+        (requireConfirmation == null ||
+            (nodeLike is! FunctionNode && requireConfirmation == false))) {
       return nodeLike;
+    }
+    if (nodeLike is FunctionNode) {
+      return FunctionNode(
+        function: nodeLike.function,
+        name: name ?? nodeLike.name,
+        description: description.isNotEmpty ? description : nodeLike.description,
+        dependsOn: dependsOn ?? nodeLike.dependsOn,
+        rerunOnResume:
+            rerunOnResume ??
+            (_hasConfirmationFlag(requireConfirmation)
+                ? true
+                : nodeLike.rerunOnResume),
+        waitForOutput: waitForOutput ?? nodeLike.waitForOutput,
+        retryConfig: retryConfig ?? nodeLike.retryConfig,
+        timeout: timeout ?? nodeLike.timeout,
+        requireConfirmation:
+            requireConfirmation ?? nodeLike.requireConfirmation,
+      );
     }
     throw UnsupportedError(
       'Cannot override fields for existing node `${nodeLike.name}`.',
     );
   }
   if (nodeLike is BaseTool) {
+    if (_hasConfirmationFlag(requireConfirmation)) {
+      throw WorkflowConfigurationError(
+        'require_confirmation is only supported on FunctionNode, got '
+        '${nodeLike.runtimeType}.',
+      );
+    }
     return ToolNode(
       tool: nodeLike,
       name: name,
@@ -715,6 +1066,12 @@ BaseNode buildNode(
     );
   }
   if (nodeLike is BaseAgent) {
+    if (_hasConfirmationFlag(requireConfirmation)) {
+      throw WorkflowConfigurationError(
+        'require_confirmation is only supported on FunctionNode, got '
+        '${nodeLike.runtimeType}.',
+      );
+    }
     final bool agentWaitForOutput =
         waitForOutput ?? (nodeLike is LlmAgent && nodeLike.mode == 'task');
     return AgentNode(
@@ -734,10 +1091,11 @@ BaseNode buildNode(
       name: name ?? 'function_node',
       description: description,
       dependsOn: dependsOn,
-      rerunOnResume: rerunOnResume ?? false,
+      rerunOnResume: rerunOnResume,
       waitForOutput: waitForOutput ?? false,
       retryConfig: retryConfig,
       timeout: timeout,
+      requireConfirmation: requireConfirmation ?? false,
     );
   }
   throw ArgumentError.value(
@@ -841,12 +1199,15 @@ class ParallelWorker extends BaseNode {
         : maxParallelWorkers!;
     int nextIndex = 0;
     var cancelRemaining = false;
+    var stopScheduling = false;
     Object? firstError;
     StackTrace? firstStackTrace;
+    NodeInterruptedError? interruptedError;
+    StackTrace? interruptedStackTrace;
 
     Future<void> worker() async {
       while (true) {
-        if (cancelRemaining) {
+        if (cancelRemaining || stopScheduling) {
           return;
         }
         final int index = nextIndex;
@@ -860,6 +1221,14 @@ class ParallelWorker extends BaseNode {
             input: items[index],
             useSubBranch: true,
           );
+          if (context.interruptIds.isNotEmpty) {
+            stopScheduling = true;
+          }
+        } on NodeInterruptedError catch (error, stackTrace) {
+          stopScheduling = true;
+          interruptedError ??= error;
+          interruptedStackTrace ??= stackTrace;
+          return;
         } catch (error, stackTrace) {
           cancelRemaining = true;
           firstError ??= error;
@@ -879,6 +1248,9 @@ class ParallelWorker extends BaseNode {
         firstError ?? error,
         firstStackTrace ?? stackTrace,
       );
+    }
+    if (interruptedError != null) {
+      Error.throwWithStackTrace(interruptedError!, interruptedStackTrace!);
     }
     return results;
   }
@@ -1129,6 +1501,7 @@ class Workflow extends BaseAgent {
           ? null
           : _copyNodeStates(previousResult.nodeStates),
       resumeInputs: resumeInputs,
+      workflowRoot: _workflowRootPath(this),
     );
     await _execute(context);
     return WorkflowResult(
@@ -1230,6 +1603,7 @@ class Workflow extends BaseAgent {
       nodeStates: previousResult == null
           ? null
           : _copyNodeStates(previousResult.nodeStates),
+      workflowRoot: _workflowRootPath(this, context),
     );
     workflowContext.onNodeStateChange = () =>
         _emitNodeCheckpoint(workflowContext);
@@ -1599,7 +1973,11 @@ class Workflow extends BaseAgent {
       if (state.status != NodeStatus.waiting || state.interrupts.isEmpty) {
         continue;
       }
-      if (!_seedNodeResumeInputs(state, context.resumeInputs)) {
+      if (!_seedNodeResumeInputs(
+        state,
+        context.resumeInputs,
+        rerunOnResume: node.rerunOnResume,
+      )) {
         continue;
       }
       if (state.interrupts.isEmpty && !node.rerunOnResume) {
@@ -1904,6 +2282,12 @@ void _validateStaticGraphEdges(Iterable<BaseNode> nodes, Iterable<Edge> edges) {
   for (final Edge edge in edges) {
     _validateChatModeEdge(edge, byName);
   }
+  for (final BaseNode node in nodes) {
+    final List<Edge> outgoing = edges
+        .where((Edge edge) => edge.fromNode == node.name)
+        .toList(growable: false);
+    node.validateOutgoingEdges(outgoing);
+  }
 }
 
 void _validateStartEdges(Iterable<Edge> edges) {
@@ -2019,6 +2403,7 @@ Future<Object?> _runNodeWithRetry({
   required Object? nodeInput,
   String? stateKey,
   String? runId,
+  String? parentKey,
 }) async {
   final RetryConfig? retry = node.retryConfig;
   _validateRetryExceptionFilters(retry);
@@ -2027,6 +2412,7 @@ Future<Object?> _runNodeWithRetry({
       : (retry.maxAttempts < 1 ? 1 : retry.maxAttempts);
   final String key = stateKey ?? node.name;
   final NodeState state = context.nodeStates.putIfAbsent(key, NodeState.new);
+  state.parentKey ??= parentKey;
   context._currentNodeKey = key;
   context._currentNodeRerunOnResume = node.rerunOnResume;
   state.input = nodeInput;
@@ -2093,10 +2479,37 @@ Future<Object?> _runNodeWithRetry({
       if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
         rethrow;
       }
+      _resetDynamicChildrenForRetry(context, key);
       await Future<void>.delayed(_retryDelay(retry!, attempt));
     }
   }
   throw StateError('Workflow node failed unexpectedly: $lastError');
+}
+
+void _resetDynamicChildrenForRetry(WorkflowContext context, String parentKey) {
+  context._childRunCounters.clear();
+  context._outputDelegated = false;
+  context._directOutput = null;
+  context._hasDirectOutput = false;
+  context.route = null;
+  final Set<String> toPrune = <String>{};
+  void collectFailedDescendants(String key) {
+    for (final MapEntry<String, NodeState> entry
+        in context.nodeStates.entries) {
+      if (entry.value.parentKey == key) {
+        if (!_isCompletedNodeState(entry.value)) {
+          toPrune.add(entry.key);
+        }
+        collectFailedDescendants(entry.key);
+      }
+    }
+  }
+
+  collectFailedDescendants(parentKey);
+  for (final String childKey in toPrune) {
+    context.nodeStates.remove(childKey);
+    context.outputs.remove(childKey);
+  }
 }
 
 void _validateRetryExceptionFilters(RetryConfig? retry) {
@@ -2211,6 +2624,8 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
   final Session? session = context.invocationContext?.session;
   if (session != null) {
     _mergeStateDelta(session, result.stateDelta);
+  } else if (result.stateDelta.isNotEmpty) {
+    context.state.addAll(result.stateDelta);
   }
   if (result.eventOutput != null) {
     context._nodeOutputEvents[result.name] = result.eventOutput!;
@@ -2285,7 +2700,11 @@ void _addOutputOwner(List<String> outputFor, String owner) {
   }
 }
 
-bool _seedNodeResumeInputs(NodeState state, Map<String, Object?> resumeInputs) {
+bool _seedNodeResumeInputs(
+  NodeState state,
+  Map<String, Object?> resumeInputs, {
+  bool rerunOnResume = false,
+}) {
   if (state.status != NodeStatus.waiting ||
       state.interrupts.isEmpty ||
       resumeInputs.isEmpty) {
@@ -2300,7 +2719,11 @@ bool _seedNodeResumeInputs(NodeState state, Map<String, Object?> resumeInputs) {
     return false;
   }
   state.resumeInputs.addAll(resolved);
-  state.interrupts.removeWhere(resolved.containsKey);
+  if (rerunOnResume) {
+    state.interrupts.clear();
+  } else {
+    state.interrupts.removeWhere(resolved.containsKey);
+  }
   return true;
 }
 
@@ -2395,8 +2818,9 @@ WorkflowResult _workflowResultFromEvents(
     final bool hasError = event.errorCode != null;
     if (hasResult) {
       state.error = null;
-      if (state.status != NodeStatus.waiting) {
+      if (state.status != NodeStatus.waiting || state.interrupts.isEmpty) {
         state.status = NodeStatus.completed;
+        state.resumeInputs.clear();
       }
     } else if (hasError) {
       state.status = NodeStatus.failed;
@@ -2420,10 +2844,11 @@ WorkflowResult _workflowResultFromEvents(
       outputs[owner.key] = requestInput;
     }
     state.status = NodeStatus.waiting;
-    state.interrupts
-      ..clear()
-      ..addAll(interruptIds);
     for (final String interruptId in interruptIds) {
+      if (!state.interrupts.contains(interruptId)) {
+        state.interrupts.add(interruptId);
+      }
+      state.resumeInputs.remove(interruptId);
       interruptOwner[interruptId] = owner.key;
       final Object? schema = _responseSchemaFromEvent(event, interruptId);
       if (schema != null) {
@@ -2463,12 +2888,19 @@ void _applyWorkflowResumeResponses(
     );
     state.resumeInputs[interruptId] = responseData;
     state.interrupts.remove(interruptId);
+
+    final BaseNode? staticNode = staticNodes[ownerKey];
+    if (staticNode != null && staticNode.rerunOnResume) {
+      state.interrupts.clear();
+      state.status = NodeStatus.waiting;
+      continue;
+    }
+
     if (state.interrupts.isNotEmpty) {
       state.status = NodeStatus.waiting;
       continue;
     }
 
-    final BaseNode? staticNode = staticNodes[ownerKey];
     if (staticNode != null && !staticNode.rerunOnResume) {
       outputs[ownerKey] = _outputFromResumeInputs(state.resumeInputs);
       state.status = NodeStatus.completed;
@@ -2741,6 +3173,7 @@ Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
         runCounter: entry.value.runCounter,
         runId: entry.value.runId,
         parentRunId: entry.value.parentRunId,
+        parentKey: entry.value.parentKey,
         route: entry.value.route,
         error: entry.value.error,
       ),
@@ -2776,10 +3209,7 @@ String _nodeName(Object node) {
 Map<String, dynamic> _toolArgsFromInput(Object? nodeInput) {
   Object? args = nodeInput;
   if (args is Content) {
-    args = args.parts
-        .where((Part part) => part.text != null)
-        .map((Part part) => part.text!)
-        .join();
+    args = _textFromContent(args);
   }
 
   if (args is String) {
@@ -2838,10 +3268,10 @@ Content _contentFromNodeInput(Object nodeInput) {
   return Content.userText('$nodeInput');
 }
 
-/// Extracts and concatenates the text parts of a [Content] instance.
+/// Extracts and concatenates the non-thought text parts of a [Content] instance.
 String _textFromContent(Content content) {
   return content.parts
-      .where((Part part) => part.text != null)
+      .where((Part part) => !part.thought && part.text != null)
       .map((Part part) => part.text!)
       .join();
 }

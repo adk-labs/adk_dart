@@ -66,7 +66,10 @@ class Context extends ReadonlyContext {
   String? get branch => invocationContext.branch;
 
   /// Buffered actions collected during this invocation.
-  EventActions get actions => _eventActions;
+  EventActions get actions {
+    _state.recordNestedWrites();
+    return _eventActions;
+  }
 
   /// Loads an artifact [filename] and optional [version].
   Future<Part?> loadArtifact(String filename, {int? version}) {
@@ -139,8 +142,8 @@ class Context extends ReadonlyContext {
   }
 
   /// Persists the current session transcript to memory.
-  Future<void> addSessionToMemory() {
-    return invocationContext.addSessionToMemory();
+  Future<void> addSessionToMemory({Map<String, Object?>? customMetadata}) {
+    return invocationContext.addSessionToMemory(customMetadata: customMetadata);
   }
 
   /// Deletes artifact [filename] and its versions.
