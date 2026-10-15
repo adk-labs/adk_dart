@@ -288,20 +288,29 @@ class RestApiTool extends BaseTool {
       final String originalName = parameter.originalName;
       switch (parameter.paramLocation) {
         case 'path':
-          pathParams[originalName] = Uri.encodeComponent(
-            '${entry.value ?? ''}',
-          );
+          if (entry.value != null) {
+            pathParams[originalName] = Uri.encodeComponent(
+              _toParamString(entry.value),
+            );
+          }
           break;
         case 'query':
-          if (_isTruthy(entry.value)) {
+          if (entry.value != null &&
+              entry.value != '' &&
+              !(entry.value is Iterable && (entry.value as Iterable).isEmpty) &&
+              !(entry.value is Map && (entry.value as Map).isEmpty)) {
             queryParams[originalName] = entry.value;
           }
           break;
         case 'header':
-          headerParams[originalName] = entry.value;
+          if (entry.value != null) {
+            headerParams[originalName] = _toParamString(entry.value);
+          }
           break;
         case 'cookie':
-          cookieParams[originalName] = entry.value;
+          if (entry.value != null) {
+            cookieParams[originalName] = _toParamString(entry.value);
+          }
           break;
       }
     }
@@ -707,26 +716,26 @@ String _formatPath(
   });
 }
 
-bool _isTruthy(Object? value) {
-  if (value == null) {
-    return false;
-  }
+String _toParamString(Object? value) {
   if (value is bool) {
-    return value;
+    return value ? 'true' : 'false';
   }
-  if (value is num) {
-    return value != 0;
-  }
-  if (value is String) {
-    return value.isNotEmpty;
-  }
-  if (value is List || value is Set) {
-    return (value as Iterable).isNotEmpty;
+  if (value is Iterable) {
+    return value
+        .where((Object? item) => item != null)
+        .map(_toParamString)
+        .join(',');
   }
   if (value is Map) {
-    return value.isNotEmpty;
+    final List<String> parts = <String>[];
+    for (final MapEntry<Object?, Object?> entry in value.entries) {
+      if (entry.value != null) {
+        parts.add('${entry.key},${_toParamString(entry.value)}');
+      }
+    }
+    return parts.join(',');
   }
-  return true;
+  return '$value';
 }
 
 AuthCredential _credentialFromJsonString(String source) {

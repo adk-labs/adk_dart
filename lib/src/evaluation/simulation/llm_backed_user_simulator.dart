@@ -211,12 +211,41 @@ class LlmBackedUserSimulator
     }
 
     final String text = response.toString();
-    if (text.isEmpty && errorReason == null) {
+    if (text.isEmpty && errorReason == null && _llm is Gemini) {
+      await for (final LlmResponse fallbackResponse in _llm.generateContent(
+        llmRequest,
+        stream: false,
+      )) {
+        final String? fallbackError = fallbackResponse.errorCode;
+        if (fallbackError != null && fallbackError.isNotEmpty) {
+          errorReason = 'safety filters or other error (code=$fallbackError)';
+          response.clear();
+          break;
+        }
+        final Content? generated = fallbackResponse.content;
+        if (generated == null || generated.parts.isEmpty) {
+          continue;
+        }
+        for (final Part part in generated.parts) {
+          if (part.thought) {
+            hasThoughtTokens = true;
+            continue;
+          }
+          final String? partText = part.text;
+          if (partText != null && partText.isNotEmpty) {
+            response.write(partText);
+          }
+        }
+      }
+    }
+
+    final String finalText = response.toString();
+    if (finalText.isEmpty && errorReason == null) {
       errorReason = hasThoughtTokens
           ? 'LLM returned only thinking tokens'
           : 'LLM returned empty response';
     }
-    return (response: text, errorReason: errorReason);
+    return (response: finalText, errorReason: errorReason);
   }
 
   @override
@@ -244,6 +273,13 @@ class LlmBackedUserSimulator
           role: _authorUser,
           parts: <Part>[Part.text(response)],
         ),
+      );
+    }
+
+    if (config.values['return_status_on_empty'] == true) {
+      return NextUserMessage(
+        status: Status.noMessageGenerated,
+        errorMessage: llmResult.errorReason,
       );
     }
 

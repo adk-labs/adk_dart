@@ -237,11 +237,25 @@ class OpenApiSpecParser {
         final List<Object?> operationParameters = _readList(
           operationDict['parameters'],
         );
+        final Set<(String, String)> opParamKeys = <(String, String)>{
+          for (final Object? param in operationParameters)
+            if (param is Map)
+              (
+                _readString(param['name']) ?? '',
+                _readString(param['in']) ?? '',
+              ),
+        };
         final Map<String, Object?> normalizedOperation =
             Map<String, Object?>.from(operationDict)
               ..['parameters'] = <Object?>[
                 ...operationParameters,
-                ...pathParameters,
+                for (final Object? param in pathParameters)
+                  if (param is! Map ||
+                      !opParamKeys.contains((
+                        _readString(param['name']) ?? '',
+                        _readString(param['in']) ?? '',
+                      )))
+                    param,
               ];
 
         if (_readString(normalizedOperation['operationId']) == null) {

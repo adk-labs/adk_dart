@@ -117,8 +117,7 @@ class VertexAiEvalFacade extends Evaluator {
         ),
       );
 
-      // Matches Python truthy behavior: 0.0 does not count as scored.
-      if (score != null && score != 0.0) {
+      if (score != null) {
         totalScore += score;
         numScoredInvocations += 1;
       }
@@ -260,10 +259,6 @@ class MultiTurnVertexAiEvalFacade extends Evaluator {
       metrics: <String>[_metricName],
     );
     final double? score = _extractScore(evalOutput);
-    if (score == null) {
-      return EvaluationResult();
-    }
-
     perInvocationResults.add(
       PerInvocationResult(
         actualInvocation: actual,
@@ -272,6 +267,9 @@ class MultiTurnVertexAiEvalFacade extends Evaluator {
         evalStatus: _getEvalStatus(score),
       ),
     );
+    if (score == null) {
+      return EvaluationResult(perInvocationResults: perInvocationResults);
+    }
 
     return EvaluationResult(
       overallScore: score,

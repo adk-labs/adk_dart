@@ -1,4 +1,9 @@
 /// Supported runtime environments for computer-use tools.
+library;
+
+import '../tool_context.dart';
+
+/// Supported runtime environments for computer-use tools.
 enum ComputerEnvironment {
   /// Unspecified environment.
   environmentUnspecified,
@@ -49,6 +54,21 @@ abstract class BaseComputer {
     bool clearBeforeTyping = true,
   });
 
+  /// Types [text] into the currently focused element and returns updated state.
+  ///
+  /// The default implementation sends each character via [keyCombination] and
+  /// optionally presses `Enter` when [pressEnter] is `true`.
+  Future<ComputerState> typeText(String text, {bool pressEnter = false}) async {
+    ComputerState? state;
+    for (int i = 0; i < text.length; i += 1) {
+      state = await keyCombination(<String>[text[i]]);
+    }
+    if (pressEnter) {
+      state = await keyCombination(<String>['Enter']);
+    }
+    return state ?? await currentState();
+  }
+
   /// Scrolls the document in [direction] and returns updated state.
   Future<ComputerState> scrollDocument(String direction);
 
@@ -86,6 +106,9 @@ abstract class BaseComputer {
 
   /// Initializes backend resources.
   Future<void> initialize() async {}
+
+  /// Prepares the computer backend before executing a tool call.
+  Future<void> prepare(ToolContext toolContext) async {}
 
   /// Releases backend resources.
   Future<void> close() async {}

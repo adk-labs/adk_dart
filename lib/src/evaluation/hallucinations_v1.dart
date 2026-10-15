@@ -442,7 +442,8 @@ class HallucinationsV1Evaluator extends Evaluator {
         }
 
         final String? text = asNullableString(part['text']);
-        if (text != null && text.isNotEmpty) {
+        final bool isThought = part['thought'] == true;
+        if (!isThought && text != null && text.isNotEmpty) {
           nlResponses.add(text);
         }
       }
@@ -482,7 +483,11 @@ class HallucinationsV1Evaluator extends Evaluator {
         final EvalJsonMap? content = event.content;
         if (content != null) {
           for (final Object? rawPart in asObjectList(content['parts'])) {
-            final String? text = asNullableString(asEvalJson(rawPart)['text']);
+            final EvalJsonMap partMap = asEvalJson(rawPart);
+            if (partMap['thought'] == true) {
+              continue;
+            }
+            final String? text = asNullableString(partMap['text']);
             if (text != null && text.isNotEmpty) {
               nlParts.add(text);
             }

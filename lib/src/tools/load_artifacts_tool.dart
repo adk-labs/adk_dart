@@ -388,50 +388,135 @@ String? _tryExtractXlsxText(List<int> bytes) {
       }
     }
 
-    final ArchiveFile? sheetFile = archive.findFile('xl/worksheets/sheet1.xml');
-    if (sheetFile == null) {
+    final Map<String, String> relIdToTarget = <String, String>{};
+    final ArchiveFile? relsFile = archive.findFile(
+      'xl/_rels/workbook.xml.rels',
+    );
+    if (relsFile != null) {
+      final Object relContent = relsFile.content;
+      final List<int> relBytes = relContent is List<int>
+          ? relContent
+          : (relContent is String ? utf8.encode(relContent) : <int>[]);
+      final String relXml = utf8.decode(relBytes, allowMalformed: true);
+      final RegExp relRegex = RegExp(r'<Relationship\s+([^>]*?)/?>');
+      final RegExp idAttr = RegExp(r'\bId="([^"]+)"');
+      final RegExp targetAttr = RegExp(r'\bTarget="([^"]+)"');
+      for (final RegExpMatch match in relRegex.allMatches(relXml)) {
+        final String attrs = match.group(1) ?? '';
+        final String? id = idAttr.firstMatch(attrs)?.group(1);
+        final String? target = targetAttr.firstMatch(attrs)?.group(1);
+        if (id != null && target != null) {
+          String normalizedTarget = target.startsWith('/')
+              ? target.substring(1)
+              : (target.startsWith('xl/') ? target : 'xl/$target');
+          relIdToTarget[id] = normalizedTarget;
+        }
+      }
+    }
+
+    final List<({String name, ArchiveFile file})> sheets =
+        <({String name, ArchiveFile file})>[];
+    final ArchiveFile? workbookFile = archive.findFile('xl/workbook.xml');
+    if (workbookFile != null) {
+      final Object wbContent = workbookFile.content;
+      final List<int> wbBytes = wbContent is List<int>
+          ? wbContent
+          : (wbContent is String ? utf8.encode(wbContent) : <int>[]);
+      final String wbXml = utf8.decode(wbBytes, allowMalformed: true);
+      final RegExp sheetTagRegex = RegExp(r'<sheet\s+([^>]*?)/?>');
+      final RegExp nameAttr = RegExp(r'\bname="([^"]+)"');
+      final RegExp rIdAttr = RegExp(r'\br:id="([^"]+)"');
+      int index = 1;
+      for (final RegExpMatch match in sheetTagRegex.allMatches(wbXml)) {
+        final String attrs = match.group(1) ?? '';
+        final String sheetName =
+            nameAttr.firstMatch(attrs)?.group(1) ?? 'Sheet$index';
+        final String? rId = rIdAttr.firstMatch(attrs)?.group(1);
+        ArchiveFile? sheetFile;
+        if (rId != null && relIdToTarget.containsKey(rId)) {
+          sheetFile = archive.findFile(relIdToTarget[rId]!);
+        }
+        sheetFile ??= archive.findFile('xl/worksheets/sheet$index.xml');
+        if (sheetFile != null) {
+          sheets.add((name: sheetName, file: sheetFile));
+        }
+        index += 1;
+      }
+    }
+
+    if (sheets.isEmpty) {
+      final List<ArchiveFile> fallbackFiles =
+          archive.files
+              .where(
+                (ArchiveFile f) =>
+                    f.isFile &&
+                    f.name.startsWith('xl/worksheets/sheet') &&
+                    f.name.endsWith('.xml'),
+              )
+              .toList()
+            ..sort((ArchiveFile a, ArchiveFile b) => a.name.compareTo(b.name));
+      for (int i = 0; i < fallbackFiles.length; i += 1) {
+        sheets.add((name: 'Sheet${i + 1}', file: fallbackFiles[i]));
+      }
+    }
+
+    if (sheets.isEmpty) {
       return null;
     }
-    final Object sContent = sheetFile.content;
-    final List<int> sheetBytes = sContent is List<int>
-        ? sContent
-        : (sContent is String ? utf8.encode(sContent) : <int>[]);
-    final String sheetXml = utf8.decode(sheetBytes, allowMalformed: true);
 
-    final List<String> rows = <String>[];
     final RegExp rowRegex = RegExp(r'<row(?:[^>]*)>(.*?)</row>', dotAll: true);
     final RegExp cellRegex = RegExp(
-      r'<c\s+([^>]*?)>(?:<v>([^<]*)</v>)?',
+      r'<c\s+([^>]*?)>(?:<v>([^<]*)</v>|<is>.*?<t(?:[^>]*)>([^<]*)</t>.*?</is>)?',
       dotAll: true,
     );
     final RegExp tAttrRegex = RegExp(r't="([^"]*)"');
 
-    for (final RegExpMatch rowMatch in rowRegex.allMatches(sheetXml)) {
-      final String rowXml = rowMatch.group(1) ?? '';
-      final List<String> cellValues = <String>[];
-      for (final RegExpMatch cellMatch in cellRegex.allMatches(rowXml)) {
-        final String attrs = cellMatch.group(1) ?? '';
-        final String? val = cellMatch.group(2);
-        if (val == null) continue;
-        final RegExpMatch? tMatch = tAttrRegex.firstMatch(attrs);
-        final String? type = tMatch?.group(1);
-        if (type == 's') {
-          final int idx = int.tryParse(val) ?? -1;
-          if (idx >= 0 && idx < sharedStrings.length) {
-            cellValues.add(sharedStrings[idx]);
+    final List<String> sheetOutputs = <String>[];
+    final bool includeHeaders = sheets.length > 1 || workbookFile != null;
+
+    for (final ({String name, ArchiveFile file}) sheet in sheets) {
+      final Object sContent = sheet.file.content;
+      final List<int> sheetBytes = sContent is List<int>
+          ? sContent
+          : (sContent is String ? utf8.encode(sContent) : <int>[]);
+      final String sheetXml = utf8.decode(sheetBytes, allowMalformed: true);
+      final List<String> rows = <String>[];
+
+      for (final RegExpMatch rowMatch in rowRegex.allMatches(sheetXml)) {
+        final String rowXml = rowMatch.group(1) ?? '';
+        final List<String> cellValues = <String>[];
+        for (final RegExpMatch cellMatch in cellRegex.allMatches(rowXml)) {
+          final String attrs = cellMatch.group(1) ?? '';
+          final String? val = cellMatch.group(2) ?? cellMatch.group(3);
+          if (val == null) continue;
+          final RegExpMatch? tMatch = tAttrRegex.firstMatch(attrs);
+          final String? type = tMatch?.group(1);
+          if (type == 's') {
+            final int idx = int.tryParse(val) ?? -1;
+            if (idx >= 0 && idx < sharedStrings.length) {
+              cellValues.add(sharedStrings[idx]);
+            } else {
+              cellValues.add(val);
+            }
           } else {
             cellValues.add(val);
           }
-        } else {
-          cellValues.add(val);
+        }
+        if (cellValues.isNotEmpty) {
+          rows.add(cellValues.join('\t'));
         }
       }
-      if (cellValues.isNotEmpty) {
-        rows.add(cellValues.join('\t'));
+
+      if (rows.isNotEmpty) {
+        if (includeHeaders) {
+          sheetOutputs.add('--- Sheet: ${sheet.name} ---\n${rows.join('\n')}');
+        } else {
+          sheetOutputs.add(rows.join('\n'));
+        }
       }
     }
 
-    return rows.isNotEmpty ? rows.join('\n') : null;
+    return sheetOutputs.isNotEmpty ? sheetOutputs.join('\n\n') : null;
   } catch (_) {
     return null;
   }

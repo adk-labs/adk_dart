@@ -16,6 +16,7 @@ import '../telemetry/tracing.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
 import 'base_toolset.dart';
+import 'environment/base_environment.dart';
 import 'tool_context.dart';
 
 const int _defaultScriptTimeout = 300;
@@ -447,6 +448,8 @@ class LoadSkillTool extends BaseTool {
       confirmedSkillName: skill.name,
     );
 
+    await _toolset._materializeSkillToEnvironment(skill);
+
     final List<String> unloadedSkills = _toolset._recordActivation(
       toolContext.state,
       toolContext.agentName,
@@ -630,6 +633,8 @@ class LoadSkillResourceTool extends BaseTool {
       toolName: name,
       confirmedSkillName: skill.name,
     );
+
+    await _toolset._materializeSkillToEnvironment(skill);
 
     Object? content;
     if (resourcePath.startsWith('references/')) {
@@ -1264,45 +1269,54 @@ class RunSkillScriptTool extends BaseTool {
 
   @override
   FunctionDeclaration? getDeclaration() {
+    final Map<String, Object?> properties = <String, Object?>{
+      'skill_name': <String, Object?>{
+        'type': 'string',
+        'description': 'The name of the skill.',
+      },
+      'file_path': <String, Object?>{
+        'type': 'string',
+        'description':
+            "The relative path to the script (e.g., 'scripts/setup.py').",
+      },
+      if (_toolset.environment != null)
+        'command': <String, Object?>{
+          'type': 'string',
+          'description':
+              'Optional shell command to execute in the materialized skill environment.',
+        },
+      'args': <String, Object?>{
+        'anyOf': <Object?>[
+          <String, Object?>{'type': 'object'},
+          <String, Object?>{
+            'type': 'array',
+            'items': <String, Object?>{'type': 'string'},
+          },
+        ],
+        'description':
+            "Optional arguments to pass to the script as key-value pairs (long options) or as a list of strings. If specified as a list, it is treated as the complete list of arguments, and 'short_options' and 'positional_args' must not be provided.",
+      },
+      'short_options': <String, Object?>{
+        'type': 'object',
+        'description':
+            "Optional short options (single hyphen) to pass to the script as key-value pairs. Must not be provided if 'args' is a list.",
+      },
+      'positional_args': <String, Object?>{
+        'type': 'array',
+        'items': <String, Object?>{'type': 'string'},
+        'description':
+            "Optional positional arguments to pass to the script. Must not be provided if 'args' is a list.",
+      },
+    };
     return FunctionDeclaration(
       name: name,
       description: description,
       parameters: <String, Object?>{
         'type': 'object',
-        'properties': <String, Object?>{
-          'skill_name': <String, Object?>{
-            'type': 'string',
-            'description': 'The name of the skill.',
-          },
-          'file_path': <String, Object?>{
-            'type': 'string',
-            'description':
-                "The relative path to the script (e.g., 'scripts/setup.py').",
-          },
-          'args': <String, Object?>{
-            'anyOf': <Object?>[
-              <String, Object?>{'type': 'object'},
-              <String, Object?>{
-                'type': 'array',
-                'items': <String, Object?>{'type': 'string'},
-              },
-            ],
-            'description':
-                "Optional arguments to pass to the script as key-value pairs (long options) or as a list of strings. If specified as a list, it is treated as the complete list of arguments, and 'short_options' and 'positional_args' must not be provided.",
-          },
-          'short_options': <String, Object?>{
-            'type': 'object',
-            'description':
-                "Optional short options (single hyphen) to pass to the script as key-value pairs. Must not be provided if 'args' is a list.",
-          },
-          'positional_args': <String, Object?>{
-            'type': 'array',
-            'items': <String, Object?>{'type': 'string'},
-            'description':
-                "Optional positional arguments to pass to the script. Must not be provided if 'args' is a list.",
-          },
-        },
-        'required': <String>['skill_name', 'file_path'],
+        'properties': properties,
+        'required': _toolset.environment != null
+            ? <String>['skill_name']
+            : <String>['skill_name', 'file_path'],
       },
     );
   }
@@ -1313,6 +1327,7 @@ class RunSkillScriptTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final Object? rawSkillName = args['skill_name'];
+    final Object? rawCommand = args['command'];
     final Object? rawScriptPath = args['file_path'] ?? args['script_path'];
     final Object? rawScriptArgs = args['args'];
     final Object? rawShortOptions = args['short_options'];
@@ -1322,7 +1337,12 @@ class RunSkillScriptTool extends BaseTool {
     if (rawSkillName is! String || rawSkillName.trim().isEmpty) {
       errors.add("Argument 'skill_name' is required.");
     }
-    if (rawScriptPath is! String || rawScriptPath.trim().isEmpty) {
+    final bool hasCommand =
+        _toolset.environment != null &&
+        rawCommand is String &&
+        rawCommand.trim().isNotEmpty;
+    if (!hasCommand &&
+        (rawScriptPath is! String || rawScriptPath.trim().isEmpty)) {
       errors.add("Argument 'file_path' is required.");
     }
     if (rawScriptArgs != null &&
@@ -1357,7 +1377,6 @@ class RunSkillScriptTool extends BaseTool {
     }
 
     final String skillName = (rawSkillName as String).trim();
-    final String scriptPath = (rawScriptPath as String).trim();
     Skill? skill;
     try {
       skill = await _toolset._getOrFetchSkill(
@@ -1382,6 +1401,46 @@ class RunSkillScriptTool extends BaseTool {
       confirmedSkillName: skill.name,
     );
 
+    if (_toolset.environment != null) {
+      await _toolset._materializeSkillToEnvironment(skill);
+      final BaseEnvironment env = _toolset.environment!;
+      final String baseFolder = (_toolset.skillsFolder ?? '/skills')
+          .replaceAll(r'\', '/')
+          .replaceAll(RegExp(r'/+$'), '');
+      final String skillDir = '$baseFolder/${skill.name}';
+
+      if (hasCommand) {
+        final String command = rawCommand.trim();
+        final String cdAndCommand =
+            "mkdir -p '${skillDir.replaceAll("'", r"'\''")}' && cd '${skillDir.replaceAll("'", r"'\''")}' && $command";
+        try {
+          final EnvironmentExecutionResult execResult = await env.execute(
+            cdAndCommand,
+            timeout: Duration(seconds: _toolset._scriptTimeout),
+          );
+          final String status =
+              execResult.exitCode == 0 && !execResult.timedOut
+              ? 'success'
+              : 'error';
+          return <String, Object?>{
+            'skill_name': skill.name,
+            'command': command,
+            'stdout': execResult.stdout,
+            'stderr': execResult.stderr,
+            'exit_code': execResult.exitCode,
+            'timed_out': execResult.timedOut,
+            'status': status,
+          };
+        } catch (error) {
+          return <String, Object?>{
+            'error': "Failed to execute command '$command': $error",
+            'error_code': 'EXECUTION_ERROR',
+          };
+        }
+      }
+    }
+
+    final String scriptPath = (rawScriptPath as String).trim();
     final Script? script = scriptPath.startsWith('scripts/')
         ? skill.resources.getScript(scriptPath.substring('scripts/'.length))
         : skill.resources.getScript(scriptPath);
@@ -1397,6 +1456,83 @@ class RunSkillScriptTool extends BaseTool {
       confirmedSkillName: skill.name,
       confirmedResourceOrScriptPath: scriptPath,
     );
+
+    if (_toolset.environment != null &&
+        _resolveCodeExecutor(_toolset._codeExecutor, toolContext) == null) {
+      final BaseEnvironment env = _toolset.environment!;
+      final String baseFolder = (_toolset.skillsFolder ?? '/skills')
+          .replaceAll(r'\', '/')
+          .replaceAll(RegExp(r'/+$'), '');
+      final String skillDir = '$baseFolder/${skill.name}';
+      final String normalizedScriptPath = scriptPath.startsWith('scripts/')
+          ? scriptPath
+          : 'scripts/$scriptPath';
+      final String ext = normalizedScriptPath.contains('.')
+          ? normalizedScriptPath.split('.').last.toLowerCase()
+          : '';
+      if (ext != 'py' && ext != 'sh' && ext != 'bash') {
+        final String extMsg = ext.isNotEmpty ? "'.$ext'" : '(no extension)';
+        return <String, Object?>{
+          'error':
+              'Unsupported script type $extMsg. Supported types: .py, .sh, .bash',
+          'error_code': 'UNSUPPORTED_SCRIPT_TYPE',
+        };
+      }
+      final String runner = ext == 'py' ? 'python3' : 'bash';
+      final List<String> cmdParts = <String>[runner, normalizedScriptPath];
+      if (rawScriptArgs is List) {
+        cmdParts.addAll(rawScriptArgs.map((Object? e) => '$e'));
+      } else {
+        if (rawScriptArgs is Map) {
+          rawScriptArgs.forEach((Object? k, Object? v) {
+            cmdParts.add('--$k');
+            cmdParts.add('$v');
+          });
+        }
+        if (rawShortOptions is Map) {
+          rawShortOptions.forEach((Object? k, Object? v) {
+            cmdParts.add('-$k');
+            cmdParts.add('$v');
+          });
+        }
+        if (rawPositionalArgs is List && rawPositionalArgs.isNotEmpty) {
+          cmdParts.add('--');
+          cmdParts.addAll(rawPositionalArgs.map((Object? e) => '$e'));
+        }
+      }
+      final String command = cmdParts
+          .map(
+            (String part) =>
+                part.contains(' ') ? "'${part.replaceAll("'", r"'\''")}'" : part,
+          )
+          .join(' ');
+      final String cdAndCommand =
+          "mkdir -p '${skillDir.replaceAll("'", r"'\''")}' && cd '${skillDir.replaceAll("'", r"'\''")}' && $command";
+      try {
+        final EnvironmentExecutionResult execResult = await env.execute(
+          cdAndCommand,
+          timeout: Duration(seconds: _toolset._scriptTimeout),
+        );
+        final String status =
+            execResult.exitCode == 0 && !execResult.timedOut
+            ? 'success'
+            : 'error';
+        return <String, Object?>{
+          'skill_name': skill.name,
+          'file_path': scriptPath,
+          'stdout': execResult.stdout,
+          'stderr': execResult.stderr,
+          'exit_code': execResult.exitCode,
+          'timed_out': execResult.timedOut,
+          'status': status,
+        };
+      } catch (error) {
+        return <String, Object?>{
+          'error': "Failed to execute script '$scriptPath': $error",
+          'error_code': 'EXECUTION_ERROR',
+        };
+      }
+    }
 
     final BaseCodeExecutor? codeExecutor = _resolveCodeExecutor(
       _toolset._codeExecutor,
@@ -1464,8 +1600,9 @@ class SkillToolset extends BaseToolset {
     SkillRegistry? registry,
     List<Object>? additionalTools,
     BaseCodeExecutor? codeExecutor,
+    this.environment,
     int scriptTimeout = _defaultScriptTimeout,
-    this.skillsFolder,
+    String? skillsFolder,
     this.saveOutputArtifacts = false,
     SkillLifecycleConfig? lifecycleConfig,
     this.discoveryMode = SkillDiscoveryMode.lazy,
@@ -1474,6 +1611,8 @@ class SkillToolset extends BaseToolset {
   }) : _registry = registry,
        _codeExecutor = codeExecutor,
        _scriptTimeout = scriptTimeout,
+       skillsFolder =
+           skillsFolder ?? (environment != null ? '/skills' : null),
        lifecycleConfig =
            lifecycleConfig ?? SkillLifecycleConfig(enabled: false) {
     final Set<String> seen = <String>{};
@@ -1521,7 +1660,12 @@ class SkillToolset extends BaseToolset {
       <String, Map<String, Future<Skill?>>>{};
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
+  final Set<String> _materializedSkills = <String>{};
+  bool _environmentInitialized = false;
   static const int _maxCacheTurns = 16;
+
+  /// Optional execution environment where skill files are materialized and run.
+  final BaseEnvironment? environment;
 
   /// Optional environment directory where skill files are materialized.
   final String? skillsFolder;
@@ -1535,8 +1679,52 @@ class SkillToolset extends BaseToolset {
   /// Discovery mode for how skills are presented to the model.
   final SkillDiscoveryMode discoveryMode;
 
+  Future<void> _materializeSkillToEnvironment(Skill skill) async {
+    final BaseEnvironment? env = environment;
+    if (env == null || _materializedSkills.contains(skill.name)) {
+      return;
+    }
+    if (!_environmentInitialized) {
+      await env.initialize();
+      _environmentInitialized = true;
+    }
+    final String baseFolder = (skillsFolder ?? '/skills')
+        .replaceAll(r'\', '/')
+        .replaceAll(RegExp(r'/+$'), '');
+    final String skillRoot = '$baseFolder/${skill.name}';
+
+    await env.writeFile('$skillRoot/SKILL.md', skill.instructions);
+
+    for (final String refName in skill.resources.listReferences()) {
+      final Object? content = skill.resources.getReferenceData(refName);
+      if (content != null) {
+        final String textContent = content is List<int>
+            ? utf8.decode(content, allowMalformed: true)
+            : '$content';
+        await env.writeFile('$skillRoot/references/$refName', textContent);
+      }
+    }
+    for (final String assetName in skill.resources.listAssets()) {
+      final Object? content = skill.resources.getAssetData(assetName);
+      if (content != null) {
+        final String textContent = content is List<int>
+            ? utf8.decode(content, allowMalformed: true)
+            : '$content';
+        await env.writeFile('$skillRoot/assets/$assetName', textContent);
+      }
+    }
+    for (final String scriptName in skill.resources.listScripts()) {
+      final Script? script = skill.resources.getScript(scriptName);
+      if (script != null) {
+        await env.writeFile('$skillRoot/scripts/$scriptName', script.src);
+      }
+    }
+
+    _materializedSkills.add(skill.name);
+  }
+
   bool _hasScriptExecution(ReadonlyContext? context) {
-    if (_codeExecutor != null) {
+    if (_codeExecutor != null || environment != null) {
       return true;
     }
     if (context == null) {
@@ -1925,6 +2113,7 @@ class SkillToolset extends BaseToolset {
         ..._providedToolsets,
       ],
       codeExecutor: _codeExecutor,
+      environment: environment,
       scriptTimeout: _scriptTimeout,
       skillsFolder: skillsFolder,
       saveOutputArtifacts: saveOutputArtifacts,

@@ -543,7 +543,22 @@ class McpSessionManager {
     if (additionalHeaders != null && additionalHeaders.isNotEmpty) {
       baseHeaders.addAll(additionalHeaders);
     }
-    return mergeTrackingHeaders(baseHeaders);
+    final Map<String, String> normalizedHeaders = <String, String>{};
+    for (final MapEntry<String, String> entry in baseHeaders.entries) {
+      final String lowerKey = entry.key.toLowerCase();
+      if (lowerKey == 'user-agent') {
+        final String? existing = normalizedHeaders['User-Agent'];
+        normalizedHeaders['User-Agent'] =
+            existing == null || existing.isEmpty ? entry.value : entry.value;
+      } else if (lowerKey == 'x-goog-api-client') {
+        final String? existing = normalizedHeaders['x-goog-api-client'];
+        normalizedHeaders['x-goog-api-client'] =
+            existing == null || existing.isEmpty ? entry.value : entry.value;
+      } else {
+        normalizedHeaders[entry.key] = entry.value;
+      }
+    }
+    return mergeTrackingHeaders(normalizedHeaders);
   }
 
   Future<void> _ensureInitialized(

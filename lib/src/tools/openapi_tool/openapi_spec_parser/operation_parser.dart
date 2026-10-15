@@ -6,6 +6,9 @@ import 'dart:convert';
 import '../../_gemini_schema_util.dart';
 import '../common/common.dart';
 
+/// Maximum allowed length for a generated OpenAPI tool function name.
+const int maxToolNameLength = 60;
+
 /// Generated signature metadata for one parsed operation parameter.
 class OperationSignatureParameter {
   /// Creates a signature entry for a generated operation parameter.
@@ -84,7 +87,7 @@ class OperationParser {
           description.isNotEmpty) {
         schema['description'] = description;
       }
-      final bool required = _readBool(param['required']);
+      final bool required = location == 'path' || _readBool(param['required']);
 
       _params.add(
         ApiParameter(

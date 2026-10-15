@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased (2026-10-10)
+## Unreleased (2026-10-15)
+
+- **Web Server & Graph Serialization (`web_server.dart`, `agent_graph.dart`)**:
+  - Added screencast WebSocket endpoint (`/apps/{appName}/screencast`) for live computer use and browser screencast streaming.
+  - Serialized nested workflow nodes, parallel workers, and input/output schemas in graph serialization (`agent_graph.dart`).
+  - Added wire mappings for `A2aTaskState.rejected` and `unknown`.
+  - Returned HTTP 404 for missing evaluation results or sessions.
+
+## 2026.10.10
 
 - **Full 1:1 `adk-python` CLI Option & Subcommand Parity**:
   - **`adk create`**: Added `--model` / `-m`, `--api_key` / `-k`, `--project` / `-p`, `--region` / `-r`, and `--type` (`CODE` | `CONFIG` | `BASIC` | `WORKFLOW`) with `root_agent.yaml`, `sub_agent_1.yaml`, `sub_agent_2.yaml`, and `.env` generation.

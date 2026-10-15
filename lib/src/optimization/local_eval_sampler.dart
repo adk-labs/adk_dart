@@ -369,6 +369,7 @@ Map<String, Object?> _extractInvocationInfo(Invocation invocation) {
             final EvalJsonMap call = item.$1;
             final EvalJsonMap? response = item.$2;
             return <String, Object?>{
+              if (call['id'] != null) 'id': '${call['id']}',
               'name': '${call['name'] ?? ''}',
               'args': _asObjectMap(call['args']),
               'response': response == null
@@ -390,6 +391,7 @@ String _contentText(Map<String, Object?>? content) {
   }
   return rawParts
       .whereType<Map>()
+      .where((Map<Object?, Object?> part) => part['thought'] != true)
       .map((Map<Object?, Object?> part) => '${part['text'] ?? ''}'.trim())
       .where((String text) => text.isNotEmpty)
       .join();

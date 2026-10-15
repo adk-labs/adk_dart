@@ -174,6 +174,8 @@ class AgentTool extends BaseTool {
     );
 
     Content? lastContent;
+    String? lastErrorMessage;
+    final Set<String> pendingToolIds = <String>{};
     Object? lastGroundingMetadata;
     if (toolContext.abortSignal?.aborted == true) {
       await runner.close();
@@ -191,7 +193,20 @@ class AgentTool extends BaseTool {
       if (event.actions.stateDelta.isNotEmpty) {
         toolContext.state.addAll(event.actions.stateDelta);
       }
+      if (event.errorMessage != null && event.errorMessage!.isNotEmpty) {
+        lastErrorMessage = event.errorMessage;
+      }
+      if (event.longRunningToolIds != null &&
+          event.longRunningToolIds!.isNotEmpty) {
+        pendingToolIds.addAll(event.longRunningToolIds!);
+      }
       if (event.content != null) {
+        for (final FunctionResponse functionResponse
+            in event.getFunctionResponses()) {
+          if (functionResponse.id != null && functionResponse.id!.isNotEmpty) {
+            pendingToolIds.remove(functionResponse.id);
+          }
+        }
         lastContent = event.content;
       }
       if (event.groundingMetadata != null) {
@@ -205,8 +220,16 @@ class AgentTool extends BaseTool {
       toolContext.state['temp:_adk_grounding_metadata'] = lastGroundingMetadata;
     }
 
+    if (pendingToolIds.isNotEmpty) {
+      toolContext.actions.skipSummarization = false;
+      final List<String> sortedIds = pendingToolIds.toList()..sort();
+      return 'Error: agent ${agent.name} stopped waiting on unresolved '
+          'long-running tool call(s) (pending call ids: $sortedIds), '
+          'which AgentTool cannot resume.';
+    }
+
     if (lastContent == null || lastContent.parts.isEmpty) {
-      return '';
+      return lastErrorMessage ?? '';
     }
 
     final String mergedText = lastContent.parts

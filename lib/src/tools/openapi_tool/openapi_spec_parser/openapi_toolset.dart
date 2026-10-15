@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import '../../../agents/readonly_context.dart';
 import '../../../auth/auth_credential.dart';
@@ -12,6 +13,7 @@ import '../../../utils/yaml_utils.dart';
 import '../../base_tool.dart';
 import '../../base_toolset.dart';
 import 'openapi_spec_parser.dart';
+import 'operation_parser.dart';
 import 'rest_api_tool.dart';
 
 /// A toolset that builds [RestApiTool] instances from an OpenAPI spec.
@@ -142,6 +144,7 @@ class OpenAPIToolset extends BaseToolset {
     ).parse(openapiSpecDict);
 
     final List<RestApiTool> tools = <RestApiTool>[];
+    final Set<String> usedNames = <String>{};
     for (final ParsedOperation operation in operations) {
       final RestApiTool tool = RestApiTool.fromParsedOperation(
         operation,
@@ -149,6 +152,20 @@ class OpenAPIToolset extends BaseToolset {
         headerProvider: _headerProvider,
         requestExecutor: _requestExecutor,
       );
+      final String baseName = tool.name;
+      String candidate = baseName;
+      int counter = 2;
+      while (usedNames.contains(candidate)) {
+        final String suffix = '_$counter';
+        final int end = math.min(
+          baseName.length,
+          maxToolNameLength - suffix.length,
+        );
+        candidate = '${baseName.substring(0, end)}$suffix';
+        counter += 1;
+      }
+      usedNames.add(candidate);
+      tool.name = candidate;
       tools.add(tool);
     }
     return tools;

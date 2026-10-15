@@ -340,6 +340,9 @@ String _workflowNodeKind(BaseNode node) {
     return 'tool';
   }
   if (node is AgentNode) {
+    if (node.agent is Workflow) {
+      return 'workflow';
+    }
     return 'agent';
   }
   if (node is JoinNode) {

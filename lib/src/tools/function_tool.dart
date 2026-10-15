@@ -241,10 +241,54 @@ class FunctionTool extends BaseTool {
     return false;
   }
 
+  /// Resolves the active streaming tool for [toolContext] by checking
+  /// [ToolContext.functionCallId] first and falling back to [name].
+  Object? resolveActiveStreamingTool(ToolContext toolContext) {
+    final Map<String, dynamic>? activeStreamingTools =
+        toolContext.invocationContext.activeStreamingTools;
+    if (activeStreamingTools == null || activeStreamingTools.isEmpty) {
+      return null;
+    }
+    final String? callId = toolContext.functionCallId;
+    if (callId != null && activeStreamingTools.containsKey(callId)) {
+      return activeStreamingTools[callId];
+    }
+    return activeStreamingTools[name];
+  }
+
+  Object? _extractActiveInputStream(ToolContext? toolContext) {
+    if (toolContext == null) {
+      return null;
+    }
+    final dynamic activeTool = resolveActiveStreamingTool(toolContext);
+    if (activeTool == null) {
+      return null;
+    }
+    try {
+      return activeTool.stream;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Object?> _invokeCallable(
     Map<String, dynamic> args,
     ToolContext toolContext,
   ) async {
+    final Map<String, dynamic>? activeStreamingTools =
+        toolContext.invocationContext.activeStreamingTools;
+    if (activeStreamingTools != null && activeStreamingTools.isNotEmpty) {
+      final Object? activeTool = resolveActiveStreamingTool(toolContext);
+      if (activeTool != null) {
+        final String? callId = toolContext.functionCallId;
+        if (callId != null && !activeStreamingTools.containsKey(callId)) {
+          activeStreamingTools[callId] = activeTool;
+        }
+        if (!activeStreamingTools.containsKey(name)) {
+          activeStreamingTools[name] = activeTool;
+        }
+      }
+    }
     final Object? value = await _invokeFunction(
       target: func,
       args: args,
@@ -266,9 +310,28 @@ class FunctionTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext? toolContext,
   }) async {
+    final Object? activeStream = _extractActiveInputStream(toolContext);
     final List<Map<Symbol, Object?>> toolContextNamedVariants =
         _toolContextNamedVariants(toolContext);
     final List<InvocationPlan> plans = <InvocationPlan>[
+      if (activeStream != null) ...<InvocationPlan>[
+        for (final Map<Symbol, Object?> variant in toolContextNamedVariants)
+          InvocationPlan(
+            positional: const <Object?>[],
+            named: <Symbol, Object?>{
+              ..._namedArgs(args),
+              #inputStream: activeStream,
+              ...variant,
+            },
+          ),
+        InvocationPlan(
+          positional: const <Object?>[],
+          named: <Symbol, Object?>{
+            ..._namedArgs(args),
+            #inputStream: activeStream,
+          },
+        ),
+      ],
       for (final Map<Symbol, Object?> variant in toolContextNamedVariants)
         InvocationPlan(
           positional: const <Object?>[],

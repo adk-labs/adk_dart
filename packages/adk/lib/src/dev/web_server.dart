@@ -1566,6 +1566,12 @@ Future<bool> _handlePythonStyleRoutes(
     return true;
   }
   if (segments.length == 3 &&
+      segments[2] == 'screencast' &&
+      request.method == 'GET') {
+    await _handleScreencast(request, context, appName: appName);
+    return true;
+  }
+  if (segments.length == 3 &&
       (segments[2] == 'graph' || segments[2] == 'build_graph') &&
       request.method == 'GET') {
     await _handleGetAppGraph(request, context, appName: appName);
@@ -2067,7 +2073,7 @@ Future<Map<String, Object?>> _buildAppInfoPayload(
     'description': rootAgent.description,
     'language': summary?['language'] ?? 'dart',
     'isComputerUse':
-        summary?['is_computer_use'] ?? _isComputerUseAgent(rootAgent),
+        _isComputerUseAgent(rootAgent) || (summary?['is_computer_use'] == true),
     'agents': await _collectAgentInfo(rootAgent),
   };
 }
@@ -2192,18 +2198,117 @@ String _inferFunctionToolName(Function function) {
   return 'tool_${function.hashCode.toUnsigned(32).toRadixString(16)}';
 }
 
-bool _isComputerUseAgent(BaseAgent agent) {
+ComputerUseToolset? _findComputerUseToolset(BaseAgent agent) {
   final dynamic dynamicAgent = agent;
-  if (dynamicAgent.tools is! List<Object>) {
-    return false;
-  }
+  try {
+    if (dynamicAgent.tools is List) {
+      for (final Object? tool in dynamicAgent.tools as List<Object?>) {
+        if (tool is ComputerUseToolset) {
+          return tool;
+        }
+      }
+    }
+  } catch (_) {}
 
-  for (final Object tool in dynamicAgent.tools as List<Object>) {
-    if (tool is ComputerUseToolset) {
-      return true;
+  for (final BaseAgent subAgent in agent.subAgents) {
+    final ComputerUseToolset? found = _findComputerUseToolset(subAgent);
+    if (found != null) {
+      return found;
     }
   }
-  return false;
+
+  if (agent is Workflow) {
+    for (final BaseNode node in agent.nodes) {
+      if (node is AgentNode) {
+        final ComputerUseToolset? found = _findComputerUseToolset(node.agent);
+        if (found != null) {
+          return found;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+bool _isComputerUseAgent(BaseAgent agent) {
+  return _findComputerUseToolset(agent) != null;
+}
+
+Future<void> _handleScreencast(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+}) async {
+  final Runner runner;
+  try {
+    runner = await context.getRunner(appName);
+  } on ArgumentError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: '${error.message}',
+    );
+    return;
+  } on StateError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
+  }
+
+  final ComputerUseToolset? toolset = _findComputerUseToolset(runner.agent);
+  if (toolset == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: 'No ComputerUseToolset found in app $appName.',
+    );
+    return;
+  }
+
+  if (!WebSocketTransformer.isUpgradeRequest(request)) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: 'WebSocket upgrade required.',
+    );
+    return;
+  }
+
+  final WebSocket socket = await WebSocketTransformer.upgrade(request);
+  bool closed = false;
+  socket.done.whenComplete(() {
+    closed = true;
+  });
+
+  try {
+    await toolset.computer.initialize();
+    while (!closed && socket.readyState == WebSocket.open) {
+      try {
+        final state = await toolset.computer.currentState();
+        if (closed || socket.readyState != WebSocket.open) {
+          break;
+        }
+        final List<int> screenshot = state.screenshot;
+        if (screenshot.isNotEmpty) {
+          socket.add(screenshot);
+        }
+      } catch (_) {
+        // Ignore transient screenshot errors while streaming.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+  } finally {
+    if (socket.readyState == WebSocket.open) {
+      await socket.close();
+    }
+  }
 }
 
 Future<void> _handleGetTraceByEventId(
@@ -6472,6 +6577,10 @@ String _a2aTaskStateToWire(A2aTaskState state) {
       return 'completed';
     case A2aTaskState.canceled:
       return 'canceled';
+    case A2aTaskState.rejected:
+      return 'rejected';
+    case A2aTaskState.unknown:
+      return 'unknown';
   }
 }
 

@@ -21,6 +21,7 @@ Future<Map<String, Object?>> executeSql({
   required Object settings,
   ToolContext? toolContext,
   Map<String, Object?>? parameters,
+  Map<String, Object?>? viewParameters,
   Map<String, Object?>? parameterTypes,
 }) async {
   // Present for parity with Python signature; not used in current implementation.
@@ -31,10 +32,14 @@ Future<Map<String, Object?>> executeSql({
       project: projectId,
       credentials: credentials,
     );
+    final Map<String, Object?>? effectiveParameters =
+        viewParameters == null && parameters == null
+        ? null
+        : <String, Object?>{...?parameters, ...?viewParameters};
     final BigtableQueryIterator queryIterator = btClient.executeQuery(
       query: query,
       instanceId: instanceId,
-      parameters: parameters,
+      parameters: effectiveParameters,
       parameterTypes: parameterTypes,
     );
 
