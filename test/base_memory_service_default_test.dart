@@ -5,7 +5,10 @@ class _RecordingMemoryService extends BaseMemoryService {
   final List<Session> ingestedSessions = <Session>[];
 
   @override
-  Future<void> addSessionToMemory(Session session) async {
+  Future<void> addSessionToMemory(
+    Session session, {
+    Map<String, Object?>? customMetadata,
+  }) async {
     ingestedSessions.add(session);
   }
 

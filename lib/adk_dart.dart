@@ -117,8 +117,11 @@ export 'src/integrations/bigquery/bigquery.dart'
         ExecuteSqlTool,
         bigQuerySessionInfoKey;
 export 'src/integrations/eleven_labs/eleven_labs.dart';
+export 'src/integrations/opensandbox/opensandbox_environment.dart';
 export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
+export 'src/integrations/vmaas/agent_engine_environment.dart';
+export 'src/labs/classifiers/classifiers.dart';
 export 'src/labs/openai.dart';
 export 'src/live/live.dart';
 
@@ -257,6 +260,7 @@ export 'src/models/interactions_utils.dart';
 export 'src/models/llm_request.dart';
 export 'src/models/llm_response.dart';
 export 'src/models/registry.dart';
+export 'src/models/routed_llm.dart';
 
 export 'src/memory/base_memory_service.dart';
 export 'src/memory/_utils.dart';
@@ -450,6 +454,9 @@ export 'src/tools/tool_confirmation.dart';
 export 'src/tools/tool_configs.dart';
 export 'src/tools/tool_context.dart';
 export 'src/tools/toolbox_toolset.dart';
+export 'src/tools/toolsearch/tool_search_toolset.dart';
+export 'src/tools/model_consult/model_consult_tool.dart';
+export 'src/tools/model_consult/model_consult_toolset.dart';
 export 'src/tools/runtime_bootstrap.dart';
 export 'src/tools/transfer_to_agent_tool.dart';
 export 'src/tools/url_context_tool.dart';

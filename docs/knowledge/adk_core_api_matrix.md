@@ -1,11 +1,12 @@
-# adk_core API Matrix (v3 — 2026-10-10)
+# adk_core API Matrix (v4 — 2026-10-15)
 
-Date: 2026-10-10
+Date: 2026-10-15
 Related plans & worklogs:
 - `docs/worklog/2026-02-28_21-44-13_adk_core_split_plan.md`
 - `docs/worklog/2026-03-01_16-59-24_flutter_adk_all_platform_plan.md`
 - `docs/worklog/2026-08-17-full-parity-suite-and-flutter-adk-completion.md`
 - `docs/worklog/2026-10-10-cascade-live-elevenlabs-and-upstream-parity.md`
+- `docs/worklog/2026-10-15-upstream-v2-12-0-and-cross-sdk-sync.md`
 
 ## Scope
 - Entrypoint: `lib/adk_core.dart`
@@ -31,6 +32,7 @@ Related plans & worklogs:
 - `src/apps/compaction.dart` (`EventsCompactionConfig`)
 - `src/runners/runner.dart` (`Runner`, `InMemoryRunner`)
 - `src/workflow/workflow.dart` (`Workflow`, `Node`, `BaseNode`, `NodeConfig`, `RetryConfig`, `Edge`, `JoinNode`)
+- `src/labs/classifiers/` (`ClassifierNode`, `BaseClassifier`, `Choice`, `Binary`, `Score`, `ClassifierResponse`)
 
 ### 2. Multi-LLM & Cascaded Live Audio Models
 - `src/models/base_llm.dart` (`BaseLlm`)
@@ -40,6 +42,7 @@ Related plans & worklogs:
 - `src/models/anthropic_llm.dart` (`AnthropicLlm`)
 - `src/models/lite_llm.dart` (`LiteLlm` — OpenAI, Ollama, LM Studio, DeepSeek, Groq)
 - `src/models/gemma_llm.dart` (`Gemma`, `GemmaLlm`)
+- `src/models/routed_llm.dart` (`RoutedLlm`, `LlmRouter`)
 - `src/models/fallback_model.dart` (`FallbackModel`)
 - `src/models/registry.dart` (`LLMRegistry`)
 - `src/models/llm_request.dart` & `src/models/llm_response.dart`

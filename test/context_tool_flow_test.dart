@@ -12,7 +12,10 @@ class _RecordingMemoryService extends BaseMemoryService {
   Session? lastSession;
 
   @override
-  Future<void> addSessionToMemory(Session session) async {
+  Future<void> addSessionToMemory(
+    Session session, {
+    Map<String, Object?>? customMetadata,
+  }) async {
     lastSession = session;
   }
 

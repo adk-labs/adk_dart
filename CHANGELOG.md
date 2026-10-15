@@ -1,4 +1,35 @@
-## Unreleased (2026-10-10)
+## Unreleased (2026-10-15)
+
+- **Classifiers & Workflow Routing (`lib/src/labs/classifiers/`, `workflow.dart`)**:
+  - Added `BaseClassifier`, `ClassifierNode`, and typed probability distribution representations (`Choice`, `Binary`, `Score`, `ChoiceAnswer`, `BinaryAnswer`, `ScoreAnswer`, `ClassifierResponse`).
+  - Added out-of-order completion buffering in `ReplaySequenceBarrier`, `validateOutgoingEdges` on `BaseNode`, and `requireConfirmation` HITL gate on `FunctionNode`.
+- **Live Barge-in & Realtime Caching (`lib/src/live/`, `lib/src/flows/llm_flows/`)**:
+  - Implemented full barge-in interruption in `CascadeLiveConnection` with sentence boundary extraction and `LlmResponse(interrupted: true)`.
+  - Renamed `AudioCacheManager` to `RealtimeCacheManager` with backward-compatible typedefs.
+  - Added `activeBackgroundTools` tracking in `InvocationContext` and cancellation error cleanup in `functions.dart`.
+- **Model Router & Modern Provider Features (`lib/src/models/`, `lib/src/a2a/`)**:
+  - Added `RoutedLlm` (`lib/src/models/routed_llm.dart`) supporting custom router functions and automatic failure recovery failover.
+  - Added Claude output schema without tools, adaptive thinking and effort configs on `AnthropicLlm`.
+  - Added Gemma 4 native function calling and system instructions on `GemmaLlm`.
+  - Supported `tool_call` and `tool_response` in A2A part converter, namespaced context IDs in `RemoteA2aAgent`, and added `A2aTaskState.rejected` / `unknown`.
+- **Tools, Sandboxes & Environments (`lib/src/tools/`, `lib/src/integrations/`)**:
+  - Added `ToolSearchToolset` with dynamic BM25 and Regex catalog search (`adk-go` parity).
+  - Added `ModelConsultTool` & `ModelConsultToolset` with advisor client label attribution (`adk-python` parity).
+  - Added `OpenSandboxEnvironment` and `AgentEngineEnvironment` (Vertex AI VMaaS) execution environments.
+  - Added Gemini 3.x modern computer use browser actions, coordinate normalization, private network blocking, and execution serialization.
+  - Added OpenAPI tool name collision disambiguation, operation-level parameter precedence, and query parameter truthiness preserving `false` and `0`.
+  - Added `BigtableToolset` parameterized view execution (`execute_parameterized_view`).
+  - Surfaced unresolved long-running tool calls as errors in `AgentTool`.
+- **Evaluation & Optimization Enhancements (`lib/src/evaluation/`, `lib/src/optimization/`)**:
+  - Supported `BaseLlm` instances in `JudgeModelOptions` and user simulation.
+  - Honored metric-level `evalStatus` and split invocation duration into model, tool, and framework time.
+  - Surfaced Vertex rubric verdicts and explanations in eval results and rejected empty train cases in `LocalEvalSampler`.
+- **CLI & Web Server (`packages/adk`)**:
+  - Added screencast WebSocket endpoint (`/apps/{appName}/screencast`) in `web_server.dart`.
+  - Serialized nested workflow nodes in graph serialization (`agent_graph.dart`).
+  - Added `A2aTaskState.rejected` and `unknown` wire mappings.
+
+## 2026.10.10
 
 - **`CascadeLive` & `ElevenLabs` Cascaded Speech Pipeline (`adk-python` `128faabb6`)**:
   - Added `CascadeLive`, `CascadeLiveConnection`, `IngressEvent` (`PartialTranscript`, `UserTurnFinished`, `UserSpeechStarted`), `EgressEvent` (`AudioChunk`, `AgentSpokenOutput`), `CancelSignal`, `LiveIngress`, and `LiveEgress` in `lib/src/live/`.

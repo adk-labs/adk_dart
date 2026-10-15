@@ -1,213 +1,104 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-14
+- Date (UTC): 2026-10-15
 - Source: `google/adk-python`
-- Latest SHA: `fb447108ab4dd1d4c1ed7e1ffde60ea3b4dd55f2`
-- Previous SHA: `4ec4af1959471bf3445d66bb7a25680865187c8a`
+- Latest SHA: `156f007ce1899bf0116eb990ce448be8ac1b3308`
+- Previous SHA: `fb447108ab4dd1d4c1ed7e1ffde60ea3b4dd55f2`
 
 ## Summary
 
-- New commits: 32
+- New commits: 17
 
 ## Commits
 
-- [fb447108](https://github.com/google/adk-python/commit/fb447108ab4dd1d4c1ed7e1ffde60ea3b4dd55f2) docs: fix grammar and phrasing in README (Ariel Peretz, 2026-10-14)
-- [c12392ea](https://github.com/google/adk-python/commit/c12392ea5d29c107217365603aea85275f262ec1) feat: support BaseLlm instances in evaluation and user simulation (yuvrajangadsingh, 2026-10-14)
-- [5bf7f12e](https://github.com/google/adk-python/commit/5bf7f12efbf84ec3ac8959e9388e31dcb6bf57f2) fix: honor each metric's own eval_status in AgentEvaluator.evaluate() (Gaurav Gandhi, 2026-10-14)
-- [ed81e1b2](https://github.com/google/adk-python/commit/ed81e1b26ecb536b39cbd88693714710addb915b) fix(workflow): disambiguate RequestInput interrupt_id across rerun loop iterations (Shangjie Chen, 2026-10-14)
-- [da1ddc2f](https://github.com/google/adk-python/commit/da1ddc2facbf1c5405002705d0b39136fa87d2ff) ci(workflows): auto-close linked issues when PR is merged via Copybara (Shangjie Chen, 2026-10-14)
-- [69c0b00f](https://github.com/google/adk-python/commit/69c0b00fc60a35f0a20882f8cddea052e43ba66a) fix: tolerate non-UTF-8 artifact metadata in FileArtifactService (Haoze Chen, 2026-10-14)
-- [cf4ec939](https://github.com/google/adk-python/commit/cf4ec93993ccb53f6f882dd1afdd1032b4775b60) fix: track Live background tool calls per function call (Liang Wu, 2026-10-14)
-- [05355fd4](https://github.com/google/adk-python/commit/05355fd49ec2c49e8ae9ed3952c8ab243e0e7618) fix(samples): prevent comment spam alerts from labeling entire issue as spam (Shangjie Chen, 2026-10-14)
-- [bb353c8d](https://github.com/google/adk-python/commit/bb353c8ddf129dfaccba3ce4bfa5ce418fd49acb) fix: route next turn to target of unfinished transfer_to_agent (Erick Leal, 2026-10-14)
-- [97af1ff6](https://github.com/google/adk-python/commit/97af1ff62af59a5a8eeb6db0a29a154a07a16715) fix: honor an output schema on Claude when the request carries no tools (George Weale, 2026-10-14)
-- [d57f0cb0](https://github.com/google/adk-python/commit/d57f0cb0cefc1e6eab1acff95ca9108293c300c5) fix: report cached and detailed token usage for the Interactions API (George Weale, 2026-10-14)
-- [0798b2c9](https://github.com/google/adk-python/commit/0798b2c94c4f5bf83693de9850e451cb17701306) fix(flows): read interrupt ids through the shared extractor in the agent flow (Shangjie Chen, 2026-10-13)
-- [2723a189](https://github.com/google/adk-python/commit/2723a18919fbcf22ce45c61595e1c7d7f3538307) fix(tools): run on_tool_error callbacks when a tool call is cancelled (Shangjie Chen, 2026-10-13)
-- [e3797a49](https://github.com/google/adk-python/commit/e3797a496e5521209e13513f956284877410b436) feat(eval): split invocation duration into model, tool and framework time (Yi Liu, 2026-10-13)
-- [bc220d2e](https://github.com/google/adk-python/commit/bc220d2ef5da6d36d707baacc04760d4f57afbe6) feat: surface Vertex rubric verdicts and explanations in eval results (DalmPhilipe, 2026-10-13)
-- [3c70e964](https://github.com/google/adk-python/commit/3c70e964a909a9f1cc8de45031bc22eea5510c44) chore: block PyPI publish until release checks pass on the commit (George Weale, 2026-10-13)
-- [3b2b949c](https://github.com/google/adk-python/commit/3b2b949c4b0b2a063b01e838d0fdde4aa93336d7) fix(sessions): purge events before deleting session row in DatabaseSessionService (donggyun112, 2026-10-13)
-- [a4ba8137](https://github.com/google/adk-python/commit/a4ba8137262f6a36339f6dd02f41cf9710f8542f) fix(workflow): buffer out-of-order completions in ReplaySequenceBarrier (Shangjie Chen, 2026-10-13)
-- [3800f068](https://github.com/google/adk-python/commit/3800f0689df1b3f1bb4fdd83750b37a03c3a9ead) feat(vmaas): add AgentEngineEnvironment (Google Team Member, 2026-10-13)
-- [b310c308](https://github.com/google/adk-python/commit/b310c3080bd95a0d4bf865dfa59704e580319887) fix: disambiguate colliding truncated OpenAPI tool names (chelsealong, 2026-10-13)
-- [2e7ef926](https://github.com/google/adk-python/commit/2e7ef926c953e5daab31cbc7ccb52fc77ebd9ae6) feat(live): Add barge-in support to CascadeLiveConnection (Google Team Member, 2026-10-13)
-- [d9fe639c](https://github.com/google/adk-python/commit/d9fe639c03f2e0af94188c0e2f796e9f5e502d99) fix: reject empty train eval cases and honor empty validation case IDs in LocalEvalSampler (chelsealong, 2026-10-13)
-- [b90e4a5e](https://github.com/google/adk-python/commit/b90e4a5eefac8d7dd24c3bc0e60ef774b21ac7a7) feat(tools): support Gemini 3.x computer use browser action schemas (Yuhan Gao, 2026-10-13)
-- [43e22a60](https://github.com/google/adk-python/commit/43e22a60438d9c36f30b37818bc04c6d6a28d36c) chore: merge release v2.12.0 to main (adk-bot, 2026-10-13)
-- [7296062e](https://github.com/google/adk-python/commit/7296062ecbf0085750951d6c0bd7ea9fef430c4b) fix: clear strict mypy errors in the adk cli and web server (George Weale, 2026-10-13)
-- [9163b19d](https://github.com/google/adk-python/commit/9163b19debc64edff3aecc771bdcd085b76bc093) perf: skip the connector poll sleep once the operation is done (George Weale, 2026-10-13)
-- [69d1c901](https://github.com/google/adk-python/commit/69d1c901ba842b5300d6ef8ce2872ea545b2375c) feat: add OpenSandbox environment (peijianping.pjp, 2026-10-13)
-- [facaf297](https://github.com/google/adk-python/commit/facaf297b1f7f74516f090df03e10eae0808bd56) fix: bind sandbox resources per tool call, not per computer (George Weale, 2026-10-13)
-- [c5ee35e3](https://github.com/google/adk-python/commit/c5ee35e332052b197b98952cec5442653f1c2aa6) fix: keep sticky routing when a sub-agent runs in task mode (George Weale, 2026-10-13)
-- [3893d7fa](https://github.com/google/adk-python/commit/3893d7fa36fc6cf9fb504075845d6542eb94398d) fix: drop plain execute_sql when Bigtable view parameters are set (George Weale, 2026-10-13)
-- [6563a09e](https://github.com/google/adk-python/commit/6563a09ed649084867b981c27fe26f43e4875365) fix: let operation parameters override path-level ones (Naveen Chatlapalli, 2026-10-13)
-- [dcd20ec4](https://github.com/google/adk-python/commit/dcd20ec4a966073fe5e462e33182089d83bc5f7c) perf: defer the sessions.state import in code_executor_context (Google Team Member, 2026-10-13)
+- [156f007ce](https://github.com/google/adk-python/commit/156f007ce1899bf0116eb990ce448be8ac1b3308) refactor(workflow): deduplicate callable invocation, parameter resolution, and HITL helpers (Shangjie Chen, 2026-10-15)
+- [9a5510e09](https://github.com/google/adk-python/commit/9a5510e09b788d114cedfb07119a0c9cd4cc527b) fix: surface HITL pauses in AgentTool instead of returning "" (chelsealong, 2026-10-14)
+- [2f6c6664a](https://github.com/google/adk-python/commit/2f6c6664a8d3cdf9151ac585bcfe6cb2c0f78d52) feat: make MongoDbToolset picklable for Agent Engine (Venkatesh Shanbhag, 2026-10-14)
+- [377306e43](https://github.com/google/adk-python/commit/377306e43c5914de3f64f72526173b0732b0c7d8) fix: merge tracking headers regardless of casing (Jeeho Lee, 2026-10-14)
+- [eff016d23](https://github.com/google/adk-python/commit/eff016d235e4b19407868e5278c579e5414c2675) fix: use McpTool inside McpToolset (Sankalp Gilda, 2026-10-14)
+- [d0c8454ed](https://github.com/google/adk-python/commit/d0c8454ed762981a9bd6be8aa843ce80e18a5327) fix(tools): return validation error dict when Workflow entry node rejects tool args in NodeTool (Shangjie Chen, 2026-10-14)
+- [cb48b9198](https://github.com/google/adk-python/commit/cb48b91981c7306b3110435019e19047b712a7eb) feat: support BaseLlm instances in evaluation and user simulation (Google Team Member, 2026-10-14)
+- [e8c4bacdf](https://github.com/google/adk-python/commit/e8c4bacdfe675ceb5adcaf24ea005af94d271c68) feat(classifiers): add ClassifierNode for workflow routing (Kathy Wu, 2026-10-14)
+- [e4165d0a4](https://github.com/google/adk-python/commit/e4165d0a43947ba7e1a0b2544e9e6e65f86ad1a8) fix(plugins): match credential key names that use hyphens (George Weale, 2026-10-14)
+- [cac5fbbbd](https://github.com/google/adk-python/commit/cac5fbbbd121cccc07fcd91b68c95b8bc360b02f) test: verify generateContent preserves function call IDs (gioboa, 2026-10-14)
+- [7d3658ef1](https://github.com/google/adk-python/commit/7d3658ef1a1f61c4c18cc4781f6892460add960c) fix: keep finished parallel tool results when a sibling raises (Thuongvu Ho, 2026-10-14)
+- [773418f34](https://github.com/google/adk-python/commit/773418f34f93edd7c379edb5703744066b9cc28a) feat(classifiers): add BaseClassifier and typed question/answer types (Kathy Wu, 2026-10-14)
+- [1360dda52](https://github.com/google/adk-python/commit/1360dda520dbff1b8f41c9f6265226c92a7021f2) fix(flows): isolate parallel single-turn node events across branches and node_paths (Shangjie Chen, 2026-10-14)
+- [9b0ceecd9](https://github.com/google/adk-python/commit/9b0ceecd9e5d0df86261d8f93ab41833f2470892) test: scope atexit cleanup assertions to their client (Sankalp Gilda, 2026-10-14)
+- [c2dcb75af](https://github.com/google/adk-python/commit/c2dcb75af5c7a6786c68d8d2e6ed26506a830c75) fix: return 404 when an eval result or session is missing (George Weale, 2026-10-14)
+- [e342a14ec](https://github.com/google/adk-python/commit/e342a14eca15e4e5a0a103a06f8307543633e904) fix: finish runner cleanup when close is cancelled (George Weale, 2026-10-14)
+- [29bb0532c](https://github.com/google/adk-python/commit/29bb0532c48abad0314cecea5a30b3cdaf6d7898) fix(evaluation): reject drive-qualified app and eval set ids (George Weale, 2026-10-14)
 
 ## Changed Files
 
-- `M	.github/.release-please-manifest.json`
-- `M	.github/release-please-config.json`
-- `M	.github/workflows/copybara-pr-handler.yml`
-- `M	.github/workflows/release-artifact-check.yml`
-- `M	.github/workflows/release-publish.yml`
-- `M	CHANGELOG.md`
-- `M	README.md`
-- `M	contributing/samples/adk_team/adk_issue_monitoring_agent/PROMPT_INSTRUCTION.txt`
-- `M	contributing/samples/adk_team/adk_issue_monitoring_agent/agent.py`
-- `A	contributing/samples/environment_and_skills/opensandbox_environment/README.md`
-- `A	contributing/samples/environment_and_skills/opensandbox_environment/__init__.py`
-- `A	contributing/samples/environment_and_skills/opensandbox_environment/agent.py`
-- `M	contributing/samples/live/cascade/README.md`
-- `M	contributing/samples/live/cascade/agent.py`
-- `M	contributing/samples/multimodal/computer_use/playwright.py`
-- `M	contributing/samples/workflows/request_input_rerun/README.md`
-- `M	contributing/samples/workflows/request_input_rerun/agent.py`
-- `M	docs/guides/agents/invocation_context/index.md`
-- `M	docs/guides/events/request_input/index.md`
-- `M	docs/guides/live/cascade_live/index.md`
-- `M	src/google/adk/agents/_agent_router.py`
+- `M	docs/guides/README.md`
+- `A	docs/guides/labs/classifiers/classifier_node/index.md`
 - `M	src/google/adk/agents/invocation_context.py`
-- `M	src/google/adk/agents/llm_agent.py`
-- `M	src/google/adk/artifacts/file_artifact_service.py`
-- `M	src/google/adk/cli/_telemetry/_metrics_collector.py`
-- `M	src/google/adk/cli/agent_graph.py`
-- `M	src/google/adk/cli/agent_test_runner.py`
-- `M	src/google/adk/cli/api_server.py`
-- `M	src/google/adk/cli/built_in_agents/adk_agent_builder_assistant.py`
-- `M	src/google/adk/cli/built_in_agents/tools/query_schema.py`
-- `M	src/google/adk/cli/built_in_agents/utils/adk_source_utils.py`
-- `M	src/google/adk/cli/built_in_agents/utils/resolve_root_directory.py`
-- `M	src/google/adk/cli/cli.py`
-- `M	src/google/adk/cli/cli_eval.py`
-- `M	src/google/adk/cli/cli_tools_click.py`
-- `M	src/google/adk/cli/conformance/_conformance_test_google_llm.py`
-- `M	src/google/adk/cli/conformance/_generate_markdown_utils.py`
-- `M	src/google/adk/cli/conformance/_generated_file_utils.py`
-- `M	src/google/adk/cli/conformance/_replay_validators.py`
-- `M	src/google/adk/cli/conformance/adk_web_server_client.py`
-- `M	src/google/adk/cli/conformance/cli_record.py`
-- `M	src/google/adk/cli/conformance/cli_test.py`
 - `M	src/google/adk/cli/dev_server.py`
-- `M	src/google/adk/cli/fast_api.py`
-- `M	src/google/adk/cli/plugins/recordings_plugin.py`
-- `M	src/google/adk/cli/plugins/replay_plugin.py`
-- `M	src/google/adk/cli/trigger_routes.py`
-- `M	src/google/adk/cli/utils/_nested_agent_loader.py`
-- `M	src/google/adk/cli/utils/_onboarding.py`
-- `M	src/google/adk/cli/utils/agent_change_handler.py`
-- `M	src/google/adk/cli/utils/agent_loader.py`
-- `M	src/google/adk/cli/utils/gcp_utils.py`
-- `M	src/google/adk/cli/utils/graph_serialization.py`
-- `M	src/google/adk/cli/utils/graph_visualization.py`
-- `M	src/google/adk/code_executors/code_executor_context.py`
-- `M	src/google/adk/evaluation/_efficiency_evaluators.py`
-- `M	src/google/adk/evaluation/agent_evaluator.py`
-- `M	src/google/adk/evaluation/eval_case.py`
+- `M	src/google/adk/evaluation/_path_validation.py`
 - `M	src/google/adk/evaluation/eval_metrics.py`
-- `M	src/google/adk/evaluation/evaluation_generator.py`
-- `M	src/google/adk/evaluation/evaluator.py`
 - `M	src/google/adk/evaluation/hallucinations_v1.py`
 - `M	src/google/adk/evaluation/llm_as_judge.py`
 - `M	src/google/adk/evaluation/llm_as_judge_utils.py`
-- `M	src/google/adk/evaluation/local_eval_service.py`
-- `M	src/google/adk/evaluation/metric_info_providers.py`
 - `M	src/google/adk/evaluation/simulation/llm_backed_user_simulator.py`
 - `M	src/google/adk/evaluation/simulation/per_turn_user_simulator_quality_v1.py`
 - `M	src/google/adk/evaluation/simulation/user_simulator.py`
-- `M	src/google/adk/evaluation/vertex_ai_eval_facade.py`
 - `M	src/google/adk/features/_feature_registry.py`
-- `M	src/google/adk/flows/llm_flows/core/_finalizer.py`
-- `M	src/google/adk/flows/llm_flows/core/_resume.py`
-- `M	src/google/adk/flows/llm_flows/tools/_caller.py`
-- `M	src/google/adk/flows/llm_flows/tools/_error_handler.py`
-- `M	src/google/adk/flows/llm_flows/tools/_live_caller.py`
-- `M	src/google/adk/integrations/eleven_labs/README.md`
-- `A	src/google/adk/integrations/opensandbox/__init__.py`
-- `A	src/google/adk/integrations/opensandbox/_opensandbox_environment.py`
-- `M	src/google/adk/integrations/vmaas/__init__.py`
-- `A	src/google/adk/integrations/vmaas/_agent_engine_environment.py`
-- `M	src/google/adk/integrations/vmaas/sandbox_computer.py`
-- `M	src/google/adk/live/_active_background_tool.py`
-- `M	src/google/adk/live/_cascade_live_connection.py`
-- `M	src/google/adk/live/_flow_utils.py`
-- `M	src/google/adk/live/_live_llm_flow.py`
-- `M	src/google/adk/models/anthropic_llm.py`
-- `M	src/google/adk/models/google_llm.py`
-- `M	src/google/adk/models/interactions_utils.py`
-- `M	src/google/adk/optimization/local_eval_sampler.py`
-- `M	src/google/adk/plugins/base_plugin.py`
-- `M	src/google/adk/plugins/reflect_retry_tool_plugin.py`
+- `M	src/google/adk/flows/llm_flows/context/_contents.py`
+- `M	src/google/adk/flows/llm_flows/core/_function_call_postprocessor.py`
+- `M	src/google/adk/flows/llm_flows/tools/_batch_executor.py`
+- `M	src/google/adk/integrations/mongodb/_client.py`
+- `M	src/google/adk/integrations/mongodb/_mongodb_toolset.py`
+- `A	src/google/adk/labs/classifiers/__init__.py`
+- `A	src/google/adk/labs/classifiers/_base_classifier.py`
+- `A	src/google/adk/labs/classifiers/_classifier_node.py`
+- `A	src/google/adk/labs/classifiers/_types.py`
+- `M	src/google/adk/plugins/auto_tracing_helpers.py`
 - `M	src/google/adk/runners.py`
-- `M	src/google/adk/sessions/database_session_service.py`
-- `M	src/google/adk/telemetry/_instrumentation.py`
-- `M	src/google/adk/tools/application_integration_tool/clients/connections_client.py`
-- `M	src/google/adk/tools/bigtable/bigtable_toolset.py`
-- `M	src/google/adk/tools/computer_use/base_computer.py`
-- `M	src/google/adk/tools/computer_use/computer_use_tool.py`
-- `M	src/google/adk/tools/computer_use/computer_use_toolset.py`
+- `M	src/google/adk/tools/_node_tool.py`
+- `M	src/google/adk/tools/agent_tool.py`
 - `M	src/google/adk/tools/function_tool.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/operation_parser.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py`
-- `M	src/google/adk/version.py`
+- `M	src/google/adk/tools/mcp_tool/mcp_session_manager.py`
+- `M	src/google/adk/tools/mcp_tool/mcp_tool.py`
+- `M	src/google/adk/tools/mcp_tool/mcp_toolset.py`
+- `M	src/google/adk/utils/_google_client_headers.py`
+- `M	src/google/adk/utils/_sync_runner.py`
+- `M	src/google/adk/workflow/_base_node.py`
+- `M	src/google/adk/workflow/_function_node.py`
 - `M	src/google/adk/workflow/_tool_node.py`
-- `M	src/google/adk/workflow/utils/_rehydration_utils.py`
-- `M	src/google/adk/workflow/utils/_replay_sequence_barrier.py`
-- `M	tests/unittests/agents/test_agent_router.py`
+- `M	src/google/adk/workflow/utils/_graph_validation.py`
+- `M	src/google/adk/workflow/utils/_workflow_hitl_utils.py`
 - `M	tests/unittests/agents/test_invocation_context.py`
-- `M	tests/unittests/artifacts/test_artifact_service.py`
-- `M	tests/unittests/cli/conformance/test_conformance_test_google_llm.py`
-- `M	tests/unittests/cli/plugins/test_replay_plugin.py`
-- `M	tests/unittests/cli/test_agent_test_runner.py`
 - `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/cli/utils/test_agent_change_handler.py`
-- `M	tests/unittests/cli/utils/test_cli.py`
-- `M	tests/unittests/cli/utils/test_cli_eval_pretty_print.py`
-- `M	tests/unittests/cli/utils/test_cli_tools_click.py`
 - `M	tests/unittests/evaluation/simulation/test_llm_audio_user_simulator.py`
 - `M	tests/unittests/evaluation/simulation/test_llm_backed_user_simulator.py`
 - `M	tests/unittests/evaluation/simulation/test_per_turn_user_simulation_quality_v1.py`
-- `M	tests/unittests/evaluation/simulation/test_user_simulator_provider.py`
-- `M	tests/unittests/evaluation/test_agent_evaluator.py`
+- `tests/unittests/evaluation/simulation/test_user_simulator_provider.py`
+- `M	tests/unittests/evaluation/test__path_validation.py`
 - `M	tests/unittests/evaluation/test_custom_metric_evaluator.py`
-- `M	tests/unittests/evaluation/test_efficiency_evaluators.py`
-- `M	tests/unittests/evaluation/test_evaluation_generator.py`
 - `M	tests/unittests/evaluation/test_hallucinations_v1.py`
 - `M	tests/unittests/evaluation/test_llm_as_judge.py`
 - `M	tests/unittests/evaluation/test_llm_as_judge_utils.py`
-- `M	tests/unittests/evaluation/test_vertex_ai_eval_facade.py`
-- `M	tests/unittests/flows/llm_flows/core/test_resume.py`
-- `M	tests/unittests/flows/llm_flows/test_live_tool_callbacks.py`
-- `M	tests/unittests/flows/llm_flows/tools/test_caller.py`
-- `M	tests/unittests/flows/llm_flows/tools/test_functions_simple.py`
-- `M	tests/unittests/flows/llm_flows/tools/test_live_caller.py`
-- `A	tests/unittests/integrations/opensandbox/test_opensandbox_environment.py`
-- `A	tests/unittests/integrations/vmaas/test_agent_engine_environment.py`
-- `M	tests/unittests/integrations/vmaas/test_sandbox_computer.py`
-- `A	tests/unittests/live/test_cascade_live_connection_barge_in.py`
-- `M	tests/unittests/live/test_live_llm_flow.py`
-- `M	tests/unittests/models/test_anthropic_llm.py`
+- `M	tests/unittests/flows/llm_flows/tools/test_batch_executor.py`
+- `M	tests/unittests/integrations/mongodb/test_mongodb_toolset.py`
+- `A	tests/unittests/labs/classifiers/__init__.py`
+- `A	tests/unittests/labs/classifiers/test_base_classifier.py`
+- `A	tests/unittests/labs/classifiers/test_classifier_node.py`
+- `A	tests/unittests/labs/classifiers/test_types.py`
+- `M	tests/unittests/models/test_completions_http_client.py`
 - `M	tests/unittests/models/test_google_llm.py`
-- `M	tests/unittests/models/test_interactions_utils.py`
-- `M	tests/unittests/optimization/local_eval_sampler_test.py`
-- `M	tests/unittests/plugins/test_reflect_retry_tool_plugin.py`
-- `M	tests/unittests/sessions/test_session_service.py`
-- `M	tests/unittests/streaming/test_live_tool_shutdown.py`
-- `M	tests/unittests/streaming/test_streaming.py`
-- `M	tests/unittests/telemetry/test_instrumentation.py`
+- `M	tests/unittests/plugins/test_auto_tracing_plugin.py`
+- `M	tests/unittests/telemetry/functional_goldens/mcp/experimental-span-and-event.json`
+- `M	tests/unittests/telemetry/functional_goldens/mcp/http-exchange.json`
 - `M	tests/unittests/test_runners.py`
-- `M	tests/unittests/tools/application_integration_tool/clients/test_connections_client.py`
-- `M	tests/unittests/tools/bigtable/test_bigtable_toolset.py`
-- `M	tests/unittests/tools/computer_use/test_base_computer.py`
-- `M	tests/unittests/tools/computer_use/test_computer_use_tool.py`
-- `M	tests/unittests/tools/computer_use/test_computer_use_toolset.py`
-- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_openapi_spec_parser.py`
-- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_openapi_toolset.py`
+- `M	tests/unittests/tools/mcp_tool/test_mcp_session_manager.py`
+- `M	tests/unittests/tools/mcp_tool/test_mcp_toolset.py`
+- `M	tests/unittests/tools/test_agent_tool.py`
 - `M	tests/unittests/tools/test_function_tool.py`
-- `M	tests/unittests/workflow/test_agent_transfer.py`
-- `M	tests/unittests/workflow/test_tool_node.py`
-- `M	tests/unittests/workflow/test_workflow_hitl.py`
-- `M	tests/unittests/workflow/utils/test_rehydration_utils.py`
-- `M	tests/unittests/workflow/utils/test_replay_sequence_barrier.py`
+- `M	tests/unittests/utils/test_google_client_headers.py`
+- `A	tests/unittests/utils/test_sync_runner.py`
+- `M	tests/unittests/workflow/test_function_node.py`
+- `M	tests/unittests/workflow/test_llm_agent_as_node.py`
+- `M	tests/unittests/workflow/test_node_tool.py`
+- `M	tests/unittests/workflow/utils/test_graph_validation.py`
+- `M	tests/unittests/workflow/utils/test_workflow_hitl_utils.py`

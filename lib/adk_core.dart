@@ -80,6 +80,7 @@ export 'src/models/gemma_llm.dart';
 export 'src/models/google_llm.dart';
 export 'src/models/lite_llm.dart';
 export 'src/models/registry.dart';
+export 'src/models/routed_llm.dart';
 
 export 'src/plugins/base_plugin.dart';
 export 'src/plugins/plugin_manager.dart';
@@ -126,6 +127,7 @@ export 'src/tools/vertex_rag_retrieval_tool.dart';
 export 'src/types/content.dart';
 export 'src/workflow/workflow.dart' hide RetryConfig;
 export 'src/workflow/replay_manager.dart';
+export 'src/labs/classifiers/classifiers.dart';
 
 // Web-safe skill surface:
 // - Inline Skill objects are supported on all platforms.
