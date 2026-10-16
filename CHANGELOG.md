@@ -24,10 +24,18 @@
   - Supported `BaseLlm` instances in `JudgeModelOptions` and user simulation.
   - Honored metric-level `evalStatus` and split invocation duration into model, tool, and framework time.
   - Surfaced Vertex rubric verdicts and explanations in eval results and rejected empty train cases in `LocalEvalSampler`.
-- **CLI & Web Server (`packages/adk`)**:
-  - Added screencast WebSocket endpoint (`/apps/{appName}/screencast`) in `web_server.dart`.
-  - Serialized nested workflow nodes in graph serialization (`agent_graph.dart`).
-  - Added `A2aTaskState.rejected` and `unknown` wire mappings.
+- **Fluent Workflow EdgesBuilder & Engine Client (`workflow/edges_builder.dart`, `vmaas/`)**:
+  - Added fluent graph edge construction via `EdgesBuilder`, `EdgeChain`, `NodeGroupChain`, `RouteMap`, `RouteSet`, and `Workflow.build` factory constructor (`adk-java` parity).
+  - Added `AgentEngineClient` supporting REST session creation and query invocation against Agent Engine / VMaaS endpoints (`adk-js` parity).
+- **Speech Pipeline Extensions (`lib/src/live/gemini_stt.dart`, `gemini_tts.dart`)**:
+  - Added `GeminiSTT` and `GeminiTTS` audio transforms for cascaded live streaming pipelines with barge-in support via `CancelSignal`.
+- **Plugins & CLI Dev Server Enhancements (`lib/src/tools/`, `packages/adk`)**:
+  - Added `ForceEscalationPlugin` with turn and session budgeting on `ModelConsultTool`.
+  - Added `indexOpenInterrupts` and auto-resume CLI handling for paused long-running tools.
+  - Added `initial_state.json` seeding in development web server session creation.
+  - Aligned truthy environment variable parsing with whitespace trimming (`isEnvEnabled`) and strict GenAI enterprise check (`_isGenaiEnvEnabled`).
+  - Aligned `adk eval` CLI exit code to reflect test pass/fail verdicts as a reliable CI/CD gate.
+  - Excluded internal `_adk_live` artifact references from model context history and cross-agent event narration.
 
 ## 2026.10.10
 
