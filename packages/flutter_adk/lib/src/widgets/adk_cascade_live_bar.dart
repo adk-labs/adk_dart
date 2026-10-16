@@ -9,6 +9,12 @@ class AdkLiveBargeInIndicator extends StatefulWidget {
     super.key,
     required this.isBargeIn,
     this.label = 'Agent Interrupted',
+    this.backgroundColor,
+    this.textColor,
+    this.iconColor,
+    this.icon,
+    this.borderRadius,
+    this.padding,
   });
 
   /// Whether barge-in interruption is currently active.
@@ -16,6 +22,24 @@ class AdkLiveBargeInIndicator extends StatefulWidget {
 
   /// Display text for the badge.
   final String label;
+
+  /// Custom background color.
+  final Color? backgroundColor;
+
+  /// Custom text color.
+  final Color? textColor;
+
+  /// Custom icon color.
+  final Color? iconColor;
+
+  /// Custom icon.
+  final IconData? icon;
+
+  /// Custom border radius.
+  final BorderRadius? borderRadius;
+
+  /// Custom padding.
+  final EdgeInsetsGeometry? padding;
 
   @override
   State<AdkLiveBargeInIndicator> createState() => _AdkLiveBargeInIndicatorState();
@@ -65,13 +89,17 @@ class _AdkLiveBargeInIndicatorState extends State<AdkLiveBargeInIndicator>
     final ThemeData theme = Theme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
 
+    final Color effectiveBg = widget.backgroundColor ?? colorScheme.errorContainer;
+    final Color effectiveFg = widget.textColor ?? colorScheme.onErrorContainer;
+    final Color effectiveIcon = widget.iconColor ?? colorScheme.error;
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
+        padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
         decoration: BoxDecoration(
-          color: colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(16.0),
+          color: effectiveBg,
+          borderRadius: widget.borderRadius ?? BorderRadius.circular(16.0),
           border: Border.all(
             color: colorScheme.error.withValues(alpha: 0.6),
           ),
@@ -87,16 +115,16 @@ class _AdkLiveBargeInIndicatorState extends State<AdkLiveBargeInIndicator>
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(
-              Icons.bolt_rounded,
+              widget.icon ?? Icons.bolt_rounded,
               size: 16.0,
-              color: colorScheme.error,
+              color: effectiveIcon,
             ),
             const SizedBox(width: 4.0),
             Text(
               widget.label,
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: colorScheme.onErrorContainer,
+                color: effectiveFg,
               ),
             ),
           ],
@@ -119,6 +147,16 @@ class AdkCascadeLiveBar extends StatelessWidget {
     this.onMicToggle,
     this.onDisconnect,
     this.statusText,
+    this.backgroundColor,
+    this.visualizerColor,
+    this.bargeInColor,
+    this.elevation,
+    this.margin,
+    this.padding,
+    this.borderRadius,
+    this.customLeading,
+    this.customTrailing,
+    this.waveVisualizerBuilder,
   });
 
   /// Whether user microphone input is currently open and transmitting.
@@ -142,6 +180,41 @@ class AdkCascadeLiveBar extends StatelessWidget {
   /// Custom status label to override default status text.
   final String? statusText;
 
+  /// Custom background color of the bar container.
+  final Color? backgroundColor;
+
+  /// Custom color override for the waveform visualizer bars.
+  final Color? visualizerColor;
+
+  /// Custom color override when barge-in interrupt occurs.
+  final Color? bargeInColor;
+
+  /// Custom elevation shadow for the container.
+  final double? elevation;
+
+  /// Custom outer margin.
+  final EdgeInsetsGeometry? margin;
+
+  /// Custom inner padding.
+  final EdgeInsetsGeometry? padding;
+
+  /// Custom border radius.
+  final BorderRadius? borderRadius;
+
+  /// Custom widget replacing the default microphone button.
+  final Widget? customLeading;
+
+  /// Custom widget replacing the default disconnect button.
+  final Widget? customTrailing;
+
+  /// Custom builder for the audio wave visualizer.
+  final Widget Function(
+    BuildContext context,
+    bool isActive,
+    bool isSpeaking,
+    bool isBargeIn,
+  )? waveVisualizerBuilder;
+
   String _resolveStatus() {
     if (statusText != null) return statusText!;
     if (isBargeIn) return 'User speaking...';
@@ -155,22 +228,28 @@ class AdkCascadeLiveBar extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
 
+    final Color effectiveBargeIn = bargeInColor ?? colorScheme.error;
+    final Color effectiveVisualizer = visualizerColor ??
+        (isBargeIn
+            ? effectiveBargeIn
+            : (isSpeaking ? colorScheme.secondary : colorScheme.primary));
+
     return Container(
-      margin: const EdgeInsets.all(12.0),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+      margin: margin ?? const EdgeInsets.all(12.0),
+      padding: padding ?? const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(28.0),
+        color: backgroundColor ?? colorScheme.surfaceContainerHigh,
+        borderRadius: borderRadius ?? BorderRadius.circular(28.0),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 10.0,
+            color: Colors.black.withValues(alpha: elevation != null ? (elevation! * 0.03).clamp(0.05, 0.3) : 0.12),
+            blurRadius: elevation ?? 10.0,
             offset: const Offset(0.0, 4.0),
           ),
         ],
         border: Border.all(
           color: isBargeIn
-              ? colorScheme.error.withValues(alpha: 0.5)
+              ? effectiveBargeIn.withValues(alpha: 0.5)
               : (isListening || isSpeaking
                   ? colorScheme.primary.withValues(alpha: 0.4)
                   : colorScheme.outlineVariant),
@@ -178,41 +257,49 @@ class AdkCascadeLiveBar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          AdkVoiceMicButton(
-            isListening: isListening,
-            size: 40.0,
-            onPressed: onMicToggle ?? () {},
-          ),
+          if (customLeading != null)
+            customLeading!
+          else
+            AdkVoiceMicButton(
+              isListening: isListening,
+              size: 40.0,
+              onPressed: onMicToggle ?? () {},
+            ),
           const SizedBox(width: 12.0),
-          AdkAudioWaveVisualizer(
-            isActive: isListening || isSpeaking,
-            height: 20.0,
-            barCount: 5,
-            color: isBargeIn
-                ? colorScheme.error
-                : (isSpeaking ? colorScheme.secondary : colorScheme.primary),
-          ),
+          if (waveVisualizerBuilder != null)
+            waveVisualizerBuilder!(context, isListening || isSpeaking, isSpeaking, isBargeIn)
+          else
+            AdkAudioWaveVisualizer(
+              isActive: isListening || isSpeaking,
+              height: 20.0,
+              barCount: 5,
+              color: effectiveVisualizer,
+            ),
           const SizedBox(width: 12.0),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8.0,
                   children: <Widget>[
                     Text(
                       _resolveStatus(),
                       style: theme.textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: isBargeIn
-                            ? colorScheme.error
+                            ? effectiveBargeIn
                             : (isSpeaking ? colorScheme.secondary : colorScheme.primary),
                       ),
                     ),
-                    if (isBargeIn) ...<Widget>[
-                      const SizedBox(width: 8.0),
-                      const AdkLiveBargeInIndicator(isBargeIn: true),
-                    ],
+                    if (isBargeIn)
+                      AdkLiveBargeInIndicator(
+                        isBargeIn: true,
+                        backgroundColor: bargeInColor?.withValues(alpha: 0.2),
+                        iconColor: bargeInColor,
+                      ),
                   ],
                 ),
                 if (partialTranscript != null && partialTranscript!.isNotEmpty)
@@ -227,7 +314,9 @@ class AdkCascadeLiveBar extends StatelessWidget {
               ],
             ),
           ),
-          if (onDisconnect != null) ...<Widget>[
+          if (customTrailing != null)
+            customTrailing!
+          else if (onDisconnect != null) ...<Widget>[
             IconButton(
               icon: const Icon(Icons.call_end_rounded),
               color: colorScheme.error,

@@ -10,3 +10,4 @@ pubspec.lock
 # ADK runtime artifacts from local test runs
 .adk/
 test_app/
+build/

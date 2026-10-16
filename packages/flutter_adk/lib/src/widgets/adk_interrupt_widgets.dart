@@ -13,6 +13,13 @@ class AdkInterruptBanner extends StatelessWidget {
     this.onResume,
     this.onDismiss,
     this.actionLabel = 'Review & Resume',
+    this.backgroundColor,
+    this.foregroundColor,
+    this.icon,
+    this.borderRadius,
+    this.padding,
+    this.margin,
+    this.actionBuilder,
   });
 
   /// Name of the tool or node that triggered the interrupt.
@@ -33,17 +40,41 @@ class AdkInterruptBanner extends StatelessWidget {
   /// Label for the action button.
   final String actionLabel;
 
+  /// Custom background color for the banner container.
+  final Color? backgroundColor;
+
+  /// Custom text and icon foreground color.
+  final Color? foregroundColor;
+
+  /// Custom leading icon.
+  final IconData? icon;
+
+  /// Custom border radius for the banner container.
+  final BorderRadius? borderRadius;
+
+  /// Custom padding inside the banner container.
+  final EdgeInsetsGeometry? padding;
+
+  /// Custom margin around the banner container.
+  final EdgeInsetsGeometry? margin;
+
+  /// Custom builder for the action area.
+  final Widget Function(BuildContext context, VoidCallback? onResume)? actionBuilder;
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
 
+    final Color effectiveBg = backgroundColor ?? colorScheme.errorContainer.withValues(alpha: 0.85);
+    final Color effectiveFg = foregroundColor ?? colorScheme.onErrorContainer;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
+      margin: margin ?? const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+      padding: padding ?? const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
       decoration: BoxDecoration(
-        color: colorScheme.errorContainer.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(12.0),
+        color: effectiveBg,
+        borderRadius: borderRadius ?? BorderRadius.circular(12.0),
         border: Border.all(
           color: colorScheme.error.withValues(alpha: 0.4),
         ),
@@ -51,8 +82,8 @@ class AdkInterruptBanner extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Icon(
-            Icons.pause_circle_filled_rounded,
-            color: colorScheme.onErrorContainer,
+            icon ?? Icons.pause_circle_filled_rounded,
+            color: effectiveFg,
             size: 24.0,
           ),
           const SizedBox(width: 12.0),
@@ -65,7 +96,7 @@ class AdkInterruptBanner extends StatelessWidget {
                   'Action Required: $toolName',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onErrorContainer,
+                    color: effectiveFg,
                   ),
                 ),
                 if (reason != null && reason!.isNotEmpty) ...<Widget>[
@@ -73,7 +104,7 @@ class AdkInterruptBanner extends StatelessWidget {
                   Text(
                     reason!,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onErrorContainer.withValues(alpha: 0.9),
+                      color: effectiveFg.withValues(alpha: 0.9),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -82,7 +113,9 @@ class AdkInterruptBanner extends StatelessWidget {
               ],
             ),
           ),
-          if (onResume != null) ...<Widget>[
+          if (actionBuilder != null)
+            actionBuilder!(context, onResume)
+          else if (onResume != null) ...<Widget>[
             const SizedBox(width: 8.0),
             FilledButton.tonal(
               onPressed: onResume,
@@ -96,7 +129,7 @@ class AdkInterruptBanner extends StatelessWidget {
           if (onDismiss != null) ...<Widget>[
             IconButton(
               icon: const Icon(Icons.close, size: 18.0),
-              color: colorScheme.onErrorContainer,
+              color: effectiveFg,
               visualDensity: VisualDensity.compact,
               onPressed: onDismiss,
               tooltip: 'Dismiss banner',
@@ -123,6 +156,12 @@ class AdkInterruptCard extends StatefulWidget {
     this.isProcessing = false,
     this.onResume,
     this.onCancel,
+    this.cardElevation = 2.0,
+    this.borderRadius,
+    this.accentColor,
+    this.headerBuilder,
+    this.actionsBuilder,
+    this.inputDecoration,
   });
 
   /// The name of the tool causing the pause.
@@ -152,6 +191,29 @@ class AdkInterruptCard extends StatefulWidget {
   /// Callback when user cancels the paused operation.
   final VoidCallback? onCancel;
 
+  /// Elevation of the card.
+  final double cardElevation;
+
+  /// Corner border radius.
+  final BorderRadius? borderRadius;
+
+  /// Accent highlight color.
+  final Color? accentColor;
+
+  /// Custom builder for the header section.
+  final Widget Function(BuildContext context)? headerBuilder;
+
+  /// Custom builder for action buttons.
+  final Widget Function(
+    BuildContext context,
+    void Function(String? val)? onResume,
+    VoidCallback? onCancel,
+    bool isProcessing,
+  )? actionsBuilder;
+
+  /// Custom decoration for the input field.
+  final InputDecoration? inputDecoration;
+
   @override
   State<AdkInterruptCard> createState() => _AdkInterruptCardState();
 }
@@ -180,12 +242,12 @@ class _AdkInterruptCardState extends State<AdkInterruptCard> {
     final ColorScheme colorScheme = theme.colorScheme;
 
     return Card(
-      elevation: 2.0,
+      elevation: widget.cardElevation,
       margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14.0),
+        borderRadius: widget.borderRadius ?? BorderRadius.circular(14.0),
         side: BorderSide(
-          color: colorScheme.error.withValues(alpha: 0.3),
+          color: (widget.accentColor ?? colorScheme.error).withValues(alpha: 0.3),
         ),
       ),
       child: Padding(
@@ -194,54 +256,57 @@ class _AdkInterruptCardState extends State<AdkInterruptCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                CircleAvatar(
-                  radius: 16.0,
-                  backgroundColor: colorScheme.errorContainer,
-                  child: Icon(
-                    Icons.security_update_warning_rounded,
-                    color: colorScheme.error,
-                    size: 18.0,
-                  ),
-                ),
-                const SizedBox(width: 10.0),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Tool Interrupted: ${widget.toolName}',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (widget.interruptId != null)
-                        Text(
-                          'ID: ${widget.interruptId}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
-                  decoration: BoxDecoration(
-                    color: colorScheme.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  child: Text(
-                    'Paused',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onTertiaryContainer,
-                      fontWeight: FontWeight.bold,
+            if (widget.headerBuilder != null)
+              widget.headerBuilder!(context)
+            else
+              Row(
+                children: <Widget>[
+                  CircleAvatar(
+                    radius: 16.0,
+                    backgroundColor: (widget.accentColor ?? colorScheme.error).withValues(alpha: 0.15),
+                    child: Icon(
+                      Icons.security_update_warning_rounded,
+                      color: widget.accentColor ?? colorScheme.error,
+                      size: 18.0,
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 10.0),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Tool Interrupted: ${widget.toolName}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (widget.interruptId != null)
+                          Text(
+                            'ID: ${widget.interruptId}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
+                    decoration: BoxDecoration(
+                      color: colorScheme.tertiaryContainer,
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    child: Text(
+                      'Paused',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onTertiaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             if (widget.reason != null && widget.reason!.isNotEmpty) ...<Widget>[
               const SizedBox(height: 12.0),
               Container(
@@ -288,47 +353,62 @@ class _AdkInterruptCardState extends State<AdkInterruptCard> {
               const SizedBox(height: 14.0),
               TextField(
                 controller: _inputController,
-                decoration: InputDecoration(
-                  hintText: widget.inputPlaceholder,
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12.0,
-                    vertical: 10.0,
-                  ),
-                ),
+                decoration: widget.inputDecoration ??
+                    InputDecoration(
+                      hintText: widget.inputPlaceholder,
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12.0,
+                        vertical: 10.0,
+                      ),
+                    ),
               ),
             ],
             const SizedBox(height: 16.0),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: <Widget>[
-                if (widget.onCancel != null) ...<Widget>[
-                  OutlinedButton(
-                    onPressed: widget.isProcessing ? null : widget.onCancel,
-                    child: const Text('Cancel'),
+            if (widget.actionsBuilder != null)
+              widget.actionsBuilder!(
+                context,
+                widget.onResume != null
+                    ? (String? val) {
+                        widget.onResume?.call(
+                          widget.requiresInput ? (val ?? _inputController.text.trim()) : null,
+                        );
+                      }
+                    : null,
+                widget.onCancel,
+                widget.isProcessing,
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  if (widget.onCancel != null) ...<Widget>[
+                    OutlinedButton(
+                      onPressed: widget.isProcessing ? null : widget.onCancel,
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8.0),
+                  ],
+                  FilledButton.icon(
+                    onPressed: widget.isProcessing
+                        ? null
+                        : () {
+                            widget.onResume?.call(
+                              widget.requiresInput ? _inputController.text.trim() : null,
+                            );
+                          },
+                    icon: widget.isProcessing
+                        ? const SizedBox(
+                            width: 14.0,
+                            height: 14.0,
+                            child: CircularProgressIndicator(strokeWidth: 2.0),
+                          )
+                        : const Icon(Icons.play_arrow_rounded, size: 18.0),
+                    label: Text(widget.isProcessing ? 'Resuming...' : 'Resume'),
                   ),
-                  const SizedBox(width: 8.0),
                 ],
-                FilledButton.icon(
-                  onPressed: widget.isProcessing
-                      ? null
-                      : () {
-                          widget.onResume?.call(
-                            widget.requiresInput ? _inputController.text.trim() : null,
-                          );
-                        },
-                  icon: widget.isProcessing
-                      ? const SizedBox(
-                          width: 14.0,
-                          height: 14.0,
-                          child: CircularProgressIndicator(strokeWidth: 2.0),
-                        )
-                      : const Icon(Icons.play_arrow_rounded, size: 18.0),
-                  label: Text(widget.isProcessing ? 'Resuming...' : 'Resume'),
-                ),
-              ],
-            ),
+              ),
           ],
         ),
       ),

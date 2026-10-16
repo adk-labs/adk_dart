@@ -236,6 +236,13 @@ AdkTheme(
 | **`AdkConfirmationBanner`** | Human-in-the-Loop (HITL) inline banner and modal dialog for sensitive tool approvals. | `AdkConfirmationBanner.showAsDialog(context, title: 'Approve Tool', description: '...');` |
 | **`AdkSessionDrawer`** | Sidebar drawer for switching, creating (`+`), and deleting conversation sessions. | `AdkSessionDrawer(sessions: sessions, activeSessionId: id, onSessionSelected: (s) => ...);` |
 | **`AdkFloatingChatButton`** | Floating Action Button (FAB) that opens an AI assistant modal bottom sheet. | `AdkFloatingChatButton(agent: myAgent);` |
+| **`AdkInterruptBanner`** | Real-time notification banner indicating an agent tool or workflow pause requiring user review. | `AdkInterruptBanner(toolName: 'transfer_funds', onResume: ...);` |
+| **`AdkInterruptCard`** | Interactive card displaying tool arguments JSON, input field, and resume/cancel actions. | `AdkInterruptCard(toolName: 'verify_otp', requiresInput: true, onResume: ...);` |
+| **`AdkCascadeLiveBar`** | Real-time multimodal streaming bar with speech waveform visualizer, mic toggle, and barge-in badge. | `AdkCascadeLiveBar(isListening: true, partialTranscript: '...');` |
+| **`AdkModelConsultBadge`**| Compact chip indicating advisor model consultation and remaining turn budget. | `AdkModelConsultBadge(advisorModel: 'gemini-2.5-pro', turnCount: 2, turnBudget: 3);` |
+| **`AdkEscalationCard`** | Expandable card displaying advisor reasoning, response output, and budget progress bars. | `AdkEscalationCard(advisorModel: 'gemini-2.5-pro', escalationReason: '...', turnCount: 2);` |
+| **`AdkClassifierCard`** | Decision breakdown card showing selected route, confidence score, and candidate probabilities. | `AdkClassifierCard(selectedRoute: 'billing', confidence: 0.94, probabilities: {...});` |
+| **`AdkWorkflowGraphView`**| Flowchart and DAG execution graph viewer for ADK `Workflow` and branching pipelines. | `AdkWorkflowGraphView(nodes: nodes, edges: edges, onNodeTap: ...);` |
 | **`AdkPromptSuggestionsBar`** | Horizontally scrollable bar with quick-tap prompt chips. | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
 | **`AdkToolCallCard`** | Accordion card displaying tool name, arguments, execution status, and return values. | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
 | **`AdkWorkflowProgressIndicator`**| Step-by-step timeline progress bar tracking workflow node statuses. | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
@@ -245,6 +252,10 @@ AdkTheme(
 | **`AdkMessageBubble`** | Material 3 chat bubble supporting user, model, tool, reasoning, and error roles. | `AdkMessageBubble(message: chatMessage);` |
 | **`AdkTypingIndicator`** | Smooth pulsing animated dots displayed during AI generation. | `AdkTypingIndicator();` |
 | **`AdkEventStreamBuilder`** | Reactive widget builder for listening directly to `Stream<Event>`. | `AdkEventStreamBuilder(stream: runner.runAsync(...), builder: (ctx, events) => ...);` |
+
+> 📖 **Full Widget Catalog & Recipes**: For exhaustive parameter tables, customization options, and copy-paste recipes, see [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md).
+>
+> 🛠️ **ADK UI Utilities**: Zero-boilerplate helpers (`AdkFormatters`, `AdkEventStreamUtils`, `AdkColorUtils`) are provided out-of-the-box for token, latency, byte, and stream parsing. Detailed in [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md#6-adk-ui-utilities).
 
 ---
 

@@ -246,5 +246,201 @@ void main() {
       await tester.pump();
       expect(tappedNode?.id, 'validate');
     });
+
+    testWidgets('Customization builders work across all widgets', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: <Widget>[
+                  AdkInterruptBanner(
+                    toolName: 'custom_banner_tool',
+                    actionBuilder: (BuildContext ctx, VoidCallback? onResume) =>
+                        const Text('CustomBannerAction'),
+                  ),
+                  AdkInterruptCard(
+                    toolName: 'custom_card_tool',
+                    headerBuilder: (BuildContext ctx) => const Text('CustomHeaderWidget'),
+                    actionsBuilder: (
+                      BuildContext ctx,
+                      void Function(String? val)? onResume,
+                      VoidCallback? onCancel,
+                      bool isProcessing,
+                    ) =>
+                        const Text('CustomActionsWidget'),
+                  ),
+                  AdkCascadeLiveBar(
+                    isListening: true,
+                    customLeading: const Text('CustomLeadingMic'),
+                    customTrailing: const Text('CustomTrailingEnd'),
+                    waveVisualizerBuilder: (
+                      BuildContext ctx,
+                      bool isActive,
+                      bool isSpeaking,
+                      bool isBargeIn,
+                    ) =>
+                        const Text('CustomWaveWidget'),
+                  ),
+                  AdkClassifierCard(
+                    selectedRoute: 'route_a',
+                    probabilities: const <String, double>{'route_a': 0.8},
+                    customRouteTileBuilder: (
+                      BuildContext ctx,
+                      String route,
+                      double prob,
+                      bool isSelected,
+                      VoidCallback? onTap,
+                    ) =>
+                        Text('CustomRouteTile: $route'),
+                  ),
+                  AdkWorkflowGraphView(
+                    orientation: Axis.vertical,
+                    nodes: const <AdkGraphNode>[
+                      AdkGraphNode(id: 'n1', label: 'Node 1'),
+                      AdkGraphNode(id: 'n2', label: 'Node 2'),
+                    ],
+                    edges: const <AdkGraphEdge>[
+                      AdkGraphEdge(fromId: 'n1', toId: 'n2', label: 'step'),
+                    ],
+                    nodeBuilder: (
+                      BuildContext ctx,
+                      AdkGraphNode n,
+                      bool isActive,
+                      AdkGraphNodeStatus status,
+                      VoidCallback? onTap,
+                    ) =>
+                        Text('CustomNode: ${n.id}'),
+                    edgeBuilder: (BuildContext ctx, AdkGraphEdge? e, bool isLast) =>
+                        Text('CustomEdge: ${e?.fromId}->${e?.toId}'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('CustomBannerAction'), findsOneWidget);
+      expect(find.text('CustomHeaderWidget'), findsOneWidget);
+      expect(find.text('CustomActionsWidget'), findsOneWidget);
+      expect(find.text('CustomLeadingMic'), findsOneWidget);
+      expect(find.text('CustomTrailingEnd'), findsOneWidget);
+      expect(find.text('CustomWaveWidget'), findsOneWidget);
+      expect(find.text('CustomRouteTile: route_a'), findsOneWidget);
+      expect(find.text('CustomNode: n1'), findsOneWidget);
+      expect(find.text('CustomNode: n2'), findsOneWidget);
+      expect(find.text('CustomEdge: n1->n2'), findsOneWidget);
+    });
+
+    test('AdkFormatters formats tokens, durations, bytes, and JSON correctly', () {
+      expect(AdkFormatters.formatTokens(450), '450 tokens');
+      expect(AdkFormatters.formatTokens(450, compact: true), '450');
+      expect(AdkFormatters.formatTokens(2500), '2.5k tokens');
+      expect(AdkFormatters.formatTokens(2500, compact: true), '2.5k');
+      expect(AdkFormatters.formatTokens(1250000), '1.3M tokens');
+      expect(AdkFormatters.formatTokens(1250000, compact: true), '1.3M');
+
+      expect(AdkFormatters.formatDuration(const Duration(milliseconds: 250)), '250ms');
+      expect(AdkFormatters.formatDuration(const Duration(seconds: 4, milliseconds: 200)), '4.20s');
+      expect(AdkFormatters.formatDuration(const Duration(minutes: 3, seconds: 15)), '3m 15s');
+
+      expect(AdkFormatters.formatBytes(500), '500 B');
+      expect(AdkFormatters.formatBytes(2048), '2.0 KB');
+      expect(AdkFormatters.formatBytes(1024 * 1024 * 3), '3.0 MB');
+
+      expect(AdkFormatters.formatJson(<String, dynamic>{'status': 'ok'}), contains('"status": "ok"'));
+      expect(AdkFormatters.formatJson(null), '');
+    });
+
+    test('AdkEventStreamUtils extracts tool calls, token usage, and model consult metadata', () {
+      final Event toolCallEvent = Event(
+        invocationId: 'inv-1',
+        author: 'model',
+        timestamp: 1729000000.0,
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.fromFunctionCall(
+              name: 'lookup_user',
+              args: <String, dynamic>{'userId': 'u-99'},
+              id: 'call-1',
+            ),
+          ],
+        ),
+      );
+
+      final List<AdkToolCallInfo> toolCalls = AdkEventStreamUtils.extractToolCalls(toolCallEvent);
+      expect(toolCalls, hasLength(1));
+      expect(toolCalls.first.toolName, 'lookup_user');
+      expect(toolCalls.first.callId, 'call-1');
+      expect(toolCalls.first.arguments['userId'], 'u-99');
+
+      final Event usageEvent = Event(
+        invocationId: 'inv-2',
+        author: 'model',
+        usageMetadata: <String, dynamic>{
+          'prompt_token_count': 120,
+          'candidates_token_count': 45,
+          'total_token_count': 165,
+          'thought_tokens': 20,
+        },
+      );
+
+      final AdkTokenUsage? usage = AdkEventStreamUtils.extractTokenUsage(usageEvent);
+      expect(usage, isNotNull);
+      expect(usage!.promptTokens, 120);
+      expect(usage.completionTokens, 45);
+      expect(usage.totalTokens, 165);
+      expect(usage.thoughtTokens, 20);
+
+      final Event consultEvent = Event(
+        invocationId: 'inv-3',
+        author: 'model',
+        customMetadata: <String, dynamic>{
+          'model_consult': true,
+          'advisor_model': 'gemini-2.5-pro',
+          'escalation_reason': 'High difficulty math',
+          'turn_count': 2,
+          'turn_budget': 5,
+        },
+      );
+
+      expect(AdkEventStreamUtils.isModelConsultEvent(consultEvent), isTrue);
+      final ({String? advisorModel, String? escalationReason, int? turnBudget, int? turnCount}) info =
+          AdkEventStreamUtils.extractModelConsultInfo(consultEvent);
+      expect(info.advisorModel, 'gemini-2.5-pro');
+      expect(info.escalationReason, 'High difficulty math');
+      expect(info.turnCount, 2);
+      expect(info.turnBudget, 5);
+    });
+
+    testWidgets('AdkColorUtils resolves status and confidence colors correctly',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) {
+              final Color highConf = AdkColorUtils.confidenceColor(context, 0.95);
+              final Color midConf = AdkColorUtils.confidenceColor(context, 0.65);
+              final Color lowConf = AdkColorUtils.confidenceColor(context, 0.2);
+
+              expect(highConf, Colors.green.shade600);
+              expect(midConf, Colors.orange.shade700);
+              expect(lowConf, Theme.of(context).colorScheme.error);
+
+              final Color completed =
+                  AdkColorUtils.nodeStatusColor(context, AdkGraphNodeStatus.completed);
+              final Color failed =
+                  AdkColorUtils.nodeStatusColor(context, AdkGraphNodeStatus.failed);
+              expect(completed, Colors.green.shade600);
+              expect(failed, Theme.of(context).colorScheme.error);
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+    });
   });
 }

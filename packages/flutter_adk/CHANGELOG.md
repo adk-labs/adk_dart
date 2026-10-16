@@ -8,6 +8,12 @@
 - Added **`AdkModelConsultBadge`** and **`AdkEscalationCard`** for advisor model consultation and budget tracking (`ModelConsultTool` and `ForceEscalationPlugin` parity).
 - Added **`AdkClassifierCard`** for visual routing decisions, confidence meters, and alternative probability breakdowns (`ClassifierNode` parity).
 - Added **`AdkWorkflowGraphView`** for interactive flowchart and pipeline execution graph visualization (`EdgesBuilder` parity).
+- Added extensive customization hooks across all new widgets: custom colors, elevations, border radii, padding, margin, icons, and builders (`actionBuilder`, `headerBuilder`, `actionsBuilder`, `customLeading`, `customTrailing`, `waveVisualizerBuilder`, `confidenceColorBuilder`, `probabilityBarColorBuilder`, `customRouteTileBuilder`, `nodeBuilder`, `edgeBuilder`).
+- Added **ADK UI Utilities** (`src/utils/adk_ui_utils.dart`):
+  - `AdkFormatters`: `formatTokens`, `formatDuration`, `formatBytes`, `formatJson`.
+  - `AdkEventStreamUtils`: `extractOpenInterrupts`, `hasOpenInterrupts`, `extractToolCalls`, `extractTokenUsage`, `isModelConsultEvent`, `extractModelConsultInfo`.
+  - `AdkColorUtils`: `confidenceColor`, `nodeStatusColor`.
+- Created comprehensive [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md) documenting widget specifications, parameter tables, customization options, and copy-paste recipes.
 - Added `AdkCodeExecutionCard` and `AdkGroundingSourcesBar` widgets, and wired `AdkAudioRecordingBar`, `AdkMarkdownText`, `AdkToolConfirmationCard`, and `AdkTraceWaterfallView` into `AdkChatController` and `AdkMessageBubble` for full `adk-web` parity.
 - Re-exported `CascadeLive`, `ElevenLabsSTT`, `ElevenLabsTTS`, and `Secret` via `package:adk_dart/adk_core.dart`.
 - Completed 100% `///` API documentation comments and runnable `/// ```dart` examples across all controllers, models, and widgets.

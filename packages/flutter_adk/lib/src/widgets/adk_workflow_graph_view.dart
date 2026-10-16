@@ -75,6 +75,21 @@ class AdkWorkflowGraphView extends StatelessWidget {
     this.onNodeTap,
     this.activeNodeId,
     this.title = 'Workflow Execution Graph',
+    this.orientation = Axis.horizontal,
+    this.nodeWidth = 140.0,
+    this.nodeHeight,
+    this.cardElevation = 2.0,
+    this.borderRadius,
+    this.cardMargin,
+    this.cardPadding,
+    this.completedColor,
+    this.runningColor,
+    this.failedColor,
+    this.skippedColor,
+    this.pendingColor,
+    this.activeBorderColor,
+    this.nodeBuilder,
+    this.edgeBuilder,
   });
 
   /// The list of nodes in topological or sequential order.
@@ -92,18 +107,73 @@ class AdkWorkflowGraphView extends StatelessWidget {
   /// Header title for the graph viewer.
   final String title;
 
+  /// Layout orientation of the node graph (horizontal or vertical).
+  final Axis orientation;
+
+  /// Fixed width for default node cards.
+  final double nodeWidth;
+
+  /// Optional fixed height for default node cards.
+  final double? nodeHeight;
+
+  /// Elevation shadow of the outer card.
+  final double cardElevation;
+
+  /// Border radius of the outer card.
+  final BorderRadius? borderRadius;
+
+  /// Margin around the outer card.
+  final EdgeInsetsGeometry? cardMargin;
+
+  /// Inner padding inside the outer card.
+  final EdgeInsetsGeometry? cardPadding;
+
+  /// Custom color override for [AdkGraphNodeStatus.completed].
+  final Color? completedColor;
+
+  /// Custom color override for [AdkGraphNodeStatus.running].
+  final Color? runningColor;
+
+  /// Custom color override for [AdkGraphNodeStatus.failed].
+  final Color? failedColor;
+
+  /// Custom color override for [AdkGraphNodeStatus.skipped].
+  final Color? skippedColor;
+
+  /// Custom color override for [AdkGraphNodeStatus.pending].
+  final Color? pendingColor;
+
+  /// Custom highlight border color for the active node.
+  final Color? activeBorderColor;
+
+  /// Custom builder for node widgets.
+  final Widget Function(
+    BuildContext context,
+    AdkGraphNode node,
+    bool isActive,
+    AdkGraphNodeStatus status,
+    VoidCallback? onTap,
+  )? nodeBuilder;
+
+  /// Custom builder for connecting edge connectors.
+  final Widget Function(
+    BuildContext context,
+    AdkGraphEdge? edge,
+    bool isLast,
+  )? edgeBuilder;
+
   Color _statusColor(ThemeData theme, AdkGraphNodeStatus status) {
     switch (status) {
       case AdkGraphNodeStatus.completed:
-        return Colors.green.shade600;
+        return completedColor ?? Colors.green.shade600;
       case AdkGraphNodeStatus.running:
-        return theme.colorScheme.primary;
+        return runningColor ?? theme.colorScheme.primary;
       case AdkGraphNodeStatus.failed:
-        return theme.colorScheme.error;
+        return failedColor ?? theme.colorScheme.error;
       case AdkGraphNodeStatus.skipped:
-        return theme.colorScheme.outline;
+        return skippedColor ?? theme.colorScheme.outline;
       case AdkGraphNodeStatus.pending:
-        return theme.colorScheme.outlineVariant;
+        return pendingColor ?? theme.colorScheme.outlineVariant;
     }
   }
 
@@ -128,15 +198,25 @@ class AdkWorkflowGraphView extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colorScheme = theme.colorScheme;
 
+    final Widget nodeContent = SingleChildScrollView(
+      scrollDirection: orientation,
+      child: orientation == Axis.horizontal
+          ? Row(children: _buildNodeItems(context, theme, colorScheme))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _buildNodeItems(context, theme, colorScheme),
+            ),
+    );
+
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      elevation: 2.0,
+      margin: cardMargin ?? const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      elevation: cardElevation,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
+        borderRadius: borderRadius ?? BorderRadius.circular(16.0),
         side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: cardPadding ?? const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -154,130 +234,188 @@ class AdkWorkflowGraphView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16.0),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: List.generate(nodes.length, (int index) {
-                  final AdkGraphNode node = nodes[index];
-                  final bool isLast = index == nodes.length - 1;
-                  final bool isActive = node.id == activeNodeId ||
-                      node.status == AdkGraphNodeStatus.running;
-
-                  // Find edge linking this node to next node if sequential
-                  final AdkGraphEdge? edge = !isLast
-                      ? edges.firstWhere(
-                          (AdkGraphEdge e) =>
-                              e.fromId == node.id && e.toId == nodes[index + 1].id,
-                          orElse: () => AdkGraphEdge(fromId: node.id, toId: ''),
-                        )
-                      : null;
-
-                  final Color statusCol = _statusColor(theme, node.status);
-
-                  return Row(
-                    children: <Widget>[
-                      InkWell(
-                        onTap: () => onNodeTap?.call(node),
-                        borderRadius: BorderRadius.circular(12.0),
-                        child: Container(
-                          width: 140.0,
-                          padding: const EdgeInsets.all(12.0),
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? colorScheme.primaryContainer.withValues(alpha: 0.6)
-                                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(12.0),
-                            border: Border.all(
-                              color: isActive ? colorScheme.primary : statusCol,
-                              width: isActive ? 2.0 : 1.0,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Row(
-                                children: <Widget>[
-                                  Icon(
-                                    _statusIcon(node.status, node.icon),
-                                    size: 16.0,
-                                    color: statusCol,
-                                  ),
-                                  const SizedBox(width: 6.0),
-                                  Expanded(
-                                    child: Text(
-                                      node.label,
-                                      style: theme.textTheme.labelMedium?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (node.subtitle != null) ...<Widget>[
-                                const SizedBox(height: 4.0),
-                                Text(
-                                  node.subtitle!,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.textTheme.bodySmall?.color
-                                        ?.withValues(alpha: 0.7),
-                                    fontSize: 10.0,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (!isLast) ...<Widget>[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              if (edge != null &&
-                                  edge.label != null &&
-                                  edge.label!.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6.0,
-                                    vertical: 1.0,
-                                  ),
-                                  margin: const EdgeInsets.only(bottom: 2.0),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.secondaryContainer,
-                                    borderRadius: BorderRadius.circular(6.0),
-                                  ),
-                                  child: Text(
-                                    edge.label!,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontSize: 9.0,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.onSecondaryContainer,
-                                    ),
-                                  ),
-                                ),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 16.0,
-                                color: colorScheme.outline,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                }),
-              ),
-            ),
+            nodeContent,
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildNodeItems(BuildContext context, ThemeData theme, ColorScheme colorScheme) {
+    return List<Widget>.generate(nodes.length, (int index) {
+      final AdkGraphNode node = nodes[index];
+      final bool isLast = index == nodes.length - 1;
+      final bool isActive = node.id == activeNodeId ||
+          node.status == AdkGraphNodeStatus.running;
+
+      final AdkGraphEdge? edge = !isLast
+          ? edges.firstWhere(
+              (AdkGraphEdge e) =>
+                  e.fromId == node.id && e.toId == nodes[index + 1].id,
+              orElse: () => AdkGraphEdge(fromId: node.id, toId: ''),
+            )
+          : null;
+
+      final Color statusCol = _statusColor(theme, node.status);
+      final VoidCallback? tapCallback = onNodeTap != null
+          ? () => onNodeTap!(node)
+          : null;
+
+      final Widget nodeWidget = nodeBuilder != null
+          ? nodeBuilder!(context, node, isActive, node.status, tapCallback)
+          : InkWell(
+              onTap: tapCallback,
+              borderRadius: BorderRadius.circular(12.0),
+              child: Container(
+                width: nodeWidth,
+                height: nodeHeight,
+                padding: const EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? (activeBorderColor ?? colorScheme.primary).withValues(alpha: 0.15)
+                      : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(12.0),
+                  border: Border.all(
+                    color: isActive ? (activeBorderColor ?? colorScheme.primary) : statusCol,
+                    width: isActive ? 2.0 : 1.0,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          _statusIcon(node.status, node.icon),
+                          size: 16.0,
+                          color: statusCol,
+                        ),
+                        const SizedBox(width: 6.0),
+                        Expanded(
+                          child: Text(
+                            node.label,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (node.subtitle != null) ...<Widget>[
+                      const SizedBox(height: 4.0),
+                      Text(
+                        node.subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.textTheme.bodySmall?.color
+                              ?.withValues(alpha: 0.7),
+                          fontSize: 10.0,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+
+      final Widget connectorWidget = edgeBuilder != null
+          ? edgeBuilder!(context, edge, isLast)
+          : (!isLast
+              ? (orientation == Axis.horizontal
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if (edge != null &&
+                              edge.label != null &&
+                              edge.label!.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6.0,
+                                vertical: 1.0,
+                              ),
+                              margin: const EdgeInsets.only(bottom: 2.0),
+                              decoration: BoxDecoration(
+                                color: colorScheme.secondaryContainer,
+                                borderRadius: BorderRadius.circular(6.0),
+                              ),
+                              child: Text(
+                                edge.label!,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontSize: 9.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onSecondaryContainer,
+                                ),
+                              ),
+                            ),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 16.0,
+                            color: colorScheme.outline,
+                          ),
+                        ],
+                      ),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const SizedBox(width: 20.0),
+                          Icon(
+                            Icons.arrow_downward_rounded,
+                            size: 16.0,
+                            color: colorScheme.outline,
+                          ),
+                          if (edge != null &&
+                              edge.label != null &&
+                              edge.label!.isNotEmpty) ...<Widget>[
+                            const SizedBox(width: 6.0),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6.0,
+                                vertical: 1.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.secondaryContainer,
+                                borderRadius: BorderRadius.circular(6.0),
+                              ),
+                              child: Text(
+                                edge.label!,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontSize: 9.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onSecondaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ))
+              : const SizedBox.shrink());
+
+      return orientation == Axis.horizontal
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                nodeWidget,
+                connectorWidget,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                nodeWidget,
+                connectorWidget,
+              ],
+            );
+    });
   }
 }
