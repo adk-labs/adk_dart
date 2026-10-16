@@ -17,6 +17,8 @@ import '../cli/cli_eval.dart' as cli_eval;
 import '../cli/conformance/adk_web_server_client.dart';
 import 'package:adk_dart/src/runners/runner.dart';
 import 'package:adk_dart/src/events/event.dart';
+import 'package:adk_dart/src/events/interrupts.dart'
+    show indexOpenInterrupts, OpenInterrupt;
 import 'package:adk_dart/src/sessions/session.dart';
 import 'package:adk_dart/src/sessions/schemas/v0.dart';
 import 'package:adk_dart/src/sessions/migration/migration_runner.dart'
@@ -5049,6 +5051,26 @@ Future<int> _runRunCommand(
   }
 
   if (command.message != null) {
+    final Map<String, OpenInterrupt> openInterrupts =
+        indexOpenInterrupts(session.events);
+    String? activeInterruptId;
+    for (final Event e in session.events.reversed) {
+      final List<String> activeIds = <String>[
+        for (final String id in e.longRunningToolIds ?? const <String>{})
+          if (openInterrupts.containsKey(id)) id,
+      ];
+      if (activeIds.isNotEmpty) {
+        activeInterruptId = activeIds.first;
+        break;
+      }
+    }
+
+    if (activeInterruptId != null && !command.jsonl) {
+      out.writeln(
+        'Auto-resuming interrupt $activeInterruptId with input: ${command.message}',
+      );
+    }
+
     final List<Event>? events = await sendMessageToSession(command.message!);
     if (events == null) {
       await runtime.runner.close();

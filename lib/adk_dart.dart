@@ -143,6 +143,7 @@ export 'src/events/node_path_builder.dart';
 export 'src/events/request_input.dart';
 export 'src/events/structured_events.dart';
 export 'src/events/ui_widget.dart';
+export 'src/events/interrupts.dart';
 
 export 'src/evaluation/base_eval_service.dart';
 export 'src/evaluation/agent_evaluator.dart';

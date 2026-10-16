@@ -87,4 +87,27 @@ Comprehensive synchronization across all upstream ADK repositories (`adk-python`
 - **Tests**:
   - Added [test/unit4_workflow_edges_builder_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit4_workflow_edges_builder_test.dart) covering linear chains, multiple-node chaining, fan-out, fan-in `joinTo`, route maps (`on`, `onAny`, `otherwise`), route map validation errors, `Workflow.build` end-to-end execution, and `AgentEngineClient` session/query/stream execution (9/9 passed).
 
+---
+
+## Unit 5: Sub-package (packages/adk) Web Server & CLI Enhancements
+- **Interrupts Indexing & Resolution (`23bc0bb79`, `_interrupts.py`, `cli.py`)**:
+  - Created `lib/src/events/interrupts.dart`:
+    - `OpenInterrupt`: Metadata class tracking event `author` and hierarchical `ancestorAuthors`.
+    - `extractEventInterruptIds`: Extracts IDs from `event.longRunningToolIds` and fallback function calls (`adk_request_input`, `adk_request_credential`, `adk_request_confirmation`).
+    - `isInterruptEvent`: Boolean predicate for interrupt events.
+    - `indexOpenInterrupts`: Indexes open interrupts across the event sequence, correctly closing answered interrupts when user `FunctionResponse` arrives or when a sub-branch finishes with matching `runId`.
+  - In `lib/src/events/node_path_builder.dart`:
+    - Added `orderedRunIds` getter to `BranchPath` to extract run IDs embedded in `segment@run_id`.
+  - In `packages/adk/lib/src/dev/cli.dart`:
+    - Integrated `indexOpenInterrupts` to detect active unanswered interrupts during `adk run`, logging auto-resume messages and forwarding inputs appropriately without mistaking answered pauses for open interrupts.
+- **Initial State Seeding from `initial_state.json` (`3c8c63e41`, `dev_server.py`)**:
+  - In `packages/adk/lib/src/dev/web_server.dart`:
+    - Added `getAgentDir(String appName)` helper to `_AdkDevWebContext`.
+    - Added `_loadInitialState(_AdkDevWebContext context, String appName)` to read the optional `initial_state.json` file located next to the agent directory.
+    - Updated `_handleLegacyCreateSession`, `_handleCreateSession`, and `_handleCreateSessionWithId` to seed session state with `initial_state.json`, while allowing caller-provided state to override file values key by key.
+- **Exports**:
+  - Exported `interrupts.dart` in `lib/adk_dart.dart` and `lib/adk_core.dart`.
+- **Tests**:
+  - Added [test/unit5_interrupts_and_initial_state_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit5_interrupts_and_initial_state_test.dart) covering open interrupt tracking, user response resolution, sub-branch runId resolution, fallback function call extraction, and `initial_state.json` state merge semantics (4/4 passed).
+
 

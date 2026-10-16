@@ -165,6 +165,18 @@ class BranchPath {
   /// A copy of the path segments.
   List<String> get segments => List<String>.from(_segments);
 
+  /// Returns the run IDs embedded across path segments (e.g. `segment@run_id`).
+  List<String> get orderedRunIds {
+    final List<String> runIds = <String>[];
+    for (final String segment in _segments) {
+      final int marker = segment.indexOf('@');
+      if (marker >= 0 && marker < segment.length - 1) {
+        runIds.add(segment.substring(marker + 1));
+      }
+    }
+    return List<String>.unmodifiable(runIds);
+  }
+
   /// Returns a new [BranchPath] with a single [segment] appended.
   ///
   /// When [runId] is provided the segment is formatted as `segment@runId`.

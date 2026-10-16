@@ -618,6 +618,18 @@ class _AdkDevWebContext {
   /// expose these privileged internal agents.
   bool get allowSpecialAgents => enableWebUi;
 
+  /// Resolves the filesystem directory for [appName].
+  String? getAgentDir(String appName) {
+    final Directory candidate = Directory('$agentsDir${Platform.pathSeparator}$appName');
+    if (candidate.existsSync()) {
+      return candidate.path;
+    }
+    if (appName == defaultAppName) {
+      return agentsDir;
+    }
+    return null;
+  }
+
   /// Throws a [SpecialAgentAccessDeniedException] when [appName] is an
   /// internal special agent and [allowSpecialAgents] is false.
   void _guardSpecialAgentAccess(String appName) {
@@ -3086,6 +3098,31 @@ EvalMetric? _evalMetricFromName(String raw) {
   }
 }
 
+const String _initialStateFilename = 'initial_state.json';
+
+Map<String, Object?> _loadInitialState(_AdkDevWebContext context, String appName) {
+  final String? agentDir = context.getAgentDir(appName);
+  if (agentDir == null) {
+    return const <String, Object?>{};
+  }
+  final File file = File('$agentDir${Platform.pathSeparator}$_initialStateFilename');
+  if (!file.existsSync()) {
+    return const <String, Object?>{};
+  }
+  try {
+    final String content = file.readAsStringSync(encoding: utf8);
+    final dynamic decoded = jsonDecode(content);
+    if (decoded is Map) {
+      return Map<String, Object?>.from(
+        decoded.map((dynamic k, dynamic v) => MapEntry(k.toString(), v)),
+      );
+    }
+  } catch (_) {
+    // Missing, unreadable, or malformed file yields empty state.
+  }
+  return const <String, Object?>{};
+}
+
 Future<void> _handleLegacyCreateSession(
   HttpRequest request,
   _AdkDevWebContext context,
@@ -3098,9 +3135,23 @@ Future<void> _handleLegacyCreateSession(
     ], fallback: context.defaultUserId),
     'user_id',
   );
+  final Map<String, Object?>? state = _readObjectMap(payload, const <String>[
+    'state',
+  ]);
+  final Map<String, Object?> initialState = _loadInitialState(
+    context,
+    context.defaultAppName,
+  );
+  final Map<String, Object?>? mergedState = (initialState.isEmpty && state == null)
+      ? null
+      : <String, Object?>{
+          ...initialState,
+          ...?state,
+        };
   final Session session = await context.sessionService.createSession(
     appName: context.defaultAppName,
     userId: userId,
+    state: mergedState,
   );
 
   await _writeJson(
@@ -3305,12 +3356,19 @@ Future<void> _handleCreateSession(
   final Map<String, Object?>? state = _readObjectMap(payload, const <String>[
     'state',
   ]);
+  final Map<String, Object?> initialState = _loadInitialState(context, appName);
+  final Map<String, Object?>? mergedState = (initialState.isEmpty && state == null)
+      ? null
+      : <String, Object?>{
+          ...initialState,
+          ...?state,
+        };
 
   final Session session = await context.sessionService.createSession(
     appName: appName,
     userId: userId,
     sessionId: validatedRequestedSessionId,
-    state: state,
+    state: mergedState,
   );
 
   final List<Event> seedEvents = _readEventsFromPayload(
@@ -3350,12 +3408,19 @@ Future<void> _handleCreateSessionWithId(
   final Map<String, Object?>? state = _readObjectMap(payload, const <String>[
     'state',
   ]);
+  final Map<String, Object?> initialState = _loadInitialState(context, appName);
+  final Map<String, Object?>? mergedState = (initialState.isEmpty && state == null)
+      ? null
+      : <String, Object?>{
+          ...initialState,
+          ...?state,
+        };
 
   final Session session = await context.sessionService.createSession(
     appName: appName,
     userId: userId,
     sessionId: sessionId,
-    state: state,
+    state: mergedState,
   );
 
   await _writeJson(

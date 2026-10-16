@@ -66,6 +66,7 @@ export 'src/events/rewind_events.dart';
 export 'src/events/node_path_builder.dart';
 export 'src/events/request_input.dart';
 export 'src/events/structured_events.dart';
+export 'src/events/interrupts.dart';
 
 export 'src/memory/base_memory_service.dart';
 export 'src/memory/in_memory_memory_service.dart';
