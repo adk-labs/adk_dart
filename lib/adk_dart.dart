@@ -121,6 +121,7 @@ export 'src/integrations/opensandbox/opensandbox_environment.dart';
 export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
 export 'src/integrations/vmaas/agent_engine_environment.dart';
+export 'src/integrations/vmaas/agent_engine_client.dart';
 export 'src/labs/classifiers/classifiers.dart';
 export 'src/labs/openai.dart';
 export 'src/live/live.dart';
@@ -466,6 +467,7 @@ export 'src/tools/vertex_rag_retrieval_tool.dart';
 
 export 'src/types/content.dart';
 export 'src/workflow/workflow.dart' hide RetryConfig;
+export 'src/workflow/edges_builder.dart';
 export 'src/workflow/workflow_tool.dart';
 export 'src/workflow/replay_manager.dart';
 export 'src/utils/agent_mode.dart';

@@ -62,4 +62,29 @@ Comprehensive synchronization across all upstream ADK repositories (`adk-python`
 - **Tests**:
   - Added [test/unit3_force_escalation_plugin_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit3_force_escalation_plugin_test.dart) covering turn and session budget tracking, first-consult forcing, tool refusal gating, repeat loop detection, and constructor argument validation (100% pass).
 
+---
+
+## Unit 4: Workflow EdgesBuilder & AgentEngineClient
+- **`EdgesBuilder` Fluent Graph Builder (`47214918`, `EdgesBuilder.java`, `EdgesDsl.kt`)**:
+  - Created `lib/src/workflow/edges_builder.dart`:
+    - `EdgesBuilder`: `from(node)`, `fromStart()`, `fromGroup(nodes)`, `fromNodes(first, second, ...rest)`, `build()`, and `EdgesBuilder.buildEdges((g) { ... })`.
+    - `EdgeChain`: `then(next)`, `thenGroup(targets)` / `thenAll(targets)`, `chain(nodes)`, and `route(definition)`.
+    - `NodeGroupChain`: `joinTo(join)`.
+    - `RouteMap`: `on(route)`, `onAny(routes)`, `otherwise(target, ...rest)`, and `anyOf(routes)`.
+    - `RouteMapEntry`: `then(target, ...rest)`.
+    - `RouteSet`: Groups multiple route keys into a single route trigger.
+  - In `lib/src/workflow/workflow.dart`:
+    - Added factory constructor `Workflow.build` with `required void Function(EdgesBuilder g) buildEdges` parameter.
+- **`AgentEngineClient` Vertex AI Reasoning Engine / VMaaS Client (`0f28dc95`, `agent_engine_client.ts`)**:
+  - Created `lib/src/integrations/vmaas/agent_engine_client.dart`:
+    - `AgentEngineConfig`: Connection metadata (`project`, `location`, `reasoningEngineId`, `apiEndpoint`, `accessToken`).
+    - `SessionConfig` & `QueryConfig`: JSON-serializable payloads for sessions and model queries.
+    - `AgentExecutionError`: Structured exception for remote reasoning engine errors.
+    - `AgentEngineClient`: Implements `createSession`, synchronous `query`, and streaming `streamQuery` with SSE chunk and `[DONE]` terminator parsing.
+- **Exports**:
+  - Exported `EdgesBuilder` in `lib/adk_dart.dart` and `lib/adk_core.dart`.
+  - Exported `AgentEngineClient` in `lib/adk_dart.dart`.
+- **Tests**:
+  - Added [test/unit4_workflow_edges_builder_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit4_workflow_edges_builder_test.dart) covering linear chains, multiple-node chaining, fan-out, fan-in `joinTo`, route maps (`on`, `onAny`, `otherwise`), route map validation errors, `Workflow.build` end-to-end execution, and `AgentEngineClient` session/query/stream execution (9/9 passed).
+
 

@@ -24,6 +24,7 @@ import '../tools/node_tool.dart';
 import '../tools/tool_confirmation.dart';
 import '../types/content.dart';
 import 'workflow_tool.dart';
+import 'edges_builder.dart';
 
 /// Sentinel node name used for workflow start edges.
 // ignore: constant_identifier_names
@@ -1468,6 +1469,41 @@ class Workflow extends BaseAgent {
        edges = List<Edge>.unmodifiable(edges),
        super(subAgents: const <BaseAgent>[]) {
     _validateStaticGraphEdges(this.nodes, this.edges);
+  }
+
+  /// Creates a workflow using an [EdgesBuilder] graph definition callback.
+  ///
+  /// ```dart
+  /// final workflow = Workflow.build(
+  ///   name: 'support_triage',
+  ///   nodes: [classify, category, billing, summarize],
+  ///   buildEdges: (g) {
+  ///     g.fromStart().chain([classify, category]).route((r) {
+  ///       r.on('billing').then(billing);
+  ///       r.otherwise(summarize);
+  ///     });
+  ///     g.from(billing).then(summarize);
+  ///   },
+  /// );
+  /// ```
+  factory Workflow.build({
+    required String name,
+    String description = '',
+    required List<BaseNode> nodes,
+    required void Function(EdgesBuilder g) buildEdges,
+    int? maxConcurrency,
+    Object? beforeAgentCallback,
+    Object? afterAgentCallback,
+  }) {
+    return Workflow(
+      name: name,
+      description: description,
+      nodes: nodes,
+      edges: EdgesBuilder.buildEdges(buildEdges),
+      maxConcurrency: maxConcurrency,
+      beforeAgentCallback: beforeAgentCallback,
+      afterAgentCallback: afterAgentCallback,
+    );
   }
 
   /// Nodes in this workflow.
