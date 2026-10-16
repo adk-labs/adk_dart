@@ -255,7 +255,9 @@ AdkTheme(
 
 > 📖 **Full Widget Catalog & Recipes**: For exhaustive parameter tables, customization options, and copy-paste recipes, see [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md).
 >
-> 🛠️ **ADK UI Utilities**: Zero-boilerplate helpers (`AdkFormatters`, `AdkEventStreamUtils`, `AdkColorUtils`) are provided out-of-the-box for token, latency, byte, and stream parsing. Detailed in [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md#6-adk-ui-utilities).
+> 📋 **Widget Technical Specification**: For complete API signatures, builder hook definitions, accessibility features, and platform notes across all 33 widgets, see [WIDGET_SPECIFICATION.md](docs/WIDGET_SPECIFICATION.md) ([한국어 명세서](docs/WIDGET_SPECIFICATION.ko.md)).
+>
+> 🛠️ **ADK UI Utilities**: Zero-boilerplate helpers (`AdkFormatters`, `AdkEventStreamUtils`, `AdkColorUtils`) are provided out-of-the-box for token, latency, byte, and stream parsing. Detailed in [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md#6-adk-ui-utilities) and [WIDGET_SPECIFICATION.md](docs/WIDGET_SPECIFICATION.md#10-adk-ui-utilities).
 
 ---
 

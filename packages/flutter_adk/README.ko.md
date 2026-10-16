@@ -236,6 +236,13 @@ AdkTheme(
 | **`AdkConfirmationBanner`** | 민감한 도구 실행 전 사용자 승인을 받는 인간 참여(HITL) 배너 및 모달 다이얼로그 | `AdkConfirmationBanner.showAsDialog(context, title: '도구 승인', description: '...');` |
 | **`AdkSessionDrawer`** | 대화 세션 히스토리 목록 탐색, 세션 전환, 생성(`+`), 삭제 지원 드로어 | `AdkSessionDrawer(sessions: sessions, activeSessionId: id, onSessionSelected: (s) => ...);` |
 | **`AdkFloatingChatButton`** | 탭 시 모달 바텀시트 챗창이 열리는 플로팅 액션 버튼(FAB) | `AdkFloatingChatButton(agent: myAgent);` |
+| **`AdkInterruptBanner`** | 도구 또는 워크플로우 승인/입력 대기 상태를 알리는 실시간 인터럽트 배너 | `AdkInterruptBanner(toolName: 'transfer_funds', onResume: ...);` |
+| **`AdkInterruptCard`** | 도구 인자 JSON, 입력 폼, 승인/거부/재개 액션을 제공하는 대화형 카드 | `AdkInterruptCard(toolName: 'verify_otp', requiresInput: true, onResume: ...);` |
+| **`AdkCascadeLiveBar`** | 실시간 음성/멀티모달 스트리밍 바 (오디오 파형 시각화, 마이크 토글, 끼어들기 감지) | `AdkCascadeLiveBar(isListening: true, partialTranscript: '...');` |
+| **`AdkModelConsultBadge`**| 상위 조언자 모델 자문 여부 및 잔여 턴 예산을 보여주는 컴팩트 칩 | `AdkModelConsultBadge(advisorModel: 'gemini-2.5-pro', turnCount: 2, turnBudget: 3);` |
+| **`AdkEscalationCard`** | 조언자 모델의 심층 분석 추론, 응답 내용, 예산 소진 게이지 확장 카드 | `AdkEscalationCard(advisorModel: 'gemini-2.5-pro', escalationReason: '...', turnCount: 2);` |
+| **`AdkClassifierCard`** | 분류 결정 라우트, 신뢰도 점수, 후보별 확률 분포를 표시하는 카드 | `AdkClassifierCard(selectedRoute: 'billing', confidence: 0.94, probabilities: {...});` |
+| **`AdkWorkflowGraphView`**| ADK `Workflow` 및 분기형 파이프라인의 DAG 실행 그래프/플로우차트 뷰어 | `AdkWorkflowGraphView(nodes: nodes, edges: edges, onNodeTap: ...);` |
 | **`AdkPromptSuggestionsBar`** | 가로 스크롤 추천 질문 칩 바 | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
 | **`AdkToolCallCard`** | 도구 이름, 전달 인자, 실행 상태, 반환 결과를 보여주는 아코디언 카드 | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
 | **`AdkWorkflowProgressIndicator`**| 워크플로우 각 노드의 실행 타임라인 진행률 바 | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
@@ -245,6 +252,12 @@ AdkTheme(
 | **`AdkMessageBubble`** | 사용자, 모델, 툴, 추론 과정, 에러를 명확히 구분하는 Material 3 메시지 버블 | `AdkMessageBubble(message: chatMessage);` |
 | **`AdkTypingIndicator`** | AI 생각/타이핑 펄스 인디케이터 | `AdkTypingIndicator();` |
 | **`AdkEventStreamBuilder`** | ADK의 실시간 `Stream<Event>`를 즉시 수신하여 반응형 UI를 구성하는 전용 빌더 | `AdkEventStreamBuilder(stream: runner.runAsync(...), builder: (ctx, events) => ...);` |
+
+> 📖 **위젯 카탈로그 및 레시피**: 전체 파라미터 표, 상세 커스터마이징 옵션 및 복사해 쓸 수 있는 실무 레시피는 [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md)를 참조하세요.
+>
+> 📋 **위젯 기술 명세서**: 33개 전체 위젯의 API 시그니처, 빌더 훅 명세, 접근성 및 플랫폼 호환성 가이드는 [WIDGET_SPECIFICATION.ko.md](docs/WIDGET_SPECIFICATION.ko.md) ([English Spec](docs/WIDGET_SPECIFICATION.md))를 참조하세요.
+>
+> 🛠️ **ADK UI 유틸리티**: 토큰 포맷팅, 지연 시간/바이트 계산, 이벤트 스트림 파싱을 위한 헬퍼(`AdkFormatters`, `AdkEventStreamUtils`, `AdkColorUtils`)를 기본 제공합니다. [WIDGET_SPECIFICATION.ko.md](docs/WIDGET_SPECIFICATION.ko.md#10-adk-ui-유틸리티) 및 [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md#6-adk-ui-utilities)에서 확인할 수 있습니다.
 
 ---
 
