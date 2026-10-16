@@ -40,3 +40,26 @@ Comprehensive synchronization across all upstream ADK repositories (`adk-python`
 - **Tests**:
   - Added [test/unit2_gemini_speech_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit2_gemini_speech_test.dart) covering `GeminiTTS` synthesis, segment splitting, barge-in cancellation, constructor validations, and `GeminiSTT` audio streaming and transcription events (100% pass).
 
+---
+
+## Unit 3: Plugins & Tools (`ForceEscalationPlugin` & `ModelConsultTool` Budget)
+- **`ModelConsultTool` Turn and Session Budgeting (`08b53e839`, `_model_consult_tool.py`)**:
+  - In `lib/src/tools/model_consult/model_consult_tool.dart`:
+    - Added `sessionMaxUses` (and `maxUses` alias for `maxConsultationsPerInvocation`).
+    - Added state key generators: `turnUsesStateKey({required String toolName, required String invocationId})` (`temp:model_consult:$toolName:$invocationId:uses`) and `sessionUsesStateKey({required String toolName})` (`model_consult:$toolName:session_uses`).
+    - Added `hasRemainingBudget(Object context)`, `turnUses(Object context)`, and `sessionUses(Object context)`.
+    - Enforced session and invocation caps during `run`, returning `SESSION_CONSULTATION_LIMIT_EXCEEDED` or `CONSULTATION_LIMIT_EXCEEDED` when exhausted, and recorded usage increments into `toolContext.state` upon success.
+- **`ForceEscalationPlugin` (`a84d978e2`, `_force_escalation_plugin.py`)**:
+  - Created `lib/src/tools/model_consult/force_escalation_plugin.dart` implementing `BasePlugin`.
+  - Added deterministic escalation triggers:
+    - `forceFirstConsult`: Requires consultation via `FunctionCallingConfig(mode: FunctionCallingConfigMode.any, allowedFunctionNames: [toolName])` on the first model turn.
+    - `forceOnRepeat`: Detects looping calls with identical serialized arguments (`signature`) exceeding `forceOnRepeat` threshold, setting `pendingForce` for the subsequent model call.
+    - `requireConsultBefore`: Refuses gated tools in `beforeToolCallback` with `status: 'consult_required'` until at least one consultation succeeds in the session, up to `maxRefusals`.
+    - `maxForced` cap to prevent runaway advisor spend.
+    - Lifecycle cleanup in `afterRunCallback` and `close`.
+- **Exports**:
+  - Exported `ForceEscalationPlugin` in `lib/adk_dart.dart`.
+- **Tests**:
+  - Added [test/unit3_force_escalation_plugin_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit3_force_escalation_plugin_test.dart) covering turn and session budget tracking, first-consult forcing, tool refusal gating, repeat loop detection, and constructor argument validation (100% pass).
+
+

@@ -4,6 +4,8 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import '../../agents/callback_context.dart';
+import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
 import '../../models/base_llm.dart';
 import '../../models/llm_request.dart';
@@ -207,8 +209,11 @@ class ModelConsultTool extends BaseTool {
     this.advisorInstruction = defaultAdvisorSystemInstruction,
     this.contextConfig = const ModelConsultContextConfig(),
     this.generateContentConfig,
-    this.maxConsultationsPerInvocation,
-  }) : super(
+    int? maxConsultationsPerInvocation,
+    int? maxUses,
+    this.sessionMaxUses,
+  }) : maxConsultationsPerInvocation = maxConsultationsPerInvocation ?? maxUses,
+       super(
          description:
              description ??
              'Consults an expert advisor model for guidance on complex '
@@ -220,6 +225,20 @@ class ModelConsultTool extends BaseTool {
       );
     }
   }
+
+  /// Default tool name for model consultation.
+  static const String defaultToolName = defaultConsultModelToolName;
+
+  /// Returns the state key for turn uses of [toolName].
+  static String turnUsesStateKey({
+    required String toolName,
+    required String invocationId,
+  }) =>
+      'temp:model_consult:$toolName:$invocationId:uses';
+
+  /// Returns the state key for session uses of [toolName].
+  static String sessionUsesStateKey({required String toolName}) =>
+      'model_consult:$toolName:session_uses';
 
   /// Advisor model specification, either a model name [String] or a [BaseLlm].
   final Object model;
@@ -236,12 +255,79 @@ class ModelConsultTool extends BaseTool {
   /// Optional cap on how many consultations may occur in one invocation.
   final int? maxConsultationsPerInvocation;
 
+  /// Optional cap on how many consultations may occur in one invocation (alias).
+  int? get maxUses => maxConsultationsPerInvocation;
+
+  /// Optional cap on how many consultations may occur across a multi-turn session.
+  final int? sessionMaxUses;
+
   /// Resolved advisor [BaseLlm] instance.
   BaseLlm get resolvedModel {
     if (model is BaseLlm) {
       return model as BaseLlm;
     }
     return LLMRegistry.newLlm(model as String);
+  }
+
+  /// Returns whether this tool still has remaining budget for [context].
+  bool hasRemainingBudget(Object context) {
+    if (sessionMaxUses != null && sessionUses(context) >= sessionMaxUses!) {
+      return false;
+    }
+    final int? turnCap = maxConsultationsPerInvocation;
+    if (turnCap != null && turnUses(context) >= turnCap) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Returns the number of consultations performed in the current turn for [context].
+  int turnUses(Object context) {
+    final String? invocationId = _extractInvocationId(context);
+    final Map<String, Object?>? state = _extractState(context);
+    if (invocationId == null || state == null) return 0;
+    final String key = turnUsesStateKey(toolName: name, invocationId: invocationId);
+    final Object? val = state[key];
+    return val is num ? val.toInt() : 0;
+  }
+
+  /// Returns the number of consultations performed in the session for [context].
+  int sessionUses(Object context) {
+    final Map<String, Object?>? state = _extractState(context);
+    if (state == null) return 0;
+    final String key = sessionUsesStateKey(toolName: name);
+    final Object? val = state[key];
+    return val is num ? val.toInt() : 0;
+  }
+
+  static String? _extractInvocationId(Object context) {
+    if (context is ToolContext) return context.invocationId;
+    if (context is CallbackContext) return context.invocationId;
+    if (context is InvocationContext) return context.invocationId;
+    try {
+      final dynamic dyn = context;
+      final Object? id = dyn.invocationId;
+      return id?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, Object?>? _extractState(Object context) {
+    if (context is ToolContext) return context.state;
+    if (context is CallbackContext) return context.state;
+    if (context is InvocationContext) return context.session.state;
+    if (context is Map<String, Object?>) return context;
+    try {
+      final dynamic dyn = context;
+      final Object? state = dyn.state;
+      if (state is Map<String, Object?>) return state;
+      if (state != null) {
+        final dynamic s = state;
+        return s as Map<String, Object?>;
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
@@ -292,12 +378,22 @@ class ModelConsultTool extends BaseTool {
       ).toJson();
     }
 
+    if (sessionMaxUses != null) {
+      final int currentSessionUses = sessionUses(toolContext);
+      if (currentSessionUses >= sessionMaxUses!) {
+        return AdvisorError(
+          error:
+              'Maximum number of model consultations ($sessionMaxUses) '
+              'reached for this session.',
+          errorCode: 'SESSION_CONSULTATION_LIMIT_EXCEEDED',
+          model: advisorLlm.model,
+        ).toJson();
+      }
+    }
+
     if (maxConsultationsPerInvocation != null) {
-      final String countKey =
-          'temp:_adk_model_consult_count_${toolContext.invocationId}_$name';
-      final Object? rawCount = toolContext.state[countKey];
-      final int currentCount = rawCount is num ? rawCount.toInt() : 0;
-      if (currentCount >= maxConsultationsPerInvocation!) {
+      final int currentTurnUses = turnUses(toolContext);
+      if (currentTurnUses >= maxConsultationsPerInvocation!) {
         return AdvisorError(
           error:
               'Maximum number of model consultations ($maxConsultationsPerInvocation) '
@@ -306,7 +402,6 @@ class ModelConsultTool extends BaseTool {
           model: advisorLlm.model,
         ).toJson();
       }
-      toolContext.state[countKey] = currentCount + 1;
     }
 
     final String question = rawQuestion.trim();
@@ -394,6 +489,16 @@ class ModelConsultTool extends BaseTool {
 
         final String advice = adviceBuffer.toString().trim();
         final String thoughts = thoughtBuffer.toString().trim();
+
+        final String sessionKey = sessionUsesStateKey(toolName: name);
+        toolContext.state[sessionKey] = sessionUses(toolContext) + 1;
+
+        final String turnKey = turnUsesStateKey(
+          toolName: name,
+          invocationId: toolContext.invocationId,
+        );
+        toolContext.state[turnKey] = turnUses(toolContext) + 1;
+
         return AdvisorResult(
           advice: advice,
           model: advisorLlm.model,

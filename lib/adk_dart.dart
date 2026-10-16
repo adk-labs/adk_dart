@@ -455,6 +455,7 @@ export 'src/tools/tool_configs.dart';
 export 'src/tools/tool_context.dart';
 export 'src/tools/toolbox_toolset.dart';
 export 'src/tools/toolsearch/tool_search_toolset.dart';
+export 'src/tools/model_consult/force_escalation_plugin.dart';
 export 'src/tools/model_consult/model_consult_tool.dart';
 export 'src/tools/model_consult/model_consult_toolset.dart';
 export 'src/tools/runtime_bootstrap.dart';
