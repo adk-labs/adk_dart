@@ -110,4 +110,24 @@ Comprehensive synchronization across all upstream ADK repositories (`adk-python`
 - **Tests**:
   - Added [test/unit5_interrupts_and_initial_state_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit5_interrupts_and_initial_state_test.dart) covering open interrupt tracking, user response resolution, sub-branch runId resolution, fallback function call extraction, and `initial_state.json` state merge semantics (4/4 passed).
 
+---
+
+## Unit 6: Full Verification & Parity Audit Summary
+- **Static Analysis**:
+  - `dart analyze` across `adk_dart`: **0 errors, 0 warnings, 0 infos**.
+  - `dart analyze` across `packages/adk`: **0 errors, 0 warnings, 0 infos**.
+- **Test Suite Results**:
+  - `test/unit1_core_parity_test.dart`: 2/2 passed.
+  - `test/unit2_gemini_speech_test.dart`: 5/5 passed.
+  - `test/unit3_force_escalation_plugin_test.dart`: 5/5 passed.
+  - `test/unit4_workflow_edges_builder_test.dart`: 9/9 passed.
+  - `test/unit5_interrupts_and_initial_state_test.dart`: 4/4 passed.
+  - **Total**: 25/25 unit tests passed (100% pass rate).
+- **Git Commit Log (Incremental Work Units)**:
+  1. `4ded41b`: `feat(core): sync upstream core runtime updates (artifact delta, deleteMemory, JSON Pointer $ref, RunConfig forwarding)`
+  2. `cf87870`: `feat(live): add GeminiSTT and GeminiTTS speech transforms for CascadeLive`
+  3. `0295d4e`: `feat(plugins): add ForceEscalationPlugin and ModelConsultTool budget tracking`
+  4. `99ac06e`: `feat(workflow): add EdgesBuilder fluent graph edge construction and AgentEngineClient`
+  5. `572c974`: `feat(cli): support indexOpenInterrupts auto-resume and initial_state.json session seeding`
+
 
