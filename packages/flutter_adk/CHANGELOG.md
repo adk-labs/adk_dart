@@ -3,6 +3,11 @@
 ## 2026.10.15
 
 - Bumped package version to `2026.10.15` and dependency `adk_dart: ^2026.10.15`.
+- Added **`AdkInterruptBanner`** and **`AdkInterruptCard`** for long-running tool interrupts and user action resumption (`indexOpenInterrupts` parity).
+- Added **`AdkCascadeLiveBar`** and **`AdkLiveBargeInIndicator`** for real-time live streaming voice and user speech barge-in alerts.
+- Added **`AdkModelConsultBadge`** and **`AdkEscalationCard`** for advisor model consultation and budget tracking (`ModelConsultTool` and `ForceEscalationPlugin` parity).
+- Added **`AdkClassifierCard`** for visual routing decisions, confidence meters, and alternative probability breakdowns (`ClassifierNode` parity).
+- Added **`AdkWorkflowGraphView`** for interactive flowchart and pipeline execution graph visualization (`EdgesBuilder` parity).
 - Added `AdkCodeExecutionCard` and `AdkGroundingSourcesBar` widgets, and wired `AdkAudioRecordingBar`, `AdkMarkdownText`, `AdkToolConfirmationCard`, and `AdkTraceWaterfallView` into `AdkChatController` and `AdkMessageBubble` for full `adk-web` parity.
 - Re-exported `CascadeLive`, `ElevenLabsSTT`, `ElevenLabsTTS`, and `Secret` via `package:adk_dart/adk_core.dart`.
 - Completed 100% `///` API documentation comments and runnable `/// ```dart` examples across all controllers, models, and widgets.

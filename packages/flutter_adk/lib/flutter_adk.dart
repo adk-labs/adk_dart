@@ -54,7 +54,9 @@ export 'src/widgets/adk_agent_management_view.dart';
 export 'src/widgets/adk_agent_persona_selector.dart';
 export 'src/widgets/adk_artifact_viewer.dart';
 export 'src/widgets/adk_bottom_sheet_chat.dart';
+export 'src/widgets/adk_cascade_live_bar.dart';
 export 'src/widgets/adk_chat_view.dart';
+export 'src/widgets/adk_classifier_card.dart';
 export 'src/widgets/adk_code_execution_card.dart';
 export 'src/widgets/adk_confirmation_dialog.dart';
 export 'src/widgets/adk_dev_studio_view.dart';
@@ -63,7 +65,9 @@ export 'src/widgets/adk_floating_chat_button.dart';
 export 'src/widgets/adk_grounding_sources_bar.dart';
 export 'src/widgets/adk_human_in_the_loop_card.dart';
 export 'src/widgets/adk_inline_assistant_bar.dart';
+export 'src/widgets/adk_interrupt_widgets.dart';
 export 'src/widgets/adk_message_bubble.dart';
+export 'src/widgets/adk_model_consult_widgets.dart';
 export 'src/widgets/adk_prompt_suggestions_bar.dart';
 export 'src/widgets/adk_reasoning_expander.dart';
 export 'src/widgets/adk_session_drawer.dart';
@@ -75,6 +79,7 @@ export 'src/widgets/adk_tool_call_card.dart';
 export 'src/widgets/adk_tool_inspector_view.dart';
 export 'src/widgets/adk_typing_indicator.dart';
 export 'src/widgets/adk_voice_widgets.dart';
+export 'src/widgets/adk_workflow_graph_view.dart';
 export 'src/widgets/adk_workflow_progress_indicator.dart';
 
 /// Provides the Flutter-facing entry point for ADK platform features.
