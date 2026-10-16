@@ -146,6 +146,13 @@ class Context extends ReadonlyContext {
     return invocationContext.addSessionToMemory(customMetadata: customMetadata);
   }
 
+  /// Removes a memory item by its [memoryId] for the current user.
+  ///
+  /// Throws a [StateError] when memory services are unavailable.
+  Future<void> deleteMemory({String? memoryId}) {
+    return invocationContext.deleteMemory(memoryId: memoryId);
+  }
+
   /// Deletes artifact [filename] and its versions.
   Future<void> deleteArtifact(String filename) {
     return invocationContext.deleteArtifact(filename: filename);

@@ -341,7 +341,7 @@ class InvocationContext {
     );
   }
 
-  /// Adds the current session transcript to memory.
+  /// Persists the current session transcript to memory.
   ///
   /// Throws a [StateError] when memory services are unavailable.
   Future<void> addSessionToMemory({
@@ -352,6 +352,21 @@ class InvocationContext {
       throw StateError('Memory service is not initialized.');
     }
     await service.addSessionToMemory(session, customMetadata: customMetadata);
+  }
+
+  /// Deletes a memory item by its [memoryId] for the current user and application.
+  ///
+  /// Throws a [StateError] when memory services are unavailable.
+  Future<void> deleteMemory({String? memoryId}) async {
+    final Object? service = memoryService;
+    if (service is! BaseMemoryService) {
+      throw StateError('Memory service is not initialized.');
+    }
+    await service.deleteMemory(
+      appName: appName,
+      userId: userId,
+      memoryId: memoryId,
+    );
   }
 
   /// Lists artifact filenames for this invocation session.

@@ -26,6 +26,8 @@ class InMemoryMemoryService extends BaseMemoryService {
 
   final Map<(String, String), Map<String, List<Event>>>
   _sessionEventsByUserKey = <(String, String), Map<String, List<Event>>>{};
+  final Map<(String, String), Set<String>> _deletedMemoryIdsByUserKey =
+      <(String, String), Set<String>>{};
 
   @override
   Future<void> addSessionToMemory(
@@ -33,12 +35,16 @@ class InMemoryMemoryService extends BaseMemoryService {
     Map<String, Object?>? customMetadata,
   }) async {
     final (String, String) key = _userKey(session.appName, session.userId);
+    final Set<String> deletedIds =
+        _deletedMemoryIdsByUserKey[key] ?? const <String>{};
     final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
         <String, List<Event>>{};
     sessions[session.id] = session.events
         .where(
           (Event event) =>
-              event.content != null && event.content!.parts.isNotEmpty,
+              event.content != null &&
+              event.content!.parts.isNotEmpty &&
+              !deletedIds.contains(event.id),
         )
         .map((Event event) => event.copyWith())
         .toList();
@@ -53,6 +59,8 @@ class InMemoryMemoryService extends BaseMemoryService {
     Map<String, Object?>? customMetadata,
   }) async {
     final (String, String) key = _userKey(appName, userId);
+    final Set<String> deletedIds =
+        _deletedMemoryIdsByUserKey[key] ?? const <String>{};
     final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
         <String, List<Event>>{};
     final String targetSessionId = sessionId ?? 'unknown_session';
@@ -65,7 +73,7 @@ class InMemoryMemoryService extends BaseMemoryService {
       if (event.content == null || event.content!.parts.isEmpty) {
         continue;
       }
-      if (existingIds.contains(event.id)) {
+      if (existingIds.contains(event.id) || deletedIds.contains(event.id)) {
         continue;
       }
       target.add(event.copyWith());
@@ -113,6 +121,7 @@ class InMemoryMemoryService extends BaseMemoryService {
           scoredMemories.add((
             matchedWords,
             MemoryEntry(
+              id: event.id,
               content: event.content!.copyWith(),
               author: event.author,
               timestamp: formatTimestamp(event.timestamp),
@@ -132,6 +141,30 @@ class InMemoryMemoryService extends BaseMemoryService {
         .toList();
 
     return SearchMemoryResponse(memories: topMemories);
+  }
+
+  @override
+  Future<void> deleteMemory({
+    required String appName,
+    required String userId,
+    String? memoryId,
+  }) async {
+    if (memoryId == null || memoryId.isEmpty) {
+      return;
+    }
+    final (String, String) key = _userKey(appName, userId);
+    final Map<String, List<Event>>? sessions = _sessionEventsByUserKey[key];
+    if (sessions != null) {
+      for (final MapEntry<String, List<Event>> entry in sessions.entries) {
+        final List<Event> kept = entry.value
+            .where((Event event) => event.id != memoryId)
+            .toList();
+        if (kept.length != entry.value.length) {
+          sessions[entry.key] = kept;
+          (_deletedMemoryIdsByUserKey[key] ??= <String>{}).add(memoryId);
+        }
+      }
+    }
   }
 }
 

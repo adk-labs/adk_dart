@@ -185,6 +185,7 @@ class AgentTool extends BaseTool {
       userId: session.userId,
       sessionId: session.id,
       newMessage: Content.userText(requestText),
+      runConfig: invocationContext.runConfig,
       abortSignal: toolContext.abortSignal,
     )) {
       if (toolContext.abortSignal?.aborted == true) {

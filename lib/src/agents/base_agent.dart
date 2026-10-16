@@ -434,7 +434,8 @@ abstract class BaseAgent {
       );
     }
 
-    if (callbackContext.state.hasDelta()) {
+    if (callbackContext.state.hasDelta() ||
+        callbackContext.actions.artifactDelta.isNotEmpty) {
       return Event(
         invocationId: context.invocationId,
         author: name,

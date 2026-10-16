@@ -20,31 +20,86 @@ String toSnakeCase(String text) {
   return value;
 }
 
-/// Resolves local `$ref` entries using schema-level `$defs`.
+/// Resolves a URI-fragment JSON Pointer (e.g. '#' or '#/path/to/node').
+///
+/// Returns the referenced value, or `null` if the pointer is not a valid URI
+/// fragment, the path does not exist, or the target value itself is `null`.
+Object? _resolveJsonPointer(String refPath, Map<String, dynamic> root) {
+  if (refPath == '#') {
+    return root;
+  }
+  if (!refPath.startsWith('#/')) {
+    return null;
+  }
+  final List<String> parts = refPath.substring(2).split('/');
+  Object? current = root;
+  for (final String rawPart in parts) {
+    final String part = Uri.decodeComponent(rawPart)
+        .replaceAll('~1', '/')
+        .replaceAll('~0', '~');
+    if (current is Map) {
+      if (!current.containsKey(part)) {
+        return null;
+      }
+      current = current[part];
+    } else if (current is List) {
+      if (!RegExp(r'^(?:0|[1-9][0-9]*)$').hasMatch(part)) {
+        return null;
+      }
+      final int idx = int.parse(part);
+      if (idx >= current.length) {
+        return null;
+      }
+      current = current[idx];
+    } else {
+      return null;
+    }
+  }
+  return current;
+}
+
+/// Resolves local `$ref` entries using JSON Pointers and schema-level `$defs` / `definitions`.
 Map<String, dynamic> dereferenceSchema(Map<String, dynamic> schema) {
-  final Map<String, dynamic> defs = _castMap(schema[r'$defs']);
+  final Map<String, dynamic> defs = <String, dynamic>{
+    ..._castMap(schema['definitions']),
+    ..._castMap(schema[r'$defs']),
+  };
 
   dynamic resolveRefs(dynamic node, Set<String> activeRefs) {
     if (node is Map) {
       final Map<String, dynamic> map = _castMap(node);
       if (map.containsKey(r'$ref')) {
-        final String ref = '${map[r'$ref']}';
-        final String refKey = ref.split('/').last;
-        if (defs.containsKey(refKey)) {
-          if (activeRefs.contains(ref)) {
-            return <String, dynamic>{
-              'type': 'object',
-              'description': 'Circular reference to $refKey',
-            };
-          }
-          final Map<String, dynamic> resolved = _castMap(defs[refKey]);
-          final Map<String, dynamic> merged = <String, dynamic>{
-            ...resolved,
-            ...map,
+        final String refUri = '${map[r'$ref']}';
+        final String refKey = refUri.split('/').last;
+        if (activeRefs.contains(refUri)) {
+          return <String, dynamic>{
+            'type': 'object',
+            'description': 'Circular reference to $refKey',
           };
-          merged.remove(r'$ref');
-          return resolveRefs(merged, <String>{...activeRefs, ref});
         }
+
+        final Set<String> newPath = <String>{...activeRefs, refUri};
+
+        // Try to resolve as a JSON Pointer reference (e.g. #/properties/foo or #).
+        final Object? resolvedJsonPointer = _resolveJsonPointer(refUri, schema);
+        if (resolvedJsonPointer is Map) {
+          final Map<String, dynamic> resolvedCopy = _castMap(resolvedJsonPointer);
+          final Map<String, dynamic> subSchemaCopy = _castMap(map)..remove(r'$ref');
+          resolvedCopy.addAll(subSchemaCopy);
+          return resolveRefs(resolvedCopy, newPath);
+        }
+
+        // Fall back to defs lookup if the definition key exists.
+        if (resolvedJsonPointer == null &&
+            defs.containsKey(refKey) &&
+            defs[refKey] is Map) {
+          final Map<String, dynamic> resolvedCopy = _castMap(defs[refKey]);
+          final Map<String, dynamic> subSchemaCopy = _castMap(map)..remove(r'$ref');
+          resolvedCopy.addAll(subSchemaCopy);
+          return resolveRefs(resolvedCopy, newPath);
+        }
+
+        return map;
       }
       return map.map((String key, dynamic value) {
         return MapEntry(key, resolveRefs(value, activeRefs));
@@ -59,7 +114,6 @@ Map<String, dynamic> dereferenceSchema(Map<String, dynamic> schema) {
   }
 
   final Map<String, dynamic> result = _castMap(resolveRefs(schema, <String>{}));
-  result.remove(r'$defs');
   return result;
 }
 

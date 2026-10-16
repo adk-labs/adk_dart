@@ -63,4 +63,20 @@ abstract class BaseMemoryService {
     required String userId,
     required String query,
   });
+
+  /// Deletes a single memory item by its [memoryId].
+  ///
+  /// The id is carried by [MemoryEntry.id] as returned by [searchMemory].
+  ///
+  /// Throws an [UnsupportedError] if the memory service does not support
+  /// deleting individual memories.
+  Future<void> deleteMemory({
+    required String appName,
+    required String userId,
+    String? memoryId,
+  }) async {
+    throw UnsupportedError(
+      'This memory service does not support deleting individual memories.',
+    );
+  }
 }
