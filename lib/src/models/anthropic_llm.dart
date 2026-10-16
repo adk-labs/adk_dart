@@ -99,6 +99,8 @@ class AnthropicGenerateContentConfig extends GenerateContentConfig {
     Object? responseSchema = _configSentinel,
     Object? responseJsonSchema = _configSentinel,
     Object? responseMimeType = _configSentinel,
+    Object? responseModalities = _configSentinel,
+    Object? speechConfig = _configSentinel,
     Object? toolConfig = _configSentinel,
     Object? automaticFunctionCalling = _configSentinel,
     Object? cachedContent = _configSentinel,
@@ -145,6 +147,12 @@ class AnthropicGenerateContentConfig extends GenerateContentConfig {
       responseMimeType: identical(responseMimeType, _configSentinel)
           ? this.responseMimeType
           : responseMimeType,
+      responseModalities: identical(responseModalities, _configSentinel)
+          ? this.responseModalities
+          : responseModalities,
+      speechConfig: identical(speechConfig, _configSentinel)
+          ? this.speechConfig
+          : speechConfig,
       toolConfig: identical(toolConfig, _configSentinel)
           ? this.toolConfig
           : toolConfig,

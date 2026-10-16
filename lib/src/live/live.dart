@@ -23,4 +23,6 @@ export 'cascade_live_events.dart'
         PartialTranscript,
         UserSpeechStarted,
         UserTurnFinished;
+export 'gemini_stt.dart' show GeminiSTT;
+export 'gemini_tts.dart' show GeminiTTS;
 export 'transforms.dart' show CancelSignal, LiveEgress, LiveIngress;

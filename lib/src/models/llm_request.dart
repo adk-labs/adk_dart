@@ -334,6 +334,8 @@ class GenerateContentConfig {
     this.responseSchema,
     this.responseJsonSchema,
     this.responseMimeType,
+    this.responseModalities,
+    this.speechConfig,
     this.toolConfig,
     this.automaticFunctionCalling,
     this.cachedContent,
@@ -393,6 +395,12 @@ class GenerateContentConfig {
   /// Preferred response MIME type.
   String? responseMimeType;
 
+  /// Requested response modalities, such as text or audio.
+  List<String>? responseModalities;
+
+  /// Provider-specific speech configuration for synthesized audio.
+  Object? speechConfig;
+
   /// Tool execution configuration.
   LlmToolConfig? toolConfig;
 
@@ -427,6 +435,8 @@ class GenerateContentConfig {
     Object? responseSchema = _sentinel,
     Object? responseJsonSchema = _sentinel,
     Object? responseMimeType = _sentinel,
+    Object? responseModalities = _sentinel,
+    Object? speechConfig = _sentinel,
     Object? toolConfig = _sentinel,
     Object? automaticFunctionCalling = _sentinel,
     Object? cachedContent = _sentinel,
@@ -477,6 +487,14 @@ class GenerateContentConfig {
       responseMimeType: identical(responseMimeType, _sentinel)
           ? this.responseMimeType
           : responseMimeType as String?,
+      responseModalities: identical(responseModalities, _sentinel)
+          ? (this.responseModalities == null
+              ? null
+              : List<String>.from(this.responseModalities!))
+          : responseModalities as List<String>?,
+      speechConfig: identical(speechConfig, _sentinel)
+          ? this.speechConfig
+          : speechConfig,
       toolConfig: identical(toolConfig, _sentinel)
           ? this.toolConfig?.copyWith()
           : toolConfig as LlmToolConfig?,

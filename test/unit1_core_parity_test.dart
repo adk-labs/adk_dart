@@ -1,4 +1,3 @@
-import 'package:adk_dart/adk_core.dart';
 import 'package:adk_dart/adk_dart.dart';
 import 'package:test/test.dart';
 

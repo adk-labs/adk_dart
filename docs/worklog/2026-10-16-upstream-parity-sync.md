@@ -18,3 +18,25 @@ Comprehensive synchronization across all upstream ADK repositories (`adk-python`
   - `lib/src/tools/_gemini_schema_util.dart`: Implemented `_resolveJsonPointer` with URI-fragment parsing, URI unquoting, token unescaping (`~1` -> `/`, `~0` -> `~`), array indexing, supporting both `definitions` and `$defs`, circular reference detection, and defs fallback.
 - **Tests**:
   - Added [test/unit1_core_parity_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit1_core_parity_test.dart) covering JSON Pointer resolution and `InMemoryMemoryService.deleteMemory`.
+
+---
+
+## Unit 2: Live Ingress/Egress Models (`GeminiSTT` & `GeminiTTS`)
+- **`GeminiSTT` Ingress Transform (`f78149a97`, `_gemini_stt.py`)**:
+  - Created `lib/src/live/gemini_stt.dart` implementing `LiveIngress` (`Stream<InlineData> audio` -> `Stream<IngressEvent>`).
+  - Added `_AudioBuffer` with `maxReplayMs` capping (default 10,000ms, 16kHz 16-bit mono) to preserve speech during session transitions.
+  - Connects to Gemini Live API (`gemini-3.5-transcribe-live`) using `LiveConnectConfig(responseModalities: ['TEXT'], speechConfig: {'silenceDurationMs': silenceDurationMs, ...})`.
+  - Dispatches `UserSpeechStarted`, `PartialTranscript`, and `UserTurnFinished` events upon transcription and turn completion (`resp.turnComplete == true`).
+- **`GeminiTTS` Egress Transform (`f78149a97`, `_gemini_tts.py`)**:
+  - Created `lib/src/live/gemini_tts.dart` implementing `LiveEgress` (`Stream<String> text` with `CancelSignal cancel` -> `Stream<EgressEvent>`).
+  - Implemented sentence boundary regex `_sentenceEnd` and CJK clause detection `_cjkClauseEnd` with `minSegmentChars` (default 50) and `maxSegmentChars` (default 240) to synthesize natural audio chunks.
+  - Generates `AudioChunk` blobs from model `Part.inlineData` and records `AgentSpokenOutput` text once audio synthesis completes.
+  - Supports immediate cancellation and barge-in via `CancelSignal`.
+- **`GenerateContentConfig` Modality & Speech Additions**:
+  - Added `responseModalities` and `speechConfig` to `GenerateContentConfig` in `lib/src/models/llm_request.dart`, with overrides in `AnthropicGenerateContentConfig` in `lib/src/models/anthropic_llm.dart`.
+  - Updated `_buildGenerationConfig` in `lib/src/models/google_llm.dart` to serialize `responseModalities` and `speechConfig`.
+- **Exports**:
+  - Exported `GeminiSTT` and `GeminiTTS` in `lib/src/live/live.dart`, which is re-exported by `lib/adk_dart.dart` and `lib/adk_core.dart`.
+- **Tests**:
+  - Added [test/unit2_gemini_speech_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit2_gemini_speech_test.dart) covering `GeminiTTS` synthesis, segment splitting, barge-in cancellation, constructor validations, and `GeminiSTT` audio streaming and transcription events (100% pass).
+

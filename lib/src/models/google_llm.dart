@@ -782,6 +782,13 @@ class Gemini extends BaseLlm {
         config.responseMimeType!.isNotEmpty) {
       output['responseMimeType'] = config.responseMimeType;
     }
+    if (config.responseModalities != null &&
+        config.responseModalities!.isNotEmpty) {
+      output['responseModalities'] = config.responseModalities;
+    }
+    if (config.speechConfig != null) {
+      output['speechConfig'] = _jsonCompatible(config.speechConfig);
+    }
     return output;
   }
 
