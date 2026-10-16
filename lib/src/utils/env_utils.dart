@@ -3,30 +3,47 @@ library;
 
 import 'system_environment/system_environment.dart';
 
+const Set<String> _truthyEnvValues = <String>{'1', 'true', 'yes', 'on'};
+const Set<String> _strictTruthyEnvValues = <String>{'1', 'true'};
+
 /// Whether [envVarName] is enabled in [environment].
 ///
-/// Values `true` and `1` are treated as enabled after lowercase conversion.
+/// Values `1`, `true`, `yes`, and `on` are treated as enabled after trimming
+/// and lowercase conversion.
 bool isEnvEnabled(
   String envVarName, {
   String defaultValue = '0',
   Map<String, String>? environment,
 }) {
   final Map<String, String> env = environment ?? readSystemEnvironment();
-  final String value = (env[envVarName] ?? defaultValue).toLowerCase();
-  return value == 'true' || value == '1';
+  final String value = (env[envVarName] ?? defaultValue).trim().toLowerCase();
+  return _truthyEnvValues.contains(value);
+}
+
+/// Check if a google-genai boolean environment variable is enabled.
+///
+/// Matches google-genai's BaseApiClient strict parsing (`envStr.toLowerCase() in
+/// ['true', '1']` without stripping whitespace or accepting `'yes'`/`'on'`).
+bool _isGenaiEnvEnabled(
+  String envVarName, {
+  Map<String, String>? environment,
+}) {
+  final Map<String, String> env = environment ?? readSystemEnvironment();
+  final String value = (env[envVarName] ?? '').toLowerCase();
+  return _strictTruthyEnvValues.contains(value);
 }
 
 /// Check if Google GenAI Enterprise mode is enabled via environment variables.
 bool isEnterpriseModeEnabled({Map<String, String>? environment}) {
   final Map<String, String> env = environment ?? readSystemEnvironment();
   if (env.containsKey('GOOGLE_GENAI_USE_ENTERPRISE')) {
-    return isEnvEnabled(
+    return _isGenaiEnvEnabled(
       'GOOGLE_GENAI_USE_ENTERPRISE',
       environment: environment,
     );
   }
   if (env.containsKey('GOOGLE_GENAI_USE_VERTEXAI')) {
-    return isEnvEnabled('GOOGLE_GENAI_USE_VERTEXAI', environment: environment);
+    return _isGenaiEnvEnabled('GOOGLE_GENAI_USE_VERTEXAI', environment: environment);
   }
   return false;
 }

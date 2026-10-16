@@ -112,22 +112,53 @@ Comprehensive synchronization across all upstream ADK repositories (`adk-python`
 
 ---
 
-## Unit 6: Full Verification & Parity Audit Summary
+---
+
+## Unit 7: Environment Parsing, Eval CLI Exit Code & Live Artifact History Filtering
+- **Truthy Environment Variable Parsing & GenAI Strict Mode (`95d621523`, `adk-python`)**:
+  - In `lib/src/utils/env_utils.dart`:
+    - Updated `isEnvEnabled` to trim whitespace and accept `{'1', 'true', 'yes', 'on'}` case-insensitively, unifying truthy environment variable checks.
+    - Added `_isGenaiEnvEnabled` implementing Google GenAI SDK's strict boolean parsing (`['true', '1']` without whitespace trimming or `yes`/`on`) for `GOOGLE_GENAI_USE_ENTERPRISE` and `GOOGLE_GENAI_USE_VERTEXAI`.
+- **Eval CLI Exit Code CI Gate (`c2ff63480`, `adk-python`)**:
+  - In `packages/adk/lib/src/dev/cli.dart`:
+    - Updated `_runEvalCliCommand` to compute `totalFailed` across `summaryByEvalSet`.
+    - Returns `(totalFailed > 0 || summaryByEvalSet.isEmpty) ? 1 : 0`, ensuring CI/CD gates fail when test assertions fail or when an empty eval set produces no results.
+- **Live Artifact History Exclusion (`29694fa8`, `adk-kotlin` & `content_utils.py`)**:
+  - In `lib/src/utils/content_utils.dart`:
+    - Added `isAdkLiveArtifactPart(Part part)` to identify internal `artifact://.../_adk_live/...` recordings.
+    - Added `filterMediaParts(Content content)` removing audio parts and internal `_adk_live` artifacts while preserving text, images, and documents.
+  - In `lib/src/models/gemini_llm_connection.dart`:
+    - Used `filterMediaParts` when seeding history to the live session.
+  - In `lib/src/flows/llm_flows/contents.dart`:
+    - In `getContents`: removed `isAdkLiveArtifactPart` parts before sending contents to LLMs.
+    - In `_isPartInvisible`: treated `isAdkLiveArtifactPart` as invisible, while honoring `thoughtSignature`.
+    - In `_formatEventForOtherAgent`: skipped `isAdkLiveArtifactPart` when narrating other agent tool results.
+- **Tests**:
+  - Added [test/unit7_env_and_eval_exit_code_test.dart](file:///Users/jaichang/Documents/GitHub/adk-labs/adk-dart/adk_dart/test/unit7_env_and_eval_exit_code_test.dart) (4/4 passed).
+
+---
+
+## Final Verification & Parity Audit Summary
 - **Static Analysis**:
   - `dart analyze` across `adk_dart`: **0 errors, 0 warnings, 0 infos**.
   - `dart analyze` across `packages/adk`: **0 errors, 0 warnings, 0 infos**.
+  - `dart analyze` across `packages/adk_litertlm`, `packages/adk_mcp`, `packages/flutter_adk`: **0 errors, 0 warnings, 0 infos**.
 - **Test Suite Results**:
   - `test/unit1_core_parity_test.dart`: 2/2 passed.
   - `test/unit2_gemini_speech_test.dart`: 5/5 passed.
   - `test/unit3_force_escalation_plugin_test.dart`: 5/5 passed.
   - `test/unit4_workflow_edges_builder_test.dart`: 9/9 passed.
   - `test/unit5_interrupts_and_initial_state_test.dart`: 4/4 passed.
-  - **Total**: 25/25 unit tests passed (100% pass rate).
+  - `test/unit7_env_and_eval_exit_code_test.dart`: 4/4 passed.
+  - **Total**: 29/29 unit tests passed (100% pass rate).
 - **Git Commit Log (Incremental Work Units)**:
   1. `4ded41b`: `feat(core): sync upstream core runtime updates (artifact delta, deleteMemory, JSON Pointer $ref, RunConfig forwarding)`
   2. `cf87870`: `feat(live): add GeminiSTT and GeminiTTS speech transforms for CascadeLive`
   3. `0295d4e`: `feat(plugins): add ForceEscalationPlugin and ModelConsultTool budget tracking`
   4. `99ac06e`: `feat(workflow): add EdgesBuilder fluent graph edge construction and AgentEngineClient`
   5. `572c974`: `feat(cli): support indexOpenInterrupts auto-resume and initial_state.json session seeding`
+  6. `68ff677`: `docs(parity): complete upstream parity audit worklog for units 1-5`
+  7. `[pending]`: `fix(parity): align truthy env parsing, eval CLI exit code, and live artifact history exclusion`
+
 
 

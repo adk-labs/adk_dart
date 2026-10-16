@@ -12,6 +12,7 @@ import '../../events/rewind_events.dart';
 import '../../models/anthropic_llm.dart';
 import '../../models/llm_request.dart';
 import '../../types/content.dart';
+import '../../utils/content_utils.dart';
 import '_fencing.dart';
 import 'base_llm_flow.dart';
 import 'functions.dart';
@@ -181,6 +182,10 @@ List<Content> getContents({
   for (final Event event in filtered) {
     final Content? content = event.content?.copyWith();
     if (content == null) {
+      continue;
+    }
+    content.parts.removeWhere(isAdkLiveArtifactPart);
+    if (content.parts.isEmpty) {
       continue;
     }
     if (!preserveFunctionCallIds) {
@@ -435,10 +440,21 @@ bool isEventBelongsToBranch(String? invocationBranch, Event event) {
 }
 
 bool _isPartInvisible(Part part) {
+  if (isAdkLiveArtifactPart(part)) {
+    return true;
+  }
   if (part.functionCall != null || part.functionResponse != null) {
     return false;
   }
-  return part.thought || !(part.hasText || part.codeExecutionResult != null);
+  if (part.thoughtSignature != null && part.thoughtSignature!.isNotEmpty) {
+    return false;
+  }
+  return part.thought ||
+      !(part.hasText ||
+          part.inlineData != null ||
+          part.fileData != null ||
+          part.executableCode != null ||
+          part.codeExecutionResult != null);
 }
 
 bool _hasCompactionEvents(List<Event> events) {
@@ -835,6 +851,9 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
         part.inlineData != null ||
         part.fileData != null ||
         part.executableCode != null) {
+      if (isAdkLiveArtifactPart(part)) {
+        continue;
+      }
       content.parts.add(part.copyWith());
       continue;
     }

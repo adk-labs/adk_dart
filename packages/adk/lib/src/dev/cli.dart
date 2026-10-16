@@ -1407,7 +1407,12 @@ Future<int> _runEvalCliCommand(
       out.writeln(cli_eval.prettyPrintEvalResult(result));
     }
   }
-  return 0;
+
+  final int totalFailed = summaryByEvalSet.values.fold<int>(
+    0,
+    (int sum, (int, int) counts) => sum + counts.$2,
+  );
+  return (totalFailed > 0 || summaryByEvalSet.isEmpty) ? 1 : 0;
 }
 
 Future<int> _runOptimizeCliCommand(

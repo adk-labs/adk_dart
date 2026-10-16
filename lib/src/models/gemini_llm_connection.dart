@@ -198,7 +198,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
     if (_liveSession != null) {
       final GeminiLiveSession liveSession = _liveSession;
       final List<Content> filtered = history
-          .map(filterAudioParts)
+          .map(filterMediaParts)
           .whereType<Content>()
           .map((Content content) => content.copyWith())
           .toList();
