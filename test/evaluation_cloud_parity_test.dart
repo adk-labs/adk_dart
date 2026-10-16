@@ -201,7 +201,7 @@ void main() {
       expect(result.perInvocationResults.single.evalStatus, EvalStatus.passed);
     });
 
-    test('matches python truthy behavior for zero scores', () async {
+    test('evaluates zero scores correctly rather than treating as null', () async {
       final VertexAiEvalFacade evaluator = VertexAiEvalFacade(
         threshold: 0.9,
         metricName: 'faithfulness',
@@ -225,8 +225,8 @@ void main() {
         ],
       );
 
-      expect(result.overallScore, isNull);
-      expect(result.overallEvalStatus, EvalStatus.notEvaluated);
+      expect(result.overallScore, 0.0);
+      expect(result.overallEvalStatus, EvalStatus.failed);
       expect(result.perInvocationResults.single.evalStatus, EvalStatus.failed);
     });
 

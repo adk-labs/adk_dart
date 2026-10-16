@@ -830,14 +830,6 @@ LlmResponse? convertInteractionEventToLlmResponse(
       targetInteraction,
       fallbackModelVersion: fallbackModelVersion,
     );
-    if (response.content == null && targetParts.isNotEmpty) {
-      response.content = Content(
-        role: 'model',
-        parts: targetParts
-            .map((Part part) => part.copyWith())
-            .toList(growable: false),
-      );
-    }
     response.usageMetadata ??= _buildUsageMetadata(streamState?.totalUsage);
     response.interactionId ??= interactionId;
     return response;

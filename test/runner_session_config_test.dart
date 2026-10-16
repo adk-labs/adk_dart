@@ -103,7 +103,7 @@ void main() {
       expect(sessionService.capturedConfigs.last?.numRecentEvents, 5);
     });
 
-    test('rewindAsync forwards getSessionConfig to session service', () async {
+    test('rewindAsync ignores getSessionConfig to load full session', () async {
       final _RecordingSessionService sessionService =
           _RecordingSessionService();
       final Runner runner = Runner(
@@ -125,12 +125,10 @@ void main() {
         ),
         throwsArgumentError,
       );
+      // Rewind must load the full session history, so getSessionConfig is omitted.
       expect(
-        sessionService.capturedConfigs
-            .whereType<GetSessionConfig>()
-            .last
-            .numRecentEvents,
-        7,
+        sessionService.capturedConfigs.whereType<GetSessionConfig>(),
+        isEmpty,
       );
     });
 

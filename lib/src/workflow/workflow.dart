@@ -1026,24 +1026,6 @@ BaseNode buildNode(
             (nodeLike is! FunctionNode && requireConfirmation == false))) {
       return nodeLike;
     }
-    if (nodeLike is FunctionNode) {
-      return FunctionNode(
-        function: nodeLike.function,
-        name: name ?? nodeLike.name,
-        description: description.isNotEmpty ? description : nodeLike.description,
-        dependsOn: dependsOn ?? nodeLike.dependsOn,
-        rerunOnResume:
-            rerunOnResume ??
-            (_hasConfirmationFlag(requireConfirmation)
-                ? true
-                : nodeLike.rerunOnResume),
-        waitForOutput: waitForOutput ?? nodeLike.waitForOutput,
-        retryConfig: retryConfig ?? nodeLike.retryConfig,
-        timeout: timeout ?? nodeLike.timeout,
-        requireConfirmation:
-            requireConfirmation ?? nodeLike.requireConfirmation,
-      );
-    }
     throw UnsupportedError(
       'Cannot override fields for existing node `${nodeLike.name}`.',
     );
@@ -2755,11 +2737,7 @@ bool _seedNodeResumeInputs(
     return false;
   }
   state.resumeInputs.addAll(resolved);
-  if (rerunOnResume) {
-    state.interrupts.clear();
-  } else {
-    state.interrupts.removeWhere(resolved.containsKey);
-  }
+  state.interrupts.removeWhere(resolved.containsKey);
   return true;
 }
 
@@ -2927,7 +2905,6 @@ void _applyWorkflowResumeResponses(
 
     final BaseNode? staticNode = staticNodes[ownerKey];
     if (staticNode != null && staticNode.rerunOnResume) {
-      state.interrupts.clear();
       state.status = NodeStatus.waiting;
       continue;
     }
