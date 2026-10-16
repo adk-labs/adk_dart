@@ -58,7 +58,7 @@ class TelemetrySpan {
 
 /// Contract for telemetry trace/span lifecycle services.
 abstract class BaseTelemetryService {
-  /// Creates and opens a span for [name].
+  /// Creates a base telemetry service.
   BaseTelemetryService();
 
   /// Starts a new span.

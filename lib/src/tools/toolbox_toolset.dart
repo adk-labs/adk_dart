@@ -42,8 +42,8 @@ abstract class ToolboxToolsetDelegate {
 class ToolboxToolset extends BaseToolset {
   static ToolboxToolsetDelegateFactory? _defaultDelegateFactory;
 
-  /// Registers a default toolbox delegate factory used when [delegate] is not
-  /// provided. Integrations can call this during startup.
+  /// Registers a default toolbox delegate factory used when an explicit delegate
+  /// is not provided. Integrations can call this during startup.
   static void registerDefaultDelegateFactory(
     ToolboxToolsetDelegateFactory factory,
   ) {

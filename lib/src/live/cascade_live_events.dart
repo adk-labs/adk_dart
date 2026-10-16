@@ -1,4 +1,6 @@
 /// Typed event hierarchy for the cascaded live audio pipeline.
+///
+/// @docImport 'transforms.dart';
 library;
 
 import '../types/content.dart';

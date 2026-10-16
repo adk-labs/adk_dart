@@ -254,8 +254,9 @@ class ListSkillsTool extends BaseTool {
   static const String toolName = listSkillsToolName;
 
   /// Creates a list-skills tool backed by [toolset].
-  ListSkillsTool(this._toolset)
-    : super(
+  ListSkillsTool(SkillToolset toolset)
+    : _toolset = toolset,
+      super(
         name: toolName,
         description:
             'Lists all available skills with their names and descriptions.',
@@ -384,8 +385,9 @@ class LoadSkillTool extends BaseTool {
   static const String toolName = loadSkillToolName;
 
   /// Creates a load-skill tool backed by [toolset].
-  LoadSkillTool(this._toolset)
-    : super(
+  LoadSkillTool(SkillToolset toolset)
+    : _toolset = toolset,
+      super(
         name: toolName,
         description: 'Loads the SKILL.md instructions for a given skill.',
       );
@@ -487,8 +489,9 @@ class UnloadSkillTool extends BaseTool {
   static const String toolName = unloadSkillToolName;
 
   /// Creates an unload-skill tool backed by [toolset].
-  UnloadSkillTool(this._toolset)
-    : super(
+  UnloadSkillTool(SkillToolset toolset)
+    : _toolset = toolset,
+      super(
         name: toolName,
         description:
             'Unloads an active skill once its task is complete, releasing its dynamic tools from the context.',
@@ -554,8 +557,9 @@ class LoadSkillResourceTool extends BaseTool {
   static const String toolName = loadSkillResourceToolName;
 
   /// Creates a load-skill-resource tool backed by [toolset].
-  LoadSkillResourceTool(this._toolset)
-    : super(
+  LoadSkillResourceTool(SkillToolset toolset)
+    : _toolset = toolset,
+      super(
         name: toolName,
         description:
             'Loads a resource file (from references/, assets/, or scripts/) from within a skill.',
@@ -1259,8 +1263,9 @@ class RunSkillScriptTool extends BaseTool {
   static const String toolName = runSkillScriptToolName;
 
   /// Creates a run-skill-script tool backed by [toolset].
-  RunSkillScriptTool(this._toolset)
-    : super(
+  RunSkillScriptTool(SkillToolset toolset)
+    : _toolset = toolset,
+      super(
         name: toolName,
         description: "Executes a script from a skill's scripts/ directory.",
       );
@@ -2103,7 +2108,7 @@ class SkillToolset extends BaseToolset {
     return evicted;
   }
 
-  /// Clones this toolset with a replaced [skills] collection while retaining lifecycle and discovery settings.
+  /// Clones this toolset with a replaced [updatedSkills] collection while retaining lifecycle and discovery settings.
   SkillToolset cloneWithUpdatedSkills(List<Skill> updatedSkills) {
     return SkillToolset(
       skills: updatedSkills,

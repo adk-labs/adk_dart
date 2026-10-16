@@ -1,5 +1,7 @@
 /// ElevenLabs speech-to-text ([ElevenLabsSTT]) and text-to-speech
 /// ([ElevenLabsTTS]) transforms for [CascadeLive].
+///
+/// @docImport '../../live/cascade_live.dart';
 library;
 
 import 'dart:async';

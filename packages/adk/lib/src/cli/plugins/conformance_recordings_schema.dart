@@ -251,7 +251,7 @@ ConformanceJson serializeContent(Content content) {
   };
 }
 
-/// Deserializes [content] produced by [serializeContent].
+/// Deserializes a [Content] produced by [serializeContent].
 Content deserializeContent(ConformanceJson json) {
   return Content(
     role: json['role'] as String?,

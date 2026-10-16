@@ -1,3 +1,6 @@
+/// @docImport 'adk_chat_message.dart';
+library;
+
 import 'package:adk_dart/adk_core.dart' as adk;
 import 'package:flutter/foundation.dart';
 

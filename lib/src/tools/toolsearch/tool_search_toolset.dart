@@ -46,10 +46,11 @@ class ToolSearchConfig {
 class SearchToolsTool extends BaseTool {
   /// Creates a search tool bound to [toolset].
   SearchToolsTool(
-    this._toolset, {
+    ToolSearchToolset toolset, {
     super.name = searchToolsToolName,
     String? description,
-  }) : super(
+  }) : _toolset = toolset,
+       super(
          description:
              description ??
              'Searches for deferred tools by keyword, required terms (+term), '

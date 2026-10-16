@@ -162,8 +162,9 @@ class EnvironmentToolset extends BaseToolset {
 /// Tool that runs shell commands in an environment.
 class ExecuteTool extends BaseTool {
   /// Creates an execute tool backed by [environment].
-  ExecuteTool(this._environment, {int? maxOutputChars})
-    : _maxOutputChars = maxOutputChars,
+  ExecuteTool(BaseEnvironment environment, {int? maxOutputChars})
+    : _environment = environment,
+      _maxOutputChars = maxOutputChars,
       super(
         name: 'Execute',
         description:
@@ -243,8 +244,9 @@ class ExecuteTool extends BaseTool {
 /// Tool that reads file contents from an environment with line numbers.
 class ReadFileTool extends BaseTool {
   /// Creates a read-file tool backed by [environment].
-  ReadFileTool(this._environment, {int? maxOutputChars})
-    : _maxOutputChars = maxOutputChars,
+  ReadFileTool(BaseEnvironment environment, {int? maxOutputChars})
+    : _environment = environment,
+      _maxOutputChars = maxOutputChars,
       super(
         name: 'ReadFile',
         description:
@@ -367,8 +369,9 @@ class ReadFileTool extends BaseTool {
 /// Tool that creates or overwrites a file in an environment.
 class WriteFileTool extends BaseTool {
   /// Creates a write-file tool backed by [environment].
-  WriteFileTool(this._environment)
-    : super(
+  WriteFileTool(BaseEnvironment environment)
+    : _environment = environment,
+      super(
         name: 'WriteFile',
         description:
             'Create or overwrite a file in the environment. Use this for new files or full rewrites.',
@@ -424,8 +427,9 @@ class WriteFileTool extends BaseTool {
 /// Tool that performs an exact text replacement in an environment file.
 class EditFileTool extends BaseTool {
   /// Creates an edit-file tool backed by [environment].
-  EditFileTool(this._environment)
-    : super(
+  EditFileTool(BaseEnvironment environment)
+    : _environment = environment,
+      super(
         name: 'EditFile',
         description:
             'Replace an exact substring in an existing file. The old_string must appear exactly once.',

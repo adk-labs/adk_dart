@@ -1,3 +1,6 @@
+/// @docImport '../widgets/adk_prompt_suggestions_bar.dart';
+library;
+
 import 'package:flutter/widgets.dart';
 
 /// A rich prompt suggestion chip model for [AdkPromptSuggestionsBar].

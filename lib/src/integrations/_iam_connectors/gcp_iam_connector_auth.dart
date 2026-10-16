@@ -1,4 +1,6 @@
 /// GCP IAM Connector auth scheme models.
+///
+/// @docImport '../../auth/auth_tool.dart';
 library;
 
 /// Externally managed authentication scheme types.

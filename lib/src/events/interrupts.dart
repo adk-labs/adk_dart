@@ -48,7 +48,7 @@ class OpenInterrupt {
 
 /// Returns all interrupt IDs carried by [event].
 ///
-/// Includes [event.longRunningToolIds] as well as fallback extraction from
+/// Includes [Event.longRunningToolIds] as well as fallback extraction from
 /// `adk_request_input`, `adk_request_credential`, and `adk_request_confirmation`
 /// function calls for sessions where [Event.longRunningToolIds] was omitted.
 Set<String> extractEventInterruptIds(Event event) {

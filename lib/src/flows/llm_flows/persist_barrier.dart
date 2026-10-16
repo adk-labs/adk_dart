@@ -1,4 +1,6 @@
 /// Coordination barrier between LLM flow steps and runner persistence.
+///
+/// @docImport '../../runners/runner.dart';
 library;
 
 import 'dart:async';

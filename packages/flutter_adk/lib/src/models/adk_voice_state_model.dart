@@ -1,3 +1,6 @@
+/// @docImport '../widgets/adk_voice_widgets.dart';
+library;
+
 /// Operational status of an interactive voice input session.
 enum AdkVoiceStatus {
   /// Mic is idle and not capturing.

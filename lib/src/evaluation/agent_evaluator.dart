@@ -123,7 +123,7 @@ class AgentEvaluator {
     _registeredAgentModules.clear();
   }
 
-  /// Sets a loader used to resolve [agentModule] values at runtime.
+  /// Sets a [loader] used to resolve agent module values at runtime.
   static void setAgentModuleLoader(AgentModuleLoader loader) {
     _agentModuleLoader = loader;
   }

@@ -141,7 +141,7 @@ class SkillTelemetry {
     confirmedResourceOrScriptPath: confirmedResourceOrScriptPath,
   );
 
-  /// Updates [span] (or [tracer.currentSpan] when omitted) with the
+  /// Updates [span] (or [AdkTracer.currentSpan] when omitted) with the
   /// formatted skill tool span name.
   static void updateCurrentSpanName({
     required String toolName,

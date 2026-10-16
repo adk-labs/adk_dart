@@ -3,3 +3,8 @@ include: package:lints/recommended.yaml
 analyzer:
   errors:
     implementation_imports: ignore
+
+linter:
+  rules:
+    - comment_references
+    - public_member_api_docs

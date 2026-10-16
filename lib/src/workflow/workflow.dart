@@ -129,7 +129,7 @@ class RetryConfig {
 
   /// Maximum number of attempts including the first run.
   ///
-  /// This default applies only when a node explicitly sets [retryConfig].
+  /// This default applies only when a node explicitly sets [BaseNode.retryConfig].
   /// Nodes without retry config still run once.
   final int maxAttempts;
 
