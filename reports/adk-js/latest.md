@@ -1,9 +1,9 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-10-15
+- Date (UTC): 2026-10-16
 - Source: `google/adk-js`
-- Latest SHA: `5cdd390be31f5eb885f3bbf58796aab61878ed8e`
-- Previous SHA: `120c28252e57d0bc1ba32c2daabbc0964a4dd50e`
+- Latest SHA: `0f28dc95cc87062a990efd56c774cf20cc3eb853`
+- Previous SHA: `5cdd390be31f5eb885f3bbf58796aab61878ed8e`
 
 ## Summary
 
@@ -11,12 +11,19 @@
 
 ## Commits
 
-- [5cdd390](https://github.com/google/adk-js/commit/5cdd390be31f5eb885f3bbf58796aab61878ed8e) test(cli): port adk-python v0.2.0 changes to cli (#1084) (Scott Mansfield, 2026-10-15)
-- [0f3e5f2](https://github.com/google/adk-js/commit/0f3e5f22b37492eb32b67710761ebf1cdb28dd56) test(sessions): port adk-python v0.2.0 changes to sessions (#1081) (Scott Mansfield, 2026-10-14)
+- [0f28dc9](https://github.com/google/adk-js/commit/0f28dc95cc87062a990efd56c774cf20cc3eb853) feat: Ergonomic TypeScript client for remote Vertex AI Agent Engine (#522) (Amaad Martin, 2026-10-15)
+- [0eb3ac5](https://github.com/google/adk-js/commit/0eb3ac5df65daacd9e217cf9fa014ee601f1813b) feat: port adk-python v0.3.0 changes to agents, auth, cli (+6 more) (#1091) (Scott Mansfield, 2026-10-15)
 
 ## Changed Files
 
-- `M	core/test/cli/utils/envs_test.ts`
-- `M	core/test/cli/utils/evals_test.ts`
-- `M	core/test/sessions/database_session_service_test.ts`
-- `M	core/test/sessions/in_memory_session_service_test.ts`
+- `M	.gitignore`
+- `M	core/package.json`
+- `A	core/src/agents/agent_engine_client.ts`
+- `A	core/test/agents/agent_engine_client_e2e_test.ts`
+- `A	core/test/agents/agent_engine_client_test.ts`
+- `M	core/test/agents/functions_test.ts`
+- `M	core/test/package_install_weight_test.ts`
+- `M	core/test/tools/function_tool_test.ts`
+- `M	dev/src/cli/deploy/cli_deploy_cloud_run.ts`
+- `M	dev/test/cli/cli_deploy_cloud_run_test.ts`
+- `M	package-lock.json`

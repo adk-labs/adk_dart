@@ -1,89 +1,182 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-15
+- Date (UTC): 2026-10-16
 - Source: `google/adk-python`
-- Latest SHA: `31398554885485f92bd918f35f90b9810f3ffed1`
-- Previous SHA: `156f007ce1899bf0116eb990ce448be8ac1b3308`
+- Latest SHA: `2a28c3edebeecebcd8e738933f24b29c4f51b3a9`
+- Previous SHA: `31398554885485f92bd918f35f90b9810f3ffed1`
 
 ## Summary
 
-- New commits: 12
+- New commits: 22
 
 ## Commits
 
-- [31398554](https://github.com/google/adk-python/commit/31398554885485f92bd918f35f90b9810f3ffed1) fix(integrations): use the mTLS Model Armor endpoint when mTLS is enabled (Jason Zhang, 2026-10-15)
-- [0491606e](https://github.com/google/adk-python/commit/0491606e42f56565aa6091f6aefa4cedd006476c) fix(features): fail fast when feature decorators are misused (Xuan Yang, 2026-10-15)
-- [019387c6](https://github.com/google/adk-python/commit/019387c62d706375059376156c355f20e0c735c2) fix: record artifact_delta from before and after agent callbacks (Akshay Shah, 2026-10-15)
-- [456d2cb9](https://github.com/google/adk-python/commit/456d2cb9ef1ac2c20842c60c97cf9079eb8adf33) fix(spanner): validate the database id used in the create statement (George Weale, 2026-10-15)
-- [4211b238](https://github.com/google/adk-python/commit/4211b238aad18576bd87dc7d14b4f95092718d70) test: pin that a rerun_on_resume node reruns on its first answer (George Weale, 2026-10-15)
-- [2416f660](https://github.com/google/adk-python/commit/2416f660b15fbb6b8e8d92c76eef76d6de69963e) fix: find stored words with a capital dotted I in sqlite memory (Somay-kousis, 2026-10-15)
-- [74d0eff8](https://github.com/google/adk-python/commit/74d0eff89391746464997b6eb1ca5cb3d44ca670) fix: keep every tool call in a finish-bearing stream chunk (Aamir Ahmed, 2026-10-15)
-- [b60b44ff](https://github.com/google/adk-python/commit/b60b44ff2a2ab843cabb4804bfc5492926953352) fix: serve dev UI behind prefix-stripping proxies (Nitish Reddy, 2026-10-15)
-- [7d6637c5](https://github.com/google/adk-python/commit/7d6637c536f3e4343c904f64b4d8bd2c8331ce7a) fix: return 404 when adding a session to a missing eval set (Ankit Kumar, 2026-10-15)
-- [3c8c63e4](https://github.com/google/adk-python/commit/3c8c63e41b3efca99e20b0b06804ed6b69b1dbf1) feat: seed adk web sessions from initial_state.json (Bicheng Wang, 2026-10-15)
-- [23bc0bb7](https://github.com/google/adk-python/commit/23bc0bb79d2d9b5b8657562cee00a63afdbef38a) fix: send adk run queries as messages after a pause is answered (Jinzhengxu, 2026-10-15)
-- [d01d5d84](https://github.com/google/adk-python/commit/d01d5d840832df35d536dcf154dc2575348ca5cc) feat(telemetry): count conversation compactions per workflow (Artur Gajowniczek, 2026-10-15)
+- [2a28c3ed](https://github.com/google/adk-python/commit/2a28c3edebeecebcd8e738933f24b29c4f51b3a9) perf: avoid quadratic scans of compacted session history (LingYi, 2026-10-16)
+- [772b5773](https://github.com/google/adk-python/commit/772b5773bcc4f695ea7a1fe9459277bef8aac4a1) feat(classifiers): add LlmClassifier (Kathy Wu, 2026-10-16)
+- [20a5a0cd](https://github.com/google/adk-python/commit/20a5a0cd47735487b504a249a3145cea5d4afef3) fix: sanitize GCS blob names to prevent path traversal in skill loading (BISHT.cx, 2026-10-16)
+- [e4067dbc](https://github.com/google/adk-python/commit/e4067dbcc8192615b69d8ca1fc1de17743a71676) fix(tools): preserve raw routine docstrings in legacy declaration builder (Xuan Yang, 2026-10-16)
+- [c9f53a62](https://github.com/google/adk-python/commit/c9f53a6242b0eeb0cc3622da788e12ed824b233f) docs: mark Sequential/Parallel/Loop agents deprecated in README (Saurabh Gupta, 2026-10-16)
+- [75355cfd](https://github.com/google/adk-python/commit/75355cfd55cb1bba56333a990e92dd8b77ad4fcd) test: verify importing Agent and _gcp_metadata defers transport imports (Google Team Member, 2026-10-16)
+- [78384882](https://github.com/google/adk-python/commit/783848821aabc6656a79949996c31608d5043606) feat(telemetry)!: Deprecate `call_llm` span and OpenTelemetry 1.36 GenAI semconv (Max Ind, 2026-10-16)
+- [7ba830a3](https://github.com/google/adk-python/commit/7ba830a318a973d3cf66290832b9339450cc3020) chore(telemetry): Rename the experimental-telemetry-stable-no-capture goldens (Max Ind, 2026-10-16)
+- [5909a0eb](https://github.com/google/adk-python/commit/5909a0ebabdf5786397b68babf1a1fa15aea22ce) fix(telemetry): Drop the call_llm span under telemetry schema v2 (Max Ind, 2026-10-16)
+- [f7e3f127](https://github.com/google/adk-python/commit/f7e3f127f3163af9da77ef82624f3b2289ebf25c) feat(telemetry): Serve the elided LLM content to the ADK Web UI (Max Ind, 2026-10-16)
+- [5f0babc9](https://github.com/google/adk-python/commit/5f0babc9c59a03005502504713d9f4bd0e5cca55) feat(telemetry): Report tool call content under the semconv attributes (Max Ind, 2026-10-16)
+- [f78149a9](https://github.com/google/adk-python/commit/f78149a97e109e9c947ade06e3a9ab8a45385e0e) feat(live): add Gemini speech-to-text and text-to-speech for CascadeLive (Liang Wu, 2026-10-15)
+- [59fe93bd](https://github.com/google/adk-python/commit/59fe93bd0e7b32649c217dcce76f8928ee3c10bc) fix: resolve JSON Pointer $ref in _dereference_schema (foivos-all, 2026-10-15)
+- [ab9c9942](https://github.com/google/adk-python/commit/ab9c99427e867234da692b969302b466b76e89a5) feat(plugins): add agent evaluation session and turn trace views (Haiyuan Cao, 2026-10-15)
+- [56ac3048](https://github.com/google/adk-python/commit/56ac304859b35906f12171d1a6aac489a0ffbffb) fix: support unhashable callable tools (Chenghao Liu, 2026-10-15)
+- [e3e65813](https://github.com/google/adk-python/commit/e3e6581354e069d7d67f915ddcb36f5949c914e9) fix: keep every artifact when converting an A2A task to an event (Atul Joshi, 2026-10-15)
+- [95d62152](https://github.com/google/adk-python/commit/95d62152387f52318f04c14d979b83da60f1b313) fix: unify boolean environment variable parsing in is_env_enabled (Yuhan Gao, 2026-10-15)
+- [c2ff6348](https://github.com/google/adk-python/commit/c2ff63480bf879da70c3b82bb3e4ed06f6842498) fix: adk eval process exit code now reflects passed/failed (Gaurav Gandhi, 2026-10-15)
+- [a84d978e](https://github.com/google/adk-python/commit/a84d978e213d8c788bf719b35f103be8c82ef02d) feat(tools): add ForceEscalationPlugin for deterministic model consultation (Xuan Yang, 2026-10-15)
+- [2ba3e2db](https://github.com/google/adk-python/commit/2ba3e2dbd5b661d1beebe6248b0f1b853345cfde) fix: consume AGENT_GATEWAY_ROOT_CERTIFICATES in deploy Dockerfile (Chaitanya Laxman, 2026-10-15)
+- [203223f5](https://github.com/google/adk-python/commit/203223f5ec74bec86487f91942794a1b0c564131) refactor(live): route live blobs through the realtime cache manager (Google Team Member, 2026-10-15)
+- [41e5c7b9](https://github.com/google/adk-python/commit/41e5c7b90622c90ed79af70f0ce96c3b55ab1ff3) feat: add delete_memory api to BaseMemoryService (Arul, 2026-10-15)
 
 ## Changed Files
 
-- `M	docs/guides/features/feature_registry/index.md`
-- `M	docs/guides/workflow/base_node/index.md`
-- `M	scripts/compliance_checks.py`
-- `M	src/google/adk/agents/base_agent.py`
+- `M	contributing/samples/live/cascade/README.md`
+- `A	contributing/samples/live/cascade/README_elevenlabs.md`
+- `A	contributing/samples/live/cascade/README_gemini.md`
+- `M	contributing/samples/live/cascade/agent.py`
+- `M	docs/guides/README.md`
+- `M	docs/guides/live/cascade_live/index.md`
+- `A	docs/guides/live/gemini_stt/index.md`
+- `A	docs/guides/live/gemini_tts/index.md`
+- `M	docs/guides/memory/memory_service/index.md`
+- `A	docs/guides/tools/model_consult/force_escalation_plugin/index.md`
+- `M	pyproject.toml`
+- `M	src/google/adk/a2a/converters/event_converter.py`
+- `M	src/google/adk/agents/context.py`
 - `M	src/google/adk/apps/compaction.py`
 - `M	src/google/adk/cli/api_server.py`
-- `M	src/google/adk/cli/cli.py`
+- `M	src/google/adk/cli/built_in_agents/README.md`
+- `M	src/google/adk/cli/cli_tools_click.py`
+- `M	src/google/adk/cli/deployers/_dockerfile_template.py`
 - `M	src/google/adk/cli/dev_server.py`
-- `M	src/google/adk/features/_feature_decorator.py`
-- `M	src/google/adk/features/_feature_registry.py`
-- `M	src/google/adk/integrations/model_armor/_plugin.py`
-- `M	src/google/adk/memory/_sqlite_memory_service.py`
-- `M	src/google/adk/models/lite_llm.py`
-- `M	src/google/adk/runners.py`
+- `M	src/google/adk/flows/llm_flows/context/_compaction.py`
+- `M	src/google/adk/flows/llm_flows/core/_finalizer.py`
+- `M	src/google/adk/flows/llm_flows/core/_model_call.py`
+- `M	src/google/adk/labs/classifiers/__init__.py`
+- `A	src/google/adk/labs/classifiers/_llm_classifier.py`
+- `M	src/google/adk/live/__init__.py`
+- `A	src/google/adk/live/_gemini_stt.py`
+- `A	src/google/adk/live/_gemini_tts.py`
+- `M	src/google/adk/live/_live_llm_flow.py`
+- `M	src/google/adk/live/_realtime_cache_manager.py`
+- `M	src/google/adk/memory/base_memory_service.py`
+- `M	src/google/adk/memory/in_memory_memory_service.py`
+- `M	src/google/adk/models/google_llm.py`
+- `M	src/google/adk/plugins/__init__.py`
+- `M	src/google/adk/plugins/bigquery_agent_analytics_plugin.py`
+- `M	src/google/adk/skills/_utils.py`
+- `A	src/google/adk/telemetry/_genai_instrumentor.py`
 - `M	src/google/adk/telemetry/_instrumentation.py`
 - `M	src/google/adk/telemetry/_metrics.py`
 - `M	src/google/adk/telemetry/_schema_version.py`
+- `A	src/google/adk/telemetry/_web_ui.py`
 - `M	src/google/adk/telemetry/context.py`
-- `M	src/google/adk/telemetry/node_tracing.py`
-- `M	src/google/adk/tools/spanner/admin_tool.py`
+- `M	src/google/adk/telemetry/tracing.py`
+- `M	src/google/adk/tools/_automatic_function_calling_util.py`
+- `M	src/google/adk/tools/_function_tool_declarations.py`
+- `M	src/google/adk/tools/_gemini_schema_util.py`
+- `M	src/google/adk/tools/function_tool.py`
+- `M	src/google/adk/tools/model_consult/__init__.py`
+- `M	src/google/adk/tools/model_consult/_advisor.py`
+- `A	src/google/adk/tools/model_consult/_force_escalation_plugin.py`
+- `M	src/google/adk/tools/skill_toolset.py`
+- `M	src/google/adk/utils/_callable_utils.py`
+- `M	src/google/adk/utils/_gcp_metadata.py`
+- `M	src/google/adk/utils/_runner_utils.py`
+- `M	src/google/adk/utils/context_utils.py`
+- `M	src/google/adk/utils/env_utils.py`
 - `M	src/google/adk/utils/feature_decorator.py`
-- `M	src/google/adk/workflow/_base_node.py`
-- `M	src/google/adk/workflow/_node_runner_utils.py`
-- `M	tests/unittests/agents/test_base_agent.py`
-- `M	tests/unittests/apps/test_compaction.py`
+- `A	tests/benchmarks/benchmark_compaction.py`
+- `M	tests/unittests/a2a/converters/test_event_converter.py`
+- `M	tests/unittests/agents/test_context.py`
+- `A	tests/unittests/apps/test_compaction_scaling.py`
 - `M	tests/unittests/cli/test_fast_api.py`
+- `M	tests/unittests/cli/utils/test_cli_deploy_to_cloud_run.py`
 - `M	tests/unittests/cli/utils/test_cli_tools_click.py`
-- `M	tests/unittests/features/test_feature_decorator.py`
-- `M	tests/unittests/integrations/model_armor/test_model_armor_plugin.py`
-- `M	tests/unittests/memory/test_sqlite_memory_service.py`
-- `M	tests/unittests/models/test_litellm.py`
-- `M	tests/unittests/scripts/test_compliance_checks.py`
+- `A	tests/unittests/flows/llm_flows/context/test_compaction_intervals.py`
+- `M	tests/unittests/flows/llm_flows/core/test_model_call.py`
+- `M	tests/unittests/flows/llm_flows/test_llm_callback_span_consistency.py`
+- `A	tests/unittests/labs/classifiers/test_llm_classifier.py`
+- `A	tests/unittests/live/test_gemini_stt.py`
+- `A	tests/unittests/live/test_gemini_tts.py`
+- `M	tests/unittests/live/test_live_llm_flow.py`
+- `M	tests/unittests/live/test_realtime_cache_manager.py`
+- `M	tests/unittests/memory/test_in_memory_memory_service.py`
+- `M	tests/unittests/plugins/test_bigquery_agent_analytics_plugin.py`
+- `M	tests/unittests/skills/test__utils.py`
 - `M	tests/unittests/telemetry/functional/_digests.py`
+- `M	tests/unittests/telemetry/functional/_divergences.py`
 - `M	tests/unittests/telemetry/functional/_recording.py`
-- `M	tests/unittests/telemetry/functional/scenarios/__init__.py`
-- `A	tests/unittests/telemetry/functional/scenarios/compaction.py`
-- `M	tests/unittests/telemetry/functional/scenarios/telemetry_setup.py`
 - `M	tests/unittests/telemetry/functional_divergences.json`
-- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-stable-no-capture-schema-v2.json`
-- `M	tests/unittests/telemetry/functional_goldens/agent_tool/experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-only-schema-v2.json`
+- `R100	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-stable-no-capture-schema-v1.json	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-no-capture-schema-v1.json`
+- `R068	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-stable-no-capture-schema-v2.json	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-no-capture-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/inference-error-resource-exhausted-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/inference-error-valueerror-schema-v2.json`
+- `A	tests/unittests/telemetry/functional_goldens/agent/inference-error-valueerror-span-and-event-schema-v2.json`
+- `D	tests/unittests/telemetry/functional_goldens/agent/stable-capture-schema-v2.json`
+- `D	tests/unittests/telemetry/functional_goldens/agent/stable-no-capture-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/tool-error-valueerror-schema-v2.json`
+- `A	tests/unittests/telemetry/functional_goldens/agent/tool-error-valueerror-span-only-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/agent_tool/experimental-telemetry-schema-v2.json`
-- `A	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/no-experimental-telemetry-schema-v2.json`
-- `A	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/sliding-window-schema-v2.json`
-- `A	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/token-threshold-schema-v2.json`
-- `A	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/untriggered-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/sliding-window-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/token-threshold-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/untriggered-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/multi_agent/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/no-experimental-telemetry-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/nested_agents_in_workflow/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/nested_agents_in_workflow/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-only-schema-v2.json`
+- `D	tests/unittests/telemetry/functional_goldens/node/stable-capture-schema-v2.json`
+- `D	tests/unittests/telemetry/functional_goldens/node/stable-no-capture-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-resource-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/skill/skill-resource-telemetry-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/skill/skill-script-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-disabled-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-schema-v2.json`
-- `A	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v1.json`
-- `A	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-only-schema-v2.json`
+- `D	tests/unittests/telemetry/functional_goldens/streaming/stable-capture-schema-v2.json`
+- `D	tests/unittests/telemetry/functional_goldens/streaming/stable-no-capture-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v2.json`
 - `M	tests/unittests/telemetry/functional_test_cases.py`
+- `M	tests/unittests/telemetry/test_functional.py`
+- `A	tests/unittests/telemetry/test_genai_instrumentor_bypass.py`
 - `M	tests/unittests/telemetry/test_instrumentation.py`
 - `M	tests/unittests/telemetry/test_metrics.py`
+- `M	tests/unittests/telemetry/test_node_functional.py`
+- `M	tests/unittests/telemetry/test_schema_version.py`
 - `M	tests/unittests/telemetry/test_semconv_conformance.py`
-- `M	tests/unittests/tools/spanner/test_admin_tool.py`
-- `M	tests/unittests/utils/test_feature_decorator.py`
-- `M	tests/unittests/workflow/test_workflow_hitl.py`
+- `M	tests/unittests/telemetry/test_spans.py`
+- `M	tests/unittests/telemetry/test_telemetry_context.py`
+- `A	tests/unittests/telemetry/test_web_ui_functional.py`
+- `A	tests/unittests/telemetry/test_web_ui_schema.py`
+- `M	tests/unittests/tools/model_consult/test_advisor.py`
+- `A	tests/unittests/tools/model_consult/test_force_escalation_plugin.py`
+- `M	tests/unittests/tools/model_consult/test_model_consult_tool.py`
+- `M	tests/unittests/tools/test_function_tool.py`
+- `M	tests/unittests/tools/test_function_tool_declarations.py`
+- `M	tests/unittests/tools/test_gemini_schema_util.py`
+- `M	tests/unittests/tools/test_skill_path_traversal.py`
+- `M	tests/unittests/tools/test_skill_toolset.py`
+- `M	tests/unittests/utils/test__runner_utils.py`
+- `M	tests/unittests/utils/test_context_utils.py`
+- `M	tests/unittests/utils/test_env_utils.py`
+- `M	tests/unittests/utils/test_gcp_metadata.py`
