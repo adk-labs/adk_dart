@@ -1,34 +1,32 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-10-16
+- Date (UTC): 2026-10-17
 - Source: `google/adk-go`
-- Latest SHA: `c7ed87daa909e7563d3167e57daedee55f557d91`
-- Previous SHA: `c935e6da519cd9b743ff0aeabcadd179cb15395c`
+- Latest SHA: `74faa9ab6bf58b47653ed275f4aa86a93e76280a`
+- Previous SHA: `c7ed87daa909e7563d3167e57daedee55f557d91`
 
 ## Summary
 
-- New commits: 5
+- New commits: 2
 
 ## Commits
 
-- [c7ed87d](https://github.com/google/adk-go/commit/c7ed87daa909e7563d3167e57daedee55f557d91) feat(mcptoolset): identify ADK in the User-Agent of MCP HTTP requests (#1862) (wolo, 2026-10-16)
-- [1d2f545](https://github.com/google/adk-go/commit/1d2f5456649f21ac6a689cec5668c74b58297430) fix(agenttool): preserve code output in sub-agent results (#1860) (ktsoator, 2026-10-16)
-- [7b10fa8](https://github.com/google/adk-go/commit/7b10fa82e6f3e297df4d9d5d99a7a58f293295f1) docs(compaction): list the GenerateContentConfig fields the summarizer uses (#1828) (Karol Piotrowicz, 2026-10-16)
-- [b595778](https://github.com/google/adk-go/commit/b595778e9ef2a45be2e439a27b83e31722f83413) refactor(workflow): remove redundant goroutine in scheduleRetry (#1849) (moodbased, 2026-10-16)
-- [900e2fa](https://github.com/google/adk-go/commit/900e2fa4907fa9825f708433ff162f6281069249) docs(loopagent): say the context is checked before each pass (#1861) (Anzal Husain Abidi, 2026-10-16)
+- [74faa9a](https://github.com/google/adk-go/commit/74faa9ab6bf58b47653ed275f4aa86a93e76280a) feat(model/openaimodel): support image/file input via genai InlineData/FileData parts (#1543) (Anton Dziatkovskii, 2026-10-16)
+- [ec0c362](https://github.com/google/adk-go/commit/ec0c362bf00aaf649f0839517762f33ab65ee4d4) fix(mcptoolset): stop using context.Background() in connectionRefresher.Close (#1844) (wolo, 2026-10-17)
 
 ## Changed Files
 
-- `M	agent/workflowagents/loopagent/agent.go`
-- `A	internal/version/tracking.go`
-- `A	internal/version/tracking_test.go`
-- `M	model/gemini/gemini.go`
-- `M	runner/runner.go`
-- `M	session/compaction/llm_summarizer.go`
-- `M	tool/agenttool/agent_tool.go`
-- `M	tool/agenttool/agent_tool_test.go`
-- `M	tool/mcptoolset/set.go`
-- `A	tool/mcptoolset/tracking.go`
-- `A	tool/mcptoolset/tracking_test.go`
-- `M	tool/mcptoolset/transport_config_test.go`
-- `M	workflow/scheduler.go`
+- `M	model/openaimodel/errors.go`
+- `A	model/openaimodel/internal/completions/media_test.go`
+- `M	model/openaimodel/internal/completions/request.go`
+- `M	model/openaimodel/internal/completions/request_test.go`
+- `M	model/openaimodel/internal/responses/request.go`
+- `M	model/openaimodel/internal/responses/request_test.go`
+- `M	model/openaimodel/internal/shared/contents.go`
+- `M	model/openaimodel/internal/shared/contents_test.go`
+- `M	model/openaimodel/internal/shared/errors.go`
+- `A	model/openaimodel/internal/shared/media.go`
+- `A	model/openaimodel/internal/shared/media_test.go`
+- `M	model/openaimodel/openaimodel_test.go`
+- `M	tool/mcptoolset/client.go`
+- `M	tool/mcptoolset/client_cancellation_test.go`
