@@ -45,7 +45,6 @@ List<EvalMetric> resolveCliEvalMetricsFromConfig(
 List<EvalMetric> getDefaultMetricInfo({bool addTrajectoryMetrics = false}) {
   final List<EvalMetric> metrics = <EvalMetric>[
     EvalMetric.finalResponseExactMatch,
-    EvalMetric.finalResponseContains,
   ];
   if (addTrajectoryMetrics &&
       !metrics.contains(EvalMetric.finalResponseContains)) {

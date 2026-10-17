@@ -1,7 +1,11 @@
+/// Demonstrates Human-in-the-Loop (HITL) workflows using [getUserChoice].
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Executes a multi-turn HITL travel planning dialogue.
 Future<void> main() async {
   final String? apiKey = Platform.environment['GEMINI_API_KEY'] ??
       Platform.environment['GOOGLE_API_KEY'];

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:adk_dart/adk_dart.dart' as adk;
 import 'package:adk_litertlm/adk_litertlm.dart';
+import 'package:adk_litertlm/src/active_litert_conversation.dart';
 import 'package:litertlm/litertlm.dart' as litert;
 import 'package:test/test.dart';
 
@@ -176,6 +178,249 @@ void main() {
       expect(lastSentMessage!.role, equals(litert.Role.tool));
 
       await model.close();
+    });
+
+    test('generateContent error handling in unary and stream modes', () async {
+      final model = LiteRtLmModel(fakeEngine, ownsEngine: true, model: 'test-model');
+
+      // Empty contents error
+      final emptyReq = adk.LlmRequest(contents: []);
+      final emptyRes = await model.generateContent(emptyReq, stream: false).toList();
+      expect(emptyRes.first.errorMessage, contains('Empty request contents'));
+
+      final emptyStreamRes = await model.generateContent(emptyReq, stream: true).toList();
+      expect(emptyStreamRes.first.errorMessage, contains('Empty request contents'));
+
+      // Stream error during sendMessageStream
+      final fakeConv = FakeConversation();
+      fakeConv.sendMessageStreamHandler = (msg) {
+        throw StateError('Stream failure');
+      };
+      fakeEngine.nextConversation = fakeConv;
+
+      final req = adk.LlmRequest(contents: [adk.Content.userText('Hello')]);
+      final streamErrors = await model.generateContent(req, stream: true).toList();
+      expect(streamErrors.first.errorMessage, contains('Stream failure'));
+
+      // Unary error during sendMessage
+      final fakeConvUnary = FakeConversation();
+      fakeConvUnary.sendMessageHandler = (msg) {
+        throw StateError('Unary failure');
+      };
+      fakeEngine.nextConversation = fakeConvUnary;
+      final unaryErrors = await model.generateContent(req, stream: false).toList();
+      expect(unaryErrors.first.errorMessage, contains('Unary failure'));
+
+      await model.dispose();
+      expect(fakeEngine.isInitialized, isFalse);
+    });
+
+    test('tools, system instructions, and manual tool execution', () async {
+      final model = LiteRtLmModel(fakeEngine, model: 'test-model');
+      final fakeConv = FakeConversation();
+      fakeEngine.nextConversation = fakeConv;
+
+      final toolDecl = adk.ToolDeclaration(
+        functionDeclarations: [
+          adk.FunctionDeclaration(
+            name: 'calc',
+            description: 'Calculator',
+            parameters: {'type': 'object'},
+          ),
+        ],
+      );
+
+      final manualTool = ManualLiteRtLmTool(toolDecl.functionDeclarations.first);
+      final desc = manualTool.getToolDescription();
+      expect(desc['type'], equals('function'));
+      expect((desc['function'] as Map)['name'], equals('calc'));
+      expect(() => manualTool.execute({}), throwsUnsupportedError);
+
+      final req = adk.LlmRequest(
+        contents: [adk.Content.userText('Calculate 2+2')],
+        config: adk.GenerateContentConfig(
+          systemInstruction: 'Be helpful.',
+          tools: [toolDecl],
+        ),
+      );
+
+      await model.generateContent(req, stream: false).toList();
+      expect(fakeEngine.lastConfig?.tools.length, equals(1));
+      expect(fakeEngine.lastConfig?.systemMessage, isNotNull);
+
+      await model.close();
+    });
+
+    test('message mapping across roles, tool calls, and multimodal parts', () async {
+      final model = LiteRtLmModel(fakeEngine, model: 'test-model');
+      final fakeConv = FakeConversation();
+      fakeEngine.nextConversation = fakeConv;
+
+      final req = adk.LlmRequest(
+        contents: [
+          adk.Content(role: 'system', parts: [adk.Part.text('Sys')]),
+          adk.Content(role: 'tool', parts: [adk.Part.text('Tool output')]),
+          adk.Content(
+            role: 'model',
+            parts: [
+              adk.Part(
+                functionCall: adk.FunctionCall(name: 'search', args: {'q': 'dart'}),
+              ),
+            ],
+          ),
+          adk.Content(
+            role: 'user',
+            parts: [
+              adk.Part(
+                inlineData: adk.InlineData(mimeType: 'image/png', data: [1, 2, 3]),
+              ),
+              adk.Part(
+                inlineData: adk.InlineData(mimeType: 'audio/wav', data: [4, 5, 6]),
+              ),
+              adk.Part(
+                fileData: adk.FileData(mimeType: 'image/jpeg', fileUri: '/tmp/pic.jpg'),
+              ),
+              adk.Part(
+                fileData: adk.FileData(mimeType: 'audio/mp3', fileUri: '/tmp/sound.mp3'),
+              ),
+              adk.Part(
+                functionResponse: adk.FunctionResponse(name: 'fn', response: {'ok': true}),
+              ),
+            ],
+          ),
+          adk.Content(role: 'custom', parts: [adk.Part.text('Fallback to user')]),
+        ],
+      );
+
+      fakeConv.sendMessageStreamHandler = (msg) {
+        return Stream.value(
+          litert.Message(
+            role: litert.Role.model,
+            contents: litert.Contents([
+              const litert.TextContent('Result: '),
+              litert.ImageBytesContent(Uint8List.fromList([1])),
+              const litert.ImageFileContent('/img.png'),
+              litert.AudioBytesContent(Uint8List.fromList([2])),
+              const litert.AudioFileContent('/audio.wav'),
+              const litert.ToolResponseContent(name: 'fn', response: {'res': 1}),
+            ]),
+            toolCalls: [
+              const litert.ToolCall(name: 'done', arguments: {'status': 200}),
+            ],
+          ),
+        );
+      };
+
+      final responses = await model.generateContent(req, stream: true).toList();
+      expect(responses.length, equals(2));
+      final finalRes = responses.last;
+      expect(finalRes.content?.parts.any((p) => p.functionCall?.name == 'done'), isTrue);
+
+      await model.close();
+    });
+
+    test('active conversation equality matching branches', () {
+      final active = ActiveLiteRtLmConversation();
+      final fakeConv = FakeConversation();
+
+      final c1 = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(
+              functionCall: adk.FunctionCall(name: 'f1', args: {'a': 1}),
+            ),
+            adk.Part(
+              functionResponse: adk.FunctionResponse(name: 'r1', response: {'b': 2}),
+            ),
+            adk.Part(
+              inlineData: adk.InlineData(mimeType: 'image/png', data: [1, 2]),
+            ),
+            adk.Part(
+              fileData: adk.FileData(mimeType: 'image/jpeg', fileUri: 'file://img'),
+            ),
+          ],
+        ),
+      ];
+
+      active.update(fakeConv, c1);
+      expect(active.matches(c1), isTrue);
+
+      // Different function call
+      final cDiffFc = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(functionCall: adk.FunctionCall(name: 'f2', args: {'a': 1})),
+            adk.Part(functionResponse: adk.FunctionResponse(name: 'r1', response: {'b': 2})),
+            adk.Part(inlineData: adk.InlineData(mimeType: 'image/png', data: [1, 2])),
+            adk.Part(fileData: adk.FileData(mimeType: 'image/jpeg', fileUri: 'file://img')),
+          ],
+        ),
+      ];
+      expect(active.matches(cDiffFc), isFalse);
+
+      // Different function response
+      final cDiffFr = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(functionCall: adk.FunctionCall(name: 'f1', args: {'a': 1})),
+            adk.Part(functionResponse: adk.FunctionResponse(name: 'r2', response: {'b': 2})),
+            adk.Part(inlineData: adk.InlineData(mimeType: 'image/png', data: [1, 2])),
+            adk.Part(fileData: adk.FileData(mimeType: 'image/jpeg', fileUri: 'file://img')),
+          ],
+        ),
+      ];
+      expect(active.matches(cDiffFr), isFalse);
+
+      // Different inline data
+      final cDiffId = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(functionCall: adk.FunctionCall(name: 'f1', args: {'a': 1})),
+            adk.Part(functionResponse: adk.FunctionResponse(name: 'r1', response: {'b': 2})),
+            adk.Part(inlineData: adk.InlineData(mimeType: 'audio/wav', data: [1, 2])),
+            adk.Part(fileData: adk.FileData(mimeType: 'image/jpeg', fileUri: 'file://img')),
+          ],
+        ),
+      ];
+      expect(active.matches(cDiffId), isFalse);
+
+      // Different file data
+      final cDiffFd = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(functionCall: adk.FunctionCall(name: 'f1', args: {'a': 1})),
+            adk.Part(functionResponse: adk.FunctionResponse(name: 'r1', response: {'b': 2})),
+            adk.Part(inlineData: adk.InlineData(mimeType: 'image/png', data: [1, 2])),
+            adk.Part(fileData: adk.FileData(mimeType: 'image/png', fileUri: 'file://other')),
+          ],
+        ),
+      ];
+      expect(active.matches(cDiffFd), isFalse);
+
+      // Different thought
+      final cDiffThought = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(text: 'think', thought: true),
+          ],
+        ),
+      ];
+      final cNoThought = [
+        adk.Content(
+          role: 'user',
+          parts: [
+            adk.Part(text: 'think', thought: false),
+          ],
+        ),
+      ];
+      active.update(fakeConv, cDiffThought);
+      expect(active.matches(cNoThought), isFalse);
     });
   });
 }

@@ -86,6 +86,13 @@ class AdkChatController extends ChangeNotifier {
   List<AdkChatMessage> get messages =>
       List<AdkChatMessage>.unmodifiable(_messages);
 
+  /// Directly appends a message for testing and simulation purposes.
+  @visibleForTesting
+  void addMessageForTesting(AdkChatMessage message) {
+    _messages.add(message);
+    notifyListeners();
+  }
+
   /// Whether a model or tool turn is currently executing.
   bool get isLoading => _isLoading;
 
@@ -153,6 +160,7 @@ class AdkChatController extends ChangeNotifier {
     AdkCodeExecution? pendingCodeExecution;
     AdkGroundingInfo? latestGrounding;
 
+    final Completer<void> completer = Completer<void>();
     _subscription = eventStream.listen(
       (adk.Event event) {
         final adk.EventCompaction? compaction = event.actions.compaction;
@@ -302,10 +310,19 @@ class AdkChatController extends ChangeNotifier {
           ),
         );
         notifyListeners();
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
       },
+      onDone: () {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      },
+      cancelOnError: false,
     );
 
-    await _subscription?.asFuture<void>();
+    await completer.future;
 
     // Finalize the last model message as complete
     if (currentModelMsgId != null) {

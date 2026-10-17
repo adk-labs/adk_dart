@@ -1574,6 +1574,7 @@ class InMemoryRunner extends Runner {
     super.plugins,
     super.app,
     super.pluginCloseTimeout,
+    super.autoCreateSession = true,
   }) : super(
          appName: app == null ? (appName ?? 'InMemoryRunner') : appName,
          artifactService: InMemoryArtifactService(),

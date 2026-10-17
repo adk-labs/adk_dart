@@ -1,8 +1,12 @@
+/// Demonstrates on-device LLM inference using Google LiteRT and [LiteRtLmModel].
+library;
+
 import 'dart:io';
 import 'package:adk_dart/adk_dart.dart' as adk;
 import 'package:adk_litertlm/adk_litertlm.dart';
 import 'package:litertlm/litertlm.dart' as litert;
 
+/// Loads a local Gemma LiteRT model and runs an on-device agent.
 Future<void> main() async {
   // 1. Resolve local Gemma .bin model file path
   final String? modelPath = Platform.environment['LITERT_MODEL_PATH'];

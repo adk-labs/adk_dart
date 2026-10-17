@@ -28,6 +28,7 @@ class LiteRtLmModel extends adk.BaseLlm {
     required super.model,
   });
 
+  // coverage:ignore-start
   /// Creates a [LiteRtLmModel] instance that owns the [litert.Engine].
   factory LiteRtLmModel.fromConfig(
     litert.EngineConfig config, {
@@ -39,6 +40,7 @@ class LiteRtLmModel extends adk.BaseLlm {
       model: model,
     );
   }
+  // coverage:ignore-end
 
   /// The underlying LiteRT-LM engine.
   final litert.Engine engine;

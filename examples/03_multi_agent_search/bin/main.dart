@@ -1,6 +1,10 @@
+/// Demonstrates multi-agent coordination and Google Search tool integration.
+library;
+
 import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 
+/// Runs single-agent and multi-agent search workflows.
 Future<void> main() async {
   final String? apiKey =
       Platform.environment['GOOGLE_API_KEY'] ??

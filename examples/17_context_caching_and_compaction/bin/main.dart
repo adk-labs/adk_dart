@@ -1,7 +1,11 @@
+/// Demonstrates LLM context caching and conversation history compaction.
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Configures caching and compaction policies and runs multi-turn dialogue.
 Future<void> main() async {
   final String? apiKey = Platform.environment['GEMINI_API_KEY'] ??
       Platform.environment['GOOGLE_API_KEY'];

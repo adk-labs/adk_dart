@@ -11,3 +11,5 @@ pubspec.lock
 .adk/
 test_app/
 build/
+coverage/
+doc/api/

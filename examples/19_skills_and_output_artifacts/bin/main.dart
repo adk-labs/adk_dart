@@ -1,7 +1,11 @@
+/// Demonstrates loading skills and capturing output artifacts using [SkillToolset].
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Discovers local skills and runs an agent with skill toolset execution.
 Future<void> main() async {
   print('=== ADK Skills & Output Artifacts Demo ===');
 

@@ -1,3 +1,6 @@
+/// Demonstrates a fan-out/fan-in DAG workflow using [Workflow], [FunctionNode], and [JoinNode].
+library;
+
 import 'package:adk_dart/adk_dart.dart';
 
 // Define functions to act as workflow nodes

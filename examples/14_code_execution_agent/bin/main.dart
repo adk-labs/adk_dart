@@ -1,7 +1,11 @@
+/// Demonstrates code execution within agents using [BuiltInCodeExecutor].
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Runs an agent that executes code to solve computational tasks.
 Future<void> main() async {
   final String? apiKey = Platform.environment['GEMINI_API_KEY'] ??
       Platform.environment['GOOGLE_API_KEY'];

@@ -1,8 +1,13 @@
+/// Demonstrates persistent session storage using [SqliteSessionService].
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// A mock LLM reflecting inputs with persistent session markers.
 class StubEchoModel extends BaseLlm {
+  /// Creates a stub echo model.
   StubEchoModel() : super(model: 'stub_echo');
 
   @override
@@ -20,6 +25,7 @@ class StubEchoModel extends BaseLlm {
   }
 }
 
+/// Runs multi-turn conversations backed by a SQLite database file.
 Future<void> main() async {
   final String dbPath = '${Directory.current.path}/sessions_demo.db';
   print('Using SQLite session database at: $dbPath');

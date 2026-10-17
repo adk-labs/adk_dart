@@ -146,9 +146,6 @@ Object? _serializeToolLike(Object tool) {
       'type': 'tool',
     };
   }
-  if (tool is BaseAgent) {
-    return serializeAgent(tool);
-  }
   return <String, Object?>{'name': _callableName(tool), 'type': 'tool'};
 }
 

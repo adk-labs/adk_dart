@@ -1,6 +1,11 @@
+/// Demonstrates a minimal echo agent using an in-memory LLM implementation.
+library;
+
 import 'package:adk_dart/adk_dart.dart';
 
+/// A mock LLM that reflects back the user's latest text input.
 class EchoModel extends BaseLlm {
+  /// Creates an echo LLM model instance.
   EchoModel() : super(model: 'echo');
 
   @override
@@ -19,6 +24,7 @@ class EchoModel extends BaseLlm {
   }
 }
 
+/// Executes the echo agent in an in-memory session.
 Future<void> main() async {
   final Agent agent = Agent(name: 'echo_agent', model: EchoModel());
   final InMemoryRunner runner = InMemoryRunner(agent: agent);

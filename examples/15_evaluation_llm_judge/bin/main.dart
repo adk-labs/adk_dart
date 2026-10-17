@@ -1,6 +1,11 @@
+/// Demonstrates LLM-as-a-judge evaluation workflows using [LocalEvalService].
+library;
+
 import 'package:adk_dart/adk_dart.dart';
 
+/// A mock LLM providing static geography responses for deterministic evaluation.
 class MockLlm extends BaseLlm {
+  /// Creates a mock LLM instance.
   MockLlm() : super(model: 'mock_helper');
 
   @override
@@ -14,6 +19,7 @@ class MockLlm extends BaseLlm {
   }
 }
 
+/// Runs the evaluation suite and prints metric score summaries.
 Future<void> main() async {
   print('=== ADK Agent Evaluation Suite ===');
 

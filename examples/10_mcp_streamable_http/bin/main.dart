@@ -1,7 +1,11 @@
+/// Demonstrates connecting an agent to remote MCP servers via Streamable HTTP and [McpToolset].
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Connects to a Streamable HTTP MCP server and runs an assistant turn.
 Future<void> main() async {
   final String? apiKey = Platform.environment['GEMINI_API_KEY'] ??
       Platform.environment['GOOGLE_API_KEY'];

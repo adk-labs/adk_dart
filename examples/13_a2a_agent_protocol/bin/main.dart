@@ -1,8 +1,13 @@
+/// Demonstrates Agent-to-Agent (A2A) protocol server wrapping and invocation.
+library;
+
 import 'dart:convert';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// A mock LLM that prepends an A2A indicator to user prompts.
 class StubEchoModel extends BaseLlm {
+  /// Creates a stub echo model.
   StubEchoModel() : super(model: 'stub_echo');
 
   @override
@@ -20,6 +25,7 @@ class StubEchoModel extends BaseLlm {
   }
 }
 
+/// Wraps an ADK agent in an A2A application and tests a task request.
 Future<void> main() async {
   // 1. Define an underlying ADK Agent
   final Agent agent = Agent(

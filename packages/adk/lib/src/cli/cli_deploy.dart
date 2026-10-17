@@ -568,7 +568,7 @@ Future<int> runDeployCommand(
     return 0;
   }
 
-  final DeployCommandRunner runner = commandRunner ?? _defaultDeployRunner;
+  final DeployCommandRunner runner = commandRunner ?? defaultDeployRunner;
   return runner(gcloudCommand, out: out, err: err, environment: env);
 }
 
@@ -1335,7 +1335,8 @@ DeployTarget _parseDeployTarget(String value) {
   }
 }
 
-Future<int> _defaultDeployRunner(
+/// Executes a deployment subprocess and pipes stdout and stderr to the provided sinks.
+Future<int> defaultDeployRunner(
   List<String> command, {
   required IOSink out,
   required IOSink err,

@@ -139,7 +139,7 @@ Object? instantiateRegisteredClassFactory(
 }
 
 /// Loads service registrations from `services.yaml` files under [agentsDir].
-void loadServicesModule(String agentsDir) {
+void loadServicesModule(String agentsDir, {ServiceRegistry? registry}) {
   final Directory directory = Directory(agentsDir);
   if (!directory.existsSync()) {
     return;
@@ -157,7 +157,7 @@ void loadServicesModule(String agentsDir) {
     if (decoded is Map) {
       _registerServicesFromYamlConfig(
         decoded.map((Object? key, Object? value) => MapEntry('$key', value)),
-        getServiceRegistry(),
+        registry ?? getServiceRegistry(),
       );
     }
   }
@@ -225,8 +225,8 @@ extension on ServiceRegistry {
       final Uri parsed = Uri.parse(uri);
       return GcsArtifactService(
         _resolveGsBucketName(parsed),
-        httpRequestProvider: _sendGcsArtifactHttpRequest,
-        authHeadersProvider: _resolveGcsArtifactAuthHeaders,
+        httpRequestProvider: sendGcsArtifactHttpRequest,
+        authHeadersProvider: resolveGcsArtifactAuthHeaders,
       );
     });
 
@@ -240,7 +240,10 @@ extension on ServiceRegistry {
           'file:// artifact URIs must reference the local filesystem.',
         );
       }
-      if (parsed.path.isEmpty) {
+      final String rawPath = uri
+          .substring(parsed.scheme.length + 1)
+          .replaceFirst(RegExp(r'^//[^/]*'), '');
+      if (rawPath.isEmpty) {
         throw ArgumentError(
           'file:// artifact URIs must include a path component.',
         );
@@ -290,7 +293,8 @@ extension on ServiceRegistry {
   }
 }
 
-Future<GcsArtifactHttpResponse> _sendGcsArtifactHttpRequest(
+/// Sends an HTTP request for Google Cloud Storage artifact operations.
+Future<GcsArtifactHttpResponse> sendGcsArtifactHttpRequest(
   GcsArtifactHttpRequest request,
 ) async {
   final HttpClient client = HttpClient();
@@ -329,12 +333,20 @@ Future<GcsArtifactHttpResponse> _sendGcsArtifactHttpRequest(
   }
 }
 
-Future<Map<String, String>> _resolveGcsArtifactAuthHeaders() async {
-  final String token = await resolveDefaultGoogleAccessToken(
-    scopes: const <String>[
-      'https://www.googleapis.com/auth/devstorage.read_write',
-    ],
-  );
+/// Resolves Google Cloud Storage authorization headers.
+Future<Map<String, String>> resolveGcsArtifactAuthHeaders() async {
+  String? nonEmpty(String? v) => (v != null && v.isNotEmpty) ? v : null;
+  final String? cliToken =
+      nonEmpty(getCliEnvironmentValue('GOOGLE_OAUTH_ACCESS_TOKEN')) ??
+      nonEmpty(getCliEnvironmentValue('GOOGLE_ACCESS_TOKEN')) ??
+      nonEmpty(getCliEnvironmentValue('ACCESS_TOKEN'));
+  final String token = cliToken != null && cliToken.isNotEmpty
+      ? cliToken
+      : await resolveDefaultGoogleAccessToken(
+          scopes: const <String>[
+            'https://www.googleapis.com/auth/devstorage.read_write',
+          ],
+        );
   return <String, String>{
     HttpHeaders.authorizationHeader: 'Bearer $token',
     HttpHeaders.acceptHeader: ContentType.json.mimeType,

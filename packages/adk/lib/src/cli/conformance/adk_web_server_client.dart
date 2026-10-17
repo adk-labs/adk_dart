@@ -26,11 +26,11 @@ class AdkWebServerClient {
     Map<String, Object?>? state,
   }) async {
     if (appName == null || appName.trim().isEmpty) {
-      return _requestJson('POST', '/api/sessions', <String, Object?>{
+      return requestJson('POST', '/api/sessions', <String, Object?>{
         'userId': userId,
       });
     }
-    return _requestJson(
+    return requestJson(
       'POST',
       '/apps/${Uri.encodeComponent(appName)}/users/${Uri.encodeComponent(userId)}/sessions',
       <String, Object?>{
@@ -46,7 +46,7 @@ class AdkWebServerClient {
     required String userId,
     required String sessionId,
   }) async {
-    return _requestJson(
+    return requestJson(
       'GET',
       '/apps/${Uri.encodeComponent(appName)}/users/${Uri.encodeComponent(userId)}/sessions/${Uri.encodeComponent(sessionId)}',
       null,
@@ -59,7 +59,7 @@ class AdkWebServerClient {
     required String userId,
     required String sessionId,
   }) async {
-    await _requestJson(
+    await requestJson(
       'DELETE',
       '/apps/${Uri.encodeComponent(appName)}/users/${Uri.encodeComponent(userId)}/sessions/${Uri.encodeComponent(sessionId)}',
       null,
@@ -68,7 +68,7 @@ class AdkWebServerClient {
 
   /// Returns server version metadata from `/version`.
   Future<Map<String, Object?>> getVersionData() async {
-    return _requestJson('GET', '/version', null);
+    return requestJson('GET', '/version', null);
   }
 
   /// Runs an agent via `/run_sse` and returns decoded event payloads.
@@ -134,7 +134,7 @@ class AdkWebServerClient {
     required String userId,
     required String text,
   }) async {
-    return _requestJson(
+    return requestJson(
       'POST',
       '/api/sessions/$sessionId/messages',
       <String, Object?>{'userId': userId, 'text': text},
@@ -165,11 +165,12 @@ class AdkWebServerClient {
     return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
   }
 
-  Future<Map<String, Object?>> _requestJson(
+  /// Performs an HTTP request against the base server URI and decodes the JSON map.
+  Future<Map<String, Object?>> requestJson(
     String method,
-    String path,
+    String path, [
     Map<String, Object?>? payload,
-  ) async {
+  ]) async {
     final Uri uri = baseUri.resolve(path);
     final HttpClientRequest request = switch (method.toUpperCase()) {
       'POST' => await _httpClient.postUrl(uri),

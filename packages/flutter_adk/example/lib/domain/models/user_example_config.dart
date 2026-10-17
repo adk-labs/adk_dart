@@ -1,8 +1,29 @@
+/// User-configurable example architectures and graph topology definitions.
+library;
+
 import 'package:flutter_adk_example/domain/models/custom_agent_config.dart';
 
-enum UserExampleArchitecture { single, team, sequential, parallel, loop }
+/// Execution architecture style for a user-defined multi-agent example.
+enum UserExampleArchitecture {
+  /// Single standalone agent.
+  single,
 
+  /// Multi-agent team with coordinator delegation.
+  team,
+
+  /// Linear sequential multi-agent execution pipeline.
+  sequential,
+
+  /// Fan-out concurrent parallel agent execution.
+  parallel,
+
+  /// Cyclical loop agent until termination condition.
+  loop,
+}
+
+/// Extension methods for [UserExampleArchitecture] providing localized label keys.
 extension UserExampleArchitectureX on UserExampleArchitecture {
+  /// The localization key for the architecture name.
   String get labelKey {
     switch (this) {
       case UserExampleArchitecture.single:
@@ -19,6 +40,7 @@ extension UserExampleArchitectureX on UserExampleArchitecture {
   }
 }
 
+/// Configuration settings for a custom user-defined example topology.
 class UserExampleConfig {
   const UserExampleConfig({
     required this.id,
@@ -205,15 +227,22 @@ class UserExampleConfig {
   }
 }
 
+/// Directed connection edge between two configured agent nodes.
 class UserExampleConnection {
+  /// Creates a connection edge with [fromIndex], [toIndex], and [condition].
   const UserExampleConnection({
     required this.fromIndex,
     required this.toIndex,
     required this.condition,
   });
 
+  /// The source agent index.
   final int fromIndex;
+
+  /// The target destination agent index.
   final int toIndex;
+
+  /// The conditional transition rule string.
   final String condition;
 
   UserExampleConnection copyWith({

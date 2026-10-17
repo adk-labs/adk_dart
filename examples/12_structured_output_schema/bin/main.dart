@@ -1,7 +1,11 @@
+/// Demonstrates strict JSON schema enforcement using the outputSchema property.
+library;
+
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Generates structured recipe output adhering to a JSON schema.
 Future<void> main() async {
   final String? apiKey = Platform.environment['GEMINI_API_KEY'] ??
       Platform.environment['GOOGLE_API_KEY'];

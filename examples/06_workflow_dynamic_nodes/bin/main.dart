@@ -1,3 +1,6 @@
+/// Demonstrates dynamic node execution within workflows using [WorkflowContext.runNode].
+library;
+
 import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 

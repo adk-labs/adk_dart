@@ -1142,4 +1142,957 @@ void main() {
       'accept',
     );
   });
+
+  test('McpResourceContent and McpServerMessage properties', () {
+    final res = McpResourceContent(text: 'txt', blob: 'aW1n', mimeType: 'text/plain');
+    expect(res.text, 'txt');
+    expect(res.blob, 'aW1n');
+    expect(res.mimeType, 'text/plain');
+
+    final msgNotif = McpServerMessage(
+      url: 'http://test',
+      method: mcpMethodResourcesListChangedNotification,
+      params: const <String, Object?>{},
+    );
+    expect(msgNotif.isNotification, isTrue);
+    expect(msgNotif.isResourceListChangedNotification, isTrue);
+    expect(msgNotif.isResourceUpdatedNotification, isFalse);
+
+    final msgUpd = McpServerMessage(url: 'http://test', method: mcpMethodResourcesUpdatedNotification, params: const {});
+    expect(msgUpd.isResourceUpdatedNotification, isTrue);
+
+    final msgPrompt = McpServerMessage(url: 'http://test', method: mcpMethodPromptsListChangedNotification, params: const {});
+    expect(msgPrompt.isPromptListChangedNotification, isTrue);
+
+    final msgTool = McpServerMessage(url: 'http://test', method: mcpMethodToolsListChangedNotification, params: const {});
+    expect(msgTool.isToolListChangedNotification, isTrue);
+
+    final msgTask = McpServerMessage(url: 'http://test', method: mcpMethodTasksStatusNotification, params: const {});
+    expect(msgTask.isTaskStatusNotification, isTrue);
+
+    final msgLog = McpServerMessage(url: 'http://test', method: mcpMethodLoggingMessageNotification, params: const {});
+    expect(msgLog.isLoggingMessageNotification, isTrue);
+
+    final msgElicit = McpServerMessage(url: 'http://test', method: mcpMethodElicitationCompleteNotification, params: const {});
+    expect(msgElicit.isElicitationCompleteNotification, isTrue);
+  });
+
+  test('McpRemoteClient negotiated capabilities and session queries', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    server.listen((HttpRequest request) async {
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      final String method = '${rpc['method'] ?? ''}';
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'protocolVersion': '2025-11-25',
+            'capabilities': <String, Object?>{
+              'tools': <String, Object?>{},
+              'experimental': true,
+            },
+          },
+          headers: <String, String>{'MCP-Session-Id': 'session-cap-test'},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+      if (method == 'resources/list') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'resources': [
+              {'uri': 'test://r1'},
+            ],
+          },
+        );
+        return;
+      }
+      if (method == 'resources/templates/list') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'resourceTemplates': [
+              {'uriTemplate': 'test://{id}'},
+            ],
+          },
+        );
+        return;
+      }
+      if (method == 'prompts/list') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'prompts': [
+              {'name': 'p1'},
+            ],
+          },
+        );
+        return;
+      }
+      if (method == 'tools/list') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'tools': [
+              {'name': 't1'},
+            ],
+          },
+        );
+        return;
+      }
+      await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{});
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+    );
+    final StreamableHTTPConnectionParams connectionParams =
+        StreamableHTTPConnectionParams(
+          url: 'http://${server.address.address}:${server.port}/mcp',
+        );
+
+    await client.ensureInitialized(connectionParams);
+
+    expect(client.negotiatedProtocolVersion(connectionParams), '2025-11-25');
+    expect(client.sessionId(connectionParams), 'session-cap-test');
+    expect(client.negotiatedCapabilities(connectionParams)['tools'], isA<Map>());
+    expect(client.hasNegotiatedCapability(connectionParams, 'tools'), isTrue);
+    expect(client.hasNegotiatedCapability(connectionParams, 'experimental'), isTrue);
+    expect(client.hasNegotiatedCapability(connectionParams, 'nonexistent'), isFalse);
+
+    // Single-page list calls
+    final resPage = await client.listResourcesPage(connectionParams: connectionParams);
+    expect((resPage['resources'] as List).isNotEmpty, isTrue);
+
+    final tplPage = await client.listResourceTemplatesPage(connectionParams: connectionParams);
+    expect((tplPage['resourceTemplates'] as List).isNotEmpty, isTrue);
+
+    final promptPage = await client.listPromptsPage(connectionParams: connectionParams);
+    expect((promptPage['prompts'] as List).isNotEmpty, isTrue);
+
+    final toolsPage = await client.listToolsPage(connectionParams: connectionParams);
+    expect((toolsPage['tools'] as List).isNotEmpty, isTrue);
+  });
+
+  test('McpRemoteClient initialize error and deleteSession error handling', () async {
+    final HttpServer server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => server.close(force: true));
+
+    var initializeMissingProtocol = false;
+    var initializeUnsupportedProtocol = false;
+    var return405OnDelete = false;
+    var return500OnDelete = false;
+
+    server.listen((HttpRequest request) async {
+      if (request.method == 'DELETE') {
+        if (return405OnDelete) {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+        if (return500OnDelete) {
+          request.response.statusCode = HttpStatus.internalServerError;
+          request.response.write('Server Error');
+          await request.response.close();
+          return;
+        }
+        request.response.statusCode = HttpStatus.noContent;
+        await request.response.close();
+        return;
+      }
+
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? key, Object? value) => MapEntry('$key', value),
+      );
+      if (initializeMissingProtocol) {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{'capabilities': {}},
+        );
+        return;
+      }
+      if (initializeUnsupportedProtocol) {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{'protocolVersion': '1999-01-01', 'capabilities': {}},
+        );
+        return;
+      }
+      await _respondJsonRpc(
+        request,
+        id: rpc['id'],
+        result: <String, Object?>{
+          'protocolVersion': '2025-11-25',
+          'capabilities': {},
+        },
+        headers: {'MCP-Session-Id': 'del-test'},
+      );
+    });
+
+    final params = StreamableHTTPConnectionParams(
+      url: 'http://${server.address.address}:${server.port}/mcp',
+    );
+
+    // Missing protocol version
+    initializeMissingProtocol = true;
+    final client1 = McpRemoteClient(clientInfoName: 'test', clientInfoVersion: '1');
+    await expectLater(client1.ensureInitialized(params), throwsStateError);
+
+    // Unsupported protocol version
+    initializeMissingProtocol = false;
+    initializeUnsupportedProtocol = true;
+    final client2 = McpRemoteClient(clientInfoName: 'test', clientInfoVersion: '1');
+    await expectLater(client2.ensureInitialized(params), throwsStateError);
+
+    // Delete session with 405 allowed
+    initializeUnsupportedProtocol = false;
+    final client3 = McpRemoteClient(clientInfoName: 'test', clientInfoVersion: '1');
+    await client3.ensureInitialized(params);
+    return405OnDelete = true;
+    await client3.terminateSession(connectionParams: params, allowMethodNotAllowed: true);
+
+    // Delete session with 500 error
+    await client3.ensureInitialized(params);
+    return405OnDelete = false;
+    return500OnDelete = true;
+    await expectLater(
+      client3.terminateSession(connectionParams: params, allowMethodNotAllowed: false),
+      throwsA(isA<McpHttpStatusException>()),
+    );
+  });
+
+  test('McpRemoteClient session recovery on 404 for call and notify', () async {
+    final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    int initializeCalls = 0;
+    int pingCalls = 0;
+    bool return404OnPing = true;
+    bool return404OnNotify = true;
+
+    server.listen((HttpRequest request) async {
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? k, Object? v) => MapEntry('$k', v),
+      );
+      final String method = '${rpc['method'] ?? ''}';
+
+      if (method == 'initialize') {
+        initializeCalls++;
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'protocolVersion': '2025-11-25',
+            'capabilities': <String, Object?>{},
+          },
+          headers: <String, String>{'MCP-Session-Id': 'recovered-session-$initializeCalls'},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+      if (method == 'ping') {
+        pingCalls++;
+        if (return404OnPing) {
+          return404OnPing = false;
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.write('Session not found');
+          await request.response.close();
+          return;
+        }
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{});
+        return;
+      }
+      if (method == 'notifications/custom') {
+        if (return404OnNotify) {
+          return404OnNotify = false;
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.write('Session not found');
+          await request.response.close();
+          return;
+        }
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+      await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{});
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'recovery_test',
+      clientInfoVersion: '1.0.0',
+    );
+    final StreamableHTTPConnectionParams params = StreamableHTTPConnectionParams(
+      url: 'http://${server.address.address}:${server.port}/mcp',
+    );
+
+    // Ensure initial handshake
+    await client.ensureInitialized(params);
+    expect(initializeCalls, equals(1));
+
+    // Call triggers 404, recovers and re-initializes
+    final pingResult = await client.ping(connectionParams: params);
+    expect(pingResult, isNotNull);
+    expect(initializeCalls, equals(2));
+    expect(pingCalls, equals(2));
+
+    // Notification triggers 404, recovers and re-initializes
+    await client.notify(
+      connectionParams: params,
+      method: 'notifications/custom',
+      params: <String, Object?>{'test': true},
+    );
+    expect(initializeCalls, equals(3));
+  });
+
+  test('McpRemoteClient error formatting and response decoding edge cases', () async {
+    final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String responseMode = 'empty';
+
+    server.listen((HttpRequest request) async {
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? k, Object? v) => MapEntry('$k', v),
+      );
+      final String method = '${rpc['method'] ?? ''}';
+
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{'protocolVersion': '2025-11-25', 'capabilities': <String, Object?>{}},
+          headers: <String, String>{'MCP-Session-Id': 'err-session'},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      switch (responseMode) {
+        case 'empty':
+          request.response.statusCode = HttpStatus.ok;
+          await request.response.close();
+          break;
+        case 'empty_sse':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'text/event-stream');
+          request.response.write(': comment only\n\n');
+          await request.response.close();
+          break;
+        case 'sse_id_mismatch':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'text/event-stream');
+          request.response.write('data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': 99999, 'result': {}})}\n\n');
+          await request.response.close();
+          break;
+        case 'non_json':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write('not-json-at-all');
+          await request.response.close();
+          break;
+        case 'request_instead_of_response':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': 123,
+            'method': 'server/query',
+          }));
+          await request.response.close();
+          break;
+        case 'neither_request_nor_response':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{'random_key': 'random_value'}));
+          await request.response.close();
+          break;
+        case 'id_mismatch':
+          await _respondJsonRpc(request, id: 88888, result: <String, Object?>{});
+          break;
+        case 'rpc_error':
+          await _respondJsonRpc(
+            request,
+            id: rpc['id'],
+            error: <String, Object?>{'code': -32600, 'message': 'Invalid Request'},
+          );
+          break;
+        case 'missing_result_and_error':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': rpc['id']}));
+          await request.response.close();
+          break;
+      }
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'test_err',
+      clientInfoVersion: '1.0.0',
+    );
+    final StreamableHTTPConnectionParams params = StreamableHTTPConnectionParams(
+      url: 'http://${server.address.address}:${server.port}/mcp',
+    );
+    await client.ensureInitialized(params);
+
+    responseMode = 'empty';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'empty_sse';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'sse_id_mismatch';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'non_json';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'request_instead_of_response';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'neither_request_nor_response';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'id_mismatch';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'missing_result_and_error';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    responseMode = 'rpc_error';
+    await expectLater(client.ping(connectionParams: params), throwsA(isA<McpJsonRpcException>()));
+
+    // Test tryCall error suppression
+    final suppressed = await client.tryCall(
+      connectionParams: params,
+      method: 'ping',
+      params: const <String, Object?>{},
+      suppressJsonRpcErrorCodes: const <int>{-32600},
+    );
+    expect(suppressed, isNull);
+
+    final suppressedAll = await client.tryCall(
+      connectionParams: params,
+      method: 'ping',
+      params: const <String, Object?>{},
+      suppressErrors: true,
+    );
+    expect(suppressedAll, isNull);
+  });
+
+  test('McpRemoteClient pagination, operations, and notification helpers', () async {
+    final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    final List<Map<String, Object?>> receivedNotifications = <Map<String, Object?>>[];
+
+    server.listen((HttpRequest request) async {
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? k, Object? v) => MapEntry('$k', v),
+      );
+      final String method = '${rpc['method'] ?? ''}';
+
+      if (method.startsWith('notifications/')) {
+        receivedNotifications.add(rpc);
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{
+            'protocolVersion': '2025-11-25',
+            'capabilities': <String, Object?>{},
+            'sessionId': 'session-from-result',
+          },
+        );
+        return;
+      }
+
+      final Map<String, Object?> params = (rpc['params'] as Map?)?.cast<String, Object?>() ?? <String, Object?>{};
+
+      if (method == 'resources/list') {
+        final cursor = params['cursor'] as String?;
+        if (cursor == null) {
+          await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+            'resources': [<String, Object?>{'uri': 'res://1'}],
+            'nextCursor': 'page2',
+          });
+        } else {
+          await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+            'resources': [<String, Object?>{'uri': 'res://2'}],
+          });
+        }
+        return;
+      }
+
+      if (method == 'resources/templates/list') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'resourceTemplates': [<String, Object?>{'uriTemplate': 'tmpl://{id}'}],
+        });
+        return;
+      }
+
+      if (method == 'prompts/list') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'prompts': [<String, Object?>{'name': 'test_prompt'}],
+        });
+        return;
+      }
+
+      if (method == 'prompts/get') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'name': params['name'],
+          'arguments': params['arguments'],
+        });
+        return;
+      }
+
+      if (method == 'tools/list') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'tools': [<String, Object?>{'name': 'test_tool'}],
+        });
+        return;
+      }
+
+      if (method == 'tools/call') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'content': [<String, Object?>{'type': 'text', 'text': 'ok'}],
+          'task': params['task'],
+          'meta': params['_meta'],
+        });
+        return;
+      }
+
+      if (method == 'tasks/list') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'tasks': [<String, Object?>{'taskId': 'task_1'}],
+        });
+        return;
+      }
+
+      if (method == 'completion/complete') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{
+          'completion': {'values': ['completed']},
+        });
+        return;
+      }
+
+      if (method == 'logging/setLevel') {
+        await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{});
+        return;
+      }
+
+      await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{});
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'pagination_test',
+      clientInfoVersion: '1.0.0',
+    );
+    final StreamableHTTPConnectionParams params = StreamableHTTPConnectionParams(
+      url: 'http://${server.address.address}:${server.port}/mcp',
+      headers: <String, String>{'X-Custom': 'param-header'},
+    );
+
+    await client.ensureInitialized(params);
+
+    // Test multi-page resources collection
+    final resources = await client.listResources(connectionParams: params);
+    expect(resources.length, equals(2));
+
+    // Test single-page with cursor
+    final resPage = await client.listResourcesPage(connectionParams: params, cursor: 'page2');
+    expect(resPage['resources'], isNotEmpty);
+
+    final templates = await client.listResourceTemplates(connectionParams: params);
+    expect(templates, isNotEmpty);
+    final tmplPage = await client.listResourceTemplatesPage(connectionParams: params, cursor: 'c');
+    expect(tmplPage, isNotEmpty);
+
+    final prompts = await client.listPrompts(connectionParams: params);
+    expect(prompts, isNotEmpty);
+    final promptPage = await client.listPromptsPage(connectionParams: params, cursor: 'c');
+    expect(promptPage, isNotEmpty);
+
+    final promptDetail = await client.getPrompt(
+      connectionParams: params,
+      name: 'test_prompt',
+      arguments: <String, String>{'arg1': 'val1'},
+    );
+    expect(promptDetail['name'], equals('test_prompt'));
+
+    final tools = await client.listTools(connectionParams: params);
+    expect(tools, isNotEmpty);
+    final toolPage = await client.listToolsPage(connectionParams: params, cursor: 'c');
+    expect(toolPage, isNotEmpty);
+
+    final toolCall = await client.callTool(
+      connectionParams: params,
+      name: 'test_tool',
+      arguments: <String, Object?>{'q': 'test'},
+      task: <String, Object?>{'taskId': 't1'},
+      meta: <String, Object?>{'source': 'unit_test'},
+    );
+    expect(toolCall['content'], isNotNull);
+
+    final tasks = await client.listTasks(connectionParams: params);
+    expect(tasks, isNotEmpty);
+    final taskPage = await client.listTasksPage(connectionParams: params, cursor: 'c');
+    expect(taskPage, isNotEmpty);
+
+    final completion = await client.complete(
+      connectionParams: params,
+      ref: <String, Object?>{'type': 'prompt', 'name': 'test'},
+      argument: 'input',
+      context: <String, Object?>{'active': true},
+    );
+    expect(completion['completion'], isNotNull);
+
+    // Logging level validation
+    expect(
+      () => client.setLoggingLevel(connectionParams: params, level: 'invalid_level'),
+      throwsArgumentError,
+    );
+    await client.setLoggingLevel(connectionParams: params, level: 'debug');
+
+    // Notifications
+    await client.notifyCancelledRequest(
+      connectionParams: params,
+      requestId: 42,
+      reason: 'user_cancelled',
+      meta: <String, Object?>{'note': 'test'},
+    );
+    await client.notifyProgress(
+      connectionParams: params,
+      progressToken: 'tok1',
+      progress: 50,
+      total: 100,
+      message: 'halfway',
+      meta: <String, Object?>{'info': 'prog'},
+    );
+    await client.notifyRootsListChanged(
+      connectionParams: params,
+      meta: <String, Object?>{'updated': true},
+    );
+    await client.notifyTaskStatus(
+      connectionParams: params,
+      status: <String, Object?>{'taskId': 't1', 'status': 'completed'},
+    );
+    await client.sendInitializedNotification(
+      connectionParams: params,
+      meta: <String, Object?>{'init': true},
+    );
+    expect(receivedNotifications.length, greaterThanOrEqualTo(5));
+
+    // Clear connection & clear all
+    client.clearConnection(params);
+    client.clear();
+  });
+
+  test('McpRemoteClient server requests and SSE message handling', () async {
+    final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    bool return400OnSse = false;
+    bool returnJsonOnSse = false;
+
+    server.listen((HttpRequest request) async {
+      if (request.method == 'GET') {
+        if (return400OnSse) {
+          request.response.statusCode = HttpStatus.badRequest;
+          request.response.write('Bad Request for SSE');
+          await request.response.close();
+          return;
+        }
+        if (returnJsonOnSse) {
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write('{}');
+          await request.response.close();
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.ok;
+        request.response.headers.set(HttpHeaders.contentTypeHeader, 'text/event-stream');
+        // Send a ping request from server
+        request.response.write(
+          'data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': 500, 'method': 'ping', 'params': {}})}\n\n',
+        );
+        // Send a server notification
+        request.response.write(
+          'data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'method': 'notifications/roots/list_changed', 'params': {}})}\n\n',
+        );
+        await request.response.close();
+        return;
+      }
+
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? k, Object? v) => MapEntry('$k', v),
+      );
+      final String method = '${rpc['method'] ?? ''}';
+
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{'protocolVersion': '2025-11-25', 'capabilities': <String, Object?>{}},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      await _respondJsonRpc(request, id: rpc['id'], result: <String, Object?>{});
+    });
+
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'sse_test',
+      clientInfoVersion: '1.0.0',
+    );
+    final StreamableHTTPConnectionParams params = StreamableHTTPConnectionParams(
+      url: 'http://${server.address.address}:${server.port}/mcp',
+    );
+    await client.ensureInitialized(params);
+
+    // Test SSE status >= 400
+    return400OnSse = true;
+    await expectLater(
+      client.readServerMessagesOnce(connectionParams: params).toList(),
+      throwsA(isA<McpHttpStatusException>()),
+    );
+
+    // Test SSE content-type not text/event-stream
+    return400OnSse = false;
+    returnJsonOnSse = true;
+    await expectLater(
+      client.readServerMessagesOnce(connectionParams: params).toList(),
+      throwsFormatException,
+    );
+
+    // Test successful SSE with server message and ping handled
+    returnJsonOnSse = false;
+    final messages = await client.readServerMessagesOnce(
+      connectionParams: params,
+      headers: <String, String>{'X-Test': 'sse'},
+      lastEventId: 'evt_123',
+    ).toList();
+    expect(messages, isNotEmpty);
+
+    // Exception toString tests
+    final rpcEx = McpJsonRpcException(method: 'foo', code: -32000, message: 'fail');
+    expect(rpcEx.toString(), contains('foo'));
+    final httpEx = McpHttpStatusException(uri: Uri.parse('http://example.com'), statusCode: 404, body: 'not found');
+    expect(httpEx.toString(), contains('404'));
+    final srvEx = McpServerRequestException(code: -32601, message: 'not found', method: 'testMethod', data: {'d': 1});
+    expect(srvEx.toString(), contains('testMethod'));
+  });
+
+  test('McpRemoteClient final coverage edge cases', () async {
+    final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String currentMode = 'init';
+
+    server.listen((HttpRequest request) async {
+      if (request.method == 'DELETE') {
+        request.response.statusCode = HttpStatus.noContent;
+        await request.response.close();
+        return;
+      }
+
+      final String body = await utf8.decoder.bind(request).join();
+      final Map<String, Object?> rpc = (jsonDecode(body) as Map).map(
+        (Object? k, Object? v) => MapEntry('$k', v),
+      );
+      final String method = '${rpc['method'] ?? ''}';
+
+      if (method == 'initialize') {
+        await _respondJsonRpc(
+          request,
+          id: rpc['id'],
+          result: <String, Object?>{'protocolVersion': '2025-11-25', 'capabilities': <String, Object?>{}},
+          headers: <String, String>{'MCP-Session-Id': 'edge-session'},
+        );
+        return;
+      }
+      if (method == 'notifications/initialized') {
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+
+      switch (currentMode) {
+        case 'json_primitive':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write('12345');
+          await request.response.close();
+          break;
+        case 'null_error_no_result':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': rpc['id'],
+            'error': null,
+          }));
+          await request.response.close();
+          break;
+        case 'num_id':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': (rpc['id'] as num).toDouble(),
+            'result': <dynamic, dynamic>{'num_id': true, 'items': <dynamic>[1, 2]},
+          }));
+          await request.response.close();
+          break;
+        case 'string_id':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': '${rpc['id']}',
+            'result': <dynamic, dynamic>{'str_id': true},
+          }));
+          await request.response.close();
+          break;
+        case 'string_code_error':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': rpc['id'],
+            'error': <String, Object?>{'code': '123', 'message': 'string error code'},
+          }));
+          await request.response.close();
+          break;
+        case 'num_code_error':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+          request.response.write(jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'id': rpc['id'],
+            'error': <String, Object?>{'code': 456.0, 'message': 'num error code'},
+          }));
+          await request.response.close();
+          break;
+        case 'server_req_crash':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.set(HttpHeaders.contentTypeHeader, 'text/event-stream');
+          // send notification to trigger onServerMessage
+          request.response.write('data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'method': 'notifications/msg', 'params': {}})}\n\n');
+          // send server request that causes onServerRequest to throw Exception
+          request.response.write('data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': 99, 'method': 'server/crash', 'params': {}})}\n\n');
+          // send actual response
+          request.response.write('data: ${jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': rpc['id'], 'result': {}})}\n\n');
+          await request.response.close();
+          break;
+      }
+    });
+
+    final List<McpServerMessage> serverMessages = [];
+    final McpRemoteClient client = McpRemoteClient(
+      clientInfoName: 'edge_test',
+      clientInfoVersion: '1.0.0',
+      onServerMessage: (m) => serverMessages.add(m),
+      onServerRequest: (m) {
+        if (m.method == 'server/crash') {
+          throw Exception('onServerRequest crash');
+        }
+        return null;
+      },
+    );
+    final StreamableHTTPConnectionParams params = StreamableHTTPConnectionParams(
+      url: 'http://${server.address.address}:${server.port}/mcp',
+    );
+    await client.ensureInitialized(params);
+
+    // terminateSession with custom headers (line 459)
+    await client.terminateSession(
+      connectionParams: params,
+      headers: <String, String>{'X-Terminate': 'true'},
+    );
+    await client.ensureInitialized(params);
+
+    // Call with headers (lines 1213, 1220)
+    currentMode = 'num_id';
+    final numResult = await client.ping(
+      connectionParams: params,
+      headers: <String, String>{'X-Call': 'yes'},
+    );
+    expect(numResult, isNotNull);
+
+    // string_id (line 1445-1446)
+    currentMode = 'string_id';
+    final strResult = await client.ping(connectionParams: params);
+    expect(strResult, isNotNull);
+
+    // json_primitive (line 1344)
+    currentMode = 'json_primitive';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    // null_error_no_result (line 1188-1189)
+    currentMode = 'null_error_no_result';
+    await expectLater(client.ping(connectionParams: params), throwsFormatException);
+
+    // string_code_error (line 1597-1598)
+    currentMode = 'string_code_error';
+    await expectLater(client.ping(connectionParams: params), throwsA(isA<McpJsonRpcException>()));
+
+    // num_code_error (line 1594-1595)
+    currentMode = 'num_code_error';
+    await expectLater(client.ping(connectionParams: params), throwsA(isA<McpJsonRpcException>()));
+
+    // server_req_crash (line 1457, 1460, 1461, 1507, 1509, 1510)
+    currentMode = 'server_req_crash';
+    await client.ping(connectionParams: params);
+    expect(serverMessages, isNotEmpty);
+  });
 }
+
+

@@ -239,15 +239,20 @@ class BranchPath {
   int get hashCode => Object.hashAll(_segments);
 }
 
+/// Represents an atomic segment in a hierarchical node path.
 class _NodePathSegment {
   const _NodePathSegment({required this.name, this.runId});
 
+  /// The node or agent identifier.
   final String name;
 
+  /// The optional execution run identifier.
   final String? runId;
 }
 
+/// Extension on [String] for splitting node paths with optional run IDs.
 extension on String {
+  /// Splits a node path token into its base name and optional run identifier.
   _NodePathSegment splitRunId() {
     final int marker = lastIndexOf('@');
     if (marker < 0) {
@@ -259,3 +264,4 @@ extension on String {
     );
   }
 }
+

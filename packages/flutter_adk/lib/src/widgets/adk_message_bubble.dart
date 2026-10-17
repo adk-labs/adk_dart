@@ -121,10 +121,9 @@ class AdkMessageBubble extends StatelessWidget {
         ? (userTextColor ?? adkTheme.userTextColor ?? flutterTheme.colorScheme.onPrimary)
         : (modelTextColor ?? adkTheme.modelTextColor ?? flutterTheme.colorScheme.onSurface);
 
-    final TextStyle defaultTextStyle = (isUser
-            ? (userTextStyle ?? adkTheme.userTextStyle ?? flutterTheme.textTheme.bodyMedium?.copyWith(color: fgColor, height: 1.4))
-            : (modelTextStyle ?? adkTheme.modelTextStyle ?? flutterTheme.textTheme.bodyMedium?.copyWith(color: fgColor, height: 1.4))) ??
-        TextStyle(color: fgColor, height: 1.4);
+    final TextStyle defaultTextStyle = isUser
+        ? (userTextStyle ?? adkTheme.userTextStyle ?? flutterTheme.textTheme.bodyMedium!.copyWith(color: fgColor, height: 1.4))
+        : (modelTextStyle ?? adkTheme.modelTextStyle ?? flutterTheme.textTheme.bodyMedium!.copyWith(color: fgColor, height: 1.4));
 
     final BorderRadius bubbleRadius = borderRadius ??
         (isUser ? adkTheme.userBorderRadius : adkTheme.modelBorderRadius) ??

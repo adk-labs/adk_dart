@@ -63,6 +63,8 @@ Future<void> main() async {
   bool cancelledSeen = false;
   Object? slowRequestId;
 
+  stderr.writeln('server starting');
+
   await for (final String line in lines) {
     if (line.trim().isEmpty) {
       continue;
@@ -227,14 +229,32 @@ Future<void> main() async {
         respond(id, result: <String, Object?>{});
         continue;
       case 'resources/list':
-        respond(
-          id,
-          result: <String, Object?>{
-            'resources': <Map<String, Object?>>[
-              <String, Object?>{'uri': 'file:///r1', 'name': 'r1'},
-            ],
-          },
-        );
+        final Map<String, Object?> params = rpc['params'] is Map
+            ? (rpc['params'] as Map).map(
+                (Object? key, Object? value) =>
+                    MapEntry<String, Object?>('$key', value),
+              )
+            : <String, Object?>{};
+        if (params['cursor'] == 'p2') {
+          respond(
+            id,
+            result: <String, Object?>{
+              'resources': <Map<String, Object?>>[
+                <String, Object?>{'uri': 'file:///r2', 'name': 'r2'},
+              ],
+            },
+          );
+        } else {
+          respond(
+            id,
+            result: <String, Object?>{
+              'resources': <Map<String, Object?>>[
+                <String, Object?>{'uri': 'file:///r1', 'name': 'r1'},
+              ],
+              'nextCursor': 'p2',
+            },
+          );
+        }
         continue;
       case 'resources/templates/list':
         respond(
@@ -338,19 +358,52 @@ Future<void> main() async {
         );
         continue;
       case 'tasks/list':
-        respond(
-          id,
-          result: <String, Object?>{
-            'tasks': <Map<String, Object?>>[
-              <String, Object?>{
-                'taskId': 'task-1',
-                'status': 'completed',
-                'createdAt': '2026-02-28T00:00:00Z',
-                'updatedAt': '2026-02-28T00:00:01Z',
-              },
-            ],
-          },
-        );
+        final Map<String, Object?> params = rpc['params'] is Map
+            ? (rpc['params'] as Map).map(
+                (Object? key, Object? value) =>
+                    MapEntry<String, Object?>('$key', value),
+              )
+            : <String, Object?>{};
+        if (params['cursor'] == 'tp2') {
+          respond(
+            id,
+            result: <String, Object?>{
+              'tasks': <Map<String, Object?>>[
+                <String, Object?>{
+                  'taskId': 'task-2',
+                  'status': 'completed',
+                },
+              ],
+            },
+          );
+        } else if (params['paginate'] == true) {
+          respond(
+            id,
+            result: <String, Object?>{
+              'tasks': <Map<String, Object?>>[
+                <String, Object?>{
+                  'taskId': 'task-1',
+                  'status': 'running',
+                },
+              ],
+              'nextCursor': 'tp2',
+            },
+          );
+        } else {
+          respond(
+            id,
+            result: <String, Object?>{
+              'tasks': <Map<String, Object?>>[
+                <String, Object?>{
+                  'taskId': 'task-1',
+                  'status': 'completed',
+                  'createdAt': '2026-02-28T00:00:00Z',
+                  'updatedAt': '2026-02-28T00:00:01Z',
+                },
+              ],
+            },
+          );
+        }
         continue;
       case 'tasks/get':
         respond(
@@ -417,6 +470,38 @@ Future<void> main() async {
             'seen': elicitationAck,
           },
         );
+        continue;
+      case 'test/error_code':
+        respond(id, error: <String, Object?>{'code': -32001, 'message': 'Custom Error'});
+        continue;
+      case 'test/missing_result_and_error':
+        stdout.writeln(jsonEncode(<String, Object?>{'jsonrpc': '2.0', 'id': id, 'error': null}));
+        continue;
+      case 'test/trigger_server_requests':
+        request(101, 'test/unsupported', <String, Object?>{});
+        request(102, 'test/throw_custom', <String, Object?>{});
+        request(103, 'test/throw_generic', <String, Object?>{});
+        stdout.writeln(jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'method': 'notifications/server_event',
+          'params': <String, Object?>{'info': 'active'},
+        }));
+        respond(id, result: <String, Object?>{'dispatched': true});
+        continue;
+      case 'test/error_empty_message':
+        respond(id, error: <String, Object?>{'code': -32002, 'message': ''});
+        continue;
+      case 'test/num_id':
+        respond((id as num).toDouble(), result: <dynamic, dynamic>{'num_id': true, 'items': <dynamic>[1, 2]});
+        continue;
+      case 'test/str_id':
+        respond('$id', result: <dynamic, dynamic>{'str_id': true});
+        continue;
+      case 'test/num_code_error':
+        respond(id, error: <String, Object?>{'code': 123.0, 'message': 'num code'});
+        continue;
+      case 'test/str_code_error':
+        respond(id, error: <String, Object?>{'code': '456', 'message': 'str code'});
         continue;
       default:
         respond(
@@ -573,7 +658,7 @@ void main() {
       expect(toolsWithElicitation['elicitationAck'], isTrue);
       expect(completion['completion'], isNotEmpty);
       expect(logging, <String, Object?>{});
-      expect(resources.single['uri'], 'file:///r1');
+      expect(resources.first['uri'], 'file:///r1');
       expect(templates.single['uriTemplate'], 'file:///tmpl/{name}');
       expect(readResource['contents'], isNotEmpty);
       expect(prompts.single['name'], 'prompt.one');
@@ -620,4 +705,390 @@ void main() {
     }
     expect(seen, isTrue);
   });
+
+  test('StdioConnectionParams resolvedConnectionId logic', () {
+    final p1 = StdioConnectionParams(command: 'echo', connectionId: 'my-id');
+    expect(p1.resolvedConnectionId, 'my-id');
+
+    final p2 = StdioConnectionParams(command: 'echo', arguments: []);
+    expect(p2.resolvedConnectionId, 'stdio:echo');
+
+    final p3 = StdioConnectionParams(command: 'echo', arguments: ['hello', 'world']);
+    expect(p3.resolvedConnectionId, 'stdio:echo hello world');
+  });
+
+  test('McpStdioClient connection state, single-page queries and stderr logging', () async {
+    final List<String> stderrLines = [];
+    final StdioConnectionParams params = await _createStdioServerParams();
+    final McpStdioClient client = McpStdioClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+      onStderrLine: (connId, line) => stderrLines.add(line),
+    );
+    addTearDown(() async => client.close());
+
+    expect(client.isConnected, isFalse);
+    expect(client.isInitialized, isFalse);
+
+    await client.ensureInitialized(params);
+
+    expect(client.isConnected, isTrue);
+    expect(client.isInitialized, isTrue);
+    expect(client.negotiatedProtocolVersion, '2025-11-25');
+    expect(client.negotiatedCapabilities, isNotEmpty);
+
+    // Single-page list methods
+    final resPage = await client.listResourcesPage(connectionParams: params);
+    expect((resPage['resources'] as List).isNotEmpty, isTrue);
+
+    final tplPage = await client.listResourceTemplatesPage(connectionParams: params);
+    expect((tplPage['resourceTemplates'] as List).isNotEmpty, isTrue);
+
+    final promptPage = await client.listPromptsPage(connectionParams: params);
+    expect((promptPage['prompts'] as List).isNotEmpty, isTrue);
+
+    final toolsPage = await client.listToolsPage(connectionParams: params);
+    expect((toolsPage['tools'] as List).isNotEmpty, isTrue);
+
+    await client.close();
+    expect(client.isConnected, isFalse);
+    expect(client.isInitialized, isFalse);
+  });
+
+  test('McpStdioClient pagination, operations, and notification helpers', () async {
+    final StdioConnectionParams params = await _createStdioServerParams();
+    final McpStdioClient client = McpStdioClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+    );
+    addTearDown(() async => client.close());
+
+    await client.ensureInitialized(params);
+
+    // Pagination for resources
+    final resList = await client.collectPaginatedMaps(
+      connectionParams: params,
+      method: 'resources/list',
+      resultArrayField: 'resources',
+    );
+    expect(resList, isNotEmpty);
+
+    final resPage = await client.listResourcesPage(connectionParams: params, cursor: 'p2');
+    expect(resPage['resources'], isNotEmpty);
+
+    final tplPage = await client.listResourceTemplatesPage(connectionParams: params, cursor: 'c');
+    expect(tplPage['resourceTemplates'], isNotEmpty);
+
+    final promptPage = await client.listPromptsPage(connectionParams: params, cursor: 'c');
+    expect(promptPage['prompts'], isNotEmpty);
+
+    final promptDetail = await client.getPrompt(
+      connectionParams: params,
+      name: 'prompt.one',
+      arguments: <String, String>{'a': '1'},
+    );
+    expect(promptDetail['messages'], isNotEmpty);
+
+    final toolsPage = await client.listToolsPage(connectionParams: params, cursor: 'c');
+    expect(toolsPage['tools'], isNotEmpty);
+
+    final toolCall = await client.callTool(
+      connectionParams: params,
+      name: 'remote_echo',
+      arguments: <String, Object?>{'x': 'y'},
+      task: <String, Object?>{'taskId': 't1'},
+      meta: <String, Object?>{'m': '1'},
+    );
+    expect(toolCall['content'], isNotEmpty);
+
+    // Tasks list and pagination
+    final tasksList = await client.listTasks(connectionParams: params);
+    expect(tasksList, isNotEmpty);
+    final tasksPage = await client.listTasksPage(connectionParams: params, cursor: 'tp2');
+    expect(tasksPage['tasks'], isNotEmpty);
+
+    // Complete with context
+    final comp = await client.complete(
+      connectionParams: params,
+      ref: <String, Object?>{'type': 'prompt'},
+      argument: 'arg',
+      context: <String, Object?>{'ctx': true},
+    );
+    expect(comp['completion'], isNotNull);
+
+    // Logging level
+    expect(
+      () => client.setLoggingLevel(connectionParams: params, level: 'bad_level'),
+      throwsArgumentError,
+    );
+    await client.setLoggingLevel(connectionParams: params, level: 'info');
+
+    // Notifications
+    await client.notifyCancelledRequest(
+      connectionParams: params,
+      requestId: 10,
+      reason: 'timeout',
+      meta: <String, Object?>{'note': 'cancelled'},
+    );
+    await client.notifyProgress(
+      connectionParams: params,
+      progressToken: 'ptok',
+      progress: 25,
+      total: 100,
+      message: 'working',
+      meta: <String, Object?>{'detail': 'step'},
+    );
+    await client.notifyRootsListChanged(
+      connectionParams: params,
+      meta: <String, Object?>{'changed': true},
+    );
+    await client.notifyTaskStatus(
+      connectionParams: params,
+      status: <String, Object?>{'taskId': 't1', 'status': 'in_progress'},
+    );
+    await client.sendInitializedNotification(
+      connectionParams: params,
+      meta: <String, Object?>{'init': true},
+    );
+
+    // Test call with method == 'initialize'
+    final initCall = await client.call(
+      connectionParams: params,
+      method: 'initialize',
+      params: <String, Object?>{
+        'protocolVersion': '2025-11-25',
+        'capabilities': <String, Object?>{},
+        'clientInfo': <String, Object?>{'name': 'c', 'version': '1'},
+      },
+    );
+    expect(initCall, isNotNull);
+  });
+
+  test('McpStdioClient error cases, server requests, and process exit', () async {
+    final List<McpServerMessage> receivedMessages = <McpServerMessage>[];
+    final StdioConnectionParams params = await _createStdioServerParams();
+    final McpStdioClient client = McpStdioClient(
+      clientInfoName: 'test_client',
+      clientInfoVersion: '0.0.0',
+      onServerMessage: (msg) => receivedMessages.add(msg),
+      onServerRequest: (msg) async {
+        if (msg.method == 'test/throw_custom') {
+          throw McpServerRequestException(
+            code: -32099,
+            message: 'Custom Server Request Failure',
+            data: <String, Object?>{'reason': 'test'},
+          );
+        }
+        if (msg.method == 'test/throw_generic') {
+          throw Exception('Generic Server Request Error');
+        }
+        return <String, Object?>{'handled': true};
+      },
+    );
+    addTearDown(() async => client.close());
+
+    await client.ensureInitialized(params);
+
+    // RPC Error response
+    await expectLater(
+      client.call(
+        connectionParams: params,
+        method: 'test/error_code',
+        params: const <String, Object?>{},
+      ),
+      throwsA(isA<McpJsonRpcException>()),
+    );
+
+    // tryCall error suppression
+    final suppressedRpc = await client.tryCall(
+      connectionParams: params,
+      method: 'test/error_code',
+      params: const <String, Object?>{},
+      suppressJsonRpcErrorCodes: const <int>{-32001},
+    );
+    expect(suppressedRpc, isNull);
+
+    final suppressedAll = await client.tryCall(
+      connectionParams: params,
+      method: 'test/error_code',
+      params: const <String, Object?>{},
+      suppressErrors: true,
+    );
+    expect(suppressedAll, isNull);
+
+    // Missing result and error
+    await expectLater(
+      client.call(
+        connectionParams: params,
+        method: 'test/missing_result_and_error',
+        params: const <String, Object?>{},
+      ),
+      throwsFormatException,
+    );
+
+    // Trigger server requests and notification
+    final triggerResult = await client.call(
+      connectionParams: params,
+      method: 'test/trigger_server_requests',
+      params: const <String, Object?>{},
+    );
+    expect(triggerResult, isNotNull);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(receivedMessages, isNotEmpty);
+  });
+
+  test('McpStdioClient handles premature process exit and bad initialize handshake', () async {
+    // 1. Script that exits unexpectedly with code 42
+    final Directory dir1 = await Directory.systemTemp.createTemp('mcp_exit_');
+    addTearDown(() => dir1.delete(recursive: true));
+    final File script1 = File('${dir1.path}/exit_server.dart');
+    await script1.writeAsString('''
+import 'dart:io';
+void main() {
+  exit(42);
 }
+''');
+    final p1 = StdioConnectionParams(
+      command: Platform.resolvedExecutable,
+      arguments: [script1.path],
+    );
+    final c1 = McpStdioClient(clientInfoName: 'c1', clientInfoVersion: '1');
+    addTearDown(() => c1.close());
+    await expectLater(c1.ensureInitialized(p1), throwsStateError);
+
+    // 2. Script that returns missing protocolVersion
+    final Directory dir2 = await Directory.systemTemp.createTemp('mcp_missing_proto_');
+    addTearDown(() => dir2.delete(recursive: true));
+    final File script2 = File('${dir2.path}/missing_proto_server.dart');
+    await script2.writeAsString('''
+import 'dart:convert';
+import 'dart:io';
+void main() {
+  stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+    final rpc = jsonDecode(line) as Map;
+    if (rpc['method'] == 'initialize') {
+      stdout.writeln(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': rpc['id'],
+        'result': {'capabilities': {}},
+      }));
+    }
+  });
+}
+''');
+    final p2 = StdioConnectionParams(
+      command: Platform.resolvedExecutable,
+      arguments: [script2.path],
+    );
+    final c2 = McpStdioClient(clientInfoName: 'c2', clientInfoVersion: '1');
+    addTearDown(() => c2.close());
+    await expectLater(c2.ensureInitialized(p2), throwsStateError);
+
+    // 3. Script that returns unsupported protocolVersion
+    final Directory dir3 = await Directory.systemTemp.createTemp('mcp_bad_proto_');
+    addTearDown(() => dir3.delete(recursive: true));
+    final File script3 = File('${dir3.path}/bad_proto_server.dart');
+    await script3.writeAsString('''
+import 'dart:convert';
+import 'dart:io';
+void main() {
+  stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+    final rpc = jsonDecode(line) as Map;
+    if (rpc['method'] == 'initialize') {
+      stdout.writeln(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': rpc['id'],
+        'result': {'protocolVersion': '1999-01-01', 'capabilities': {}},
+      }));
+    }
+  });
+}
+''');
+    final p3 = StdioConnectionParams(
+      command: Platform.resolvedExecutable,
+      arguments: [script3.path],
+    );
+    final c3 = McpStdioClient(clientInfoName: 'c3', clientInfoVersion: '1');
+    addTearDown(() => c3.close());
+    await expectLater(c3.ensureInitialized(p3), throwsStateError);
+  });
+
+  test('McpStdioClient final edge cases coverage', () async {
+    final StdioConnectionParams params = await _createStdioServerParams();
+    // 1. Client with onServerRequest: null to trigger unsupported server request
+    final McpStdioClient client = McpStdioClient(
+      clientInfoName: 'stdio_edge',
+      clientInfoVersion: '1.0.0',
+    );
+    addTearDown(() async => client.close(killProcess: true));
+
+    await client.ensureInitialized(params);
+
+    // Collect paginated maps across pages
+    final pages = await client.collectPaginatedMaps(
+      connectionParams: params,
+      method: 'resources/list',
+      resultArrayField: 'resources',
+    );
+    expect(pages.length, equals(2));
+
+    // test/num_id
+    final numRes = await client.call(
+      connectionParams: params,
+      method: 'test/num_id',
+      params: const <String, Object?>{},
+    );
+    expect(numRes, isNotNull);
+
+    // test/str_id
+    final strRes = await client.call(
+      connectionParams: params,
+      method: 'test/str_id',
+      params: const <String, Object?>{},
+    );
+    expect(strRes, isNotNull);
+
+    // test/error_empty_message
+    await expectLater(
+      client.call(
+        connectionParams: params,
+        method: 'test/error_empty_message',
+        params: const <String, Object?>{},
+      ),
+      throwsA(isA<McpJsonRpcException>()),
+    );
+
+    // test/num_code_error
+    await expectLater(
+      client.call(
+        connectionParams: params,
+        method: 'test/num_code_error',
+        params: const <String, Object?>{},
+      ),
+      throwsA(isA<McpJsonRpcException>()),
+    );
+
+    // test/str_code_error
+    await expectLater(
+      client.call(
+        connectionParams: params,
+        method: 'test/str_code_error',
+        params: const <String, Object?>{},
+      ),
+      throwsA(isA<McpJsonRpcException>()),
+    );
+
+    // Server request when onServerRequest is null
+    await client.call(
+      connectionParams: params,
+      method: 'test/trigger_server_requests',
+      params: const <String, Object?>{},
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    // Close with killProcess: true
+    await client.close(killProcess: true);
+  });
+}
+
+

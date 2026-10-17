@@ -1,6 +1,10 @@
+/// Demonstrates integrating local LLMs (Ollama / LiteLLM) via [LiteLlm].
+library;
+
 import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 
+/// Connects to a local LLM instance and runs an interactive turn.
 Future<void> main() async {
   // 1. Configure local model details.
   // By default, local Ollama running on default port: http://localhost:11434/v1

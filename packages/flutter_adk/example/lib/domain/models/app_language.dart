@@ -1,6 +1,24 @@
-enum AppLanguage { en, ko, ja, zh }
+/// Supported UI and agent response languages for the example application.
+library;
 
+/// Supported languages in the example app.
+enum AppLanguage {
+  /// English language option.
+  en,
+
+  /// Korean language option.
+  ko,
+
+  /// Japanese language option.
+  ja,
+
+  /// Simplified Chinese language option.
+  zh,
+}
+
+/// Extension methods for [AppLanguage] providing language code and localized labels.
 extension AppLanguageX on AppLanguage {
+  /// The two-letter ISO language code.
   String get code {
     switch (this) {
       case AppLanguage.en:
@@ -14,6 +32,7 @@ extension AppLanguageX on AppLanguage {
     }
   }
 
+  /// The native display label of the language.
   String get nativeLabel {
     switch (this) {
       case AppLanguage.en:
@@ -28,6 +47,7 @@ extension AppLanguageX on AppLanguage {
   }
 }
 
+/// Resolves an [AppLanguage] from the given two-letter ISO [code].
 AppLanguage appLanguageFromCode(String? code) {
   switch (code) {
     case 'ko':
@@ -42,6 +62,7 @@ AppLanguage appLanguageFromCode(String? code) {
   }
 }
 
+/// Returns a system prompt instruction specifying the desired response [language].
 String responseLanguageInstruction(AppLanguage language) {
   switch (language) {
     case AppLanguage.en:

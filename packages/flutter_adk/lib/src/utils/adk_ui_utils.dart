@@ -7,8 +7,7 @@ import '../models/adk_tool_call_info.dart';
 import '../widgets/adk_workflow_graph_view.dart';
 
 /// Formatting and string presentation utilities for ADK Flutter applications.
-class AdkFormatters {
-  const AdkFormatters._();
+abstract final class AdkFormatters {
 
   /// Formats raw token count into human-readable representation.
   ///
@@ -75,8 +74,7 @@ class AdkFormatters {
 }
 
 /// Helper utilities for extracting UI models and state from ADK event streams.
-class AdkEventStreamUtils {
-  const AdkEventStreamUtils._();
+abstract final class AdkEventStreamUtils {
 
   /// Scans [events] and returns all open, unresolved long-running tool interrupts.
   ///
@@ -217,8 +215,7 @@ class AdkEventStreamUtils {
 }
 
 /// Color resolution helpers for statuses, confidence scores, and node lifecycles.
-class AdkColorUtils {
-  const AdkColorUtils._();
+abstract final class AdkColorUtils {
 
   /// Resolves an appropriate status color based on classification or model confidence.
   static Color confidenceColor(BuildContext context, double confidence) {

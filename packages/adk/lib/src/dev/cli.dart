@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:meta/meta.dart';
 
 import 'package:adk_dart/src/agents/base_agent.dart';
 import 'package:adk_dart/src/agents/llm_agent.dart';
@@ -516,6 +517,14 @@ ParsedAdkCommand parseAdkCliArgs(List<String> args) {
   }
 }
 
+/// Optional override for testing telemetry consent writes.
+@visibleForTesting
+void Function(bool consent)? writeTelemetryConsentTestingOverride;
+
+/// Optional override for testing subcommand execution in runAdkCli.
+@visibleForTesting
+Future<int> Function(ParsedAdkCommand command)? runSubcommandTestingOverride;
+
 /// Runs the ADK CLI command handler and returns an exit code.
 ///
 /// Returns `0` for success, `64` for usage errors, and non-zero runtime exit
@@ -528,6 +537,8 @@ Future<int> runAdkCli(
   List<String> args, {
   IOSink? outSink,
   IOSink? errSink,
+  Future<void>? stopSignal,
+  String? Function()? readLine,
 }) async {
   final IOSink out = outSink ?? stdout;
   final IOSink err = errSink ?? stderr;
@@ -564,214 +575,116 @@ Future<int> runAdkCli(
     );
   }
 
-  if (args.contains('-h') || args.contains('--help')) {
+  if (args.first != 'test' &&
+      (args.contains('-h') || args.contains('--help'))) {
     out.writeln(adkUsage);
     return 0;
   }
 
-  if (args.first == 'eval') {
-    try {
+  try {
+    if (args.first == 'eval') {
       return await _runEvalCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
         err: err,
       );
-    } on CliUsageError catch (error) {
-      err.writeln(error.message);
-      err.writeln('');
-      err.writeln(adkUsage);
-      return 64;
-    } on FileSystemException catch (error) {
-      err.writeln('Filesystem error: $error');
-      return 1;
-    } on FormatException catch (error) {
-      err.writeln('Config parse error: $error');
-      return 1;
-    } on StateError catch (error) {
-      err.writeln('Runtime error: $error');
-      return 1;
-    } on ArgumentError catch (error) {
-      err.writeln('Argument error: $error');
-      return 1;
     }
-  }
 
-  if (args.first == 'eval_set') {
-    try {
+    if (args.first == 'eval_set') {
       return await _runEvalSetCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
       );
-    } on CliUsageError catch (error) {
-      err.writeln(error.message);
-      err.writeln('');
-      err.writeln(adkUsage);
-      return 64;
-    } on FileSystemException catch (error) {
-      err.writeln('Filesystem error: $error');
-      return 1;
-    } on FormatException catch (error) {
-      err.writeln('Config parse error: $error');
-      return 1;
-    } on StateError catch (error) {
-      err.writeln('Runtime error: $error');
-      return 1;
-    } on ArgumentError catch (error) {
-      err.writeln('Argument error: $error');
-      return 1;
     }
-  }
 
-  if (args.first == 'conformance') {
-    try {
+    if (args.first == 'conformance') {
       return await _runConformanceCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
       );
-    } on CliUsageError catch (error) {
-      err.writeln(error.message);
-      err.writeln('');
-      err.writeln(adkUsage);
-      return 64;
-    } on FileSystemException catch (error) {
-      err.writeln('Filesystem error: $error');
-      return 1;
-    } on FormatException catch (error) {
-      err.writeln('Config parse error: $error');
-      return 1;
-    } on StateError catch (error) {
-      err.writeln('Runtime error: $error');
-      return 1;
-    } on ArgumentError catch (error) {
-      err.writeln('Argument error: $error');
-      return 1;
     }
-  }
 
-  if (args.first == 'optimize') {
-    try {
+    if (args.first == 'optimize') {
       return await _runOptimizeCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
         err: err,
       );
-    } on CliUsageError catch (error) {
-      err.writeln(error.message);
-      err.writeln('');
-      err.writeln(adkUsage);
-      return 64;
-    } on FileSystemException catch (error) {
-      err.writeln('Filesystem error: $error');
-      return 1;
-    } on FormatException catch (error) {
-      err.writeln('Config parse error: $error');
-      return 1;
-    } on StateError catch (error) {
-      err.writeln('Runtime error: $error');
-      return 1;
-    } on ArgumentError catch (error) {
-      err.writeln('Argument error: $error');
-      return 1;
     }
-  }
 
-  if (args.first == 'migrate') {
-    try {
+    if (args.first == 'migrate') {
       return await _runMigrateCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
       );
-    } on CliUsageError catch (error) {
-      err.writeln(error.message);
-      err.writeln('');
-      err.writeln(adkUsage);
-      return 64;
-    } on FileSystemException catch (error) {
-      err.writeln('Filesystem error: $error');
-      return 1;
-    } on FormatException catch (error) {
-      err.writeln('Config parse error: $error');
-      return 1;
-    } on StateError catch (error) {
-      err.writeln('Runtime error: $error');
-      return 1;
-    } on ArgumentError catch (error) {
-      err.writeln('Argument error: $error');
-      return 1;
     }
-  }
 
-  if (args.first == 'telemetry') {
-    if (args.length < 2 || args[1] == 'status') {
-      final bool? consent = readTelemetryConsent();
-      if (consent == true) {
-        out.writeln('Telemetry collection is enabled.');
-      } else if (consent == false) {
-        out.writeln('Telemetry collection is disabled.');
+    if (args.first == 'telemetry') {
+      if (args.length < 2 || args[1] == 'status') {
+        final bool? consent = readTelemetryConsent();
+        if (consent == true) {
+          out.writeln('Telemetry collection is enabled.');
+        } else if (consent == false) {
+          out.writeln('Telemetry collection is disabled.');
+        } else {
+          out.writeln(
+            'Telemetry collection is not configured (defaults to OFF).',
+          );
+        }
+        return 0;
+      }
+      final String sub = args[1].toLowerCase();
+      if (sub == 'enable' || sub == 'on') {
+        try {
+          if (writeTelemetryConsentTestingOverride != null) {
+            writeTelemetryConsentTestingOverride!(true);
+          } else {
+            writeTelemetryConsent(true);
+          }
+          out.writeln('Telemetry collection has been enabled.');
+          return 0;
+        } catch (e) {
+          err.writeln('Failed to enable telemetry: $e');
+          return 1;
+        }
+      } else if (sub == 'disable' || sub == 'off') {
+        try {
+          if (writeTelemetryConsentTestingOverride != null) {
+            writeTelemetryConsentTestingOverride!(false);
+          } else {
+            writeTelemetryConsent(false);
+          }
+          out.writeln('Telemetry collection has been disabled.');
+          return 0;
+        } catch (e) {
+          err.writeln('Failed to disable telemetry: $e');
+          return 1;
+        }
       } else {
-        out.writeln(
-          'Telemetry collection is not configured (defaults to OFF).',
+        err.writeln(
+          'Unknown telemetry command: $sub. Expected enable, disable, or status.',
         );
+        return 64;
       }
-      return 0;
     }
-    final String sub = args[1].toLowerCase();
-    if (sub == 'enable' || sub == 'on') {
-      try {
-        writeTelemetryConsent(true);
-        out.writeln('Telemetry collection has been enabled.');
-        return 0;
-      } catch (e) {
-        err.writeln('Failed to enable telemetry: $e');
-        return 1;
-      }
-    } else if (sub == 'disable' || sub == 'off') {
-      try {
-        writeTelemetryConsent(false);
-        out.writeln('Telemetry collection has been disabled.');
-        return 0;
-      } catch (e) {
-        err.writeln('Failed to disable telemetry: $e');
-        return 1;
-      }
-    } else {
-      err.writeln(
-        'Unknown telemetry command: $sub. Expected enable, disable, or status.',
-      );
-      return 64;
-    }
-  }
 
-  if (args.first == 'test') {
-    try {
+    if (args.first == 'test') {
       return await _runTestCliCommand(
         args.skip(1).toList(growable: false),
         out: out,
       );
-    } on CliUsageError catch (error) {
-      err.writeln(error.message);
-      err.writeln('');
-      err.writeln(adkUsage);
-      return 64;
     }
-  }
 
-  final ParsedAdkCommand parsed;
-  try {
-    parsed = parseAdkCliArgs(args);
-  } on CliUsageError catch (error) {
-    err.writeln(error.message);
-    err.writeln('');
-    err.writeln(adkUsage);
-    return 64;
-  }
-
-  try {
+    final ParsedAdkCommand parsed = parseAdkCliArgs(args);
     _applyFeatureOverridesFromCli(
       enableFeatures: parsed.enableFeatures,
       disableFeatures: parsed.disableFeatures,
       err: err,
     );
+
+    if (runSubcommandTestingOverride != null) {
+      return await runSubcommandTestingOverride!(parsed);
+    }
 
     late final int exitCode;
     switch (parsed.type) {
@@ -779,13 +692,18 @@ Future<int> runAdkCli(
         exitCode = await _runCreateCommand(parsed, out);
         break;
       case AdkCommandType.run:
-        exitCode = await _runRunCommand(parsed, out, err: err);
+        exitCode = await _runRunCommand(parsed, out, err: err, readLine: readLine);
         break;
       case AdkCommandType.web:
-        exitCode = await _runWebCommand(parsed, out, err);
+        exitCode = await _runWebCommand(parsed, out, err, stopSignal: stopSignal);
         break;
     }
     return exitCode;
+  } on CliUsageError catch (error) {
+    err.writeln(error.message);
+    err.writeln('');
+    err.writeln(adkUsage);
+    return 64;
   } on FileSystemException catch (error) {
     err.writeln('Filesystem error: $error');
     return 1;
@@ -819,6 +737,9 @@ Future<int> _runTestCliCommand(
     if (passthrough) {
       testRunnerArgs.add(arg);
       continue;
+    }
+    if (arg == '--help' || arg == '-h') {
+      throw CliUsageError('Usage: adk test [options] [agent_dir]');
     }
     if (arg == '--') {
       passthrough = true;
@@ -1188,7 +1109,7 @@ class _ConformanceUserMessage {
   final String? text;
 
   /// Structured content payload.
-  final Map<String, Object?>? content;
+  final Object? content;
 
   /// Optional state delta to inject before sending.
   final Map<String, Object?>? stateDelta;
@@ -1463,6 +1384,15 @@ Future<int> _runOptimizeCliCommand(
     loadedAgent.rootAgent as Agent,
     sampler,
   );
+  _printOptimizationResults(result, command: command, out: out);
+  return 0;
+}
+
+void _printOptimizationResults(
+  GepaRootAgentPromptOptimizerResult result, {
+  required _ParsedOptimizeCliCommand command,
+  required IOSink out,
+}) {
   final int bestIdx = _bestOptimizedAgentIndex(result);
 
   out.writeln('=' * 80);
@@ -1483,7 +1413,6 @@ Future<int> _runOptimizeCliCommand(
   }
 
   out.writeln('=' * 80);
-  return 0;
 }
 
 Future<int> _runEvalSetCliCommand(
@@ -1975,16 +1904,17 @@ Future<_ConformanceCaseResult> _runConformanceLiveCase(
   required String userId,
   required StreamingMode streamingMode,
 }) async {
-  final Map<String, Object?> session = await client.createSession(
-    appName: testCase.spec.agent,
-    userId: userId,
-    state: testCase.spec.initialState,
-  );
-  final String sessionId =
-      _extractSessionIdFromCreateSession(session) ??
-      (throw StateError('Failed to create session id for conformance test.'));
-  final Map<String, String> functionCallNameToId = <String, String>{};
+  String? sessionId;
   try {
+    final Map<String, Object?> session = await client.createSession(
+      appName: testCase.spec.agent,
+      userId: userId,
+      state: testCase.spec.initialState,
+    );
+    sessionId =
+        _extractSessionIdFromCreateSession(session) ??
+        (throw StateError('Failed to create session id for conformance test.'));
+    final Map<String, String> functionCallNameToId = <String, String>{};
     for (final _ConformanceUserMessage userMessage
         in testCase.spec.userMessages) {
       final Map<String, Object?> stateDelta = <String, Object?>{
@@ -2019,14 +1949,16 @@ Future<_ConformanceCaseResult> _runConformanceLiveCase(
       description: testCase.spec.description,
     );
   } finally {
-    try {
-      await client.deleteSession(
-        appName: testCase.spec.agent,
-        userId: userId,
-        sessionId: sessionId,
-      );
-    } on Exception {
-      // Best effort cleanup.
+    if (sessionId != null) {
+      try {
+        await client.deleteSession(
+          appName: testCase.spec.agent,
+          userId: userId,
+          sessionId: sessionId,
+        );
+      } on Exception {
+        // Best effort cleanup.
+      }
     }
   }
 }
@@ -2050,16 +1982,17 @@ Future<_ConformanceCaseResult> _runConformanceReplayCase(
     );
   }
 
-  final Map<String, Object?> session = await client.createSession(
-    appName: testCase.spec.agent,
-    userId: userId,
-    state: testCase.spec.initialState,
-  );
-  final String sessionId =
-      _extractSessionIdFromCreateSession(session) ??
-      (throw StateError('Failed to create session id for conformance test.'));
-  final Map<String, String> functionCallNameToId = <String, String>{};
+  String? sessionId;
   try {
+    final Map<String, Object?> session = await client.createSession(
+      appName: testCase.spec.agent,
+      userId: userId,
+      state: testCase.spec.initialState,
+    );
+    sessionId =
+        _extractSessionIdFromCreateSession(session) ??
+        (throw StateError('Failed to create session id for conformance test.'));
+    final Map<String, String> functionCallNameToId = <String, String>{};
     for (
       int userMessageIndex = 0;
       userMessageIndex < testCase.spec.userMessages.length;
@@ -2178,14 +2111,16 @@ Future<_ConformanceCaseResult> _runConformanceReplayCase(
       description: testCase.spec.description,
     );
   } finally {
-    try {
-      await client.deleteSession(
-        appName: testCase.spec.agent,
-        userId: userId,
-        sessionId: sessionId,
-      );
-    } on Exception {
-      // Best effort cleanup.
+    if (sessionId != null) {
+      try {
+        await client.deleteSession(
+          appName: testCase.spec.agent,
+          userId: userId,
+          sessionId: sessionId,
+        );
+      } on Exception {
+        // Best effort cleanup.
+      }
     }
   }
 }
@@ -2646,15 +2581,7 @@ Map<String, Object?> _sanitizeConformanceSessionMap(
 
 Map<String, Object?> _deepCopyMap(Map<String, Object?> input) {
   final Object? normalized = _normalizeJsonForStableHash(input);
-  if (normalized is Map<String, Object?>) {
-    return normalized;
-  }
-  if (normalized is Map) {
-    return normalized.map(
-      (Object? key, Object? value) => MapEntry('$key', value),
-    );
-  }
-  return <String, Object?>{};
+  return Map<String, Object?>.from(normalized as Map);
 }
 
 bool _deepMapEquals(Map<String, Object?> left, Map<String, Object?> right) {
@@ -2978,9 +2905,6 @@ _EvalSelection _parseEvalSelection(String rawValue) {
 
   final String source = value.substring(0, colonIndex).trim();
   final String idsPart = value.substring(colonIndex + 1).trim();
-  if (source.isEmpty || idsPart.isEmpty) {
-    return _EvalSelection(source: value, evalCaseIds: <String>{});
-  }
   final Set<String> ids = idsPart
       .split(',')
       .map((String item) => item.trim())
@@ -4506,7 +4430,8 @@ ParsedAdkCommand _parseWebCommand(
     }
     if (arg == '--no-with_ui' ||
         arg == '--no_with_ui' ||
-        arg == '--no-with-ui') {
+        arg == '--no-with-ui' ||
+        arg == '--no-ui') {
       effectiveEnableWebUi = false;
       continue;
     }
@@ -4578,7 +4503,9 @@ ParsedAdkCommand _parseWebCommand(
       evalStorageUri = arg.substring('--eval_storage_uri='.length).trim();
       continue;
     }
-    if (arg == '--log_level' || arg == '--verbosity') {
+    if (arg == '--log_level' ||
+        arg == '--log-level' ||
+        arg == '--verbosity') {
       logLevel = _nextArg(args, i, arg);
       i += 1;
       continue;
@@ -4587,7 +4514,9 @@ ParsedAdkCommand _parseWebCommand(
       verbose = true;
       continue;
     }
-    if (arg.startsWith('--log_level=') || arg.startsWith('--verbosity=')) {
+    if (arg.startsWith('--log_level=') ||
+        arg.startsWith('--log-level=') ||
+        arg.startsWith('--verbosity=')) {
       logLevel = arg.substring(arg.indexOf('=') + 1);
       continue;
     }
@@ -4668,7 +4597,7 @@ ParsedAdkCommand _parseWebCommand(
     if (avatarFile.existsSync()) {
       jsonText = avatarFile.readAsStringSync().trim();
     }
-    if (jsonText.startsWith('{')) {
+    if (jsonText.startsWith('{') || jsonText.startsWith('[')) {
       final Object? decoded;
       try {
         decoded = jsonDecode(jsonText);
@@ -4695,7 +4624,7 @@ ParsedAdkCommand _parseWebCommand(
         final int sepIdx = (eqIdx > 0 && (colonIdx <= 0 || eqIdx < colonIdx))
             ? eqIdx
             : colonIdx;
-        if (sepIdx <= 0 || sepIdx == trimmed.length - 1) {
+        if (sepIdx <= 0) {
           throw CliUsageError('Invalid --avatar_config entry: $trimmed');
         }
         final String k = trimmed.substring(0, sepIdx).trim();
@@ -4884,10 +4813,12 @@ Future<_RunCommandContext> _loadRunCommandContext(
   final Directory agentsParentDir = agentDir.parent.absolute;
 
   loadServicesModule(agentDir.path);
-  final AgentLoader agentLoader = AgentLoader(
-    agentsParentDir.path,
-    enableDevProjectFallback: false,
-  );
+  final AgentLoader agentLoader =
+      agentLoaderTestingOverride?.call(agentsParentDir.path) ??
+      AgentLoader(
+        agentsParentDir.path,
+        enableDevProjectFallback: false,
+      );
   final AgentOrApp loaded = agentLoader.loadAgent(agentFolderName);
   final BaseAgent rootAgent = asBaseAgent(loaded);
 
@@ -4995,6 +4926,7 @@ Future<int> _runRunCommand(
   ParsedAdkCommand command,
   IOSink out, {
   IOSink? err,
+  String? Function()? readLine,
 }) async {
   if (command.logLevel != null) {
     cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel!));
@@ -5022,6 +4954,7 @@ Future<int> _runRunCommand(
         projectDir: command.projectDir,
         requestedSessionIdForSave: command.sessionId,
         out: out,
+        readLine: readLine,
       );
     }
     await runtime.runner.close();
@@ -5089,6 +5022,7 @@ Future<int> _runRunCommand(
         projectDir: command.projectDir,
         requestedSessionIdForSave: command.sessionId,
         out: out,
+        readLine: readLine,
       );
     }
     final bool pausedForInput = events.any(
@@ -5123,13 +5057,14 @@ Future<int> _runRunCommand(
     out.writeln('Running agent $rootAgentName, type exit to exit.');
   }
 
+  final String? Function() readLineFunc = _resolveCliReadLine(readLine);
   while (true) {
     if (!command.jsonl) {
       out.write('[user]: ');
       await out.flush();
     }
 
-    final String? line = stdin.readLineSync();
+    final String? line = readLineFunc();
     if (line == null) {
       break;
     }
@@ -5156,6 +5091,7 @@ Future<int> _runRunCommand(
       projectDir: command.projectDir,
       requestedSessionIdForSave: command.sessionId,
       out: out,
+      readLine: readLine,
     );
   }
 
@@ -5319,7 +5255,11 @@ Future<Session> _prepareRunSession({
     );
   }
 
-  return session;
+  final Session? reloaded = await runtime.getSession(
+    userId: userId,
+    sessionId: session.id,
+  );
+  return reloaded ?? session;
 }
 
 Future<Session> _loadSessionSnapshot(String filePath) async {
@@ -5369,6 +5309,7 @@ Future<void> _saveSessionSnapshot({
   required String projectDir,
   required String? requestedSessionIdForSave,
   required IOSink out,
+  String? Function()? readLine,
 }) async {
   final Session? refreshed = await runtime.getSession(
     userId: session.userId,
@@ -5379,7 +5320,8 @@ Future<void> _saveSessionSnapshot({
   if (saveId == null || saveId.isEmpty) {
     out.write('Session ID to save: ');
     await out.flush();
-    saveId = stdin.readLineSync()?.trim();
+    final String? Function() readLineFunc = _resolveCliReadLine(readLine);
+    saveId = readLineFunc()?.trim();
     if (saveId == null || saveId.isEmpty) {
       saveId = target.id;
     }
@@ -5397,8 +5339,9 @@ Future<void> _saveSessionSnapshot({
 Future<int> _runWebCommand(
   ParsedAdkCommand command,
   IOSink out,
-  IOSink err,
-) async {
+  IOSink err, {
+  Future<void>? stopSignal,
+}) async {
   cli_logs.setupAdkLogger(level: _toCliLogEnum(command.logLevel ?? 'INFO'));
 
   if (command.usedDeprecatedSessionDbUrl) {
@@ -5510,38 +5453,65 @@ Future<int> _runWebCommand(
   }
   out.writeln('Press Ctrl+C to stop.');
 
-  final List<StreamSubscription<ProcessSignal>> signalSubscriptions =
-      <StreamSubscription<ProcessSignal>>[];
+  final List<StreamSubscription<dynamic>> signalSubscriptions =
+      <StreamSubscription<dynamic>>[];
   final Completer<void> stopRequested = Completer<void>();
+  if (stopSignal != null) {
+    stopSignal.then((_) {
+      if (!stopRequested.isCompleted) {
+        stopRequested.complete();
+      }
+    });
+  }
 
-  final List<ProcessSignal> signals = <ProcessSignal>[
-    ProcessSignal.sigint,
-    if (!Platform.isWindows) ProcessSignal.sigterm,
-  ];
+  if (webSignalStreamTestingOverride != null) {
+    signalSubscriptions.add(
+      webSignalStreamTestingOverride!.listen((_) {
+        if (!stopRequested.isCompleted) {
+          stopRequested.complete();
+        }
+      }),
+    );
+  } else {
+    final List<ProcessSignal> signals =
+        webSignalsTestingOverride ??
+        <ProcessSignal>[
+          ProcessSignal.sigint,
+          if (!Platform.isWindows) ProcessSignal.sigterm,
+        ];
 
-  for (final ProcessSignal signal in signals) {
-    try {
-      signalSubscriptions.add(
-        signal.watch().listen((_) {
-          if (!stopRequested.isCompleted) {
-            stopRequested.complete();
-          }
-        }),
-      );
-    } on UnsupportedError {
-      // Signal handling may not be available on all platforms.
+    for (final ProcessSignal signal in signals) {
+      try {
+        if (simulateSignalUnsupportedForTesting) {
+          throw UnsupportedError('Signal watch unsupported');
+        }
+        final Stream<dynamic> signalStream =
+            signalWatchTestingOverride != null
+                ? signalWatchTestingOverride!(signal)
+                : signal.watch();
+        signalSubscriptions.add(
+          signalStream.listen((_) {
+            if (!stopRequested.isCompleted) {
+              stopRequested.complete();
+            }
+          }),
+        );
+      } on UnsupportedError {
+        // Signal handling may not be available on all platforms.
+      }
     }
   }
 
   if (signalSubscriptions.isEmpty) {
     out.writeln('Signal handling unavailable. Press Enter to stop.');
-    await stdin.first;
+    final Stream<List<int>> input = _resolveWebStdin();
+    await input.first;
   } else {
     await stopRequested.future;
   }
 
   await server.close(force: true);
-  for (final StreamSubscription<ProcessSignal> subscription
+  for (final StreamSubscription<dynamic> subscription
       in signalSubscriptions) {
     await subscription.cancel();
   }
@@ -5738,3 +5708,353 @@ String _displayHost(InternetAddress address) {
   }
   return address.address;
 }
+
+/// Internal testing helper to format an internet address for display.
+String displayHostForTesting(InternetAddress address) => _displayHost(address);
+
+/// Internal testing helper to write run events to output.
+void writeRunEventsForTesting(
+  List<Event> events, {
+  required IOSink out,
+  bool jsonl = false,
+  Session? session,
+}) => _writeRunEvents(events, out: out, jsonl: jsonl, session: session);
+
+/// Internal testing helper to escape a scalar string for YAML output.
+String yamlScalarForTesting(String value) => _yamlScalar(value);
+
+/// Internal testing helper to parse timeout string into seconds.
+int parseTimeoutSecondsTesting(String raw) => _parseTimeoutSeconds(raw);
+
+/// Internal testing helper to get streaming mode name.
+String conformanceStreamingModeNameTesting(StreamingMode mode) =>
+    _conformanceStreamingModeName(mode);
+
+/// Internal testing helper to extract session ID from create session response.
+String? extractSessionIdFromCreateSessionTesting(Map<String, Object?> response) =>
+    _extractSessionIdFromCreateSession(response);
+
+/// Internal testing helper to map raw CLI feature string to FeatureName.
+FeatureName? featureNameFromCliValueTesting(String raw) =>
+    _featureNameFromCliValue(raw);
+
+/// Internal testing helper to write unknown feature name warning.
+void writeUnknownFeatureNameWarningTesting(String raw, IOSink err) =>
+    _writeUnknownFeatureNameWarning(raw, err);
+
+/// Internal testing helper to convert empty string to null.
+String? emptyToNullTesting(String? value) => _emptyToNull(value);
+
+/// Internal testing helper for deep cloning JSON value.
+Object? deepCloneJsonValueForTesting(Object? value) =>
+    _deepCloneJsonValue(value);
+
+/// Internal testing helper for sanitizing conformance event map.
+Map<String, Object?> sanitizeConformanceEventMapForTesting(
+  Map<String, Object?> raw,
+) => _sanitizeConformanceEventMap(raw);
+
+/// Internal testing helper for converting value to object map.
+Map<String, Object?> asObjectMapForTesting(Object? value) => _asObjectMap(value);
+
+/// Internal testing helper for parsing host.
+InternetAddress parseHostForTesting(String raw) => _parseHost(raw);
+
+/// Internal testing helper for building conformance run messages.
+Object? buildConformanceRunMessageForTesting(
+  Object? content,
+  Map<String, String> functionCallNameToId, {
+  String? text,
+}) {
+  return _buildConformanceRunMessage(
+    _ConformanceUserMessage(
+      text: text,
+      content: content,
+    ),
+    functionCallNameToId,
+  );
+}
+
+/// Internal testing helper for sanitizing conformance session maps.
+Map<String, Object?> sanitizeConformanceSessionMapForTesting(
+  Map<String, Object?> session, {
+  bool keepEvents = false,
+}) => _sanitizeConformanceSessionMap(session, keepEvents: keepEvents);
+
+/// Internal testing helper for deep copying maps.
+Map<String, Object?> deepCopyMapForTesting(Map<String, Object?> input) =>
+    _deepCopyMap(input);
+
+/// Internal testing helper for parsing eval selection.
+Object parseEvalSelectionForTesting(String value) => _parseEvalSelection(value);
+
+/// Internal testing helper for creating eval managers.
+dynamic createEvalManagersForTesting({
+  required String? evalStorageUri,
+  required String agentsDir,
+  required bool useInMemory,
+}) => _createEvalManagers(
+  evalStorageUri: evalStorageUri,
+  agentsDir: agentsDir,
+  useInMemory: useInMemory,
+);
+
+/// Internal testing helper for merging eval targets.
+void mergeEvalTargetsForTesting(
+  List<dynamic> targets,
+  String evalSetId,
+  Set<String> evalCaseIds,
+) {
+  _mergeEvalTarget(targets.cast<_EvalTarget>(), evalSetId, evalCaseIds);
+}
+
+/// Internal testing helper for best optimized agent index.
+int bestOptimizedAgentIndexForTesting(
+  GepaRootAgentPromptOptimizerResult result,
+) => _bestOptimizedAgentIndex(result);
+
+/// Internal testing helper for loading conformance spec.
+dynamic loadConformanceSpecForTesting(String specFilePath) =>
+    _loadConformanceSpec(specFilePath);
+
+/// Internal testing helper for parsing conformance record command.
+dynamic parseConformanceRecordCommandForTesting(List<String> args) =>
+    _parseConformanceRecordCommand(args);
+
+/// Internal testing helper for creating parsed conformance record command.
+@visibleForTesting
+dynamic createParsedConformanceRecordCommandForTesting({
+  required List<String> paths,
+  required Uri baseUri,
+  required String userId,
+  StreamingMode? streamingMode,
+}) => _ParsedConformanceRecordCommand(
+  paths: paths,
+  baseUri: baseUri,
+  userId: userId,
+  streamingMode: streamingMode,
+);
+
+/// Internal testing helper for running conformance record.
+@visibleForTesting
+Future<void> runConformanceRecordForTesting(
+  dynamic command, {
+  required IOSink out,
+}) => _runConformanceRecord(
+  command as _ParsedConformanceRecordCommand,
+  out: out,
+);
+
+/// Internal testing helper for parsing conformance test command.
+dynamic parseConformanceTestCommandForTesting(List<String> args) =>
+    _parseConformanceTestCommand(args);
+
+/// Internal testing helper for creating parsed conformance test command.
+@visibleForTesting
+dynamic createParsedConformanceTestCommandForTesting({
+  required List<String> paths,
+  required Uri baseUri,
+  required String userId,
+  required String mode,
+  bool generateReport = false,
+  String? reportDir,
+  StreamingMode? streamingMode,
+}) => _ParsedConformanceTestCommand(
+  paths: paths,
+  baseUri: baseUri,
+  userId: userId,
+  mode: mode,
+  generateReport: generateReport,
+  reportDir: reportDir,
+  streamingMode: streamingMode,
+);
+
+/// Internal testing helper for running conformance test.
+@visibleForTesting
+Future<List<dynamic>> runConformanceTestForTesting(
+  dynamic command, {
+  required IOSink out,
+}) => _runConformanceTest(
+  command as _ParsedConformanceTestCommand,
+  out: out,
+);
+
+/// Internal testing helper for parsing eval_set create command.
+dynamic parseEvalSetCreateCommandForTesting(List<String> args) =>
+    _parseEvalSetCreateCommand(args);
+
+/// Internal testing helper for parsing eval_set add_eval_case command.
+dynamic parseEvalSetAddEvalCaseCommandForTesting(List<String> args) =>
+    _parseEvalSetAddEvalCaseCommand(args);
+
+/// Internal testing helper for writing conformance report markdown.
+Future<String> writeConformanceReportMarkdownForTesting({
+  required List<dynamic> summaries,
+  required String? reportDir,
+  required Map<String, Object?> versionData,
+}) => _writeConformanceMarkdownReport(
+  summaries.cast<_ConformanceTestSummary>(),
+  reportDir: reportDir,
+  versionData: versionData,
+);
+
+/// Internal testing helper for loading agent for CLI.
+Future<dynamic> loadAgentForCliForTesting(String agentPath) =>
+    _loadAgentForCli(agentPath);
+
+/// Internal testing helper for running eval CLI command.
+Future<int> runEvalCliCommandForTesting(
+  List<String> args, {
+  required IOSink out,
+  IOSink? err,
+}) => _runEvalCliCommand(args, out: out, err: err);
+
+/// Internal testing helper for running optimize CLI command.
+Future<int> runOptimizeCliCommandForTesting(
+  List<String> args, {
+  required IOSink out,
+  IOSink? err,
+}) => _runOptimizeCliCommand(args, out: out, err: err);
+
+/// Internal testing helper for loading scenarios file.
+Future<dynamic> loadScenariosFileForTesting(File file) =>
+    _readConversationScenariosFile(file.path);
+
+/// Internal testing helper for recording a conformance case.
+Future<void> recordConformanceCaseForTesting(
+  AdkWebServerClient client,
+  dynamic testCase, {
+  required String userId,
+  required StreamingMode streamingMode,
+}) => _recordConformanceCase(
+  client,
+  testCase as _ConformanceTestCase,
+  userId: userId,
+  streamingMode: streamingMode,
+);
+
+/// Internal testing helper for running a conformance test case.
+Future<dynamic> runConformanceTestCaseForTesting(
+  AdkWebServerClient client,
+  dynamic testCase, {
+  required String userId,
+  required StreamingMode streamingMode,
+  required String mode,
+}) => mode == 'live'
+    ? _runConformanceLiveCase(
+        client,
+        testCase as _ConformanceTestCase,
+        userId: userId,
+        streamingMode: streamingMode,
+      )
+    : _runConformanceReplayCase(
+        client,
+        testCase as _ConformanceTestCase,
+        userId: userId,
+        streamingMode: streamingMode,
+      );
+
+/// Internal testing helper for discovering conformance cases.
+Future<List<dynamic>> discoverConformanceCasesForTesting(
+  List<String> paths, {
+  required IOSink out,
+  required bool replayMode,
+  required StreamingMode streamingMode,
+}) => _discoverConformanceCases(
+  paths,
+  out: out,
+  replayMode: replayMode,
+  streamingMode: streamingMode,
+);
+/// Internal testing override for [AgentLoader] creation in CLI.
+@visibleForTesting
+AgentLoader Function(String path)? agentLoaderTestingOverride;
+
+/// Internal testing override for web command signals.
+@visibleForTesting
+List<ProcessSignal>? webSignalsTestingOverride;
+
+/// Internal testing override for web signal stream.
+@visibleForTesting
+Stream<void>? webSignalStreamTestingOverride;
+
+/// Internal testing override for web stdin stream.
+@visibleForTesting
+Stream<List<int>>? webStdinTestingOverride;
+
+/// Internal testing flag to simulate signal watch throwing [UnsupportedError].
+@visibleForTesting
+bool simulateSignalUnsupportedForTesting = false;
+
+/// Internal testing helper for printing optimization results.
+@visibleForTesting
+void printOptimizationResultsForTesting(
+  GepaRootAgentPromptOptimizerResult result, {
+  required bool printDetailedResults,
+  required IOSink out,
+}) {
+  final _ParsedOptimizeCliCommand command = _ParsedOptimizeCliCommand(
+    agentPath: '',
+    samplerConfigFilePath: '',
+    optimizerConfigFilePath: null,
+    printDetailedResults: printDetailedResults,
+    logLevel: 'INFO',
+  );
+  _printOptimizationResults(result, command: command, out: out);
+}
+
+/// Internal testing override for interactive cli readLineSync.
+@visibleForTesting
+String? Function()? cliReadLineTestingOverride;
+
+/// Internal testing override for signal watch streams.
+@visibleForTesting
+Stream<dynamic> Function(ProcessSignal signal)? signalWatchTestingOverride;
+
+String? Function() _resolveCliReadLine(String? Function()? readLine) {
+  if (readLine != null) {
+    return readLine;
+  }
+  if (cliReadLineTestingOverride != null) {
+    return cliReadLineTestingOverride!;
+  }
+  return stdin.readLineSync;
+}
+
+Stream<List<int>> _resolveWebStdin() {
+  if (webStdinTestingOverride != null) {
+    return webStdinTestingOverride!;
+  }
+  return stdin;
+}
+
+/// Internal testing helper for resolving CLI readLine function.
+@visibleForTesting
+String? Function() resolveCliReadLineForTesting(String? Function()? readLine) =>
+    _resolveCliReadLine(readLine);
+
+/// Internal testing helper for resolving web stdin stream.
+@visibleForTesting
+Stream<List<int>> resolveWebStdinForTesting() => _resolveWebStdin();
+
+/// Internal testing helper for running the run command directly.
+@visibleForTesting
+Future<int> runRunCommandForTesting(
+  ParsedAdkCommand command,
+  IOSink out, {
+  IOSink? err,
+  String? Function()? readLine,
+}) => _runRunCommand(command, out, err: err, readLine: readLine);
+
+/// Internal testing helper for applying feature overrides.
+@visibleForTesting
+void applyFeatureOverridesFromCliForTesting({
+  required List<String> enableFeatures,
+  required List<String> disableFeatures,
+  required IOSink err,
+}) => _applyFeatureOverridesFromCli(
+  enableFeatures: enableFeatures,
+  disableFeatures: disableFeatures,
+  err: err,
+);
+

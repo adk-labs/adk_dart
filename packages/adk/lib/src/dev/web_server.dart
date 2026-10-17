@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:adk_dart/src/a2a/executor/a2a_agent_executor.dart';
+import 'package:meta/meta.dart';
 import 'package:adk_dart/src/a2a/protocol.dart';
 import 'package:adk_dart/src/a2a/utils/agent_card_builder.dart';
 import 'package:adk_dart/src/agents/abort_signal.dart';
@@ -322,7 +323,7 @@ String _resolveEvalLocalBaseDir({
         'file:// eval storage URIs must reference the local filesystem.',
       );
     }
-    if (parsed.path.isEmpty) {
+    if (parsed.path.isEmpty || parsed.path == '/') {
       throw ArgumentError(
         'file:// eval storage URIs must include a path component.',
       );
@@ -479,6 +480,7 @@ class _AdkDevWebContext {
     required List<String> extraPlugins,
     List<String> triggerSources = const <String>[],
     TriggerAuthVerifier? triggerAuthVerifier,
+    TriggerRouter? customTriggerRouter,
     Map<String, String>? environment,
     int maxLiveMessageBytes = 16 * 1024 * 1024,
     Duration liveKeepaliveTimeout = const Duration(seconds: 40),
@@ -503,14 +505,17 @@ class _AdkDevWebContext {
       fallbackAppName: project.appName,
     );
 
-    final BaseSessionService sessionService = createSessionServiceFromOptions(
-      baseDir: agentsRoot.path,
-      sessionServiceUri: sessionServiceUri,
-      appNameToDir: appNameToDir,
-      useLocalStorage: useLocalStorage,
-    );
+    final BaseSessionService sessionService =
+        webServerSessionServiceTestingOverride ??
+        createSessionServiceFromOptions(
+          baseDir: agentsRoot.path,
+          sessionServiceUri: sessionServiceUri,
+          appNameToDir: appNameToDir,
+          useLocalStorage: useLocalStorage,
+        );
 
     final BaseArtifactService artifactService =
+        webServerArtifactServiceTestingOverride ??
         createArtifactServiceFromOptions(
           baseDir: agentsRoot.path,
           artifactServiceUri: artifactServiceUri,
@@ -549,19 +554,21 @@ class _AdkDevWebContext {
         .where((String s) => s.isNotEmpty)
         .toList(growable: false);
     late final _AdkDevWebContext context;
-    final TriggerRouter? triggerRouter = normalizedTriggerSources.isEmpty
-        ? null
-        : TriggerRouter(
-            getRunnerAsync: (String appName) => context.getRunner(appName),
-            sessionService: sessionService,
-            triggerSources: normalizedTriggerSources,
-            verifyAuth: triggerAuthVerifier,
-          );
+    final TriggerRouter? triggerRouter = customTriggerRouter ??
+        (normalizedTriggerSources.isEmpty
+            ? null
+            : TriggerRouter(
+                getRunnerAsync: (String appName) => context.getRunner(appName),
+                sessionService: sessionService,
+                triggerSources: normalizedTriggerSources,
+                verifyAuth: triggerAuthVerifier,
+              ));
     context = _AdkDevWebContext(
       runtime: runtime,
       project: project,
       agentsDir: agentsRoot.path,
-      agentLoader: AgentLoader(agentsRoot.path),
+      agentLoader: webServerAgentLoaderTestingOverride?.call(agentsRoot.path) ??
+          AgentLoader(agentsRoot.path),
       sessionService: sessionService,
       artifactService: artifactService,
       memoryService: memoryService,
@@ -1084,6 +1091,11 @@ class _AdkDevWebContext {
         .toList(growable: false);
   }
 
+  /// Internal testing access to in-memory traces by event id.
+  @visibleForTesting
+  Map<String, Map<String, Object?>> get inMemoryTracesByEventIdForTesting =>
+      _traceByEventId;
+
   Future<Event?> readSessionEvent({
     required String appName,
     required String userId,
@@ -1142,6 +1154,11 @@ class _AdkDevWebContext {
         rethrow;
       }
       return runtime.runner.agent;
+    } on ArgumentError {
+      if (resolvedAppName != defaultAppName) {
+        rethrow;
+      }
+      return runtime.runner.agent;
     }
   }
 }
@@ -1182,7 +1199,7 @@ Map<String, Object?> _traceFromEvent({
     'start_time': event.timestamp,
     'end_time': event.timestamp,
     'attributes': attributes,
-    'parent_span_id': null,
+    'parent_span_id': event.customMetadata?['parent_span_id'],
     'event_id': event.id,
   };
 }
@@ -1200,57 +1217,68 @@ String _spanNameFromEvent(Event event) {
   return 'event';
 }
 
+/// Optional override for testing request handling and error catches.
+@visibleForTesting
+Future<void> Function(HttpRequest request, dynamic context)?
+handleRequestTestingOverride;
+
 Future<void> _handleRequests(
   HttpServer server,
   _AdkDevWebContext context,
 ) async {
   try {
     await for (final HttpRequest request in server) {
-      try {
-        await _handleRequest(request, context);
-      } on FormatException catch (error) {
-        await _writeError(
-          request,
-          context,
-          statusCode: HttpStatus.badRequest,
-          message: error.message,
-        );
-      } on ArgumentError catch (error) {
-        await _writeError(
-          request,
-          context,
-          statusCode: HttpStatus.badRequest,
-          message: '${error.message}',
-        );
-      } on StateError catch (error) {
-        await _writeError(
-          request,
-          context,
-          statusCode: HttpStatus.notFound,
-          message: error.message,
-        );
-      } on SessionNotFoundError catch (error) {
-        await _writeError(
-          request,
-          context,
-          statusCode: HttpStatus.notFound,
-          message: error.message,
-        );
-      } on SpecialAgentAccessDeniedException catch (error) {
-        await _writeError(
-          request,
-          context,
-          statusCode: HttpStatus.forbidden,
-          message: error.message,
-        );
-      } catch (_) {
-        await _writeError(
-          request,
-          context,
-          statusCode: HttpStatus.internalServerError,
-          message: 'Internal server error.',
-        );
-      }
+      unawaited(() async {
+        try {
+          if (handleRequestTestingOverride != null) {
+            await handleRequestTestingOverride!(request, context);
+            return;
+          }
+          await _handleRequest(request, context);
+        } on FormatException catch (error) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.badRequest,
+            message: error.message,
+          );
+        } on ArgumentError catch (error) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.badRequest,
+            message: '${error.message}',
+          );
+        } on StateError catch (error) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.notFound,
+            message: error.message,
+          );
+        } on SessionNotFoundError catch (error) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.notFound,
+            message: error.message,
+          );
+        } on SpecialAgentAccessDeniedException catch (error) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.forbidden,
+            message: error.message,
+          );
+        } catch (_) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.internalServerError,
+            message: 'Internal server error.',
+          );
+        }
+      }());
     }
   } finally {
     await context.close();
@@ -1559,8 +1587,17 @@ Future<bool> _handlePythonStyleRoutes(
       request.method == 'POST') {
     final String triggerSource = segments[3].toLowerCase();
     final TriggerRouter? triggerRouter = context.triggerRouter;
-    if (triggerRouter == null || !triggerRouter.isSourceEnabled(triggerSource)) {
+    if (triggerRouter == null) {
       return false;
+    }
+    if (!triggerRouter.isSourceEnabled(triggerSource)) {
+      await _writeError(
+        request,
+        context,
+        statusCode: HttpStatus.notFound,
+        message: 'Unknown trigger source: $triggerSource',
+      );
+      return true;
     }
     await _handleTriggerRoute(
       request,
@@ -2300,6 +2337,9 @@ Future<void> _handleScreencast(
   });
 
   try {
+    if (simulateScreencastInitErrorForTesting) {
+      throw StateError('Simulated screencast initialization error');
+    }
     await toolset.computer.initialize();
     while (!closed && socket.readyState == WebSocket.open) {
       try {
@@ -2316,6 +2356,8 @@ Future<void> _handleScreencast(
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
+  } catch (_) {
+    // Ignore screencast streaming/initialization errors.
   } finally {
     if (socket.readyState == WebSocket.open) {
       await socket.close();
@@ -2368,6 +2410,25 @@ Future<void> _handleGetSessionTrace(
   return _handleGetTraceBySessionId(request, context, sessionId: sessionId);
 }
 
+Set<(String, String)> _extractLiveHighlights(Event event) {
+  final Set<(String, String)> highlights = <(String, String)>{};
+  final List<FunctionCall> functionCalls = event.getFunctionCalls();
+  final List<FunctionResponse> functionResponses = event.getFunctionResponses();
+
+  if (functionCalls.isNotEmpty) {
+    for (final FunctionCall call in functionCalls) {
+      highlights.add((event.author, 'tool:${call.name}'));
+    }
+  } else if (functionResponses.isNotEmpty) {
+    for (final FunctionResponse response in functionResponses) {
+      highlights.add(('tool:${response.name}', event.author));
+    }
+  } else {
+    highlights.add((event.author, ''));
+  }
+  return highlights;
+}
+
 Future<void> _handleGetEventGraph(
   HttpRequest request,
   _AdkDevWebContext context, {
@@ -2387,21 +2448,7 @@ Future<void> _handleGetEventGraph(
     return;
   }
 
-  final Set<(String, String)> highlights = <(String, String)>{};
-  final List<FunctionCall> functionCalls = event.getFunctionCalls();
-  final List<FunctionResponse> functionResponses = event.getFunctionResponses();
-
-  if (functionCalls.isNotEmpty) {
-    for (final FunctionCall call in functionCalls) {
-      highlights.add((event.author, 'tool:${call.name}'));
-    }
-  } else if (functionResponses.isNotEmpty) {
-    for (final FunctionResponse response in functionResponses) {
-      highlights.add(('tool:${response.name}', event.author));
-    }
-  } else {
-    highlights.add((event.author, ''));
-  }
+  final Set<(String, String)> highlights = _extractLiveHighlights(event);
 
   final Runner runner = await context.getRunner(appName);
   final Map<String, NodeStatus> nodeStatuses = _nodeStatusesFromAgentState(
@@ -3985,11 +4032,17 @@ Future<void> _handleRunSse(
           ),
         );
         try {
+          if (simulateSseFlushErrorForTesting) {
+            throw const SocketException('Simulated SSE client disconnect');
+          }
           response.write('data: $data\n\n');
           await response.flush();
         } catch (_) {
           clientDisconnected = true;
           abortController.abort('SSE client disconnected');
+          try {
+            await response.close();
+          } catch (_) {}
           return;
         }
       }
@@ -4296,19 +4349,7 @@ Future<void> _writeFile(
   final HttpResponse response = request.response;
   _setCorsHeaders(request, response, context);
 
-  final String extension = file.path.split('.').last.toLowerCase();
-  final ContentType contentType = switch (extension) {
-    'html' => ContentType.html,
-    'js' => ContentType('application', 'javascript', charset: 'utf-8'),
-    'css' => ContentType('text', 'css', charset: 'utf-8'),
-    'svg' => ContentType('image', 'svg+xml'),
-    'json' => ContentType.json,
-    'png' => ContentType('image', 'png'),
-    'jpg' || 'jpeg' => ContentType('image', 'jpeg'),
-    'webp' => ContentType('image', 'webp'),
-    'woff2' => ContentType('font', 'woff2'),
-    _ => ContentType.binary,
-  };
+  final ContentType contentType = _contentTypeForFile(file.path);
 
   response.statusCode = HttpStatus.ok;
   response.headers.contentType = contentType;
@@ -5430,9 +5471,7 @@ void _configureCloudTelemetry({
       googleAuth: GoogleAuthResult(credentials: Object(), projectId: projectId),
       environment: environment,
     );
-    if (gcpHooks.spanProcessors.isNotEmpty ||
-        gcpHooks.metricReaders.isNotEmpty ||
-        gcpHooks.logRecordProcessors.isNotEmpty) {
+    if (gcpHooks.spanProcessors.isNotEmpty) {
       hooks.add(gcpHooks);
       resource = getGcpResource(projectId: projectId, environment: environment);
     }
@@ -5510,9 +5549,7 @@ Future<Map<String, Object?>?> _loadA2aAgentCardFromDisk(
       return decoded.map(
         (Object? key, Object? value) => MapEntry('$key', value),
       );
-    } on FormatException {
-      continue;
-    } on FileSystemException {
+    } catch (_) {
       continue;
     }
   }
@@ -6097,11 +6134,13 @@ Future<void> _writeA2aSseTaskReplay(
   response.headers.set('Cache-Control', 'no-cache');
   response.headers.set('Connection', 'keep-alive');
 
-  final List<Object?> streamItems = <Object?>[task, ...updates];
-  for (final Object? item in streamItems) {
-    final Object payload = jsonRpcEnvelope
-        ? _a2aJsonRpcSuccess(id: id, result: item)
-        : (item ?? <String, Object?>{});
+  final List<Map<String, Object?>> streamItems = <Map<String, Object?>>[
+    task,
+    ...updates,
+  ];
+  for (final Map<String, Object?> item in streamItems) {
+    final Object payload =
+        jsonRpcEnvelope ? _a2aJsonRpcSuccess(id: id, result: item) : item;
     response.write('data: ${jsonEncode(payload)}\n\n');
     await response.flush();
   }
@@ -6808,7 +6847,17 @@ Map<String, Object?> _a2aPartToJson(A2aPart part) {
 }
 
 String _normalizeA2aRpcMethod(String raw) {
-  return raw.trim().toLowerCase().replaceAll(':', '/').replaceAll('.', '/');
+  final String normalized =
+      raw.trim().toLowerCase().replaceAll(':', '/').replaceAll('.', '/');
+  if (normalized == 'tasks/push_notification_config/get' ||
+      normalized == 'tasks/push_notification_configs/get') {
+    return 'tasks/pushnotificationconfig/get';
+  }
+  if (normalized == 'tasks/push_notification_config/set' ||
+      normalized == 'tasks/push_notification_configs/set') {
+    return 'tasks/pushnotificationconfig/set';
+  }
+  return normalized;
 }
 
 Map<String, Object?> _a2aJsonRpcSuccess({required Object? id, Object? result}) {
@@ -6840,6 +6889,321 @@ Map<String, Object?> _toObjectMap(Object? value) {
   }
   return <String, Object?>{};
 }
+
+ContentType _contentTypeForFile(String path) {
+  final String extension = path.split('.').last.toLowerCase();
+  return switch (extension) {
+    'html' => ContentType.html,
+    'js' => ContentType('application', 'javascript', charset: 'utf-8'),
+    'css' => ContentType('text', 'css', charset: 'utf-8'),
+    'svg' => ContentType('image', 'svg+xml'),
+    'json' => ContentType.json,
+    'png' => ContentType('image', 'png'),
+    'jpg' || 'jpeg' => ContentType('image', 'jpeg'),
+    'webp' => ContentType('image', 'webp'),
+    'woff2' => ContentType('font', 'woff2'),
+    _ => ContentType.binary,
+  };
+}
+
+/// Internal testing helper to parse a node status.
+NodeStatus? parseNodeStatusForTesting(Object? value) => _parseNodeStatus(value);
+
+/// Internal testing helper to parse a query boolean parameter.
+bool? parseQueryBoolForTesting(Map<String, dynamic> payload, List<String> keys) =>
+    _readOptionalBool(payload, keys);
+
+/// Internal testing helper to check if a string is truthy.
+bool isTruthyForTesting(String? raw) => _isTruthy(raw);
+
+/// Internal testing helper to strip optional enclosing quotes.
+String stripOptionalQuotesForTesting(String value) =>
+    _stripOptionalQuotes(value);
+
+/// Internal testing helper to normalize a URL prefix string.
+String? normalizeUrlPrefixForTesting(String? prefix) =>
+    _normalizeUrlPrefix(prefix);
+
+/// Internal testing helper to determine the content type of a file.
+ContentType contentTypeForFileTesting(String filename) =>
+    _contentTypeForFile(filename);
+
+/// Internal testing helper to resolve an evaluation metric from its name.
+EvalMetric? evalMetricFromNameTesting(String raw) =>
+    _evalMetricFromName(raw);
+
+/// Internal testing helper to parse run eval metrics from a payload.
+List<EvalMetric> parseRunEvalMetricsTesting(Map<String, dynamic> payload) =>
+    _parseRunEvalMetrics(payload);
+
+/// Internal testing helper to parse a content part from a JSON map.
+Part parseContentPartTesting(Map<String, dynamic> json) =>
+    _partFromJson(json);
+
+/// Internal testing helper to convert a content part to JSON.
+Map<String, Object?> contentPartToJsonTesting(Part part) =>
+    _partToJson(part);
+
+/// Internal testing helper to convert an A2A part to JSON.
+Map<String, Object?> a2aPartToJsonTesting(A2aPart part) =>
+    _a2aPartToJson(part);
+
+/// Internal testing helper to parse an A2A part from JSON.
+A2aPart a2aPartFromJsonTesting(Map<String, dynamic> json) =>
+    _a2aPartFromJson(json);
+
+/// Internal testing helper to check if an origin matches an allowlist.
+bool originAllowedTesting(String origin, List<String> allowOrigins) =>
+    _originAllowed(origin, allowOrigins);
+
+/// Internal testing helper to resolve evaluation managers from storage URI.
+Object? resolveEvalManagersTesting({
+  required String baseDir,
+  required String? evalStorageUri,
+}) => _createEvalManagersFromOptions(baseDir: baseDir, evalStorageUri: evalStorageUri);
+
+/// Internal testing helper to check if a host string represents a loopback address.
+bool isLoopbackAddressTesting(String host) => _isLoopbackAddress(host);
+
+/// Internal testing helper to parse a live request from JSON payload.
+LiveRequest liveRequestFromJsonTesting(Map<String, dynamic> payload) =>
+    _liveRequestFromJson(payload);
+
+/// Internal testing helper to parse content from JSON payload.
+Content contentFromJsonTesting(Map<String, dynamic> json) =>
+    _contentFromJson(json);
+
+/// Internal testing helper to generate an A2A fallback message for a task.
+Map<String, Object?> a2aFallbackMessageTesting(Map<String, Object?> task) =>
+    _a2aFallbackMessage(task);
+
+/// Internal testing helper to parse A2aTaskState from wire string.
+A2aTaskState a2aTaskStateFromWireTesting(String raw) =>
+    _a2aTaskStateFromWire(raw);
+
+/// Internal testing helper to convert A2aTaskState to wire string.
+String a2aTaskStateToWireTesting(A2aTaskState state) =>
+    _a2aTaskStateToWire(state);
+
+/// Internal testing helper to construct an A2A JSON-RPC error map.
+Map<String, Object?> a2aJsonRpcErrorTesting({
+  required Object? id,
+  required int code,
+  required String message,
+  Object? data,
+}) => _a2aJsonRpcError(id: id, code: code, message: message, data: data);
+
+/// Internal testing helper to convert a map or dynamic object to object map.
+Map<String, Object?> toObjectMapTesting(Object? value) => _toObjectMap(value);
+
+/// Internal testing helper to parse node statuses from agent state map.
+Map<String, NodeStatus> nodeStatusesFromAgentStateTesting(
+  Map<String, Object?>? state,
+) => _nodeStatusesFromAgentState(state);
+
+/// Internal testing helper to split node path string.
+List<String> splitNodePathTesting(String? path) => _splitNodePath(path);
+
+/// Internal testing helper to join node path segments.
+String joinNodePathTesting(String base, String child) =>
+    _joinNodePath(base, child);
+
+/// Internal testing helper to extract function declarations from tool union.
+Future<List<FunctionDeclaration>> declarationsFromToolUnionTesting(
+  Object toolUnion,
+) => _extractFunctionDeclarations(toolUnion);
+
+/// Internal testing helper to read string with fallback and required flag.
+String readStringTesting(
+  Map<String, dynamic> payload,
+  List<String> keys, {
+  String? fallback,
+  bool required = false,
+}) => _readString(payload, keys, fallback: fallback, required: required);
+
+/// Internal testing helper to resolve A2A push URL from push config.
+String? resolveA2aPushUrlTesting(Map<String, Object?> pushConfig) =>
+    _resolveA2aPushUrl(pushConfig);
+
+/// Internal testing helper to resolve A2A push headers from push config.
+Map<String, String> resolveA2aPushHeadersTesting(
+  Map<String, Object?> pushConfig,
+) => _resolveA2aPushHeaders(pushConfig);
+
+/// Internal testing helper to resolve A2A push authorization from push config.
+String? resolveA2aPushAuthorizationTesting(
+  Map<String, Object?> pushConfig,
+) => _resolveA2aPushAuthorization(pushConfig);
+
+/// Internal testing helper to parse integer with bounds.
+int parseA2aIntTesting(
+  Object? value, {
+  required int fallback,
+  required int min,
+  int? max,
+}) => _readPositiveInt(value, fallback: fallback, min: min, max: max);
+
+/// Internal testing helper to extract A2A scoped app name from path.
+String? extractA2aScopedAppNameTesting(String routedPath) =>
+    _extractA2aScopedAppName(routedPath);
+
+/// Internal testing helper to normalize A2A RPC method name.
+String normalizeA2aRpcMethodTesting(String raw) =>
+    _normalizeA2aRpcMethod(raw);
+
+/// Internal testing helper to normalize origin scheme string.
+String normalizeOriginSchemeTesting(String raw) =>
+    _normalizeOriginScheme(raw);
+
+/// Internal testing helper for optional boolean query param parsing.
+bool? readOptionalBoolQueryForTesting(HttpRequest request, String key) =>
+    _readOptionalBoolQuery(request, key);
+
+/// Internal testing helper for required query param parsing.
+String readRequiredQueryForTesting(HttpRequest request, String key) =>
+    _readRequiredQuery(request, key);
+
+/// Internal testing helper for path identifier validation.
+String validatePathIdentifierForTesting(String value, String fieldName) =>
+    _validatePathIdentifier(value, fieldName);
+
+/// Internal testing helper for dynamic map conversion.
+Map<String, dynamic> toDynamicMapForTesting(Object? value) =>
+    _toDynamicMap(value);
+
+/// Internal testing helper to resolve eval storage directory.
+String resolveEvalLocalBaseDirForTesting({
+  required String baseDir,
+  required String evalStorageUri,
+}) => _resolveEvalLocalBaseDir(baseDir: baseDir, evalStorageUri: evalStorageUri);
+
+/// Internal testing helper to format an A2A message part to text payload.
+Map<String, Object?> a2aPartToJsonForTesting(A2aPart part) =>
+    _a2aPartToJson(part);
+
+/// Internal testing helper to format an A2A event to JSON.
+Map<String, Object?> a2aEventToJsonForTesting(A2aEvent event) =>
+    _a2aEventToJson(event);
+
+/// Internal testing helper for tool function name inference.
+String inferFunctionToolNameForTesting(Function function) =>
+    _inferFunctionToolName(function);
+
+/// Internal testing helper to find ComputerUseToolset.
+ComputerUseToolset? findComputerUseToolsetForTesting(BaseAgent agent) =>
+    _findComputerUseToolset(agent);
+
+/// Internal testing helper to collect workflow graph targets.
+Map<String, BaseAgent> collectWorkflowGraphTargetsForTesting(
+  BaseAgent agent, {
+  required String currentPath,
+}) => _collectWorkflowGraphTargets(agent, currentPath: currentPath);
+
+/// Internal testing helper to find graph target from path.
+BaseAgent? findGraphTargetFromForTesting(
+  BaseAgent agent,
+  List<String> path,
+) => _findGraphTargetFrom(agent, path);
+
+/// Internal testing helper to extract eval case IDs from payload.
+List<String> parseRunEvalCaseIdsForTesting(Map<String, dynamic> payload) =>
+    _parseRunEvalCaseIds(payload);
+
+/// Internal testing helper to extract eval metrics from payload.
+List<EvalMetric> parseRunEvalMetricsForTesting(Map<String, dynamic> payload) =>
+    _parseRunEvalMetrics(payload);
+
+/// Internal testing helper to check if environment has key.
+bool hasValueForTesting(Map<String, String> environment, String key) =>
+    _hasValue(environment, key);
+
+/// Internal testing helper to test mirror plugin instantiation.
+Future<BasePlugin?> instantiatePluginUsingMirrorsForTesting(
+  String spec, {
+  required String baseDir,
+}) => _instantiatePluginUsingMirrors(spec, baseDir: baseDir);
+
+/// Internal testing helper for building live highlights.
+Set<(String, String)> buildLiveHighlightsForTesting(Event event) =>
+    _extractLiveHighlights(event);
+
+/// Internal testing helper for parsing run request.
+dynamic parseRunRequestForTesting(
+  Map<String, dynamic> payload,
+  dynamic context,
+) => _parseRunRequest(payload, context as _AdkDevWebContext);
+
+/// Internal testing helper for converting value to double.
+double asDoubleForTesting(dynamic context, Object? value) =>
+    (context as _AdkDevWebContext)._asDouble(value);
+
+/// Internal testing helper for getting request origin.
+String? getRequestOriginForTesting(HttpRequest request) =>
+    _getRequestOrigin(request);
+
+/// Internal testing helper for finding graph target.
+BaseAgent? findGraphTargetForTesting(BaseAgent rootAgent, List<String> nodePath) =>
+    _findGraphTarget(rootAgent, nodePath);
+
+/// Internal testing helper to create an [_AdkDevWebContext].
+Future<dynamic> createAdkDevWebContextForTesting({
+  required DevAgentRuntime runtime,
+  required DevProjectConfig project,
+  String agentsDir = '.',
+  bool enableWebUi = true,
+  String? logoText,
+  String? logoImageUrl,
+  bool a2a = true,
+  List<String> triggerSources = const <String>[],
+  List<String> extraPlugins = const <String>[],
+  bool reload = false,
+  bool reloadAgents = false,
+  TriggerRouter? triggerRouter,
+}) async {
+  return await _AdkDevWebContext.create(
+    runtime: runtime,
+    project: project,
+    agentsDir: agentsDir,
+    sessionServiceUri: null,
+    artifactServiceUri: null,
+    memoryServiceUri: null,
+    evalStorageUri: null,
+    useLocalStorage: true,
+    allowOrigins: const <String>[],
+    urlPrefix: '',
+    autoCreateSession: true,
+    enableWebUi: enableWebUi,
+    logoText: logoText,
+    logoImageUrl: logoImageUrl,
+    reload: reload,
+    reloadAgents: reloadAgents,
+    traceToCloud: false,
+    otelToCloud: false,
+    a2a: a2a,
+    extraPlugins: extraPlugins,
+    triggerSources: triggerSources,
+    customTriggerRouter: triggerRouter,
+  );
+}
+
+/// Internal testing helper for trigger route handling.
+@visibleForTesting
+Future<void> handleTriggerRouteForTesting(
+  HttpRequest request,
+  dynamic context, {
+  required String appName,
+  required String triggerSource,
+}) {
+  final _AdkDevWebContext devContext = context as _AdkDevWebContext;
+  return _handleTriggerRoute(
+    request,
+    devContext,
+    triggerRouter: devContext.triggerRouter!,
+    appName: appName,
+    triggerSource: triggerSource,
+  );
+}
+
 
 /// Parsed request payload for the `/run` endpoint.
 class _RunRequest {
@@ -6879,3 +7243,84 @@ class _RunRequest {
   /// Optional invocation id override.
   final String? invocationId;
 }
+
+/// Internal testing helper for resolving graph target root.
+@visibleForTesting
+BaseAgent resolveGraphTargetRootTesting(dynamic context, String? appName) =>
+    (context as _AdkDevWebContext).getRootAgent(appName ?? '');
+
+/// Internal testing helper for reading agent details.
+@visibleForTesting
+List<Map<String, Object?>> agentDetailsTesting(dynamic context) =>
+    (context as _AdkDevWebContext).listAppDetails();
+
+/// Internal testing helper for enqueueing A2A push delivery directly.
+@visibleForTesting
+Future<void> enqueueA2aPushDeliveryTesting(
+  dynamic context, {
+  required String appName,
+  required String taskId,
+  required Map<String, Object?> pushConfig,
+  required Map<String, Object?> task,
+  required List<Map<String, Object?>> updates,
+}) => (context as _AdkDevWebContext).enqueueA2aPushNotifications(
+  appName: appName,
+  taskId: taskId,
+  pushConfig: pushConfig,
+  task: task,
+  updates: updates,
+);
+
+/// Internal testing override for [AgentLoader] creation in web server.
+@visibleForTesting
+AgentLoader Function(String path)? webServerAgentLoaderTestingOverride;
+
+/// Internal testing override for [BaseSessionService] creation in web server.
+@visibleForTesting
+BaseSessionService? webServerSessionServiceTestingOverride;
+
+/// Internal testing override for [BaseArtifactService] creation in web server.
+@visibleForTesting
+BaseArtifactService? webServerArtifactServiceTestingOverride;
+
+/// Internal testing helper for dispatching HTTP requests to the web server router.
+@visibleForTesting
+Future<void> handleDevWebServerRequestForTesting(
+  HttpRequest request,
+  dynamic context,
+) => _handleRequest(request, context as _AdkDevWebContext);
+
+/// Internal testing hook to simulate screencast initialization error.
+@visibleForTesting
+bool simulateScreencastInitErrorForTesting = false;
+
+/// Internal testing hook for simulating SSE flush error.
+@visibleForTesting
+bool simulateSseFlushErrorForTesting = false;
+
+/// Internal testing helper for reading in-memory traces by event id from context.
+@visibleForTesting
+Map<String, Map<String, Object?>> inMemoryTracesByEventIdForTesting(
+  dynamic context,
+) => (context as _AdkDevWebContext).inMemoryTracesByEventIdForTesting;
+
+/// Internal testing helper for streaming A2A task updates.
+@visibleForTesting
+Future<void> writeA2aSseTaskReplayForTesting(
+  HttpRequest request,
+  dynamic context, {
+  required Object? id,
+  required bool jsonRpcEnvelope,
+  required Map<String, Object?> task,
+  required List<Map<String, Object?>> updates,
+}) => _writeA2aSseTaskReplay(
+  request,
+  context as _AdkDevWebContext,
+  id: id,
+  jsonRpcEnvelope: jsonRpcEnvelope,
+  task: task,
+  updates: updates,
+);
+
+
+

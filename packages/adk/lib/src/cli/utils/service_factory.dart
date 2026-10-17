@@ -176,15 +176,11 @@ BaseSessionService createSessionServiceFromOptions({
     return InMemorySessionService();
   }
 
-  try {
-    return createLocalSessionService(
-      baseDir: basePath.path,
-      perAgent: true,
-      appNameToDir: appNameToDir,
-    );
-  } on FileSystemException {
-    return InMemorySessionService();
-  }
+  return createLocalSessionService(
+    baseDir: basePath.path,
+    perAgent: true,
+    appNameToDir: appNameToDir,
+  );
 }
 
 /// Creates a memory service from CLI options and environment context.

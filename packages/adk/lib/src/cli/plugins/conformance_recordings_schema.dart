@@ -148,7 +148,7 @@ class ConformanceRecordings {
             (item) =>
                 ConformanceRecording.fromJson(asConformanceObjectMap(item)),
           )
-          .toList(growable: false),
+          .toList(),
     );
   }
 }

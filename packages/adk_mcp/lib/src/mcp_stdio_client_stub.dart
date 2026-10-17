@@ -381,6 +381,7 @@ class McpStdioClient {
   /// Throws [UnsupportedError] on this platform.
   Future<void> sendInitializedNotification({
     required StdioConnectionParams connectionParams,
+    Map<String, Object?>? meta,
   }) {
     throw UnsupportedError(_unsupportedMessage);
   }

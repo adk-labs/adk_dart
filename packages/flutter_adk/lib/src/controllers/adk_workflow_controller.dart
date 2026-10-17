@@ -20,8 +20,12 @@ class AdkWorkflowController extends ChangeNotifier {
     List<AdkWorkflowStep>? initialSteps,
     this.userId = 'workflow_user',
     String? sessionId,
+    this.runnerFactory,
   })  : _steps = initialSteps != null ? List<AdkWorkflowStep>.from(initialSteps) : <AdkWorkflowStep>[],
         sessionId = sessionId ?? 'workflow_session_${DateTime.now().millisecondsSinceEpoch}';
+
+  /// Optional factory for creating [adk.Runner] instances.
+  final adk.Runner Function(adk.BaseAgent agent)? runnerFactory;
 
   /// The root workflow agent (e.g. [adk.SequentialAgent], [adk.ParallelAgent], [adk.LoopAgent]).
   final adk.BaseAgent workflowAgent;
@@ -78,10 +82,12 @@ class AdkWorkflowController extends ChangeNotifier {
     _currentError = null;
     notifyListeners();
 
-    final adk.Runner runner = adk.InMemoryRunner(agent: workflowAgent);
-    final String prompt = inputPrompt ?? 'Start workflow execution';
-
     try {
+      final adk.Runner runner = runnerFactory != null
+          ? runnerFactory!(workflowAgent)
+          : adk.InMemoryRunner(agent: workflowAgent);
+      final String prompt = inputPrompt ?? 'Start workflow execution';
+
       final Stream<adk.Event> eventStream = runner.runAsync(
         userId: userId,
         sessionId: sessionId,
@@ -99,7 +105,6 @@ class AdkWorkflowController extends ChangeNotifier {
         },
         onDone: () {
           _isRunning = false;
-          _isPaused = false;
           notifyListeners();
         },
       );

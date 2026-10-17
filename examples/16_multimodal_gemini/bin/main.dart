@@ -1,8 +1,12 @@
+/// Demonstrates sending multimodal image and text content to Gemini models.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/adk_dart.dart';
 
+/// Runs the multimodal agent with inline PNG image bytes.
 Future<void> main() async {
   final String? apiKey = Platform.environment['GEMINI_API_KEY'] ??
       Platform.environment['GOOGLE_API_KEY'];

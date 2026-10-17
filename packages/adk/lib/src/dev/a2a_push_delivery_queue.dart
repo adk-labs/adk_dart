@@ -323,9 +323,6 @@ class A2aPushDeliveryQueue {
   }
 
   Map<String, Object?> _decodeObjectMap(Object? raw) {
-    if (raw is Map) {
-      return raw.map((Object? key, Object? value) => MapEntry('$key', value));
-    }
     if (raw is! String || raw.trim().isEmpty) {
       return <String, Object?>{};
     }

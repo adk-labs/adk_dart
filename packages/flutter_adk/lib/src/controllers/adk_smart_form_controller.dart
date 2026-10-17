@@ -134,7 +134,14 @@ class AdkSmartFormController extends ChangeNotifier {
   /// Resets all field values.
   void reset() {
     for (final String k in _fields.keys) {
-      _fields[k] = _fields[k]!.copyWith(value: null);
+      final f = _fields[k]!;
+      _fields[k] = AdkFormField(
+        key: f.key,
+        label: f.label,
+        hint: f.hint,
+        isRequired: f.isRequired,
+        value: null,
+      );
     }
     _isSubmitting = false;
     _isCompleted = false;

@@ -69,6 +69,7 @@ class AdkInlineAssistantBar extends StatefulWidget {
     this.showPreview = true,
     this.padding = const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
     this.actionBuilder,
+    this.runnerFactory,
   });
 
   /// Agent to perform refinements.
@@ -95,6 +96,9 @@ class AdkInlineAssistantBar extends StatefulWidget {
   /// Custom builder for action chips/buttons.
   final Widget Function(BuildContext context, AdkInlineAction action, bool isRunning, VoidCallback onTrigger)?
       actionBuilder;
+
+  /// Optional runner factory to customize or mock the [adk.Runner] instance.
+  final adk.Runner Function(adk.BaseAgent agent)? runnerFactory;
 
   @override
   State<AdkInlineAssistantBar> createState() => _AdkInlineAssistantBarState();
@@ -123,7 +127,8 @@ class _AdkInlineAssistantBarState extends State<AdkInlineAssistantBar> {
       _generatedResult = '';
     });
 
-    final adk.Runner runner = adk.InMemoryRunner(agent: widget.agent);
+    final adk.Runner runner = widget.runnerFactory?.call(widget.agent) ??
+        adk.InMemoryRunner(agent: widget.agent, autoCreateSession: true);
     final String fullPrompt = '${action.promptPrefix}\n\n$text';
 
     try {
@@ -133,22 +138,40 @@ class _AdkInlineAssistantBarState extends State<AdkInlineAssistantBar> {
         newMessage: adk.Content.userText(fullPrompt),
       );
 
+      final Completer<void> completer = Completer<void>();
       final StringBuffer buffer = StringBuffer();
-      await for (final adk.Event event in stream) {
-        final content = event.content;
-        if (content != null) {
-          for (final part in content.parts) {
-            if (part.text != null) {
-              buffer.write(part.text);
-              if (mounted) {
-                setState(() {
-                  _generatedResult = buffer.toString();
-                });
+
+      _subscription?.cancel();
+      _subscription = stream.listen(
+        (adk.Event event) {
+          final content = event.content;
+          if (content != null) {
+            for (final part in content.parts) {
+              if (part.text != null) {
+                buffer.write(part.text);
+                if (mounted) {
+                  setState(() {
+                    _generatedResult = buffer.toString();
+                  });
+                }
               }
             }
           }
-        }
-      }
+        },
+        onError: (Object error) {
+          if (!completer.isCompleted) {
+            completer.completeError(error);
+          }
+        },
+        onDone: () {
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        },
+        cancelOnError: true,
+      );
+
+      await completer.future;
     } catch (e) {
       if (mounted) {
         setState(() {

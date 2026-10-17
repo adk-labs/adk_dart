@@ -1,6 +1,10 @@
+/// Demonstrates a tool-augmented agent fetching weather data using [FunctionTool].
+library;
+
 import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 
+/// Returns mock weather forecast for the specified [location].
 String getWeather(String location) {
   if (location.toLowerCase().contains('seoul')) {
     return 'Sunny, 20°C';
@@ -8,6 +12,7 @@ String getWeather(String location) {
   return 'Cloudy, 15°C';
 }
 
+/// Executes the weather agent with tool invocation.
 Future<void> main() async {
   final apiKey = Platform.environment['GEMINI_API_KEY'];
   if (apiKey == null) {

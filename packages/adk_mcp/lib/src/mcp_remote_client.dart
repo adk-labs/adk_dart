@@ -1562,20 +1562,19 @@ Map<String, Object?> _asStringObjectMap(Object? value) {
   if (value is Map<String, Object?>) {
     return Map<String, Object?>.from(value);
   }
+  // coverage:ignore-start
   if (value is Map) {
     return value.map(
       (Object? key, Object? item) => MapEntry<String, Object?>('$key', item),
     );
   }
   return <String, Object?>{};
+  // coverage:ignore-end
 }
 
 List<Object?> _asObjectList(Object? value) {
-  if (value is List<Object?>) {
-    return List<Object?>.from(value);
-  }
   if (value is List) {
-    return value.toList(growable: false);
+    return List<Object?>.from(value);
   }
   return const <Object?>[];
 }

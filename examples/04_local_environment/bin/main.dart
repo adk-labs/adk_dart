@@ -1,6 +1,10 @@
+/// Demonstrates using [EnvironmentToolset] and [ExecuteBashTool] in local environments.
+library;
+
 import 'dart:io';
 import 'package:adk_dart/adk_dart.dart';
 
+/// Root agent configured with a [LocalEnvironment] toolset.
 final Agent rootAgent = Agent(
   model: 'gemini-3.7-flash',
   name: 'local_environment_agent',
@@ -17,6 +21,7 @@ user's instructions.
   ],
 );
 
+/// Executes local bash commands using policy restrictions.
 void main() async {
   print('Configured ${rootAgent.name} for ${Directory.current.path}');
 
