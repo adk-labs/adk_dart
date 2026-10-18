@@ -1,32 +1,28 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-10-17
+- Date (UTC): 2026-10-18
 - Source: `google/adk-go`
-- Latest SHA: `74faa9ab6bf58b47653ed275f4aa86a93e76280a`
-- Previous SHA: `c7ed87daa909e7563d3167e57daedee55f557d91`
+- Latest SHA: `90efa8d01506e26f142d2855d3559fa9bb76722e`
+- Previous SHA: `74faa9ab6bf58b47653ed275f4aa86a93e76280a`
 
 ## Summary
 
-- New commits: 2
+- New commits: 3
 
 ## Commits
 
-- [74faa9a](https://github.com/google/adk-go/commit/74faa9ab6bf58b47653ed275f4aa86a93e76280a) feat(model/openaimodel): support image/file input via genai InlineData/FileData parts (#1543) (Anton Dziatkovskii, 2026-10-16)
-- [ec0c362](https://github.com/google/adk-go/commit/ec0c362bf00aaf649f0839517762f33ab65ee4d4) fix(mcptoolset): stop using context.Background() in connectionRefresher.Close (#1844) (wolo, 2026-10-17)
+- [90efa8d](https://github.com/google/adk-go/commit/90efa8d01506e26f142d2855d3559fa9bb76722e) fix(agent): record artifact-only deltas from before/after agent callbacks (#1878) (Anzal Husain Abidi, 2026-10-18)
+- [225454b](https://github.com/google/adk-go/commit/225454bcd3fd7d81ee9c02af7fecadca751936bd) fix(llminternal): record model callback artifact saves on the event (#1800) (Gangavarapu Vivek, 2026-10-18)
+- [fd32d28](https://github.com/google/adk-go/commit/fd32d286d3971101f8aa14017a3eec291cd8e87c) feat(agentanalytics): add concurrency-safe trace manager, latency_ms, and streaming TTFT (#1787) (Haiyuan Cao, 2026-10-18)
 
 ## Changed Files
 
-- `M	model/openaimodel/errors.go`
-- `A	model/openaimodel/internal/completions/media_test.go`
-- `M	model/openaimodel/internal/completions/request.go`
-- `M	model/openaimodel/internal/completions/request_test.go`
-- `M	model/openaimodel/internal/responses/request.go`
-- `M	model/openaimodel/internal/responses/request_test.go`
-- `M	model/openaimodel/internal/shared/contents.go`
-- `M	model/openaimodel/internal/shared/contents_test.go`
-- `M	model/openaimodel/internal/shared/errors.go`
-- `A	model/openaimodel/internal/shared/media.go`
-- `A	model/openaimodel/internal/shared/media_test.go`
-- `M	model/openaimodel/openaimodel_test.go`
-- `M	tool/mcptoolset/client.go`
-- `M	tool/mcptoolset/client_cancellation_test.go`
+- `M	agent/agent.go`
+- `M	agent/agent_test.go`
+- `A	agent/llmagent/model_callback_artifact_test.go`
+- `M	internal/llminternal/base_flow.go`
+- `M	plugin/agentanalytics/bigquery_agent_analytics_plugin.go`
+- `M	plugin/agentanalytics/bigquery_agent_analytics_plugin_test.go`
+- `M	plugin/agentanalytics/schema.go`
+- `A	plugin/agentanalytics/trace_manager.go`
+- `A	plugin/agentanalytics/trace_manager_test.go`

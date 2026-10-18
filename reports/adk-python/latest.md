@@ -1,155 +1,20 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-17
+- Date (UTC): 2026-10-18
 - Source: `google/adk-python`
-- Latest SHA: `4dbb55d0a7e02f6d654244e42506bc220ba285ba`
-- Previous SHA: `2a28c3edebeecebcd8e738933f24b29c4f51b3a9`
+- Latest SHA: `e2dbc0f55027372f3a701d41004ee006ee8f9f14`
+- Previous SHA: `4dbb55d0a7e02f6d654244e42506bc220ba285ba`
 
 ## Summary
 
-- New commits: 28
+- New commits: 1
 
 ## Commits
 
-- [4dbb55d0](https://github.com/google/adk-python/commit/4dbb55d0a7e02f6d654244e42506bc220ba285ba) docs(memory): document SqliteMemoryService and delete_memory support in unit guide (Shangjie Chen, 2026-10-17)
-- [a6ed8590](https://github.com/google/adk-python/commit/a6ed85905d4c1d1f285ba9d4f76a9d801b66d17f) fix: make JoinNode in a loop wait for each iteration's predecessors (Akshay Shah, 2026-10-17)
-- [6a77d48c](https://github.com/google/adk-python/commit/6a77d48cc6405cd50a33c87e1b533881ebf72380) feat(plugins): log terminations, node results and tool result errors in the logging plugins (Haiyuan Cao, 2026-10-16)
-- [a4b8ee94](https://github.com/google/adk-python/commit/a4b8ee94c8dcbcd867fe41567868413ae6b834c1) feat(plugins): classify error-bearing tool results and extract shared callback helpers (Haiyuan Cao, 2026-10-16)
-- [18a41a54](https://github.com/google/adk-python/commit/18a41a543f2db1dd8856b8f887d48d0c4c2ab56e) feat: support extra packages in cloud deployments (Sylvester Kaczmarek, 2026-10-16)
-- [c006e00b](https://github.com/google/adk-python/commit/c006e00b96b96777090c423f428a6bbffebac275) docs(vmaas): add a unit guide for AgentEngineEnvironment (Google Team Member, 2026-10-16)
-- [a468d5a5](https://github.com/google/adk-python/commit/a468d5a5be5f27789eab0eae147949f5c7f4eaed) fix: classify artifact MIME types without case sensitivity (Jeeho Lee, 2026-10-16)
-- [ff6c851d](https://github.com/google/adk-python/commit/ff6c851dde00cbf3469400810c3148164ff82a18) docs(workflow): align retry_config, graph validation, and error types with HEAD (Shangjie Chen, 2026-10-16)
-- [0e968189](https://github.com/google/adk-python/commit/0e968189596f93a0220f8f7bc63ebe3a569765a8) fix: cap the google-genai instrumentor below 1.0 in the test extra (George Weale, 2026-10-16)
-- [67b816b4](https://github.com/google/adk-python/commit/67b816b477251d0fcfbf72d4e1e0bace338e1d58) fix: key Eventarc client cache by full credential identity and scopes (Ievgen Bondarenko, 2026-10-16)
-- [4fdca195](https://github.com/google/adk-python/commit/4fdca19593f67169d473f800c1339b57cfb9b5de) refactor(workflow): add BaseNode._iter_static_children and walk it in Runner.close (Shangjie Chen, 2026-10-16)
-- [ddf8c55e](https://github.com/google/adk-python/commit/ddf8c55eb6bc5e0c5fb90acbed3b66af939f7d7a) feat(integrations): add TypesafeClassifier for TypeSafe's Jev models (Kathy Wu, 2026-10-16)
-- [b75b3005](https://github.com/google/adk-python/commit/b75b30052ee4ae08c4cac104a5b56d9587957064) test: record the die roll in the hello_world roll_and_check replay (George Weale, 2026-10-16)
-- [33453d88](https://github.com/google/adk-python/commit/33453d8874d58071454218f23d02fc5788c7f4f2) fix: align shipped AgentConfig.json schema with runtime validation (Yuhan Gao, 2026-10-16)
-- [f02b89c3](https://github.com/google/adk-python/commit/f02b89c398ead95eda1748e771ef9c91c5675f11) feat(tools): measure model consultation escalations, tokens, and cost (Yuhan Gao, 2026-10-16)
-- [cb547270](https://github.com/google/adk-python/commit/cb547270100aafe134bb4a831f680a44d9deb1c2) fix(integrations): lazy-import google-cloud clients in gcs, secret_manager and parameter_manager (Alexander Percivall, 2026-10-16)
-- [270ef5ee](https://github.com/google/adk-python/commit/270ef5ee9f958174148982f0c4941f401e1910ed) fix: raise a clear error when an agentplatform older than 2.2 loads (George Weale, 2026-10-16)
-- [cb47e7bf](https://github.com/google/adk-python/commit/cb47e7bf00f3c84e3c03a98f436b450426ed441c) fix(flows): preserve completed sibling tool responses on NodeInterruptedError (Shangjie Chen, 2026-10-16)
-- [dd9ca6fc](https://github.com/google/adk-python/commit/dd9ca6fc100c146978ce2d199ff168458be4007b) fix(compaction): isolate event compaction by isolation_scope (Shangjie Chen, 2026-10-16)
-- [17d8a5ae](https://github.com/google/adk-python/commit/17d8a5aeaa2b6a97ad042cb97e400985ef74ba0b) feat(live): add ZIP_STORED visual frame pack and unpack helpers (Google Team Member, 2026-10-16)
-- [aa9af7bf](https://github.com/google/adk-python/commit/aa9af7bfba59c263a7adb3a245ea251fe14d2e40) fix: allow custom name/description when VertexAiSearchTool is swapped (Lalit Kumar, 2026-10-16)
-- [7fca46f1](https://github.com/google/adk-python/commit/7fca46f1155ff04a4d9b50516c6badc6d7cdfc89) fix: stop persisting an OAuth2 credential whose code was never redeemed (George Weale, 2026-10-16)
-- [6031bb1d](https://github.com/google/adk-python/commit/6031bb1d75a411f21c4cd8a54251823b03249f78) fix: warn when cousin agents share a name (Gyanu Mayank, 2026-10-16)
-- [f82aa222](https://github.com/google/adk-python/commit/f82aa222f1e90b9a32a32dc82cd6d347840a8574) fix: align MCP auth and header provider precedence (CorgiBoyG, 2026-10-16)
-- [8bbfc33a](https://github.com/google/adk-python/commit/8bbfc33a54f92be11283c25a7c4a2b709f9cc3e3) feat: support Atlas Automated Embedding in MongoDB search (Venkatesh Shanbhag, 2026-10-16)
-- [723beea2](https://github.com/google/adk-python/commit/723beea21234cd6d8784382a64b4bb1f2cce26b9) docs(samples): add classifier tool gate sample (Kathy Wu, 2026-10-16)
-- [bba90f2e](https://github.com/google/adk-python/commit/bba90f2e2ff77b0e10d484ee3f7a7e839443a1ec) docs(samples): add ClassifierNode workflow routing sample (Kathy Wu, 2026-10-16)
-- [b592dee0](https://github.com/google/adk-python/commit/b592dee0a7ca1e1f9fb84b40c808fda16776b57e) feat: honor ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS (Jinni Gu, 2026-10-16)
+- [e2dbc0f5](https://github.com/google/adk-python/commit/e2dbc0f55027372f3a701d41004ee006ee8f9f14) fix: retry a rejected dynamic child instead of replaying it (Arjun Prabhulal, 2026-10-18)
 
 ## Changed Files
 
-- `M	contributing/samples/core/hello_world/tests/roll_and_check.json`
-- `A	contributing/samples/hitl/classifier_tool_gate/README.md`
-- `A	contributing/samples/hitl/classifier_tool_gate/__init__.py`
-- `A	contributing/samples/hitl/classifier_tool_gate/agent.py`
-- `A	contributing/samples/hitl/classifier_tool_gate/tool_gate.py`
-- `A	contributing/samples/workflows/classifier_node/README.md`
-- `A	contributing/samples/workflows/classifier_node/agent.py`
-- `M	docs/guides/README.md`
-- `M	docs/guides/auth/tool_auth/index.md`
-- `M	docs/guides/integrations/mongodb/mongodb_toolset/index.md`
-- `A	docs/guides/integrations/vmaas/agent_engine_environment/index.md`
-- `M	docs/guides/memory/memory_service/index.md`
-- `A	docs/guides/tools/model_consult/observability_plugin/index.md`
-- `M	docs/guides/workflow/function_node/index.md`
-- `M	docs/guides/workflow/graph/index.md`
-- `M	docs/guides/workflow/join_node/index.md`
-- `M	docs/guides/workflow/retry_config/index.md`
-- `M	docs/guides/workflow/workflow/index.md`
-- `M	pyproject.toml`
-- `M	scripts/generate_agent_config_schema.py`
-- `M	src/google/adk/agents/base_agent.py`
-- `M	src/google/adk/agents/config_schemas/AgentConfig.json`
-- `M	src/google/adk/agents/llm_agent.py`
-- `M	src/google/adk/apps/compaction.py`
-- `M	src/google/adk/auth/credential_manager.py`
-- `M	src/google/adk/cli/cli_deploy.py`
-- `M	src/google/adk/code_executors/agent_engine_sandbox_code_executor.py`
-- `M	src/google/adk/examples/vertex_ai_example_store.py`
-- `M	src/google/adk/features/_feature_registry.py`
-- `M	src/google/adk/flows/llm_flows/context/_compaction.py`
-- `M	src/google/adk/flows/llm_flows/core/_function_call_postprocessor.py`
-- `M	src/google/adk/flows/llm_flows/core/_resume.py`
-- `M	src/google/adk/flows/llm_flows/tools/_batch_executor.py`
-- `M	src/google/adk/integrations/eventarc/_client.py`
-- `M	src/google/adk/integrations/gcs/client.py`
-- `A	src/google/adk/integrations/mongodb/README.md`
-- `M	src/google/adk/integrations/mongodb/_search_tool.py`
-- `M	src/google/adk/integrations/mongodb/_settings.py`
-- `M	src/google/adk/integrations/parameter_manager/parameter_client.py`
-- `M	src/google/adk/integrations/secret_manager/secret_client.py`
-- `A	src/google/adk/integrations/typesafe/__init__.py`
-- `A	src/google/adk/integrations/typesafe/_typesafe_classifier.py`
-- `M	src/google/adk/integrations/vmaas/sandbox_computer.py`
-- `A	src/google/adk/live/_visual_frames.py`
-- `M	src/google/adk/memory/vertex_ai_memory_bank_service.py`
-- `M	src/google/adk/plugins/__init__.py`
-- `A	src/google/adk/plugins/_callback_helpers.py`
-- `M	src/google/adk/plugins/bigquery_agent_analytics_plugin.py`
-- `M	src/google/adk/plugins/debug_logging_plugin.py`
-- `M	src/google/adk/plugins/logging_plugin.py`
-- `M	src/google/adk/runners.py`
-- `M	src/google/adk/tools/discovery_engine_search_tool.py`
-- `M	src/google/adk/tools/load_artifacts_tool.py`
-- `M	src/google/adk/tools/mcp_tool/mcp_tool.py`
-- `M	src/google/adk/tools/mcp_tool/mcp_toolset.py`
-- `M	src/google/adk/tools/model_consult/__init__.py`
-- `A	src/google/adk/tools/model_consult/_observability_plugin.py`
-- `M	src/google/adk/tools/vertex_ai_search_tool.py`
-- `M	src/google/adk/utils/_dependency.py`
-- `M	src/google/adk/utils/env_utils.py`
-- `M	src/google/adk/utils/feature_decorator.py`
-- `M	src/google/adk/workflow/_base_node.py`
-- `M	src/google/adk/workflow/_node.py`
-- `M	src/google/adk/workflow/_parallel_worker.py`
-- `M	src/google/adk/workflow/_workflow.py`
-- `A	tests/unittests/a2a/test_experimental.py`
-- `M	tests/unittests/agents/test_agent_config.py`
-- `M	tests/unittests/agents/test_base_agent.py`
-- `M	tests/unittests/agents/test_llm_agent_fields.py`
-- `M	tests/unittests/apps/test_compaction.py`
-- `M	tests/unittests/auth/test_credential_manager.py`
-- `M	tests/unittests/cli/utils/test_cli_deploy.py`
-- `M	tests/unittests/cli/utils/test_cli_deploy_to_cloud_run.py`
-- `M	tests/unittests/cli/utils/test_cli_tools_click.py`
-- `M	tests/unittests/code_executors/test_agent_engine_sandbox_code_executor.py`
-- `M	tests/unittests/examples/test_vertex_ai_example_store.py`
-- `M	tests/unittests/features/test_feature_decorator.py`
-- `M	tests/unittests/features/test_feature_registry.py`
-- `M	tests/unittests/flows/llm_flows/core/test_resume.py`
-- `M	tests/unittests/flows/llm_flows/tools/test_batch_executor.py`
-- `M	tests/unittests/integrations/eventarc/test_client.py`
-- `M	tests/unittests/integrations/eventarc/test_eventarc_toolset.py`
-- `M	tests/unittests/integrations/gcs/test_client.py`
-- `M	tests/unittests/integrations/mongodb/test_search_tool.py`
-- `M	tests/unittests/integrations/parameter_manager/test_parameter_client.py`
-- `M	tests/unittests/integrations/secret_manager/test_secret_client.py`
-- `A	tests/unittests/integrations/typesafe/__init__.py`
-- `A	tests/unittests/integrations/typesafe/test_typesafe_classifier.py`
-- `M	tests/unittests/integrations/vmaas/test_sandbox_computer.py`
-- `A	tests/unittests/live/test_visual_frames.py`
-- `M	tests/unittests/memory/test_vertex_ai_memory_bank_service.py`
-- `M	tests/unittests/plugins/test_bigquery_agent_analytics_plugin.py`
-- `M	tests/unittests/plugins/test_debug_logging_plugin.py`
-- `M	tests/unittests/plugins/test_logging_plugin.py`
-- `M	tests/unittests/test_import_loading.py`
-- `M	tests/unittests/test_runners.py`
-- `M	tests/unittests/tools/mcp_tool/test_mcp_tool.py`
-- `M	tests/unittests/tools/mcp_tool/test_mcp_toolset.py`
-- `M	tests/unittests/tools/model_consult/test_model_consult_tool.py`
-- `A	tests/unittests/tools/model_consult/test_observability_plugin.py`
-- `M	tests/unittests/tools/spanner/test_spanner_tool_settings.py`
-- `M	tests/unittests/tools/test_discovery_engine_search_tool.py`
-- `M	tests/unittests/tools/test_load_artifacts_tool.py`
-- `M	tests/unittests/utils/test_dependency.py`
-- `M	tests/unittests/utils/test_env_utils.py`
-- `M	tests/unittests/utils/test_feature_decorator.py`
-- `M	tests/unittests/workflow/test_base_node.py`
-- `M	tests/unittests/workflow/test_join_node.py`
-- `M	tests/unittests/workflow/test_workflow.py`
-- `M	tests/unittests/workflow/test_workflow_node.py`
-- `M	tests/unittests/workflow/test_workflow_parallel_worker.py`
+- `M	src/google/adk/workflow/_dynamic_node_scheduler.py`
+- `M	src/google/adk/workflow/_node_runner.py`
+- `M	tests/unittests/workflow/test_node_runner_failure.py`
