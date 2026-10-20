@@ -1,83 +1,104 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-19
+- Date (UTC): 2026-10-20
 - Source: `google/adk-python`
-- Latest SHA: `ebbfb0ee5166424240156ab9056f2bf67f5af784`
-- Previous SHA: `e2dbc0f55027372f3a701d41004ee006ee8f9f14`
+- Latest SHA: `e02b2bff416602476cd94e8f9184a9fda1879444`
+- Previous SHA: `ebbfb0ee5166424240156ab9056f2bf67f5af784`
 
 ## Summary
 
-- New commits: 17
+- New commits: 21
 
 ## Commits
 
-- [ebbfb0ee](https://github.com/google/adk-python/commit/ebbfb0ee5166424240156ab9056f2bf67f5af784) perf: cut late /run_sse turns by 13-30% by loading their events once (George Weale, 2026-10-19)
-- [2802834e](https://github.com/google/adk-python/commit/2802834eb2dc15855e82142b598b7d22a6843810) fix: source MCP destination ID from RuntimeReference.uri (chelsealong, 2026-10-19)
-- [92bb67f9](https://github.com/google/adk-python/commit/92bb67f9b5e4204aba71e482aeabfab39bd87da9) docs(runner): fix voluntary early-termination guidance in abort unit guide (Shangjie Chen, 2026-10-19)
-- [ef8be1f9](https://github.com/google/adk-python/commit/ef8be1f96aa52f88611d75ad6ba6f76f48f3825b) test: cover use_sub_branch parallel single_turn context isolation (er-s-an, 2026-10-19)
-- [2d81d328](https://github.com/google/adk-python/commit/2d81d3289586bdfb1b9ec4264193dba01416f945) docs(sessions): update State iteration, nested write tracking, and session error docs (Shangjie Chen, 2026-10-19)
-- [57e8bc67](https://github.com/google/adk-python/commit/57e8bc67f19aa964e928b6c6d3199a9ec7892de6) fix: do not resolve Bigtable view parameters from session state (prasanna8585, 2026-10-19)
-- [772f1396](https://github.com/google/adk-python/commit/772f1396244ac7c3381ee7cfe22530899b428de2) perf: cut a string-model agent's turn from 20 ms to 2.5 ms (George Weale, 2026-10-19)
-- [dd80f8f7](https://github.com/google/adk-python/commit/dd80f8f7500c9853d44a3682405c4742f2c40c37) fix: forward thinking_config to litellm reasoning params (chelsealong, 2026-10-19)
-- [557743c4](https://github.com/google/adk-python/commit/557743c4484c7745f6c52b3bca07727011852e78) fix: keep a streamed thought signature sent without the call's name (Vetle Leinonen-Roeim, 2026-10-19)
-- [5d408696](https://github.com/google/adk-python/commit/5d408696d2c5a1c8bb80cac6e4fb63263093bf82) fix: share event id across streamed A2A artifact chunks (Ferran Pons Serra, 2026-10-19)
-- [8ff99419](https://github.com/google/adk-python/commit/8ff99419f3da8bc5921122699f125bf931905698) fix: keep client token usage when the last response has none (Somay-kousis, 2026-10-19)
-- [ead208a4](https://github.com/google/adk-python/commit/ead208a47540e0004286302d6718330679278a1b) feat: record google_search grounding on LLM spans (Spandan Keche, 2026-10-19)
-- [52cc2d82](https://github.com/google/adk-python/commit/52cc2d82a2959e9920db04c028be1450d7b4aaa0) fix: give each seeded environment-simulation injection its own generator (George Weale, 2026-10-19)
-- [d3770b83](https://github.com/google/adk-python/commit/d3770b837ea186487e6a4f16d644e3b3a9f10208) test: resolve wrapped callable annotations in tool schemas (Chenghao Liu, 2026-10-18)
-- [8f17ac4f](https://github.com/google/adk-python/commit/8f17ac4fa4c9a18efabc699ea3032bb861e25dcf) fix(tools): extract query text from all user content parts in ExampleTool (Yuhan Gao, 2026-10-18)
-- [04b8b601](https://github.com/google/adk-python/commit/04b8b6011ed6335febeef77631f137613d471348) fix: preserve Annotated text and content schemas (Jeeho Lee, 2026-10-18)
-- [ebe11595](https://github.com/google/adk-python/commit/ebe11595e7da50a1f158f64e266fb4e73f60bea1) test: cover FunctionTool with async tools behind sync decorators (techi101, 2026-10-18)
+- [e02b2bff](https://github.com/google/adk-python/commit/e02b2bff416602476cd94e8f9184a9fda1879444) fix: use a real CallToolResult in agent identity 2LO MCP tests (Liang Wu, 2026-10-20)
+- [f1c23e30](https://github.com/google/adk-python/commit/f1c23e30882a0593b40c09ea373d03f664554bd4) fix: accept Gemini 3 and later in the CFC and example gates (George Weale, 2026-10-20)
+- [662b0175](https://github.com/google/adk-python/commit/662b0175aa23605d4936c36ec60609ad8bbca09f) fix: record a nested state write only when its container converts to JSON unchanged (George Weale, 2026-10-20)
+- [77a74f02](https://github.com/google/adk-python/commit/77a74f0206eaf8542e4db6243d4b9dc7965f4475) fix: copy events and search results in InMemoryMemoryService (Cherry, 2026-10-20)
+- [6727f8f5](https://github.com/google/adk-python/commit/6727f8f5617509f88d2b3d4e5bf49c59d3b0e539) fix: route the turn after a paused single_turn sub-agent to its delegator (Somay-kousis, 2026-10-20)
+- [8909689a](https://github.com/google/adk-python/commit/8909689ae46de5ecadd12cd8fccfdee6a32b67cc) docs: fix get_gcp_exporters docstring argument names (yetuge, 2026-10-20)
+- [3b3de80f](https://github.com/google/adk-python/commit/3b3de80f1ab75f0adf210c1eab1e440cd61d8c7b) fix(workflow): preserve route and retry order during replay interception (Thomas Zettl, 2026-10-20)
+- [d5c87a66](https://github.com/google/adk-python/commit/d5c87a66cff0333b8afb3bbb2fd64204251d23a8) feat(plugins): classify write-time 403 and 404 drops in BigQueryAgentAnalyticsPlugin (Haiyuan Cao, 2026-10-19)
+- [365084db](https://github.com/google/adk-python/commit/365084db7b14e796f36ad2929f987e8d83874961) test(vmaas): add live integration tests for AgentEngineEnvironment (Google Team Member, 2026-10-19)
+- [019b2b21](https://github.com/google/adk-python/commit/019b2b21f9b68a344efd6b92f4f7a40a7c6e273b) fix(vmaas): report sandbox timeouts and retry commands only when safe (Google Team Member, 2026-10-19)
+- [1def14ba](https://github.com/google/adk-python/commit/1def14ba8efa662a5fa5d3b4c368ec8eecc9a2d6) fix(core): stop the unsafe local code executor waiting forever (George Weale, 2026-10-19)
+- [486ef302](https://github.com/google/adk-python/commit/486ef302cf6cc620c13d0e2bb0e1d98d5d66cf02) fix: run a task delegation sent in the same turn as finish_task (Arjun Prabhulal, 2026-10-19)
+- [43bab7db](https://github.com/google/adk-python/commit/43bab7db04b4418eec1b55e9eb0e73a72504b9d4) docs(live): fix run_live and CascadeLive snippets and document LiveRequest.state_delta (Shangjie Chen, 2026-10-19)
+- [6e026995](https://github.com/google/adk-python/commit/6e02699531946a00637e58634c2ce9cabeb450b0) fix: clear strict mypy errors in model connectors and telemetry (George Weale, 2026-10-19)
+- [12726f7a](https://github.com/google/adk-python/commit/12726f7a9775dfb46eddea044742efd89956ac1e) fix: support callables with positional-only arguments in FunctionTool (Moayad Alshehri, 2026-10-19)
+- [b0e59521](https://github.com/google/adk-python/commit/b0e59521dbc9b15d7ccbf634b5f61dc6dc2d15ae) fix(workflow): run a resumed sub-agent again when control transfers back to it (Google Team Member, 2026-10-19)
+- [da121d7b](https://github.com/google/adk-python/commit/da121d7bd8be75806b9f87a8323bac0677701169) fix: yield turn_complete and interrupted after flushing live audio (George Weale, 2026-10-19)
+- [db432dba](https://github.com/google/adk-python/commit/db432dbae7c92df1c88b6d37d82a36c86998becb) fix: keep integers outside 64 bits exact in SqliteSessionService state (Somay-kousis, 2026-10-19)
+- [626bd207](https://github.com/google/adk-python/commit/626bd20717100edf781a738c65c92e40b183d179) fix: recover the correct occurrence of reused compacted tool calls (LingYi, 2026-10-19)
+- [13dde39b](https://github.com/google/adk-python/commit/13dde39b685aee292be9056f63a7ca24214950de) fix: give each retry of a dynamic function node fresh arguments (Arjun Prabhulal, 2026-10-19)
+- [30726eaf](https://github.com/google/adk-python/commit/30726eaf0aab26d61474d96acb4cdd2beadbc083) fix: add SSRF protection to RestApiTool (Neelagiri65, 2026-10-19)
 
 ## Changed Files
 
-- `M	docs/guides/examples/example/index.md`
-- `M	docs/guides/models/llm_registry/index.md`
-- `M	docs/guides/runners/runner/abort.md`
-- `M	docs/guides/sessions/session/index.md`
-- `M	docs/guides/sessions/state/index.md`
-- `M	docs/guides/telemetry/telemetry_config/index.md`
-- `M	src/google/adk/a2a/agent/_remote_a2a_agent.py`
-- `M	src/google/adk/a2a/converters/to_adk_event.py`
-- `M	src/google/adk/agents/llm_agent.py`
-- `M	src/google/adk/cli/api_server.py`
+- `M	.agents/skills/adk-architecture/references/interface-workflow.md`
+- `M	contributing/samples/integrations/authn-adk-all-in-one/adk_agents/agent_openapi_tools/agent.py`
+- `M	docs/guides/live/cascade_live/index.md`
+- `M	docs/guides/live/live_request_queue/index.md`
+- `M	docs/guides/runners/runner/live.md`
+- `M	src/google/adk/agents/_agent_router.py`
+- `M	src/google/adk/code_executors/unsafe_local_code_executor.py`
 - `M	src/google/adk/examples/example_util.py`
-- `M	src/google/adk/integrations/agent_registry/agent_registry.py`
-- `M	src/google/adk/models/base_llm.py`
-- `M	src/google/adk/models/lite_llm.py`
-- `M	src/google/adk/telemetry/_adk_attributes.py`
-- `M	src/google/adk/telemetry/_metrics.py`
-- `M	src/google/adk/telemetry/context.py`
+- `M	src/google/adk/flows/llm_flows/context/_compaction.py`
+- `M	src/google/adk/flows/llm_flows/context/_fencing.py`
+- `M	src/google/adk/integrations/openai/_openai_llm.py`
+- `M	src/google/adk/integrations/openai/_openai_responses_llm.py`
+- `M	src/google/adk/integrations/vmaas/_agent_engine_environment.py`
+- `M	src/google/adk/live/_live_llm_flow.py`
+- `M	src/google/adk/memory/in_memory_memory_service.py`
+- `M	src/google/adk/models/anthropic_llm.py`
+- `M	src/google/adk/models/gemini_llm_connection.py`
+- `M	src/google/adk/models/google_llm.py`
+- `M	src/google/adk/models/interactions_utils.py`
+- `M	src/google/adk/plugins/bigquery_agent_analytics_plugin.py`
+- `M	src/google/adk/runners.py`
+- `M	src/google/adk/sessions/sqlite_session_service.py`
+- `M	src/google/adk/sessions/state.py`
+- `M	src/google/adk/telemetry/_gcp_resource.py`
+- `M	src/google/adk/telemetry/google_cloud.py`
 - `M	src/google/adk/telemetry/tracing.py`
-- `M	src/google/adk/tools/bigtable/bigtable_toolset.py`
-- `M	src/google/adk/tools/environment_simulation/environment_simulation_config.py`
-- `M	src/google/adk/tools/environment_simulation/environment_simulation_engine.py`
-- `M	src/google/adk/tools/example_tool.py`
-- `M	src/google/adk/tools/preload_memory_tool.py`
-- `M	src/google/adk/utils/_schema_utils.py`
-- `M	src/google/adk/utils/content_utils.py`
-- `M	tests/unittests/a2a/agent/test_remote_a2a_agent.py`
-- `M	tests/unittests/a2a/converters/test_to_adk.py`
-- `M	tests/unittests/agents/test_llm_agent_fields.py`
-- `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/integrations/agent_registry/test_agent_registry.py`
-- `M	tests/unittests/models/test_litellm.py`
-- `M	tests/unittests/telemetry/functional/_recording.py`
-- `M	tests/unittests/telemetry/functional/scenarios/conversation.py`
-- `M	tests/unittests/telemetry/functional/scenarios/inference.py`
-- `M	tests/unittests/telemetry/functional_divergences.json`
-- `A	tests/unittests/telemetry/functional_goldens/agent/grounding.json`
-- `M	tests/unittests/telemetry/functional_test_cases.py`
-- `M	tests/unittests/telemetry/regenerate.py`
-- `M	tests/unittests/telemetry/test_functional.py`
-- `M	tests/unittests/telemetry/test_metrics.py`
-- `M	tests/unittests/telemetry/test_semconv_conformance.py`
+- `M	src/google/adk/tools/_url_validator.py`
+- `M	src/google/adk/tools/agent_tool.py`
+- `M	src/google/adk/tools/apihub_tool/apihub_toolset.py`
+- `M	src/google/adk/tools/application_integration_tool/application_integration_toolset.py`
+- `M	src/google/adk/tools/function_tool.py`
+- `M	src/google/adk/tools/load_web_page.py`
+- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py`
+- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py`
+- `M	src/google/adk/workflow/_dynamic_node_scheduler.py`
+- `M	src/google/adk/workflow/_function_node.py`
+- `M	src/google/adk/workflow/_llm_agent_wrapper.py`
+- `M	src/google/adk/workflow/utils/_rehydration_utils.py`
+- `M	src/google/adk/workflow/utils/_replay_interceptor.py`
+- `M	src/google/adk/workflow/utils/_replay_manager.py`
+- `M	tests/integration/integrations/agent_identity/test_2lo_flow.py`
+- `M	tests/integration/integrations/agent_identity/test_agent_identity_2lo_flow.py`
+- `A	tests/integration/integrations/vmaas/test_agent_engine_environment_live.py`
+- `M	tests/unittests/agents/test_agent_router.py`
+- `M	tests/unittests/agents/test_llm_agent_interruptions.py`
+- `M	tests/unittests/code_executors/test_unsafe_local_code_executor.py`
+- `M	tests/unittests/examples/test_example_util.py`
+- `M	tests/unittests/flows/llm_flows/context/test_content_compaction.py`
+- `M	tests/unittests/integrations/openai/test_openai_responses_llm.py`
+- `M	tests/unittests/integrations/vmaas/test_agent_engine_environment.py`
+- `M	tests/unittests/live/test_live_llm_flow.py`
+- `M	tests/unittests/memory/test_in_memory_memory_service.py`
+- `M	tests/unittests/models/test_interactions_utils.py`
+- `M	tests/unittests/plugins/test_bigquery_agent_analytics_plugin.py`
+- `M	tests/unittests/sessions/test_session_service.py`
+- `M	tests/unittests/sessions/test_state.py`
+- `M	tests/unittests/telemetry/test_gcp_resource.py`
 - `M	tests/unittests/telemetry/test_spans.py`
-- `M	tests/unittests/tools/bigtable/test_bigtable_toolset.py`
-- `M	tests/unittests/tools/environment_simulation/test_environment_simulation_engine.py`
-- `M	tests/unittests/tools/test_example_tool.py`
+- `M	tests/unittests/test_runners.py`
+- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_rest_api_tool.py`
 - `M	tests/unittests/tools/test_function_tool.py`
-- `M	tests/unittests/tools/test_function_tool_with_import_annotations.py`
-- `M	tests/unittests/utils/test_content_utils.py`
-- `M	tests/unittests/utils/test_schema_utils.py`
-- `M	tests/unittests/workflow/test_llm_agent_as_node.py`
+- `M	tests/unittests/workflow/test_agent_transfer.py`
+- `M	tests/unittests/workflow/test_dynamic_node_scheduler.py`
+- `M	tests/unittests/workflow/test_node_runner_failure.py`
+- `M	tests/unittests/workflow/test_task_api_e2e.py`
+- `M	tests/unittests/workflow/utils/test_replay_interceptor.py`
+- `M	tests/unittests/workflow/utils/test_replay_manager.py`
