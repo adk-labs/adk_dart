@@ -2,6 +2,7 @@
 library;
 
 import 'dart:collection';
+import 'dart:convert';
 
 /// Map-like state container with change tracking.
 class State extends MapBase<String, Object?> {
@@ -25,6 +26,7 @@ class State extends MapBase<String, Object?> {
   final Map<String, Object?> _delta;
   final Map<String, (Object?, Object?)> _snapshots =
       <String, (Object?, Object?)>{};
+  final Set<String> _recordedNestedKeys = <String>{};
 
   @override
   Object? operator [](Object? key) {
@@ -43,6 +45,7 @@ class State extends MapBase<String, Object?> {
     _value[key] = value;
     _delta[key] = value;
     _snapshots.remove(key);
+    _recordedNestedKeys.remove(key);
   }
 
   void _takeSnapshot(String key, Object? value) {
@@ -63,6 +66,9 @@ class State extends MapBase<String, Object?> {
 
   /// Records any in-place mutations made to `Map` or `List` containers
   /// previously read from this state into the pending delta.
+  ///
+  /// A changed container with no JSON form equal to it is not recorded, and
+  /// one this state recorded earlier is withdrawn from the delta.
   void recordNestedWrites() {
     for (final MapEntry<String, (Object?, Object?)> entry
         in _snapshots.entries.toList(growable: false)) {
@@ -75,11 +81,13 @@ class State extends MapBase<String, Object?> {
         current = _value[key];
       } else {
         _snapshots.remove(key);
+        _recordedNestedKeys.remove(key);
         continue;
       }
 
       if (!identical(current, handedOut)) {
         _snapshots.remove(key);
+        _recordedNestedKeys.remove(key);
         continue;
       }
 
@@ -87,11 +95,20 @@ class State extends MapBase<String, Object?> {
       try {
         changed = !_deepEquals(current, snapshot, <Object>{});
       } catch (_) {
-        _snapshots.remove(key);
-        continue;
+        changed = true;
       }
 
       if (changed) {
+        if (!_equalsItsJsonForm(current)) {
+          _snapshots.remove(key);
+          if (_recordedNestedKeys.remove(key)) {
+            _delta.remove(key);
+          }
+          continue;
+        }
+        if (!_delta.containsKey(key)) {
+          _recordedNestedKeys.add(key);
+        }
         _value[key] = current;
         _delta[key] = current;
         _takeSnapshot(key, current);
@@ -119,6 +136,7 @@ class State extends MapBase<String, Object?> {
     _value.remove(key);
     _delta[key] = null;
     _snapshots.remove(key);
+    _recordedNestedKeys.remove(key);
     return old;
   }
 
@@ -146,6 +164,7 @@ class State extends MapBase<String, Object?> {
     addAll(delta);
     for (final String key in delta.keys) {
       _snapshots.remove(key);
+      _recordedNestedKeys.remove(key);
     }
   }
 
@@ -157,6 +176,59 @@ class State extends MapBase<String, Object?> {
 
   /// Alias of [toMap] for compatibility with Python naming.
   Map<String, Object?> toDict() => toMap();
+}
+
+bool _equalsItsJsonForm(Object? value) {
+  try {
+    if (!_isStrictJsonValue(value, Set<Object>.identity())) {
+      return false;
+    }
+    final Object? decoded = jsonDecode(jsonEncode(value));
+    return _deepEquals(decoded, value, <Object>{});
+  } catch (_) {
+    return false;
+  }
+}
+
+bool _isStrictJsonValue(Object? value, Set<Object> activeContainers) {
+  if (value == null || value is bool || value is int || value is String) {
+    return true;
+  }
+  if (value is double) {
+    return !value.isNaN && !value.isInfinite;
+  }
+  if (value is List) {
+    if (!activeContainers.add(value)) {
+      return false;
+    }
+    try {
+      for (final Object? item in value) {
+        if (!_isStrictJsonValue(item, activeContainers)) {
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      activeContainers.remove(value);
+    }
+  }
+  if (value is Map) {
+    if (!activeContainers.add(value)) {
+      return false;
+    }
+    try {
+      for (final MapEntry<Object?, Object?> entry in value.entries) {
+        if (entry.key is! String ||
+            !_isStrictJsonValue(entry.value, activeContainers)) {
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      activeContainers.remove(value);
+    }
+  }
+  return false;
 }
 
 Object? _deepCopyContainer(Object? value, Map<Object, Object?> seen) {

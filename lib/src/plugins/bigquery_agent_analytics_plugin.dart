@@ -26,6 +26,10 @@ import '../types/content.dart';
 import '../utils/function_call_names.dart';
 import '../version.dart';
 import 'base_plugin.dart';
+import 'callback_helpers.dart';
+
+export 'callback_helpers.dart'
+    show ToolResultClassification, ToolResultClassifier;
 
 const String _schemaVersion = '1';
 const String _schemaVersionLabelKey = 'adk_schema_version';
@@ -123,6 +127,9 @@ class BigQueryLoggerConfig {
     this.autoSchemaUpgrade = true,
     this.createViews = true,
     Set<String>? finalResponseToolNames,
+    this.createEvalViews = false,
+    this.evalViewMode = 'full',
+    this.toolResultClassifier,
     this.onSchemaError,
     this.onSchemaReady,
   }) : clusteringFields =
@@ -197,6 +204,17 @@ class BigQueryLoggerConfig {
   /// When a completed tool's name is in this set, its call args are logged as
   /// an `AGENT_RESPONSE` event.
   Set<String> finalResponseToolNames;
+
+  /// Whether agent evaluation views (`v_eval_session`, `v_eval_turn`) should
+  /// be created automatically.
+  bool createEvalViews;
+
+  /// Evaluation view event requirement mode: `'full'` (default) or
+  /// `'conversation_only'`.
+  String evalViewMode;
+
+  /// Optional classifier for tool results that report errors without throwing.
+  ToolResultClassifier? toolResultClassifier;
 
   /// Optional callback invoked when schema or view setup fails.
   void Function(Object error, StackTrace stackTrace)? onSchemaError;
@@ -722,6 +740,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
        super(name: 'bigquery_agent_analytics') {
     this.tableId = tableId ?? this.config.tableId;
     _applyConfigOverrides(configOverrides);
+    if (this.config.createEvalViews) {
+      _validateEvalViewConfig(prefix: 'Cannot enable createEvalViews=true');
+    }
     _gcsUploadProvider = _resolveGcsUploadProvider(
       accessToken: accessToken,
       accessTokenProvider: accessTokenProvider,
@@ -869,6 +890,87 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     _viewsCreated = true;
   }
 
+  static const Set<String> _evalViewFullRequiredEvents = <String>{
+    'USER_MESSAGE_RECEIVED',
+    'AGENT_STARTING',
+    'LLM_REQUEST',
+    'TOOL_STARTING',
+    'TOOL_COMPLETED',
+    'TOOL_PAUSED',
+    'AGENT_TRANSFER',
+    'AGENT_RESPONSE',
+    'INVOCATION_COMPLETED',
+    'HITL_CREDENTIAL_REQUEST',
+    'HITL_CREDENTIAL_REQUEST_COMPLETED',
+    'HITL_CONFIRMATION_REQUEST',
+    'HITL_CONFIRMATION_REQUEST_COMPLETED',
+    'HITL_INPUT_REQUEST',
+    'HITL_INPUT_REQUEST_COMPLETED',
+  };
+
+  static const Set<String> _evalViewConversationOnlyRequiredEvents = <String>{
+    'USER_MESSAGE_RECEIVED',
+    'AGENT_RESPONSE',
+    'INVOCATION_COMPLETED',
+  };
+
+  static const Map<String, Set<String>> _evalViewEventsByMode =
+      <String, Set<String>>{
+        'full': _evalViewFullRequiredEvents,
+        'conversation_only': _evalViewConversationOnlyRequiredEvents,
+      };
+
+  void _validateEvalViewConfig({String prefix = 'Cannot create eval views'}) {
+    final Set<String>? requiredEvents =
+        _evalViewEventsByMode[config.evalViewMode];
+    if (requiredEvents == null) {
+      throw ArgumentError(
+        '$prefix with unknown evalViewMode=${config.evalViewMode}; '
+        'expected one of [conversation_only, full].',
+      );
+    }
+    final List<String> denied = (config.eventDenylist ?? const <String>[])
+        .where(requiredEvents.contains)
+        .toList()
+      ..sort();
+    if (denied.isNotEmpty) {
+      throw ArgumentError(
+        '$prefix when required events are in eventDenylist: $denied.',
+      );
+    }
+    final List<String>? allowlist = config.eventAllowlist;
+    if (allowlist != null && allowlist.isNotEmpty) {
+      final Set<String> allowed = allowlist.toSet();
+      final List<String> missing = requiredEvents
+          .where((String event) => !allowed.contains(event))
+          .toList()
+        ..sort();
+      if (missing.isNotEmpty) {
+        final String hint = config.evalViewMode == 'full'
+            ? " Set evalViewMode='conversation_only' if tool, model-request, "
+                  'agent-handoff, or HITL events are intentionally omitted.'
+            : '';
+        throw ArgumentError(
+          '$prefix unless eventAllowlist includes all required events; '
+          'missing: $missing.$hint',
+        );
+      }
+    }
+  }
+
+  /// Validates [config] and creates or refreshes the evaluation views.
+  Future<void> createEvalViews() async {
+    _validateEvalViewConfig();
+    final BigQueryAnalyticsViewExecutor? executor = _analyticsViewExecutor;
+    if (executor == null) {
+      return;
+    }
+    await executor(<String>[
+      'CREATE OR REPLACE VIEW `$projectId.$datasetId.v_eval_session` AS SELECT * FROM `$projectId.$datasetId.$tableId`',
+      'CREATE OR REPLACE VIEW `$projectId.$datasetId.v_eval_turn` AS SELECT * FROM `$projectId.$datasetId.$tableId`',
+    ]);
+  }
+
   @override
   Future<void> close() async {
     await shutdown();
@@ -941,6 +1043,39 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
             },
           ),
         );
+      }
+
+      final NodeInfo nodeInfo = event.nodeInfo;
+      if (nodeInfo.path.isNotEmpty && event.partial != true) {
+        if (event.output != null && nodeInfo.messageAsOutput != true) {
+          final _TruncateResult outputTruncated = _recursiveSmartTruncate(
+            event.output,
+            config.maxContentLength,
+          );
+          await _logEvent(
+            'NODE_OUTPUT',
+            callbackContext,
+            rawContent: <String, Object?>{'output': outputTruncated.value},
+            isTruncated: outputTruncated.isTruncated,
+            eventData: EventData(
+              extraAttributes: <String, Object?>{'node_path': nodeInfo.path},
+            ),
+          );
+        }
+        if (isDurableNodeError(event)) {
+          await _logEvent(
+            'NODE_ERROR',
+            callbackContext,
+            eventData: EventData(
+              status: 'ERROR',
+              errorMessage: event.errorMessage ?? event.errorCode,
+              extraAttributes: <String, Object?>{
+                'node_path': nodeInfo.path,
+                'error_code': event.errorCode,
+              },
+            ),
+          );
+        }
       }
 
       final Content? content = event.content;
@@ -1293,7 +1428,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     });
   }
 
-  /// Logs successful tool completion and span timing.
+  /// Logs successful tool completion (or result-reported failure) and span timing.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -1302,11 +1437,49 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required Map<String, dynamic> result,
   }) async {
     return _safeCallback<Map<String, dynamic>?>('afterToolCallback', () async {
+      if (popToolErrorRecorded(this, toolContext)) {
+        return null;
+      }
+
+      final String toolOrigin = _getToolOrigin(tool);
+      final _PopResult popResult = _TraceManager.popSpan(toolContext);
+      final String? errorMessage = classifyToolResultError(
+        tool: tool,
+        toolArgs: toolArgs,
+        toolContext: toolContext,
+        result: result,
+        toolResultClassifier: config.toolResultClassifier,
+        onWarning: (String warning) => stderr.writeln(warning),
+      );
+      if (errorMessage != null) {
+        final _TruncateResult argsTruncated = _recursiveSmartTruncate(
+          toolArgs,
+          config.maxContentLength,
+        );
+        await _logEvent(
+          'TOOL_ERROR',
+          toolContext,
+          rawContent: <String, Object?>{
+            'tool': tool.name,
+            'args': argsTruncated.value,
+            'tool_origin': toolOrigin,
+          },
+          isTruncated: argsTruncated.isTruncated,
+          eventData: EventData(
+            status: 'ERROR',
+            errorMessage: errorMessage,
+            latencyMs: popResult.durationMs,
+            spanIdOverride: popResult.spanId,
+            parentSpanIdOverride: popResult.parentSpanId,
+          ),
+        );
+        return null;
+      }
+
       final _TruncateResult truncatedResult = _recursiveSmartTruncate(
         result,
         config.maxContentLength,
       );
-      final _PopResult popResult = _TraceManager.popSpan(toolContext);
 
       await _logEvent(
         'TOOL_COMPLETED',
@@ -1314,7 +1487,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         rawContent: <String, Object?>{
           'tool': tool.name,
           'result': truncatedResult.value,
-          'tool_origin': _getToolOrigin(tool),
+          'tool_origin': toolOrigin,
         },
         isTruncated: truncatedResult.isTruncated,
         eventData: EventData(
@@ -1359,6 +1532,16 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           config.maxContentLength,
         );
         final _PopResult popResult = _TraceManager.popSpan(toolContext);
+        String errorMessage;
+        try {
+          final String rendered = '$error';
+          errorMessage = rendered.isNotEmpty
+              ? rendered
+              : error.runtimeType.toString();
+        } catch (_) {
+          errorMessage = error.runtimeType.toString();
+        }
+        markToolErrorRecorded(this, toolContext);
 
         await _logEvent(
           'TOOL_ERROR',
@@ -1370,7 +1553,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           },
           isTruncated: args.isTruncated,
           eventData: EventData(
-            errorMessage: '$error',
+            status: 'ERROR',
+            errorMessage: errorMessage,
             latencyMs: popResult.durationMs,
             spanIdOverride: popResult.spanId,
             parentSpanIdOverride: popResult.parentSpanId,
@@ -1677,6 +1861,18 @@ WHERE event_type = '$escapedEventType'
           if (entry.value is bool) {
             config.createViews = entry.value as bool;
           }
+        case 'create_eval_views':
+          if (entry.value is bool) {
+            config.createEvalViews = entry.value as bool;
+          }
+        case 'eval_view_mode':
+          if (entry.value is String) {
+            config.evalViewMode = entry.value as String;
+          }
+        case 'tool_result_classifier':
+          if (entry.value is ToolResultClassifier) {
+            config.toolResultClassifier = entry.value as ToolResultClassifier;
+          }
       }
     }
   }
@@ -1690,6 +1886,15 @@ WHERE event_type = '$escapedEventType'
     }
   }
 }
+
+const Set<String> _skillToolTypeNames = <String>{
+  'ListSkillsTool',
+  'LoadSkillResourceTool',
+  'LoadSkillTool',
+  'RunSkillScriptTool',
+  'SearchSkillsTool',
+  'UnloadSkillTool',
+};
 
 String _getToolOrigin(BaseTool tool) {
   if (tool is McpTool) {
@@ -1706,6 +1911,13 @@ String _getToolOrigin(BaseTool tool) {
   }
   if (tool is FunctionTool) {
     return 'LOCAL';
+  }
+  final String runtimeTypeName = tool.runtimeType.toString();
+  if (runtimeTypeName == 'ToolboxTool') {
+    return 'TOOLBOX';
+  }
+  if (_skillToolTypeNames.contains(runtimeTypeName)) {
+    return 'SKILL';
   }
   return 'UNKNOWN';
 }

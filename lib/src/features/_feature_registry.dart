@@ -107,6 +107,9 @@ enum FeatureName {
   /// Cloud Spanner vector store integration.
   spannerVectorStore('SPANNER_VECTOR_STORE'),
 
+  /// Pluggable tool call argument matching support.
+  toolArgsMatcher('TOOL_ARGS_MATCHER'),
+
   /// General tool configuration support.
   toolConfig('TOOL_CONFIG'),
 
@@ -156,7 +159,7 @@ typedef FeatureWarningEmitter = void Function(String message);
 final Map<FeatureName, FeatureConfig> _featureRegistry =
     <FeatureName, FeatureConfig>{
       FeatureName.agentConfig: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.agentEngineSandboxEnvironment: const FeatureConfig(
@@ -164,15 +167,15 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.agentState: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.authenticatedFunctionTool: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.baseAuthenticatedTool: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.bigQueryToolset: const FeatureConfig(
@@ -231,16 +234,19 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
       ),
       FeatureName.googleCredentialsConfig: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.googleTool: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
-      FeatureName.jsonSchemaForFuncDecl: const FeatureConfig(FeatureStage.wip),
+      FeatureName.jsonSchemaForFuncDecl: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
       FeatureName.mcpGracefulErrorHandling: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.opensandboxEnvironment: const FeatureConfig(
@@ -248,11 +254,11 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.pluggableAuth: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.progressiveSseStreaming: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.pubsubToolConfig: const FeatureConfig(
@@ -286,12 +292,16 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: true,
       ),
-      FeatureName.toolConfig: const FeatureConfig(
+      FeatureName.toolArgsMatcher: const FeatureConfig(
         FeatureStage.experimental,
+        defaultOn: false,
+      ),
+      FeatureName.toolConfig: const FeatureConfig(
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.toolConfirmation: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
     };
@@ -344,7 +354,11 @@ bool isFeatureEnabled(
   if (_featureOverrides.containsKey(featureName)) {
     final bool enabled = _featureOverrides[featureName]!;
     if (enabled && config.stage != FeatureStage.stable) {
-      _emitNonStableWarningOnce(featureName, config.stage);
+      _emitNonStableWarningOnce(
+        featureName,
+        config.stage,
+        environment: environment,
+      );
     }
     return enabled;
   }
@@ -353,7 +367,11 @@ bool isFeatureEnabled(
   final String disableVar = 'ADK_DISABLE_${featureName.value}';
   if (isEnvEnabled(enableVar, environment: environment)) {
     if (config.stage != FeatureStage.stable) {
-      _emitNonStableWarningOnce(featureName, config.stage);
+      _emitNonStableWarningOnce(
+        featureName,
+        config.stage,
+        environment: environment,
+      );
     }
     return true;
   }
@@ -362,15 +380,24 @@ bool isFeatureEnabled(
   }
 
   if (config.stage != FeatureStage.stable && config.defaultOn) {
-    _emitNonStableWarningOnce(featureName, config.stage);
+    _emitNonStableWarningOnce(
+      featureName,
+      config.stage,
+      environment: environment,
+    );
   }
   return config.defaultOn;
 }
 
 void _emitNonStableWarningOnce(
   FeatureName featureName,
-  FeatureStage featureStage,
-) {
+  FeatureStage featureStage, {
+  Map<String, String>? environment,
+}) {
+  if (featureStage == FeatureStage.experimental &&
+      isExperimentalWarningSuppressed(environment: environment)) {
+    return;
+  }
   if (_warnedFeatures.contains(featureName)) {
     return;
   }

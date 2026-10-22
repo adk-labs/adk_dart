@@ -645,7 +645,8 @@ class AnthropicLlm extends BaseLlm {
         anthropicStopReason == 'pause_turn') {
       return 'STOP';
     }
-    if (anthropicStopReason == 'max_tokens') {
+    if (anthropicStopReason == 'max_tokens' ||
+        anthropicStopReason == 'model_context_window_exceeded') {
       return 'MAX_TOKENS';
     }
     if (anthropicStopReason == 'refusal') {

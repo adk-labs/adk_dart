@@ -710,10 +710,13 @@ void main() {
             )
             .toList();
 
-        expect(events, hasLength(4));
+        expect(events, hasLength(5));
         expect(events[0].content?.parts.first.thought, isTrue);
         expect(events[1].content?.parts.first.thought, isTrue);
-        expect(events[3].content?.parts.first.thought, isFalse);
+        expect(events[2].partial, isTrue);
+        expect(events[3].partial, isFalse);
+        expect(events[2].id, events[3].id);
+        expect(events[4].content?.parts.first.thought, isFalse);
 
         for (final Event event in events) {
           expect(event.customMetadata?['a2a:request'], isA<Map>());

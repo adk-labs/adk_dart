@@ -6,6 +6,17 @@ import 'system_environment/system_environment.dart';
 const Set<String> _truthyEnvValues = <String>{'1', 'true', 'yes', 'on'};
 const Set<String> _strictTruthyEnvValues = <String>{'1', 'true'};
 
+/// Environment variable name that suppresses experimental feature warnings.
+const String experimentalWarningSuppressionEnvVar =
+    'ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS';
+
+/// Whether experimental feature warnings are suppressed in [environment].
+bool isExperimentalWarningSuppressed({Map<String, String>? environment}) =>
+    isEnvEnabled(
+      experimentalWarningSuppressionEnvVar,
+      environment: environment,
+    );
+
 /// Whether [envVarName] is enabled in [environment].
 ///
 /// Values `1`, `true`, `yes`, and `on` are treated as enabled after trimming

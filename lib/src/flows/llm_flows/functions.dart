@@ -8,11 +8,13 @@ import '../../agents/abort_signal.dart';
 import '../../agents/active_streaming_tool.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
+import '../../agents/llm/task/finish_task_tool.dart';
 import '../../agents/run_config.dart';
 import '../../auth/auth_tool.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../plugins/base_plugin.dart';
+import '../../tools/agent_tool.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/computer_use/computer_use_tool.dart';
 import '../../tools/tool_confirmation.dart';
@@ -273,6 +275,9 @@ Future<Event?> handleFunctionCallListAsync(
   }
 
   final LlmAgent agent = invocationContext.agent as LlmAgent;
+  final bool hasTaskDelegation = filtered.any(
+    (FunctionCall call) => toolsDict[call.name] is TaskAgentTool,
+  );
 
   final List<Event?> results = <Event?>[];
   if (invocationContext.runConfig?.toolExecutionMode ==
@@ -290,6 +295,7 @@ Future<Event?> handleFunctionCallListAsync(
           toolConfirmation: call.id == null
               ? null
               : toolConfirmationDict?[call.id!],
+          ignoreFinishTaskForDelegation: hasTaskDelegation,
         ),
       );
     }
@@ -310,6 +316,7 @@ Future<Event?> handleFunctionCallListAsync(
               ? null
               : toolConfirmationDict?[state.call.id!],
           callState: state,
+          ignoreFinishTaskForDelegation: hasTaskDelegation,
         );
         state.finished = true;
         state.completedEvent = event;
@@ -421,9 +428,32 @@ Future<Event?> _executeSingleFunctionCallAsync(
   LlmAgent agent, {
   ToolConfirmation? toolConfirmation,
   _ParallelToolCallState? callState,
+  bool ignoreFinishTaskForDelegation = false,
 }) async {
   if (invocationContext.isAborted || (callState?.cancelled ?? false)) {
     return null;
+  }
+
+  if (ignoreFinishTaskForDelegation &&
+      functionCall.name == finishTaskToolName) {
+    final ToolContext ignoredContext = Context(
+      invocationContext,
+      functionCallId: functionCall.id,
+      toolConfirmation: toolConfirmation,
+    );
+    final BaseTool finishTool =
+        toolsDict[functionCall.name] ?? _MissingTool(functionCall.name);
+    return _buildResponseEvent(
+      tool: finishTool,
+      functionResult: <String, dynamic>{
+        'error':
+            'finish_task was ignored because a task delegation was sent in '
+            'the same turn. Call finish_task by itself once the delegated '
+            'result is available.',
+      },
+      toolContext: ignoredContext,
+      invocationContext: invocationContext,
+    );
   }
 
   final Map<String, dynamic> functionArgs = Map<String, dynamic>.from(

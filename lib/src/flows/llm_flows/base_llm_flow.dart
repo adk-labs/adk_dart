@@ -98,7 +98,11 @@ class BaseLlmFlow {
     }
 
     final LlmRequest request = LlmRequest();
-    await for (final Event event in _preprocessAsync(context, request)) {
+    await for (final Event event in _preprocessAsync(
+      context,
+      request,
+      live: true,
+    )) {
       if (context.isAborted) {
         return;
       }
@@ -489,7 +493,6 @@ class BaseLlmFlow {
         for (final Event event in flushed) {
           yield event;
         }
-        return;
       }
     }
 
@@ -515,15 +518,6 @@ class BaseLlmFlow {
       }
       if (functionResponseEvent != null) {
         yield functionResponseEvent;
-        final String? jsonResponse = output_schema.getStructuredModelResponse(
-          functionResponseEvent,
-        );
-        if (jsonResponse != null) {
-          yield output_schema.createFinalModelResponseEvent(
-            context,
-            jsonResponse,
-          );
-        }
         final String? transferToAgent =
             functionResponseEvent.actions.transferToAgent;
         if (transferToAgent != null && transferToAgent.isNotEmpty) {
@@ -961,9 +955,13 @@ class BaseLlmFlow {
 
   Stream<Event> _preprocessAsync(
     InvocationContext context,
-    LlmRequest request,
-  ) async* {
+    LlmRequest request, {
+    bool live = false,
+  }) async* {
     for (final BaseLlmRequestProcessor processor in requestProcessors) {
+      if (live && processor is output_schema.OutputSchemaRequestProcessor) {
+        continue;
+      }
       await for (final Event event in processor.runAsync(context, request)) {
         if (context.isAborted) {
           return;
@@ -1369,7 +1367,10 @@ class BaseLlmFlow {
       context,
       eventActions: modelResponseEvent.actions,
     );
-    final CallbackContext pluginCallbackContext = Context(context);
+    final CallbackContext pluginCallbackContext = Context(
+      context,
+      eventActions: modelResponseEvent.actions,
+    );
 
     final LlmResponse? pluginOverride = await context.pluginManager
         .runAfterModelCallback(

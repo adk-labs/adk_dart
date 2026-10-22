@@ -1,3 +1,33 @@
+## 2026.10.22
+
+- **Classifiers (`lib/src/labs/classifiers/`, `lib/src/integrations/typesafe/`)**:
+  - Added `LlmClassifier` (`lib/src/labs/classifiers/llm_classifier.dart`) to evaluate `Choice`, `Binary`, and `Score` questions via structured JSON output and normalize probability distributions.
+  - Added `TypesafeClassifier` (`lib/src/integrations/typesafe/typesafe_classifier.dart`) for TypeSafe Jev models (`/v1/systemone`) with automatic retry on HTTP `429`/`529`.
+  - Added `classifyAll` and `classifyBatch` helpers with configurable concurrency on `BaseClassifier`.
+- **Extensible Tool Argument Matcher & Model Consult Observability (`lib/src/tools/`)**:
+  - Added `ToolArgsMatcher` (`lib/src/tools/tool_args_matcher/tool_args_matcher.dart`) with `ArgMatchResult`, `ToolArgsMatchResult`, `BaseArgMatcher`, `ExactArgMatcher`, `CasefoldArgMatcher`, `NumericArgMatcher`, `ContainsArgMatcher`, `IgnoreArgMatcher`, and `registerArgMatcher`.
+  - Added `ModelConsultObservabilityPlugin` (`lib/src/tools/model_consult/observability_plugin.dart`) with `ModelConsultUsage`, `ModelConsultStats`, and `ModelConsultReport` to measure primary and advisor model calls, escalations, token usage, and estimated USD cost.
+- **Features & Warning Suppression (`lib/src/features/`, `lib/src/utils/`)**:
+  - Promoted 12 mature features (`agentConfig`, `agentState`, `authenticatedFunctionTool`, `baseAuthenticatedTool`, `googleCredentialsConfig`, `googleTool`, `jsonSchemaForFuncDecl`, `mcpGracefulErrorHandling`, `progressiveSseStreaming`, `toolConfig`, `toolConfirmation`, `pluggableAuth`) to `FeatureStage.stable` (`defaultOn: true`) and registered `FeatureName.toolArgsMatcher`.
+  - Added `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS` support via `experimentalWarningSuppressionEnvVar` and `isExperimentalWarningSuppressed()`.
+- **Isolation Scope, Compaction & State (`lib/src/runners/`, `lib/src/apps/`, `lib/src/flows/llm_flows/`, `lib/src/sessions/`)**:
+  - Keyed finished isolation scopes by `(scope, invocationId)` and skipped compaction events in `Runner._findActiveTaskScope`.
+  - Scoped token estimation and sliding-window/token-threshold compaction by `isolationScope`, optimized compaction range subsumption and lookup to $O(N \log N)$ via `_getCompactionRanges`, and paired compacted `FunctionCall`/`FunctionResponse` events by event identity + `callId` so repeated tool call IDs recover the matching turn's call.
+  - Updated `State.recordNestedWrites()` to skip nested container mutations that do not round-trip through JSON unchanged.
+- **Agents, Workflow & Live Visual Frames (`lib/src/agents/`, `lib/src/workflow/`, `lib/src/live/`)**:
+  - Updated `BaseAgent` to detect duplicate agent names across full sibling subtrees and against the root agent name.
+  - Ignored `finish_task` when called in the same turn as a task delegation, routed the turn after a paused `single_turn` sub-agent to its delegator, and traversed `Workflow` nodes in `Runner.close()`.
+  - Preserved dynamic node `route` and retried failed dynamic runs during replay interception, reserved static ancestor `runId` counters on resume, cloned `FunctionNode` inputs per retry attempt, restored dynamic child run counters on parent retry, required fresh predecessor arrivals for `JoinNode` in loops, and sealed `RouteMap` after `Edges.route()`.
+  - Added `VisualFrame`, `packVisualFrames`, and `unpackVisualFrames` (`lib/src/live/visual_frames.dart`) using uncompressed `ZIP_STORED` archives, skipped `output_schema` processors in live flow, and forwarded `turnComplete`/`interrupted` events after flushing live audio blobs.
+- **Auth, Models, A2A, Memory, Plugins, Telemetry & Tools**:
+  - Added `credentialFromString` supporting `apiKey`, `http` bearer (rejecting `basic`), `oauth2`, and `openIdConnect`, and avoided persisting unredeemed OAuth2 auth codes in `CredentialManager`.
+  - Mapped Anthropic `model_context_window_exceeded` to `MAX_TOKENS`, supported `ThinkingConfig` and streamed `thoughtSignature` preservation in `LiteLlm`, and rejected native `outputSchema` with tools on `gemini-1.*`.
+  - Shared deterministic UUIDv5 `artifactEventId` across streamed A2A artifact chunks and emitted intermediate appended chunks with `partial: !update.lastChunk`.
+  - Deep-copied `Part` fields in `InMemoryMemoryService` and excluded `thought` parts from memory indexing, `PreloadMemoryTool`, and `ExampleTool` via `extractTextFromContent`.
+  - Added `ToolResultClassification`, `ToolResultClassifier`, `classifyToolResultError`, and `isDurableNodeError` (`lib/src/plugins/callback_helpers.dart`) across `LoggingPlugin`, `DebugLoggingPlugin`, and `BigQueryAgentAnalyticsPlugin` (plus `evalViewMode`, 403/404/stream error classification, and suffix-based credential redaction), and tracked declined HITL calls in `ReflectAndRetryToolPlugin`.
+  - Added experimental grounding span attributes (`adk.experimental.grounding.*`) and preserved streaming token usage in `lib/src/telemetry/`.
+  - Added SSRF protection (`allowPrivateNetworkAccess: false`) to `RestApiTool`, `viewParameters` and trusted `ToolContext` resolution to `BigtableToolset`, MCP auth header precedence & session reaping (`closeSession`), `AgentRegistry` runtime reference URI resolution, custom `name`/`description` on `VertexAiSearchTool`, isolated `Random` instances in `AgentSimulatorEngine`, sandbox state verification in `AgentEngineEnvironment`, 300s timeout in `UnsafeLocalCodeExecutor`, and lowercase MIME canonicalization in `load_artifacts_tool.dart`.
+
 ## 2026.10.15
 
 - **Classifiers & Workflow Routing (`lib/src/labs/classifiers/`, `workflow.dart`)**:

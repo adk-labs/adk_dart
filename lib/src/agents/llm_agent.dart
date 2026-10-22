@@ -17,7 +17,6 @@ import '../planners/built_in_planner.dart';
 import '../tools/agent_tool.dart';
 import '../tools/base_tool.dart';
 import '../tools/base_toolset.dart';
-import '../tools/discovery_engine_search_tool.dart';
 import '../tools/function_tool.dart';
 import '../tools/google_search_agent_tool.dart';
 import '../tools/google_search_tool.dart';
@@ -941,15 +940,7 @@ Future<List<BaseTool>> _convertToolUnionToTools(
 
   if (multipleTools && toolUnion is VertexAiSearchTool) {
     if (toolUnion.bypassMultiToolsLimit) {
-      return <BaseTool>[
-        DiscoveryEngineSearchTool(
-          dataStoreId: toolUnion.dataStoreId,
-          dataStoreSpecs: toolUnion.dataStoreSpecs,
-          searchEngineId: toolUnion.searchEngineId,
-          filter: toolUnion.filter,
-          maxResults: toolUnion.maxResults,
-        ),
-      ];
+      return <BaseTool>[toolUnion.toDiscoveryEngineSearchTool()];
     }
   }
 

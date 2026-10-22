@@ -1069,12 +1069,15 @@ class _SkillScriptCodeExecutor {
     required Map<String, Object?> shortOptions,
     required List<Object?> positionalArgs,
   }) {
-    final String normalizedScriptPath = scriptPath.startsWith('scripts/')
-        ? scriptPath
-        : 'scripts/$scriptPath';
+    final String normalizedFile = _validateSkillSubpath(
+      scriptPath,
+      subDir: 'scripts',
+      stripSubDir: true,
+    );
+    final String normalizedScriptPath = 'scripts/$normalizedFile';
 
-    final String extension = scriptPath.contains('.')
-        ? scriptPath.split('.').last.toLowerCase()
+    final String extension = normalizedFile.contains('.')
+        ? normalizedFile.split('.').last.toLowerCase()
         : '';
     if (extension != 'py' && extension != 'sh' && extension != 'bash') {
       return null;
@@ -1700,28 +1703,52 @@ class SkillToolset extends BaseToolset {
 
     await env.writeFile('$skillRoot/SKILL.md', skill.instructions);
 
+    final Set<String> seenReferences = <String>{};
     for (final String refName in skill.resources.listReferences()) {
+      final String normalized = _validateSkillSubpath(
+        refName,
+        subDir: 'references',
+      );
+      if (!seenReferences.add(normalized)) {
+        throw ArgumentError('Duplicate normalized path detected: $normalized');
+      }
       final Object? content = skill.resources.getReferenceData(refName);
       if (content != null) {
         final String textContent = content is List<int>
             ? utf8.decode(content, allowMalformed: true)
             : '$content';
-        await env.writeFile('$skillRoot/references/$refName', textContent);
+        await env.writeFile('$skillRoot/references/$normalized', textContent);
       }
     }
+    final Set<String> seenAssets = <String>{};
     for (final String assetName in skill.resources.listAssets()) {
+      final String normalized = _validateSkillSubpath(
+        assetName,
+        subDir: 'assets',
+      );
+      if (!seenAssets.add(normalized)) {
+        throw ArgumentError('Duplicate normalized path detected: $normalized');
+      }
       final Object? content = skill.resources.getAssetData(assetName);
       if (content != null) {
         final String textContent = content is List<int>
             ? utf8.decode(content, allowMalformed: true)
             : '$content';
-        await env.writeFile('$skillRoot/assets/$assetName', textContent);
+        await env.writeFile('$skillRoot/assets/$normalized', textContent);
       }
     }
+    final Set<String> seenScripts = <String>{};
     for (final String scriptName in skill.resources.listScripts()) {
+      final String normalized = _validateSkillSubpath(
+        scriptName,
+        subDir: 'scripts',
+      );
+      if (!seenScripts.add(normalized)) {
+        throw ArgumentError('Duplicate normalized path detected: $normalized');
+      }
       final Script? script = skill.resources.getScript(scriptName);
       if (script != null) {
-        await env.writeFile('$skillRoot/scripts/$scriptName', script.src);
+        await env.writeFile('$skillRoot/scripts/$normalized', script.src);
       }
     }
 
@@ -2194,8 +2221,7 @@ class SkillToolset extends BaseToolset {
         .map((BaseTool tool) => tool.name)
         .toSet();
     final List<BaseTool> resolved = <BaseTool>[];
-    final List<String> sortedNames = additionalToolNames.toList()..sort();
-    for (final String toolName in sortedNames) {
+    for (final String toolName in additionalToolNames) {
       final BaseTool? tool = candidateTools[toolName];
       if (tool == null) {
         continue;
@@ -2412,6 +2438,26 @@ String _guessMimeType(String path) {
     }
   }
   return 'application/octet-stream';
+}
+
+String _validateSkillSubpath(
+  String path, {
+  String? subDir,
+  bool stripSubDir = false,
+}) {
+  String candidate = path;
+  if (stripSubDir && subDir != null) {
+    String posixPath = candidate.replaceAll(r'\', '/');
+    while (posixPath.startsWith('./')) {
+      posixPath = posixPath.substring(2);
+    }
+    final String prefix = '$subDir/';
+    if (posixPath.startsWith(prefix)) {
+      posixPath = posixPath.substring(prefix.length);
+    }
+    candidate = posixPath;
+  }
+  return validateRelativeResourcePath(candidate);
 }
 
 int? _toInt(Object? value) {

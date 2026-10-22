@@ -91,6 +91,7 @@ class RestApiTool extends BaseTool {
     HeaderProvider? headerProvider,
     String? credentialKey,
     RestApiRequestExecutor? requestExecutor,
+    this.allowPrivateNetworkAccess = false,
   }) : operation = _readMap(operation),
        _sslVerify = sslVerify,
        _headerProvider = headerProvider,
@@ -123,6 +124,9 @@ class RestApiTool extends BaseTool {
   /// The configured auth credential for request preparation.
   AuthCredential? authCredential;
 
+  /// Whether requests to loopback, private, link-local, or internal hosts are allowed.
+  final bool allowPrivateNetworkAccess;
+
   final Map<String, String> _defaultHeaders = <String, String>{};
   Object? _sslVerify;
   final HeaderProvider? _headerProvider;
@@ -134,6 +138,7 @@ class RestApiTool extends BaseTool {
     Object? sslVerify,
     HeaderProvider? headerProvider,
     RestApiRequestExecutor? requestExecutor,
+    bool allowPrivateNetworkAccess = false,
   }) {
     final OperationParser operationParser = OperationParser.load(
       parsed.operation,
@@ -155,6 +160,7 @@ class RestApiTool extends BaseTool {
       sslVerify: sslVerify,
       headerProvider: headerProvider,
       requestExecutor: requestExecutor,
+      allowPrivateNetworkAccess: allowPrivateNetworkAccess,
     );
     generated._operationParser = operationParser;
     return generated;
@@ -506,6 +512,10 @@ class RestApiTool extends BaseTool {
         }
       }
 
+      if (!allowPrivateNetworkAccess) {
+        _validateRequestUrl(_readString(requestParams['url']) ?? '');
+      }
+
       response = await _requestExecutor(requestParams: requestParams);
     } catch (error) {
       return <String, Object?>{
@@ -560,6 +570,137 @@ class RestApiTool extends BaseTool {
     return 'RestApiTool(name="$name", description="$description", endpoint="$endpoint", '
         'operation="$operation", authScheme="$authScheme", authCredential="$authCredential")';
   }
+}
+
+const Set<String> _blockedHostnames = <String>{
+  'localhost',
+  'metadata',
+  'metadata.goog',
+};
+
+const List<String> _blockedHostnameSuffixes = <String>[
+  '.localhost',
+  '.local',
+  '.internal',
+  '.metadata.goog',
+];
+
+void _validateRequestUrl(String rawUrl) {
+  final Uri? uri = Uri.tryParse(rawUrl);
+  if (uri == null || !uri.hasScheme) {
+    throw ArgumentError('Unsupported url scheme: $rawUrl');
+  }
+  final String scheme = uri.scheme.toLowerCase();
+  if (scheme != 'http' && scheme != 'https') {
+    throw ArgumentError('Unsupported url scheme: $rawUrl');
+  }
+  String host = uri.host.trim();
+  if (host.startsWith('[') && host.endsWith(']') && host.length > 2) {
+    host = host.substring(1, host.length - 1);
+  }
+  if (host.isEmpty) {
+    throw ArgumentError('URL is missing a hostname: $rawUrl');
+  }
+  final String normalizedHost = host
+      .replaceFirst(RegExp(r'\.+$'), '')
+      .toLowerCase();
+  if (_blockedHostnames.contains(normalizedHost) ||
+      _blockedHostnameSuffixes.any(normalizedHost.endsWith)) {
+    throw ArgumentError('Blocked host: $host');
+  }
+  final InternetAddress? parsedIp = InternetAddress.tryParse(host);
+  if (parsedIp != null && _isRestrictedAddress(parsedIp)) {
+    throw ArgumentError('Blocked host: $host');
+  }
+}
+
+bool _isRestrictedAddress(InternetAddress address) {
+  if (address.isLoopback || address.isLinkLocal || address.isMulticast) {
+    return true;
+  }
+  final List<int> bytes = address.rawAddress;
+  if (address.type == InternetAddressType.IPv4 && bytes.length == 4) {
+    return _isRestrictedIpv4(bytes);
+  }
+  if (address.type == InternetAddressType.IPv6 && bytes.length == 16) {
+    if (bytes.every((int byte) => byte == 0)) {
+      return true;
+    }
+    if ((bytes[0] & 0xfe) == 0xfc) {
+      return true;
+    }
+    if (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80) {
+      return true;
+    }
+    if (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0xc0) {
+      return true;
+    }
+    if (bytes[0] == 0x20 &&
+        bytes[1] == 0x01 &&
+        bytes[2] == 0x0d &&
+        bytes[3] == 0xb8) {
+      return true;
+    }
+    final bool ipv4Mapped =
+        bytes.take(10).every((int byte) => byte == 0) &&
+        bytes[10] == 0xff &&
+        bytes[11] == 0xff;
+    if (ipv4Mapped) {
+      return _isRestrictedIpv4(bytes.sublist(12));
+    }
+    final bool nat64 =
+        bytes[0] == 0x00 &&
+        bytes[1] == 0x64 &&
+        bytes[2] == 0xff &&
+        bytes[3] == 0x9b &&
+        bytes.sublist(4, 12).every((int byte) => byte == 0);
+    if (nat64) {
+      return _isRestrictedIpv4(bytes.sublist(12));
+    }
+    if (bytes[0] == 0x20 && bytes[1] == 0x02) {
+      return _isRestrictedIpv4(bytes.sublist(2, 6));
+    }
+    if (bytes.take(12).every((int byte) => byte == 0)) {
+      return _isRestrictedIpv4(bytes.sublist(12));
+    }
+  }
+  return false;
+}
+
+bool _isRestrictedIpv4(List<int> bytes) {
+  final int first = bytes[0];
+  final int second = bytes[1];
+  if (first == 0 || first == 10 || first == 127 || first >= 224) {
+    return true;
+  }
+  if (first == 100 && second >= 64 && second <= 127) {
+    return true;
+  }
+  if (first == 169 && second == 254) {
+    return true;
+  }
+  if (first == 172 && second >= 16 && second <= 31) {
+    return true;
+  }
+  if (first == 192 && second == 168) {
+    return true;
+  }
+  if (first == 192 && second == 0 && (bytes[2] == 0 || bytes[2] == 2)) {
+    return true;
+  }
+  if (first == 192 && second == 88 && bytes[2] == 99) {
+    return true;
+  }
+  if (first == 198 && (second == 18 || second == 19)) {
+    return true;
+  }
+  if (first == 198 && second == 51 && bytes[2] == 100) {
+    return true;
+  }
+  if (first == 203 && second == 0 && bytes[2] == 113) {
+    return true;
+  }
+  return false;
 }
 
 Future<RestApiResponse> _request({

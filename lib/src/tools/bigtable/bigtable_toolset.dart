@@ -18,26 +18,38 @@ const String defaultBigtableToolNamePrefix = 'bigtable';
 
 /// Tool that executes SQL queries against parameterized Bigtable logical views.
 class BigtableParameterizedViewTool extends GoogleTool {
-  /// Creates a parameterized view SQL execution tool for [viewParameterNames].
+  /// Creates a parameterized view SQL execution tool for [viewParameterNames]
+  /// or [viewParameters].
   BigtableParameterizedViewTool({
-    required List<String> viewParameterNames,
+    List<String>? viewParameterNames,
+    Map<String, Object?>? viewParameters,
     super.credentialsConfig,
     super.toolSettings,
-  }) : viewParameterNames = List<String>.unmodifiable(viewParameterNames),
+  }) : viewParameterNames = viewParameterNames == null
+           ? const <String>[]
+           : List<String>.unmodifiable(viewParameterNames),
+       viewParameters = viewParameters == null
+           ? null
+           : Map<String, Object?>.unmodifiable(viewParameters),
        super(
          func: query_tool.executeSql,
          name: 'execute_sql_parameterized',
-       );
+       ) {
+    if (this.viewParameterNames.isNotEmpty && this.viewParameters != null) {
+      throw ArgumentError(
+        'Cannot specify both viewParameterNames and viewParameters.',
+      );
+    }
+  }
 
-  /// Parameter names required by the target Bigtable logical view.
+  /// Parameter names resolved from trusted [ToolContext] attributes.
   final List<String> viewParameterNames;
+
+  /// Explicit view parameter values injected into parameterized view queries.
+  final Map<String, Object?>? viewParameters;
 
   @override
   FunctionDeclaration? getDeclaration() {
-    final Map<String, Object?> viewProperties = <String, Object?>{
-      for (final String paramName in viewParameterNames)
-        paramName: <String, Object?>{'type': 'string'},
-    };
     return FunctionDeclaration(
       name: name,
       description: description.isEmpty
@@ -49,27 +61,84 @@ class BigtableParameterizedViewTool extends GoogleTool {
           'project_id': <String, Object?>{'type': 'string'},
           'instance_id': <String, Object?>{'type': 'string'},
           'query': <String, Object?>{'type': 'string'},
-          'view_parameters': <String, Object?>{
-            'type': 'object',
-            'properties': viewProperties,
-            'required': List<String>.from(viewParameterNames),
-          },
         },
         'required': <String>[
           'project_id',
           'instance_id',
           'query',
-          'view_parameters',
         ],
       },
     );
+  }
+
+  static String? _resolveContextAttribute(
+    ToolContext toolContext,
+    String paramName,
+  ) {
+    switch (paramName) {
+      case 'user_id':
+      case 'userId':
+        return toolContext.userId;
+      case 'app_name':
+      case 'appName':
+        return toolContext.session.appName;
+      case 'session_id':
+      case 'sessionId':
+        return toolContext.session.id;
+      case 'invocation_id':
+      case 'invocationId':
+        return toolContext.invocationId;
+      case 'agent_name':
+      case 'agentName':
+        return toolContext.agentName;
+      default:
+        throw ArgumentError(
+          'Unsupported view parameter name "$paramName". Only trusted '
+          'ToolContext attributes are supported; pass custom parameters via '
+          'viewParameters.',
+        );
+    }
+  }
+
+  Future<Map<String, Object?>> _resolveViewParameters(
+    ToolContext toolContext,
+  ) async {
+    final Map<String, Object?> resolved = <String, Object?>{};
+    for (final String paramName in viewParameterNames) {
+      final String? value = _resolveContextAttribute(toolContext, paramName);
+      if (value == null || value.isEmpty) {
+        throw ArgumentError(
+          'Missing value for view parameter "$paramName" on ToolContext.',
+        );
+      }
+      resolved[paramName] = value;
+    }
+
+    if (viewParameters != null) {
+      for (final MapEntry<String, Object?> entry in viewParameters!.entries) {
+        Object? value = entry.value;
+        if (value is Function) {
+          value = Function.apply(value, <Object?>[toolContext]);
+          if (value is Future) {
+            value = await value;
+          }
+        }
+        if (value != null) {
+          resolved[entry.key] = value;
+        } else {
+          resolved.remove(entry.key);
+        }
+      }
+    }
+
+    return resolved;
   }
 
   @override
   Future<Object?> run({
     required Map<String, dynamic> args,
     required ToolContext toolContext,
-  }) {
+  }) async {
     final Map<String, dynamic> normalizedArgs = Map<String, dynamic>.from(args);
     if (normalizedArgs.containsKey('project_id') &&
         !normalizedArgs.containsKey('projectId')) {
@@ -79,14 +148,12 @@ class BigtableParameterizedViewTool extends GoogleTool {
         !normalizedArgs.containsKey('instanceId')) {
       normalizedArgs['instanceId'] = normalizedArgs.remove('instance_id');
     }
-    final Object? rawViewParams =
-        normalizedArgs.remove('view_parameters') ??
-        normalizedArgs['viewParameters'];
-    if (rawViewParams is Map) {
-      normalizedArgs['viewParameters'] = <String, Object?>{
-        for (final MapEntry<Object?, Object?> entry in rawViewParams.entries)
-          '${entry.key}': entry.value,
-      };
+    normalizedArgs.remove('view_parameters');
+    normalizedArgs.remove('viewParameters');
+    if (viewParameterNames.isNotEmpty || viewParameters != null) {
+      normalizedArgs['viewParameters'] = await _resolveViewParameters(
+        toolContext,
+      );
     }
     return super.run(args: normalizedArgs, toolContext: toolContext);
   }
@@ -100,12 +167,24 @@ class BigtableToolset extends BaseToolset {
     BigtableCredentialsConfig? credentialsConfig,
     BigtableToolSettings? bigtableToolSettings,
     List<String>? viewParameterNames,
+    Map<String, Object?>? viewParameters,
   }) : _credentialsConfig = credentialsConfig,
        _toolSettings = bigtableToolSettings ?? BigtableToolSettings(),
        viewParameterNames = viewParameterNames == null
            ? null
            : List<String>.unmodifiable(viewParameterNames),
-       super(toolNamePrefix: defaultBigtableToolNamePrefix);
+       viewParameters = viewParameters == null
+           ? null
+           : Map<String, Object?>.unmodifiable(viewParameters),
+       super(toolNamePrefix: defaultBigtableToolNamePrefix) {
+    if (this.viewParameterNames != null &&
+        this.viewParameterNames!.isNotEmpty &&
+        this.viewParameters != null) {
+      throw ArgumentError(
+        'Cannot specify both viewParameterNames and viewParameters.',
+      );
+    }
+  }
 
   final BigtableCredentialsConfig? _credentialsConfig;
   final BigtableToolSettings _toolSettings;
@@ -116,12 +195,19 @@ class BigtableToolset extends BaseToolset {
   /// generic `execute_sql` tool.
   final List<String>? viewParameterNames;
 
+  /// Optional explicit parameter values for parameterized Bigtable logical views.
+  ///
+  /// When non-empty, `execute_sql_parameterized` is exposed in place of the
+  /// generic `execute_sql` tool.
+  final Map<String, Object?>? viewParameters;
+
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     isFeatureEnabled(FeatureName.bigtableToolset);
 
     final bool hasViewParameters =
-        viewParameterNames != null && viewParameterNames!.isNotEmpty;
+        (viewParameterNames != null && viewParameterNames!.isNotEmpty) ||
+        (viewParameters != null && viewParameters!.isNotEmpty);
 
     final List<GoogleTool> allTools = <GoogleTool>[
       GoogleTool(
@@ -162,7 +248,8 @@ class BigtableToolset extends BaseToolset {
       ),
       if (hasViewParameters)
         BigtableParameterizedViewTool(
-          viewParameterNames: viewParameterNames!,
+          viewParameterNames: viewParameterNames,
+          viewParameters: viewParameters,
           credentialsConfig: _credentialsConfig,
           toolSettings: _toolSettings,
         )

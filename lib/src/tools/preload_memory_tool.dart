@@ -3,6 +3,7 @@ library;
 
 import '../memory/memory_entry.dart';
 import '../models/llm_request.dart';
+import '../utils/content_utils.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
 
@@ -38,16 +39,8 @@ class PreloadMemoryTool extends BaseTool {
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
-    final userContent = toolContext.userContent;
-    if (userContent == null || userContent.parts.isEmpty) {
-      return;
-    }
-
-    final String query = userContent.parts
-        .where((part) => part.text != null && part.text!.trim().isNotEmpty)
-        .map((part) => part.text!.trim())
-        .join(' ')
-        .trim();
+    final String query =
+        (extractTextFromContent(toolContext.userContent) ?? '').trim();
     if (query.isEmpty) {
       return;
     }
@@ -77,10 +70,7 @@ $memoryText
 }
 
 String _memoryAsText(MemoryEntry memory) {
-  final String text = memory.content.parts
-      .where((part) => part.text != null && part.text!.trim().isNotEmpty)
-      .map((part) => part.text!.trim())
-      .join('\n');
+  final String text = (extractTextFromContent(memory.content) ?? '').trim();
   if (text.isEmpty) {
     return '';
   }

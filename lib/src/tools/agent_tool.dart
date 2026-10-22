@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 
 import '../agents/base_agent.dart';
+import '../agents/context_cache_config.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../events/event.dart';
@@ -56,6 +57,8 @@ Map<String, Object?> _objectMap(Object? value) {
 }
 
 String? _stringValue(Object? value) => value is String ? value : null;
+
+const int _agentToolMaxCacheTtlSeconds = 300;
 
 const String _taskAgentToolSuffix =
     'IMPORTANT: This tool delegates execution to a specialized agent. '
@@ -162,6 +165,29 @@ class AgentTool extends BaseTool {
     );
     if (includePlugins) {
       runner.pluginManager.setSkipClosingPlugins(true);
+    }
+    final Object? parentCacheConfig = invocationContext.contextCacheConfig;
+    if (parentCacheConfig is ContextCacheConfig) {
+      runner.contextCacheConfig = ContextCacheConfig(
+        cacheIntervals: parentCacheConfig.cacheIntervals,
+        ttlSeconds: parentCacheConfig.ttlSeconds > _agentToolMaxCacheTtlSeconds
+            ? _agentToolMaxCacheTtlSeconds
+            : parentCacheConfig.ttlSeconds,
+        minTokens: parentCacheConfig.minTokens,
+      );
+    } else if (parentCacheConfig is Map<String, Object?>) {
+      final ContextCacheConfig parsed = ContextCacheConfig.fromJson(
+        parentCacheConfig,
+      );
+      runner.contextCacheConfig = ContextCacheConfig(
+        cacheIntervals: parsed.cacheIntervals,
+        ttlSeconds: parsed.ttlSeconds > _agentToolMaxCacheTtlSeconds
+            ? _agentToolMaxCacheTtlSeconds
+            : parsed.ttlSeconds,
+        minTokens: parsed.minTokens,
+      );
+    } else if (parentCacheConfig != null) {
+      runner.contextCacheConfig = parentCacheConfig;
     }
 
     final Map<String, Object?> stateSnapshot = Map<String, Object?>.from(

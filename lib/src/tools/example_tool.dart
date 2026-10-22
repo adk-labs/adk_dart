@@ -1,10 +1,12 @@
 /// Few-shot example injection tool for prompt conditioning.
 library;
 
+import '../examples/base_example_provider.dart';
 import '../examples/example.dart';
 import '../examples/example_util.dart' as example_util;
 import '../models/llm_request.dart';
 import '../types/content.dart';
+import '../utils/content_utils.dart';
 import 'base_tool.dart';
 import 'tool_configs.dart';
 import 'tool_context.dart';
@@ -43,15 +45,19 @@ class ExampleTool extends BaseTool {
     required LlmRequest llmRequest,
   }) async {
     final Content? userContent = toolContext.invocationContext.userContent;
-    final String? query = userContent?.parts.isNotEmpty == true
-        ? userContent!.parts.first.text
-        : null;
-    if (query == null || query.isEmpty) {
+    if (userContent == null || userContent.parts.isEmpty) {
+      return;
+    }
+    final String? query = extractTextFromContent(
+      userContent,
+      separator: '\n',
+    );
+    if ((query == null || query.isEmpty) && examples is BaseExampleProvider) {
       return;
     }
 
     llmRequest.appendInstructions(<String>[
-      example_util.buildExampleSi(examples, query, llmRequest.model),
+      example_util.buildExampleSi(examples, query ?? '', llmRequest.model),
     ]);
   }
 

@@ -10,6 +10,110 @@ import 'auth_tool.dart';
 import 'exchanger/base_credential_exchanger.dart';
 import 'exchanger/oauth2_credential_exchanger.dart';
 
+/// Builds an [AuthCredential] from a raw token or key string [val] according
+/// to [authScheme].
+///
+/// Throws an [ArgumentError] if [val] is empty or if [authScheme] specifies
+/// HTTP `basic` authentication.
+AuthCredential credentialFromString(String val, [Object? authScheme]) {
+  if (val.isEmpty) {
+    throw ArgumentError('Credential string cannot be empty.');
+  }
+
+  if (authScheme == null || (authScheme is String && authScheme.isEmpty)) {
+    return AuthCredential(
+      authType: AuthCredentialType.oauth2,
+      oauth2: OAuth2Auth(accessToken: val),
+    );
+  }
+
+  String? schemeType;
+  String httpScheme = 'bearer';
+
+  Object? resolvedScheme = authScheme;
+  if (resolvedScheme is String) {
+    final String trimmed = resolvedScheme.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        resolvedScheme = jsonDecode(trimmed);
+      } catch (_) {
+        schemeType = trimmed.toLowerCase();
+      }
+    } else {
+      final String lower = trimmed.toLowerCase();
+      if (lower == 'apikey' || lower == 'api_key') {
+        schemeType = 'apikey';
+      } else if (lower == 'basic') {
+        schemeType = 'http';
+        httpScheme = 'basic';
+      } else if (lower == 'http' || lower == 'bearer') {
+        schemeType = 'http';
+        httpScheme = 'bearer';
+      } else {
+        schemeType = lower;
+      }
+    }
+  }
+
+  if (resolvedScheme is Map) {
+    final Object? rawType =
+        resolvedScheme['type'] ??
+        resolvedScheme['type_'] ??
+        resolvedScheme['auth_type'];
+    if (rawType != null) {
+      schemeType = '$rawType'.trim().toLowerCase();
+    }
+    final Object? rawHttpScheme = resolvedScheme['scheme'];
+    if (rawHttpScheme is String && rawHttpScheme.trim().isNotEmpty) {
+      httpScheme = rawHttpScheme.trim();
+    }
+  } else if (resolvedScheme is! String) {
+    final dynamic dyn = resolvedScheme;
+    try {
+      final Object? rawType = dyn.type_;
+      if (rawType != null) {
+        schemeType = '$rawType'.split('.').last.toLowerCase();
+      }
+    } catch (_) {
+      try {
+        final Object? rawType = dyn.type;
+        if (rawType != null) {
+          schemeType = '$rawType'.split('.').last.toLowerCase();
+        }
+      } catch (_) {}
+    }
+    try {
+      final Object? rawHttpScheme = dyn.scheme;
+      if (rawHttpScheme is String && rawHttpScheme.isNotEmpty) {
+        httpScheme = rawHttpScheme;
+      }
+    } catch (_) {}
+  }
+
+  if (schemeType == 'apikey' || schemeType == 'api_key') {
+    return AuthCredential(authType: AuthCredentialType.apiKey, apiKey: val);
+  }
+  if (schemeType == 'http') {
+    if (httpScheme.toLowerCase() == 'basic') {
+      throw ArgumentError(
+        'HTTP basic authentication requires username and password '
+        'credentials, not a raw token string.',
+      );
+    }
+    return AuthCredential(
+      authType: AuthCredentialType.http,
+      http: HttpAuth(
+        scheme: httpScheme,
+        credentials: HttpCredentials(token: val),
+      ),
+    );
+  }
+  return AuthCredential(
+    authType: AuthCredentialType.oauth2,
+    oauth2: OAuth2Auth(accessToken: val),
+  );
+}
+
 /// Internal auth orchestration helper mirroring Python ADK behavior.
 ///
 /// ```dart
@@ -95,13 +199,33 @@ class AuthHandler {
 
   /// Returns the stored auth response credential, if present.
   AuthCredential? getAuthResponse(State state) {
-    final Object? value =
-        state[authTemporaryStateKey(authConfig.credentialKey)] ??
-        state[authResponseStateKey(authConfig.credentialKey)];
-    if (value is! AuthCredential) {
-      return null;
+    final List<String> keys = <String>[
+      authTemporaryStateKey(authConfig.credentialKey),
+      authResponseStateKey(authConfig.credentialKey),
+      authConfig.credentialKey,
+    ];
+    for (final String key in keys) {
+      final Object? value = state[key];
+      if (value == null) {
+        continue;
+      }
+      if (value is AuthCredential) {
+        return value.copyWith();
+      }
+      try {
+        if (value is String && value.isNotEmpty) {
+          return credentialFromString(value, authConfig.authScheme);
+        }
+      } on Object catch (error) {
+        if (error is ArgumentError ||
+            error is FormatException ||
+            error is TypeError) {
+          continue;
+        }
+        rethrow;
+      }
     }
-    return value.copyWith();
+    return null;
   }
 
   /// Produces an auth request config for interactive auth flows.

@@ -49,6 +49,22 @@ const String adkExperimentalContextCacheContentsCount =
 const String adkExperimentalContextCacheInvocationsUsed =
     'adk.experimental.context_cache.invocations_used';
 
+/// Attribute key recording the distinct count of grounding web search queries.
+const String adkExperimentalGroundingQueryCount =
+    'adk.experimental.grounding.query_count';
+
+/// Attribute key recording the count of grounding chunks returned by the model.
+const String adkExperimentalGroundingChunkCount =
+    'adk.experimental.grounding.chunk_count';
+
+/// Attribute key recording the grounding web search queries when content capture is enabled.
+const String adkExperimentalGroundingWebSearchQueries =
+    'adk.experimental.grounding.web_search_queries';
+
+/// Attribute key recording the distinct grounding source URIs when content capture is enabled.
+const String adkExperimentalGroundingSourceUris =
+    'adk.experimental.grounding.source_uris';
+
 /// Alias for [TraceSpanRecord].
 typedef TraceSpan = TraceSpanRecord;
 
@@ -513,6 +529,12 @@ void traceCallLlm(
     llmResponse.cacheMetadata,
     environment: environment,
   );
+  _setGroundingAttributes(
+    targetSpan,
+    llmResponse.groundingMetadata,
+    captureContent: _shouldAddRequestResponseToSpans(environment: environment),
+    environment: environment,
+  );
 
   final String? finishReason = llmResponse.finishReason;
   if (finishReason != null && finishReason.isNotEmpty) {
@@ -520,6 +542,40 @@ void traceCallLlm(
       finishReason.toLowerCase(),
     ]);
   }
+}
+
+bool _isExperimentalTelemetryOptedIn(
+  String feature, {
+  Map<String, String>? environment,
+}) {
+  final Map<String, String> env = environment ?? Platform.environment;
+  final List<String?> rawValues = <String?>[
+    env['ADK_EXPERIMENTAL_TELEMETRY_OPT_IN'],
+    env['adk_experimental_telemetry_opt_in'],
+    env['ADK_EXPERIMENTAL_TELEMETRY'],
+    env['adk_experimental_telemetry'],
+    env['ADK_EXPERIMENTAL_TELEMETRY_FEATURES'],
+    env['adk_experimental_telemetry_features'],
+  ];
+  final String normalizedFeature = feature.trim().toLowerCase();
+  for (final String? raw in rawValues) {
+    if (raw == null || raw.isEmpty) {
+      continue;
+    }
+    final String lowered = raw.trim().toLowerCase();
+    if (lowered == 'true' || lowered == '1') {
+      return true;
+    }
+    for (final String token in lowered.split(',')) {
+      final String trimmed = token.trim();
+      if (trimmed == 'true' ||
+          trimmed == '1' ||
+          trimmed == normalizedFeature) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 void _setContextCacheAttributes(
@@ -537,11 +593,10 @@ void _setContextCacheAttributes(
   if (cacheMetadata == null) {
     return;
   }
-  final Map<String, String> env = environment ?? Platform.environment;
-  final bool shouldEmit =
-      env['ADK_EXPERIMENTAL_TELEMETRY_OPT_IN'] == 'true' ||
-      env['adk_experimental_telemetry_opt_in'] == 'true';
-  if (!shouldEmit) {
+  if (!_isExperimentalTelemetryOptedIn(
+    'context_cache',
+    environment: environment,
+  )) {
     return;
   }
   span
@@ -563,6 +618,198 @@ void _setContextCacheAttributes(
       cacheMetadata.invocationsUsed!,
     );
   }
+}
+
+void _setGroundingAttributes(
+  TraceSpanRecord span,
+  Object? rawGroundingMetadata, {
+  required bool captureContent,
+  Map<String, String>? environment,
+}) {
+  if (rawGroundingMetadata == null) {
+    return;
+  }
+  if (!_isExperimentalTelemetryOptedIn('grounding', environment: environment)) {
+    return;
+  }
+
+  final List<String> webSearchQueries = _extractWebSearchQueries(
+    rawGroundingMetadata,
+  );
+  final List<Object?> groundingChunks = _extractGroundingChunks(
+    rawGroundingMetadata,
+  );
+
+  span
+    ..setAttribute(
+      adkExperimentalGroundingQueryCount,
+      webSearchQueries.toSet().length,
+    )
+    ..setAttribute(
+      adkExperimentalGroundingChunkCount,
+      groundingChunks.length,
+    );
+
+  if (captureContent) {
+    if (webSearchQueries.isNotEmpty) {
+      span.setAttribute(
+        adkExperimentalGroundingWebSearchQueries,
+        webSearchQueries,
+      );
+    }
+    final List<String> sourceUris = _groundingSourceUris(groundingChunks);
+    if (sourceUris.isNotEmpty) {
+      span.setAttribute(adkExperimentalGroundingSourceUris, sourceUris);
+    }
+  }
+}
+
+List<String> _extractWebSearchQueries(Object groundingMetadata) {
+  Object? rawQueries;
+  if (groundingMetadata is Map) {
+    rawQueries =
+        groundingMetadata['web_search_queries'] ??
+        groundingMetadata['webSearchQueries'];
+  } else {
+    final dynamic dynamicMeta = groundingMetadata;
+    try {
+      rawQueries = dynamicMeta.webSearchQueries;
+    } catch (_) {
+      try {
+        rawQueries = dynamicMeta.web_search_queries;
+      } catch (_) {
+        rawQueries = null;
+      }
+    }
+  }
+  if (rawQueries is! Iterable) {
+    return const <String>[];
+  }
+  final List<String> queries = <String>[];
+  for (final Object? entry in rawQueries) {
+    if (entry is String && entry.isNotEmpty) {
+      queries.add(entry);
+    }
+  }
+  return queries;
+}
+
+List<Object?> _extractGroundingChunks(Object groundingMetadata) {
+  Object? rawChunks;
+  if (groundingMetadata is Map) {
+    rawChunks =
+        groundingMetadata['grounding_chunks'] ??
+        groundingMetadata['groundingChunks'];
+  } else {
+    final dynamic dynamicMeta = groundingMetadata;
+    try {
+      rawChunks = dynamicMeta.groundingChunks;
+    } catch (_) {
+      try {
+        rawChunks = dynamicMeta.grounding_chunks;
+      } catch (_) {
+        rawChunks = null;
+      }
+    }
+  }
+  if (rawChunks is Iterable) {
+    return rawChunks.toList(growable: false);
+  }
+  return const <Object?>[];
+}
+
+List<String> _groundingSourceUris(List<Object?> groundingChunks) {
+  final Set<String> uris = <String>{};
+  for (final Object? chunk in groundingChunks) {
+    if (chunk == null) {
+      continue;
+    }
+    final List<String?> candidates = <String?>[
+      _nestedStringField(chunk, const <String>['web'], const <String>['uri']),
+      _nestedStringField(
+        chunk,
+        const <String>['retrieved_context', 'retrievedContext'],
+        const <String>['uri'],
+      ),
+      _nestedStringField(chunk, const <String>['maps'], const <String>['uri']),
+      _nestedStringField(
+        chunk,
+        const <String>['image'],
+        const <String>['source_uri', 'sourceUri'],
+      ),
+    ];
+    for (final String? uri in candidates) {
+      if (uri != null && uri.isNotEmpty) {
+        uris.add(uri);
+      }
+    }
+  }
+  return uris.toList(growable: false);
+}
+
+String? _nestedStringField(
+  Object target,
+  List<String> containerKeys,
+  List<String> leafKeys,
+) {
+  Object? container;
+  if (target is Map) {
+    for (final String key in containerKeys) {
+      if (target.containsKey(key)) {
+        container = target[key];
+        break;
+      }
+    }
+  } else {
+    final dynamic dynTarget = target;
+    for (final String key in containerKeys) {
+      try {
+        if (key == 'web') {
+          container = dynTarget.web;
+        } else if (key == 'retrieved_context') {
+          container = dynTarget.retrieved_context;
+        } else if (key == 'retrievedContext') {
+          container = dynTarget.retrievedContext;
+        } else if (key == 'maps') {
+          container = dynTarget.maps;
+        } else if (key == 'image') {
+          container = dynTarget.image;
+        }
+        if (container != null) {
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+  if (container == null) {
+    return null;
+  }
+  if (container is Map) {
+    for (final String key in leafKeys) {
+      final Object? val = container[key];
+      if (val is String && val.isNotEmpty) {
+        return val;
+      }
+    }
+    return null;
+  }
+  final dynamic dynContainer = container;
+  for (final String key in leafKeys) {
+    try {
+      Object? val;
+      if (key == 'uri') {
+        val = dynContainer.uri;
+      } else if (key == 'source_uri') {
+        val = dynContainer.source_uri;
+      } else if (key == 'sourceUri') {
+        val = dynContainer.sourceUri;
+      }
+      if (val is String && val.isNotEmpty) {
+        return val;
+      }
+    } catch (_) {}
+  }
+  return null;
 }
 
 /// Records span attributes for send-data events.
@@ -756,6 +1003,14 @@ void traceInferenceResult(
   _setContextCacheAttributes(
     targetSpan,
     llmResponse.cacheMetadata,
+    environment: environment,
+  );
+  _setGroundingAttributes(
+    targetSpan,
+    llmResponse.groundingMetadata,
+    captureContent: _shouldAddContentToExperimentalSpans(
+      environment: environment,
+    ),
     environment: environment,
   );
 
@@ -1005,6 +1260,13 @@ bool _shouldLogPromptResponseContent({Map<String, String>? environment}) {
   final String value =
       (env[otelInstrumentationGenaiCaptureMessageContent] ?? '').toLowerCase();
   return value == 'true' || value == '1';
+}
+
+bool _shouldAddContentToExperimentalSpans({Map<String, String>? environment}) {
+  final String mode = experimental_semconv.getContentCapturingMode(
+    environment: environment,
+  );
+  return mode == 'SPAN_ONLY' || mode == 'SPAN_AND_EVENT';
 }
 
 Object? _serializeContent(Object? content) {

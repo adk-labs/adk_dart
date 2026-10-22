@@ -20,6 +20,7 @@ import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
 import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/trigger_routes.dart';
 import '../cli/utils/agent_loader.dart';
+import 'package:adk_dart/src/errors/invocation_not_found_error.dart';
 import 'package:adk_dart/src/errors/session_not_found_error.dart';
 import 'package:adk_dart/src/events/event.dart';
 import 'package:adk_dart/src/events/internal_metadata.dart';
@@ -435,6 +436,11 @@ class _AdkDevWebContext {
   String? serverHost;
 
   final Map<String, Runner> _runners = <String, Runner>{};
+  final Map<(String, String, String), List<AdkAbortController>>
+  _activeSessionAbortControllers =
+      <(String, String, String), List<AdkAbortController>>{};
+  final Map<(String, String, String), List<Future<void>>>
+  _activeSessionRunFutures = <(String, String, String), List<Future<void>>>{};
   final Map<String, Map<String, Map<String, Object?>>> _a2aTasksByApp =
       <String, Map<String, Map<String, Object?>>>{};
   final Map<String, Map<String, List<Map<String, Object?>>>>
@@ -621,9 +627,74 @@ class _AdkDevWebContext {
   /// a built-in agent-builder assistant) may be loaded and executed.
   ///
   /// Mirrors Python's `_allow_special_agents`: it is only enabled when the
-  /// Dev UI is served ([enableWebUi]); API-server-only deployments must not
-  /// expose these privileged internal agents.
-  bool get allowSpecialAgents => enableWebUi;
+  /// Dev UI is served ([enableWebUi]) and the server is bound to a loopback
+  /// address; API-server-only or non-loopback deployments must not expose
+  /// these privileged internal agents.
+  bool get allowSpecialAgents =>
+      enableWebUi && (serverHost == null || _isLoopbackAddress(serverHost!));
+
+  void registerActiveSessionRun(
+    String appName,
+    String userId,
+    String sessionId,
+    AdkAbortController abortController,
+    Future<void> runFuture,
+  ) {
+    final (String, String, String) key = (appName, userId, sessionId);
+    _activeSessionAbortControllers
+        .putIfAbsent(key, () => <AdkAbortController>[])
+        .add(abortController);
+    _activeSessionRunFutures
+        .putIfAbsent(key, () => <Future<void>>[])
+        .add(runFuture);
+  }
+
+  void unregisterActiveSessionRun(
+    String appName,
+    String userId,
+    String sessionId,
+    AdkAbortController abortController,
+    Future<void> runFuture,
+  ) {
+    final (String, String, String) key = (appName, userId, sessionId);
+    final List<AdkAbortController>? controllers =
+        _activeSessionAbortControllers[key];
+    if (controllers != null) {
+      controllers.remove(abortController);
+      if (controllers.isEmpty) {
+        _activeSessionAbortControllers.remove(key);
+      }
+    }
+    final List<Future<void>>? futures = _activeSessionRunFutures[key];
+    if (futures != null) {
+      futures.remove(runFuture);
+      if (futures.isEmpty) {
+        _activeSessionRunFutures.remove(key);
+      }
+    }
+  }
+
+  Future<void> cancelActiveSessionRuns(
+    String appName,
+    String userId,
+    String sessionId,
+  ) async {
+    final (String, String, String) key = (appName, userId, sessionId);
+    final List<AdkAbortController> controllers = List<AdkAbortController>.from(
+      _activeSessionAbortControllers[key] ?? const <AdkAbortController>[],
+    );
+    for (final AdkAbortController controller in controllers) {
+      controller.abort('Session rewind requested');
+    }
+    final List<Future<void>> futures = List<Future<void>>.from(
+      _activeSessionRunFutures[key] ?? const <Future<void>>[],
+    );
+    if (futures.isNotEmpty) {
+      await Future.wait(
+        futures.map((Future<void> f) => f.catchError((Object _) {})),
+      );
+    }
+  }
 
   /// Resolves the filesystem directory for [appName].
   String? getAgentDir(String appName) {
@@ -1242,6 +1313,13 @@ Future<void> _handleRequests(
             statusCode: HttpStatus.badRequest,
             message: error.message,
           );
+        } on InvocationNotFoundError catch (error) {
+          await _writeError(
+            request,
+            context,
+            statusCode: HttpStatus.notFound,
+            message: error.message,
+          );
         } on ArgumentError catch (error) {
           await _writeError(
             request,
@@ -1741,6 +1819,19 @@ Future<bool> _handlePythonStyleRoutes(
       return true;
     }
     return false;
+  }
+
+  if (segments.length == 7 &&
+      segments[6] == 'rewind' &&
+      request.method == 'POST') {
+    await _handleRewindSession(
+      request,
+      context,
+      appName: appName,
+      userId: userId,
+      sessionId: sessionId,
+    );
+    return true;
   }
 
   if (segments.length >= 7 && segments[6] == 'artifacts') {
@@ -3576,6 +3667,73 @@ Future<void> _handlePatchMemory(
   await _writeJson(request, context, payload: const <String, Object?>{});
 }
 
+Future<void> _handleRewindSession(
+  HttpRequest request,
+  _AdkDevWebContext context, {
+  required String appName,
+  required String userId,
+  required String sessionId,
+}) async {
+  final Map<String, dynamic> payload = await _readJsonBody(request);
+  final String rewindBeforeInvocationId = _readString(
+    payload,
+    const <String>[
+      'rewind_before_invocation_id',
+      'rewindBeforeInvocationId',
+      'invocation_id',
+      'invocationId',
+    ],
+    required: true,
+  );
+
+  final Runner runner = await context.getRunner(appName);
+  await context.cancelActiveSessionRuns(appName, userId, sessionId);
+  try {
+    await runner.rewindAsync(
+      userId: userId,
+      sessionId: sessionId,
+      rewindBeforeInvocationId: rewindBeforeInvocationId,
+    );
+  } on SessionNotFoundError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
+  } on InvocationNotFoundError catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: error.message,
+    );
+    return;
+  }
+
+  final Session? updated = await context.sessionService.getSession(
+    appName: appName,
+    userId: userId,
+    sessionId: sessionId,
+  );
+  if (updated == null) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message: 'Session not found: $sessionId',
+    );
+    return;
+  }
+
+  await _writeJson(
+    request,
+    context,
+    payload: _sessionToApiJson(updated, includeEvents: true),
+  );
+}
+
 Future<void> _handleArtifactsRoute(
   HttpRequest request,
   _AdkDevWebContext context,
@@ -3823,6 +3981,15 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
       runRequest.autoCreateSession ?? runner.autoCreateSession;
 
   final List<Event> events;
+  final AdkAbortController abortController = AdkAbortController();
+  final Completer<void> runCompleter = Completer<void>();
+  context.registerActiveSessionRun(
+    runRequest.appName,
+    runRequest.userId,
+    runRequest.sessionId,
+    abortController,
+    runCompleter.future,
+  );
   try {
     if (shouldAutoCreateSession) {
       await _ensureSessionExists(context, runRequest);
@@ -3837,6 +4004,7 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
           runConfig: context.maxLlmCalls == null
               ? null
               : RunConfig(maxLlmCalls: context.maxLlmCalls!),
+          abortSignal: abortController.signal,
         )
         .toList();
     for (final Event event in events) {
@@ -3863,6 +4031,17 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
       message: error.message,
     );
     return;
+  } finally {
+    if (!runCompleter.isCompleted) {
+      runCompleter.complete();
+    }
+    context.unregisterActiveSessionRun(
+      runRequest.appName,
+      runRequest.userId,
+      runRequest.sessionId,
+      abortController,
+      runCompleter.future,
+    );
   }
 
   await _writeJson(
@@ -3990,6 +4169,14 @@ Future<void> _handleRunSse(
     newMessage: runRequest.newMessage,
   );
   final AdkAbortController abortController = AdkAbortController();
+  final Completer<void> runCompleter = Completer<void>();
+  context.registerActiveSessionRun(
+    runRequest.appName,
+    runRequest.userId,
+    runRequest.sessionId,
+    abortController,
+    runCompleter.future,
+  );
   var clientDisconnected = false;
 
   try {
@@ -4053,6 +4240,17 @@ Future<void> _handleRunSse(
         'data: ${jsonEncode(<String, Object?>{'error': '$error'})}\n\n',
       );
     }
+  } finally {
+    if (!runCompleter.isCompleted) {
+      runCompleter.complete();
+    }
+    context.unregisterActiveSessionRun(
+      runRequest.appName,
+      runRequest.userId,
+      runRequest.sessionId,
+      abortController,
+      runCompleter.future,
+    );
   }
 
   if (!clientDisconnected) {
@@ -4207,6 +4405,14 @@ Future<void> _handleRunLive(
 
     final Future<void> forwardTask = forwardEvents();
     final Future<void> messageTask = processMessages();
+    final Completer<void> liveCompleter = Completer<void>();
+    context.registerActiveSessionRun(
+      appName,
+      userId,
+      sessionId,
+      abortController,
+      liveCompleter.future,
+    );
 
     try {
       await Future.any(<Future<void>>[forwardTask, messageTask]);
@@ -4216,6 +4422,16 @@ Future<void> _handleRunLive(
       abortController.abort('WebSocket client disconnected');
       liveQueue.close();
       await socket.close();
+      if (!liveCompleter.isCompleted) {
+        liveCompleter.complete();
+      }
+      context.unregisterActiveSessionRun(
+        appName,
+        userId,
+        sessionId,
+        abortController,
+        liveCompleter.future,
+      );
     }
   } finally {
     context.activeLiveSessions -= 1;
@@ -7159,8 +7375,9 @@ Future<dynamic> createAdkDevWebContextForTesting({
   bool reload = false,
   bool reloadAgents = false,
   TriggerRouter? triggerRouter,
+  String? serverHost,
 }) async {
-  return await _AdkDevWebContext.create(
+  final _AdkDevWebContext context = await _AdkDevWebContext.create(
     runtime: runtime,
     project: project,
     agentsDir: agentsDir,
@@ -7184,6 +7401,10 @@ Future<dynamic> createAdkDevWebContextForTesting({
     triggerSources: triggerSources,
     customTriggerRouter: triggerRouter,
   );
+  if (serverHost != null) {
+    context.serverHost = serverHost;
+  }
+  return context;
 }
 
 /// Internal testing helper for trigger route handling.

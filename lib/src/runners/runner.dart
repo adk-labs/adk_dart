@@ -7,6 +7,7 @@ import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
 import '../agents/invocation_context.dart';
 import '../agents/live_request_queue.dart';
+import '../agents/llm/task/finish_task_tool.dart';
 import '../agents/llm_agent.dart';
 import '../agents/managed_agent.dart';
 import '../agents/run_config.dart';
@@ -20,6 +21,7 @@ import '../events/abort_events.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../events/internal_metadata.dart';
+import '../events/rewind_events.dart';
 import '../flows/llm_flows/agent_transfer.dart';
 import '../flows/llm_flows/persist_barrier.dart';
 import '../flows/llm_flows/functions.dart' as flow_functions;
@@ -29,7 +31,64 @@ import '../sessions/base_session_service.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../tools/base_toolset.dart';
+import '../tools/node_tool.dart';
 import '../types/content.dart';
+import '../workflow/workflow.dart';
+
+bool _isFinishTaskTerminalFr(Event event) {
+  for (final FunctionResponse fr in event.getFunctionResponses()) {
+    if (fr.name == finishTaskToolName) {
+      final Object? result = fr.response['result'];
+      return result == finishTaskSuccessResult || result == 'Task failed.';
+    }
+  }
+  return false;
+}
+
+Set<(String, String)> _findFinishedScopeRuns(List<Event> liveEvents) {
+  final Set<(String, String)> finishedRuns = <(String, String)>{};
+  final Set<String> abortedInvocations = <String>{
+    for (final Event event in liveEvents)
+      if (isAbortEvent(event)) event.invocationId,
+  };
+  for (final Event event in liveEvents) {
+    if (event.actions.compaction != null) {
+      continue;
+    }
+    final String? scope = event.isolationScope;
+    if (scope == null || scope.isEmpty) {
+      continue;
+    }
+    if (abortedInvocations.contains(event.invocationId) ||
+        _isFinishTaskTerminalFr(event)) {
+      finishedRuns.add((scope, event.invocationId));
+    }
+  }
+  return finishedRuns;
+}
+
+/// Finds the active paused task scope `(isolationScope, invocationId)` in [session], if any.
+(String, String)? findActiveTaskScope(Session session) =>
+    _findActiveTaskScope(session);
+
+(String, String)? _findActiveTaskScope(Session session) {
+  final List<Event> liveEvents = applyRewinds(session.events);
+  final Set<(String, String)> finishedRuns = _findFinishedScopeRuns(liveEvents);
+  for (int i = liveEvents.length - 1; i >= 0; i -= 1) {
+    final Event event = liveEvents[i];
+    if (event.actions.compaction != null) {
+      continue;
+    }
+    final String? scope = event.isolationScope;
+    if (scope == null || scope.isEmpty) {
+      continue;
+    }
+    if (!finishedRuns.contains((scope, event.invocationId))) {
+      return (scope, event.invocationId);
+    }
+  }
+  return null;
+}
 
 /// Best-effort on_run_error notification; never masks the original error.
 ///
@@ -963,6 +1022,12 @@ class Runner {
           ? EventActions()
           : EventActions(stateDelta: stateDelta),
     );
+    if (event.isolationScope == null) {
+      final (String, String)? activeScope = _findActiveTaskScope(session);
+      if (activeScope != null) {
+        event.isolationScope = activeScope.$1;
+      }
+    }
 
     _applyRunConfigCustomMetadata(event, context.runConfig);
 
@@ -981,6 +1046,14 @@ class Runner {
       isolationScope: context.isolationScope,
       actions: EventActions(stateDelta: stateDelta),
     );
+    if (event.isolationScope == null) {
+      final (String, String)? activeScope = _findActiveTaskScope(
+        context.session,
+      );
+      if (activeScope != null) {
+        event.isolationScope = activeScope.$1;
+      }
+    }
 
     _applyRunConfigCustomMetadata(event, context.runConfig);
 
@@ -1348,7 +1421,7 @@ class Runner {
         ManagedAgent(:final String? mode) => mode,
         _ => null,
       };
-      if (mode == 'task') {
+      if (mode == 'task' || mode == 'single_turn') {
         delegator = current.parentAgent!;
       }
       current = current.parentAgent;
@@ -1475,21 +1548,60 @@ class Runner {
     };
   }
 
-  Set<BaseToolset> _collectToolsets(BaseAgent agent) {
+  Set<BaseToolset> _collectToolsets(
+    BaseAgent agent, [
+    Set<Object>? visited,
+  ]) {
+    final Set<Object> seen = visited ?? Set<Object>.identity();
+    if (!seen.add(agent)) {
+      return <BaseToolset>{};
+    }
     final Set<BaseToolset> toolsets = <BaseToolset>{};
 
     if (agent is LlmAgent) {
       for (final Object tool in agent.tools) {
         if (tool is BaseToolset) {
           toolsets.add(tool);
+        } else if (tool is NodeTool) {
+          toolsets.addAll(_collectNodeToolsets(tool.node, seen));
+        } else if (tool is BaseAgent) {
+          toolsets.addAll(_collectToolsets(tool, seen));
+        } else if (tool is BaseNode) {
+          toolsets.addAll(_collectNodeToolsets(tool, seen));
         }
       }
     }
 
-    for (final BaseAgent subAgent in agent.subAgents) {
-      toolsets.addAll(_collectToolsets(subAgent));
+    if (agent is Workflow) {
+      for (final BaseNode node in agent.nodes) {
+        toolsets.addAll(_collectNodeToolsets(node, seen));
+      }
     }
 
+    for (final BaseAgent subAgent in agent.subAgents) {
+      toolsets.addAll(_collectToolsets(subAgent, seen));
+    }
+
+    return toolsets;
+  }
+
+  Set<BaseToolset> _collectNodeToolsets(BaseNode node, Set<Object> seen) {
+    if (!seen.add(node)) {
+      return <BaseToolset>{};
+    }
+    final Set<BaseToolset> toolsets = <BaseToolset>{};
+    if (node is AgentNode) {
+      toolsets.addAll(_collectToolsets(node.agent, seen));
+    } else if (node is ToolNode) {
+      final Object tool = node.tool;
+      if (tool is BaseToolset) {
+        toolsets.add(tool);
+      } else if (tool is NodeTool) {
+        toolsets.addAll(_collectNodeToolsets(tool.node, seen));
+      }
+    } else if (node is ParallelWorker) {
+      toolsets.addAll(_collectNodeToolsets(node.wrappedNode, seen));
+    }
     return toolsets;
   }
 

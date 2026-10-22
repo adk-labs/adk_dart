@@ -11,11 +11,18 @@ import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
+import 'callback_helpers.dart';
 
 /// Console logging plugin for invocation, model, and tool lifecycle events.
 class LoggingPlugin extends BasePlugin {
   /// Creates a logging plugin.
-  LoggingPlugin({super.name = 'logging_plugin'});
+  LoggingPlugin({
+    super.name = 'logging_plugin',
+    this.toolResultClassifier,
+  });
+
+  /// Optional classifier for tool results that report errors without throwing.
+  final ToolResultClassifier? toolResultClassifier;
 
   /// Logs the incoming user message and invocation context.
   @override
@@ -75,6 +82,21 @@ class LoggingPlugin extends BasePlugin {
     if (longRunningIds != null && longRunningIds.isNotEmpty) {
       _log('Long Running Tools: ${longRunningIds.toList()}');
     }
+    final NodeInfo nodeInfo = event.nodeInfo;
+    if (nodeInfo.path.isNotEmpty) {
+      _log('Node Path: ${nodeInfo.path}');
+      if (event.partial != true) {
+        if (event.output != null && nodeInfo.messageAsOutput != true) {
+          _log('Node Output: ${_formatValue(event.output)}');
+        }
+        if (isDurableNodeError(event)) {
+          _log(
+            'Node Error: [${event.errorCode}] ${event.errorMessage ?? ''}'
+                .trimRight(),
+          );
+        }
+      }
+    }
     return null;
   }
 
@@ -97,6 +119,9 @@ class LoggingPlugin extends BasePlugin {
     _log('AGENT STARTING');
     _log('Agent Name: ${callbackContext.agentName}');
     _log('Invocation ID: ${callbackContext.invocationId}');
+    if (callbackContext.invocationContext.branch != null) {
+      _log('Branch: ${callbackContext.invocationContext.branch}');
+    }
     return null;
   }
 
@@ -143,17 +168,25 @@ class LoggingPlugin extends BasePlugin {
   }) async {
     _log('LLM RESPONSE');
     _log('Agent: ${callbackContext.agentName}');
-    if (llmResponse.errorCode != null) {
+    final bool isFinal = llmResponse.partial != true;
+    if (isFinal &&
+        llmResponse.errorCode != null &&
+        llmResponse.errorCode!.isNotEmpty) {
       _log('ERROR - Code: ${llmResponse.errorCode}');
       _log('Error Message: ${llmResponse.errorMessage}');
-      return null;
+    } else {
+      _log('Content: ${_formatContent(llmResponse.content)}');
+      if (llmResponse.partial != null) {
+        _log('Partial: ${llmResponse.partial}');
+      }
+      if (llmResponse.turnComplete != null) {
+        _log('Turn Complete: ${llmResponse.turnComplete}');
+      }
     }
-    _log('Content: ${_formatContent(llmResponse.content)}');
-    if (llmResponse.partial != null) {
-      _log('Partial: ${llmResponse.partial}');
-    }
-    if (llmResponse.turnComplete != null) {
-      _log('Turn Complete: ${llmResponse.turnComplete}');
+    if (isFinal &&
+        llmResponse.finishReason != null &&
+        llmResponse.finishReason!.isNotEmpty) {
+      _log('Finish Reason: ${llmResponse.finishReason}');
     }
     if (llmResponse.usageMetadata != null) {
       _log('Usage Metadata: ${llmResponse.usageMetadata}');
@@ -176,7 +209,7 @@ class LoggingPlugin extends BasePlugin {
     return null;
   }
 
-  /// Logs tool-call completion details.
+  /// Logs tool-call completion details, or the failure its result reports.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -184,6 +217,26 @@ class LoggingPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Map<String, dynamic> result,
   }) async {
+    if (popToolErrorRecorded(this, toolContext)) {
+      return null;
+    }
+    final String? errorMessage = classifyToolResultError(
+      tool: tool,
+      toolArgs: toolArgs,
+      toolContext: toolContext,
+      result: result,
+      toolResultClassifier: toolResultClassifier,
+    );
+    if (errorMessage != null) {
+      _log('TOOL ERROR');
+      _log('Tool Name: ${tool.name}');
+      _log('Agent: ${toolContext.agentName}');
+      _log('Function Call ID: ${toolContext.functionCallId}');
+      _log('Arguments: ${_formatArgs(toolArgs)}');
+      _log('Result: ${_formatArgs(result)}');
+      _log('Error: $errorMessage');
+      return null;
+    }
     _log('TOOL COMPLETED');
     _log('Tool Name: ${tool.name}');
     _log('Agent: ${toolContext.agentName}');
@@ -213,12 +266,18 @@ class LoggingPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Exception error,
   }) async {
-    _log('TOOL ERROR');
-    _log('Tool Name: ${tool.name}');
-    _log('Agent: ${toolContext.agentName}');
-    _log('Function Call ID: ${toolContext.functionCallId}');
-    _log('Arguments: ${_formatArgs(toolArgs)}');
-    _log('Error: $error');
+    final List<String> lines = <String>[
+      'TOOL ERROR',
+      'Tool Name: ${tool.name}',
+      'Agent: ${toolContext.agentName}',
+      'Function Call ID: ${toolContext.functionCallId}',
+      'Arguments: ${_formatArgs(toolArgs)}',
+      'Error: $error',
+    ];
+    markToolErrorRecorded(this, toolContext);
+    for (final String line in lines) {
+      _log(line);
+    }
     return null;
   }
 
@@ -260,5 +319,13 @@ class LoggingPlugin extends BasePlugin {
       value = '${value.substring(0, maxLength)}...}';
     }
     return value;
+  }
+
+  String _formatValue(Object? value, {int maxLength = 300}) {
+    String formatted = value is String ? "'$value'" : '$value';
+    if (formatted.length > maxLength) {
+      formatted = '${formatted.substring(0, maxLength)}...';
+    }
+    return formatted;
   }
 }

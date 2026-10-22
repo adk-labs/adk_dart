@@ -97,7 +97,17 @@ class InMemoryMemoryService extends BaseMemoryService {
 
     for (final List<Event> events in sessions.values) {
       for (final Event event in events) {
-        final String text = _eventText(event);
+        final content = event.content;
+        if (content == null || content.parts.isEmpty) {
+          continue;
+        }
+        final visibleParts = content.parts
+            .where((part) => !part.thought)
+            .toList(growable: false);
+        final String text = visibleParts
+            .where((part) => part.text != null && part.text!.trim().isNotEmpty)
+            .map((part) => part.text!.trim())
+            .join(' ');
         if (text.isEmpty) {
           continue;
         }
@@ -122,7 +132,9 @@ class InMemoryMemoryService extends BaseMemoryService {
             matchedWords,
             MemoryEntry(
               id: event.id,
-              content: event.content!.copyWith(),
+              content: content.copyWith(
+                parts: visibleParts.map((part) => part.copyWith()).toList(),
+              ),
               author: event.author,
               timestamp: formatTimestamp(event.timestamp),
             ),
@@ -169,17 +181,6 @@ class InMemoryMemoryService extends BaseMemoryService {
 }
 
 (String, String) _userKey(String appName, String userId) => (appName, userId);
-
-String _eventText(Event event) {
-  final content = event.content;
-  if (content == null) {
-    return '';
-  }
-  return content.parts
-      .where((part) => part.text != null && part.text!.trim().isNotEmpty)
-      .map((part) => part.text!.trim())
-      .join(' ');
-}
 
 bool _isAscii(String str) {
   for (int i = 0; i < str.length; i += 1) {

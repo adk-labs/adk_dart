@@ -7,6 +7,29 @@ import 'dart:typed_data';
 
 import '../../tools/environment/base_environment.dart';
 
+/// Exception thrown when an Agent Engine sandbox API call fails.
+class AgentEngineSandboxApiException implements Exception {
+  /// Creates an Agent Engine sandbox API exception.
+  const AgentEngineSandboxApiException({
+    this.code,
+    this.status,
+    required this.message,
+  });
+
+  /// Optional HTTP or RPC status code.
+  final int? code;
+
+  /// Optional status string (for example, `'FAILED_PRECONDITION'`, `'UNAVAILABLE'`, `'DEADLINE_EXCEEDED'`).
+  final String? status;
+
+  /// Human-readable error message.
+  final String message;
+
+  @override
+  String toString() =>
+      'AgentEngineSandboxApiException(code: $code, status: $status, message: $message)';
+}
+
 /// Client interface for interacting with a Vertex AI Agent Engine code execution sandbox.
 abstract class AgentEngineEnvironmentClient {
   /// Creates a new sandbox inside [agentEngineResourceName] and returns its resource name.
@@ -40,6 +63,13 @@ abstract class AgentEngineEnvironmentClient {
 
   /// Deletes the sandbox identified by [sandboxResourceName].
   Future<void> deleteSandbox(String sandboxResourceName);
+
+  /// Returns the lifecycle state of [sandboxResourceName] (defaults to `'STATE_RUNNING'`).
+  Future<String> getSandboxState(String sandboxResourceName) async =>
+      'STATE_RUNNING';
+
+  /// Waits until [sandboxResourceName] transitions to `'STATE_RUNNING'`.
+  Future<void> waitUntilRunning(String sandboxResourceName) async {}
 }
 
 /// Command-based [AgentEngineEnvironmentClient] that delegates file I/O over shell commands when direct file APIs are unavailable.
@@ -54,8 +84,12 @@ class ShellBackedAgentEngineSandboxClient implements AgentEngineEnvironmentClien
     })?
     createSandboxFn,
     Future<void> Function(String sandboxResourceName)? deleteSandboxFn,
+    Future<String> Function(String sandboxResourceName)? getSandboxStateFn,
+    Future<void> Function(String sandboxResourceName)? waitUntilRunningFn,
   }) : _createSandboxFn = createSandboxFn,
-       _deleteSandboxFn = deleteSandboxFn;
+       _deleteSandboxFn = deleteSandboxFn,
+       _getSandboxStateFn = getSandboxStateFn,
+       _waitUntilRunningFn = waitUntilRunningFn;
 
   /// Callback that executes a shell command in the remote Agent Engine sandbox.
   final Future<EnvironmentExecutionResult> Function({
@@ -75,6 +109,8 @@ class ShellBackedAgentEngineSandboxClient implements AgentEngineEnvironmentClien
   _createSandboxFn;
 
   final Future<void> Function(String sandboxResourceName)? _deleteSandboxFn;
+  final Future<String> Function(String sandboxResourceName)? _getSandboxStateFn;
+  final Future<void> Function(String sandboxResourceName)? _waitUntilRunningFn;
 
   @override
   Future<String> createSandbox({
@@ -157,6 +193,21 @@ class ShellBackedAgentEngineSandboxClient implements AgentEngineEnvironmentClien
       await _deleteSandboxFn(sandboxResourceName);
     }
   }
+
+  @override
+  Future<String> getSandboxState(String sandboxResourceName) async {
+    if (_getSandboxStateFn != null) {
+      return _getSandboxStateFn(sandboxResourceName);
+    }
+    return AgentEngineEnvironment.sandboxStateRunning;
+  }
+
+  @override
+  Future<void> waitUntilRunning(String sandboxResourceName) async {
+    if (_waitUntilRunningFn != null) {
+      await _waitUntilRunningFn(sandboxResourceName);
+    }
+  }
 }
 
 /// Execution environment backed by a Vertex AI Agent Engine (VMaaS) sandbox.
@@ -176,6 +227,8 @@ class AgentEngineEnvironment extends BaseEnvironment {
     this.ttl,
     this.sandboxConfig,
     this.deleteOnClose = false,
+    this.maxUnreachableRetries = defaultMaxUnreachableRetries,
+    this.unreachableRetryDelay = Duration.zero,
     AgentEngineEnvironmentClient? client,
     super.workingDirectory,
   }) : _client = client {
@@ -187,6 +240,12 @@ class AgentEngineEnvironment extends BaseEnvironment {
       );
     }
   }
+
+  /// Running lifecycle state constant returned by Agent Engine sandboxes.
+  static const String sandboxStateRunning = 'STATE_RUNNING';
+
+  /// Default maximum number of retries when a sandbox is temporarily unreachable.
+  static const int defaultMaxUnreachableRetries = 5;
 
   /// Resource name of the parent Vertex AI Agent Engine (`reasoningEngines/*`).
   final String? agentEngineResourceName;
@@ -205,6 +264,12 @@ class AgentEngineEnvironment extends BaseEnvironment {
 
   /// Whether a created sandbox should be deleted when [close] is called.
   final bool deleteOnClose;
+
+  /// Maximum number of retries when the sandbox service reports an unreachable sandbox.
+  final int maxUnreachableRetries;
+
+  /// Delay between unreachable sandbox retry attempts.
+  final Duration unreachableRetryDelay;
 
   final AgentEngineEnvironmentClient? _client;
   final Map<String, Uint8List> _inMemoryFallbackFiles = <String, Uint8List>{};
@@ -256,8 +321,9 @@ class AgentEngineEnvironment extends BaseEnvironment {
       envVars: envVars,
     );
     if (_client != null) {
-      return _client.execute(
-        sandboxResourceName: _activeSandboxResourceName!,
+      return _executeWithRetry(
+        client: _client,
+        sandboxName: _activeSandboxResourceName!,
         command: wrappedCommand,
         workingDir: effectiveWorkingDir,
         timeout: timeout,
@@ -265,6 +331,56 @@ class AgentEngineEnvironment extends BaseEnvironment {
       );
     }
     return const EnvironmentExecutionResult(exitCode: 0);
+  }
+
+  Future<EnvironmentExecutionResult> _executeWithRetry({
+    required AgentEngineEnvironmentClient client,
+    required String sandboxName,
+    required String command,
+    required String workingDir,
+    required Duration timeout,
+    required Map<String, String>? envVars,
+  }) async {
+    bool resumed = false;
+    int unreachableRetries = 0;
+    while (true) {
+      try {
+        return await client.execute(
+          sandboxResourceName: sandboxName,
+          command: command,
+          workingDir: workingDir,
+          timeout: timeout,
+          envVars: envVars,
+        );
+      } catch (error) {
+        if (_isTimeoutError(error)) {
+          return const EnvironmentExecutionResult(
+            exitCode: -1,
+            timedOut: true,
+          );
+        }
+        if (_isUnreachableError(error)) {
+          if (unreachableRetries < maxUnreachableRetries) {
+            unreachableRetries += 1;
+            if (unreachableRetryDelay > Duration.zero) {
+              await Future<void>.delayed(unreachableRetryDelay);
+            }
+            continue;
+          }
+          rethrow;
+        }
+        if (resumed || !_isPausedOrResumingError(error)) {
+          rethrow;
+        }
+        final String state = await client.getSandboxState(sandboxName);
+        if (state == sandboxStateRunning) {
+          rethrow;
+        }
+        await client.waitUntilRunning(sandboxName);
+        resumed = true;
+        unreachableRetries = 0;
+      }
+    }
   }
 
   @override
@@ -367,4 +483,38 @@ String _parentDirectory(String path) {
     return '/';
   }
   return normalized.substring(0, idx);
+}
+
+bool _isTimeoutError(Object error) {
+  if (error is TimeoutException) {
+    return true;
+  }
+  if (error is AgentEngineSandboxApiException) {
+    return error.code == 504 ||
+        error.status == 'DEADLINE_EXCEEDED' ||
+        error.message.contains('DEADLINE_EXCEEDED');
+  }
+  final String text = '$error';
+  return text.contains('DEADLINE_EXCEEDED');
+}
+
+bool _isUnreachableError(Object error) {
+  final String message = error is AgentEngineSandboxApiException
+      ? error.message
+      : '$error';
+  return message.contains('Unable to reach the sandbox environment');
+}
+
+bool _isPausedOrResumingError(Object error) {
+  if (error is AgentEngineSandboxApiException) {
+    return error.code == 503 ||
+        error.status == 'UNAVAILABLE' ||
+        error.status == 'FAILED_PRECONDITION' ||
+        error.message.contains('UNAVAILABLE') ||
+        error.message.contains('FAILED_PRECONDITION');
+  }
+  final String text = '$error';
+  return text.contains('UNAVAILABLE') ||
+      text.contains('FAILED_PRECONDITION') ||
+      text.contains('503');
 }

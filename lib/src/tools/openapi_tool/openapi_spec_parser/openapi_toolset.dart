@@ -32,6 +32,7 @@ class OpenAPIToolset extends BaseToolset {
     HeaderProvider? headerProvider,
     RestApiRequestExecutor? requestExecutor,
     this.preservePropertyNames = false,
+    this.allowPrivateNetworkAccess = false,
   }) : _headerProvider = headerProvider,
        _sslVerify = sslVerify,
        _requestExecutor = requestExecutor,
@@ -60,6 +61,9 @@ class OpenAPIToolset extends BaseToolset {
 
   /// Whether original OpenAPI property names are preserved in generated tool schemas.
   final bool preservePropertyNames;
+
+  /// Whether requests to loopback, private, link-local, or internal hosts are allowed.
+  final bool allowPrivateNetworkAccess;
 
   Object? _sslVerify;
   late final List<RestApiTool> _tools;
@@ -151,6 +155,7 @@ class OpenAPIToolset extends BaseToolset {
         sslVerify: _sslVerify,
         headerProvider: _headerProvider,
         requestExecutor: _requestExecutor,
+        allowPrivateNetworkAccess: allowPrivateNetworkAccess,
       );
       final String baseName = tool.name;
       String candidate = baseName;

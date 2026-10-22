@@ -78,6 +78,14 @@ class ConformanceReplayPlugin extends BasePlugin {
       return null;
     }
 
+    if (tool.name == 'exit_loop') {
+      final Object? result = await tool.run(
+        args: toolArgs,
+        toolContext: toolContext,
+      );
+      return result is Map<String, dynamic> ? result : <String, dynamic>{};
+    }
+
     final _InvocationReplayState state =
         _getInvocationState(toolContext) ?? _loadInvocationState(toolContext);
     final ConformanceToolRecording recording =

@@ -78,6 +78,14 @@ class ConformanceReplayPlugin extends BasePlugin {
       return null;
     }
 
+    if (tool.name == 'exit_loop') {
+      final Object? result = await tool.run(
+        args: toolArgs,
+        toolContext: toolContext,
+      );
+      return result is Map<String, dynamic> ? result : <String, dynamic>{};
+    }
+
     final _InvocationReplayState state =
         _getInvocationState(toolContext) ?? _loadInvocationState(toolContext);
     final ConformanceToolRecording recording =
@@ -92,6 +100,14 @@ class ConformanceReplayPlugin extends BasePlugin {
       throw ReplayVerificationError(
         'Missing recorded tool response for ${tool.name}.',
       );
+    }
+    switch (tool.name) {
+      case 'transfer_to_agent':
+        final Object? target = toolArgs['agent_name'] ?? toolArgs['agentName'];
+        if (target is String) {
+          toolContext.actions.transferToAgent = target;
+        }
+        break;
     }
     return asConformanceDynamicMap(toolResponse['response']) ??
         <String, dynamic>{};

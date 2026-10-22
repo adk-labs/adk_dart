@@ -465,79 +465,161 @@ bool _hasCompactionEvents(List<Event> events) {
 List<Event> processCompactionEvents(List<Event> events) =>
     _processCompactionEvents(events);
 
-List<Event> _processCompactionEvents(List<Event> events) {
-  final List<(int, double, double, Event)> compactions =
-      <(int, double, double, Event)>[];
-  for (int i = 0; i < events.length; i += 1) {
-    final Event event = events[i];
+List<(int, double, double)> _getCompactionRangesForIndexedEvents(
+  List<(int, Event)> indexedEvents,
+) {
+  final List<(int, double, double)> ranges = <(int, double, double)>[];
+  final List<(int, double, double)> comparable = <(int, double, double)>[];
+  final Set<int> retained = <int>{};
+  for (final (int index, Event event) in indexedEvents) {
     final EventCompaction? compaction = event.actions.compaction;
     if (compaction == null) {
       continue;
     }
-    compactions.add((
-      i,
-      compaction.startTimestamp,
-      compaction.endTimestamp,
-      event,
-    ));
+    final double start = compaction.startTimestamp;
+    final double end = compaction.endTimestamp;
+    final (int, double, double) item = (index, start, end);
+    ranges.add(item);
+    if (start.isNaN || end.isNaN) {
+      retained.add(index);
+    } else {
+      comparable.add(item);
+    }
   }
 
-  final Set<int> subsumed = <int>{};
-  for (final (int eventIndex, double start, double end, Event _)
-      in compactions) {
-    for (final (int otherIndex, double otherStart, double otherEnd, Event _)
-        in compactions) {
-      if (otherIndex == eventIndex) {
-        continue;
-      }
-      if (otherStart <= start &&
-          otherEnd >= end &&
-          (otherStart < start || otherEnd > end || otherIndex > eventIndex)) {
-        subsumed.add(eventIndex);
-        break;
-      }
+  comparable.sort(((int, double, double) a, (int, double, double) b) {
+    final int startCmp = a.$2.compareTo(b.$2);
+    if (startCmp != 0) {
+      return startCmp;
     }
+    final int endCmp = b.$3.compareTo(a.$3);
+    if (endCmp != 0) {
+      return endCmp;
+    }
+    return b.$1.compareTo(a.$1);
+  });
+
+  double? maxEnd;
+  for (final (int index, double _, double end) in comparable) {
+    if (maxEnd == null || end > maxEnd) {
+      retained.add(index);
+      maxEnd = end;
+    }
+  }
+  return <(int, double, double)>[
+    for (final (int, double, double) item in ranges)
+      if (retained.contains(item.$1)) item,
+  ];
+}
+
+int _bisectRight(List<double> sortedStarts, double value) {
+  int lo = 0;
+  int hi = sortedStarts.length;
+  while (lo < hi) {
+    final int mid = (lo + hi) >> 1;
+    if (value < sortedStarts[mid]) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return lo;
+}
+
+List<(double, int, Event)> _processSingleScopeCompactionEvents(
+  List<(int, Event)> indexedEvents,
+) {
+  final List<(int, double, double)> compactionInfos =
+      _getCompactionRangesForIndexedEvents(indexedEvents);
+  final Set<int> retainedIndexes = <int>{
+    for (final (int index, double _, double _) in compactionInfos) index,
+  };
+
+  final List<(double, double)> validRanges = <(double, double)>[
+    for (final (int _, double start, double end) in compactionInfos)
+      if (start <= end) (start, end),
+  ]..sort(((double, double) a, (double, double) b) {
+    final int startCmp = a.$1.compareTo(b.$1);
+    return startCmp != 0 ? startCmp : a.$2.compareTo(b.$2);
+  });
+
+  final List<(double, double)> coverage = <(double, double)>[];
+  for (final (double start, double end) in validRanges) {
+    if (coverage.isNotEmpty && start <= coverage.last.$2) {
+      final (double lastStart, double lastEnd) = coverage.last;
+      coverage[coverage.length - 1] = (
+        lastStart,
+        end > lastEnd ? end : lastEnd,
+      );
+    } else {
+      coverage.add((start, end));
+    }
+  }
+  final List<double> coverageStarts = <double>[
+    for (final (double start, double _) in coverage) start,
+  ];
+
+  bool isTimestampCompacted(double ts) {
+    if (ts.isNaN || coverageStarts.isEmpty) {
+      return false;
+    }
+    final int index = _bisectRight(coverageStarts, ts) - 1;
+    return index >= 0 && ts <= coverage[index].$2;
   }
 
   final List<(double, int, Event)> processed = <(double, int, Event)>[];
-  final List<(double, double)> ranges = <(double, double)>[];
-  for (final (int index, double start, double end, Event event)
-      in compactions) {
-    if (subsumed.contains(index)) {
-      continue;
-    }
-    final EventCompaction compaction = event.actions.compaction!;
-    ranges.add((start, end));
-    processed.add((
-      end,
-      index,
-      Event(
-        timestamp: end,
-        invocationId: event.invocationId,
-        author: 'model',
-        branch: event.branch,
-        isolationScope: event.isolationScope,
-        content: compaction.compactedContent.copyWith(),
-        actions: event.actions.copyWith(),
-      ),
-    ));
-  }
-
-  bool isCompacted(double ts) {
-    for (final (double start, double end) in ranges) {
-      if (start <= ts && ts <= end) {
-        return true;
+  for (final (int index, Event event) in indexedEvents) {
+    final EventCompaction? compaction = event.actions.compaction;
+    if (compaction != null) {
+      if (!retainedIndexes.contains(index)) {
+        continue;
       }
+      final double end = compaction.endTimestamp;
+      processed.add((
+        end,
+        index,
+        Event(
+          timestamp: end,
+          invocationId: event.invocationId,
+          author: 'model',
+          branch: event.branch,
+          isolationScope: event.isolationScope,
+          content: compaction.compactedContent.copyWith(),
+          actions: event.actions.copyWith(),
+        ),
+      ));
+    } else if (!isTimestampCompacted(event.timestamp)) {
+      processed.add((event.timestamp, index, event));
     }
-    return false;
   }
 
-  for (int i = 0; i < events.length; i += 1) {
-    final Event event = events[i];
-    if (event.actions.compaction != null || isCompacted(event.timestamp)) {
-      continue;
+  return processed;
+}
+
+List<Event> _processCompactionEvents(List<Event> events) {
+  if (events.isEmpty) {
+    return events;
+  }
+  final String? firstScope = events.first.isolationScope;
+  final bool singleScope = events.every(
+    (Event e) => e.isolationScope == firstScope,
+  );
+  final List<(double, int, Event)> processed;
+  if (singleScope) {
+    processed = _processSingleScopeCompactionEvents(<(int, Event)>[
+      for (int i = 0; i < events.length; i += 1) (i, events[i]),
+    ]);
+  } else {
+    final Map<String?, List<(int, Event)>> partitions =
+        <String?, List<(int, Event)>>{};
+    for (int i = 0; i < events.length; i += 1) {
+      final Event event = events[i];
+      (partitions[event.isolationScope] ??= <(int, Event)>[]).add((i, event));
     }
-    processed.add((event.timestamp, i, event));
+    processed = <(double, int, Event)>[
+      for (final List<(int, Event)> partition in partitions.values)
+        ..._processSingleScopeCompactionEvents(partition),
+    ];
   }
 
   processed.sort((a, b) {
@@ -568,6 +650,10 @@ List<Event> _processCompactionEvents(List<Event> events) {
 /// removed are re-injected too, so a sibling is not surfaced as a phantom
 /// pending call.
 ///
+/// Call ids can be reused. Ownership is resolved in source order before any
+/// events are restored: a response belongs to the latest preceding call with
+/// its id, even when another call with that id survived compaction.
+///
 /// [events] is the post-compaction events being assembled into request
 /// contents; [sourceEvents] is the pre-compaction events to recover missing
 /// calls from. Returns [events] unchanged when nothing needs recovery.
@@ -575,90 +661,91 @@ List<Event> _recoverCompactedFunctionCalls(
   List<Event> events,
   List<Event> sourceEvents,
 ) {
-  final Set<String> callIdsPresent = <String>{};
-  final Set<String> responseIdsPresent = <String>{};
-  for (final Event event in events) {
+  if (!events.any((Event event) => event.getFunctionResponses().isNotEmpty)) {
+    return events;
+  }
+
+  final Set<Event> presentEvents = Set<Event>.identity()..addAll(events);
+  final Map<String, Event> latestCallById = <String, Event>{};
+  final Map<Event, Map<String, Event>> callByResponse =
+      Map<Event, Map<String, Event>>.identity();
+  final Map<Event, Map<String, Event>> responseByCall =
+      Map<Event, Map<String, Event>>.identity();
+  final Map<Event, Set<String>> survivingResponses =
+      Map<Event, Set<String>>.identity();
+
+  for (final Event event in sourceEvents) {
     for (final FunctionCall functionCall in event.getFunctionCalls()) {
       final String? id = functionCall.id;
       if (id != null && id.isNotEmpty) {
-        callIdsPresent.add(id);
+        latestCallById[id] = event;
       }
     }
     for (final FunctionResponse functionResponse
         in event.getFunctionResponses()) {
-      final String? id = functionResponse.id;
-      if (id != null && id.isNotEmpty) {
-        responseIdsPresent.add(id);
+      final String? responseId = functionResponse.id;
+      if (responseId == null || responseId.isEmpty) {
+        continue;
       }
-    }
-  }
-
-  final Set<String> orphanedIds = responseIdsPresent
-      .where((String responseId) => !callIdsPresent.contains(responseId))
-      .toSet();
-  if (orphanedIds.isEmpty) {
-    return events;
-  }
-
-  final Map<String, Event> callEventById = <String, Event>{};
-  for (final Event event in sourceEvents) {
-    for (final FunctionCall functionCall in event.getFunctionCalls()) {
-      final String? id = functionCall.id;
-      if (id != null && orphanedIds.contains(id)) {
-        callEventById.putIfAbsent(id, () => event);
+      final Event? callEvent = latestCallById[responseId];
+      if (callEvent == null) {
+        continue;
       }
-    }
-  }
-
-  if (callEventById.isEmpty) {
-    return events;
-  }
-
-  final Map<String, Event> responseEventById = <String, Event>{};
-  for (final Event event in sourceEvents) {
-    for (final FunctionResponse functionResponse
-        in event.getFunctionResponses()) {
-      final String? id = functionResponse.id;
-      if (id != null && id.isNotEmpty) {
-        responseEventById.putIfAbsent(id, () => event);
+      (callByResponse[event] ??= <String, Event>{})[responseId] = callEvent;
+      if (presentEvents.contains(event)) {
+        (survivingResponses[callEvent] ??= <String>{}).add(responseId);
+      }
+      // Keep the latest update for this occurrence, not a later call that
+      // happens to reuse the id. Equal timestamps retain source order.
+      final Map<String, Event> callResponses =
+          responseByCall[callEvent] ??= <String, Event>{};
+      final Event? existing = callResponses[responseId];
+      if (existing == null || event.timestamp >= existing.timestamp) {
+        callResponses[responseId] = event;
       }
     }
   }
 
   final List<Event> result = <Event>[];
-  final Set<String> reinjectedIds = <String>{};
+  final Set<Event> reinjectedCalls = Set<Event>.identity();
+  final Set<Event> reinjectedResponses = Set<Event>.identity();
   for (final Event event in events) {
     for (final FunctionResponse functionResponse
         in event.getFunctionResponses()) {
-      final String? responseId = functionResponse.id;
-      if (responseId == null) {
+      final String? functionResponseId = functionResponse.id;
+      if (functionResponseId == null || functionResponseId.isEmpty) {
         continue;
       }
-      final Event? callEvent = callEventById[responseId];
-      if (callEvent == null || reinjectedIds.contains(responseId)) {
+      final Event? callEvent = callByResponse[event]?[functionResponseId];
+      if (callEvent == null ||
+          presentEvents.contains(callEvent) ||
+          reinjectedCalls.contains(callEvent)) {
         continue;
       }
       result.add(callEvent);
-      final List<String> siblingIds = <String>[
-        for (final FunctionCall functionCall in callEvent.getFunctionCalls())
-          if (functionCall.id != null && functionCall.id!.isNotEmpty)
-            functionCall.id!,
-      ];
-      reinjectedIds.addAll(siblingIds);
+      reinjectedCalls.add(callEvent);
       // Recover sibling responses that compaction removed so a parallel sibling
       // is not left looking like a pending call.
-      for (final String siblingId in siblingIds) {
-        if (!responseIdsPresent.contains(siblingId)) {
-          final Event? siblingResponse = responseEventById[siblingId];
-          if (siblingResponse != null) {
+      final Set<String>? survivingForCall = survivingResponses[callEvent];
+      final Map<String, Event>? responsesForCall = responseByCall[callEvent];
+      for (final FunctionCall siblingCall in callEvent.getFunctionCalls()) {
+        final String? siblingId = siblingCall.id;
+        if (siblingId == null || siblingId.isEmpty) {
+          continue;
+        }
+        if (survivingForCall == null || !survivingForCall.contains(siblingId)) {
+          final Event? siblingResponse = responsesForCall?[siblingId];
+          if (siblingResponse != null &&
+              !reinjectedResponses.contains(siblingResponse)) {
             result.add(siblingResponse);
+            reinjectedResponses.add(siblingResponse);
           }
         }
       }
     }
     result.add(event);
   }
-  return result;
+  return reinjectedCalls.isNotEmpty ? result : events;
 }
 
 List<Event> _dropOrphanedFunctionResponses(List<Event> events) {

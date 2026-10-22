@@ -14,6 +14,7 @@ import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
 import '../types/content.dart';
 import 'base_plugin.dart';
+import 'callback_helpers.dart';
 
 /// One debug log entry recorded during an invocation.
 class _DebugEntry {
@@ -81,6 +82,7 @@ class DebugLoggingPlugin extends BasePlugin {
     String outputPath = 'adk_debug.yaml',
     bool includeSessionState = true,
     bool includeSystemInstruction = true,
+    this.toolResultClassifier,
   }) : _outputFile = File(outputPath),
        _includeSessionState = includeSessionState,
        _includeSystemInstruction = includeSystemInstruction;
@@ -88,6 +90,9 @@ class DebugLoggingPlugin extends BasePlugin {
   final File _outputFile;
   final bool _includeSessionState;
   final bool _includeSystemInstruction;
+
+  /// Optional classifier for tool results that report errors without throwing.
+  final ToolResultClassifier? toolResultClassifier;
   final Map<String, _InvocationDebugState> _invocationStates =
       <String, _InvocationDebugState>{};
 
@@ -240,29 +245,45 @@ class DebugLoggingPlugin extends BasePlugin {
     required InvocationContext invocationContext,
     required Event event,
   }) async {
+    final Map<String, Object?> eventData = <String, Object?>{
+      'event_id': event.id,
+      'author': event.author,
+      'content': _serializeContent(event.content),
+      'is_final_response': event.isFinalResponse(),
+      'partial': event.partial,
+      'turn_complete': event.turnComplete,
+      'branch': event.branch,
+      'actions': _safeSerialize(<String, Object?>{
+        'state_delta': event.actions.stateDelta,
+        'artifact_delta': event.actions.artifactDelta,
+        'transfer_to_agent': event.actions.transferToAgent,
+        'escalate': event.actions.escalate,
+        'requested_auth_configs': event.actions.requestedAuthConfigs.length,
+      }),
+      'error_code': event.errorCode,
+      'error_message': event.errorMessage,
+      'long_running_tool_ids': event.longRunningToolIds?.toList(),
+    };
+    final NodeInfo nodeInfo = event.nodeInfo;
+    if (nodeInfo.path.isNotEmpty) {
+      eventData['node_path'] = nodeInfo.path;
+      if (event.partial != true) {
+        if (event.output != null && nodeInfo.messageAsOutput != true) {
+          eventData['node_output'] = _safeSerialize(event.output);
+        }
+        if (isDurableNodeError(event)) {
+          eventData['node_error'] = <String, Object?>{
+            'error_code': event.errorCode,
+            'error_message': event.errorMessage,
+          };
+        }
+      }
+    }
     _addEntry(
       invocationContext.invocationId,
       'event',
       agentName: event.author,
-      data: <String, Object?>{
-        'event_id': event.id,
-        'author': event.author,
-        'content': _serializeContent(event.content),
-        'is_final_response': event.isFinalResponse(),
-        'partial': event.partial,
-        'turn_complete': event.turnComplete,
-        'branch': event.branch,
-        'actions': _safeSerialize(<String, Object?>{
-          'state_delta': event.actions.stateDelta,
-          'artifact_delta': event.actions.artifactDelta,
-          'transfer_to_agent': event.actions.transferToAgent,
-          'escalate': event.actions.escalate,
-          'requested_auth_configs': event.actions.requestedAuthConfigs.length,
-        }),
-        'error_code': event.errorCode,
-        'error_message': event.errorMessage,
-        'long_running_tool_ids': event.longRunningToolIds?.toList(),
-      },
+      data: eventData,
     );
     return null;
   }
@@ -395,6 +416,7 @@ class DebugLoggingPlugin extends BasePlugin {
     required CallbackContext callbackContext,
     required LlmResponse llmResponse,
   }) async {
+    final bool isFinal = llmResponse.partial != true;
     _addEntry(
       callbackContext.invocationId,
       'llm_response',
@@ -403,10 +425,10 @@ class DebugLoggingPlugin extends BasePlugin {
         'content': _serializeContent(llmResponse.content),
         'partial': llmResponse.partial,
         'turn_complete': llmResponse.turnComplete,
-        'error_code': llmResponse.errorCode,
-        'error_message': llmResponse.errorMessage,
+        'error_code': isFinal ? llmResponse.errorCode : null,
+        'error_message': isFinal ? llmResponse.errorMessage : null,
         'usage_metadata': _safeSerialize(llmResponse.usageMetadata),
-        'finish_reason': llmResponse.finishReason,
+        'finish_reason': isFinal ? llmResponse.finishReason : null,
         'model_version': llmResponse.modelVersion,
       },
     );
@@ -453,7 +475,7 @@ class DebugLoggingPlugin extends BasePlugin {
     return null;
   }
 
-  /// Records tool-call outputs.
+  /// Records tool-call outputs, or the failure its result reports.
   @override
   Future<Map<String, dynamic>?> afterToolCallback({
     required BaseTool tool,
@@ -461,6 +483,31 @@ class DebugLoggingPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Map<String, dynamic> result,
   }) async {
+    if (popToolErrorRecorded(this, toolContext)) {
+      return null;
+    }
+    final String? errorMessage = classifyToolResultError(
+      tool: tool,
+      toolArgs: toolArgs,
+      toolContext: toolContext,
+      result: result,
+      toolResultClassifier: toolResultClassifier,
+    );
+    if (errorMessage != null) {
+      _addEntry(
+        toolContext.invocationId,
+        'tool_error',
+        agentName: toolContext.agentName,
+        data: <String, Object?>{
+          'tool_name': tool.name,
+          'function_call_id': toolContext.functionCallId,
+          'args': _safeSerialize(toolArgs) as Map<String, Object?>?,
+          'result': _safeSerialize(result) as Map<String, Object?>?,
+          'error_message': errorMessage,
+        },
+      );
+      return null;
+    }
     _addEntry(
       toolContext.invocationId,
       'tool_response',
@@ -482,17 +529,19 @@ class DebugLoggingPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Exception error,
   }) async {
+    final Map<String, Object?> entryData = <String, Object?>{
+      'tool_name': tool.name,
+      'function_call_id': toolContext.functionCallId,
+      'args': _safeSerialize(toolArgs) as Map<String, Object?>?,
+      'error_type': error.runtimeType.toString(),
+      'error_message': '$error',
+    };
+    markToolErrorRecorded(this, toolContext);
     _addEntry(
       toolContext.invocationId,
       'tool_error',
       agentName: toolContext.agentName,
-      data: <String, Object?>{
-        'tool_name': tool.name,
-        'function_call_id': toolContext.functionCallId,
-        'args': _safeSerialize(toolArgs) as Map<String, Object?>?,
-        'error_type': error.runtimeType.toString(),
-        'error_message': '$error',
-      },
+      data: entryData,
     );
     return null;
   }

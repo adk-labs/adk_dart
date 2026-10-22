@@ -9,6 +9,7 @@ import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
 import '../agents/context.dart';
 import '../agents/invocation_context.dart';
+import '../agents/llm/task/finish_task_tool.dart';
 import '../agents/llm_agent.dart';
 import '../errors/input_validation_error.dart';
 import '../events/event.dart';
@@ -19,6 +20,7 @@ import '../flows/llm_flows/functions.dart';
 import '../models/llm_request.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
+import '../tools/agent_tool.dart';
 import '../tools/base_tool.dart';
 import '../tools/node_tool.dart';
 import '../tools/tool_confirmation.dart';
@@ -216,6 +218,7 @@ class NodeState {
     Map<String, Object?>? resumeInputs,
     List<String>? outputFor,
     this.branch,
+    this.outputBranch,
     this.runCounter = 0,
     this.runId,
     this.parentRunId,
@@ -244,8 +247,11 @@ class NodeState {
   /// Output ownership targets for delegated workflow outputs.
   final List<String> outputFor;
 
-  /// Branch used when emitting this node's output event.
+  /// Branch used when executing this node.
   String? branch;
+
+  /// Branch of the outermost node that explicitly claimed this node's output.
+  String? outputBranch;
 
   /// Sequential run counter for fresh node runs.
   int runCounter;
@@ -289,7 +295,9 @@ class WorkflowContext {
        requestInputNodeKeys = requestInputNodeKeys ?? <String>{},
        _fallbackState = fallbackState ?? <String, Object?>{},
        _workflowRoot = workflowRoot,
-       _cancellation = _WorkflowCancelToken();
+       _cancellation = _WorkflowCancelToken() {
+    _seedChildRunCounters();
+  }
 
   WorkflowContext._({
     this.invocationContext,
@@ -312,11 +320,14 @@ class WorkflowContext {
        requestInputNodeKeys = requestInputNodeKeys ?? <String>{},
        _fallbackState = fallbackState,
        _workflowRoot = workflowRoot,
-       _cancellation = cancellation;
+       _cancellation = cancellation {
+    _seedChildRunCounters();
+  }
 
   bool _hasDirectOutput = false;
   Object? _directOutput;
   bool _outputDelegated = false;
+  bool _failedInDynamicChild = false;
   final Map<String, int> _childRunCounters = <String, int>{};
   String? _currentNodeKey;
   bool? _currentNodeRerunOnResume;
@@ -499,12 +510,23 @@ class WorkflowContext {
       overrideBranch: overrideBranch,
     );
     final NodeState? state = nodeStates[stateKey];
+    final String? claimerBranch = useAsOutput
+        ? (parentState?.outputBranch ??
+              parentState?.branch ??
+              invocationContext?.branch)
+        : null;
     if (state != null) {
       state.parentKey ??= parentKey;
       if (branch != null) {
         state.branch = branch;
       }
+      if (useAsOutput) {
+        state.outputBranch = claimerBranch;
+      }
       if (_isCompletedNodeState(state) && outputs.containsKey(stateKey)) {
+        if (useAsOutput && state.route != null) {
+          route ??= state.route;
+        }
         return outputs[stateKey];
       }
       _seedNodeResumeInputs(
@@ -512,39 +534,56 @@ class WorkflowContext {
         resumeInputs,
         rerunOnResume: node.rerunOnResume,
       );
-      if (_hasUnresolvedWaitingInterrupts(state)) {
-        interruptIds.addAll(state.interrupts);
-        if (raiseOnWait) {
-          throw NodeInterruptedError();
+      if (state.status != NodeStatus.failed) {
+        if (_hasUnresolvedWaitingInterrupts(state)) {
+          interruptIds.addAll(state.interrupts);
+          if (raiseOnWait) {
+            throw NodeInterruptedError();
+          }
+          return outputs[stateKey];
         }
-        return outputs[stateKey];
+        if (state.status == NodeStatus.waiting &&
+            state.resumeInputs.isNotEmpty &&
+            !node.rerunOnResume) {
+          final Object? output = _outputFromResumeInputs(state.resumeInputs);
+          outputs[stateKey] = output;
+          state.status = NodeStatus.completed;
+          state.interrupts.clear();
+          state.resumeInputs.clear();
+          return output;
+        }
       }
-      if (state.status == NodeStatus.waiting &&
-          state.resumeInputs.isNotEmpty &&
-          !node.rerunOnResume) {
-        final Object? output = _outputFromResumeInputs(state.resumeInputs);
-        outputs[stateKey] = output;
-        state.status = NodeStatus.completed;
-        state.interrupts.clear();
-        state.resumeInputs.clear();
-        return output;
-      }
+    } else if (branch != null || useAsOutput) {
+      nodeStates[stateKey] = NodeState(
+        parentKey: parentKey,
+        branch: branch,
+        outputBranch: claimerBranch,
+      );
     }
     final WorkflowContext childContext = _childExecutionContext(
       resumeInputs: state?.resumeInputs.isNotEmpty == true
           ? Map<String, Object?>.from(state!.resumeInputs)
           : const <String, Object?>{},
     );
-    final Object? rawOutput = await _runNodeWithRetry(
-      context: childContext,
-      node: node,
-      nodeInput: input,
-      stateKey: stateKey,
-      runId: effectiveRunId,
-      parentKey: parentKey,
-    );
+    final Object? rawOutput;
+    try {
+      rawOutput = await _runNodeWithRetry(
+        context: childContext,
+        node: node,
+        nodeInput: input,
+        stateKey: stateKey,
+        runId: effectiveRunId,
+        parentKey: parentKey,
+      );
+    } catch (_) {
+      _failedInDynamicChild = true;
+      rethrow;
+    }
     if (branch != null) {
       nodeStates[stateKey]?.branch = branch;
+    }
+    if (useAsOutput) {
+      nodeStates[stateKey]?.outputBranch = claimerBranch;
     }
     final _NodeRunResult result = _resultFromRawNodeOutput(
       node,
@@ -573,6 +612,36 @@ class WorkflowContext {
       throw NodeInterruptedError();
     }
     return result.output;
+  }
+
+  /// Records every numeric `runId` in [nodePath] as allocated so future dynamic
+  /// runs of the same node or its ancestors do not reuse that path.
+  void reserveRunIds(String nodePath) {
+    if (nodePath.isEmpty) {
+      return;
+    }
+    NodePathBuilder? path = NodePathBuilder.fromString(nodePath);
+    while (path != null && path.toString().isNotEmpty) {
+      final String? runId = path.runId;
+      final int? parsed = runId == null ? null : int.tryParse(runId);
+      if (parsed != null && parsed > 0 && path.nodeName.isNotEmpty) {
+        final int current = _childRunCounters[path.nodeName] ?? 0;
+        if (parsed > current) {
+          _childRunCounters[path.nodeName] = parsed;
+        }
+      }
+      path = path.parent;
+    }
+  }
+
+  void _seedChildRunCounters() {
+    if (_workflowRoot != null && _workflowRoot.isNotEmpty) {
+      reserveRunIds(_workflowRoot);
+    }
+    final String? branch = invocationContext?.branch;
+    if (branch != null && branch.isNotEmpty) {
+      reserveRunIds(branch);
+    }
   }
 
   String? _dynamicNodeBranch({
@@ -1361,16 +1430,58 @@ class AgentNode extends BaseNode {
     final String? ownerPath = collectNestedWorkflowEvents
         ? _nodePathForOutputKey(parentContext, nodeKey)
         : null;
+    final String? nodeBranch =
+        ownerPath ??
+        (nodeKey != null ? context.nodeStates[nodeKey]?.branch : null) ??
+        parentContext.branch;
     final InvocationContext agentContext = parentContext.copyWith(
       agent: agent,
       userContent: userContent,
-      branch: ownerPath,
+      branch: nodeBranch,
     );
     final List<Event> nestedEvents = <Event>[];
+    final bool isTaskMode =
+        agent is LlmAgent && (agent as LlmAgent).mode == 'task';
+    final Set<String> taskSubagentToolNames = <String>{
+      if (isTaskMode)
+        for (final Object tool in (agent as LlmAgent).tools)
+          if (tool is TaskAgentTool) tool.name,
+    };
+    Map<String, dynamic>? pendingFinishArgs;
+    String? pendingFinishCallId;
 
     Event? finalEvent;
     await for (final Event event in agent.runAsync(agentContext)) {
       _mergeStateDelta(agentContext.session, event.actions.stateDelta);
+      if (isTaskMode) {
+        final List<FunctionCall> calls = event.getFunctionCalls();
+        final bool hasTaskSubagentCall = calls.any(
+          (FunctionCall call) => taskSubagentToolNames.contains(call.name),
+        );
+        for (final FunctionCall call in calls) {
+          if (call.name == finishTaskToolName && !hasTaskSubagentCall) {
+            pendingFinishArgs = Map<String, dynamic>.from(call.args);
+            pendingFinishCallId = call.id;
+          }
+        }
+        for (final FunctionResponse response in event.getFunctionResponses()) {
+          if (response.name == finishTaskToolName &&
+              (pendingFinishCallId == null ||
+                  response.id == pendingFinishCallId) &&
+              response.response['result'] == 'Task completed.' &&
+              pendingFinishArgs != null) {
+            final LlmAgent llmAgent = agent as LlmAgent;
+            final Object? taskOutput = _extractTaskOutput(
+              llmAgent.outputSchema,
+              pendingFinishArgs,
+            );
+            if (llmAgent.outputKey != null && taskOutput != null) {
+              agentContext.session.state[llmAgent.outputKey!] = taskOutput;
+            }
+            return taskOutput;
+          }
+        }
+      }
       if (event.isFinalResponse() &&
           event.actions.endOfAgent == null &&
           event.actions.agentState == null) {
@@ -1642,18 +1753,22 @@ class Workflow extends BaseAgent {
       yield event;
     }
 
-    for (final MapEntry<String, Object?> entry
-        in workflowContext.outputs.entries) {
-      if (entry.key == START) {
+    final Set<String> outputKeys = <String>{
+      ...workflowContext.outputs.keys,
+      ...workflowContext._nodeEvents.keys,
+    };
+    for (final String key in outputKeys) {
+      if (key == START) {
         continue;
       }
-      final List<Event>? nodeEvents = workflowContext._nodeEvents[entry.key];
-      if (workflowContext.requestInputNodeKeys.contains(entry.key)) {
+      final Object? outputValue = workflowContext.outputs[key];
+      final List<Event>? nodeEvents = workflowContext._nodeEvents[key];
+      if (workflowContext.requestInputNodeKeys.contains(key)) {
         continue;
       }
       final bool isPrevCompleted = _isPreviouslyCompletedOutput(
         previousResult,
-        entry.key,
+        key,
         historyEvents: context.session.events,
         workflowPath: _workflowRootPath(this, context),
       );
@@ -1667,12 +1782,12 @@ class Workflow extends BaseAgent {
         continue;
       }
       final Object? eventOutput =
-          workflowContext._nodeOutputEvents[entry.key] ?? entry.value;
+          workflowContext._nodeOutputEvents[key] ?? outputValue;
       final Event? event = _eventFromOutput(
         context,
-        entry.key,
+        key,
         eventOutput,
-        state: workflowContext.nodeStates[entry.key],
+        state: workflowContext.nodeStates[key],
       );
       if (event != null) {
         yield event;
@@ -1689,6 +1804,9 @@ class Workflow extends BaseAgent {
     }
 
     final Map<String, Set<String>> dependencies = _dependencies(byName);
+    final Map<String, Set<String>> edgePredecessors = _edgePredecessors(byName);
+    final Map<String, Set<String>> reachableFrom = _reachableFrom(byName);
+    final Map<String, Set<String>> joinArrivals = <String, Set<String>>{};
     _seedResumeInputs(context, byName);
     final Set<String> completed = <String>{
       START,
@@ -1707,7 +1825,7 @@ class Workflow extends BaseAgent {
     final Set<String> active = edges.isEmpty
         ? byName.keys.toSet()
         : _initialActiveNodes(byName);
-    for (final String completedNode in completed) {
+    for (final String completedNode in completed.toList()) {
       if (completedNode == START) {
         continue;
       }
@@ -1715,6 +1833,13 @@ class Workflow extends BaseAgent {
         fromNode: completedNode,
         route: context.nodeStates[completedNode]?.route,
         active: active,
+        byName: byName,
+        dependencies: dependencies,
+        edgePredecessors: edgePredecessors,
+        joinArrivals: joinArrivals,
+        completed: completed,
+        pending: pending,
+        reactivateCompleted: false,
       );
       if (activatedTargets.isEmpty) {
         _markTerminalOutputOwner(context, completedNode);
@@ -1727,6 +1852,9 @@ class Workflow extends BaseAgent {
         context: context,
         byName: byName,
         dependencies: dependencies,
+        edgePredecessors: edgePredecessors,
+        reachableFrom: reachableFrom,
+        joinArrivals: joinArrivals,
         pending: pending,
         completed: completed,
         active: active,
@@ -1749,15 +1877,31 @@ class Workflow extends BaseAgent {
         break;
       }
 
-      final List<String> ready = pending.where(active.contains).where((
-        String name,
-      ) {
-        return dependencies[name]!.every(completed.contains);
-      }).toList()..sort();
+      final List<String> ready =
+          pending
+              .where(
+                (String name) => _isNodeReady(
+                  name: name,
+                  byName: byName,
+                  dependencies: dependencies,
+                  edgePredecessors: edgePredecessors,
+                  reachableFrom: reachableFrom,
+                  joinArrivals: joinArrivals,
+                  active: active,
+                  pending: pending,
+                  completed: completed,
+                  running: const <String, Future<_TaskOutcome>>{},
+                ),
+              )
+              .toList()
+            ..sort();
       if (ready.isEmpty) {
         throw StateError(
           'Workflow graph has unresolved or cyclic dependencies.',
         );
+      }
+      for (final String name in ready) {
+        joinArrivals.remove(name);
       }
 
       // Schedule all ready tasks, then drain them by completion order. When a
@@ -1806,6 +1950,13 @@ class Workflow extends BaseAgent {
           fromNode: result.name,
           route: result.route,
           active: active,
+          byName: byName,
+          dependencies: dependencies,
+          edgePredecessors: edgePredecessors,
+          joinArrivals: joinArrivals,
+          completed: completed,
+          pending: pending,
+          reactivateCompleted: true,
         );
         if (activatedTargets.isEmpty) {
           _markTerminalOutputOwner(context, result.name);
@@ -1830,6 +1981,9 @@ class Workflow extends BaseAgent {
     required WorkflowContext context,
     required Map<String, BaseNode> byName,
     required Map<String, Set<String>> dependencies,
+    required Map<String, Set<String>> edgePredecessors,
+    required Map<String, Set<String>> reachableFrom,
+    required Map<String, Set<String>> joinArrivals,
     required Set<String> pending,
     required Set<String> completed,
     required Set<String> active,
@@ -1851,11 +2005,24 @@ class Workflow extends BaseAgent {
           ? 0
           : concurrencyLimit - running.length;
       if (availableSlots > 0) {
-        final List<String> ready = pending.where(active.contains).where((
-          String name,
-        ) {
-          return dependencies[name]!.every(completed.contains);
-        }).toList()..sort();
+        final List<String> ready =
+            pending
+                .where(
+                  (String name) => _isNodeReady(
+                    name: name,
+                    byName: byName,
+                    dependencies: dependencies,
+                    edgePredecessors: edgePredecessors,
+                    reachableFrom: reachableFrom,
+                    joinArrivals: joinArrivals,
+                    active: active,
+                    pending: pending,
+                    completed: completed,
+                    running: running,
+                  ),
+                )
+                .toList()
+              ..sort();
         if (ready.isEmpty && running.isEmpty && pending.any(active.contains)) {
           throw StateError(
             'Workflow graph has unresolved or cyclic dependencies.',
@@ -1863,6 +2030,7 @@ class Workflow extends BaseAgent {
         }
         for (final String name in ready.take(availableSlots)) {
           pending.remove(name);
+          joinArrivals.remove(name);
           running[name] =
               _runReadyNode(
                 context: context,
@@ -1910,11 +2078,125 @@ class Workflow extends BaseAgent {
         fromNode: result.name,
         route: result.route,
         active: active,
+        byName: byName,
+        dependencies: dependencies,
+        edgePredecessors: edgePredecessors,
+        joinArrivals: joinArrivals,
+        completed: completed,
+        pending: pending,
+        reactivateCompleted: true,
       );
       if (activatedTargets.isEmpty) {
         _markTerminalOutputOwner(context, result.name);
       }
     }
+  }
+
+  Map<String, Set<String>> _edgePredecessors(Map<String, BaseNode> byName) {
+    final Map<String, Set<String>> preds = <String, Set<String>>{
+      for (final String name in byName.keys) name: <String>{},
+    };
+    for (final Edge edge in edges) {
+      if (edge.fromNode != START && preds.containsKey(edge.toNode)) {
+        preds[edge.toNode]!.add(edge.fromNode);
+      }
+    }
+    return preds;
+  }
+
+  Map<String, Set<String>> _reachableFrom(Map<String, BaseNode> byName) {
+    final Map<String, Set<String>> adj = <String, Set<String>>{
+      for (final String name in byName.keys) name: <String>{},
+    };
+    for (final BaseNode node in byName.values) {
+      for (final String dep in node.dependsOn) {
+        if (adj.containsKey(dep)) {
+          adj[dep]!.add(node.name);
+        }
+      }
+    }
+    for (final Edge edge in edges) {
+      if (edge.fromNode != START && adj.containsKey(edge.fromNode)) {
+        adj[edge.fromNode]!.add(edge.toNode);
+      }
+    }
+    final Map<String, Set<String>> reachable = <String, Set<String>>{};
+    for (final String start in byName.keys) {
+      final Set<String> visited = <String>{};
+      final List<String> queue = <String>[...adj[start]!];
+      while (queue.isNotEmpty) {
+        final String current = queue.removeLast();
+        if (visited.add(current)) {
+          queue.addAll(adj[current] ?? const <String>{});
+        }
+      }
+      reachable[start] = visited;
+    }
+    return reachable;
+  }
+
+  bool _isNodeReady({
+    required String name,
+    required Map<String, BaseNode> byName,
+    required Map<String, Set<String>> dependencies,
+    required Map<String, Set<String>> edgePredecessors,
+    required Map<String, Set<String>> reachableFrom,
+    required Map<String, Set<String>> joinArrivals,
+    required Set<String> active,
+    required Set<String> pending,
+    required Set<String> completed,
+    required Map<String, Future<_TaskOutcome>> running,
+  }) {
+    if (!active.contains(name)) {
+      return false;
+    }
+    final BaseNode node = byName[name]!;
+    if (node.requiresAllPredecessors) {
+      final Set<String> arrivals = joinArrivals[name] ?? const <String>{};
+      final Set<String> edgePreds = edgePredecessors[name] ?? const <String>{};
+      for (final String p in dependencies[name]!) {
+        if (p == START) {
+          continue;
+        }
+        if (!completed.contains(p)) {
+          return false;
+        }
+        if (edgePreds.contains(p) && !arrivals.contains(p)) {
+          return false;
+        }
+        if (running.containsKey(p) ||
+            (pending.contains(p) && active.contains(p))) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    for (final String dep in node.dependsOn) {
+      if (!completed.contains(dep)) {
+        return false;
+      }
+    }
+    final Set<String> reachable = reachableFrom[name] ?? const <String>{};
+    for (final String pred in edgePredecessors[name] ?? const <String>{}) {
+      if (reachable.contains(pred)) {
+        // Loop back-edge: do not block initial execution on a downstream loop body node.
+        continue;
+      }
+      final bool predHasUnconditionalEdge = edges.any(
+        (Edge e) => e.fromNode == pred && e.toNode == name && e.route == null,
+      );
+      if (!predHasUnconditionalEdge) {
+        continue;
+      }
+      final bool predInFlight =
+          running.containsKey(pred) ||
+          (pending.contains(pred) && active.contains(pred));
+      if (predInFlight || !completed.contains(pred)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Whether any task-mode agent node in this graph is currently waiting.
@@ -2065,6 +2347,13 @@ class Workflow extends BaseAgent {
     required String fromNode,
     required Object? route,
     required Set<String> active,
+    required Map<String, BaseNode> byName,
+    required Map<String, Set<String>> dependencies,
+    required Map<String, Set<String>> edgePredecessors,
+    required Map<String, Set<String>> joinArrivals,
+    required Set<String> completed,
+    required Set<String> pending,
+    required bool reactivateCompleted,
   }) {
     bool matchedSpecificRoute = false;
     final List<String> defaultTargets = <String>[];
@@ -2089,6 +2378,38 @@ class Workflow extends BaseAgent {
       activatedTargets.addAll(defaultTargets);
     }
     active.addAll(activatedTargets);
+    for (final String target in activatedTargets) {
+      final BaseNode? targetNode = byName[target];
+      if (targetNode == null) {
+        continue;
+      }
+      if (targetNode.requiresAllPredecessors) {
+        joinArrivals.putIfAbsent(target, () => <String>{}).add(fromNode);
+      }
+      if (reactivateCompleted && completed.contains(target)) {
+        if (!targetNode.requiresAllPredecessors) {
+          completed.remove(target);
+          pending.add(target);
+          for (final Set<String> arrivals in joinArrivals.values) {
+            arrivals.remove(target);
+          }
+        } else {
+          final Set<String> arrivals = joinArrivals[target] ?? const <String>{};
+          final Set<String> edgePreds =
+              edgePredecessors[target] ?? const <String>{};
+          final bool allArrived = dependencies[target]!.every(
+            (String p) =>
+                p == START ||
+                (completed.contains(p) &&
+                    (!edgePreds.contains(p) || arrivals.contains(p))),
+          );
+          if (allArrived) {
+            completed.remove(target);
+            pending.add(target);
+          }
+        }
+      }
+    }
     return activatedTargets;
   }
 
@@ -2123,6 +2444,10 @@ class Workflow extends BaseAgent {
       author,
       outputForKeys: state?.outputFor,
     );
+    final String? publishBranch =
+        (output is Event && output.getFunctionResponses().isNotEmpty)
+        ? (state?.branch ?? context.branch)
+        : (state?.outputBranch ?? state?.branch ?? context.branch);
     if (output is Event) {
       Event event = output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
@@ -2134,7 +2459,7 @@ class Workflow extends BaseAgent {
         event = event.copyWith(author: author);
       }
       if (event.branch == null) {
-        event = event.copyWith(branch: state?.branch ?? context.branch);
+        event = event.copyWith(branch: publishBranch);
       }
       if (event.isolationScope == null) {
         event = event.copyWith(isolationScope: context.isolationScope);
@@ -2152,7 +2477,7 @@ class Workflow extends BaseAgent {
             ? event.actions
             : event.actions.copyWith(route: state?.route),
         nodeInfo: nodeInfo,
-        branch: state?.branch ?? context.branch,
+        branch: publishBranch,
         isolationScope: event.isolationScope ?? context.isolationScope,
       );
     }
@@ -2160,7 +2485,7 @@ class Workflow extends BaseAgent {
       return Event(
         invocationId: context.invocationId,
         author: author,
-        branch: state?.branch ?? context.branch,
+        branch: publishBranch,
         isolationScope: context.isolationScope,
         nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
         content: output,
@@ -2170,7 +2495,7 @@ class Workflow extends BaseAgent {
     return Event(
       invocationId: context.invocationId,
       author: author,
-      branch: state?.branch ?? context.branch,
+      branch: publishBranch,
       isolationScope: context.isolationScope,
       nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
       content: Content.modelText(text),
@@ -2450,9 +2775,16 @@ Future<Object?> _runNodeWithRetry({
     }
     _updateNodeStatus(context, state, NodeStatus.running);
     state.attemptCount = attempt;
+    context._failedInDynamicChild = false;
+    final Map<String, int> countersAtStart = Map<String, int>.from(
+      context._childRunCounters,
+    );
+    final Object? attemptInput = maxAttempts > 1
+        ? _cloneNodeInputForAttempt(nodeInput)
+        : nodeInput;
     try {
       Future<Object?> future = Future<Object?>.sync(
-        () => node.run(context, nodeInput),
+        () => node.run(context, attemptInput),
       );
       final Duration? timeout = node.timeout;
       if (timeout != null) {
@@ -2491,21 +2823,34 @@ Future<Object?> _runNodeWithRetry({
       state.error = error;
       rethrow;
     } catch (error) {
+      final bool failedInChild = context._failedInDynamicChild;
       lastError = error;
       _updateNodeStatus(context, state, NodeStatus.failed);
       state.error = error;
       if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
         rethrow;
       }
-      _resetDynamicChildrenForRetry(context, key);
+      _resetDynamicChildrenForRetry(
+        context,
+        key,
+        countersSnapshot: failedInChild ? countersAtStart : null,
+      );
       await Future<void>.delayed(_retryDelay(retry!, attempt));
     }
   }
   throw StateError('Workflow node failed unexpectedly: $lastError');
 }
 
-void _resetDynamicChildrenForRetry(WorkflowContext context, String parentKey) {
-  context._childRunCounters.clear();
+void _resetDynamicChildrenForRetry(
+  WorkflowContext context,
+  String parentKey, {
+  Map<String, int>? countersSnapshot,
+}) {
+  if (countersSnapshot != null) {
+    context._childRunCounters
+      ..clear()
+      ..addAll(countersSnapshot);
+  }
   context._outputDelegated = false;
   context._directOutput = null;
   context._hasDirectOutput = false;
@@ -2655,6 +3000,8 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
   }
   if (result.output != null || result.route != null) {
     context.outputs[result.name] = result.output;
+  } else {
+    context.outputs.remove(result.name);
   }
   if (result.interruptIds.isNotEmpty || result.waiting) {
     if (state != null) {
@@ -2665,7 +3012,11 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
     }
     return false;
   }
-  context.outputs[result.name] = result.output;
+  if (result.output != null || result.route != null) {
+    context.outputs[result.name] = result.output;
+  } else {
+    context.outputs.remove(result.name);
+  }
   if (state != null) {
     state.interrupts.clear();
     state.resumeInputs.clear();
@@ -2674,15 +3025,7 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
 }
 
 void _markTerminalOutputOwner(WorkflowContext context, String nodeName) {
-  if (!context.outputs.containsKey(nodeName)) {
-    return;
-  }
   final NodeState? state = context.nodeStates[nodeName];
-  if (state == null) {
-    return;
-  }
-  _addOutputOwner(state.outputFor, nodeName);
-  _addOutputOwner(state.outputFor, _workflowOutputOwner);
   for (final NodeState childState in context.nodeStates.values) {
     if (identical(childState, state)) {
       continue;
@@ -2691,6 +3034,15 @@ void _markTerminalOutputOwner(WorkflowContext context, String nodeName) {
       _addOutputOwner(childState.outputFor, _workflowOutputOwner);
     }
   }
+  if (!context.outputs.containsKey(nodeName) ||
+      context.outputs[nodeName] == null) {
+    return;
+  }
+  if (state == null) {
+    return;
+  }
+  _addOutputOwner(state.outputFor, nodeName);
+  _addOutputOwner(state.outputFor, _workflowOutputOwner);
 }
 
 void _validateSingleTerminalOutput(
@@ -2700,7 +3052,7 @@ void _validateSingleTerminalOutput(
 }) {
   final List<String> terminalOutputs = <String>[
     for (final String nodeName in terminalNodeNames)
-      if (context.outputs.containsKey(nodeName)) nodeName,
+      if (context.outputs[nodeName] != null) nodeName,
   ];
   if (terminalOutputs.length <= 1) {
     return;
@@ -2802,8 +3154,38 @@ WorkflowResult _workflowResultFromEvents(
     }
 
     final NodeState state = stateFor(owner.key, owner.runId, owner.parentRunId);
+    if (owner.runId != null) {
+      final int prevCounter = state.runCounter;
+      final int newCounter = _runCounterFromRunId(owner.runId);
+      state.runId = owner.runId;
+      if (newCounter > prevCounter) {
+        state.runCounter = newCounter;
+        if (prevCounter > 0 && staticNodes.containsKey(owner.key)) {
+          // A static node started a new loop iteration: invalidate older
+          // completed static nodes so downstream nodes re-run on resume.
+          for (final MapEntry<String, NodeState> entry in states.entries) {
+            if (entry.key == owner.key || !staticNodes.containsKey(entry.key)) {
+              continue;
+            }
+            if (_isCompletedNodeState(entry.value) &&
+                entry.value.runCounter < newCounter) {
+              entry.value.status = NodeStatus.inactive;
+            }
+          }
+        }
+      }
+    }
+    final bool hasOutput = event.hasOutput || _hasMessageAsOutput(event);
+    final bool hasClaimedBranch =
+        hasOutput &&
+        (event.nodeInfo.outputFor?.length ?? 0) > 1 &&
+        event.getFunctionResponses().isEmpty;
     if (event.branch != null) {
-      state.branch = event.branch;
+      if (hasClaimedBranch) {
+        state.outputBranch = event.branch;
+      } else {
+        state.branch = event.branch;
+      }
     }
     final List<String>? outputFor = _outputKeysFromPaths(
       event.nodeInfo.outputFor,
@@ -2823,7 +3205,6 @@ WorkflowResult _workflowResultFromEvents(
     }
 
     final Object? eventOutput = _workflowOutputFromEvent(event);
-    final bool hasOutput = event.hasOutput || _hasMessageAsOutput(event);
     if (hasOutput) {
       outputs[owner.key] = eventOutput;
     }
@@ -3183,6 +3564,7 @@ Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
         resumeInputs: Map<String, Object?>.from(entry.value.resumeInputs),
         outputFor: List<String>.from(entry.value.outputFor),
         branch: entry.value.branch,
+        outputBranch: entry.value.outputBranch,
         runCounter: entry.value.runCounter,
         runId: entry.value.runId,
         parentRunId: entry.value.parentRunId,
@@ -3191,6 +3573,51 @@ Map<String, NodeState> _copyNodeStates(Map<String, NodeState> states) {
         error: entry.value.error,
       ),
   };
+}
+
+Object? _extractTaskOutput(
+  Object? outputSchema,
+  Map<String, dynamic> finishArgs,
+) {
+  if (outputSchema == null) {
+    return finishArgs['result'];
+  }
+  if (outputSchema is Map) {
+    final Object? type = outputSchema['type'];
+    final bool isObjectSchema =
+        type == 'object' ||
+        (type == null && outputSchema.containsKey('properties'));
+    if (isObjectSchema) {
+      return Map<String, Object?>.from(finishArgs);
+    }
+  }
+  if (finishArgs.length == 1 && finishArgs.containsKey('result')) {
+    return finishArgs['result'];
+  }
+  return Map<String, Object?>.from(finishArgs);
+}
+
+Object? _cloneNodeInputForAttempt(Object? input) {
+  if (input is Map) {
+    return <Object?, Object?>{
+      for (final MapEntry<Object?, Object?> entry in input.entries)
+        entry.key: _cloneNodeInputForAttempt(entry.value),
+    };
+  }
+  if (input is List) {
+    return <Object?>[
+      for (final Object? element in input) _cloneNodeInputForAttempt(element),
+    ];
+  }
+  if (input is Set) {
+    return <Object?>{
+      for (final Object? element in input) _cloneNodeInputForAttempt(element),
+    };
+  }
+  if (input is Content) {
+    return input.copyWith();
+  }
+  return input;
 }
 
 bool _isCompletedNodeState(NodeState state) {

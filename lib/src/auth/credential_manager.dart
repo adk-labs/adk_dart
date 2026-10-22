@@ -161,6 +161,10 @@ class CredentialManager {
     current = exchangeResult.credential;
     final bool wasExchanged = exchangeResult.wasExchanged;
 
+    if (_hasUnredeemedAuthCode(current)) {
+      return null;
+    }
+
     bool wasRefreshed = false;
     if (!wasExchanged) {
       final _RefreshOutcome refreshResult = await _refreshCredential(current);
@@ -173,6 +177,23 @@ class CredentialManager {
     }
 
     return current;
+  }
+
+  bool _hasUnredeemedAuthCode(AuthCredential credential) {
+    if (credential.authType != AuthCredentialType.oauth2 &&
+        credential.authType != AuthCredentialType.openIdConnect) {
+      return false;
+    }
+    final OAuth2Auth? oauth2 = credential.oauth2;
+    if (oauth2 == null) {
+      return false;
+    }
+    final bool hasAuthCode =
+        (oauth2.authCode != null && oauth2.authCode!.isNotEmpty) ||
+        (oauth2.authResponseUri != null && oauth2.authResponseUri!.isNotEmpty);
+    final bool hasAccessToken =
+        oauth2.accessToken != null && oauth2.accessToken!.isNotEmpty;
+    return hasAuthCode && !hasAccessToken;
   }
 
   Future<AuthCredential?> _loadExistingCredential(Context context) async {

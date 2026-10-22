@@ -253,6 +253,8 @@ class DiscoveryEngineSearchTool extends FunctionTool {
     this.maxResults,
     this.location,
     SearchResultMode? searchResultMode,
+    String? name,
+    String? description,
     this.searchHandler,
     DiscoveryEngineSearchHttpRequestProvider? httpRequestProvider,
     DiscoveryEngineSearchAccessTokenProvider? accessTokenProvider,
@@ -266,8 +268,12 @@ class DiscoveryEngineSearchTool extends FunctionTool {
        _searchResultMode = searchResultMode,
        super(
          func: _discoveryEngineSearchPlaceholder,
-         name: 'discovery_engine_search',
-         description: 'discovery_engine_search',
+         name: (name != null && name.isNotEmpty)
+             ? name
+             : 'discovery_engine_search',
+         description: (description != null && description.isNotEmpty)
+             ? description
+             : 'discovery_engine_search',
        ) {
     if ((dataStoreId == null && searchEngineId == null) ||
         (dataStoreId != null && searchEngineId != null)) {
@@ -323,6 +329,8 @@ class DiscoveryEngineSearchTool extends FunctionTool {
       return null;
     }
     return declaration.copyWith(
+      name: name,
+      description: description,
       parameters: <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{

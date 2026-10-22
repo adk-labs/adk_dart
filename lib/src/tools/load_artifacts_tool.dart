@@ -270,7 +270,13 @@ Part _asSafeInlineDataPart(
 }) {
   final InlineData inlineData = artifact.inlineData!;
   if (_isInlineMimeTypeSupported(inlineData.mimeType)) {
-    return artifact.copyWith();
+    final int delimiterIndex = inlineData.mimeType.indexOf(';');
+    final String canonicalMimeType = delimiterIndex == -1
+        ? inlineData.mimeType.trim().toLowerCase()
+        : '${inlineData.mimeType.substring(0, delimiterIndex).trim().toLowerCase()}${inlineData.mimeType.substring(delimiterIndex)}';
+    return artifact.copyWith(
+      inlineData: inlineData.copyWith(mimeType: canonicalMimeType),
+    );
   }
 
   final String mimeType =

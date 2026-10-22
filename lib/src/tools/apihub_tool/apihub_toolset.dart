@@ -29,6 +29,7 @@ class APIHubToolset extends BaseToolset {
     AuthCredential? authCredential,
     BaseAPIHubClient? apihubClient,
     super.toolFilter,
+    this.allowPrivateNetworkAccess = false,
   }) : _apihubResourceName = apihubResourceName,
        _authScheme = authScheme,
        _authCredential = authCredential,
@@ -54,6 +55,9 @@ class APIHubToolset extends BaseToolset {
 
   /// Toolset description override used for generated OpenAPI tools.
   String description;
+
+  /// Whether requests to loopback, private, link-local, or internal hosts are allowed.
+  final bool allowPrivateNetworkAccess;
 
   final String _apihubResourceName;
   final BaseAPIHubClient _apihubClient;
@@ -104,6 +108,7 @@ class APIHubToolset extends BaseToolset {
       authCredential: _authCredential,
       authScheme: _authScheme,
       toolFilter: toolFilter,
+      allowPrivateNetworkAccess: allowPrivateNetworkAccess,
     );
   }
 

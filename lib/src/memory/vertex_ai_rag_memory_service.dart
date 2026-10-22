@@ -223,7 +223,7 @@ class VertexAiRagMemoryService extends BaseMemoryService {
       }
 
       final List<String> textParts = content.parts
-          .where((Part part) => part.text != null)
+          .where((Part part) => part.text != null && !part.thought)
           .map((Part part) => part.text!.replaceAll('\n', ' '))
           .where((String value) => value.isNotEmpty)
           .toList(growable: false);

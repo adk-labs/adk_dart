@@ -21,6 +21,7 @@ class CompactionRequestProcessor extends BaseLlmRequestProcessor {
           sessionService: invocationContext.sessionService,
           agentName: invocationContext.agent.name,
           currentBranch: invocationContext.branch,
+          isolationScope: invocationContext.isolationScope,
         );
     if (compacted) {
       invocationContext.tokenCompactionChecked = true;

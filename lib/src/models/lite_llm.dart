@@ -158,6 +158,14 @@ class LiteLlm extends BaseLlm {
     if (request.config.stopSequences.isNotEmpty) {
       payload['stop'] = request.config.stopSequences;
     }
+    if (request.config.topK != null) {
+      payload['top_k'] = request.config.topK;
+    }
+    _applyThinkingConfigToPayload(
+      payload,
+      request.config.thinkingConfig,
+      model: request.model ?? '',
+    );
     final Map<String, Object?>? responseJsonSchema = _asObjectMap(
       request.config.responseJsonSchema,
     );
@@ -334,7 +342,11 @@ class LiteLlm extends BaseLlm {
       payload: buildPayload(prepared, stream: stream, baseUrl: baseUrl),
       stream: stream,
     );
+    final bool filterThoughts = _shouldFilterThoughts(
+      prepared.config.thinkingConfig,
+    );
     bool multipleChoicesLogged = false;
+    final Map<int, List<int>> pendingToolSignatures = <int, List<int>>{};
     for (final Map<String, Object?> response in responses) {
       if (stream) {
         final List<Object?> choices =
@@ -364,9 +376,25 @@ class LiteLlm extends BaseLlm {
         final Map<String, Object?> modified = choices.isEmpty
             ? response
             : <String, Object?>{...response, 'choices': filteredChoices};
-        yield parseCompletionResponse(modified);
+        final LlmResponse parsed = _parseStreamCompletionChunk(
+          modified,
+          pendingToolSignatures: pendingToolSignatures,
+        );
+        if (filterThoughts) {
+          _filterThoughtParts(parsed);
+          if ((parsed.content == null || parsed.content!.parts.isEmpty) &&
+              parsed.finishReason == 'OTHER' &&
+              _asMap(modified['usage']).isEmpty) {
+            continue;
+          }
+        }
+        yield parsed;
       } else {
-        yield parseCompletionResponse(response);
+        final LlmResponse parsed = parseCompletionResponse(response);
+        if (filterThoughts) {
+          _filterThoughtParts(parsed);
+        }
+        yield parsed;
       }
     }
   }
@@ -1152,7 +1180,11 @@ String _normalizePythonLiteralJson(String input) {
   return normalized;
 }
 
-Part _parseFunctionCall(Map<String, Object?> callMap) {
+Part _parseFunctionCall(
+  Map<String, Object?> callMap, {
+  Map<int, List<int>>? pendingToolSignatures,
+  int fallbackIndex = 0,
+}) {
   final Map<String, Object?> function = _asMap(callMap['function']);
   final String name = '${function['name'] ?? ''}';
   final Map<String, dynamic> parsedArgs = _parseToolCallArguments(
@@ -1160,18 +1192,360 @@ Part _parseFunctionCall(Map<String, Object?> callMap) {
     name,
   );
   final String? callId = callMap['id'] == null ? null : '${callMap['id']}';
+  final int callIndex = callMap['index'] is num
+      ? (callMap['index'] as num).toInt()
+      : fallbackIndex;
+  final List<int>? extractedSignature = _extractThoughtSignatureFromToolCall(
+    callMap,
+  );
+  if (name.isEmpty &&
+      (function['arguments'] == null || '${function['arguments']}'.isEmpty) &&
+      extractedSignature != null &&
+      pendingToolSignatures != null) {
+    pendingToolSignatures[callIndex] = extractedSignature;
+  }
+  final List<int>? thoughtSignature =
+      extractedSignature ?? pendingToolSignatures?.remove(callIndex);
   final Part part = Part.fromFunctionCall(
     name: name,
     args: parsedArgs,
     id: callId,
   );
-  final List<int>? thoughtSignature = _extractThoughtSignatureFromToolCall(
-    callMap,
-  );
   if (thoughtSignature == null) {
     return part;
   }
   return part.copyWith(thoughtSignature: thoughtSignature);
+}
+
+LlmResponse _parseStreamCompletionChunk(
+  Map<String, Object?> response, {
+  required Map<int, List<int>> pendingToolSignatures,
+}) {
+  final List<Object?> choices =
+      (response['choices'] as List<Object?>?) ?? <Object?>[];
+  if (choices.isEmpty) {
+    return LiteLlm.parseCompletionResponse(response);
+  }
+  final Map<String, Object?> first = _asMap(choices.first);
+  final Map<String, Object?> message = _asMap(first['message']);
+  final Map<String, Object?> delta = _asMap(first['delta']);
+  final Map<String, Object?> effectiveMessage = message.isNotEmpty
+      ? message
+      : delta;
+  final List<Object?> toolCalls =
+      (effectiveMessage['tool_calls'] as List<Object?>?) ?? <Object?>[];
+  if (toolCalls.isEmpty) {
+    return LiteLlm.parseCompletionResponse(response);
+  }
+  final List<Object?> filteredToolCalls = <Object?>[];
+  for (int i = 0; i < toolCalls.length; i += 1) {
+    final Map<String, Object?> callMap = _asMap(toolCalls[i]);
+    final Map<String, Object?> fn = _asMap(callMap['function']);
+    final String name = '${fn['name'] ?? ''}';
+    final String args = '${fn['arguments'] ?? ''}';
+    final int idx = callMap['index'] is num
+        ? (callMap['index'] as num).toInt()
+        : i;
+    final List<int>? sig = _extractThoughtSignatureFromToolCall(callMap);
+    if (name.isEmpty && args.isEmpty) {
+      if (sig != null) {
+        pendingToolSignatures[idx] = sig;
+      }
+      continue;
+    }
+    if (sig == null && pendingToolSignatures.containsKey(idx)) {
+      final String encoded = base64Encode(pendingToolSignatures.remove(idx)!);
+      filteredToolCalls.add(<String, Object?>{
+        ...callMap,
+        'provider_specific_fields': <String, Object?>{
+          ..._asMap(callMap['provider_specific_fields']),
+          'thought_signature': encoded,
+        },
+      });
+    } else {
+      if (sig != null) {
+        pendingToolSignatures.remove(idx);
+      }
+      filteredToolCalls.add(callMap);
+    }
+  }
+  final Map<String, Object?> patchedMessage = <String, Object?>{
+    ...effectiveMessage,
+    'tool_calls': filteredToolCalls,
+  };
+  final Map<String, Object?> patchedFirst = <String, Object?>{
+    ...first,
+    if (message.isNotEmpty) 'message': patchedMessage else 'delta': patchedMessage,
+  };
+  return LiteLlm.parseCompletionResponse(<String, Object?>{
+    ...response,
+    'choices': <Object?>[patchedFirst],
+  });
+}
+
+const int _anthropicMinThinkingBudgetTokens = 1024;
+const Map<String, int> _anthropicEffortBudgets = <String, int>{
+  'minimal': _anthropicMinThinkingBudgetTokens,
+  'low': 1024,
+  'medium': 2048,
+  'high': 4096,
+};
+const List<String> _claude46Substrings = <String>[
+  'opus-4-6',
+  'opus_4_6',
+  'opus-4.6',
+  'opus_4.6',
+  'sonnet-4-6',
+  'sonnet_4_6',
+  'sonnet-4.6',
+  'sonnet_4.6',
+];
+const List<String> _claude47Substrings = <String>[
+  'opus-4-7',
+  'opus_4_7',
+  'opus-4.7',
+  'opus_4.7',
+];
+const Map<String, int> _geminiMinThinkingBudgets = <String, int>{
+  'gemini-2.5-pro': 128,
+  'gemini-2.5-flash-lite': 512,
+};
+
+Map<String, Object?>? _thinkingConfigToMap(Object? rawConfig) {
+  if (rawConfig == null) {
+    return null;
+  }
+  if (rawConfig is Map) {
+    return rawConfig.map(
+      (Object? key, Object? value) => MapEntry<String, Object?>('$key', value),
+    );
+  }
+  final dynamic dyn = rawConfig;
+  try {
+    final Object? json = dyn.toJson();
+    if (json is Map) {
+      return json.map(
+        (Object? key, Object? value) =>
+            MapEntry<String, Object?>('$key', value),
+      );
+    }
+  } catch (_) {}
+  final Map<String, Object?> result = <String, Object?>{};
+  try {
+    final Object? includeThoughts = dyn.includeThoughts;
+    if (includeThoughts != null) {
+      result['include_thoughts'] = includeThoughts;
+    }
+  } catch (_) {}
+  try {
+    final Object? thinkingBudget = dyn.thinkingBudget;
+    if (thinkingBudget != null) {
+      result['thinking_budget'] = thinkingBudget;
+    }
+  } catch (_) {}
+  try {
+    final Object? thinkingLevel = dyn.thinkingLevel;
+    if (thinkingLevel != null) {
+      result['thinking_level'] = thinkingLevel;
+    }
+  } catch (_) {}
+  return result.isEmpty ? null : result;
+}
+
+bool _shouldFilterThoughts(Object? rawThinkingConfig) {
+  final Map<String, Object?>? map = _thinkingConfigToMap(rawThinkingConfig);
+  if (map == null) {
+    return false;
+  }
+  final Object? includeThoughts =
+      map['include_thoughts'] ?? map['includeThoughts'];
+  return includeThoughts == false;
+}
+
+void _filterThoughtParts(LlmResponse response) {
+  final Content? content = response.content;
+  if (content == null || content.parts.isEmpty) {
+    return;
+  }
+  final bool hasToolCalls = content.parts.any(
+    (Part part) => part.functionCall != null,
+  );
+  content.parts = <Part>[
+    for (final Part part in content.parts)
+      if (!part.thought || (hasToolCalls && part.thoughtSignature != null))
+        part,
+  ];
+}
+
+void _dropParamsRejectedByAnthropicThinking(Map<String, Object?> params) {
+  final Object? thinking = params['thinking'];
+  final Object? reasoningEffort = params['reasoning_effort'];
+  final bool thinkingEnabled =
+      (reasoningEffort != null && reasoningEffort != 'none') ||
+      (thinking is Map &&
+          (thinking['type'] == 'enabled' || thinking['type'] == 'adaptive'));
+  if (!thinkingEnabled) {
+    return;
+  }
+  if (params['temperature'] != 1 && params['temperature'] != 1.0) {
+    params.remove('temperature');
+  }
+  params.remove('top_k');
+  final Object? topP = params['top_p'];
+  if (topP is num && topP < 0.95) {
+    params.remove('top_p');
+  }
+}
+
+void _applyThinkingConfigToPayload(
+  Map<String, Object?> payload,
+  Object? rawThinkingConfig, {
+  required String model,
+}) {
+  final Map<String, Object?>? config = _thinkingConfigToMap(rawThinkingConfig);
+  if (config == null || config.isEmpty) {
+    return;
+  }
+  final String lowerModel = model.toLowerCase();
+  final bool isAnthropic =
+      _isAnthropicModel(model) || lowerModel.contains('claude');
+  final bool isClaude47 =
+      isAnthropic && _claude47Substrings.any(lowerModel.contains);
+  final bool isAdaptiveAnthropic =
+      isAnthropic &&
+      (isClaude47 || _claude46Substrings.any(lowerModel.contains));
+  final bool isGemini = lowerModel.contains('gemini-');
+  final bool isGemini3OrNewer = isGemini && lowerModel.contains('gemini-3');
+  final int? effectiveMaxTokens =
+      (payload['max_completion_tokens'] as int?) ??
+      (payload['max_tokens'] as int?);
+
+  final Object? rawLevel =
+      config['thinking_level'] ?? config['thinkingLevel'];
+  final String? levelStr = rawLevel == null
+      ? null
+      : '$rawLevel'.split('.').last;
+  final Object? rawBudget =
+      config['thinking_budget'] ?? config['thinkingBudget'];
+  final int? thinkingBudget = rawBudget is num ? rawBudget.toInt() : null;
+  final Object? includeThoughts =
+      config['include_thoughts'] ?? config['includeThoughts'];
+
+  if (levelStr != null &&
+      levelStr.isNotEmpty &&
+      levelStr.toUpperCase() != 'THINKING_LEVEL_UNSPECIFIED' &&
+      levelStr.toLowerCase() != 'unspecified') {
+    final String effort = levelStr.toLowerCase();
+    if (isAnthropic && !isAdaptiveAnthropic) {
+      final int? effortBudget = _anthropicEffortBudgets[effort];
+      if (effectiveMaxTokens != null &&
+          effectiveMaxTokens <= _anthropicMinThinkingBudgetTokens) {
+        // Skip thinking when max_tokens cannot fit the minimum budget.
+      } else if (effort == 'minimal' ||
+          (effectiveMaxTokens != null &&
+              effortBudget != null &&
+              effectiveMaxTokens <= effortBudget)) {
+        final int budget =
+            (effectiveMaxTokens != null && effortBudget != null)
+            ? (effortBudget < effectiveMaxTokens - 1
+                  ? effortBudget
+                  : effectiveMaxTokens - 1)
+            : _anthropicMinThinkingBudgetTokens;
+        payload['thinking'] = <String, Object?>{
+          'type': 'enabled',
+          'budget_tokens': budget,
+        };
+      } else {
+        payload['reasoning_effort'] = effort;
+      }
+    } else {
+      payload['reasoning_effort'] = effort;
+    }
+  } else if (thinkingBudget == 0) {
+    if (!isGemini3OrNewer && (isAnthropic || isGemini)) {
+      if (isGemini) {
+        if (!lowerModel.contains('gemini-2.5-pro')) {
+          payload['thinking'] = <String, Object?>{
+            'type': 'enabled',
+            'budget_tokens': 0,
+          };
+        }
+      } else {
+        payload['thinking'] = <String, Object?>{'type': 'disabled'};
+      }
+    } else if (isGemini3OrNewer) {
+      payload['reasoning_effort'] = 'none';
+    }
+  } else if (thinkingBudget != null && thinkingBudget > 0) {
+    if (!isGemini3OrNewer && !isClaude47 && (isAnthropic || isGemini)) {
+      int minBudget = 0;
+      if (isAnthropic) {
+        minBudget = _anthropicMinThinkingBudgetTokens;
+      } else if (isGemini) {
+        for (final MapEntry<String, int> entry
+            in _geminiMinThinkingBudgets.entries) {
+          if (lowerModel.contains(entry.key)) {
+            minBudget = entry.value;
+            break;
+          }
+        }
+      }
+      final int rawBudgetVal =
+          thinkingBudget < minBudget ? minBudget : thinkingBudget;
+      int? budgetVal = rawBudgetVal;
+      if (isAnthropic && effectiveMaxTokens != null) {
+        budgetVal = effectiveMaxTokens > _anthropicMinThinkingBudgetTokens
+            ? (rawBudgetVal < effectiveMaxTokens - 1
+                  ? rawBudgetVal
+                  : effectiveMaxTokens - 1)
+            : null;
+      }
+      if (budgetVal != null) {
+        payload['thinking'] = <String, Object?>{
+          'type': 'enabled',
+          'budget_tokens': budgetVal,
+        };
+      }
+    } else {
+      if (thinkingBudget <= 1024) {
+        payload['reasoning_effort'] = 'low';
+      } else if (thinkingBudget <= 2048) {
+        payload['reasoning_effort'] = 'medium';
+      } else {
+        payload['reasoning_effort'] = 'high';
+      }
+    }
+  }
+
+  if (!payload.containsKey('thinking') &&
+      !payload.containsKey('reasoning_effort') &&
+      (levelStr == null ||
+          levelStr.isEmpty ||
+          levelStr.toUpperCase() == 'THINKING_LEVEL_UNSPECIFIED' ||
+          levelStr.toLowerCase() == 'unspecified') &&
+      (thinkingBudget == null || thinkingBudget < 0)) {
+    if (includeThoughts == true && !isGemini3OrNewer) {
+      if (isAnthropic) {
+        if (isClaude47) {
+          payload['thinking'] = <String, Object?>{'type': 'adaptive'};
+        } else if (effectiveMaxTokens == null ||
+            effectiveMaxTokens > _anthropicMinThinkingBudgetTokens) {
+          payload['thinking'] = <String, Object?>{
+            'type': 'enabled',
+            'budget_tokens': _anthropicMinThinkingBudgetTokens,
+          };
+        }
+      } else if (isGemini) {
+        payload['thinking'] = <String, Object?>{'type': 'enabled'};
+      }
+    } else if (includeThoughts == false && isGemini) {
+      payload['thinking'] = <String, Object?>{'type': 'disabled'};
+    }
+  }
+
+  if (isAnthropic) {
+    _dropParamsRejectedByAnthropicThinking(payload);
+  }
 }
 
 Map<String, Object?> _asMap(Object? value) {

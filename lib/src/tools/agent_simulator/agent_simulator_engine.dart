@@ -56,15 +56,26 @@ class AgentSimulatorEngine {
     for (final simulator_config.ToolSimulationConfig toolConfig
         in _config.toolSimulationConfigs) {
       _toolSimConfigs[toolConfig.toolName] = toolConfig;
+      for (int i = 0; i < toolConfig.injectionConfigs.length; i += 1) {
+        final simulator_config.InjectionConfig injectionConfig =
+            toolConfig.injectionConfigs[i];
+        if (injectionConfig.randomSeed != null) {
+          _seededGenerators[(toolConfig.toolName, i)] = math.Random(
+            injectionConfig.randomSeed!,
+          );
+        }
+      }
     }
   }
 
   final simulator_config.AgentSimulatorConfig _config;
   final Map<String, simulator_config.ToolSimulationConfig> _toolSimConfigs =
       <String, simulator_config.ToolSimulationConfig>{};
+  final Map<(String, int), math.Random> _seededGenerators =
+      <(String, int), math.Random>{};
   ToolConnectionAnalyzer? _analyzer;
   final SimulatorStrategyFactory _strategyFactory;
-  math.Random _randomGenerator;
+  final math.Random _randomGenerator;
   final String? _environmentData;
 
   bool _isAnalyzed = false;
@@ -109,18 +120,18 @@ class AgentSimulatorEngine {
       _isAnalyzed = true;
     }
 
-    for (final simulator_config.InjectionConfig injectionConfig
-        in toolSimConfig.injectionConfigs) {
+    for (int i = 0; i < toolSimConfig.injectionConfigs.length; i += 1) {
+      final simulator_config.InjectionConfig injectionConfig =
+          toolSimConfig.injectionConfigs[i];
       final Map<String, Object?>? matchArgs = injectionConfig.matchArgs;
       if (matchArgs != null && !_containsAllEntries(args, matchArgs)) {
         continue;
       }
 
-      if (injectionConfig.randomSeed != null) {
-        _randomGenerator = math.Random(injectionConfig.randomSeed!);
-      }
+      final math.Random generator =
+          _seededGenerators[(tool.name, i)] ?? _randomGenerator;
 
-      if (_randomGenerator.nextDouble() <
+      if (generator.nextDouble() <
           injectionConfig.injectionProbability) {
         if (injectionConfig.injectedLatencySeconds > 0) {
           await Future<void>.delayed(

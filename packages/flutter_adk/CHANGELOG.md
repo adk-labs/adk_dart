@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.22
+
+- Bumped package version to `2026.10.22` and dependency `adk_dart: ^2026.10.22`.
+- Re-exported `LlmClassifier`, `VisualFrame`, `packVisualFrames`, `unpackVisualFrames`, `ToolArgsMatcher`, `ModelConsultObservabilityPlugin`, and `ToolResultClassification` via `package:adk_dart/adk_core.dart`.
+
 ## 2026.10.15
 
 - Bumped package version to `2026.10.15` and dependency `adk_dart: ^2026.10.15`.

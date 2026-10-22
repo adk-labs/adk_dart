@@ -26,3 +26,9 @@ export 'cascade_live_events.dart'
 export 'gemini_stt.dart' show GeminiSTT;
 export 'gemini_tts.dart' show GeminiTTS;
 export 'transforms.dart' show CancelSignal, LiveEgress, LiveIngress;
+export 'visual_frames.dart'
+    show
+        VisualFrame,
+        packVisualFrames,
+        unpackVisualFrames,
+        visualFramesZipMimeType;

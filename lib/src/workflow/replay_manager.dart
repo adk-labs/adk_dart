@@ -1,6 +1,7 @@
 import '../agents/context.dart';
 import '../events/event.dart';
 import '../events/node_path_builder.dart';
+import '../events/request_input.dart';
 import '../types/content.dart';
 import 'workflow.dart';
 
@@ -163,6 +164,7 @@ class ReplayManager {
       basePath,
     );
     final List<String> sequence = <String>[];
+    final Set<String> completed = <String>{};
 
     for (final Event event in events) {
       final String eventNodePath = event.nodeInfo.path;
@@ -183,17 +185,50 @@ class ReplayManager {
 
       final String segment = childPath.leafSegment;
 
-      if (event.isFinalResponse() ||
-          event.actions.route != null ||
-          event.longRunningToolIds?.isNotEmpty == true) {
+      if (_isTerminalEvent(event)) {
+        final bool hasResult = _eventHasResult(event);
+        final bool isInterrupt = _isInterruptEvent(event);
+        if (event.errorCode != null && !hasResult && !isInterrupt) {
+          if (sequence.contains(segment) && !completed.contains(segment)) {
+            sequence.remove(segment);
+          }
+          continue;
+        }
+        if (completed.contains(segment)) {
+          continue;
+        }
         if (sequence.contains(segment)) {
           sequence.remove(segment);
         }
         sequence.add(segment);
+        if (!isInterrupt && hasResult) {
+          completed.add(segment);
+        }
       }
     }
 
     return sequence;
+  }
+
+  bool _eventHasResult(Event event) {
+    return (event.hasOutput && event.output != null) ||
+        ((event.nodeInfo.messageAsOutput ?? false) && event.content != null) ||
+        event.actions.route != null ||
+        event.actions.transferToAgent != null;
+  }
+
+  bool _isInterruptEvent(Event event) {
+    return (event.longRunningToolIds?.isNotEmpty == true) ||
+        event.actions.requestedToolConfirmations.isNotEmpty ||
+        getRequestInputInterruptIds(event).isNotEmpty;
+  }
+
+  bool _isTerminalEvent(Event event) {
+    return event.isFinalResponse() ||
+        event.hasOutput ||
+        event.actions.route != null ||
+        event.errorCode != null ||
+        _isInterruptEvent(event);
   }
 
   /// Advance sequence barrier if initialized for parentPath.

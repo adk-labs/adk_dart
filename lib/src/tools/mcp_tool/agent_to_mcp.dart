@@ -1,6 +1,7 @@
 /// Exposes an ADK Agent as an MCP server tool payload/runner interface.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import '../../agents/base_agent.dart';
@@ -106,6 +107,8 @@ class AdkAgentMcpServer {
   final Runner runner;
 
   final Map<String, String> _connectionSessions = <String, String>{};
+  final Map<String, Future<String>> _pendingSessions =
+      <String, Future<String>>{};
 
   /// Returns the MCP tool descriptor for this agent.
   Map<String, dynamic> getToolDescriptor() {
@@ -125,26 +128,78 @@ class AdkAgentMcpServer {
     };
   }
 
+  Future<String> _getOrCreateSession(String? connectionId) async {
+    if (connectionId != null && connectionId.isNotEmpty) {
+      final String? existing = _connectionSessions[connectionId];
+      if (existing != null) {
+        return existing;
+      }
+      final Future<String>? pending = _pendingSessions[connectionId];
+      if (pending != null) {
+        return pending;
+      }
+      final Completer<String> completer = Completer<String>();
+      _pendingSessions[connectionId] = completer.future;
+      try {
+        final session = await runner.sessionService.createSession(
+          appName: runner.appName,
+          userId: mcpUserId,
+        );
+        _connectionSessions[connectionId] = session.id;
+        completer.complete(session.id);
+        return session.id;
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+        rethrow;
+      } finally {
+        _pendingSessions.remove(connectionId);
+      }
+    }
+
+    final session = await runner.sessionService.createSession(
+      appName: runner.appName,
+      userId: mcpUserId,
+    );
+    return session.id;
+  }
+
+  /// Closes and reaps the session associated with [sessionId] (or connection ID).
+  Future<void> closeSession(String sessionId) async {
+    String? targetSessionId = _connectionSessions.remove(sessionId);
+    if (targetSessionId == null) {
+      final Future<String>? pending = _pendingSessions.remove(sessionId);
+      if (pending != null) {
+        try {
+          targetSessionId = await pending;
+        } catch (_) {
+          return;
+        }
+        _connectionSessions.remove(sessionId);
+      }
+    }
+    if (targetSessionId == null) {
+      _connectionSessions.removeWhere(
+        (String _, String value) => value == sessionId,
+      );
+      targetSessionId = sessionId;
+    }
+    try {
+      await runner.sessionService.deleteSession(
+        appName: runner.appName,
+        userId: mcpUserId,
+        sessionId: targetSessionId,
+      );
+    } catch (_) {
+      // Ignore deletion errors during session cleanup.
+    }
+  }
+
   /// Runs the agent for one MCP tool request and returns final content blocks.
   Future<List<McpContentBlock>> runAgent({
     required String request,
     String? connectionId,
   }) async {
-    String? sessionId;
-    if (connectionId != null && connectionId.isNotEmpty) {
-      sessionId = _connectionSessions[connectionId];
-    }
-
-    if (sessionId == null) {
-      final session = await runner.sessionService.createSession(
-        appName: runner.appName,
-        userId: mcpUserId,
-      );
-      sessionId = session.id;
-      if (connectionId != null && connectionId.isNotEmpty) {
-        _connectionSessions[connectionId] = sessionId;
-      }
-    }
+    final String sessionId = await _getOrCreateSession(connectionId);
 
     final Content newMessage = Content.userText(request);
     final List<McpContentBlock> finalContent = <McpContentBlock>[];

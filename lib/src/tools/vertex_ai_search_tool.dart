@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../models/llm_request.dart';
 import '../utils/model_name_utils.dart';
 import 'base_tool.dart';
+import 'discovery_engine_search_tool.dart';
 import 'tool_context.dart';
 
 /// One Vertex AI Search data store reference.
@@ -71,10 +72,19 @@ class VertexAiSearchTool extends BaseTool {
     this.filter,
     this.maxResults,
     this.bypassMultiToolsLimit = false,
+    String? name,
+    String? description,
     bool Function()? modelIdCheckDisabledResolver,
-  }) : _modelIdCheckDisabledResolver =
+  }) : _customName = name,
+       _customDescription = description,
+       _modelIdCheckDisabledResolver =
            modelIdCheckDisabledResolver ?? isGeminiModelIdCheckDisabled,
-       super(name: 'vertex_ai_search', description: 'vertex_ai_search') {
+       super(
+         name: (name != null && name.isNotEmpty) ? name : 'vertex_ai_search',
+         description: (description != null && description.isNotEmpty)
+             ? description
+             : 'vertex_ai_search',
+       ) {
     if ((dataStoreId == null && searchEngineId == null) ||
         (dataStoreId != null && searchEngineId != null)) {
       throw ArgumentError(
@@ -105,7 +115,23 @@ class VertexAiSearchTool extends BaseTool {
 
   /// Whether Gemini 1.x multi-tool constraints are bypassed.
   final bool bypassMultiToolsLimit;
+  final String? _customName;
+  final String? _customDescription;
   final bool Function() _modelIdCheckDisabledResolver;
+
+  /// Converts this tool into a [DiscoveryEngineSearchTool], preserving any
+  /// custom [name] and [description] overrides.
+  DiscoveryEngineSearchTool toDiscoveryEngineSearchTool() {
+    return DiscoveryEngineSearchTool(
+      dataStoreId: dataStoreId,
+      dataStoreSpecs: dataStoreSpecs,
+      searchEngineId: searchEngineId,
+      filter: filter,
+      maxResults: maxResults,
+      name: _customName,
+      description: _customDescription,
+    );
+  }
 
   /// Builds retrieval config to inject into model requests.
   VertexAiSearchConfig buildVertexAiSearchConfig(ToolContext toolContext) {

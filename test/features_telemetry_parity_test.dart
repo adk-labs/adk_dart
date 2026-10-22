@@ -15,24 +15,24 @@ void main() {
       final List<String> warnings = <String>[];
       setFeatureWarningEmitter(warnings.add);
 
-      expect(isFeatureEnabled(FeatureName.agentConfig), isTrue);
-      expect(isFeatureEnabled(FeatureName.agentConfig), isTrue);
+      expect(isFeatureEnabled(FeatureName.computerUse), isTrue);
+      expect(isFeatureEnabled(FeatureName.computerUse), isTrue);
       expect(warnings, hasLength(1));
 
-      overrideFeatureEnabled(FeatureName.agentConfig, false);
+      overrideFeatureEnabled(FeatureName.computerUse, false);
       expect(
         isFeatureEnabled(
-          FeatureName.agentConfig,
-          environment: <String, String>{'ADK_ENABLE_AGENT_CONFIG': '1'},
+          FeatureName.computerUse,
+          environment: <String, String>{'ADK_ENABLE_COMPUTER_USE': '1'},
         ),
         isFalse,
       );
 
-      clearFeatureOverride(FeatureName.agentConfig);
+      clearFeatureOverride(FeatureName.computerUse);
       expect(
         isFeatureEnabled(
-          FeatureName.agentConfig,
-          environment: <String, String>{'ADK_DISABLE_AGENT_CONFIG': '1'},
+          FeatureName.computerUse,
+          environment: <String, String>{'ADK_DISABLE_COMPUTER_USE': '1'},
         ),
         isFalse,
       );
@@ -52,17 +52,17 @@ void main() {
 
     test('decorator parity checks enabled state and stage mismatch', () {
       expect(
-        () => feature_decorator.stable(FeatureName.agentConfig),
+        () => feature_decorator.stable(FeatureName.computerUse),
         throwsArgumentError,
       );
 
       final feature_decorator.FeatureDecorator guard = feature_decorator
-          .workingInProgress(FeatureName.jsonSchemaForFuncDecl);
+          .experimental(FeatureName.snakeCaseSkillName);
 
       expect(() => guard.run(() => 'x'), throwsA(isA<StateError>()));
 
       final String value = withTemporaryFeatureOverride(
-        FeatureName.jsonSchemaForFuncDecl,
+        FeatureName.snakeCaseSkillName,
         true,
         () => guard.run(() => 'ok'),
       );

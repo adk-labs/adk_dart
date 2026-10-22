@@ -10,6 +10,9 @@ String extractText(MemoryEntry memory, {String splitter = ' '}) {
   }
   final List<String> chunks = <String>[];
   for (final part in memory.content.parts) {
+    if (part.thought) {
+      continue;
+    }
     final String? text = part.text;
     if (text != null && text.isNotEmpty) {
       chunks.add(text);

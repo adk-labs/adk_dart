@@ -8,6 +8,8 @@ import '../models/base_llm.dart';
 import '../models/llm_request.dart';
 import '../tools/base_tool.dart';
 import '../tools/base_toolset.dart';
+import '../tools/exit_loop_tool.dart';
+import '../tools/function_tool.dart';
 import '../tools/tool_configs.dart';
 import 'agent_config.dart';
 import 'base_agent.dart';
@@ -101,10 +103,17 @@ Object? resolveFullyQualifiedName(
   required AgentConfigResolvers resolvers,
 }) {
   final Object? value = resolvers.resolveSymbol(name);
-  if (value == null) {
-    throw ArgumentError('Invalid fully qualified name: $name');
+  if (value != null) {
+    return value;
   }
-  return value;
+  if (name == 'exit_loop' || name.endsWith('.exit_loop')) {
+    return FunctionTool(
+      func: exitLoop,
+      name: 'exit_loop',
+      description: 'Exits the current loop.',
+    );
+  }
+  throw ArgumentError('Invalid fully qualified name: $name');
 }
 
 /// Resolves an [AgentRefConfig] into a concrete [BaseAgent].

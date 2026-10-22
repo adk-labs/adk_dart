@@ -522,19 +522,50 @@ abstract class BaseAgent {
   }
 
   void _validateSubAgentUniqueNames() {
-    final Set<String> seen = <String>{};
+    final Set<String> seenNames = <String>{};
     final Set<String> duplicates = <String>{};
+    int selfNameInSubtreeCount = 0;
     for (final BaseAgent subAgent in subAgents) {
-      if (!seen.add(subAgent.name)) {
-        duplicates.add(subAgent.name);
-      }
-    }
-    if (duplicates.isNotEmpty) {
-      developer.log(
-        'Found duplicate sub-agent names under `$name`: '
-        '${duplicates.toList(growable: false)..sort()}',
-        name: 'adk_dart.agents',
+      final Set<String> branchNames = _subtreeNames(
+        subAgent,
+        Set<BaseAgent>.identity(),
       );
+      if (branchNames.contains(name)) {
+        selfNameInSubtreeCount += 1;
+      }
+      duplicates.addAll(seenNames.intersection(branchNames));
+      seenNames.addAll(branchNames);
     }
+    _warnDuplicateAgentNames(duplicates);
+    if (selfNameInSubtreeCount == 1) {
+      _warnDuplicateAgentNames(<String>{name});
+    }
+  }
+
+  Set<String> _subtreeNames(BaseAgent? agent, Set<BaseAgent> visited) {
+    if (agent == null || !visited.add(agent)) {
+      return <String>{};
+    }
+    final Set<String> names = <String>{agent.name};
+    for (final BaseAgent child in agent.subAgents) {
+      names.addAll(_subtreeNames(child, visited));
+    }
+    return names;
+  }
+
+  void _warnDuplicateAgentNames(Set<String> duplicates) {
+    if (duplicates.isEmpty) {
+      return;
+    }
+    final List<String> sorted = duplicates.toList(growable: false)..sort();
+    final String duplicateNamesStr = sorted
+        .map((String item) => '`$item`')
+        .join(', ');
+    developer.log(
+      'Found duplicate agent names: $duplicateNamesStr. '
+      'All agents in the tree must have unique names. '
+      'find_agent() returns the first match in a depth-first walk.',
+      name: 'adk_dart.agents',
+    );
   }
 }

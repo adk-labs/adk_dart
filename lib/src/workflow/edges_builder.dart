@@ -167,6 +167,7 @@ class RouteMap {
 
   /// Starts an entry for [route]; [RouteMapEntry.then] completes it.
   RouteMapEntry on(Object route) {
+    _checkNotBuilt();
     if (route is RouteSet) {
       return _start(route.routes);
     }
@@ -175,8 +176,25 @@ class RouteMap {
 
   /// Starts an entry that fires when the source node emits any of [routes].
   RouteMapEntry onAny(Iterable<Object> routes) {
+    _checkNotBuilt();
     final List<Object> list = List<Object>.unmodifiable(routes);
     return _start(list);
+  }
+
+  /// Starts or completes an entry for [route].
+  ///
+  /// When [first] is provided, completes the route entry immediately with
+  /// [first] and optional [rest] targets.
+  RouteMapEntry when(
+    Object route, [
+    Object? first,
+    List<Object> rest = const <Object>[],
+  ]) {
+    final RouteMapEntry entry = on(route);
+    if (first != null) {
+      entry.then(first, rest);
+    }
+    return entry;
   }
 
   /// Leads to [first] and optional [rest] targets when no other route matches,
@@ -187,6 +205,11 @@ class RouteMap {
     for (final Object target in targets) {
       _edges.add(Edge(fromNode: _from, toNode: target, route: DEFAULT_ROUTE));
     }
+  }
+
+  /// Explicitly drops [route] without adding a target edge.
+  void drop([Object? route]) {
+    _checkNotBuilt();
   }
 
   /// Groups routes for [on] so one edge fires on any of them.

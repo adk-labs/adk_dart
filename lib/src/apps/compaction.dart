@@ -200,21 +200,27 @@ Future<bool> runCompactionForTokenThresholdConfig({
   required BaseSessionService sessionService,
   required String agentName,
   required String? currentBranch,
+  String? isolationScope,
 }) async {
   if (!hasTokenThresholdConfig(config) || config == null) {
     return false;
   }
 
-  final List<Event> events = applyRewinds(session.events);
+  final List<Event> rewoundEvents = applyRewinds(session.events);
+  final List<Event> events = rewoundEvents
+      .where((Event e) => e.isolationScope == isolationScope)
+      .toList(growable: false);
   final int? promptTokenCount = latestPromptTokenCount(
-    events: events,
+    events: rewoundEvents,
     currentBranch: currentBranch,
     agentName: agentName,
+    isolationScope: isolationScope,
   );
   if (promptTokenCount == null || promptTokenCount < config.tokenThreshold!) {
     return false;
   }
 
+  final Event? latestCompactionEvent = _latestCompactionEvent(events);
   final double lastCompactedEnd = latestCompactionEndTimestamp(events);
   final List<Event> candidates = events
       .where(
@@ -246,11 +252,29 @@ Future<bool> runCompactionForTokenThresholdConfig({
     eventsToCompact,
     allEvents: events,
   );
-  if (eventsToCompact.isEmpty ||
-      !_isRangeWorthCompacting(
-        events: events,
-        eventsToCompact: eventsToCompact,
-      )) {
+  if (eventsToCompact.isEmpty) {
+    return false;
+  }
+
+  if (latestCompactionEvent != null &&
+      latestCompactionEvent.actions.compaction != null) {
+    final EventCompaction compaction =
+        latestCompactionEvent.actions.compaction!;
+    final Event seedEvent = Event(
+      timestamp: compaction.startTimestamp,
+      author: 'model',
+      content: compaction.compactedContent.copyWith(),
+      branch: latestCompactionEvent.branch,
+      isolationScope: latestCompactionEvent.isolationScope,
+      invocationId: Event.newId(),
+    );
+    eventsToCompact = <Event>[seedEvent, ...eventsToCompact];
+  }
+
+  if (!_isRangeWorthCompacting(
+    events: events,
+    eventsToCompact: eventsToCompact,
+  )) {
     return false;
   }
 
@@ -266,6 +290,7 @@ Future<bool> runCompactionForTokenThresholdConfig({
   if (compactionEvent == null) {
     return false;
   }
+  compactionEvent.isolationScope = isolationScope;
   await sessionService.appendEvent(session: session, event: compactionEvent);
   return true;
 }
@@ -304,7 +329,12 @@ Stream<Event> runCompactionForSlidingWindow({
     return;
   }
 
-  final List<Event> events = applyRewinds(session.events);
+  final List<Event> events = applyRewinds(session.events)
+      .where((Event e) => e.isolationScope == null)
+      .toList(growable: false);
+  if (events.isEmpty) {
+    return;
+  }
   final double lastCompactedEnd = latestCompactionEndTimestamp(events);
   final List<Event> candidates = events
       .where(
@@ -431,22 +461,64 @@ int _removablePromptChars({
   return _promptCharsSaved(events: events, compactionEvent: weightlessSummary);
 }
 
-Event? _latestCompactionEvent(List<Event> events) {
-  double latestEnd = 0.0;
-  int latestIndex = -1;
-  Event? latest;
-  for (int i = 0; i < events.length; i += 1) {
-    final EventCompaction? compaction = events[i].actions.compaction;
+/// Returns surviving `(eventIndex, startTimestamp, endTimestamp)` compaction
+/// ranges in original event order.
+///
+/// A containing range supersedes its contained ranges; identical ranges keep
+/// the latest event.
+List<(int, double, double)> getCompactionRanges(List<Event> events) {
+  final List<(int, double, double)> ranges = <(int, double, double)>[];
+  final List<(int, double, double)> comparable = <(int, double, double)>[];
+  final Set<int> retained = <int>{};
+  for (int index = 0; index < events.length; index += 1) {
+    final EventCompaction? compaction = events[index].actions.compaction;
     if (compaction == null) {
       continue;
     }
-    if (i >= latestIndex && compaction.endTimestamp > latestEnd) {
-      latestIndex = i;
-      latestEnd = compaction.endTimestamp;
-      latest = events[i];
+    final double start = compaction.startTimestamp;
+    final double end = compaction.endTimestamp;
+    final (int, double, double) item = (index, start, end);
+    ranges.appendRangeItem(item);
+    if (start.isNaN || end.isNaN) {
+      // NaN bounds neither contain another range nor are contained by one.
+      retained.add(index);
+    } else {
+      comparable.add(item);
     }
   }
-  return latest;
+
+  comparable.sort(((int, double, double) a, (int, double, double) b) {
+    final int startCmp = a.$2.compareTo(b.$2);
+    if (startCmp != 0) {
+      return startCmp;
+    }
+    final int endCmp = b.$3.compareTo(a.$3);
+    if (endCmp != 0) {
+      return endCmp;
+    }
+    return b.$1.compareTo(a.$1);
+  });
+
+  double? maxEnd;
+  for (final (int index, double _, double end) in comparable) {
+    if (maxEnd == null || end > maxEnd) {
+      retained.add(index);
+      maxEnd = end;
+    }
+  }
+  return <(int, double, double)>[
+    for (final (int, double, double) item in ranges)
+      if (retained.contains(item.$1)) item,
+  ];
+}
+
+extension on List<(int, double, double)> {
+  void appendRangeItem((int, double, double) item) => add(item);
+}
+
+Event? _latestCompactionEvent(List<Event> events) {
+  final List<(int, double, double)> ranges = getCompactionRanges(events);
+  return ranges.isEmpty ? null : events[ranges.last.$1];
 }
 
 int _previousSummaryChars(List<Event> events) {
@@ -597,23 +669,17 @@ String _summarizerType(Object? summarizer) {
   return summarizer.runtimeType.toString();
 }
 
-/// Returns the latest prompt token count estimate from [events].
-int? latestPromptTokenCount({
+int? _estimatePromptTokenCount({
   required List<Event> events,
   required String? currentBranch,
   required String agentName,
+  String? isolationScope,
 }) {
-  for (int i = events.length - 1; i >= 0; i -= 1) {
-    final int? found = _extractPromptTokenCount(events[i].usageMetadata);
-    if (found != null) {
-      return found;
-    }
-  }
-
   final List<Content> effectiveContents = contents_flow.getContents(
     currentBranch: currentBranch,
     events: events,
     agentName: agentName,
+    isolationScope: isolationScope,
   );
   int totalChars = 0;
   for (final Content content in effectiveContents) {
@@ -623,6 +689,36 @@ int? latestPromptTokenCount({
     return null;
   }
   return totalChars ~/ 4;
+}
+
+/// Returns the latest prompt token count estimate from [events].
+int? latestPromptTokenCount({
+  required List<Event> events,
+  required String? currentBranch,
+  required String agentName,
+  String? isolationScope,
+}) {
+  final List<Event> scopedEvents = events
+      .where((Event e) => e.isolationScope == isolationScope)
+      .toList(growable: false);
+  for (int i = scopedEvents.length - 1; i >= 0; i -= 1) {
+    final Event event = scopedEvents[i];
+    if (event.actions.compaction != null) {
+      // Counts at or before a summarization describe a prompt it replaced.
+      break;
+    }
+    final int? found = _extractPromptTokenCount(event.usageMetadata);
+    if (found != null) {
+      return found;
+    }
+  }
+
+  return _estimatePromptTokenCount(
+    events: events,
+    currentBranch: currentBranch,
+    agentName: agentName,
+    isolationScope: isolationScope,
+  );
 }
 
 int _countCharsInContent(Content? content) {

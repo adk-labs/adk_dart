@@ -56,3 +56,28 @@ Content? filterMediaParts(Content content) {
   return Content(role: content.role, parts: filtered);
 }
 
+/// Extracts non-thought text from [content] joined by [separator].
+///
+/// Returns `null` when [content] is `null` or contains no non-empty non-thought
+/// text parts.
+String? extractTextFromContent(Content? content, {String separator = ' '}) {
+  if (content == null || content.parts.isEmpty) {
+    return null;
+  }
+  final List<String> texts = <String>[];
+  for (final Part part in content.parts) {
+    if (part.thought) {
+      continue;
+    }
+    final String? text = part.text;
+    if (text != null && text.isNotEmpty) {
+      texts.add(text);
+    }
+  }
+  if (texts.isEmpty) {
+    return null;
+  }
+  return texts.join(separator);
+}
+
+

@@ -465,6 +465,17 @@ class Gemini extends BaseLlm {
         tools.any((ToolDeclaration tool) => tool.computerUse != null)) {
       request.config.systemInstruction = null;
     }
+    if (tools != null &&
+        tools.any(
+          (ToolDeclaration tool) => tool.functionDeclarations.isNotEmpty,
+        ) &&
+        isGemini1Model(request.model ?? model)) {
+      request.config.responseSchema = null;
+      request.config.responseJsonSchema = null;
+      if (request.config.responseMimeType == 'application/json') {
+        request.config.responseMimeType = null;
+      }
+    }
   }
 
   Map<String, String> _mergeTrackingHeaders(Map<String, String>? headers) {

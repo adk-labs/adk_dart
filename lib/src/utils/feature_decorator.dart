@@ -41,7 +41,10 @@ class FeatureDecorator {
     final bool bypassed =
         bypassEnvVar != null &&
         isEnvEnabled(bypassEnvVar!, environment: environment);
-    if (bypassed) {
+    if (bypassed ||
+        (!blockUsage &&
+            label.toUpperCase() == 'EXPERIMENTAL' &&
+            isExperimentalWarningSuppressed(environment: environment))) {
       return;
     }
 

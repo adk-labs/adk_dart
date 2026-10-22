@@ -252,7 +252,7 @@ class Resources {
          _normalizeResourceMap(assets ?? <String, SkillResourceData>{}),
        ),
        scripts = Map<String, Script>.unmodifiable(
-         scripts ?? <String, Script>{},
+         _normalizeScriptMap(scripts ?? <String, Script>{}),
        );
 
   /// Text or binary references bundled with the skill.
@@ -867,6 +867,38 @@ Skill loadSkillFromDir(String skillDirPath) {
   );
 }
 
+/// Validates and normalizes a skill-relative resource [path].
+///
+/// Rejects empty paths, leading `/` or `\`, Windows drive prefixes, and `.` or
+/// `..` traversal segments. Returns a normalized forward-slash POSIX path.
+String validateRelativeResourcePath(String path) {
+  final String trimmed = path.trim();
+  if (trimmed.isEmpty ||
+      path.startsWith('/') ||
+      path.startsWith(r'\') ||
+      RegExp(r'^[A-Za-z]:').hasMatch(trimmed)) {
+    throw ArgumentError('Unsafe path in skill resource: $path');
+  }
+  final String posix = path.replaceAll(r'\', '/');
+  final List<String> rawSegments = posix.split('/');
+  final List<String> normalizedSegments = <String>[];
+  for (final String segment in rawSegments) {
+    if (segment.isEmpty) {
+      continue;
+    }
+    if (segment == '.' ||
+        segment == '..' ||
+        RegExp(r'^[A-Za-z]:').hasMatch(segment)) {
+      throw ArgumentError('Unsafe path in skill resource: $path');
+    }
+    normalizedSegments.add(segment);
+  }
+  if (normalizedSegments.isEmpty) {
+    throw ArgumentError('Unsafe path in skill resource: $path');
+  }
+  return normalizedSegments.join('/');
+}
+
 /// Reports unsupported validation mode on Web.
 List<String> validateSkillDir(String skillDirPath) {
   return <String>[
@@ -990,13 +1022,28 @@ Object? _normalizeMetadataValue(Object? value) {
 Map<String, SkillResourceData> _normalizeResourceMap(
   Map<String, SkillResourceData> resources,
 ) {
-  return resources.map(
-    (String key, SkillResourceData value) =>
-        MapEntry<String, SkillResourceData>(
-          key,
-          _normalizeResourceValue(value),
-        ),
-  );
+  final Map<String, SkillResourceData> normalized =
+      <String, SkillResourceData>{};
+  for (final MapEntry<String, SkillResourceData> entry in resources.entries) {
+    final String key = validateRelativeResourcePath(entry.key);
+    if (normalized.containsKey(key)) {
+      throw ArgumentError('Duplicate normalized path detected: $key');
+    }
+    normalized[key] = _normalizeResourceValue(entry.value);
+  }
+  return normalized;
+}
+
+Map<String, Script> _normalizeScriptMap(Map<String, Script> scripts) {
+  final Map<String, Script> normalized = <String, Script>{};
+  for (final MapEntry<String, Script> entry in scripts.entries) {
+    final String key = validateRelativeResourcePath(entry.key);
+    if (normalized.containsKey(key)) {
+      throw ArgumentError('Duplicate normalized path detected: $key');
+    }
+    normalized[key] = entry.value;
+  }
+  return normalized;
 }
 
 SkillResourceData _normalizeResourceValue(Object? value) {

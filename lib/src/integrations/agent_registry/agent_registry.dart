@@ -15,6 +15,8 @@ import '../../tools/mcp_tool/mcp_toolset.dart';
 const String _agentRegistryBaseUrl =
     'https://agentregistry.googleapis.com/v1alpha';
 const String _gcpMcpServerDestinationIdKey = 'gcp.mcp.server.destination.id';
+const String _runtimeReferenceAttribute =
+    'apphub.googleapis.com/RuntimeReference';
 
 /// Supported Agent Registry protocol types.
 enum AgentRegistryProtocolType {
@@ -75,12 +77,14 @@ typedef AgentRegistryAuthHeadersProvider =
 class _AgentRegistrySingleMcpToolset extends McpToolset {
   _AgentRegistrySingleMcpToolset({
     required this.destinationResourceId,
+    this.mcpServerId,
     required super.connectionParams,
     super.toolNamePrefix,
     super.headerProvider,
   });
 
   final String? destinationResourceId;
+  final String? mcpServerId;
 
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
@@ -188,6 +192,17 @@ class AgentRegistry {
       final String value when value.trim().isNotEmpty => value,
       _ => null,
     };
+    final Object? attributes = serverDetails['attributes'];
+    final Object? runtimeReference = attributes is Map
+        ? attributes[_runtimeReferenceAttribute]
+        : null;
+    final Object? runtimeReferenceUri = runtimeReference is Map
+        ? runtimeReference['uri']
+        : null;
+    final String? destinationResourceId = switch (runtimeReferenceUri) {
+      final String value when value.trim().isNotEmpty => value,
+      _ => mcpServerId,
+    };
     final String prefix = _cleanName(
       _readString(serverDetails['displayName']).isEmpty
           ? mcpServerName
@@ -204,7 +219,8 @@ class AgentRegistry {
     }
 
     return _AgentRegistrySingleMcpToolset(
-      destinationResourceId: mcpServerId,
+      destinationResourceId: destinationResourceId,
+      mcpServerId: mcpServerId,
       connectionParams: StreamableHTTPConnectionParams(
         url: endpointUri,
         headers: await _authHeadersProvider(),

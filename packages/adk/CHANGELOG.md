@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.22
+
+- Bumped package version to `2026.10.22` and dependency `adk_dart: ^2026.10.22`.
+- **Dev Web Server & CLI Deployment (`web_server.dart`, `cli_deploy.dart`, `conformance_replay_plugin.dart`)**:
+  - Exposed `POST /apps/{app_name}/users/{user_id}/sessions/{session_id}/rewind` and cancelled any active `/run`, `/run_sse`, or `/run_live` session runs before rewinding.
+  - Restricted `allowSpecialAgents` to require both `enableWebUi` and a loopback `serverHost`.
+  - Added `Dockerfile` and `deployment.yaml` to reserved extra package names in `adk deploy`.
+  - Executed `exit_loop` directly during conformance replay instead of looking up a recorded tool response.
+
 ## 2026.10.15
 
 - Bumped package version to `2026.10.15` and dependency `adk_dart: ^2026.10.15`.

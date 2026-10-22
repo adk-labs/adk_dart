@@ -256,7 +256,7 @@ class Resources {
          _normalizeResourceMap(assets ?? <String, SkillResourceData>{}),
        ),
        scripts = Map<String, Script>.unmodifiable(
-         scripts ?? <String, Script>{},
+         _normalizeScriptMap(scripts ?? <String, Script>{}),
        );
 
   /// Text or binary references bundled with the skill.
@@ -984,14 +984,49 @@ Skill loadSkillFromZipBytes(List<int> zipBytes) {
   );
 }
 
+/// Validates and normalizes a skill-relative resource [path].
+///
+/// Rejects empty paths, leading `/` or `\`, Windows drive prefixes, and `.` or
+/// `..` traversal segments. Returns a normalized forward-slash POSIX path.
+String validateRelativeResourcePath(String path) {
+  final String trimmed = path.trim();
+  if (trimmed.isEmpty ||
+      path.startsWith('/') ||
+      path.startsWith(r'\') ||
+      RegExp(r'^[A-Za-z]:').hasMatch(trimmed)) {
+    throw ArgumentError('Unsafe path in skill resource: $path');
+  }
+  final String posix = path.replaceAll(r'\', '/');
+  final List<String> rawSegments = posix.split('/');
+  final List<String> normalizedSegments = <String>[];
+  for (final String segment in rawSegments) {
+    if (segment.isEmpty) {
+      continue;
+    }
+    if (segment == '.' ||
+        segment == '..' ||
+        RegExp(r'^[A-Za-z]:').hasMatch(segment)) {
+      throw ArgumentError('Unsafe path in skill resource: $path');
+    }
+    normalizedSegments.add(segment);
+  }
+  if (normalizedSegments.isEmpty) {
+    throw ArgumentError('Unsafe path in skill resource: $path');
+  }
+  return normalizedSegments.join('/');
+}
+
 /// Validates skill directory structure and returns human-readable problems.
 List<String> validateSkillDir(String skillDirPath) {
   final Directory skillDir = _resolveSkillDir(skillDirPath);
+  final FileSystemEntityType entityType = FileSystemEntity.typeSync(
+    skillDir.path,
+  );
 
-  if (!skillDir.existsSync()) {
+  if (entityType == FileSystemEntityType.notFound) {
     return <String>["Directory '${skillDir.path}' does not exist."];
   }
-  if (skillDir.statSync().type != FileSystemEntityType.directory) {
+  if (entityType != FileSystemEntityType.directory) {
     return <String>["'${skillDir.path}' is not a directory."];
   }
 
@@ -1348,29 +1383,45 @@ Future<Skill> loadSkillFromGcsDir(
   final Map<String, SkillResourceData> assets = <String, SkillResourceData>{};
   final Map<String, Script> scripts = <String, Script>{};
   for (final String blobName in blobNames) {
-    if (blobName == manifestBlobName) {
+    if (blobName == manifestBlobName || blobName.endsWith('/')) {
       continue;
     }
     final String relativePath = blobName.substring(skillDirPrefix.length);
     if (relativePath.isEmpty) {
       continue;
     }
+    final String normalizedRel = validateRelativeResourcePath(relativePath);
     final List<int>? bytes = await store.downloadBlob(bucketName, blobName);
     if (bytes == null) {
       continue;
     }
-    if (relativePath.startsWith('references/')) {
-      final String resourceId = relativePath.substring('references/'.length);
+    if (normalizedRel.startsWith('references/')) {
+      final String resourceId = validateRelativeResourcePath(
+        normalizedRel.substring('references/'.length),
+      );
+      if (references.containsKey(resourceId)) {
+        throw ArgumentError('Duplicate normalized path detected: $resourceId');
+      }
       references[resourceId] = _decodeSkillResource(resourceId, bytes);
       continue;
     }
-    if (relativePath.startsWith('assets/')) {
-      final String resourceId = relativePath.substring('assets/'.length);
+    if (normalizedRel.startsWith('assets/')) {
+      final String resourceId = validateRelativeResourcePath(
+        normalizedRel.substring('assets/'.length),
+      );
+      if (assets.containsKey(resourceId)) {
+        throw ArgumentError('Duplicate normalized path detected: $resourceId');
+      }
       assets[resourceId] = _decodeSkillResource(resourceId, bytes);
       continue;
     }
-    if (relativePath.startsWith('scripts/')) {
-      final String scriptId = relativePath.substring('scripts/'.length);
+    if (normalizedRel.startsWith('scripts/')) {
+      final String scriptId = validateRelativeResourcePath(
+        normalizedRel.substring('scripts/'.length),
+      );
+      if (scripts.containsKey(scriptId)) {
+        throw ArgumentError('Duplicate normalized path detected: $scriptId');
+      }
       try {
         scripts[scriptId] = Script(src: _decodeSkillText(bytes));
       } on FormatException {
@@ -1631,13 +1682,28 @@ Object? _normalizeMetadataValue(Object? value) {
 Map<String, SkillResourceData> _normalizeResourceMap(
   Map<String, SkillResourceData> resources,
 ) {
-  return resources.map(
-    (String key, SkillResourceData value) =>
-        MapEntry<String, SkillResourceData>(
-          key,
-          _normalizeResourceValue(value),
-        ),
-  );
+  final Map<String, SkillResourceData> normalized =
+      <String, SkillResourceData>{};
+  for (final MapEntry<String, SkillResourceData> entry in resources.entries) {
+    final String key = validateRelativeResourcePath(entry.key);
+    if (normalized.containsKey(key)) {
+      throw ArgumentError('Duplicate normalized path detected: $key');
+    }
+    normalized[key] = _normalizeResourceValue(entry.value);
+  }
+  return normalized;
+}
+
+Map<String, Script> _normalizeScriptMap(Map<String, Script> scripts) {
+  final Map<String, Script> normalized = <String, Script>{};
+  for (final MapEntry<String, Script> entry in scripts.entries) {
+    final String key = validateRelativeResourcePath(entry.key);
+    if (normalized.containsKey(key)) {
+      throw ArgumentError('Duplicate normalized path detected: $key');
+    }
+    normalized[key] = entry.value;
+  }
+  return normalized;
 }
 
 SkillResourceData _normalizeResourceValue(Object? value) {

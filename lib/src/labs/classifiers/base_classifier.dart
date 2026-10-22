@@ -43,7 +43,7 @@ abstract class BaseClassifier {
   }
 
   /// Provider's model name.
-  final String model;
+  String model;
 
   /// Answers every question in [questions] against [input].
   Future<ClassifierResponse> classify({

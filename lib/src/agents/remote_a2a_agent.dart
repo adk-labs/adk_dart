@@ -730,14 +730,20 @@ class RemoteA2aAgent extends BaseAgent {
             }
           }
           _addMockFunctionCall(event, update.status.state);
-        } else if (update is A2aTaskArtifactUpdateEvent &&
-            (!update.append || update.lastChunk)) {
+        } else if (update is A2aTaskArtifactUpdateEvent) {
           event = convertA2aArtifactUpdateToEvent(
             update,
             author: name,
             invocationContext: ctx,
             partConverter: _a2aPartConverter,
           );
+          final String? eventId = artifactEventId(
+            update.artifact.artifactId,
+            ctx,
+          );
+          if (eventId != null) {
+            event.id = eventId;
+          }
         } else {
           return null;
         }

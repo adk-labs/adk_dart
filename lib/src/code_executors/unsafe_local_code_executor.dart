@@ -13,7 +13,7 @@ import 'code_execution_utils.dart';
 class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
   /// Creates an unsafe local code executor.
   UnsafeLocalCodeExecutor({
-    this.defaultTimeout = const Duration(seconds: 30),
+    this.defaultTimeout = const Duration(seconds: 300),
     this.executable = 'python3',
     this.dartCommandPath,
     this.pythonCommandPath = 'python3',
@@ -149,7 +149,13 @@ class UnsafeLocalCodeExecutor extends BaseCodeExecutor {
           .transform(SystemEncoding().decoder)
           .join();
 
-      final int exitCode = await process.exitCode.timeout(defaultTimeout);
+      final int exitCode;
+      try {
+        exitCode = await process.exitCode.timeout(defaultTimeout);
+      } on TimeoutException {
+        process.kill(ProcessSignal.sigkill);
+        rethrow;
+      }
 
       return CodeExecutionResult(
         exitCode: exitCode,

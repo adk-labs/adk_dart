@@ -22,6 +22,14 @@ bool canUseOutputSchemaWithTools(
   Object model, {
   Map<String, String>? environment,
 }) {
+  final String modelString = switch (model) {
+    String value => value,
+    BaseLlm llm => llm.model,
+    _ => '',
+  };
+  if (modelString.trim().toLowerCase().startsWith('gemini-1.')) {
+    return false;
+  }
   if (model is BaseLlm) {
     if (model.capabilities.outputSchemaAndTools) {
       return true;
@@ -30,11 +38,6 @@ bool canUseOutputSchemaWithTools(
   if (model is LiteLlm) {
     return true;
   }
-  final String modelString = switch (model) {
-    String value => value,
-    BaseLlm llm => llm.model,
-    _ => '',
-  };
   return getGoogleLlmVariant(environment: environment) ==
           GoogleLLMVariant.vertexAi &&
       isGeminiEapOr2OrAbove(modelString);

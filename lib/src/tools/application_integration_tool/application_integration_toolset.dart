@@ -36,6 +36,7 @@ class ApplicationIntegrationToolset extends BaseToolset {
     this.integrationClient,
     this.connectionsClient,
     super.toolFilter,
+    this.allowPrivateNetworkAccess = false,
   }) : triggers = triggers ?? <String>[],
        entityOperations = entityOperations ?? <String, List<String>>{},
        actions = actions ?? <String>[],
@@ -104,6 +105,9 @@ class ApplicationIntegrationToolset extends BaseToolset {
 
   /// Optional preconfigured connections client.
   final ConnectionsClient? connectionsClient;
+
+  /// Whether requests to loopback, private, link-local, or internal hosts are allowed.
+  final bool allowPrivateNetworkAccess;
 
   final AuthConfig? _authConfig;
 
@@ -204,6 +208,7 @@ class ApplicationIntegrationToolset extends BaseToolset {
         authCredential: resolvedAuthCredential,
         authScheme: resolvedAuthScheme,
         toolFilter: toolFilter,
+        allowPrivateNetworkAccess: allowPrivateNetworkAccess,
       );
       return;
     }
@@ -227,6 +232,7 @@ class ApplicationIntegrationToolset extends BaseToolset {
 
       final RestApiTool restApiTool = RestApiTool.fromParsedOperation(
         openApiOperation,
+        allowPrivateNetworkAccess: allowPrivateNetworkAccess,
       );
       restApiTool.configureAuthScheme(resolvedAuthScheme);
       restApiTool.configureAuthCredential(resolvedAuthCredential);

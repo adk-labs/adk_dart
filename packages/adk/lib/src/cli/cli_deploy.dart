@@ -412,6 +412,8 @@ const Set<String> _reservedExtraPackageNames = <String>{
   'include',
   'share',
   'pyvenv.cfg',
+  'Dockerfile',
+  'deployment.yaml',
 };
 
 final RegExp _serviceAccountEmailPattern = RegExp(

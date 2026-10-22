@@ -68,6 +68,27 @@ const Set<String> mcpReservedToolNames = <String>{
   'transfer_to_agent',
 };
 
+/// Merges MCP session headers so explicit [authHeaders] take precedence over
+/// [providerHeaders] on case-insensitive header name collisions.
+Map<String, String> mergeMcpAuthAndProviderHeaders({
+  Map<String, String>? authHeaders,
+  Map<String, String>? providerHeaders,
+}) {
+  final Map<String, String> headers = <String, String>{
+    ...?providerHeaders,
+  };
+  if (authHeaders != null && authHeaders.isNotEmpty) {
+    final Set<String> authHeaderNames = <String>{
+      for (final String name in authHeaders.keys) name.toLowerCase(),
+    };
+    headers.removeWhere(
+      (String name, String _) => authHeaderNames.contains(name.toLowerCase()),
+    );
+    headers.addAll(authHeaders);
+  }
+  return headers;
+}
+
 /// Auth-aware MCP tool wrapper that delegates calls through [McpSessionManager].
 class McpTool extends BaseAuthenticatedTool {
   /// Creates an MCP-backed tool.
@@ -242,13 +263,14 @@ class McpTool extends BaseAuthenticatedTool {
       }
     }
 
-    final Map<String, String> headers = <String, String>{};
-    headers.addAll(_headersFromCredential(credential));
-    if (headerProvider != null) {
-      headers.addAll(
-        headerProvider!(ReadonlyContext(toolContext.invocationContext)),
-      );
-    }
+    final Map<String, String> authHeaders = _headersFromCredential(credential);
+    final Map<String, String>? providerHeaders = headerProvider?.call(
+      ReadonlyContext(toolContext.invocationContext),
+    );
+    final Map<String, String> headers = mergeMcpAuthAndProviderHeaders(
+      authHeaders: authHeaders,
+      providerHeaders: providerHeaders,
+    );
 
     final Object? response;
     try {

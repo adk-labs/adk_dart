@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import '../agents/invocation_context.dart';
 import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
 import 'base_plugin.dart';
@@ -83,6 +84,9 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
 
   final Map<String, Map<String, int>> _scopedFailureCounters =
       <String, Map<String, int>>{};
+  final Expando<bool> _declinedCalls = Expando<bool>(
+    'reflect_retry_declined_calls',
+  );
 
   Future<void> _lock = Future<void>.value();
 
@@ -109,6 +113,16 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     if (result['response_type'] == reflectAndRetryResponseType) {
       return null;
     }
+    final bool wasDeclined = await _synchronized<bool>(() {
+      if (_declinedCalls[toolContext] == true) {
+        _declinedCalls[toolContext] = null;
+        return true;
+      }
+      return false;
+    });
+    if (wasDeclined) {
+      return null;
+    }
 
     final Object? error = await extractErrorFromResult(
       tool: tool,
@@ -118,7 +132,13 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     );
 
     if (error != null) {
-      return _handleToolError(tool, toolArgs, toolContext, error);
+      return _handleToolError(
+        tool,
+        toolArgs,
+        toolContext,
+        error,
+        fromOnToolError: false,
+      );
     }
 
     await _resetFailuresForTool(toolContext, tool.name);
@@ -143,17 +163,53 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     required ToolContext toolContext,
     required Exception error,
   }) async {
-    return _handleToolError(tool, toolArgs, toolContext, error);
+    return _handleToolError(
+      tool,
+      toolArgs,
+      toolContext,
+      error,
+      fromOnToolError: true,
+    );
+  }
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    await _forgetInvocation(invocationContext.invocationId);
+  }
+
+  @override
+  Future<void> onRunErrorCallback({
+    required InvocationContext invocationContext,
+    required Object error,
+  }) async {
+    await _forgetInvocation(invocationContext.invocationId);
+  }
+
+  Future<void> _forgetInvocation(String invocationId) async {
+    if (trackingScope != TrackingScope.invocation) {
+      return;
+    }
+    await _synchronized<void>(() {
+      _scopedFailureCounters.remove(invocationId);
+    });
   }
 
   Future<Map<String, dynamic>?> _handleToolError(
     BaseTool tool,
     Map<String, dynamic> toolArgs,
     ToolContext toolContext,
-    Object error,
-  ) async {
+    Object error, {
+    required bool fromOnToolError,
+  }) async {
     if (maxRetries == 0) {
       if (throwExceptionIfRetryExceeded) {
+        if (fromOnToolError) {
+          await _synchronized<void>(() {
+            _declinedCalls[toolContext] = true;
+          });
+        }
         throw _ensureException(error);
       }
       return _getToolRetryExceedMessage(tool, toolArgs, error);
@@ -176,6 +232,9 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
       }
 
       if (throwExceptionIfRetryExceeded) {
+        if (fromOnToolError) {
+          _declinedCalls[toolContext] = true;
+        }
         throw _ensureException(error);
       }
       return _getToolRetryExceedMessage(tool, toolArgs, error);

@@ -2,6 +2,9 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 
 import '../../agents/invocation_context.dart';
 import '../../events/event.dart';
@@ -417,6 +420,49 @@ Event convertA2aStatusUpdateToEvent(
   );
 }
 
+/// Returns the deterministic UUIDv5 event ID shared by all chunks of an A2A
+/// artifact update within [invocationContext], or `null` when unavailable.
+String? artifactEventId(
+  String artifactId,
+  InvocationContext? invocationContext,
+) {
+  if (artifactId.isEmpty) {
+    return null;
+  }
+  // Standard RFC 4122 URL namespace UUID: 6ba7b811-9dad-11d1-80b4-00c04fd430c8
+  const List<int> urlNamespaceBytes = <int>[
+    0x6b,
+    0xa7,
+    0xb8,
+    0x11,
+    0x9d,
+    0xad,
+    0x11,
+    0xd1,
+    0x80,
+    0xb4,
+    0x00,
+    0xc0,
+    0x4f,
+    0xd4,
+    0x30,
+    0xc8,
+  ];
+  final String invocationId = invocationContext?.invocationId ?? '';
+  final String key = '$invocationId:$artifactId';
+  final List<int> input = <int>[...urlNamespaceBytes, ...utf8.encode(key)];
+  final Uint8List digest = Uint8List.fromList(sha1.convert(input).bytes);
+  digest[6] = (digest[6] & 0x0f) | 0x50; // version 5
+  digest[8] = (digest[8] & 0x3f) | 0x80; // RFC 4122 variant
+  String hexByte(int b) => b.toRadixString(16).padLeft(2, '0');
+  return '${hexByte(digest[0])}${hexByte(digest[1])}${hexByte(digest[2])}${hexByte(digest[3])}-'
+      '${hexByte(digest[4])}${hexByte(digest[5])}-'
+      '${hexByte(digest[6])}${hexByte(digest[7])}-'
+      '${hexByte(digest[8])}${hexByte(digest[9])}-'
+      '${hexByte(digest[10])}${hexByte(digest[11])}${hexByte(digest[12])}'
+      '${hexByte(digest[13])}${hexByte(digest[14])}${hexByte(digest[15])}';
+}
+
 /// Converts an [A2aTaskArtifactUpdateEvent] into an ADK [Event].
 Event convertA2aArtifactUpdateToEvent(
   A2aTaskArtifactUpdateEvent a2aArtifactUpdate, {
@@ -435,7 +481,14 @@ Event convertA2aArtifactUpdateToEvent(
     invocationContext: invocationContext,
     partConverter: partConverter,
   );
-  return converted.copyWith(partial: !a2aArtifactUpdate.lastChunk);
+  final String? eventId = artifactEventId(
+    a2aArtifactUpdate.artifact.artifactId,
+    invocationContext,
+  );
+  return converted.copyWith(
+    id: eventId ?? converted.id,
+    partial: !a2aArtifactUpdate.lastChunk,
+  );
 }
 
 /// Converts an ADK [Event] into an [A2aMessage], when possible.

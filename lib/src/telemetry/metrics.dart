@@ -4,7 +4,12 @@ library;
 import 'dart:convert';
 
 import '../events/event.dart';
+import '../models/llm_request.dart';
+import '../models/llm_response.dart';
 import '../types/content.dart';
+
+/// Metric name for client token usage.
+const String genAiClientTokenUsageMetric = 'gen_ai.client.token.usage';
 
 /// Metric name for agent invocation durations.
 const String genAiAgentInvocationDurationMetric =
@@ -258,6 +263,226 @@ void recordToolResponseSize(
       attributes: _toolAttributes(toolName, agentName),
     ),
   );
+}
+
+/// Aggregated token usage extracted from one or more LLM responses.
+class TokenUsage {
+  /// Creates a token usage summary.
+  const TokenUsage({
+    this.inputTokens,
+    this.outputTokens,
+    this.cacheReadInputTokens,
+    this.reasoningOutputTokens,
+    this.toolInputTokens,
+    this.promptInputTokens,
+    this.candidateOutputTokens,
+  });
+
+  /// Total input tokens (prompt + tool input tokens).
+  final int? inputTokens;
+
+  /// Total output tokens (candidate + reasoning output tokens).
+  final int? outputTokens;
+
+  /// Cached content input tokens.
+  final int? cacheReadInputTokens;
+
+  /// Reasoning (thoughts) output tokens.
+  final int? reasoningOutputTokens;
+
+  /// Server-side tool use prompt input tokens.
+  final int? toolInputTokens;
+
+  /// Prompt input tokens.
+  final int? promptInputTokens;
+
+  /// Candidate output tokens.
+  final int? candidateOutputTokens;
+
+  /// Total derived tokens (`(inputTokens ?? 0) + (outputTokens ?? 0)`).
+  int get totalTokens => (inputTokens ?? 0) + (outputTokens ?? 0);
+
+  /// Extracts [TokenUsage] from a raw [usageMetadata] map or object.
+  static TokenUsage fromUsageMetadata(Object? usageMetadata) {
+    if (usageMetadata == null) {
+      return const TokenUsage();
+    }
+    final int? promptTokens = _readIntField(
+      usageMetadata,
+      const <String>['prompt_token_count', 'promptTokenCount'],
+    );
+    final int? toolTokens = _readIntField(
+      usageMetadata,
+      const <String>[
+        'tool_use_prompt_token_count',
+        'toolUsePromptTokenCount',
+      ],
+    );
+    final int? candidatesTokens = _readIntField(
+      usageMetadata,
+      const <String>['candidates_token_count', 'candidatesTokenCount'],
+    );
+    final int? thoughtsTokens = _readIntField(
+      usageMetadata,
+      const <String>[
+        'thoughts_token_count',
+        'thoughtsTokenCount',
+        'reasoning_tokens',
+        'reasoningTokens',
+      ],
+    );
+    final int? cachedTokens = _readIntField(
+      usageMetadata,
+      const <String>['cached_content_token_count', 'cachedContentTokenCount'],
+    );
+
+    return TokenUsage(
+      inputTokens: promptTokens == null && toolTokens == null
+          ? null
+          : (promptTokens ?? 0) + (toolTokens ?? 0),
+      outputTokens: candidatesTokens == null && thoughtsTokens == null
+          ? null
+          : (candidatesTokens ?? 0) + (thoughtsTokens ?? 0),
+      cacheReadInputTokens: cachedTokens,
+      reasoningOutputTokens: thoughtsTokens,
+      toolInputTokens: toolTokens,
+      promptInputTokens: promptTokens,
+      candidateOutputTokens: candidatesTokens,
+    );
+  }
+
+  /// Extracts cumulative [TokenUsage] from [responses], preserving earlier
+  /// usage when a trailing response has none.
+  static TokenUsage? fromLlmResponses(List<LlmResponse> responses) {
+    final List<Object> reported = <Object>[
+      for (final LlmResponse response in responses)
+        if (response.usageMetadata != null) response.usageMetadata!,
+    ];
+    if (reported.isEmpty) {
+      return null;
+    }
+    final TokenUsage usage = fromUsageMetadata(reported.last);
+    if (usage.inputTokens == null && usage.outputTokens == null) {
+      return null;
+    }
+    return usage;
+  }
+}
+
+/// Records client token usage metrics from [responses], keeping usage from
+/// earlier responses when the final response carries none.
+void recordClientTokenUsage({
+  required String agentName,
+  required LlmRequest llmRequest,
+  required List<LlmResponse> responses,
+  AdkMetricsRecorder? recorder,
+}) {
+  if (responses.isEmpty) {
+    return;
+  }
+  final TokenUsage? tokenUsage = TokenUsage.fromLlmResponses(responses);
+  if (tokenUsage == null) {
+    return;
+  }
+
+  final int inputTokenCount = tokenUsage.inputTokens ?? 0;
+  final int outputTokenCount = tokenUsage.outputTokens ?? 0;
+  final String? responseModel =
+      responses.last.modelVersion ?? llmRequest.model;
+  final Map<String, Object?> baseAttributes = <String, Object?>{
+    'gen_ai.agent.name': agentName,
+    'gen_ai.operation.name': 'generate_content',
+    if (llmRequest.model != null && llmRequest.model!.isNotEmpty)
+      'gen_ai.request.model': llmRequest.model,
+    if (responseModel != null && responseModel.isNotEmpty)
+      'gen_ai.response.model': responseModel,
+  };
+
+  if (inputTokenCount > 0) {
+    _record(
+      recorder,
+      AdkMetricRecord(
+        name: genAiClientTokenUsageMetric,
+        value: inputTokenCount,
+        unit: '{token}',
+        description: 'Number of input and output tokens used.',
+        attributes: <String, Object?>{
+          ...baseAttributes,
+          'gen_ai.token.type': 'input',
+        },
+      ),
+    );
+  }
+
+  if (outputTokenCount > 0) {
+    _record(
+      recorder,
+      AdkMetricRecord(
+        name: genAiClientTokenUsageMetric,
+        value: outputTokenCount,
+        unit: '{token}',
+        description: 'Number of input and output tokens used.',
+        attributes: <String, Object?>{
+          ...baseAttributes,
+          'gen_ai.token.type': 'output',
+        },
+      ),
+    );
+  }
+}
+
+int? _readIntField(Object source, List<String> keys) {
+  if (source is Map) {
+    for (final String key in keys) {
+      final Object? value = source[key];
+      if (value is int) {
+        return value;
+      }
+      if (value is num) {
+        return value.toInt();
+      }
+    }
+    return null;
+  }
+  final dynamic dyn = source;
+  for (final String key in keys) {
+    try {
+      Object? value;
+      switch (key) {
+        case 'prompt_token_count':
+          value = dyn.prompt_token_count;
+        case 'promptTokenCount':
+          value = dyn.promptTokenCount;
+        case 'tool_use_prompt_token_count':
+          value = dyn.tool_use_prompt_token_count;
+        case 'toolUsePromptTokenCount':
+          value = dyn.toolUsePromptTokenCount;
+        case 'candidates_token_count':
+          value = dyn.candidates_token_count;
+        case 'candidatesTokenCount':
+          value = dyn.candidatesTokenCount;
+        case 'thoughts_token_count':
+          value = dyn.thoughts_token_count;
+        case 'thoughtsTokenCount':
+          value = dyn.thoughtsTokenCount;
+        case 'reasoning_tokens':
+          value = dyn.reasoning_tokens;
+        case 'reasoningTokens':
+          value = dyn.reasoningTokens;
+        case 'cached_content_token_count':
+          value = dyn.cached_content_token_count;
+        case 'cachedContentTokenCount':
+          value = dyn.cachedContentTokenCount;
+      }
+      if (value is int) {
+        return value;
+      }
+      if (value is num) {
+        return value.toInt();
+      }
+    } catch (_) {}
+  }
+  return null;
 }
 
 void _record(AdkMetricsRecorder? recorder, AdkMetricRecord metric) {

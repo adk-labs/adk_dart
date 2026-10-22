@@ -102,13 +102,13 @@ class FunctionCall {
   }) {
     return FunctionCall(
       name: name ?? this.name,
-      args: args ?? Map<String, dynamic>.from(this.args),
+      args: args ?? _deepCopyJsonMap(this.args),
       id: identical(id, _sentinel) ? this.id : id as String?,
       partialArgs: identical(partialArgs, _sentinel)
           ? this.partialArgs
                 ?.map(
                   (Map<String, Object?> item) =>
-                      Map<String, Object?>.from(item),
+                      _deepCopyObjectMap(item),
                 )
                 .toList(growable: false)
           : partialArgs as List<Map<String, Object?>>?,
@@ -234,7 +234,7 @@ class FunctionResponse {
   }) {
     return FunctionResponse(
       name: name ?? this.name,
-      response: response ?? Map<String, dynamic>.from(this.response),
+      response: response ?? _deepCopyJsonMap(this.response),
       id: identical(id, _sentinel) ? this.id : id as String?,
       parts: identical(parts, _sentinel)
           ? this.parts?.map((p) => p.copyWith()).toList()
@@ -434,7 +434,7 @@ class Part {
       partMetadata: identical(partMetadata, _sentinel)
           ? (this.partMetadata == null
                 ? null
-                : Map<String, Object?>.from(this.partMetadata!))
+                : _deepCopyObjectMap(this.partMetadata!))
           : partMetadata as Map<String, Object?>?,
     );
   }
@@ -471,6 +471,60 @@ class Content {
       parts: parts ?? this.parts.map((part) => part.copyWith()).toList(),
     );
   }
+}
+
+JsonMap _deepCopyJsonMap(JsonMap source) {
+  return <String, dynamic>{
+    for (final MapEntry<String, dynamic> entry in source.entries)
+      entry.key: _deepCopyValue(entry.value),
+  };
+}
+
+Map<String, Object?> _deepCopyObjectMap(Map<String, Object?> source) {
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in source.entries)
+      entry.key: _deepCopyValue(entry.value),
+  };
+}
+
+Object? _deepCopyValue(Object? value) {
+  if (value is Map<String, dynamic>) {
+    return _deepCopyJsonMap(value);
+  }
+  if (value is Map<String, Object?>) {
+    return _deepCopyObjectMap(value);
+  }
+  if (value is Map) {
+    return <Object?, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        entry.key: _deepCopyValue(entry.value),
+    };
+  }
+  if (value is List<int>) {
+    return List<int>.from(value);
+  }
+  if (value is List) {
+    return value.map(_deepCopyValue).toList();
+  }
+  if (value is Part) {
+    return value.copyWith();
+  }
+  if (value is Content) {
+    return value.copyWith();
+  }
+  if (value is FunctionCall) {
+    return value.copyWith();
+  }
+  if (value is FunctionResponse) {
+    return value.copyWith();
+  }
+  if (value is InlineData) {
+    return value.copyWith();
+  }
+  if (value is FileData) {
+    return value.copyWith();
+  }
+  return value;
 }
 
 const Object _sentinel = Object();
