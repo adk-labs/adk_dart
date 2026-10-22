@@ -55,6 +55,18 @@ class PrebuiltMetricNames {
   /// Multi-turn tool use quality metric version 1.
   static const String multiTurnToolUseQualityV1 =
       'multi_turn_tool_use_quality_v1';
+
+  /// Tool call count efficiency metric version 1.
+  static const String toolCallCountV1 = 'tool_call_count_v1';
+
+  /// Inference call count efficiency metric version 1.
+  static const String inferenceCallCountV1 = 'inference_call_count_v1';
+
+  /// Invocation duration efficiency metric version 1.
+  static const String invocationDurationV1 = 'invocation_duration_v1';
+
+  /// Token usage efficiency metric version 1.
+  static const String tokenUsageV1 = 'token_usage_v1';
 }
 
 /// Enum wrapper for built-in metric identifiers.
@@ -706,4 +718,133 @@ class MetricInfo {
 abstract class MetricInfoProvider {
   /// Returns metric metadata.
   MetricInfo getMetricInfo();
+}
+
+/// Detailed token usage breakdown recorded by efficiency evaluators.
+class TokenUsageDetails {
+  /// Creates a [TokenUsageDetails] breakdown.
+  const TokenUsageDetails({
+    this.promptTokenCount = 0,
+    this.candidatesTokenCount = 0,
+    this.thoughtsTokenCount = 0,
+    this.cachedContentTokenCount = 0,
+    this.toolUsePromptTokenCount = 0,
+    this.totalTokenCount = 0,
+  });
+
+  /// Parses [TokenUsageDetails] from JSON.
+  factory TokenUsageDetails.fromJson(Map<String, Object?> json) {
+    int readInt(String camel, String snake) {
+      final Object? v = json[camel] ?? json[snake];
+      return v is int ? v : (v is num ? v.toInt() : 0);
+    }
+
+    return TokenUsageDetails(
+      promptTokenCount: readInt('promptTokenCount', 'prompt_token_count'),
+      candidatesTokenCount: readInt(
+        'candidatesTokenCount',
+        'candidates_token_count',
+      ),
+      thoughtsTokenCount: readInt('thoughtsTokenCount', 'thoughts_token_count'),
+      cachedContentTokenCount: readInt(
+        'cachedContentTokenCount',
+        'cached_content_token_count',
+      ),
+      toolUsePromptTokenCount: readInt(
+        'toolUsePromptTokenCount',
+        'tool_use_prompt_token_count',
+      ),
+      totalTokenCount: readInt('totalTokenCount', 'total_token_count'),
+    );
+  }
+
+  /// Prompt/input token count.
+  final int promptTokenCount;
+
+  /// Candidate/output token count.
+  final int candidatesTokenCount;
+
+  /// Reasoning/thoughts token count.
+  final int thoughtsTokenCount;
+
+  /// Cached content token count.
+  final int cachedContentTokenCount;
+
+  /// Tool-use prompt token count.
+  final int toolUsePromptTokenCount;
+
+  /// Total token count.
+  final int totalTokenCount;
+
+  /// Serializes this token breakdown to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'prompt_token_count': promptTokenCount,
+      'candidates_token_count': candidatesTokenCount,
+      'thoughts_token_count': thoughtsTokenCount,
+      'cached_content_token_count': cachedContentTokenCount,
+      'tool_use_prompt_token_count': toolUsePromptTokenCount,
+      'total_token_count': totalTokenCount,
+    };
+  }
+}
+
+/// Detailed invocation duration breakdown recorded by efficiency evaluators.
+class DurationDetails {
+  /// Creates a [DurationDetails] breakdown.
+  const DurationDetails({
+    this.totalDurationSeconds = 0.0,
+    this.modelDurationSeconds = 0.0,
+    this.toolDurationSeconds = 0.0,
+    this.frameworkDurationSeconds = 0.0,
+  });
+
+  /// Parses [DurationDetails] from JSON.
+  factory DurationDetails.fromJson(Map<String, Object?> json) {
+    double readDouble(String camel, String snake) {
+      final Object? v = json[camel] ?? json[snake];
+      return v is num ? v.toDouble() : 0.0;
+    }
+
+    return DurationDetails(
+      totalDurationSeconds: readDouble(
+        'totalDurationSeconds',
+        'total_duration_seconds',
+      ),
+      modelDurationSeconds: readDouble(
+        'modelDurationSeconds',
+        'model_duration_seconds',
+      ),
+      toolDurationSeconds: readDouble(
+        'toolDurationSeconds',
+        'tool_duration_seconds',
+      ),
+      frameworkDurationSeconds: readDouble(
+        'frameworkDurationSeconds',
+        'framework_duration_seconds',
+      ),
+    );
+  }
+
+  /// Total wall-clock duration in seconds.
+  final double totalDurationSeconds;
+
+  /// Time spent waiting for model inference in seconds.
+  final double modelDurationSeconds;
+
+  /// Time spent executing tools in seconds.
+  final double toolDurationSeconds;
+
+  /// Remaining framework orchestration overhead in seconds.
+  final double frameworkDurationSeconds;
+
+  /// Serializes this duration breakdown to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'total_duration_seconds': totalDurationSeconds,
+      'model_duration_seconds': modelDurationSeconds,
+      'tool_duration_seconds': toolDurationSeconds,
+      'framework_duration_seconds': frameworkDurationSeconds,
+    };
+  }
 }

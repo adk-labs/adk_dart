@@ -65,6 +65,7 @@ export 'src/agents/transcription_entry.dart';
 export 'src/a2a/a2a_message.dart';
 export 'src/a2a/experimental.dart';
 export 'src/a2a/in_memory_a2a_router.dart';
+export 'src/a2a/interceptors.dart' hide A2aClientCallContext;
 export 'src/a2a/protocol.dart' hide SecurityScheme;
 export 'src/a2a/converters/event_converter.dart';
 export 'src/a2a/converters/part_converter.dart';
@@ -93,6 +94,7 @@ export 'src/auth/auth_schemes.dart';
 export 'src/auth/auth_tool.dart';
 export 'src/auth/base_auth_provider.dart';
 export 'src/auth/credential_manager.dart';
+export 'src/auth/kms_encryptor.dart';
 export 'src/auth/oauth2_credential_util.dart';
 export 'src/auth/oauth2_discovery.dart';
 export 'src/auth/credential_service/base_credential_service.dart';
@@ -107,6 +109,8 @@ export 'src/auth/refresher/credential_refresher_registry.dart';
 export 'src/auth/refresher/oauth2_credential_refresher.dart';
 export 'src/integrations/_iam_connectors/gcp_auth_provider.dart';
 export 'src/integrations/_iam_connectors/gcp_iam_connector_auth.dart';
+export 'src/integrations/agent_identity/agent_identity.dart'
+    hide GcpAuthProvider, GcpAuthProviderScheme;
 export 'src/integrations/agent_registry/agent_registry.dart';
 export 'src/integrations/bigquery/bigquery.dart'
     hide
@@ -116,13 +120,32 @@ export 'src/integrations/bigquery/bigquery.dart'
         BigQueryToolset,
         ExecuteSqlTool,
         bigQuerySessionInfoKey;
+export 'src/integrations/e2b/e2b_environment.dart';
 export 'src/integrations/eleven_labs/eleven_labs.dart';
+export 'src/integrations/firestore/firestore.dart';
+export 'src/integrations/gcs/gcs.dart';
+export 'src/integrations/livekit/livekit.dart';
+export 'src/integrations/model_armor/model_armor.dart';
+export 'src/integrations/mongodb/mongodb.dart';
+export 'src/integrations/oci/oci.dart';
+export 'src/integrations/openai/openai.dart' hide OpenAiLlm, OpenAILlm;
 export 'src/integrations/opensandbox/opensandbox_environment.dart';
+export 'src/integrations/parameter_manager/parameter_manager.dart';
+export 'src/integrations/redis/redis.dart';
+export 'src/integrations/secret_manager/secret_manager.dart'
+    hide
+        SecretManagerClient,
+        SecretManagerSecretFetcher,
+        setSecretManagerSecretFetcher,
+        resetSecretManagerSecretFetcher,
+        resolveDefaultGoogleAccessToken;
 export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
 export 'src/integrations/typesafe/typesafe_classifier.dart';
 export 'src/integrations/vmaas/agent_engine_environment.dart';
 export 'src/integrations/vmaas/agent_engine_client.dart';
+export 'src/labs/antigravity/antigravity.dart'
+    hide AgentConfig, BaseLocalAgentConfig, LocalAgentConfig;
 export 'src/labs/classifiers/classifiers.dart';
 export 'src/labs/openai.dart';
 export 'src/live/live.dart';
@@ -203,8 +226,10 @@ export 'src/evaluation/simulation/static_user_simulator.dart';
 export 'src/evaluation/simulation/user_simulator.dart';
 export 'src/evaluation/simulation/user_simulator_personas.dart';
 export 'src/evaluation/simulation/user_simulator_provider.dart';
+export 'src/evaluation/simulation/cloud_tts_llm.dart';
 export 'src/evaluation/trajectory_evaluator.dart';
 export 'src/evaluation/vertex_ai_eval_facade.dart';
+export 'src/evaluation/vertex_ai_scenario_generation_facade.dart';
 export 'src/examples/base_example_provider.dart';
 export 'src/examples/example.dart';
 export 'src/examples/example_util.dart';
@@ -269,6 +294,7 @@ export 'src/memory/base_memory_service.dart';
 export 'src/memory/_utils.dart';
 export 'src/memory/in_memory_memory_service.dart';
 export 'src/memory/memory_entry.dart';
+export 'src/memory/sqlite_memory_service.dart';
 export 'src/memory/vertex_ai_memory_bank_service.dart';
 export 'src/memory/vertex_ai_rag_memory_service.dart';
 
@@ -285,6 +311,7 @@ export 'src/plugins/plugin_manager.dart';
 export 'src/plugins/reflect_retry_tool_plugin.dart';
 export 'src/plugins/reflect_retry_model_plugin.dart';
 export 'src/plugins/save_files_as_artifacts_plugin.dart';
+export 'src/plugins/tool_call_integrity_plugin.dart';
 export 'src/platform/runtime_environment.dart';
 export 'src/platform/thread.dart';
 export 'src/platform/time.dart';
@@ -295,6 +322,8 @@ export 'src/planners/plan_re_act_planner.dart';
 export 'src/planners/rule_based_planner.dart';
 export 'src/optimization/agent_optimizer.dart';
 export 'src/optimization/data_types.dart';
+export 'src/optimization/gepa_root_agent_optimizer.dart'
+    hide GepaOptimizeRawOutput, SamplingResult, AgentWithScores;
 export 'src/optimization/gepa_root_agent_prompt_optimizer.dart';
 export 'src/optimization/local_eval_sampler.dart';
 export 'src/optimization/prompt_optimizer.dart';
@@ -475,6 +504,7 @@ export 'src/workflow/workflow.dart' hide RetryConfig;
 export 'src/workflow/edges_builder.dart';
 export 'src/workflow/workflow_tool.dart';
 export 'src/workflow/replay_manager.dart';
+export 'src/utils/agent_info.dart';
 export 'src/utils/agent_mode.dart';
 export 'src/utils/cache_performance_analyzer.dart';
 export 'src/utils/client_labels_utils.dart';

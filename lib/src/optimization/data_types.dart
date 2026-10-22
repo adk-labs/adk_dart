@@ -13,6 +13,9 @@ class BaseSamplingResult {
   final Map<String, double> scores;
 }
 
+/// Alias for [BaseSamplingResult] matching the ADK Python `SamplingResult` type.
+typedef SamplingResult = BaseSamplingResult;
+
 /// Sampling result that also carries optional per-metric structured payloads.
 class UnstructuredSamplingResult extends BaseSamplingResult {
   /// Creates an unstructured sampling result.
@@ -43,6 +46,9 @@ class BaseAgentWithScores {
   /// Optional aggregate score across validation metrics.
   final double? overallScore;
 }
+
+/// Alias for [BaseAgentWithScores] matching the ADK Python `AgentWithScores` type.
+typedef AgentWithScores = BaseAgentWithScores;
 
 /// Wraps optimizer output candidates.
 class OptimizerResult<T extends BaseAgentWithScores> {

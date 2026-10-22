@@ -214,3 +214,60 @@ class PerTurnUserSimulatorQualityV1MetricInfoProvider
     );
   }
 }
+
+/// Metric metadata provider for `tool_call_count_v1`.
+class ToolCallCountV1MetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.toolCallCountV1,
+      description: 'Counts the total number of tool calls per invocation.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: double.infinity),
+      ),
+    );
+  }
+}
+
+/// Metric metadata provider for `inference_call_count_v1`.
+class InferenceCallCountV1MetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.inferenceCallCountV1,
+      description: 'Counts the total number of LLM inference calls.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: double.infinity),
+      ),
+    );
+  }
+}
+
+/// Metric metadata provider for `invocation_duration_v1`.
+class InvocationDurationV1MetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.invocationDurationV1,
+      description:
+          'Measures total invocation duration in seconds across model, tool, and framework time.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: double.infinity),
+      ),
+    );
+  }
+}
+
+/// Metric metadata provider for `token_usage_v1`.
+class TokenUsageV1MetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.tokenUsageV1,
+      description: 'Tracks total token consumption across an invocation.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: double.infinity),
+      ),
+    );
+  }
+}

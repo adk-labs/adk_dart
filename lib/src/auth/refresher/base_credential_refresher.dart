@@ -17,3 +17,15 @@ abstract class BaseCredentialRefresher {
     String? authScheme,
   });
 }
+
+/// Exception thrown when refreshing an [AuthCredential] fails.
+class CredentialRefresherError implements Exception {
+  /// Creates a [CredentialRefresherError] with [message].
+  const CredentialRefresherError(this.message);
+
+  /// Error details.
+  final String message;
+
+  @override
+  String toString() => 'CredentialRefresherError: $message';
+}

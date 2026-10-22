@@ -142,5 +142,6 @@ export 'src/labs/classifiers/classifiers.dart';
 // - Directory-based Skill loading remains unavailable on Web.
 export 'src/live/live.dart';
 export 'src/skills/skill_runtime.dart';
+export 'src/utils/agent_info.dart';
 export 'src/utils/agent_mode.dart';
 export 'src/utils/function_call_names.dart';

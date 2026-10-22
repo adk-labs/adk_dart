@@ -908,3 +908,12 @@ bool isSessionTerminatedError(Object? error) {
   }
   return false;
 }
+
+/// Alias for [StreamableHTTPConnectionParams] matching Python `SseServerParams`.
+typedef SseServerParams = StreamableHTTPConnectionParams;
+
+/// Alias for [StreamableHTTPConnectionParams] matching Python `SseConnectionParams`.
+typedef SseConnectionParams = StreamableHTTPConnectionParams;
+
+/// Alias for [StdioConnectionParams] matching Python `StdioServerParameters`.
+typedef StdioServerParameters = StdioConnectionParams;

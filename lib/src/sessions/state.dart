@@ -300,3 +300,15 @@ bool _deepEquals(Object? a, Object? b, Set<Object> activePairs) {
   }
   return a == b;
 }
+
+/// Exception thrown when a state key or value violates a declared state schema.
+class StateSchemaError implements Exception {
+  /// Creates a [StateSchemaError] with [message].
+  const StateSchemaError(this.message);
+
+  /// Human-readable error message.
+  final String message;
+
+  @override
+  String toString() => 'StateSchemaError: $message';
+}

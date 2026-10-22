@@ -206,3 +206,60 @@ Map<String, Object?> _castJsonMap(Object? value) {
   }
   return <String, Object?>{};
 }
+
+/// Configuration for running an agent in live/bidirectional mode during evaluation.
+class LiveModelConfig {
+  /// Creates a [LiveModelConfig].
+  const LiveModelConfig({
+    this.responseModalities = const <String>['AUDIO'],
+    this.speechConfig,
+    this.enableInputAudioTranscription = true,
+    this.enableOutputAudioTranscription = true,
+  });
+
+  /// Parses a [LiveModelConfig] from JSON.
+  factory LiveModelConfig.fromJson(Map<String, Object?> json) {
+    final Object? rawModalities =
+        json['responseModalities'] ?? json['response_modalities'];
+    return LiveModelConfig(
+      responseModalities: rawModalities is Iterable
+          ? rawModalities.map((Object? e) => '$e').toList(growable: false)
+          : const <String>['AUDIO'],
+      speechConfig: json['speechConfig'] is Map || json['speech_config'] is Map
+          ? _castJsonMap(json['speechConfig'] ?? json['speech_config'])
+          : null,
+      enableInputAudioTranscription:
+          (json['enableInputAudioTranscription'] ??
+                  json['enable_input_audio_transcription'])
+              as bool? ??
+          true,
+      enableOutputAudioTranscription:
+          (json['enableOutputAudioTranscription'] ??
+                  json['enable_output_audio_transcription'])
+              as bool? ??
+          true,
+    );
+  }
+
+  /// Requested response modalities (defaults to `['AUDIO']`).
+  final List<String> responseModalities;
+
+  /// Optional speech synthesis configuration dictionary.
+  final Map<String, Object?>? speechConfig;
+
+  /// Whether input audio transcription is enabled.
+  final bool enableInputAudioTranscription;
+
+  /// Whether output audio transcription is enabled.
+  final bool enableOutputAudioTranscription;
+
+  /// Serializes this configuration to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'response_modalities': responseModalities,
+      if (speechConfig != null) 'speech_config': speechConfig,
+      'enable_input_audio_transcription': enableInputAudioTranscription,
+      'enable_output_audio_transcription': enableOutputAudioTranscription,
+    };
+  }
+}

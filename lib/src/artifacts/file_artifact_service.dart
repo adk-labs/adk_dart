@@ -775,3 +775,15 @@ class FileArtifactService extends BaseArtifactService {
     );
   }
 }
+
+/// On-disk metadata model for a single version of a file-backed artifact.
+class FileArtifactVersion extends ArtifactVersion {
+  /// Creates a [FileArtifactVersion].
+  FileArtifactVersion({
+    required super.version,
+    required super.canonicalUri,
+    super.customMetadata,
+    super.createTime,
+    super.mimeType,
+  });
+}

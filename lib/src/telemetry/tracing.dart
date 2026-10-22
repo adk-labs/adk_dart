@@ -1585,3 +1585,157 @@ Map<String, Object?> _dropNullEntries(Map<String, Object?> values) {
   }
   return cleaned;
 }
+
+/// Configuration for telemetry capture behavior.
+class TelemetryConfig {
+  /// Creates a [TelemetryConfig].
+  const TelemetryConfig({
+    this.captureMessageContent = true,
+    this.useExperimentalSemconv = false,
+  });
+
+  /// Whether message and tool content payloads are captured on spans/logs.
+  final bool captureMessageContent;
+
+  /// Whether OpenTelemetry GenAI experimental semantic conventions are enabled.
+  final bool useExperimentalSemconv;
+}
+
+/// Scoped telemetry context holder for node and agent execution.
+class TelemetryContext {
+  /// Creates a [TelemetryContext].
+  TelemetryContext({
+    this.config = const TelemetryConfig(),
+    Map<String, Object?>? attributes,
+  }) : attributes = Map<String, Object?>.from(
+         attributes ?? const <String, Object?>{},
+       );
+
+  /// Active telemetry configuration.
+  final TelemetryConfig config;
+
+  /// Context-scoped attributes propagated to child spans.
+  final Map<String, Object?> attributes;
+}
+
+/// Structured log entry exported for the ADK Web UI trace viewer.
+class WebUiLog {
+  /// Creates a [WebUiLog].
+  WebUiLog({
+    required this.eventName,
+    required this.body,
+    Map<String, Object?>? attributes,
+    this.spanId,
+    this.traceId,
+  }) : attributes = Map<String, Object?>.unmodifiable(
+         attributes ?? const <String, Object?>{},
+       );
+
+  /// Event name (for example `'gen_ai.user.message'`).
+  final String eventName;
+
+  /// Structured or scalar log body.
+  final Object? body;
+
+  /// Log record attributes.
+  final Map<String, Object?> attributes;
+
+  /// Associated span ID, if any.
+  final String? spanId;
+
+  /// Associated trace ID, if any.
+  final String? traceId;
+
+  /// Converts this log entry to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'event_name': eventName,
+      'body': body,
+      'attributes': attributes,
+      if (spanId != null) 'span_id': spanId,
+      if (traceId != null) 'trace_id': traceId,
+    };
+  }
+}
+
+/// Structured span snapshot exported for the ADK Web UI trace viewer.
+class WebUiSpan {
+  /// Creates a [WebUiSpan].
+  WebUiSpan({
+    required this.name,
+    required this.spanId,
+    required this.traceId,
+    this.parentSpanId,
+    this.startTimeUnixNano = 0,
+    this.endTimeUnixNano = 0,
+    Map<String, Object?>? attributes,
+    List<WebUiLog>? logs,
+  }) : attributes = Map<String, Object?>.unmodifiable(
+         attributes ?? const <String, Object?>{},
+       ),
+       logs = List<WebUiLog>.unmodifiable(logs ?? const <WebUiLog>[]);
+
+  /// Span name.
+  final String name;
+
+  /// Span identifier.
+  final String spanId;
+
+  /// Trace identifier.
+  final String traceId;
+
+  /// Optional parent span identifier.
+  final String? parentSpanId;
+
+  /// Start timestamp in Unix nanoseconds.
+  final int startTimeUnixNano;
+
+  /// End timestamp in Unix nanoseconds.
+  final int endTimeUnixNano;
+
+  /// Span attributes.
+  final Map<String, Object?> attributes;
+
+  /// Logs attached to this span.
+  final List<WebUiLog> logs;
+
+  /// Converts this span snapshot to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'name': name,
+      'span_id': spanId,
+      'trace_id': traceId,
+      'parent_span_id': parentSpanId,
+      'start_time': startTimeUnixNano,
+      'end_time': endTimeUnixNano,
+      'attributes': attributes,
+      'logs': logs.map((WebUiLog l) => l.toJson()).toList(growable: false),
+    };
+  }
+}
+
+/// In-memory log exporter used by the ADK Web UI to correlate logs with spans.
+class WebUiLogExporter {
+  /// Creates a [WebUiLogExporter].
+  WebUiLogExporter();
+
+  final Map<String, List<WebUiLog>> _logsBySpanId = <String, List<WebUiLog>>{};
+
+  /// Exports a [log] and indexes it by `log.spanId`.
+  void export(WebUiLog log) {
+    final String key = log.spanId ?? '';
+    _logsBySpanId.putIfAbsent(key, () => <WebUiLog>[]).add(log);
+  }
+
+  /// Returns all logs recorded for [spanId].
+  List<WebUiLog> getLogsForSpan(String spanId) {
+    return List<WebUiLog>.unmodifiable(
+      _logsBySpanId[spanId] ?? const <WebUiLog>[],
+    );
+  }
+
+  /// Clears all stored logs.
+  void clear() {
+    _logsBySpanId.clear();
+  }
+}

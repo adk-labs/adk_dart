@@ -352,3 +352,41 @@ UserPersonaRegistry getDefaultPersonaRegistry() {
   );
   return registry;
 }
+
+/// Namespace of pre-built [UserBehavior] definitions used to compose personas.
+class PreBuiltBehaviors {
+  const PreBuiltBehaviors._();
+
+  /// Detail-oriented advancement behavior.
+  static UserBehavior get advanceDetailOriented => _advanceDetailOriented;
+
+  /// Goal-oriented advancement behavior.
+  static UserBehavior get advanceGoalOriented => _advanceGoalOriented;
+
+  /// Answers only relevant questions.
+  static UserBehavior get answerRelevantOnly => _answerRelevantOnly;
+
+  /// Answers all questions asked by the agent.
+  static UserBehavior get answerAll => _answerAll;
+
+  /// Corrects the agent when it makes a mistake.
+  static UserBehavior get correctAgent => _correctAgent;
+
+  /// Does not correct the agent when it makes a mistake.
+  static UserBehavior get doNotCorrectAgent => _doNotCorrectAgent;
+
+  /// Troubleshoots once when the agent fails.
+  static UserBehavior get troubleshootOnce => _troubleshootOnce;
+
+  /// Troubleshoots with the agent before ending the conversation.
+  static UserBehavior get endWithTroubleshooting => _endLimitedTroubleshooting;
+
+  /// Ends immediately without troubleshooting when the agent fails.
+  static UserBehavior get endNoTroubleshooting => _endNoTroubleshooting;
+
+  /// Uses a professional tone.
+  static UserBehavior get toneProfessional => _toneProfessional;
+
+  /// Uses a conversational tone.
+  static UserBehavior get toneConversational => _toneConversational;
+}

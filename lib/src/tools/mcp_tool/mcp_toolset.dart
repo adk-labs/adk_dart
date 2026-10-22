@@ -260,3 +260,34 @@ String _readString(Object? value) {
   }
   return '$value';
 }
+
+/// Declarative configuration model for constructing an [McpToolset].
+class McpToolsetConfig {
+  /// Creates an [McpToolsetConfig].
+  const McpToolsetConfig({
+    this.stdioServerParams,
+    this.stdioConnectionParams,
+    this.sseConnectionParams,
+    this.streamableHttpConnectionParams,
+    this.toolFilter,
+    this.toolNamePrefix,
+  });
+
+  /// Legacy stdio server parameters.
+  final StdioServerParameters? stdioServerParams;
+
+  /// Stdio connection parameters.
+  final StdioConnectionParams? stdioConnectionParams;
+
+  /// SSE connection parameters.
+  final SseServerParams? sseConnectionParams;
+
+  /// Streamable HTTP connection parameters.
+  final StreamableHTTPConnectionParams? streamableHttpConnectionParams;
+
+  /// Optional tool filter list or predicate.
+  final Object? toolFilter;
+
+  /// Optional prefix prepended to exposed tool names.
+  final String? toolNamePrefix;
+}

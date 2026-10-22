@@ -389,3 +389,6 @@ class AuthCredential {
 }
 
 const Object _sentinel = Object();
+
+/// Alias for [AuthCredentialType] matching Python `AuthCredentialTypes`.
+typedef AuthCredentialTypes = AuthCredentialType;

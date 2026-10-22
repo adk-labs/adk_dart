@@ -86,3 +86,22 @@ Map<String, Object?> _memoryToJson(MemoryEntry memory) {
     'custom_metadata': Map<String, Object?>.from(memory.customMetadata),
   };
 }
+
+/// Structured response returned by [LoadMemoryTool].
+class LoadMemoryResponse {
+  /// Creates a [LoadMemoryResponse].
+  LoadMemoryResponse({List<MemoryEntry>? memories})
+    : memories = List<MemoryEntry>.unmodifiable(
+        memories ?? const <MemoryEntry>[],
+      );
+
+  /// Retrieved memory entries matching the query.
+  final List<MemoryEntry> memories;
+
+  /// Converts this response to a JSON-serializable map.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'memories': memories.map(_memoryToJson).toList(growable: false),
+    };
+  }
+}

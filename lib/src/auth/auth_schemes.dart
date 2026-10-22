@@ -233,3 +233,27 @@ class ExtendedOAuth2 extends SecurityScheme {
     };
   }
 }
+
+/// Custom or pluggable authentication scheme.
+class CustomAuthScheme extends SecurityScheme {
+  /// Creates a [CustomAuthScheme].
+  CustomAuthScheme({
+    super.type = AuthSchemeType.http,
+    super.description,
+    super.name,
+    Map<String, Object?>? extraFields,
+  }) : extraFields = extraFields == null
+           ? const <String, Object?>{}
+           : Map<String, Object?>.unmodifiable(extraFields);
+
+  /// Additional scheme configuration fields.
+  final Map<String, Object?> extraFields;
+
+  @override
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      ...super.toJson(),
+      ...extraFields,
+    };
+  }
+}
