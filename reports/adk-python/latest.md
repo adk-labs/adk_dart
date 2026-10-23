@@ -1,33 +1,32 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-22
+- Date (UTC): 2026-10-23
 - Source: `google/adk-python`
-- Latest SHA: `471341f28d23a57c6f15d74c83cd3fc3300fdc3d`
-- Previous SHA: `59dc13457c2001094086b972022b485a56bcff9c`
+- Latest SHA: `f08f9d677f16f36980be56d34bb1b4a444b2d934`
+- Previous SHA: `471341f28d23a57c6f15d74c83cd3fc3300fdc3d`
 
 ## Summary
 
-- New commits: 17
+- New commits: 16
 
 ## Commits
 
-- [471341f2](https://github.com/google/adk-python/commit/471341f28d23a57c6f15d74c83cd3fc3300fdc3d) fix(runner): close isolated runs that end on a terminal node outcome (Shangjie Chen, 2026-10-22)
-- [facd7dda](https://github.com/google/adk-python/commit/facd7ddafe0e23715e079e50971ad27b251e2e98) fix: close inner async generators across node `_run_impl` and skip compaction on early close (Google Team Member, 2026-10-22)
-- [92dfe41e](https://github.com/google/adk-python/commit/92dfe41e8db5ce248d7141498662787990f8e508) fix: stub ADC in modules that imported google.auth.default by name (Google Team Member, 2026-10-22)
-- [636a8e3d](https://github.com/google/adk-python/commit/636a8e3d7d44f7c6f26f42dc2ffaa6d54964e503) test(workflow): cover what a node retry replays (Thomas Zettl, 2026-10-22)
-- [b84e0a0a](https://github.com/google/adk-python/commit/b84e0a0a394fea73144408eb649efb06df74791f) fix: require authlib 1.9.1 or newer for CVE fixes (Google Team Member, 2026-10-22)
-- [bd385358](https://github.com/google/adk-python/commit/bd38535817a9639408a5f863c0f044aaa65d74cb) fix: classify stream-level non-retryable BigQuery write errors as non_retryable (Google Team Member, 2026-10-21)
-- [8d7445d9](https://github.com/google/adk-python/commit/8d7445d99d9404f68805a7cb72b848a795c30bc1) fix(runner): key finished isolation scopes by invocation id (Shangjie Chen, 2026-10-21)
-- [d3247446](https://github.com/google/adk-python/commit/d324744645ee372db8ecce4c0209e9c70ce18e0b) fix(auth): support raw token strings in HTTP and API key auth resume (Yuhan Gao, 2026-10-21)
-- [b01c5fff](https://github.com/google/adk-python/commit/b01c5fff5378fed116b6978cb9293909e3c4a5e0) feat: expose session rewind as a REST endpoint (chelsealong, 2026-10-21)
-- [55a6fe5f](https://github.com/google/adk-python/commit/55a6fe5f3d40734bab219d5a5032e19c3d0f5326) fix: cap litellm below 1.106.3 END_PUBLIC Installing google-adk[extensions] while the compromised litellm 1.107.0 was on PyPI pulled in its credential stealer, because the extras accepted any litellm release from 1.84 up, and LiteLLM has not yet ruled out further access to its release accounts. This bounds litellm below 1.106.3 in the all, extensions and test extras, which today keeps users on 1.106.2, the release LiteLLM tells users to pin to. (George Weale, 2026-10-21)
-- [caf828df](https://github.com/google/adk-python/commit/caf828df5ef9e6322826ad4fe0dd0d2dce552a64) feat(integrations): keep MongoDB credentials out of Agent Engine packages (Venkatesh Shanbhag, 2026-10-21)
-- [c8d0aa51](https://github.com/google/adk-python/commit/c8d0aa51ccba8e8e22a5bc3d525b06c06179b7a2) refactor: remove the Gemini._merge_tracking_headers wrapper (Liang Wu, 2026-10-21)
-- [17fb8afc](https://github.com/google/adk-python/commit/17fb8afc15a7cd8f33d82328d65b8e0e47436739) fix: reap ADK sessions of dead MCP connections in to_mcp_server (harshal-96, 2026-10-21)
-- [47e613d8](https://github.com/google/adk-python/commit/47e613d84769d2e4f84bf5f4be7ecb81fe1996a7) fix: point litellm install hints at google-adk[extensions] (George Weale, 2026-10-21)
-- [5762ef81](https://github.com/google/adk-python/commit/5762ef81f2f7a11bce064491e86d6f5e3cf3ea88) feat(plugins): support conversation_only eval view mode and session prompt fallback (Haiyuan Cao, 2026-10-21)
-- [ed76f945](https://github.com/google/adk-python/commit/ed76f94501f0e4dad9346e064980c1059bded1a7) feat(tools): add extensible tool argument matcher (Yi Liu, 2026-10-21)
-- [d2ae9016](https://github.com/google/adk-python/commit/d2ae9016a6a63e073dea129e647553c04cf09864) fix: present the mTLS client certificate from RemoteA2aAgent's default client (Kathy Wu, 2026-10-21)
+- [f08f9d67](https://github.com/google/adk-python/commit/f08f9d677f16f36980be56d34bb1b4a444b2d934) fix: disambiguate colliding connector tool names in ApplicationIntegrationToolset (Yuhan Gao, 2026-10-23)
+- [48d18a6a](https://github.com/google/adk-python/commit/48d18a6aea65ed399bf036f29e383219ec167b3b) docs(guides): add TypesafeClassifier unit guide (Kathy Wu, 2026-10-23)
+- [cbca417c](https://github.com/google/adk-python/commit/cbca417c40e1aa052446391d2d7b36ae92978da9) feat: add MongoDB-backed memory service (Venkatesh Shanbhag, 2026-10-23)
+- [83acbc50](https://github.com/google/adk-python/commit/83acbc50f45afa07e47e72007d4291f2fa6f36e6) fix: stop McpTool falling back to HTTP auth on an empty OAuth2 token (CorgiBoyG, 2026-10-23)
+- [c31856d1](https://github.com/google/adk-python/commit/c31856d17ab54d82dbe89b4e511d34395ffc977b) feat(plugins): record workflow node observations in the BigQuery analytics plugin (Haiyuan Cao, 2026-10-23)
+- [2de5876b](https://github.com/google/adk-python/commit/2de5876b09f7bc92b1d6f041a1513e6b0eb870d2) fix: wrap class descriptors from __dict__ (Chaitanya Laxman, 2026-10-23)
+- [7f3517e4](https://github.com/google/adk-python/commit/7f3517e43d7b6012f51438cffb60e6d7983e4217) feat(eval): run each eval case N times in adk eval for steadier verdicts (Yi Liu, 2026-10-23)
+- [1fbe9e03](https://github.com/google/adk-python/commit/1fbe9e034506a0a9a03039a68e822fb1b787a165) fix(cli): monitor ASGI receive channel for client disconnect in /run_sse (Google Team Member, 2026-10-22)
+- [b89dda40](https://github.com/google/adk-python/commit/b89dda409e062bd20015ad9508cf75d252dd2ab9) feat: serialize prompt-cache creation tokens on LlmResponse (Gurjot Singh, 2026-10-22)
+- [37b1ab3c](https://github.com/google/adk-python/commit/37b1ab3c20a0bee18e5c4429a05a0007cd8ea8d6) fix: mark failed MCP tool results as errors for Claude (Akshay Shah, 2026-10-22)
+- [98338351](https://github.com/google/adk-python/commit/9833835193016a559578800743ac87fe318bd48f) feat: add MongoDB-backed session service (Venkatesh Shanbhag, 2026-10-22)
+- [93316384](https://github.com/google/adk-python/commit/93316384945d782a4de6e78b768f772e210ddcba) feat: let a plugin configure event compaction per session (George Weale, 2026-10-22)
+- [6c672404](https://github.com/google/adk-python/commit/6c672404ef96863963303b0a03000c35f7068044) fix: answer the coordinator when a task-mode remote agent fails (George Weale, 2026-10-22)
+- [466648bb](https://github.com/google/adk-python/commit/466648bb4e26c3f5cd1c1903c66a82c800703e68) fix: pin certifi 2026.10.19 in the constraints files (George Weale, 2026-10-22)
+- [a9714ece](https://github.com/google/adk-python/commit/a9714eceb6b012cd68d7701467acdb098a6befc8) fix(workflow): retry a failed parallel worker item instead of the batch (Thomas Zettl, 2026-10-22)
+- [fb197fa3](https://github.com/google/adk-python/commit/fb197fa39470614a9a079cf33c69cabf6b0df260) fix: keep ADK tracking headers and http options when client_kwargs sets http_options (Liang Wu, 2026-10-22)
 
 ## Changed Files
 
@@ -37,61 +36,76 @@
 - `M	constraints-3.13.txt`
 - `M	constraints-3.14.txt`
 - `M	constraints-3.15.txt`
-- `M	contributing/samples/integrations/gepa/README.md`
-- `M	contributing/samples/integrations/gepa/gepa_tau_bench.ipynb`
-- `M	contributing/samples/integrations/gepa/voter_agent/gepa.ipynb`
-- `M	contributing/samples/mcp/mcp_server_side_sampling/README.md`
-- `M	contributing/samples/models/hello_world_nvidia/README.md`
 - `M	docs/guides/README.md`
-- `M	docs/guides/integrations/mongodb/mongodb_toolset/index.md`
-- `A	docs/guides/tools/tool_args_matcher/tool_args_matcher/index.md`
-- `M	docs/guides/workflow/retry_config/index.md`
-- `M	pyproject.toml`
+- `M	docs/guides/agents/remote_a2a_agent/task.md`
+- `M	docs/guides/apps/app/index.md`
+- `M	docs/guides/evaluation/agent_evaluator/index.md`
+- `M	docs/guides/evaluation/eval_config/index.md`
+- `M	docs/guides/evaluation/eval_service/index.md`
+- `M	docs/guides/evaluation/evaluator/index.md`
+- `A	docs/guides/integrations/mongodb/memory_service/index.md`
+- `A	docs/guides/integrations/mongodb/session_service/index.md`
+- `A	docs/guides/integrations/typesafe/typesafe_classifier/index.md`
+- `M	docs/guides/runners/runner/index.md`
+- `M	docs/guides/workflow/parallel_worker/index.md`
 - `M	src/google/adk/a2a/agent/_remote_a2a_agent.py`
-- `M	src/google/adk/agents/_managed_agent.py`
-- `M	src/google/adk/agents/base_agent.py`
-- `M	src/google/adk/auth/_auth_resume.py`
-- `M	src/google/adk/auth/auth_handler.py`
+- `M	src/google/adk/agents/invocation_context.py`
+- `M	src/google/adk/apps/compaction.py`
 - `M	src/google/adk/cli/api_server.py`
-- `A	src/google/adk/events/_isolation_scope.py`
+- `M	src/google/adk/cli/cli_eval.py`
+- `M	src/google/adk/cli/cli_tools_click.py`
+- `M	src/google/adk/evaluation/__init__.py`
+- `A	src/google/adk/evaluation/_eval_case_result_multi_run_aggregator.py`
+- `A	src/google/adk/evaluation/_multi_run_aggregation_methods.py`
+- `M	src/google/adk/evaluation/agent_evaluator.py`
+- `M	src/google/adk/evaluation/base_eval_service.py`
+- `M	src/google/adk/evaluation/eval_config.py`
+- `M	src/google/adk/evaluation/eval_result.py`
+- `M	src/google/adk/evaluation/local_eval_service.py`
 - `M	src/google/adk/features/_feature_registry.py`
 - `M	src/google/adk/integrations/mongodb/README.md`
+- `M	src/google/adk/integrations/mongodb/__init__.py`
 - `M	src/google/adk/integrations/mongodb/_client.py`
-- `M	src/google/adk/integrations/mongodb/_mongodb_toolset.py`
-- `M	src/google/adk/labs/antigravity/_antigravity_agent.py`
-- `M	src/google/adk/models/apigee_llm.py`
+- `A	src/google/adk/integrations/mongodb/_memory_service.py`
+- `A	src/google/adk/integrations/mongodb/_session_service.py`
+- `M	src/google/adk/models/anthropic_llm.py`
+- `M	src/google/adk/models/cache_metadata.py`
 - `M	src/google/adk/models/google_llm.py`
-- `M	src/google/adk/models/registry.py`
+- `M	src/google/adk/models/lite_llm.py`
+- `M	src/google/adk/models/llm_response.py`
+- `M	src/google/adk/plugins/auto_tracing_plugin.py`
 - `M	src/google/adk/plugins/bigquery_agent_analytics_plugin.py`
 - `M	src/google/adk/runners.py`
-- `M	src/google/adk/tools/mcp_tool/_agent_to_mcp.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.py`
-- `A	src/google/adk/tools/tool_args_matcher/__init__.py`
-- `A	src/google/adk/tools/tool_args_matcher/_tool_args_matcher.py`
+- `M	src/google/adk/tools/application_integration_tool/application_integration_toolset.py`
+- `M	src/google/adk/tools/mcp_tool/mcp_tool.py`
+- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py`
 - `M	src/google/adk/workflow/_base_node.py`
-- `M	src/google/adk/workflow/_node.py`
+- `M	src/google/adk/workflow/_node_runner.py`
 - `M	src/google/adk/workflow/_node_runner_utils.py`
-- `M	src/google/adk/workflow/utils/_workflow_hitl_utils.py`
-- `M	tests/unittests/a2a/agent/test_remote_a2a_agent.py`
-- `M	tests/unittests/agents/test_base_agent.py`
-- `M	tests/unittests/agents/test_managed_agent.py`
-- `M	tests/unittests/auth/test_auth_handler.py`
-- `M	tests/unittests/auth/test_auth_resume.py`
+- `M	src/google/adk/workflow/_parallel_worker.py`
+- `M	src/google/adk/workflow/utils/_retry_utils.py`
+- `M	tests/unittests/a2a/integration/test_client_server.py`
+- `M	tests/unittests/apps/test_compaction.py`
+- `M	tests/unittests/apps/test_compaction_runner_e2e.py`
 - `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/integrations/mongodb/test_mongodb_toolset.py`
-- `M	tests/unittests/labs/antigravity/test_antigravity_agent.py`
+- `M	tests/unittests/cli/utils/test_cli_eval_pretty_print.py`
+- `M	tests/unittests/cli/utils/test_cli_tools_click.py`
+- `M	tests/unittests/evaluation/test_agent_evaluator.py`
+- `A	tests/unittests/evaluation/test_eval_case_result_multi_run_aggregator.py`
+- `M	tests/unittests/evaluation/test_eval_config.py`
+- `M	tests/unittests/evaluation/test_local_eval_service.py`
+- `A	tests/unittests/evaluation/test_multi_run_aggregation_methods.py`
+- `A	tests/unittests/integrations/mongodb/_fake_mongo.py`
+- `A	tests/unittests/integrations/mongodb/test_memory_service.py`
+- `A	tests/unittests/integrations/mongodb/test_session_service.py`
+- `M	tests/unittests/models/test_anthropic_llm.py`
+- `M	tests/unittests/models/test_google_llm.py`
+- `M	tests/unittests/models/test_litellm.py`
+- `M	tests/unittests/plugins/test_auto_tracing_plugin.py`
 - `M	tests/unittests/plugins/test_bigquery_agent_analytics_plugin.py`
-- `M	tests/unittests/test_runners.py`
-- `M	tests/unittests/test_samples.py`
-- `M	tests/unittests/tools/mcp_tool/test_agent_to_mcp.py`
-- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_tool_auth_handler.py`
-- `A	tests/unittests/tools/tool_args_matcher/__init__.py`
-- `A	tests/unittests/tools/tool_args_matcher/test_tool_args_matcher.py`
+- `M	tests/unittests/sessions/_conformance.py`
+- `M	tests/unittests/tools/application_integration_tool/test_application_integration_toolset.py`
+- `M	tests/unittests/tools/mcp_tool/test_mcp_tool.py`
 - `M	tests/unittests/workflow/test_node_runner_failure.py`
-- `M	tests/unittests/workflow/test_node_runner_utils.py`
-- `M	tests/unittests/workflow/test_tool_node.py`
-- `M	tests/unittests/workflow/test_workflow_dynamic_nodes.py`
-- `M	tests/unittests/workflow/test_workflow_node.py`
-- `M	tests/unittests/workflow/test_workflow_routes.py`
-- `M	tests/unittests/workflow/utils/test_rehydration_utils.py`
-- `M	tests/unittests/workflow/utils/test_workflow_hitl_utils.py`
+- `M	tests/unittests/workflow/test_workflow_parallel_worker.py`
+- `M	tests/unittests/workflow/utils/test_retry_utils.py`

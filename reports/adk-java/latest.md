@@ -1,71 +1,62 @@
 # ADK Java Daily Change Report
 
-- Date (UTC): 2026-10-22
+- Date (UTC): 2026-10-23
 - Source: `google/adk-java`
-- Latest SHA: `17687a92fba166ad7911766e3e59689b23d19a51`
-- Previous SHA: `aab51efa5ad765622858fd844b920756a65bcd88`
+- Latest SHA: `84bae34a9ae4c133c7e6294faff5cb50f64a3474`
+- Previous SHA: `17687a92fba166ad7911766e3e59689b23d19a51`
 
 ## Summary
 
-- New commits: 17
+- New commits: 14
 
 ## Commits
 
-- [17687a92](https://github.com/google/adk-java/commit/17687a92fba166ad7911766e3e59689b23d19a51) Merge pull request #1572 from Laurianti:fix-error-event-final-response (Copybara-Service, 2026-10-22)
-- [da10073e](https://github.com/google/adk-java/commit/da10073e5b82f7c5f84f0186abb47cf0a392aecd) Merge pull request #1569 from Laurianti:fix-instruction-dollar-brace-placeholders (Copybara-Service, 2026-10-22)
-- [6f929342](https://github.com/google/adk-java/commit/6f929342262ca9347b95ef3ac0f0462fdc9b0efd) Merge pull request #1144 from r4inee:feature/default-message-content-in-tracing-to-false (Copybara-Service, 2026-10-22)
-- [4d05a08a](https://github.com/google/adk-java/commit/4d05a08a1ea8886b0b51d46d493dea841fb6fac6) Merge pull request #1391 from svetanis:feature/reflect-and-retry-tool-plugin (Copybara-Service, 2026-10-22)
-- [a630ecf5](https://github.com/google/adk-java/commit/a630ecf5b6606b38b479795abcf2a9401f2e3977) Merge pull request #1673 from NewPeople-star:fix/mcp-reserved-tool-names-1513 (Copybara-Service, 2026-10-22)
-- [29616c7e](https://github.com/google/adk-java/commit/29616c7e4ec909a939ac1886dd778411234e8eba) Merge pull request #1096 from mohan-ganesh:firestore-session-updatereadme (Copybara-Service, 2026-10-22)
-- [52f2be71](https://github.com/google/adk-java/commit/52f2be71c5aa703cb611bddd2cd299df86bf4d10) feat: add NodeInfo.name, runId, and parentRunId, and Event.nodeName (Damian Momot, 2026-10-22)
-- [e293898b](https://github.com/google/adk-java/commit/e293898bbf528fb983ff3533fa6dfb7dd7ecf346) feat: run child nodes from a workflow node with Context.runNode (Damian Momot, 2026-10-22)
-- [ad1ea25f](https://github.com/google/adk-java/commit/ad1ea25fef24773ade34ff690a333cb8f441fef0) Merge pull request #1435 from prasanna8585:fix/listevents-ownership-check (Copybara-Service, 2026-10-22)
-- [145901db](https://github.com/google/adk-java/commit/145901db1e7142cf15c66b7298c8116c14111883) refactor: add the runtime that runs child nodes from a workflow node (Damian Momot, 2026-10-22)
-- [72b4af89](https://github.com/google/adk-java/commit/72b4af893e06b05ef032f0cb4a63ca345760124f) feat: add RunConfig.dollarEscapedPlaceholders to leave escaped placeholders in instructions as written (Laurianti, 2026-10-21)
-- [ab67dc50](https://github.com/google/adk-java/commit/ab67dc5015cc3554214d7919682613e200c9e5f1) fix(events): treat an error event without function calls as a final response (Laurianti, 2026-09-28)
-- [5af3854a](https://github.com/google/adk-java/commit/5af3854a27c9fa2be54b998b2883b071be667c01) docs: update firestore session service dependency versions and artifact identifiers... (Ganesh, Mohan, 2026-10-18)
-- [33e9f8b2](https://github.com/google/adk-java/commit/33e9f8b2dcd88916d12621243fa6e0b1988c5bad) feat(plugins): port ReflectAndRetryToolPlugin from adk-python (svetanis, 2026-08-02)
-- [81a6a047](https://github.com/google/adk-java/commit/81a6a04701ec2d7218420df0ce1e4be87d2259b6) feat: default message content capture in spans to false (Simon Su, 2026-04-16)
-- [509d69d6](https://github.com/google/adk-java/commit/509d69d6025c7c9f093383114b7a86e7070cfbc9) fix: skip reserved framework names in MCP toolsets (NewPeople-star, 2026-10-17)
-- [6cb6557a](https://github.com/google/adk-java/commit/6cb6557a423eab39c67da9a1ec4691e9aa8ba951) fix: enforce appName ownership check in VertexAiSessionService.listEvents (prasanna8585, 2026-10-15)
+- [84bae34a](https://github.com/google/adk-java/commit/84bae34a9ae4c133c7e6294faff5cb50f64a3474) revert: restrict turn-based `transfer_to_agent` to declared targets (Mateusz Krawiec, 2026-10-23)
+- [18554a19](https://github.com/google/adk-java/commit/18554a19295b603d4c6140bd790486b96c7c1bc1) revert: restrict live `transfer_to_agent` to the agent, its sub-agents, parent, and peers (Mateusz Krawiec, 2026-10-23)
+- [85780688](https://github.com/google/adk-java/commit/85780688fb0c1cb02f8c89a4fcbd6ec7dc0eba03) feat: pause a workflow for user input (Damian Momot, 2026-10-23)
+- [a313ce4a](https://github.com/google/adk-java/commit/a313ce4af4844ae36ecfbd17db3d38fc16345723) feat: share one run per Context.runNode run ID (Damian Momot, 2026-10-23)
+- [2e88a6de](https://github.com/google/adk-java/commit/2e88a6de4c9735f104986d34a4d461a6a36e06be) feat: resume a paused workflow from its session events (Damian Momot, 2026-10-23)
+- [b0bdd989](https://github.com/google/adk-java/commit/b0bdd989b77548aa480029310cb15b5e1e3bc019) Merge pull request #1442 from pgentile:rag_retrieval_similarity_top_k (Copybara-Service, 2026-10-23)
+- [7096019e](https://github.com/google/adk-java/commit/7096019e4581da5899d5b41e6bdd8ba3c847db75) feat: rebuild a workflow's node progress from session events (Damian Momot, 2026-10-23)
+- [41aa2506](https://github.com/google/adk-java/commit/41aa2506fed26f8f4240e6cc9e6459a8f0f69546) Merge pull request #1570 from Laurianti:fix-loop-agent-non-positive-max-iterations (Copybara-Service, 2026-10-23)
+- [9a158552](https://github.com/google/adk-java/commit/9a158552079bdba10f6d59a39d7c4bc62dbde485) fix(live): replay stored transcriptions as conversation history (Kamil Tomaszek, 2026-10-22)
+- [f4d6de4c](https://github.com/google/adk-java/commit/f4d6de4cc2e4d6765449753e1a3ddf94c579a7db) fix: restrict live `transfer_to_agent` to the agent, its sub-agents, parent, and peers (Kamil Tomaszek, 2026-10-22)
+- [c781145c](https://github.com/google/adk-java/commit/c781145c79a9ddad56eadb9ef8b61644c37b1518) Merge pull request #1589 from quifox:fix/skill-resource-mixed-parts (Copybara-Service, 2026-10-22)
+- [71bd1cdc](https://github.com/google/adk-java/commit/71bd1cdcacf28b58a2e0682f2dbf7c757392bc91) feat: configure similarity top-K in the VertexAiRagRetrieval tool (Pierre Gentile, 2026-08-19)
+- [e1fbed9f](https://github.com/google/adk-java/commit/e1fbed9f52275e817a1a1c3b55a7c15128e7377e) fix(skills): preserve sibling parts when loading binary resources (quifox, 2026-10-01)
+- [5feaae49](https://github.com/google/adk-java/commit/5feaae492a3b22f0a1813575f19d4bef3db101bd) fix(agents): run LoopAgent zero times when maxIterations is zero or negative (Laurianti, 2026-10-01)
 
 ## Changed Files
 
-- `M	contrib/firestore-session-service/README.md`
+- `M	core/pom.xml`
 - `M	core/src/main/java/com/google/adk/agents/Context.java`
-- `M	core/src/main/java/com/google/adk/agents/Instruction.java`
-- `M	core/src/main/java/com/google/adk/agents/RunConfig.java`
-- `M	core/src/main/java/com/google/adk/events/Event.java`
-- `A	core/src/main/java/com/google/adk/plugins/ReflectAndRetryToolPlugin.java`
-- `M	core/src/main/java/com/google/adk/sessions/VertexAiSessionService.java`
-- `M	core/src/main/java/com/google/adk/telemetry/README.md`
-- `M	core/src/main/java/com/google/adk/telemetry/Tracing.java`
-- `M	core/src/main/java/com/google/adk/tools/mcp/McpAsyncToolset.java`
-- `A	core/src/main/java/com/google/adk/tools/mcp/McpToolNameFilter.java`
-- `M	core/src/main/java/com/google/adk/tools/mcp/McpToolset.java`
-- `M	core/src/main/java/com/google/adk/utils/InstructionUtils.java`
-- `A	core/src/main/java/com/google/adk/workflow/DynamicNodeFailedException.java`
+- `M	core/src/main/java/com/google/adk/agents/LlmAgent.java`
+- `M	core/src/main/java/com/google/adk/agents/LoopAgent.java`
+- `D	core/src/main/java/com/google/adk/agents/TransferRejectedException.java`
+- `M	core/src/main/java/com/google/adk/flows/llmflows/BaseLlmFlow.java`
+- `M	core/src/main/java/com/google/adk/flows/llmflows/Contents.java`
+- `M	core/src/main/java/com/google/adk/runner/Runner.java`
+- `M	core/src/main/java/com/google/adk/tools/retrieval/VertexAiRagRetrieval.java`
+- `M	core/src/main/java/com/google/adk/tools/skills/LoadSkillResourceTool.java`
+- `M	core/src/main/java/com/google/adk/workflow/BaseNode.java`
+- `M	core/src/main/java/com/google/adk/workflow/Node.java`
 - `M	core/src/main/java/com/google/adk/workflow/NodeExecutionState.java`
-- `M	core/src/main/java/com/google/adk/workflow/NodeInfo.java`
-- `A	core/src/main/java/com/google/adk/workflow/NodeInterruptedException.java`
 - `M	core/src/main/java/com/google/adk/workflow/NodeRunner.java`
-- `A	core/src/main/java/com/google/adk/workflow/RunNodeConfig.java`
+- `M	core/src/main/java/com/google/adk/workflow/NodeState.java`
+- `M	core/src/main/java/com/google/adk/workflow/NodeStatus.java`
+- `A	core/src/main/java/com/google/adk/workflow/RequestInput.java`
+- `A	core/src/main/java/com/google/adk/workflow/ResumeScan.java`
+- `M	core/src/main/java/com/google/adk/workflow/RunNodeConfig.java`
 - `M	core/src/main/java/com/google/adk/workflow/Scheduler.java`
-- `M	core/src/test/java/com/google/adk/agents/ContextTest.java`
-- `M	core/src/test/java/com/google/adk/agents/RunConfigTest.java`
-- `M	core/src/test/java/com/google/adk/events/EventTest.java`
-- `M	core/src/test/java/com/google/adk/flows/llmflows/InstructionsTest.java`
-- `M	core/src/test/java/com/google/adk/plugins/GlobalInstructionPluginTest.java`
-- `A	core/src/test/java/com/google/adk/plugins/ReflectAndRetryToolPluginTest.java`
-- `M	core/src/test/java/com/google/adk/sessions/VertexAiSessionServiceTest.java`
-- `M	core/src/test/java/com/google/adk/telemetry/ContextPropagationTest.java`
-- `A	core/src/test/java/com/google/adk/testing/WorkflowTestNodes.java`
-- `A	core/src/test/java/com/google/adk/tools/mcp/McpToolsetReservedNamesTest.java`
-- `M	core/src/test/java/com/google/adk/utils/InstructionUtilsTest.java`
-- `A	core/src/test/java/com/google/adk/workflow/DynamicDispatchTest.java`
-- `A	core/src/test/java/com/google/adk/workflow/DynamicWorkflowTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/NodeInfoTest.java`
-- `A	core/src/test/java/com/google/adk/workflow/RunNodeConfigTest.java`
-- `M	release-please-config.json`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/RunConfigCodec.kt`
-- `M	tokt/src/test/kotlin/com/google/adk/tokt/KtRunnerInteropTest.kt`
+- `M	core/src/test/java/com/google/adk/agents/LlmAgentTest.java`
+- `M	core/src/test/java/com/google/adk/agents/LoopAgentTest.java`
+- `M	core/src/test/java/com/google/adk/flows/llmflows/AgentTransferTest.java`
+- `M	core/src/test/java/com/google/adk/flows/llmflows/ContentsTest.java`
+- `M	core/src/test/java/com/google/adk/runner/RunnerRootNodeTest.java`
+- `M	core/src/test/java/com/google/adk/runner/RunnerTest.java`
+- `M	core/src/test/java/com/google/adk/tools/retrieval/VertexAiRagRetrievalTest.java`
+- `A	core/src/test/java/com/google/adk/tools/skills/LoadSkillResourceMixedPartsRegressionTest.java`
+- `A	core/src/test/java/com/google/adk/workflow/ResumeScanTest.java`
+- `A	core/src/test/java/com/google/adk/workflow/WorkflowHitlTest.java`
+- `A	core/src/test/java/com/google/adk/workflow/WorkflowResumeTest.java`
+- `A	core/src/test/java/com/google/adk/workflow/WorkflowResumeTesting.java`
