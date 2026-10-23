@@ -11,6 +11,7 @@ import '../agents/context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm/task/finish_task_tool.dart';
 import '../agents/llm_agent.dart';
+import '../agents/remote_a2a_agent.dart';
 import '../errors/input_validation_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
@@ -740,7 +741,7 @@ abstract class BaseNode {
   final bool waitForOutput;
 
   /// Optional retry configuration.
-  final RetryConfig? retryConfig;
+  RetryConfig? retryConfig;
 
   /// Optional per-attempt timeout.
   final Duration? timeout;
@@ -1125,7 +1126,9 @@ BaseNode buildNode(
       );
     }
     final bool agentWaitForOutput =
-        waitForOutput ?? (nodeLike is LlmAgent && nodeLike.mode == 'task');
+        waitForOutput ??
+        ((nodeLike is LlmAgent && nodeLike.mode == 'task') ||
+            (nodeLike is RemoteA2aAgent && nodeLike.mode == 'task'));
     return AgentNode(
       agent: nodeLike,
       name: name,
@@ -1202,7 +1205,10 @@ class ParallelWorker extends BaseNode {
     RetryConfig? retryConfig,
     Duration? timeout,
   }) {
-    final BaseNode wrappedNode = _buildParallelWorkerNode(node);
+    BaseNode wrappedNode = _buildParallelWorkerNode(node);
+    if (retryConfig != null) {
+      wrappedNode = _withRetryConfig(wrappedNode, retryConfig);
+    }
     final int? resolvedLimit = maxParallelWorkers ?? maxConcurrency;
     if (resolvedLimit != null && resolvedLimit < 1) {
       throw ArgumentError(
@@ -1212,7 +1218,6 @@ class ParallelWorker extends BaseNode {
     return ParallelWorker._(
       wrappedNode: wrappedNode,
       maxParallelWorkers: resolvedLimit,
-      retryConfig: retryConfig,
       timeout: timeout,
     );
   }
@@ -1220,7 +1225,6 @@ class ParallelWorker extends BaseNode {
   ParallelWorker._({
     required this.wrappedNode,
     required this.maxParallelWorkers,
-    super.retryConfig,
     super.timeout,
   }) : super(name: wrappedNode.name, rerunOnResume: true);
 
@@ -1317,6 +1321,55 @@ BaseNode _buildParallelWorkerNode(Object node) {
     );
   }
   return buildNode(node);
+}
+
+BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
+  if (node is FunctionNode) {
+    return FunctionNode(
+      function: node.function,
+      name: node.name,
+      description: node.description,
+      dependsOn: node.dependsOn,
+      rerunOnResume: node.rerunOnResume,
+      waitForOutput: node.waitForOutput,
+      retryConfig: retryConfig,
+      timeout: node.timeout,
+      requireConfirmation: node.requireConfirmation,
+    );
+  }
+  if (node is ToolNode) {
+    return ToolNode(
+      tool: node.tool,
+      name: node.name,
+      description: node.description,
+      dependsOn: node.dependsOn,
+      rerunOnResume: node.rerunOnResume,
+      waitForOutput: node.waitForOutput,
+      retryConfig: retryConfig,
+      timeout: node.timeout,
+    );
+  }
+  if (node is AgentNode) {
+    return AgentNode(
+      agent: node.agent,
+      name: node.name,
+      description: node.description,
+      dependsOn: node.dependsOn,
+      rerunOnResume: node.rerunOnResume,
+      waitForOutput: node.waitForOutput,
+      retryConfig: retryConfig,
+      timeout: node.timeout,
+    );
+  }
+  if (node is ParallelWorker) {
+    return ParallelWorker._(
+      wrappedNode: _withRetryConfig(node.wrappedNode, retryConfig),
+      maxParallelWorkers: node.maxParallelWorkers,
+      timeout: node.timeout,
+    );
+  }
+  node.retryConfig = retryConfig;
+  return node;
 }
 
 /// Node that wraps an ADK [BaseTool].
@@ -1441,9 +1494,10 @@ class AgentNode extends BaseNode {
     );
     final List<Event> nestedEvents = <Event>[];
     final bool isTaskMode =
-        agent is LlmAgent && (agent as LlmAgent).mode == 'task';
+        (agent is LlmAgent && (agent as LlmAgent).mode == 'task') ||
+        (agent is RemoteA2aAgent && (agent as RemoteA2aAgent).mode == 'task');
     final Set<String> taskSubagentToolNames = <String>{
-      if (isTaskMode)
+      if (agent is LlmAgent && (agent as LlmAgent).mode == 'task')
         for (final Object tool in (agent as LlmAgent).tools)
           if (tool is TaskAgentTool) tool.name,
     };
@@ -1467,18 +1521,33 @@ class AgentNode extends BaseNode {
         for (final FunctionResponse response in event.getFunctionResponses()) {
           if (response.name == finishTaskToolName &&
               (pendingFinishCallId == null ||
-                  response.id == pendingFinishCallId) &&
-              response.response['result'] == 'Task completed.' &&
-              pendingFinishArgs != null) {
-            final LlmAgent llmAgent = agent as LlmAgent;
-            final Object? taskOutput = _extractTaskOutput(
-              llmAgent.outputSchema,
-              pendingFinishArgs,
-            );
-            if (llmAgent.outputKey != null && taskOutput != null) {
-              agentContext.session.state[llmAgent.outputKey!] = taskOutput;
+                  response.id == pendingFinishCallId)) {
+            if (response.response['result'] == finishTaskErrorResult ||
+                (event.errorMessage != null &&
+                    event.errorMessage!.isNotEmpty)) {
+              return <String, Object?>{
+                'error': event.errorMessage ?? finishTaskErrorResult,
+              };
             }
-            return taskOutput;
+            if (response.response['result'] == finishTaskSuccessResult &&
+                pendingFinishArgs != null) {
+              final Object? outputSchema = agent is LlmAgent
+                  ? (agent as LlmAgent).outputSchema
+                  : agent is RemoteA2aAgent
+                  ? (agent as RemoteA2aAgent).outputSchema
+                  : null;
+              final Object? taskOutput = _extractTaskOutput(
+                outputSchema,
+                pendingFinishArgs,
+              );
+              if (agent is LlmAgent) {
+                final LlmAgent llmAgent = agent as LlmAgent;
+                if (llmAgent.outputKey != null && taskOutput != null) {
+                  agentContext.session.state[llmAgent.outputKey!] = taskOutput;
+                }
+              }
+              return taskOutput;
+            }
           }
         }
       }
@@ -2827,7 +2896,9 @@ Future<Object?> _runNodeWithRetry({
       lastError = error;
       _updateNodeStatus(context, state, NodeStatus.failed);
       state.error = error;
-      if (attempt >= maxAttempts || !_shouldRetryError(error, retry)) {
+      if (attempt >= maxAttempts ||
+          (failedInChild && node is ParallelWorker) ||
+          !_shouldRetryError(error, retry)) {
         rethrow;
       }
       _resetDynamicChildrenForRetry(

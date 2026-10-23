@@ -13,9 +13,63 @@ import '../a2a/protocol.dart';
 import '../events/event.dart';
 import '../flows/llm_flows/functions.dart';
 import '../platform/uuid.dart';
+import '../sessions/session.dart';
 import '../types/content.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
+import 'llm/task/finish_task_tool.dart';
+
+/// Error result returned by `finish_task` when a delegated task fails.
+const String finishTaskErrorResult = 'Task failed.';
+
+/// Default wrapper parameter key used by `finish_task` for non-object schemas.
+const String finishTaskDefaultWrapperKey = 'result';
+
+/// Returns the wrapper parameter key (`'result'`) for non-object
+/// [outputSchema] definitions, or `null` when [outputSchema] is an object
+/// schema (or omitted).
+String? getOutputWrapperKey(Object? outputSchema) {
+  if (outputSchema == null) {
+    return null;
+  }
+  if (outputSchema is Map) {
+    final Object? rawType = outputSchema['type'];
+    if (rawType is String && rawType.toLowerCase() == 'object') {
+      return null;
+    }
+    if (rawType == null && outputSchema.containsKey('properties')) {
+      return null;
+    }
+    return finishTaskDefaultWrapperKey;
+  }
+  if (outputSchema is String) {
+    return outputSchema.toLowerCase() == 'object'
+        ? null
+        : finishTaskDefaultWrapperKey;
+  }
+  if (outputSchema == Map || outputSchema == Object) {
+    return null;
+  }
+  return finishTaskDefaultWrapperKey;
+}
+
+/// Whether [event] contains a terminal `finish_task` [FunctionResponse].
+bool isFinishTaskTerminalFr(Event event) {
+  for (final FunctionResponse fr in event.getFunctionResponses()) {
+    if (fr.name == finishTaskToolName) {
+      final Object? result = fr.response['result'];
+      return result == finishTaskSuccessResult ||
+          result == finishTaskErrorResult;
+    }
+  }
+  return false;
+}
+
+const Set<A2aTaskState> _unfinishedTaskStates = <A2aTaskState>{
+  A2aTaskState.submitted,
+  A2aTaskState.working,
+  A2aTaskState.unknown,
+};
 
 /// Well-known path used to discover remote agent cards.
 const String agentCardWellKnownPath = '/.well-known/agent.json';
@@ -219,6 +273,8 @@ class RemoteA2aAgent extends BaseAgent {
     this.a2aRequestMetaProvider,
     this.fullHistoryWhenStateless = false,
     this.config = const A2aRemoteAgentConfig(),
+    this.mode,
+    this.outputSchema,
     super.subAgents,
     super.beforeAgentCallback,
     super.afterAgentCallback,
@@ -227,12 +283,20 @@ class RemoteA2aAgent extends BaseAgent {
        _a2aClientFactory = a2aClientFactory,
        _httpClient = httpClient,
        _httpClientNeedsCleanup = httpClient == null {
+    if (mode != null && mode != 'task') {
+      throw ArgumentError(
+        "RemoteA2aAgent mode must be null or 'task', got '$mode'.",
+      );
+    }
     if (agentCard == null) {
       throw ArgumentError('agentCard cannot be null');
     }
 
     if (agentCard is AgentCard) {
       _agentCard = agentCard;
+      if (description.isEmpty && agentCard.description.isNotEmpty) {
+        description = agentCard.description;
+      }
       return;
     }
 
@@ -266,6 +330,12 @@ class RemoteA2aAgent extends BaseAgent {
   /// Interceptor configuration for request/response processing.
   final A2aRemoteAgentConfig config;
 
+  /// Delegation mode (`'task'` or `null`).
+  final String? mode;
+
+  /// Optional output schema used to unwrap task-mode outputs.
+  final Object? outputSchema;
+
   AgentCard? _agentCard;
   String? _agentCardSource;
   A2aClient? _a2aClient;
@@ -297,6 +367,8 @@ class RemoteA2aAgent extends BaseAgent {
         'a2aRequestMetaProvider',
         'fullHistoryWhenStateless',
         'config',
+        'mode',
+        'outputSchema',
       },
     );
 
@@ -363,6 +435,16 @@ class RemoteA2aAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'config',
         currentValue: config,
+      ),
+      mode: cloneFieldValue<String?>(
+        update: cloneUpdate,
+        fieldName: 'mode',
+        currentValue: mode,
+      ),
+      outputSchema: cloneObjectFieldValue(
+        update: cloneUpdate,
+        fieldName: 'outputSchema',
+        currentValue: outputSchema,
       ),
       subAgents: <BaseAgent>[],
       beforeAgentCallback: cloneObjectFieldValue(
@@ -630,6 +712,7 @@ class RemoteA2aAgent extends BaseAgent {
     final List<A2aPart> messageParts = <A2aPart>[];
     String? contextId;
     final List<Event> eventsToProcess = <Event>[];
+    final bool useFullHistory = fullHistoryWhenStateless || mode == 'task';
 
     for (int i = ctx.session.events.length - 1; i >= 0; i -= 1) {
       final Event event = ctx.session.events[i];
@@ -639,11 +722,24 @@ class RemoteA2aAgent extends BaseAgent {
         if (remoteContextId is String && remoteContextId.isNotEmpty) {
           contextId = remoteContextId;
         }
-        if (!fullHistoryWhenStateless || contextId != null) {
+        if (!useFullHistory || contextId != null) {
           break;
         }
       }
       eventsToProcess.add(event);
+    }
+
+    if (eventsToProcess.isEmpty &&
+        ctx.userContent != null &&
+        ctx.userContent!.parts.isNotEmpty) {
+      eventsToProcess.add(
+        Event(
+          invocationId: ctx.invocationId,
+          author: 'user',
+          branch: ctx.branch,
+          content: ctx.userContent,
+        ),
+      );
     }
 
     for (final Event rawEvent in eventsToProcess.reversed) {
@@ -863,137 +959,253 @@ class RemoteA2aAgent extends BaseAgent {
   /// Sends current conversation context to the remote A2A endpoint.
   @override
   Stream<Event> runAsyncImpl(InvocationContext ctx) async* {
-    try {
-      await _ensureResolved();
-    } catch (error) {
-      yield Event(
-        author: name,
-        errorMessage: 'Failed to initialize remote A2A agent: $error',
-        invocationId: ctx.invocationId,
-        branch: ctx.branch,
-      );
-      return;
-    }
+    bool shouldReleaseTaskControl = false;
+    String? taskErrorMessage;
+    A2aMessage? a2aRequest;
 
-    A2aMessage? a2aRequest = _createA2aRequestForUserFunctionResponse(ctx);
-    if (a2aRequest == null) {
-      final (List<A2aPart> messageParts, String? contextId) =
-          _constructMessagePartsFromSession(ctx);
-      if (messageParts.isEmpty) {
-        developer.log(
-          'No parts to send to remote A2A agent. Emitting empty event.',
-          name: 'adk_dart.remote_a2a_agent',
-        );
+    try {
+      try {
+        await _ensureResolved();
+      } catch (error) {
+        taskErrorMessage = 'Failed to initialize remote A2A agent: $error';
+        shouldReleaseTaskControl = true;
         yield Event(
           author: name,
-          content: Content(),
+          errorMessage: taskErrorMessage,
           invocationId: ctx.invocationId,
           branch: ctx.branch,
         );
         return;
       }
 
-      a2aRequest = A2aMessage(
-        messageId: _newMessageId(),
-        parts: messageParts,
-        role: A2aRole.user,
-        contextId: contextId,
+      a2aRequest = _createA2aRequestForUserFunctionResponse(ctx);
+      if (a2aRequest == null) {
+        final (List<A2aPart> messageParts, String? contextId) =
+            _constructMessagePartsFromSession(ctx);
+        if (messageParts.isEmpty) {
+          developer.log(
+            'No parts to send to remote A2A agent. Emitting empty event.',
+            name: 'adk_dart.remote_a2a_agent',
+          );
+          taskErrorMessage = 'No parts to send to remote A2A agent.';
+          shouldReleaseTaskControl = true;
+          yield Event(
+            author: name,
+            content: Content(),
+            invocationId: ctx.invocationId,
+            branch: ctx.branch,
+          );
+          return;
+        }
+
+        a2aRequest = A2aMessage(
+          messageId: _newMessageId(),
+          parts: messageParts,
+          role: A2aRole.user,
+          contextId: contextId,
+        );
+      }
+
+      developer.log(
+        buildA2aRequestLog(a2aRequest),
+        name: 'adk_dart.remote_a2a_agent',
       );
-    }
 
-    developer.log(
-      buildA2aRequestLog(a2aRequest),
-      name: 'adk_dart.remote_a2a_agent',
-    );
-
-    try {
-      final A2aBeforeRequestResult beforeRequestResult =
-          await _executeBeforeRequestInterceptors(
-            ctx,
-            a2aRequest,
-            A2aRequestParametersConfig(
-              clientCallContext: A2aClientCallContext(
-                state: Map<String, Object?>.from(ctx.session.state),
+      try {
+        final A2aBeforeRequestResult beforeRequestResult =
+            await _executeBeforeRequestInterceptors(
+              ctx,
+              a2aRequest,
+              A2aRequestParametersConfig(
+                clientCallContext: A2aClientCallContext(
+                  state: Map<String, Object?>.from(ctx.session.state),
+                ),
               ),
+            );
+        if (beforeRequestResult.event != null) {
+          taskErrorMessage = 'Request intercepted';
+          shouldReleaseTaskControl = true;
+          yield beforeRequestResult.event!;
+          return;
+        }
+
+        a2aRequest = beforeRequestResult.request!;
+        final A2aRequestParametersConfig parameters =
+            beforeRequestResult.parameters;
+        if (a2aRequestMetaProvider != null) {
+          parameters.requestMetadata = a2aRequestMetaProvider!(ctx, a2aRequest);
+        }
+
+        A2aTask? lastTask;
+        await for (final Object a2aResponse in _a2aClient!.sendMessage(
+          request: a2aRequest,
+          requestMetadata: parameters.requestMetadata,
+          context: parameters.clientCallContext,
+        )) {
+          developer.log(
+            buildA2aResponseLog(_responseForLog(a2aResponse)),
+            name: 'adk_dart.remote_a2a_agent',
+          );
+
+          A2aTask? task;
+          if (a2aResponse is A2aClientEvent) {
+            task = a2aResponse.$1;
+            lastTask = task;
+          } else {
+            lastTask = null;
+          }
+
+          Event? event = await _handleA2aResponse(a2aResponse, ctx);
+          if (event == null) {
+            continue;
+          }
+          event = await _executeAfterRequestInterceptors(
+            ctx,
+            a2aResponse,
+            event,
+          );
+          if (event == null) {
+            continue;
+          }
+
+          event.customMetadata ??= <String, dynamic>{};
+          event.customMetadata!['${a2aMetadataPrefix}request'] = _pruneNulls(
+            _a2aMessageToJson(a2aRequest),
+          );
+
+          if (a2aResponse is A2aClientEvent) {
+            event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
+              _a2aTaskToJson(a2aResponse.$1),
+            );
+          } else if (a2aResponse is A2aMessage) {
+            event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
+              _a2aMessageToJson(a2aResponse),
+            );
+          }
+
+          if (mode == 'task' && isFinishTaskTerminalFr(event)) {
+            if (_isFinishTaskErrorEvent(event)) {
+              event.errorMessage ??=
+                  'Remote A2A task failed: $finishTaskErrorResult';
+            } else if (event.errorMessage == null) {
+              final Map<String, dynamic>? args = _findFinishTaskArgsFromHistory(
+                ctx.session,
+                isolationScope: ctx.isolationScope,
+                completedFrEvent: event,
+              );
+              if (args != null) {
+                final String? wrapperKey = getOutputWrapperKey(outputSchema);
+                if (wrapperKey != null && args.containsKey(wrapperKey)) {
+                  event.output = args[wrapperKey];
+                } else {
+                  event.output = args;
+                }
+              } else {
+                event.output = <String, Object?>{};
+                developer.log(
+                  "Could not find finish_task arguments for isolation scope "
+                  "'${ctx.isolationScope}'. Completing the task with an empty output.",
+                  name: 'adk_dart.remote_a2a_agent',
+                );
+              }
+            }
+            yield event;
+            shouldReleaseTaskControl = true;
+            return;
+          }
+
+          yield event;
+
+          if (mode == 'task' &&
+              task != null &&
+              (task.status.state == A2aTaskState.failed ||
+                  task.status.state == A2aTaskState.canceled)) {
+            final bool isCancel = task.status.state == A2aTaskState.canceled;
+            final String errorText = isCancel
+                ? 'Task canceled'
+                : (_textFromEventContent(event.content) ?? 'Unknown error');
+            final (
+              Event errorEvent,
+              Event failureEvent,
+            ) = _createTaskFailureEvents(
+              errorText: errorText,
+              ctx: ctx,
+              agentName: name,
+              taskId: task.id,
+              a2aRequest: a2aRequest,
+            );
+            yield errorEvent;
+            yield failureEvent;
+            shouldReleaseTaskControl = true;
+            return;
+          }
+        }
+
+        if (lastTask != null &&
+            _unfinishedTaskStates.contains(lastTask.status.state)) {
+          taskErrorMessage =
+              'A2A response stream ended before task ${lastTask.id} reached a '
+              'terminal state.';
+          shouldReleaseTaskControl = true;
+          yield Event(
+            author: name,
+            errorMessage: taskErrorMessage,
+            invocationId: ctx.invocationId,
+            branch: ctx.branch,
+            customMetadata: <String, dynamic>{
+              '${a2aMetadataPrefix}request': _pruneNulls(
+                _a2aMessageToJson(a2aRequest),
+              ),
+            },
+          );
+        }
+      } on A2aClientHttpError catch (error) {
+        final String message = 'A2A request failed: $error';
+        taskErrorMessage = message;
+        shouldReleaseTaskControl = true;
+        yield Event(
+          author: name,
+          errorMessage: message,
+          invocationId: ctx.invocationId,
+          branch: ctx.branch,
+          customMetadata: <String, dynamic>{
+            '${a2aMetadataPrefix}request': _pruneNulls(
+              _a2aMessageToJson(a2aRequest),
             ),
-          );
-      if (beforeRequestResult.event != null) {
-        yield beforeRequestResult.event!;
-        return;
-      }
-
-      a2aRequest = beforeRequestResult.request!;
-      final A2aRequestParametersConfig parameters =
-          beforeRequestResult.parameters;
-      if (a2aRequestMetaProvider != null) {
-        parameters.requestMetadata = a2aRequestMetaProvider!(ctx, a2aRequest);
-      }
-
-      await for (final Object a2aResponse in _a2aClient!.sendMessage(
-        request: a2aRequest,
-        requestMetadata: parameters.requestMetadata,
-        context: parameters.clientCallContext,
-      )) {
-        developer.log(
-          buildA2aResponseLog(_responseForLog(a2aResponse)),
-          name: 'adk_dart.remote_a2a_agent',
+            '${a2aMetadataPrefix}error': message,
+            '${a2aMetadataPrefix}status_code': '${error.statusCode ?? ''}',
+          },
         );
-
-        Event? event = await _handleA2aResponse(a2aResponse, ctx);
-        if (event == null) {
-          continue;
-        }
-        event = await _executeAfterRequestInterceptors(ctx, a2aResponse, event);
-        if (event == null) {
-          continue;
-        }
-
-        event.customMetadata ??= <String, dynamic>{};
-        event.customMetadata!['${a2aMetadataPrefix}request'] = _pruneNulls(
-          _a2aMessageToJson(a2aRequest),
+      } catch (error) {
+        final String message = 'A2A request failed: $error';
+        taskErrorMessage = message;
+        shouldReleaseTaskControl = true;
+        yield Event(
+          author: name,
+          errorMessage: message,
+          invocationId: ctx.invocationId,
+          branch: ctx.branch,
+          customMetadata: <String, dynamic>{
+            '${a2aMetadataPrefix}request': _pruneNulls(
+              _a2aMessageToJson(a2aRequest),
+            ),
+            '${a2aMetadataPrefix}error': message,
+          },
         );
-
-        if (a2aResponse is A2aClientEvent) {
-          event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
-            _a2aTaskToJson(a2aResponse.$1),
-          );
-        } else if (a2aResponse is A2aMessage) {
-          event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
-            _a2aMessageToJson(a2aResponse),
+      }
+    } finally {
+      if (mode == 'task' && shouldReleaseTaskControl) {
+        if (taskErrorMessage != null) {
+          yield _createFinishTaskEvent(
+            ctx: ctx,
+            agentName: name,
+            errorMessage: taskErrorMessage,
+            isError: true,
           );
         }
-
-        yield event;
+        ctx.setAgentState(name, endOfAgent: true);
+        yield createAgentStateEvent(ctx);
       }
-    } on A2aClientHttpError catch (error) {
-      final String message = 'A2A request failed: $error';
-      yield Event(
-        author: name,
-        errorMessage: message,
-        invocationId: ctx.invocationId,
-        branch: ctx.branch,
-        customMetadata: <String, dynamic>{
-          '${a2aMetadataPrefix}request': _pruneNulls(
-            _a2aMessageToJson(a2aRequest),
-          ),
-          '${a2aMetadataPrefix}error': message,
-          '${a2aMetadataPrefix}status_code': '${error.statusCode ?? ''}',
-        },
-      );
-    } catch (error) {
-      final String message = 'A2A request failed: $error';
-      yield Event(
-        author: name,
-        errorMessage: message,
-        invocationId: ctx.invocationId,
-        branch: ctx.branch,
-        customMetadata: <String, dynamic>{
-          '${a2aMetadataPrefix}request': _pruneNulls(
-            _a2aMessageToJson(a2aRequest),
-          ),
-          '${a2aMetadataPrefix}error': message,
-        },
-      );
     }
   }
 
@@ -1027,6 +1239,137 @@ Object _responseForLog(Object response) {
     return response.$1;
   }
   return response;
+}
+
+bool _isFinishTaskErrorEvent(Event event) {
+  for (final FunctionResponse fr in event.getFunctionResponses()) {
+    if (fr.name == finishTaskToolName &&
+        fr.response['result'] == finishTaskErrorResult) {
+      return true;
+    }
+  }
+  return false;
+}
+
+Map<String, dynamic>? _findFinishTaskArgsFromHistory(
+  Session session, {
+  String? isolationScope,
+  Event? completedFrEvent,
+}) {
+  String? matchingFcId;
+  if (completedFrEvent != null) {
+    for (final FunctionResponse fr in completedFrEvent.getFunctionResponses()) {
+      if (fr.name == finishTaskToolName) {
+        matchingFcId = fr.id;
+        break;
+      }
+    }
+  }
+
+  Map<String, dynamic>? argsFrom(Event event) {
+    for (final FunctionCall fc in event.getFunctionCalls()) {
+      if (fc.name != finishTaskToolName) {
+        continue;
+      }
+      if (matchingFcId == null || fc.id == matchingFcId) {
+        return Map<String, dynamic>.from(fc.args);
+      }
+    }
+    return null;
+  }
+
+  if (completedFrEvent != null) {
+    final Map<String, dynamic>? args = argsFrom(completedFrEvent);
+    if (args != null) {
+      return args;
+    }
+  }
+
+  for (int i = session.events.length - 1; i >= 0; i -= 1) {
+    final Event event = session.events[i];
+    if (isolationScope != null &&
+        isolationScope.isNotEmpty &&
+        event.isolationScope != isolationScope) {
+      continue;
+    }
+    final Map<String, dynamic>? args = argsFrom(event);
+    if (args != null) {
+      return args;
+    }
+  }
+  return null;
+}
+
+String? _textFromEventContent(Content? content) {
+  if (content == null || content.parts.isEmpty) {
+    return null;
+  }
+  final List<String> texts = <String>[
+    for (final Part part in content.parts)
+      if (part.text != null && part.text!.isNotEmpty) part.text!,
+  ];
+  return texts.isEmpty ? null : texts.join('\n');
+}
+
+Event _createFinishTaskEvent({
+  required InvocationContext ctx,
+  required String agentName,
+  Object? output,
+  String? errorMessage,
+  bool isError = false,
+}) {
+  return Event(
+    author: agentName,
+    invocationId: ctx.invocationId,
+    branch: ctx.branch,
+    isolationScope: ctx.isolationScope,
+    errorMessage: errorMessage,
+    content: Content(
+      role: 'user',
+      parts: <Part>[
+        Part.fromFunctionResponse(
+          name: finishTaskToolName,
+          response: <String, dynamic>{
+            'result': isError ? finishTaskErrorResult : finishTaskSuccessResult,
+          },
+        ),
+      ],
+    ),
+    output: output,
+  );
+}
+
+(Event, Event) _createTaskFailureEvents({
+  required String errorText,
+  required InvocationContext ctx,
+  required String agentName,
+  required String taskId,
+  A2aMessage? a2aRequest,
+}) {
+  final String errorMessage = 'Remote A2A task failed: $errorText';
+  final Map<String, dynamic> errorEventMetadata = <String, dynamic>{
+    '${a2aMetadataPrefix}error': errorMessage,
+    '${a2aMetadataPrefix}task_id': taskId,
+    if (a2aRequest != null)
+      '${a2aMetadataPrefix}request': _pruneNulls(
+        _a2aMessageToJson(a2aRequest),
+      ),
+  };
+  final Event errorEvent = Event(
+    author: agentName,
+    invocationId: ctx.invocationId,
+    branch: ctx.branch,
+    isolationScope: ctx.isolationScope,
+    errorMessage: errorMessage,
+    customMetadata: errorEventMetadata,
+  );
+  final Event finishEvent = _createFinishTaskEvent(
+    ctx: ctx,
+    agentName: agentName,
+    errorMessage: errorMessage,
+    isError: true,
+  );
+  return (errorEvent, finishEvent);
 }
 
 bool _isOtherAgentReply(String currentAgentName, Event event) {

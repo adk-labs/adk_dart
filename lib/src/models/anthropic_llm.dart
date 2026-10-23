@@ -749,10 +749,13 @@ class AnthropicLlm extends BaseLlm {
       } else {
         content = '$response';
       }
+      final bool isError =
+          response is Map &&
+          (_isTruthy(response['isError']) || _isTruthy(response['is_error']));
       return <String, Object?>{
         'type': 'tool_result',
         'tool_use_id': sanitizer.sanitize(part.functionResponse!.id),
-        'is_error': false,
+        'is_error': isError,
         'content': content,
       };
     }
@@ -880,6 +883,9 @@ class AnthropicLlm extends BaseLlm {
         <String, Object?>{};
     final int inputTokens = (usage['input_tokens'] as num?)?.toInt() ?? 0;
     final int outputTokens = (usage['output_tokens'] as num?)?.toInt() ?? 0;
+    final int? cacheCreationInputTokens = _toInt(
+      usage['cache_creation_input_tokens'] ?? usage['cacheCreationInputTokens'],
+    );
 
     final String? model = message['model'] as String?;
 
@@ -890,6 +896,7 @@ class AnthropicLlm extends BaseLlm {
         'candidates_token_count': outputTokens,
         'total_token_count': inputTokens + outputTokens,
       },
+      cacheCreationTokenCount: cacheCreationInputTokens,
       finishReason: toGoogleFinishReason(message['stop_reason'] as String?),
       modelVersion: model,
     );
@@ -1134,6 +1141,7 @@ class AnthropicLlm extends BaseLlm {
     redactedThinkingBlocks = <int, _AnthropicRedactedThinkingAccumulator>{};
     int inputTokens = 0;
     int outputTokens = 0;
+    int cacheCreationInputTokens = 0;
     String? finishReason;
     String? modelVersion;
 
@@ -1145,6 +1153,12 @@ class AnthropicLlm extends BaseLlm {
           final Map<String, Object?> usage = _mapOf(message['usage']);
           inputTokens = _intValue(usage['input_tokens']);
           outputTokens = _intValue(usage['output_tokens']);
+          cacheCreationInputTokens =
+              _toInt(
+                usage['cache_creation_input_tokens'] ??
+                    usage['cacheCreationInputTokens'],
+              ) ??
+              0;
           modelVersion = message['model'] as String?;
           break;
         case 'content_block_start':
@@ -1248,6 +1262,13 @@ class AnthropicLlm extends BaseLlm {
           if (deltaOutput > 0) {
             outputTokens = deltaOutput;
           }
+          final int? deltaCacheCreation = _toInt(
+            usage['cache_creation_input_tokens'] ??
+                usage['cacheCreationInputTokens'],
+          );
+          if (deltaCacheCreation != null) {
+            cacheCreationInputTokens = deltaCacheCreation;
+          }
           break;
         case 'message_stop':
           break;
@@ -1308,6 +1329,7 @@ class AnthropicLlm extends BaseLlm {
         'candidates_token_count': outputTokens,
         'total_token_count': inputTokens + outputTokens,
       },
+      cacheCreationTokenCount: cacheCreationInputTokens,
       finishReason: finishReason,
       partial: false,
       turnComplete: true,
@@ -1712,6 +1734,38 @@ String _fallbackContentBlockText(Map<String, Object?> block) {
   } catch (_) {
     return 'Unsupported anthropic content block: $block';
   }
+}
+
+bool _isTruthy(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  if (value is String) {
+    return value.isNotEmpty;
+  }
+  if (value is Iterable) {
+    return value.isNotEmpty;
+  }
+  if (value is Map) {
+    return value.isNotEmpty;
+  }
+  return value != null;
+}
+
+int? _toInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
 }
 
 /// Backward-compatible alias for [AnthropicLlm].

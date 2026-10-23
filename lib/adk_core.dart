@@ -93,6 +93,7 @@ export 'src/runners/runner.dart';
 
 export 'src/sessions/base_session_service.dart';
 export 'src/sessions/in_memory_session_service.dart';
+export 'src/sessions/mongodb_session_service.dart';
 export 'src/sessions/schemas/v1.dart';
 export 'src/sessions/schemas/shared.dart';
 export 'src/sessions/session.dart';

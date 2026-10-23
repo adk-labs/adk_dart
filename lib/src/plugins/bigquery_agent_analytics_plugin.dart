@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import '../agents/base_agent.dart';
 import '../agents/callback_context.dart';
 import '../agents/invocation_context.dart';
+import '../agents/llm/task/finish_task_tool.dart';
+import '../agents/llm_agent.dart';
 import '../agents/remote_a2a_agent.dart';
 import '../events/event.dart';
 import '../models/cache_metadata.dart';
@@ -102,6 +104,46 @@ typedef BigQueryGcsUploadProvider =
 typedef BigQueryAnalyticsViewExecutor =
     Future<void> Function(List<String> statements);
 
+/// Snapshot of dropped or degraded analytics event counts.
+class BigQueryDropStats {
+  /// Creates a drop statistics snapshot.
+  const BigQueryDropStats({
+    this.queueFull = 0,
+    this.writeFailed = 0,
+    this.shutdownDropped = 0,
+    this.formatFailed = 0,
+    this.gcsUploadFailed = 0,
+  });
+
+  /// Events dropped because the internal queue was at capacity.
+  final int queueFull;
+
+  /// Events dropped because writing to the BigQuery sink failed.
+  final int writeFailed;
+
+  /// Events dropped because the plugin was shutting down.
+  final int shutdownDropped;
+
+  /// Events whose content formatting failed and fell back to `null`.
+  final int formatFailed;
+
+  /// Multimodal or oversized text parts whose GCS offload failed.
+  final int gcsUploadFailed;
+
+  /// Total events dropped from BigQuery delivery.
+  int get total => queueFull + writeFailed + shutdownDropped;
+
+  /// Serializes this snapshot as a JSON-compatible map.
+  Map<String, int> toJson() => <String, int>{
+    'queue_full': queueFull,
+    'write_failed': writeFailed,
+    'shutdown_dropped': shutdownDropped,
+    'format_failed': formatFailed,
+    'gcs_upload_failed': gcsUploadFailed,
+    'total': total,
+  };
+}
+
 /// Configuration for [BigQueryAgentAnalyticsPlugin].
 class BigQueryLoggerConfig {
   /// Creates a BigQuery logging configuration.
@@ -121,11 +163,13 @@ class BigQueryLoggerConfig {
     this.contentFormatter,
     this.gcsBucketName,
     this.gcsUploadProvider,
+    this.gcsUploadTimeout = const Duration(seconds: 10),
     this.connectionId,
     this.logSessionMetadata = true,
     Map<String, Object?>? customTags,
     this.autoSchemaUpgrade = true,
     this.createViews = true,
+    this.exactlyOnceDelivery = false,
     Set<String>? finalResponseToolNames,
     this.createEvalViews = false,
     this.evalViewMode = 'full',
@@ -185,6 +229,10 @@ class BigQueryLoggerConfig {
   /// Optional uploader used when [gcsBucketName] is configured.
   BigQueryGcsUploadProvider? gcsUploadProvider;
 
+  /// Timeout applied to each GCS offload upload before pausing uploads for one
+  /// cooldown window.
+  Duration gcsUploadTimeout;
+
   /// Optional BigQuery connection identifier for external integrations.
   String? connectionId;
 
@@ -199,6 +247,9 @@ class BigQueryLoggerConfig {
 
   /// Whether per-event analytics views should be created.
   bool createViews;
+
+  /// Whether deterministic row `insertId` values are used for deduplication.
+  bool exactlyOnceDelivery;
 
   /// Tool names whose successful completion carries the agent's final answer.
   /// When a completed tool's name is in this set, its call args are logged as
@@ -514,11 +565,35 @@ class _GcsJsonUploadProvider {
 }
 
 class _SpanRecord {
-  _SpanRecord({required this.spanId, required this.startMicros});
+  _SpanRecord({
+    required this.spanId,
+    required this.startMicros,
+    this.name = '',
+    this.agentName,
+    this.isLlmAgent = false,
+    List<String>? childAgentNames,
+  }) : childAgentNames = childAgentNames ?? const <String>[];
 
   final String spanId;
   final int startMicros;
+  final String name;
+  final String? agentName;
+  final bool isLlmAgent;
+  final List<String> childAgentNames;
   int? firstTokenMicros;
+  bool taskDelegated = false;
+}
+
+class _CompletedInvocationTrace {
+  _CompletedInvocationTrace({
+    required this.traceId,
+    required this.rootSpanId,
+    required this.rootAgentName,
+  });
+
+  final String traceId;
+  final String? rootSpanId;
+  final String? rootAgentName;
 }
 
 class _TracePair {
@@ -538,22 +613,29 @@ class _PopResult {
 
 /// Tracks trace and span state across callback boundaries.
 class _TraceManager {
+  static const int maxCompletedInvocations = 1024;
   static final Map<String, List<_SpanRecord>> _spanRecordsByInvocation =
       <String, List<_SpanRecord>>{};
   static final Map<String, String> _rootAgentNameByInvocation =
       <String, String>{};
+  static final Map<String, String> _rootSpanIdByInvocation = <String, String>{};
+  static final Map<String, _CompletedInvocationTrace> _completedInvocations =
+      <String, _CompletedInvocationTrace>{};
   static final Random _random = Random();
 
   /// Initializes trace state for an invocation if missing.
   static void initTrace(CallbackContext callbackContext) {
+    final String invocationId = callbackContext.invocationId;
+    _completedInvocations.remove(invocationId);
     _spanRecordsByInvocation.putIfAbsent(
-      callbackContext.invocationId,
+      invocationId,
       () => <_SpanRecord>[],
     );
     _rootAgentNameByInvocation.putIfAbsent(
-      callbackContext.invocationId,
+      invocationId,
       () => callbackContext.invocationContext.agent.rootAgent.name,
     );
+    _rootSpanIdByInvocation.putIfAbsent(invocationId, _newSpanId);
   }
 
   /// The trace identifier for the current invocation.
@@ -562,35 +644,153 @@ class _TraceManager {
   }
 
   /// Pushes a new span and returns its identifier.
-  static String pushSpan(CallbackContext callbackContext, String spanName) {
+  static String pushSpan(
+    CallbackContext callbackContext,
+    String spanName, {
+    BaseAgent? agent,
+  }) {
+    final String invocationId = callbackContext.invocationId;
+    final _CompletedInvocationTrace? completed =
+        _completedInvocations[invocationId];
+    if (completed != null) {
+      // Late callback after afterRunCallback: do not resurrect active tracking,
+      // but push onto the transient stack seeded with the completed root span.
+      final List<_SpanRecord> stack = _spanRecordsByInvocation.putIfAbsent(
+        invocationId,
+        () => <_SpanRecord>[
+          if (completed.rootSpanId != null)
+            _SpanRecord(
+              spanId: completed.rootSpanId!,
+              startMicros: DateTime.now().microsecondsSinceEpoch,
+              name: 'invocation',
+            ),
+        ],
+      );
+      final String spanId = _newSpanId();
+      stack.add(
+        _SpanRecord(
+          spanId: spanId,
+          startMicros: DateTime.now().microsecondsSinceEpoch,
+          name: spanName,
+          agentName: agent?.name,
+          isLlmAgent: agent is LlmAgent,
+          childAgentNames: agent == null
+              ? const <String>[]
+              : agent.subAgents
+                    .map((BaseAgent sub) => sub.name)
+                    .toList(growable: false),
+        ),
+      );
+      return spanId;
+    }
+
     initTrace(callbackContext);
 
-    final String spanId = _newSpanId();
     final List<_SpanRecord> stack = _spanRecordsByInvocation.putIfAbsent(
-      callbackContext.invocationId,
+      invocationId,
       () => <_SpanRecord>[],
     );
+    if (spanName == 'agent' && agent != null && stack.isNotEmpty) {
+      // Retire a prior activation of the same LLM agent that was interrupted
+      // by task delegation when control returns after finish_task.
+      for (int i = stack.length - 1; i >= 0; i -= 1) {
+        final _SpanRecord record = stack[i];
+        if (record.name == 'agent' &&
+            record.agentName == agent.name &&
+            record.taskDelegated) {
+          stack.removeRange(i, stack.length);
+          break;
+        }
+      }
+    }
+
+    final String spanId = _newSpanId();
     stack.add(
       _SpanRecord(
         spanId: spanId,
         startMicros: DateTime.now().microsecondsSinceEpoch,
+        name: spanName,
+        agentName: agent?.name,
+        isLlmAgent: agent is LlmAgent,
+        childAgentNames: agent == null
+            ? const <String>[]
+            : agent.subAgents
+                  .map((BaseAgent sub) => sub.name)
+                  .toList(growable: false),
       ),
     );
+    _rootSpanIdByInvocation[invocationId] ??= spanId;
     return spanId;
+  }
+
+  /// Pops a task-mode agent span when `finish_task` completes and marks only a
+  /// direct LLM parent that configured the task sub-agent as `taskDelegated`.
+  static _PopResult popTaskAgentSpan(
+    CallbackContext callbackContext,
+    String taskAgentName,
+  ) {
+    final List<_SpanRecord>? stack =
+        _spanRecordsByInvocation[callbackContext.invocationId];
+    if (stack == null || stack.isEmpty) {
+      return _PopResult();
+    }
+    int taskIndex = -1;
+    for (int i = stack.length - 1; i >= 0; i -= 1) {
+      if (stack[i].name == 'agent' && stack[i].agentName == taskAgentName) {
+        taskIndex = i;
+        break;
+      }
+    }
+    if (taskIndex < 0) {
+      return _PopResult();
+    }
+    final _SpanRecord record = stack.removeAt(taskIndex);
+    final String? parentSpanId = taskIndex > 0
+        ? stack[taskIndex - 1].spanId
+        : null;
+    if (parentSpanId != null) {
+      for (int j = 0; j < stack.length; j += 1) {
+        final _SpanRecord candidate = stack[j];
+        if (candidate.spanId == parentSpanId &&
+            candidate.name == 'agent' &&
+            candidate.isLlmAgent &&
+            candidate.childAgentNames.contains(taskAgentName)) {
+          candidate.taskDelegated = true;
+          break;
+        }
+      }
+    }
+    final int nowMicros = DateTime.now().microsecondsSinceEpoch;
+    final int durationMs = ((nowMicros - record.startMicros) / 1000).round();
+    return _PopResult(
+      spanId: record.spanId,
+      parentSpanId: parentSpanId,
+      durationMs: durationMs,
+    );
   }
 
   /// Pops the current span and returns timing information.
   static _PopResult popSpan(CallbackContext callbackContext) {
-    final List<_SpanRecord>? stack =
-        _spanRecordsByInvocation[callbackContext.invocationId];
+    final String invocationId = callbackContext.invocationId;
+    final List<_SpanRecord>? stack = _spanRecordsByInvocation[invocationId];
     if (stack == null || stack.isEmpty) {
+      final _CompletedInvocationTrace? completed =
+          _completedInvocations[invocationId];
+      if (completed != null) {
+        return _PopResult(
+          spanId: completed.rootSpanId,
+          parentSpanId: null,
+        );
+      }
       return _PopResult();
     }
 
     final _SpanRecord record = stack.removeLast();
     final int nowMicros = DateTime.now().microsecondsSinceEpoch;
     final int durationMs = ((nowMicros - record.startMicros) / 1000).round();
-    final String? parentSpanId = stack.isEmpty ? null : stack.last.spanId;
+    final String? parentSpanId = stack.isEmpty
+        ? _completedInvocations[invocationId]?.rootSpanId
+        : stack.last.spanId;
     return _PopResult(
       spanId: record.spanId,
       parentSpanId: parentSpanId,
@@ -600,24 +800,32 @@ class _TraceManager {
 
   /// The current span and parent span identifiers.
   static _TracePair getCurrentSpanAndParent(CallbackContext callbackContext) {
-    final List<_SpanRecord>? stack =
-        _spanRecordsByInvocation[callbackContext.invocationId];
+    final String invocationId = callbackContext.invocationId;
+    final List<_SpanRecord>? stack = _spanRecordsByInvocation[invocationId];
     if (stack == null || stack.isEmpty) {
+      final _CompletedInvocationTrace? completed =
+          _completedInvocations[invocationId];
+      if (completed != null) {
+        return _TracePair(spanId: completed.rootSpanId, parentSpanId: null);
+      }
       return _TracePair();
     }
     final String spanId = stack.last.spanId;
     final String? parentSpanId = stack.length > 1
         ? stack[stack.length - 2].spanId
-        : null;
-    return _TracePair(spanId: spanId, parentSpanId: parentSpanId);
+        : _completedInvocations[invocationId]?.rootSpanId;
+    return _TracePair(
+      spanId: spanId,
+      parentSpanId: parentSpanId == spanId ? null : parentSpanId,
+    );
   }
 
   /// The current span identifier, if present.
   static String? getCurrentSpanId(CallbackContext callbackContext) {
-    final List<_SpanRecord>? stack =
-        _spanRecordsByInvocation[callbackContext.invocationId];
+    final String invocationId = callbackContext.invocationId;
+    final List<_SpanRecord>? stack = _spanRecordsByInvocation[invocationId];
     if (stack == null || stack.isEmpty) {
-      return null;
+      return _completedInvocations[invocationId]?.rootSpanId;
     }
     return stack.last.spanId;
   }
@@ -659,13 +867,34 @@ class _TraceManager {
 
   /// The root agent name associated with the current invocation.
   static String? getRootAgentName(CallbackContext callbackContext) {
-    return _rootAgentNameByInvocation[callbackContext.invocationId];
+    final String invocationId = callbackContext.invocationId;
+    return _rootAgentNameByInvocation[invocationId] ??
+        _completedInvocations[invocationId]?.rootAgentName;
   }
 
-  /// Clears trace state for an invocation.
+  /// Archives and clears active trace state for a completed invocation.
   static void clear(CallbackContext callbackContext) {
-    _spanRecordsByInvocation.remove(callbackContext.invocationId);
-    _rootAgentNameByInvocation.remove(callbackContext.invocationId);
+    final String invocationId = callbackContext.invocationId;
+    final List<_SpanRecord>? stack = _spanRecordsByInvocation.remove(
+      invocationId,
+    );
+    final String rootAgentName =
+        _rootAgentNameByInvocation.remove(invocationId) ??
+        callbackContext.invocationContext.agent.rootAgent.name;
+    final String? rootSpanId =
+        _rootSpanIdByInvocation.remove(invocationId) ??
+        (stack != null && stack.isNotEmpty ? stack.first.spanId : null);
+    if (invocationId.isNotEmpty) {
+      _completedInvocations.remove(invocationId);
+      _completedInvocations[invocationId] = _CompletedInvocationTrace(
+        traceId: invocationId,
+        rootSpanId: rootSpanId,
+        rootAgentName: rootAgentName,
+      );
+      while (_completedInvocations.length > maxCompletedInvocations) {
+        _completedInvocations.remove(_completedInvocations.keys.first);
+      }
+    }
   }
 
   static _SpanRecord? _findRecord(
@@ -771,10 +1000,25 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   bool _started = false;
   bool _isShuttingDown = false;
   bool _viewsCreated = false;
+  final int _queueFullCount = 0;
+  int _writeFailedCount = 0;
+  int _shutdownDroppedCount = 0;
+  int _formatFailedCount = 0;
+  int _gcsUploadFailedCount = 0;
+  DateTime? _gcsCooldownUntil;
   final BigQueryEventSink _sink;
   final BigQueryAnalyticsViewExecutor? _analyticsViewExecutor;
   BigQueryGcsUploadProvider? _gcsUploadProvider;
   http.Client? _ownedGcsHttpClient;
+
+  /// Current snapshot of dropped or degraded analytics event counts.
+  BigQueryDropStats get dropStats => BigQueryDropStats(
+    queueFull: _queueFullCount,
+    writeFailed: _writeFailedCount,
+    shutdownDropped: _shutdownDroppedCount,
+    formatFailed: _formatFailedCount,
+    gcsUploadFailed: _gcsUploadFailedCount,
+  );
 
   /// The schema version stored in each event row.
   String get schemaVersion => _schemaVersion;
@@ -832,20 +1076,54 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       return null;
     }
     final BigQueryGcsUploadProvider? configured = config.gcsUploadProvider;
-    if (configured != null) {
-      return configured;
-    }
-
-    final http.Client client =
-        httpClient ?? (_ownedGcsHttpClient = http.Client());
-    final BigQueryAccessTokenProvider tokenProvider = accessToken == null
-        ? accessTokenProvider ?? _defaultBigQueryAccessTokenProvider
-        : () async => accessToken;
-    return _GcsJsonUploadProvider(
-      bucketName: bucketName,
-      httpClient: client,
-      accessTokenProvider: tokenProvider,
-    ).uploadContent;
+    final BigQueryGcsUploadProvider rawProvider =
+        configured ??
+        _GcsJsonUploadProvider(
+          bucketName: bucketName,
+          httpClient:
+              httpClient ?? (_ownedGcsHttpClient = http.Client()),
+          accessTokenProvider: accessToken == null
+              ? accessTokenProvider ?? _defaultBigQueryAccessTokenProvider
+              : () async => accessToken,
+        ).uploadContent;
+    return ({
+      required List<int> data,
+      required String contentType,
+      required String path,
+    }) async {
+      final DateTime now = DateTime.now();
+      if (_gcsCooldownUntil != null && now.isBefore(_gcsCooldownUntil!)) {
+        _gcsUploadFailedCount += 1;
+        throw TimeoutException(
+          'GCS upload paused during cooldown window',
+          config.gcsUploadTimeout,
+        );
+      }
+      final Duration timeout = config.gcsUploadTimeout;
+      try {
+        if (timeout > Duration.zero) {
+          return await rawProvider(
+            data: data,
+            contentType: contentType,
+            path: path,
+          ).timeout(timeout);
+        }
+        return await rawProvider(
+          data: data,
+          contentType: contentType,
+          path: path,
+        );
+      } on TimeoutException {
+        _gcsUploadFailedCount += 1;
+        if (timeout > Duration.zero) {
+          _gcsCooldownUntil = DateTime.now().add(timeout);
+        }
+        rethrow;
+      } catch (_) {
+        _gcsUploadFailedCount += 1;
+        rethrow;
+      }
+    };
   }
 
   /// Flushes and closes the sink.
@@ -1106,6 +1384,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
 
         final FunctionResponse? functionResponse = part.functionResponse;
         if (functionResponse != null) {
+          if (functionResponse.name == finishTaskToolName &&
+              isFinishTaskTerminalFr(event)) {
+            _TraceManager.popTaskAgentSpan(callbackContext, event.author);
+          }
           final String? hitlEvent = _hitlEventMap[functionResponse.name];
           if (hitlEvent != null) {
             final _TruncateResult result = _recursiveSmartTruncate(
@@ -1203,7 +1485,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   }) async {
     return _safeCallback<Content?>('beforeAgentCallback', () async {
       _TraceManager.initTrace(callbackContext);
-      _TraceManager.pushSpan(callbackContext, 'agent');
+      _TraceManager.pushSpan(callbackContext, 'agent', agent: agent);
       await _logEvent(
         'AGENT_STARTING',
         callbackContext,
@@ -1586,7 +1868,11 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     bool isTruncated = false,
     EventData? eventData,
   }) async {
-    if (!config.enabled || _isShuttingDown) {
+    if (!config.enabled) {
+      return;
+    }
+    if (_isShuttingDown) {
+      _shutdownDroppedCount += 1;
       return;
     }
     if (config.eventDenylist?.contains(eventType) == true) {
@@ -1608,6 +1894,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       try {
         normalizedContent = formatter(normalizedContent, eventType);
       } catch (error) {
+        _formatFailedCount += 1;
         stderr.writeln('Content formatter failed: $error');
         // Fail closed so a masking/formatting error cannot leak raw content.
         normalizedContent = null;
@@ -1679,7 +1966,12 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       'location': location,
     };
 
-    await _sink.append(row);
+    try {
+      await _sink.append(row);
+    } catch (_) {
+      _writeFailedCount += 1;
+      rethrow;
+    }
   }
 
   List<String> _buildAnalyticsViewStatements() {
@@ -1860,6 +2152,18 @@ WHERE event_type = '$escapedEventType'
         case 'create_views':
           if (entry.value is bool) {
             config.createViews = entry.value as bool;
+          }
+        case 'exactly_once_delivery':
+          if (entry.value is bool) {
+            config.exactlyOnceDelivery = entry.value as bool;
+          }
+        case 'gcs_upload_timeout':
+          if (entry.value is Duration) {
+            config.gcsUploadTimeout = entry.value as Duration;
+          } else if (entry.value is num) {
+            config.gcsUploadTimeout = Duration(
+              milliseconds: ((entry.value as num).toDouble() * 1000).round(),
+            );
           }
         case 'create_eval_views':
           if (entry.value is bool) {

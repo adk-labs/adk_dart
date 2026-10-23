@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.23
+
+- Bumped package version to `2026.10.23`.
+- Upgraded dependencies (`http: ^1.6.0`, `lints: ^6.1.0`, `test: ^1.33.0`) and synced compatibility with `adk_dart` `2026.10.23` release.
+
 ## 2026.10.22
 
 - Bumped package version to `2026.10.22`.

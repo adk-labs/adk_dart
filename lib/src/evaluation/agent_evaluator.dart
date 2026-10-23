@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../agents/base_agent.dart';
+import 'base_eval_service.dart';
 import 'eval_case.dart';
 import 'eval_config.dart';
 import 'eval_metrics.dart';
@@ -139,6 +140,37 @@ class AgentEvaluator {
     final String testFolder = file.parent.path;
     final String configPath = '$testFolder/test_config.json';
     return getEvaluationCriteriaOrDefault(configPath);
+  }
+
+  /// Runs [inferenceRequest] against [evalService] for [repeatNum] repetitions
+  /// and stamps each returned [InferenceResult] with its zero-based
+  /// `repetitionIndex`.
+  static Future<List<InferenceResult>> generateInferences({
+    required BaseEvalService evalService,
+    required InferenceRequest inferenceRequest,
+    int repeatNum = numRuns,
+  }) async {
+    final List<InferenceResult> inferenceResults = <InferenceResult>[];
+    for (int i = 0; i < repeatNum; i += 1) {
+      await for (final InferenceResult inference
+          in evalService.performInference(inferenceRequest)) {
+        inferenceResults.add(
+          InferenceResult(
+            appName: inference.appName,
+            evalCaseId: inference.evalCaseId,
+            evalSetId: inference.evalSetId,
+            userInput: inference.userInput,
+            inferences: inference.inferences,
+            responseText: inference.responseText,
+            sessionId: inference.sessionId,
+            status: inference.status,
+            errorMessage: inference.errorMessage,
+            repetitionIndex: i,
+          ),
+        );
+      }
+    }
+    return inferenceResults;
   }
 
   /// Evaluates all discovered eval set files under [evalDatasetFilePathOrDir].

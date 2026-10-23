@@ -10,6 +10,7 @@ import '../agents/live_request_queue.dart';
 import '../agents/llm/task/finish_task_tool.dart';
 import '../agents/llm_agent.dart';
 import '../agents/managed_agent.dart';
+import '../agents/remote_a2a_agent.dart';
 import '../agents/run_config.dart';
 import '../apps/app.dart';
 import '../apps/compaction.dart' as app_compaction;
@@ -21,6 +22,7 @@ import '../events/abort_events.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../events/internal_metadata.dart';
+import '../events/interrupts.dart';
 import '../events/rewind_events.dart';
 import '../flows/llm_flows/agent_transfer.dart';
 import '../flows/llm_flows/persist_barrier.dart';
@@ -35,18 +37,63 @@ import '../tools/node_tool.dart';
 import '../types/content.dart';
 import '../workflow/workflow.dart';
 
+const Set<String> _llmResponseErrorCodes = <String>{
+  'FINISH_REASON_UNSPECIFIED',
+  'STOP',
+  'MAX_TOKENS',
+  'SAFETY',
+  'RECITATION',
+  'LANGUAGE',
+  'OTHER',
+  'BLOCKLIST',
+  'PROHIBITED_CONTENT',
+  'SPII',
+  'MALFORMED_FUNCTION_CALL',
+  'IMAGE_SAFETY',
+  'UNEXPECTED_TOOL_CALL',
+  'IMAGE_PROHIBITED_CONTENT',
+  'NO_IMAGE',
+  'IMAGE_RECITATION',
+  'IMAGE_OTHER',
+  'BLOCKED_REASON_UNSPECIFIED',
+  'MODEL_ARMOR',
+  'JAILBREAK',
+};
+
 bool _isFinishTaskTerminalFr(Event event) {
   for (final FunctionResponse fr in event.getFunctionResponses()) {
     if (fr.name == finishTaskToolName) {
       final Object? result = fr.response['result'];
-      return result == finishTaskSuccessResult || result == 'Task failed.';
+      return result == finishTaskSuccessResult ||
+          result == finishTaskErrorResult ||
+          result == 'Task failed.';
     }
   }
   return false;
 }
 
+bool _isTerminalEvent(Event event) {
+  if (event.hasOutput) {
+    return true;
+  }
+  if ((event.nodeInfo.messageAsOutput ?? false) && event.content != null) {
+    return true;
+  }
+  if (event.actions.route != null) {
+    return true;
+  }
+  if (event.errorCode != null) {
+    return true;
+  }
+  if (isInterruptEvent(event)) {
+    return true;
+  }
+  return false;
+}
+
 Set<(String, String)> _findFinishedScopeRuns(List<Event> liveEvents) {
-  final Set<(String, String)> finishedRuns = <(String, String)>{};
+  final Set<(String, String)> permanentlyFinishedRuns = <(String, String)>{};
+  final Set<(String, String)> completedOrErroredRuns = <(String, String)>{};
   final Set<String> abortedInvocations = <String>{
     for (final Event event in liveEvents)
       if (isAbortEvent(event)) event.invocationId,
@@ -59,12 +106,35 @@ Set<(String, String)> _findFinishedScopeRuns(List<Event> liveEvents) {
     if (scope == null || scope.isEmpty) {
       continue;
     }
-    if (abortedInvocations.contains(event.invocationId) ||
-        _isFinishTaskTerminalFr(event)) {
-      finishedRuns.add((scope, event.invocationId));
+    final (String, String) runKey = (scope, event.invocationId);
+    if (abortedInvocations.contains(event.invocationId)) {
+      permanentlyFinishedRuns.add(runKey);
+      continue;
+    }
+    if (_isFinishTaskTerminalFr(event)) {
+      permanentlyFinishedRuns.add(runKey);
+      continue;
+    }
+
+    final bool hasTerminalNodeOutcome =
+        event.hasOutput ||
+        (event.nodeInfo.messageAsOutput ?? false) ||
+        event.actions.route != null ||
+        (event.finishReason == null &&
+            !_llmResponseErrorCodes.contains(event.errorCode));
+    if (_isTerminalEvent(event) &&
+        !isInterruptEvent(event) &&
+        hasTerminalNodeOutcome) {
+      completedOrErroredRuns.add(runKey);
+    } else if ((event.content != null && event.partial != true) ||
+        _isTerminalEvent(event)) {
+      completedOrErroredRuns.remove(runKey);
     }
   }
-  return finishedRuns;
+  return < (String, String)>{
+    ...permanentlyFinishedRuns,
+    ...completedOrErroredRuns,
+  };
 }
 
 /// Finds the active paused task scope `(isolationScope, invocationId)` in [session], if any.
@@ -417,24 +487,17 @@ class Runner {
         yield event;
       }
 
-      if (app != null && app!.eventsCompactionConfig != null) {
+      if (context.eventsCompactionConfig != null) {
         // Compaction runs on the success path. A failure here is an unhandled
         // runner error, so notify on_run_error_callback once and re-raise.
-        // Compaction yields its event instead of appending it; the runner is
-        // the single append site so persistence stays at the runtime's
-        // synchronization point.
         try {
-          await for (final Event compactionEvent
-              in app_compaction.runCompactionForSlidingWindow(
-                app: app!,
-                session: context.session,
-                sessionService: sessionService,
-              )) {
-            await sessionService.appendEvent(
-              session: context.session,
-              event: compactionEvent,
-            );
-          }
+          await app_compaction.runCompactionForSlidingWindowConfig(
+            config: context.eventsCompactionConfig,
+            session: context.session,
+            sessionService: sessionService,
+            agent: agent,
+            skipTokenCompaction: context.tokenCompactionChecked,
+          );
         } catch (error) {
           await _notifyRunError(context.pluginManager, context, error);
           rethrow;
@@ -1386,6 +1449,9 @@ class Runner {
       interrupted: modifiedEvent.interrupted ?? originalEvent.interrupted,
       customMetadata: effectiveMetadata,
       usageMetadata: modifiedEvent.usageMetadata ?? originalEvent.usageMetadata,
+      cacheCreationTokenCount:
+          modifiedEvent.cacheCreationTokenCount ??
+          originalEvent.cacheCreationTokenCount,
       inputTranscription:
           modifiedEvent.inputTranscription ?? originalEvent.inputTranscription,
       outputTranscription:
@@ -1419,6 +1485,7 @@ class Runner {
       final String? mode = switch (current) {
         LlmAgent(:final String? mode) => mode,
         ManagedAgent(:final String? mode) => mode,
+        RemoteA2aAgent(:final String? mode) => mode,
         _ => null,
       };
       if (mode == 'task' || mode == 'single_turn') {

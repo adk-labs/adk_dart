@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.10.23
+
+- Bumped package version to `2026.10.23` and dependency `adk_dart: ^2026.10.23`.
+- Re-exported `MongoDbSessionService`, `MultiRunAggregationMethod`, `EvalCaseResultMultiRunAggregator`, `SqliteMemoryService`, `ToolCallIntegrityPlugin`, and `AntigravityAgent` via `package:adk_dart/adk_core.dart`.
+- Upgraded `web` dependency to `^1.1.2`.
+
 ## 2026.10.22
 
 - Bumped package version to `2026.10.22` and dependency `adk_dart: ^2026.10.22`.

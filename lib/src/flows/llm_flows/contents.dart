@@ -148,7 +148,10 @@ List<Content> getContents({
 
   List<Event> eventsToProcess;
   if (_hasCompactionEvents(rawFiltered)) {
-    eventsToProcess = _processCompactionEvents(rawFiltered);
+    eventsToProcess = _processCompactionEvents(
+      rawFiltered,
+      agentName: agentName,
+    );
     // Compaction may have removed a function_call whose response survives
     // (e.g. a long-running call resumed after it was compacted); restore it so
     // the call/response pairing is intact.
@@ -160,6 +163,7 @@ List<Content> getContents({
     eventsToProcess = rawFiltered;
   }
 
+  eventsToProcess = _mergeTranscriptions(eventsToProcess);
   eventsToProcess = _dropOrphanedFunctionResponses(eventsToProcess);
   eventsToProcess = _dropOrphanedFunctionCalls(eventsToProcess);
 
@@ -241,24 +245,39 @@ List<Content> getCurrentTurnContents({
       }
     }
 
-    if (unmatchedResponseIds.isEmpty &&
-        shouldIncludeEventInContext(
+    if (unmatchedResponseIds.isEmpty) {
+      final _TranscriptionKind? kind = _transcriptionKind(event);
+      int start = -1;
+      if (kind != null) {
+        start = _spokenTurnStart(
           currentBranch,
-          event,
+          scopedEvents,
+          agentName,
+          i,
+          kind,
           isolationScope: isolationScope,
-        ) &&
-        (event.author == 'user' || _isOtherAgentReply(agentName, event)) &&
-        !_isDirectTransfer(event)) {
-      return getContents(
-        currentBranch: currentBranch,
-        events: scopedEvents.sublist(i),
-        agentName: agentName,
-        preserveFunctionCallIds: preserveFunctionCallIds,
-        isolationScope: isolationScope,
-        isSingleTurn: isSingleTurn,
-        userContent: userContent,
-        nodePath: nodePath,
-      );
+        );
+      } else if (shouldIncludeEventInContext(
+            currentBranch,
+            event,
+            isolationScope: isolationScope,
+          ) &&
+          (event.author == 'user' || _isOtherAgentReply(agentName, event)) &&
+          !_isDirectTransfer(event)) {
+        start = i;
+      }
+      if (start >= 0) {
+        return getContents(
+          currentBranch: currentBranch,
+          events: scopedEvents.sublist(start),
+          agentName: agentName,
+          preserveFunctionCallIds: preserveFunctionCallIds,
+          isolationScope: isolationScope,
+          isSingleTurn: isSingleTurn,
+          userContent: userContent,
+          nodePath: nodePath,
+        );
+      }
     }
   }
   return const <Content>[];
@@ -414,11 +433,146 @@ bool containsEmptyContent(Event event) {
     return false;
   }
 
+  return !_hasVisibleContent(event) && _transcriptionKind(event) == null;
+}
+
+bool _hasVisibleContent(Event event) {
   final Content? content = event.content;
-  if (content == null || content.role == null || content.parts.isEmpty) {
-    return true;
+  if (content == null ||
+      content.role == null ||
+      content.role!.isEmpty ||
+      content.parts.isEmpty) {
+    return false;
   }
-  return content.parts.every(_isPartInvisible);
+  return !content.parts.every(_isPartInvisible);
+}
+
+enum _TranscriptionKind {
+  input,
+  output;
+
+  String text(Event event) {
+    final Object? raw = switch (this) {
+      _TranscriptionKind.input => event.inputTranscription,
+      _TranscriptionKind.output => event.outputTranscription,
+    };
+    return _extractTranscriptionText(raw);
+  }
+
+  Event toTextEvent(Event event, String text) {
+    return switch (this) {
+      _TranscriptionKind.input => event.copyWith(
+        author: 'user',
+        content: Content(role: 'user', parts: <Part>[Part.text(text)]),
+        inputTranscription: null,
+      ),
+      _TranscriptionKind.output => event.copyWith(
+        content: Content(role: 'model', parts: <Part>[Part.text(text)]),
+        outputTranscription: null,
+      ),
+    };
+  }
+}
+
+String _extractTranscriptionText(Object? transcription) {
+  if (transcription == null) {
+    return '';
+  }
+  if (transcription is Map) {
+    final Object? text = transcription['text'];
+    return text is String ? text : '';
+  }
+  if (transcription is String) {
+    return transcription;
+  }
+  try {
+    final Object? text = (transcription as dynamic).text;
+    return text is String ? text : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+_TranscriptionKind? _transcriptionKind(Event event) {
+  if (_hasVisibleContent(event)) {
+    return null;
+  }
+  if (_TranscriptionKind.input.text(event).isNotEmpty) {
+    return _TranscriptionKind.input;
+  }
+  if (_TranscriptionKind.output.text(event).isNotEmpty) {
+    return _TranscriptionKind.output;
+  }
+  return null;
+}
+
+bool _continuesRun(_TranscriptionKind kind, Event event, Event other) {
+  return _transcriptionKind(other) == kind &&
+      (kind == _TranscriptionKind.input || event.author == other.author);
+}
+
+int _spokenTurnStart(
+  String? currentBranch,
+  List<Event> events,
+  String agentName,
+  int end,
+  _TranscriptionKind kind, {
+  String? isolationScope,
+}) {
+  final Event event = events[end];
+  final bool startsTurn =
+      kind == _TranscriptionKind.input || _isOtherAgentReply(agentName, event);
+  if (!startsTurn ||
+      !shouldIncludeEventInContext(
+        currentBranch,
+        event,
+        isolationScope: isolationScope,
+      )) {
+    return -1;
+  }
+  int start = end;
+  bool blank = kind.text(event).trim().isEmpty;
+  for (int i = end - 1; i >= 0; i -= 1) {
+    if (!shouldIncludeEventInContext(
+      currentBranch,
+      events[i],
+      isolationScope: isolationScope,
+    )) {
+      continue;
+    }
+    if (!_continuesRun(kind, events[start], events[i])) {
+      break;
+    }
+    start = i;
+    blank = blank && kind.text(events[i]).trim().isEmpty;
+  }
+  return blank ? -1 : start;
+}
+
+List<Event> _mergeTranscriptions(List<Event> events) {
+  if (events.isEmpty) {
+    return events;
+  }
+  final List<Event> merged = <Event>[];
+  final StringBuffer text = StringBuffer();
+  for (int i = 0; i < events.length; i += 1) {
+    final Event event = events[i];
+    final _TranscriptionKind? kind = _transcriptionKind(event);
+    if (kind == null) {
+      merged.add(event);
+      continue;
+    }
+    text.write(kind.text(event));
+    if (i + 1 < events.length && _continuesRun(kind, event, events[i + 1])) {
+      continue;
+    }
+    final String runText = text.toString();
+    if (runText.trim().isNotEmpty) {
+      merged.add(kind.toTextEvent(event, runText));
+    }
+    text.clear();
+  }
+  return merged;
 }
 
 /// Whether [event] belongs to [invocationBranch] context.
@@ -527,8 +681,9 @@ int _bisectRight(List<double> sortedStarts, double value) {
 }
 
 List<(double, int, Event)> _processSingleScopeCompactionEvents(
-  List<(int, Event)> indexedEvents,
-) {
+  List<(int, Event)> indexedEvents, {
+  String agentName = '',
+}) {
   final List<(int, double, double)> compactionInfos =
       _getCompactionRangesForIndexedEvents(indexedEvents);
   final Set<int> retainedIndexes = <int>{
@@ -581,7 +736,7 @@ List<(double, int, Event)> _processSingleScopeCompactionEvents(
         Event(
           timestamp: end,
           invocationId: event.invocationId,
-          author: 'model',
+          author: agentName.isEmpty ? 'model' : agentName,
           branch: event.branch,
           isolationScope: event.isolationScope,
           content: compaction.compactedContent.copyWith(),
@@ -596,7 +751,10 @@ List<(double, int, Event)> _processSingleScopeCompactionEvents(
   return processed;
 }
 
-List<Event> _processCompactionEvents(List<Event> events) {
+List<Event> _processCompactionEvents(
+  List<Event> events, {
+  String agentName = '',
+}) {
   if (events.isEmpty) {
     return events;
   }
@@ -608,7 +766,7 @@ List<Event> _processCompactionEvents(List<Event> events) {
   if (singleScope) {
     processed = _processSingleScopeCompactionEvents(<(int, Event)>[
       for (int i = 0; i < events.length; i += 1) (i, events[i]),
-    ]);
+    ], agentName: agentName);
   } else {
     final Map<String?, List<(int, Event)>> partitions =
         <String?, List<(int, Event)>>{};
@@ -618,7 +776,7 @@ List<Event> _processCompactionEvents(List<Event> events) {
     }
     processed = <(double, int, Event)>[
       for (final List<(int, Event)> partition in partitions.values)
-        ..._processSingleScopeCompactionEvents(partition),
+        ..._processSingleScopeCompactionEvents(partition, agentName: agentName),
     ];
   }
 

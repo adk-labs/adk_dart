@@ -32,6 +32,7 @@ import 'invocation_context.dart';
 import 'llm/task/finish_task_tool.dart';
 import 'managed_agent.dart';
 import 'readonly_context.dart';
+import 'remote_a2a_agent.dart';
 
 /// Callback invoked before model generation.
 typedef BeforeModelCallback =
@@ -873,6 +874,8 @@ class LlmAgent extends BaseAgent {
           subAgentMode = 'chat';
         }
       } else if (subAgent is ManagedAgent) {
+        subAgentMode = subAgent.mode;
+      } else if (subAgent is RemoteA2aAgent) {
         subAgentMode = subAgent.mode;
       }
 

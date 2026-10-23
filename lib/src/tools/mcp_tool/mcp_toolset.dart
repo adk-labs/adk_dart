@@ -134,7 +134,11 @@ class McpToolset extends BaseToolset {
     }
 
     return tools
-        .where((BaseTool tool) => isToolSelected(tool, readonlyContext))
+        .where(
+          (BaseTool tool) =>
+              !mcpReservedToolNames.contains(tool.name) &&
+              isToolSelected(tool, readonlyContext),
+        )
         .toList(growable: false);
   }
 

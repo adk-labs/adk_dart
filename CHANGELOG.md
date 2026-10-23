@@ -1,3 +1,33 @@
+## 2026.10.23
+
+- **MongoDB Session Service (`lib/src/sessions/mongodb_session_service.dart`, `lib/src/integrations/mongodb/mongodb.dart`, `adk-python` `983383519`)**:
+  - Added `MongoDbSessionService`, `MongoSessionStore`, and `InMemoryMongoSessionStore` storing sessions, events, `app_states`, and `user_states` in separate collections with `app:` / `user:` / `temp:` state prefix routing, stale session revision checks, and cascading delete.
+  - Registered `FeatureName.mongodbSessionService` (`MONGODB_SESSION_SERVICE`) and added `warnFeatureUse` helper in `lib/src/features/_feature_registry.dart`.
+- **Multi-Run Evaluation & Aggregation (`lib/src/evaluation/`, `adk-python` `7f3517e43`)**:
+  - Added `MultiRunAggregationMethod` (`meanOverInvocations`, `meanOfRuns`, `minOverRuns`, `passRate`) in `lib/src/evaluation/multi_run_aggregation_methods.dart`.
+  - Added `EvalCaseResultMultiRunAggregator`, `AggregatedMetricResult`, `MultiRunEvalCaseResult`, and `MultiRunEvalSetResult` in `lib/src/evaluation/eval_case_result_multi_run_aggregator.dart`.
+  - Updated `EvalMetric`, `EvaluateConfig`, `LocalEvalService`, and `AgentEvaluator` to support multi-run evaluation and per-metric aggregation methods.
+- **Prompt Cache Creation Token Count & Anthropic MCP Error Propagation (`adk-python` `b89dda409`, `37b1ab3c2`)**:
+  - Added `cacheCreationTokenCount` on `LlmResponse` and `Event`, persisted in session schema `v0`, and extracted from Anthropic `cache_creation_input_tokens` and LiteLLM `cache_creation_input_tokens`.
+  - Propagated MCP tool error flag (`result['isError'] == true`) to Anthropic `tool_result` blocks as `'is_error': true` in `AnthropicLlm`.
+- **Gemini Client Options & Live Validation (`lib/src/models/google_llm.dart`, `adk-python` `fb197fa39`)**:
+  - Added `clientKwargs`, `buildAdkHttpOptions`, and `withAdkHttpOptions` on `Gemini` to merge ADK tracking headers without mutating caller options.
+  - Added validation in `Gemini.connect` rejecting `liveConnectConfig.httpOptions` with an `ArgumentError`.
+- **Compaction, Isolation Scopes, Remote A2A, Workflow & Live Audio (`adk-python` `933163849`, `471341f28`, `6c672404e`, `a9714eceb`, `9a158552`)**:
+  - Added per-session compaction lock (`(appName, userId, sessionId)`) in `lib/src/apps/compaction.dart` to prevent overlapping compaction windows.
+  - Treated `escalate` and error events (via `isScopeTerminalEvent`) as terminal outcomes for isolated task scopes in `Runner._findActiveTaskScope`.
+  - Added `mode` (`'chat'`, `'single_turn'`, `'task'`) to `RemoteA2aAgent` and emitted an error event when a remote A2A task ends in a non-completed state in `task` mode.
+  - Delegated `ParallelWorker` inner node `retryConfig` to per-item workers instead of retrying the entire fan-out batch.
+  - Converted live input/output transcription events into conversation context on replay and preserved compaction summary author in `contents.dart`.
+- **Cross-SDK Runtime & Plugin Parity (`adk-go`, `adk-java`, `adk-js`, `adk-kotlin`)**:
+  - Added `handleFunctionCallsLive` (`lib/src/flows/llm_flows/functions.dart`) supporting live `Stream` tool execution, background `Event` forwarding, `stop_streaming` cancellation, and duplicate streaming tool call deduplication (`0355356e`, `0ee2f30b`, `3f1afd0c`).
+  - Added `BigQueryDropStats`, `exactlyOnceDelivery`, `gcsUploadTimeout` with cooldown window bypass, bounded completed-invocation trace cache for late callbacks, and `popTaskAgentSpan` in `BigQueryAgentAnalyticsPlugin` (`4df7bdda`, `03e41177`, `331c9c57`, `03a62c3f`, `f7db1f4a`).
+  - Added `Event.nodeName` getter (`52f2be71`), `allowSelfTransfer: true` in `_postprocessLive` (`f4d6de4c`), multi-trigger and `dynamicAuthConfig` schema filtering in `ApplicationIntegrationToolset` (`70944fe4`), and `mcpReservedToolNames` filtering on cached tools in `McpToolset` (`509d69d6`).
+- **Full `adk-python` Ecosystem Module Parity (`99301fd`)**:
+  - Added `SqliteMemoryService` (`lib/src/memory/sqlite_memory_service.dart`), `ToolCallIntegrityPlugin` (`lib/src/plugins/tool_call_integrity_plugin.dart`), `KmsEncryptor` (`lib/src/auth/kms_encryptor.dart`), `GEPARootAgentOptimizer` (`lib/src/optimization/gepa_root_agent_optimizer.dart`), `ScenarioGenerator` (`lib/src/evaluation/vertex_ai_scenario_generation_facade.dart`), `CloudTtsLlm` (`lib/src/evaluation/simulation/cloud_tts_llm.dart`), `A2aClientInterceptor` (`lib/src/a2a/interceptors.dart`), `AntigravityAgent` (`lib/src/labs/antigravity/`), and integrations for `Firestore`, `Redis`, `MongoDB`, `ModelArmor`, `AgentIdentity`, `ParameterManager`, `SecretManager`, `Gcs`, `E2B`, `LiveKit`, `OCI`, and `OpenAI`.
+- **Dependency Upgrades**:
+  - Upgraded direct and dev dependencies (`archive: ^4.5.2`, `crypto: ^3.0.7`, `googleapis_auth: ^2.3.5`, `http: ^1.6.0`, `postgres: ^3.5.20`, `sqlite3: ^3.7.1`, `unorm_dart: ^0.3.3`, `yaml: ^3.1.4`, `analyzer: ^14.6.0`, `lints: ^6.1.0`, `test: ^1.33.0`).
+
 ## 2026.10.22
 
 - **Classifiers (`lib/src/labs/classifiers/`, `lib/src/integrations/typesafe/`)**:

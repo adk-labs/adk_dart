@@ -7,6 +7,7 @@ import '../agents/base_agent.dart';
 import '../agents/context_cache_config.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
+import '../agents/remote_a2a_agent.dart';
 import '../events/event.dart';
 import '../flows/llm_flows/persist_barrier.dart';
 import '../agents/llm/task/finish_task_tool.dart';
@@ -460,11 +461,22 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
 
     for (final FunctionResponse response in event.getFunctionResponses()) {
       if (response.name == finishTaskToolName &&
-          (pendingFinishCallId == null || response.id == pendingFinishCallId) &&
-          _isFinishTaskSuccess(response.response) &&
-          pendingFinishArgs != null) {
-        result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
-        return result;
+          (pendingFinishCallId == null || response.id == pendingFinishCallId)) {
+        if (_isFinishTaskError(response.response) ||
+            (event.errorMessage != null && event.errorMessage!.isNotEmpty)) {
+          result.taskOutput = <String, dynamic>{
+            'error':
+                event.errorMessage ??
+                response.response['error'] ??
+                finishTaskErrorResult,
+          };
+          return result;
+        }
+        if (_isFinishTaskSuccess(response.response) &&
+            pendingFinishArgs != null) {
+          result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
+          return result;
+        }
       }
     }
   }
@@ -544,6 +556,11 @@ bool _isFinishTaskSuccess(Map<String, dynamic> response) {
       response['output'] == finishTaskSuccessResult;
 }
 
+bool _isFinishTaskError(Map<String, dynamic> response) {
+  return response['result'] == finishTaskErrorResult ||
+      response['output'] == finishTaskErrorResult;
+}
+
 Object? _extractTaskOutput(BaseAgent agent, Map<String, dynamic> args) {
   if (_usesObjectFinishTaskArgs(agent)) {
     return args;
@@ -606,6 +623,9 @@ Object? _getInputSchema(BaseAgent agent) {
 
 Object? _getOutputSchema(BaseAgent agent) {
   if (agent is LlmAgent) {
+    return agent.outputSchema;
+  }
+  if (agent is RemoteA2aAgent) {
     return agent.outputSchema;
   }
   if (agent.subAgents.isNotEmpty) {

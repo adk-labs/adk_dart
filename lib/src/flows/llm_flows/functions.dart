@@ -206,6 +206,23 @@ Event? generateRequestConfirmationEvent(
   );
 }
 
+/// Handles function calls attached to [functionCallEvent] in live mode.
+Future<Event?> handleFunctionCallsLive(
+  InvocationContext invocationContext,
+  Event functionCallEvent,
+  Map<String, BaseTool> toolsDict, {
+  Set<String>? filters,
+  Map<String, ToolConfirmation>? toolConfirmationDict,
+}) {
+  return handleFunctionCallsAsync(
+    invocationContext,
+    functionCallEvent,
+    toolsDict,
+    filters: filters,
+    toolConfirmationDict: toolConfirmationDict,
+  );
+}
+
 /// Handles function calls attached to [functionCallEvent].
 Future<Event?> handleFunctionCallsAsync(
   InvocationContext invocationContext,
@@ -593,11 +610,19 @@ Future<Map<String, dynamic>> _stopStreamingTools(
           entry.key.startsWith('$functionName@') ||
           entry.key.startsWith('${functionName}_');
       if (matchesKey &&
-          (entry.value.task != null || entry.value.stream != null)) {
+          (entry.value.task != null ||
+              entry.value.stream != null ||
+              entry.value.onCancel != null)) {
         stoppedAny = true;
+        try {
+          await entry.value.onCancel?.call();
+        } catch (_) {}
         entry.value.stream?.close();
         entry.value.task = null;
         entry.value.stream = null;
+        entry.value.arguments = null;
+        entry.value.onCancel = null;
+        legacyStreaming.remove(entry.key);
       }
     }
   }
@@ -697,6 +722,21 @@ Future<Event?> _runToolExecutionPipeline({
       }
 
       if (functionResponse == null) {
+        if (invocationContext.liveRequestQueue != null &&
+            await _deduplicateOrRestartLiveStreamingTool(
+              invocationContext: invocationContext,
+              toolName: tool.name,
+              functionArgs: functionArgs,
+            )) {
+          functionResponse = <String, dynamic>{
+            'status':
+                'The function is already running and streaming results.',
+          };
+          rawResult = functionResponse;
+        }
+      }
+
+      if (functionResponse == null) {
         final Object? result;
         if (functionCall.name == 'stop_streaming' &&
             functionArgs.containsKey('function_name') &&
@@ -728,10 +768,22 @@ Future<Event?> _runToolExecutionPipeline({
           }
           return null;
         }
-        rawResult = result;
-        functionResponse = tool.defersResponse && result == null
-            ? <String, dynamic>{}
-            : _normalizeFunctionResult(result);
+        if (result is Stream && invocationContext.liveRequestQueue != null) {
+          final Map<String, dynamic> pendingStatus = _startLiveStreamingResult(
+            invocationContext: invocationContext,
+            tool: tool,
+            functionCall: functionCall,
+            functionArgs: functionArgs,
+            stream: result,
+          );
+          rawResult = pendingStatus;
+          functionResponse = pendingStatus;
+        } else {
+          rawResult = result;
+          functionResponse = tool.defersResponse && result == null
+              ? <String, dynamic>{}
+              : _normalizeFunctionResult(result);
+        }
       }
     } catch (error) {
       _clearPendingToolInterrupts(toolContext);
@@ -1321,4 +1373,147 @@ bool _isNonBlockingTool(BaseTool? tool) {
     return tool.behavior == ToolBehavior.nonBlocking;
   }
   return tool.responseScheduling != null;
+}
+
+Future<bool> _deduplicateOrRestartLiveStreamingTool({
+  required InvocationContext invocationContext,
+  required String toolName,
+  required Map<String, dynamic> functionArgs,
+}) async {
+  for (final MapEntry<String, ActiveBackgroundTool> entry
+      in invocationContext.activeBackgroundTools.entries.toList(
+        growable: false,
+      )) {
+    final ActiveBackgroundTool active = entry.value;
+    if (active.toolName != toolName || !active.isGenerator) {
+      continue;
+    }
+    if (active.arguments != null &&
+        _areValuesEqual(active.arguments, functionArgs)) {
+      return true;
+    }
+    try {
+      await active.onCancel?.call();
+    } catch (_) {}
+    active.inputStream?.close();
+    invocationContext.activeBackgroundTools.remove(entry.key);
+  }
+
+  final Map<String, ActiveStreamingTool>? legacy =
+      invocationContext.activeStreamingTools;
+  if (legacy != null) {
+    final ActiveStreamingTool? existing = legacy[toolName];
+    if (existing != null &&
+        existing.arguments != null &&
+        (existing.task != null ||
+            existing.stream != null ||
+            existing.onCancel != null)) {
+      if (_areValuesEqual(existing.arguments, functionArgs)) {
+        return true;
+      }
+      try {
+        await existing.onCancel?.call();
+      } catch (_) {}
+      existing.stream?.close();
+      existing.task = null;
+      existing.stream = null;
+      existing.arguments = null;
+      existing.onCancel = null;
+      legacy.remove(toolName);
+    }
+  }
+  return false;
+}
+
+Map<String, dynamic> _startLiveStreamingResult({
+  required InvocationContext invocationContext,
+  required BaseTool tool,
+  required FunctionCall functionCall,
+  required Map<String, dynamic> functionArgs,
+  required Stream<Object?> stream,
+}) {
+  final String callId = functionCall.id ?? generateClientFunctionCallId();
+  final Map<String, dynamic> argsCopy = Map<String, dynamic>.from(functionArgs);
+  final Completer<void> doneCompleter = Completer<void>();
+  StreamSubscription<Object?>? subscription;
+
+  Future<void> cancelStream() async {
+    final StreamSubscription<Object?>? sub = subscription;
+    subscription = null;
+    if (sub != null) {
+      await sub.cancel();
+    }
+    if (!doneCompleter.isCompleted) {
+      doneCompleter.complete();
+    }
+  }
+
+  final ActiveBackgroundTool backgroundEntry = ActiveBackgroundTool(
+    toolName: tool.name,
+    functionCallId: callId,
+    task: doneCompleter.future,
+    isGenerator: true,
+    arguments: argsCopy,
+    onCancel: cancelStream,
+  );
+  invocationContext.activeBackgroundTools[callId] = backgroundEntry;
+
+  final Map<String, ActiveStreamingTool> streamingMap =
+      invocationContext.activeStreamingTools ??=
+          <String, ActiveStreamingTool>{};
+  final ActiveStreamingTool streamingEntry = ActiveStreamingTool(
+    task: doneCompleter.future,
+    arguments: argsCopy,
+    onCancel: cancelStream,
+  );
+  streamingMap[tool.name] = streamingEntry;
+
+  subscription = stream.listen(
+    (Object? item) {
+      if (invocationContext.isAborted ||
+          invocationContext.liveRequestQueue == null) {
+        unawaited(cancelStream());
+        return;
+      }
+      // Events emitted by streaming tools are caller-only and not forwarded to
+      // the model's LiveRequestQueue (adk-kotlin 0ee2f30b).
+      if (item is Event) {
+        return;
+      }
+      final Content content = Content(
+        role: 'user',
+        parts: <Part>[
+          Part.fromFunctionResponse(
+            name: tool.name,
+            id: callId,
+            response: _normalizeFunctionResult(item),
+          ),
+        ],
+      );
+      invocationContext.liveRequestQueue!.sendContent(content);
+    },
+    onError: (Object _) {
+      invocationContext.activeBackgroundTools.remove(callId);
+      if (identical(streamingMap[tool.name], streamingEntry)) {
+        streamingMap.remove(tool.name);
+      }
+      if (!doneCompleter.isCompleted) {
+        doneCompleter.complete();
+      }
+    },
+    onDone: () {
+      invocationContext.activeBackgroundTools.remove(callId);
+      if (identical(streamingMap[tool.name], streamingEntry)) {
+        streamingMap.remove(tool.name);
+      }
+      if (!doneCompleter.isCompleted) {
+        doneCompleter.complete();
+      }
+    },
+    cancelOnError: false,
+  );
+
+  return <String, dynamic>{
+    'status': 'The function is running asynchronously and streaming results.',
+  };
 }

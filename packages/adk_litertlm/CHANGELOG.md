@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.23
+
+- Bumped package version to `2026.10.23` and dependency `adk_dart: ^2026.10.23`.
+- Upgraded `litertlm` to `>=0.0.14 <0.1.0`, `lints` to `^6.1.0`, and `test` to `^1.33.0`.
+
 ## 2026.10.22
 
 - Bumped package version to `2026.10.22` and dependency `adk_dart: ^2026.10.22`.

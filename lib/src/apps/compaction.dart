@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../agents/base_agent.dart';
+import '../agents/llm_agent.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../events/rewind_events.dart';
@@ -12,6 +14,33 @@ import '../types/content.dart';
 import '../utils/function_call_names.dart';
 import 'app.dart';
 import 'base_events_summarizer.dart';
+import 'llm_event_summarizer.dart';
+
+final Expando<bool> _autoCreatedSummarizers = Expando<bool>(
+  '_adk_auto_created_compaction_summarizer',
+);
+
+void _ensureCompactionSummarizer({
+  required EventsCompactionConfig config,
+  BaseAgent? agent,
+  String? agentName,
+}) {
+  if (config.summarizer != null) {
+    return;
+  }
+  if (agent != null && agent is! LlmAgent && agentName == null) {
+    throw ArgumentError(
+      'No BaseEventsSummarizer provided and root agent is not an LlmAgent.',
+    );
+  }
+  if (agent is LlmAgent) {
+    final LlmEventSummarizer summarizer = LlmEventSummarizer(
+      llm: agent.canonicalModel,
+    );
+    _autoCreatedSummarizers[summarizer] = true;
+    config.summarizer = summarizer;
+  }
+}
 
 /// Whether [config] has token-threshold compaction parameters configured.
 bool hasTokenThresholdConfig(EventsCompactionConfig? config) {
@@ -198,13 +227,15 @@ Future<bool> runCompactionForTokenThresholdConfig({
   required EventsCompactionConfig? config,
   required Session session,
   required BaseSessionService sessionService,
-  required String agentName,
-  required String? currentBranch,
+  BaseAgent? agent,
+  String? agentName,
+  String? currentBranch,
   String? isolationScope,
 }) async {
   if (!hasTokenThresholdConfig(config) || config == null) {
     return false;
   }
+  final String resolvedAgentName = agentName ?? agent?.name ?? 'agent';
 
   final List<Event> rewoundEvents = applyRewinds(session.events);
   final List<Event> events = rewoundEvents
@@ -213,7 +244,7 @@ Future<bool> runCompactionForTokenThresholdConfig({
   final int? promptTokenCount = latestPromptTokenCount(
     events: rewoundEvents,
     currentBranch: currentBranch,
-    agentName: agentName,
+    agentName: resolvedAgentName,
     isolationScope: isolationScope,
   );
   if (promptTokenCount == null || promptTokenCount < config.tokenThreshold!) {
@@ -278,13 +309,19 @@ Future<bool> runCompactionForTokenThresholdConfig({
     return false;
   }
 
+  _ensureCompactionSummarizer(
+    config: config,
+    agent: agent,
+    agentName: agentName,
+  );
+
   final Event? compactionEvent = await _createCompactionEventWithTrace(
     session: session,
     config: config,
     events: events,
     eventsToCompact: eventsToCompact,
     trigger: 'token_threshold',
-    author: agentName,
+    author: resolvedAgentName,
     branch: currentBranch,
   );
   if (compactionEvent == null) {
@@ -306,34 +343,128 @@ Stream<Event> runCompactionForSlidingWindow({
   required Session session,
   required BaseSessionService sessionService,
   bool skipTokenCompaction = false,
+}) {
+  return streamCompactionForSlidingWindowConfig(
+    config: app.eventsCompactionConfig,
+    session: session,
+    sessionService: sessionService,
+    agent: app.rootAgent,
+    skipTokenCompaction: skipTokenCompaction,
+  );
+}
+
+/// Streams sliding-window compaction events for [config] and [session] without
+/// appending the sliding-window event to [sessionService].
+Stream<Event> streamCompactionForSlidingWindowConfig({
+  required EventsCompactionConfig? config,
+  required Session session,
+  required BaseSessionService sessionService,
+  BaseAgent? agent,
+  String? agentName,
+  String? currentBranch,
+  bool skipTokenCompaction = false,
+  String? isolationScope,
 }) async* {
-  final EventsCompactionConfig? config = app.eventsCompactionConfig;
   if (config == null) {
     return;
   }
+  final String resolvedAgentName = agentName ?? agent?.name ?? 'agent';
 
   if (!skipTokenCompaction) {
     final bool tokenCompacted = await runCompactionForTokenThresholdConfig(
       config: config,
       session: session,
       sessionService: sessionService,
-      agentName: app.rootAgent.name,
-      currentBranch: null,
+      agent: agent,
+      agentName: agentName,
+      currentBranch: currentBranch,
+      isolationScope: isolationScope,
     );
     if (tokenCompacted) {
       return;
     }
   }
 
+  final Event? compactionEvent = await _buildSlidingWindowCompactionEvent(
+    config: config,
+    session: session,
+    agent: agent,
+    agentName: agentName,
+    resolvedAgentName: resolvedAgentName,
+    currentBranch: currentBranch,
+    isolationScope: isolationScope,
+  );
+  if (compactionEvent != null) {
+    yield compactionEvent;
+  }
+}
+
+/// Runs sliding-window compaction for [config] and [session] and appends any
+/// resulting compaction event to [sessionService].
+Future<bool> runCompactionForSlidingWindowConfig({
+  required EventsCompactionConfig? config,
+  required Session session,
+  required BaseSessionService sessionService,
+  BaseAgent? agent,
+  String? agentName,
+  String? currentBranch,
+  bool skipTokenCompaction = false,
+  String? isolationScope,
+}) async {
+  if (config == null) {
+    return false;
+  }
+  final String resolvedAgentName = agentName ?? agent?.name ?? 'agent';
+
+  if (!skipTokenCompaction) {
+    final bool tokenCompacted = await runCompactionForTokenThresholdConfig(
+      config: config,
+      session: session,
+      sessionService: sessionService,
+      agent: agent,
+      agentName: agentName,
+      currentBranch: currentBranch,
+      isolationScope: isolationScope,
+    );
+    if (tokenCompacted) {
+      return true;
+    }
+  }
+
+  final Event? compactionEvent = await _buildSlidingWindowCompactionEvent(
+    config: config,
+    session: session,
+    agent: agent,
+    agentName: agentName,
+    resolvedAgentName: resolvedAgentName,
+    currentBranch: currentBranch,
+    isolationScope: isolationScope,
+  );
+  if (compactionEvent == null) {
+    return false;
+  }
+  await sessionService.appendEvent(session: session, event: compactionEvent);
+  return true;
+}
+
+Future<Event?> _buildSlidingWindowCompactionEvent({
+  required EventsCompactionConfig config,
+  required Session session,
+  required BaseAgent? agent,
+  required String? agentName,
+  required String resolvedAgentName,
+  required String? currentBranch,
+  required String? isolationScope,
+}) async {
   if (!hasSlidingWindowConfig(config)) {
-    return;
+    return null;
   }
 
   final List<Event> events = applyRewinds(session.events)
-      .where((Event e) => e.isolationScope == null)
+      .where((Event e) => e.isolationScope == isolationScope)
       .toList(growable: false);
   if (events.isEmpty) {
-    return;
+    return null;
   }
   final double lastCompactedEnd = latestCompactionEndTimestamp(events);
   final List<Event> candidates = events
@@ -344,7 +475,7 @@ Stream<Event> runCompactionForSlidingWindow({
       )
       .toList(growable: false);
   if (candidates.isEmpty) {
-    return;
+    return null;
   }
 
   final List<String> userInvocations = <String>[];
@@ -359,13 +490,13 @@ Stream<Event> runCompactionForSlidingWindow({
   }
 
   if (userInvocations.length < config.compactionInterval) {
-    return;
+    return null;
   }
 
   final int keep = config.overlapSize.clamp(0, userInvocations.length);
   final int compactCount = userInvocations.length - keep;
   if (compactCount <= 0) {
-    return;
+    return null;
   }
 
   final Set<String> invocationIdsToCompact = userInvocations
@@ -386,8 +517,14 @@ Stream<Event> runCompactionForSlidingWindow({
         events: events,
         eventsToCompact: eventsToCompact,
       )) {
-    return;
+    return null;
   }
+
+  _ensureCompactionSummarizer(
+    config: config,
+    agent: agent,
+    agentName: agentName,
+  );
 
   final Event? compactionEvent = await _createCompactionEventWithTrace(
     session: session,
@@ -395,11 +532,13 @@ Stream<Event> runCompactionForSlidingWindow({
     events: events,
     eventsToCompact: eventsToCompact,
     trigger: 'sliding_window',
-    author: app.rootAgent.name,
+    author: resolvedAgentName,
+    branch: currentBranch,
   );
-  if (compactionEvent != null) {
-    yield compactionEvent;
+  if (compactionEvent != null && isolationScope != null) {
+    compactionEvent.isolationScope = isolationScope;
   }
+  return compactionEvent;
 }
 
 Content? _requestContent(Event event) {
@@ -569,13 +708,19 @@ Future<Event?> _createCompactionEventWithTrace({
           }
           return summarizedEvent;
         } catch (error, stackTrace) {
-          developer.log(
-            'Failed to compact events ($trigger); skipping compaction: $error',
-            name: 'adk_dart.compaction',
-            error: error,
-            stackTrace: stackTrace,
-          );
-          return null;
+          if (_autoCreatedSummarizers[rawSummarizer] == true &&
+              error is StateError) {
+            // Fall through to deterministic fallback summary when the default
+            // LLM model is used offline without an API key configured.
+          } else {
+            developer.log(
+              'Failed to compact events ($trigger); skipping compaction: $error',
+              name: 'adk_dart.compaction',
+              error: error,
+              stackTrace: stackTrace,
+            );
+            return null;
+          }
         }
       }
 

@@ -74,6 +74,9 @@ enum FeatureName {
   /// Graceful error handling for MCP tool execution.
   mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
 
+  /// MongoDB session service integration.
+  mongodbSessionService('MONGODB_SESSION_SERVICE'),
+
   /// OpenSandbox environment integration.
   opensandboxEnvironment('OPENSANDBOX_ENVIRONMENT'),
 
@@ -249,6 +252,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.mongodbSessionService: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: false,
+      ),
       FeatureName.opensandboxEnvironment: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
@@ -387,6 +394,22 @@ bool isFeatureEnabled(
     );
   }
   return config.defaultOn;
+}
+
+/// Emits a one-time warning when a non-stable [featureName] is used.
+void warnFeatureUse(
+  FeatureName featureName, {
+  Map<String, String>? environment,
+}) {
+  final FeatureConfig? config = getFeatureConfig(featureName);
+  if (config == null || config.stage == FeatureStage.stable) {
+    return;
+  }
+  _emitNonStableWarningOnce(
+    featureName,
+    config.stage,
+    environment: environment,
+  );
 }
 
 void _emitNonStableWarningOnce(

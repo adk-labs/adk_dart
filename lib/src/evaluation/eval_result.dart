@@ -1,7 +1,10 @@
 /// Evaluation result models used by eval services and CLI output.
 library;
 
+import '../sessions/session.dart';
+import 'eval_case.dart';
 import 'eval_metric.dart';
+import 'eval_metrics.dart';
 
 /// Inference execution status for one eval case.
 enum InferenceStatus {
@@ -25,6 +28,9 @@ enum EvalStatus {
 
   /// Metric was not evaluated or produced no score.
   notEvaluated,
+
+  /// Status for an indicator computed across runs without a pass/fail threshold.
+  informational,
 }
 
 /// Result of running model inference for an eval case.
@@ -32,22 +38,35 @@ class InferenceResult {
   /// Creates an inference result.
   InferenceResult({
     required this.appName,
-    required this.evalCaseId,
-    required this.userInput,
+    String? evalCaseId,
+    String? evalId,
+    this.userInput = '',
+    this.evalSetId = '',
+    this.inferences,
     this.responseText,
     this.sessionId,
     this.status = InferenceStatus.unknown,
     this.errorMessage,
-  });
+    this.repetitionIndex,
+  }) : evalCaseId = evalCaseId ?? evalId ?? '';
 
   /// Application name used for inference.
   final String appName;
 
+  /// Parent eval set identifier.
+  final String evalSetId;
+
   /// Eval case identifier.
   final String evalCaseId;
 
+  /// Alias for [evalCaseId] matching upstream naming.
+  String get evalId => evalCaseId;
+
   /// Input text sent to the model.
   final String userInput;
+
+  /// Optional list of per-turn invocations captured during inference.
+  final List<Invocation>? inferences;
 
   /// Optional model response text.
   final String? responseText;
@@ -60,6 +79,11 @@ class InferenceResult {
 
   /// Optional error message.
   final String? errorMessage;
+
+  /// Zero-based index when an eval case is run multiple times (`numRuns > 1`).
+  ///
+  /// `null` for single-run execution.
+  final int? repetitionIndex;
 }
 
 /// One metric evaluation result.
@@ -71,6 +95,8 @@ class EvalMetricResult {
     bool passed = false,
     EvalStatus? evalStatus,
     this.detail,
+    this.metricNameOverride,
+    this.threshold,
   }) : evalStatus =
            evalStatus ?? (passed ? EvalStatus.passed : EvalStatus.failed),
        passed = evalStatus == null ? passed : evalStatus == EvalStatus.passed;
@@ -78,8 +104,17 @@ class EvalMetricResult {
   /// Metric identifier.
   final EvalMetric metric;
 
+  /// Optional raw metric name when the metric is not one of [EvalMetric].
+  final String? metricNameOverride;
+
+  /// Resolved metric name string.
+  String get metricName => metricNameOverride ?? metric.name;
+
   /// Metric score value.
   final double score;
+
+  /// Optional pass/fail threshold for this metric.
+  final double? threshold;
 
   /// Whether this metric passed.
   final bool passed;
@@ -92,10 +127,10 @@ class EvalMetricResult {
 
   /// Creates a metric result from JSON.
   factory EvalMetricResult.fromJson(Map<String, Object?> json) {
-    final String metricName =
+    final String rawMetricName =
         (json['metric_name'] ?? json['metricName'] ?? json['metric'] ?? '')
             .toString();
-    final EvalMetric metric = _evalMetricFromString(metricName);
+    final EvalMetric metric = _evalMetricFromString(rawMetricName);
     final bool? rawPassed = json['passed'] as bool?;
     final Object? rawEvalStatus = json['eval_status'] ?? json['evalStatus'];
     final EvalStatus parsedEvalStatus = rawEvalStatus == null
@@ -103,9 +138,12 @@ class EvalMetricResult {
               ? EvalStatus.notEvaluated
               : (rawPassed ? EvalStatus.passed : EvalStatus.failed))
         : _evalStatusFromString(rawEvalStatus.toString());
+    final Object? rawThreshold = json['threshold'];
     return EvalMetricResult(
       metric: metric,
+      metricNameOverride: rawMetricName.isEmpty ? null : rawMetricName,
       score: _asDouble(json['score']),
+      threshold: rawThreshold is num ? rawThreshold.toDouble() : null,
       evalStatus: parsedEvalStatus,
       detail: _metricDetailFromJson(json),
     );
@@ -118,8 +156,9 @@ class EvalMetricResult {
       details['detail'] = detail;
     }
     return <String, Object?>{
-      'metric_name': metric.name,
+      'metric_name': metricName,
       'score': score,
+      if (threshold != null) 'threshold': threshold,
       'eval_status': _evalStatusToJson(evalStatus),
       'details': details,
     };
@@ -130,20 +169,42 @@ class EvalMetricResult {
 class EvalCaseResult {
   /// Creates an eval-case result.
   EvalCaseResult({
-    required this.evalCaseId,
-    required this.metrics,
+    String? evalCaseId,
+    String? evalId,
+    List<EvalMetricResult>? metrics,
+    List<EvalMetricResultSpec>? overallEvalMetricResults,
+    List<EvalMetricResultPerInvocation>? evalMetricResultPerInvocation,
     this.evalSetId = '',
     this.finalEvalStatus = EvalStatus.notEvaluated,
     this.sessionId = '',
+    this.sessionDetails,
     this.userId,
     this.evalSetFile,
-  });
+    this.repetitionIndex,
+  }) : evalCaseId = evalCaseId ?? evalId ?? '',
+       metrics =
+           metrics ??
+           _metricsFromSpecs(overallEvalMetricResults ?? const <EvalMetricResultSpec>[]),
+       overallEvalMetricResults =
+           overallEvalMetricResults ??
+           _specsFromMetrics(metrics ?? const <EvalMetricResult>[]),
+       evalMetricResultPerInvocation =
+           evalMetricResultPerInvocation ?? const <EvalMetricResultPerInvocation>[];
 
   /// Eval case identifier.
   final String evalCaseId;
 
+  /// Alias for [evalCaseId] matching upstream naming.
+  String get evalId => evalCaseId;
+
   /// Metric results for this case.
   final List<EvalMetricResult> metrics;
+
+  /// Overall evaluated metric specs for this case across the full conversation.
+  final List<EvalMetricResultSpec> overallEvalMetricResults;
+
+  /// Per-invocation evaluated metric results for this case.
+  final List<EvalMetricResultPerInvocation> evalMetricResultPerInvocation;
 
   /// Parent eval set identifier.
   final String evalSetId;
@@ -154,11 +215,50 @@ class EvalCaseResult {
   /// Session ID used for inference.
   final String sessionId;
 
+  /// Optional session details captured during inference.
+  final Session? sessionDetails;
+
   /// Optional user ID used for inference.
   final String? userId;
 
   /// Optional source eval-set file path.
   final String? evalSetFile;
+
+  /// Zero-based index when an eval case is run multiple times (`numRuns > 1`).
+  ///
+  /// `null` for single-run execution.
+  final int? repetitionIndex;
+
+  static List<EvalMetricResult> _metricsFromSpecs(
+    List<EvalMetricResultSpec> specs,
+  ) {
+    return specs
+        .map(
+          (EvalMetricResultSpec spec) => EvalMetricResult(
+            metric: _evalMetricFromString(spec.metricName),
+            metricNameOverride: spec.metricName,
+            score: spec.score ?? 0.0,
+            threshold: spec.threshold ?? spec.criterion?.threshold,
+            evalStatus: spec.evalStatus,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static List<EvalMetricResultSpec> _specsFromMetrics(
+    List<EvalMetricResult> metrics,
+  ) {
+    return metrics
+        .map(
+          (EvalMetricResult m) => EvalMetricResultSpec(
+            metricName: m.metricName,
+            threshold: m.threshold,
+            score: m.evalStatus == EvalStatus.notEvaluated ? null : m.score,
+            evalStatus: m.evalStatus,
+          ),
+        )
+        .toList(growable: false);
+  }
 
   /// Average score across [metrics].
   double get overallScore {
@@ -181,18 +281,24 @@ class EvalCaseResult {
         json['evalMetricResults'] ??
         json['eval_metric_results'];
     final List<EvalMetricResult> metrics = <EvalMetricResult>[];
+    final List<EvalMetricResultSpec> overallSpecs = <EvalMetricResultSpec>[];
     if (rawMetrics is List) {
       for (final Object? item in rawMetrics) {
         if (item is Map) {
-          metrics.add(EvalMetricResult.fromJson(_castJsonMap(item)));
+          final Map<String, Object?> map = _castJsonMap(item);
+          metrics.add(EvalMetricResult.fromJson(map));
+          overallSpecs.add(_metricResultSpecFromJson(map));
         }
       }
     }
+    final Object? rawRepIndex =
+        json['repetitionIndex'] ?? json['repetition_index'];
     return EvalCaseResult(
       evalCaseId:
           (json['evalCaseId'] ?? json['eval_id'] ?? json['evalId'] ?? '')
               .toString(),
       metrics: metrics,
+      overallEvalMetricResults: overallSpecs,
       evalSetId: (json['evalSetId'] ?? json['eval_set_id'] ?? '').toString(),
       finalEvalStatus: _evalStatusFromString(
         (json['finalEvalStatus'] ?? json['final_eval_status']).toString(),
@@ -200,6 +306,9 @@ class EvalCaseResult {
       sessionId: (json['sessionId'] ?? json['session_id'] ?? '').toString(),
       userId: (json['userId'] ?? json['user_id']) as String?,
       evalSetFile: (json['evalSetFile'] ?? json['eval_set_file']) as String?,
+      repetitionIndex: rawRepIndex is int
+          ? rawRepIndex
+          : (rawRepIndex is num ? rawRepIndex.toInt() : null),
     );
   }
 
@@ -215,6 +324,7 @@ class EvalCaseResult {
       'session_id': sessionId,
       if (userId != null) 'user_id': userId,
       if (evalSetFile != null) 'eval_set_file': evalSetFile,
+      if (repetitionIndex != null) 'repetition_index': repetitionIndex,
     };
   }
 }
@@ -301,11 +411,17 @@ EvalStatus _evalStatusFromString(String value) {
   final String normalized = _normalizeSnakeLike(value);
   switch (normalized) {
     case 'passed':
+    case '1':
       return EvalStatus.passed;
     case 'failed':
+    case '2':
       return EvalStatus.failed;
     case 'not_evaluated':
+    case '3':
       return EvalStatus.notEvaluated;
+    case 'informational':
+    case '4':
+      return EvalStatus.informational;
   }
   return EvalStatus.notEvaluated;
 }
@@ -318,7 +434,34 @@ String _evalStatusToJson(EvalStatus status) {
       return 'failed';
     case EvalStatus.notEvaluated:
       return 'not_evaluated';
+    case EvalStatus.informational:
+      return 'informational';
   }
+}
+
+EvalMetricResultSpec _metricResultSpecFromJson(Map<String, Object?> json) {
+  final String metricName =
+      (json['metric_name'] ?? json['metricName'] ?? json['metric'] ?? '')
+          .toString();
+  final bool? rawPassed = json['passed'] as bool?;
+  final Object? rawEvalStatus = json['eval_status'] ?? json['evalStatus'];
+  final EvalStatus parsedEvalStatus = rawEvalStatus == null
+      ? (rawPassed == null
+            ? EvalStatus.notEvaluated
+            : (rawPassed ? EvalStatus.passed : EvalStatus.failed))
+      : _evalStatusFromString(rawEvalStatus.toString());
+  final Object? rawThreshold = json['threshold'];
+  final Object? rawScore = json['score'];
+  final Object? rawCriterion = json['criterion'];
+  return EvalMetricResultSpec(
+    metricName: metricName,
+    threshold: rawThreshold is num ? rawThreshold.toDouble() : null,
+    criterion: rawCriterion == null ? null : BaseCriterion.fromJson(rawCriterion),
+    customFunctionPath:
+        (json['custom_function_path'] ?? json['customFunctionPath']) as String?,
+    score: rawScore is num ? rawScore.toDouble() : null,
+    evalStatus: parsedEvalStatus,
+  );
 }
 
 double _asDouble(Object? value) {

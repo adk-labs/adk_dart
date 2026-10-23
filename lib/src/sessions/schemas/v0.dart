@@ -133,6 +133,7 @@ class StorageEventV0 {
     this.content,
     this.customMetadata,
     this.usageMetadata,
+    this.cacheCreationTokenCount,
     this.citationMetadata,
     this.groundingMetadata,
     this.partial,
@@ -207,6 +208,9 @@ class StorageEventV0 {
 
   /// Usage metadata.
   final Object? usageMetadata;
+
+  /// Number of tokens written into the prompt cache during this call.
+  final int? cacheCreationTokenCount;
 
   /// Citation metadata.
   final Object? citationMetadata;
@@ -292,6 +296,9 @@ class StorageEventV0 {
         json['custom_metadata'] ?? json['customMetadata'],
       ),
       usageMetadata: json['usage_metadata'] ?? json['usageMetadata'],
+      cacheCreationTokenCount: _asNullableInt(
+        json['cache_creation_token_count'] ?? json['cacheCreationTokenCount'],
+      ),
       citationMetadata: json['citation_metadata'] ?? json['citationMetadata'],
       groundingMetadata:
           json['grounding_metadata'] ?? json['groundingMetadata'],
@@ -348,6 +355,7 @@ class StorageEventV0 {
           ? null
           : Map<String, dynamic>.from(event.customMetadata!),
       usageMetadata: event.usageMetadata,
+      cacheCreationTokenCount: event.cacheCreationTokenCount,
       citationMetadata: event.citationMetadata,
       groundingMetadata: event.groundingMetadata,
       partial: event.partial,
@@ -405,6 +413,7 @@ class StorageEventV0 {
           : Map<String, dynamic>.from(customMetadata!),
       content: content?.copyWith(),
       usageMetadata: usageMetadata,
+      cacheCreationTokenCount: cacheCreationTokenCount,
       citationMetadata: citationMetadata,
       groundingMetadata: groundingMetadata,
       inputTranscription: inputTranscription,
@@ -446,6 +455,8 @@ class StorageEventV0 {
       if (content != null) 'content': _contentToJson(content!),
       if (customMetadata != null) 'custom_metadata': customMetadata,
       if (usageMetadata != null) 'usage_metadata': usageMetadata,
+      if (cacheCreationTokenCount != null)
+        'cache_creation_token_count': cacheCreationTokenCount,
       if (citationMetadata != null) 'citation_metadata': citationMetadata,
       if (groundingMetadata != null) 'grounding_metadata': groundingMetadata,
       if (partial != null) 'partial': partial,
@@ -909,6 +920,22 @@ double? _asNullableDouble(Object? value) {
   }
   if (value is String) {
     return double.tryParse(value);
+  }
+  return null;
+}
+
+int? _asNullableInt(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
   }
   return null;
 }

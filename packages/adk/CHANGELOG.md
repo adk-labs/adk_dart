@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.23
+
+- Bumped package version to `2026.10.23` and dependency `adk_dart: ^2026.10.23`.
+- **Multi-Run CLI Evaluation & Dev Web Server (`cli_eval.dart`, `cli.dart`, `web_server.dart`)**:
+  - Added `--num_runs` option to `adk eval` and formatted multi-run evaluation summaries and per-case metric aggregation breakdowns (`MEAN_OVER_INVOCATIONS`, `MEAN_OF_RUNS`, `MIN_OVER_RUNS`, `PASS_RATE`).
+  - Added `cache_creation_token_count` serialization in `/run` and `/run_sse` event payloads.
+  - Aborted active `/run` and `/run_sse` agent runs immediately when the HTTP client disconnects (`response.done` error listener).
+- Upgraded direct and dev dependencies (`crypto: ^3.0.7`, `sqlite3: ^3.7.1`, `yaml: ^3.1.4`, `http: ^1.6.0`, `meta: ^1.19.0`, `lints: ^6.1.0`, `test: ^1.33.0`).
+
 ## 2026.10.22
 
 - Bumped package version to `2026.10.22` and dependency `adk_dart: ^2026.10.22`.

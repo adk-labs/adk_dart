@@ -25,44 +25,50 @@ class LocalEvalService extends BaseEvalService {
 
   @override
   Stream<InferenceResult> performInference(InferenceRequest request) async* {
+    final int numRuns = request.inferenceConfig.numRuns;
     for (final EvalCase evalCase in request.evalCases) {
-      final Session session = await _runner.sessionService.createSession(
-        appName: _runner.appName,
-        userId: request.userId,
-      );
+      for (int rep = 0; rep < numRuns; rep += 1) {
+        final int? repetitionIndex = numRuns > 1 ? rep : null;
+        final Session session = await _runner.sessionService.createSession(
+          appName: _runner.appName,
+          userId: request.userId,
+        );
 
-      try {
-        final List<Event> events = request.inferenceConfig.useLive
-            ? await _runLiveInference(
-                request: request,
-                session: session,
-                evalCase: evalCase,
-              )
-            : await _runner
-                  .runAsync(
-                    userId: request.userId,
-                    sessionId: session.id,
-                    newMessage: Content.userText(evalCase.input),
-                  )
-                  .toList();
-        final String response = _finalAgentText(events);
-        yield InferenceResult(
-          appName: request.appName,
-          evalCaseId: evalCase.evalId,
-          userInput: evalCase.input,
-          responseText: response,
-          sessionId: session.id,
-          status: InferenceStatus.success,
-        );
-      } catch (error) {
-        yield InferenceResult(
-          appName: request.appName,
-          evalCaseId: evalCase.evalId,
-          userInput: evalCase.input,
-          sessionId: session.id,
-          status: InferenceStatus.failure,
-          errorMessage: '$error',
-        );
+        try {
+          final List<Event> events = request.inferenceConfig.useLive
+              ? await _runLiveInference(
+                  request: request,
+                  session: session,
+                  evalCase: evalCase,
+                )
+              : await _runner
+                    .runAsync(
+                      userId: request.userId,
+                      sessionId: session.id,
+                      newMessage: Content.userText(evalCase.input),
+                    )
+                    .toList();
+          final String response = _finalAgentText(events);
+          yield InferenceResult(
+            appName: request.appName,
+            evalCaseId: evalCase.evalId,
+            userInput: evalCase.input,
+            responseText: response,
+            sessionId: session.id,
+            status: InferenceStatus.success,
+            repetitionIndex: repetitionIndex,
+          );
+        } catch (error) {
+          yield InferenceResult(
+            appName: request.appName,
+            evalCaseId: evalCase.evalId,
+            userInput: evalCase.input,
+            sessionId: session.id,
+            status: InferenceStatus.failure,
+            errorMessage: '$error',
+            repetitionIndex: repetitionIndex,
+          );
+        }
       }
     }
   }
@@ -108,7 +114,12 @@ class LocalEvalService extends BaseEvalService {
         }
       }
 
-      yield EvalCaseResult(evalCaseId: inference.evalCaseId, metrics: metrics);
+      yield EvalCaseResult(
+        evalCaseId: inference.evalCaseId,
+        metrics: metrics,
+        sessionId: inference.sessionId ?? '',
+        repetitionIndex: inference.repetitionIndex,
+      );
     }
   }
 

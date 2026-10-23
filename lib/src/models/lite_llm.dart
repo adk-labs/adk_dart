@@ -250,7 +250,25 @@ class LiteLlm extends BaseLlm {
   static LlmResponse parseCompletionResponse(Map<String, Object?> response) {
     final List<Object?> choices =
         (response['choices'] as List<Object?>?) ?? <Object?>[];
+    final Map<String, Object?> usage = _asMap(response['usage']);
+    final int? cachedTokenCount = _extractCachedTokens(usage);
+    final int? cacheCreationTokenCount = _extractCacheCreationTokens(usage);
     if (choices.isEmpty) {
+      if (usage.isNotEmpty) {
+        return LlmResponse(
+          modelVersion: response['model'] as String?,
+          usageMetadata: <String, Object?>{
+            'prompt_token_count': usage['prompt_tokens'] ?? 0,
+            'candidates_token_count': usage['completion_tokens'] ?? 0,
+            'total_token_count': usage['total_tokens'] ?? 0,
+            if (_reasoningTokens(usage) != null)
+              'thoughts_token_count': _reasoningTokens(usage),
+            'cached_content_token_count': ?cachedTokenCount,
+            'cache_creation_input_tokens': ?cacheCreationTokenCount,
+          },
+          cacheCreationTokenCount: cacheCreationTokenCount,
+        );
+      }
       return LlmResponse();
     }
     if (choices.length > 1) {
@@ -295,7 +313,6 @@ class LiteLlm extends BaseLlm {
       parts.add(_parseFunctionCall(callMap));
     }
 
-    final Map<String, Object?> usage = _asMap(response['usage']);
     final String finishReason = mapFinishReason(first['finish_reason']);
     final String? errorMessage = _finishReasonToErrorMessage(finishReason);
     return LlmResponse(
@@ -310,7 +327,10 @@ class LiteLlm extends BaseLlm {
         'total_token_count': usage['total_tokens'] ?? 0,
         if (_reasoningTokens(usage) != null)
           'thoughts_token_count': _reasoningTokens(usage),
+        'cached_content_token_count': ?cachedTokenCount,
+        'cache_creation_input_tokens': ?cacheCreationTokenCount,
       },
+      cacheCreationTokenCount: cacheCreationTokenCount,
       customMetadata: <String, dynamic>{
         'id': response['id'],
         'created': response['created'],
@@ -538,6 +558,75 @@ Object? _reasoningTokens(Map<String, Object?> usage) {
     usage['completion_tokens_details'],
   );
   return details['reasoning_tokens'] ?? details['reasoningTokens'];
+}
+
+int? _asNullableInt(Object? raw) {
+  if (raw is int) {
+    return raw;
+  }
+  if (raw is num) {
+    return raw.toInt();
+  }
+  if (raw is String) {
+    return int.tryParse(raw.trim());
+  }
+  return null;
+}
+
+int? _extractCachedTokens(Map<String, Object?> usage) {
+  for (final String key in const <String>[
+    'cache_read_input_tokens',
+    'cacheReadInputTokens',
+  ]) {
+    final int? value = _asNullableInt(usage[key]);
+    if (value != null) {
+      return value;
+    }
+  }
+  final Map<String, Object?> details = _asMap(
+    usage['prompt_tokens_details'] ?? usage['promptTokensDetails'],
+  );
+  for (final String key in const <String>[
+    'cached_tokens',
+    'cachedTokens',
+    'cache_read_input_tokens',
+    'cacheReadInputTokens',
+  ]) {
+    final int? value = _asNullableInt(details[key]);
+    if (value != null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+int? _extractCacheCreationTokens(Map<String, Object?> usage) {
+  for (final String key in const <String>[
+    'cache_creation_input_tokens',
+    'cacheCreationInputTokens',
+    'cache_write_input_tokens',
+    'cacheWriteInputTokens',
+  ]) {
+    final int? value = _asNullableInt(usage[key]);
+    if (value != null) {
+      return value;
+    }
+  }
+  final Map<String, Object?> details = _asMap(
+    usage['prompt_tokens_details'] ?? usage['promptTokensDetails'],
+  );
+  for (final String key in const <String>[
+    'cache_creation_tokens',
+    'cacheCreationTokens',
+    'cache_creation_input_tokens',
+    'cacheCreationInputTokens',
+  ]) {
+    final int? value = _asNullableInt(details[key]);
+    if (value != null) {
+      return value;
+    }
+  }
+  return null;
 }
 
 List<Part> _extractReasoningParts(Object? raw, {Set<String>? reasoningTexts}) {

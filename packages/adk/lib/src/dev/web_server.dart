@@ -3990,6 +3990,14 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
     abortController,
     runCompleter.future,
   );
+  request.response.done.then(
+    (_) {},
+    onError: (_) {
+      if (!runCompleter.isCompleted) {
+        abortController.abort('Client disconnected');
+      }
+    },
+  );
   try {
     if (shouldAutoCreateSession) {
       await _ensureSessionExists(context, runRequest);
@@ -4178,6 +4186,15 @@ Future<void> _handleRunSse(
     runCompleter.future,
   );
   var clientDisconnected = false;
+  response.done.then(
+    (_) {},
+    onError: (_) {
+      if (!runCompleter.isCompleted) {
+        clientDisconnected = true;
+        abortController.abort('SSE client disconnected');
+      }
+    },
+  );
 
   try {
     await for (final Event event in runner.runAsync(
@@ -4943,6 +4960,7 @@ Map<String, Object?> _eventToApiJson(
     'sessionId': snake['session_id'],
     'customMetadata': snake['custom_metadata'],
     'usageMetadata': snake['usage_metadata'],
+    'cacheCreationTokenCount': snake['cache_creation_token_count'],
     'citationMetadata': snake['citation_metadata'],
     'groundingMetadata': snake['grounding_metadata'],
     'turnComplete': snake['turn_complete'],

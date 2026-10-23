@@ -808,6 +808,7 @@ class _ParsedEvalCliCommand {
     required this.printDetailedResults,
     this.evalStorageUri,
     this.logLevel,
+    this.numRuns,
     this.enableFeatures = const <String>[],
     this.disableFeatures = const <String>[],
   });
@@ -829,6 +830,9 @@ class _ParsedEvalCliCommand {
 
   /// Optional log verbosity level.
   final String? logLevel;
+
+  /// Optional number of times to run each eval case.
+  final int? numRuns;
 
   /// Feature flags forced to enabled.
   final List<String> enableFeatures;
@@ -1265,6 +1269,13 @@ Future<int> _runEvalCliCommand(
     }
   }
 
+  final EvalConfig evalConfig = cli_eval.getEvaluationCriteriaOrDefault(
+    effectiveConfigFilePath,
+  );
+  cli_eval.loadAggregationMethods(evalConfig.multiRunConfig);
+  final int resolvedNumRuns =
+      command.numRuns ?? evalConfig.multiRunConfig?.numRuns ?? 1;
+
   final List<EvalCaseResult> allResults = <EvalCaseResult>[];
   for (final _EvalTarget target in evalTargets) {
     final EvalSet? evalSet = await managers.evalSetsManager.getEvalSet(
@@ -1294,13 +1305,21 @@ Future<int> _runEvalCliCommand(
         evalCases: selectedCases,
         evalSetResultsManager: managers.evalSetResultsManager,
         configFilePath: effectiveConfigFilePath,
+        evalConfig: evalConfig,
+        numRuns: resolvedNumRuns,
       ),
     );
   }
 
+  final List<cli_eval.MultiRunCaseResult> aggregateEvalResults =
+      cli_eval.aggregateEvalCaseResults(
+        allResults,
+        multiRunConfig: evalConfig.multiRunConfig,
+      );
+
   final Map<String, (int passed, int failed)> summaryByEvalSet =
       <String, (int, int)>{};
-  for (final EvalCaseResult result in allResults) {
+  for (final cli_eval.MultiRunCaseResult result in aggregateEvalResults) {
     final (int passed, int failed) current =
         summaryByEvalSet[result.evalSetId] ?? (0, 0);
     if (result.finalEvalStatus == EvalStatus.passed) {
@@ -1311,6 +1330,11 @@ Future<int> _runEvalCliCommand(
   }
 
   out.writeln('Eval Run Summary');
+  if (resolvedNumRuns > 1) {
+    out.writeln(
+      'Each eval case was run $resolvedNumRuns times and judged on all $resolvedNumRuns runs.',
+    );
+  }
   final List<String> evalSetIds = summaryByEvalSet.keys.toList(growable: false)
     ..sort();
   for (final String evalSetId in evalSetIds) {
@@ -1321,11 +1345,21 @@ Future<int> _runEvalCliCommand(
   }
 
   if (command.printDetailedResults) {
-    for (final EvalCaseResult result in allResults) {
+    if (resolvedNumRuns > 1 ||
+        cli_eval.hasPassCountRules(evalConfig.multiRunConfig)) {
       out.writeln(
-        '*********************************************************************',
+        cli_eval.prettyPrintEvalResultsAcrossRuns(
+          aggregateEvalResults,
+          numRuns: resolvedNumRuns,
+        ),
       );
-      out.writeln(cli_eval.prettyPrintEvalResult(result));
+    } else {
+      for (final EvalCaseResult result in allResults) {
+        out.writeln(
+          '*********************************************************************',
+        );
+        out.writeln(cli_eval.prettyPrintEvalResult(result));
+      }
     }
   }
 
@@ -2695,6 +2729,7 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
   bool printDetailedResults = false;
   String? evalStorageUri;
   String? logLevel;
+  int? numRuns;
   bool verbose = false;
   final List<String> enableFeatures = <String>[];
   final List<String> disableFeatures = <String>[];
@@ -2713,6 +2748,29 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
     }
     if (arg == '--print_detailed_results') {
       printDetailedResults = true;
+      continue;
+    }
+    if (arg == '--num_runs') {
+      final String rawNumRuns = _nextArg(args, i, '--num_runs');
+      final int? parsed = int.tryParse(rawNumRuns.trim());
+      if (parsed == null || parsed < 1) {
+        throw CliUsageError(
+          "Invalid value for '--num_runs': $rawNumRuns is not in the range x>=1.",
+        );
+      }
+      numRuns = parsed;
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--num_runs=')) {
+      final String rawNumRuns = arg.substring('--num_runs='.length);
+      final int? parsed = int.tryParse(rawNumRuns.trim());
+      if (parsed == null || parsed < 1) {
+        throw CliUsageError(
+          "Invalid value for '--num_runs': $rawNumRuns is not in the range x>=1.",
+        );
+      }
+      numRuns = parsed;
       continue;
     }
     if (arg == '--eval_storage_uri') {
@@ -2781,6 +2839,7 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
     printDetailedResults: printDetailedResults,
     evalStorageUri: _emptyToNull(evalStorageUri),
     logLevel: resolvedLogLevel,
+    numRuns: numRuns,
     enableFeatures: _normalizeCsvValues(enableFeatures),
     disableFeatures: _normalizeCsvValues(disableFeatures),
   );
@@ -3044,11 +3103,15 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   required List<EvalCase> evalCases,
   required EvalSetResultsManager evalSetResultsManager,
   String? configFilePath,
+  EvalConfig? evalConfig,
+  int numRuns = 1,
 }) async {
   final LocalEvalService evalService = LocalEvalService(
     rootAgent: rootAgent,
     appName: appName,
   );
+  final EvalConfig resolvedEvalConfig =
+      evalConfig ?? cli_eval.getEvaluationCriteriaOrDefault(configFilePath);
 
   final List<InferenceResult> inferenceResults = await evalService
       .performInference(
@@ -3056,6 +3119,10 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
           appName: appName,
           evalCases: evalCases,
           userId: 'eval_user',
+          inferenceConfig: InferenceConfig(
+            useLive: resolvedEvalConfig.liveModelConfig != null,
+            numRuns: numRuns,
+          ),
         ),
       )
       .toList();
@@ -3063,11 +3130,8 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   final Map<String, EvalCase> evalCasesById = <String, EvalCase>{
     for (final EvalCase evalCase in evalCases) evalCase.evalId: evalCase,
   };
-  final EvalConfig evalConfig = cli_eval.getEvaluationCriteriaOrDefault(
-    configFilePath,
-  );
   final List<EvalMetric> evalMetrics =
-      cli_eval.resolveCliEvalMetricsFromConfig(evalConfig);
+      cli_eval.resolveCliEvalMetricsFromConfig(resolvedEvalConfig);
   final List<EvalCaseResult> rawResults = await evalService
       .evaluate(
         EvaluateRequest(
@@ -3078,6 +3142,11 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
       )
       .toList();
 
+  final Map<(String, int?), InferenceResult> inferenceByCaseAndRep =
+      <(String, int?), InferenceResult>{
+        for (final InferenceResult inference in inferenceResults)
+          (inference.evalCaseId, inference.repetitionIndex): inference,
+      };
   final Map<String, InferenceResult> inferenceByEvalCaseId =
       <String, InferenceResult>{
         for (final InferenceResult inference in inferenceResults)
@@ -3086,17 +3155,21 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   final List<EvalCaseResult> normalizedResults = rawResults
       .map((EvalCaseResult value) {
         final InferenceResult? inference =
+            inferenceByCaseAndRep[(value.evalCaseId, value.repetitionIndex)] ??
             inferenceByEvalCaseId[value.evalCaseId];
         return EvalCaseResult(
           evalCaseId: value.evalCaseId,
           metrics: value.metrics,
           evalSetId: evalSetId,
           finalEvalStatus: _deriveEvalStatusFromMetrics(value.metrics),
-          sessionId: inference?.sessionId ?? '',
+          sessionId: value.sessionId.isNotEmpty
+              ? value.sessionId
+              : (inference?.sessionId ?? ''),
           userId:
               evalCasesById[value.evalCaseId]?.sessionInput?.userId ??
               'eval_user',
           evalSetFile: '$evalSetId.evalset.json',
+          repetitionIndex: value.repetitionIndex ?? inference?.repetitionIndex,
         );
       })
       .toList(growable: false);

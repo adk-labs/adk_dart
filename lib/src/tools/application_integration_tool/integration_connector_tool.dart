@@ -73,6 +73,11 @@ class IntegrationConnectorTool extends BaseTool {
   /// Optional auth credential override for this connector tool.
   final AuthCredential? authCredential;
 
+  static const List<String> _dynamicAuthExcludeFields = <String>[
+    'dynamic_auth_config',
+    'dynamicAuthConfig',
+  ];
+
   @override
   FunctionDeclaration? getDeclaration() {
     final FunctionDeclaration? baseDeclaration = _restApiTool.getDeclaration();
@@ -81,11 +86,18 @@ class IntegrationConnectorTool extends BaseTool {
     final Map<String, Object?> properties = _readMap(schema['properties']);
     final List<Object?> required = _readList(schema['required']);
 
-    for (final String field in excludeFields) {
+    for (final String field in <String>[
+      ...excludeFields,
+      ..._dynamicAuthExcludeFields,
+    ]) {
       properties.remove(field);
     }
 
-    final Set<String> removable = <String>{...optionalFields, ...excludeFields};
+    final Set<String> removable = <String>{
+      ...optionalFields,
+      ...excludeFields,
+      ..._dynamicAuthExcludeFields,
+    };
     required.removeWhere((Object? item) => removable.contains('$item'));
 
     schema['properties'] = properties;
@@ -134,15 +146,12 @@ class IntegrationConnectorTool extends BaseTool {
       final String? authCredentialToken = _prepareDynamicEuc(
         authResult.authCredential!,
       );
-      if (authCredentialToken != null) {
-        args['dynamic_auth_config'] = <String, Object?>{
-          'oauth2_auth_code_flow.access_token': authCredentialToken,
-        };
-      } else {
-        args['dynamic_auth_config'] = <String, Object?>{
-          'oauth2_auth_code_flow.access_token': <String, Object?>{},
-        };
-      }
+      final Map<String, Object?> dynamicAuthPayload = <String, Object?>{
+        'oauth2_auth_code_flow.access_token':
+            authCredentialToken ?? <String, Object?>{},
+      };
+      args['dynamic_auth_config'] = dynamicAuthPayload;
+      args['dynamicAuthConfig'] = dynamicAuthPayload;
     }
 
     args['connection_name'] = connectionName;

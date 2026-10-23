@@ -512,7 +512,7 @@ class BaseLlmFlow {
       }
 
       final Event? functionResponseEvent = await flow_functions
-          .handleFunctionCallsAsync(context, finalized, request.toolsDict);
+          .handleFunctionCallsLive(context, finalized, request.toolsDict);
       if (context.isAborted) {
         return;
       }
@@ -521,7 +521,11 @@ class BaseLlmFlow {
         final String? transferToAgent =
             functionResponseEvent.actions.transferToAgent;
         if (transferToAgent != null && transferToAgent.isNotEmpty) {
-          final BaseAgent agentToRun = _getAgentToRun(context, transferToAgent);
+          final BaseAgent agentToRun = _getAgentToRun(
+            context,
+            transferToAgent,
+            allowSelfTransfer: true,
+          );
           final InvocationContext childContext = _createLiveTransferContext(
             context,
           );
@@ -1417,7 +1421,13 @@ class BaseLlmFlow {
         replacement.turnComplete == null && original.turnComplete != null;
     final bool inheritUsageMetadata =
         replacement.usageMetadata == null && original.usageMetadata != null;
-    if (!inheritPartial && !inheritTurnComplete && !inheritUsageMetadata) {
+    final bool inheritCacheCreationTokenCount =
+        replacement.cacheCreationTokenCount == null &&
+        original.cacheCreationTokenCount != null;
+    if (!inheritPartial &&
+        !inheritTurnComplete &&
+        !inheritUsageMetadata &&
+        !inheritCacheCreationTokenCount) {
       return replacement;
     }
     return replacement.copyWith(
@@ -1428,6 +1438,9 @@ class BaseLlmFlow {
       usageMetadata: inheritUsageMetadata
           ? original.usageMetadata
           : replacement.usageMetadata,
+      cacheCreationTokenCount: inheritCacheCreationTokenCount
+          ? original.cacheCreationTokenCount
+          : replacement.cacheCreationTokenCount,
     );
   }
 
@@ -1513,6 +1526,7 @@ class BaseLlmFlow {
       interrupted: response.interrupted,
       customMetadata: response.customMetadata,
       usageMetadata: response.usageMetadata,
+      cacheCreationTokenCount: response.cacheCreationTokenCount,
       inputTranscription: response.inputTranscription,
       outputTranscription: response.outputTranscription,
       avgLogprobs: response.avgLogprobs,
@@ -1587,13 +1601,20 @@ class BaseLlmFlow {
     return agent.canonicalModel;
   }
 
-  BaseAgent _getAgentToRun(InvocationContext context, String agentName) {
+  BaseAgent _getAgentToRun(
+    InvocationContext context,
+    String agentName, {
+    bool allowSelfTransfer = false,
+  }) {
     final BaseAgent currentAgent = context.agent;
     final BaseAgent? agent = currentAgent.rootAgent.findAgent(agentName);
     if (agent == null) {
       throw StateError('Agent $agentName not found in the agent tree.');
     }
     if (agent.name == currentAgent.name) {
+      if (allowSelfTransfer) {
+        return agent;
+      }
       throw ArgumentError("Agent '$agentName' cannot transfer to itself.");
     }
     if (currentAgent is LlmAgent) {

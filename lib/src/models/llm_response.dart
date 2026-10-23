@@ -17,6 +17,7 @@ class LlmResponse {
     this.interrupted,
     this.customMetadata,
     this.usageMetadata,
+    this.cacheCreationTokenCount,
     this.inputTranscription,
     this.outputTranscription,
     this.avgLogprobs,
@@ -62,6 +63,12 @@ class LlmResponse {
 
   /// Provider usage metadata payload.
   Object? usageMetadata;
+
+  /// Number of tokens written into the prompt cache during this call.
+  ///
+  /// Populated for providers (such as Anthropic and Bedrock) that report cache
+  /// write tokens separately from [usageMetadata].
+  int? cacheCreationTokenCount;
 
   /// Provider input transcription payload.
   Object? inputTranscription;
@@ -146,6 +153,7 @@ class LlmResponse {
     Object? interrupted = _sentinel,
     Object? customMetadata = _sentinel,
     Object? usageMetadata = _sentinel,
+    Object? cacheCreationTokenCount = _sentinel,
     Object? inputTranscription = _sentinel,
     Object? outputTranscription = _sentinel,
     Object? avgLogprobs = _sentinel,
@@ -191,6 +199,9 @@ class LlmResponse {
       usageMetadata: identical(usageMetadata, _sentinel)
           ? this.usageMetadata
           : usageMetadata,
+      cacheCreationTokenCount: identical(cacheCreationTokenCount, _sentinel)
+          ? this.cacheCreationTokenCount
+          : cacheCreationTokenCount as int?,
       inputTranscription: identical(inputTranscription, _sentinel)
           ? this.inputTranscription
           : inputTranscription,

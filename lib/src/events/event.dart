@@ -45,6 +45,7 @@ class Event extends LlmResponse {
     super.interrupted,
     super.customMetadata,
     super.usageMetadata,
+    super.cacheCreationTokenCount,
     super.inputTranscription,
     super.outputTranscription,
     super.avgLogprobs,
@@ -121,6 +122,16 @@ class Event extends LlmResponse {
 
   set message(Content? value) {
     content = value;
+  }
+
+  /// Name of the workflow node that produced this event, or `null` for
+  /// internal state-tracking events or non-node events.
+  String? get nodeName {
+    if (actions.agentState != null || actions.endOfAgent == true) {
+      return null;
+    }
+    final String name = nodeInfo.name;
+    return name.isEmpty ? null : name;
   }
 
   /// Whether this event should be treated as a final user-visible response.
@@ -206,6 +217,7 @@ class Event extends LlmResponse {
     Object? interrupted = _sentinel,
     Object? customMetadata = _sentinel,
     Object? usageMetadata = _sentinel,
+    Object? cacheCreationTokenCount = _sentinel,
     Object? inputTranscription = _sentinel,
     Object? outputTranscription = _sentinel,
     Object? avgLogprobs = _sentinel,
@@ -276,6 +288,9 @@ class Event extends LlmResponse {
       usageMetadata: identical(usageMetadata, _sentinel)
           ? this.usageMetadata
           : usageMetadata,
+      cacheCreationTokenCount: identical(cacheCreationTokenCount, _sentinel)
+          ? this.cacheCreationTokenCount
+          : cacheCreationTokenCount as int?,
       inputTranscription: identical(inputTranscription, _sentinel)
           ? this.inputTranscription
           : inputTranscription,

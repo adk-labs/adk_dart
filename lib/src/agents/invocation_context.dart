@@ -45,6 +45,7 @@ class ActiveBackgroundTool {
     this.task,
     this.inputStream,
     this.isGenerator = false,
+    this.arguments,
     this.onCancel,
   });
 
@@ -62,6 +63,9 @@ class ActiveBackgroundTool {
 
   /// Whether the tool is a streaming generator that yields multiple responses.
   final bool isGenerator;
+
+  /// Arguments passed to the tool call when it started.
+  final Map<String, dynamic>? arguments;
 
   /// Optional cancellation callback invoked by `stop_streaming`.
   FutureOr<void> Function()? onCancel;

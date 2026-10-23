@@ -298,10 +298,12 @@ List<BaseAgent> getTransferTargets(LlmAgent agent) {
 
 bool _usesTaskTransferMode(BaseAgent agent) {
   // Any agent class that declares `mode` participates here, mirroring
-  // Python's hasattr-based check (LlmAgent, ManagedAgent).
+  // Python's hasattr-based check (LlmAgent, ManagedAgent, RemoteA2aAgent).
   final String? mode = agent is LlmAgent
       ? agent.mode
       : agent is ManagedAgent
+      ? agent.mode
+      : agent is RemoteA2aAgent
       ? agent.mode
       : null;
   return mode == 'task' || mode == 'single_turn';

@@ -88,6 +88,7 @@ class Gemini extends BaseLlm {
     this.retryOptions,
     this.baseUrl,
     this.speechConfig,
+    this.clientKwargs,
     this.cacheManager = const GeminiContextCacheManager(),
     this.environment,
     this.apiBackendOverride,
@@ -108,6 +109,9 @@ class Gemini extends BaseLlm {
 
   /// Optional speech config used for live connections.
   final Object? speechConfig;
+
+  /// Optional client keyword arguments forwarded to the underlying Gemini client.
+  final Map<String, Object?>? clientKwargs;
 
   /// Context cache manager used for cache-aware requests.
   final GeminiContextCacheManager cacheManager;
@@ -145,6 +149,32 @@ class Gemini extends BaseLlm {
       _normalizedEndpoint.apiVersion ??
       (apiBackend == GoogleLLMVariant.vertexAi ? 'v1beta1' : 'v1alpha');
 
+  String? _resolveEnvApiVersion() {
+    final Map<String, String> env = environment ?? readSystemEnvironment();
+    final String? version = env['GOOGLE_GENAI_API_VERSION'];
+    if (version == null || version.trim().isEmpty) {
+      return null;
+    }
+    return version.trim();
+  }
+
+  /// Resolved client-level [HttpOptions] for standard Gemini requests.
+  HttpOptions get clientHttpOptions => buildAdkHttpOptions(
+    clientKwargs: clientKwargs,
+    retryOptions: _resolveRetryOptions(requestRetryOptions: null),
+    apiVersion: _normalizedEndpoint.apiVersion ?? _resolveEnvApiVersion(),
+    baseUrl: _normalizedEndpoint.baseUrl,
+    environment: environment,
+  );
+
+  /// Resolved client-level [HttpOptions] for Live API connections.
+  HttpOptions get liveClientHttpOptions => buildAdkHttpOptions(
+    clientKwargs: clientKwargs,
+    apiVersion: _liveApiVersion,
+    baseUrl: _normalizedEndpoint.baseUrl,
+    environment: environment,
+  );
+
   @override
   LlmCapabilities get capabilities => LlmCapabilities(
     outputSchemaAndTools:
@@ -180,9 +210,13 @@ class Gemini extends BaseLlm {
     }
     _preprocessRequest(prepared);
     maybeAppendUserContent(prepared);
+    final HttpOptions resolvedClientOptions = clientHttpOptions;
     prepared.config.httpOptions ??= HttpOptions();
     prepared.config.httpOptions!.headers = _mergeTrackingHeaders(
-      prepared.config.httpOptions!.headers,
+      <String, String>{
+        ...resolvedClientOptions.headers,
+        ...prepared.config.httpOptions!.headers,
+      },
     );
 
     CacheMetadata? cacheMetadata;
@@ -213,12 +247,17 @@ class Gemini extends BaseLlm {
           'Gemini.generateContent requires GEMINI_API_KEY or GOOGLE_API_KEY to be set.',
         );
       }
-      final HttpRetryOptions? resolvedRetryOptions = _resolveRetryOptions(
-        requestRetryOptions: prepared.config.httpOptions?.retryOptions,
-      );
+      final HttpRetryOptions? resolvedRetryOptions =
+          prepared.config.httpOptions?.retryOptions ??
+          resolvedClientOptions.retryOptions ??
+          _resolveRetryOptions(
+            requestRetryOptions: prepared.config.httpOptions?.retryOptions,
+          );
+      final _NormalizedGeminiEndpoint endpoint = _normalizedEndpoint;
+      final String? resolvedBaseUrl =
+          resolvedClientOptions.baseUrl ?? endpoint.baseUrl;
 
       if (useInteractionsApi) {
-        final _NormalizedGeminiEndpoint endpoint = _normalizedEndpoint;
         await for (final LlmResponse response in generateContentViaInteractions(
           llmRequest: prepared,
           stream: stream,
@@ -227,10 +266,11 @@ class Gemini extends BaseLlm {
               ? _resolvedRestTransport
               : null,
           apiKey: apiKey,
-          baseUrl: endpoint.baseUrl,
+          baseUrl: resolvedBaseUrl,
           apiVersion:
               endpoint.apiVersion ??
               prepared.config.httpOptions?.apiVersion ??
+              resolvedClientOptions.apiVersion ??
               'v1beta',
           headers: prepared.config.httpOptions?.headers,
           retryOptions: resolvedRetryOptions,
@@ -242,10 +282,10 @@ class Gemini extends BaseLlm {
       }
 
       final String computedModel = prepared.model ?? model;
-      final _NormalizedGeminiEndpoint endpoint = _normalizedEndpoint;
       final String apiVersion =
           endpoint.apiVersion ??
           prepared.config.httpOptions?.apiVersion ??
+          resolvedClientOptions.apiVersion ??
           'v1beta';
       final Map<String, Object?> payload = _buildGenerateContentPayload(
         prepared,
@@ -261,7 +301,7 @@ class Gemini extends BaseLlm {
               model: computedModel,
               apiKey: apiKey!,
               payload: payload,
-              baseUrl: endpoint.baseUrl,
+              baseUrl: resolvedBaseUrl,
               apiVersion: apiVersion,
               headers: prepared.config.httpOptions?.headers,
               retryOptions: resolvedRetryOptions,
@@ -339,7 +379,7 @@ class Gemini extends BaseLlm {
               model: computedModel,
               apiKey: apiKey!,
               payload: payload,
-              baseUrl: endpoint.baseUrl,
+              baseUrl: resolvedBaseUrl,
               apiVersion: apiVersion,
               headers: prepared.config.httpOptions?.headers,
               retryOptions: resolvedRetryOptions,
@@ -379,13 +419,13 @@ class Gemini extends BaseLlm {
 
   /// Creates a live-capable connection for [request].
   BaseLlmConnection connect(LlmRequest request) {
+    if (request.liveConnectConfig.httpOptions != null) {
+      throw ArgumentError(
+        "http_options must be set via Gemini(clientKwargs: {'http_options': ...}), not on liveConnectConfig, because the live client is initialized with client-level HTTP options.",
+      );
+    }
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model = prepared.model ?? model;
-    prepared.liveConnectConfig.httpOptions ??= HttpOptions();
-    prepared.liveConnectConfig.httpOptions!.headers = _mergeTrackingHeaders(
-      prepared.liveConnectConfig.httpOptions!.headers,
-    );
-    prepared.liveConnectConfig.httpOptions!.apiVersion = _liveApiVersion;
     if (speechConfig != null) {
       prepared.liveConnectConfig.speechConfig = speechConfig;
     }
@@ -1270,6 +1310,130 @@ _NormalizedGeminiEndpoint _normalizeGeminiEndpoint(String? baseUrl) {
 
 bool _isApiVersionSegment(String segment) {
   return RegExp(r'^v\d[\w.-]*$').hasMatch(segment);
+}
+
+final Expando<String> _httpOptionsBaseUrl = Expando<String>(
+  '_adk_http_options_base_url',
+);
+
+/// Extension providing client-level base URL metadata on [HttpOptions].
+extension GeminiHttpOptionsBaseUrl on HttpOptions {
+  /// Optional base URL override for Gemini client HTTP options.
+  String? get baseUrl => _httpOptionsBaseUrl[this];
+
+  set baseUrl(String? value) {
+    _httpOptionsBaseUrl[this] = value;
+  }
+}
+
+HttpRetryOptions? _coerceHttpRetryOptions(Object? raw) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is HttpRetryOptions) {
+    return raw.copyWith();
+  }
+  if (raw is Map) {
+    final Map<String, Object?> map = raw.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+    return HttpRetryOptions(
+      attempts: _intValue(map['attempts']),
+      initialDelay: _doubleValue(map['initialDelay'] ?? map['initial_delay']),
+      maxDelay: _doubleValue(map['maxDelay'] ?? map['max_delay']),
+      expBase: _doubleValue(map['expBase'] ?? map['exp_base']),
+      httpStatusCodes: _coerceIntList(
+        map['httpStatusCodes'] ?? map['http_status_codes'],
+      ),
+    );
+  }
+  return null;
+}
+
+Map<String, String> _coerceStringHeaders(Object? raw) {
+  if (raw is Map) {
+    final Map<String, String> headers = <String, String>{};
+    raw.forEach((Object? key, Object? value) {
+      if (key != null && value != null) {
+        headers['$key'] = '$value';
+      }
+    });
+    return headers;
+  }
+  return <String, String>{};
+}
+
+/// Builds [HttpOptions] by merging caller [clientKwargs] `http_options` with
+/// ADK defaults and tracking headers.
+HttpOptions buildAdkHttpOptions({
+  Map<String, Object?>? clientKwargs,
+  Map<String, String>? defaultHeaders,
+  HttpRetryOptions? retryOptions,
+  String? apiVersion,
+  String? baseUrl,
+  Map<String, String>? environment,
+}) {
+  final Object? rawHttpOptions =
+      clientKwargs?['http_options'] ?? clientKwargs?['httpOptions'];
+  final Map<String, String> mergedHeaders = <String, String>{
+    ...?defaultHeaders,
+  };
+  HttpRetryOptions? resolvedRetryOptions;
+  String? resolvedApiVersion;
+  String? resolvedBaseUrl;
+
+  if (rawHttpOptions is HttpOptions) {
+    mergedHeaders.addAll(rawHttpOptions.headers);
+    resolvedRetryOptions = rawHttpOptions.retryOptions?.copyWith();
+    resolvedApiVersion = rawHttpOptions.apiVersion;
+    resolvedBaseUrl = rawHttpOptions.baseUrl;
+  } else if (rawHttpOptions is Map) {
+    final Map<String, Object?> map = rawHttpOptions.map(
+      (Object? key, Object? value) => MapEntry('$key', value),
+    );
+    mergedHeaders.addAll(_coerceStringHeaders(map['headers']));
+    resolvedRetryOptions = _coerceHttpRetryOptions(
+      map['retry_options'] ?? map['retryOptions'],
+    );
+    resolvedApiVersion = _stringValue(map['api_version'] ?? map['apiVersion']);
+    resolvedBaseUrl = _stringValue(map['base_url'] ?? map['baseUrl']);
+  }
+
+  resolvedRetryOptions ??= retryOptions?.copyWith();
+  resolvedApiVersion ??= apiVersion;
+  resolvedBaseUrl ??= baseUrl;
+
+  final HttpOptions built = HttpOptions(
+    retryOptions: resolvedRetryOptions,
+    headers: mergeTrackingHeaders(mergedHeaders, environment: environment),
+    apiVersion: resolvedApiVersion,
+  );
+  built.baseUrl = resolvedBaseUrl;
+  return built;
+}
+
+/// Returns a copy of [clientKwargs] with ADK HTTP options and tracking headers
+/// merged into `http_options`.
+Map<String, Object?> withAdkHttpOptions({
+  Map<String, Object?>? clientKwargs,
+  Map<String, String>? defaultHeaders,
+  HttpRetryOptions? retryOptions,
+  String? apiVersion,
+  String? baseUrl,
+  Map<String, String>? environment,
+}) {
+  final HttpOptions resolved = buildAdkHttpOptions(
+    clientKwargs: clientKwargs,
+    defaultHeaders: defaultHeaders,
+    retryOptions: retryOptions,
+    apiVersion: apiVersion,
+    baseUrl: baseUrl,
+    environment: environment,
+  );
+  final Map<String, Object?> mergedKwargs = <String, Object?>{...?clientKwargs};
+  mergedKwargs.remove('httpOptions');
+  mergedKwargs['http_options'] = resolved;
+  return mergedKwargs;
 }
 
 /// Backward-compatible alias for [Gemini].

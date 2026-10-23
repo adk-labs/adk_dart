@@ -25,10 +25,13 @@ class ApplicationIntegrationToolset extends BaseToolset {
     required this.location,
     this.connectionTemplateOverride,
     this.integration,
+    this.trigger,
     List<String>? triggers,
     this.connection,
     Map<String, List<String>>? entityOperations,
     List<String>? actions,
+    this.toolName,
+    super.toolNamePrefix,
     this.toolInstructions = '',
     this.serviceAccountJson,
     this.authScheme,
@@ -37,7 +40,8 @@ class ApplicationIntegrationToolset extends BaseToolset {
     this.connectionsClient,
     super.toolFilter,
     this.allowPrivateNetworkAccess = false,
-  }) : triggers = triggers ?? <String>[],
+  }) : triggers =
+           triggers ?? (trigger != null ? <String>[trigger] : <String>[]),
        entityOperations = entityOperations ?? <String, List<String>>{},
        actions = actions ?? <String>[],
        _authConfig = authScheme == null
@@ -76,6 +80,9 @@ class ApplicationIntegrationToolset extends BaseToolset {
   /// Optional integration resource name.
   final String? integration;
 
+  /// Optional single trigger id used for integration-mode spec generation.
+  final String? trigger;
+
   /// Trigger ids used for integration-mode spec generation.
   final List<String> triggers;
 
@@ -87,6 +94,9 @@ class ApplicationIntegrationToolset extends BaseToolset {
 
   /// Requested connector actions.
   final List<String> actions;
+
+  /// Optional prefix for generated tool names (superseded by [toolNamePrefix] when both are set).
+  final String? toolName;
 
   /// Additional tool instructions injected into generated operations.
   final String toolInstructions;
@@ -136,7 +146,9 @@ class ApplicationIntegrationToolset extends BaseToolset {
           );
       connectionDetails = await resolvedConnectionsClient
           .getConnectionDetails();
+      final String resolvedToolName = toolNamePrefix ?? toolName ?? '';
       spec = await resolvedIntegrationClient.getOpenApiSpecForConnection(
+        toolName: resolvedToolName,
         toolInstructions: toolInstructions,
       );
     } else {
@@ -203,11 +215,13 @@ class ApplicationIntegrationToolset extends BaseToolset {
     }
 
     if (integration != null) {
+      final String resolvedToolName = toolNamePrefix ?? toolName ?? '';
       _openApiToolset = OpenAPIToolset(
         specDict: specDict,
         authCredential: resolvedAuthCredential,
         authScheme: resolvedAuthScheme,
         toolFilter: toolFilter,
+        toolNamePrefix: resolvedToolName.isEmpty ? null : resolvedToolName,
         allowPrivateNetworkAccess: allowPrivateNetworkAccess,
       );
       return;
