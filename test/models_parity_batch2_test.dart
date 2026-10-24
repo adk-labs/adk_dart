@@ -723,7 +723,7 @@ void main() {
         );
 
         expect(captured, isNotNull);
-        expect(captured!.liveConnectConfig.httpOptions?.apiVersion, 'v1beta1');
+        expect(captured!.liveConnectConfig.httpOptions, isNull);
         expect(captured!.liveConnectConfig.tools, isNotNull);
         expect(captured!.liveConnectConfig.systemInstruction, isA<Content>());
         expect(connection, isA<GeminiLlmConnection>());

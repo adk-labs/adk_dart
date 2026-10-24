@@ -8,6 +8,7 @@ import 'dart:io';
 
 import '../a2a/converters/event_converter.dart';
 import '../a2a/converters/part_converter.dart';
+import '../a2a/converters/utils.dart';
 import '../a2a/logs/log_utils.dart';
 import '../a2a/protocol.dart';
 import '../events/event.dart';
@@ -69,6 +70,15 @@ const Set<A2aTaskState> _unfinishedTaskStates = <A2aTaskState>{
   A2aTaskState.submitted,
   A2aTaskState.working,
   A2aTaskState.unknown,
+};
+
+const Set<A2aTaskState> _taskResponseBoundaryStates = <A2aTaskState>{
+  A2aTaskState.completed,
+  A2aTaskState.failed,
+  A2aTaskState.canceled,
+  A2aTaskState.rejected,
+  A2aTaskState.inputRequired,
+  A2aTaskState.authRequired,
 };
 
 /// Well-known path used to discover remote agent cards.
@@ -801,6 +811,9 @@ class RemoteA2aAgent extends BaseAgent {
             invocationContext: ctx,
             partConverter: _a2aPartConverter,
           );
+          if (isFailedStatus(task.status)) {
+            event = markA2aTaskFailedEvent(event);
+          }
           if ((task.status.state == A2aTaskState.submitted ||
                   task.status.state == A2aTaskState.working) &&
               event.content != null &&
@@ -810,22 +823,43 @@ class RemoteA2aAgent extends BaseAgent {
             }
           }
           _addMockFunctionCall(event, task.status.state);
-        } else if (update is A2aTaskStatusUpdateEvent &&
-            update.status.message != null) {
-          event = convertA2aStatusUpdateToEvent(
-            update,
-            author: name,
-            invocationContext: ctx,
-            partConverter: _a2aPartConverter,
-          );
-          if ((update.status.state == A2aTaskState.submitted ||
-                  update.status.state == A2aTaskState.working) &&
-              event.content != null) {
-            for (final Part part in event.content!.parts) {
-              part.thought = true;
+        } else if (update is A2aTaskStatusUpdateEvent) {
+          final bool failed =
+              isFailedStatus(update.status) || isFailedStatus(task.status);
+          final bool hasMessageParts =
+              update.status.message != null &&
+              update.status.message!.parts.isNotEmpty;
+          if (failed || hasMessageParts) {
+            event = convertA2aStatusUpdateToEvent(
+              update,
+              author: name,
+              invocationContext: ctx,
+              partConverter: _a2aPartConverter,
+            );
+            if (failed) {
+              event = markA2aTaskFailedEvent(event);
+              _addMockFunctionCall(event, A2aTaskState.failed);
+            } else {
+              if ((update.status.state == A2aTaskState.submitted ||
+                      update.status.state == A2aTaskState.working) &&
+                  event.content != null) {
+                for (final Part part in event.content!.parts) {
+                  part.thought = true;
+                }
+              }
+              _addMockFunctionCall(event, update.status.state);
             }
+          } else if (_taskResponseBoundaryStates.contains(
+            update.status.state,
+          )) {
+            event = Event(
+              author: name,
+              invocationId: ctx.invocationId,
+              branch: ctx.branch,
+            );
+          } else {
+            return null;
           }
-          _addMockFunctionCall(event, update.status.state);
         } else if (update is A2aTaskArtifactUpdateEvent) {
           event = convertA2aArtifactUpdateToEvent(
             update,

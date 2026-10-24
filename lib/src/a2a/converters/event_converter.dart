@@ -305,7 +305,7 @@ Event convertA2aTaskToEvent(
     actions.skipSummarization = true;
   }
 
-  return Event(
+  final Event event = Event(
     invocationId: invocationId,
     author: author ?? 'a2a_agent',
     branch: invocationContext?.branch,
@@ -316,6 +316,36 @@ Event convertA2aTaskToEvent(
     content: processedParts.isEmpty
         ? null
         : Content(role: 'model', parts: processedParts),
+  );
+  if (isFailedStatus(a2aTask.status)) {
+    return markA2aTaskFailedEvent(event);
+  }
+  return event;
+}
+
+String _extractTextFromEvent(Event event) {
+  final Content? content = event.content;
+  if (content == null || content.parts.isEmpty) {
+    return '';
+  }
+  return content.parts
+      .where((Part part) => part.text != null && part.text!.isNotEmpty)
+      .map((Part part) => part.text!)
+      .join('\n');
+}
+
+/// Marks [event] with [a2aTaskFailedErrorCode] and a fallback error message
+/// when a remote A2A task or status update is in a failed state.
+Event markA2aTaskFailedEvent(Event event) {
+  if (event.errorCode != null && event.errorMessage != null) {
+    return event;
+  }
+  final String text = _extractTextFromEvent(event);
+  return event.copyWith(
+    errorCode: event.errorCode ?? a2aTaskFailedErrorCode,
+    errorMessage:
+        event.errorMessage ??
+        (text.isNotEmpty ? text : a2aTaskFailedErrorMessage),
   );
 }
 
@@ -408,7 +438,7 @@ Event convertA2aStatusUpdateToEvent(
     parts: processedParts,
   );
 
-  return converted.copyWith(
+  final Event updated = converted.copyWith(
     actions: _mergeEventActions(
       _extractEventActions(a2aStatusUpdate.metadata),
       converted.actions,
@@ -418,6 +448,10 @@ Event convertA2aStatusUpdateToEvent(
         : processedLongRunningIds,
     content: processedContent,
   );
+  if (isFailedStatus(a2aStatusUpdate.status)) {
+    return markA2aTaskFailedEvent(updated);
+  }
+  return updated;
 }
 
 /// Returns the deterministic UUIDv5 event ID shared by all chunks of an A2A

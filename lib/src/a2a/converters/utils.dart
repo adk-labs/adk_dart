@@ -1,8 +1,22 @@
 /// Shared conversion helpers for ADK-specific A2A metadata and context IDs.
 library;
 
+import '../protocol.dart';
+
 /// The metadata key prefix reserved for ADK-specific fields.
 const String adkMetadataKeyPrefix = 'adk_';
+
+/// Error code set on ADK events when a remote A2A task fails.
+const String a2aTaskFailedErrorCode = 'A2A_TASK_FAILED';
+
+/// Fallback error message set on ADK events when a remote A2A task fails
+/// without providing status message text.
+const String a2aTaskFailedErrorMessage = 'Remote agent task failed';
+
+/// Returns true when [status] represents a failed A2A task state.
+bool isFailedStatus(A2aTaskStatus? status) {
+  return status != null && status.state == A2aTaskState.failed;
+}
 
 /// The fixed prefix used in encoded ADK A2A context identifiers.
 const String adkContextIdPrefix = 'ADK';

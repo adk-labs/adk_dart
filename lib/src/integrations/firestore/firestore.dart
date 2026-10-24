@@ -826,8 +826,11 @@ class FirestoreSessionService extends BaseSessionService {
     required String appName,
     String? userId,
   }) async {
+    if (userId == '') {
+      return ListSessionsResponse(sessions: <Session>[]);
+    }
     final List<FirestoreDocumentSnapshot> docs;
-    if (userId != null && userId.isNotEmpty) {
+    if (userId != null) {
       docs = await client.queryCollection(
         _sessionsCollectionPath(appName, userId),
         filters: <FirestoreFieldFilter>[

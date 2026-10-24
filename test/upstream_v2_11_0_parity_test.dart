@@ -590,7 +590,7 @@ contradicting_excerpt: null
       // Default summarizer compacts inv-1 despite orphanCall because dead_call_1 is in an older invocation.
       final App workingApp = App(
         name: 'app',
-        rootAgent: LlmAgent(name: 'root'),
+        rootAgent: LlmAgent(name: 'root', model: _RecordingLlm()),
         eventsCompactionConfig: EventsCompactionConfig(
           compactionInterval: 2,
           overlapSize: 1,
