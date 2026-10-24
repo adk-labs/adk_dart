@@ -15,9 +15,11 @@ import '../agents/llm/task/finish_task_tool.dart';
 import '../agents/llm_agent.dart';
 import '../agents/remote_a2a_agent.dart';
 import '../events/event.dart';
+import '../events/node_path_builder.dart';
 import '../models/cache_metadata.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
+import '../platform/uuid.dart';
 import '../tools/agent_tool.dart';
 import '../tools/base_tool.dart';
 import '../tools/function_tool.dart';
@@ -46,6 +48,7 @@ const Map<String, String> _hitlEventMap = <String, String>{
 const List<String> _analyticsViewEventTypes = <String>[
   'INVOCATION_STARTING',
   'INVOCATION_COMPLETED',
+  'INVOCATION_ERROR',
   'AGENT_STARTING',
   'AGENT_COMPLETED',
   'LLM_REQUEST',
@@ -63,7 +66,63 @@ const List<String> _analyticsViewEventTypes = <String>[
   'HITL_CONFIRMATION_REQUEST_COMPLETED',
   'HITL_INPUT_REQUEST',
   'HITL_INPUT_REQUEST_COMPLETED',
+  'NODE_OUTPUT',
+  'NODE_ERROR',
+  'WORKFLOW_NODE_FIRST_OBSERVED',
+  'WORKFLOW_NODE_OBSERVATION_SUMMARY',
 ];
+
+const int _maxInFlightWorkflowSegments = 4096;
+const int _maxObservedNodePathsPerSegment = 4096;
+const int _reservedTerminalQueueSlots = 2;
+const Set<String> _terminalQueueEventTypes = <String>{
+  'INVOCATION_COMPLETED',
+  'INVOCATION_ERROR',
+};
+
+List<String> _strictAncestorNodePaths(String nodePath) {
+  final List<String> segments = nodePath.split('/');
+  final List<String> ancestors = <String>[];
+  for (int end = 1; end < segments.length; end += 1) {
+    ancestors.add(segments.sublist(0, end).join('/'));
+  }
+  return ancestors;
+}
+
+class _WorkflowNodeObservation {
+  _WorkflowNodeObservation({
+    required this.nodePath,
+    required this.nodeRunId,
+    required this.nodeParentRunId,
+    required this.firstSourceEventId,
+    required this.lastSourceEventId,
+    this.firstSourceEventTimestamp,
+    this.lastSourceEventTimestamp,
+  });
+
+  final String nodePath;
+  final String? nodeRunId;
+  final String? nodeParentRunId;
+  final String firstSourceEventId;
+  String lastSourceEventId;
+  double? firstSourceEventTimestamp;
+  double? lastSourceEventTimestamp;
+  int observedEventCount = 1;
+  bool nodeInterruptObserved = false;
+  bool descendantInterruptObserved = false;
+  int nodeErrorObservedCount = 0;
+}
+
+class _WorkflowObservationSegment {
+  _WorkflowObservationSegment({required this.segmentId});
+
+  final String segmentId;
+  final Map<String, _WorkflowNodeObservation> nodes =
+      <String, _WorkflowNodeObservation>{};
+  final Set<String> overflowNodePaths = <String>{};
+  int untrackedPathEvents = 0;
+  final Set<String> interruptedAncestorPaths = <String>{};
+}
 
 /// Retry policy used by BigQuery event delivery.
 class RetryConfig {
@@ -113,6 +172,7 @@ class BigQueryDropStats {
     this.shutdownDropped = 0,
     this.formatFailed = 0,
     this.gcsUploadFailed = 0,
+    this.workflowObservationCapacity = 0,
   });
 
   /// Events dropped because the internal queue was at capacity.
@@ -130,8 +190,13 @@ class BigQueryDropStats {
   /// Multimodal or oversized text parts whose GCS offload failed.
   final int gcsUploadFailed;
 
+  /// Workflow observation summaries not written because observed node paths
+  /// exceeded [BigQueryLoggerConfig.maxObservationSummariesPerSegment].
+  final int workflowObservationCapacity;
+
   /// Total events dropped from BigQuery delivery.
-  int get total => queueFull + writeFailed + shutdownDropped;
+  int get total =>
+      queueFull + writeFailed + shutdownDropped + workflowObservationCapacity;
 
   /// Serializes this snapshot as a JSON-compatible map.
   Map<String, int> toJson() => <String, int>{
@@ -140,6 +205,7 @@ class BigQueryDropStats {
     'shutdown_dropped': shutdownDropped,
     'format_failed': formatFailed,
     'gcs_upload_failed': gcsUploadFailed,
+    'workflow_observation_capacity': workflowObservationCapacity,
     'total': total,
   };
 }
@@ -173,6 +239,7 @@ class BigQueryLoggerConfig {
     Set<String>? finalResponseToolNames,
     this.createEvalViews = false,
     this.evalViewMode = 'full',
+    this.maxObservationSummariesPerSegment = 200,
     this.toolResultClassifier,
     this.onSchemaError,
     this.onSchemaReady,
@@ -264,6 +331,10 @@ class BigQueryLoggerConfig {
   /// `'conversation_only'`.
   String evalViewMode;
 
+  /// Maximum number of `WORKFLOW_NODE_OBSERVATION_SUMMARY` rows written when
+  /// a runner call ends. Must be an integer >= 1.
+  int maxObservationSummariesPerSegment;
+
   /// Optional classifier for tool results that report errors without throwing.
   ToolResultClassifier? toolResultClassifier;
 
@@ -289,8 +360,11 @@ class EventData {
     this.cacheMetadata,
     this.status = 'OK',
     this.errorMessage,
+    this.sourceEvent,
+    Map<String, Object?>? adkExtras,
     Map<String, Object?>? extraAttributes,
-  }) : extraAttributes = extraAttributes ?? <String, Object?>{};
+  }) : adkExtras = adkExtras ?? <String, Object?>{},
+       extraAttributes = extraAttributes ?? <String, Object?>{};
 
   /// Explicit trace identifier to use for this event.
   final String? traceIdOverride;
@@ -324,6 +398,12 @@ class EventData {
 
   /// Optional error message for failed operations.
   final String? errorMessage;
+
+  /// Optional source [Event] used to populate the `attributes.adk` envelope.
+  final Event? sourceEvent;
+
+  /// Producer-supplied extras merged into `attributes.adk`.
+  final Map<String, Object?> adkExtras;
 
   /// Additional attributes merged into the row metadata.
   final Map<String, Object?> extraAttributes;
@@ -969,6 +1049,13 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
        super(name: 'bigquery_agent_analytics') {
     this.tableId = tableId ?? this.config.tableId;
     _applyConfigOverrides(configOverrides);
+    if (this.config.maxObservationSummariesPerSegment < 1) {
+      throw ArgumentError.value(
+        this.config.maxObservationSummariesPerSegment,
+        'maxObservationSummariesPerSegment',
+        'max_observation_summaries_per_segment must be an int >= 1.',
+      );
+    }
     if (this.config.createEvalViews) {
       _validateEvalViewConfig(prefix: 'Cannot enable createEvalViews=true');
     }
@@ -1000,16 +1087,33 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   bool _started = false;
   bool _isShuttingDown = false;
   bool _viewsCreated = false;
-  final int _queueFullCount = 0;
+  int _queueFullCount = 0;
   int _writeFailedCount = 0;
   int _shutdownDroppedCount = 0;
   int _formatFailedCount = 0;
   int _gcsUploadFailedCount = 0;
+  int _workflowObservationCapacityCount = 0;
+  final Map<String, _WorkflowObservationSegment> _workflowSegments =
+      <String, _WorkflowObservationSegment>{};
+
+  /// Optional provider returning the current pending queue size for backpressure
+  /// and terminal slot reservation checks.
+  int Function()? queueSizeProvider;
   DateTime? _gcsCooldownUntil;
   final BigQueryEventSink _sink;
   final BigQueryAnalyticsViewExecutor? _analyticsViewExecutor;
   BigQueryGcsUploadProvider? _gcsUploadProvider;
   http.Client? _ownedGcsHttpClient;
+
+  /// Number of queue slots reserved exclusively for `INVOCATION_COMPLETED` and
+  /// `INVOCATION_ERROR` rows when `config.queueMaxSize > 1`.
+  int get reservedTerminalQueueSlots {
+    final int maxSize = config.queueMaxSize;
+    if (maxSize <= 1) {
+      return 0;
+    }
+    return min(max(_reservedTerminalQueueSlots, maxSize ~/ 100), maxSize - 1);
+  }
 
   /// Current snapshot of dropped or degraded analytics event counts.
   BigQueryDropStats get dropStats => BigQueryDropStats(
@@ -1018,7 +1122,11 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     shutdownDropped: _shutdownDroppedCount,
     formatFailed: _formatFailedCount,
     gcsUploadFailed: _gcsUploadFailedCount,
+    workflowObservationCapacity: _workflowObservationCapacityCount,
   );
+
+  /// Returns per-reason drop counts as a map (matching Python `get_drop_stats()`).
+  Map<String, int> getDropStats() => dropStats.toJson();
 
   /// The schema version stored in each event row.
   String get schemaVersion => _schemaVersion;
@@ -1138,6 +1246,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     await _sink.close();
     _ownedGcsHttpClient?.close();
     _ownedGcsHttpClient = null;
+    _workflowSegments.clear();
     _isShuttingDown = false;
     _started = false;
   }
@@ -1309,11 +1418,47 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         invocationContext,
       );
 
+      if (_workflowObservationsEnabled) {
+        try {
+          final (_WorkflowObservationSegment, bool, double?)?
+          workflowObservation = _recordWorkflowNodeObservation(
+            event,
+            invocationContext,
+          );
+          if (workflowObservation != null) {
+            final (
+              _WorkflowObservationSegment segment,
+              bool isFirst,
+              double? eventTs,
+            ) = workflowObservation;
+            if (isFirst) {
+              await _logEvent(
+                'WORKFLOW_NODE_FIRST_OBSERVED',
+                callbackContext,
+                eventData: EventData(
+                  sourceEvent: event,
+                  adkExtras: <String, Object?>{
+                    'workflow_segment_id': segment.segmentId,
+                    'boundary_basis': 'event_observation',
+                    'source_event_timestamp': eventTs,
+                  },
+                ),
+              );
+            }
+          }
+        } catch (error) {
+          stderr.writeln(
+            'Could not record workflow-node observation; continuing. $error',
+          );
+        }
+      }
+
       if (event.actions.stateDelta.isNotEmpty) {
         await _logEvent(
           'STATE_DELTA',
           callbackContext,
           eventData: EventData(
+            sourceEvent: event,
             extraAttributes: <String, Object?>{
               'state_delta': Map<String, Object?>.from(
                 event.actions.stateDelta,
@@ -1336,15 +1481,19 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
             rawContent: <String, Object?>{'output': outputTruncated.value},
             isTruncated: outputTruncated.isTruncated,
             eventData: EventData(
+              sourceEvent: event,
               extraAttributes: <String, Object?>{'node_path': nodeInfo.path},
             ),
           );
         }
-        if (isDurableNodeError(event)) {
+        if ((event.errorCode?.isNotEmpty ?? false) &&
+            isDurableNodeError(event)) {
           await _logEvent(
             'NODE_ERROR',
             callbackContext,
+            rawContent: <String, Object?>{'error_code': event.errorCode},
             eventData: EventData(
+              sourceEvent: event,
               status: 'ERROR',
               errorMessage: event.errorMessage ?? event.errorCode,
               extraAttributes: <String, Object?>{
@@ -1453,10 +1602,13 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required InvocationContext invocationContext,
   }) async {
     return _safeCallback<Content?>('beforeRunCallback', () async {
+      await _ensureStarted();
+      if (_workflowObservationsEnabled) {
+        _openWorkflowSegment(invocationContext.invocationId);
+      }
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
-      await _ensureStarted();
       await _logEvent('INVOCATION_STARTING', callbackContext);
       return null;
     });
@@ -1471,9 +1623,49 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
-      await _logEvent('INVOCATION_COMPLETED', callbackContext);
-      await flush();
-      _TraceManager.clear(callbackContext);
+      try {
+        await _drainWorkflowNodeObservations(
+          callbackContext,
+          drainCallback: 'after_run',
+        );
+        await _logEvent('INVOCATION_COMPLETED', callbackContext);
+      } finally {
+        _workflowSegments.remove(invocationContext.invocationId);
+        await flush();
+        _TraceManager.clear(callbackContext);
+      }
+    });
+  }
+
+  /// Logs runner failure, drains workflow node observations, and clears trace state.
+  @override
+  Future<void> onRunErrorCallback({
+    required InvocationContext invocationContext,
+    required Object error,
+  }) async {
+    await _safeCallback<void>('onRunErrorCallback', () async {
+      final CallbackContext callbackContext = CallbackContext(
+        invocationContext,
+      );
+      try {
+        await _drainWorkflowNodeObservations(
+          callbackContext,
+          drainCallback: 'on_run_error',
+        );
+        await _logEvent(
+          'INVOCATION_ERROR',
+          callbackContext,
+          rawContent: <String, Object?>{'error_traceback': '$error'},
+          eventData: EventData(
+            status: 'ERROR',
+            errorMessage: '$error',
+          ),
+        );
+      } finally {
+        _workflowSegments.remove(invocationContext.invocationId);
+        await flush();
+        _TraceManager.clear(callbackContext);
+      }
     });
   }
 
@@ -1861,6 +2053,199 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     }
   }
 
+  bool get _workflowObservationsEnabled => config.enabled && !_isShuttingDown;
+
+  bool _eventTypeFiltered(String eventType) {
+    if (config.eventDenylist?.contains(eventType) == true) {
+      return true;
+    }
+    final List<String>? allowlist = config.eventAllowlist;
+    return allowlist != null && !allowlist.contains(eventType);
+  }
+
+  void _openWorkflowSegment(String invocationId) {
+    _workflowSegments.remove(invocationId);
+    while (_workflowSegments.length >= _maxInFlightWorkflowSegments) {
+      _workflowSegments.remove(_workflowSegments.keys.first);
+    }
+    _workflowSegments[invocationId] = _WorkflowObservationSegment(
+      segmentId: newUuid(),
+    );
+  }
+
+  (_WorkflowObservationSegment, bool, double?)? _recordWorkflowNodeObservation(
+    Event event,
+    InvocationContext invocationContext,
+  ) {
+    final NodeInfo nodeInfo = event.nodeInfo;
+    final String nodePath = nodeInfo.path;
+    if (nodePath.isEmpty) {
+      return null;
+    }
+
+    final String eventId = event.id;
+    final double? eventTs = event.timestamp.isFinite ? event.timestamp : null;
+    final int summaryCap = config.maxObservationSummariesPerSegment;
+    final int maxTrackedPaths = max(
+      summaryCap,
+      _maxObservedNodePathsPerSegment,
+    );
+
+    final _WorkflowObservationSegment? segment =
+        _workflowSegments[invocationContext.invocationId];
+    if (segment == null) {
+      return null;
+    }
+
+    _WorkflowNodeObservation? observation = segment.nodes[nodePath];
+    bool isFirst = false;
+    if (observation == null) {
+      if (segment.nodes.length >= summaryCap) {
+        if (event.longRunningToolIds != null &&
+            event.longRunningToolIds!.isNotEmpty) {
+          for (final String ancestorPath in _strictAncestorNodePaths(nodePath)) {
+            final _WorkflowNodeObservation? ancestor =
+                segment.nodes[ancestorPath];
+            if (ancestor != null) {
+              ancestor.descendantInterruptObserved = true;
+            }
+          }
+        }
+        if (segment.overflowNodePaths.contains(nodePath)) {
+          return (segment, false, eventTs);
+        }
+        if (segment.nodes.length + segment.overflowNodePaths.length <
+            maxTrackedPaths) {
+          segment.overflowNodePaths.add(nodePath);
+          return (segment, true, eventTs);
+        }
+        segment.untrackedPathEvents += 1;
+        return (segment, false, eventTs);
+      }
+      isFirst = true;
+      final String? runId = NodePathBuilder.fromString(nodePath).runId;
+      observation = _WorkflowNodeObservation(
+        nodePath: nodePath,
+        nodeRunId: (runId == null || runId.isEmpty) ? null : runId,
+        nodeParentRunId: nodeInfo.parentRunId,
+        firstSourceEventId: eventId,
+        lastSourceEventId: eventId,
+        firstSourceEventTimestamp: eventTs,
+        lastSourceEventTimestamp: eventTs,
+      );
+      segment.nodes[nodePath] = observation;
+    } else {
+      observation.lastSourceEventId = eventId;
+      if (eventTs != null) {
+        observation.firstSourceEventTimestamp ??= eventTs;
+        observation.lastSourceEventTimestamp = eventTs;
+      }
+      observation.observedEventCount += 1;
+    }
+
+    if (event.longRunningToolIds != null &&
+        event.longRunningToolIds!.isNotEmpty) {
+      observation.nodeInterruptObserved = true;
+      final List<String> ancestorPaths = _strictAncestorNodePaths(nodePath);
+      segment.interruptedAncestorPaths.addAll(ancestorPaths);
+      for (final String ancestorPath in ancestorPaths) {
+        final _WorkflowNodeObservation? ancestor = segment.nodes[ancestorPath];
+        if (ancestor != null) {
+          ancestor.descendantInterruptObserved = true;
+        }
+      }
+    }
+
+    if (segment.interruptedAncestorPaths.contains(nodePath)) {
+      observation.descendantInterruptObserved = true;
+    }
+
+    if ((event.errorCode?.isNotEmpty ?? false) && isDurableNodeError(event)) {
+      observation.nodeErrorObservedCount += 1;
+    }
+
+    return (segment, isFirst, eventTs);
+  }
+
+  Future<void> _drainWorkflowNodeObservations(
+    CallbackContext callbackContext, {
+    required String drainCallback,
+  }) async {
+    if (!_workflowObservationsEnabled) {
+      return;
+    }
+    final _WorkflowObservationSegment? segment =
+        _workflowSegments[callbackContext.invocationId];
+    if (segment == null) {
+      return;
+    }
+    final List<_WorkflowNodeObservation> observations = segment.nodes.values
+        .toList(growable: false);
+    final int overflowPathCount = segment.overflowNodePaths.length;
+    final int untrackedEventCount = segment.untrackedPathEvents;
+    if (_eventTypeFiltered('WORKFLOW_NODE_OBSERVATION_SUMMARY')) {
+      return;
+    }
+
+    final int cap = config.maxObservationSummariesPerSegment;
+    final List<_WorkflowNodeObservation> kept = observations.length > cap
+        ? observations.sublist(0, cap)
+        : observations;
+    final int truncatedNodeCount =
+        (observations.length - kept.length) + overflowPathCount;
+    for (int index = 1; index <= kept.length; index += 1) {
+      final _WorkflowNodeObservation observation = kept[index - 1];
+      try {
+        final double? spanMs =
+            observation.firstSourceEventTimestamp != null &&
+                observation.lastSourceEventTimestamp != null
+            ? (observation.lastSourceEventTimestamp! -
+                      observation.firstSourceEventTimestamp!) *
+                  1000.0
+            : null;
+        final Map<String, Object?> adkExtras = <String, Object?>{
+          'workflow_segment_id': segment.segmentId,
+          'node': <String, Object?>{
+            'path': observation.nodePath,
+            'run_id': observation.nodeRunId,
+            'parent_run_id': observation.nodeParentRunId,
+          },
+          'first_source_event_id': observation.firstSourceEventId,
+          'last_source_event_id': observation.lastSourceEventId,
+          'first_source_event_timestamp': observation.firstSourceEventTimestamp,
+          'last_source_event_timestamp': observation.lastSourceEventTimestamp,
+          'source_event_span_ms': spanMs,
+          'observed_event_count': observation.observedEventCount,
+          'node_interrupt_observed': observation.nodeInterruptObserved,
+          'descendant_interrupt_observed':
+              observation.descendantInterruptObserved,
+          'node_error_observed_count': observation.nodeErrorObservedCount,
+          'drain_callback': drainCallback,
+          'boundary_basis': 'event_observation',
+        };
+        if (truncatedNodeCount > 0 && index == kept.length) {
+          adkExtras['truncated_node_count'] = truncatedNodeCount;
+        }
+        if (untrackedEventCount > 0 && index == kept.length) {
+          adkExtras['untracked_overflow_event_count'] = untrackedEventCount;
+        }
+        await _logEvent(
+          'WORKFLOW_NODE_OBSERVATION_SUMMARY',
+          callbackContext,
+          eventData: EventData(adkExtras: adkExtras),
+        );
+      } catch (error) {
+        stderr.writeln(
+          'Could not emit workflow-node observation summary; continuing. $error',
+        );
+      }
+    }
+
+    if (truncatedNodeCount > 0) {
+      _workflowObservationCapacityCount += truncatedNodeCount;
+    }
+  }
+
   Future<void> _logEvent(
     String eventType,
     CallbackContext callbackContext, {
@@ -1875,16 +2260,27 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       _shutdownDroppedCount += 1;
       return;
     }
-    if (config.eventDenylist?.contains(eventType) == true) {
-      return;
-    }
-    final List<String>? allowlist = config.eventAllowlist;
-    if (allowlist != null && !allowlist.contains(eventType)) {
+    if (_eventTypeFiltered(eventType)) {
       return;
     }
 
     if (!_started) {
       await _ensureStarted();
+    }
+
+    final int maxQueueSize = config.queueMaxSize;
+    final int Function()? sizeFn = queueSizeProvider;
+    if (maxQueueSize > 0 && sizeFn != null) {
+      final int currentSize = sizeFn();
+      final int reserved = reservedTerminalQueueSlots;
+      final bool isTerminal = _terminalQueueEventTypes.contains(eventType);
+      final int effectiveLimit = isTerminal
+          ? maxQueueSize
+          : maxQueueSize - reserved;
+      if (currentSize >= effectiveLimit) {
+        _queueFullCount += 1;
+        return;
+      }
     }
 
     final EventData resolvedEventData = eventData ?? EventData();
@@ -1983,6 +2379,53 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   String _buildAnalyticsViewStatement(String eventType) {
     final String viewName = 'v_${eventType.toLowerCase()}';
     final String escapedEventType = eventType.replaceAll("'", "\\'");
+    final List<String> extraColumns = switch (eventType) {
+      'NODE_OUTPUT' => const <String>[
+        "JSON_VALUE(attributes, '\$.adk.node.path') AS node_path",
+        "JSON_VALUE(attributes, '\$.adk.node.run_id') AS node_run_id",
+        "JSON_VALUE(attributes, '\$.adk.node.parent_run_id') AS node_parent_run_id",
+        'content AS output',
+      ],
+      'NODE_ERROR' => const <String>[
+        "JSON_VALUE(attributes, '\$.adk.node.path') AS node_path",
+        "JSON_VALUE(attributes, '\$.adk.node.run_id') AS node_run_id",
+        "JSON_VALUE(attributes, '\$.adk.node.parent_run_id') AS node_parent_run_id",
+        "JSON_VALUE(content, '\$.error_code') AS error_code",
+      ],
+      'WORKFLOW_NODE_FIRST_OBSERVED' => const <String>[
+        "JSON_VALUE(attributes, '\$.adk.app_name') AS app_name",
+        "JSON_VALUE(attributes, '\$.adk.workflow_segment_id') AS workflow_segment_id",
+        "JSON_VALUE(attributes, '\$.adk.node.path') AS node_path",
+        "JSON_VALUE(attributes, '\$.adk.node.run_id') AS node_run_id",
+        "JSON_VALUE(attributes, '\$.adk.node.parent_run_id') AS node_parent_run_id",
+        "JSON_VALUE(attributes, '\$.adk.source_event_id') AS source_event_id",
+        "SAFE.TIMESTAMP_MICROS(SAFE_CAST(SAFE_CAST(JSON_VALUE(attributes, '\$.adk.source_event_timestamp') AS FLOAT64) * 1000000 AS INT64)) AS source_event_timestamp",
+        "JSON_VALUE(attributes, '\$.adk.boundary_basis') AS boundary_basis",
+      ],
+      'WORKFLOW_NODE_OBSERVATION_SUMMARY' => const <String>[
+        "JSON_VALUE(attributes, '\$.adk.app_name') AS app_name",
+        "JSON_VALUE(attributes, '\$.adk.workflow_segment_id') AS workflow_segment_id",
+        "JSON_VALUE(attributes, '\$.adk.node.path') AS node_path",
+        "JSON_VALUE(attributes, '\$.adk.node.run_id') AS node_run_id",
+        "JSON_VALUE(attributes, '\$.adk.node.parent_run_id') AS node_parent_run_id",
+        "JSON_VALUE(attributes, '\$.adk.first_source_event_id') AS first_source_event_id",
+        "JSON_VALUE(attributes, '\$.adk.last_source_event_id') AS last_source_event_id",
+        "SAFE.TIMESTAMP_MICROS(SAFE_CAST(SAFE_CAST(JSON_VALUE(attributes, '\$.adk.first_source_event_timestamp') AS FLOAT64) * 1000000 AS INT64)) AS first_source_event_timestamp",
+        "SAFE.TIMESTAMP_MICROS(SAFE_CAST(SAFE_CAST(JSON_VALUE(attributes, '\$.adk.last_source_event_timestamp') AS FLOAT64) * 1000000 AS INT64)) AS last_source_event_timestamp",
+        "SAFE_CAST(JSON_VALUE(attributes, '\$.adk.source_event_span_ms') AS FLOAT64) AS source_event_span_ms",
+        "SAFE_CAST(JSON_VALUE(attributes, '\$.adk.observed_event_count') AS INT64) AS observed_event_count",
+        "SAFE_CAST(JSON_VALUE(attributes, '\$.adk.node_interrupt_observed') AS BOOL) AS node_interrupt_observed",
+        "SAFE_CAST(JSON_VALUE(attributes, '\$.adk.descendant_interrupt_observed') AS BOOL) AS descendant_interrupt_observed",
+        "SAFE_CAST(JSON_VALUE(attributes, '\$.adk.node_error_observed_count') AS INT64) AS node_error_observed_count",
+        "JSON_VALUE(attributes, '\$.adk.drain_callback') AS drain_callback",
+        "JSON_VALUE(attributes, '\$.adk.boundary_basis') AS boundary_basis",
+        "SAFE_CAST(JSON_VALUE(attributes, '\$.adk.truncated_node_count') AS INT64) AS truncated_node_count",
+      ],
+      _ => const <String>[],
+    };
+    final String extraSelect = extraColumns.isEmpty
+        ? ''
+        : ',\n  ${extraColumns.join(',\n  ')}';
     return '''
 CREATE OR REPLACE VIEW `$projectId.$datasetId.$viewName` AS
 SELECT
@@ -2006,11 +2449,37 @@ SELECT
   project_id,
   dataset_id,
   table_id,
-  location
+  location$extraSelect
 FROM `$projectId.$datasetId.$tableId`
 WHERE event_type = '$escapedEventType'
 '''
         .trim();
+  }
+
+  Map<String, Object?> _buildAdkEnvelope(
+    CallbackContext callbackContext,
+    Event? sourceEvent,
+  ) {
+    final Map<String, Object?> adk = <String, Object?>{
+      'schema_version': _schemaVersion,
+      'app_name': callbackContext.session.appName,
+    };
+    if (sourceEvent == null) {
+      return adk;
+    }
+    if (sourceEvent.id.isNotEmpty) {
+      adk['source_event_id'] = sourceEvent.id;
+    }
+    final NodeInfo nodeInfo = sourceEvent.nodeInfo;
+    final String path = nodeInfo.path;
+    final String? runId = NodePathBuilder.fromString(path).runId;
+    adk['node'] = <String, Object?>{
+      'path': path,
+      'run_id': (runId == null || runId.isEmpty) ? null : runId,
+      'parent_run_id': nodeInfo.parentRunId,
+    };
+    adk['branch'] = sourceEvent.branch;
+    return adk;
   }
 
   Map<String, Object?> _enrichAttributes({
@@ -2020,6 +2489,21 @@ WHERE event_type = '$escapedEventType'
     final Map<String, Object?> attrs = <String, Object?>{
       ...eventData.extraAttributes,
     };
+
+    final Map<String, Object?> adkEnvelope = _buildAdkEnvelope(
+      callbackContext,
+      eventData.sourceEvent,
+    );
+    eventData.adkExtras.forEach((String key, Object? value) {
+      adkEnvelope.putIfAbsent(key, () => value);
+    });
+    if (attrs['adk'] is Map) {
+      final Map<String, Object?> existingAdk = _toStringObjectMap(attrs['adk']);
+      existingAdk.forEach((String key, Object? value) {
+        adkEnvelope.putIfAbsent(key, () => value);
+      });
+    }
+    attrs['adk'] = adkEnvelope;
 
     attrs['root_agent_name'] =
         _TraceManager.getRootAgentName(callbackContext) ??
@@ -2172,6 +2656,11 @@ WHERE event_type = '$escapedEventType'
         case 'eval_view_mode':
           if (entry.value is String) {
             config.evalViewMode = entry.value as String;
+          }
+        case 'max_observation_summaries_per_segment':
+          if (entry.value is num) {
+            config.maxObservationSummariesPerSegment =
+                (entry.value as num).toInt();
           }
         case 'tool_result_classifier':
           if (entry.value is ToolResultClassifier) {

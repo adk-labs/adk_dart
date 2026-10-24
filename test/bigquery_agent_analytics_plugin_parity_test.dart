@@ -665,8 +665,14 @@ void main() {
         ),
       );
       expect(
+        capturedStatements.single,
+        contains(contains("WHERE event_type = 'HITL_INPUT_REQUEST_COMPLETED'")),
+      );
+      expect(
         capturedStatements.single.last,
-        contains("WHERE event_type = 'HITL_INPUT_REQUEST_COMPLETED'"),
+        contains(
+          "WHERE event_type = 'WORKFLOW_NODE_OBSERVATION_SUMMARY'",
+        ),
       );
     });
 
