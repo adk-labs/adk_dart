@@ -153,6 +153,17 @@ void resetMongoDbSessionClientFactory() {
   _mongoDbSessionClientFactory = _defaultMongoDbSessionClientFactory;
 }
 
+/// Creates a [MongoDbSessionClient] from [dbUrl] using the active factory.
+MongoDbSessionClient createMongoDbClientFromUrl(
+  String dbUrl, {
+  Map<String, Object?>? mongoClientKwargs,
+}) {
+  return _mongoDbSessionClientFactory(
+    dbUrl,
+    mongoClientKwargs: mongoClientKwargs,
+  );
+}
+
 /// In-memory implementation of [MongoDbSessionCollection] for testing and local use.
 class InMemoryMongoDbSessionCollection implements MongoDbSessionCollection {
   /// Creates an in-memory MongoDB collection named [name].
@@ -1320,9 +1331,9 @@ bool _matchesFilter(Map<String, Object?> doc, Map<String, Object?> filter) {
         final Object? opVal = op.value;
         switch (opName) {
           case r'$eq':
-            if (!_deepEquals(actual, opVal)) return false;
+            if (!_matchesScalarOrArrayElement(actual, opVal)) return false;
           case r'$ne':
-            if (_deepEquals(actual, opVal)) return false;
+            if (_matchesScalarOrArrayElement(actual, opVal)) return false;
           case r'$gt':
             if (actual == null || _compareValues(actual, opVal) <= 0) {
               return false;
@@ -1341,12 +1352,16 @@ bool _matchesFilter(Map<String, Object?> doc, Map<String, Object?> filter) {
             }
           case r'$in':
             if (opVal is! Iterable ||
-                !opVal.any((Object? item) => _deepEquals(actual, item))) {
+                !opVal.any(
+                  (Object? item) => _matchesScalarOrArrayElement(actual, item),
+                )) {
               return false;
             }
           case r'$nin':
             if (opVal is Iterable &&
-                opVal.any((Object? item) => _deepEquals(actual, item))) {
+                opVal.any(
+                  (Object? item) => _matchesScalarOrArrayElement(actual, item),
+                )) {
               return false;
             }
           case r'$exists':
@@ -1354,11 +1369,21 @@ bool _matchesFilter(Map<String, Object?> doc, Map<String, Object?> filter) {
             if (exists != (opVal == true)) return false;
         }
       }
-    } else if (!_deepEquals(actual, expected)) {
+    } else if (!_matchesScalarOrArrayElement(actual, expected)) {
       return false;
     }
   }
   return true;
+}
+
+bool _matchesScalarOrArrayElement(Object? actual, Object? expected) {
+  if (_deepEquals(actual, expected)) {
+    return true;
+  }
+  if (actual is List && expected is! List) {
+    return actual.any((Object? element) => _deepEquals(element, expected));
+  }
+  return false;
 }
 
 int _compareValues(Object? a, Object? b) {

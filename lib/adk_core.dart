@@ -71,6 +71,7 @@ export 'src/events/interrupts.dart';
 export 'src/memory/base_memory_service.dart';
 export 'src/memory/in_memory_memory_service.dart';
 export 'src/memory/memory_entry.dart';
+export 'src/memory/mongodb_memory_service.dart';
 
 export 'src/models/capabilities.dart';
 export 'src/models/llm_request.dart';

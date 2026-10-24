@@ -74,6 +74,9 @@ enum FeatureName {
   /// Graceful error handling for MCP tool execution.
   mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
 
+  /// MongoDB memory service integration.
+  mongodbMemoryService('MONGODB_MEMORY_SERVICE'),
+
   /// MongoDB session service integration.
   mongodbSessionService('MONGODB_SESSION_SERVICE'),
 
@@ -250,6 +253,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.mcpGracefulErrorHandling: const FeatureConfig(
         FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.mongodbMemoryService: const FeatureConfig(
+        FeatureStage.experimental,
         defaultOn: true,
       ),
       FeatureName.mongodbSessionService: const FeatureConfig(

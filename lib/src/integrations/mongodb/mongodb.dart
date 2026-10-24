@@ -12,6 +12,7 @@ import '../../tools/base_tool.dart';
 import '../../tools/base_toolset.dart';
 import '../../tools/tool_context.dart';
 
+export '../../memory/mongodb_memory_service.dart';
 export '../../sessions/mongodb_session_service.dart';
 
 /// Default tool name prefix applied by [MongoDbToolset].

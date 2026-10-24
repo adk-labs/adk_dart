@@ -296,6 +296,7 @@ export 'src/memory/base_memory_service.dart';
 export 'src/memory/_utils.dart';
 export 'src/memory/in_memory_memory_service.dart';
 export 'src/memory/memory_entry.dart';
+export 'src/memory/mongodb_memory_service.dart';
 export 'src/memory/sqlite_memory_service.dart';
 export 'src/memory/vertex_ai_memory_bank_service.dart';
 export 'src/memory/vertex_ai_rag_memory_service.dart';
