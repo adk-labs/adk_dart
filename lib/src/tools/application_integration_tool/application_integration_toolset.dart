@@ -283,6 +283,12 @@ class ApplicationIntegrationToolset extends BaseToolset {
         ),
       );
     }
+    disambiguateToolNames(_tools);
+    for (final BaseTool tool in _tools) {
+      if (tool is IntegrationConnectorTool) {
+        tool.restApiTool.name = tool.name;
+      }
+    }
   }
 
   @override

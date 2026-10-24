@@ -193,7 +193,7 @@ void main() {
   });
 
   test(
-    'AgentTool does not propagate temp state to child agent session',
+    'AgentTool propagates caller temp state to child agent session while filtering _adk internal keys',
     () async {
       final _StateCaptureAgent childAgent = _StateCaptureAgent();
       final AgentTool tool = AgentTool(agent: childAgent);
@@ -209,6 +209,8 @@ void main() {
           state: <String, Object?>{
             'normalKey': 'parentValue',
             'temp:transient': 'tempValue',
+            '_adk_internal': 'hidden',
+            'temp:_adk_internal': 'hiddenTemp',
           },
         ),
         artifactService: InMemoryArtifactService(),
@@ -226,7 +228,15 @@ void main() {
         childAgent.seenSessionState,
         containsPair('normalKey', 'parentValue'),
       );
-      expect(childAgent.seenSessionState, isNot(contains('temp:transient')));
+      expect(
+        childAgent.seenSessionState,
+        containsPair('temp:transient', 'tempValue'),
+      );
+      expect(childAgent.seenSessionState, isNot(contains('_adk_internal')));
+      expect(
+        childAgent.seenSessionState,
+        isNot(contains('temp:_adk_internal')),
+      );
     },
   );
 

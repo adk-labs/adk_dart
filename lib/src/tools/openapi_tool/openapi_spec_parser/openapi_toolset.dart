@@ -148,7 +148,6 @@ class OpenAPIToolset extends BaseToolset {
     ).parse(openapiSpecDict);
 
     final List<RestApiTool> tools = <RestApiTool>[];
-    final Set<String> usedNames = <String>{};
     for (final ParsedOperation operation in operations) {
       final RestApiTool tool = RestApiTool.fromParsedOperation(
         operation,
@@ -157,22 +156,9 @@ class OpenAPIToolset extends BaseToolset {
         requestExecutor: _requestExecutor,
         allowPrivateNetworkAccess: allowPrivateNetworkAccess,
       );
-      final String baseName = tool.name;
-      String candidate = baseName;
-      int counter = 2;
-      while (usedNames.contains(candidate)) {
-        final String suffix = '_$counter';
-        final int end = math.min(
-          baseName.length,
-          maxToolNameLength - suffix.length,
-        );
-        candidate = '${baseName.substring(0, end)}$suffix';
-        counter += 1;
-      }
-      usedNames.add(candidate);
-      tool.name = candidate;
       tools.add(tool);
     }
+    disambiguateToolNames(tools);
     return tools;
   }
 
@@ -184,6 +170,33 @@ class OpenAPIToolset extends BaseToolset {
   @override
   AuthConfig? getAuthConfig() {
     return _authConfig?.copyWith();
+  }
+}
+
+/// Disambiguates duplicate tool names in [tools] in place so every tool has a
+/// unique name within [maxToolNameLength] characters and no generated suffix
+/// collides with a later tool's original name.
+void disambiguateToolNames(List<BaseTool> tools) {
+  final Set<String> reservedNames = <String>{
+    for (final BaseTool tool in tools) tool.name,
+  };
+  final Set<String> assignedNames = <String>{};
+  for (final BaseTool tool in tools) {
+    final String baseName = tool.name;
+    String candidate = baseName;
+    int counter = 2;
+    while (assignedNames.contains(candidate) ||
+        (candidate != baseName && reservedNames.contains(candidate))) {
+      final String suffix = '_$counter';
+      final int end = math.min(
+        baseName.length,
+        maxToolNameLength - suffix.length,
+      );
+      candidate = '${baseName.substring(0, end)}$suffix';
+      counter += 1;
+    }
+    assignedNames.add(candidate);
+    tool.name = candidate;
   }
 }
 

@@ -15,6 +15,7 @@ import '../models/llm_request.dart';
 import '../plugins/plugin_manager.dart';
 import '../runners/runner.dart';
 import '../sessions/in_memory_session_service.dart';
+import '../sessions/state.dart';
 import '../types/content.dart';
 import 'base_tool.dart';
 import '_forwarding_artifact_service.dart';
@@ -193,7 +194,30 @@ class AgentTool extends BaseTool {
 
     final Map<String, Object?> stateSnapshot = Map<String, Object?>.from(
       toolContext.state.toMap(),
-    )..removeWhere((String key, Object? _) => key.startsWith('_adk'));
+    )..removeWhere(
+        (String key, Object? _) =>
+            key.startsWith('_adk') ||
+            key.startsWith('${State.tempPrefix}_adk'),
+      );
+    // Session services strip `temp:` keys on createSession, so carry the
+    // caller's invocation-scoped state into the child run via stateDelta.
+    // Shallow-copy mutable containers so in-place edits inside the wrapped
+    // agent do not mutate the caller's state despite `temp:` isolation.
+    final Map<String, Object?> tempState = <String, Object?>{};
+    for (final String key in stateSnapshot.keys.toList(growable: false)) {
+      if (key.startsWith(State.tempPrefix)) {
+        final Object? value = stateSnapshot.remove(key);
+        if (value is Map) {
+          tempState[key] = Map<Object?, Object?>.of(value);
+        } else if (value is List) {
+          tempState[key] = List<Object?>.of(value);
+        } else if (value is Set) {
+          tempState[key] = Set<Object?>.of(value);
+        } else {
+          tempState[key] = value;
+        }
+      }
+    }
     final session = await runner.sessionService.createSession(
       appName: childAppName,
       userId: invocationContext.userId,
@@ -212,6 +236,7 @@ class AgentTool extends BaseTool {
       userId: session.userId,
       sessionId: session.id,
       newMessage: Content.userText(requestText),
+      stateDelta: tempState.isEmpty ? null : tempState,
       runConfig: invocationContext.runConfig,
       abortSignal: toolContext.abortSignal,
     )) {
@@ -219,7 +244,11 @@ class AgentTool extends BaseTool {
         break;
       }
       if (event.actions.stateDelta.isNotEmpty) {
-        toolContext.state.addAll(event.actions.stateDelta);
+        event.actions.stateDelta.forEach((String key, Object? value) {
+          if (!key.startsWith(State.tempPrefix)) {
+            toolContext.state[key] = value;
+          }
+        });
       }
       if (event.errorMessage != null && event.errorMessage!.isNotEmpty) {
         lastErrorMessage = event.errorMessage;

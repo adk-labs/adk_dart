@@ -397,21 +397,24 @@ class McpTool extends BaseAuthenticatedTool {
     if (credential == null) {
       return <String, String>{};
     }
+    if (credential.apiKey != null && credential.apiKey!.isNotEmpty) {
+      return <String, String>{'x-api-key': credential.apiKey!};
+    }
+    if (credential.oauth2 != null) {
+      final String? accessToken = credential.oauth2?.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        return <String, String>{};
+      }
+      return <String, String>{'Authorization': 'Bearer $accessToken'};
+    }
+    if (credential.http != null) {
+      return _headersFromHttp(credential.http);
+    }
     switch (credential.authType) {
       case AuthCredentialType.apiKey:
-        if (credential.apiKey == null || credential.apiKey!.isEmpty) {
-          return <String, String>{};
-        }
-        return <String, String>{'x-api-key': credential.apiKey!};
       case AuthCredentialType.http:
-        return _headersFromHttp(credential.http);
       case AuthCredentialType.oauth2:
       case AuthCredentialType.openIdConnect:
-        final String? accessToken = credential.oauth2?.accessToken;
-        if (accessToken == null || accessToken.isEmpty) {
-          return <String, String>{};
-        }
-        return <String, String>{'Authorization': 'Bearer $accessToken'};
       case AuthCredentialType.serviceAccount:
         return <String, String>{};
     }

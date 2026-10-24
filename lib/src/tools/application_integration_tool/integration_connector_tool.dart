@@ -67,6 +67,15 @@ class IntegrationConnectorTool extends BaseTool {
 
   final RestApiTool _restApiTool;
 
+  /// Underlying [RestApiTool] invoked by this connector tool.
+  RestApiTool get restApiTool => _restApiTool;
+
+  @override
+  set name(String value) {
+    super.name = value;
+    _restApiTool.name = value;
+  }
+
   /// Optional auth scheme override for this connector tool.
   final Object? authScheme;
 
