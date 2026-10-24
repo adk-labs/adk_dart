@@ -1,3 +1,23 @@
+## 2026.10.24
+
+- **Upstream `adk-python` `v2.13.0` Release & Version Alignment (`lib/src/version.dart`, `adk-python` `ceb0627f1`)**:
+  - Updated `adkVersion` to `'2.13.0'` and `adkPackageVersion` to `'2026.10.24'`.
+- **MongoDB-Backed Memory Service (`lib/src/memory/mongodb_memory_service.dart`, `lib/src/integrations/mongodb/mongodb.dart`, `adk-python` `cbca417c4`)**:
+  - Added `MongoDbMemoryService`, `MongoMemoryStore`, `InMemoryMongoMemoryStore`, `MongoDbOperationFailure`, and `extractKeywords` with Latin and CJK bigram keyword indexing, idempotent `(app_name, user_id, session_id, event_id)` upserts, keyword-overlap ranking, and response deduplication.
+  - Registered `FeatureName.mongodbMemoryService` (`MONGODB_MEMORY_SERVICE`) in `lib/src/features/_feature_registry.dart` and aligned `MongoDbSessionService._ensureInitialized` index creation error handling.
+- **BigQuery Agent Analytics Workflow Node Observations (`lib/src/plugins/bigquery_agent_analytics_plugin.dart`, `adk-python` `c31856d17`)**:
+  - Recorded `WORKFLOW_NODE_FIRST_OBSERVED` and `WORKFLOW_NODE_OBSERVATION_SUMMARY` events during workflow runs with a per-invocation cap (`_maxTrackedWorkflowNodesPerInvocation = 1000`) and overflow counters (`untracked_node_count`, `untracked_observation_count`).
+  - Reserved `_reservedTerminalQueueSlots = 16` queue slots for terminal invocation events (`INVOCATION_COMPLETED`, `INVOCATION_ERROR`, `WORKFLOW_NODE_OBSERVATION_SUMMARY`) and added `v_workflow_node_first_observed` and `v_workflow_node_observation_summary` analytics view definitions.
+- **`AgentTool` Caller `temp:` State Propagation & Isolation (`lib/src/tools/agent_tool.dart`, `adk-python` `12c7bed76`)**:
+  - Forwarded the caller's `temp:` state keys into the child runner's `stateDelta` with shallow copies of mutable containers (`Map`, `List`, `Set`), while excluding internal `_adk` / `temp:_adk` state keys and preventing child `temp:` writes from leaking back into parent state.
+- **Connector Tool Name Disambiguation & `McpTool` OAuth2 Guard (`lib/src/tools/`, `adk-python` `f08f9d677`, `83acbc50f`)**:
+  - Added `OpenAPIToolset.getToolsWithPrefix`, `IntegrationConnectorTool.entity` / `operation`, and `disambiguateToolNames` in `ApplicationIntegrationToolset` to rename colliding connector tool names using entity suffixes and numeric counters.
+  - Updated `McpTool` (`_headersFromCredential`) so an `oauth2` credential with an empty `accessToken` returns empty headers instead of falling back to `credential.http`.
+- **A2A Failed Task Error Events, `LiteLlm` Quoted Tool Call Masking & Firestore Empty `userId` Guard (`adk-python` `25d191710`, `6b00a3890`, `b98125006`)**:
+  - Added `extractErrorCode` and `extractErrorMessage` (`lib/src/a2a/converters/utils.dart`) and populated `errorCode` and `errorMessage` on `Event` when converting failed A2A `Task` or `TaskStatusUpdateEvent` payloads.
+  - Updated `LiteLlm` inline tool-call parser (`lib/src/models/lite_llm.dart`) to mask fenced code blocks, inline code spans, and closed `<think>...</think>` blocks so tool call examples quoted in prose are not executed.
+  - Guarded `FirestoreSessionService.listSessions` (`lib/src/integrations/firestore/firestore.dart`) to return an empty session list immediately when `userId == ''`.
+
 ## 2026.10.23
 
 - **MongoDB Session Service (`lib/src/sessions/mongodb_session_service.dart`, `lib/src/integrations/mongodb/mongodb.dart`, `adk-python` `983383519`)**:

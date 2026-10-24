@@ -1,6 +1,6 @@
 name: adk_dart
 description: Core Dart port of Agent Development Kit (ADK) runtime primitives.
-version: 2026.10.23
+version: 2026.10.24
 repository: https://github.com/adk-labs/adk_dart
 homepage: https://github.com/adk-labs/adk_dart
 issue_tracker: https://github.com/adk-labs/adk_dart/issues
@@ -24,7 +24,7 @@ dependencies:
   http: ^1.6.0
   googleapis_auth: ^2.3.5
   yaml: ^3.1.4
-  adk_mcp: ^2026.10.23
+  adk_mcp: ^2026.10.24
   unorm_dart: ^0.3.3
   postgres: ^3.5.20
   mysql_client_plus: ^0.1.3

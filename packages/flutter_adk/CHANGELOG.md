@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.24
+
+- Bumped package version to `2026.10.24` and dependency `adk_dart: ^2026.10.24`.
+- Re-exported `MongoDbMemoryService`, `MongoMemoryStore`, `InMemoryMongoMemoryStore`, `MongoDbOperationFailure`, and `extractKeywords` via `package:adk_dart/adk_core.dart`.
+
 ## 2026.10.23
 
 - Bumped package version to `2026.10.23` and dependency `adk_dart: ^2026.10.23`.
