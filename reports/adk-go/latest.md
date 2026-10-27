@@ -1,35 +1,49 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-10-26
+- Date (UTC): 2026-10-27
 - Source: `google/adk-go`
-- Latest SHA: `219c13059ecf654b7318d5927a607779711943e0`
-- Previous SHA: `733b52570555653a768134ab827e01691be8d871`
+- Latest SHA: `19707a2660a8dd7b8ffb32837027253ed2f29dd1`
+- Previous SHA: `219c13059ecf654b7318d5927a607779711943e0`
 
 ## Summary
 
-- New commits: 5
+- New commits: 8
 
 ## Commits
 
-- [219c130](https://github.com/google/adk-go/commit/219c13059ecf654b7318d5927a607779711943e0) fix(llmagent): save output_key when a before-agent callback short-circuits (#1963) (Anzal Husain Abidi, 2026-10-26)
-- [6ede178](https://github.com/google/adk-go/commit/6ede178570c6ee708733f37d6b43663bfbd19537) fix(agentanalytics): pause stalled run-end uploads across batches (#1947) (ktsoator, 2026-10-26)
-- [c43259a](https://github.com/google/adk-go/commit/c43259a11de2ad639d6c919ca58431a7b2088d9f) fix(session/vertexai): persist live transcriptions (#1964) (DisturbedCrow, 2026-10-26)
-- [3fe0032](https://github.com/google/adk-go/commit/3fe0032bf87e8b14738983252d4d3e4ed66f1b71) fix(agentanalytics): log a deferred GCS retry only when it is requeued (#1941) (leilei3167, 2026-10-26)
-- [45787ba](https://github.com/google/adk-go/commit/45787ba63bfa5b59a0ea84141e08e40a5fd80bb9) chore(deps): bump the go-minor-patch group with 3 updates (#1969) (dependabot[bot], 2026-10-26)
+- [19707a2](https://github.com/google/adk-go/commit/19707a2660a8dd7b8ffb32837027253ed2f29dd1) fix(ci): stop every CI run from building with an empty Go cache (#1972) (João Westerberg, 2026-10-27)
+- [ab19ff2](https://github.com/google/adk-go/commit/ab19ff216ade4c4b00477d78c05d688f3229e204) fix(openaimodel): refuse config fields genai adds before they are supported (#1922) (Jan Wojtas, 2026-10-27)
+- [e51f0ef](https://github.com/google/adk-go/commit/e51f0ef2d35c5f97d778ba51e95281e80db6f86a) fix(openaimodel): use adk_response when the schema title is not a valid format name (#1912) (Jan Wojtas, 2026-10-27)
+- [8db87f4](https://github.com/google/adk-go/commit/8db87f44e47c9535b2600a9e866333ec6b94658f) fix(auth): keep the init context alive so token sources can refresh (#1904) (Jan Wojtas, 2026-10-27)
+- [4152aea](https://github.com/google/adk-go/commit/4152aeab1740030a25ba012123266cf289855187) chore(deps): bump the go_modules group across 1 directory with 2 updates (#1934) (dependabot[bot], 2026-10-27)
+- [751c5ec](https://github.com/google/adk-go/commit/751c5ec34f3bc0251b90d8f62d78d408afac57ce) fix(memory): skip thought parts in in-memory search and preloaded memories (#1975) (Gangavarapu Vivek, 2026-10-27)
+- [231e007](https://github.com/google/adk-go/commit/231e0073ed157eb761c910fcda6f144ba097c095) fix(launcher): honor WithOtelToCloud in launcher.Config.TelemetryOptions (#1968) (Saurav Gupta, 2026-10-27)
+- [1af51a3](https://github.com/google/adk-go/commit/1af51a3d869aacc215885c19f7ba95133446eb7c) fix(functiontool): preserve streaming consumer panics (#1961) (Jabrail, 2026-10-27)
 
 ## Changed Files
 
-- `M	agent/agent.go`
-- `M	agent/llmagent/llmagent.go`
-- `A	agent/llmagent/llmagent_beforecallback_outputkey_test.go`
-- `M	go.mod`
-- `M	go.sum`
-- `M	internal/agent/state.go`
-- `M	plugin/agentanalytics/batch_processor.go`
-- `M	plugin/agentanalytics/batch_processor_test.go`
-- `M	plugin/agentanalytics/config.go`
-- `M	plugin/agentanalytics/gcs_offloader.go`
-- `M	plugin/agentanalytics/gcs_offloader_test.go`
-- `M	session/vertexai/raw_event_crossruntime_test.go`
-- `M	session/vertexai/vertexai_client.go`
-- `M	session/vertexai/vertexai_test.go`
+- `M	.github/actions/setup/action.yml`
+- `M	.github/workflows/go.yml`
+- `M	auth/providers.go`
+- `M	auth/providers_internal_test.go`
+- `M	cmd/launcher/console/console.go`
+- `M	cmd/launcher/internal/telemetry/telemetry.go`
+- `A	cmd/launcher/internal/telemetry/telemetry_test.go`
+- `M	cmd/launcher/web/web.go`
+- `M	memory/inmemory.go`
+- `M	memory/inmemory_search_test.go`
+- `M	model/openaimodel/doc.go`
+- `M	model/openaimodel/internal/completions/request.go`
+- `M	model/openaimodel/internal/completions/request_test.go`
+- `M	model/openaimodel/internal/responses/request.go`
+- `M	model/openaimodel/internal/responses/request_test.go`
+- `M	model/openaimodel/internal/shared/config.go`
+- `M	model/openaimodel/internal/shared/config_test.go`
+- `M	model/openaimodel/internal/shared/schema.go`
+- `M	model/openaimodel/internal/shared/schema_test.go`
+- `M	plugin/agentanalytics/go.mod`
+- `M	plugin/agentanalytics/go.sum`
+- `M	tool/functiontool/streaming_function.go`
+- `M	tool/functiontool/streaming_function_test.go`
+- `M	tool/preloadmemorytool/tool.go`
+- `M	tool/preloadmemorytool/tool_test.go`

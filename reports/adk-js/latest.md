@@ -1,9 +1,9 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-10-26
+- Date (UTC): 2026-10-27
 - Source: `google/adk-js`
-- Latest SHA: `eed31475067c2392fcafeabf196d0fb3ca17718e`
-- Previous SHA: `f882b34ad57d24e911324dcda124499cfb726381`
+- Latest SHA: `05739b59883c81599448632888cb21b65b60148e`
+- Previous SHA: `eed31475067c2392fcafeabf196d0fb3ca17718e`
 
 ## Summary
 
@@ -11,8 +11,9 @@
 
 ## Commits
 
-- [eed3147](https://github.com/google/adk-js/commit/eed31475067c2392fcafeabf196d0fb3ca17718e) fix(test): run the unit:integrations vitest project from the root scripts (#1157) (Scott Mansfield, 2026-10-26)
+- [05739b5](https://github.com/google/adk-js/commit/05739b59883c81599448632888cb21b65b60148e) fix(skills): require a line of exactly --- as the SKILL.md frontmatter delimiter (#1136) (Osama Ansar, 2026-10-27)
 
 ## Changed Files
 
-- `M	package.json`
+- `M	core/src/skills/loader.ts`
+- `M	core/test/skills/loader_test.ts`

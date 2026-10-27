@@ -1,44 +1,69 @@
 # ADK Java Daily Change Report
 
-- Date (UTC): 2026-10-26
+- Date (UTC): 2026-10-27
 - Source: `google/adk-java`
-- Latest SHA: `2c84291bc6601dbe61bbbba5a34743f356e65403`
-- Previous SHA: `84bae34a9ae4c133c7e6294faff5cb50f64a3474`
+- Latest SHA: `461f7d6fd9d7fc1ee99e7bf3a788040810caf7d3`
+- Previous SHA: `2c84291bc6601dbe61bbbba5a34743f356e65403`
 
 ## Summary
 
-- New commits: 9
+- New commits: 12
 
 ## Commits
 
-- [2c84291b](https://github.com/google/adk-java/commit/2c84291bc6601dbe61bbbba5a34743f356e65403) fix: keep context cache metadata in events and model responses (Damian Momot, 2026-10-26)
-- [beca7764](https://github.com/google/adk-java/commit/beca7764d0e87c65267fa31b02b31e5d87f35ce3) fix: store grounded events in an adapted Java session service (Damian Momot, 2026-10-26)
-- [dcbdf96c](https://github.com/google/adk-java/commit/dcbdf96caeb4cb059a84215bb0bc926f0e456d1c) test: stop sending the OpenAI key to the demo proxy in integration tests (Damian Osadczuk, 2026-10-26)
-- [5177269f](https://github.com/google/adk-java/commit/5177269f54fd8ed7d42df9891ae5f8982f4e02b7) fix: drop a delegating node's own output, as Python ADK does (Damian Momot, 2026-10-26)
-- [eb622e63](https://github.com/google/adk-java/commit/eb622e63b566eefdb03d6f9b30d74ff7120224ce) test: gate LocalModelIntegrationTest on ADK_RUN_LOCAL_MODEL_TESTS (Damian Osadczuk, 2026-10-26)
-- [49e6c18d](https://github.com/google/adk-java/commit/49e6c18dc7d52e27b0ee998757f005832d0953e2) Merge pull request #1590 from quifox:fix/skill-tool-instruction (Copybara-Service, 2026-10-26)
-- [86f31308](https://github.com/google/adk-java/commit/86f31308c96c41b15db63f870a12f05319c3ef55) feat: add Event.isolationScope (Damian Momot, 2026-10-26)
-- [3e330b82](https://github.com/google/adk-java/commit/3e330b82f63a1d2fef196e84c958f5aaf8f15bc5) test: run the Gemini integration test against Vertex AI (Rafal Glowinski, 2026-10-26)
-- [9d680532](https://github.com/google/adk-java/commit/9d680532a3dd3e4a67d18c81f5795225e432f1dd) fix(skills): remove unregistered script tool from default instructions (quifox, 2026-10-01)
+- [461f7d6f](https://github.com/google/adk-java/commit/461f7d6fd9d7fc1ee99e7bf3a788040810caf7d3) fix: close the Gemini response stream after a read error (Google Team Member, 2026-10-27)
+- [367b402d](https://github.com/google/adk-java/commit/367b402db39f93ab430f473f48bce89a301bbb60) fix: enforce node retry policies and timeouts (Damian Momot, 2026-10-27)
+- [08ca7012](https://github.com/google/adk-java/commit/08ca70123d3ade0bb4ce008439bd122b911eddd6) test: cover inline data metadata on session reloads (Google Team Member, 2026-10-27)
+- [9949265e](https://github.com/google/adk-java/commit/9949265e6ca09ecfab888b608572a47b962db37f) feat: add bidirectional conversion between ADK and Spring AI (Rafal Glowinski, 2026-10-27)
+- [1917ec14](https://github.com/google/adk-java/commit/1917ec145bd42cc6bb91374f2375b81c6ff03624) Merge pull request #1607 from hermanrous:fix/sessions-inline-data-mimetype (Copybara-Service, 2026-10-27)
+- [087614ce](https://github.com/google/adk-java/commit/087614ceaf8f8576e9b0d8adb534f630300d3389) Merge pull request #1643 from innoprej:fix/firestore-session-whole-events (Copybara-Service, 2026-10-27)
+- [7ed0a93d](https://github.com/google/adk-java/commit/7ed0a93d591dd0533f0ada90ce03a3a44579a9a5) Merge pull request #1621 from sangkyoonnam:fix/1618-cancel-propagation (Copybara-Service, 2026-10-27)
+- [1a18907d](https://github.com/google/adk-java/commit/1a18907d9d93cca71bb0aa1e832b54c0efa89a05) Merge pull request #1412 from svetanis:feature/save-files-as-artifacts-plugin (Copybara-Service, 2026-10-27)
+- [272ea6cb](https://github.com/google/adk-java/commit/272ea6cbcc8f61311e810e79d23d7f08dad31563) feat(plugins): port SaveFilesAsArtifactsPlugin from adk-python (svetanis, 2026-08-07)
+- [cce02ae7](https://github.com/google/adk-java/commit/cce02ae7914b289b81aae8128d1b3cebaad65786) fix(flows): propagate downstream cancellation to the model stream (Sangkyoon Nam, 2026-10-06)
+- [a1610094](https://github.com/google/adk-java/commit/a1610094728b67abac7ed77833d086bb5cad45ea) fix: stop losing event fields on Firestore session reloads (Jaehee Shin, 2026-10-10)
+- [f7af931a](https://github.com/google/adk-java/commit/f7af931a8da97a4c2357ec6d14d66fec5f739f2f) fix(sessions): keep inlineData mimeType when encoding or decoding content (Chengmian Liu, 2026-10-04)
 
 ## Changed Files
 
-- `M	contrib/langchain4j/src/test/java/com/google/adk/models/langchain4j/LangChain4jIntegrationTest.java`
-- `M	contrib/spring-ai/README.md`
-- `M	contrib/spring-ai/src/test/java/com/google/adk/models/springai/integrations/GeminiApiIntegrationTest.java`
-- `M	contrib/spring-ai/src/test/java/com/google/adk/models/springai/ollama/LocalModelIntegrationTest.java`
-- `M	core/src/main/java/com/google/adk/events/Event.java`
-- `M	core/src/main/java/com/google/adk/tools/skills/SkillToolset.java`
+- `M	contrib/firestore-session-service/src/main/java/com/google/adk/sessions/FirestoreSessionService.java`
+- `M	contrib/firestore-session-service/src/test/java/com/google/adk/sessions/FirestoreSessionServiceTest.java`
+- `M	contrib/spring-ai/src/main/java/com/google/adk/models/springai/ConfigMapper.java`
+- `M	contrib/spring-ai/src/main/java/com/google/adk/models/springai/EmbeddingConverter.java`
+- `M	contrib/spring-ai/src/main/java/com/google/adk/models/springai/MessageConverter.java`
+- `A	contrib/spring-ai/src/main/java/com/google/adk/models/springai/SpringAiTool.java`
+- `A	contrib/spring-ai/src/main/java/com/google/adk/models/springai/SpringAiToolset.java`
+- `M	contrib/spring-ai/src/main/java/com/google/adk/models/springai/ToolConverter.java`
+- `M	contrib/spring-ai/src/test/java/com/google/adk/models/springai/ConfigMapperTest.java`
+- `M	contrib/spring-ai/src/test/java/com/google/adk/models/springai/MessageConverterTest.java`
+- `A	contrib/spring-ai/src/test/java/com/google/adk/models/springai/SpringAiToolTest.java`
+- `A	contrib/spring-ai/src/test/java/com/google/adk/models/springai/SpringAiToolsetTest.java`
+- `M	contrib/spring-ai/src/test/java/com/google/adk/models/springai/ToolConverterTest.java`
+- `M	contrib/spring-ai/src/test/java/com/google/adk/models/springai/embeddings/EmbeddingConverterTest.java`
+- `M	core/src/main/java/com/google/adk/agents/BaseAgent.java`
+- `M	core/src/main/java/com/google/adk/agents/Context.java`
+- `M	core/src/main/java/com/google/adk/agents/InvocationContext.java`
+- `M	core/src/main/java/com/google/adk/flows/llmflows/BaseLlmFlow.java`
+- `M	core/src/main/java/com/google/adk/models/Gemini.java`
+- `A	core/src/main/java/com/google/adk/plugins/SaveFilesAsArtifactsPlugin.java`
+- `M	core/src/main/java/com/google/adk/runner/Runner.java`
+- `M	core/src/main/java/com/google/adk/sessions/SessionUtils.java`
+- `M	core/src/main/java/com/google/adk/workflow/NodeConfig.java`
 - `M	core/src/main/java/com/google/adk/workflow/NodeExecutionState.java`
 - `M	core/src/main/java/com/google/adk/workflow/NodeRunner.java`
-- `M	core/src/main/java/com/google/adk/workflow/RunNodeConfig.java`
-- `M	core/src/test/java/com/google/adk/events/EventTest.java`
-- `M	core/src/test/java/com/google/adk/tools/skills/SkillToolsetTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/DynamicDispatchTest.java`
-- `M	core/src/test/java/com/google/adk/workflow/DynamicWorkflowTest.java`
+- `M	core/src/main/java/com/google/adk/workflow/ResumeScan.java`
+- `M	core/src/main/java/com/google/adk/workflow/RetryConfig.java`
+- `M	core/src/main/java/com/google/adk/workflow/Scheduler.java`
+- `M	core/src/test/java/com/google/adk/agents/BaseAgentTest.java`
+- `M	core/src/test/java/com/google/adk/agents/ContextTest.java`
+- `A	core/src/test/java/com/google/adk/flows/llmflows/BaseLlmFlowCancelTest.java`
+- `M	core/src/test/java/com/google/adk/models/GeminiContinuationTest.java`
+- `M	core/src/test/java/com/google/adk/models/GeminiTest.java`
+- `A	core/src/test/java/com/google/adk/plugins/SaveFilesAsArtifactsPluginTest.java`
+- `M	core/src/test/java/com/google/adk/sessions/SessionJsonConverterTest.java`
+- `A	core/src/test/java/com/google/adk/sessions/SessionUtilsTest.java`
+- `M	core/src/test/java/com/google/adk/workflow/ResumeScanTest.java`
+- `M	core/src/test/java/com/google/adk/workflow/RetryConfigTest.java`
 - `M	core/src/test/java/com/google/adk/workflow/WorkflowResumeTest.java`
-- `A	tokt/src/main/kotlin/com/google/adk/tokt/codecs/CacheMetadataCodec.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/EventCodec.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/GroundingMetadataCodec.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/LlmResponseCodec.kt`
-- `M	tokt/src/test/kotlin/com/google/adk/tokt/KtRunnerInteropTest.kt`
+- `M	core/src/test/java/com/google/adk/workflow/WorkflowResumeTesting.java`
+- `A	core/src/test/java/com/google/adk/workflow/WorkflowRetryTest.java`
