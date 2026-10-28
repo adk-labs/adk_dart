@@ -1,19 +1,148 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-10-27
+- Date (UTC): 2026-10-28
 - Source: `google/adk-js`
-- Latest SHA: `05739b59883c81599448632888cb21b65b60148e`
-- Previous SHA: `eed31475067c2392fcafeabf196d0fb3ca17718e`
+- Latest SHA: `96154a6e19c53ed91de683820f7fc541a3e5302e`
+- Previous SHA: `05739b59883c81599448632888cb21b65b60148e`
 
 ## Summary
 
-- New commits: 1
+- New commits: 18
 
 ## Commits
 
-- [05739b5](https://github.com/google/adk-js/commit/05739b59883c81599448632888cb21b65b60148e) fix(skills): require a line of exactly --- as the SKILL.md frontmatter delimiter (#1136) (Osama Ansar, 2026-10-27)
+- [96154a6](https://github.com/google/adk-js/commit/96154a6e19c53ed91de683820f7fc541a3e5302e) Release: v2.4.0 (#1077) (Alexey Kalenkevich, 2026-10-28)
+- [ff435b1](https://github.com/google/adk-js/commit/ff435b1ece68d760cf25c93672670c8d12be28ab) refactor(integrations): move CrewaiTool and LangchainTool to @google/adk-integrations (#1183) (adk-foundry-bot, 2026-10-28)
+- [0a96b46](https://github.com/google/adk-js/commit/0a96b46e2e0b2cc0614784fbbaa4b69295d05b2e) fix(tools): match adk-python's empty-object schema, OAuth2 exchange and object-body parsing in op... (#1181) (adk-foundry-bot, 2026-10-28)
+- [567b9a8](https://github.com/google/adk-js/commit/567b9a8f62d139081bc9c64428c292db13026285) refactor(tools): one GoogleApiToolset, no toolset singletons, private internals in google_api_tool (#1176) (adk-foundry-bot, 2026-10-28)
+- [1b7d94f](https://github.com/google/adk-js/commit/1b7d94f65622e01247c4cef6b8201037c4d1c1c4) fix(sessions): reject a stale session in appendEvent instead of reloading it (#1182) (adk-foundry-bot, 2026-10-28)
+- [9c1a7e9](https://github.com/google/adk-js/commit/9c1a7e9efa7959a6609a88ef3bdbbe5e2c46fab6) refactor(cli): remove logToStderr and the --log_to_tmp flag in favor of setupAdkLogger (#1180) (adk-foundry-bot, 2026-10-28)
+- [cf9701e](https://github.com/google/adk-js/commit/cf9701eaedc8c2864bcc4304e28ab0907f53e68b) refactor(tools): remove ToolboxTool and wrap Toolbox tools as function tools (#1179) (adk-foundry-bot, 2026-10-28)
+- [730b3e6](https://github.com/google/adk-js/commit/730b3e6830b24b1ed9030be15b8762097237e10c) refactor(agents): remove RemoteAgent, deleted in adk-python before v1.0.0 (#1178) (adk-foundry-bot, 2026-10-28)
+- [0607350](https://github.com/google/adk-js/commit/06073500f9fcaa1e3ab25478c41661431908bb5c) fix(tools): return full memory entries from LoadMemoryTool (#1177) (adk-foundry-bot, 2026-10-28)
+- [a5d71f2](https://github.com/google/adk-js/commit/a5d71f2ff2a5138d3c5109e0d733320fd7972b96) refactor(tools): make the ToolPredicate context parameter optional (#1175) (adk-foundry-bot, 2026-10-28)
+- [8c62092](https://github.com/google/adk-js/commit/8c62092fb23074e20d0d4dbac661e5b5f016fd75) refactor(tools): take triggers and toolNamePrefix only in ApplicationIntegrationToolset (#1174) (adk-foundry-bot, 2026-10-28)
+- [06f3b74](https://github.com/google/adk-js/commit/06f3b743fb75e5cff4ebd01975bcdf402fdb73a6) refactor(tools): drop APIHubToolset.getTool and make its resource name and lazy flag private (#1173) (adk-foundry-bot, 2026-10-28)
+- [3a7af47](https://github.com/google/adk-js/commit/3a7af47386512e17ec81b5d97c4794cb0c140717) fix(dev): stop logging request headers and bodies on /api/reasoning_engine (#1163) (Scott Mansfield, 2026-10-27)
+- [2a65dc1](https://github.com/google/adk-js/commit/2a65dc1478a349a66e94e9b8f10fc3bbb4ba107a) fix(dev): preserve workflow node names in bundled agents (#1149) (Tianlang (Jackie) Chen, 2026-10-27)
+- [f799919](https://github.com/google/adk-js/commit/f79991927dd7116fcfa67e9e9c606f2a4a0edf67) fix(tools): send array query parameters as repeated keys in RestApiTool (#1135) (Osama Ansar, 2026-10-28)
+- [31b3500](https://github.com/google/adk-js/commit/31b3500d4fe9b72d16ac02b9f381be889cd79da8) fix(models): fail over synchronous delegate initialization errors (#1153) (Kevin Dong, 2026-10-28)
+- [0515f7c](https://github.com/google/adk-js/commit/0515f7cda10964754a18a710be8ea682f3964bbd) fix: preserve server-managed deployment spec fields on agent_engine update (#1159) (Mirco469, 2026-10-27)
+- [cfb4764](https://github.com/google/adk-js/commit/cfb4764c1b51536ea39577abfe7dfd2e8df15a79) fix(integrations): honor maxOutputTokens, set finishReason and sanitize tool ids on Claude (#1139) (Scott Mansfield, 2026-10-27)
 
 ## Changed Files
 
-- `M	core/src/skills/loader.ts`
-- `M	core/test/skills/loader_test.ts`
+- `M	.release-please-manifest.json`
+- `M	core/CHANGELOG.md`
+- `M	core/package.json`
+- `M	core/src/agents/processors/content_processor_utils.ts`
+- `M	core/src/agents/processors/content_request_processor.ts`
+- `D	core/src/agents/remote_agent.ts`
+- `M	core/src/cli/utils/logs.ts`
+- `M	core/src/common.ts`
+- `M	core/src/index.ts`
+- `M	core/src/integrations/agent_registry/agent_registry_mcp_toolset.ts`
+- `M	core/src/sessions/database_session_service.ts`
+- `A	core/src/sessions/stale_session_error.ts`
+- `M	core/src/tools/apihub_tool/apihub_toolset.ts`
+- `M	core/src/tools/application_integration_tool/application_integration_toolset.ts`
+- `M	core/src/tools/application_integration_tool/clients/integration_client.ts`
+- `M	core/src/tools/base_toolset.ts`
+- `M	core/src/tools/google_api_tool/google_api_tool.ts`
+- `D	core/src/tools/google_api_tool/google_api_tool_set.ts`
+- `A	core/src/tools/google_api_tool/google_api_toolset.ts`
+- `R062	core/src/tools/google_api_tool/google_api_tool_sets.ts	core/src/tools/google_api_tool/google_api_toolsets.ts`
+- `M	core/src/tools/google_api_tool/googleapi_to_openapi_converter.ts`
+- `M	core/src/tools/google_api_tool/index.ts`
+- `M	core/src/tools/load_memory_tool.ts`
+- `M	core/src/tools/mcp/mcp_toolset.ts`
+- `M	core/src/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger.ts`
+- `M	core/src/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.ts`
+- `M	core/src/tools/openapi_tool/openapi_spec_parser/operation_parser.ts`
+- `M	core/src/tools/openapi_tool/openapi_toolset.ts`
+- `M	core/src/tools/openapi_tool/rest_api_tool.ts`
+- `D	core/src/tools/toolbox_tool.ts`
+- `M	core/src/tools/toolbox_toolset.ts`
+- `M	core/src/tools/webmcp/webmcp_toolset.ts`
+- `M	core/src/utils/failover_utils.ts`
+- `M	core/src/utils/gemini_schema_util.ts`
+- `M	core/src/utils/simple_zod_to_json.ts`
+- `M	core/src/version.ts`
+- `M	core/test/agents/processors/content_processor_utils_test.ts`
+- `M	core/test/agents/processors/content_request_processor_test.ts`
+- `D	core/test/agents/remote_agent_test.ts`
+- `M	core/test/cli/utils/logs_test.ts`
+- `A	core/test/models/routed_llm_sync_failure_test.ts`
+- `M	core/test/sessions/database_session_service_test.ts`
+- `M	core/test/tools/apihub_tool/apihub_toolset_test.ts`
+- `M	core/test/tools/application_integration_tool/application_integration_toolset_test.ts`
+- `M	core/test/tools/application_integration_tool/clients/integration_client_test.ts`
+- `M	core/test/tools/base_toolset_test.ts`
+- `D	core/test/tools/google_api_tool/google_api_tool_set_test.ts`
+- `D	core/test/tools/google_api_tool/google_api_tool_sets_test.ts`
+- `M	core/test/tools/google_api_tool/google_api_tool_test.ts`
+- `A	core/test/tools/google_api_tool/google_api_toolset_test.ts`
+- `A	core/test/tools/google_api_tool/google_api_toolsets_test.ts`
+- `M	core/test/tools/google_api_tool/googleapi_to_openapi_converter_test.ts`
+- `M	core/test/tools/load_memory_tool_test.ts`
+- `M	core/test/tools/mcp/mcp_toolset_test.ts`
+- `M	core/test/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger_extra_test.ts`
+- `M	core/test/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger_test.ts`
+- `M	core/test/tools/openapi_tool/openapi_toolset_test.ts`
+- `M	core/test/tools/openapi_tool/operation_parser_parity_test.ts`
+- `M	core/test/tools/openapi_tool/operation_parser_test.ts`
+- `M	core/test/tools/openapi_tool/rest_api_tool_parity_test.ts`
+- `M	core/test/tools/openapi_tool/rest_api_tool_test.ts`
+- `D	core/test/tools/toolbox_tool_test.ts`
+- `M	core/test/tools/toolbox_toolset_test.ts`
+- `M	dev/CHANGELOG.md`
+- `M	dev/package.json`
+- `M	dev/src/cli/cli.ts`
+- `M	dev/src/cli/cli_run.ts`
+- `M	dev/src/cli/deploy/cli_deploy_agent_engine.ts`
+- `M	dev/src/server/adk_api_server.ts`
+- `M	dev/src/utils/agent_loader.ts`
+- `M	dev/src/version.ts`
+- `M	dev/test/cli/cli_deploy_agent_engine_test.ts`
+- `M	dev/test/cli/cli_run_test.ts`
+- `M	dev/test/cli/cli_test.ts`
+- `M	dev/test/server/adk_api_server_test.ts`
+- `M	dev/test/utils/agent_loader_test.ts`
+- `M	docs/guides/README.md`
+- `M	docs/guides/agents/index.md`
+- `M	docs/guides/cli/index.md`
+- `A	docs/guides/integrations/crewai/index.md`
+- `A	docs/guides/integrations/langchain/index.md`
+- `M	docs/guides/integrations/models/anthropic_llm/index.md`
+- `M	docs/guides/memory/index.md`
+- `M	docs/guides/sessions/index.md`
+- `M	docs/guides/tools/apihub_tool/index.md`
+- `M	docs/guides/tools/application_integration_tool/index.md`
+- `M	docs/guides/tools/google_api_tool/index.md`
+- `M	docs/guides/tools/index.md`
+- `M	docs/guides/tools/mcp_tool/index.md`
+- `M	docs/guides/tools/openapi_tool/index.md`
+- `M	integrations/CHANGELOG.md`
+- `M	integrations/package.json`
+- `R093	core/src/tools/crewai_tool.ts	integrations/src/crewai/crewai_tool.ts`
+- `M	integrations/src/index.ts`
+- `M	integrations/src/index_web.ts`
+- `R095	core/src/tools/langchain_tool.ts	integrations/src/langchain/langchain_tool.ts`
+- `M	integrations/src/models/anthropic_llm.ts`
+- `M	integrations/src/models/anthropic_utils.ts`
+- `M	integrations/src/version.ts`
+- `R097	core/test/tools/crewai_tool_test.ts	integrations/test/crewai/crewai_tool_test.ts`
+- `R097	core/test/tools/langchain_tool_test.ts	integrations/test/langchain/langchain_tool_test.ts`
+- `M	integrations/test/models/anthropic_llm_test.ts`
+- `M	integrations/test/models/anthropic_utils_test.ts`
+- `M	package-lock.json`
+- `M	package.json`
+- `M	samples/agents/README.md`
+- `M	samples/agents/agent.ts`
+- `M	samples/cli/README.md`
+- `M	samples/tools/README.md`
+- `M	samples/tools/agent.ts`
+- `M	samples/tools/application_integration_tool/README.md`
+- `M	samples/tools/application_integration_tool/agent.ts`
+- `M	samples/tools/google_api_tool/README.md`
+- `M	samples/tools/google_api_tool/agent.ts`
