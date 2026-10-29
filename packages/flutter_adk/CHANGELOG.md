@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.29
+
+- Bumped package version to `2026.10.29` and dependency `adk_dart: ^2026.10.29`.
+- Re-exported `CallbackType`, `CallbackInfo`, `ReflectAndRetryModelPlugin`, `NodePathBuilder`, `applyRewinds`, `getActiveEvents`, and `loadBigQuerySkill` via `package:adk_dart/adk_core.dart`.
+
 ## 2026.10.24
 
 - Bumped package version to `2026.10.24` and dependency `adk_dart: ^2026.10.24`.

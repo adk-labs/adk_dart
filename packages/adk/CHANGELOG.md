@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.29
+
+- Bumped package version to `2026.10.29` and dependency `adk_dart: ^2026.10.29`.
+- **CLI & Dev Web Server Security & Reliability (`cli.dart`, `web_server.dart`, `adk-python` `27dda3e11`, `ff66b1f17`, `b7ac5ef75`, `3b227d6ec`, `e2e9336a7`)**:
+  - Wrapped `FileSystemException` when reading `--avatar_config` into `CliUsageError` (`27dda3e11`).
+  - Added `file://` URI support and `ADK_EVAL_STORAGE_URI` environment variable fallback for evaluation storage (`ff66b1f17`).
+  - Protected internal special agents (`__*`) and `/dev/*` routes from foreign browser origins when wildcard or regex `allow_origins` are configured (`b7ac5ef75`).
+  - Closed `/run_live` WebSockets cleanly with `1007` (`invalidFramePayloadData`) on malformed request frames and `1011` (`internalServerError`) on unhandled runner failures while aborting the active live session (`3b227d6ec`).
+
 ## 2026.10.24
 
 - Bumped package version to `2026.10.24` and dependency `adk_dart: ^2026.10.24`.
