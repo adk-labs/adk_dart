@@ -757,7 +757,67 @@ Responsive carousel or grid selector for switching between agent personas.
 
 ### `AdkTokenUsageBadge`
 
-Compact badge showing prompt, completion, and total token usage with cost tooltip.
+Compact badge showing prompt, completion, cached, and total token usage with cost tooltip. Supports `style` (`AdkCardStyle`), `leadingIcon`, `trailingWidget`, and `contentBuilder`.
+
+---
+
+### `AdkUsageMonitorCard`
+
+Session and turn-level token usage & cost dashboard card with proportional stacked progress bar (`Prompt`, `Cached`, `Output`, `Thoughts`, `Tool Prompt`), cache hit ratio %, average latency, USD cost estimator (`inputCostPerMillionUsd`, `outputCostPerMillionUsd`, `cachedCostPerMillionUsd`), and reset action (`onReset`). Supports `style`, `leadingIcon`, `trailingWidget`, `headerBuilder`, `barBuilder`, and `metricsBuilder`.
+
+---
+
+### `AdkContextWindowMeter`
+
+Context window utilization gauge (`usedTokens / maxContextTokens`) with optional `compactionThresholdTokens` vertical marker line and compact/full display modes. Automatically changes color (`normalColor`, `warningColor`, `criticalColor`) as context utilization approaches the compaction threshold.
+
+---
+
+### `AdkSkillToolCard`
+
+Specialized tool card for `SkillToolset` invocations (`list_skills`, `search_skills`, `load_skill`, `unload_skill`, `load_skill_resource`). Automatically parses `<available_skills>` XML catalogs into structured skill badges and renders `SKILL.md` instructions or resources.
+
+---
+
+### `AdkFileEditCard`
+
+Specialized tool card for `EnvironmentToolset` file operations (`EditFile`, `WriteFile`, `ReadFile`) featuring an LCS line-by-line unified diff viewer (`AdkDiffLine`) and copy action.
+
+---
+
+### `AdkShellCommandCard`
+
+Dark terminal card for shell command and script executions (`Execute`, `execute_bash`, `run_command`, `run_skill_script`) with ANSI escape code stripping, `stdout`/`stderr` streams, `exit_code` badge, and timeout indicator.
+
+---
+
+### `AdkWebPageCard`
+
+Specialized card for `load_web_page` / `fetch_web_page` tool calls displaying the target URL, extracted domain badge, expandable text preview, and error states.
+
+---
+
+### `AdkComputerActionCard`
+
+Specialized card for `ComputerUseToolset` browser/desktop GUI actions (`click_at`, `type_text_at`, `scroll_at`, `key_combination`, `navigate`, `drag_and_drop`) with `(x, y)` coordinate badge, target URL, and base64 screenshot viewer.
+
+---
+
+### `AdkCompactionSummaryCard`
+
+Collapsible timeline card for `SlidingWindowCompactor` / `EventActions.compaction` events showing the compacted timestamp range and summary text.
+
+---
+
+### `AdkReflectRetryBanner`
+
+Self-healing status banner for `ReflectAndRetryToolPlugin` / `ReflectAndRetryModelPlugin` retry attempts (`Attempt N/M`), displaying the error summary and reflection guidance.
+
+---
+
+### `AdkMultiRunEvalCard`
+
+Evaluation summary card for `MultiRunCaseResult` (`AdkMultiRunEvalCard.fromCoreResults`) displaying pass rate, per-metric average score and standard deviation (`±σ`), and per-case run pass ratios.
 
 ---
 

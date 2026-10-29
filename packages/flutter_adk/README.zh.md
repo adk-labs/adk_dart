@@ -6,9 +6,11 @@
 
 ## 提供能力
 
-- 重新导出 `package:adk_dart/adk_core.dart`
+- 重新导出 `package:adk_dart/adk_core.dart`（100% 兼容 Flutter Web / WASM）
 - Flutter 单一 import：`package:flutter_adk/flutter_adk.dart`
-- 包含 `AgentTool`、`UrlContextTool`、Vertex retrieval tools 等最新 Web-safe ADK 接口
+- **43+ 开箱即用 Material 3 UI 组件**：包括 `AdkChatView`、`AdkDevStudioView`、`AdkUsageMonitorCard`、`AdkContextWindowMeter`、`AdkSkillToolCard`、`AdkFileEditCard`、`AdkShellCommandCard`、`AdkWebPageCard`、`AdkComputerActionCard`、`AdkCompactionSummaryCard`、`AdkReflectRetryBanner`、`AdkMultiRunEvalCard`、`AdkWorkflowGraphView`、`AdkCascadeLiveBar` 等
+- **全方位样式与构建器定制**：支持 `AdkTheme`、`AdkChatThemeData`、`AdkCardStyle` 以及所有组件的 `style`、`headerBuilder`、`toolCardBuilder`、`tokenUsageBuilder` 插槽
+- 包含 `AgentTool`、`UrlContextTool`、`SkillToolset`、Vertex retrieval tools 等最新 Web-safe ADK 接口
 - 覆盖 Android/iOS/Web/Linux/macOS/Windows 插件注册
 
 ## 什么时候用 `flutter_adk`？
@@ -72,7 +74,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+3
+  flutter_adk: ^2026.10.29
 ```
 
 ## 快速上手 (开箱即用的聊天 UI)
@@ -92,7 +94,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final agent = LlmAgent(
       name: 'assistant',
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       instruction: '你是一个乐于助人且友好的 Flutter 助手。',
     );
 
@@ -101,6 +103,8 @@ class MyApp extends StatelessWidget {
         appBar: AppBar(title: const Text('ADK Flutter 聊天')),
         body: AdkChatView(
           agent: agent,
+          showContextWindowMeter: true,
+          useSpecializedToolCards: true,
           inputPlaceholder: '请输入问题...',
         ),
       ),

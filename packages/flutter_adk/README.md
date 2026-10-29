@@ -29,7 +29,7 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+7
+  flutter_adk: ^2026.10.29
 ```
 
 ---
@@ -117,7 +117,7 @@ class LocalAiApp extends StatelessWidget {
 
 | Widget | Description | Key Parameters |
 |---|---|---|
-| **`AdkChatView`** | Full-featured chat UI with autoscroll, input box, suggestions bar, and tool cards. | `agent`, `controller`, `suggestions`, `showVoiceButton`, `customBubbleBuilder`, `inputPlaceholder` |
+| **`AdkChatView`** | Full-featured chat UI with autoscroll, input box, suggestions bar, context window meter, and specialized tool cards. | `agent`, `controller`, `suggestions`, `showVoiceButton`, `showContextWindowMeter`, `showTokenUsage`, `useSpecializedToolCards`, `toolCardBuilder`, `tokenUsageBuilder`, `compactionCardBuilder`, `customBubbleBuilder` |
 | **`AdkDevStudioView`** | Embedded ADK Web developer studio with Playground, Live Logger, Agent Graph, and Session State tabs. | `agent`, `controller`, `initialTab`, `showLogs` |
 | **`AdkAgentLoggerView`** | Real-time I/O & telemetry inspector for prompts, model completions, tool calls, latencies, and token counts. | `logs`, `onClearLogs`, `showHeader`, `title` |
 | **`AdkToolInspectorView`** | Visual registry inspector detailing all available tools and their JSON parameter schemas. | `tools`, `title`, `showHeader` |
@@ -200,8 +200,8 @@ final sessionService = AdkStorageSessionService.custom(
 );
 ```
 
-#### `AdkTheme` & `AdkChatThemeData` (Theming System)
-Wrap your app or screen with `AdkTheme` to customize colors, corner radiuses, paddings, and font styles across all widgets:
+#### `AdkTheme`, `AdkChatThemeData` & `AdkCardStyle` (Theming & Widget Customization)
+Wrap your app or screen with `AdkTheme` to customize colors, corner radiuses, paddings, font styles, and card styles (`cardStyle`, `terminalCardStyle`, `usageBadgeStyle`, `compactionCardStyle`, `contextMeterStyle`) across all widgets. Every widget also accepts an explicit `style: AdkCardStyle(...)` override, custom `leadingIcon` / `trailingWidget` slots, and builder callbacks (`headerBuilder`, `bodyBuilder`, `toolCardBuilder`, `tokenUsageBuilder`, `compactionCardBuilder`, `contextWindowMeterBuilder`):
 
 ```dart
 AdkTheme(
@@ -215,8 +215,19 @@ AdkTheme(
     sendButtonColor: Colors.deepPurple,
     showTimestamp: true,
     showAvatars: true,
+    cardStyle: AdkCardStyle(
+      borderRadius: BorderRadius.all(Radius.circular(14.0)),
+      accentColor: Colors.deepPurple,
+    ),
   ),
-  child: AdkChatView(agent: myAgent),
+  child: AdkChatView(
+    agent: myAgent,
+    showContextWindowMeter: true,
+    maxContextTokens: 128000,
+    compactionThresholdTokens: 96000,
+    useSpecializedToolCards: true,
+    toolCardBuilder: (context, call) => null, // Return custom widget or null to use built-in specialized cards
+  ),
 )
 ```
 
@@ -243,6 +254,16 @@ AdkTheme(
 | **`AdkEscalationCard`** | Expandable card displaying advisor reasoning, response output, and budget progress bars. | `AdkEscalationCard(advisorModel: 'gemini-2.5-pro', escalationReason: '...', turnCount: 2);` |
 | **`AdkClassifierCard`** | Decision breakdown card showing selected route, confidence score, and candidate probabilities. | `AdkClassifierCard(selectedRoute: 'billing', confidence: 0.94, probabilities: {...});` |
 | **`AdkWorkflowGraphView`**| Flowchart and DAG execution graph viewer for ADK `Workflow` and branching pipelines. | `AdkWorkflowGraphView(nodes: nodes, edges: edges, onNodeTap: ...);` |
+| **`AdkUsageMonitorCard`** | Session & turn token usage dashboard with stacked category bar, cache hit ratio, latency, and USD cost estimator. | `AdkUsageMonitorCard(usage: ctrl.sessionTokenUsage, turnCount: ctrl.turnCount);` |
+| **`AdkContextWindowMeter`** | Context window utilization progress bar (`used / max`) with compaction threshold marker and compact/full modes. | `AdkContextWindowMeter(usedTokens: 42000, maxContextTokens: 128000, compactionThresholdTokens: 96000);` |
+| **`AdkSkillToolCard`** | Dedicated card for `SkillToolset` (`list_skills`, `load_skill`, `load_skill_resource`) with `<available_skills>` XML parser. | `AdkSkillToolCard(toolName: 'load_skill', arguments: {...}, result: {...});` |
+| **`AdkFileEditCard`** | Dedicated card for `EnvironmentToolset` (`EditFile`, `WriteFile`, `ReadFile`) with LCS line-by-line unified diff viewer. | `AdkFileEditCard(toolName: 'EditFile', arguments: {...}, result: {...});` |
+| **`AdkShellCommandCard`** | Dark terminal card for `Execute` / `run_skill_script` with ANSI stripping, `stdout`/`stderr`, and exit code badge. | `AdkShellCommandCard(command: 'dart test', result: {...});` |
+| **`AdkWebPageCard`** | Dedicated card for `load_web_page` / `fetch_web_page` with URL, domain badge, and expandable content preview. | `AdkWebPageCard(url: 'https://dart.dev', result: {...});` |
+| **`AdkComputerActionCard`** | Dedicated card for `ComputerUseToolset` (`click_at`, `type_text_at`, `scroll_at`, `navigate`) with `(x, y)` coordinates and screenshot. | `AdkComputerActionCard(toolName: 'click_at', arguments: {'x': 320, 'y': 180});` |
+| **`AdkCompactionSummaryCard`** | Collapsible timeline card for compacted conversation history (`EventActions.compaction`). | `AdkCompactionSummaryCard(summaryText: '...', startTimestamp: ..., endTimestamp: ...);` |
+| **`AdkReflectRetryBanner`** | Status banner for `ReflectAndRetryToolPlugin` self-healing retries (`Attempt N/M`). | `AdkReflectRetryBanner(toolName: 'sql_query', attempt: 2, maxAttempts: 3);` |
+| **`AdkMultiRunEvalCard`** | Summary card for multi-run evaluation aggregation (`MultiRunCaseResult` pass rate, avg score, std dev). | `AdkMultiRunEvalCard.fromCoreResults(results: multiRunResults);` |
 | **`AdkPromptSuggestionsBar`** | Horizontally scrollable bar with quick-tap prompt chips. | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
 | **`AdkToolCallCard`** | Accordion card displaying tool name, arguments, execution status, and return values. | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
 | **`AdkWorkflowProgressIndicator`**| Step-by-step timeline progress bar tracking workflow node statuses. | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
@@ -255,7 +276,7 @@ AdkTheme(
 
 > 📖 **Full Widget Catalog & Recipes**: For exhaustive parameter tables, customization options, and copy-paste recipes, see [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md).
 >
-> 📋 **Widget Technical Specification**: For complete API signatures, builder hook definitions, accessibility features, and platform notes across all 33 widgets, see [WIDGET_SPECIFICATION.md](docs/WIDGET_SPECIFICATION.md) ([한국어 명세서](docs/WIDGET_SPECIFICATION.ko.md)).
+> 📋 **Widget Technical Specification**: For complete API signatures, builder hook definitions, accessibility features, and platform notes across all 43+ widgets, see [WIDGET_SPECIFICATION.md](docs/WIDGET_SPECIFICATION.md) ([한국어 명세서](docs/WIDGET_SPECIFICATION.ko.md)).
 >
 > 🛠️ **ADK UI Utilities**: Zero-boilerplate helpers (`AdkFormatters`, `AdkEventStreamUtils`, `AdkColorUtils`) are provided out-of-the-box for token, latency, byte, and stream parsing. Detailed in [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md#6-adk-ui-utilities) and [WIDGET_SPECIFICATION.md](docs/WIDGET_SPECIFICATION.md#10-adk-ui-utilities).
 
@@ -263,12 +284,12 @@ AdkTheme(
 
 ### 4. UI Data Models (`package:flutter_adk/flutter_adk.dart`)
 
-- **`AdkChatMessage`**: Immutable chat message (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `metadata`).
+- **`AdkChatMessage`**: Immutable chat message (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `tokenUsage`, `invocationId`, `metadata`).
 - **`AdkToolCallInfo`**: Tool execution state model (`callId`, `toolName`, `arguments`, `result`, `status`, `durationMs`).
 - **`AdkWorkflowStep`**: Workflow step model (`id`, `label`, `description`, `status`, `durationMs`, `output`).
 - **`AdkSessionInfo`**: Session history model (`id`, `title`, `messageCount`, `lastMessagePreview`, `updatedAt`).
 - **`AdkPromptSuggestion`**: Suggestion model (`text`, `label`, `icon`, `category`).
-- **`AdkTokenUsage`**: Token telemetry model (`promptTokens`, `completionTokens`, `totalTokens`, `formattedTotal`).
+- **`AdkTokenUsage`**: Token telemetry model (`promptTokens`, `completionTokens`, `totalTokens`, `thoughtTokens`, `cachedTokens`, `toolUsePromptTokens`, `trafficType`, `cacheHitRatio`, `estimateCostUsd`, `operator +`).
 - **`AdkVoiceState`**: Real-time voice state model (`status`, `decibels`, `isMuted`, `isActive`).
 
 ---
@@ -278,7 +299,7 @@ AdkTheme(
 | Feature | Android | iOS | Web (WASM) | Linux | macOS | Windows | Notes |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | --- |
 | `flutter_adk` single import | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Re-exports Web-safe `adk_core` |
-| Turnkey UI Kit (14+ Widgets) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100% Flutter Material 3 |
+| Turnkey UI Kit (43+ Widgets) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100% Flutter Material 3 |
 | Agent runtime (`LlmAgent`, workflows) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Pure Dart async stream orchestration |
 | `Gemini` (3.7 / 2.0) & `LiteLlm` (Local) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Cross-platform REST & WebSocket |
 | MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Remote MCP server connections |

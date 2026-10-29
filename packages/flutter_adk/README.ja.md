@@ -6,10 +6,11 @@ Flutter で ADK Dart の Web-safe コアランタイムを使うためのファ�
 
 ## 提供内容
 
-- `package:adk_dart/adk_core.dart` re-export
+- `package:adk_dart/adk_core.dart` re-export (Web / WASM 完全対応)
 - Single Flutter import: `package:flutter_adk/flutter_adk.dart`
-- Latest Web-safe ADK surface such as `AgentTool`, `UrlContextTool`, and Vertex
-  retrieval tools
+- **43+ ターンキー Material 3 UI ウィジェット**: `AdkChatView`, `AdkDevStudioView`, `AdkUsageMonitorCard`, `AdkContextWindowMeter`, `AdkSkillToolCard`, `AdkFileEditCard`, `AdkShellCommandCard`, `AdkWebPageCard`, `AdkComputerActionCard`, `AdkCompactionSummaryCard`, `AdkReflectRetryBanner`, `AdkMultiRunEvalCard`, `AdkWorkflowGraphView`, `AdkCascadeLiveBar` など
+- **スタイル & ビルダーカスタマイズ**: `AdkTheme`, `AdkChatThemeData`, `AdkCardStyle` および各ウィジェットの `style`, `headerBuilder`, `toolCardBuilder`, `tokenUsageBuilder` スロット
+- Latest Web-safe ADK surface such as `AgentTool`, `UrlContextTool`, `SkillToolset`, and Vertex retrieval tools
 - Plugin registration for Android/iOS/Web/Linux/macOS/Windows
 
 ## `flutter_adk` を使うべきケース
@@ -74,7 +75,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+3
+  flutter_adk: ^2026.10.29
 ```
 
 ## クイックスタート (ターンキーチャットUI)
@@ -94,7 +95,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final agent = LlmAgent(
       name: 'assistant',
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       instruction: '親切で役立つFlutterアシスタントです。',
     );
 
@@ -103,6 +104,8 @@ class MyApp extends StatelessWidget {
         appBar: AppBar(title: const Text('ADK Flutter Chat')),
         body: AdkChatView(
           agent: agent,
+          showContextWindowMeter: true,
+          useSpecializedToolCards: true,
           inputPlaceholder: '質問を入力してください...',
         ),
       ),

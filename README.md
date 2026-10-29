@@ -47,7 +47,7 @@ developer ergonomics.
 
 ADK Dart is intended to behave like `adk-python` while using Dart-native
 types, async streams, package structure, and platform constraints. The current
-release baseline tracks `adk-python` `2.2.0`.
+release baseline tracks `adk-python` `2.13.0`.
 
 Status legend:
 
@@ -57,7 +57,7 @@ Status legend:
 
 | `adk-python` area | Dart status | Dart implementation surface | Notes |
 | --- | --- | --- | --- |
-| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm` are aligned on `2026.9.7`; exported ADK baseline is `2.7.0`. |
+| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm` are aligned on `2026.10.29`; exported ADK baseline is `2.13.0`. |
 | Agents and runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | Core invocation, live fallback, rewind, session state, callback, and transfer behavior are ported. |
 | LLM flow processors | ✅ | request/response processors under `flows/llm_flows` | Covers instructions, identity, contents, compaction, context cache, code execution, output schema, tool confirmation, auth preflight, and agent transfer. |
 | Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, `NodeTool` (workflow-as-tool), joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, START-edge routing guards, completed-task batching, strict node input-schema validation, graph serialization, and status-aware DOT output. |
@@ -110,9 +110,7 @@ Status legend:
 | :--- | :--- | :--- |
 | Running CLI commands in terminal (`adk create`, `adk run`, `adk web`) or building server agents | [`adk`](https://pub.dev/packages/adk) | Official CLI toolchain executable and unified entrypoint for Dart VM. |
 | Building Dart backend, cloud, or VM agents with core SDK primitives | [`adk_dart`](https://pub.dev/packages/adk_dart) | Core SDK runtime library providing the fundamental agent, runner, and workflow engine. |
-| Building a Flutter client app (Mobile, Desktop, Web, WASM) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | Full UI Kit with 20+ turnkey widgets, 6 reactive controllers, `AdkTheme`, and WASM support. |
-| Integrating Model Context Protocol (MCP) clients / servers | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | Standalone MCP client/server protocol transport package. |
-| Running on-device LLM acceleration on edge devices | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | On-device LiteRT / Gemini Nano accelerator integration. |
+| Building a Flutter client app (Mobile, Desktop, Web, WASM) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | Full UI Kit with 40+ turnkey widgets, 6 reactive controllers, `AdkTheme` & `AdkCardStyle`, and WASM support. |
 | Integrating Model Context Protocol (MCP) clients / servers | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | Standalone MCP client/server protocol transport package. |
 | Running on-device LLM acceleration on edge devices | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | On-device LiteRT / Gemini Nano accelerator integration. |
 
@@ -251,9 +249,9 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.8.17+1
+  adk_dart: ^2026.10.29
   # Or use the unified facade + CLI package:
-  # adk: ^2026.8.17+1
+  # adk: ^2026.10.29
 ```
 
 If you prefer a shorter import path, use the facade package:

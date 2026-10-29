@@ -22,11 +22,15 @@ All widgets adhere to Material 3 design principles, fully adapt to light/dark th
    - [AdkClassifierCard](#adkclassifiercard)
 6. [Workflow Flowchart & Execution Graphs](#5-workflow-flowchart--execution-graphs)
    - [AdkWorkflowGraphView](#adkworkflowgraphview)
-7. [ADK UI Utilities](#6-adk-ui-utilities)
+7. [Token Usage, Context Meter & Specialized Tool Cards](#6-token-usage-context-meter--specialized-tool-cards)
+   - [AdkUsageMonitorCard & AdkContextWindowMeter](#adkusagemonitorcard--adkcontextwindowmeter)
+   - [AdkSkillToolCard, AdkFileEditCard, AdkShellCommandCard, AdkWebPageCard, AdkComputerActionCard](#specialized-tool-cards)
+   - [AdkCompactionSummaryCard, AdkReflectRetryBanner, AdkMultiRunEvalCard](#compaction-retry--eval-widgets)
+8. [ADK UI Utilities](#7-adk-ui-utilities)
    - [AdkFormatters](#adkformatters)
    - [AdkEventStreamUtils](#adkeventstreamutils)
    - [AdkColorUtils](#adkcolorutils)
-8. [Copy-Paste Recipes](#7-copy-paste-recipes)
+9. [Copy-Paste Recipes](#8-copy-paste-recipes)
 
 ---
 
@@ -331,7 +335,46 @@ AdkWorkflowGraphView(
 
 ---
 
-## 6. ADK UI Utilities
+## 6. Token Usage, Context Meter & Specialized Tool Cards
+
+### `AdkUsageMonitorCard` & `AdkContextWindowMeter`
+
+```dart
+AdkUsageMonitorCard(
+  usage: chatController.sessionTokenUsage,
+  turnCount: chatController.turnCount,
+  inputCostPerMillionUsd: 0.15,
+  outputCostPerMillionUsd: 0.60,
+  cachedCostPerMillionUsd: 0.0375,
+  onReset: () => chatController.resetTokenUsage(),
+)
+
+AdkContextWindowMeter(
+  usedTokens: chatController.sessionTokenUsage.totalTokens,
+  maxContextTokens: 128000,
+  compactionThresholdTokens: 96000,
+)
+```
+
+### Specialized Tool Cards
+
+Automatically rendered inside `AdkMessageBubble` / `AdkChatView` when `useSpecializedToolCards: true` (default), or usable standalone:
+
+- **`AdkSkillToolCard`**: Renders `SkillToolset` (`list_skills`, `search_skills`, `load_skill`, `unload_skill`, `load_skill_resource`) with `<available_skills>` XML parsing.
+- **`AdkFileEditCard`**: Renders `EnvironmentToolset` (`EditFile`, `WriteFile`, `ReadFile`) with LCS line-by-line unified diff viewer.
+- **`AdkShellCommandCard`**: Renders `Execute` / `run_skill_script` in a dark terminal card with ANSI stripping, `stdout`/`stderr`, and exit code badge.
+- **`AdkWebPageCard`**: Renders `load_web_page` / `fetch_web_page` with domain badge and expandable body preview.
+- **`AdkComputerActionCard`**: Renders `ComputerUseToolset` (`click_at`, `type_text_at`, `scroll_at`, `navigate`) with `(x, y)` coordinates and base64 screenshot.
+
+### Compaction, Retry & Eval Widgets
+
+- **`AdkCompactionSummaryCard`**: Collapsible timeline summary for `EventActions.compaction`.
+- **`AdkReflectRetryBanner`**: Self-healing status banner for `ReflectAndRetryToolPlugin` (`Attempt N/M`).
+- **`AdkMultiRunEvalCard`**: Summary card for `MultiRunCaseResult` (`AdkMultiRunEvalCard.fromCoreResults`).
+
+---
+
+## 7. ADK UI Utilities
 
 The `AdkFormatters`, `AdkEventStreamUtils`, and `AdkColorUtils` classes provide zero-boilerplate helpers for stream parsing, formatting, and theme-compatible coloring.
 

@@ -386,7 +386,57 @@ ADK `ClassifierNode`가 결정한 분기 경로, 신뢰도 점수, 후보 경로
 ## 9. 원격 측정 및 반응형 스트림 빌더
 
 ### `AdkTokenUsageBadge`
-프롬프트, 컴플리션, 총합 토큰 사용량과 툴팁을 제공하는 컴팩트 뱃지입니다.
+프롬프트, 컴플리션, 캐시, 총합 토큰 사용량과 비용 툴팁을 제공하는 컴팩트 뱃지입니다. `style` (`AdkCardStyle`), `leadingIcon`, `trailingWidget`, `contentBuilder` 커스터마이징을 지원합니다.
+
+---
+
+### `AdkUsageMonitorCard`
+세션 및 턴 단위 토큰 사용량/비용 대시보드 카드입니다. 카테고리별 비율 스택 바(`Prompt`, `Cached`, `Output`, `Thoughts`, `Tool Prompt`), 캐시 적중률(%), 평균 지연 시간, USD 예상 비용 계산기 및 초기화(`onReset`) 버튼을 제공하며 `style`, `headerBuilder`, `barBuilder`, `metricsBuilder`를 지원합니다.
+
+---
+
+### `AdkContextWindowMeter`
+컨텍스트 윈도우 점유율(`usedTokens / maxContextTokens`) 진행률 게이지 및 컴팩션 임계치(`compactionThresholdTokens`) 수직 마커 위젯입니다. 컴팩트/전체 모드와 점유율 구간별 색상(`normalColor`, `warningColor`, `criticalColor`) 자동 전환을 지원합니다.
+
+---
+
+### `AdkSkillToolCard`
+`SkillToolset` (`list_skills`, `search_skills`, `load_skill`, `unload_skill`, `load_skill_resource`) 호출 전용 카드 위젯으로, `<available_skills>` XML 목록을 파싱하여 스킬 배지로 시각화하고 `SKILL.md` 본문 및 리소스를 표시합니다.
+
+---
+
+### `AdkFileEditCard`
+`EnvironmentToolset` 파일 도구(`EditFile`, `WriteFile`, `ReadFile`) 전용 카드 위젯으로, LCS 알고리즘 기반 줄 단위 Unified Diff 뷰어(`AdkDiffLine`)와 원클릭 복사 기능을 제공합니다.
+
+---
+
+### `AdkShellCommandCard`
+셸 명령어 및 스킬 스크립트(`Execute`, `execute_bash`, `run_command`, `run_skill_script`) 실행 결과를 다크 터미널 테마로 표시하는 카드입니다. ANSI 이스케이프 코드 자동 제거, `stdout`/`stderr` 분리 표시, `exit_code` 및 타임아웃 배지를 제공합니다.
+
+---
+
+### `AdkWebPageCard`
+`load_web_page` / `fetch_web_page` 도구 호출 전용 카드로, 대상 URL, 도메인 배지, 본문 미리보기 접기/펴기 및 에러 상태를 표시합니다.
+
+---
+
+### `AdkComputerActionCard`
+`ComputerUseToolset` (`click_at`, `type_text_at`, `scroll_at`, `navigate` 등) 브라우저/데스크톱 제어 액션을 시각화하는 카드로, `(x, y)` 좌표 배지, 입력 텍스트, Base64 스크린샷 렌더링을 지원합니다.
+
+---
+
+### `AdkCompactionSummaryCard`
+대화 히스토리 컴팩션(`EventActions.compaction`) 이벤트를 타임라인 배너/아코디언 형태로 표시하는 카드 위젯입니다.
+
+---
+
+### `AdkReflectRetryBanner`
+`ReflectAndRetryToolPlugin` / `ReflectAndRetryModelPlugin`의 자기 치유(Self-healing) 재시도 상태(`Attempt N/M`)와 리플렉션 가이드를 표시하는 배너 위젯입니다.
+
+---
+
+### `AdkMultiRunEvalCard`
+멀티 런 평가 결과(`MultiRunCaseResult`, `AdkMultiRunEvalCard.fromCoreResults`)의 전체 통과율, 메트릭별 평균 점수 및 표준편차(`±σ`), 케이스별 통과 비율을 집계하여 보여주는 카드입니다.
 
 ---
 

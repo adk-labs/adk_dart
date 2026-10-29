@@ -32,7 +32,7 @@ ADK Dart는 모듈형 런타임 프리미티브, 도구 오케스트레이션 �
 
 ## ADK Python 호환성 현황
 
-ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stream<Event>`), 패키지 구조 및 플랫폼 제약 조건을 준수하면서 `adk-python`과 동일하게 동작하도록 설계되었습니다. 현재 릴리즈 기준선은 `adk-python` `2.7.0`을 추적합니다.
+ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stream<Event>`), 패키지 구조 및 플랫폼 제약 조건을 준수하면서 `adk-python`과 동일하게 동작하도록 설계되었습니다. 현재 릴리즈 기준선은 `adk-python` `2.13.0`을 추적합니다.
 
 상태 범례:
 
@@ -42,7 +42,7 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 
 | `adk-python` 영역 | Dart 상태 | Dart 구현 API 및 인터페이스 | 비고 |
 | --- | --- | --- | --- |
-| 패키지/버전 기준선 | ✅ | `adkVersion`, 패키지 버전 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 최신 정렬 완료; ADK 기준 버전은 `2.7.0`. |
+| 패키지/버전 기준선 | ✅ | `adkVersion`, 패키지 버전 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 최신(`2026.10.29`) 정렬 완료; ADK 기준 버전은 `2.13.0`. |
 | 에이전트 및 런너 | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 핵심 호출, 실시간 폴백, 세션 롤백 및 리와인드(Rewind), 세션 상태, 콜백 및 Agent Transfer 구현 완료. |
 | LLM 플로우 프로세서 | ✅ | `flows/llm_flows` 하위 요청/응답 프로세서 | 지침, 정체성, 컨텐츠, 토큰 컴팩션, 컨텍스트 캐시, 코드 실행, 출력 스키마, 툴 확인(HITL), 사전 인증 및 에이전트 전환 처리. |
 | 워크플로우 런타임 | ✅ | `Workflow`, `BaseNode`, 함수/도구/LLM-Agent 노드, `NodeTool`(도구화된 워크플로우), 조인, 라우트, 동적 노드, 리플레이 헬퍼 | 재시도, 타임아웃, 입력 요청/HITL, 병렬 워커, 워크플로우 리플레이 및 상태 복원(State Restoration), START 라우팅 가드, 완료 태스크 배칭, 엄격한 입력 스키마 검증, 그래프 직렬화, DOT 시각화 포팅 완료. |
@@ -95,9 +95,7 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 | :--- | :--- | :--- |
 | 터미널에서 CLI 도구 실행 (`adk create`, `adk run`, `adk web`) 또는 백엔드 에이전트 개발 | [`adk`](https://pub.dev/packages/adk) | 공식 CLI 실행 바이너리 및 Dart VM 최상위 통합 엔트리포인트 |
 | 코어 SDK 프리미티브 기반 백엔드/클라우드/서버 에이전트 개발 | [`adk_dart`](https://pub.dev/packages/adk_dart) | 에이전트, 러너, 워크플로우 2.0 엔진을 제공하는 SDK 핵심 라이브러리 |
-| Flutter 클라이언트 앱 개발 (모바일, 데스크톱, Web, WASM) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 20+ Turnkey 위젯, 6종 리액티브 컨트롤러, `AdkTheme`, WASM 및 SSE 스트리밍 지원 UI Kit |
-| MCP(Model Context Protocol) 클라이언트/서버 연동 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 독립형 표준 MCP 프로토콜 전송/세션 패키지 |
-| 온디바이스 엣지 디바이스 Gemini Nano / LiteRT 가속 | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | 온디바이스 경량 LLM 런타임 통합 패키지 |
+| Flutter 클라이언트 앱 개발 (모바일, 데스크톱, Web, WASM) | [`flutter_adk`](https://pub.dev/packages/flutter_adk) | 40+ Turnkey 위젯, 6종 리액티브 컨트롤러, `AdkTheme` & `AdkCardStyle`, WASM 및 SSE 스트리밍 지원 UI Kit |
 | MCP(Model Context Protocol) 클라이언트/서버 연동 | [`adk_mcp`](https://pub.dev/packages/adk_mcp) | 독립형 표준 MCP 프로토콜 전송/세션 패키지 |
 | 온디바이스 엣지 디바이스 Gemini Nano / LiteRT 가속 | [`adk_litertlm`](https://pub.dev/packages/adk_litertlm) | 온디바이스 경량 LLM 런타임 통합 패키지 |
 
@@ -134,9 +132,9 @@ dart pub add adk_dart
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.8.17+1
+  adk_dart: ^2026.10.29
   # 또는 통합 CLI 퍼사드 패키지:
-  # adk: ^2026.8.17+1
+  # adk: ^2026.10.29
 ```
 
 짧은 import 패키지(`adk`)를 사용하는 경우:

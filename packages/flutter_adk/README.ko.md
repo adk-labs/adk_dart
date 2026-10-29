@@ -29,7 +29,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.8.17+7
+  flutter_adk: ^2026.10.29
 ```
 
 ---
@@ -117,7 +117,7 @@ class LocalAiApp extends StatelessWidget {
 
 | 위젯 명 | 설명 | 주요 파라미터 |
 |---|---|---|
-| **`AdkChatView`** | 자동 스크롤, 입력창, 추천 질문 칩, 도구 실행 카드가 통합된 완성형 대화창 | `agent`, `controller`, `suggestions`, `showVoiceButton`, `customBubbleBuilder`, `inputPlaceholder` |
+| **`AdkChatView`** | 자동 스크롤, 입력창, 추천 질문 칩, 컨텍스트 윈도우 미터, 특화 도구 실행 카드가 통합된 완성형 대화창 | `agent`, `controller`, `suggestions`, `showVoiceButton`, `showContextWindowMeter`, `showTokenUsage`, `useSpecializedToolCards`, `toolCardBuilder`, `tokenUsageBuilder`, `compactionCardBuilder`, `customBubbleBuilder` |
 | **`AdkDevStudioView`** | ADK Web을 플러터에 이식한 개발자 스튜디오 (Playground, Live Logger, Agent Graph, Session State 탭 통합) | `agent`, `controller`, `initialTab`, `showLogs` |
 | **`AdkAgentLoggerView`** | 프롬프트, 모델 응답, 도구 호출/결과, 지연 시간(ms), 토큰 소모량을 실시간 추적하고 검색/필터링/복사 지원 | `logs`, `onClearLogs`, `showHeader`, `title` |
 | **`AdkToolInspectorView`** | 에이전트에 등록된 모든 도구 목록과 각 도구의 JSON 파라미터 스키마를 시각화 | `tools`, `title`, `showHeader` |
@@ -200,8 +200,8 @@ final sessionService = AdkStorageSessionService.custom(
 );
 ```
 
-#### `AdkTheme` & `AdkChatThemeData` (테마 커스터마이징)
-앱 또는 특정 화면을 `AdkTheme`으로 감싸면 말풍선 색상, 코너 라운딩, 폰트 스타일, 패딩을 일괄 적용할 수 있습니다:
+#### `AdkTheme`, `AdkChatThemeData` & `AdkCardStyle` (테마 및 위젯 커스터마이징)
+앱 또는 특정 화면을 `AdkTheme`으로 감싸면 말풍선 색상, 코너 라운딩, 폰트 스타일, 패딩 및 카드 스타일(`cardStyle`, `terminalCardStyle`, `usageBadgeStyle`, `compactionCardStyle`, `contextMeterStyle`)을 일괄 적용할 수 있습니다. 또한 모든 위젯은 개별 `style: AdkCardStyle(...)` 오버라이드, 커스텀 위젯 슬롯(`leadingIcon`, `trailingWidget`, `sendButtonWidget`, `voiceButtonWidget`), 커스텀 빌더(`headerBuilder`, `bodyBuilder`, `toolCardBuilder`, `tokenUsageBuilder`, `compactionCardBuilder`, `contextWindowMeterBuilder`)를 지원합니다:
 
 ```dart
 AdkTheme(
@@ -215,8 +215,19 @@ AdkTheme(
     sendButtonColor: Colors.deepPurple,
     showTimestamp: true,
     showAvatars: true,
+    cardStyle: AdkCardStyle(
+      borderRadius: BorderRadius.all(Radius.circular(14.0)),
+      accentColor: Colors.deepPurple,
+    ),
   ),
-  child: AdkChatView(agent: myAgent),
+  child: AdkChatView(
+    agent: myAgent,
+    showContextWindowMeter: true,
+    maxContextTokens: 128000,
+    compactionThresholdTokens: 96000,
+    useSpecializedToolCards: true,
+    toolCardBuilder: (context, call) => null, // 커스텀 위젯 반환 또는 null 반환 시 내장 특화 카드 사용
+  ),
 )
 ```
 
@@ -243,6 +254,16 @@ AdkTheme(
 | **`AdkEscalationCard`** | 조언자 모델의 심층 분석 추론, 응답 내용, 예산 소진 게이지 확장 카드 | `AdkEscalationCard(advisorModel: 'gemini-2.5-pro', escalationReason: '...', turnCount: 2);` |
 | **`AdkClassifierCard`** | 분류 결정 라우트, 신뢰도 점수, 후보별 확률 분포를 표시하는 카드 | `AdkClassifierCard(selectedRoute: 'billing', confidence: 0.94, probabilities: {...});` |
 | **`AdkWorkflowGraphView`**| ADK `Workflow` 및 분기형 파이프라인의 DAG 실행 그래프/플로우차트 뷰어 | `AdkWorkflowGraphView(nodes: nodes, edges: edges, onNodeTap: ...);` |
+| **`AdkUsageMonitorCard`** | 세션/턴 토큰 사용량 대시보드 카드 (카테고리별 스택 바, 캐시 적중률, 지연 시간, USD 예상 비용) | `AdkUsageMonitorCard(usage: ctrl.sessionTokenUsage, turnCount: ctrl.turnCount);` |
+| **`AdkContextWindowMeter`** | 컨텍스트 윈도우 점유율 게이지 (`used / max`) 및 컴팩션 임계선 마커 | `AdkContextWindowMeter(usedTokens: 42000, maxContextTokens: 128000, compactionThresholdTokens: 96000);` |
+| **`AdkSkillToolCard`** | `SkillToolset` (`list_skills`, `load_skill`, `load_skill_resource`) 전용 카드 및 `<available_skills>` XML 파서 | `AdkSkillToolCard(toolName: 'load_skill', arguments: {...}, result: {...});` |
+| **`AdkFileEditCard`** | `EnvironmentToolset` (`EditFile`, `WriteFile`, `ReadFile`) 전용 줄 단위 LCS Unified Diff 및 코드 뷰어 카드 | `AdkFileEditCard(toolName: 'EditFile', arguments: {...}, result: {...});` |
+| **`AdkShellCommandCard`** | `Execute` / `run_skill_script` 전용 다크 터미널 카드 (ANSI 제거, `stdout`/`stderr`, 종료 코드/타임아웃 배지) | `AdkShellCommandCard(command: 'dart test', result: {...});` |
+| **`AdkWebPageCard`** | `load_web_page` / `fetch_web_page` 전용 웹페이지 프리뷰 카드 (도메인 배지, 본문 접기/펴기) | `AdkWebPageCard(url: 'https://dart.dev', result: {...});` |
+| **`AdkComputerActionCard`** | `ComputerUseToolset` (`click_at`, `type_text_at`, `scroll_at`, `navigate`) 전용 좌표 배지 및 스크린샷 카드 | `AdkComputerActionCard(toolName: 'click_at', arguments: {'x': 320, 'y': 180});` |
+| **`AdkCompactionSummaryCard`** | 컨텍스트 컴팩션(`EventActions.compaction`) 요약 타임라인 배너 카드 | `AdkCompactionSummaryCard(summaryText: '...', startTimestamp: ..., endTimestamp: ...);` |
+| **`AdkReflectRetryBanner`** | `ReflectAndRetryToolPlugin` 자기 치유(Self-healing) 재시도 상태 배너 (`Attempt N/M`) | `AdkReflectRetryBanner(toolName: 'sql_query', attempt: 2, maxAttempts: 3);` |
+| **`AdkMultiRunEvalCard`** | 멀티 런 평가(`MultiRunCaseResult`) 통과율, 평균 점수, 표준편차 집계 카드 | `AdkMultiRunEvalCard.fromCoreResults(results: multiRunResults);` |
 | **`AdkPromptSuggestionsBar`** | 가로 스크롤 추천 질문 칩 바 | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
 | **`AdkToolCallCard`** | 도구 이름, 전달 인자, 실행 상태, 반환 결과를 보여주는 아코디언 카드 | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
 | **`AdkWorkflowProgressIndicator`**| 워크플로우 각 노드의 실행 타임라인 진행률 바 | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
@@ -255,7 +276,7 @@ AdkTheme(
 
 > 📖 **위젯 카탈로그 및 레시피**: 전체 파라미터 표, 상세 커스터마이징 옵션 및 복사해 쓸 수 있는 실무 레시피는 [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md)를 참조하세요.
 >
-> 📋 **위젯 기술 명세서**: 33개 전체 위젯의 API 시그니처, 빌더 훅 명세, 접근성 및 플랫폼 호환성 가이드는 [WIDGET_SPECIFICATION.ko.md](docs/WIDGET_SPECIFICATION.ko.md) ([English Spec](docs/WIDGET_SPECIFICATION.md))를 참조하세요.
+> 📋 **위젯 기술 명세서**: 43개 이상 전체 위젯의 API 시그니처, 빌더 훅 명세, 접근성 및 플랫폼 호환성 가이드는 [WIDGET_SPECIFICATION.ko.md](docs/WIDGET_SPECIFICATION.ko.md) ([English Spec](docs/WIDGET_SPECIFICATION.md))를 참조하세요.
 >
 > 🛠️ **ADK UI 유틸리티**: 토큰 포맷팅, 지연 시간/바이트 계산, 이벤트 스트림 파싱을 위한 헬퍼(`AdkFormatters`, `AdkEventStreamUtils`, `AdkColorUtils`)를 기본 제공합니다. [WIDGET_SPECIFICATION.ko.md](docs/WIDGET_SPECIFICATION.ko.md#10-adk-ui-유틸리티) 및 [WIDGET_CATALOG.md](docs/WIDGET_CATALOG.md#6-adk-ui-utilities)에서 확인할 수 있습니다.
 
@@ -263,12 +284,12 @@ AdkTheme(
 
 ### 4. UI 데이터 모델 (`package:flutter_adk/flutter_adk.dart`)
 
-- **`AdkChatMessage`**: 불변 대화 메시지 모델 (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `metadata`).
+- **`AdkChatMessage`**: 불변 대화 메시지 모델 (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `tokenUsage`, `invocationId`, `metadata`).
 - **`AdkToolCallInfo`**: 도구 실행 상태 모델 (`callId`, `toolName`, `arguments`, `result`, `status`, `durationMs`).
 - **`AdkWorkflowStep`**: 워크플로우 단계 모델 (`id`, `label`, `description`, `status`, `durationMs`, `output`).
 - **`AdkSessionInfo`**: 세션 정보 모델 (`id`, `title`, `messageCount`, `lastMessagePreview`, `updatedAt`).
 - **`AdkPromptSuggestion`**: 추천 질문 모델 (`text`, `label`, `icon`, `category`).
-- **`AdkTokenUsage`**: 토큰 사용량 모델 (`promptTokens`, `completionTokens`, `totalTokens`, `formattedTotal`).
+- **`AdkTokenUsage`**: 토큰 사용량 모델 (`promptTokens`, `completionTokens`, `totalTokens`, `thoughtTokens`, `cachedTokens`, `toolUsePromptTokens`, `trafficType`, `cacheHitRatio`, `estimateCostUsd`, `operator +`).
 - **`AdkVoiceState`**: 실시간 음성 상태 모델 (`status`, `decibels`, `isMuted`, `isActive`).
 
 ---
@@ -278,7 +299,7 @@ AdkTheme(
 | 기능 | Android | iOS | Web (WASM) | Linux | macOS | Windows | 비고 |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | --- |
 | `flutter_adk` 단일 import | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Web-safe `adk_core` 재노출 |
-| 완성형 UI Kit (14+종 위젯) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100% Flutter Material 3 |
+| 완성형 UI Kit (43+종 위젯) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 100% Flutter Material 3 |
 | Agent 런타임 (`LlmAgent`, 워크플로우) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Pure Dart 비동기 스트림 오케스트레이션 |
 | `Gemini` (3.7 / 2.0) & `LiteLlm` (로컬) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 크로스플랫폼 REST & WebSocket |
 | MCP Toolset (Streamable HTTP) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 원격 MCP HTTP 서버 연결 |

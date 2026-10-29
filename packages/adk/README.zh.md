@@ -2,13 +2,13 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | 中文
 
-`adk` 是 `adk_dart` 的短包名门面（facade）包。
+`adk` 是 `adk_dart` 的官方 CLI 工具链及短包名门面（facade）包。
 
 ## 包定位
 
 - 短 import：`package:adk/adk.dart`
 - 重新导出 `adk_dart` API
-- 提供 `adk` CLI 入口
+- 提供完整 `adk` CLI 入口（`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`）
 
 ## 什么时候用 `adk`？
 
@@ -62,7 +62,7 @@ dart pub add adk
 
 ```yaml
 dependencies:
-  adk: ^2026.8.17+1
+  adk: ^2026.10.29
 ```
 
 ## 参考

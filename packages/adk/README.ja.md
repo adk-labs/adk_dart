@@ -2,13 +2,13 @@
 
 [English](README.md) | [한국어](README.ko.md) | 日本語 | [中文](README.zh.md)
 
-`adk` は `adk_dart` を短い import 名で再公開するファサードパッケージです。
+`adk` は `adk_dart` を短い import 名で再公開する公式CLIツールチェーンおよび統合ファサードパッケージです。
 
 ## 役割
 
 - Short import: `package:adk/adk.dart`
 - `adk_dart` API re-export
-- `adk` CLI entrypoint
+- `adk` CLI entrypoint (`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`)
 
 ## `adk` を使うべきケース
 
@@ -63,7 +63,7 @@ dart pub add adk
 
 ```yaml
 dependencies:
-  adk: ^2026.8.17+1
+  adk: ^2026.10.29
 ```
 
 ## Links
