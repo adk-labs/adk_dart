@@ -40,7 +40,48 @@ class SetModelResponseTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
-    return Map<String, dynamic>.from(args);
+    return _normalizeResponseArgs(args, outputSchema);
+  }
+
+  Map<String, dynamic> _normalizeResponseArgs(
+    Map<String, dynamic> args,
+    Object schema,
+  ) {
+    final Map<String, dynamic> normalized = Map<String, dynamic>.from(args);
+    if (schema is! Map) {
+      return normalized;
+    }
+    final Object? rawProps = schema['properties'];
+    if (rawProps is! Map) {
+      return normalized;
+    }
+    for (final MapEntry<Object?, Object?> entry in rawProps.entries) {
+      final String propKey = '${entry.key}';
+      final Object? propSchema = entry.value;
+      if (propSchema is! Map) {
+        continue;
+      }
+      final String? alias =
+          (propSchema['alias'] ??
+                  propSchema['validation_alias'] ??
+                  propSchema['serialization_alias'])
+              as String?;
+      final String? fieldName = propSchema['field_name'] as String?;
+      if (alias != null &&
+          alias.isNotEmpty &&
+          alias != propKey &&
+          normalized.containsKey(alias) &&
+          !normalized.containsKey(propKey)) {
+        normalized[propKey] = normalized.remove(alias);
+      } else if (fieldName != null &&
+          fieldName.isNotEmpty &&
+          fieldName != propKey &&
+          normalized.containsKey(propKey) &&
+          !normalized.containsKey(fieldName)) {
+        normalized[fieldName] = normalized.remove(propKey);
+      }
+    }
+    return normalized;
   }
 
   Object _normalizeParameters(Object schema) {

@@ -31,7 +31,7 @@ class ReflectAndRetryModelPlugin extends BasePlugin {
   /// Maximum consecutive model failures before giving up.
   final int maxRetries;
 
-  /// If true, returns/raises final error when retry limit is exceeded.
+  /// Whether to throw or return the final error when [maxRetries] is exceeded.
   final bool throwExceptionIfRetryExceeded;
 
   /// Scope used for tracking failure counters.

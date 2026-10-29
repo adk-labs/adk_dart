@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:adk/src/cli/utils/agent_loader.dart';
 import 'package:adk/src/dev/cli.dart';
 import 'package:adk/src/dev/project.dart';
 import 'package:adk/src/dev/runtime.dart';
@@ -430,6 +431,24 @@ void main() {
 
       await socket.drain<void>().timeout(const Duration(seconds: 5));
       expect(socket.closeCode, WebSocketStatus.internalServerError);
+    });
+  });
+
+  group('e2e9336a7: AgentLoader rejects agent names with a trailing newline', () {
+    test('loadAgent throws ArgumentError when agentName ends with newline', () async {
+      final Directory tempDir = await Directory.systemTemp.createTemp(
+        'adk_agent_loader_newline_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      final Directory agentDir = Directory('${tempDir.path}/my_agent');
+      await agentDir.create(recursive: true);
+
+      final AgentLoader loader = AgentLoader(tempDir.path);
+      expect(() => loader.loadAgent('my_agent\n'), throwsArgumentError);
     });
   });
 }

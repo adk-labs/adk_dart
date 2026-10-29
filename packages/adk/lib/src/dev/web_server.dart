@@ -248,30 +248,30 @@ class SpecialAgentAccessDeniedException implements Exception {
   String toString() => 'SpecialAgentAccessDeniedException: $message';
 }
 
-/// Parsed extra plugin spec from CLI input.
+// Parsed extra plugin spec from CLI input.
 class _ExtraPluginSpec {
-  /// Creates an extra plugin spec.
+  // Creates an extra plugin spec.
   _ExtraPluginSpec({required this.raw, required this.normalizedName});
 
-  /// Raw plugin string from CLI.
+  // Raw plugin string from CLI.
   final String raw;
 
-  /// Normalized plugin key used for built-in matching.
+  // Normalized plugin key used for built-in matching.
   final String normalizedName;
 }
 
-/// Eval manager dependencies used by web server endpoints.
+// Eval manager dependencies used by web server endpoints.
 class _EvalManagers {
-  /// Creates eval manager dependencies.
+  // Creates eval manager dependencies.
   _EvalManagers({
     required this.evalSetsManager,
     required this.evalSetResultsManager,
   });
 
-  /// Eval set CRUD manager.
+  // Eval set CRUD manager.
   final EvalSetsManager evalSetsManager;
 
-  /// Eval result persistence manager.
+  // Eval result persistence manager.
   final EvalSetResultsManager evalSetResultsManager;
 }
 
@@ -372,9 +372,9 @@ String _resolveEvalLocalBaseDir({
   return candidate;
 }
 
-/// Per-server runtime context for request handling.
+// Per-server runtime context for request handling.
 class _AdkDevWebContext {
-  /// Creates a web server runtime context.
+  // Creates a web server runtime context.
   _AdkDevWebContext({
     required this.runtime,
     required this.project,
@@ -454,11 +454,11 @@ class _AdkDevWebContext {
   final int maxLiveSessions;
   int activeLiveSessions = 0;
 
-  /// Address the server is bound to, set once [HttpServer.bind] resolves.
-  ///
-  /// Used for DNS-rebinding protection: when the server is on loopback and
-  /// no explicit [allowOrigins] are configured, request origins must also
-  /// resolve to loopback.
+  // Address the server is bound to, set once [HttpServer.bind] resolves.
+  //
+  // Used for DNS-rebinding protection: when the server is on loopback and
+  // no explicit [allowOrigins] are configured, request origins must also
+  // resolve to loopback.
   String? serverHost;
 
   final Map<String, Runner> _runners = <String, Runner>{};
@@ -481,7 +481,7 @@ class _AdkDevWebContext {
   bool _a2aPushDrainInProgress = false;
   static const int _a2aPushDrainBatchSize = 64;
 
-  /// Creates and wires context dependencies from CLI/runtime options.
+  // Creates and wires context dependencies from CLI/runtime options.
   static Future<_AdkDevWebContext> create({
     required DevAgentRuntime runtime,
     required DevProjectConfig project,
@@ -650,13 +650,13 @@ class _AdkDevWebContext {
   String get defaultAppName => project.appName;
   String get defaultUserId => project.userId;
 
-  /// Whether internal special agents (app names starting with `__`, such as
-  /// a built-in agent-builder assistant) may be loaded and executed.
-  ///
-  /// Mirrors Python's `_allow_special_agents`: it is only enabled when the
-  /// Dev UI is served ([enableWebUi]) and the server is bound to a loopback
-  /// address; API-server-only or non-loopback deployments must not expose
-  /// these privileged internal agents.
+  // Whether internal special agents (app names starting with `__`, such as
+  // a built-in agent-builder assistant) may be loaded and executed.
+  //
+  // Mirrors Python's `_allow_special_agents`: it is only enabled when the
+  // Dev UI is served ([enableWebUi]) and the server is bound to a loopback
+  // address; API-server-only or non-loopback deployments must not expose
+  // these privileged internal agents.
   bool get allowSpecialAgents =>
       enableWebUi && (serverHost == null || _isLoopbackAddress(serverHost!));
 
@@ -723,7 +723,7 @@ class _AdkDevWebContext {
     }
   }
 
-  /// Resolves the filesystem directory for [appName].
+  // Resolves the filesystem directory for [appName].
   String? getAgentDir(String appName) {
     final Directory candidate = Directory('$agentsDir${Platform.pathSeparator}$appName');
     if (candidate.existsSync()) {
@@ -735,9 +735,9 @@ class _AdkDevWebContext {
     return null;
   }
 
-  /// Throws a [SpecialAgentAccessDeniedException] when [appName] is an
-  /// internal special agent and [allowSpecialAgents] is false, or when a
-  /// browser sends the request from a foreign origin.
+  // Throws a [SpecialAgentAccessDeniedException] when [appName] is an
+  // internal special agent and [allowSpecialAgents] is false, or when a
+  // browser sends the request from a foreign origin.
   void _guardSpecialAgentAccess(String appName, {HttpRequest? request}) {
     if (!appName.startsWith('__')) {
       return;
@@ -4826,20 +4826,20 @@ bool _isRequestOriginAllowed({
   return requestOrigin != null && requestOrigin == origin;
 }
 
-/// Loopback hostnames recognized in addition to loopback IP literals.
+// Loopback hostnames recognized in addition to loopback IP literals.
 const Set<String> _loopbackHostnames = <String>{'localhost'};
 
-/// Returns true if [host] (with or without a port, optionally
-/// IPv6-bracketed) refers to a loopback address.
-///
-/// Handles the forms produced by browsers and Dart's HTTP stack:
-///   - Plain IPv4:          "127.0.0.1"
-///   - IPv4 with port:      "127.0.0.1:8000"
-///   - Bracketed IPv6:      "[::1]"
-///   - Bracketed IPv6+port: "[::1]:8000"
-///   - Plain IPv6:          "::1"
-///   - Hostname:            "localhost"
-///   - Hostname with port:  "localhost:8000"
+// Returns true if [host] (with or without a port, optionally
+// IPv6-bracketed) refers to a loopback address.
+//
+// Handles the forms produced by browsers and Dart's HTTP stack:
+//   - Plain IPv4:          "127.0.0.1"
+//   - IPv4 with port:      "127.0.0.1:8000"
+//   - Bracketed IPv6:      "[::1]"
+//   - Bracketed IPv6+port: "[::1]:8000"
+//   - Plain IPv6:          "::1"
+//   - Hostname:            "localhost"
+//   - Hostname with port:  "localhost:8000"
 bool _isLoopbackAddress(String host) {
   String bare = host;
   if (bare.startsWith('[')) {
@@ -7617,9 +7617,9 @@ Future<void> handleTriggerRouteForTesting(
 }
 
 
-/// Parsed request payload for the `/run` endpoint.
+// Parsed request payload for the `/run` endpoint.
 class _RunRequest {
-  /// Creates a normalized run request payload.
+  // Creates a normalized run request payload.
   _RunRequest({
     required this.appName,
     required this.userId,
@@ -7631,28 +7631,28 @@ class _RunRequest {
     required this.invocationId,
   });
 
-  /// App name to execute.
+  // App name to execute.
   final String appName;
 
-  /// User id for session lookup.
+  // User id for session lookup.
   final String userId;
 
-  /// Session id to continue or create.
+  // Session id to continue or create.
   final String sessionId;
 
-  /// New incoming user/model content.
+  // New incoming user/model content.
   final Content? newMessage;
 
-  /// Whether streaming output is requested.
+  // Whether streaming output is requested.
   final bool streaming;
 
-  /// Optional per-request override for auto-creating sessions.
+  // Optional per-request override for auto-creating sessions.
   final bool? autoCreateSession;
 
-  /// Optional state delta to apply before execution.
+  // Optional state delta to apply before execution.
   final Map<String, Object?>? stateDelta;
 
-  /// Optional invocation id override.
+  // Optional invocation id override.
   final String? invocationId;
 }
 

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import '../models/llm_request.dart';
@@ -165,6 +166,11 @@ class FunctionTool extends BaseTool {
 
       final Object? type = propSchema['type'];
       final Object? value = converted[paramName];
+      final Object? rawEnum = propSchema['enumValues'] ?? propSchema['enum'];
+      if (rawEnum is List && value != null) {
+        converted[paramName] = _coerceEnumValue(paramName, value, rawEnum);
+        continue;
+      }
 
       if (type == 'integer' && value is num) {
         if (value % 1 == 0) {
@@ -213,6 +219,50 @@ class FunctionTool extends BaseTool {
       }
     }
     return converted;
+  }
+
+  Object? _coerceEnumValue(
+    String paramName,
+    Object? value,
+    List<Object?> enumList,
+  ) {
+    if (enumList.contains(value)) {
+      return value;
+    }
+    for (final Object? candidate in enumList) {
+      if (candidate is Enum) {
+        if (candidate == value || candidate.name == value) {
+          return candidate;
+        }
+        try {
+          final Object? customValue = (candidate as dynamic).value;
+          if (customValue == value ||
+              (value is String &&
+                  customValue is! String &&
+                  jsonEncode(customValue) == value)) {
+            return candidate;
+          }
+        } catch (_) {}
+      } else if (candidate is int &&
+          value is num &&
+          value % 1 == 0 &&
+          value.toInt() == candidate) {
+        return candidate;
+      } else if (value is String && candidate is! String) {
+        try {
+          if (jsonEncode(candidate) == value) {
+            return candidate;
+          }
+        } catch (_) {}
+      }
+    }
+    developer.log(
+      "Argument '$paramName' is not a value of enum $enumList: $value; "
+      'passing it through unchanged.',
+      name: 'google-adk',
+      level: 900,
+    );
+    return value;
   }
 
   Future<bool> _requiresConfirmation(Map<String, dynamic> args) async {

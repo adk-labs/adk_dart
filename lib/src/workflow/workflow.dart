@@ -356,7 +356,7 @@ class WorkflowContext {
   /// Set of request input node keys in this workflow.
   final Set<String> requestInputNodeKeys;
 
-  /// Intermediate checkpoint events.
+  // Intermediate checkpoint events.
   final List<Event> _checkpointEvents = <Event>[];
 
   /// Node outputs keyed by node name.
@@ -1350,7 +1350,7 @@ RetryConfig? nodeRetryConfig(BaseNode node) {
   return null;
 }
 
-/// Whether [node] has an explicit [RetryConfig] configured directly or on its wrapped worker.
+/// Returns whether [node] has an explicit [RetryConfig] configured directly or on its wrapped worker.
 bool hasOwnRetryConfig(BaseNode node) => nodeRetryConfig(node) != null;
 
 /// Returns a copy of [node] with [retryConfig] applied.
@@ -2331,11 +2331,11 @@ class Workflow extends BaseAgent {
     return true;
   }
 
-  /// Whether any task-mode agent node in this graph is currently waiting.
-  ///
-  /// Task-mode agents are multi-turn and pause for user input. While one is
-  /// waiting, the scheduler stops dispatching further parallel branches so the
-  /// suspended task keeps exclusive control of the conversation.
+  // Whether any task-mode agent node in this graph is currently waiting.
+  //
+  // Task-mode agents are multi-turn and pause for user input. While one is
+  // waiting, the scheduler stops dispatching further parallel branches so the
+  // suspended task keeps exclusive control of the conversation.
   bool _hasWaitingTaskAgent(WorkflowContext context) {
     for (final BaseNode node in nodes) {
       if (node is AgentNode &&
@@ -2831,11 +2831,11 @@ LlmAgent? _chatModeAgentInNode(BaseNode node) {
   return null;
 }
 
-/// Outcome of awaiting a single scheduled node task.
-///
-/// Wraps either a successful [_NodeRunResult] or a captured error so the
-/// orchestration loop can process all completed sibling tasks in a batch
-/// before propagating the first failure.
+// Outcome of awaiting a single scheduled node task.
+//
+// Wraps either a successful [_NodeRunResult] or a captured error so the
+// orchestration loop can process all completed sibling tasks in a batch
+// before propagating the first failure.
 class _TaskOutcome {
   _TaskOutcome.success(_NodeRunResult this.result)
     : name = result.name,
@@ -3878,7 +3878,7 @@ Content _contentFromNodeInput(Object nodeInput) {
   return Content.userText('$nodeInput');
 }
 
-/// Extracts and concatenates the non-thought text parts of a [Content] instance.
+// Extracts and concatenates the non-thought text parts of a [Content] instance.
 String _textFromContent(Content content) {
   return content.parts
       .where((Part part) => !part.thought && part.text != null)
@@ -3945,7 +3945,7 @@ Object? validateNodeData(Object? schema, Object? data) {
   return payload;
 }
 
-/// Validates [value] against a JSON [schema], appending failures to [errors].
+// Validates [value] against a JSON [schema], appending failures to [errors].
 void _validateNodeValue(
   Object? value,
   Map<String, Object?> schema, {

@@ -836,7 +836,7 @@ int? _estimatePromptTokenCount({
   return totalChars ~/ 4;
 }
 
-/// Returns events before [start] needed to pair `FunctionResponse` events at or after [start].
+// Returns events before [start] needed to pair `FunctionResponse` events at or after [start].
 List<Event> _earlierCallsAnsweredBy(List<Event> events, int start) {
   final Set<String> callIdsFromStart = <String>{};
   final Set<String> unmatchedRespIds = <String>{};

@@ -220,7 +220,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.bigtableToolSettings: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.bigtableToolset: const FeatureConfig(
@@ -248,7 +248,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.daytonaEnvironment: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.e2bEnvironment: const FeatureConfig(
@@ -335,7 +335,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.pubsubToolConfig: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.pubsubToolset: const FeatureConfig(
@@ -350,7 +350,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
       ),
       FeatureName.spannerAdminToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.spannerToolset: const FeatureConfig(
@@ -358,11 +358,11 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.spannerToolSettings: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.spannerVectorStore: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.toolArgsMatcher: const FeatureConfig(

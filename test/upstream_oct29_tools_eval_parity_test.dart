@@ -22,11 +22,13 @@ import 'package:adk_dart/src/evaluation/response_evaluator.dart';
 import 'package:adk_dart/src/evaluation/rubric_based_multi_turn_trajectory_evaluator.dart';
 import 'package:adk_dart/src/events/event.dart';
 import 'package:adk_dart/src/events/event_actions.dart';
+import 'package:adk_dart/src/features/_feature_registry.dart';
 import 'package:adk_dart/src/models/base_llm.dart';
 import 'package:adk_dart/src/models/llm_request.dart';
 import 'package:adk_dart/src/models/llm_response.dart';
 import 'package:adk_dart/src/sessions/in_memory_session_service.dart';
 import 'package:adk_dart/src/sessions/session.dart';
+import 'package:adk_dart/src/skills/skill.dart';
 import 'package:adk_dart/src/tools/agent_tool.dart';
 import 'package:adk_dart/src/tools/function_tool.dart';
 import 'package:adk_dart/src/tools/load_artifacts_tool.dart';
@@ -35,9 +37,18 @@ import 'package:adk_dart/src/tools/openapi_tool/common/common.dart';
 import 'package:adk_dart/src/tools/openapi_tool/openapi_spec_parser/openapi_spec_parser.dart';
 import 'package:adk_dart/src/tools/openapi_tool/openapi_spec_parser/rest_api_tool.dart';
 import 'package:adk_dart/src/tools/retrieval/base_retrieval_tool.dart';
+import 'package:adk_dart/src/tools/set_model_response_tool.dart';
 import 'package:adk_dart/src/tools/tool_context.dart';
 import 'package:adk_dart/src/types/content.dart';
 import 'package:test/test.dart';
+
+enum _TestPriority {
+  low(1),
+  high(2);
+
+  const _TestPriority(this.value);
+  final int value;
+}
 
 class _TestRetrievalTool extends BaseRetrievalTool {
   _TestRetrievalTool()
@@ -830,6 +841,182 @@ void main() {
           'Agent: code_agent\n'
           '- code_execution (built-in)',
         ),
+      );
+    });
+  });
+
+  group('799fc9459, 27cdf7fb5, 82fe029b8, 3700f0d1b, e2e9336a7: Additional Oct 29 parity items', () {
+    test('799fc9459: all 16 promoted toolset and integration features are stable', () {
+      const List<FeatureName> promoted = <FeatureName>[
+        FeatureName.bigQueryToolset,
+        FeatureName.bigtableToolSettings,
+        FeatureName.bigtableToolset,
+        FeatureName.computerUse,
+        FeatureName.dataAgentToolset,
+        FeatureName.daytonaEnvironment,
+        FeatureName.e2bEnvironment,
+        FeatureName.gcsAdminToolset,
+        FeatureName.gcsToolSettings,
+        FeatureName.gcsToolset,
+        FeatureName.mcpToolset,
+        FeatureName.openapiToolset,
+        FeatureName.pubsubToolConfig,
+        FeatureName.pubsubToolset,
+        FeatureName.spannerAdminToolset,
+        FeatureName.spannerToolset,
+        FeatureName.spannerToolSettings,
+        FeatureName.spannerVectorStore,
+        FeatureName.toolboxToolset,
+      ];
+      for (final FeatureName feature in promoted) {
+        final FeatureConfig? config = getFeatureConfig(feature);
+        expect(config, isNotNull, reason: '$feature must be registered');
+        expect(config!.stage, FeatureStage.stable, reason: '$feature should be stable');
+        expect(config.defaultOn, isTrue, reason: '$feature should default on');
+      }
+    });
+
+    test('27cdf7fb5: InMemoryArtifactService keeps scopes separate when identifiers contain / or %', () async {
+      final InMemoryArtifactService service = InMemoryArtifactService();
+      await service.saveArtifact(
+        appName: 'team/project',
+        userId: 'alice',
+        sessionId: 's1',
+        filename: 'report.txt',
+        artifact: Part.text('scope A'),
+      );
+      await service.saveArtifact(
+        appName: 'team',
+        userId: 'project/alice',
+        sessionId: 's1',
+        filename: 'report.txt',
+        artifact: Part.text('scope B'),
+      );
+      await service.saveArtifact(
+        appName: 'team%2Fproject',
+        userId: 'alice',
+        sessionId: 's1',
+        filename: 'report.txt',
+        artifact: Part.text('scope C'),
+      );
+
+      final Part? loadedA = await service.loadArtifact(
+        appName: 'team/project',
+        userId: 'alice',
+        sessionId: 's1',
+        filename: 'report.txt',
+      );
+      final Part? loadedB = await service.loadArtifact(
+        appName: 'team',
+        userId: 'project/alice',
+        sessionId: 's1',
+        filename: 'report.txt',
+      );
+      final Part? loadedC = await service.loadArtifact(
+        appName: 'team%2Fproject',
+        userId: 'alice',
+        sessionId: 's1',
+        filename: 'report.txt',
+      );
+      expect(loadedA?.text, 'scope A');
+      expect(loadedB?.text, 'scope B');
+      expect(loadedC?.text, 'scope C');
+
+      final List<String> keysA = await service.listArtifactKeys(
+        appName: 'team/project',
+        userId: 'alice',
+        sessionId: 's1',
+      );
+      expect(keysA, <String>['report.txt']);
+    });
+
+    test('82fe029b8: FunctionTool converts Enum tool arguments to the declared member', () async {
+      _TestPriority? receivedPriority;
+      final FunctionTool tool = FunctionTool(
+        name: 'set_priority',
+        description: 'Sets priority',
+        func: ({required _TestPriority priority}) {
+          receivedPriority = priority;
+          return priority.name;
+        },
+        declaration: FunctionDeclaration(
+          name: 'set_priority',
+          description: 'Sets priority',
+          parameters: <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'priority': <String, dynamic>{
+                'type': 'string',
+                'enum': _TestPriority.values,
+              },
+            },
+            'required': <String>['priority'],
+          },
+        ),
+      );
+      final ToolContext toolContext = await _createToolContext();
+
+      // Match by enum member name
+      await tool.run(
+        args: <String, dynamic>{'priority': 'high'},
+        toolContext: toolContext,
+      );
+      expect(receivedPriority, _TestPriority.high);
+
+      // Match by stringified non-string custom value ("1")
+      await tool.run(
+        args: <String, dynamic>{'priority': '1'},
+        toolContext: toolContext,
+      );
+      expect(receivedPriority, _TestPriority.low);
+    });
+
+    test('3700f0d1b: SetModelResponseTool accepts declared field names and normalizes aliased schemas', () async {
+      final SetModelResponseTool tool = SetModelResponseTool(<String, dynamic>{
+        'type': 'object',
+        'properties': <String, dynamic>{
+          'user_name': <String, dynamic>{
+            'type': 'string',
+            'alias': 'userName',
+          },
+          'fullName': <String, dynamic>{
+            'type': 'string',
+            'field_name': 'full_name',
+          },
+        },
+      });
+      final ToolContext toolContext = await _createToolContext();
+
+      final Object? fromAlias = await tool.run(
+        args: <String, dynamic>{
+          'userName': 'alice',
+          'fullName': 'Alice Smith',
+        },
+        toolContext: toolContext,
+      );
+      expect(fromAlias, <String, dynamic>{
+        'user_name': 'alice',
+        'full_name': 'Alice Smith',
+      });
+
+      final Object? fromDeclared = await tool.run(
+        args: <String, dynamic>{
+          'user_name': 'bob',
+          'full_name': 'Bob Jones',
+        },
+        toolContext: toolContext,
+      );
+      expect(fromDeclared, <String, dynamic>{
+        'user_name': 'bob',
+        'full_name': 'Bob Jones',
+      });
+    });
+
+    test('e2e9336a7: validateAppName and Frontmatter reject names with a trailing newline', () {
+      expect(() => validateAppName('valid_app\n'), throwsArgumentError);
+      expect(
+        () => Frontmatter(name: 'valid-skill\n', description: 'desc'),
+        throwsArgumentError,
       );
     });
   });

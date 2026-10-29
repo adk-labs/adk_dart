@@ -126,7 +126,7 @@ String resolveCallbackName(Object callback, {String fallback = '<anonymous>'}) {
   return callback.runtimeType.toString();
 }
 
-/// Runs [fn] within a [Zone] bound to [info] so `context.callbackInfo` resolves.
+/// Runs [fn] within a [Zone] bound to [info] so [Context.callbackInfo] resolves.
 Future<T> runWithCallbackScope<T>(
   CallbackInfo info,
   FutureOr<T> Function() fn,

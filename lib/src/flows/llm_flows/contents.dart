@@ -601,7 +601,7 @@ bool isEventBelongsToBranch(String? invocationBranch, Event event) {
   return BranchPath.isSameOrBelow(invocationBranch, eventBranch);
 }
 
-/// Whether [event] is a tool's message published strictly below [currentBranch].
+/// Returns whether [event] is a tool's message published strictly below [currentBranch].
 bool isToolSubBranchEvent(
   String? currentBranch,
   Event event,

@@ -29,6 +29,10 @@ class InMemoryArtifactService extends BaseArtifactService {
     return filename.startsWith('user:');
   }
 
+  String _encodeSegment(String value) {
+    return value.replaceAll('%', '%25').replaceAll('/', '%2F');
+  }
+
   String _artifactPath({
     required String appName,
     required String userId,
@@ -37,8 +41,9 @@ class InMemoryArtifactService extends BaseArtifactService {
   }) {
     validatePathSegment(appName, 'app_name');
     validatePathSegment(userId, 'user_id');
+    final String scope = '${_encodeSegment(appName)}/${_encodeSegment(userId)}';
     if (_fileHasUserNamespace(filename)) {
-      return '$appName/$userId/user/$filename';
+      return '$scope/user/$filename';
     }
 
     if (sessionId == null || sessionId.isEmpty) {
@@ -48,7 +53,7 @@ class InMemoryArtifactService extends BaseArtifactService {
     }
     validatePathSegment(sessionId, 'session_id');
 
-    return '$appName/$userId/$sessionId/$filename';
+    return '$scope/${_encodeSegment(sessionId)}/$filename';
   }
 
   /// Saves [artifact] in memory and returns the next version number.
@@ -198,10 +203,11 @@ class InMemoryArtifactService extends BaseArtifactService {
     if (sessionId != null) {
       validatePathSegment(sessionId, 'session_id');
     }
-    final String userPrefix = '$appName/$userId/user/';
+    final String scope = '${_encodeSegment(appName)}/${_encodeSegment(userId)}';
+    final String userPrefix = '$scope/user/';
     final String? sessionPrefix = sessionId == null
         ? null
-        : '$appName/$userId/$sessionId/';
+        : '$scope/${_encodeSegment(sessionId)}/';
 
     final Set<String> filenames = <String>{};
     for (final String path in _artifacts.keys) {

@@ -1,13 +1,17 @@
+/// Helpers for filtering rewound events from session history.
+library;
+
 import 'event.dart';
+import 'event_actions.dart';
 
 /// Returns [events] with rewound invocations removed.
 ///
-/// Iterates backward. When an event carries
-/// `actions.rewindBeforeInvocationId == X`, drops that event together with
+/// Iterates backward. When an event carries a non-empty
+/// [EventActions.rewindBeforeInvocationId] `X`, drops that event together with
 /// every event between it and the earliest event of invocation `X` (inclusive),
 /// then resumes the backward walk from there.
 ///
-/// This is the single source of truth for "which events are live" after rewinds.
+/// This is the single source of truth for which events are live after rewinds.
 /// Both LLM prompt building and context compaction must agree on it, otherwise
 /// rewound content can leak back into prompts through a compaction summary.
 List<Event> applyRewinds(List<Event> events) {
