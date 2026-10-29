@@ -61,6 +61,8 @@ class ApiParameter {
     this.description = '',
     String? pyName,
     this.required = false,
+    this.style,
+    this.explode,
   }) : paramSchema = Map<String, Object?>.from(paramSchema),
        pyName = pyName == null || pyName.isEmpty
            ? _defaultPyNameFor(originalName, paramLocation)
@@ -83,6 +85,12 @@ class ApiParameter {
 
   /// Whether this parameter is required.
   final bool required;
+
+  /// Optional OpenAPI serialization style (for example `form`, `deepObject`, `spaceDelimited`, `pipeDelimited`).
+  final String? style;
+
+  /// Optional OpenAPI explode flag controlling array and object query parameter expansion.
+  final bool? explode;
 
   /// The Dart type hint string inferred from [paramSchema].
   String get typeHint => TypeHintHelper.getTypeHint(paramSchema);
@@ -107,6 +115,8 @@ class ApiParameter {
     Object? description = _sentinel,
     Object? pyName = _sentinel,
     Object? required = _sentinel,
+    Object? style = _sentinel,
+    Object? explode = _sentinel,
   }) {
     return ApiParameter(
       originalName: identical(originalName, _sentinel)
@@ -123,6 +133,8 @@ class ApiParameter {
       required: identical(required, _sentinel)
           ? this.required
           : required as bool,
+      style: identical(style, _sentinel) ? this.style : style as String?,
+      explode: identical(explode, _sentinel) ? this.explode : explode as bool?,
     );
   }
 

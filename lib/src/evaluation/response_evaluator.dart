@@ -114,7 +114,9 @@ String _textFromContent(EvalJsonMap? content) {
     return '';
   }
   return asObjectList(content['parts'])
-      .map((Object? value) => asNullableString(asEvalJson(value)['text']) ?? '')
+      .map(asEvalJson)
+      .where((EvalJsonMap partMap) => partMap['thought'] != true)
+      .map((EvalJsonMap partMap) => asNullableString(partMap['text']) ?? '')
       .where((String text) => text.isNotEmpty)
       .join('\n');
 }

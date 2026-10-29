@@ -9,6 +9,22 @@ import 'dart:typed_data';
 const Duration _defaultLoadWebPageTimeout = Duration(seconds: 10);
 const int _defaultLoadWebPageMaxResponseBytes = 1024 * 1024;
 
+String _extractRawUrlAuthority(String url) {
+  final int schemeSep = url.indexOf('://');
+  if (schemeSep < 0) {
+    return '';
+  }
+  final String rest = url.substring(schemeSep + 3);
+  int end = rest.length;
+  for (final String delimiter in const <String>['/', '?', '#']) {
+    final int idx = rest.indexOf(delimiter);
+    if (idx >= 0 && idx < end) {
+      end = idx;
+    }
+  }
+  return rest.substring(0, end);
+}
+
 /// The extracted readable text for [url] or an error message string.
 ///
 /// Only HTTP/HTTPS URLs are supported.
@@ -26,11 +42,20 @@ Future<String> loadWebPage(
     );
   }
 
+  final String rawAuthority = _extractRawUrlAuthority(url);
+  if (rawAuthority.contains(r'\')) {
+    throw ArgumentError('Backslash in url authority: $url');
+  }
+
   final Uri uri;
   try {
     uri = Uri.parse(url);
   } on FormatException catch (e) {
     return 'Failed to fetch URL "$url": invalid URL (${e.message}).';
+  }
+  if (uri.authority.contains(r'\') ||
+      uri.userInfo.toLowerCase().contains('%5c')) {
+    throw ArgumentError('Backslash in url authority: $url');
   }
   if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
     return 'Failed to fetch URL "$url": only http and https URLs are supported.';

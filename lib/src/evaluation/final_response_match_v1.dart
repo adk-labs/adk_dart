@@ -73,7 +73,11 @@ String _getTextFromContent(EvalJsonMap? content) {
   final List<Object?> parts = asObjectList(content['parts']);
   final List<String> texts = <String>[];
   for (final Object? part in parts) {
-    final String? text = asNullableString(asEvalJson(part)['text']);
+    final EvalJsonMap partMap = asEvalJson(part);
+    if (partMap['thought'] == true) {
+      continue;
+    }
+    final String? text = asNullableString(partMap['text']);
     if (text != null) {
       texts.add(text);
     }

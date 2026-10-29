@@ -88,6 +88,10 @@ class OperationParser {
         schema['description'] = description;
       }
       final bool required = location == 'path' || _readBool(param['required']);
+      final String? style = _readString(param['style']);
+      final bool? explode = param['explode'] == null
+          ? null
+          : _readBool(param['explode']);
 
       _params.add(
         ApiParameter(
@@ -97,6 +101,8 @@ class OperationParser {
           description: description,
           pyName: _pyNameFor(originalName),
           required: required,
+          style: style,
+          explode: explode,
         ),
       );
     }

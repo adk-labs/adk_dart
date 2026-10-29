@@ -130,6 +130,8 @@ class ParsedOperation {
               'description': parameter.description,
               'py_name': parameter.pyName,
               'required': parameter.required,
+              if (parameter.style != null) 'style': parameter.style,
+              if (parameter.explode != null) 'explode': parameter.explode,
             },
           )
           .toList(growable: false),
@@ -140,6 +142,8 @@ class ParsedOperation {
         'description': returnValue.description,
         'py_name': returnValue.pyName,
         'required': returnValue.required,
+        if (returnValue.style != null) 'style': returnValue.style,
+        if (returnValue.explode != null) 'explode': returnValue.explode,
       },
       if (authScheme != null) 'auth_scheme': _authSchemeToJson(authScheme),
       if (authCredential != null) 'auth_credential': authCredential,
@@ -554,6 +558,8 @@ ApiParameter _apiParameterFromObject(Object? value) {
     description: _readString(data['description']) ?? '',
     pyName: _readString(data['py_name']) ?? _readString(data['pyName']),
     required: _readBool(data['required']),
+    style: _readString(data['style']),
+    explode: data['explode'] == null ? null : _readBool(data['explode']),
   );
 }
 

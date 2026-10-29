@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:archive/archive.dart';
 
@@ -40,11 +41,19 @@ const Set<String> _spreadsheetMimeTypes = <String>{
 typedef ProcessArtifactCallback =
     FutureOr<Part?> Function(Part artifact, String artifactName);
 
+/// Signature for filtering or transforming available artifact names.
+typedef ProcessArtifactNamesCallback =
+    FutureOr<List<String>> Function(
+      List<String> artifactNames,
+      ToolContext toolContext,
+    );
+
 /// Tool that loads saved artifacts into the current turn.
 class LoadArtifactsTool extends BaseTool {
   /// Creates a tool that loads saved artifacts into the current request.
   LoadArtifactsTool({
     this.processArtifact,
+    this.processArtifactNames,
     this.enableSpreadsheetParsing = false,
   }) : super(
          name: 'load_artifacts',
@@ -58,8 +67,28 @@ web UI).''',
   /// to the LLM request.
   final ProcessArtifactCallback? processArtifact;
 
+  /// Optional callback to filter the list of available artifact names.
+  final ProcessArtifactNamesCallback? processArtifactNames;
+
   /// Whether to parse spreadsheet artifacts (.xlsx, .xls) into textual representations.
   final bool enableSpreadsheetParsing;
+
+  Future<(List<String>, Set<String>)> _getArtifactNames(
+    ToolContext toolContext,
+  ) async {
+    final List<String> artifactNames = List<String>.from(
+      await toolContext.listArtifacts(),
+    );
+    final Set<String> allNames = artifactNames.toSet();
+    if (processArtifactNames != null) {
+      final List<String> filteredNames = await processArtifactNames!(
+        artifactNames,
+        toolContext,
+      );
+      return (filteredNames, allNames.difference(filteredNames.toSet()));
+    }
+    return (artifactNames, <String>{});
+  }
 
   @override
   FunctionDeclaration? getDeclaration() {
@@ -83,9 +112,19 @@ web UI).''',
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
-    final List<String> artifactNames = _coerceArtifactNames(
+    final List<String> requestedNames = _coerceArtifactNames(
       args['artifact_names'],
     );
+    final (List<String> availableNames, _) = await _getArtifactNames(
+      toolContext,
+    );
+    final Set<String> availableSet = availableNames.toSet();
+    final List<String> artifactNames = <String>[
+      for (final String name in requestedNames)
+        if (availableSet.contains(name) ||
+            availableSet.contains('$_userNamespacePrefix$name'))
+          name,
+    ];
     return <String, Object?>{
       'artifact_names': artifactNames,
       'status':
@@ -103,7 +142,12 @@ web UI).''',
       llmRequest: llmRequest,
     );
 
-    final List<String> artifactNames = await toolContext.listArtifacts();
+    final (List<String> artifactNames, Set<String> filteredOutNames) =
+        await _getArtifactNames(toolContext);
+    if (artifactNames.isEmpty && filteredOutNames.isEmpty) {
+      return;
+    }
+
     if (artifactNames.isNotEmpty) {
       llmRequest.appendInstructions(<String>[
         'You have a list of artifacts:\n'
@@ -141,6 +185,23 @@ web UI).''',
         availableNames,
       );
       if (resolvedName == null) {
+        final String? filteredOutName = _resolveRequestedArtifactName(
+          requestedName,
+          filteredOutNames,
+        );
+        if (filteredOutName != null) {
+          developer.log(
+            'Artifact "$requestedName" was filtered out by '
+            'process_artifact_names and cannot be loaded.',
+            name: 'adk_dart.tools.load_artifacts_tool',
+          );
+        } else {
+          developer.log(
+            'Artifact "$requestedName" is not in the list of available '
+            'artifacts.',
+            name: 'adk_dart.tools.load_artifacts_tool',
+          );
+        }
         continue;
       }
 

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../agents/base_agent.dart';
+import '../apps/app.dart';
 import 'base_eval_service.dart';
 import 'eval_case.dart';
 import 'eval_config.dart';
@@ -98,14 +99,14 @@ class AgentEvalCaseSummary {
 class AgentEvaluator {
   /// The default number of repeated runs per eval case.
   static const int numRuns = 2;
-  static final Map<String, BaseAgent Function()> _registeredAgentModules =
-      <String, BaseAgent Function()>{};
+  static final Map<String, Object Function()> _registeredAgentModules =
+      <String, Object Function()>{};
   static AgentModuleLoader? _agentModuleLoader;
 
-  /// Registers a root agent factory for [moduleName].
+  /// Registers a root agent or app factory for [moduleName].
   static void registerAgentModule(
     String moduleName,
-    BaseAgent Function() rootAgentFactory,
+    Object Function() rootAgentFactory,
   ) {
     final String normalized = moduleName.trim();
     if (normalized.isEmpty) {
@@ -180,7 +181,7 @@ class AgentEvaluator {
   /// Throws a [StateError] when [failOnFailure] is true and any case fails.
   static Future<List<AgentEvalCaseSummary>> evaluate({
     BaseAgent? rootAgent,
-    String? agentModule,
+    Object? agentModule,
     required String evalDatasetFilePathOrDir,
     int repeatNum = numRuns,
     String? agentName,
@@ -226,17 +227,18 @@ class AgentEvaluator {
       if (failOnFailure) {
         for (final AgentEvalCaseSummary summary in summaries) {
           if (!summary.passed) {
+            final String label = _agentLabel(agentModule, summary.evalCaseId);
             final List<String> metricFailures = <String>[];
             for (final AgentMetricAggregate metric in summary.metrics) {
               if (metric.evalStatus == EvalStatus.notEvaluated) {
                 metricFailures.add(
-                  '${metric.metricName} for ${agentModule ?? summary.evalCaseId} was not evaluated. '
+                  '${metric.metricName} for $label was not evaluated. '
                   'No score was produced, so the threshold of ${metric.threshold} was never '
                   'checked and this is not a score regression. See the logs for why the metric could not run.',
                 );
               } else if (!metric.passed) {
                 metricFailures.add(
-                  '${metric.metricName} for ${agentModule ?? summary.evalCaseId} Failed. '
+                  '${metric.metricName} for $label Failed. '
                   'Expected ${metric.threshold}, but got ${metric.averageScore}.',
                 );
               }
@@ -270,7 +272,7 @@ class AgentEvaluator {
   /// Uses [criteria] when provided, otherwise falls back to [evalConfig].
   static Future<List<AgentEvalCaseSummary>> evaluateEvalSet({
     BaseAgent? rootAgent,
-    String? agentModule,
+    Object? agentModule,
     required EvalSet evalSet,
     Map<String, double>? criteria,
     EvalConfig? evalConfig,
@@ -384,9 +386,100 @@ class AgentEvaluator {
     return summaries;
   }
 
+  static String _agentLabel(Object? agentModule, String fallback) {
+    if (agentModule is String && agentModule.trim().isNotEmpty) {
+      return agentModule.trim();
+    }
+    if (agentModule is App) {
+      return agentModule.name;
+    }
+    if (agentModule is BaseAgent) {
+      return agentModule.name;
+    }
+    return fallback;
+  }
+
+  static BaseAgent _extractRootAgentFromObject(Object moduleOrAgent) {
+    if (moduleOrAgent is BaseAgent) {
+      return moduleOrAgent;
+    }
+    if (moduleOrAgent is App) {
+      return moduleOrAgent.rootAgent;
+    }
+    if (moduleOrAgent is Map) {
+      if (moduleOrAgent.containsKey('root_agent') ||
+          moduleOrAgent.containsKey('rootAgent')) {
+        final Object? candidate =
+            moduleOrAgent['root_agent'] ?? moduleOrAgent['rootAgent'];
+        if (candidate is BaseAgent) {
+          return candidate;
+        }
+        throw ArgumentError(
+          '`root_agent` is not an instance of `BaseAgent`, found '
+          '`${candidate.runtimeType}`.',
+        );
+      }
+      if (moduleOrAgent.containsKey('app')) {
+        final Object? candidate = moduleOrAgent['app'];
+        if (candidate is App) {
+          return candidate.rootAgent;
+        }
+        throw ArgumentError(
+          '`app` is not an instance of `App`, found '
+          '`${candidate.runtimeType}`.',
+        );
+      }
+      throw ArgumentError(
+        'Neither `root_agent` nor `app` was found in the agent module.',
+      );
+    }
+
+    final dynamic dynamicModule = moduleOrAgent;
+    try {
+      final Object? candidate = dynamicModule.rootAgent;
+      if (candidate is BaseAgent) {
+        return candidate;
+      }
+      throw ArgumentError(
+        '`root_agent` is not an instance of `BaseAgent`, found '
+        '`${candidate.runtimeType}`.',
+      );
+    } on NoSuchMethodError {
+      // Fall through.
+    }
+    try {
+      final Object? candidate = dynamicModule.root_agent;
+      if (candidate is BaseAgent) {
+        return candidate;
+      }
+      throw ArgumentError(
+        '`root_agent` is not an instance of `BaseAgent`, found '
+        '`${candidate.runtimeType}`.',
+      );
+    } on NoSuchMethodError {
+      // Fall through.
+    }
+    try {
+      final Object? candidate = dynamicModule.app;
+      if (candidate is App) {
+        return candidate.rootAgent;
+      }
+      throw ArgumentError(
+        '`app` is not an instance of `App`, found '
+        '`${candidate.runtimeType}`.',
+      );
+    } on NoSuchMethodError {
+      // Fall through.
+    }
+
+    throw ArgumentError(
+      'Neither `root_agent` nor `app` was found in the agent module.',
+    );
+  }
+
   static Future<BaseAgent> _getAgentForEval({
     BaseAgent? rootAgent,
-    String? agentModule,
+    Object? agentModule,
     String? agentName,
     AgentModuleLoader? agentModuleLoader,
   }) async {
@@ -409,14 +502,18 @@ class AgentEvaluator {
 
   static Future<BaseAgent> _resolveRootAgent({
     BaseAgent? rootAgent,
-    String? agentModule,
+    Object? agentModule,
     AgentModuleLoader? agentModuleLoader,
   }) async {
     if (rootAgent != null) {
       return rootAgent;
     }
 
-    final String normalizedModule = (agentModule ?? '').trim();
+    if (agentModule != null && agentModule is! String) {
+      return _extractRootAgentFromObject(agentModule);
+    }
+
+    final String normalizedModule = ((agentModule as String?) ?? '').trim();
     if (normalizedModule.isEmpty) {
       throw ArgumentError('Either rootAgent or agentModule must be provided.');
     }
@@ -426,7 +523,7 @@ class AgentEvaluator {
       return loader(normalizedModule);
     }
 
-    final BaseAgent Function()? factory =
+    final Object Function()? factory =
         _registeredAgentModules[normalizedModule];
     if (factory == null) {
       throw ArgumentError(
@@ -434,7 +531,7 @@ class AgentEvaluator {
         'Use registerAgentModule or pass agentModuleLoader.',
       );
     }
-    return factory();
+    return _extractRootAgentFromObject(factory());
   }
 
   /// Converts a legacy eval dataset file into the modern EvalSet schema.

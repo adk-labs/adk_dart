@@ -23,6 +23,7 @@ abstract class BaseRetrievalTool extends BaseTool {
             'description': 'The query to retrieve.',
           },
         },
+        'required': <String>['query'],
       },
     );
   }

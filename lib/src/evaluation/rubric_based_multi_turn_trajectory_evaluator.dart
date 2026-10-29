@@ -269,7 +269,7 @@ class RubricBasedMultiTurnTrajectoryEvaluator extends RubricBasedEvaluator {
     _formattedDialogue = dialogueLines.join('\n');
 
     final List<String> instructionParts = <String>[];
-    final List<String> toolParts = <String>[];
+    final Map<String, List<String>> toolsByAgent = <String, List<String>>{};
     for (final Invocation invocation in actualInvocations) {
       final AppDetails? appDetails = invocation.appDetails;
       if (appDetails == null) {
@@ -279,18 +279,27 @@ class RubricBasedMultiTurnTrajectoryEvaluator extends RubricBasedEvaluator {
         instructionParts.add(
           'Agent $agentId Instructions:\n${details.instructions}',
         );
-        toolParts.add('Agent: $agentId');
+        final List<String> agentTools = toolsByAgent.putIfAbsent(
+          agentId,
+          () => <String>[],
+        );
         for (final Object? declaration in details.toolDeclarations) {
-          for (final (String name, String description) in _functionDeclarations(
-            declaration,
-          )) {
-            toolParts.add('- $name: $description');
+          for (final String line in _extractToolLines(declaration)) {
+            if (!agentTools.contains(line)) {
+              agentTools.add(line);
+            }
           }
         }
       });
     }
     _formattedInstructions = _dedupe(instructionParts).join('\n\n');
-    _formattedTools = _dedupe(toolParts).join('\n');
+    final List<String> toolParts = <String>[];
+    toolsByAgent.forEach((String agentId, List<String> lines) {
+      if (lines.isNotEmpty) {
+        toolParts.add('Agent: $agentId\n${lines.join('\n')}');
+      }
+    });
+    _formattedTools = toolParts.join('\n\n');
   }
 }
 
@@ -349,16 +358,52 @@ String? _firstEventAuthor(Object? intermediateData) {
   return null;
 }
 
-Iterable<(String, String)> _functionDeclarations(Object? declaration) sync* {
+const List<String> _builtInToolFields = <String>[
+  'google_search',
+  'google_search_retrieval',
+  'url_context',
+  'code_execution',
+  'google_maps',
+  'enterprise_web_search',
+  'retrieval',
+  'computer_use',
+];
+
+Iterable<String> _extractToolLines(Object? declaration) sync* {
   if (declaration is ToolDeclaration) {
     for (final FunctionDeclaration function
         in declaration.functionDeclarations) {
-      yield (function.name, function.description);
+      final String name = function.name.isEmpty ? '<unknown>' : function.name;
+      final String description = function.description.isEmpty
+          ? 'No description.'
+          : function.description;
+      yield '- $name: $description';
+    }
+    final Map<String, Object?> builtIns = <String, Object?>{
+      'google_search': declaration.googleSearch,
+      'google_search_retrieval': declaration.googleSearchRetrieval,
+      'url_context': declaration.urlContext,
+      'code_execution': declaration.codeExecution,
+      'google_maps': declaration.googleMaps,
+      'enterprise_web_search': declaration.enterpriseWebSearch,
+      'retrieval': declaration.retrieval,
+      'computer_use': declaration.computerUse,
+    };
+    for (final String fieldName in _builtInToolFields) {
+      if (builtIns[fieldName] != null) {
+        yield '- $fieldName (built-in)';
+      }
     }
     return;
   }
   if (declaration is FunctionDeclaration) {
-    yield (declaration.name, declaration.description);
+    final String name = declaration.name.isEmpty
+        ? '<unknown>'
+        : declaration.name;
+    final String description = declaration.description.isEmpty
+        ? 'No description.'
+        : declaration.description;
+    yield '- $name: $description';
     return;
   }
   final EvalJsonMap map = asEvalJson(declaration);
@@ -370,17 +415,34 @@ Iterable<(String, String)> _functionDeclarations(Object? declaration) sync* {
   if (rawFunctions != null) {
     for (final Object? rawFunction in asObjectList(rawFunctions)) {
       final EvalJsonMap function = asEvalJson(rawFunction);
-      final String name = asNullableString(function['name']) ?? '';
-      if (name.isEmpty) {
-        continue;
-      }
-      yield (name, asNullableString(function['description']) ?? '');
+      final String rawName = asNullableString(function['name']) ?? '';
+      final String name = rawName.isEmpty ? '<unknown>' : rawName;
+      final String rawDesc = asNullableString(function['description']) ?? '';
+      final String description = rawDesc.isEmpty ? 'No description.' : rawDesc;
+      yield '- $name: $description';
     }
-    return;
+  } else if (map.containsKey('name') || map.containsKey('description')) {
+    final String rawName = asNullableString(map['name']) ?? '';
+    final String name = rawName.isEmpty ? '<unknown>' : rawName;
+    final String rawDesc = asNullableString(map['description']) ?? '';
+    final String description = rawDesc.isEmpty ? 'No description.' : rawDesc;
+    yield '- $name: $description';
   }
-  final String name = asNullableString(map['name']) ?? '';
-  if (name.isNotEmpty) {
-    yield (name, asNullableString(map['description']) ?? '');
+  const Map<String, String> camelBuiltInKeys = <String, String>{
+    'google_search': 'googleSearch',
+    'google_search_retrieval': 'googleSearchRetrieval',
+    'url_context': 'urlContext',
+    'code_execution': 'codeExecution',
+    'google_maps': 'googleMaps',
+    'enterprise_web_search': 'enterpriseWebSearch',
+    'retrieval': 'retrieval',
+    'computer_use': 'computerUse',
+  };
+  for (final String fieldName in _builtInToolFields) {
+    final String camelKey = camelBuiltInKeys[fieldName]!;
+    if (map[fieldName] != null || map[camelKey] != null) {
+      yield '- $fieldName (built-in)';
+    }
   }
 }
 

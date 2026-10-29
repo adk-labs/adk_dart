@@ -1407,9 +1407,14 @@ Future<int> _runOptimizeCliCommand(
           ),
         );
 
+  final _EvalManagers managers = _createEvalManagers(
+    evalStorageUri: null,
+    agentsDir: loadedAgent.agentsParentDirPath,
+    useInMemory: false,
+  );
   final LocalEvalSampler sampler = await LocalEvalSampler.create(
     config: samplerConfig,
-    evalSetsManager: LocalEvalSetsManager(loadedAgent.agentsParentDirPath),
+    evalSetsManager: managers.evalSetsManager,
   );
   final GepaRootAgentPromptOptimizer optimizer = GepaRootAgentPromptOptimizer(
     optimizerConfig,
@@ -2992,30 +2997,98 @@ bool _usesEvalSetFileTargets(List<_EvalSelection> selections) {
   return usingFiles ?? false;
 }
 
+String? _resolveEvalStorageUri(
+  String? evalStorageUri, {
+  Map<String, String>? environment,
+}) {
+  final String? explicit = _emptyToNull(evalStorageUri);
+  if (explicit != null) {
+    return explicit;
+  }
+  return _emptyToNull(
+    (environment ?? Platform.environment)['ADK_EVAL_STORAGE_URI'],
+  );
+}
+
+String _localEvalDirFromUri(String evalStorageUri) {
+  final Uri parsed = Uri.parse(evalStorageUri);
+  if (parsed.scheme != 'file') {
+    throw ArgumentError(
+      'Unsupported evals storage URI: $evalStorageUri. Supported URIs: '
+      'gs://<bucket name>, file://<path>',
+    );
+  }
+  final String authority = parsed.authority.toLowerCase();
+  if (authority.isNotEmpty && authority != 'localhost') {
+    throw ArgumentError(
+      'Invalid evals storage URI: $evalStorageUri. file:// URIs must '
+      'target the local host, e.g. file:///abs/path',
+    );
+  }
+  final String afterScheme = evalStorageUri.substring('file:'.length);
+  if (!afterScheme.startsWith('/') ||
+      !parsed.path.startsWith('/') ||
+      parsed.path.isEmpty ||
+      parsed.path == '/') {
+    throw ArgumentError(
+      'Invalid evals storage URI: $evalStorageUri. file:// URIs must use '
+      'an absolute path, e.g. file:///abs/path',
+    );
+  }
+  final String localPath = Uri.decodeFull(parsed.path);
+  try {
+    Directory(localPath).createSync(recursive: true);
+  } on FileSystemException catch (error) {
+    throw ArgumentError(
+      "Failed to create eval storage directory '$localPath' for "
+      "'$evalStorageUri' (configured via --eval_storage_uri or "
+      'ADK_EVAL_STORAGE_URI): $error',
+    );
+  }
+  return localPath;
+}
+
 _EvalManagers _createEvalManagers({
   required String? evalStorageUri,
   required String agentsDir,
   required bool useInMemory,
+  Map<String, String>? environment,
 }) {
-  if (useInMemory) {
+  final String? resolvedUri = _resolveEvalStorageUri(
+    evalStorageUri,
+    environment: environment,
+  );
+  if (resolvedUri == null) {
+    if (useInMemory) {
+      return _EvalManagers(
+        evalSetsManager: InMemoryEvalSetsManager(),
+        evalSetResultsManager: InMemoryEvalSetResultsManager(),
+      );
+    }
     return _EvalManagers(
-      evalSetsManager: InMemoryEvalSetsManager(),
-      evalSetResultsManager: InMemoryEvalSetResultsManager(),
+      evalSetsManager: LocalEvalSetsManager(agentsDir),
+      evalSetResultsManager: LocalEvalSetResultsManager(agentsDir),
     );
   }
 
-  if (evalStorageUri != null) {
+  final EvalSetsManager configuredSetsManager;
+  final EvalSetResultsManager configuredResultsManager;
+  if (resolvedUri.startsWith('gs://')) {
     final cli_evals.GcsEvalManagers gcsManagers = cli_evals
-        .createGcsEvalManagersFromUri(evalStorageUri);
-    return _EvalManagers(
-      evalSetsManager: gcsManagers.evalSetsManager,
-      evalSetResultsManager: gcsManagers.evalSetResultsManager,
-    );
+        .createGcsEvalManagersFromUri(resolvedUri);
+    configuredSetsManager = gcsManagers.evalSetsManager;
+    configuredResultsManager = gcsManagers.evalSetResultsManager;
+  } else {
+    final String localDir = _localEvalDirFromUri(resolvedUri);
+    configuredSetsManager = LocalEvalSetsManager(localDir);
+    configuredResultsManager = LocalEvalSetResultsManager(localDir);
   }
 
   return _EvalManagers(
-    evalSetsManager: LocalEvalSetsManager(agentsDir),
-    evalSetResultsManager: LocalEvalSetResultsManager(agentsDir),
+    evalSetsManager: useInMemory
+        ? InMemoryEvalSetsManager()
+        : configuredSetsManager,
+    evalSetResultsManager: configuredResultsManager,
   );
 }
 
@@ -4667,8 +4740,16 @@ ParsedAdkCommand _parseWebCommand(
     final String rawAvatar = avatarConfigRaw!.trim();
     String jsonText = rawAvatar;
     final File avatarFile = File(rawAvatar);
-    if (avatarFile.existsSync()) {
-      jsonText = avatarFile.readAsStringSync().trim();
+    if (avatarFile.existsSync() ||
+        FileSystemEntity.typeSync(rawAvatar) ==
+            FileSystemEntityType.directory) {
+      try {
+        jsonText = avatarFile.readAsStringSync().trim();
+      } on FileSystemException catch (error) {
+        throw CliUsageError(
+          "could not read avatar configuration file '$rawAvatar': $error",
+        );
+      }
     }
     if (jsonText.startsWith('{') || jsonText.startsWith('[')) {
       final Object? decoded;
@@ -5866,10 +5947,12 @@ dynamic createEvalManagersForTesting({
   required String? evalStorageUri,
   required String agentsDir,
   required bool useInMemory,
+  Map<String, String>? environment,
 }) => _createEvalManagers(
   evalStorageUri: evalStorageUri,
   agentsDir: agentsDir,
   useInMemory: useInMemory,
+  environment: environment,
 );
 
 /// Internal testing helper for merging eval targets.

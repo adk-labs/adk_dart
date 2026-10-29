@@ -273,6 +273,7 @@ class RestApiTool extends BaseTool {
     final Map<String, Object?> queryParams = <String, Object?>{};
     final Map<String, Object?> headerParams = <String, Object?>{};
     final Map<String, Object?> cookieParams = <String, Object?>{};
+    final Set<String> spreadQueryKeys = <String>{};
 
     headerParams['User-Agent'] = 'google-adk/$adkVersion (tool: $name)';
 
@@ -305,7 +306,19 @@ class RestApiTool extends BaseTool {
               entry.value != '' &&
               !(entry.value is Iterable && (entry.value as Iterable).isEmpty) &&
               !(entry.value is Map && (entry.value as Map).isEmpty)) {
-            queryParams[originalName] = entry.value;
+            for (final MapEntry<String, Object?> serialized
+                in _serializeQueryParam(parameter, entry.value).entries) {
+              if (serialized.key != originalName) {
+                if (queryParams.containsKey(serialized.key) &&
+                    !spreadQueryKeys.contains(serialized.key)) {
+                  continue;
+                }
+                spreadQueryKeys.add(serialized.key);
+              } else {
+                spreadQueryKeys.remove(serialized.key);
+              }
+              queryParams[serialized.key] = serialized.value;
+            }
           }
           break;
         case 'header':
@@ -331,10 +344,10 @@ class RestApiTool extends BaseTool {
     final Uri parsedUrl = Uri.parse(url);
     if (parsedUrl.hasQuery || parsedUrl.fragment.isNotEmpty) {
       parsedUrl.queryParametersAll.forEach((String key, List<String> values) {
-        queryParams.putIfAbsent(
-          key,
-          () => values.length == 1 ? values.first : values,
-        );
+        if (!queryParams.containsKey(key) || spreadQueryKeys.contains(key)) {
+          spreadQueryKeys.remove(key);
+          queryParams[key] = values.length == 1 ? values.first : values;
+        }
       });
       final int queryStart = url.indexOf('?');
       final int fragmentStart = url.indexOf('#');
@@ -585,7 +598,35 @@ const List<String> _blockedHostnameSuffixes = <String>[
   '.metadata.goog',
 ];
 
+String _extractRawUrlAuthority(String url) {
+  final int schemeSep = url.indexOf('://');
+  if (schemeSep < 0) {
+    return '';
+  }
+  final String rest = url.substring(schemeSep + 3);
+  int end = rest.length;
+  for (final String delimiter in const <String>['/', '?', '#']) {
+    final int idx = rest.indexOf(delimiter);
+    if (idx >= 0 && idx < end) {
+      end = idx;
+    }
+  }
+  return rest.substring(0, end);
+}
+
 void _validateRequestUrl(String rawUrl) {
+  final int schemeSep = rawUrl.indexOf('://');
+  if (schemeSep <= 0) {
+    throw ArgumentError('Unsupported url scheme: $rawUrl');
+  }
+  final String rawScheme = rawUrl.substring(0, schemeSep).toLowerCase();
+  if (rawScheme != 'http' && rawScheme != 'https') {
+    throw ArgumentError('Unsupported url scheme: $rawUrl');
+  }
+  final String rawAuthority = _extractRawUrlAuthority(rawUrl);
+  if (rawAuthority.contains(r'\')) {
+    throw ArgumentError('Backslash in url authority: $rawUrl');
+  }
   final Uri? uri = Uri.tryParse(rawUrl);
   if (uri == null || !uri.hasScheme) {
     throw ArgumentError('Unsupported url scheme: $rawUrl');
@@ -593,6 +634,10 @@ void _validateRequestUrl(String rawUrl) {
   final String scheme = uri.scheme.toLowerCase();
   if (scheme != 'http' && scheme != 'https') {
     throw ArgumentError('Unsupported url scheme: $rawUrl');
+  }
+  if (uri.authority.contains(r'\') ||
+      uri.userInfo.toLowerCase().contains('%5c')) {
+    throw ArgumentError('Backslash in url authority: $rawUrl');
   }
   String host = uri.host.trim();
   if (host.startsWith('[') && host.endsWith(']') && host.length > 2) {
@@ -715,10 +760,21 @@ Future<RestApiResponse> _request({
 
   Uri uri = Uri.parse(rawUrl);
   if (params.isNotEmpty) {
-    final Map<String, String> query = <String, String>{
-      for (final MapEntry<String, Object?> entry in params.entries)
-        if (entry.value != null) entry.key: '${entry.value}',
-    };
+    final Map<String, Object> query = <String, Object>{};
+    for (final MapEntry<String, Object?> entry in params.entries) {
+      final Object? value = entry.value;
+      if (value == null) {
+        continue;
+      }
+      if (value is Iterable) {
+        query[entry.key] = value
+            .where((Object? item) => item != null)
+            .map((Object? item) => '$item')
+            .toList(growable: false);
+      } else {
+        query[entry.key] = '$value';
+      }
+    }
     uri = uri.replace(queryParameters: query.isEmpty ? null : query);
   }
 
@@ -877,6 +933,81 @@ String _toParamString(Object? value) {
     return parts.join(',');
   }
   return '$value';
+}
+
+Map<String, Object?> _serializeQueryParam(ApiParameter param, Object? value) {
+  final String name = param.originalName;
+  final String style = param.style ?? 'form';
+  final bool explode = param.explode ?? (style == 'form');
+
+  if (value is Map) {
+    if (style == 'deepObject') {
+      return <String, Object?>{
+        for (final MapEntry<Object?, Object?> entry in value.entries)
+          if (entry.value != null)
+            '$name[${entry.key}]': _toParamString(entry.value),
+      };
+    }
+    if (style == 'form') {
+      if (explode) {
+        final Object? properties = param.paramSchema['properties'];
+        final Object? additionalProps =
+            param.paramSchema['additionalProperties'];
+        final Set<String>? allowedKeys =
+            properties is Map &&
+                additionalProps != true &&
+                additionalProps is! Map
+            ? properties.keys.map((Object? k) => '$k').toSet()
+            : null;
+        return <String, Object?>{
+          for (final MapEntry<Object?, Object?> entry in value.entries)
+            if (entry.value != null &&
+                (allowedKeys == null || allowedKeys.contains('${entry.key}')))
+              '${entry.key}': _toParamString(entry.value),
+        };
+      }
+      final String joined = <String>[
+        for (final MapEntry<Object?, Object?> entry in value.entries)
+          if (entry.value != null) ...<String>[
+            '${entry.key}',
+            _toParamString(entry.value),
+          ],
+      ].join(',');
+      return joined.isNotEmpty
+          ? <String, Object?>{name: joined}
+          : <String, Object?>{};
+    }
+    return <String, Object?>{name: value};
+  }
+
+  if (value is Iterable && value is! String) {
+    final List<String> items = <String>[
+      for (final Object? item in value)
+        if (item != null) _toParamString(item),
+    ];
+    if (items.isEmpty) {
+      return <String, Object?>{};
+    }
+    if (explode) {
+      return <String, Object?>{name: items};
+    }
+    const Map<String, String> delimiters = <String, String>{
+      'form': ',',
+      'spaceDelimited': ' ',
+      'pipeDelimited': '|',
+    };
+    final String? delimiter = delimiters[style];
+    if (delimiter != null) {
+      return <String, Object?>{name: items.join(delimiter)};
+    }
+    return <String, Object?>{name: items};
+  }
+
+  if (value is bool) {
+    return <String, Object?>{name: _toParamString(value)};
+  }
+
+  return <String, Object?>{name: value};
 }
 
 AuthCredential _credentialFromJsonString(String source) {

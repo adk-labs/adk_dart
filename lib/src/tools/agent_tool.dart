@@ -8,18 +8,124 @@ import '../agents/context_cache_config.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../agents/remote_a2a_agent.dart';
+import '../apps/app.dart';
+import '../apps/llm_event_summarizer.dart';
+import '../errors/input_validation_error.dart';
 import '../events/event.dart';
 import '../flows/llm_flows/persist_barrier.dart';
 import '../agents/llm/task/finish_task_tool.dart';
+import '../models/base_llm.dart';
 import '../models/llm_request.dart';
+import '../plugins/base_plugin.dart';
 import '../plugins/plugin_manager.dart';
 import '../runners/runner.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/state.dart';
 import '../types/content.dart';
+import '../workflow/workflow.dart';
 import 'base_tool.dart';
 import '_forwarding_artifact_service.dart';
 import 'tool_context.dart';
+
+EventsCompactionConfig? _nestedCompactionConfig(
+  InvocationContext? invocationContext,
+) {
+  final EventsCompactionConfig? config =
+      invocationContext?.eventsCompactionConfig;
+  if (config == null ||
+      config.tokenThreshold == null ||
+      config.eventRetentionSize == null) {
+    return null;
+  }
+  return EventsCompactionConfig(
+    compactionInterval: 0,
+    overlapSize: 0,
+    tokenThreshold: config.tokenThreshold,
+    eventRetentionSize: config.eventRetentionSize,
+    summarizer: config.summarizer,
+  );
+}
+
+class _NestedCompactionPlugin extends BasePlugin {
+  _NestedCompactionPlugin(this.compactionConfig)
+    : super(name: '_adk_agent_tool_nested_compaction');
+
+  final EventsCompactionConfig compactionConfig;
+
+  @override
+  Future<Content?> onUserMessageCallback({
+    required InvocationContext invocationContext,
+    required Content userMessage,
+  }) async {
+    invocationContext.eventsCompactionConfig = compactionConfig;
+    return null;
+  }
+
+  @override
+  Future<Content?> beforeRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    invocationContext.eventsCompactionConfig = compactionConfig;
+    return null;
+  }
+
+  @override
+  Future<Content?> beforeAgentCallback({
+    required BaseAgent agent,
+    required Object callbackContext,
+  }) async {
+    if (compactionConfig.summarizer == null &&
+        agent is LlmAgent &&
+        agent.model is BaseLlm) {
+      compactionConfig.summarizer = LlmEventSummarizer(
+        llm: agent.canonicalModel,
+      );
+    }
+    return null;
+  }
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    invocationContext.eventsCompactionConfig = null;
+  }
+}
+
+Object? _normalizeInputSchemaForValidation(Object? schema) {
+  if (schema is! Map) {
+    return schema;
+  }
+  final Map<String, Object?> normalized = <String, Object?>{
+    for (final MapEntry<Object?, Object?> entry in schema.entries)
+      '${entry.key}': entry.value,
+  };
+  final Object? rawType = normalized['type'];
+  if (rawType is String) {
+    normalized['type'] = rawType.toLowerCase();
+  } else if (rawType == null &&
+      (normalized.containsKey('properties') ||
+          normalized.containsKey('required'))) {
+    normalized['type'] = 'object';
+  }
+  final Object? properties = normalized['properties'];
+  if (properties is Map) {
+    normalized['properties'] = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in properties.entries)
+        '${entry.key}': _normalizeInputSchemaForValidation(entry.value),
+    };
+  }
+  return normalized;
+}
+
+Map<String, Object?> _argValidationError(String toolName, Object error) {
+  return <String, Object?>{
+    'error':
+        'Invoking `$toolName()` failed due to argument validation errors:\n'
+        '$error\n'
+        'You could retry calling this tool with corrected argument types.',
+  };
+}
 
 String _partToText(Part part) {
   final String? text = part.text;
@@ -141,19 +247,35 @@ class AgentTool extends BaseTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
+    final Object? inputSchema = _getInputSchema(agent);
+    final String requestText;
+    if (inputSchema != null) {
+      try {
+        final Object? validatedInput = validateNodeData(
+          _normalizeInputSchemaForValidation(inputSchema),
+          args,
+        );
+        requestText = jsonEncode(validatedInput);
+      } on InputValidationError catch (error) {
+        return _argValidationError(name, error);
+      } on ArgumentError catch (error) {
+        return _argValidationError(name, error);
+      }
+    } else {
+      requestText = _resolveRequestText(args);
+    }
+
     if (skipSummarization) {
       toolContext.actions.skipSummarization = true;
     }
 
-    final Object? inputSchema = _getInputSchema(agent);
-    final String requestText = inputSchema == null
-        ? _resolveRequestText(args)
-        : jsonEncode(args);
     final Object? outputSchema = _getOutputSchema(agent);
     final invocationContext = toolContext.invocationContext;
     final String childAppName = invocationContext.appName.isEmpty
         ? agent.name
         : invocationContext.appName;
+    final EventsCompactionConfig? nestedCompactionConfig =
+        _nestedCompactionConfig(invocationContext);
     final Runner runner = Runner(
       appName: childAppName,
       agent: agent,
@@ -167,6 +289,11 @@ class AgentTool extends BaseTool {
     );
     if (includePlugins) {
       runner.pluginManager.setSkipClosingPlugins(true);
+    }
+    if (nestedCompactionConfig != null) {
+      runner.pluginManager.registerPlugin(
+        _NestedCompactionPlugin(nestedCompactionConfig),
+      );
     }
     final Object? parentCacheConfig = invocationContext.contextCacheConfig;
     if (parentCacheConfig is ContextCacheConfig) {
@@ -316,6 +443,17 @@ class SingleTurnAgentTool extends AgentTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
+    final Object? inputSchema = _getInputSchema(agent);
+    if (inputSchema != null) {
+      try {
+        validateNodeData(_normalizeInputSchemaForValidation(inputSchema), args);
+      } on InputValidationError catch (error) {
+        return _argValidationError(name, error);
+      } on ArgumentError catch (error) {
+        return _argValidationError(name, error);
+      }
+    }
+
     if (skipSummarization) {
       toolContext.actions.skipSummarization = true;
     }
@@ -382,6 +520,17 @@ class TaskAgentTool extends AgentTool {
     required Map<String, dynamic> args,
     required ToolContext toolContext,
   }) async {
+    final Object? inputSchema = _getInputSchema(agent);
+    if (inputSchema != null) {
+      try {
+        validateNodeData(_normalizeInputSchemaForValidation(inputSchema), args);
+      } on InputValidationError catch (error) {
+        return _argValidationError(name, error);
+      } on ArgumentError catch (error) {
+        return _argValidationError(name, error);
+      }
+    }
+
     if (skipSummarization) {
       toolContext.actions.skipSummarization = true;
     }

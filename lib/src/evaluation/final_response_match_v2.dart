@@ -85,10 +85,21 @@ Label parseCritique(String response) {
 
   final RegExpMatch? invalidMatch = labelInvalidExp.firstMatch(response);
   if (invalidMatch != null) {
-    final String label = (invalidMatch.group(1) ?? '').trim().toLowerCase();
-    return (label == Label.trueLabel.value || label == Label.invalid.value)
-        ? Label.invalid
-        : Label.valid;
+    final String label = (invalidMatch.group(1) ?? '')
+        .trim()
+        .replaceAll(RegExp(r'[,}]+$'), '')
+        .toLowerCase();
+    if (label == Label.invalid.value ||
+        label == Label.almost.value ||
+        label == Label.trueLabel.value ||
+        label == 'partially' ||
+        label == 'partially_valid') {
+      return Label.invalid;
+    }
+    if (label == Label.valid.value || label == Label.falseLabel.value) {
+      return Label.valid;
+    }
+    return Label.notFound;
   }
 
   return Label.notFound;

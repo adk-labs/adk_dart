@@ -236,11 +236,13 @@ Future<HttpServer> startAdkDevWebServer({
 /// reject them to avoid exposing privileged internal tooling.
 class SpecialAgentAccessDeniedException implements Exception {
   /// Creates a special-agent access-denied exception.
-  const SpecialAgentAccessDeniedException();
+  const SpecialAgentAccessDeniedException([
+    this.message =
+        'Access to internal special agents is disabled in API server mode.',
+  ]);
 
   /// Human-readable error message, matching upstream's HTTP detail text.
-  String get message =>
-      'Access to internal special agents is disabled in API server mode.';
+  final String message;
 
   @override
   String toString() => 'SpecialAgentAccessDeniedException: $message';
@@ -276,8 +278,16 @@ class _EvalManagers {
 _EvalManagers _createEvalManagersFromOptions({
   required String baseDir,
   required String? evalStorageUri,
+  Map<String, String>? environment,
 }) {
-  final String? normalized = evalStorageUri?.trim();
+  String? normalized = evalStorageUri?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    final String? envUri =
+        (environment ?? Platform.environment)['ADK_EVAL_STORAGE_URI']?.trim();
+    if (envUri != null && envUri.isNotEmpty) {
+      normalized = envUri;
+    }
+  }
   if (normalized == null || normalized.isEmpty) {
     return _EvalManagers(
       evalSetsManager: LocalEvalSetsManager(baseDir),
@@ -307,6 +317,17 @@ _EvalManagers _createEvalManagersFromOptions({
     baseDir: baseDir,
     evalStorageUri: normalized,
   );
+  if (normalized.startsWith('file:')) {
+    try {
+      Directory(localBaseDir).createSync(recursive: true);
+    } on FileSystemException catch (error) {
+      throw ArgumentError(
+        "Failed to create eval storage directory '$localBaseDir' for "
+        "'$normalized' (configured via --eval_storage_uri or "
+        'ADK_EVAL_STORAGE_URI): $error',
+      );
+    }
+  }
   return _EvalManagers(
     evalSetsManager: LocalEvalSetsManager(localBaseDir),
     evalSetResultsManager: LocalEvalSetResultsManager(localBaseDir),
@@ -317,16 +338,21 @@ String _resolveEvalLocalBaseDir({
   required String baseDir,
   required String evalStorageUri,
 }) {
-  if (evalStorageUri.startsWith('file://')) {
+  if (evalStorageUri.startsWith('file:')) {
     final Uri parsed = Uri.parse(evalStorageUri);
-    if (parsed.authority.isNotEmpty && parsed.authority != 'localhost') {
+    final String authority = parsed.authority.toLowerCase();
+    if (authority.isNotEmpty && authority != 'localhost') {
       throw ArgumentError(
         'file:// eval storage URIs must reference the local filesystem.',
       );
     }
-    if (parsed.path.isEmpty || parsed.path == '/') {
+    final String afterScheme = evalStorageUri.substring('file:'.length);
+    if (!afterScheme.startsWith('/') ||
+        !parsed.path.startsWith('/') ||
+        parsed.path.isEmpty ||
+        parsed.path == '/') {
       throw ArgumentError(
-        'file:// eval storage URIs must include a path component.',
+        'file:// eval storage URIs must include an absolute path component.',
       );
     }
     return Uri.decodeFull(parsed.path);
@@ -536,6 +562,7 @@ class _AdkDevWebContext {
     final _EvalManagers evalManagers = _createEvalManagersFromOptions(
       baseDir: agentsRoot.path,
       evalStorageUri: evalStorageUri,
+      environment: environment,
     );
 
     final Directory? webAssetsDir = enableWebUi
@@ -709,18 +736,29 @@ class _AdkDevWebContext {
   }
 
   /// Throws a [SpecialAgentAccessDeniedException] when [appName] is an
-  /// internal special agent and [allowSpecialAgents] is false.
-  void _guardSpecialAgentAccess(String appName) {
-    if (appName.startsWith('__') && !allowSpecialAgents) {
+  /// internal special agent and [allowSpecialAgents] is false, or when a
+  /// browser sends the request from a foreign origin.
+  void _guardSpecialAgentAccess(String appName, {HttpRequest? request}) {
+    if (!appName.startsWith('__')) {
+      return;
+    }
+    if (!allowSpecialAgents) {
       throw const SpecialAgentAccessDeniedException();
+    }
+    if (request != null && _requestHasForeignBrowserOrigin(request, this)) {
+      throw const SpecialAgentAccessDeniedException(
+        "This endpoint writes agent files or starts runs, so it accepts "
+        "browser requests only from this server's own origin or an origin "
+        "listed literally in allow_origins.",
+      );
     }
   }
 
-  Future<Runner> getRunner(String? appName) async {
+  Future<Runner> getRunner(String? appName, {HttpRequest? request}) async {
     final String resolvedAppName = (appName == null || appName.trim().isEmpty)
         ? defaultAppName
         : appName.trim();
-    _guardSpecialAgentAccess(resolvedAppName);
+    _guardSpecialAgentAccess(resolvedAppName, request: request);
 
     final bool shouldReload = reload || reloadAgents;
     if (!shouldReload) {
@@ -1649,6 +1687,16 @@ Future<bool> _handlePythonStyleRoutes(
   _AdkDevWebContext context,
   List<String> rawSegments,
 ) async {
+  if (rawSegments.isNotEmpty &&
+      rawSegments[0] == 'dev' &&
+      !_safeHttpMethods.contains(request.method.toUpperCase()) &&
+      _requestHasForeignBrowserOrigin(request, context)) {
+    throw const SpecialAgentAccessDeniedException(
+      "This endpoint writes agent files or starts runs, so it accepts "
+      "browser requests only from this server's own origin or an origin "
+      "listed literally in allow_origins.",
+    );
+  }
   final List<String> segments =
       (rawSegments.length >= 3 &&
           rawSegments[0] == 'dev' &&
@@ -1660,6 +1708,7 @@ Future<bool> _handlePythonStyleRoutes(
   }
 
   final String appName = segments[1];
+  context._guardSpecialAgentAccess(appName, request: request);
   if (segments.length == 4 &&
       segments[2] == 'trigger' &&
       request.method == 'POST') {
@@ -1715,7 +1764,7 @@ Future<bool> _handlePythonStyleRoutes(
       segments[3] == 'trace' &&
       segments[4] != 'session' &&
       request.method == 'GET') {
-    context._guardSpecialAgentAccess(appName);
+    context._guardSpecialAgentAccess(appName, request: request);
     await _handleGetTraceDict(request, context, eventId: segments[4]);
     return true;
   }
@@ -1724,7 +1773,7 @@ Future<bool> _handlePythonStyleRoutes(
       segments[3] == 'trace' &&
       segments[4] == 'session' &&
       request.method == 'GET') {
-    context._guardSpecialAgentAccess(appName);
+    context._guardSpecialAgentAccess(appName, request: request);
     await _handleGetSessionTrace(request, context, sessionId: segments[5]);
     return true;
   }
@@ -2149,7 +2198,7 @@ Future<void> _handleGetAppInfo(
 }) async {
   final Runner runner;
   try {
-    runner = await context.getRunner(appName);
+    runner = await context.getRunner(appName, request: request);
   } on ArgumentError catch (error) {
     await _writeError(
       request,
@@ -2381,7 +2430,7 @@ Future<void> _handleScreencast(
 }) async {
   final Runner runner;
   try {
-    runner = await context.getRunner(appName);
+    runner = await context.getRunner(appName, request: request);
   } on ArgumentError catch (error) {
     await _writeError(
       request,
@@ -2541,7 +2590,7 @@ Future<void> _handleGetEventGraph(
 
   final Set<(String, String)> highlights = _extractLiveHighlights(event);
 
-  final Runner runner = await context.getRunner(appName);
+  final Runner runner = await context.getRunner(appName, request: request);
   final Map<String, NodeStatus> nodeStatuses = _nodeStatusesFromAgentState(
     event.actions.agentState,
   );
@@ -2562,7 +2611,7 @@ Future<void> _handleGetAppGraph(
   _AdkDevWebContext context, {
   required String appName,
 }) async {
-  final Runner runner = await context.getRunner(appName);
+  final Runner runner = await context.getRunner(appName, request: request);
   final String dotSrc = await _buildAgentGraphDot(runner.agent);
   await _writeJson(
     request,
@@ -2584,7 +2633,7 @@ Future<void> _handleBuildGraphImage(
   _AdkDevWebContext context, {
   required String appName,
 }) async {
-  final Runner runner = await context.getRunner(appName);
+  final Runner runner = await context.getRunner(appName, request: request);
   final String? nodePath = request.uri.queryParameters['node'];
   final BaseAgent? targetAgent = _findGraphTarget(
     runner.agent,
@@ -3976,7 +4025,10 @@ Future<void> _handleArtifactsRoute(
 Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
-  final Runner runner = await context.getRunner(runRequest.appName);
+  final Runner runner = await context.getRunner(
+    runRequest.appName,
+    request: request,
+  );
   final bool shouldAutoCreateSession =
       runRequest.autoCreateSession ?? runner.autoCreateSession;
 
@@ -4139,7 +4191,10 @@ Future<void> _handleRunSse(
 ) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
-  final Runner runner = await context.getRunner(runRequest.appName);
+  final Runner runner = await context.getRunner(
+    runRequest.appName,
+    request: request,
+  );
   final bool shouldAutoCreateSession =
       runRequest.autoCreateSession ?? runner.autoCreateSession;
 
@@ -4309,7 +4364,7 @@ Future<void> _handleRunLive(
 
   // Guard before the websocket upgrade so the 403 can still be written as a
   // plain HTTP response.
-  context._guardSpecialAgentAccess(appName);
+  context._guardSpecialAgentAccess(appName, request: request);
 
   if (context.maxLiveSessions > 0 &&
       context.activeLiveSessions >= context.maxLiveSessions) {
@@ -4333,7 +4388,7 @@ Future<void> _handleRunLive(
 
     final LiveRequestQueue liveQueue = LiveRequestQueue();
     final AdkAbortController abortController = AdkAbortController();
-    final Runner runner = await context.getRunner(appName);
+    final Runner runner = await context.getRunner(appName, request: request);
     final bool? proactiveAudio = _readOptionalBoolQuery(
       request,
       'proactive_audio',
@@ -4362,6 +4417,9 @@ Future<void> _handleRunLive(
       saveLiveBlob: saveLiveBlob,
       maxLlmCalls: context.maxLlmCalls ?? 500,
     );
+
+    int? closeCode;
+    String closeReason = '';
 
     Future<void> forwardEvents() async {
       await for (final Event event in runner.runLive(
@@ -4400,20 +4458,27 @@ Future<void> _handleRunLive(
             : (data is List<int> ? data.length : 0);
         if (context.maxLiveMessageBytes > 0 &&
             byteLength > context.maxLiveMessageBytes) {
+          closeCode = WebSocketStatus.messageTooBig;
+          closeReason = 'Live message exceeds maximum allowed size';
           abortController.abort();
           liveQueue.close();
-          await socket.close(
-            WebSocketStatus.messageTooBig,
-            'Live message exceeds maximum allowed size',
-          );
-          break;
+          await socket.close(closeCode, closeReason);
+          return;
         }
         if (data is String) {
-          final Object? decoded = jsonDecode(data);
-          if (decoded is! Map) {
-            continue;
+          final LiveRequest liveRequest;
+          try {
+            final Object? decoded = jsonDecode(data);
+            if (decoded is! Map) {
+              throw const FormatException('LiveRequest must be a JSON object.');
+            }
+            liveRequest = _liveRequestFromJson(_toDynamicMap(decoded));
+          } on Object {
+            closeCode = WebSocketStatus.invalidFramePayloadData;
+            closeReason = 'Invalid live request';
+            return;
           }
-          liveQueue.send(_liveRequestFromJson(_toDynamicMap(decoded)));
+          liveQueue.send(liveRequest);
         } else {
           liveQueue.sendRealtime(data);
         }
@@ -4433,12 +4498,21 @@ Future<void> _handleRunLive(
 
     try {
       await Future.any(<Future<void>>[forwardTask, messageTask]);
+      closeCode ??= WebSocketStatus.normalClosure;
     } on SessionNotFoundError {
-      await socket.close(WebSocketStatus.protocolError, 'Session not found');
+      closeCode = WebSocketStatus.protocolError;
+      closeReason = 'Session not found';
+    } catch (error) {
+      closeCode = WebSocketStatus.internalServerError;
+      final String reason = '$error';
+      closeReason = reason.length > 123 ? reason.substring(0, 123) : reason;
     } finally {
       abortController.abort('WebSocket client disconnected');
       liveQueue.close();
-      await socket.close();
+      await forwardTask
+          .catchError((Object _) {})
+          .timeout(const Duration(milliseconds: 200), onTimeout: () {});
+      await socket.close(closeCode, closeReason);
       if (!liveCompleter.isCompleted) {
         liveCompleter.complete();
       }
@@ -4788,42 +4862,49 @@ bool _isLoopbackAddress(String host) {
   }
 }
 
-String? _getRequestOrigin(HttpRequest request) {
-  final String? forwarded = _firstHeaderValue(request, 'forwarded');
-  if (forwarded != null) {
-    String? proto;
-    String? host;
-    for (final String element in forwarded.split(';')) {
-      final int separator = element.indexOf('=');
-      if (separator <= 0) {
-        continue;
-      }
-      final String name = element.substring(0, separator).trim().toLowerCase();
-      final String value = _stripOptionalQuotes(
-        element.substring(separator + 1).trim(),
-      );
-      if (name == 'proto') {
-        proto = value;
-      } else if (name == 'host') {
-        host = value;
-      }
+bool _isOriginAllowedForProtectedMutation({
+  required String origin,
+  required HttpRequest request,
+  required List<String> allowOrigins,
+}) {
+  for (final String allowed in allowOrigins) {
+    if (allowed == '*' || allowed.startsWith('regex:')) {
+      continue;
     }
-    if (proto != null && host != null) {
-      return '${_normalizeOriginScheme(proto)}://$host';
+    if (allowed == origin) {
+      return true;
     }
   }
+  final String? requestOrigin = _getRequestOrigin(request);
+  return requestOrigin != null && requestOrigin == origin;
+}
 
+bool _requestHasForeignBrowserOrigin(
+  HttpRequest request,
+  _AdkDevWebContext context,
+) {
+  final String? origin = _firstHeaderValue(request, 'origin');
+  if (origin == null) {
+    return false;
+  }
+  return !_isOriginAllowedForProtectedMutation(
+    origin: origin,
+    request: request,
+    allowOrigins: context.allowOrigins,
+  );
+}
+
+String? _getRequestOrigin(HttpRequest request) {
+  // Only trust the direct Host header (or requestedUri.authority), not
+  // Forwarded or X-Forwarded-Host, which a cross-origin fetch can spoof.
   final String host =
-      _firstHeaderValue(request, 'x-forwarded-host') ??
-      _firstHeaderValue(request, 'host') ??
+      _firstHeaderValue(request, HttpHeaders.hostHeader) ??
       request.requestedUri.authority;
   if (host.isEmpty) {
     return null;
   }
 
-  final String scheme =
-      _firstHeaderValue(request, 'x-forwarded-proto') ??
-      request.requestedUri.scheme;
+  final String scheme = request.requestedUri.scheme;
   return '${_normalizeOriginScheme(scheme)}://$host';
 }
 
@@ -5405,25 +5486,113 @@ List<String>? _parseModalities(String? raw) {
   return values.isEmpty ? null : values;
 }
 
+void _validateLiveContentMap(Map<String, dynamic> contentMap) {
+  final Object? role = contentMap['role'];
+  if (role != null && role is! String) {
+    throw const FormatException('Invalid live request: content.role must be a string.');
+  }
+  final Object? text = contentMap['text'];
+  if (text != null && text is! String) {
+    throw const FormatException('Invalid live request: content.text must be a string.');
+  }
+  final Object? partsRaw = contentMap['parts'];
+  if (partsRaw != null) {
+    if (partsRaw is! List) {
+      throw const FormatException('Invalid live request: content.parts must be a list.');
+    }
+    for (final Object? item in partsRaw) {
+      if (item is! Map) {
+        throw const FormatException('Invalid live request: each content part must be an object.');
+      }
+      final Map<String, dynamic> partMap = _toDynamicMap(item);
+      if (partMap['text'] != null && partMap['text'] is! String) {
+        throw const FormatException('Invalid live request: part.text must be a string.');
+      }
+      if (partMap['thought'] != null && partMap['thought'] is! bool) {
+        throw const FormatException('Invalid live request: part.thought must be a boolean.');
+      }
+      final Object? inlineData = partMap['inline_data'] ?? partMap['inlineData'];
+      if (inlineData != null && inlineData is! Map) {
+        throw const FormatException('Invalid live request: inline_data must be an object.');
+      }
+      final Object? functionCall = partMap['function_call'] ?? partMap['functionCall'];
+      if (functionCall != null && functionCall is! Map) {
+        throw const FormatException('Invalid live request: function_call must be an object.');
+      }
+      final Object? functionResponse =
+          partMap['function_response'] ?? partMap['functionResponse'];
+      if (functionResponse != null && functionResponse is! Map) {
+        throw const FormatException('Invalid live request: function_response must be an object.');
+      }
+    }
+  }
+}
+
 LiveRequest _liveRequestFromJson(Map<String, dynamic> payload) {
-  if (payload['close'] == true) {
-    return LiveRequest(close: true);
+  if (payload.containsKey('close')) {
+    final Object? closeVal = payload['close'];
+    if (closeVal != null && closeVal is! bool) {
+      throw const FormatException('Invalid live request: close must be a boolean.');
+    }
+    if (closeVal == true) {
+      return LiveRequest(close: true);
+    }
   }
 
-  if (payload['activity_start'] == true || payload['activityStart'] == true) {
-    return LiveRequest(activityStart: const LiveActivityStart());
-  }
-  if (payload['activity_end'] == true || payload['activityEnd'] == true) {
-    return LiveRequest(activityEnd: const LiveActivityEnd());
+  final Object? activityStartRaw =
+      payload['activity_start'] ?? payload['activityStart'];
+  if (activityStartRaw != null) {
+    if (activityStartRaw is! bool && activityStartRaw is! Map) {
+      throw const FormatException(
+        'Invalid live request: activity_start must be a boolean or object.',
+      );
+    }
+    if (activityStartRaw == true || activityStartRaw is Map) {
+      return LiveRequest(activityStart: const LiveActivityStart());
+    }
   }
 
-  final Object? contentRaw = payload['content'];
-  if (contentRaw is Map) {
-    return LiveRequest(content: _contentFromJson(_toDynamicMap(contentRaw)));
+  final Object? activityEndRaw =
+      payload['activity_end'] ?? payload['activityEnd'];
+  if (activityEndRaw != null) {
+    if (activityEndRaw is! bool && activityEndRaw is! Map) {
+      throw const FormatException(
+        'Invalid live request: activity_end must be a boolean or object.',
+      );
+    }
+    if (activityEndRaw == true || activityEndRaw is Map) {
+      return LiveRequest(activityEnd: const LiveActivityEnd());
+    }
   }
 
-  if (payload.containsKey('blob')) {
-    return LiveRequest(blob: payload['blob']);
+  if (payload.containsKey('content') && payload['content'] != null) {
+    final Object? contentRaw = payload['content'];
+    if (contentRaw is! Map) {
+      throw const FormatException('Invalid live request: content must be an object.');
+    }
+    final Map<String, dynamic> contentMap = _toDynamicMap(contentRaw);
+    _validateLiveContentMap(contentMap);
+    return LiveRequest(content: _contentFromJson(contentMap));
+  }
+
+  if (payload.containsKey('blob') && payload['blob'] != null) {
+    final Object? blobRaw = payload['blob'];
+    if (blobRaw is Map) {
+      final Map<String, dynamic> blobMap = _toDynamicMap(blobRaw);
+      final Object? mimeType = blobMap['mime_type'] ?? blobMap['mimeType'];
+      if (mimeType != null && mimeType is! String) {
+        throw const FormatException('Invalid live request: blob.mime_type must be a string.');
+      }
+      final Object? dataRaw = blobMap['data'];
+      if (dataRaw is String) {
+        base64Decode(dataRaw);
+      } else if (dataRaw != null && dataRaw is! List<int>) {
+        throw const FormatException('Invalid live request: blob.data must be base64 string or bytes.');
+      }
+    } else if (blobRaw is! String && blobRaw is! List<int>) {
+      throw const FormatException('Invalid live request: blob must be an object, string, or bytes.');
+    }
+    return LiveRequest(blob: blobRaw);
   }
 
   return LiveRequest();
@@ -7388,6 +7557,9 @@ Future<dynamic> createAdkDevWebContextForTesting({
   String? logoText,
   String? logoImageUrl,
   bool a2a = true,
+  List<String> allowOrigins = const <String>[],
+  String? evalStorageUri,
+  Map<String, String>? environment,
   List<String> triggerSources = const <String>[],
   List<String> extraPlugins = const <String>[],
   bool reload = false,
@@ -7402,9 +7574,9 @@ Future<dynamic> createAdkDevWebContextForTesting({
     sessionServiceUri: null,
     artifactServiceUri: null,
     memoryServiceUri: null,
-    evalStorageUri: null,
+    evalStorageUri: evalStorageUri,
     useLocalStorage: true,
-    allowOrigins: const <String>[],
+    allowOrigins: allowOrigins,
     urlPrefix: '',
     autoCreateSession: true,
     enableWebUi: enableWebUi,
@@ -7418,6 +7590,7 @@ Future<dynamic> createAdkDevWebContextForTesting({
     extraPlugins: extraPlugins,
     triggerSources: triggerSources,
     customTriggerRouter: triggerRouter,
+    environment: environment,
   );
   if (serverHost != null) {
     context.serverHost = serverHost;
