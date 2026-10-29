@@ -41,10 +41,7 @@ class ReplayManager {
         continue;
       }
 
-      final NodePathBuilder pathBuilder = NodePathBuilder.fromString(path);
-      final String parentPath = pathBuilder.parent != null
-          ? pathBuilder.parent.toString()
-          : '';
+      final String parentPath = parentNodePath(path);
 
       _addEventToIndex(parentPath, event);
 
@@ -88,14 +85,10 @@ class ReplayManager {
   void _addEventToIndex(String parentPath, Event event) {
     _eventsByParent.putIfAbsent(parentPath, () => <Event>[]).add(event);
 
-    NodePathBuilder? curr = parentPath.isNotEmpty
-        ? NodePathBuilder.fromString(parentPath)
-        : null;
-    while (curr != null && curr.toString().isNotEmpty) {
-      _transitiveEventsByParent
-          .putIfAbsent(curr.toString(), () => <Event>[])
-          .add(event);
-      curr = curr.parent;
+    String curr = parentPath;
+    while (curr.isNotEmpty) {
+      _transitiveEventsByParent.putIfAbsent(curr, () => <Event>[]).add(event);
+      curr = parentNodePath(curr);
     }
 
     _transitiveEventsByParent.putIfAbsent('', () => <Event>[]).add(event);
@@ -108,12 +101,10 @@ class ReplayManager {
     }
 
     _ensureIndex(ctx);
-    final NodePathBuilder pathBuilder = NodePathBuilder.fromString(nodePath);
-    final NodePathBuilder? parentBuilder = pathBuilder.parent;
-    if (parentBuilder == null || parentBuilder.toString().isEmpty) {
+    final String parentPath = parentNodePath(nodePath);
+    if (parentPath.isEmpty) {
       return ctx.invocationContext.session.events;
     }
-    final String parentPath = parentBuilder.toString();
 
     final List<Event> nodeEvents =
         _transitiveEventsByParent[parentPath] ?? <Event>[];

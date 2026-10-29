@@ -13,6 +13,7 @@ import '../memory/memory_entry.dart';
 import '../sessions/state.dart';
 import '../tools/tool_confirmation.dart';
 import '../types/content.dart';
+import 'callback_context.dart';
 import 'invocation_context.dart';
 import 'readonly_context.dart';
 import '../artifacts/base_artifact_service.dart';
@@ -64,6 +65,9 @@ class Context extends ReadonlyContext {
 
   /// The branch path of the current invocation context.
   String? get branch => invocationContext.branch;
+
+  /// Metadata about the currently executing callback, or `null` when not in a callback scope.
+  CallbackInfo? get callbackInfo => currentCallbackInfo;
 
   /// Buffered actions collected during this invocation.
   EventActions get actions {

@@ -142,6 +142,11 @@ Set<(String, String)> _findFinishedScopeRuns(List<Event> liveEvents) {
     _findActiveTaskScope(session);
 
 (String, String)? _findActiveTaskScope(Session session) {
+  if (!session.events.any(
+    (Event e) => e.isolationScope != null && e.isolationScope!.isNotEmpty,
+  )) {
+    return null;
+  }
   final List<Event> liveEvents = applyRewinds(session.events);
   final Set<(String, String)> finishedRuns = _findFinishedScopeRuns(liveEvents);
   for (int i = liveEvents.length - 1; i >= 0; i -= 1) {
@@ -248,6 +253,8 @@ class Runner {
     this.credentialService,
     Duration? pluginCloseTimeout,
     this.autoCreateSession = false,
+    this.eventsCompactionConfig,
+    this.skipPostInvocationCompaction = false,
   }) : pluginManager = PluginManager(
          plugins: plugins,
          closeTimeout: pluginCloseTimeout ?? const Duration(seconds: 5),
@@ -259,6 +266,7 @@ class Runner {
     this.agent = params.agent;
     contextCacheConfig = params.contextCacheConfig;
     resumabilityConfig = params.resumabilityConfig;
+    eventsCompactionConfig ??= app?.eventsCompactionConfig;
 
     if (app != null) {
       for (final BasePlugin plugin in resolvedPlugins) {
@@ -301,6 +309,12 @@ class Runner {
 
   /// Optional resumability policy for invocation replay/resume.
   ResumabilityConfig? resumabilityConfig;
+
+  /// Optional event compaction configuration for this runner.
+  EventsCompactionConfig? eventsCompactionConfig;
+
+  /// Whether to skip post-invocation event compaction after an invocation completes.
+  bool skipPostInvocationCompaction;
 
   (_RunnerParams, List<BasePlugin>) _validateRunnerParams(
     App? app,
@@ -487,7 +501,8 @@ class Runner {
         yield event;
       }
 
-      if (context.eventsCompactionConfig != null) {
+      if (!skipPostInvocationCompaction &&
+          context.eventsCompactionConfig != null) {
         // Compaction runs on the success path. A failure here is an unhandled
         // runner error, so notify on_run_error_callback once and re-raise.
         try {
@@ -1008,7 +1023,8 @@ class Runner {
       liveRequestQueue: liveRequestQueue,
       runConfig: runConfig ?? RunConfig(),
       resumabilityConfig: resumabilityConfig,
-      eventsCompactionConfig: app?.eventsCompactionConfig,
+      eventsCompactionConfig:
+          eventsCompactionConfig ?? app?.eventsCompactionConfig,
       abortSignal: abortSignal,
       pluginManager: pluginManager,
     );
@@ -1754,6 +1770,8 @@ class InMemoryRunner extends Runner {
     super.app,
     super.pluginCloseTimeout,
     super.autoCreateSession = true,
+    super.eventsCompactionConfig,
+    super.skipPostInvocationCompaction = false,
   }) : super(
          appName: app == null ? (appName ?? 'InMemoryRunner') : appName,
          artifactService: InMemoryArtifactService(),

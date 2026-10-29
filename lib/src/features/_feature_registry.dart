@@ -50,6 +50,9 @@ enum FeatureName {
   /// Daytona sandbox environment integration.
   daytonaEnvironment('DAYTONA_ENVIRONMENT'),
 
+  /// E2B sandbox environment integration.
+  e2bEnvironment('E2B_ENVIRONMENT'),
+
   /// ElevenLabs speech-to-text and text-to-speech integration.
   elevenLabs('ELEVEN_LABS'),
 
@@ -62,6 +65,15 @@ enum FeatureName {
   /// Google Cloud IAM connector authentication.
   gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
 
+  /// Google Cloud Storage administrative toolset integration.
+  gcsAdminToolset('GCS_ADMIN_TOOLSET'),
+
+  /// Settings for Google Cloud Storage tools.
+  gcsToolSettings('GCS_TOOL_SETTINGS'),
+
+  /// Google Cloud Storage toolset integration.
+  gcsToolset('GCS_TOOLSET'),
+
   /// Configuration for Google Cloud credentials.
   googleCredentialsConfig('GOOGLE_CREDENTIALS_CONFIG'),
 
@@ -71,8 +83,14 @@ enum FeatureName {
   /// JSON Schema support in function declarations.
   jsonSchemaForFuncDecl('JSON_SCHEMA_FOR_FUNC_DECL'),
 
+  /// MCP agent server integration.
+  mcpAgentServer('MCP_AGENT_SERVER'),
+
   /// Graceful error handling for MCP tool execution.
   mcpGracefulErrorHandling('MCP_GRACEFUL_ERROR_HANDLING'),
+
+  /// Model Context Protocol (MCP) toolset integration.
+  mcpToolset('MCP_TOOLSET'),
 
   /// MongoDB memory service integration.
   mongodbMemoryService('MONGODB_MEMORY_SERVICE'),
@@ -80,8 +98,14 @@ enum FeatureName {
   /// MongoDB session service integration.
   mongodbSessionService('MONGODB_SESSION_SERVICE'),
 
+  /// OpenAPI toolset integration.
+  openapiToolset('OPENAPI_TOOLSET'),
+
   /// OpenSandbox environment integration.
   opensandboxEnvironment('OPENSANDBOX_ENVIRONMENT'),
+
+  /// Agent planners support.
+  planners('PLANNERS'),
 
   /// Pluggable authentication framework support.
   pluggableAuth('PLUGGABLE_AUTH'),
@@ -120,7 +144,10 @@ enum FeatureName {
   toolConfig('TOOL_CONFIG'),
 
   /// Interactive user confirmation before tool execution.
-  toolConfirmation('TOOL_CONFIRMATION');
+  toolConfirmation('TOOL_CONFIRMATION'),
+
+  /// Toolbox toolset integration.
+  toolboxToolset('TOOLBOX_TOOLSET');
 
   /// Creates a feature identifier with its environment variable [value].
   const FeatureName(this.value);
@@ -185,7 +212,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.bigQueryToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.bigQueryToolConfig: const FeatureConfig(
@@ -197,7 +224,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.bigtableToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.cascadeLive: const FeatureConfig(
@@ -209,7 +236,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.computerUse: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.dataAgentToolConfig: const FeatureConfig(
@@ -217,11 +244,15 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.dataAgentToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.daytonaEnvironment: const FeatureConfig(
         FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.e2bEnvironment: const FeatureConfig(
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.elevenLabs: const FeatureConfig(
@@ -229,7 +260,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.environmentSimulation: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.eventarcToolset: const FeatureConfig(
@@ -238,6 +269,18 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.gcpIamConnectorAuth: const FeatureConfig(
         FeatureStage.experimental,
+      ),
+      FeatureName.gcsAdminToolset: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.gcsToolSettings: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.gcsToolset: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
       ),
       FeatureName.googleCredentialsConfig: const FeatureConfig(
         FeatureStage.stable,
@@ -251,7 +294,15 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.mcpAgentServer: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
       FeatureName.mcpGracefulErrorHandling: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.mcpToolset: const FeatureConfig(
         FeatureStage.stable,
         defaultOn: true,
       ),
@@ -263,8 +314,16 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: false,
       ),
+      FeatureName.openapiToolset: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
       FeatureName.opensandboxEnvironment: const FeatureConfig(
         FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.planners: const FeatureConfig(
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.pluggableAuth: const FeatureConfig(
@@ -280,11 +339,11 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.pubsubToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.skillToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.snakeCaseSkillName: const FeatureConfig(
@@ -295,7 +354,7 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.spannerToolset: const FeatureConfig(
-        FeatureStage.experimental,
+        FeatureStage.stable,
         defaultOn: true,
       ),
       FeatureName.spannerToolSettings: const FeatureConfig(
@@ -315,6 +374,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.toolConfirmation: const FeatureConfig(
+        FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.toolboxToolset: const FeatureConfig(
         FeatureStage.stable,
         defaultOn: true,
       ),

@@ -372,8 +372,12 @@ abstract class BaseAgent {
     if (callbackContent == null) {
       for (final AgentLifecycleCallback callback
           in canonicalBeforeAgentCallbacks) {
-        final Content? value = await Future<Content?>.value(
-          callback(callbackContext),
+        final Content? value = await runWithCallbackScope<Content?>(
+          CallbackInfo(
+            type: CallbackType.beforeAgent,
+            name: resolveCallbackName(callback),
+          ),
+          () => callback(callbackContext),
         );
         if (value != null) {
           callbackContent = value;
@@ -414,8 +418,12 @@ abstract class BaseAgent {
     if (callbackContent == null) {
       for (final AgentLifecycleCallback callback
           in canonicalAfterAgentCallbacks) {
-        final Content? value = await Future<Content?>.value(
-          callback(callbackContext),
+        final Content? value = await runWithCallbackScope<Content?>(
+          CallbackInfo(
+            type: CallbackType.afterAgent,
+            name: resolveCallbackName(callback),
+          ),
+          () => callback(callbackContext),
         );
         if (value != null) {
           callbackContent = value;

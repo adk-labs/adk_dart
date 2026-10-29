@@ -39,7 +39,7 @@ class ManagedAgent extends BaseAgent {
        _apiKey = apiKey,
        _baseUrl = baseUrl;
 
-  /// The Managed Agent identifier (e.g. 'projects/PROJECT/locations/global/agents/AGENT').
+  /// The Managed Agent identifier (e.g. `'antigravity-preview-09-2026'` or `'projects/PROJECT/locations/global/agents/AGENT'`).
   final String agentId;
 
   /// A sandbox environment specification or an existing environment ID string.

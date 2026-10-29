@@ -64,6 +64,12 @@ class WorkflowDataError extends ArgumentError {
   WorkflowDataError([super.message]);
 }
 
+/// Error thrown when an internal workflow runtime invariant is violated.
+class WorkflowInvariantError extends StateError {
+  /// Creates a workflow invariant error with [message].
+  WorkflowInvariantError(super.message);
+}
+
 /// Chronological barrier used to coordinate deterministic replay ordering.
 ///
 /// Keys not present in [sequence] pass through [wait] immediately. Keys in the
@@ -535,8 +541,15 @@ class WorkflowContext {
         resumeInputs,
         rerunOnResume: node.rerunOnResume,
       );
+      final bool hasPendingChildInterrupts = nodeStates.entries.any(
+        (MapEntry<String, NodeState> e) =>
+            e.value.parentKey == stateKey && e.value.interrupts.isNotEmpty,
+      );
       if (state.status != NodeStatus.failed) {
-        if (_hasUnresolvedWaitingInterrupts(state)) {
+        if (_hasUnresolvedWaitingInterrupts(
+          state,
+          rerunOnResume: node.rerunOnResume && hasPendingChildInterrupts,
+        )) {
           interruptIds.addAll(state.interrupts);
           if (raiseOnWait) {
             throw NodeInterruptedError();
@@ -875,7 +888,10 @@ FutureOr<Object?> _executeFunctionNode(
 
   final Object? result = await node.function(context, nodeInput);
   if (result == null &&
-      resumedConfirmation &&
+      (resumedConfirmation ||
+          (context.resumeInputs.isNotEmpty &&
+              context.invocationContext != null &&
+              !node.waitForOutput)) &&
       !context._hasDirectOutput &&
       context.route == null) {
     return Event(
@@ -1323,6 +1339,24 @@ BaseNode _buildParallelWorkerNode(Object node) {
   return buildNode(node);
 }
 
+/// Returns the effective [RetryConfig] configured on [node], unwrapping [ParallelWorker] if needed.
+RetryConfig? nodeRetryConfig(BaseNode node) {
+  if (node.retryConfig != null) {
+    return node.retryConfig;
+  }
+  if (node is ParallelWorker) {
+    return nodeRetryConfig(node.wrappedNode);
+  }
+  return null;
+}
+
+/// Whether [node] has an explicit [RetryConfig] configured directly or on its wrapped worker.
+bool hasOwnRetryConfig(BaseNode node) => nodeRetryConfig(node) != null;
+
+/// Returns a copy of [node] with [retryConfig] applied.
+BaseNode withRetryConfig(BaseNode node, RetryConfig? retryConfig) =>
+    _withRetryConfig(node, retryConfig);
+
 BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
   if (node is FunctionNode) {
     return FunctionNode(
@@ -1350,7 +1384,8 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
     );
   }
   if (node is AgentNode) {
-    return AgentNode(
+    final BaseAgent? previousParent = node.agent.parentAgent;
+    final AgentNode cloned = AgentNode(
       agent: node.agent,
       name: node.name,
       description: node.description,
@@ -1360,6 +1395,8 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
       retryConfig: retryConfig,
       timeout: node.timeout,
     );
+    node.agent.parentAgent = previousParent;
+    return cloned;
   }
   if (node is ParallelWorker) {
     return ParallelWorker._(
@@ -1825,6 +1862,7 @@ class Workflow extends BaseAgent {
     final Set<String> outputKeys = <String>{
       ...workflowContext.outputs.keys,
       ...workflowContext._nodeEvents.keys,
+      ...workflowContext._nodeOutputEvents.keys,
     };
     for (final String key in outputKeys) {
       if (key == START) {
@@ -1888,7 +1926,15 @@ class Workflow extends BaseAgent {
     final Set<String> pending = <String>{
       for (final String name in byName.keys)
         if (!completed.contains(name) &&
-            !_hasUnresolvedWaitingInterrupts(context.nodeStates[name]))
+            !_hasUnresolvedWaitingInterrupts(
+              context.nodeStates[name],
+              rerunOnResume:
+                  (byName[name]?.rerunOnResume ?? false) &&
+                  context.nodeStates.values.any(
+                    (NodeState s) =>
+                        s.parentKey == name && s.interrupts.isNotEmpty,
+                  ),
+            ))
           name,
     };
     final Set<String> active = edges.isEmpty
@@ -2060,6 +2106,7 @@ class Workflow extends BaseAgent {
   }) async {
     final Map<String, Future<_TaskOutcome>> running =
         <String, Future<_TaskOutcome>>{};
+    final Set<String> replayedInFlight = <String>{};
     while (pending.any(active.contains) || running.isNotEmpty) {
       // Serialize concurrency when a task-mode agent node is waiting: do not
       // schedule further parallel branches. If nothing is in flight, the
@@ -2070,10 +2117,13 @@ class Workflow extends BaseAgent {
           break;
         }
       }
+      final int activeLiveCount = running.keys
+          .where((String key) => !replayedInFlight.contains(key))
+          .length;
       final int availableSlots = _hasWaitingTaskAgent(context)
           ? 0
-          : concurrencyLimit - running.length;
-      if (availableSlots > 0) {
+          : concurrencyLimit - activeLiveCount;
+      if (!_hasWaitingTaskAgent(context)) {
         final List<String> ready =
             pending
                 .where(
@@ -2097,7 +2147,19 @@ class Workflow extends BaseAgent {
             'Workflow graph has unresolved or cyclic dependencies.',
           );
         }
-        for (final String name in ready.take(availableSlots)) {
+        int remainingLiveSlots = availableSlots;
+        for (final String name in ready) {
+          final NodeState? nodeState = context.nodeStates[name];
+          final bool isReplayed =
+              nodeState != null && _isCompletedNodeState(nodeState);
+          if (!isReplayed) {
+            if (remainingLiveSlots <= 0) {
+              continue;
+            }
+            remainingLiveSlots -= 1;
+          } else {
+            replayedInFlight.add(name);
+          }
           pending.remove(name);
           joinArrivals.remove(name);
           running[name] =
@@ -2119,6 +2181,7 @@ class Workflow extends BaseAgent {
 
       final _TaskOutcome outcome = await Future.any(running.values);
       running.remove(outcome.name);
+      replayedInFlight.remove(outcome.name);
       if (outcome.error != null) {
         // Drain remaining in-flight tasks so completed siblings still have
         // their outputs recorded, then propagate the first failure.
@@ -2965,7 +3028,9 @@ void _validateRetryExceptionFilters(RetryConfig? retry) {
 }
 
 bool _shouldRetryError(Object error, RetryConfig? retry) {
-  if (retry == null) {
+  if (retry == null ||
+      error is WorkflowConfigurationError ||
+      error is WorkflowInvariantError) {
     return false;
   }
   final List<Object>? filters = retry.exceptions;
@@ -3123,7 +3188,10 @@ void _validateSingleTerminalOutput(
 }) {
   final List<String> terminalOutputs = <String>[
     for (final String nodeName in terminalNodeNames)
-      if (context.outputs[nodeName] != null) nodeName,
+      if (context.outputs[nodeName] != null &&
+          context.outputs[nodeName] is! RequestInput &&
+          context.nodeStates[nodeName]?.status != NodeStatus.waiting)
+        nodeName,
   ];
   if (terminalOutputs.length <= 1) {
     return;
@@ -3180,6 +3248,7 @@ WorkflowResult _workflowResultFromEvents(
   final Map<String, NodeState> states = <String, NodeState>{};
   final Map<String, String> interruptOwner = <String, String>{};
   final Map<String, Object?> responseSchemas = <String, Object?>{};
+  final Set<String> resumedWaitingNodes = <String>{};
 
   NodeState stateFor(String key, String? runId, String? parentRunId) {
     return states.putIfAbsent(
@@ -3206,6 +3275,7 @@ WorkflowResult _workflowResultFromEvents(
         staticNodes: staticNodes,
         interruptOwner: interruptOwner,
         responseSchemas: responseSchemas,
+        resumedWaitingNodes: resumedWaitingNodes,
       );
       continue;
     }
@@ -3284,25 +3354,43 @@ WorkflowResult _workflowResultFromEvents(
     final bool hasError = event.errorCode != null;
     if (hasResult) {
       state.error = null;
-      if (state.status != NodeStatus.waiting || state.interrupts.isEmpty) {
+      if (state.status != NodeStatus.waiting ||
+          state.interrupts.isEmpty ||
+          resumedWaitingNodes.contains(owner.key)) {
         state.status = NodeStatus.completed;
+        state.interrupts.clear();
         state.resumeInputs.clear();
+        resumedWaitingNodes.remove(owner.key);
       }
     } else if (hasError) {
       state.status = NodeStatus.failed;
       state.error = event.errorMessage ?? event.errorCode;
       outputs.remove(owner.key);
+      resumedWaitingNodes.remove(owner.key);
     }
 
     final Set<String> interruptIds = _interruptIdsFromEvent(event);
     if (interruptIds.isEmpty) {
       if (!hasResult &&
           !hasError &&
-          state.status != NodeStatus.waiting &&
-          state.status != NodeStatus.failed) {
-        state.status = NodeStatus.completed;
+          state.status != NodeStatus.failed &&
+          (state.status != NodeStatus.waiting ||
+              resumedWaitingNodes.contains(owner.key))) {
+        final BaseNode? staticNode = staticNodes[owner.key];
+        if (staticNode == null || !staticNode.waitForOutput) {
+          state.status = NodeStatus.completed;
+          state.interrupts.clear();
+          state.resumeInputs.clear();
+          outputs.remove(owner.key);
+          resumedWaitingNodes.remove(owner.key);
+        }
       }
       continue;
+    }
+
+    if (resumedWaitingNodes.remove(owner.key)) {
+      state.interrupts.clear();
+      state.resumeInputs.clear();
     }
 
     final RequestInput? requestInput = _requestInputFromEvent(event);
@@ -3333,6 +3421,7 @@ void _applyWorkflowResumeResponses(
   required Map<String, BaseNode> staticNodes,
   required Map<String, String> interruptOwner,
   required Map<String, Object?> responseSchemas,
+  Set<String>? resumedWaitingNodes,
 }) {
   for (final FunctionResponse response in event.getFunctionResponses()) {
     final String? interruptId = response.id;
@@ -3358,11 +3447,13 @@ void _applyWorkflowResumeResponses(
     final BaseNode? staticNode = staticNodes[ownerKey];
     if (staticNode != null && staticNode.rerunOnResume) {
       state.status = NodeStatus.waiting;
+      resumedWaitingNodes?.add(ownerKey);
       continue;
     }
 
     if (state.interrupts.isNotEmpty) {
       state.status = NodeStatus.waiting;
+      resumedWaitingNodes?.add(ownerKey);
       continue;
     }
 
@@ -3370,8 +3461,10 @@ void _applyWorkflowResumeResponses(
       outputs[ownerKey] = _outputFromResumeInputs(state.resumeInputs);
       state.status = NodeStatus.completed;
       state.resumeInputs.clear();
+      resumedWaitingNodes?.remove(ownerKey);
     } else {
       state.status = NodeStatus.waiting;
+      resumedWaitingNodes?.add(ownerKey);
     }
   }
 }
@@ -3696,8 +3789,14 @@ bool _isCompletedNodeState(NodeState state) {
       state.status == NodeStatus.succeeded;
 }
 
-bool _hasUnresolvedWaitingInterrupts(NodeState? state) {
+bool _hasUnresolvedWaitingInterrupts(
+  NodeState? state, {
+  bool rerunOnResume = false,
+}) {
   if (state == null || state.status != NodeStatus.waiting) {
+    return false;
+  }
+  if (rerunOnResume && state.resumeInputs.isNotEmpty) {
     return false;
   }
   return state.interrupts.isNotEmpty;
@@ -3981,7 +4080,7 @@ Object? _workflowOutputFromRaw(Object? output) {
     if (output.hasOutput) {
       return output.output;
     }
-    if (output.content == null && output.actions.route != null) {
+    if (output.content == null) {
       return null;
     }
   }

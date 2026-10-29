@@ -15,24 +15,24 @@ void main() {
       final List<String> warnings = <String>[];
       setFeatureWarningEmitter(warnings.add);
 
-      expect(isFeatureEnabled(FeatureName.computerUse), isTrue);
-      expect(isFeatureEnabled(FeatureName.computerUse), isTrue);
+      expect(isFeatureEnabled(FeatureName.elevenLabs), isTrue);
+      expect(isFeatureEnabled(FeatureName.elevenLabs), isTrue);
       expect(warnings, hasLength(1));
 
-      overrideFeatureEnabled(FeatureName.computerUse, false);
+      overrideFeatureEnabled(FeatureName.elevenLabs, false);
       expect(
         isFeatureEnabled(
-          FeatureName.computerUse,
-          environment: <String, String>{'ADK_ENABLE_COMPUTER_USE': '1'},
+          FeatureName.elevenLabs,
+          environment: <String, String>{'ADK_ENABLE_ELEVEN_LABS': '1'},
         ),
         isFalse,
       );
 
-      clearFeatureOverride(FeatureName.computerUse);
+      clearFeatureOverride(FeatureName.elevenLabs);
       expect(
         isFeatureEnabled(
-          FeatureName.computerUse,
-          environment: <String, String>{'ADK_DISABLE_COMPUTER_USE': '1'},
+          FeatureName.elevenLabs,
+          environment: <String, String>{'ADK_DISABLE_ELEVEN_LABS': '1'},
         ),
         isFalse,
       );
@@ -52,7 +52,7 @@ void main() {
 
     test('decorator parity checks enabled state and stage mismatch', () {
       expect(
-        () => feature_decorator.stable(FeatureName.computerUse),
+        () => feature_decorator.stable(FeatureName.elevenLabs),
         throwsArgumentError,
       );
 

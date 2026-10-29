@@ -2,6 +2,7 @@
 library;
 
 import '../events/event.dart';
+import '../events/rewind_events.dart';
 import '../sessions/session.dart';
 import '_utils.dart';
 import 'base_memory_service.dart';
@@ -24,8 +25,8 @@ class InMemoryMemoryService extends BaseMemoryService {
 
   static const int _maxSearchResults = 10;
 
-  final Map<(String, String), Map<String, List<Event>>>
-  _sessionEventsByUserKey = <(String, String), Map<String, List<Event>>>{};
+  final Map<(String, String), Map<String?, List<Event>>>
+  _sessionEventsByUserKey = <(String, String), Map<String?, List<Event>>>{};
   final Map<(String, String), Set<String>> _deletedMemoryIdsByUserKey =
       <(String, String), Set<String>>{};
 
@@ -34,20 +35,13 @@ class InMemoryMemoryService extends BaseMemoryService {
     Session session, {
     Map<String, Object?>? customMetadata,
   }) async {
-    final (String, String) key = _userKey(session.appName, session.userId);
-    final Set<String> deletedIds =
-        _deletedMemoryIdsByUserKey[key] ?? const <String>{};
-    final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
-        <String, List<Event>>{};
-    sessions[session.id] = session.events
-        .where(
-          (Event event) =>
-              event.content != null &&
-              event.content!.parts.isNotEmpty &&
-              !deletedIds.contains(event.id),
-        )
-        .map((Event event) => event.copyWith())
-        .toList();
+    _addEventsToMemory(
+      appName: session.appName,
+      userId: session.userId,
+      sessionId: session.id,
+      events: applyRewinds(session.events),
+      replaceSessionEvents: true,
+    );
   }
 
   @override
@@ -58,14 +52,47 @@ class InMemoryMemoryService extends BaseMemoryService {
     String? sessionId,
     Map<String, Object?>? customMetadata,
   }) async {
+    final String? normalizedSessionId =
+        (sessionId == null || sessionId.isEmpty) ? null : sessionId;
+    _addEventsToMemory(
+      appName: appName,
+      userId: userId,
+      sessionId: normalizedSessionId,
+      events: events,
+      replaceSessionEvents: false,
+    );
+  }
+
+  void _addEventsToMemory({
+    required String appName,
+    required String userId,
+    required String? sessionId,
+    required List<Event> events,
+    required bool replaceSessionEvents,
+  }) {
     final (String, String) key = _userKey(appName, userId);
     final Set<String> deletedIds =
         _deletedMemoryIdsByUserKey[key] ?? const <String>{};
-    final Map<String, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
-        <String, List<Event>>{};
-    final String targetSessionId = sessionId ?? 'unknown_session';
-    final List<Event> target = sessions[targetSessionId] ??= <Event>[];
+    final Map<String?, List<Event>> sessions = _sessionEventsByUserKey[key] ??=
+        <String?, List<Event>>{};
 
+    if (replaceSessionEvents) {
+      final Set<String> seenIds = <String>{};
+      final List<Event> replaced = <Event>[];
+      for (final Event event in events) {
+        if (event.content == null || event.content!.parts.isEmpty) {
+          continue;
+        }
+        if (deletedIds.contains(event.id) || !seenIds.add(event.id)) {
+          continue;
+        }
+        replaced.add(event.copyWith());
+      }
+      sessions[sessionId] = replaced;
+      return;
+    }
+
+    final List<Event> target = sessions[sessionId] ??= <Event>[];
     final Set<String> existingIds = target
         .map((Event event) => event.id)
         .toSet();
@@ -88,8 +115,8 @@ class InMemoryMemoryService extends BaseMemoryService {
     required String query,
   }) async {
     final (String, String) key = _userKey(appName, userId);
-    final Map<String, List<Event>> sessions =
-        _sessionEventsByUserKey[key] ?? <String, List<Event>>{};
+    final Map<String?, List<Event>> sessions =
+        _sessionEventsByUserKey[key] ?? <String?, List<Event>>{};
 
     final Set<String> queryWords = _extractWordsLower(query);
     final bool matchAll = query.trim().isEmpty;
@@ -165,9 +192,9 @@ class InMemoryMemoryService extends BaseMemoryService {
       return;
     }
     final (String, String) key = _userKey(appName, userId);
-    final Map<String, List<Event>>? sessions = _sessionEventsByUserKey[key];
+    final Map<String?, List<Event>>? sessions = _sessionEventsByUserKey[key];
     if (sessions != null) {
-      for (final MapEntry<String, List<Event>> entry in sessions.entries) {
+      for (final MapEntry<String?, List<Event>> entry in sessions.entries) {
         final List<Event> kept = entry.value
             .where((Event event) => event.id != memoryId)
             .toList();

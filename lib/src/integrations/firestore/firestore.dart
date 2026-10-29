@@ -12,6 +12,7 @@ import '../../errors/session_not_found_error.dart';
 import '../../errors/stale_session_error.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
+import '../../events/rewind_events.dart';
 import '../../events/ui_widget.dart';
 import '../../memory/_utils.dart';
 import '../../memory/base_memory_service.dart';
@@ -1162,11 +1163,28 @@ class FirestoreMemoryService extends BaseMemoryService {
     Session session, {
     Map<String, Object?>? customMetadata,
   }) async {
+    final List<Event> activeEvents = applyRewinds(session.events);
+    final Set<String> activeIds = activeEvents
+        .map((Event e) => e.id)
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    for (final Event event in session.events) {
+      if (event.id.isEmpty || activeIds.contains(event.id)) {
+        continue;
+      }
+      final String docId = _memoryDocId(
+        appName: session.appName,
+        userId: session.userId,
+        sessionId: session.id,
+        eventId: event.id,
+      );
+      await client.deleteDocument('$memoriesCollection/$docId');
+    }
     await _writeMemories(
       appName: session.appName,
       userId: session.userId,
       sessionId: session.id,
-      events: session.events,
+      events: activeEvents,
     );
   }
 

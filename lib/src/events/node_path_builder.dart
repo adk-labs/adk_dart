@@ -1,6 +1,28 @@
 /// Path builder for hierarchical workflow node paths.
 library;
 
+/// Returns the parent of a node path string, as [NodePathBuilder] does.
+///
+/// Returns `''` for a top-level or empty path.
+String parentNodePath(String path) {
+  final int slash = path.lastIndexOf('/');
+  if (slash != -1) {
+    return path.substring(0, slash);
+  }
+  final int dot = path.lastIndexOf('.');
+  return dot == -1 ? '' : path.substring(0, dot);
+}
+
+/// Appends a child segment to a node path, as [NodePathBuilder] does.
+String joinNodePath(String? parentPath, String nodeName, [String? runId]) {
+  final String segment = (runId == null || runId.isEmpty)
+      ? nodeName
+      : '$nodeName@$runId';
+  return (parentPath == null || parentPath.isEmpty)
+      ? segment
+      : '$parentPath/$segment';
+}
+
 /// Represents a path to a node in a hierarchical workflow.
 ///
 /// A node path is a sequence of segments, each identifying a node instance,
@@ -217,6 +239,48 @@ class BranchPath {
     return BranchPath.fromString(
       baseBranch,
     ).append(name, runId: runId).toString();
+  }
+
+  /// Whether [path] is [ancestor] or lies below it.
+  static bool isSameOrBelow(String path, String ancestor) {
+    return path == ancestor ||
+        (path.length > ancestor.length &&
+            path.startsWith(ancestor) &&
+            path.codeUnitAt(ancestor.length) == 0x2E);
+  }
+
+  /// Whether any segment of [path] strictly below [base] is a tool branch.
+  static bool hasToolSegmentBelow(
+    String? path,
+    String? base,
+    String nodeName,
+    Set<String> toolCallIds,
+  ) {
+    if (path == null || path.isEmpty || toolCallIds.isEmpty) {
+      return false;
+    }
+    final String subPath;
+    if (base != null && base.isNotEmpty) {
+      if (!(path.length > base.length &&
+          path.startsWith(base) &&
+          path.codeUnitAt(base.length) == 0x2E)) {
+        return false;
+      }
+      subPath = path.substring(base.length + 1);
+    } else {
+      subPath = path;
+    }
+    for (final String segment in subPath.split('.')) {
+      final int at = segment.lastIndexOf('@');
+      if (at != -1) {
+        final String leafName = segment.substring(0, at);
+        final String trailingId = segment.substring(at + 1);
+        if (toolCallIds.contains(trailingId) && leafName != nodeName) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   @override

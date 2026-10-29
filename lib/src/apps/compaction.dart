@@ -836,6 +836,54 @@ int? _estimatePromptTokenCount({
   return totalChars ~/ 4;
 }
 
+/// Returns events before [start] needed to pair `FunctionResponse` events at or after [start].
+List<Event> _earlierCallsAnsweredBy(List<Event> events, int start) {
+  final Set<String> callIdsFromStart = <String>{};
+  final Set<String> unmatchedRespIds = <String>{};
+  for (int i = start; i < events.length; i += 1) {
+    final Event event = events[i];
+    callIdsFromStart.addAll(_eventFunctionCallIds(event));
+    for (final String respId in _eventFunctionResponseIds(event)) {
+      if (!callIdsFromStart.contains(respId)) {
+        unmatchedRespIds.add(respId);
+      }
+    }
+  }
+  if (unmatchedRespIds.isEmpty) {
+    return const <Event>[];
+  }
+
+  final Set<int> neededIndices = <int>{};
+  final Set<String> siblingCallIds = <String>{};
+  for (int i = start - 1; i >= 0; i -= 1) {
+    final Set<String> callIds = _eventFunctionCallIds(events[i]);
+    final Set<String> matched = callIds.intersection(unmatchedRespIds);
+    if (matched.isNotEmpty) {
+      neededIndices.add(i);
+      siblingCallIds.addAll(callIds);
+      unmatchedRespIds.removeAll(matched);
+      if (unmatchedRespIds.isEmpty) {
+        break;
+      }
+    }
+  }
+  if (neededIndices.isEmpty) {
+    return const <Event>[];
+  }
+
+  for (int i = 0; i < start; i += 1) {
+    if (neededIndices.contains(i)) {
+      continue;
+    }
+    if (_eventFunctionResponseIds(events[i]).intersection(siblingCallIds).isNotEmpty) {
+      neededIndices.add(i);
+    }
+  }
+
+  final List<int> sortedIndices = neededIndices.toList()..sort();
+  return <Event>[for (final int idx in sortedIndices) events[idx]];
+}
+
 /// Returns the latest prompt token count estimate from [events].
 int? latestPromptTokenCount({
   required List<Event> events,
@@ -852,9 +900,24 @@ int? latestPromptTokenCount({
       // Counts at or before a summarization describe a prompt it replaced.
       break;
     }
+    if (agentName.isNotEmpty && event.author != agentName) {
+      continue;
+    }
     final int? found = _extractPromptTokenCount(event.usageMetadata);
-    if (found != null) {
-      return found;
+    if (found != null && found > 0) {
+      final List<Event> trailingSlice = <Event>[
+        ..._earlierCallsAnsweredBy(scopedEvents, i),
+        ...scopedEvents.sublist(i),
+      ];
+      final int trailingEstimate =
+          _estimatePromptTokenCount(
+            events: trailingSlice,
+            currentBranch: currentBranch,
+            agentName: agentName,
+            isolationScope: isolationScope,
+          ) ??
+          0;
+      return found + trailingEstimate;
     }
   }
 

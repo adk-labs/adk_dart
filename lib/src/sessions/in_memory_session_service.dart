@@ -57,14 +57,14 @@ class InMemorySessionService extends BaseSessionService {
     if (deltas.app.isNotEmpty) {
       _appState
           .putIfAbsent(appName, () => <String, Object?>{})
-          .addAll(deltas.app);
+          .addAll(_deepCopyStateMap(deltas.app));
     }
 
     if (deltas.user.isNotEmpty) {
       _userState
           .putIfAbsent(appName, () => <String, Map<String, Object?>>{})
           .putIfAbsent(userId, () => <String, Object?>{})
-          .addAll(deltas.user);
+          .addAll(_deepCopyStateMap(deltas.user));
     }
 
     final String resolvedSessionId =
@@ -74,7 +74,7 @@ class InMemorySessionService extends BaseSessionService {
       id: resolvedSessionId,
       appName: appName,
       userId: userId,
-      state: deltas.session,
+      state: _deepCopyStateMap(deltas.session),
       lastUpdateTime: getTime(),
     );
 
@@ -260,20 +260,48 @@ class InMemorySessionService extends BaseSessionService {
     required String userId,
     required Session session,
   }) {
+    session.state = _deepCopyStateMap(session.state);
     final Map<String, Object?>? appState = _appState[appName];
     if (appState != null) {
       appState.forEach((String key, Object? value) {
-        session.state['${State.appPrefix}$key'] = value;
+        session.state['${State.appPrefix}$key'] = _deepCopyStateValue(value);
       });
     }
 
     final Map<String, Object?>? userState = _userState[appName]?[userId];
     if (userState != null) {
       userState.forEach((String key, Object? value) {
-        session.state['${State.userPrefix}$key'] = value;
+        session.state['${State.userPrefix}$key'] = _deepCopyStateValue(value);
       });
     }
 
     return session;
   }
+}
+
+Map<String, Object?> _deepCopyStateMap(Map<String, Object?> source) {
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in source.entries)
+      entry.key: _deepCopyStateValue(entry.value),
+  };
+}
+
+Object? _deepCopyStateValue(Object? value) {
+  if (value is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': _deepCopyStateValue(entry.value),
+    };
+  }
+  if (value is List) {
+    return <Object?>[
+      for (final Object? item in value) _deepCopyStateValue(item),
+    ];
+  }
+  if (value is Set) {
+    return <Object?>{
+      for (final Object? item in value) _deepCopyStateValue(item),
+    };
+  }
+  return value;
 }

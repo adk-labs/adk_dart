@@ -136,13 +136,21 @@ List<Content> getContents({
     nodePath: nodePath,
     allowAncestorNodePaths: true,
   );
+  final Set<String> toolCallIds = _collectFunctionCallIds(rewindFiltered);
   final List<Event> rawFiltered = rewindFiltered
       .where(
-        (Event event) => shouldIncludeEventInContext(
-          currentBranch,
-          event,
-          isolationScope: isolationScope,
-        ),
+        (Event event) =>
+            shouldIncludeEventInContext(
+              currentBranch,
+              event,
+              isolationScope: isolationScope,
+            ) &&
+            !isToolSubBranchEvent(
+              currentBranch,
+              event,
+              agentName,
+              toolCallIds,
+            ),
       )
       .toList(growable: false);
 
@@ -263,7 +271,13 @@ List<Content> getCurrentTurnContents({
             isolationScope: isolationScope,
           ) &&
           (event.author == 'user' || _isOtherAgentReply(agentName, event)) &&
-          !_isDirectTransfer(event)) {
+          !_isDirectTransfer(event) &&
+          !isToolSubBranchEvent(
+            currentBranch,
+            event,
+            agentName,
+            toolCallIds,
+          )) {
         start = i;
       }
       if (start >= 0) {
@@ -584,13 +598,22 @@ bool isEventBelongsToBranch(String? invocationBranch, Event event) {
   if (invocationBranch == null || invocationBranch.isEmpty) {
     return !eventBranch.contains('@');
   }
-  if (invocationBranch == eventBranch) {
-    return true;
-  }
-  if (invocationBranch.startsWith('$eventBranch.')) {
-    return true;
-  }
-  return false;
+  return BranchPath.isSameOrBelow(invocationBranch, eventBranch);
+}
+
+/// Whether [event] is a tool's message published strictly below [currentBranch].
+bool isToolSubBranchEvent(
+  String? currentBranch,
+  Event event,
+  String agentName,
+  Set<String> toolCallIds,
+) {
+  return BranchPath.hasToolSegmentBelow(
+    event.branch,
+    currentBranch,
+    agentName,
+    toolCallIds,
+  );
 }
 
 bool _isPartInvisible(Part part) {
@@ -1099,7 +1122,7 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
       if (isAdkLiveArtifactPart(part)) {
         continue;
       }
-      content.parts.add(part.copyWith());
+      content.parts.add(elideRelayedPartMarkers(part));
       continue;
     }
   }

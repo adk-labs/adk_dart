@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import '../../agents/abort_signal.dart';
 import '../../agents/active_streaming_tool.dart';
+import '../../agents/callback_context.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
 import '../../agents/llm/task/finish_task_tool.dart';
@@ -665,8 +666,12 @@ Future<Event?> _runToolExecutionPipeline({
         return null;
       }
       final Map<String, dynamic>? value =
-          await Future<Map<String, dynamic>?>.value(
-            callback(tool, functionArgs, toolContext),
+          await runWithCallbackScope<Map<String, dynamic>?>(
+            CallbackInfo(
+              type: CallbackType.beforeTool,
+              name: resolveCallbackName(callback),
+            ),
+            () => callback(tool, functionArgs, toolContext),
           );
       if (invocationContext.isAborted || (callState?.cancelled ?? false)) {
         return null;
@@ -840,8 +845,12 @@ Future<Event?> _runToolExecutionPipeline({
         return null;
       }
       final Map<String, dynamic>? value =
-          await Future<Map<String, dynamic>?>.value(
-            callback(tool, functionArgs, toolContext, functionResponse),
+          await runWithCallbackScope<Map<String, dynamic>?>(
+            CallbackInfo(
+              type: CallbackType.afterTool,
+              name: resolveCallbackName(callback),
+            ),
+            () => callback(tool, functionArgs, toolContext, functionResponse!),
           );
       if (invocationContext.isAborted || (callState?.cancelled ?? false)) {
         return null;
@@ -895,11 +904,18 @@ Future<void> notifyToolCancelled({
       cancelled ?? AdkAbortException(invocationContext.abortSignal?.reason);
   for (final BasePlugin plugin in invocationContext.pluginManager.plugins) {
     try {
-      await plugin.onToolErrorCallback(
-        tool: tool,
-        toolArgs: toolArgs,
-        toolContext: toolContext,
-        error: cancellationError,
+      await runWithCallbackScope<Map<String, dynamic>?>(
+        CallbackInfo(
+          type: CallbackType.onToolError,
+          name: CallbackType.onToolError.value,
+          pluginName: plugin.name,
+        ),
+        () => plugin.onToolErrorCallback(
+          tool: tool,
+          toolArgs: toolArgs,
+          toolContext: toolContext,
+          error: cancellationError,
+        ),
       );
     } catch (_) {}
   }
@@ -911,8 +927,12 @@ Future<void> notifyToolCancelled({
   for (final OnToolErrorCallback callback
       in agent.canonicalOnToolErrorCallbacks) {
     try {
-      await Future<Map<String, dynamic>?>.value(
-        callback(tool, toolArgs, toolContext, cancellationError),
+      await runWithCallbackScope<Map<String, dynamic>?>(
+        CallbackInfo(
+          type: CallbackType.onToolError,
+          name: resolveCallbackName(callback),
+        ),
+        () => callback(tool, toolArgs, toolContext, cancellationError),
       );
     } catch (_) {}
   }
@@ -951,8 +971,12 @@ Future<Map<String, dynamic>?> _runOnToolErrorCallbacks({
       return null;
     }
     final Map<String, dynamic>? value =
-        await Future<Map<String, dynamic>?>.value(
-          callback(tool, toolArgs, toolContext, error),
+        await runWithCallbackScope<Map<String, dynamic>?>(
+          CallbackInfo(
+            type: CallbackType.onToolError,
+            name: resolveCallbackName(callback),
+          ),
+          () => callback(tool, toolArgs, toolContext, error),
         );
     if (invocationContext.isAborted) {
       return null;

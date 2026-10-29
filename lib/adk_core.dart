@@ -84,11 +84,16 @@ export 'src/models/lite_llm.dart';
 export 'src/models/registry.dart';
 export 'src/models/routed_llm.dart';
 
+export 'src/plugins/auto_tracing_plugin.dart';
 export 'src/plugins/base_plugin.dart';
 export 'src/plugins/callback_helpers.dart';
+export 'src/plugins/global_instruction_plugin.dart';
+export 'src/plugins/logging_plugin.dart';
 export 'src/plugins/plugin_manager.dart';
 export 'src/plugins/reflect_retry_model_plugin.dart';
 export 'src/plugins/reflect_retry_tool_plugin.dart';
+export 'src/plugins/save_files_as_artifacts_plugin.dart';
+export 'src/plugins/tool_call_integrity_plugin.dart';
 
 export 'src/runners/runner.dart';
 

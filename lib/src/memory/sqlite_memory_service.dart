@@ -11,6 +11,7 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../events/event.dart';
+import '../events/rewind_events.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
 import '_utils.dart';
@@ -541,11 +542,51 @@ class SqliteMemoryService extends BaseMemoryService {
     Session session, {
     Map<String, Object?>? customMetadata,
   }) async {
+    _ensureInitialized();
+    final List<Event> activeEvents = applyRewinds(session.events);
+    final Set<String> activeIds = activeEvents
+        .map((Event e) => e.id)
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    final List<String> rewoundIds = <String>[
+      for (final Event event in session.events)
+        if (event.id.isNotEmpty && !activeIds.contains(event.id)) event.id,
+    ];
+    if (rewoundIds.isNotEmpty) {
+      final sqlite3.Database db = _openDatabase();
+      db.execute('BEGIN IMMEDIATE');
+      try {
+        for (final String eventId in rewoundIds) {
+          db.execute(
+            'DELETE FROM memory_events WHERE app_name = ? AND user_id = ? AND session_id = ? AND event_id = ?',
+            <Object?>[session.appName, session.userId, session.id, eventId],
+          );
+          db.execute(
+            'DELETE FROM memory_entries WHERE app_name = ? AND user_id = ? AND session_id = ? AND event_id = ?',
+            <Object?>[session.appName, session.userId, session.id, eventId],
+          );
+          if (_ftsEnabled) {
+            db.execute(
+              'DELETE FROM memory_events_fts WHERE app_name = ? AND user_id = ? AND session_id = ? AND event_id = ?',
+              <Object?>[session.appName, session.userId, session.id, eventId],
+            );
+            db.execute(
+              'DELETE FROM memory_entries_fts WHERE app_name = ? AND user_id = ? AND session_id = ? AND event_id = ?',
+              <Object?>[session.appName, session.userId, session.id, eventId],
+            );
+          }
+        }
+        db.execute('COMMIT');
+      } catch (_) {
+        db.execute('ROLLBACK');
+        rethrow;
+      }
+    }
     await addEventsToMemory(
       appName: session.appName,
       userId: session.userId,
       sessionId: session.id,
-      events: session.events,
+      events: activeEvents,
       customMetadata: customMetadata,
     );
   }
@@ -859,6 +900,14 @@ class SqliteMemoryService extends BaseMemoryService {
         );
         continue;
       }
+
+      final List<Part> visibleParts = content.parts
+          .where((Part part) => !part.thought)
+          .toList(growable: false);
+      if (visibleParts.isEmpty) {
+        continue;
+      }
+      content = content.copyWith(parts: visibleParts);
 
       final Map<String, Object?> customMetadata = <String, Object?>{
         'session_id': sessionId,

@@ -11,6 +11,16 @@ import 'event.dart';
 /// Both LLM prompt building and context compaction must agree on it, otherwise
 /// rewound content can leak back into prompts through a compaction summary.
 List<Event> applyRewinds(List<Event> events) {
+  if (events.isEmpty) {
+    return <Event>[];
+  }
+  if (!events.any(
+    (Event e) =>
+        e.actions.rewindBeforeInvocationId != null &&
+        e.actions.rewindBeforeInvocationId!.isNotEmpty,
+  )) {
+    return List<Event>.from(events);
+  }
   final List<Event> kept = <Event>[];
   int i = events.length - 1;
   while (i >= 0) {
@@ -32,3 +42,6 @@ List<Event> applyRewinds(List<Event> events) {
   }
   return kept.reversed.toList();
 }
+
+/// Returns the active (non-rewound) events from [events].
+List<Event> getActiveEvents(List<Event> events) => applyRewinds(events);

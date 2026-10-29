@@ -463,7 +463,7 @@ void main() {
       ),
       Event(
         invocationId: 'inv_2',
-        author: 'user',
+        author: 'root_agent',
         timestamp: 3.0,
         content: Content.userText('message 2'),
         usageMetadata: <String, Object?>{'prompt_token_count': 100},
@@ -524,7 +524,7 @@ void main() {
         ),
         Event(
           invocationId: 'inv_2',
-          author: 'user',
+          author: 'root_agent',
           timestamp: 3.0,
           content: Content.userText('message 2'),
           usageMetadata: <String, Object?>{'prompt_token_count': 100},

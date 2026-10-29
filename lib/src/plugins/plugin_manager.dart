@@ -48,9 +48,19 @@ class PluginManager {
     required String callbackName,
     required Future<T?> Function(BasePlugin plugin) invoke,
   }) async {
+    final CallbackType? callbackType = CallbackType.fromValue(callbackName);
     for (final BasePlugin plugin in _plugins) {
       try {
-        final T? result = await invoke(plugin);
+        final T? result = callbackType == null
+            ? await invoke(plugin)
+            : await runWithCallbackScope<T?>(
+                CallbackInfo(
+                  type: callbackType,
+                  name: callbackName,
+                  pluginName: plugin.name,
+                ),
+                () => invoke(plugin),
+              );
         if (result != null) {
           return result;
         }
@@ -127,7 +137,14 @@ class PluginManager {
   }) async {
     for (final BasePlugin plugin in _plugins) {
       try {
-        await plugin.afterRunCallback(invocationContext: invocationContext);
+        await runWithCallbackScope<void>(
+          CallbackInfo(
+            type: CallbackType.afterRun,
+            name: CallbackType.afterRun.value,
+            pluginName: plugin.name,
+          ),
+          () => plugin.afterRunCallback(invocationContext: invocationContext),
+        );
       } catch (error) {
         throw PluginManagerException(
           "Error in plugin '${plugin.name}' during "
@@ -333,9 +350,21 @@ class PluginManager {
     String callbackName,
     Future<void> Function(BasePlugin plugin) invoke,
   ) async {
+    final CallbackType? callbackType = CallbackType.fromValue(callbackName);
     for (final BasePlugin plugin in _plugins) {
       try {
-        await invoke(plugin);
+        if (callbackType == null) {
+          await invoke(plugin);
+        } else {
+          await runWithCallbackScope<void>(
+            CallbackInfo(
+              type: callbackType,
+              name: callbackName,
+              pluginName: plugin.name,
+            ),
+            () => invoke(plugin),
+          );
+        }
       } catch (_) {
         // Best-effort: a failure in a notification callback must never mask
         // the original error, so log-and-continue (suppress here).

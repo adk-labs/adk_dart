@@ -22,6 +22,7 @@ import '../../models/base_llm.dart';
 import '../../models/base_llm_connection.dart';
 import '../../models/conformance_replay_llm.dart';
 import '../../plugins/conformance/conformance_recordings_schema.dart';
+import '../../platform/time.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../tools/base_tool.dart';
@@ -332,7 +333,15 @@ class BaseLlmFlow {
         final RealtimeBlob realtimeBlob = _coerceRealtimeBlob(
           liveRequest.blob!,
         );
-        if (realtimeBlob.mimeType.startsWith('audio/')) {
+        if (context.runConfig?.saveLiveBlob == true) {
+          audioCacheManager.cacheRealtimeBlob(
+            context,
+            InlineData(
+              mimeType: realtimeBlob.mimeType,
+              data: List<int>.from(realtimeBlob.data),
+            ),
+          );
+        } else if (realtimeBlob.mimeType.startsWith('audio/')) {
           audioCacheManager.cacheAudio(
             context,
             InlineData(
@@ -949,9 +958,9 @@ class BaseLlmFlow {
         if (context.isAborted) {
           return;
         }
-        modelResponseEvent.id = Event.newId();
-        modelResponseEvent.timestamp =
-            DateTime.now().millisecondsSinceEpoch / 1000;
+        if (event.partial != true) {
+          modelResponseEvent.id = Event.newId();
+        }
         yield event;
       }
     }
@@ -1146,6 +1155,7 @@ class BaseLlmFlow {
       return;
     }
 
+    modelResponseEvent.timestamp = getTime();
     final Event finalized = _finalizeModelResponseEvent(
       request,
       response,
@@ -1350,8 +1360,12 @@ class BaseLlmFlow {
 
     for (final BeforeModelCallback callback
         in agent.canonicalBeforeModelCallbacks) {
-      final LlmResponse? response = await Future<LlmResponse?>.value(
-        callback(callbackContext, request),
+      final LlmResponse? response = await runWithCallbackScope<LlmResponse?>(
+        CallbackInfo(
+          type: CallbackType.beforeModel,
+          name: resolveCallbackName(callback),
+        ),
+        () => callback(callbackContext, request),
       );
       if (response != null) {
         return response;
@@ -1392,8 +1406,12 @@ class BaseLlmFlow {
 
     for (final AfterModelCallback callback
         in agent.canonicalAfterModelCallbacks) {
-      final LlmResponse? altered = await Future<LlmResponse?>.value(
-        callback(callbackContext, response),
+      final LlmResponse? altered = await runWithCallbackScope<LlmResponse?>(
+        CallbackInfo(
+          type: CallbackType.afterModel,
+          name: resolveCallbackName(callback),
+        ),
+        () => callback(callbackContext, response),
       );
       if (altered != null) {
         final LlmResponse? withGrounding = await _maybeAddGroundingMetadata(
@@ -1499,8 +1517,12 @@ class BaseLlmFlow {
 
     for (final OnModelErrorCallback callback
         in agent.canonicalOnModelErrorCallbacks) {
-      final LlmResponse? handled = await Future<LlmResponse?>.value(
-        callback(callbackContext, request, error),
+      final LlmResponse? handled = await runWithCallbackScope<LlmResponse?>(
+        CallbackInfo(
+          type: CallbackType.onModelError,
+          name: resolveCallbackName(callback),
+        ),
+        () => callback(callbackContext, request, error),
       );
       if (handled != null) {
         return handled;
@@ -1553,7 +1575,7 @@ class BaseLlmFlow {
     return finalized;
   }
 
-  /// Flushes cached live audio events based on control flags in [response].
+  /// Flushes cached live audio and visual events based on control flags in [response].
   Future<List<Event>> handleControlEventFlush(
     InvocationContext context,
     LlmResponse response,
@@ -1562,6 +1584,7 @@ class BaseLlmFlow {
       return audioCacheManager.flushCaches(
         context,
         flushUserAudio: false,
+        flushUserVisual: false,
         flushModelAudio: true,
       );
     }
@@ -1569,6 +1592,7 @@ class BaseLlmFlow {
       return audioCacheManager.flushCaches(
         context,
         flushUserAudio: true,
+        flushUserVisual: true,
         flushModelAudio: true,
       );
     }

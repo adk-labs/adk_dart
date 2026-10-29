@@ -5,6 +5,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import '../events/event.dart';
+import '../events/rewind_events.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
 import '_utils.dart';
@@ -216,7 +217,7 @@ class VertexAiRagMemoryService extends BaseMemoryService {
     Map<String, Object?>? customMetadata,
   }) async {
     final StringBuffer output = StringBuffer();
-    for (final Event event in session.events) {
+    for (final Event event in applyRewinds(session.events)) {
       final Content? content = event.content;
       if (content == null || content.parts.isEmpty) {
         continue;

@@ -97,6 +97,7 @@ class InvocationContext {
     this.transcriptionCache,
     this.liveSessionResumptionHandle,
     this.inputRealtimeCache,
+    this.inputVisualCache,
     this.outputRealtimeCache,
     this.runConfig,
     this.resumabilityConfig,
@@ -186,6 +187,9 @@ class InvocationContext {
 
   /// Buffered realtime input chunks.
   List<Object?>? inputRealtimeCache;
+
+  /// Buffered realtime visual input frames.
+  List<Object?>? inputVisualCache;
 
   /// Buffered realtime output chunks.
   List<Object?>? outputRealtimeCache;
@@ -736,6 +740,9 @@ class InvocationContext {
       inputRealtimeCache: inputRealtimeCache == null
           ? null
           : List<Object?>.from(inputRealtimeCache!),
+      inputVisualCache: inputVisualCache == null
+          ? null
+          : List<Object?>.from(inputVisualCache!),
       outputRealtimeCache: outputRealtimeCache == null
           ? null
           : List<Object?>.from(outputRealtimeCache!),

@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../events/event.dart';
+import '../events/rewind_events.dart';
 import '../flows/llm_flows/contents.dart' show isAuthEvent;
 import '../sessions/session.dart';
 import '../types/content.dart';
@@ -675,7 +676,7 @@ class VertexAiMemoryBankService extends BaseMemoryService {
     await _addEventsToMemoryFromEvents(
       appName: session.appName,
       userId: session.userId,
-      eventsToProcess: session.events,
+      eventsToProcess: applyRewinds(session.events),
       customMetadata: customMetadata,
     );
   }
