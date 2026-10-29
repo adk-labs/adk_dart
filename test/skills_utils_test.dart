@@ -299,7 +299,7 @@ Body
     });
 
     test(
-      'loadSkillFromDir closes frontmatter on first subsequent --- substring',
+      'loadSkillFromDir allows --- substring inside frontmatter and requires whole-line closing ---',
       () async {
         final Directory tempDir = await Directory.systemTemp.createTemp(
           'adk-skill-test-',
@@ -315,6 +315,18 @@ name: my-skill
 description: "A---B"
 ---
 Body
+''');
+
+        final Skill skill = loadSkillFromDir(skillDir.path);
+        expect(skill.name, 'my-skill');
+        expect(skill.description, 'A---B');
+        expect(skill.instructions, 'Body');
+
+        _writeFile(_join(skillDir.path, 'SKILL.md'), '''
+---
+name: my-skill
+description: "A---B"
+Body without closing delimiter
 ''');
 
         expect(

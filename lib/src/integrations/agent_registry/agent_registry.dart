@@ -4,19 +4,88 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import '../../a2a/protocol.dart';
+import '../../a2a/protocol.dart' hide SecurityScheme;
 import '../../agents/readonly_context.dart';
 import '../../agents/remote_a2a_agent.dart';
+import '../../auth/auth_credential.dart';
+import '../../auth/auth_schemes.dart';
+import '../../auth/auth_tool.dart';
+import '../agent_identity/agent_identity.dart' show GcpAuthProviderScheme;
 import '../../tools/base_tool.dart';
 import '../../tools/_google_access_token.dart';
 import '../../tools/mcp_tool/mcp_session_manager.dart';
 import '../../tools/mcp_tool/mcp_toolset.dart';
+
+export '../agent_identity/agent_identity.dart' show GcpAuthProviderScheme;
 
 const String _agentRegistryBaseUrl =
     'https://agentregistry.googleapis.com/v1alpha';
 const String _gcpMcpServerDestinationIdKey = 'gcp.mcp.server.destination.id';
 const String _runtimeReferenceAttribute =
     'apphub.googleapis.com/RuntimeReference';
+
+/// Selects the `authProviderBinding` from the most recently updated binding.
+Map<String, Object?>? selectAuthProviderBinding(
+  List<Map<String, Object?>> bindings, [
+  String resourceName = '',
+]) {
+  if (bindings.isEmpty) {
+    return null;
+  }
+  Map<String, Object?>? newest;
+  (String, String)? newestKey;
+  for (final Map<String, Object?> binding in bindings) {
+    final Map<String, Object?>? candidate = _extractAuthProviderBindingMap(
+      binding,
+    );
+    if (candidate == null) {
+      continue;
+    }
+    final (String, String) key = _updateTimeKey(binding);
+    if (newest == null ||
+        newestKey == null ||
+        _compareUpdateTimeKey(key, newestKey) > 0) {
+      newest = candidate;
+      newestKey = key;
+    }
+  }
+  return newest;
+}
+
+/// Builds a [GcpAuthProviderScheme] from an `authProviderBinding` payload.
+GcpAuthProviderScheme? schemeFromBinding(
+  Map<String, Object?>? authProviderBinding, {
+  String? continueUri,
+}) {
+  if (authProviderBinding == null || authProviderBinding.isEmpty) {
+    return null;
+  }
+  final String authProvider = _readString(
+    authProviderBinding['authProvider'] ?? authProviderBinding['auth_provider'],
+  ).trim();
+  if (authProvider.isEmpty) {
+    return null;
+  }
+  final Object? rawScopes = authProviderBinding['scopes'];
+  final List<String>? scopes = rawScopes is List
+      ? rawScopes
+            .map((Object? item) => _readString(item).trim())
+            .where((String item) => item.isNotEmpty)
+            .toList(growable: false)
+      : null;
+  final String bindingContinueUri = _readString(
+    authProviderBinding['continueUri'] ?? authProviderBinding['continue_uri'],
+  ).trim();
+  final String? resolvedContinueUri =
+      (continueUri != null && continueUri.trim().isNotEmpty)
+      ? continueUri.trim()
+      : (bindingContinueUri.isNotEmpty ? bindingContinueUri : null);
+  return GcpAuthProviderScheme(
+    name: authProvider,
+    scopes: scopes != null && scopes.isNotEmpty ? scopes : null,
+    continueUri: resolvedContinueUri,
+  );
+}
 
 /// Supported Agent Registry protocol types.
 enum AgentRegistryProtocolType {
@@ -74,17 +143,42 @@ typedef AgentRegistryHttpPostProvider =
 typedef AgentRegistryAuthHeadersProvider =
     Future<Map<String, String>> Function();
 
-class _AgentRegistrySingleMcpToolset extends McpToolset {
-  _AgentRegistrySingleMcpToolset({
+/// MCP toolset backed by a single registered Agent Registry MCP server.
+class AgentRegistrySingleMcpToolset extends McpToolset {
+  /// Creates an Agent Registry MCP toolset.
+  AgentRegistrySingleMcpToolset({
     required this.destinationResourceId,
     this.mcpServerId,
     required super.connectionParams,
     super.toolNamePrefix,
     super.headerProvider,
-  });
+    this.authScheme,
+    this.authCredential,
+    this.continueUri,
+    AuthConfig? authConfig,
+  }) : super(
+         authConfig:
+             authConfig ??
+             _buildAuthConfig(
+               authScheme: authScheme,
+               authCredential: authCredential,
+             ),
+       );
 
+  /// Destination resource identifier recorded on tool spans.
   final String? destinationResourceId;
+
+  /// Stable MCP server identifier from Agent Registry.
   final String? mcpServerId;
+
+  /// Resolved or caller-provided auth scheme.
+  final Object? authScheme;
+
+  /// Optional auth credential paired with [authScheme].
+  final AuthCredential? authCredential;
+
+  /// Optional caller-supplied continue URI preserved across rebinds.
+  final String? continueUri;
 
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
@@ -102,6 +196,33 @@ class _AgentRegistrySingleMcpToolset extends McpToolset {
     }
     return tools;
   }
+}
+
+/// Remote A2A agent constructed from an Agent Registry entry.
+class AgentRegistryRemoteA2aAgent extends RemoteA2aAgent {
+  /// Creates an Agent Registry remote A2A agent.
+  AgentRegistryRemoteA2aAgent({
+    required super.name,
+    required super.agentCard,
+    super.description,
+    this.authScheme,
+    this.authCredential,
+    AuthConfig? authConfig,
+  }) : authConfig =
+           authConfig ??
+           _buildAuthConfig(
+             authScheme: authScheme,
+             authCredential: authCredential,
+           );
+
+  /// Resolved or caller-provided auth scheme.
+  final Object? authScheme;
+
+  /// Optional auth credential paired with [authScheme].
+  final AuthCredential? authCredential;
+
+  /// Optional constructed [AuthConfig] for this agent.
+  final AuthConfig? authConfig;
 }
 
 /// Client for interacting with Google Cloud Agent Registry.
@@ -184,7 +305,13 @@ class AgentRegistry {
   }
 
   /// Builds an [McpToolset] from one registered MCP server.
-  Future<McpToolset> getMcpToolset(String mcpServerName) async {
+  Future<McpToolset> getMcpToolset(
+    String mcpServerName, {
+    Object? authScheme,
+    AuthCredential? authCredential,
+    String? continueUri,
+    bool resolveBindings = false,
+  }) async {
     final Map<String, Object?> serverDetails = await getMcpServer(
       mcpServerName,
     );
@@ -218,7 +345,24 @@ class AgentRegistry {
       );
     }
 
-    return _AgentRegistrySingleMcpToolset(
+    Object? resolvedAuthScheme = authScheme;
+    if (resolvedAuthScheme == null) {
+      resolvedAuthScheme = _resolveInlineAuthScheme(
+        serverDetails,
+        mcpServerName,
+        continueUri: continueUri,
+      );
+      if (resolvedAuthScheme == null &&
+          (resolveBindings || continueUri != null)) {
+        resolvedAuthScheme = await resolveAuthProviderScheme(
+          mcpServerId,
+          mcpServerName,
+          continueUri: continueUri,
+        );
+      }
+    }
+
+    return AgentRegistrySingleMcpToolset(
       destinationResourceId: destinationResourceId,
       mcpServerId: mcpServerId,
       connectionParams: StreamableHTTPConnectionParams(
@@ -227,7 +371,108 @@ class AgentRegistry {
       ),
       toolNamePrefix: prefix,
       headerProvider: headerProvider,
+      authScheme: resolvedAuthScheme,
+      authCredential: authCredential,
+      continueUri: continueUri,
     );
+  }
+
+  /// Resolves the [GcpAuthProviderScheme] bound to [resourceId] via `bindings`.
+  Future<GcpAuthProviderScheme?> resolveAuthProviderScheme(
+    String? resourceId,
+    String resourceName, {
+    String? continueUri,
+  }) async {
+    if (resourceId == null || resourceId.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final List<Map<String, Object?>> bindings =
+          await _listAuthProviderBindings('bindings', resourceId.trim());
+      final Map<String, Object?>? selected = selectAuthProviderBinding(
+        bindings,
+        resourceName,
+      );
+      return schemeFromBinding(selected, continueUri: continueUri);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolves the [GcpAuthProviderScheme] available to [sourceIdentifier] for
+  /// [resourceId] via `bindings:fetchAvailable`.
+  Future<GcpAuthProviderScheme?> fetchAvailableAuthScheme(
+    String resourceId,
+    String sourceIdentifier, {
+    String? continueUri,
+  }) async {
+    final List<Map<String, Object?>> bindings = await _listAuthProviderBindings(
+      'bindings:fetchAvailable',
+      resourceId,
+      params: <String, String>{
+        'sourceIdentifier': sourceIdentifier,
+        'targetIdentifier': resourceId,
+      },
+    );
+    final List<Map<String, Object?>> ownBindings = bindings
+        .where((Map<String, Object?> binding) {
+          final Object? source = binding['source'];
+          if (source is! Map) {
+            return false;
+          }
+          return _readString(source['identifier']) == sourceIdentifier;
+        })
+        .toList(growable: false);
+    final Map<String, Object?>? selected = selectAuthProviderBinding(
+      ownBindings.isNotEmpty ? ownBindings : bindings,
+      resourceId,
+    );
+    return schemeFromBinding(selected, continueUri: continueUri);
+  }
+
+  Future<List<Map<String, Object?>>> _listAuthProviderBindings(
+    String path,
+    String resourceId, {
+    Map<String, String>? params,
+  }) async {
+    final Map<String, String> queryParams = <String, String>{...?params};
+    final List<Map<String, Object?>> bindings = <Map<String, Object?>>[];
+    while (true) {
+      final Map<String, Object?> data = await _makeRequest(
+        path,
+        params: queryParams,
+      );
+      final Object? rawBindings = data['bindings'];
+      if (rawBindings is List) {
+        for (final Object? entry in rawBindings) {
+          if (entry is! Map) {
+            continue;
+          }
+          final Map<String, Object?> binding = _toStringObjectMap(entry);
+          final Object? target = binding['target'];
+          final String targetId = target is Map
+              ? _readString(target['identifier'])
+              : '';
+          final Map<String, Object?>? authProviderBinding =
+              _extractAuthProviderBindingMap(binding);
+          final String authProvider = authProviderBinding == null
+              ? ''
+              : _readString(
+                  authProviderBinding['authProvider'] ??
+                      authProviderBinding['auth_provider'],
+                );
+          if ((targetId.isEmpty || targetId.endsWith(resourceId)) &&
+              authProvider.isNotEmpty) {
+            bindings.add(binding);
+          }
+        }
+      }
+      final String pageToken = _readString(data['nextPageToken']);
+      if (pageToken.isEmpty) {
+        return bindings;
+      }
+      queryParams['pageToken'] = pageToken;
+    }
   }
 
   /// Lists registered A2A agents.
@@ -295,15 +540,43 @@ class AgentRegistry {
   }
 
   /// Builds a ready-to-use [RemoteA2aAgent] from Agent Registry metadata.
-  Future<RemoteA2aAgent> getRemoteA2aAgent(String agentName) async {
+  Future<RemoteA2aAgent> getRemoteA2aAgent(
+    String agentName, {
+    Object? authScheme,
+    AuthCredential? authCredential,
+    String? continueUri,
+    bool resolveBindings = false,
+  }) async {
     final Map<String, Object?> agentInfo = await getAgentInfo(agentName);
+    final String? agentId = switch (agentInfo['agentId']) {
+      final String value when value.trim().isNotEmpty => value,
+      _ => null,
+    };
+    Object? resolvedAuthScheme = authScheme;
+    if (resolvedAuthScheme == null) {
+      resolvedAuthScheme = _resolveInlineAuthScheme(
+        agentInfo,
+        agentName,
+        continueUri: continueUri,
+      );
+      if (resolvedAuthScheme == null &&
+          (resolveBindings || continueUri != null)) {
+        resolvedAuthScheme = await resolveAuthProviderScheme(
+          agentId,
+          agentName,
+          continueUri: continueUri,
+        );
+      }
+    }
 
     final AgentCard? storedCard = _tryStoredAgentCard(agentInfo);
     if (storedCard != null) {
-      return RemoteA2aAgent(
+      return AgentRegistryRemoteA2aAgent(
         name: _cleanName(storedCard.name),
         agentCard: storedCard,
         description: storedCard.description,
+        authScheme: resolvedAuthScheme,
+        authCredential: authCredential,
       );
     }
 
@@ -337,10 +610,12 @@ class AgentRegistry {
       defaultInputModes: <String>['text'],
       defaultOutputModes: <String>['text'],
     );
-    return RemoteA2aAgent(
+    return AgentRegistryRemoteA2aAgent(
       name: name,
       agentCard: agentCard,
       description: description,
+      authScheme: resolvedAuthScheme,
+      authCredential: authCredential,
     );
   }
 
@@ -523,6 +798,109 @@ String _cleanName(String name) {
 }
 
 String _readString(Object? value) => value is String ? value : '${value ?? ''}';
+
+(String, String) _updateTimeKey(Map<String, Object?> binding) {
+  final String raw = _readString(
+    binding['updateTime'] ?? binding['update_time'],
+  ).replaceFirst(RegExp(r'Z$'), '');
+  final int dotIndex = raw.indexOf('.');
+  if (dotIndex < 0) {
+    return (raw, ''.padRight(9, '0'));
+  }
+  final String seconds = raw.substring(0, dotIndex);
+  final String fraction = raw.substring(dotIndex + 1).padRight(9, '0');
+  return (seconds, fraction);
+}
+
+int _compareUpdateTimeKey((String, String) a, (String, String) b) {
+  final int first = a.$1.compareTo(b.$1);
+  if (first != 0) {
+    return first;
+  }
+  return a.$2.compareTo(b.$2);
+}
+
+Map<String, Object?>? _extractAuthProviderBindingMap(
+  Map<String, Object?> item,
+) {
+  final Object? nested =
+      item['authProviderBinding'] ?? item['auth_provider_binding'];
+  if (nested is Map) {
+    final Map<String, Object?> map = _toStringObjectMap(nested);
+    final String provider = _readString(
+      map['authProvider'] ?? map['auth_provider'],
+    ).trim();
+    if (provider.isNotEmpty) {
+      return map;
+    }
+  }
+  final String directProvider = _readString(
+    item['authProvider'] ?? item['auth_provider'],
+  ).trim();
+  if (directProvider.isNotEmpty) {
+    return item;
+  }
+  return null;
+}
+
+GcpAuthProviderScheme? _resolveInlineAuthScheme(
+  Map<String, Object?> resourceDetails,
+  String resourceName, {
+  String? continueUri,
+}) {
+  final Object? rawList =
+      resourceDetails['authProviderBindings'] ??
+      resourceDetails['auth_provider_bindings'] ??
+      resourceDetails['bindings'];
+  if (rawList is List) {
+    final List<Map<String, Object?>> bindings = rawList
+        .whereType<Map>()
+        .map(_toStringObjectMap)
+        .toList(growable: false);
+    final Map<String, Object?>? selected = selectAuthProviderBinding(
+      bindings,
+      resourceName,
+    );
+    if (selected != null) {
+      return schemeFromBinding(selected, continueUri: continueUri);
+    }
+  }
+  final Object? singleBinding =
+      resourceDetails['authProviderBinding'] ??
+      resourceDetails['auth_provider_binding'];
+  if (singleBinding is Map) {
+    return schemeFromBinding(
+      _toStringObjectMap(singleBinding),
+      continueUri: continueUri,
+    );
+  }
+  return null;
+}
+
+AuthConfig? _buildAuthConfig({
+  required Object? authScheme,
+  required AuthCredential? authCredential,
+}) {
+  if (authScheme == null && authCredential == null) {
+    return null;
+  }
+  final String serializedScheme;
+  if (authScheme is String) {
+    serializedScheme = authScheme;
+  } else if (authScheme is SecurityScheme) {
+    serializedScheme = jsonEncode(authScheme.toJson());
+  } else if (authScheme is Map) {
+    serializedScheme = jsonEncode(authScheme);
+  } else if (authScheme != null) {
+    serializedScheme = '$authScheme';
+  } else {
+    serializedScheme = '';
+  }
+  return AuthConfig(
+    authScheme: serializedScheme,
+    rawAuthCredential: authCredential,
+  );
+}
 
 Map<String, Object?> _toStringObjectMap(Map value) {
   return value.map(

@@ -10,6 +10,7 @@ import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../errors/tool_execution_error.dart';
 import '../events/event.dart';
+import '../models/base_llm.dart';
 import '../models/cache_metadata.dart';
 import '../models/google_llm.dart';
 import '../models/llm_request.dart';
@@ -18,6 +19,7 @@ import '../tools/base_tool.dart';
 import '../types/content.dart';
 import '../utils/model_name_utils.dart';
 import 'base_telemetry_service.dart';
+import 'sqlite_span_exporter.dart';
 import '_experimental_semconv.dart' as experimental_semconv;
 
 /// Environment key controlling whether request and response payloads are
@@ -68,17 +70,33 @@ const String adkExperimentalGroundingSourceUris =
 /// Alias for [TraceSpanRecord].
 typedef TraceSpan = TraceSpanRecord;
 
+/// Resolves the OpenTelemetry `error.type` attribute value for [error].
+String resolveErrorType(Object error) {
+  if (error is ToolExecutionError &&
+      error.errorType != null &&
+      error.errorType!.isNotEmpty) {
+    return error.errorType!;
+  }
+  return error.runtimeType.toString();
+}
+
 /// In-memory representation of a trace span and its attributes.
 class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
   /// Creates a trace span record.
-  TraceSpanRecord(this.name, {Map<String, Object?>? attributes})
-    : attributes = attributes ?? <String, Object?>{};
+  TraceSpanRecord(
+    this.name, {
+    Map<String, Object?>? attributes,
+    this.kind = SpanKind.internal,
+  }) : attributes = attributes ?? <String, Object?>{};
 
   /// Span name.
   String name;
 
   /// Mutable span attributes.
   final Map<String, Object?> attributes;
+
+  /// OpenTelemetry span kind.
+  final SpanKind kind;
 
   /// Updates the span [name] to [newName].
   void updateName(String newName) {
@@ -235,8 +253,13 @@ class AdkTracer {
   TraceSpanRecord startAsCurrentSpan(
     String name, {
     Map<String, Object?>? attributes,
+    SpanKind kind = SpanKind.internal,
   }) {
-    final TraceSpanRecord span = TraceSpanRecord(name, attributes: attributes);
+    final TraceSpanRecord span = TraceSpanRecord(
+      name,
+      attributes: attributes,
+      kind: kind,
+    );
     _spanStack.add(span);
     return span;
   }
@@ -283,13 +306,18 @@ class AdkTracer {
     String name,
     T Function(TraceSpanRecord span) body, {
     Map<String, Object?>? attributes,
+    SpanKind kind = SpanKind.internal,
   }) {
     final TraceSpanRecord span = startAsCurrentSpan(
       name,
       attributes: attributes,
+      kind: kind,
     );
     try {
       return body(span);
+    } catch (error) {
+      span.setAttribute('error.type', resolveErrorType(error));
+      rethrow;
     } finally {
       endCurrentSpan();
     }
@@ -300,13 +328,18 @@ class AdkTracer {
     String name,
     Future<T> Function(TraceSpanRecord span) body, {
     Map<String, Object?>? attributes,
+    SpanKind kind = SpanKind.internal,
   }) async {
     final TraceSpanRecord span = startAsCurrentSpan(
       name,
       attributes: attributes,
+      kind: kind,
     );
     try {
       return await body(span);
+    } catch (error) {
+      span.setAttribute('error.type', resolveErrorType(error));
+      rethrow;
     } finally {
       endCurrentSpan();
     }
@@ -891,7 +924,10 @@ Future<T> useInferenceSpan<T>(
   final TraceSpanRecord span = tracer.startAsCurrentSpan(
     'generate_content ${llmRequest.model ?? ''}',
   );
-  final GenerateContentSpan gcSpan = GenerateContentSpan(span);
+  final GenerateContentSpan gcSpan = GenerateContentSpan(
+    span,
+    invocationContext: invocationContext,
+  );
 
   try {
     _setCommonGenerateContentAttributes(span, llmRequest, commonAttributes);
@@ -908,18 +944,23 @@ Future<T> useInferenceSpan<T>(
         environment: environment,
       );
     } else {
-      span.setAttribute(
-        'gen_ai.system',
-        _guessGeminiSystemName(environment: environment),
+      final String systemName = _resolveGenAiSystemName(
+        llmRequest.model,
+        environment: environment,
       );
+      span.setAttribute('gen_ai.system', systemName);
       _emitStablePromptLogs(
         llmRequest,
+        systemName: systemName,
         logOnlyCommonAttributes: logOnlyCommonAttributes,
         environment: environment,
       );
     }
 
     return await run(gcSpan);
+  } catch (error) {
+    span.setAttribute('error.type', resolveErrorType(error));
+    rethrow;
   } finally {
     if (useExperimentalSemconv) {
       experimental_semconv.maybeLogCompletionDetails(
@@ -937,10 +978,13 @@ Future<T> useInferenceSpan<T>(
 /// Span wrapper for generate-content operations.
 class GenerateContentSpan {
   /// Creates a generate-content span wrapper.
-  GenerateContentSpan(this.span);
+  GenerateContentSpan(this.span, {this.invocationContext});
 
   /// Underlying trace span.
   final TraceSpanRecord span;
+
+  /// Invocation context associated with this inference span, if available.
+  final InvocationContext? invocationContext;
 
   /// Experimental operation details attributes.
   final Map<String, Object?> operationDetailsAttributes = <String, Object?>{};
@@ -1024,7 +1068,11 @@ void traceInferenceResult(
     return;
   }
 
-  _emitChoiceLog(llmResponse, environment: environment);
+  _emitChoiceLog(
+    llmResponse,
+    invocationContext: generateContentSpan?.invocationContext,
+    environment: environment,
+  );
 }
 
 Map<String, Object?> _buildLlmRequestForTrace(LlmRequest llmRequest) {
@@ -1306,10 +1354,13 @@ Object? _serializeContentWithElision(
 
 void _emitStablePromptLogs(
   LlmRequest llmRequest, {
+  String? systemName,
   Map<String, Object?> logOnlyCommonAttributes = const <String, Object?>{},
   Map<String, String>? environment,
 }) {
-  final String systemName = _guessGeminiSystemName(environment: environment);
+  final String resolvedSystemName =
+      systemName ??
+      _resolveGenAiSystemName(llmRequest.model, environment: environment);
   otelLogger.emit(
     OTelLogRecord(
       eventName: 'gen_ai.system.message',
@@ -1319,12 +1370,12 @@ void _emitStablePromptLogs(
           environment: environment,
         ),
       },
-      attributes: <String, Object?>{'gen_ai.system': systemName},
+      attributes: <String, Object?>{'gen_ai.system': resolvedSystemName},
     ),
   );
 
   final Map<String, Object?> userMessageAttributes = <String, Object?>{
-    'gen_ai.system': systemName,
+    'gen_ai.system': resolvedSystemName,
   };
   if (_shouldLogPromptResponseContent(environment: environment)) {
     final Object? userId = logOnlyCommonAttributes['user.id'];
@@ -1351,6 +1402,7 @@ void _emitStablePromptLogs(
 
 void _emitChoiceLog(
   LlmResponse llmResponse, {
+  InvocationContext? invocationContext,
   Map<String, String>? environment,
 }) {
   final Map<String, Object?> body = <String, Object?>{
@@ -1369,7 +1421,11 @@ void _emitChoiceLog(
       eventName: 'gen_ai.choice',
       body: body,
       attributes: <String, Object?>{
-        'gen_ai.system': _guessGeminiSystemName(environment: environment),
+        'gen_ai.system': _inferenceSystemName(
+          invocationContext,
+          llmResponse,
+          environment: environment,
+        ),
       },
     ),
   );
@@ -1567,13 +1623,65 @@ bool _isGeminiAgent(BaseAgent agent) {
   return model is Gemini;
 }
 
-String _guessGeminiSystemName({Map<String, String>? environment}) {
-  final Map<String, String> env = environment ?? Platform.environment;
-  final String value = (env['GOOGLE_GENAI_USE_VERTEXAI'] ?? '').toLowerCase();
-  if (value == 'true' || value == '1') {
-    return 'vertex_ai';
+String? _genAiSystemNameFromModel(
+  String? model, {
+  Map<String, String>? environment,
+}) {
+  if (model == null || model.isEmpty) {
+    return null;
   }
-  return 'gemini';
+  if (isGeminiModel(model)) {
+    final Map<String, String> env = environment ?? Platform.environment;
+    final String value = (env['GOOGLE_GENAI_USE_VERTEXAI'] ?? '').toLowerCase();
+    if (value == 'true' || value == '1') {
+      return 'gcp.vertex.agent';
+    }
+    return 'gcp.gemini';
+  }
+  final String normalized = extractModelName(model);
+  if (normalized.startsWith('claude-')) {
+    return 'anthropic';
+  }
+  return null;
+}
+
+String _resolveGenAiSystemName(
+  String? model, {
+  Map<String, String>? environment,
+}) {
+  return _genAiSystemNameFromModel(model, environment: environment) ?? '_other';
+}
+
+String _inferenceSystemName(
+  InvocationContext? invocationContext,
+  LlmResponse llmResponse, {
+  Map<String, String>? environment,
+}) {
+  final String? fromResponse = _genAiSystemNameFromModel(
+    llmResponse.modelVersion,
+    environment: environment,
+  );
+  if (fromResponse != null) {
+    return fromResponse;
+  }
+  final BaseAgent? agent = invocationContext?.agent;
+  if (agent is LlmAgent) {
+    final Object model = agent.model;
+    String? modelName;
+    if (model is String) {
+      modelName = model;
+    } else if (model is BaseLlm) {
+      modelName = model.model;
+    }
+    final String? fromAgent = _genAiSystemNameFromModel(
+      modelName,
+      environment: environment,
+    );
+    if (fromAgent != null) {
+      return fromAgent;
+    }
+  }
+  return 'gcp.vertex.agent';
 }
 
 Map<String, Object?> _dropNullEntries(Map<String, Object?> values) {

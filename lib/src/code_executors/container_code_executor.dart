@@ -200,6 +200,15 @@ class ProcessContainerRuntimeClient implements ContainerRuntimeClient {
   }
 }
 
+/// Default input directory inside the container for staged input files.
+const String defaultContainerInputDir = '/tmp/inputs';
+
+/// Default output directory inside the container for execution working directory.
+const String defaultContainerOutputDir = '/tmp/outputs';
+
+/// Maximum total byte size (100 MiB) of collected output files.
+const int maxContainerOutputTotalBytes = 100 * 1024 * 1024;
+
 /// Container-backed code executor that runs snippets in Docker.
 class ContainerCodeExecutor extends BaseCodeExecutor {
   /// Creates a container-backed code executor.
@@ -207,6 +216,8 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     this.baseUrl,
     String? image,
     this.dockerPath,
+    this.inputDir = defaultContainerInputDir,
+    this.outputDir = defaultContainerOutputDir,
     bool stateful = false,
     bool optimizeDataFile = false,
     super.errorRetryAttempts = 2,
@@ -231,6 +242,13 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
         'Cannot set `optimizeDataFile=true` in ContainerCodeExecutor.',
       );
     }
+    final String normInput = _normalizePosixPath(inputDir);
+    final String normOutput = _normalizePosixPath(outputDir);
+    if (_pathsOverlapOrNested(normInput, normOutput)) {
+      throw ArgumentError(
+        'inputDir and outputDir must not be the same or nested in each other.',
+      );
+    }
   }
 
   /// Optional Docker host URL passed to the runtime client.
@@ -241,6 +259,12 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
 
   /// Optional Docker build context path for custom images.
   final String? dockerPath;
+
+  /// Container directory where input files are staged before execution.
+  final String inputDir;
+
+  /// Container working directory where code executes and output files are collected.
+  final String outputDir;
   final ContainerRuntimeClient _runtimeClient;
 
   String? _containerId;
@@ -331,35 +355,204 @@ class ContainerCodeExecutor extends BaseCodeExecutor {
     }
   }
 
-  /// Executes code with temporary input file staging.
+  /// Executes code with container input file staging and output file collection.
   @override
   Future<CodeExecutionResult> executeCode(
     InvocationContext invocationContext,
     CodeExecutionInput codeExecutionInput,
   ) async {
-    final Directory tempDirectory = await Directory.systemTemp.createTemp(
-      'adk_docker_exec_',
-    );
+    final List<({String name, List<int> bytes})> stagedFiles;
     try {
-      for (final CodeExecutionFile file in codeExecutionInput.inputFiles) {
-        final String safeName = _sanitizeCodeExecutionFileName(file.name);
-        final File out = File('${tempDirectory.path}/$safeName');
-        await out.parent.create(recursive: true);
-        await out.writeAsBytes(_toBytes(file.content));
-      }
-
-      return await execute(
-        CodeExecutionRequest(
-          command: codeExecutionInput.code,
-          workingDirectory: tempDirectory.path,
-        ),
-      );
+      stagedFiles = _validateAndDecodeInputFiles(codeExecutionInput.inputFiles);
     } on ArgumentError catch (error) {
       return CodeExecutionResult(exitCode: -1, stderr: '$error');
-    } finally {
-      await tempDirectory.delete(recursive: true);
+    }
+
+    await _ensureContainerReady();
+    final String containerId = _containerId!;
+    final String normInputDir = _normalizePosixPath(inputDir);
+    final String normOutputDir = _normalizePosixPath(outputDir);
+
+    await _prepareDirectories(containerId, normInputDir, normOutputDir);
+    await _stageInputFiles(containerId, normInputDir, stagedFiles);
+
+    final CodeExecutionResult execResult = await execute(
+      CodeExecutionRequest(
+        command: codeExecutionInput.code,
+        workingDirectory: normOutputDir,
+      ),
+    );
+    final List<CodeExecutionFile> collectedOutputs = await _collectOutputFiles(
+      containerId,
+      normOutputDir,
+    );
+    return CodeExecutionResult(
+      exitCode: execResult.exitCode,
+      stdout: execResult.stdout,
+      stderr: execResult.stderr,
+      timedOut: execResult.timedOut,
+      outputFiles: collectedOutputs,
+    );
+  }
+
+  Future<void> _prepareDirectories(
+    String containerId,
+    String normInputDir,
+    String normOutputDir,
+  ) async {
+    final String qInput = _shellQuote(normInputDir);
+    final String qOutput = _shellQuote(normOutputDir);
+    final DockerExecResult result = await _runtimeClient.exec(
+      containerId: containerId,
+      command: <String>[
+        'sh',
+        '-c',
+        'rm -rf $qInput $qOutput && mkdir -p $qInput $qOutput',
+      ],
+    );
+    if (result.exitCode != 0) {
+      throw StateError(
+        'Failed to prepare container directories $normInputDir and $normOutputDir: ${result.stderr}',
+      );
     }
   }
+
+  Future<void> _stageInputFiles(
+    String containerId,
+    String normInputDir,
+    List<({String name, List<int> bytes})> stagedFiles,
+  ) async {
+    if (stagedFiles.isEmpty) {
+      return;
+    }
+    for (final ({String name, List<int> bytes}) file in stagedFiles) {
+      final String encoded = base64Encode(file.bytes);
+      final String targetPath = _shellQuote('$normInputDir/${file.name}');
+      final DockerExecResult result = await _runtimeClient.exec(
+        containerId: containerId,
+        command: <String>[
+          'sh',
+          '-c',
+          "printf '%s' '$encoded' | base64 -d > $targetPath",
+        ],
+      );
+      if (result.exitCode != 0) {
+        throw StateError(
+          'Failed to stage input file "${file.name}" into $normInputDir: ${result.stderr}',
+        );
+      }
+    }
+  }
+
+  Future<List<CodeExecutionFile>> _collectOutputFiles(
+    String containerId,
+    String normOutputDir,
+  ) async {
+    final String qOutput = _shellQuote(normOutputDir);
+    final String script =
+        'import base64, json, os, sys; '
+        'root = $qOutput; '
+        'items = []; total = 0; limit = $maxContainerOutputTotalBytes; '
+        'for dirpath, dirnames, filenames in os.walk(root, followlinks=False): '
+        '  dirnames[:] = [d for d in sorted(dirnames) if not os.path.islink(os.path.join(dirpath, d))]; '
+        '  for fn in sorted(filenames): '
+        '    full = os.path.join(dirpath, fn); '
+        '    if os.path.islink(full) or not os.path.isfile(full): continue; '
+        '    sz = os.path.getsize(full); '
+        '    total += sz; '
+        '    if total > limit: sys.stderr.write("Total output files size exceeds limit"); sys.exit(67); '
+        '    rel = os.path.relpath(full, root).replace("\\\\", "/"); '
+        '    with open(full, "rb") as f: data = base64.b64encode(f.read()).decode("ascii"); '
+        '    items.append({"name": rel, "size": sz, "content": data}); '
+        'print(json.dumps(items))';
+    final DockerExecResult result = await _runtimeClient.exec(
+      containerId: containerId,
+      command: <String>['sh', '-c', 'python3 -c ${_shellQuote(script)}'],
+    );
+    if (result.exitCode != 0) {
+      throw StateError(
+        'Failed to collect output files from $normOutputDir: ${result.stderr}',
+      );
+    }
+
+    final String trimmed = result.stdout.trim();
+    if (trimmed.isEmpty || !trimmed.startsWith('[')) {
+      return <CodeExecutionFile>[];
+    }
+
+    final Object? decoded = jsonDecode(trimmed);
+    if (decoded is! List) {
+      return <CodeExecutionFile>[];
+    }
+
+    int totalBytes = 0;
+    final List<CodeExecutionFile> files = <CodeExecutionFile>[];
+    for (final Object? entry in decoded) {
+      if (entry is! Map) {
+        continue;
+      }
+      final String rawRel = '${entry['name'] ?? ''}'.replaceAll('\\', '/');
+      final String relPath = rawRel
+          .replaceFirst(RegExp(r'^(?:\./|/)+'), '')
+          .trim();
+      if (relPath.isEmpty || relPath == '.' || relPath == '..') {
+        continue;
+      }
+      if (relPath.startsWith('user:')) {
+        throw StateError(
+          "Output file path '$relPath' starts with reserved prefix 'user:'.",
+        );
+      }
+
+      final Object? rawContent = entry['content'];
+      final List<int> fileBytes = rawContent == null
+          ? const <int>[]
+          : _toBytes(rawContent);
+      final int declaredSize = entry['size'] is num
+          ? (entry['size'] as num).toInt()
+          : fileBytes.length;
+      final int effectiveSize = declaredSize > fileBytes.length
+          ? declaredSize
+          : fileBytes.length;
+      totalBytes += effectiveSize;
+      if (totalBytes > maxContainerOutputTotalBytes) {
+        throw StateError(
+          'Total output files size ($totalBytes bytes) exceeds the '
+          '${maxContainerOutputTotalBytes ~/ (1024 * 1024)} MiB limit.',
+        );
+      }
+
+      final String? explicitMime = entry['mime_type'] as String?;
+      files.add(
+        CodeExecutionFile(
+          name: relPath,
+          content: base64Encode(fileBytes),
+          mimeType: (explicitMime != null && explicitMime.isNotEmpty)
+              ? explicitMime
+              : _guessMimeType(relPath),
+        ),
+      );
+    }
+    return files;
+  }
+}
+
+List<({String name, List<int> bytes})> _validateAndDecodeInputFiles(
+  List<CodeExecutionFile> inputFiles,
+) {
+  final List<({String name, List<int> bytes})> staged =
+      <({String name, List<int> bytes})>[];
+  final Set<String> seenNames = <String>{};
+  for (final CodeExecutionFile file in inputFiles) {
+    final String fileName = _extractInputFileBasename(file.name);
+    if (!seenNames.add(fileName)) {
+      throw ArgumentError(
+        'Duplicate input file name after path normalization: "$fileName".',
+      );
+    }
+    staged.add((name: fileName, bytes: _toBytes(file.content)));
+  }
+  return staged;
 }
 
 List<int> _toBytes(Object value) {
@@ -367,50 +560,123 @@ List<int> _toBytes(Object value) {
     return value;
   }
   if (value is String) {
+    final String normalized = value.replaceAll(RegExp(r'\s+'), '');
+    if (normalized.isEmpty) {
+      return const <int>[];
+    }
     try {
-      return base64Decode(value);
-    } catch (_) {
+      return base64Decode(normalized);
+    } on FormatException {
       return utf8.encode(value);
     }
   }
   return utf8.encode('$value');
 }
 
-String _sanitizeCodeExecutionFileName(String rawName) {
+String _extractInputFileBasename(String rawName) {
   final String normalized = rawName.replaceAll('\\', '/').trim();
-  if (normalized.isEmpty) {
-    throw ArgumentError(
-      'Invalid input file name: file name must not be empty.',
-    );
+  if (normalized.isEmpty ||
+      normalized.contains('\u0000') ||
+      normalized.startsWith('/') ||
+      RegExp(r'^[a-zA-Z]:([/\\]|$)').hasMatch(normalized)) {
+    throw ArgumentError('Invalid input file name: "$rawName".');
   }
-  if (normalized.contains('\u0000')) {
-    throw ArgumentError(
-      'Invalid input file name `$rawName`: null bytes are not allowed.',
-    );
-  }
-  if (normalized.startsWith('/')) {
-    throw ArgumentError(
-      'Invalid input file name `$rawName`: absolute paths are not allowed.',
-    );
-  }
-  if (RegExp(r'^[a-zA-Z]:([/\\]|$)').hasMatch(normalized)) {
-    throw ArgumentError(
-      'Invalid input file name `$rawName`: drive-prefixed paths are not allowed.',
-    );
-  }
-
   final List<String> segments = normalized.split('/');
   for (final String segment in segments) {
-    if (segment.isEmpty) {
-      throw ArgumentError(
-        'Invalid input file name `$rawName`: empty path segments are not allowed.',
-      );
-    }
-    if (segment == '.' || segment == '..') {
-      throw ArgumentError(
-        'Invalid input file name `$rawName`: path traversal segments are not allowed.',
-      );
+    if (segment.isEmpty || segment == '.' || segment == '..') {
+      throw ArgumentError('Invalid input file name: "$rawName".');
     }
   }
-  return segments.join('/');
+  return segments.last;
+}
+
+String _normalizePosixPath(String rawPath) {
+  final String trimmed = rawPath.trim().replaceAll('\\', '/');
+  if (trimmed.isEmpty) {
+    return '.';
+  }
+  final bool isAbsolute = trimmed.startsWith('/');
+  final List<String> stack = <String>[];
+  for (final String part in trimmed.split('/')) {
+    if (part.isEmpty || part == '.') {
+      continue;
+    }
+    if (part == '..') {
+      if (stack.isNotEmpty && stack.last != '..') {
+        stack.removeLast();
+      } else if (!isAbsolute) {
+        stack.add('..');
+      }
+      continue;
+    }
+    stack.add(part);
+  }
+  final String joined = stack.join('/');
+  if (isAbsolute) {
+    return '/$joined';
+  }
+  return joined.isEmpty ? '.' : joined;
+}
+
+bool _pathsOverlapOrNested(String first, String second) {
+  if (first == second) {
+    return true;
+  }
+  if (first == '/' || second == '/') {
+    return first.startsWith('/') && second.startsWith('/');
+  }
+  return first.startsWith('$second/') || second.startsWith('$first/');
+}
+
+String _shellQuote(String value) {
+  return "'${value.replaceAll("'", "'\"'\"'")}'";
+}
+
+String _guessMimeType(String fileName) {
+  final int dot = fileName.lastIndexOf('.');
+  if (dot < 0 || dot == fileName.length - 1) {
+    return 'application/octet-stream';
+  }
+  final String ext = fileName.substring(dot + 1).toLowerCase();
+  switch (ext) {
+    case 'txt':
+    case 'log':
+      return 'text/plain';
+    case 'csv':
+      return 'text/csv';
+    case 'tsv':
+      return 'text/tab-separated-values';
+    case 'json':
+      return 'application/json';
+    case 'html':
+    case 'htm':
+      return 'text/html';
+    case 'md':
+    case 'markdown':
+      return 'text/markdown';
+    case 'xml':
+      return 'application/xml';
+    case 'yaml':
+    case 'yml':
+      return 'application/x-yaml';
+    case 'py':
+      return 'text/x-python';
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'gif':
+      return 'image/gif';
+    case 'svg':
+      return 'image/svg+xml';
+    case 'webp':
+      return 'image/webp';
+    case 'pdf':
+      return 'application/pdf';
+    case 'zip':
+      return 'application/zip';
+    default:
+      return 'application/octet-stream';
+  }
 }

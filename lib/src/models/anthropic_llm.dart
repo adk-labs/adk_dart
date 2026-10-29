@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:http/http.dart' as http;
 
@@ -31,6 +32,78 @@ const Set<String> _validAnthropicEfforts = <String>{
   'xhigh',
   'max',
 };
+const Set<String> _truncatingStopReasons = <String>{
+  'max_tokens',
+  'model_context_window_exceeded',
+};
+
+LlmResponse _truncatedToolUseResponse({
+  required String stopReason,
+  required String toolName,
+  required Map<String, Object?> usageMetadata,
+  required int? cacheCreationTokenCount,
+  required String? modelVersion,
+}) {
+  return LlmResponse(
+    content: null,
+    errorCode: 'MAX_TOKENS',
+    errorMessage:
+        "Anthropic stopped with $stopReason while generating arguments for tool "
+        "'$toolName'; the truncated tool call was not executed. Increase "
+        'max_tokens on AnthropicLlm or GenerateContentConfig.max_output_tokens.',
+    finishReason: 'MAX_TOKENS',
+    usageMetadata: usageMetadata,
+    cacheCreationTokenCount: cacheCreationTokenCount,
+    modelVersion: modelVersion,
+  );
+}
+
+Map<String, Object?> _buildToolChoice(
+  GenerateContentConfig? config, {
+  bool forcedToolUseBlocked = false,
+}) {
+  final FunctionCallingConfig? functionCallingConfig =
+      config?.toolConfig?.functionCallingConfig;
+  if (functionCallingConfig == null) {
+    return <String, Object?>{'type': 'auto'};
+  }
+  final FunctionCallingConfigMode mode = functionCallingConfig.mode;
+  final List<String> allowed = functionCallingConfig.allowedFunctionNames;
+  switch (mode) {
+    case FunctionCallingConfigMode.none:
+      if (allowed.isNotEmpty) {
+        throw ArgumentError(
+          'allowed_function_names cannot be set when function_calling_config.mode is NONE.',
+        );
+      }
+      return <String, Object?>{'type': 'none'};
+    case FunctionCallingConfigMode.any:
+      if (forcedToolUseBlocked) {
+        developer.log(
+          'Anthropic does not support forced tool use when thinking is enabled; falling back to tool_choice auto.',
+          name: 'adk_dart.models.anthropic_llm',
+        );
+        return <String, Object?>{'type': 'auto'};
+      }
+      if (allowed.length > 1) {
+        throw ArgumentError(
+          'Anthropic only supports restricting to a single function in ANY mode, got ${allowed.length} functions.',
+        );
+      }
+      if (allowed.length == 1) {
+        return <String, Object?>{'type': 'tool', 'name': allowed.first};
+      }
+      return <String, Object?>{'type': 'any'};
+    case FunctionCallingConfigMode.auto:
+    case FunctionCallingConfigMode.modeUnspecified:
+      if (allowed.isNotEmpty) {
+        throw ArgumentError(
+          'allowed_function_names is only supported when function_calling_config.mode is ANY.',
+        );
+      }
+      return <String, Object?>{'type': 'auto'};
+  }
+}
 
 /// Specialized generation configuration for Anthropic Claude models.
 class AnthropicGenerateContentConfig extends GenerateContentConfig {
@@ -867,6 +940,48 @@ class AnthropicLlm extends BaseLlm {
   static LlmResponse messageToLlmResponse(Map<String, Object?> message) {
     final List<Object?> contentBlocks =
         (message['content'] as List<Object?>?) ?? <Object?>[];
+    final Map<String, Object?> usage =
+        (message['usage'] as Map?)?.cast<String, Object?>() ??
+        <String, Object?>{};
+    final int uncachedInputTokens =
+        _toInt(usage['input_tokens'] ?? usage['inputTokens']) ?? 0;
+    final int outputTokens =
+        _toInt(usage['output_tokens'] ?? usage['outputTokens']) ?? 0;
+    final int? cachedInputTokens = _toInt(
+      usage['cache_read_input_tokens'] ?? usage['cacheReadInputTokens'],
+    );
+    final int? cacheCreationInputTokens = _toInt(
+      usage['cache_creation_input_tokens'] ?? usage['cacheCreationInputTokens'],
+    );
+    final int promptTokenCount =
+        uncachedInputTokens +
+        (cachedInputTokens ?? 0) +
+        (cacheCreationInputTokens ?? 0);
+    final Map<String, Object?> usageMetadata = <String, Object?>{
+      'prompt_token_count': promptTokenCount,
+      'candidates_token_count': outputTokens,
+      'total_token_count': promptTokenCount + outputTokens,
+      'cached_content_token_count': ?cachedInputTokens,
+      'cache_creation_input_tokens': ?cacheCreationInputTokens,
+    };
+    final String? model = message['model'] as String?;
+    final String? stopReason = message['stop_reason'] as String?;
+
+    if (stopReason != null &&
+        _truncatingStopReasons.contains(stopReason) &&
+        contentBlocks.isNotEmpty) {
+      final Object? lastBlock = contentBlocks.last;
+      if (lastBlock is Map && '${lastBlock['type'] ?? ''}' == 'tool_use') {
+        return _truncatedToolUseResponse(
+          stopReason: stopReason,
+          toolName: '${lastBlock['name'] ?? ''}',
+          usageMetadata: usageMetadata,
+          cacheCreationTokenCount: cacheCreationInputTokens,
+          modelVersion: model,
+        );
+      }
+    }
+
     final List<Part> parts = <Part>[];
     for (final Object? block in contentBlocks) {
       if (block is Map) {
@@ -878,26 +993,11 @@ class AnthropicLlm extends BaseLlm {
       }
     }
 
-    final Map<String, Object?> usage =
-        (message['usage'] as Map?)?.cast<String, Object?>() ??
-        <String, Object?>{};
-    final int inputTokens = (usage['input_tokens'] as num?)?.toInt() ?? 0;
-    final int outputTokens = (usage['output_tokens'] as num?)?.toInt() ?? 0;
-    final int? cacheCreationInputTokens = _toInt(
-      usage['cache_creation_input_tokens'] ?? usage['cacheCreationInputTokens'],
-    );
-
-    final String? model = message['model'] as String?;
-
     return LlmResponse(
       content: Content(role: 'model', parts: parts),
-      usageMetadata: <String, Object?>{
-        'prompt_token_count': inputTokens,
-        'candidates_token_count': outputTokens,
-        'total_token_count': inputTokens + outputTokens,
-      },
+      usageMetadata: usageMetadata,
       cacheCreationTokenCount: cacheCreationInputTokens,
-      finishReason: toGoogleFinishReason(message['stop_reason'] as String?),
+      finishReason: toGoogleFinishReason(stopReason),
       modelVersion: model,
     );
   }
@@ -1024,12 +1124,15 @@ class AnthropicLlm extends BaseLlm {
     final String? effort = _extractEffort(request.config);
     final bool excludeSampling = thinkingEnabled || effort != null;
 
-    Map<String, Object?>? toolChoice = request.toolsDict.isNotEmpty
-        ? <String, Object?>{'type': 'auto'}
-        : null;
+    Map<String, Object?>? toolChoice;
     if (outputSchemaTool != null) {
       tools = <Map<String, Object?>>[outputSchemaTool.param];
       toolChoice = outputSchemaTool.choice(thinkingEnabled: thinkingEnabled);
+    } else if (tools.isNotEmpty || request.toolsDict.isNotEmpty) {
+      toolChoice = _buildToolChoice(
+        request.config,
+        forcedToolUseBlocked: thinking != null,
+      );
     }
 
     return <String, Object?>{
@@ -1139,10 +1242,12 @@ class AnthropicLlm extends BaseLlm {
         <int, _AnthropicThinkingAccumulator>{};
     final Map<int, _AnthropicRedactedThinkingAccumulator>
     redactedThinkingBlocks = <int, _AnthropicRedactedThinkingAccumulator>{};
-    int inputTokens = 0;
+    int uncachedInputTokens = 0;
     int outputTokens = 0;
-    int cacheCreationInputTokens = 0;
+    int? cachedInputTokens;
+    int? cacheCreationTokens;
     String? finishReason;
+    String? stopReasonRaw;
     String? modelVersion;
 
     await for (final Map<String, Object?> event in rawStream) {
@@ -1151,14 +1256,19 @@ class AnthropicLlm extends BaseLlm {
         case 'message_start':
           final Map<String, Object?> message = _mapOf(event['message']);
           final Map<String, Object?> usage = _mapOf(message['usage']);
-          inputTokens = _intValue(usage['input_tokens']);
-          outputTokens = _intValue(usage['output_tokens']);
-          cacheCreationInputTokens =
-              _toInt(
-                usage['cache_creation_input_tokens'] ??
-                    usage['cacheCreationInputTokens'],
-              ) ??
-              0;
+          uncachedInputTokens = _intValue(
+            usage['input_tokens'] ?? usage['inputTokens'],
+          );
+          outputTokens = _intValue(
+            usage['output_tokens'] ?? usage['outputTokens'],
+          );
+          cachedInputTokens = _toInt(
+            usage['cache_read_input_tokens'] ?? usage['cacheReadInputTokens'],
+          );
+          cacheCreationTokens = _toInt(
+            usage['cache_creation_input_tokens'] ??
+                usage['cacheCreationInputTokens'],
+          );
           modelVersion = message['model'] as String?;
           break;
         case 'content_block_start':
@@ -1255,19 +1365,34 @@ class AnthropicLlm extends BaseLlm {
           final Map<String, Object?> delta = _mapOf(event['delta']);
           final String? reason = delta['stop_reason'] as String?;
           if (reason != null) {
+            stopReasonRaw = reason;
             finishReason = toGoogleFinishReason(reason);
           }
           final Map<String, Object?> usage = _mapOf(event['usage']);
-          final int deltaOutput = _intValue(usage['output_tokens']);
-          if (deltaOutput > 0) {
+          final int? deltaInput = _toInt(
+            usage['input_tokens'] ?? usage['inputTokens'],
+          );
+          if (deltaInput != null) {
+            uncachedInputTokens = deltaInput;
+          }
+          final int? deltaOutput = _toInt(
+            usage['output_tokens'] ?? usage['outputTokens'],
+          );
+          if (deltaOutput != null) {
             outputTokens = deltaOutput;
+          }
+          final int? deltaCached = _toInt(
+            usage['cache_read_input_tokens'] ?? usage['cacheReadInputTokens'],
+          );
+          if (deltaCached != null) {
+            cachedInputTokens = deltaCached;
           }
           final int? deltaCacheCreation = _toInt(
             usage['cache_creation_input_tokens'] ??
                 usage['cacheCreationInputTokens'],
           );
           if (deltaCacheCreation != null) {
-            cacheCreationInputTokens = deltaCacheCreation;
+            cacheCreationTokens = deltaCacheCreation;
           }
           break;
         case 'message_stop':
@@ -1277,12 +1402,41 @@ class AnthropicLlm extends BaseLlm {
       }
     }
 
+    final int promptTokens =
+        uncachedInputTokens +
+        (cachedInputTokens ?? 0) +
+        (cacheCreationTokens ?? 0);
+    final Map<String, Object?> usageMetadata = <String, Object?>{
+      'prompt_token_count': promptTokens,
+      'candidates_token_count': outputTokens,
+      'total_token_count': promptTokens + outputTokens,
+      'cached_content_token_count': ?cachedInputTokens,
+      'cache_creation_input_tokens': ?cacheCreationTokens,
+    };
+
     final List<int> sortedIndices = <int>{
       ...textBlocks.keys,
       ...toolUseBlocks.keys,
       ...thinkingBlocks.keys,
       ...redactedThinkingBlocks.keys,
     }.toList()..sort();
+
+    if (stopReasonRaw != null &&
+        _truncatingStopReasons.contains(stopReasonRaw) &&
+        sortedIndices.isNotEmpty &&
+        toolUseBlocks.containsKey(sortedIndices.last)) {
+      final LlmResponse truncated = _truncatedToolUseResponse(
+        stopReason: stopReasonRaw,
+        toolName: toolUseBlocks[sortedIndices.last]!.name,
+        usageMetadata: usageMetadata,
+        cacheCreationTokenCount: cacheCreationTokens,
+        modelVersion: modelVersion ?? request.model,
+      );
+      truncated.partial = false;
+      truncated.turnComplete = true;
+      yield truncated;
+      return;
+    }
 
     final List<Part> parts = <Part>[];
     for (final int index in sortedIndices) {
@@ -1324,12 +1478,8 @@ class AnthropicLlm extends BaseLlm {
     LlmResponse finalResponse = LlmResponse(
       modelVersion: modelVersion ?? request.model,
       content: Content(role: 'model', parts: parts),
-      usageMetadata: <String, Object?>{
-        'prompt_token_count': inputTokens,
-        'candidates_token_count': outputTokens,
-        'total_token_count': inputTokens + outputTokens,
-      },
-      cacheCreationTokenCount: cacheCreationInputTokens,
+      usageMetadata: usageMetadata,
+      cacheCreationTokenCount: cacheCreationTokens,
       finishReason: finishReason,
       partial: false,
       turnComplete: true,

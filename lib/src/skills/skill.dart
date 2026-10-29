@@ -1333,11 +1333,15 @@ Future<Skill> loadSkillFromGcsDir(
   SkillGcsStore? storageStore,
 }) async {
   final SkillGcsStore store = storageStore ?? LiveSkillGcsStore();
-  final String basePrefix = _normalizeGcsPrefix(skillsBasePath);
-  final String normalizedSkillId = skillId.trim().replaceAll(
+  final String normalizedSkillId = skillId.replaceAll(
     RegExp(r'^/+|/+$'),
     '',
   );
+  for (final String segment in normalizedSkillId.split('/')) {
+    _validateGcsPathSegment(segment, 'skill_id');
+  }
+  skillId = normalizedSkillId;
+  final String basePrefix = _normalizeGcsPrefix(skillsBasePath);
   final String skillDirPrefix = '$basePrefix$normalizedSkillId/';
   final String? manifestBlobName = await _findSkillManifestBlob(
     bucketName,
@@ -1495,20 +1499,30 @@ _ParsedSkillMd _parseSkillMd(Directory skillDir) {
   }
 
   final String content = skillMd.readAsStringSync();
-  if (!content.startsWith('---')) {
-    throw FormatException('SKILL.md must start with YAML frontmatter (---)');
+  return _parseSkillMdContent(content);
+}
+
+final RegExp _skillMdFrontmatterPattern = RegExp(
+  r'^---[ \t]*\r?\n(.*?)^---[ \t]*\r?$(.*)',
+  multiLine: true,
+  dotAll: true,
+);
+
+void _validateGcsPathSegment(String value, String fieldName) {
+  if (value.isEmpty) {
+    throw ArgumentError('$fieldName must not be empty.');
   }
-
-  final int closingIndex = content.indexOf('---', 3);
-  if (closingIndex < 0) {
-    throw FormatException('SKILL.md frontmatter not properly closed with ---');
+  if (value.contains('\x00')) {
+    throw ArgumentError('$fieldName must not contain null bytes.');
   }
-
-  final String frontmatterText = content.substring(3, closingIndex);
-  final String body = content.substring(closingIndex + 3).trim();
-
-  final Map<String, Object?> parsed = _parseYamlMapping(frontmatterText);
-  return _ParsedSkillMd(frontmatter: parsed, body: body);
+  if (value.contains(r'\')) {
+    throw ArgumentError("$fieldName '$value' must not contain backslashes.");
+  }
+  if (value == '.' || value == '..') {
+    throw ArgumentError(
+      "$fieldName '$value' must not contain traversal segments.",
+    );
+  }
 }
 
 _ParsedSkillMd _parseSkillMdContent(String content) {
@@ -1516,13 +1530,13 @@ _ParsedSkillMd _parseSkillMdContent(String content) {
     throw FormatException('SKILL.md must start with YAML frontmatter (---)');
   }
 
-  final int closingIndex = content.indexOf('---', 3);
-  if (closingIndex < 0) {
+  final Match? match = _skillMdFrontmatterPattern.matchAsPrefix(content);
+  if (match == null) {
     throw FormatException('SKILL.md frontmatter not properly closed with ---');
   }
 
-  final String frontmatterText = content.substring(3, closingIndex);
-  final String body = content.substring(closingIndex + 3).trim();
+  final String frontmatterText = match.group(1) ?? '';
+  final String body = (match.group(2) ?? '').trim();
 
   final Map<String, Object?> parsed = _parseYamlMapping(frontmatterText);
   return _ParsedSkillMd(frontmatter: parsed, body: body);

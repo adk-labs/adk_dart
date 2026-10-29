@@ -5,9 +5,82 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../agents/invocation_context.dart';
+import '../events/event.dart';
 import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
+import '../types/content.dart';
 import 'base_plugin.dart';
+
+/// Returns whether [invocationContext] ended in a paused state awaiting
+/// long-running tool results, tool confirmation, or authentication.
+bool isPausedInvocation(InvocationContext invocationContext) {
+  final Set<String> openInterrupts = <String>{};
+  final Map<String, String> childToOriginalId = <String, String>{};
+  final Map<String, Set<String>> originalToChildIds = <String, Set<String>>{};
+
+  for (final Event event in invocationContext.session.events) {
+    if (event.invocationId != invocationContext.invocationId) {
+      continue;
+    }
+
+    if (event.longRunningToolIds != null) {
+      openInterrupts.addAll(event.longRunningToolIds!);
+    }
+    openInterrupts.addAll(event.actions.requestedToolConfirmations.keys);
+    openInterrupts.addAll(event.actions.requestedAuthConfigs.keys);
+
+    for (final FunctionCall call in event.getFunctionCalls()) {
+      final String? callId = call.id;
+      if (callId == null || callId.isEmpty) {
+        continue;
+      }
+      if (event.longRunningToolIds?.contains(callId) == true ||
+          event.actions.requestedToolConfirmations.containsKey(callId) ||
+          event.actions.requestedAuthConfigs.containsKey(callId)) {
+        openInterrupts.add(callId);
+      }
+      final Object? originalCall = call.args['originalFunctionCall'];
+      if (originalCall is Map && originalCall['id'] is String) {
+        final String origId = originalCall['id'] as String;
+        childToOriginalId[callId] = origId;
+        originalToChildIds.putIfAbsent(origId, () => <String>{}).add(callId);
+      }
+      final Object? authCallId =
+          call.args['function_call_id'] ?? call.args['functionCallId'];
+      if (authCallId is String && authCallId.isNotEmpty) {
+        childToOriginalId[callId] = authCallId;
+        originalToChildIds
+            .putIfAbsent(authCallId, () => <String>{})
+            .add(callId);
+      }
+    }
+
+    for (final FunctionResponse response in event.getFunctionResponses()) {
+      final String? id = response.id;
+      if (id == null || id.isEmpty) {
+        continue;
+      }
+      final bool isReflectAndRetryFailure =
+          response.response['response_type'] == reflectAndRetryResponseType;
+      if (!isReflectAndRetryFailure &&
+          (event.actions.requestedToolConfirmations.containsKey(id) ||
+              event.actions.requestedAuthConfigs.containsKey(id))) {
+        continue;
+      }
+      openInterrupts.remove(id);
+      final String? origId = childToOriginalId[id];
+      if (origId != null) {
+        openInterrupts.remove(origId);
+      }
+      final Set<String>? children = originalToChildIds[id];
+      if (children != null) {
+        openInterrupts.removeAll(children);
+      }
+    }
+  }
+
+  return openInterrupts.isNotEmpty;
+}
 
 /// Response type emitted when this plugin handles a tool failure.
 const String reflectAndRetryResponseType =
@@ -113,6 +186,12 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
     if (result['response_type'] == reflectAndRetryResponseType) {
       return null;
     }
+    final String? callId = toolContext.functionCallId;
+    if (callId != null &&
+        (toolContext.actions.requestedToolConfirmations.containsKey(callId) ||
+            toolContext.actions.requestedAuthConfigs.containsKey(callId))) {
+      return null;
+    }
     final bool wasDeclined = await _synchronized<bool>(() {
       if (_declinedCalls[toolContext] == true) {
         _declinedCalls[toolContext] = null;
@@ -176,6 +255,9 @@ class ReflectAndRetryToolPlugin extends BasePlugin {
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
   }) async {
+    if (isPausedInvocation(invocationContext)) {
+      return;
+    }
     await _forgetInvocation(invocationContext.invocationId);
   }
 

@@ -1103,18 +1103,24 @@ class _ParsedSkillMd {
   final String body;
 }
 
+final RegExp _skillMdFrontmatterPattern = RegExp(
+  r'^---[ \t]*\r?\n(.*?)^---[ \t]*\r?$(.*)',
+  multiLine: true,
+  dotAll: true,
+);
+
 _ParsedSkillMd _parseSkillMdContent(String content) {
   if (!content.startsWith('---')) {
     throw FormatException('SKILL.md must start with YAML frontmatter (---)');
   }
 
-  final int closingIndex = content.indexOf('---', 3);
-  if (closingIndex < 0) {
+  final Match? match = _skillMdFrontmatterPattern.matchAsPrefix(content);
+  if (match == null) {
     throw FormatException('SKILL.md frontmatter not properly closed with ---');
   }
 
-  final String frontmatterText = content.substring(3, closingIndex);
-  final String body = content.substring(closingIndex + 3).trim();
+  final String frontmatterText = match.group(1) ?? '';
+  final String body = (match.group(2) ?? '').trim();
 
   final Map<String, Object?> parsed = _parseYamlMapping(frontmatterText);
   return _ParsedSkillMd(frontmatter: parsed, body: body);

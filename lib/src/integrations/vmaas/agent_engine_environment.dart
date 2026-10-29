@@ -155,17 +155,87 @@ class ShellBackedAgentEngineSandboxClient
     required String path,
   }) async {
     final String quoted = _shellQuote(path);
-    final EnvironmentExecutionResult res = await execute(
+    final String sizeCommand =
+        'if [ ! -e $quoted ]; then exit 66; fi; '
+        'size=\$(stat -L -c %s $quoted) || exit \$?; '
+        'if [ "\$size" -gt ${AgentEngineEnvironment.maxReadFileBytes} ]; then '
+        'echo "\$size"; exit 67; fi; '
+        'echo "\$size"';
+    final EnvironmentExecutionResult sizeResult = await execute(
       sandboxResourceName: sandboxResourceName,
-      command: 'base64 < $quoted',
+      command: sizeCommand,
     );
-    if (res.exitCode != 0) {
+    if (sizeResult.exitCode == 66) {
+      throw StateError('File not found: $path');
+    }
+    if (sizeResult.exitCode == 67) {
       throw StateError(
-        "Failed to read '$path' from Agent Engine sandbox: ${res.stderr}",
+        'File "$path" (${sizeResult.stdout.trim()} bytes) exceeds the 1 MiB '
+        'read limit (${AgentEngineEnvironment.maxReadFileBytes} bytes).',
       );
     }
-    final String cleaned = res.stdout.replaceAll(RegExp(r'\s+'), '');
-    return Uint8List.fromList(base64Decode(cleaned));
+    if (sizeResult.exitCode != 0) {
+      throw StateError(
+        "Failed to read '$path' from Agent Engine sandbox: ${sizeResult.stderr}",
+      );
+    }
+    final int? totalSize = int.tryParse(sizeResult.stdout.trim());
+    if (totalSize == null) {
+      final EnvironmentExecutionResult res = await execute(
+        sandboxResourceName: sandboxResourceName,
+        command: 'base64 < $quoted',
+      );
+      if (res.exitCode != 0) {
+        throw StateError(
+          "Failed to read '$path' from Agent Engine sandbox: ${res.stderr}",
+        );
+      }
+      final String cleaned = res.stdout.replaceAll(RegExp(r'\s+'), '');
+      final Uint8List decoded = Uint8List.fromList(base64Decode(cleaned));
+      if (decoded.length > AgentEngineEnvironment.maxReadFileBytes) {
+        throw StateError(
+          'File "$path" (${decoded.length} bytes) exceeds the 1 MiB '
+          'read limit (${AgentEngineEnvironment.maxReadFileBytes} bytes).',
+        );
+      }
+      return decoded;
+    }
+    if (totalSize == 0) {
+      return Uint8List(0);
+    }
+    if (totalSize > AgentEngineEnvironment.maxReadFileBytes) {
+      throw StateError(
+        'File "$path" ($totalSize bytes) exceeds the 1 MiB '
+        'read limit (${AgentEngineEnvironment.maxReadFileBytes} bytes).',
+      );
+    }
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    final int sliceSize = AgentEngineEnvironment.readSliceBytes;
+    final int sliceCount = (totalSize + sliceSize - 1) ~/ sliceSize;
+    for (int index = 0; index < sliceCount; index += 1) {
+      final EnvironmentExecutionResult sliceResult = await execute(
+        sandboxResourceName: sandboxResourceName,
+        command:
+            'dd if=$quoted bs=$sliceSize skip=$index count=1 status=none | base64',
+      );
+      if (sliceResult.exitCode != 0) {
+        throw StateError(
+          "Failed to read '$path' from Agent Engine sandbox: ${sliceResult.stderr}",
+        );
+      }
+      final String cleaned = sliceResult.stdout.replaceAll(RegExp(r'\s+'), '');
+      if (cleaned.isNotEmpty) {
+        builder.add(base64Decode(cleaned));
+      }
+    }
+    final Uint8List collected = builder.takeBytes();
+    if (collected.length != totalSize) {
+      throw StateError(
+        'File "$path" changed while reading '
+        '(expected $totalSize bytes, got ${collected.length} bytes).',
+      );
+    }
+    return collected;
   }
 
   @override
@@ -174,20 +244,83 @@ class ShellBackedAgentEngineSandboxClient
     required String path,
     required List<int> bytes,
   }) async {
+    if (bytes.length > AgentEngineEnvironment.maxWriteFileBytes) {
+      throw ArgumentError(
+        'Content size (${bytes.length} bytes) exceeds the 64 MiB write limit '
+        '(${AgentEngineEnvironment.maxWriteFileBytes} bytes).',
+      );
+    }
     final String parentDir = _parentDirectory(path);
     final String quotedPath = _shellQuote(path);
     final String quotedDir = _shellQuote(parentDir);
     final String encoded = base64Encode(bytes);
-    final String command =
-        'mkdir -p $quotedDir && printf %s ${_shellQuote(encoded)} | base64 -d > $quotedPath';
-    final EnvironmentExecutionResult res = await execute(
-      sandboxResourceName: sandboxResourceName,
-      command: command,
-    );
-    if (res.exitCode != 0) {
-      throw StateError(
-        "Failed to write '$path' in Agent Engine sandbox: ${res.stderr}",
+    if (encoded.length <= AgentEngineEnvironment.writeChunkBase64Chars) {
+      final String command =
+          'mkdir -p $quotedDir && printf %s ${_shellQuote(encoded)} | base64 -d > $quotedPath';
+      final EnvironmentExecutionResult res = await execute(
+        sandboxResourceName: sandboxResourceName,
+        command: command,
       );
+      if (res.exitCode != 0) {
+        throw StateError(
+          "Failed to write '$path' in Agent Engine sandbox: ${res.stderr}",
+        );
+      }
+      return;
+    }
+
+    final String tempTemplate =
+        '${parentDir == '/' ? '' : parentDir}/.adk_stage.XXXXXX';
+    final EnvironmentExecutionResult mktempRes = await execute(
+      sandboxResourceName: sandboxResourceName,
+      command: 'mkdir -p $quotedDir && mktemp ${_shellQuote(tempTemplate)}',
+    );
+    if (mktempRes.exitCode != 0 || mktempRes.stdout.trim().isEmpty) {
+      throw StateError(
+        "Failed to create staging file for '$path' in Agent Engine sandbox: ${mktempRes.stderr}",
+      );
+    }
+    final String tempPath = mktempRes.stdout.trim();
+    final String tempNewPath = '$tempPath.new';
+    final String quotedTemp = _shellQuote(tempPath);
+    final String quotedTempNew = _shellQuote(tempNewPath);
+    try {
+      const int chunkSize = AgentEngineEnvironment.writeChunkBase64Chars;
+      for (int offset = 0; offset < encoded.length; offset += chunkSize) {
+        final int end = offset + chunkSize < encoded.length
+            ? offset + chunkSize
+            : encoded.length;
+        final String chunk = encoded.substring(offset, end);
+        final EnvironmentExecutionResult chunkRes = await execute(
+          sandboxResourceName: sandboxResourceName,
+          command: 'printf %s ${_shellQuote(chunk)} >> $quotedTemp',
+        );
+        if (chunkRes.exitCode != 0) {
+          throw StateError(
+            "Failed to stage chunk for '$path' in Agent Engine sandbox: ${chunkRes.stderr}",
+          );
+        }
+      }
+      final String finalizeCommand =
+          'base64 -d < $quotedTemp > $quotedTempNew && '
+          'if [ -e $quotedPath ]; then chmod --reference=$quotedPath $quotedTempNew; fi && '
+          'mv -fT $quotedTempNew $quotedPath && '
+          'rm -f $quotedTemp';
+      final EnvironmentExecutionResult finalizeRes = await execute(
+        sandboxResourceName: sandboxResourceName,
+        command: finalizeCommand,
+      );
+      if (finalizeRes.exitCode != 0) {
+        throw StateError(
+          "Failed to finalize '$path' in Agent Engine sandbox: ${finalizeRes.stderr}",
+        );
+      }
+    } catch (_) {
+      await execute(
+        sandboxResourceName: sandboxResourceName,
+        command: 'rm -f $quotedTemp $quotedTempNew',
+      );
+      rethrow;
     }
   }
 
@@ -250,6 +383,21 @@ class AgentEngineEnvironment extends BaseEnvironment {
 
   /// Default maximum number of retries when a sandbox is temporarily unreachable.
   static const int defaultMaxUnreachableRetries = 5;
+
+  /// Maximum execution timeout allowed by the Agent Engine sandbox service (570s).
+  static const Duration maxExecutionTimeout = Duration(seconds: 570);
+
+  /// Maximum file size allowed for [readFile] (1 MiB).
+  static const int maxReadFileBytes = 1024 * 1024;
+
+  /// Slice size used when reading files via `dd` (1 MiB).
+  static const int readSliceBytes = 1024 * 1024;
+
+  /// Maximum file size allowed for [writeFile] / [writeBytes] (64 MiB).
+  static const int maxWriteFileBytes = 64 * 1024 * 1024;
+
+  /// Base64 chunk size used when staging large file writes (96 KiB).
+  static const int writeChunkBase64Chars = 96 * 1024;
 
   /// Resource name of the parent Vertex AI Agent Engine (`reasoningEngines/*`).
   final String? agentEngineResourceName;
@@ -318,6 +466,9 @@ class AgentEngineEnvironment extends BaseEnvironment {
     Map<String, String>? envVars,
   }) async {
     await initialize();
+    final Duration effectiveTimeout = timeout > maxExecutionTimeout
+        ? maxExecutionTimeout
+        : timeout;
     final String effectiveWorkingDir = workingDir ?? this.workingDir;
     final String wrappedCommand = _wrapCommandWithEnvAndWorkingDir(
       command: command,
@@ -330,7 +481,7 @@ class AgentEngineEnvironment extends BaseEnvironment {
         sandboxName: _activeSandboxResourceName!,
         command: wrappedCommand,
         workingDir: effectiveWorkingDir,
-        timeout: timeout,
+        timeout: effectiveTimeout,
         envVars: envVars,
       );
     }
@@ -401,6 +552,12 @@ class AgentEngineEnvironment extends BaseEnvironment {
     if (bytes == null) {
       throw StateError("File not found in AgentEngineEnvironment: '$resolved'");
     }
+    if (bytes.length > maxReadFileBytes) {
+      throw StateError(
+        'File "$resolved" (${bytes.length} bytes) exceeds the 1 MiB '
+        'read limit ($maxReadFileBytes bytes).',
+      );
+    }
     return Uint8List.fromList(bytes);
   }
 
@@ -411,6 +568,12 @@ class AgentEngineEnvironment extends BaseEnvironment {
 
   /// Writes raw [bytes] to [path] inside the Agent Engine sandbox.
   Future<void> writeBytes(Object path, List<int> bytes) async {
+    if (bytes.length > maxWriteFileBytes) {
+      throw ArgumentError(
+        'Content size (${bytes.length} bytes) exceeds the 64 MiB write limit '
+        '($maxWriteFileBytes bytes).',
+      );
+    }
     await initialize();
     final String resolved = _resolvePath('$path');
     if (_client != null) {

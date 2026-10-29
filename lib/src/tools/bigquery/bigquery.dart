@@ -2,6 +2,7 @@
 library;
 
 export 'bigquery_credentials.dart';
+export 'bigquery_skill.dart';
 export 'bigquery_toolset.dart';
 export 'client.dart';
 export 'config.dart';

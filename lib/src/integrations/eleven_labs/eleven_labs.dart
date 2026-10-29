@@ -790,42 +790,46 @@ class ElevenLabsSTT extends LiveIngress {
 }
 
 final RegExp _sentenceEndPattern = RegExp(
-  r'[.!?\u2026]["\x27\u201d\u2019)\]]*\s+|\n+',
+  r'[.!?\u2026]["\x27\u201d\u2019)\]]*\s+'
+  r'|[\u3002\uff01\uff1f]+[\u300d\u300f\uff09\u201d\u2019]*\s*'
+  r'(?=[^\s\u3002\uff01\uff1f\u300d\u300f\uff09\u201d\u2019])'
+  r'|\n+',
 );
+
+(String?, String) _takeSentence(String buffer, int maxChars) {
+  final RegExpMatch? match = _sentenceEndPattern.firstMatch(buffer);
+  if (match != null) {
+    return (buffer.substring(0, match.end), buffer.substring(match.end));
+  }
+  if (maxChars > 0 && buffer.length >= maxChars) {
+    final String head = buffer.substring(0, maxChars);
+    final int cut = head.lastIndexOf(' ');
+    if (cut > 0) {
+      return (buffer.substring(0, cut + 1), buffer.substring(cut + 1));
+    }
+    return (head, buffer.substring(maxChars));
+  }
+  return (null, buffer);
+}
 
 /// Splits a stream of [text] deltas into sentence-sized pieces suitable for
 /// low-latency text-to-speech synthesis.
-Stream<String> splitElevenLabsTtsSentences(Stream<String> text) async* {
+Stream<String> splitElevenLabsTtsSentences(
+  Stream<String> text, {
+  int maxChars = maxElevenLabsSentenceChars,
+}) async* {
   String buf = '';
   await for (final String delta in text) {
     buf += delta;
     while (true) {
-      final RegExpMatch? match = _sentenceEndPattern.firstMatch(buf);
-      if (match != null) {
-        final String piece = buf.substring(0, match.end);
-        buf = buf.substring(match.end);
-        if (piece.trim().isNotEmpty) {
-          yield piece;
-        }
-        continue;
+      final (String? piece, String remainder) = _takeSentence(buf, maxChars);
+      if (piece == null) {
+        break;
       }
-      if (buf.length >= maxElevenLabsSentenceChars) {
-        final String head = buf.substring(0, maxElevenLabsSentenceChars);
-        final int cut = head.lastIndexOf(' ');
-        String piece;
-        if (cut > 0) {
-          piece = buf.substring(0, cut + 1);
-          buf = buf.substring(cut + 1);
-        } else {
-          piece = head;
-          buf = buf.substring(maxElevenLabsSentenceChars);
-        }
-        if (piece.trim().isNotEmpty) {
-          yield piece;
-        }
-        continue;
+      buf = remainder;
+      if (piece.trim().isNotEmpty) {
+        yield piece;
       }
-      break;
     }
   }
   if (buf.trim().isNotEmpty) {

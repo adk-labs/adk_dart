@@ -61,6 +61,40 @@ class SpanContext {
   String get spanIdHex => spanId.toRadixString(16).padLeft(16, '0');
 }
 
+/// OpenTelemetry span kind classification.
+enum SpanKind {
+  /// Default internal operation.
+  internal('INTERNAL'),
+
+  /// Server-side request handling.
+  server('SERVER'),
+
+  /// Outgoing client request.
+  client('CLIENT'),
+
+  /// Asynchronous message producer.
+  producer('PRODUCER'),
+
+  /// Asynchronous message consumer.
+  consumer('CONSUMER');
+
+  const SpanKind(this.wireName);
+
+  /// Uppercase OpenTelemetry wire representation.
+  final String wireName;
+
+  /// Resolves a [SpanKind] from its [wireName], defaulting to [SpanKind.internal].
+  static SpanKind fromWireName(String? value) {
+    final String normalized = (value ?? '').trim().toUpperCase();
+    for (final SpanKind kind in SpanKind.values) {
+      if (kind.wireName == normalized) {
+        return kind;
+      }
+    }
+    return SpanKind.internal;
+  }
+}
+
 /// Readable span model used for export and retrieval.
 class ReadableSpan {
   /// Creates a readable span.
@@ -71,6 +105,7 @@ class ReadableSpan {
     Map<String, Object?>? attributes,
     this.startTimeUnixNano,
     this.endTimeUnixNano,
+    this.kind = SpanKind.internal,
   }) : attributes = attributes ?? <String, Object?>{};
 
   /// Span name.
@@ -90,6 +125,9 @@ class ReadableSpan {
 
   /// Span end time in Unix nanoseconds.
   final int? endTimeUnixNano;
+
+  /// OpenTelemetry span kind.
+  final SpanKind kind;
 }
 
 /// Export result status.
@@ -141,9 +179,30 @@ class SqliteSpanExporter implements SpanExporter {
         session_id TEXT,
         invocation_id TEXT,
         event_id TEXT,
-        attributes_json TEXT NOT NULL
+        attributes_json TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'INTERNAL'
       )
     ''');
+    final sqlite.ResultSet versionRows = _database.select(
+      'PRAGMA user_version;',
+    );
+    final int userVersion = versionRows.isEmpty
+        ? 0
+        : (versionRows.first.values.first as int? ?? 0);
+    if (userVersion < 1) {
+      final sqlite.ResultSet columns = _database.select(
+        'PRAGMA table_info(spans);',
+      );
+      final bool hasKindColumn = columns.any(
+        (sqlite.Row row) => '${row['name'] ?? ''}' == 'kind',
+      );
+      if (!hasKindColumn) {
+        _database.execute(
+          "ALTER TABLE spans ADD COLUMN kind TEXT NOT NULL DEFAULT 'INTERNAL'",
+        );
+      }
+      _database.execute('PRAGMA user_version = 1');
+    }
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_spans_session_id ON spans(session_id)',
     );
@@ -196,9 +255,10 @@ class SqliteSpanExporter implements SpanExporter {
           session_id,
           invocation_id,
           event_id,
-          attributes_json
+          attributes_json,
+          kind
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(span_id) DO UPDATE SET
           trace_id = excluded.trace_id,
           parent_span_id = excluded.parent_span_id,
@@ -208,7 +268,8 @@ class SqliteSpanExporter implements SpanExporter {
           session_id = excluded.session_id,
           invocation_id = excluded.invocation_id,
           event_id = excluded.event_id,
-          attributes_json = excluded.attributes_json
+          attributes_json = excluded.attributes_json,
+          kind = excluded.kind
       ''');
       for (final ReadableSpan span in spans) {
         final Map<String, Object?> attributes = Map<String, Object?>.from(
@@ -231,6 +292,7 @@ class SqliteSpanExporter implements SpanExporter {
           invocationId == null ? null : '$invocationId',
           eventId == null ? null : '$eventId',
           _serializeAttributes(attributes),
+          span.kind.wireName,
         ]);
       }
       statement.close();
@@ -281,6 +343,7 @@ class SqliteSpanExporter implements SpanExporter {
       attributes: _deserializeAttributes(row['attributes_json']),
       startTimeUnixNano: row['start_time_unix_nano'] as int?,
       endTimeUnixNano: row['end_time_unix_nano'] as int?,
+      kind: SpanKind.fromWireName(row['kind'] as String?),
     );
   }
 
@@ -295,7 +358,9 @@ class SqliteSpanExporter implements SpanExporter {
         name,
         start_time_unix_nano,
         end_time_unix_nano,
-        attributes_json
+        session_id,
+        attributes_json,
+        kind
       FROM spans
       WHERE trace_id IN (
         SELECT DISTINCT trace_id FROM spans WHERE session_id = ?

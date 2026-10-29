@@ -15,9 +15,17 @@ const String genAiClientTokenUsageMetric = 'gen_ai.client.token.usage';
 const String genAiAgentInvocationDurationMetric =
     'gen_ai.agent.invocation.duration';
 
+/// Metric name for workflow invocation durations.
+const String genAiWorkflowInvocationDurationMetric =
+    'gen_ai.workflow.invocation.duration';
+
 /// Metric name for tool execution durations.
 const String genAiToolExecutionDurationMetric =
     'gen_ai.tool.execution.duration';
+
+/// Metric name for client operation durations.
+const String genAiClientOperationDurationMetric =
+    'gen_ai.client.operation.duration';
 
 /// Metric name for agent request sizes.
 const String genAiAgentRequestSizeMetric = 'gen_ai.agent.request.size';
@@ -31,6 +39,74 @@ const String genAiToolRequestSizeMetric = 'gen_ai.tool.request.size';
 /// Metric name for tool response sizes.
 const String genAiToolResponseSizeMetric = 'gen_ai.tool.response.size';
 
+/// Explicit histogram bucket boundaries for agent invocation durations (s).
+const List<double> agentDurationBucketBounds = <double>[
+  0.1,
+  0.2,
+  0.4,
+  0.8,
+  1.6,
+  3.2,
+  6.4,
+  12.8,
+  25.6,
+  51.2,
+  102.4,
+  204.8,
+  409.6,
+];
+
+/// Explicit histogram bucket boundaries for workflow invocation durations (s).
+const List<int> workflowDurationBucketBounds = <int>[
+  1,
+  5,
+  10,
+  30,
+  60,
+  120,
+  300,
+  600,
+  1800,
+  3600,
+  7200,
+];
+
+/// Explicit histogram bucket boundaries for tool and client operation durations (s).
+const List<double> operationDurationBucketBounds = <double>[
+  0.01,
+  0.02,
+  0.04,
+  0.08,
+  0.16,
+  0.32,
+  0.64,
+  1.28,
+  2.56,
+  5.12,
+  10.24,
+  20.48,
+  40.96,
+  81.92,
+];
+
+/// Explicit histogram bucket boundaries for token usage counts.
+const List<int> tokenUsageBucketBounds = <int>[
+  1,
+  4,
+  16,
+  64,
+  256,
+  1024,
+  4096,
+  16384,
+  65536,
+  262144,
+  1048576,
+  4194304,
+  16777216,
+  67108864,
+];
+
 /// One ADK metric sample.
 class AdkMetricRecord {
   /// Creates a metric sample with [name], [value], [unit], and [attributes].
@@ -40,9 +116,14 @@ class AdkMetricRecord {
     required this.unit,
     required this.description,
     Map<String, Object?>? attributes,
+    List<num>? explicitBucketBoundariesAdvisory,
   }) : attributes = Map<String, Object?>.unmodifiable(
          attributes ?? const <String, Object?>{},
-       );
+       ),
+       explicitBucketBoundariesAdvisory =
+           explicitBucketBoundariesAdvisory == null
+           ? null
+           : List<num>.unmodifiable(explicitBucketBoundariesAdvisory);
 
   /// Canonical OpenTelemetry metric name.
   final String name;
@@ -58,6 +139,9 @@ class AdkMetricRecord {
 
   /// Attributes attached to this sample.
   final Map<String, Object?> attributes;
+
+  /// Optional explicit histogram bucket boundaries advisory.
+  final List<num>? explicitBucketBoundariesAdvisory;
 }
 
 /// Sink for ADK metric samples.
@@ -157,6 +241,58 @@ void recordAgentInvocationDuration(
       unit: 'ms',
       description: 'Duration of agent invocations.',
       attributes: _agentAttributes(agentName, error: error),
+      explicitBucketBoundariesAdvisory: agentDurationBucketBounds,
+    ),
+  );
+}
+
+/// Records the duration of a workflow invocation.
+void recordWorkflowInvocationDuration(
+  String workflowName,
+  Duration duration, {
+  Object? error,
+  AdkMetricsRecorder? recorder,
+}) {
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiWorkflowInvocationDurationMetric,
+      value: duration.inMilliseconds.toDouble() / 1000.0,
+      unit: 's',
+      description: 'Total duration of a workflow execution.',
+      attributes: _agentAttributes(workflowName, error: error),
+      explicitBucketBoundariesAdvisory: workflowDurationBucketBounds,
+    ),
+  );
+}
+
+/// Records the duration of a client operation (e.g., `generate_content`).
+void recordClientOperationDuration(
+  String agentName,
+  Duration duration, {
+  String operationName = 'generate_content',
+  String? requestModel,
+  String? responseModel,
+  Object? error,
+  AdkMetricsRecorder? recorder,
+}) {
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiClientOperationDurationMetric,
+      value: duration.inMilliseconds.toDouble() / 1000.0,
+      unit: 's',
+      description: 'GenAI operation duration.',
+      attributes: <String, Object?>{
+        'gen_ai.agent.name': agentName,
+        'gen_ai.operation.name': operationName,
+        if (requestModel != null && requestModel.isNotEmpty)
+          'gen_ai.request.model': requestModel,
+        if (responseModel != null && responseModel.isNotEmpty)
+          'gen_ai.response.model': responseModel,
+        if (error != null) 'error.type': error.runtimeType.toString(),
+      },
+      explicitBucketBoundariesAdvisory: operationDurationBucketBounds,
     ),
   );
 }
@@ -223,6 +359,7 @@ void recordToolExecutionDuration(
       unit: 'ms',
       description: 'Duration of tool executions.',
       attributes: _toolAttributes(toolName, agentName, error: error),
+      explicitBucketBoundariesAdvisory: operationDurationBucketBounds,
     ),
   );
 }
@@ -410,6 +547,7 @@ void recordClientTokenUsage({
           ...baseAttributes,
           'gen_ai.token.type': 'input',
         },
+        explicitBucketBoundariesAdvisory: tokenUsageBucketBounds,
       ),
     );
   }
@@ -426,6 +564,7 @@ void recordClientTokenUsage({
           ...baseAttributes,
           'gen_ai.token.type': 'output',
         },
+        explicitBucketBoundariesAdvisory: tokenUsageBucketBounds,
       ),
     );
   }

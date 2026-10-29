@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 
 import '../agents/callback_context.dart';
+import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
@@ -111,6 +112,33 @@ Formulate a new plan based on your analysis and try a corrected or different app
     final String modelName = _getModelNameFromContext(callbackContext);
     await _resetModelFailureCount(scopeKey, modelName);
     return null;
+  }
+
+  @override
+  Future<void> afterRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    if (isPausedInvocation(invocationContext)) {
+      return;
+    }
+    await _forgetInvocation(invocationContext.invocationId);
+  }
+
+  @override
+  Future<void> onRunErrorCallback({
+    required InvocationContext invocationContext,
+    required Object error,
+  }) async {
+    await _forgetInvocation(invocationContext.invocationId);
+  }
+
+  Future<void> _forgetInvocation(String invocationId) async {
+    if (trackingScope != TrackingScope.invocation) {
+      return;
+    }
+    await _synchronized<void>(() {
+      _scopedFailureCounters.remove(invocationId);
+    });
   }
 
   void _provideReflectionTool(LlmRequest llmRequest) {

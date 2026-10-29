@@ -354,7 +354,11 @@ Future<Map<String, Object?>> analyzeContribution({
     );
     if (executeSqlSettings.writeMode == WriteMode.blocked) {
       throw ArgumentError(
-        'analyze_contribution is not allowed in this session.',
+        'analyze_contribution is not allowed in this session because '
+        'write_mode is BLOCKED (it requires creating a temporary model). '
+        'To enable analyze_contribution, set write_mode to '
+        'WriteMode.PROTECTED or WriteMode.ALLOWED in BigQueryToolConfig, '
+        'or run a read-only query using execute_sql.',
       );
     } else if (executeSqlSettings.writeMode != WriteMode.protected) {
       executeSqlSettings = executeSqlSettings.copyWith(
@@ -468,7 +472,13 @@ Future<Map<String, Object?>> detectAnomalies({
       settings,
     );
     if (executeSqlSettings.writeMode == WriteMode.blocked) {
-      throw ArgumentError('anomaly detection is not allowed in this session.');
+      throw ArgumentError(
+        'anomaly detection is not allowed in this session because '
+        'write_mode is BLOCKED (it requires creating a temporary model). '
+        'To enable anomaly detection, set write_mode to '
+        'WriteMode.PROTECTED or WriteMode.ALLOWED in BigQueryToolConfig, '
+        'or run a read-only query using execute_sql.',
+      );
     } else if (executeSqlSettings.writeMode != WriteMode.protected) {
       executeSqlSettings = executeSqlSettings.copyWith(
         writeMode: WriteMode.protected,

@@ -235,6 +235,7 @@ class ChatCompletionsHttpClient implements ApigeeCompletionsClient {
 class _ChatCompletionsChunkCollection {
   final StringBuffer _content = StringBuffer();
   final Map<int, _StreamingToolCall> _toolCalls = <int, _StreamingToolCall>{};
+  int? _lastToolCallIndex;
   String _role = 'model';
   String? _model;
   Map<String, Object?>? _usage;
@@ -270,6 +271,7 @@ class _ChatCompletionsChunkCollection {
           turnComplete: true,
         ),
       );
+      _lastToolCallIndex = null;
     }
     return responses;
   }
@@ -330,8 +332,46 @@ class _ChatCompletionsChunkCollection {
     return parts;
   }
 
-  Part? _upsertToolCall(Map<String, Object?> toolCall) {
-    final int index = _readIndex(toolCall['index']) ?? _toolCalls.length;
+  int _inferToolCallIndex(
+    Map<String, Object?> toolCall, {
+    required bool isStreaming,
+  }) {
+    final int nextIndex = _toolCalls.length;
+    if (!isStreaming) {
+      return nextIndex;
+    }
+    final String id = '${toolCall['id'] ?? ''}';
+    if (id.isNotEmpty && id != 'null') {
+      for (final MapEntry<int, _StreamingToolCall> entry
+          in _toolCalls.entries) {
+        if (entry.value.id == id) {
+          return entry.key;
+        }
+      }
+      return nextIndex;
+    }
+    final Map<String, Object?> function = _asMap(toolCall['function']);
+    final String name = '${function['name'] ?? ''}';
+    if (name.isNotEmpty && name != 'null') {
+      return nextIndex;
+    }
+    if (_lastToolCallIndex != null) {
+      return _lastToolCallIndex!;
+    }
+    if (_toolCalls.isEmpty) {
+      return 0;
+    }
+    return _toolCalls.keys.reduce((int a, int b) => a > b ? a : b);
+  }
+
+  Part? _upsertToolCall(
+    Map<String, Object?> toolCall, {
+    bool isStreaming = true,
+  }) {
+    final int index =
+        _readIndex(toolCall['index']) ??
+        _inferToolCallIndex(toolCall, isStreaming: isStreaming);
+    _lastToolCallIndex = index;
     final _StreamingToolCall state = _toolCalls.putIfAbsent(
       index,
       _StreamingToolCall.new,

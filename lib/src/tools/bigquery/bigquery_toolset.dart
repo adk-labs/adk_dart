@@ -7,6 +7,7 @@ import '../base_tool.dart';
 import '../base_toolset.dart';
 import '../google_tool.dart';
 import 'bigquery_credentials.dart';
+import 'bigquery_skill.dart';
 import 'config.dart';
 import 'data_insights_tool.dart' as data_insights_tool;
 import 'metadata_tool.dart' as metadata_tool;
@@ -14,6 +15,9 @@ import 'query_tool.dart' as query_tool;
 import 'search_tool.dart' as search_tool;
 
 /// Toolset that exposes BigQuery query, metadata, and insights tools.
+///
+/// Pair with [getBigQuerySkill] (for example via `SkillToolset`) to equip
+/// agents with BigQuery AI/ML and Graph (GQL) SQL generation skills.
 class BigQueryToolset extends BaseToolset {
   /// Creates a BigQuery toolset with optional credential and tool settings.
   BigQueryToolset({
