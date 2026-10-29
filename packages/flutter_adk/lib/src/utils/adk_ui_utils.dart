@@ -8,7 +8,6 @@ import '../widgets/adk_workflow_graph_view.dart';
 
 /// Formatting and string presentation utilities for ADK Flutter applications.
 abstract final class AdkFormatters {
-
   /// Formats raw token count into human-readable representation.
   ///
   /// Examples:
@@ -75,11 +74,12 @@ abstract final class AdkFormatters {
 
 /// Helper utilities for extracting UI models and state from ADK event streams.
 abstract final class AdkEventStreamUtils {
-
   /// Scans [events] and returns all open, unresolved long-running tool interrupts.
   ///
   /// Delegates to `core.indexOpenInterrupts(events)`.
-  static Map<String, core.OpenInterrupt> extractOpenInterrupts(List<core.Event> events) {
+  static Map<String, core.OpenInterrupt> extractOpenInterrupts(
+    List<core.Event> events,
+  ) {
     return core.indexOpenInterrupts(events);
   }
 
@@ -124,22 +124,41 @@ abstract final class AdkEventStreamUtils {
     if (rawUsage is Map) {
       final int prompt = (rawUsage['prompt_token_count'] as num?)?.toInt() ??
           (rawUsage['promptTokenCount'] as num?)?.toInt() ??
+          (rawUsage['input_tokens'] as num?)?.toInt() ??
           0;
-      final int completion = (rawUsage['candidates_token_count'] as num?)?.toInt() ??
-          (rawUsage['candidatesTokenCount'] as num?)?.toInt() ??
-          (rawUsage['completion_tokens'] as num?)?.toInt() ??
-          0;
-      final int total = (rawUsage['total_token_count'] as num?)?.toInt() ??
-          (rawUsage['totalTokenCount'] as num?)?.toInt() ??
-          (prompt + completion);
-      final int thought = (rawUsage['thought_tokens'] as num?)?.toInt() ??
+      final int completion =
+          (rawUsage['candidates_token_count'] as num?)?.toInt() ??
+              (rawUsage['candidatesTokenCount'] as num?)?.toInt() ??
+              (rawUsage['completion_tokens'] as num?)?.toInt() ??
+              (rawUsage['output_tokens'] as num?)?.toInt() ??
+              0;
+      final int thought = (rawUsage['thoughts_token_count'] as num?)?.toInt() ??
+          (rawUsage['thoughtsTokenCount'] as num?)?.toInt() ??
+          (rawUsage['thought_tokens'] as num?)?.toInt() ??
           (rawUsage['thoughtTokens'] as num?)?.toInt() ??
           0;
+      final int cached =
+          (rawUsage['cached_content_token_count'] as num?)?.toInt() ??
+              (rawUsage['cachedContentTokenCount'] as num?)?.toInt() ??
+              (rawUsage['cached_tokens'] as num?)?.toInt() ??
+              0;
+      final int toolUsePrompt =
+          (rawUsage['tool_use_prompt_token_count'] as num?)?.toInt() ??
+              (rawUsage['toolUsePromptTokenCount'] as num?)?.toInt() ??
+              0;
+      final int total = (rawUsage['total_token_count'] as num?)?.toInt() ??
+          (rawUsage['totalTokenCount'] as num?)?.toInt() ??
+          (prompt + completion + thought);
+      final String? trafficType =
+          (rawUsage['traffic_type'] ?? rawUsage['trafficType'])?.toString();
       return AdkTokenUsage(
         promptTokens: prompt,
         completionTokens: completion,
         totalTokens: total,
         thoughtTokens: thought,
+        cachedTokens: cached,
+        toolUsePromptTokens: toolUsePrompt,
+        trafficType: trafficType,
       );
     }
 
@@ -151,17 +170,48 @@ abstract final class AdkEventStreamUtils {
       final int completion = (d.candidatesTokenCount as num?)?.toInt() ??
           (d.candidates_token_count as num?)?.toInt() ??
           0;
+      int thought = 0;
+      try {
+        thought = (d.thoughtsTokenCount as num?)?.toInt() ??
+            (d.thoughtTokens as num?)?.toInt() ??
+            0;
+      } catch (_) {}
+      int cached = 0;
+      try {
+        cached = (d.cachedContentTokenCount as num?)?.toInt() ??
+            (d.cachedTokens as num?)?.toInt() ??
+            0;
+      } catch (_) {}
+      int toolUsePrompt = 0;
+      try {
+        toolUsePrompt = (d.toolUsePromptTokenCount as num?)?.toInt() ?? 0;
+      } catch (_) {}
       final int total = (d.totalTokenCount as num?)?.toInt() ??
           (d.total_token_count as num?)?.toInt() ??
-          (prompt + completion);
+          (prompt + completion + thought);
       return AdkTokenUsage(
         promptTokens: prompt,
         completionTokens: completion,
         totalTokens: total,
+        thoughtTokens: thought,
+        cachedTokens: cached,
+        toolUsePromptTokens: toolUsePrompt,
       );
     } catch (_) {
       return null;
     }
+  }
+
+  /// Aggregates cumulative [AdkTokenUsage] across a sequence of [events].
+  static AdkTokenUsage aggregateTokenUsage(Iterable<core.Event> events) {
+    AdkTokenUsage total = const AdkTokenUsage();
+    for (final core.Event event in events) {
+      final AdkTokenUsage? usage = extractTokenUsage(event);
+      if (usage != null) {
+        total = total + usage;
+      }
+    }
+    return total;
   }
 
   /// Whether [event] indicates an advisor model consultation was performed
@@ -170,7 +220,8 @@ abstract final class AdkEventStreamUtils {
     final core.Content? content = event.content;
     if (content != null) {
       for (final core.Part part in content.parts) {
-        final String? name = part.functionCall?.name ?? part.functionResponse?.name;
+        final String? name =
+            part.functionCall?.name ?? part.functionResponse?.name;
         if (name == 'consult_model' || name == 'model_consult') {
           return true;
         }
@@ -187,7 +238,8 @@ abstract final class AdkEventStreamUtils {
     int? turnCount,
     int? turnBudget,
   }) extractModelConsultInfo(core.Event event) {
-    final Map<String, dynamic>? meta = event.customMetadata?.cast<String, dynamic>();
+    final Map<String, dynamic>? meta =
+        event.customMetadata?.cast<String, dynamic>();
 
     String? advisor = meta?['advisor_model'] as String?;
     String? reason = meta?['escalation_reason'] as String?;
@@ -197,8 +249,10 @@ abstract final class AdkEventStreamUtils {
     if (advisor == null && event.content != null) {
       for (final core.Part part in event.content!.parts) {
         final core.FunctionCall? call = part.functionCall;
-        if (call != null && (call.name == 'consult_model' || call.name == 'model_consult')) {
-          advisor ??= call.args['model'] as String? ?? call.args['advisor_model'] as String?;
+        if (call != null &&
+            (call.name == 'consult_model' || call.name == 'model_consult')) {
+          advisor ??=
+              call.args['model'] as String? ?? call.args['advisor_model'] as String?;
           reason ??= call.args['reason'] as String?;
           break;
         }
@@ -216,7 +270,6 @@ abstract final class AdkEventStreamUtils {
 
 /// Color resolution helpers for statuses, confidence scores, and node lifecycles.
 abstract final class AdkColorUtils {
-
   /// Resolves an appropriate status color based on classification or model confidence.
   static Color confidenceColor(BuildContext context, double confidence) {
     if (confidence >= 0.8) return Colors.green.shade600;
@@ -225,7 +278,10 @@ abstract final class AdkColorUtils {
   }
 
   /// Resolves theme-friendly status colors for workflow graph nodes.
-  static Color nodeStatusColor(BuildContext context, AdkGraphNodeStatus status) {
+  static Color nodeStatusColor(
+    BuildContext context,
+    AdkGraphNodeStatus status,
+  ) {
     final ThemeData theme = Theme.of(context);
     switch (status) {
       case AdkGraphNodeStatus.completed:

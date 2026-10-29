@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'adk_attachment_model.dart';
+import 'adk_token_usage_model.dart';
 
 /// The sender role of a chat message.
 enum AdkMessageRole {
@@ -182,6 +183,8 @@ class AdkChatMessage {
     this.toolResult,
     this.codeExecution,
     this.grounding,
+    this.tokenUsage,
+    this.invocationId,
     this.isCompaction = false,
     this.errorMessage,
     this.attachments = const <AdkAttachment>[],
@@ -194,6 +197,7 @@ class AdkChatMessage {
     required String id,
     required String text,
     String author = 'User',
+    String? invocationId,
     List<AdkAttachment> attachments = const <AdkAttachment>[],
     DateTime? timestamp,
     Map<String, dynamic> metadata = const <String, dynamic>{},
@@ -203,6 +207,7 @@ class AdkChatMessage {
       role: .user,
       text: text,
       author: author,
+      invocationId: invocationId,
       attachments: attachments,
       timestamp: timestamp,
       metadata: metadata,
@@ -218,6 +223,8 @@ class AdkChatMessage {
     String? thought,
     AdkCodeExecution? codeExecution,
     AdkGroundingInfo? grounding,
+    AdkTokenUsage? tokenUsage,
+    String? invocationId,
     bool isCompaction = false,
     List<AdkAttachment> attachments = const <AdkAttachment>[],
     DateTime? timestamp,
@@ -232,6 +239,8 @@ class AdkChatMessage {
       thought: thought,
       codeExecution: codeExecution,
       grounding: grounding,
+      tokenUsage: tokenUsage,
+      invocationId: invocationId,
       isCompaction: isCompaction,
       attachments: attachments,
       timestamp: timestamp,
@@ -319,6 +328,12 @@ class AdkChatMessage {
   /// Search grounding queries and citation sources, if any.
   final AdkGroundingInfo? grounding;
 
+  /// Token consumption metrics for this turn, if available.
+  final AdkTokenUsage? tokenUsage;
+
+  /// Invocation identifier associated with this message turn, if available.
+  final String? invocationId;
+
   /// Whether this message represents a compacted conversation summary.
   final bool isCompaction;
 
@@ -368,6 +383,8 @@ class AdkChatMessage {
     dynamic toolResult,
     AdkCodeExecution? codeExecution,
     AdkGroundingInfo? grounding,
+    AdkTokenUsage? tokenUsage,
+    String? invocationId,
     bool? isCompaction,
     String? errorMessage,
     List<AdkAttachment>? attachments,
@@ -386,6 +403,8 @@ class AdkChatMessage {
       toolResult: toolResult ?? this.toolResult,
       codeExecution: codeExecution ?? this.codeExecution,
       grounding: grounding ?? this.grounding,
+      tokenUsage: tokenUsage ?? this.tokenUsage,
+      invocationId: invocationId ?? this.invocationId,
       isCompaction: isCompaction ?? this.isCompaction,
       errorMessage: errorMessage ?? this.errorMessage,
       attachments: attachments ?? this.attachments,
@@ -405,6 +424,8 @@ class AdkChatMessage {
         other.toolName == toolName &&
         other.codeExecution == codeExecution &&
         other.grounding == grounding &&
+        other.tokenUsage == tokenUsage &&
+        other.invocationId == invocationId &&
         other.isCompaction == isCompaction &&
         other.errorMessage == errorMessage &&
         listEquals(other.attachments, attachments);
@@ -419,6 +440,8 @@ class AdkChatMessage {
         toolName,
         codeExecution,
         grounding,
+        tokenUsage,
+        invocationId,
         isCompaction,
         errorMessage,
         Object.hashAll(attachments),

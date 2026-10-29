@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../models/adk_attachment_model.dart';
 import '../models/adk_chat_message.dart';
+import '../models/adk_token_usage_model.dart';
 import '../theme/adk_theme.dart';
 import 'adk_code_execution_card.dart';
+import 'adk_compaction_summary_card.dart';
+import 'adk_computer_action_card.dart';
+import 'adk_file_edit_card.dart';
 import 'adk_grounding_sources_bar.dart';
 import 'adk_reasoning_expander.dart';
+import 'adk_shell_command_card.dart';
+import 'adk_skill_tool_card.dart';
+import 'adk_token_usage_badge.dart';
 import 'adk_tool_call_card.dart';
 import 'adk_typing_indicator.dart';
+import 'adk_web_page_card.dart';
 
 /// A customizable message bubble widget representing user, model, tool, or system messages.
 class AdkMessageBubble extends StatelessWidget {
@@ -33,7 +41,21 @@ class AdkMessageBubble extends StatelessWidget {
     this.onLongPress,
     this.onGroundingSourceTap,
     this.customContentBuilder,
+    this.toolCardBuilder,
+    this.systemCardBuilder,
+    this.compactionCardBuilder,
+    this.tokenUsageBuilder,
+    this.thoughtBuilder,
+    this.codeExecutionBuilder,
+    this.groundingBuilder,
+    this.attachmentBuilder,
+    this.toolCardStyle,
+    this.terminalCardStyle,
+    this.usageBadgeStyle,
+    this.compactionCardStyle,
     this.useToolCallCard = true,
+    this.useSpecializedToolCards = true,
+    this.showTokenUsage = true,
   });
 
   /// The chat message to render.
@@ -93,8 +115,73 @@ class AdkMessageBubble extends StatelessWidget {
   /// Optional builder to override internal message body content.
   final Widget Function(BuildContext context, AdkChatMessage message)? customContentBuilder;
 
+  /// Optional builder to override tool call and tool response cards.
+  final Widget Function(BuildContext context, AdkChatMessage message)?
+      toolCardBuilder;
+
+  /// Optional builder to override system and error notification cards.
+  final Widget Function(BuildContext context, AdkChatMessage message)?
+      systemCardBuilder;
+
+  /// Optional builder to override compacted conversation summary cards.
+  final Widget Function(BuildContext context, AdkChatMessage message)?
+      compactionCardBuilder;
+
+  /// Optional builder to override the per-message token usage badge.
+  final Widget Function(
+    BuildContext context,
+    AdkTokenUsage usage,
+    AdkChatMessage message,
+  )? tokenUsageBuilder;
+
+  /// Optional builder to override the reasoning / thought expander inside model bubbles.
+  final Widget Function(
+    BuildContext context,
+    String thought,
+    AdkChatMessage message,
+  )? thoughtBuilder;
+
+  /// Optional builder to override the code execution card inside model bubbles.
+  final Widget Function(
+    BuildContext context,
+    AdkCodeExecution execution,
+    AdkChatMessage message,
+  )? codeExecutionBuilder;
+
+  /// Optional builder to override the grounding citation bar inside model bubbles.
+  final Widget Function(
+    BuildContext context,
+    AdkGroundingInfo grounding,
+    AdkChatMessage message,
+  )? groundingBuilder;
+
+  /// Optional builder to override individual attachment items inside bubbles.
+  final Widget Function(
+    BuildContext context,
+    AdkAttachment attachment,
+    bool isUser,
+  )? attachmentBuilder;
+
+  /// Optional style override applied to tool, skill, file, web, and computer cards.
+  final AdkCardStyle? toolCardStyle;
+
+  /// Optional style override applied to shell command and code execution terminal cards.
+  final AdkCardStyle? terminalCardStyle;
+
+  /// Optional style override applied to the token usage badge.
+  final AdkCardStyle? usageBadgeStyle;
+
+  /// Optional style override applied to the compaction summary card.
+  final AdkCardStyle? compactionCardStyle;
+
   /// Whether to render tool messages using [AdkToolCallCard] with expandable args and results.
   final bool useToolCallCard;
+
+  /// Whether to route built-in tool names (`SkillToolset`, `FileEdit`, `ShellCommand`, `WebPage`, `ComputerAction`) to their dedicated cards.
+  final bool useSpecializedToolCards;
+
+  /// Whether to display an [AdkTokenUsageBadge] beneath model responses when token metrics are present.
+  final bool showTokenUsage;
 
   @override
   Widget build(BuildContext context) {
@@ -106,11 +193,11 @@ class AdkMessageBubble extends StatelessWidget {
     final bool isSystem = message.role == .system;
 
     if (isSystem) {
-      return _buildSystemCard(flutterTheme, adkTheme);
+      return _buildSystemCard(context, flutterTheme, adkTheme);
     }
 
     if (isTool) {
-      return _buildToolCard(flutterTheme, adkTheme);
+      return _buildToolCard(context, flutterTheme, adkTheme);
     }
 
     final Color bgColor = isUser
@@ -176,15 +263,24 @@ class AdkMessageBubble extends StatelessWidget {
               ),
             ),
           if (message.thought != null && message.thought!.isNotEmpty) ...<Widget>[
-            AdkReasoningExpander(thought: message.thought!),
+            if (thoughtBuilder != null)
+              thoughtBuilder!(context, message.thought!, message)
+            else
+              AdkReasoningExpander(thought: message.thought!),
             const SizedBox(height: 4.0),
           ],
           if (message.codeExecution != null) ...<Widget>[
-            AdkCodeExecutionCard(execution: message.codeExecution!),
+            if (codeExecutionBuilder != null)
+              codeExecutionBuilder!(context, message.codeExecution!, message)
+            else
+              AdkCodeExecutionCard(
+                execution: message.codeExecution!,
+                style: terminalCardStyle ?? adkTheme.terminalCardStyle,
+              ),
             if (message.text.isNotEmpty) const SizedBox(height: 6.0),
           ],
           if (message.attachments.isNotEmpty) ...<Widget>[
-            _buildAttachmentsList(flutterTheme, isUser),
+            _buildAttachmentsList(context, flutterTheme, isUser),
             if (message.text.isNotEmpty) const SizedBox(height: 6.0),
           ],
           if (customContentBuilder != null)
@@ -195,9 +291,27 @@ class AdkMessageBubble extends StatelessWidget {
               style: defaultTextStyle,
             ),
           if (message.grounding != null && message.grounding!.isNotEmpty)
-            AdkGroundingSourcesBar(
-              grounding: message.grounding!,
-              onSourceTap: onGroundingSourceTap,
+            if (groundingBuilder != null)
+              groundingBuilder!(context, message.grounding!, message)
+            else
+              AdkGroundingSourcesBar(
+                grounding: message.grounding!,
+                onSourceTap: onGroundingSourceTap,
+                style: toolCardStyle ?? adkTheme.cardStyle,
+              ),
+          if (!isUser &&
+              showTokenUsage &&
+              message.tokenUsage != null &&
+              message.tokenUsage!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6.0),
+              child: tokenUsageBuilder != null
+                  ? tokenUsageBuilder!(context, message.tokenUsage!, message)
+                  : AdkTokenUsageBadge.fromUsage(
+                      message.tokenUsage!,
+                      compact: true,
+                      style: usageBadgeStyle ?? adkTheme.usageBadgeStyle,
+                    ),
             ),
           if (message.isPartial)
             Padding(
@@ -273,11 +387,18 @@ class AdkMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachmentsList(ThemeData theme, bool isUser) {
+  Widget _buildAttachmentsList(
+    BuildContext context,
+    ThemeData theme,
+    bool isUser,
+  ) {
     return Wrap(
       spacing: 6.0,
       runSpacing: 6.0,
       children: message.attachments.map((AdkAttachment att) {
+        if (attachmentBuilder != null) {
+          return attachmentBuilder!(context, att, isUser);
+        }
         if (att.isImage && att.bytes != null) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(8.0),
@@ -327,7 +448,68 @@ class AdkMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildToolCard(ThemeData theme, AdkChatThemeData adkTheme) {
+  Widget _buildToolCard(
+    BuildContext context,
+    ThemeData theme,
+    AdkChatThemeData adkTheme,
+  ) {
+    if (toolCardBuilder != null) {
+      return toolCardBuilder!(context, message);
+    }
+    final AdkCardStyle? effectiveToolStyle =
+        adkTheme.cardStyle?.merge(toolCardStyle) ?? toolCardStyle;
+    final AdkCardStyle? effectiveTerminalStyle =
+        adkTheme.terminalCardStyle?.merge(terminalCardStyle) ??
+        terminalCardStyle;
+    final String? name = message.toolName;
+    if (useSpecializedToolCards && name != null) {
+      if (AdkSkillToolCard.isSkillTool(name)) {
+        return AdkSkillToolCard(
+          toolName: name,
+          toolArgs: message.toolArgs,
+          toolResult: message.toolResult,
+          isRunning: message.isPartial,
+          style: effectiveToolStyle,
+        );
+      }
+      if (AdkFileEditCard.isFileTool(name)) {
+        return AdkFileEditCard(
+          toolName: name,
+          toolArgs: message.toolArgs,
+          toolResult: message.toolResult,
+          isRunning: message.isPartial,
+          style: effectiveToolStyle,
+        );
+      }
+      if (AdkShellCommandCard.isShellTool(name)) {
+        return AdkShellCommandCard(
+          toolName: name,
+          toolArgs: message.toolArgs,
+          toolResult: message.toolResult,
+          isRunning: message.isPartial,
+          style: effectiveTerminalStyle,
+        );
+      }
+      if (AdkWebPageCard.isWebPageTool(name)) {
+        return AdkWebPageCard(
+          toolName: name,
+          toolArgs: message.toolArgs,
+          toolResult: message.toolResult,
+          isRunning: message.isPartial,
+          style: effectiveToolStyle,
+        );
+      }
+      if (AdkComputerActionCard.isComputerActionTool(name)) {
+        return AdkComputerActionCard(
+          toolName: name,
+          toolArgs: message.toolArgs,
+          toolResult: message.toolResult,
+          isRunning: message.isPartial,
+          style: effectiveToolStyle,
+        );
+      }
+    }
+
     if (useToolCallCard && (message.toolName != null || message.toolArgs != null || message.toolResult != null)) {
       return AdkToolCallCard(
         toolName: message.toolName ?? 'Unnamed Tool',
@@ -335,6 +517,7 @@ class AdkMessageBubble extends StatelessWidget {
         toolResult: message.toolResult,
         errorMessage: message.errorMessage,
         isRunning: message.isPartial,
+        style: effectiveToolStyle,
       );
     }
 
@@ -377,7 +560,24 @@ class AdkMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildSystemCard(ThemeData theme, AdkChatThemeData adkTheme) {
+  Widget _buildSystemCard(
+    BuildContext context,
+    ThemeData theme,
+    AdkChatThemeData adkTheme,
+  ) {
+    if (message.isCompaction) {
+      if (compactionCardBuilder != null) {
+        return compactionCardBuilder!(context, message);
+      }
+      return AdkCompactionSummaryCard(
+        summaryText: message.text,
+        style: adkTheme.compactionCardStyle?.merge(compactionCardStyle) ??
+            compactionCardStyle,
+      );
+    }
+    if (systemCardBuilder != null) {
+      return systemCardBuilder!(context, message);
+    }
     final bool isErr = message.errorMessage != null;
 
     return Center(

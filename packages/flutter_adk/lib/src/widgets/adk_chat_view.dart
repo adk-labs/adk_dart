@@ -2,8 +2,11 @@ import 'package:adk_dart/adk_core.dart' as adk;
 import 'package:flutter/material.dart';
 
 import '../controllers/adk_chat_controller.dart';
+import '../models/adk_attachment_model.dart';
 import '../models/adk_chat_message.dart';
+import '../models/adk_token_usage_model.dart';
 import '../theme/adk_theme.dart';
+import 'adk_context_window_meter.dart';
 import 'adk_message_bubble.dart';
 import 'adk_prompt_suggestions_bar.dart';
 import 'adk_typing_indicator.dart';
@@ -32,8 +35,19 @@ class AdkChatView extends StatefulWidget {
     this.emptyStateWidget,
     this.emptyStateBuilder,
     this.messageBubbleBuilder,
+    this.toolCardBuilder,
+    this.systemCardBuilder,
+    this.compactionCardBuilder,
+    this.tokenUsageBuilder,
+    this.thoughtBuilder,
+    this.codeExecutionBuilder,
+    this.groundingBuilder,
+    this.attachmentBuilder,
+    this.contextWindowMeterBuilder,
     this.avatarBuilder,
     this.inputBarBuilder,
+    this.sendButtonWidget,
+    this.voiceButtonWidget,
     this.suggestionBuilder,
     this.typingIndicatorBuilder,
     this.headerBuilder,
@@ -43,6 +57,11 @@ class AdkChatView extends StatefulWidget {
     this.onLongPressMessage,
     this.showAppBar = false,
     this.showAvatars,
+    this.showTokenUsage = true,
+    this.showContextWindowMeter = false,
+    this.maxContextTokens = 128000,
+    this.compactionThresholdTokens,
+    this.useSpecializedToolCards = true,
   }) : assert(
           controller != null || agent != null || runner != null,
           'AdkChatView requires either a controller, an agent, or a runner.',
@@ -79,6 +98,60 @@ class AdkChatView extends StatefulWidget {
   final Widget Function(BuildContext context, AdkChatMessage message)?
       messageBubbleBuilder;
 
+  /// Optional builder to override tool call and tool response cards.
+  final Widget Function(BuildContext context, AdkChatMessage message)?
+      toolCardBuilder;
+
+  /// Optional builder to override system and error notification cards.
+  final Widget Function(BuildContext context, AdkChatMessage message)?
+      systemCardBuilder;
+
+  /// Optional builder to override compacted conversation summary cards.
+  final Widget Function(BuildContext context, AdkChatMessage message)?
+      compactionCardBuilder;
+
+  /// Optional builder to override per-message token usage badges.
+  final Widget Function(
+    BuildContext context,
+    AdkTokenUsage usage,
+    AdkChatMessage message,
+  )? tokenUsageBuilder;
+
+  /// Optional builder to override reasoning / thought expanders inside model bubbles.
+  final Widget Function(
+    BuildContext context,
+    String thought,
+    AdkChatMessage message,
+  )? thoughtBuilder;
+
+  /// Optional builder to override code execution cards inside model bubbles.
+  final Widget Function(
+    BuildContext context,
+    AdkCodeExecution execution,
+    AdkChatMessage message,
+  )? codeExecutionBuilder;
+
+  /// Optional builder to override grounding citation bars inside model bubbles.
+  final Widget Function(
+    BuildContext context,
+    AdkGroundingInfo grounding,
+    AdkChatMessage message,
+  )? groundingBuilder;
+
+  /// Optional builder to override attachment items inside bubbles.
+  final Widget Function(
+    BuildContext context,
+    AdkAttachment attachment,
+    bool isUser,
+  )? attachmentBuilder;
+
+  /// Optional builder to override the [AdkContextWindowMeter] above the messages list.
+  final Widget Function(
+    BuildContext context,
+    AdkTokenUsage sessionUsage,
+    AdkTokenUsage? lastTurnUsage,
+  )? contextWindowMeterBuilder;
+
   /// Custom avatar builder for messages.
   final Widget Function(BuildContext context, AdkChatMessage message)?
       avatarBuilder;
@@ -90,6 +163,12 @@ class AdkChatView extends StatefulWidget {
     VoidCallback onSend,
     bool isLoading,
   )? inputBarBuilder;
+
+  /// Optional custom widget replacing the default send icon button in the input bar.
+  final Widget? sendButtonWidget;
+
+  /// Optional custom widget replacing the default voice microphone button in the input bar.
+  final Widget? voiceButtonWidget;
 
   /// Custom builder for individual suggestion chips.
   final Widget Function(
@@ -121,6 +200,21 @@ class AdkChatView extends StatefulWidget {
 
   /// Whether to display avatars next to messages.
   final bool? showAvatars;
+
+  /// Whether to display per-turn token usage badges beneath model messages.
+  final bool showTokenUsage;
+
+  /// Whether to display an [AdkContextWindowMeter] above the messages list when token metrics are available.
+  final bool showContextWindowMeter;
+
+  /// Maximum context window capacity used by [AdkContextWindowMeter].
+  final int maxContextTokens;
+
+  /// Optional compaction token threshold marker displayed on [AdkContextWindowMeter].
+  final int? compactionThresholdTokens;
+
+  /// Whether to route built-in tools to their specialized cards in [AdkMessageBubble].
+  final bool useSpecializedToolCards;
 
   @override
   State<AdkChatView> createState() => _AdkChatViewState();
@@ -204,6 +298,22 @@ class _AdkChatViewState extends State<AdkChatView> {
         child: Column(
           children: <Widget>[
             if (widget.headerBuilder != null) widget.headerBuilder!(context),
+            if (widget.showContextWindowMeter &&
+                _controller.sessionTokenUsage.isNotEmpty)
+              if (widget.contextWindowMeterBuilder != null)
+                widget.contextWindowMeterBuilder!(
+                  context,
+                  _controller.sessionTokenUsage,
+                  _controller.lastTurnTokenUsage,
+                )
+              else
+                AdkContextWindowMeter(
+                  usedTokens: _controller.lastTurnTokenUsage?.promptTokens ??
+                      _controller.sessionTokenUsage.promptTokens,
+                  maxContextTokens: widget.maxContextTokens,
+                  compactionThresholdTokens: widget.compactionThresholdTokens,
+                  style: adkTheme.contextMeterStyle,
+                ),
             Expanded(
               child: _controller.messages.isEmpty
                   ? _buildEmptyState(flutterTheme)
@@ -299,6 +409,16 @@ class _AdkChatViewState extends State<AdkChatView> {
           theme: adkTheme,
           avatarBuilder: widget.avatarBuilder,
           showAvatar: showAvatars,
+          showTokenUsage: widget.showTokenUsage,
+          useSpecializedToolCards: widget.useSpecializedToolCards,
+          toolCardBuilder: widget.toolCardBuilder,
+          systemCardBuilder: widget.systemCardBuilder,
+          compactionCardBuilder: widget.compactionCardBuilder,
+          tokenUsageBuilder: widget.tokenUsageBuilder,
+          thoughtBuilder: widget.thoughtBuilder,
+          codeExecutionBuilder: widget.codeExecutionBuilder,
+          groundingBuilder: widget.groundingBuilder,
+          attachmentBuilder: widget.attachmentBuilder,
           onTap: widget.onTapMessage != null ? () => widget.onTapMessage!(message) : null,
           onLongPress: widget.onLongPressMessage != null ? () => widget.onLongPressMessage!(message) : null,
         );
@@ -346,11 +466,17 @@ class _AdkChatViewState extends State<AdkChatView> {
       child: Row(
         children: <Widget>[
           if (widget.onVoicePressed != null)
-            IconButton(
-              icon: const Icon(Icons.mic_outlined),
-              onPressed: widget.onVoicePressed,
-              tooltip: 'Voice Input',
-            ),
+            if (widget.voiceButtonWidget != null)
+              GestureDetector(
+                onTap: widget.onVoicePressed,
+                child: widget.voiceButtonWidget,
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.mic_outlined),
+                onPressed: widget.onVoicePressed,
+                tooltip: 'Voice Input',
+              ),
           Expanded(
             child: TextField(
               controller: _textEditingController,
@@ -374,14 +500,20 @@ class _AdkChatViewState extends State<AdkChatView> {
             ),
           ),
           const SizedBox(width: 8.0),
-          IconButton.filled(
-            icon: Icon(
-              adkTheme.sendButtonIcon ?? Icons.arrow_upward,
-              color: sendBtnIconColor,
+          if (widget.sendButtonWidget != null)
+            GestureDetector(
+              onTap: _controller.isLoading ? null : _sendMessage,
+              child: widget.sendButtonWidget,
+            )
+          else
+            IconButton.filled(
+              icon: Icon(
+                adkTheme.sendButtonIcon ?? Icons.arrow_upward,
+                color: sendBtnIconColor,
+              ),
+              style: IconButton.styleFrom(backgroundColor: sendBtnBg),
+              onPressed: _controller.isLoading ? null : _sendMessage,
             ),
-            style: IconButton.styleFrom(backgroundColor: sendBtnBg),
-            onPressed: _controller.isLoading ? null : _sendMessage,
-          ),
         ],
       ),
     );

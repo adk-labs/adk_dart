@@ -1,5 +1,133 @@
 import 'package:flutter/material.dart';
 
+/// Reusable visual style configuration for ADK cards, badges, banners, and meters.
+@immutable
+class AdkCardStyle {
+  /// Creates an [AdkCardStyle].
+  const AdkCardStyle({
+    this.backgroundColor,
+    this.headerBackgroundColor,
+    this.borderColor,
+    this.accentColor,
+    this.textColor,
+    this.borderRadius,
+    this.padding,
+    this.margin,
+    this.elevation,
+    this.decoration,
+    this.titleStyle,
+    this.subtitleStyle,
+    this.bodyStyle,
+    this.codeStyle,
+    this.maxBodyHeight,
+  });
+
+  /// Container background color.
+  final Color? backgroundColor;
+
+  /// Optional header row background color.
+  final Color? headerBackgroundColor;
+
+  /// Border stroke color.
+  final Color? borderColor;
+
+  /// Primary accent color for icons, indicators, and badges.
+  final Color? accentColor;
+
+  /// Default foreground text color.
+  final Color? textColor;
+
+  /// Corner radius of the card or badge container.
+  final BorderRadius? borderRadius;
+
+  /// Internal content padding.
+  final EdgeInsetsGeometry? padding;
+
+  /// External margin around the card or badge.
+  final EdgeInsetsGeometry? margin;
+
+  /// Optional Material elevation when rendered inside a [Card].
+  final double? elevation;
+
+  /// Full [BoxDecoration] override for the container.
+  final BoxDecoration? decoration;
+
+  /// Text style for card titles or headers.
+  final TextStyle? titleStyle;
+
+  /// Text style for secondary labels, chips, or subtitles.
+  final TextStyle? subtitleStyle;
+
+  /// Text style for body text.
+  final TextStyle? bodyStyle;
+
+  /// Monospace text style for code, diff lines, or terminal output.
+  final TextStyle? codeStyle;
+
+  /// Maximum scrollable height for expandable card bodies.
+  final double? maxBodyHeight;
+
+  /// Creates a copy of this [AdkCardStyle] with updated properties.
+  AdkCardStyle copyWith({
+    Color? backgroundColor,
+    Color? headerBackgroundColor,
+    Color? borderColor,
+    Color? accentColor,
+    Color? textColor,
+    BorderRadius? borderRadius,
+    EdgeInsetsGeometry? padding,
+    EdgeInsetsGeometry? margin,
+    double? elevation,
+    BoxDecoration? decoration,
+    TextStyle? titleStyle,
+    TextStyle? subtitleStyle,
+    TextStyle? bodyStyle,
+    TextStyle? codeStyle,
+    double? maxBodyHeight,
+  }) {
+    return AdkCardStyle(
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      headerBackgroundColor:
+          headerBackgroundColor ?? this.headerBackgroundColor,
+      borderColor: borderColor ?? this.borderColor,
+      accentColor: accentColor ?? this.accentColor,
+      textColor: textColor ?? this.textColor,
+      borderRadius: borderRadius ?? this.borderRadius,
+      padding: padding ?? this.padding,
+      margin: margin ?? this.margin,
+      elevation: elevation ?? this.elevation,
+      decoration: decoration ?? this.decoration,
+      titleStyle: titleStyle ?? this.titleStyle,
+      subtitleStyle: subtitleStyle ?? this.subtitleStyle,
+      bodyStyle: bodyStyle ?? this.bodyStyle,
+      codeStyle: codeStyle ?? this.codeStyle,
+      maxBodyHeight: maxBodyHeight ?? this.maxBodyHeight,
+    );
+  }
+
+  /// Merges [other] on top of this [AdkCardStyle].
+  AdkCardStyle merge(AdkCardStyle? other) {
+    if (other == null) return this;
+    return copyWith(
+      backgroundColor: other.backgroundColor,
+      headerBackgroundColor: other.headerBackgroundColor,
+      borderColor: other.borderColor,
+      accentColor: other.accentColor,
+      textColor: other.textColor,
+      borderRadius: other.borderRadius,
+      padding: other.padding,
+      margin: other.margin,
+      elevation: other.elevation,
+      decoration: other.decoration,
+      titleStyle: other.titleStyle,
+      subtitleStyle: other.subtitleStyle,
+      bodyStyle: other.bodyStyle,
+      codeStyle: other.codeStyle,
+      maxBodyHeight: other.maxBodyHeight,
+    );
+  }
+}
+
 /// Theming configuration for ADK Flutter UI components and chat views.
 @immutable
 class AdkChatThemeData {
@@ -39,6 +167,11 @@ class AdkChatThemeData {
     this.appBarTextStyle,
     this.showTimestamp = false,
     this.showAvatars = false,
+    this.cardStyle,
+    this.terminalCardStyle,
+    this.usageBadgeStyle,
+    this.compactionCardStyle,
+    this.contextMeterStyle,
   });
 
   /// Derives default theme properties from the current Flutter [ThemeData].
@@ -47,8 +180,10 @@ class AdkChatThemeData {
       userBubbleColor: theme.colorScheme.primary,
       modelBubbleColor: theme.colorScheme.surfaceContainerHighest,
       toolBubbleColor: theme.colorScheme.surfaceContainerLow,
-      systemBubbleColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-      errorBubbleColor: theme.colorScheme.errorContainer.withValues(alpha: 0.7),
+      systemBubbleColor:
+          theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      errorBubbleColor:
+          theme.colorScheme.errorContainer.withValues(alpha: 0.7),
       userTextColor: theme.colorScheme.onPrimary,
       modelTextColor: theme.colorScheme.onSurface,
       inputBackgroundColor: theme.colorScheme.surfaceContainerHigh,
@@ -163,6 +298,21 @@ class AdkChatThemeData {
   /// Whether to display avatars next to messages.
   final bool showAvatars;
 
+  /// Default style applied to tool, file, skill, web, computer, and evaluation cards.
+  final AdkCardStyle? cardStyle;
+
+  /// Default style applied to shell command and code execution terminal cards.
+  final AdkCardStyle? terminalCardStyle;
+
+  /// Default style applied to `AdkTokenUsageBadge` and `AdkUsageMonitorCard`.
+  final AdkCardStyle? usageBadgeStyle;
+
+  /// Default style applied to `AdkCompactionSummaryCard`.
+  final AdkCardStyle? compactionCardStyle;
+
+  /// Default style applied to `AdkContextWindowMeter`.
+  final AdkCardStyle? contextMeterStyle;
+
   /// Creates a copy of this [AdkChatThemeData] with updated fields.
   AdkChatThemeData copyWith({
     Color? userBubbleColor,
@@ -199,6 +349,11 @@ class AdkChatThemeData {
     TextStyle? appBarTextStyle,
     bool? showTimestamp,
     bool? showAvatars,
+    AdkCardStyle? cardStyle,
+    AdkCardStyle? terminalCardStyle,
+    AdkCardStyle? usageBadgeStyle,
+    AdkCardStyle? compactionCardStyle,
+    AdkCardStyle? contextMeterStyle,
   }) {
     return AdkChatThemeData(
       userBubbleColor: userBubbleColor ?? this.userBubbleColor,
@@ -227,14 +382,22 @@ class AdkChatThemeData {
       sendButtonColor: sendButtonColor ?? this.sendButtonColor,
       sendButtonIconColor: sendButtonIconColor ?? this.sendButtonIconColor,
       sendButtonIcon: sendButtonIcon ?? this.sendButtonIcon,
-      suggestionBackgroundColor: suggestionBackgroundColor ?? this.suggestionBackgroundColor,
+      suggestionBackgroundColor:
+          suggestionBackgroundColor ?? this.suggestionBackgroundColor,
       suggestionTextColor: suggestionTextColor ?? this.suggestionTextColor,
-      suggestionBorderRadius: suggestionBorderRadius ?? this.suggestionBorderRadius,
+      suggestionBorderRadius:
+          suggestionBorderRadius ?? this.suggestionBorderRadius,
       backgroundColor: backgroundColor ?? this.backgroundColor,
-      appBarBackgroundColor: appBarBackgroundColor ?? this.appBarBackgroundColor,
+      appBarBackgroundColor:
+          appBarBackgroundColor ?? this.appBarBackgroundColor,
       appBarTextStyle: appBarTextStyle ?? this.appBarTextStyle,
       showTimestamp: showTimestamp ?? this.showTimestamp,
       showAvatars: showAvatars ?? this.showAvatars,
+      cardStyle: cardStyle ?? this.cardStyle,
+      terminalCardStyle: terminalCardStyle ?? this.terminalCardStyle,
+      usageBadgeStyle: usageBadgeStyle ?? this.usageBadgeStyle,
+      compactionCardStyle: compactionCardStyle ?? this.compactionCardStyle,
+      contextMeterStyle: contextMeterStyle ?? this.contextMeterStyle,
     );
   }
 }
@@ -248,21 +411,20 @@ class AdkTheme extends InheritedWidget {
     required super.child,
   });
 
-  /// The [AdkChatThemeData] provided by this widget.
+  /// The active [AdkChatThemeData] provided to descendants.
   final AdkChatThemeData data;
 
-  /// Retrieves the closest [AdkChatThemeData] from the widget tree, or derives one from [Theme.of].
-  static AdkChatThemeData of(BuildContext context) {
-    final AdkTheme? inherited = context.dependOnInheritedWidgetOfExactType<AdkTheme>();
-    if (inherited != null) {
-      return inherited.data;
-    }
-    return AdkChatThemeData.fromTheme(Theme.of(context));
+  /// Retrieves the closest [AdkChatThemeData] from the widget tree, or `null` if none is found.
+  static AdkChatThemeData? maybeOf(BuildContext context) {
+    final AdkTheme? inherited =
+        context.dependOnInheritedWidgetOfExactType<AdkTheme>();
+    return inherited?.data;
   }
 
-  /// Retrieves the closest [AdkChatThemeData], or null if not found.
-  static AdkChatThemeData? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<AdkTheme>()?.data;
+  /// Retrieves the closest [AdkChatThemeData] from the widget tree, or derives
+  /// a default theme from [Theme.of].
+  static AdkChatThemeData of(BuildContext context) {
+    return maybeOf(context) ?? AdkChatThemeData.fromTheme(Theme.of(context));
   }
 
   @override

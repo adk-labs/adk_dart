@@ -4,8 +4,10 @@ import 'package:adk_dart/adk_core.dart' as adk;
 import 'package:flutter/foundation.dart';
 
 import '../models/adk_chat_message.dart';
+import '../models/adk_token_usage_model.dart';
 import '../storage/adk_storage.dart';
 import '../storage/adk_storage_session_service.dart';
+import '../utils/adk_ui_utils.dart';
 
 /// State controller that manages conversation events, streaming responses,
 /// and message history for ADK agents in Flutter.
@@ -80,7 +82,27 @@ class AdkChatController extends ChangeNotifier {
   bool _isLoading = false;
   bool _isStreaming = false;
   String? _currentError;
+  AdkTokenUsage _sessionTokenUsage = const AdkTokenUsage();
+  AdkTokenUsage? _lastTurnTokenUsage;
+  int _turnCount = 0;
   StreamSubscription<adk.Event>? _subscription;
+
+  /// Cumulative token usage across all turns in the current session.
+  AdkTokenUsage get sessionTokenUsage => _sessionTokenUsage;
+
+  /// Token usage reported by the most recent model turn, if any.
+  AdkTokenUsage? get lastTurnTokenUsage => _lastTurnTokenUsage;
+
+  /// Number of completed model turns with token metrics in this session.
+  int get turnCount => _turnCount;
+
+  /// Resets cumulative [sessionTokenUsage] and [turnCount] counters.
+  void resetTokenUsage() {
+    _sessionTokenUsage = const AdkTokenUsage();
+    _lastTurnTokenUsage = null;
+    _turnCount = 0;
+    notifyListeners();
+  }
 
   /// Unmodifiable list of current chat messages in chronological order.
   List<AdkChatMessage> get messages =>
@@ -159,10 +181,24 @@ class AdkChatController extends ChangeNotifier {
     final StringBuffer thoughtAccumulator = StringBuffer();
     AdkCodeExecution? pendingCodeExecution;
     AdkGroundingInfo? latestGrounding;
+    AdkTokenUsage? latestTurnUsage;
+    String? latestInvocationId;
+    final Stopwatch turnStopwatch = Stopwatch()..start();
 
     final Completer<void> completer = Completer<void>();
     _subscription = eventStream.listen(
       (adk.Event event) {
+        if (event.invocationId.isNotEmpty) {
+          latestInvocationId = event.invocationId;
+        }
+        final AdkTokenUsage? eventUsage =
+            AdkEventStreamUtils.extractTokenUsage(event);
+        if (eventUsage != null && eventUsage.isNotEmpty) {
+          latestTurnUsage = eventUsage.copyWith(
+            latencyMs: turnStopwatch.elapsedMilliseconds,
+          );
+        }
+
         final adk.EventCompaction? compaction = event.actions.compaction;
         if (compaction != null) {
           final String summaryText = compaction.compactedContent.parts
@@ -260,7 +296,8 @@ class AdkChatController extends ChangeNotifier {
             chunkText.isNotEmpty ||
             thoughtChunk.isNotEmpty ||
             pendingCodeExecution != null ||
-            eventGrounding != null;
+            eventGrounding != null ||
+            eventUsage != null;
 
         if (hasModelUpdate) {
           _isStreaming = true;
@@ -282,6 +319,8 @@ class AdkChatController extends ChangeNotifier {
                 thought: currentThought,
                 codeExecution: pendingCodeExecution,
                 grounding: latestGrounding,
+                tokenUsage: latestTurnUsage,
+                invocationId: latestInvocationId,
               ),
             );
           } else {
@@ -294,6 +333,8 @@ class AdkChatController extends ChangeNotifier {
                 thought: currentThought,
                 codeExecution: pendingCodeExecution,
                 grounding: latestGrounding,
+                tokenUsage: latestTurnUsage,
+                invocationId: latestInvocationId,
               );
             }
           }
@@ -323,13 +364,24 @@ class AdkChatController extends ChangeNotifier {
     );
 
     await completer.future;
+    turnStopwatch.stop();
+
+    if (latestTurnUsage != null && latestTurnUsage!.isNotEmpty) {
+      _lastTurnTokenUsage = latestTurnUsage;
+      _sessionTokenUsage = _sessionTokenUsage + latestTurnUsage!;
+      _turnCount += 1;
+    }
 
     // Finalize the last model message as complete
     if (currentModelMsgId != null) {
       final int index =
           _messages.indexWhere((AdkChatMessage m) => m.id == currentModelMsgId);
       if (index != -1) {
-        _messages[index] = _messages[index].copyWith(isPartial: false);
+        _messages[index] = _messages[index].copyWith(
+          isPartial: false,
+          tokenUsage: latestTurnUsage,
+          invocationId: latestInvocationId,
+        );
       }
     }
   }
@@ -354,7 +406,20 @@ class AdkChatController extends ChangeNotifier {
     if (session == null) return;
 
     _messages.clear();
-    for (final event in session.events) {
+    _sessionTokenUsage = const AdkTokenUsage();
+    _lastTurnTokenUsage = null;
+    _turnCount = 0;
+
+    final List<adk.Event> effectiveEvents = adk.applyRewinds(session.events);
+    for (final event in effectiveEvents) {
+      final AdkTokenUsage? eventUsage =
+          AdkEventStreamUtils.extractTokenUsage(event);
+      if (eventUsage != null && eventUsage.isNotEmpty) {
+        _lastTurnTokenUsage = eventUsage;
+        _sessionTokenUsage = _sessionTokenUsage + eventUsage;
+        _turnCount += 1;
+      }
+
       final compaction = event.actions.compaction;
       if (compaction != null) {
         final summaryText = compaction.compactedContent.parts
@@ -418,6 +483,12 @@ class AdkChatController extends ChangeNotifier {
                   : null,
               grounding: !isUser && !attachedExtrasToModelMessage
                   ? grounding
+                  : null,
+              tokenUsage: !isUser && !attachedExtrasToModelMessage
+                  ? eventUsage
+                  : null,
+              invocationId: event.invocationId.isNotEmpty
+                  ? event.invocationId
                   : null,
               timestamp: DateTime.fromMillisecondsSinceEpoch(
                 (event.timestamp * 1000).toInt(),
@@ -562,7 +633,23 @@ class AdkChatController extends ChangeNotifier {
   void clearMessages() {
     _messages.clear();
     _currentError = null;
+    _sessionTokenUsage = const AdkTokenUsage();
+    _lastTurnTokenUsage = null;
+    _turnCount = 0;
     notifyListeners();
+  }
+
+  /// Rewinds the active session state and message history to before [invocationId].
+  Future<void> rewindBeforeInvocation(String invocationId) async {
+    if (_runner == null || invocationId.trim().isEmpty) {
+      return;
+    }
+    await _runner.rewindAsync(
+      userId: userId,
+      sessionId: sessionId,
+      rewindBeforeInvocationId: invocationId,
+    );
+    await loadSession();
   }
 
   /// Cancels any active streaming generation.

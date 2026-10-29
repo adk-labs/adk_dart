@@ -232,4 +232,274 @@ void main() {
     await tester.tap(find.text('ADK Docs'));
     expect(tappedSource?.uri, 'https://google.github.io/adk-docs/');
   });
+
+  test('AdkTokenUsage operator +, cacheHitRatio, and estimateCostUsd work accurately', () {
+    const AdkTokenUsage turn1 = AdkTokenUsage(
+      promptTokens: 1000,
+      completionTokens: 200,
+      thoughtTokens: 50,
+      cachedTokens: 400,
+      totalTokens: 1250,
+      latencyMs: 320,
+    );
+    const AdkTokenUsage turn2 = AdkTokenUsage(
+      promptTokens: 500,
+      completionTokens: 100,
+      cachedTokens: 100,
+      totalTokens: 600,
+      latencyMs: 180,
+    );
+    final AdkTokenUsage sum = turn1 + turn2;
+    expect(sum.promptTokens, 1500);
+    expect(sum.completionTokens, 300);
+    expect(sum.thoughtTokens, 50);
+    expect(sum.cachedTokens, 500);
+    expect(sum.totalTokens, 1850);
+    expect(sum.latencyMs, 500);
+    expect(turn1.cacheHitRatio, closeTo(0.4, 1e-6));
+    expect(sum.estimateCostUsd(), greaterThan(0));
+  });
+
+  testWidgets('AdkUsageMonitorCard and AdkContextWindowMeter render usage metrics', (
+    WidgetTester tester,
+  ) async {
+    const AdkTokenUsage usage = AdkTokenUsage(
+      promptTokens: 2400,
+      completionTokens: 600,
+      thoughtTokens: 200,
+      cachedTokens: 800,
+      totalTokens: 3200,
+      latencyMs: 450,
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Column(
+              children: <Widget>[
+                AdkUsageMonitorCard(
+                  usage: usage,
+                  modelName: 'gemini-2.5-flash',
+                  turnCount: 3,
+                ),
+                AdkContextWindowMeter(
+                  usedTokens: 64000,
+                  maxContextTokens: 128000,
+                  compactionThresholdTokens: 96000,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Token Usage & Cost'), findsOneWidget);
+    expect(find.text('gemini-2.5-flash'), findsOneWidget);
+    expect(find.text('3.2k'), findsOneWidget);
+    expect(find.text('33%'), findsOneWidget);
+    expect(find.text('Context Window'), findsOneWidget);
+    expect(find.textContaining('50%'), findsOneWidget);
+  });
+
+  testWidgets('AdkMessageBubble routes built-in tools to specialized cards and renders compaction & token badges', (
+    WidgetTester tester,
+  ) async {
+    final List<AdkChatMessage> messages = <AdkChatMessage>[
+      AdkChatMessage.tool(
+        id: 't_skill',
+        toolName: 'list_skills',
+        toolResult:
+            '<available_skills><skill><name>weather</name><description>Get forecast</description></skill></available_skills>',
+      ),
+      AdkChatMessage.tool(
+        id: 't_edit',
+        toolName: 'EditFile',
+        toolArgs: const <String, dynamic>{
+          'path': 'lib/main.dart',
+          'old_string': 'print("old");',
+          'new_string': 'print("new");\nprint("done");',
+        },
+      ),
+      AdkChatMessage.tool(
+        id: 't_shell',
+        toolName: 'execute_bash',
+        toolArgs: const <String, dynamic>{'command': 'dart test'},
+        toolResult: const <String, dynamic>{
+          'stdout': '\x1B[32mAll tests passed!\x1B[0m',
+          'exit_code': 0,
+        },
+      ),
+      AdkChatMessage.tool(
+        id: 't_web',
+        toolName: 'load_web_page',
+        toolArgs: const <String, dynamic>{'url': 'https://dart.dev/guides'},
+        toolResult: 'Dart documentation content',
+      ),
+      AdkChatMessage.tool(
+        id: 't_comp',
+        toolName: 'click_at',
+        toolArgs: const <String, dynamic>{'x': 120, 'y': 340},
+      ),
+      AdkChatMessage.system(
+        id: 's_compact',
+        text: 'Session compacted: Earlier turns summarized.',
+        isCompaction: true,
+      ),
+      AdkChatMessage.model(
+        id: 'm_usage',
+        text: 'Completed tasks.',
+        tokenUsage: const AdkTokenUsage(
+          promptTokens: 500,
+          completionTokens: 120,
+          totalTokens: 620,
+        ),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: messages
+                .map((AdkChatMessage m) => AdkMessageBubble(message: m))
+                .toList(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(AdkSkillToolCard), findsOneWidget);
+    expect(find.text('Available Skills (1)'), findsOneWidget);
+    expect(find.byType(AdkFileEditCard), findsOneWidget);
+    expect(find.text('lib/main.dart'), findsOneWidget);
+    expect(find.byType(AdkShellCommandCard), findsOneWidget);
+    expect(find.text('All tests passed!'), findsOneWidget);
+    expect(find.byType(AdkWebPageCard), findsOneWidget);
+    expect(find.text('dart.dev'), findsOneWidget);
+    expect(find.byType(AdkComputerActionCard), findsOneWidget);
+    expect(find.text('(120, 340)'), findsOneWidget);
+    expect(find.byType(AdkCompactionSummaryCard), findsOneWidget);
+    expect(find.byType(AdkTokenUsageBadge), findsOneWidget);
+    expect(find.text('620 tokens'), findsOneWidget);
+  });
+
+  testWidgets('AdkReflectRetryBanner and AdkMultiRunEvalCard render accurately', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: <Widget>[
+              AdkReflectRetryBanner(
+                attempt: 2,
+                maxRetries: 3,
+                targetName: 'search_api',
+                errorSummary: 'Invalid JSON argument',
+              ),
+              AdkMultiRunEvalCard(
+                caseSummaries: <AdkMultiRunCaseSummary>[
+                  AdkMultiRunCaseSummary(
+                    evalId: 'case_weather_1',
+                    totalRuns: 5,
+                    passedRuns: 4,
+                    passed: true,
+                    metrics: <AdkMultiRunMetricSummary>[
+                      AdkMultiRunMetricSummary(
+                        metricName: 'tool_trajectory_avg_score',
+                        methodName: 'mean_of_runs',
+                        value: 0.92,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Attempt 2/3'), findsOneWidget);
+    expect(find.textContaining('search_api'), findsOneWidget);
+    expect(find.text('case_weather_1'), findsOneWidget);
+    expect(find.text('4/5 runs passed'), findsOneWidget);
+  });
+
+  testWidgets('Custom AdkCardStyle, slot widgets, and custom builders override default UI', (
+    WidgetTester tester,
+  ) async {
+    const AdkCardStyle customStyle = AdkCardStyle(
+      backgroundColor: Colors.amber,
+      borderColor: Colors.deepOrange,
+      accentColor: Colors.purple,
+      textColor: Colors.black87,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: <Widget>[
+              AdkSkillToolCard(
+                toolName: 'list_skills',
+                toolResult:
+                    '<available_skills><skill><name>alpha</name><description>desc</description></skill></available_skills>',
+                initiallyExpanded: true,
+                style: customStyle,
+                leadingIcon: const Icon(Icons.star, key: Key('custom_skill_icon')),
+                skillItemBuilder: (BuildContext context, AdkSkillSummary skill) =>
+                    Text('CUSTOM_SKILL:${skill.name}'),
+              ),
+              AdkFileEditCard(
+                toolName: 'EditFile',
+                toolArgs: const <String, dynamic>{
+                  'path': 'main.dart',
+                  'old_string': 'a',
+                  'new_string': 'b',
+                },
+                style: customStyle,
+                diffLineBuilder: (BuildContext context, AdkDiffLine line) =>
+                    Text('CUSTOM_DIFF:${line.content}'),
+              ),
+              AdkMessageBubble(
+                message: AdkChatMessage.model(
+                  id: 'm_custom',
+                  text: 'Custom bubble',
+                  tokenUsage: const AdkTokenUsage(
+                    promptTokens: 10,
+                    completionTokens: 20,
+                    totalTokens: 30,
+                  ),
+                ),
+                tokenUsageBuilder: (
+                  BuildContext context,
+                  AdkTokenUsage usage,
+                  AdkChatMessage msg,
+                ) =>
+                    Text('CUSTOM_TOKENS:${usage.effectiveTotalTokens}'),
+              ),
+              AdkMessageBubble(
+                message: AdkChatMessage.tool(
+                  id: 't_custom',
+                  toolName: 'my_custom_tool',
+                ),
+                toolCardBuilder: (BuildContext context, AdkChatMessage msg) =>
+                    Text('CUSTOM_TOOL_CARD:${msg.toolName}'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('custom_skill_icon')), findsOneWidget);
+    expect(find.text('CUSTOM_SKILL:alpha'), findsOneWidget);
+    expect(find.text('CUSTOM_DIFF:a'), findsOneWidget);
+    expect(find.text('CUSTOM_DIFF:b'), findsOneWidget);
+    expect(find.text('CUSTOM_TOKENS:30'), findsOneWidget);
+    expect(find.text('CUSTOM_TOOL_CARD:my_custom_tool'), findsOneWidget);
+  });
 }
