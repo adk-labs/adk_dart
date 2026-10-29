@@ -1,136 +1,102 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-10-28
+- Date (UTC): 2026-10-29
 - Source: `google/adk-python`
-- Latest SHA: `82fe029b8490479229dbfc33815468fe17a427ab`
-- Previous SHA: `0ea43cc3986078699ef69a0437aca74bd7dfa520`
+- Latest SHA: `29956a8e69366c58f95b54eface6497b2294629d`
+- Previous SHA: `82fe029b8490479229dbfc33815468fe17a427ab`
 
 ## Summary
 
-- New commits: 26
+- New commits: 18
 
 ## Commits
 
-- [82fe029b](https://github.com/google/adk-python/commit/82fe029b8490479229dbfc33815468fe17a427ab) fix: convert Enum tool arguments to the declared member (Somay-kousis, 2026-10-28)
-- [b7ac5ef7](https://github.com/google/adk-python/commit/b7ac5ef7557186518ce57cb3dbfd58ec6c1b8bfe) fix: keep a wildcard allow_origins off the builder and internal agents (George Weale, 2026-10-28)
-- [4c66a009](https://github.com/google/adk-python/commit/4c66a009106cbb855a79f4dc7383712057212e1e) fix: avoid passing unknown alternate judge verdicts (Jeeho Lee, 2026-10-28)
-- [d563d803](https://github.com/google/adk-python/commit/d563d80372e0281236c57a299fbaafb0e5595c4a) fix: keep streamed ApigeeLlm tool call chunks without an index together (Alex Castillo, 2026-10-28)
-- [e2e9336a](https://github.com/google/adk-python/commit/e2e9336a7fde1ea6450a56629090be7bc06cae52) fix: reject names with a trailing newline (lisry-1, 2026-10-28)
-- [4d0cd985](https://github.com/google/adk-python/commit/4d0cd985faedb3c0d9e3579077de327a6ef86a52) fix: reject model-supplied urls with a backslash in the authority (George Weale, 2026-10-28)
-- [45ee29a2](https://github.com/google/adk-python/commit/45ee29a24b2e2dfa3ef4e270e8ce79ddd563e4eb) chore(samples): update live samples to use gemini-3.8-live (Jason Zhang, 2026-10-28)
-- [bc291ab6](https://github.com/google/adk-python/commit/bc291ab62ab2c0eaaaf01c7d9c0238b48842753f) fix: run LlamaIndexRetrieval lookups off the event loop (Roydon Sequeira, 2026-10-28)
-- [073b0054](https://github.com/google/adk-python/commit/073b0054780583903a927245cc8e1cca03c0a588) perf: skip the rewind pass for a workflow node with no events (George Weale, 2026-10-28)
-- [bd77f3f2](https://github.com/google/adk-python/commit/bd77f3f2c53a8d274a882f600f4e758f187d7d46) feat(cli): support Python versions other than 3.11 in adk deploy images (Yang Song, 2026-10-28)
-- [a72a8ed3](https://github.com/google/adk-python/commit/a72a8ed391c542417ce4c73c3bde751bb1d522cc) fix: count tool outputs since the last model call toward token threshold (Google Team Member, 2026-10-28)
-- [95dd267c](https://github.com/google/adk-python/commit/95dd267c22f822d554e93df165274389d5ae7f31) fix: return AgentTool input_schema validation errors to the model (George Weale, 2026-10-28)
-- [5cc364b7](https://github.com/google/adk-python/commit/5cc364b75587bc1806cd50b43905c074851c870c) fix: declare the retrieval tool query parameter as required (Roydon Sequeira, 2026-10-28)
-- [e34f126a](https://github.com/google/adk-python/commit/e34f126ac3cc9bb40629565f2aa79ecfcbe3c65c) perf: skip two per-turn history scans in an LLM agent node (George Weale, 2026-10-28)
-- [5db54a0f](https://github.com/google/adk-python/commit/5db54a0f89403f2a9517966c59a1f214cfda4534) test: cover database stale-writer session rejection (jabrailkhalil, 2026-10-28)
-- [ebec2c83](https://github.com/google/adk-python/commit/ebec2c83bb2e0a19163ae92371854f682cc8ce2a) fix: preserve span kinds in SQLite traces (Bicheng Wang, 2026-10-28)
-- [34750dcb](https://github.com/google/adk-python/commit/34750dcb85f4cdefefe002f8c3f156c471d29b52) docs: disable all content paths in the telemetry admin lock recipe (Jeeho Lee, 2026-10-28)
-- [3fbf2b5c](https://github.com/google/adk-python/commit/3fbf2b5c226c5935c17fe5678715ca70876abc9a) docs(agents): update ManagedAgent examples and tests to antigravity-preview-09-2026 (Google Team Member, 2026-10-28)
-- [1d81896a](https://github.com/google/adk-python/commit/1d81896aa081e7b2e50b3a4a227f7c6933805752) fix: honor query parameter style and explode (Naveen Chatlapalli, 2026-10-27)
-- [b9d2bc3d](https://github.com/google/adk-python/commit/b9d2bc3d95487ecc4a437b813f9b8fa634e1be54) fix: stop running truncated Claude tool calls (donggyun112, 2026-10-27)
-- [ce92e924](https://github.com/google/adk-python/commit/ce92e924721e873afec74bdb393072eb32615f96) feat: let AgentEvaluator evaluate an agent built at runtime (Vishal Bulbule, 2026-10-27)
-- [42a8a879](https://github.com/google/adk-python/commit/42a8a87928a092be2c2138c619f4d15ad12c953a) fix: drop per-invocation retry counts when an invocation ends (Somay-kousis, 2026-10-27)
-- [571670d9](https://github.com/google/adk-python/commit/571670d9f7e1760985d0bd41a009600ee14b6acd) fix: ignore thought parts when scoring response_match_score (Jason Zhang, 2026-10-27)
-- [2591397b](https://github.com/google/adk-python/commit/2591397bba40f1d0899aca0ea37c162381d0a119) fix: keep turns a rewind took back out of long-term memory (dev-S-t, 2026-10-27)
-- [3700f0d1](https://github.com/google/adk-python/commit/3700f0d1b99fee5a0bda8dc48a92df15179b3730) fix: accept declared field names in set_model_response for aliased schemas (techi101, 2026-10-27)
-- [cbe7c5e5](https://github.com/google/adk-python/commit/cbe7c5e529ae214c70e33b87cb8538f4cd4e3154) fix(flows): elide system instruction markers from relayed agent text (George Weale, 2026-10-27)
+- [29956a8e](https://github.com/google/adk-python/commit/29956a8e69366c58f95b54eface6497b2294629d) feat(tools): preserve tool display titles on BaseTool, McpTool, and events (Google Team Member, 2026-10-29)
+- [d45df6a4](https://github.com/google/adk-python/commit/d45df6a44e1fd1261997b2f1e7e6f74314e0bf9f) feat(classifiers): add RefusalAnswer for questions a model declines (Yuhan Gao, 2026-10-29)
+- [75fb7886](https://github.com/google/adk-python/commit/75fb78863b96f0381e2117dba28f8442fa45ba68) chore(deps): raise e2b floor to 2.29.5 (Kathy Wu, 2026-10-29)
+- [58332a28](https://github.com/google/adk-python/commit/58332a284b73435eb5c54dac73f6740258b7a741) fix: convert list[Enum] tool arguments to the declared members (Somay-kousis, 2026-10-29)
+- [e3d0ec92](https://github.com/google/adk-python/commit/e3d0ec9263f8a22bc857535baea0ce8456d689b6) feat(cli): pip install wheels and installable packages passed to --extra_packages (Yang Song, 2026-10-29)
+- [b6600be7](https://github.com/google/adk-python/commit/b6600be7b40e1b561418ecaf395240948881d9c0) fix(workflow): keep JoinNode in a loop firing after the first iteration (Thomas Zettl, 2026-10-29)
+- [08c289bb](https://github.com/google/adk-python/commit/08c289bb48e9fda73ed06d03dc7d8879c73fd2db) feat(tools): add semantic argument matching to Environment Simulation injections (Google Team Member, 2026-10-29)
+- [3640e7d0](https://github.com/google/adk-python/commit/3640e7d0c74bb2d377a58271ac6290d2e51ee60d) feat: add get_active_events helper function (ecantn, 2026-10-28)
+- [ba456715](https://github.com/google/adk-python/commit/ba456715ce8a25c99218db992d4b96ab30f2d5c5) fix(telemetry): give every gen_ai duration and token histogram bucket bounds (Google Team Member, 2026-10-28)
+- [0fe80f19](https://github.com/google/adk-python/commit/0fe80f19c2495895d8f432a6af7e6515d3a0426e) fix: split CJK sentences in ElevenLabsTTS (Kayvan Zahiri, 2026-10-28)
+- [665945db](https://github.com/google/adk-python/commit/665945db17579b68d0586f482b5d715c3e5f62c5) feat(bigquery): make built-in BigQuery skills loadable and discoverable via get_bigquery_skill (Google Team Member, 2026-10-28)
+- [ba8905a3](https://github.com/google/adk-python/commit/ba8905a36ddcdae459d431ca648bc39cb219a9f7) perf: handle workflow node paths and branches as plain strings (George Weale, 2026-10-28)
+- [effd6410](https://github.com/google/adk-python/commit/effd64101112643cf96ce6bdef6ece26080f6d49) feat: support input and output files in ContainerCodeExecutor (Hamdi Sakly, 2026-10-28)
+- [27dda3e1](https://github.com/google/adk-python/commit/27dda3e11eefef25fd75ba4b3ea43ded989f6e56) fix: handle non-UTF-8 avatar configuration files (xili-ytl, 2026-10-28)
+- [1e63423e](https://github.com/google/adk-python/commit/1e63423e5198a8d9dd04214add6bd67cb7d561bf) fix: stamp the model response event when finalizing it (Mihir Inamdar, 2026-10-28)
+- [ff66b1f1](https://github.com/google/adk-python/commit/ff66b1f178c02bc0ef5d97b4303cb2c446f045cc) feat: store eval files outside a read-only agents_dir (Anusha, 2026-10-28)
+- [930ec4de](https://github.com/google/adk-python/commit/930ec4de0ef4c5f2bfc2f13227a3fea9fb2e6d84) test: cover the tool call that carries no arguments (yasumorishima, 2026-10-28)
+- [adc2433b](https://github.com/google/adk-python/commit/adc2433bf467cf3ba778189e3b0ddf17bde5f0fb) fix: exclude replayed nodes from workflow max_concurrency count (Mihir Inamdar, 2026-10-28)
 
 ## Changed Files
 
-- `M	contributing/samples/integrations/livekit/README.md`
-- `M	contributing/samples/integrations/livekit/agent.py`
-- `M	contributing/samples/live/multi_agent/agent.py`
-- `M	contributing/samples/live/non_blocking_tool_agent/agent.py`
-- `M	contributing/samples/live/parallel_tools_agent/agent.py`
-- `M	contributing/samples/live/single_agent/agent.py`
-- `M	contributing/samples/live/streaming_tool_events/agent.py`
-- `M	contributing/samples/live/tool_callbacks_agent/agent.py`
-- `M	contributing/samples/live/tools_agent/agent.py`
-- `M	contributing/samples/live/workflow/README.md`
-- `M	contributing/samples/live/workflow/agent.py`
-- `M	contributing/samples/managed_agent/basic/agent.py`
-- `M	contributing/samples/managed_agent/code_execution/agent.py`
-- `M	contributing/samples/managed_agent/remote_mcp/agent.py`
-- `M	contributing/samples/managed_agent/single_turn/agent.py`
-- `M	contributing/samples/managed_agent/system_instruction/agent.py`
-- `M	docs/guides/agents/managed_agent/index.md`
-- `M	docs/guides/evaluation/agent_evaluator/index.md`
-- `M	docs/guides/plugins/reflect_retry_model_plugin/index.md`
-- `M	docs/guides/plugins/reflect_retry_tool_plugin/index.md`
-- `M	docs/guides/telemetry/telemetry_config/index.md`
-- `M	src/google/adk/agents/_managed_agent.py`
-- `M	src/google/adk/apps/app.py`
-- `M	src/google/adk/apps/compaction.py`
-- `M	src/google/adk/cli/api_server.py`
+- `M	.agents/skills/adk-architecture/references/interface-workflow.md`
+- `M	contributing/samples/live/cascade/README_elevenlabs.md`
+- `M	docs/guides/integrations/bigquery/bigquery_toolset/index.md`
+- `M	docs/guides/labs/classifiers/classifier_node/index.md`
+- `M	docs/guides/tools/tool_args_matcher/tool_args_matcher/index.md`
+- `M	docs/guides/workflow/join_node/index.md`
+- `M	pyproject.toml`
+- `M	src/google/adk/agents/context.py`
 - `M	src/google/adk/cli/cli_deploy.py`
+- `M	src/google/adk/cli/cli_eval.py`
 - `M	src/google/adk/cli/cli_tools_click.py`
-- `M	src/google/adk/cli/deployers/_dockerfile_template.py`
-- `M	src/google/adk/cli/dev_server.py`
-- `M	src/google/adk/cli/utils/agent_loader.py`
-- `M	src/google/adk/evaluation/agent_evaluator.py`
-- `M	src/google/adk/evaluation/final_response_match_v1.py`
-- `M	src/google/adk/evaluation/final_response_match_v2.py`
-- `M	src/google/adk/flows/llm_flows/context/_fencing.py`
-- `M	src/google/adk/integrations/firestore/firestore_memory_service.py`
-- `M	src/google/adk/memory/_sqlite_memory_service.py`
-- `M	src/google/adk/memory/in_memory_memory_service.py`
-- `M	src/google/adk/memory/vertex_ai_memory_bank_service.py`
-- `M	src/google/adk/memory/vertex_ai_rag_memory_service.py`
-- `M	src/google/adk/models/anthropic_llm.py`
-- `M	src/google/adk/models/apigee_llm.py`
-- `M	src/google/adk/plugins/_reflect_retry_model_plugin.py`
-- `M	src/google/adk/plugins/_reflect_retry_utils.py`
-- `M	src/google/adk/plugins/reflect_retry_tool_plugin.py`
-- `M	src/google/adk/skills/models.py`
-- `M	src/google/adk/telemetry/sqlite_span_exporter.py`
-- `M	src/google/adk/tools/_url_validator.py`
-- `M	src/google/adk/tools/agent_tool.py`
-- `M	src/google/adk/tools/computer_use/computer_use_toolset.py`
-- `M	src/google/adk/tools/openapi_tool/common/common.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/operation_parser.py`
-- `M	src/google/adk/tools/openapi_tool/openapi_spec_parser/rest_api_tool.py`
-- `M	src/google/adk/tools/retrieval/base_retrieval_tool.py`
-- `M	src/google/adk/tools/retrieval/llama_index_retrieval.py`
-- `M	src/google/adk/tools/set_model_response_tool.py`
+- `M	src/google/adk/cli/fast_api.py`
+- `A	src/google/adk/cli/utils/_eval_storage.py`
+- `M	src/google/adk/code_executors/container_code_executor.py`
+- `M	src/google/adk/events/__init__.py`
+- `M	src/google/adk/events/_branch_path.py`
+- `M	src/google/adk/events/_node_path_builder.py`
+- `M	src/google/adk/events/_rewind_events.py`
+- `M	src/google/adk/events/event.py`
+- `M	src/google/adk/flows/llm_flows/base_llm_flow.py`
+- `M	src/google/adk/flows/llm_flows/context/_contents.py`
+- `M	src/google/adk/flows/llm_flows/core/_finalizer.py`
+- `M	src/google/adk/integrations/bigquery/_bigquery_skill.py`
+- `M	src/google/adk/integrations/bigquery/bigquery_toolset.py`
+- `M	src/google/adk/integrations/eleven_labs/README.md`
+- `M	src/google/adk/integrations/eleven_labs/_tts.py`
+- `M	src/google/adk/labs/classifiers/__init__.py`
+- `M	src/google/adk/labs/classifiers/_base_classifier.py`
+- `M	src/google/adk/labs/classifiers/_classifier_node.py`
+- `M	src/google/adk/labs/classifiers/_types.py`
+- `M	src/google/adk/telemetry/_metrics.py`
+- `M	src/google/adk/tools/base_tool.py`
+- `M	src/google/adk/tools/environment_simulation/environment_simulation_config.py`
+- `M	src/google/adk/tools/environment_simulation/environment_simulation_engine.py`
+- `M	src/google/adk/tools/mcp_tool/mcp_tool.py`
+- `M	src/google/adk/tools/tool_args_matcher/__init__.py`
+- `A	src/google/adk/tools/tool_args_matcher/_semantic_arg_matcher.py`
 - `M	src/google/adk/utils/_schema_utils.py`
-- `M	src/google/adk/workflow/_llm_agent_wrapper.py`
-- `M	src/google/adk/workflow/_node_runner.py`
-- `M	tests/integration/test_managed_agent.py`
-- `M	tests/unittests/agents/test_managed_agent.py`
-- `M	tests/unittests/apps/test_apps.py`
-- `M	tests/unittests/apps/test_compaction.py`
+- `M	src/google/adk/workflow/_dynamic_node_scheduler.py`
+- `M	src/google/adk/workflow/_join_node.py`
+- `M	src/google/adk/workflow/_workflow.py`
+- `M	src/google/adk/workflow/utils/_replay_manager.py`
+- `A	tests/integration/test_environment_simulation_semantic_matching.py`
 - `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/cli/utils/test_agent_loader.py`
 - `M	tests/unittests/cli/utils/test_cli_deploy.py`
-- `M	tests/unittests/evaluation/test_agent_evaluator.py`
-- `M	tests/unittests/evaluation/test_final_response_match_v1.py`
-- `M	tests/unittests/evaluation/test_final_response_match_v2.py`
-- `M	tests/unittests/flows/llm_flows/context/test_fencing.py`
-- `M	tests/unittests/integrations/firestore/test_firestore_memory_service.py`
-- `M	tests/unittests/memory/test_in_memory_memory_service.py`
-- `M	tests/unittests/memory/test_sqlite_memory_service.py`
-- `M	tests/unittests/memory/test_vertex_ai_memory_bank_service.py`
-- `M	tests/unittests/memory/test_vertex_ai_rag_memory_service.py`
-- `M	tests/unittests/models/test_anthropic_llm.py`
-- `M	tests/unittests/models/test_apigee_llm.py`
-- `M	tests/unittests/plugins/test_reflect_retry_model_plugin.py`
-- `M	tests/unittests/plugins/test_reflect_retry_tool_plugin.py`
-- `M	tests/unittests/plugins/test_reflect_retry_utils.py`
-- `M	tests/unittests/sessions/test_session_service.py`
-- `M	tests/unittests/skills/test_models.py`
-- `M	tests/unittests/telemetry/test_sqlite_span_exporter.py`
-- `M	tests/unittests/tools/openapi_tool/common/test_common.py`
-- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_operation_parser.py`
-- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_rest_api_tool.py`
-- `M	tests/unittests/tools/retrieval/test_base_retrieval_tool.py`
-- `M	tests/unittests/tools/retrieval/test_llama_index_retrieval.py`
-- `M	tests/unittests/tools/test_agent_tool.py`
+- `M	tests/unittests/cli/utils/test_cli_eval.py`
+- `M	tests/unittests/cli/utils/test_cli_tools_click.py`
+- `M	tests/unittests/cli/utils/test_evals.py`
+- `M	tests/unittests/code_executors/test_container_code_executor.py`
+- `M	tests/unittests/events/test_branch_path.py`
+- `M	tests/unittests/events/test_node_path_builder.py`
+- `A	tests/unittests/events/test_rewind_events.py`
+- `M	tests/unittests/flows/llm_flows/context/test_contents_branch.py`
+- `M	tests/unittests/flows/llm_flows/core/test_finalizer.py`
+- `M	tests/unittests/flows/llm_flows/test_base_llm_flow.py`
+- `M	tests/unittests/integrations/bigquery/test_bigquery_skill.py`
+- `M	tests/unittests/integrations/eleven_labs/test_tts.py`
+- `M	tests/unittests/labs/classifiers/test_classifier_node.py`
+- `M	tests/unittests/labs/classifiers/test_types.py`
+- `M	tests/unittests/models/test_litellm.py`
+- `M	tests/unittests/tools/environment_simulation/test_environment_simulation_config.py`
+- `M	tests/unittests/tools/environment_simulation/test_environment_simulation_engine.py`
+- `M	tests/unittests/tools/mcp_tool/test_mcp_tool.py`
 - `M	tests/unittests/tools/test_function_tool.py`
-- `M	tests/unittests/tools/test_load_web_page.py`
-- `M	tests/unittests/tools/test_set_model_response_tool.py`
-- `M	tests/unittests/tools/test_url_validator.py`
-- `M	tests/unittests/workflow/test_llm_agent_as_node.py`
-- `M	tests/unittests/workflow/test_node_runner_ctx.py`
+- `A	tests/unittests/tools/tool_args_matcher/test_semantic_arg_matcher.py`
+- `M	tests/unittests/workflow/test_join_node.py`
+- `M	tests/unittests/workflow/test_workflow_concurrency.py`
+- `M	tests/unittests/workflow/utils/test_replay_manager.py`
