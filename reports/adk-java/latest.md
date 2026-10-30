@@ -1,9 +1,9 @@
 # ADK Java Daily Change Report
 
-- Date (UTC): 2026-10-29
+- Date (UTC): 2026-10-30
 - Source: `google/adk-java`
-- Latest SHA: `7391fa836e8896787eb3f690875152f9f84bcec3`
-- Previous SHA: `b7f45e2b54c5331c847e6ceb26ed24f09f8d13ee`
+- Latest SHA: `a4c8ac1ef53543b3a00075899b6499b1874bc90d`
+- Previous SHA: `7391fa836e8896787eb3f690875152f9f84bcec3`
 
 ## Summary
 
@@ -11,37 +11,27 @@
 
 ## Commits
 
-- [7391fa83](https://github.com/google/adk-java/commit/7391fa836e8896787eb3f690875152f9f84bcec3) feat: add a Spring Boot chat that streams replies and mixes ADK and Spring AI tools (Rafal Glowinski, 2026-10-29)
-- [2e8dbead](https://github.com/google/adk-java/commit/2e8dbeada175adebab13f49bdc6cafe24ecd7341) feat: add App.toBuilder() (Damian Osadczuk, 2026-10-29)
-- [528a99d4](https://github.com/google/adk-java/commit/528a99d4d79c73f5f654d7f0f7777b41e32fd46c) feat: run a node once per item of a list input (Miłosz Sobczyk, 2026-10-29)
-- [bca05915](https://github.com/google/adk-java/commit/bca05915b244cfc23bfd738c4feadc2ae5f53f58) feat: add a Spring Boot chat app backed by an ADK agent (Rafal Glowinski, 2026-10-29)
-- [c2ab2e32](https://github.com/google/adk-java/commit/c2ab2e3225c81b41897f5678f97d1eaca6b92ad9) fix: keep event isolation scopes in an adapted Java session service (Damian Momot, 2026-10-28)
+- [a4c8ac1e](https://github.com/google/adk-java/commit/a4c8ac1ef53543b3a00075899b6499b1874bc90d) feat(workflow): add NodeExecutionException as the base of NodeTimeoutException (Damian Momot, 2026-10-30)
+- [fb4c9160](https://github.com/google/adk-java/commit/fb4c9160b359ee85a32c81da85289264c516b87d) feat(workflow): let RetryConfig match exceptions by class (Damian Momot, 2026-10-30)
+- [a0178791](https://github.com/google/adk-java/commit/a0178791015d388b3bad12b6a9f3bade6a6b302e) fix: let a timeout cancel the node a workflow is starting (Damian Momot, 2026-10-30)
+- [0c661e11](https://github.com/google/adk-java/commit/0c661e11f76e6eb385930ecf14df6a222444d202) fix: fail a timed-out node with NodeTimeoutException (Damian Momot, 2026-10-30)
+- [64ce48c7](https://github.com/google/adk-java/commit/64ce48c742eb423671f2c36696fcf3986f791c73) fix: harden disabled mode, config checks and error capture (Google Team Member, 2026-10-29)
 
 ## Changed Files
 
-- `M	core/src/main/java/com/google/adk/apps/App.java`
-- `A	core/src/main/java/com/google/adk/workflow/ParallelWorkers.java`
-- `M	core/src/test/java/com/google/adk/apps/AppTest.java`
-- `A	core/src/test/java/com/google/adk/workflow/ParallelWorkersTest.java`
-- `M	examples/README.md`
-- `M	examples/pom.xml`
-- `A	examples/spring_chat/README.md`
-- `A	examples/spring_chat/pom.xml`
-- `A	examples/spring_chat/src/main/java/com/example/springchat/AgentConfig.java`
-- `A	examples/spring_chat/src/main/java/com/example/springchat/ChatController.java`
-- `A	examples/spring_chat/src/main/java/com/example/springchat/SpringChatApplication.java`
-- `A	examples/spring_chat/src/main/resources/application.properties`
-- `A	examples/spring_chat/src/main/resources/static/index.html`
-- `A	examples/spring_chat_advanced/README.md`
-- `A	examples/spring_chat_advanced/pom.xml`
-- `A	examples/spring_chat_advanced/src/main/java/com/example/springchat/advanced/AgentConfig.java`
-- `A	examples/spring_chat_advanced/src/main/java/com/example/springchat/advanced/ChatController.java`
-- `A	examples/spring_chat_advanced/src/main/java/com/example/springchat/advanced/OrderService.java`
-- `A	examples/spring_chat_advanced/src/main/java/com/example/springchat/advanced/ShippingTools.java`
-- `A	examples/spring_chat_advanced/src/main/java/com/example/springchat/advanced/SpringChatAdvancedApplication.java`
-- `A	examples/spring_chat_advanced/src/main/resources/application.properties`
-- `A	examples/spring_chat_advanced/src/main/resources/static/index.html`
-- `M	pom.xml`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/JavaAdkToKt.kt`
-- `M	tokt/src/main/kotlin/com/google/adk/tokt/codecs/EventCodec.kt`
-- `M	tokt/src/test/kotlin/com/google/adk/tokt/KtRunnerInteropTest.kt`
+- `M	core/src/main/java/com/google/adk/plugins/agentanalytics/BigQueryAgentAnalyticsPlugin.java`
+- `M	core/src/main/java/com/google/adk/plugins/agentanalytics/BigQueryLoggerConfig.java`
+- `M	core/src/main/java/com/google/adk/plugins/agentanalytics/PluginState.java`
+- `M	core/src/main/java/com/google/adk/workflow/NodeConfig.java`
+- `A	core/src/main/java/com/google/adk/workflow/NodeExecutionException.java`
+- `M	core/src/main/java/com/google/adk/workflow/NodeRunner.java`
+- `A	core/src/main/java/com/google/adk/workflow/NodeTimeoutException.java`
+- `M	core/src/main/java/com/google/adk/workflow/RetryConfig.java`
+- `M	core/src/main/java/com/google/adk/workflow/Scheduler.java`
+- `M	core/src/test/java/com/google/adk/plugins/agentanalytics/BigQueryAgentAnalyticsPluginTest.java`
+- `M	core/src/test/java/com/google/adk/plugins/agentanalytics/BigQueryLoggerConfigTest.java`
+- `M	core/src/test/java/com/google/adk/plugins/agentanalytics/PluginStateTest.java`
+- `M	core/src/test/java/com/google/adk/workflow/ParallelWorkersTest.java`
+- `M	core/src/test/java/com/google/adk/workflow/RetryConfigTest.java`
+- `M	core/src/test/java/com/google/adk/workflow/SchedulerTest.java`
+- `M	core/src/test/java/com/google/adk/workflow/WorkflowRetryTest.java`
