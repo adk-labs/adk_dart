@@ -13,6 +13,46 @@ import 'package:adk_dart/src/workflow/workflow.dart';
 /// JSON-compatible object map.
 typedef GraphJson = Map<String, Object?>;
 
+/// Node type mapping for workflow node classes.
+const Map<String, String> nodeTypeMap = <String, String>{
+  'FunctionNode': 'function',
+  'ToolNode': 'tool',
+  'JoinNode': 'join',
+};
+
+/// Fields to skip during agent serialization.
+const Set<String> skipFields = <String>{
+  'parent_agent',
+  'before_agent_callback',
+  'after_agent_callback',
+  'before_model_callback',
+  'after_model_callback',
+  'on_model_error_callback',
+  'before_tool_callback',
+  'after_tool_callback',
+  'on_tool_error_callback',
+};
+
+/// Serializes a node-like object (`String`, [BaseAgent], [BaseNode], `Function`, or primitive).
+Object? serializeNodeLike(Object? item) {
+  if (item == 'START') {
+    return 'START';
+  }
+  if (item == null || item is String || item is num || item is bool) {
+    return item;
+  }
+  if (item is BaseAgent) {
+    return serializeAgent(item);
+  }
+  if (item is BaseNode) {
+    return serializeNode(item);
+  }
+  if (item is Function) {
+    return <String, Object?>{'name': _callableName(item), 'type': 'function'};
+  }
+  return '$item';
+}
+
 /// Serializes an app for graph-oriented web UI endpoints.
 GraphJson serializeAppInfo(App app, {String? readme}) {
   final GraphJson result = <String, Object?>{
@@ -64,6 +104,14 @@ GraphJson serializeAgent(BaseAgent agent) {
 
 /// Serializes a workflow node.
 GraphJson serializeNode(BaseNode node) {
+  if (node.name == '__START__') {
+    return <String, Object?>{
+      'name': '__START__',
+      'type': 'start',
+      'rerun_on_resume': node.rerunOnResume,
+    };
+  }
+
   final GraphJson result = <String, Object?>{
     'name': node.name,
     'type': _nodeType(node),
@@ -108,7 +156,21 @@ GraphJson _serializeLlmAgentFields(LlmAgent agent) {
     result['static_instruction'] = _jsonSafeValue(agent.staticInstruction);
   }
   if (agent.tools.isNotEmpty) {
-    result['tools'] = agent.tools.map(_serializeToolLike).toList();
+    final Set<String> subAgentNames = <String>{
+      for (final BaseAgent subAgent in agent.subAgents)
+        if (subAgent.name.isNotEmpty) subAgent.name,
+    };
+    final List<Object?> serializedTools = <Object?>[];
+    for (final Object tool in agent.tools) {
+      final Object? serialized = _serializeToolLike(tool);
+      if (serialized is Map &&
+          serialized['name'] is String &&
+          subAgentNames.contains(serialized['name'])) {
+        continue;
+      }
+      serializedTools.add(serialized);
+    }
+    result['tools'] = serializedTools;
   }
   if (agent.subAgents.isNotEmpty) {
     result['sub_agents'] = agent.subAgents.map(serializeAgent).toList();

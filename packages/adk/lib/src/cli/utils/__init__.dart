@@ -1,6 +1,9 @@
 /// Utility exports shared across CLI commands.
 library;
 
+export '_eval_storage.dart';
+export '_nested_agent_loader.dart';
+export '_onboarding.dart' hide promptStr, promptToChooseBackend;
 export 'agent_change_handler.dart';
 export 'agent_loader.dart';
 export 'base_agent_loader.dart';
@@ -9,7 +12,9 @@ export 'common.dart';
 export 'dot_adk_folder.dart';
 export 'envs.dart';
 export 'evals.dart';
+export 'gcp_utils.dart';
 export 'graph_serialization.dart';
+export 'graph_visualization.dart';
 export 'local_storage.dart';
 export 'logs.dart';
 export 'service_factory.dart';

@@ -16,4 +16,4 @@
 library;
 
 export 'package:adk_dart/adk_dart.dart' hide adkPackageVersion;
-export 'cli.dart';
+export 'cli.dart' hide validateAppName;

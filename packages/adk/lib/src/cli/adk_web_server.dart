@@ -7,6 +7,9 @@ import '../dev/project.dart';
 import '../dev/runtime.dart';
 import '../dev/web_server.dart';
 
+export 'api_server.dart';
+export 'dev_server.dart';
+
 /// Configurable wrapper that starts and stops the ADK dev web server.
 class AdkWebServer {
   /// Creates a web server launcher for [agentsDir].

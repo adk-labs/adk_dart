@@ -33,8 +33,15 @@ Directory _resolveAgentDir({
     parameterName: 'agentsRoot',
   );
   final String rootPath = _ensureTrailingSlash(agentsRootDir.uri.path);
+  final String relativeAppPath =
+      (appName.contains('.') &&
+              !appName.contains('..') &&
+              !appName.contains('/') &&
+              !appName.contains(r'\'))
+          ? appName.replaceAll('.', Platform.pathSeparator)
+          : appName;
   final Directory agentDir = Directory(
-    '${agentsRootDir.path}${Platform.pathSeparator}$appName',
+    '${agentsRootDir.path}${Platform.pathSeparator}$relativeAppPath',
   ).absolute;
   final String agentPath = _ensureTrailingSlash(agentDir.uri.path);
 

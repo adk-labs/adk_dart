@@ -27,6 +27,9 @@ const String cloudRunServiceEnv = 'K_SERVICE';
 /// Kubernetes environment variable used for runtime detection.
 const String kubernetesHostEnv = 'KUBERNETES_SERVICE_HOST';
 
+/// Agent Engine ID environment variable used for automatic service configuration.
+const String agentEngineIdEnv = 'GOOGLE_CLOUD_AGENT_ENGINE_ID';
+
 /// Redacts sensitive URI components before writing logs.
 String redactUriForLog(String uri) {
   if (uri.trim().isEmpty) {
@@ -75,6 +78,16 @@ bool isCloudRun([Map<String, String>? environment]) {
 bool isKubernetes([Map<String, String>? environment]) {
   final Map<String, String> env = environment ?? Platform.environment;
   return (env[kubernetesHostEnv] ?? '').isNotEmpty;
+}
+
+/// Returns the `agentengine://` URI if [agentEngineIdEnv] is set.
+String? getAgentEngineUri([Map<String, String>? environment]) {
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String? engineId = env[agentEngineIdEnv]?.trim();
+  if (engineId != null && engineId.isNotEmpty) {
+    return 'agentengine://$engineId';
+  }
+  return null;
 }
 
 /// Whether [dir] is writable by creating and deleting a probe file.
@@ -145,6 +158,7 @@ BaseSessionService createSessionServiceFromOptions({
   Map<String, Object?>? sessionDbKwargs,
   Map<String, String>? appNameToDir,
   bool useLocalStorage = true,
+  Map<String, String>? environment,
 }) {
   final Directory basePath = directoryFromArg(
     baseDir,
@@ -168,25 +182,46 @@ BaseSessionService createSessionServiceFromOptions({
     return DatabaseSessionService(sessionServiceUri);
   }
 
+  final String? agentEngineUri = getAgentEngineUri(environment);
+  if (agentEngineUri != null) {
+    try {
+      final BaseSessionService? service = registry.createSessionService(
+        agentEngineUri,
+        kwargs: kwargs,
+      );
+      if (service != null) {
+        return service;
+      }
+    } on Object {
+      // Auto-configuration is best-effort; fall back to local/in-memory storage.
+    }
+  }
+
   final (bool enabled, String? _) = resolveUseLocalStorage(
     basePath: basePath,
     requested: useLocalStorage,
+    environment: environment,
   );
   if (!enabled) {
     return InMemorySessionService();
   }
 
-  return createLocalSessionService(
-    baseDir: basePath.path,
-    perAgent: true,
-    appNameToDir: appNameToDir,
-  );
+  try {
+    return createLocalSessionService(
+      baseDir: basePath.path,
+      perAgent: true,
+      appNameToDir: appNameToDir,
+    );
+  } on FileSystemException {
+    return InMemorySessionService();
+  }
 }
 
 /// Creates a memory service from CLI options and environment context.
 BaseMemoryService createMemoryServiceFromOptions({
   required Object baseDir,
   String? memoryServiceUri,
+  Map<String, String>? environment,
 }) {
   final Directory basePath = directoryFromArg(
     baseDir,
@@ -207,6 +242,21 @@ BaseMemoryService createMemoryServiceFromOptions({
     return service;
   }
 
+  final String? agentEngineUri = getAgentEngineUri(environment);
+  if (agentEngineUri != null) {
+    try {
+      final BaseMemoryService? service = registry.createMemoryService(
+        agentEngineUri,
+        kwargs: <String, Object?>{'agents_dir': basePath.path},
+      );
+      if (service != null) {
+        return service;
+      }
+    } on Object {
+      // Auto-configuration is best-effort; fall back to in-memory memory service.
+    }
+  }
+
   return InMemoryMemoryService();
 }
 
@@ -215,7 +265,10 @@ BaseArtifactService createArtifactServiceFromOptions({
   required Object baseDir,
   String? artifactServiceUri,
   bool strictUri = false,
+  Map<String, String>? appNameToDir,
+  bool perAgent = false,
   bool useLocalStorage = true,
+  Map<String, String>? environment,
 }) {
   final Directory basePath = directoryFromArg(
     baseDir,
@@ -242,13 +295,18 @@ BaseArtifactService createArtifactServiceFromOptions({
   final (bool enabled, String? _) = resolveUseLocalStorage(
     basePath: basePath,
     requested: useLocalStorage,
+    environment: environment,
   );
   if (!enabled) {
     return InMemoryArtifactService();
   }
 
   try {
-    return createLocalArtifactService(baseDir: basePath.path);
+    return createLocalArtifactService(
+      baseDir: basePath.path,
+      perAgent: perAgent || appNameToDir != null,
+      appNameToDir: appNameToDir,
+    );
   } on FileSystemException {
     return InMemoryArtifactService();
   }

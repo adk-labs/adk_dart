@@ -38,6 +38,21 @@ void main() {
           greaterThan(0),
           reason: '$relativePath must be non-empty',
         );
+        if (relativePath.endsWith('.py')) {
+          final String dartPath =
+              '${relativePath.substring(0, relativePath.length - 3)}.dart';
+          final File dartFile = File(_join(packageRoot.path, dartPath));
+          expect(
+            dartFile.existsSync(),
+            isTrue,
+            reason: '$dartPath must exist alongside $relativePath',
+          );
+          expect(
+            dartFile.lengthSync(),
+            greaterThan(0),
+            reason: '$dartPath must be non-empty',
+          );
+        }
       }
     });
 

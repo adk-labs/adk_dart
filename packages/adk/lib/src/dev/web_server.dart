@@ -17,6 +17,7 @@ import 'package:adk_dart/src/agents/llm_agent.dart';
 import 'package:adk_dart/src/agents/run_config.dart';
 import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
+import '../cli/_dev_deploy.dart' as dev_deploy;
 import '../cli/agent_graph.dart' as agent_graph;
 import '../cli/trigger_routes.dart';
 import '../cli/utils/agent_loader.dart';
@@ -1668,6 +1669,29 @@ Future<void> _handleRequest(
       request.method == 'GET') {
     await _handleGetAppGraphImage(request, context, appName: segments[2]);
     return;
+  }
+
+  if (segments.length == 5 &&
+      segments[0] == 'dev' &&
+      segments[1] == 'apps' &&
+      segments[3] == 'deploy') {
+    final bool handled = await dev_deploy.handleDevDeployRoute(
+      request: request,
+      routedPath: routedPath,
+      agentsRoot: context.agentsDir,
+      enableWebUi: context.enableWebUi,
+      isLocalClient: _isLocalDevDeployClient(request, context),
+      agentLookup: (String appName) {
+        try {
+          return context.getRootAgent(appName);
+        } catch (_) {
+          return null;
+        }
+      },
+    );
+    if (handled) {
+      return;
+    }
   }
 
   if (await _handlePythonStyleRoutes(request, context, segments)) {
@@ -4892,6 +4916,36 @@ bool _requestHasForeignBrowserOrigin(
     request: request,
     allowOrigins: context.allowOrigins,
   );
+}
+
+bool _isLocalDevDeployClient(HttpRequest request, _AdkDevWebContext context) {
+  if (_requestHasForeignBrowserOrigin(request, context)) {
+    return false;
+  }
+  final String allowRemote =
+      (Platform.environment['ADK_ALLOW_REMOTE_AGENT_BUILDER'] ?? '')
+          .trim()
+          .toLowerCase();
+  if (allowRemote == '1' || allowRemote == 'true' || allowRemote == 'yes') {
+    return true;
+  }
+  for (final String header in const <String>[
+    'forwarded',
+    'x-forwarded-for',
+    'x-forwarded-host',
+  ]) {
+    if (_firstHeaderValue(request, header) != null) {
+      return false;
+    }
+  }
+  if (context.serverHost != null && !_isLoopbackAddress(context.serverHost!)) {
+    return false;
+  }
+  final HttpConnectionInfo? connInfo = request.connectionInfo;
+  if (connInfo != null && !_isLoopbackAddress(connInfo.remoteAddress.address)) {
+    return false;
+  }
+  return true;
 }
 
 String? _getRequestOrigin(HttpRequest request) {

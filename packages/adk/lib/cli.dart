@@ -10,12 +10,19 @@
 library;
 
 export 'src/cli/cli_tools_click.dart' show main;
+export 'src/cli/_dev_deploy.dart';
+export 'src/cli/_telemetry/__init__.dart';
 export 'src/cli/adk_web_server.dart';
 export 'src/cli/agent_graph.dart';
+export 'src/cli/agent_test_runner.dart';
+export 'src/cli/api_server.dart';
+export 'src/cli/built_in_agents/__init__.dart';
 export 'src/cli/cli_create.dart';
 export 'src/cli/cli_deploy.dart';
 export 'src/cli/cli_eval.dart';
 export 'src/cli/conformance/__init__.dart';
+export 'src/cli/deployers/__init__.dart';
+export 'src/cli/dev_server.dart';
 export 'src/cli/fast_api.dart';
 export 'src/cli/plugins/__init__.dart';
 export 'src/cli/service_registry.dart';

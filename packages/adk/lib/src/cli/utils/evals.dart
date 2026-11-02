@@ -34,15 +34,20 @@ List<Invocation> convertSessionToEvalInvocations(Session? session) {
 ///
 /// Throws an [ArgumentError] for unsupported URI schemes.
 /// Throws a [StateError] when `GOOGLE_CLOUD_PROJECT` is missing.
-GcsEvalManagers createGcsEvalManagersFromUri(String evalStorageUri) {
+GcsEvalManagers createGcsEvalManagersFromUri(
+  String evalStorageUri, {
+  Map<String, String>? environment,
+}) {
   if (!evalStorageUri.startsWith('gs://')) {
     throw ArgumentError(
       'Unsupported evals storage URI: $evalStorageUri. Supported URIs: gs://<bucket name>',
     );
   }
 
-  final String bucketName = evalStorageUri.split('://')[1];
-  final String? project = getCliEnvironmentValue('GOOGLE_CLOUD_PROJECT');
+  final String bucketName = evalStorageUri.split('://')[1].split('/')[0];
+  final String? project =
+      environment?['GOOGLE_CLOUD_PROJECT'] ??
+      getCliEnvironmentValue('GOOGLE_CLOUD_PROJECT');
   if (project == null || project.isEmpty) {
     throw StateError('GOOGLE_CLOUD_PROJECT is not set.');
   }
