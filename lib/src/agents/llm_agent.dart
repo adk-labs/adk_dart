@@ -131,7 +131,21 @@ class LlmAgent extends BaseAgent {
     this.beforeToolCallback,
     this.afterToolCallback,
     this.onToolErrorCallback,
+    this.parallelWorker = false,
+    this.maxParallelWorkers,
   }) : tools = _adaptTools(tools) {
+    if (maxParallelWorkers != null && maxParallelWorkers! < 1) {
+      throw ArgumentError.value(
+        maxParallelWorkers,
+        'maxParallelWorkers',
+        'max_parallel_workers must be >= 1.',
+      );
+    }
+    if (maxParallelWorkers != null && !parallelWorker) {
+      throw ArgumentError(
+        'max_parallel_workers can only be set when parallel_worker is true.',
+      );
+    }
     _validateGenerateContentConfig(generateContentConfig);
     _warnOnThinkingConfigPrecedence();
     _installTaskModeToolIfNeeded();
@@ -238,6 +252,12 @@ class LlmAgent extends BaseAgent {
   /// Tool-error callback(s).
   Object? onToolErrorCallback;
 
+  /// Whether this agent executes as a parallel worker node in a workflow.
+  bool parallelWorker;
+
+  /// Optional upper bound on concurrent workers when [parallelWorker] is true.
+  int? maxParallelWorkers;
+
   /// Returns a cloned LLM agent with optional field overrides.
   @override
   LlmAgent clone({Map<String, Object?>? update}) {
@@ -267,6 +287,8 @@ class LlmAgent extends BaseAgent {
         'beforeToolCallback',
         'afterToolCallback',
         'onToolErrorCallback',
+        'parallelWorker',
+        'maxParallelWorkers',
       },
     );
 
@@ -400,6 +422,16 @@ class LlmAgent extends BaseAgent {
         update: cloneUpdate,
         fieldName: 'onToolErrorCallback',
         currentValue: onToolErrorCallback,
+      ),
+      parallelWorker: cloneFieldValue<bool>(
+        update: cloneUpdate,
+        fieldName: 'parallelWorker',
+        currentValue: parallelWorker,
+      ),
+      maxParallelWorkers: cloneFieldValue<int?>(
+        update: cloneUpdate,
+        fieldName: 'maxParallelWorkers',
+        currentValue: maxParallelWorkers,
       ),
     );
     clonedAgent.subAgents = clonedSubAgents;

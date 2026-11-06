@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../platform/uuid.dart';
 import '../types/content.dart';
+import '../utils/schema_utils.dart';
 import '../utils/system_environment/system_environment.dart';
 import 'base_llm.dart';
 import 'llm_request.dart';
@@ -41,6 +42,12 @@ typedef LiteLlmCompletionsInvoker =
 const String _thoughtSignatureSeparator = '__thought__';
 const String _systemInstructionFallbackText =
     'Handle the requests as specified in the System Instruction.';
+const String _streamEndedWithoutFinishReason =
+    'stream_ended_without_finish_reason';
+const String _truncatedStreamErrorMessage =
+    'The stream ended without a finish reason; the response may be truncated.';
+const int _maxJsonDepth = 500;
+final RegExp _hugeIntLiteralPattern = RegExp(r'\d{4301,}');
 
 /// OpenAI-compatible adapter that targets LiteLLM providers.
 ///
@@ -253,6 +260,7 @@ class LiteLlm extends BaseLlm {
     Map<String, Object?> response, {
     bool parseInlineToolCalls = true,
     bool allowBareJson = true,
+    bool isPartial = false,
   }) {
     final List<Object?> choices =
         (response['choices'] as List<Object?>?) ?? <Object?>[];
@@ -317,19 +325,32 @@ class LiteLlm extends BaseLlm {
       parts.add(Part.text(contentRaw));
     }
 
+    final List<(String, int)> malformedToolCalls = <(String, int)>[];
     for (final Object? call in toolCalls) {
       final Map<String, Object?> callMap = _asMap(call);
-      parts.add(_parseFunctionCall(callMap));
+      final Object? callType = callMap['type'];
+      if (callType != null && callType != '' && callType != 'function') {
+        continue;
+      }
+      final Part? parsedPart = _tryParseFunctionCall(callMap);
+      if (parsedPart == null) {
+        final Map<String, Object?> fn = _asMap(callMap['function']);
+        final Object? rawName = fn['name'];
+        final Object? rawArguments = fn['arguments'];
+        final String reportedName =
+            rawName is String && rawName.isNotEmpty ? rawName : '<unnamed>';
+        final int reportedLen =
+            rawArguments is String ? rawArguments.length : 0;
+        malformedToolCalls.add((reportedName, reportedLen));
+        continue;
+      }
+      parts.add(parsedPart);
     }
 
-    final String finishReason = mapFinishReason(first['finish_reason']);
-    final String? errorMessage = _finishReasonToErrorMessage(finishReason);
-    return LlmResponse(
+    final LlmResponse llmResponse = LlmResponse(
       modelVersion: response['model'] as String?,
       content: Content(role: role, parts: parts),
-      finishReason: finishReason,
-      errorCode: errorMessage == null ? null : finishReason,
-      errorMessage: errorMessage,
+      partial: isPartial ? true : null,
       usageMetadata: <String, Object?>{
         'prompt_token_count': usage['prompt_tokens'] ?? 0,
         'candidates_token_count': usage['completion_tokens'] ?? 0,
@@ -346,6 +367,31 @@ class LiteLlm extends BaseLlm {
         'provider': getProviderFromModel('${response['model'] ?? ''}'),
       }..removeWhere((Object? key, Object? value) => value == null),
     );
+
+    if (malformedToolCalls.isNotEmpty && !isPartial) {
+      for (final (String name, int argLength) in malformedToolCalls) {
+        developer.log(
+          "Discarding tool call '$name' with unparseable arguments ($argLength chars).",
+          name: 'adk_dart.models.lite_llm',
+          level: 900,
+        );
+      }
+      llmResponse.finishReason = 'MALFORMED_FUNCTION_CALL';
+      llmResponse.errorCode = 'MALFORMED_FUNCTION_CALL';
+      llmResponse.errorMessage =
+          'Arguments for the following function calls were not a valid JSON object: '
+          '${malformedToolCalls.map(((String, int) e) => e.$1).join(', ')}';
+    }
+
+    final Object? rawFinishReason = first['finish_reason'];
+    if (!isPartial || rawFinishReason != null) {
+      _stampFinishReason(
+        llmResponse,
+        rawFinishReason == null ? null : '$rawFinishReason',
+        defaultToOtherWhenNull: !isPartial,
+      );
+    }
+    return llmResponse;
   }
 
   /// Generates model responses using LiteLLM payload/response conventions.
@@ -378,6 +424,7 @@ class LiteLlm extends BaseLlm {
     final Map<int, List<int>> pendingToolSignatures = <int, List<int>>{};
     final _StreamTextTracker textTracker = _StreamTextTracker();
     final List<String> rawStreamTexts = <String>[];
+    final List<Part> rawStreamReasoningParts = <Part>[];
     bool sawStructuredToolCalls = false;
     bool emittedInlineToolCalls = false;
     String? lastStreamModel;
@@ -443,6 +490,13 @@ class LiteLlm extends BaseLlm {
           rawStreamTexts.add(deltaText);
           textTracker.feed(deltaText);
         }
+        for (final String field in const <String>[
+          'thinking_blocks',
+          'reasoning_content',
+          'reasoning',
+        ]) {
+          rawStreamReasoningParts.addAll(_extractReasoningParts(eff[field]));
+        }
         final LlmResponse parsed = _parseStreamCompletionChunk(
           modified,
           pendingToolSignatures: pendingToolSignatures,
@@ -457,7 +511,7 @@ class LiteLlm extends BaseLlm {
         if (filterThoughts) {
           _filterThoughtParts(parsed);
           if ((parsed.content == null || parsed.content!.parts.isEmpty) &&
-              parsed.finishReason == 'OTHER' &&
+              (parsed.finishReason == null || parsed.finishReason == 'OTHER') &&
               _asMap(modified['usage']).isEmpty) {
             continue;
           }
@@ -474,20 +528,39 @@ class LiteLlm extends BaseLlm {
     if (stream &&
         !sawStructuredToolCalls &&
         !emittedInlineToolCalls &&
-        rawStreamTexts.isNotEmpty) {
+        (rawStreamTexts.isNotEmpty || rawStreamReasoningParts.isNotEmpty)) {
       final (List<Map<String, Object?>> heldBackCalls, String? remainder) =
-          parseToolCallsFromText(rawStreamTexts.join());
+          rawStreamTexts.isNotEmpty
+          ? parseToolCallsFromText(rawStreamTexts.join())
+          : (const <Map<String, Object?>>[], null);
       if (heldBackCalls.isNotEmpty) {
         final List<Part> finalParts = <Part>[
           if (remainder != null && remainder.isNotEmpty) Part.text(remainder),
           for (final Map<String, Object?> callMap in heldBackCalls)
-            _parseFunctionCall(callMap),
+            ?_tryParseFunctionCall(callMap),
         ];
         yield LlmResponse(
           modelVersion: lastStreamModel,
           content: Content(role: 'model', parts: finalParts),
-          finishReason: mapFinishReason(lastStreamFinishReason ?? 'stop'),
+          finishReason: mapFinishReason(lastStreamFinishReason ?? 'tool_calls'),
+          partial: false,
         );
+      } else if (lastStreamFinishReason == null) {
+        final List<Part> finalParts = <Part>[
+          if (!filterThoughts && rawStreamReasoningParts.isNotEmpty)
+            Part.text(
+              _mergeReasoningTexts(rawStreamReasoningParts),
+              thought: true,
+            ),
+          if (rawStreamTexts.isNotEmpty) Part.text(rawStreamTexts.join()),
+        ];
+        final LlmResponse truncated = LlmResponse(
+          modelVersion: lastStreamModel,
+          content: Content(role: 'model', parts: finalParts),
+          partial: false,
+        );
+        _stampFinishReason(truncated, _streamEndedWithoutFinishReason);
+        yield truncated;
       }
     }
   }
@@ -624,6 +697,59 @@ String? _finishReasonToErrorMessage(String finishReason) {
     return 'Maximum tokens reached';
   }
   return 'Finished with $finishReason';
+}
+
+bool _malformedArgsOutrankProvider({
+  required String? responseFinishReason,
+  required String? providerFinishReason,
+}) {
+  return responseFinishReason == 'MALFORMED_FUNCTION_CALL' &&
+      (providerFinishReason == null ||
+          providerFinishReason == 'STOP' ||
+          providerFinishReason == 'OTHER');
+}
+
+void _applyProviderFinishReason(
+  LlmResponse llmResponse,
+  String? providerFinishReason,
+) {
+  final String? malformedArgsMessage =
+      llmResponse.finishReason == 'MALFORMED_FUNCTION_CALL'
+      ? llmResponse.errorMessage
+      : null;
+  llmResponse.finishReason = providerFinishReason;
+  if (providerFinishReason == null || providerFinishReason == 'STOP') {
+    llmResponse.errorCode = null;
+    llmResponse.errorMessage = null;
+    return;
+  }
+  llmResponse.errorCode = providerFinishReason;
+  llmResponse.errorMessage = _finishReasonToErrorMessage(providerFinishReason);
+  if (malformedArgsMessage != null && malformedArgsMessage.isNotEmpty) {
+    llmResponse.errorMessage =
+        '${llmResponse.errorMessage}. $malformedArgsMessage';
+  }
+}
+
+void _stampFinishReason(
+  LlmResponse llmResponse,
+  String? finishReason, {
+  bool defaultToOtherWhenNull = false,
+}) {
+  final String? mappedFinishReason = finishReason == null
+      ? (defaultToOtherWhenNull ? 'OTHER' : null)
+      : LiteLlm.mapFinishReason(finishReason);
+  if (mappedFinishReason == null ||
+      _malformedArgsOutrankProvider(
+        responseFinishReason: llmResponse.finishReason,
+        providerFinishReason: mappedFinishReason,
+      )) {
+    return;
+  }
+  _applyProviderFinishReason(llmResponse, mappedFinishReason);
+  if (finishReason == _streamEndedWithoutFinishReason) {
+    llmResponse.errorMessage = _truncatedStreamErrorMessage;
+  }
 }
 
 Object? _reasoningTokens(Map<String, Object?> usage) {
@@ -855,7 +981,10 @@ bool _isGemma4Model(String model, {String? baseUrl}) {
     return false;
   }
   final String provider = LiteLlm.getProviderFromModel(model);
-  if (provider == 'openai' || provider == 'azure' || provider == 'lm_studio') {
+  if (provider == 'openai' ||
+      provider == 'azure' ||
+      provider == 'lm_studio' ||
+      provider == 'vertex_ai') {
     return false;
   }
   if (baseUrl != null && baseUrl.isNotEmpty) {
@@ -1195,12 +1324,19 @@ String _quoteUnquotedJsonObjectKeys(String rawArguments) {
         }
         if (k < length && rawArguments[k] == ':') {
           final String key = rawArguments.substring(i, j);
-          result.write('"$key"');
-          result.write(rawArguments.substring(j, k));
-          result.write(':');
-          expectingKey = false;
-          i = k + 1;
-          continue;
+          if (key != 'True' &&
+              key != 'False' &&
+              key != 'None' &&
+              key != 'true' &&
+              key != 'false' &&
+              key != 'null') {
+            result.write('"$key"');
+            result.write(rawArguments.substring(j, k));
+            result.write(':');
+            expectingKey = false;
+            i = k + 1;
+            continue;
+          }
         }
       }
       expectingKey = false;
@@ -1229,45 +1365,122 @@ bool _isIdentifierContinuation(String ch) {
       ch == '.';
 }
 
-Map<String, dynamic> _parseToolCallArguments(Object? rawArgs, String toolName) {
-  if (rawArgs == null) {
-    return <String, dynamic>{};
-  }
-  if (rawArgs is Map) {
-    return rawArgs.map((Object? k, Object? v) => MapEntry('$k', v));
-  }
-  if (rawArgs is! String) {
-    return <String, dynamic>{};
-  }
-  String cleaned = rawArgs.trim();
-  if (cleaned.isEmpty) {
-    return <String, dynamic>{};
-  }
-  final RegExpMatch? fenceMatch = _markdownCodeBlockPattern.firstMatch(cleaned);
-  if (fenceMatch != null) {
-    cleaned = (fenceMatch.group(1) ?? '').trim();
-  }
-  final String quotedKeys = _quoteUnquotedJsonObjectKeys(cleaned);
-  for (final String candidate in <String>[
-    cleaned,
-    quotedKeys,
-    _normalizePythonLiteralJson(quotedKeys),
-  ]) {
-    try {
-      final Object? decoded = jsonDecode(candidate);
-      if (decoded is Map) {
-        return decoded.map((Object? k, Object? v) => MapEntry('$k', v));
+bool _hasOnlyStringKeys(Object? value) {
+  final List<(Object?, int)> stack = <(Object?, int)>[(value, 0)];
+  while (stack.isNotEmpty) {
+    final (Object? item, int depth) = stack.removeLast();
+    if (depth > _maxJsonDepth) {
+      return false;
+    }
+    if (item is Map) {
+      for (final Object? key in item.keys) {
+        if (key is! String) {
+          return false;
+        }
       }
-    } catch (_) {
-      // Try next fallback candidate.
+      for (final Object? child in item.values) {
+        stack.add((child, depth + 1));
+      }
+    } else if (item is Iterable) {
+      for (final Object? child in item) {
+        stack.add((child, depth + 1));
+      }
     }
   }
-  developer.log(
-    "Malformed JSON in tool call arguments for function '$toolName'; dispatching with empty arguments so the tool can return a structured error and the model can retry.",
-    name: 'adk_dart.models.lite_llm',
-    level: 900,
+  return true;
+}
+
+/// Parses tool call [arguments] into a JSON-encodable object, throwing
+/// [FormatException] when the arguments cannot be parsed or encoded.
+Object? parseToolCallArguments(Object? arguments, {String? functionName}) {
+  final Object? decoded = _decodeToolCallArguments(
+    arguments,
+    functionName: functionName,
   );
-  return <String, dynamic>{};
+  try {
+    jsonEncode(decoded);
+  } on Object {
+    throw const FormatException('Tool call arguments cannot be encoded as JSON');
+  }
+  if (!_hasOnlyStringKeys(decoded)) {
+    throw const FormatException('Tool call argument keys must be strings');
+  }
+  return decoded;
+}
+
+Object? _decodeToolCallArguments(
+  Object? arguments, {
+  String? functionName,
+}) {
+  if (arguments == null || (arguments is String && arguments.isEmpty)) {
+    return <String, dynamic>{};
+  }
+  if (arguments is! String) {
+    return arguments;
+  }
+  if (_hugeIntLiteralPattern.hasMatch(arguments)) {
+    throw const FormatException(
+      "Tool call arguments exceed the decoder's limits",
+    );
+  }
+  try {
+    return jsonDecode(arguments);
+  } on StackOverflowError {
+    throw const FormatException(
+      "Tool call arguments exceed the decoder's limits",
+    );
+  } on FormatException {
+    final String cleaned;
+    final RegExpMatch? fenceMatch = _markdownCodeBlockPattern.firstMatch(
+      arguments.trim(),
+    );
+    if (fenceMatch != null) {
+      cleaned = (fenceMatch.group(1) ?? '').trim();
+      if (cleaned.isEmpty) {
+        rethrow;
+      }
+    } else {
+      cleaned = arguments.trim();
+    }
+    if (cleaned.isEmpty) {
+      rethrow;
+    }
+    final String quotedKeys = _quoteUnquotedJsonObjectKeys(cleaned);
+    for (final String candidate in <String>[
+      if (fenceMatch != null) cleaned,
+      quotedKeys,
+      _normalizePythonLiteralJson(quotedKeys),
+    ]) {
+      try {
+        return jsonDecode(candidate);
+      } on StackOverflowError {
+        throw const FormatException(
+          "Tool call arguments exceed the decoder's limits",
+        );
+      } on FormatException {
+        // Try next fallback candidate.
+      }
+    }
+    rethrow;
+  }
+}
+
+Map<String, dynamic>? _tryParseToolCallArguments(
+  Object? rawArgs,
+  String toolName,
+) {
+  try {
+    final Object? parsed = parseToolCallArguments(
+      rawArgs,
+      functionName: toolName,
+    );
+    if (parsed is Map) {
+      return parsed.map((Object? k, Object? v) => MapEntry('$k', v));
+    }
+    return null;
+  } on Object {
+    return null;
+  }
 }
 
 String _normalizePythonLiteralJson(String input) {
@@ -1342,17 +1555,21 @@ String _normalizePythonLiteralJson(String input) {
   return normalized;
 }
 
-Part _parseFunctionCall(
+Part? _tryParseFunctionCall(
   Map<String, Object?> callMap, {
   Map<int, List<int>>? pendingToolSignatures,
   int fallbackIndex = 0,
 }) {
   final Map<String, Object?> function = _asMap(callMap['function']);
-  final String name = '${function['name'] ?? ''}';
-  final Map<String, dynamic> parsedArgs = _parseToolCallArguments(
+  final Object? rawName = function['name'];
+  final String name = rawName is String ? rawName : '';
+  final Map<String, dynamic>? parsedArgs = _tryParseToolCallArguments(
     function['arguments'],
     name,
   );
+  if (parsedArgs == null) {
+    return null;
+  }
   final String? callId = callMap['id'] == null ? null : '${callMap['id']}';
   final int callIndex = callMap['index'] is num
       ? (callMap['index'] as num).toInt()
@@ -1749,7 +1966,8 @@ Map<String, Object?> _toLiteLlmResponseFormat(
     };
   }
 
-  _enforceStrictOpenAiSchema(responseSchema);
+  lowercaseSchemaTypes(responseSchema);
+  enforceStrictOpenAiSchema(responseSchema);
   final String schemaName =
       responseSchema['title'] is String &&
           (responseSchema['title'] as String).isNotEmpty
@@ -1769,65 +1987,6 @@ bool _isLiteLlmGeminiModel(String model) {
   final String normalized = model.toLowerCase();
   return normalized.startsWith('gemini/gemini-') ||
       normalized.startsWith('vertex_ai/gemini-');
-}
-
-void _enforceStrictOpenAiSchema(Map<String, Object?> schema) {
-  if (schema.containsKey(r'$ref')) {
-    schema.removeWhere((String key, Object? _) => key != r'$ref');
-    return;
-  }
-
-  final Object? schemaType = schema['type'];
-  final Map<String, Object?>? properties = _asObjectMap(schema['properties']);
-  final bool isObject =
-      schemaType == 'object' ||
-      (schemaType is List && schemaType.contains('object'));
-  if (isObject && properties != null) {
-    schema['additionalProperties'] = false;
-    final List<String> required = properties.keys.toList()..sort();
-    schema['required'] = required;
-  }
-
-  final Map<String, Object?>? defs = _asObjectMap(schema[r'$defs']);
-  if (defs != null) {
-    for (final MapEntry<String, Object?> entry in defs.entries) {
-      final Map<String, Object?>? defSchema = _asObjectMap(entry.value);
-      if (defSchema != null) {
-        defs[entry.key] = defSchema;
-        _enforceStrictOpenAiSchema(defSchema);
-      }
-    }
-  }
-
-  if (properties != null) {
-    for (final MapEntry<String, Object?> entry in properties.entries) {
-      final Map<String, Object?>? propertySchema = _asObjectMap(entry.value);
-      if (propertySchema != null) {
-        properties[entry.key] = propertySchema;
-        _enforceStrictOpenAiSchema(propertySchema);
-      }
-    }
-  }
-
-  for (final String key in <String>['anyOf', 'oneOf', 'allOf']) {
-    final Object? combinator = schema[key];
-    if (combinator is! List) {
-      continue;
-    }
-    for (int i = 0; i < combinator.length; i += 1) {
-      final Map<String, Object?>? itemSchema = _asObjectMap(combinator[i]);
-      if (itemSchema != null) {
-        combinator[i] = itemSchema;
-        _enforceStrictOpenAiSchema(itemSchema);
-      }
-    }
-  }
-
-  final Map<String, Object?>? items = _asObjectMap(schema['items']);
-  if (items != null) {
-    schema['items'] = items;
-    _enforceStrictOpenAiSchema(items);
-  }
 }
 
 Map<String, Object?> _deepCopyJsonMap(Map<String, Object?> source) {
@@ -2045,8 +2204,14 @@ Map<String, Object?>? _buildToolCallFromJsonDict(
   } else {
     try {
       argumentsPayload = jsonEncode(argsRaw);
+    } on StackOverflowError {
+      return null;
     } catch (_) {
-      argumentsPayload = '$argsRaw';
+      try {
+        argumentsPayload = '$argsRaw';
+      } on StackOverflowError {
+        return null;
+      }
     }
   }
   final Object? rawId = candidate['id'];
@@ -2111,9 +2276,15 @@ Map<String, Object?>? _buildToolCallFromJsonDict(
   if (end == -1) {
     return null;
   }
+  final String slice = text.substring(start, end);
+  if (_hugeIntLiteralPattern.hasMatch(slice)) {
+    return null;
+  }
   try {
-    final Object? decoded = jsonDecode(text.substring(start, end));
+    final Object? decoded = jsonDecode(slice);
     return (decoded, end);
+  } on StackOverflowError {
+    return null;
   } catch (_) {
     return null;
   }
@@ -2126,10 +2297,14 @@ String? _extractJsonFromDeepseekArgs(String argsText) {
   final RegExpMatch? fenceMatch = _dsFenceArgsRe.firstMatch(argsText);
   if (fenceMatch != null) {
     final String candidate = (fenceMatch.group(1) ?? '').trim();
-    try {
-      jsonDecode(candidate);
-      return candidate;
-    } catch (_) {}
+    if (!_hugeIntLiteralPattern.hasMatch(candidate)) {
+      try {
+        jsonDecode(candidate);
+        return candidate;
+      } on StackOverflowError {
+        // Fall through.
+      } catch (_) {}
+    }
   }
   final int openBrace = argsText.indexOf('{');
   if (openBrace == -1) {
@@ -2139,7 +2314,13 @@ String? _extractJsonFromDeepseekArgs(String argsText) {
   if (raw == null) {
     return null;
   }
-  return jsonEncode(raw.$1);
+  try {
+    return jsonEncode(raw.$1);
+  } on StackOverflowError {
+    return null;
+  } catch (_) {
+    return null;
+  }
 }
 
 (List<Map<String, Object?>>, String?) _parseDeepseekToolCallsFromText(

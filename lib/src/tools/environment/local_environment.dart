@@ -4,8 +4,11 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'base_environment.dart';
+
+const int _streamChunkSize = 64 * 1024;
 
 /// Local environment that executes commands and accesses files on disk.
 class LocalEnvironment extends BaseEnvironment {
@@ -62,11 +65,30 @@ class LocalEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> writeFile(Object path, String content) async {
+  Stream<List<int>> readFileStream(Object path) async* {
+    await initialize();
+    final File file = _resolveFile(path);
+    final RandomAccessFile raf = await file.open(mode: FileMode.read);
+    try {
+      while (true) {
+        final Uint8List chunk = await raf.read(_streamChunkSize);
+        if (chunk.isEmpty) {
+          break;
+        }
+        yield chunk;
+      }
+    } finally {
+      await raf.close();
+    }
+  }
+
+  @override
+  Future<void> writeFile(Object path, Object content) async {
+    final Uint8List data = encodeWriteFileContent(content);
     await initialize();
     final File file = _resolveFile(path);
     await file.parent.create(recursive: true);
-    await file.writeAsString(content, flush: true);
+    await file.writeAsBytes(data, flush: true);
   }
 
   File _resolveFile(Object path) {

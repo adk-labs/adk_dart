@@ -68,7 +68,16 @@ class WorkflowTool extends BaseTool {
       final WorkflowResult result = await workflow.runWorkflow(
         input: workflowInput,
       );
+      final bool isWaitingForInput = result.nodeStates.values.any(
+        (NodeState state) =>
+            state.status == NodeStatus.waiting && state.interrupts.isNotEmpty,
+      );
+      if (isWaitingForInput) {
+        return <String, dynamic>{};
+      }
       return result.outputs;
+    } on NodeInterruptedError {
+      return <String, dynamic>{};
     } catch (error) {
       return 'Error running workflow $name: $error';
     }

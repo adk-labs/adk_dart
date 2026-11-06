@@ -1,7 +1,6 @@
 /// Shared utility and helper APIs for ADK runtime behavior.
 library;
 
-import '../agents/context.dart';
 import '../agents/invocation_context.dart';
 import '../agents/readonly_context.dart';
 import '../events/event.dart';
@@ -57,7 +56,10 @@ class AuthLlmRequestProcessor extends BaseLlmRequestProcessor {
       events: events,
       authFcIds: authFcIds,
       authResponses: authResponsePayloads,
-      state: Context(context).state,
+      state: State(
+        value: context.session.state,
+        delta: <String, Object?>{},
+      ),
     );
     if (toolsToResume.isEmpty) {
       return;

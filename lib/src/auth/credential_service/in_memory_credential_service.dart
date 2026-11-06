@@ -27,13 +27,21 @@ class InMemoryCredentialService extends BaseCredentialService {
     AuthConfig authConfig,
     CallbackContext callbackContext,
   ) async {
-    final AuthCredential? credential =
-        authConfig.exchangedAuthCredential ?? authConfig.rawAuthCredential;
-    if (credential == null) {
+    final Map<String, AuthCredential> bucket = _bucketFor(callbackContext);
+    final AuthCredential? exchanged = authConfig.exchangedAuthCredential;
+    if (exchanged == null) {
+      if (bucket.containsKey(authConfig.credentialKey)) {
+        bucket.remove(authConfig.credentialKey);
+        return;
+      }
+      final AuthCredential? fallback = authConfig.rawAuthCredential;
+      if (fallback == null) {
+        return;
+      }
+      bucket[authConfig.credentialKey] = fallback.copyWith();
       return;
     }
-    final Map<String, AuthCredential> bucket = _bucketFor(callbackContext);
-    bucket[authConfig.credentialKey] = credential.copyWith();
+    bucket[authConfig.credentialKey] = exchanged.copyWith();
   }
 
   Map<String, AuthCredential> _bucketFor(CallbackContext context) {

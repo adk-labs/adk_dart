@@ -47,6 +47,102 @@ const String _staleSessionErrorMessage =
     'The session has been modified in storage since it was loaded. '
     'Please reload the session before appending more events.';
 
+const String _nestedListKey = '_adk_list';
+const String _escapedDictKey = '_adk_dict';
+
+/// Wraps arrays nested in arrays, which Firestore rejects, in one-key maps.
+Object? _encodeFirestoreValue(Object? value, {bool inList = false}) {
+  if (value is Map) {
+    final Map<String, Object?> encoded = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': _encodeFirestoreValue(entry.value),
+    };
+    if (inList &&
+        encoded.length == 1 &&
+        (encoded.containsKey(_nestedListKey) ||
+            encoded.containsKey(_escapedDictKey))) {
+      return <String, Object?>{_escapedDictKey: encoded};
+    }
+    return encoded;
+  }
+  if (value is Iterable) {
+    final List<Object?> items = value
+        .map((Object? item) => _encodeFirestoreValue(item, inList: true))
+        .toList();
+    return inList ? <String, Object?>{_nestedListKey: items} : items;
+  }
+  return value;
+}
+
+/// Encodes a Firestore document map so nested lists are wrapped in one-key maps.
+Map<String, Object?> _encodeFirestoreMap(Map<String, Object?> data) {
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in data.entries)
+      entry.key: _encodeFirestoreValue(entry.value),
+  };
+}
+
+/// Unwraps nested-array and escaped-dict wrappers from a Firestore value.
+Object? _decodeFirestoreValue(Object? value, {bool inList = false}) {
+  if (value is List) {
+    return value
+        .map((Object? item) => _decodeFirestoreValue(item, inList: true))
+        .toList();
+  }
+  if (value is Map) {
+    if (inList && value.length == 1) {
+      final Object? innerList = value[_nestedListKey];
+      if (innerList is List) {
+        return innerList
+            .map((Object? item) => _decodeFirestoreValue(item, inList: true))
+            .toList();
+      }
+      final Object? innerDict = value[_escapedDictKey];
+      if (innerDict is Map) {
+        return <String, Object?>{
+          for (final MapEntry<Object?, Object?> entry in innerDict.entries)
+            '${entry.key}': _decodeFirestoreValue(entry.value),
+        };
+      }
+    }
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': _decodeFirestoreValue(entry.value),
+    };
+  }
+  return value;
+}
+
+/// Decodes a Firestore document map, unwrapping nested-array and escaped-dict wrappers.
+Map<String, Object?> _decodeFirestoreMap(Map<String, Object?>? data) {
+  if (data == null || data.isEmpty) {
+    return <String, Object?>{};
+  }
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in data.entries)
+      entry.key: _decodeFirestoreValue(entry.value),
+  };
+}
+
+void _rejectDirectlyNestedLists(Object? value, {bool inList = false}) {
+  if (value is List) {
+    if (inList) {
+      throw ArgumentError(
+        'Cannot convert an array value in an array value in Firestore.',
+      );
+    }
+    for (final Object? item in value) {
+      _rejectDirectlyNestedLists(item, inList: true);
+    }
+    return;
+  }
+  if (value is Map) {
+    for (final Object? item in value.values) {
+      _rejectDirectlyNestedLists(item, inList: false);
+    }
+  }
+}
+
 /// Standard English stop words excluded during Firestore memory keyword extraction.
 const Set<String> englishStopWords = <String>{
   'a',
@@ -387,12 +483,14 @@ class InMemoryFirestoreDatabaseClient extends FirestoreDatabaseClient {
 
   @override
   Future<void> setDocument(String path, Map<String, Object?> data) async {
+    _rejectDirectlyNestedLists(data);
     final String normalized = _normalizePath(path);
     _documents[normalized] = _deepCopyMap(data);
   }
 
   @override
   Future<void> updateDocument(String path, Map<String, Object?> data) async {
+    _rejectDirectlyNestedLists(data);
     final String normalized = _normalizePath(path);
     final Map<String, Object?>? existing = _documents[normalized];
     if (existing == null) {
@@ -580,11 +678,49 @@ class FirestoreSessionService extends BaseSessionService {
   final Map<(String, String, String), Future<void>> _sessionLocks =
       <(String, String, String), Future<void>>{};
 
-  String _sessionsCollectionPath(String appName, String userId) =>
-      '$rootCollection/$appName/users/$userId/$sessionsCollection';
+  static void _validateIdentityComponent(String name, String value) {
+    if (value.isEmpty) {
+      throw ArgumentError.value(
+        value,
+        name,
+        '$name must be a non-empty string.',
+      );
+    }
+    if (value.contains('/')) {
+      throw ArgumentError.value(
+        value,
+        name,
+        '$name must not contain "/": $value',
+      );
+    }
+    if (value == '.' || value == '..') {
+      throw ArgumentError.value(
+        value,
+        name,
+        '$name must not be "." or "..": $value',
+      );
+    }
+    if (value.length >= 4 &&
+        value.startsWith('__') &&
+        value.endsWith('__')) {
+      throw ArgumentError.value(
+        value,
+        name,
+        '$name is reserved by Firestore (__.*__): $value',
+      );
+    }
+  }
 
-  String _sessionDocPath(String appName, String userId, String sessionId) =>
-      '${_sessionsCollectionPath(appName, userId)}/$sessionId';
+  String _sessionsCollectionPath(String appName, String userId) {
+    _validateIdentityComponent('app_name', appName);
+    _validateIdentityComponent('user_id', userId);
+    return '$rootCollection/$appName/users/$userId/$sessionsCollection';
+  }
+
+  String _sessionDocPath(String appName, String userId, String sessionId) {
+    _validateIdentityComponent('session_id', sessionId);
+    return '${_sessionsCollectionPath(appName, userId)}/$sessionId';
+  }
 
   String _eventsCollectionPath(
     String appName,
@@ -645,10 +781,7 @@ class FirestoreSessionService extends BaseSessionService {
     Map<String, Object?>? state,
     String? sessionId,
   }) async {
-    final String resolvedSessionId =
-        (sessionId != null && sessionId.trim().isNotEmpty)
-        ? sessionId.trim()
-        : newAdkId(prefix: 'session_');
+    final String resolvedSessionId = sessionId ?? newAdkId(prefix: 'session_');
 
     final Map<String, Object?> initialState = state ?? <String, Object?>{};
     final SessionStateDelta deltas = extractStateDelta(initialState);
@@ -689,18 +822,20 @@ class FirestoreSessionService extends BaseSessionService {
       final FirestoreDocumentSnapshot appSnap = await txn.getDocument(appPath);
       final FirestoreDocumentSnapshot userSnap = await txn.getDocument(userPath);
 
-      final Map<String, Object?> currentApp =
-          appSnap.toMap() ?? <String, Object?>{};
-      final Map<String, Object?> currentUser =
-          userSnap.toMap() ?? <String, Object?>{};
+      final Map<String, Object?> currentApp = appSnap.exists
+          ? _decodeFirestoreMap(appSnap.toMap())
+          : <String, Object?>{};
+      final Map<String, Object?> currentUser = userSnap.exists
+          ? _decodeFirestoreMap(userSnap.toMap())
+          : <String, Object?>{};
 
       if (appStateDelta.isNotEmpty) {
         currentApp.addAll(appStateDelta);
-        await txn.setDocument(appPath, currentApp);
+        await txn.setDocument(appPath, _encodeFirestoreMap(currentApp));
       }
       if (userStateDelta.isNotEmpty) {
         currentUser.addAll(userStateDelta);
-        await txn.setDocument(userPath, currentUser);
+        await txn.setDocument(userPath, _encodeFirestoreMap(currentUser));
       }
 
       await txn.setDocument(sessionPath, sessionData);
@@ -792,17 +927,26 @@ class FirestoreSessionService extends BaseSessionService {
     final List<Event> events = <Event>[];
     for (final FirestoreDocumentSnapshot eventDoc in eventDocs) {
       final Map<String, Object?>? eventData = eventDoc.toMap();
-      if (eventData != null && eventData['event_data'] is Map) {
-        events.add(
-          _firestoreEventFromJson(_castStringObjectMap(eventData['event_data'])),
-        );
+      if (eventData != null && eventData.containsKey('event_data')) {
+        final Object? ed = eventData['event_data'];
+        if (ed is String) {
+          final Object? decoded = jsonDecode(ed);
+          if (decoded is Map) {
+            events.add(_firestoreEventFromJson(_castStringObjectMap(decoded)));
+          }
+        } else if (ed is Map) {
+          events.add(_firestoreEventFromJson(_castStringObjectMap(ed)));
+        }
       }
     }
 
     final Map<String, Object?> sessionState = _decodeSessionState(data['state']);
-    final Map<String, Object?> appState = appDoc.toMap() ?? <String, Object?>{};
-    final Map<String, Object?> userState =
-        userDoc.toMap() ?? <String, Object?>{};
+    final Map<String, Object?> appState = appDoc.exists
+        ? _decodeFirestoreMap(appDoc.toMap())
+        : <String, Object?>{};
+    final Map<String, Object?> userState = userDoc.exists
+        ? _decodeFirestoreMap(userDoc.toMap())
+        : <String, Object?>{};
 
     final Map<String, Object?> mergedState = _mergeState(
       appState: appState,
@@ -827,6 +971,7 @@ class FirestoreSessionService extends BaseSessionService {
     required String appName,
     String? userId,
   }) async {
+    _validateIdentityComponent('app_name', appName);
     if (userId == '') {
       return ListSessionsResponse(sessions: <Session>[]);
     }
@@ -864,7 +1009,9 @@ class FirestoreSessionService extends BaseSessionService {
     final FirestoreDocumentSnapshot appDoc = await client.getDocument(
       _appStateDocPath(appName),
     );
-    final Map<String, Object?> appState = appDoc.toMap() ?? <String, Object?>{};
+    final Map<String, Object?> appState = appDoc.exists
+        ? _decodeFirestoreMap(appDoc.toMap())
+        : <String, Object?>{};
 
     final Map<String, Map<String, Object?>> userStatesMap =
         <String, Map<String, Object?>>{};
@@ -873,7 +1020,7 @@ class FirestoreSessionService extends BaseSessionService {
         _userStateDocPath(appName, userId),
       );
       if (userDoc.exists) {
-        userStatesMap[userId] = userDoc.toMap() ?? <String, Object?>{};
+        userStatesMap[userId] = _decodeFirestoreMap(userDoc.toMap());
       }
     } else {
       final List<String> uniqueUserIds =
@@ -891,7 +1038,7 @@ class FirestoreSessionService extends BaseSessionService {
             .getAllDocuments(userPaths);
         for (final FirestoreDocumentSnapshot uDoc in userDocs) {
           if (uDoc.exists) {
-            userStatesMap[uDoc.id] = uDoc.toMap() ?? <String, Object?>{};
+            userStatesMap[uDoc.id] = _decodeFirestoreMap(uDoc.toMap());
           }
         }
       }
@@ -941,13 +1088,15 @@ class FirestoreSessionService extends BaseSessionService {
     required String appName,
     required String userId,
   }) async {
+    _validateIdentityComponent('app_name', appName);
+    _validateIdentityComponent('user_id', userId);
     final FirestoreDocumentSnapshot userDoc = await client.getDocument(
       _userStateDocPath(appName, userId),
     );
     if (!userDoc.exists) {
       return <String, Object?>{};
     }
-    return userDoc.toMap() ?? <String, Object?>{};
+    return _decodeFirestoreMap(userDoc.toMap());
   }
 
   @override
@@ -1051,17 +1200,19 @@ class FirestoreSessionService extends BaseSessionService {
               : null;
 
           if (appUpdates.isNotEmpty && appSnap != null) {
-            final Map<String, Object?> currentApp =
-                appSnap.toMap() ?? <String, Object?>{};
+            final Map<String, Object?> currentApp = appSnap.exists
+                ? _decodeFirestoreMap(appSnap.toMap())
+                : <String, Object?>{};
             currentApp.addAll(appUpdates);
-            await txn.setDocument(appPath, currentApp);
+            await txn.setDocument(appPath, _encodeFirestoreMap(currentApp));
           }
 
           if (userUpdates.isNotEmpty && userSnap != null) {
-            final Map<String, Object?> currentUser =
-                userSnap.toMap() ?? <String, Object?>{};
+            final Map<String, Object?> currentUser = userSnap.exists
+                ? _decodeFirestoreMap(userSnap.toMap())
+                : <String, Object?>{};
             currentUser.addAll(userUpdates);
-            await txn.setDocument(userPath, currentUser);
+            await txn.setDocument(userPath, _encodeFirestoreMap(currentUser));
           }
 
           final int nextRevision = currentRevision + 1;
@@ -1086,7 +1237,7 @@ class FirestoreSessionService extends BaseSessionService {
           final String eventPath =
               '${_eventsCollectionPath(session.appName, session.userId, session.id)}/${trimmedEvent.id}';
           await txn.setDocument(eventPath, <String, Object?>{
-            'event_data': _firestoreEventToJson(trimmedEvent),
+            'event_data': jsonEncode(_firestoreEventToJson(trimmedEvent)),
             'timestamp': trimmedEvent.timestamp,
             'appName': session.appName,
             'userId': session.userId,
@@ -1218,7 +1369,13 @@ class FirestoreMemoryService extends BaseMemoryService {
       if (content.parts.isEmpty) {
         continue;
       }
-      final String text = content.parts
+      final List<Part> nonThoughtParts = content.parts
+          .where((Part part) => !part.thought)
+          .toList(growable: false);
+      if (nonThoughtParts.isEmpty) {
+        continue;
+      }
+      final String text = nonThoughtParts
           .where((Part part) => part.text != null && part.text!.isNotEmpty)
           .map((Part part) => part.text!)
           .join(' ');
@@ -1229,6 +1386,10 @@ class FirestoreMemoryService extends BaseMemoryService {
       if (keywords.isEmpty) {
         continue;
       }
+      final Content storedContent = Content(
+        role: content.role,
+        parts: nonThoughtParts,
+      );
       final String entryId =
           (memory.id != null && memory.id!.isNotEmpty)
           ? memory.id!
@@ -1246,7 +1407,7 @@ class FirestoreMemoryService extends BaseMemoryService {
         'sessionId': null,
         'keywords': keywords.toList(growable: false),
         'author': memory.author ?? '',
-        'content': _firestoreContentToJson(content),
+        'content': _firestoreContentToJson(storedContent),
         'timestamp': timestamp,
       });
     }
@@ -1267,7 +1428,13 @@ class FirestoreMemoryService extends BaseMemoryService {
       if (content == null || content.parts.isEmpty) {
         continue;
       }
-      final String text = content.parts
+      final List<Part> nonThoughtParts = content.parts
+          .where((Part part) => !part.thought)
+          .toList(growable: false);
+      if (nonThoughtParts.isEmpty) {
+        continue;
+      }
+      final String text = nonThoughtParts
           .where((Part part) => part.text != null && part.text!.isNotEmpty)
           .map((Part part) => part.text!)
           .join(' ');
@@ -1278,6 +1445,10 @@ class FirestoreMemoryService extends BaseMemoryService {
       if (keywords.isEmpty) {
         continue;
       }
+      final Content storedContent = Content(
+        role: content.role,
+        parts: nonThoughtParts,
+      );
       final String docId = _memoryDocId(
         appName: appName,
         userId: userId,
@@ -1290,7 +1461,7 @@ class FirestoreMemoryService extends BaseMemoryService {
         'sessionId': sessionId,
         'keywords': keywords.toList(growable: false),
         'author': event.author,
-        'content': _firestoreContentToJson(content),
+        'content': _firestoreContentToJson(storedContent),
         'timestamp': event.timestamp,
       });
     }
@@ -1327,8 +1498,18 @@ class FirestoreMemoryService extends BaseMemoryService {
       final Map<String, Object?>? data = doc.toMap();
       if (data != null && data['content'] is Map) {
         try {
-          final Content content = _firestoreContentFromJson(
+          final Content decodedContent = _firestoreContentFromJson(
             _castStringObjectMap(data['content']),
+          );
+          final List<Part> visibleParts = decodedContent.parts
+              .where((Part part) => !part.thought)
+              .toList(growable: false);
+          if (visibleParts.isEmpty) {
+            continue;
+          }
+          final Content content = Content(
+            role: decodedContent.role,
+            parts: visibleParts,
           );
           final double ts = _toEpochSeconds(data['timestamp']) ?? 0.0;
           entries.add(

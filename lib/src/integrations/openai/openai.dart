@@ -12,7 +12,14 @@ import '../../models/base_llm.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../types/content.dart';
+import '../../utils/schema_utils.dart' as schema_utils;
 import '../../utils/system_environment/system_environment.dart';
+
+export 'openai_decisions_classifier.dart'
+    show
+        OpenAIDecisionsClassifier,
+        OpenAIDecisionsClient,
+        OpenAiDecisionsClassifier;
 
 const String _openAiApiKeyEnv = 'OPENAI_API_KEY';
 const String _openAiBaseUrlEnv = 'OPENAI_BASE_URL';
@@ -289,78 +296,7 @@ String? mapFinishReason(String? finishReason) {
 
 /// Recursively transforms a JSON [schema] in place for OpenAI strict structured outputs.
 void enforceStrictOpenAiSchema(Map<String, dynamic> schema) {
-  if (schema.containsKey(r'$ref')) {
-    final Object? ref = schema[r'$ref'];
-    schema
-      ..clear()
-      ..[r'$ref'] = ref;
-    return;
-  }
-  if (schema['type'] == 'object' && schema['properties'] is Map) {
-    final Map<Object?, Object?> props =
-        schema['properties'] as Map<Object?, Object?>;
-    schema['additionalProperties'] = false;
-    final List<String> keys = props.keys.map((Object? k) => '$k').toList()
-      ..sort();
-    schema['required'] = keys;
-  }
-  final Object? defs = schema[r'$defs'];
-  if (defs is Map) {
-    for (final Object? defn in defs.values) {
-      if (defn is Map<String, dynamic>) {
-        enforceStrictOpenAiSchema(defn);
-      } else if (defn is Map) {
-        final Map<String, dynamic> converted = defn.map(
-          (Object? k, Object? v) => MapEntry('$k', v),
-        );
-        enforceStrictOpenAiSchema(converted);
-        defs[defs.keys.firstWhere((Object? k) => defs[k] == defn)] = converted;
-      }
-    }
-  }
-  final Object? properties = schema['properties'];
-  if (properties is Map) {
-    for (final MapEntry<Object?, Object?> entry
-        in properties.entries.toList()) {
-      final Object? prop = entry.value;
-      if (prop is Map<String, dynamic>) {
-        enforceStrictOpenAiSchema(prop);
-      } else if (prop is Map) {
-        final Map<String, dynamic> converted = prop.map(
-          (Object? k, Object? v) => MapEntry('$k', v),
-        );
-        enforceStrictOpenAiSchema(converted);
-        properties[entry.key] = converted;
-      }
-    }
-  }
-  for (final String key in const <String>['anyOf', 'oneOf', 'allOf']) {
-    final Object? list = schema[key];
-    if (list is List) {
-      for (int i = 0; i < list.length; i++) {
-        final Object? item = list[i];
-        if (item is Map<String, dynamic>) {
-          enforceStrictOpenAiSchema(item);
-        } else if (item is Map) {
-          final Map<String, dynamic> converted = item.map(
-            (Object? k, Object? v) => MapEntry('$k', v),
-          );
-          enforceStrictOpenAiSchema(converted);
-          list[i] = converted;
-        }
-      }
-    }
-  }
-  final Object? items = schema['items'];
-  if (items is Map<String, dynamic>) {
-    enforceStrictOpenAiSchema(items);
-  } else if (items is Map) {
-    final Map<String, dynamic> converted = items.map(
-      (Object? k, Object? v) => MapEntry('$k', v),
-    );
-    enforceStrictOpenAiSchema(converted);
-    schema['items'] = converted;
-  }
+  schema_utils.enforceStrictOpenAiSchema(schema);
 }
 
 /// Converts a schema map into a normalized OpenAI JSON schema, optionally enforcing [strict] mode.
@@ -2329,7 +2265,9 @@ String _serializeJsonValue(Object? value) {
     if (content is String && content.isNotEmpty) {
       return content;
     }
-    if (value.containsKey('result') && value['result'] != null) {
+    if (value.length == 1 &&
+        value.containsKey('result') &&
+        value['result'] != null) {
       final Object? result = value['result'];
       if (result is String) {
         return result;

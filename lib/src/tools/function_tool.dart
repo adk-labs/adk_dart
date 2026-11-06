@@ -185,6 +185,37 @@ class FunctionTool extends BaseTool {
         }
       } else if (type == 'array') {
         final Object? items = propSchema['items'];
+        final Object? rawItemEnum = items is Map
+            ? (items['enumValues'] ?? items['enum'])
+            : null;
+        if (rawItemEnum is List && value is Iterable) {
+          final List<Object?> coercedItems = <Object?>[];
+          final List<Object?> invalidItems = <Object?>[];
+          for (final Object? item in value) {
+            final ({Object? value, bool matched}) result = _tryCoerceEnumItem(
+              item,
+              rawItemEnum,
+            );
+            coercedItems.add(result.value);
+            if (!result.matched) {
+              invalidItems.add(item);
+            }
+          }
+          if (invalidItems.isNotEmpty) {
+            developer.log(
+              "Argument '$paramName' contains values not in enum $rawItemEnum: "
+              '$invalidItems; passing them through unchanged.',
+              name: 'google-adk',
+              level: 900,
+            );
+          }
+          if (value is Set) {
+            converted[paramName] = coercedItems.toSet();
+          } else {
+            converted[paramName] = coercedItems;
+          }
+          continue;
+        }
         final bool isIntArray = items is Map && items['type'] == 'integer';
         if (isIntArray && value is List) {
           final List<Object?> coercedItems = <Object?>[];
@@ -226,35 +257,12 @@ class FunctionTool extends BaseTool {
     Object? value,
     List<Object?> enumList,
   ) {
-    if (enumList.contains(value)) {
-      return value;
-    }
-    for (final Object? candidate in enumList) {
-      if (candidate is Enum) {
-        if (candidate == value || candidate.name == value) {
-          return candidate;
-        }
-        try {
-          final Object? customValue = (candidate as dynamic).value;
-          if (customValue == value ||
-              (value is String &&
-                  customValue is! String &&
-                  jsonEncode(customValue) == value)) {
-            return candidate;
-          }
-        } catch (_) {}
-      } else if (candidate is int &&
-          value is num &&
-          value % 1 == 0 &&
-          value.toInt() == candidate) {
-        return candidate;
-      } else if (value is String && candidate is! String) {
-        try {
-          if (jsonEncode(candidate) == value) {
-            return candidate;
-          }
-        } catch (_) {}
-      }
+    final ({Object? value, bool matched}) result = _tryCoerceEnumItem(
+      value,
+      enumList,
+    );
+    if (result.matched) {
+      return result.value;
     }
     developer.log(
       "Argument '$paramName' is not a value of enum $enumList: $value; "
@@ -263,6 +271,43 @@ class FunctionTool extends BaseTool {
       level: 900,
     );
     return value;
+  }
+
+  ({Object? value, bool matched}) _tryCoerceEnumItem(
+    Object? value,
+    List<Object?> enumList,
+  ) {
+    if (enumList.contains(value)) {
+      return (value: value, matched: true);
+    }
+    for (final Object? candidate in enumList) {
+      if (candidate is Enum) {
+        if (candidate == value || candidate.name == value) {
+          return (value: candidate, matched: true);
+        }
+        try {
+          final Object? customValue = (candidate as dynamic).value;
+          if (customValue == value ||
+              (value is String &&
+                  customValue is! String &&
+                  jsonEncode(customValue) == value)) {
+            return (value: candidate, matched: true);
+          }
+        } catch (_) {}
+      } else if (candidate is int &&
+          value is num &&
+          value % 1 == 0 &&
+          value.toInt() == candidate) {
+        return (value: candidate, matched: true);
+      } else if (value is String && candidate is! String) {
+        try {
+          if (jsonEncode(candidate) == value) {
+            return (value: candidate, matched: true);
+          }
+        } catch (_) {}
+      }
+    }
+    return (value: value, matched: false);
   }
 
   Future<bool> _requiresConfirmation(Map<String, dynamic> args) async {

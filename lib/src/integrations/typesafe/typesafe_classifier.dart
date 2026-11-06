@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import '../../labs/classifiers/base_classifier.dart';
 import '../../labs/classifiers/types.dart';
 import '../../types/content.dart';
+import '../../utils/client_labels_utils.dart';
 import '../../utils/system_environment/system_environment.dart';
 
 const String _apiKeyEnvVar = 'TYPESAFE_API_KEY';
@@ -352,6 +353,9 @@ class TypesafeClassifier extends BaseClassifier {
 
   final TypesafeHttpTransport? _httpTransport;
 
+  @override
+  String get clientLabelKind => 'typesafe';
+
   Duration _retryDelay(int retryIndex, Map<String, String> headers) {
     for (final MapEntry<String, String> entry in headers.entries) {
       if (entry.key.toLowerCase() == 'retry-after') {
@@ -403,6 +407,7 @@ class TypesafeClassifier extends BaseClassifier {
     final Map<String, String> headers = <String, String>{
       'Authorization': 'Bearer $_apiKey',
       'Content-Type': 'application/json',
+      'User-Agent': getClientLabels().join(' '),
     };
     final Duration timeoutDuration = Duration(
       milliseconds: (timeout * 1000).round(),
@@ -449,52 +454,54 @@ class TypesafeClassifier extends BaseClassifier {
   Future<ClassifierResponse> classify({
     required Object input,
     required Map<String, ClassifierQuestion> questions,
-  }) async {
-    final Map<String, Object?> body = <String, Object?>{
-      'model': model,
-      'state': _inputToState(input),
-      'questions': <String, Object?>{
+  }) {
+    return runWithClientLabelContext(() async {
+      final Map<String, Object?> body = <String, Object?>{
+        'model': model,
+        'state': _inputToState(input),
+        'questions': <String, Object?>{
+          for (final MapEntry<String, ClassifierQuestion> entry
+              in questions.entries)
+            entry.key: _questionToJson(entry.key, entry.value),
+        },
+      };
+
+      if (questions.isEmpty) {
+        return ClassifierResponse(
+          answers: const <String, ClassifierAnswer>{},
+          modelVersion: model,
+        );
+      }
+
+      final TypesafeHttpResponse response = await _send(body);
+      if (response.statusCode >= 400) {
+        final String snippet = response.body.length > 500
+            ? response.body.substring(0, 500)
+            : response.body;
+        throw StateError(
+          'TypeSafe request failed with ${response.statusCode}: $snippet',
+        );
+      }
+
+      final Object? data = jsonDecode(response.body);
+      if (data is! Map) {
+        throw const FormatException('TypeSafe did not return a JSON object.');
+      }
+      final Object? rawAnswers = data['answers'];
+      if (rawAnswers is! Map) {
+        throw const FormatException('TypeSafe returned no answers.');
+      }
+
+      final Map<String, ClassifierAnswer> answers = <String, ClassifierAnswer>{
         for (final MapEntry<String, ClassifierQuestion> entry
             in questions.entries)
-          entry.key: _questionToJson(entry.key, entry.value),
-      },
-    };
+          entry.key: _toAnswer(entry.key, entry.value, rawAnswers[entry.key]),
+      };
 
-    if (questions.isEmpty) {
       return ClassifierResponse(
-        answers: const <String, ClassifierAnswer>{},
-        modelVersion: model,
+        answers: answers,
+        modelVersion: (data['model'] ?? data['model_version']) as String?,
       );
-    }
-
-    final TypesafeHttpResponse response = await _send(body);
-    if (response.statusCode >= 400) {
-      final String snippet = response.body.length > 500
-          ? response.body.substring(0, 500)
-          : response.body;
-      throw StateError(
-        'TypeSafe request failed with ${response.statusCode}: $snippet',
-      );
-    }
-
-    final Object? data = jsonDecode(response.body);
-    if (data is! Map) {
-      throw const FormatException('TypeSafe did not return a JSON object.');
-    }
-    final Object? rawAnswers = data['answers'];
-    if (rawAnswers is! Map) {
-      throw const FormatException('TypeSafe returned no answers.');
-    }
-
-    final Map<String, ClassifierAnswer> answers = <String, ClassifierAnswer>{
-      for (final MapEntry<String, ClassifierQuestion> entry
-          in questions.entries)
-        entry.key: _toAnswer(entry.key, entry.value, rawAnswers[entry.key]),
-    };
-
-    return ClassifierResponse(
-      answers: answers,
-      modelVersion: (data['model'] ?? data['model_version']) as String?,
-    );
+    });
   }
 }

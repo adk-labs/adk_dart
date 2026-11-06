@@ -216,7 +216,7 @@ sealed class ClassifierAnswer {
     }
   }
 
-  /// Discriminator identifying the answer kind (`choice`, `binary`, `score`).
+  /// Discriminator identifying the answer kind (`choice`, `binary`, `score`, `refusal`).
   String get type;
 
   /// Provider's confidence in the answer, in `[0.0, 1.0]`, when reported.
@@ -235,6 +235,8 @@ sealed class ClassifierAnswer {
         return BinaryAnswer.fromJson(json);
       case 'score':
         return ScoreAnswer.fromJson(json);
+      case 'refusal':
+        return RefusalAnswer.fromJson(json);
       default:
         throw ArgumentError.value(
           rawType,
@@ -243,6 +245,58 @@ sealed class ClassifierAnswer {
         );
     }
   }
+}
+
+/// Answer for a question the classifier declined to answer.
+///
+/// ```dart
+/// final answer = RefusalAnswer();
+/// ```
+final class RefusalAnswer extends ClassifierAnswer {
+  /// Creates a [RefusalAnswer].
+  RefusalAnswer({super.confidence});
+
+  /// Deserializes a [RefusalAnswer] from [json].
+  factory RefusalAnswer.fromJson(Map<String, Object?> json) {
+    final Object? rawType = json['type'];
+    if (rawType != null && rawType != 'refusal') {
+      throw ArgumentError.value(
+        rawType,
+        'type',
+        'Expected type "refusal".',
+      );
+    }
+    return RefusalAnswer(
+      confidence: json['confidence'] == null
+          ? null
+          : _toDouble(json['confidence'], 'confidence'),
+    );
+  }
+
+  @override
+  String get type => 'refusal';
+
+  @override
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'type': type,
+      if (confidence != null) 'confidence': confidence,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is RefusalAnswer && other.confidence == confidence;
+  }
+
+  @override
+  int get hashCode => Object.hash(type, confidence);
+
+  @override
+  String toString() => 'RefusalAnswer(confidence: $confidence)';
 }
 
 /// Alias matching upstream Python's `Answer` type alias.
@@ -421,6 +475,9 @@ final class ScoreAnswer extends ClassifierAnswer {
   /// Expected rubric level weighted by [probabilities].
   final double score;
 
+  /// Alias for [score] matching expected-value terminology.
+  double get expected => score;
+
   /// Probability assigned to each rubric level.
   final Map<int, double> probabilities;
 
@@ -459,6 +516,7 @@ class ClassifierResponse {
   ClassifierResponse({
     required Map<String, ClassifierAnswer> answers,
     this.modelVersion,
+    this.usageMetadata,
   }) : answers = Map<String, ClassifierAnswer>.unmodifiable(answers);
 
   /// Deserializes a [ClassifierResponse] from [json].
@@ -486,6 +544,7 @@ class ClassifierResponse {
       },
       modelVersion:
           (json['model_version'] ?? json['modelVersion']) as String?,
+      usageMetadata: json['usage_metadata'] ?? json['usageMetadata'],
     );
   }
 
@@ -494,6 +553,9 @@ class ClassifierResponse {
 
   /// Optional model version reported by the classifier provider.
   final String? modelVersion;
+
+  /// Optional token usage metadata reported by the classifier provider.
+  final Object? usageMetadata;
 
   /// Serializes this response to a JSON-compatible map.
   Map<String, Object?> toJson() {

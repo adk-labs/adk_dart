@@ -10,6 +10,7 @@
 library;
 
 export 'src/cli/cli_tools_click.dart' show main;
+export 'src/cli/_cli_generate_agent_card.dart';
 export 'src/cli/_dev_deploy.dart';
 export 'src/cli/_telemetry/__init__.dart';
 export 'src/cli/adk_web_server.dart';

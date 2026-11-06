@@ -1,9 +1,15 @@
 /// Slack integration surface for running ADK agents in Slack conversations.
 library;
 
+import 'dart:collection';
+
 import '../../events/event.dart';
+import '../../platform/time.dart';
 import '../../runners/runner.dart';
 import '../../types/content.dart';
+
+const int _maxProcessedEvents = 1024;
+const double _processedEventTtlSeconds = 600.0;
 
 /// Callback used to respond into a Slack thread.
 typedef SlackSay =
@@ -64,6 +70,31 @@ class SlackRunner {
   /// Optional factory used to start Slack Socket Mode.
   final SlackSocketModeHandlerFactory? socketModeHandlerFactory;
 
+  final LinkedHashMap<(String, String), double> _processedEvents =
+      LinkedHashMap<(String, String), double>();
+
+  /// Records `(channelId, ts)` and returns whether it was seen within the TTL.
+  bool isDuplicateEvent(String channelId, String? ts) {
+    if (ts == null || ts.isEmpty) {
+      return false;
+    }
+    final double now = getTime();
+    final double expiredBefore = now - _processedEventTtlSeconds;
+    while (_processedEvents.isNotEmpty &&
+        _processedEvents.values.first < expiredBefore) {
+      _processedEvents.remove(_processedEvents.keys.first);
+    }
+    final (String, String) eventKey = (channelId, ts);
+    if (_processedEvents.containsKey(eventKey)) {
+      return true;
+    }
+    _processedEvents[eventKey] = now;
+    if (_processedEvents.length > _maxProcessedEvents) {
+      _processedEvents.remove(_processedEvents.keys.first);
+    }
+    return false;
+  }
+
   void _setupHandlers() {
     slackApp.onEvent('app_mention', (Map<String, Object?> event, SlackSay say) {
       return handleMessage(event, say);
@@ -97,6 +128,13 @@ class SlackRunner {
     final String threadTs = '${event['thread_ts'] ?? event['ts'] ?? ''}'.trim();
 
     if (text.isEmpty || userId.isEmpty || channelId.isEmpty) {
+      return;
+    }
+    final Object? rawEventTs = event['ts'];
+    final String? eventTs = rawEventTs is String
+        ? rawEventTs
+        : (rawEventTs != null ? '$rawEventTs' : null);
+    if (isDuplicateEvent(channelId, eventTs)) {
       return;
     }
 

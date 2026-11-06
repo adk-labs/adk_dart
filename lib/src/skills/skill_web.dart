@@ -916,7 +916,10 @@ Frontmatter readSkillProperties(String skillDirPath) {
 }
 
 /// Returns no directory-backed skills on Web.
-Map<String, Frontmatter> listSkillsInDir(String skillsBasePath) {
+Map<String, Frontmatter> listSkillsInDir(
+  String skillsBasePath, {
+  void Function(String skillId, Object error)? onError,
+}) {
   return <String, Frontmatter>{};
 }
 

@@ -132,11 +132,19 @@ class JudgeModelOptions {
     this.judgeModel = 'gemini-2.5-flash',
     this.judgeModelConfig,
     this.numSamples = 5,
+    this.parallelismLimit = 1,
   }) {
     if (numSamples < 1) {
       throw ArgumentError.value(
         numSamples,
         'numSamples',
+        'Must be greater than or equal to 1',
+      );
+    }
+    if (parallelismLimit < 1) {
+      throw ArgumentError.value(
+        parallelismLimit,
+        'parallelismLimit',
         'Must be greater than or equal to 1',
       );
     }
@@ -151,6 +159,9 @@ class JudgeModelOptions {
   /// Number of samples used when scoring.
   final int numSamples;
 
+  /// Maximum number of parallel LLM evaluation calls to execute.
+  final int parallelismLimit;
+
   /// Creates options from JSON.
   factory JudgeModelOptions.fromJson(Map<String, Object?> json) {
     return JudgeModelOptions(
@@ -159,6 +170,8 @@ class JudgeModelOptions {
               as String,
       judgeModelConfig: json['judgeModelConfig'] ?? json['judge_model_config'],
       numSamples: (json['numSamples'] ?? json['num_samples'] ?? 5) as int,
+      parallelismLimit:
+          (json['parallelismLimit'] ?? json['parallelism_limit'] ?? 1) as int,
     );
   }
 
@@ -168,6 +181,7 @@ class JudgeModelOptions {
       'judge_model': judgeModel,
       if (judgeModelConfig != null) 'judge_model_config': judgeModelConfig,
       'num_samples': numSamples,
+      'parallelism_limit': parallelismLimit,
     };
   }
 }

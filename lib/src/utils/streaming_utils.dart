@@ -1,6 +1,8 @@
 /// Shared utility and helper APIs for ADK runtime behavior.
 library;
 
+import 'dart:convert';
+
 import '../flows/llm_flows/functions.dart' as flow_functions;
 import '../features/_feature_registry.dart';
 import '../models/llm_response.dart';
@@ -590,4 +592,501 @@ List<String> _jsonPathParts(String jsonPath) {
     parts.add(current.toString());
   }
   return parts;
+}
+
+final RegExp _jsonHighSurrogateEscapeRe = RegExp(
+  r'^\\u[dD][89aAbB][0-9a-fA-F]{2}$',
+);
+final RegExp _simpleJsonKeyRe = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+final RegExp _hugeIntLiteralRe = RegExp(r'\d{4301,}');
+
+/// Incremental argument delta produced by [JsonPathTracker].
+class PartialArg {
+  /// Creates a partial argument descriptor.
+  PartialArg({
+    this.jsonPath,
+    this.stringValue,
+    this.numberValue,
+    this.boolValue,
+    this.nullValue,
+    this.willContinue = false,
+  });
+
+  /// JSONPath location of the argument value.
+  String? jsonPath;
+
+  /// Incremental string value delta, when applicable.
+  String? stringValue;
+
+  /// Numeric value, when applicable.
+  num? numberValue;
+
+  /// Boolean value, when applicable.
+  bool? boolValue;
+
+  /// Null marker (`'NULL_VALUE'`), when applicable.
+  String? nullValue;
+
+  /// Whether additional string chunks will follow for [jsonPath].
+  bool willContinue;
+
+  /// Serializes this partial argument to a JSON map.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      if (jsonPath != null) 'json_path': jsonPath,
+      if (stringValue != null) 'string_value': stringValue,
+      if (numberValue != null) 'number_value': numberValue,
+      if (boolValue != null) 'bool_value': boolValue,
+      if (nullValue != null) 'null_value': nullValue,
+      'will_continue': willContinue,
+    };
+  }
+}
+
+/// Tracks JSON paths and values from a streaming JSON argument string.
+class JsonPathTracker {
+  /// Accumulated raw JSON string chunks.
+  List<String> accumulatedParts = <String>[];
+
+  /// Previously decoded JSON object snapshot.
+  Map<String, Object?> previousDict = <String, Object?>{};
+
+  /// Last completed JSON string that was parsed.
+  String previousCompleted = '';
+
+  /// Whether the tracker should reset before the next chunk.
+  bool needReset = false;
+
+  List<String> _stack = <String>[];
+  bool _inString = false;
+  bool _escaped = false;
+  bool _seenOpen = false;
+  String? _currentPath;
+  List<Object>? _parsedCurrentPath;
+  String? _openStringPath;
+
+  /// Processes a new [chunk] of JSON and returns detected [PartialArg] deltas.
+  List<PartialArg> handleChunk(String chunk) {
+    if (chunk.isEmpty) {
+      return <PartialArg>[];
+    }
+
+    if (needReset) {
+      accumulatedParts = <String>[];
+      previousCompleted = '';
+      previousDict = <String, Object?>{};
+      needReset = false;
+      _stack = <String>[];
+      _inString = false;
+      _escaped = false;
+      _seenOpen = false;
+      _currentPath = null;
+      _parsedCurrentPath = null;
+      _openStringPath = null;
+    }
+
+    if (_inString &&
+        !_escaped &&
+        _currentPath != null &&
+        _parsedCurrentPath != null &&
+        !chunk.contains('"') &&
+        !chunk.contains(r'\')) {
+      accumulatedParts.add(chunk);
+      final (Object? existingVal, bool found) = _getValueByJsonPath(
+        previousDict,
+        _parsedCurrentPath!,
+      );
+      final String newVal =
+          (found && existingVal is String ? existingVal : '') + chunk;
+      _setValueByJsonPath(previousDict, _parsedCurrentPath!, newVal);
+      return <PartialArg>[
+        PartialArg(
+          jsonPath: _currentPath,
+          stringValue: chunk,
+          willContinue: true,
+        ),
+      ];
+    }
+
+    accumulatedParts.add(chunk);
+    _currentPath = null;
+    _parsedCurrentPath = null;
+
+    for (int i = 0; i < chunk.length; i += 1) {
+      final String char = chunk[i];
+      if (_inString) {
+        if (_escaped) {
+          _escaped = false;
+        } else if (char == r'\') {
+          _escaped = true;
+        } else if (char == '"') {
+          _inString = false;
+        }
+      } else {
+        if (char == '"') {
+          _inString = true;
+        } else if (char == '{' || char == '[') {
+          _stack.add(char);
+          _seenOpen = true;
+        } else if (char == '}' || char == ']') {
+          if (_stack.isNotEmpty &&
+              ((char == '}' && _stack.last == '{') ||
+                  (char == ']' && _stack.last == '['))) {
+            _stack.removeLast();
+          }
+        }
+      }
+    }
+
+    if (_seenOpen && _stack.isEmpty && !_inString) {
+      needReset = true;
+    }
+
+    final String completed = _completeJson();
+    if (completed.isEmpty) {
+      return <PartialArg>[];
+    }
+
+    if (completed == previousCompleted) {
+      if (!_inString && _openStringPath != null) {
+        final String closedPath = _openStringPath!;
+        _openStringPath = null;
+        return <PartialArg>[
+          PartialArg(
+            jsonPath: closedPath,
+            stringValue: '',
+            willContinue: false,
+          ),
+        ];
+      }
+      return <PartialArg>[];
+    }
+    previousCompleted = completed;
+
+    if (_hugeIntLiteralRe.hasMatch(completed)) {
+      return <PartialArg>[];
+    }
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(completed);
+    } on StackOverflowError {
+      return <PartialArg>[];
+    } catch (_) {
+      return <PartialArg>[];
+    }
+
+    if (decoded is! Map) {
+      return <PartialArg>[];
+    }
+    final Map<String, Object?> currentDict = decoded.map(
+      (Object? k, Object? v) => MapEntry('$k', v),
+    );
+
+    final List<PartialArg> diffs;
+    try {
+      diffs = _getDiff(previousDict, currentDict);
+    } on _TrackerRecursionError {
+      return <PartialArg>[];
+    } on StackOverflowError {
+      return <PartialArg>[];
+    }
+    previousDict = currentDict;
+
+    if (_openStringPath != null &&
+        !diffs.any((PartialArg d) => d.jsonPath == _openStringPath)) {
+      diffs.insert(
+        0,
+        PartialArg(
+          jsonPath: _openStringPath,
+          stringValue: '',
+          willContinue: false,
+        ),
+      );
+      _openStringPath = null;
+    }
+
+    if (_inString) {
+      for (int i = diffs.length - 1; i >= 0; i -= 1) {
+        final PartialArg d = diffs[i];
+        if (d.stringValue != null && d.jsonPath != null) {
+          _currentPath = d.jsonPath;
+          _parsedCurrentPath = _parseTrackerJsonPath(d.jsonPath!);
+          _openStringPath = d.jsonPath;
+          d.willContinue = true;
+          break;
+        }
+      }
+    } else {
+      _currentPath = null;
+      _parsedCurrentPath = null;
+      _openStringPath = null;
+    }
+
+    return diffs;
+  }
+
+  String _completeJson() {
+    if (!_seenOpen) {
+      return '';
+    }
+
+    if (_inString) {
+      if (_escaped) {
+        return '';
+      }
+      final String prefix = accumulatedParts.join();
+      final int escapeStart = prefix.length - 6;
+      if (escapeStart >= 0 &&
+          _jsonHighSurrogateEscapeRe.hasMatch(prefix.substring(escapeStart))) {
+        int i = escapeStart - 1;
+        while (i >= 0 && prefix[i] == r'\') {
+          i -= 1;
+        }
+        if ((escapeStart - 1 - i).isEven) {
+          return '';
+        }
+      }
+      final String suffix =
+          '"${_stack.reversed.map((String op) => op == '{' ? '}' : ']').join()}';
+      return prefix + suffix;
+    }
+
+    String lastNonWs = '';
+    int lastPartIdx = -1;
+    int lastCharIdx = -1;
+    for (int i = accumulatedParts.length - 1; i >= 0; i -= 1) {
+      final String part = accumulatedParts[i];
+      final String stripped = part.trimRight();
+      if (stripped.isNotEmpty) {
+        lastNonWs = stripped[stripped.length - 1];
+        lastPartIdx = i;
+        lastCharIdx = stripped.length - 1;
+        break;
+      }
+    }
+
+    if (lastNonWs.isEmpty) {
+      return '';
+    }
+
+    final int codeUnit = lastNonWs.codeUnitAt(0);
+    final bool isDigit = codeUnit >= 0x30 && codeUnit <= 0x39;
+    if (lastNonWs == ':' || isDigit) {
+      return '';
+    } else if ((lastNonWs == '{' && _stack.length > 1) || lastNonWs == '[') {
+      return '';
+    } else if (lastNonWs == ',') {
+      final String prefix =
+          accumulatedParts.sublist(0, lastPartIdx).join() +
+          accumulatedParts[lastPartIdx].substring(0, lastCharIdx);
+      final String suffix = _stack.reversed
+          .map((String op) => op == '{' ? '}' : ']')
+          .join();
+      return prefix + suffix;
+    } else {
+      final String suffix = _stack.reversed
+          .map((String op) => op == '{' ? '}' : ']')
+          .join();
+      return accumulatedParts.join() + suffix;
+    }
+  }
+
+  List<PartialArg> _getDiff(
+    Object? prev,
+    Object? curr, [
+    String path = r'$',
+    int depth = 0,
+  ]) {
+    if (depth > _maxTrackerRecursionDepth) {
+      throw const _TrackerRecursionError();
+    }
+    final List<PartialArg> diffs = <PartialArg>[];
+    if (curr is Map && prev is Map) {
+      for (final MapEntry<Object?, Object?> entry in curr.entries) {
+        final String key = '${entry.key}';
+        final String currPath = _appendJsonPathKey(path, key);
+        if (!prev.containsKey(key)) {
+          diffs.addAll(_getDiffNewValue(currPath, entry.value, depth + 1));
+        } else {
+          diffs.addAll(_getDiff(prev[key], entry.value, currPath, depth + 1));
+        }
+      }
+    } else if (curr is List && prev is List) {
+      for (int i = 0; i < curr.length; i += 1) {
+        final String currPath = '$path[$i]';
+        if (i >= prev.length) {
+          diffs.addAll(_getDiffNewValue(currPath, curr[i], depth + 1));
+        } else {
+          diffs.addAll(_getDiff(prev[i], curr[i], currPath, depth + 1));
+        }
+      }
+    } else if (prev != curr) {
+      if (curr is String && prev is String) {
+        if (curr.startsWith(prev)) {
+          final String delta = curr.substring(prev.length);
+          if (delta.isNotEmpty) {
+            diffs.add(
+              PartialArg(
+                jsonPath: path,
+                stringValue: delta,
+                willContinue: false,
+              ),
+            );
+          }
+        } else {
+          diffs.add(
+            PartialArg(jsonPath: path, stringValue: curr, willContinue: false),
+          );
+        }
+      } else {
+        diffs.addAll(_getDiffNewValue(path, curr, depth + 1));
+      }
+    }
+    return diffs;
+  }
+
+  List<PartialArg> _getDiffNewValue(
+    String path,
+    Object? val, [
+    int depth = 0,
+  ]) {
+    if (depth > _maxTrackerRecursionDepth) {
+      throw const _TrackerRecursionError();
+    }
+    final List<PartialArg> diffs = <PartialArg>[];
+    if (val is Map && val.isNotEmpty) {
+      for (final MapEntry<Object?, Object?> entry in val.entries) {
+        diffs.addAll(
+          _getDiffNewValue(
+            _appendJsonPathKey(path, '${entry.key}'),
+            entry.value,
+            depth + 1,
+          ),
+        );
+      }
+    } else if (val is List && val.isNotEmpty) {
+      for (int i = 0; i < val.length; i += 1) {
+        diffs.addAll(_getDiffNewValue('$path[$i]', val[i], depth + 1));
+      }
+    } else {
+      diffs.add(_createPartialArg(path, val));
+    }
+    return diffs;
+  }
+
+  PartialArg _createPartialArg(String path, Object? val) {
+    if (val is String) {
+      return PartialArg(jsonPath: path, stringValue: val, willContinue: false);
+    } else if (val is num) {
+      if (!val.toDouble().isFinite) {
+        return PartialArg(jsonPath: path, willContinue: false);
+      }
+      return PartialArg(jsonPath: path, numberValue: val, willContinue: false);
+    } else if (val is BigInt) {
+      final double asDouble = val.toDouble();
+      if (!asDouble.isFinite) {
+        return PartialArg(jsonPath: path, willContinue: false);
+      }
+      return PartialArg(
+        jsonPath: path,
+        numberValue: asDouble,
+        willContinue: false,
+      );
+    } else if (val is bool) {
+      return PartialArg(jsonPath: path, boolValue: val, willContinue: false);
+    } else if (val == null) {
+      return PartialArg(
+        jsonPath: path,
+        nullValue: 'NULL_VALUE',
+        willContinue: false,
+      );
+    }
+    return PartialArg(jsonPath: path, willContinue: false);
+  }
+}
+
+const int _maxTrackerRecursionDepth = 500;
+
+class _TrackerRecursionError implements Exception {
+  const _TrackerRecursionError();
+}
+
+String _appendJsonPathKey(String basePath, String key) {
+  if (_simpleJsonKeyRe.hasMatch(key)) {
+    return '$basePath.$key';
+  }
+  final String escaped = key
+      .replaceAll(r'\', r'\\')
+      .replaceAll("'", r"\'")
+      .replaceAll('\n', r'\n')
+      .replaceAll('\r', r'\r')
+      .replaceAll('\t', r'\t');
+  return "$basePath['$escaped']";
+}
+
+List<Object> _parseTrackerJsonPath(String jsonPath) {
+  final List<String> rawParts = _jsonPathParts(jsonPath);
+  final List<Object> parsed = <Object>[];
+  final RegExp arrayIndexRe = RegExp(r'^([^\[\]]+)\[(\d+)\]$');
+  for (final String part in rawParts) {
+    final Match? match = arrayIndexRe.firstMatch(part);
+    if (match != null) {
+      parsed.add(match.group(1)!);
+      parsed.add(int.parse(match.group(2)!));
+    } else {
+      parsed.add(part);
+    }
+  }
+  return parsed;
+}
+
+(Object?, bool) _getValueByJsonPath(
+  Map<String, Object?> root,
+  List<Object> path,
+) {
+  Object? current = root;
+  for (final Object segment in path) {
+    if (segment is String && current is Map) {
+      if (!current.containsKey(segment)) {
+        return (null, false);
+      }
+      current = current[segment];
+    } else if (segment is int && current is List) {
+      if (segment < 0 || segment >= current.length) {
+        return (null, false);
+      }
+      current = current[segment];
+    } else {
+      return (null, false);
+    }
+  }
+  return (current, true);
+}
+
+void _setValueByJsonPath(
+  Map<String, Object?> root,
+  List<Object> path,
+  Object? value,
+) {
+  if (path.isEmpty) {
+    return;
+  }
+  Object? current = root;
+  for (int i = 0; i < path.length - 1; i += 1) {
+    final Object segment = path[i];
+    if (segment is String && current is Map) {
+      current = current[segment];
+    } else if (segment is int && current is List) {
+      current = current[segment];
+    } else {
+      return;
+    }
+  }
+  final Object last = path.last;
+  if (last is String && current is Map) {
+    current[last] = value;
+  } else if (last is int && current is List && last < current.length) {
+    current[last] = value;
+  }
 }

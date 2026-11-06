@@ -108,8 +108,8 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       for (final BaseTool tool in tools) {
         final String toolNodeId = 'tool:${tool.name}';
         final String caption = tool is FunctionTool
-            ? '🔧 ${tool.name}'
-            : '🧰 ${tool.name}';
+            ? '🔧 ${tool.displayTitle}'
+            : '🧰 ${tool.displayTitle}';
         nodes.putIfAbsent(
           toolNodeId,
           () => AgentGraphNode(id: toolNodeId, caption: caption, kind: 'tool'),
@@ -129,12 +129,14 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       ),
     );
 
+    final List<BaseNode> wfNodes = _workflowNodes(workflow);
+    final List<Edge> wfEdges = _workflowEdges(workflow);
     final Set<String> workflowNodeNames = <String>{
-      for (final BaseNode node in workflow.nodes) node.name,
+      for (final BaseNode node in wfNodes) node.name,
     };
     final Set<String> targetedNodes = <String>{};
 
-    for (final BaseNode node in workflow.nodes) {
+    for (final BaseNode node in wfNodes) {
       final String nodeId = _workflowNodeId(workflow, node.name);
       nodes.putIfAbsent(
         nodeId,
@@ -151,8 +153,8 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       } else if (node is ToolNode) {
         final String toolNodeId = 'tool:${node.tool.name}';
         final String caption = node.tool is FunctionTool
-            ? '🔧 ${node.tool.name}'
-            : '🧰 ${node.tool.name}';
+            ? '🔧 ${node.tool.displayTitle}'
+            : '🧰 ${node.tool.displayTitle}';
         nodes.putIfAbsent(
           toolNodeId,
           () => AgentGraphNode(id: toolNodeId, caption: caption, kind: 'tool'),
@@ -161,7 +163,7 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       }
     }
 
-    for (final Edge edge in workflow.edges) {
+    for (final Edge edge in wfEdges) {
       if (!workflowNodeNames.contains(edge.toNode)) {
         continue;
       }
@@ -178,7 +180,7 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       addEdge(from, to, label: edge.route);
     }
 
-    for (final BaseNode node in workflow.nodes) {
+    for (final BaseNode node in wfNodes) {
       final String to = _workflowNodeId(workflow, node.name);
       for (final String dependency in node.dependsOn) {
         if (workflowNodeNames.contains(dependency)) {
@@ -188,7 +190,7 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       }
     }
 
-    for (final BaseNode node in workflow.nodes) {
+    for (final BaseNode node in wfNodes) {
       if (!targetedNodes.contains(node.name)) {
         addEdge(workflow.name, _workflowNodeId(workflow, node.name));
       }
@@ -201,6 +203,26 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
     edges: edges.toList(growable: false),
     edgeLabels: Map<(String, String), String>.unmodifiable(edgeLabels),
   );
+}
+
+bool _matchesHighlightPair(
+  String from,
+  String to,
+  Set<(String, String)> highlightPairs,
+) {
+  if (highlightPairs.isEmpty) {
+    return false;
+  }
+  final String normalizedFrom = from.startsWith('tool:')
+      ? from.substring('tool:'.length)
+      : from;
+  final String normalizedTo = to.startsWith('tool:')
+      ? to.substring('tool:'.length)
+      : to;
+  return highlightPairs.contains((from, to)) ||
+      highlightPairs.contains((to, from)) ||
+      highlightPairs.contains((normalizedFrom, normalizedTo)) ||
+      highlightPairs.contains((normalizedTo, normalizedFrom));
 }
 
 /// Returns Mermaid flowchart text for the graph rooted at [rootAgent].
@@ -219,9 +241,7 @@ Future<String> getAgentGraph(
   }
 
   for (final (String from, String to) in graph.edges) {
-    final bool highlighted =
-        highlightPairs.contains((from, to)) ||
-        highlightPairs.contains((to, from));
+    final bool highlighted = _matchesHighlightPair(from, to, highlightPairs);
     final String fromId = _toMermaidId(from);
     final String toId = _toMermaidId(to);
     final String? label = graph.edgeLabels[(from, to)];
@@ -280,8 +300,7 @@ Future<String> getAgentGraphDot(
     if (_isToolEdge((from, to), kindById)) {
       attributes['style'] = 'dashed';
     }
-    if (highlightPairs.contains((from, to)) ||
-        highlightPairs.contains((to, from))) {
+    if (_matchesHighlightPair(from, to, highlightPairs)) {
       attributes['color'] = 'red';
       attributes['penwidth'] = '2.0';
     }
@@ -452,19 +471,57 @@ String _nodeStateKey(String nodeId) {
   return nodeId.substring(separator + 1);
 }
 
+List<BaseNode> _workflowNodes(Workflow workflow) {
+  try {
+    final dynamic graph = (workflow as dynamic).graph;
+    if (graph != null) {
+      final Object? graphNodes = graph.nodes;
+      if (graphNodes is List<BaseNode>) {
+        return graphNodes;
+      }
+      if (graphNodes is Iterable) {
+        return graphNodes.whereType<BaseNode>().toList(growable: false);
+      }
+    }
+  } on NoSuchMethodError {
+    // Fallback when Workflow.graph is not present.
+  }
+  return workflow.nodes;
+}
+
+List<Edge> _workflowEdges(Workflow workflow) {
+  try {
+    final dynamic graph = (workflow as dynamic).graph;
+    if (graph != null) {
+      final Object? graphEdges = graph.edges;
+      if (graphEdges is List<Edge>) {
+        return graphEdges;
+      }
+      if (graphEdges is Iterable) {
+        return graphEdges.whereType<Edge>().toList(growable: false);
+      }
+    }
+  } on NoSuchMethodError {
+    // Fallback when Workflow.graph is not present.
+  }
+  return workflow.edges;
+}
+
 Set<String> _terminalWorkflowNodeIds(Workflow workflow) {
+  final List<BaseNode> wfNodes = _workflowNodes(workflow);
+  final List<Edge> wfEdges = _workflowEdges(workflow);
   final Set<String> nonTerminalNames = <String>{};
-  for (final Edge edge in workflow.edges) {
+  for (final Edge edge in wfEdges) {
     if (edge.fromNode != START) {
       nonTerminalNames.add(edge.fromNode);
     }
   }
-  for (final BaseNode node in workflow.nodes) {
+  for (final BaseNode node in wfNodes) {
     nonTerminalNames.addAll(node.dependsOn);
   }
 
   return <String>{
-    for (final BaseNode node in workflow.nodes)
+    for (final BaseNode node in wfNodes)
       if (node is! ToolNode && !nonTerminalNames.contains(node.name))
         _workflowNodeId(workflow, node.name),
   };

@@ -19,14 +19,69 @@ import 'mcp_session_manager.dart';
 typedef McpToolHeaderProvider =
     Map<String, String> Function(ReadonlyContext readonlyContext);
 
+/// Extracts the display title from an MCP tool descriptor or [McpBaseTool].
+///
+/// Checks top-level `title` first, then `annotations.title`, returning `null`
+/// if neither is a non-empty string.
+String? extractMcpToolTitle(Object mcpTool) {
+  if (mcpTool is McpBaseTool) {
+    final String? topTitle = mcpTool.title;
+    if (topTitle != null && topTitle.isNotEmpty) {
+      return topTitle;
+    }
+    final Object? annotationTitle = mcpTool.annotations?['title'];
+    if (annotationTitle is String && annotationTitle.isNotEmpty) {
+      return annotationTitle;
+    }
+    return null;
+  }
+  if (mcpTool is Map) {
+    final Object? topTitle = mcpTool['title'];
+    if (topTitle is String && topTitle.isNotEmpty) {
+      return topTitle;
+    }
+    final Object? annotations = mcpTool['annotations'];
+    if (annotations is Map) {
+      final Object? annotationTitle = annotations['title'];
+      if (annotationTitle is String && annotationTitle.isNotEmpty) {
+        return annotationTitle;
+      }
+    }
+    return null;
+  }
+  try {
+    final Object? topTitle = (mcpTool as dynamic).title;
+    if (topTitle is String && topTitle.isNotEmpty) {
+      return topTitle;
+    }
+  } catch (_) {}
+  try {
+    final dynamic annotations = (mcpTool as dynamic).annotations;
+    if (annotations is Map) {
+      final Object? annotationTitle = annotations['title'];
+      if (annotationTitle is String && annotationTitle.isNotEmpty) {
+        return annotationTitle;
+      }
+    } else if (annotations != null) {
+      final Object? annotationTitle = annotations.title;
+      if (annotationTitle is String && annotationTitle.isNotEmpty) {
+        return annotationTitle;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 /// Lightweight MCP tool descriptor used by [McpTool].
 class McpBaseTool {
   /// Creates a normalized MCP tool descriptor.
   McpBaseTool({
     required this.name,
+    this.title,
     this.description = '',
     Map<String, dynamic>? inputSchema,
     Map<String, dynamic>? outputSchema,
+    this.annotations,
     Map<String, Object?>? meta,
   }) : inputSchema = inputSchema ?? <String, dynamic>{},
        outputSchema = outputSchema ?? <String, dynamic>{},
@@ -34,6 +89,9 @@ class McpBaseTool {
 
   /// Tool name returned by MCP tool discovery.
   final String name;
+
+  /// Optional human-readable display title for the tool.
+  final String? title;
 
   /// Human-readable tool description.
   final String description;
@@ -44,6 +102,9 @@ class McpBaseTool {
   /// Output JSON schema emitted by this tool.
   final Map<String, dynamic> outputSchema;
 
+  /// Optional MCP tool annotations (such as `title`, `readOnlyHint`, etc.).
+  final Map<String, Object?>? annotations;
+
   /// Optional MCP metadata attached to the tool descriptor.
   final Map<String, Object?> meta;
 
@@ -51,9 +112,12 @@ class McpBaseTool {
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'name': name,
+      if (title != null) 'title': title,
       'description': description,
       'inputSchema': Map<String, dynamic>.from(inputSchema),
       'outputSchema': Map<String, dynamic>.from(outputSchema),
+      if (annotations != null && annotations!.isNotEmpty)
+        'annotations': Map<String, Object?>.from(annotations!),
       if (meta.isNotEmpty) 'meta': Map<String, Object?>.from(meta),
     };
   }
@@ -104,7 +168,11 @@ class McpTool extends BaseAuthenticatedTool {
        _connectionParams = connectionParams,
        _sessionManager = sessionManager,
        _requireConfirmation = requireConfirmation,
-       super(name: mcpTool.name, description: mcpTool.description) {
+       super(
+         name: mcpTool.name,
+         description: mcpTool.description,
+         title: extractMcpToolTitle(mcpTool),
+       ) {
     if (mcpReservedToolNames.contains(mcpTool.name)) {
       throw ArgumentError(
         "MCP tool name '${mcpTool.name}' is reserved by the ADK framework.",

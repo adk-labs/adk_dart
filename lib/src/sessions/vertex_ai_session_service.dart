@@ -12,6 +12,7 @@ import '../events/event_actions.dart';
 import '../events/ui_widget.dart';
 import '../platform/time.dart';
 import '../types/content.dart';
+import '../utils/google_client_headers.dart';
 import '../utils/system_environment/system_environment.dart';
 import '../utils/vertex_ai_utils.dart';
 import 'base_session_service.dart';
@@ -344,12 +345,12 @@ class VertexAiSessionHttpApiClient implements VertexAiSessionApiClient {
           );
 
     final String? accessToken = await _accessTokenProvider();
-    final Map<String, String> headers = <String, String>{
+    final Map<String, String> headers = mergeTrackingHeaders(<String, String>{
       'accept': 'application/json',
       if (payload != null) 'content-type': 'application/json',
       if (accessToken != null && accessToken.isNotEmpty)
         HttpHeaders.authorizationHeader: 'Bearer $accessToken',
-    };
+    });
 
     final http.Request request = http.Request(method, uri)
       ..headers.addAll(headers);
@@ -561,30 +562,76 @@ class VertexAiSessionService extends BaseSessionService {
     );
   }
 
+  static const Set<String> _allowedCreateSessionConfigKeys = <String>{
+    'display_name',
+    'displayName',
+    'ttl',
+    'expire_time',
+    'expireTime',
+    'labels',
+  };
+
   @override
   Future<Session> createSession({
     required String appName,
     required String userId,
     Map<String, Object?>? state,
     String? sessionId,
+    String? displayName,
+    String? ttl,
+    Object? expireTime,
+    Map<String, String>? labels,
+    Map<String, Object?>? config,
   }) async {
     if (sessionId != null && sessionId.isNotEmpty) {
       throw ArgumentError(
         'User-provided Session id is not supported for VertexAiSessionService.',
       );
     }
+    if (config != null) {
+      final List<String> unsupportedKeys = config.keys
+          .where(
+            (String key) => !_allowedCreateSessionConfigKeys.contains(key),
+          )
+          .toList(growable: false);
+      if (unsupportedKeys.isNotEmpty) {
+        throw ArgumentError(
+          'Unsupported createSession config keys for VertexAiSessionService: '
+          '${unsupportedKeys.join(', ')}',
+        );
+      }
+    }
+
+    final Object? resolvedDisplayName =
+        displayName ?? config?['display_name'] ?? config?['displayName'];
+    final Object? resolvedTtl = ttl ?? config?['ttl'];
+    final Object? resolvedExpireTime =
+        expireTime ?? config?['expire_time'] ?? config?['expireTime'];
+    final Object? resolvedLabels = labels ?? config?['labels'];
+    if (resolvedTtl != null && resolvedExpireTime != null) {
+      throw ArgumentError('Cannot specify both ttl and expire_time.');
+    }
 
     final String reasoningEngineId = _getReasoningEngineId(appName);
     final VertexAiSessionApiClient apiClient = _getApiClient();
-    final Map<String, Object?> filteredState = trimTempState(state);
-    final Map<String, Object?> config = <String, Object?>{
+    final Map<String, Object?> filteredState = makeJsonSafeState(
+      trimTempState(state),
+    );
+    final Map<String, Object?> apiConfig = <String, Object?>{
       if (filteredState.isNotEmpty) 'session_state': filteredState,
+      'display_name': ?resolvedDisplayName,
+      'ttl': ?resolvedTtl,
+      if (resolvedExpireTime != null)
+        'expire_time': resolvedExpireTime is DateTime
+            ? resolvedExpireTime.toUtc().toIso8601String()
+            : resolvedExpireTime,
+      'labels': ?resolvedLabels,
     };
 
     final Map<String, Object?>? created = await apiClient.createSession(
       reasoningEngineId: reasoningEngineId,
       userId: userId,
-      config: config,
+      config: apiConfig,
     );
     if (created == null || created.isEmpty) {
       throw StateError('Vertex session create response is empty.');
@@ -593,8 +640,8 @@ class VertexAiSessionService extends BaseSessionService {
     final String name =
         _readStringByKeys(created, const <String>['name']) ?? '';
     final String resolvedId = name.isEmpty ? '' : name.split('/').last;
-    final Map<String, Object?> sessionState = _asStringMap(
-      created['session_state'],
+    final Map<String, Object?> sessionState = trimTempState(
+      _asStringMap(created['session_state']),
     );
     final double updateTime =
         _parseTimestamp(created['update_time'] ?? created['updateTime']) ??
@@ -777,6 +824,9 @@ class VertexAiSessionService extends BaseSessionService {
     required Session session,
     required Event event,
   }) async {
+    if (event.partial == true) {
+      return event;
+    }
     _validateSessionId(session.id);
     final Event persistedEvent = eventForPersistence(event);
     await super.appendEvent(session: session, event: event);
@@ -790,9 +840,7 @@ class VertexAiSessionService extends BaseSessionService {
     }
     final Map<String, Object?> actions = <String, Object?>{
       'skip_summarization': event.actions.skipSummarization,
-      'state_delta': Map<String, Object?>.from(
-        persistedEvent.actions.stateDelta,
-      ),
+      'state_delta': makeJsonSafeState(persistedEvent.actions.stateDelta),
       'artifact_delta': Map<String, int>.from(event.actions.artifactDelta),
       'transfer_agent': event.actions.transferToAgent,
       'escalate': event.actions.escalate,

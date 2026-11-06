@@ -1,6 +1,9 @@
 /// Event action models used to carry side-channel run instructions.
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import '../types/content.dart';
 import 'ui_widget.dart';
 
@@ -157,7 +160,7 @@ Map<String, Object?> eventActionsToJson(EventActions actions) {
   return <String, Object?>{
     if (actions.skipSummarization != null)
       'skipSummarization': actions.skipSummarization,
-    'stateDelta': Map<String, Object?>.from(actions.stateDelta),
+    'stateDelta': _coerceBytesMap(actions.stateDelta),
     'artifactDelta': Map<String, int>.from(actions.artifactDelta),
     if (actions.transferToAgent != null)
       'transferToAgent': actions.transferToAgent,
@@ -186,11 +189,38 @@ Map<String, Object?> eventActionsToJson(EventActions actions) {
       },
     if (actions.endOfAgent != null) 'endOfAgent': actions.endOfAgent,
     if (actions.agentState != null)
-      'agentState': Map<String, Object?>.from(actions.agentState!),
+      'agentState': _coerceBytesMap(actions.agentState!),
     if (actions.rewindBeforeInvocationId != null)
       'rewindBeforeInvocationId': actions.rewindBeforeInvocationId,
-    if (actions.route != null) 'route': actions.route,
+    if (actions.route != null) 'route': _coerceBytesInValue(actions.route),
   };
+}
+
+Map<String, Object?> _coerceBytesMap(Map<String, Object?> source) {
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in source.entries)
+      entry.key: _coerceBytesInValue(entry.value),
+  };
+}
+
+Object? _coerceBytesInValue(Object? value) {
+  if (value is Uint8List) {
+    try {
+      return utf8.decode(value);
+    } on FormatException {
+      return base64.encode(value);
+    }
+  }
+  if (value is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': _coerceBytesInValue(entry.value),
+    };
+  }
+  if (value is List) {
+    return value.map(_coerceBytesInValue).toList(growable: false);
+  }
+  return value;
 }
 
 /// Deserializes [json] into [EventActions].

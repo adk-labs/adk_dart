@@ -29,9 +29,19 @@ import '../tools/transfer_to_agent_tool.dart';
 import '../types/content.dart';
 import '../utils/function_call_names.dart';
 import '../version.dart';
+import '_bigquery_agent_analytics_eval_sql.dart';
 import 'base_plugin.dart';
 import 'callback_helpers.dart';
 
+export '_bigquery_agent_analytics_eval_sql.dart'
+    show
+        buildEvalSessionQuerySql,
+        buildEvalSessionViewSql,
+        buildEvalTurnQuerySql,
+        buildEvalTurnViewSql,
+        evalTableIdUnquotableRe,
+        projectablePayloadColumns,
+        validatePayloadColumnDenylist;
 export 'callback_helpers.dart'
     show ToolResultClassification, ToolResultClassifier;
 
@@ -227,6 +237,7 @@ class BigQueryLoggerConfig {
     this.shutdownTimeout = 10,
     this.queueMaxSize = 10000,
     this.contentFormatter,
+    this.logContentFormatterErrorDetails = false,
     this.gcsBucketName,
     this.gcsUploadProvider,
     this.gcsUploadTimeout = const Duration(seconds: 10),
@@ -235,10 +246,12 @@ class BigQueryLoggerConfig {
     Map<String, Object?>? customTags,
     this.autoSchemaUpgrade = true,
     this.createViews = true,
+    this.viewPrefix = 'v',
     this.exactlyOnceDelivery = false,
     Set<String>? finalResponseToolNames,
     this.createEvalViews = false,
     this.evalViewMode = 'full',
+    this.payloadColumnDenylist,
     this.maxObservationSummariesPerSegment = 200,
     this.toolResultClassifier,
     this.onSchemaError,
@@ -247,7 +260,9 @@ class BigQueryLoggerConfig {
            clusteringFields ?? <String>['event_type', 'agent', 'user_id'],
        retryConfig = retryConfig ?? RetryConfig(),
        customTags = customTags ?? <String, Object?>{},
-       finalResponseToolNames = finalResponseToolNames ?? <String>{};
+       finalResponseToolNames = finalResponseToolNames ?? <String>{} {
+    validatePayloadColumnDenylist(payloadColumnDenylist);
+  }
 
   /// Whether event logging is enabled.
   bool enabled;
@@ -290,6 +305,13 @@ class BigQueryLoggerConfig {
   /// Optional payload formatter applied before truncation.
   BigQueryContentFormatter? contentFormatter;
 
+  /// Whether to record `contentFormatter` exception details in BigQuery rows
+  /// (`error_message` and `attributes.adk.content_formatter_error`).
+  ///
+  /// Defaults to `false` so exception messages that may contain raw payload
+  /// fragments are not written to BigQuery unless explicitly opted in.
+  bool logContentFormatterErrorDetails;
+
   /// Optional Cloud Storage bucket for overflow or archival integrations.
   String? gcsBucketName;
 
@@ -315,6 +337,9 @@ class BigQueryLoggerConfig {
   /// Whether per-event analytics views should be created.
   bool createViews;
 
+  /// Prefix used for created BigQuery analytics and evaluation views.
+  String viewPrefix;
+
   /// Whether deterministic row `insertId` values are used for deduplication.
   bool exactlyOnceDelivery;
 
@@ -330,6 +355,10 @@ class BigQueryLoggerConfig {
   /// Evaluation view event requirement mode: `'full'` (default) or
   /// `'conversation_only'`.
   String evalViewMode;
+
+  /// Optional list of projectable payload columns (`'content'`,
+  /// `'content_parts'`, `'attributes'`, `'latency_ms'`) to omit from logged rows.
+  List<String>? payloadColumnDenylist;
 
   /// Maximum number of `WORKFLOW_NODE_OBSERVATION_SUMMARY` rows written when
   /// a runner call ends. Must be an integer >= 1.
@@ -1047,8 +1076,26 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
                : InMemoryBigQueryEventSink()),
        _analyticsViewExecutor = analyticsViewExecutor,
        super(name: 'bigquery_agent_analytics') {
-    this.tableId = tableId ?? this.config.tableId;
     _applyConfigOverrides(configOverrides);
+    this.tableId = tableId ?? this.config.tableId;
+    _deniedColumns = validatePayloadColumnDenylist(
+      this.config.payloadColumnDenylist,
+    );
+    for (final (String fieldName, String value) in <(String, String)>[
+      ('project_id', projectId),
+      ('dataset_id', datasetId),
+      ('table_id', this.tableId),
+      ('view_prefix', this.config.viewPrefix),
+    ]) {
+      if (value.isEmpty || evalTableIdUnquotableRe.hasMatch(value)) {
+        throw ArgumentError.value(
+          value,
+          fieldName,
+          '$fieldName must be a non-empty string without a backtick, '
+          "backslash, control or line-break character; got '$value'.",
+        );
+      }
+    }
     if (this.config.maxObservationSummariesPerSegment < 1) {
       throw ArgumentError.value(
         this.config.maxObservationSummariesPerSegment,
@@ -1084,6 +1131,8 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   /// The destination BigQuery table identifier.
   late final String tableId;
 
+  late Set<String> _deniedColumns;
+  bool _offloadDisabledWarned = false;
   bool _started = false;
   bool _isShuttingDown = false;
   bool _viewsCreated = false;
@@ -1174,6 +1223,30 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     }
   }
 
+  bool _contentPartsPersisted() {
+    return config.logMultiModalContent &&
+        !_deniedColumns.contains('content_parts');
+  }
+
+  void _maybeWarnOffloadDisabled() {
+    if (_offloadDisabledWarned) {
+      return;
+    }
+    final String? bucketName = config.gcsBucketName?.trim();
+    if (bucketName == null || bucketName.isEmpty) {
+      return;
+    }
+    final String reason = _deniedColumns.contains('content_parts')
+        ? "payload_column_denylist drops 'content_parts', which holds the offloaded object reference"
+        : "log_multi_modal_content is False, so 'content_parts' (which holds the offloaded object reference) is not persisted";
+    stderr.writeln(
+      'GCS offload disabled: $reason; large text is kept inline (truncated) '
+      "in 'content' and binary parts are not stored instead of being uploaded "
+      'to $bucketName.',
+    );
+    _offloadDisabledWarned = true;
+  }
+
   BigQueryGcsUploadProvider? _resolveGcsUploadProvider({
     required String? accessToken,
     required BigQueryAccessTokenProvider? accessTokenProvider,
@@ -1181,6 +1254,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   }) {
     final String? bucketName = config.gcsBucketName?.trim();
     if (bucketName == null || bucketName.isEmpty) {
+      return null;
+    }
+    if (!_contentPartsPersisted()) {
+      _maybeWarnOffloadDisabled();
       return null;
     }
     final BigQueryGcsUploadProvider? configured = config.gcsUploadProvider;
@@ -1283,6 +1360,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     'LLM_REQUEST',
     'TOOL_STARTING',
     'TOOL_COMPLETED',
+    'TOOL_ERROR',
     'TOOL_PAUSED',
     'AGENT_TRANSFER',
     'AGENT_RESPONSE',
@@ -1308,6 +1386,11 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       };
 
   void _validateEvalViewConfig({String prefix = 'Cannot create eval views'}) {
+    if (_deniedColumns.contains('content')) {
+      throw ArgumentError(
+        "$prefix when 'content' is in payloadColumnDenylist.",
+      );
+    }
     final Set<String>? requiredEvents =
         _evalViewEventsByMode[config.evalViewMode];
     if (requiredEvents == null) {
@@ -1348,14 +1431,24 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
   /// Validates [config] and creates or refreshes the evaluation views.
   Future<void> createEvalViews() async {
     _validateEvalViewConfig();
+    final String fullTableId = '$projectId.$datasetId.$tableId';
+    final List<String> statements = <String>[
+      buildEvalSessionViewSql(
+        fullTableId,
+        viewPrefix: config.viewPrefix,
+        deniedColumns: _deniedColumns,
+      ),
+      buildEvalTurnViewSql(
+        fullTableId,
+        viewPrefix: config.viewPrefix,
+        deniedColumns: _deniedColumns,
+      ),
+    ];
     final BigQueryAnalyticsViewExecutor? executor = _analyticsViewExecutor;
     if (executor == null) {
       return;
     }
-    await executor(<String>[
-      'CREATE OR REPLACE VIEW `$projectId.$datasetId.v_eval_session` AS SELECT * FROM `$projectId.$datasetId.$tableId`',
-      'CREATE OR REPLACE VIEW `$projectId.$datasetId.v_eval_turn` AS SELECT * FROM `$projectId.$datasetId.$tableId`',
-    ]);
+    await executor(statements);
   }
 
   @override
@@ -2284,6 +2377,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     }
 
     final EventData resolvedEventData = eventData ?? EventData();
+    String? effectiveErrorMessage = resolvedEventData.errorMessage;
     Object? normalizedContent = rawContent;
     final BigQueryContentFormatter? formatter = config.contentFormatter;
     if (formatter != null) {
@@ -2292,8 +2386,27 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       } catch (error) {
         _formatFailedCount += 1;
         stderr.writeln('Content formatter failed: $error');
+        String formatterError;
+        try {
+          final String detail = '$error';
+          formatterError = detail.isNotEmpty
+              ? '${error.runtimeType}: $detail'
+              : '${error.runtimeType}';
+        } catch (_) {
+          formatterError = '${error.runtimeType}';
+        }
         // Fail closed so a masking/formatting error cannot leak raw content.
         normalizedContent = null;
+        if (config.logContentFormatterErrorDetails) {
+          final _TruncateResult truncatedFormatterError =
+              _recursiveSmartTruncate(formatterError, config.maxContentLength);
+          isTruncated = isTruncated || truncatedFormatterError.isTruncated;
+          resolvedEventData.adkExtras['content_formatter_error'] =
+              truncatedFormatterError.value;
+          if (effectiveErrorMessage == null || effectiveErrorMessage.isEmpty) {
+            effectiveErrorMessage = '${truncatedFormatterError.value ?? ''}';
+          }
+        }
       }
     }
 
@@ -2307,34 +2420,50 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     final String? parentSpanId =
         resolvedEventData.parentSpanIdOverride ?? pair.parentSpanId;
 
-    final _TruncateResult contentResult = _serializeContentPayload(
-      normalizedContent,
-      maxLength: config.maxContentLength,
-    );
-    isTruncated = isTruncated || contentResult.isTruncated;
-    final List<Object?> contentParts = config.logMultiModalContent
-        ? await _extractContentPartsForLogging(
-            normalizedContent,
-            maxLength: config.maxContentLength,
-            gcsUploadProvider: _gcsUploadProvider,
-            traceId: traceId,
-            spanId: spanId,
-            connectionId: config.connectionId,
-          )
-        : const <Object?>[];
-
-    final Map<String, Object?> attributes = _enrichAttributes(
-      callbackContext: callbackContext,
-      eventData: resolvedEventData,
-    );
-    String attributesJson;
-    try {
-      attributesJson = jsonEncode(attributes);
-    } on Object {
-      attributesJson = jsonEncode(
-        attributes,
-        toEncodable: (Object? value) => '$value',
+    final bool contentPartsPersisted = _contentPartsPersisted();
+    if (!contentPartsPersisted) {
+      _maybeWarnOffloadDisabled();
+    }
+    Object? contentValue;
+    List<Object?> contentParts;
+    if (_deniedColumns.contains('content') && !contentPartsPersisted) {
+      contentValue = null;
+      contentParts = const <Object?>[];
+    } else {
+      final _TruncateResult contentResult = _serializeContentPayload(
+        normalizedContent,
+        maxLength: config.maxContentLength,
       );
+      isTruncated = isTruncated || contentResult.isTruncated;
+      contentValue = _deniedColumns.contains('content')
+          ? null
+          : contentResult.value;
+      contentParts = contentPartsPersisted
+          ? await _extractContentPartsForLogging(
+              normalizedContent,
+              maxLength: config.maxContentLength,
+              gcsUploadProvider: _gcsUploadProvider,
+              traceId: traceId,
+              spanId: spanId,
+              connectionId: config.connectionId,
+            )
+          : const <Object?>[];
+    }
+
+    String? attributesJson;
+    if (!_deniedColumns.contains('attributes')) {
+      final Map<String, Object?> attributes = _enrichAttributes(
+        callbackContext: callbackContext,
+        eventData: resolvedEventData,
+      );
+      try {
+        attributesJson = jsonEncode(attributes);
+      } on Object {
+        attributesJson = jsonEncode(
+          attributes,
+          toEncodable: (Object? value) => '$value',
+        );
+      }
     }
 
     final Map<String, Object?> row = <String, Object?>{
@@ -2347,12 +2476,14 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       'trace_id': traceId,
       'span_id': spanId,
       'parent_span_id': parentSpanId,
-      'content': contentResult.value,
-      'content_parts': contentParts,
-      'attributes': attributesJson,
-      'latency_ms': _extractLatency(resolvedEventData),
+      if (!_deniedColumns.contains('content')) 'content': contentValue,
+      if (!_deniedColumns.contains('content_parts'))
+        'content_parts': contentParts,
+      if (!_deniedColumns.contains('attributes')) 'attributes': attributesJson,
+      if (!_deniedColumns.contains('latency_ms'))
+        'latency_ms': _extractLatency(resolvedEventData),
       'status': resolvedEventData.status,
-      'error_message': resolvedEventData.errorMessage,
+      'error_message': effectiveErrorMessage,
       'is_truncated': isTruncated,
       'sdk_version': adkVersion,
       _schemaVersionLabelKey: _schemaVersion,
@@ -2621,6 +2752,10 @@ WHERE event_type = '$escapedEventType'
           if (entry.value is bool) {
             config.logMultiModalContent = entry.value as bool;
           }
+        case 'log_content_formatter_error_details':
+          if (entry.value is bool) {
+            config.logContentFormatterErrorDetails = entry.value as bool;
+          }
         case 'gcs_bucket_name':
           if (entry.value is String) {
             config.gcsBucketName = entry.value as String;
@@ -2636,6 +2771,18 @@ WHERE event_type = '$escapedEventType'
         case 'create_views':
           if (entry.value is bool) {
             config.createViews = entry.value as bool;
+          }
+        case 'view_prefix':
+          if (entry.value is String) {
+            config.viewPrefix = entry.value as String;
+          }
+        case 'payload_column_denylist':
+          if (entry.value is Iterable) {
+            final List<String> list = (entry.value as Iterable)
+                .map((Object? value) => '$value')
+                .toList(growable: false);
+            validatePayloadColumnDenylist(list);
+            config.payloadColumnDenylist = list;
           }
         case 'exactly_once_delivery':
           if (entry.value is bool) {

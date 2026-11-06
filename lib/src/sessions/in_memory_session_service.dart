@@ -190,7 +190,7 @@ class InMemorySessionService extends BaseSessionService {
     required String appName,
     required String userId,
   }) async {
-    return Map<String, Object?>.from(
+    return _deepCopyStateMap(
       _userState[appName]?[userId] ?? <String, Object?>{},
     );
   }
@@ -219,10 +219,15 @@ class InMemorySessionService extends BaseSessionService {
     final int existingIndex = stored.events.indexWhere(
       (Event existing) => existing.id == appended.id,
     );
+    final Event storedCopy = appended.copyWith(
+      actions: appended.actions.copyWith(
+        stateDelta: _deepCopyStateMap(appended.actions.stateDelta),
+      ),
+    );
     if (existingIndex != -1) {
-      stored.events[existingIndex] = appended.copyWith();
+      stored.events[existingIndex] = storedCopy;
     } else {
-      stored.events.add(appended.copyWith());
+      stored.events.add(storedCopy);
     }
     stored.lastUpdateTime = appended.timestamp;
 
@@ -234,7 +239,7 @@ class InMemorySessionService extends BaseSessionService {
       if (delta.app.isNotEmpty) {
         _appState
             .putIfAbsent(session.appName, () => <String, Object?>{})
-            .addAll(delta.app);
+            .addAll(_deepCopyStateMap(delta.app));
       }
 
       if (delta.user.isNotEmpty) {
@@ -244,11 +249,11 @@ class InMemorySessionService extends BaseSessionService {
               () => <String, Map<String, Object?>>{},
             )
             .putIfAbsent(session.userId, () => <String, Object?>{})
-            .addAll(delta.user);
+            .addAll(_deepCopyStateMap(delta.user));
       }
 
       if (delta.session.isNotEmpty) {
-        stored.state.addAll(delta.session);
+        stored.state.addAll(_deepCopyStateMap(delta.session));
       }
     }
 

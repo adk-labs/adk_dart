@@ -2,6 +2,7 @@
 library;
 
 import '../models/llm_request.dart';
+import '_gemini_schema_util.dart';
 
 /// The [FunctionDeclaration] built from explicit JSON schema arguments.
 FunctionDeclaration buildFunctionDeclarationWithJsonSchema({
@@ -32,8 +33,8 @@ FunctionDeclaration buildFunctionDeclarationFromSpec(
   final String description = (spec['description'] ?? '') as String;
   final Object? rawParameters =
       spec['parametersJsonSchema'] ?? spec['parameters'];
-  final Map<String, dynamic> parameters = _castSchema(
-    rawParameters is Map ? rawParameters : null,
+  final Map<String, dynamic> parameters = dereferenceSchema(
+    _castSchema(rawParameters is Map ? rawParameters : null),
   );
   if (ignoreParams != null && ignoreParams.isNotEmpty) {
     final Map<String, dynamic> properties = _castSchema(

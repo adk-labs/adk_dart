@@ -102,9 +102,15 @@ class ClassifierNode extends BaseNode {
 
   /// Computes the outgoing route value for [answer].
   ///
-  /// Throws a [WorkflowDataError] when [answer] does not match [question] or
-  /// chooses an unknown label.
+  /// Throws a [WorkflowDataError] when [answer] does not match [question], is a
+  /// [RefusalAnswer], or chooses an unknown label.
   Object routeFor(ClassifierAnswer answer) {
+    if (answer is RefusalAnswer) {
+      throw WorkflowDataError(
+        'Classifier for node "$name" declined to answer, '
+        'so the node has no route to take.',
+      );
+    }
     final ClassifierQuestion q = question;
     if (q is Choice && answer is ChoiceAnswer) {
       if (!q.criteria.containsKey(answer.choice)) {
@@ -200,10 +206,13 @@ class ClassifierNode extends BaseNode {
         // Keep original nodeInput when it does not expose toJson().
       }
     }
-    final ClassifierResponse response = await classifier.classify(
-      input: classifierInput,
-      questions: <String, ClassifierQuestion>{_questionName: question},
-    );
+    final ClassifierResponse response = await classifier
+        .runWithClientLabelContext(
+          () => classifier.classify(
+            input: classifierInput,
+            questions: <String, ClassifierQuestion>{_questionName: question},
+          ),
+        );
     final ClassifierAnswer? answer = response.answers[_questionName];
     if (answer == null) {
       throw WorkflowDataError(

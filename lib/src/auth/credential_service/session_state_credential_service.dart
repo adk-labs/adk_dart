@@ -34,12 +34,20 @@ class SessionStateCredentialService extends BaseCredentialService {
     AuthConfig authConfig,
     CallbackContext callbackContext,
   ) async {
-    final AuthCredential? credential =
-        authConfig.exchangedAuthCredential ?? authConfig.rawAuthCredential;
-    if (credential == null) {
+    final String key = '$statePrefix${authConfig.credentialKey}';
+    final AuthCredential? exchanged = authConfig.exchangedAuthCredential;
+    if (exchanged == null) {
+      if (callbackContext.state[key] != null) {
+        callbackContext.state[key] = null;
+        return;
+      }
+      final AuthCredential? fallback = authConfig.rawAuthCredential;
+      if (fallback == null) {
+        return;
+      }
+      callbackContext.state[key] = fallback.copyWith();
       return;
     }
-    final String key = '$statePrefix${authConfig.credentialKey}';
-    callbackContext.state[key] = credential.copyWith();
+    callbackContext.state[key] = exchanged.copyWith();
   }
 }

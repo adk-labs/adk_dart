@@ -382,6 +382,139 @@ class InMemoryExporter {
   }
 }
 
+/// Extracted W3C Trace Context (`traceparent`, `tracestate`) and W3C `baggage`.
+class W3cTraceContext {
+  /// Creates a [W3cTraceContext].
+  const W3cTraceContext({
+    this.traceparent,
+    this.traceId,
+    this.parentSpanId,
+    this.traceFlags,
+    this.tracestate,
+    this.baggage = const <String, String>{},
+  });
+
+  /// Raw validated `traceparent` header value, if present and valid.
+  final String? traceparent;
+
+  /// 32-hex-character trace ID from `traceparent`, if valid.
+  final String? traceId;
+
+  /// 16-hex-character parent span ID from `traceparent`, if valid.
+  final String? parentSpanId;
+
+  /// 2-hex-character trace flags from `traceparent`, if valid.
+  final String? traceFlags;
+
+  /// Optional W3C `tracestate` header value when `traceparent` is valid.
+  final String? tracestate;
+
+  /// Parsed key-value entries from the W3C `baggage` header.
+  final Map<String, String> baggage;
+
+  /// Whether a valid `traceparent` was extracted.
+  bool get hasTraceContext => traceId != null && parentSpanId != null;
+
+  /// Whether any baggage entries were extracted.
+  bool get hasBaggage => baggage.isNotEmpty;
+}
+
+final RegExp _traceparentRegex = RegExp(
+  r'^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$',
+);
+
+/// Extracts standard W3C Trace Context (`traceparent`, `tracestate`) and
+/// W3C `baggage` headers from incoming HTTP [headers] (case-insensitive).
+///
+/// Mirrors `otel.extract(dict(request.headers))` in `fast_api.py`.
+W3cTraceContext extractW3cTraceContext(Map<String, String> headers) {
+  String? rawTraceparent;
+  String? rawTracestate;
+  String? rawBaggage;
+
+  for (final MapEntry<String, String> entry in headers.entries) {
+    final String lowerKey = entry.key.toLowerCase();
+    if (lowerKey == 'traceparent') {
+      rawTraceparent = entry.value.trim();
+    } else if (lowerKey == 'tracestate') {
+      rawTracestate = entry.value.trim();
+    } else if (lowerKey == 'baggage') {
+      rawBaggage = entry.value.trim();
+    }
+  }
+
+  String? traceparent;
+  String? traceId;
+  String? parentSpanId;
+  String? traceFlags;
+  String? tracestate;
+
+  if (rawTraceparent != null && rawTraceparent.isNotEmpty) {
+    final RegExpMatch? match = _traceparentRegex.firstMatch(rawTraceparent);
+    if (match != null) {
+      final String version = match.group(1)!;
+      final String candidateTraceId = match.group(2)!;
+      final String candidateSpanId = match.group(3)!;
+      final String candidateFlags = match.group(4)!;
+      final bool validVersion = version != 'ff';
+      final bool validTraceId = candidateTraceId != '00000000000000000000000000000000';
+      final bool validSpanId = candidateSpanId != '0000000000000000';
+      if (validVersion && validTraceId && validSpanId) {
+        traceparent = rawTraceparent;
+        traceId = candidateTraceId;
+        parentSpanId = candidateSpanId;
+        traceFlags = candidateFlags;
+        if (rawTracestate != null && rawTracestate.isNotEmpty) {
+          tracestate = rawTracestate;
+        }
+      }
+    }
+  }
+
+  final Map<String, String> baggage = <String, String>{};
+  if (rawBaggage != null && rawBaggage.isNotEmpty) {
+    for (final String member in rawBaggage.split(',')) {
+      final String trimmedMember = member.trim();
+      if (trimmedMember.isEmpty) {
+        continue;
+      }
+      // Strip optional baggage properties (;prop=val) after the key=value pair.
+      final String keyValuePart = trimmedMember.split(';').first.trim();
+      final int eqIndex = keyValuePart.indexOf('=');
+      if (eqIndex <= 0) {
+        continue;
+      }
+      final String rawKey = keyValuePart.substring(0, eqIndex).trim();
+      final String rawVal = keyValuePart.substring(eqIndex + 1).trim();
+      if (rawKey.isEmpty) {
+        continue;
+      }
+      String decodedKey = rawKey;
+      String decodedVal = rawVal;
+      try {
+        decodedKey = Uri.decodeComponent(rawKey);
+      } on ArgumentError {
+        // Keep raw key on malformed percent encoding.
+      }
+      try {
+        decodedVal = Uri.decodeComponent(rawVal);
+      } on ArgumentError {
+        // Keep raw value on malformed percent encoding.
+      }
+      baggage[decodedKey] = decodedVal;
+    }
+  }
+
+  return W3cTraceContext(
+    traceparent: traceparent,
+    traceId: traceId,
+    parentSpanId: parentSpanId,
+    traceFlags: traceFlags,
+    tracestate: tracestate,
+    baggage: baggage,
+  );
+}
+
 /// Production ADK API server (`adk api_server`).
 ///
 /// Serves the core agent execution and session/artifact/memory/A2A endpoints

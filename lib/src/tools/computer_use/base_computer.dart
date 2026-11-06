@@ -15,18 +15,18 @@ enum ComputerEnvironment {
 /// Snapshot of computer state returned by computer-use operations.
 class ComputerState {
   /// Creates a computer state snapshot.
-  ComputerState({List<int>? screenshot, this.url})
-    : screenshot = screenshot ?? <int>[];
+  ComputerState({this.screenshot, this.url});
 
-  /// Screenshot bytes for the current state.
-  List<int> screenshot;
+  /// Screenshot bytes in PNG format for the current state, or `null` if no
+  /// screenshot was captured.
+  List<int>? screenshot;
 
   /// Current page URL when available.
   String? url;
 
   /// Encodes this state snapshot for transport.
   Map<String, Object?> toJson() => <String, Object?>{
-    'screenshot': List<int>.from(screenshot),
+    'screenshot': screenshot == null ? null : List<int>.from(screenshot!),
     'url': url,
   };
 }

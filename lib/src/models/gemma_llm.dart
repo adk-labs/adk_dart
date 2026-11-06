@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:typed_data';
 
 import 'base_llm.dart';
 import 'llm_request.dart';
@@ -173,7 +174,8 @@ _ConvertedGemmaContent _convertContentPartsForGemma(Content content) {
       final FunctionResponse functionResponse = part.functionResponse!;
       newParts.add(
         Part.text(
-          'Invoking tool `${functionResponse.name}` produced: `${jsonEncode(functionResponse.response)}`.',
+          'Invoking tool `${functionResponse.name}` produced: '
+          '`${_functionResponseToJson(functionResponse.response)}`.',
         ),
       );
       continue;
@@ -205,6 +207,87 @@ _ConvertedGemmaContent _convertContentPartsForGemma(Content content) {
     hasFunctionResponsePart: hasFunctionResponsePart,
     hasFunctionCallPart: hasFunctionCallPart,
   );
+}
+
+String _functionResponseToJson(Map<String, Object?>? response) {
+  final Object? normalized = _toJsonEncodable(response ?? const <String, Object?>{});
+  final String encoded = jsonEncode(normalized);
+  return _escapeLoneSurrogates(encoded);
+}
+
+Object? _toJsonEncodable(Object? value, {bool excludeNullFields = false}) {
+  if (value == null || value is bool || value is num || value is String) {
+    return value;
+  }
+  if (value is DateTime) {
+    return value.toIso8601String();
+  }
+  if (value is Uint8List) {
+    return base64Encode(value);
+  }
+  if (value is List<int>) {
+    return base64Encode(value);
+  }
+  if (value is Map) {
+    final Map<String, Object?> out = <String, Object?>{};
+    for (final MapEntry<Object?, Object?> entry in value.entries) {
+      if (excludeNullFields && entry.value == null) {
+        continue;
+      }
+      out['${entry.key}'] = _toJsonEncodable(
+        entry.value,
+        excludeNullFields: excludeNullFields,
+      );
+    }
+    return out;
+  }
+  if (value is Iterable) {
+    return value
+        .map(
+          (Object? item) =>
+              _toJsonEncodable(item, excludeNullFields: excludeNullFields),
+        )
+        .toList(growable: false);
+  }
+  try {
+    final dynamic dynamicValue = value;
+    final Object? dumped = dynamicValue.toJson();
+    return _toJsonEncodable(dumped, excludeNullFields: true);
+  } catch (_) {
+    return '$value';
+  }
+}
+
+String _escapeLoneSurrogates(String input) {
+  final List<int> codeUnits = input.codeUnits;
+  StringBuffer? buffer;
+  int lastCopied = 0;
+  for (int i = 0; i < codeUnits.length; i += 1) {
+    final int unit = codeUnits[i];
+    if (unit >= 0xD800 && unit <= 0xDBFF) {
+      if (i + 1 < codeUnits.length) {
+        final int next = codeUnits[i + 1];
+        if (next >= 0xDC00 && next <= 0xDFFF) {
+          i += 1;
+          continue;
+        }
+      }
+      buffer ??= StringBuffer();
+      buffer.write(input.substring(lastCopied, i));
+      buffer.write('\\u${unit.toRadixString(16).padLeft(4, '0')}');
+      lastCopied = i + 1;
+    } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+      buffer ??= StringBuffer();
+      buffer.write(input.substring(lastCopied, i));
+      buffer.write('\\u${unit.toRadixString(16).padLeft(4, '0')}');
+      lastCopied = i + 1;
+    }
+  }
+  if (buffer == null) {
+    return input;
+  }
+  buffer.write(input.substring(lastCopied));
+  return buffer.toString();
 }
 
 String _buildGemmaFunctionSystemInstruction(

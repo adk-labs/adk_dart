@@ -67,21 +67,30 @@ class PerTurnUserSimulatorQualityV1 extends Evaluator {
       _evaluateFirstTurn(actualInvocations.first, conversationScenario),
     ];
 
-    for (int i = 1; i < actualInvocations.length; i += 1) {
-      results.add(
-        await _evaluateIntermediateTurn(
-          invocationAtStep: actualInvocations[i],
-          invocationHistory: actualInvocations.sublist(0, i),
-          conversationScenario: conversationScenario,
-        ),
-      );
-    }
+    final JudgeEvaluationSemaphore semaphore = JudgeEvaluationSemaphore(
+      _llmOptions.parallelismLimit,
+    );
 
-    final PerInvocationResult stopSignalEvaluation =
-        await _evaluateStopSignalTurn(
-          invocationHistory: actualInvocations,
-          conversationScenario: conversationScenario,
-        );
+    final List<Future<PerInvocationResult>> turnFutures =
+        <Future<PerInvocationResult>>[
+          for (int i = 1; i < actualInvocations.length; i += 1)
+            _evaluateIntermediateTurn(
+              invocationAtStep: actualInvocations[i],
+              invocationHistory: actualInvocations.sublist(0, i),
+              conversationScenario: conversationScenario,
+              semaphore: semaphore,
+            ),
+          _evaluateStopSignalTurn(
+            invocationHistory: actualInvocations,
+            conversationScenario: conversationScenario,
+            semaphore: semaphore,
+          ),
+        ];
+
+    final List<PerInvocationResult> gatheredResults =
+        await gatherCancellingOnError(turnFutures);
+    results.addAll(gatheredResults.sublist(0, gatheredResults.length - 1));
+    final PerInvocationResult stopSignalEvaluation = gatheredResults.last;
 
     if (stopSignalEvaluation.evalStatus == EvalStatus.failed &&
         results.isNotEmpty) {
@@ -111,6 +120,7 @@ class PerTurnUserSimulatorQualityV1 extends Evaluator {
     required Invocation invocationAtStep,
     required List<Invocation> invocationHistory,
     required ConversationScenario conversationScenario,
+    JudgeEvaluationSemaphore? semaphore,
   }) async {
     final String autoRaterPrompt = _formatLlmPrompt(
       invocation: invocationAtStep,
@@ -131,19 +141,24 @@ class PerTurnUserSimulatorQualityV1 extends Evaluator {
     final int numSamples = _llmOptions.numSamples < 1
         ? 1
         : _llmOptions.numSamples;
-    final List<PerInvocationResult> samples = <PerInvocationResult>[];
+    final JudgeEvaluationSemaphore effectiveSemaphore =
+        semaphore ?? JudgeEvaluationSemaphore(_llmOptions.parallelismLimit);
     final double threshold = _evalMetric.threshold ?? _criterion.threshold;
 
-    for (int i = 0; i < numSamples; i += 1) {
-      final AutoRaterScore llmScore = await _sampleLlm(llmRequest);
-      samples.add(
+    final List<AutoRaterScore> llmScores = await gatherCancellingOnError(
+      <Future<AutoRaterScore>>[
+        for (int i = 0; i < numSamples; i += 1)
+          effectiveSemaphore.withPermit(() => _sampleLlm(llmRequest)),
+      ],
+    );
+    final List<PerInvocationResult> samples = <PerInvocationResult>[
+      for (final AutoRaterScore llmScore in llmScores)
         PerInvocationResult(
           actualInvocation: invocationAtStep,
           score: llmScore.score,
           evalStatus: getEvalStatus(llmScore.score, threshold),
         ),
-      );
-    }
+    ];
 
     if (samples.isEmpty) {
       return PerInvocationResult(
@@ -158,11 +173,13 @@ class PerTurnUserSimulatorQualityV1 extends Evaluator {
   Future<PerInvocationResult> _evaluateStopSignalTurn({
     required List<Invocation> invocationHistory,
     required ConversationScenario conversationScenario,
+    JudgeEvaluationSemaphore? semaphore,
   }) {
     return _evaluateIntermediateTurn(
       invocationAtStep: _getStopSignalInvocation(_stopSignal),
       invocationHistory: invocationHistory,
       conversationScenario: conversationScenario,
+      semaphore: semaphore,
     );
   }
 

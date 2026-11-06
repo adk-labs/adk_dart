@@ -1,6 +1,8 @@
 /// OAuth2-based credential refresh helpers.
 library;
 
+import 'dart:developer' as developer;
+
 import '../auth_credential.dart';
 import 'base_credential_refresher.dart';
 
@@ -34,7 +36,7 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
     if (oauth2 == null) {
       return false;
     }
-    if (oauth2.refreshToken == null || oauth2.refreshToken!.isEmpty) {
+    if (oauth2.accessToken == null || oauth2.accessToken!.isEmpty) {
       return false;
     }
 
@@ -65,22 +67,52 @@ class OAuth2CredentialRefresher extends BaseCredentialRefresher {
       return authCredential;
     }
 
-    final OAuth2RefreshHandler? handler = refreshHandler;
-    if (handler == null) {
+    final OAuth2Auth? oauth2 = authCredential.oauth2;
+    if (oauth2 == null) {
       return authCredential;
     }
 
-    final OAuth2Auth? oauth2 = authCredential.oauth2;
-    if (oauth2 == null) {
+    if (oauth2.refreshToken == null || oauth2.refreshToken!.isEmpty) {
+      developer.log(
+        'OAuth2 token expired and has no refresh token; cannot refresh',
+        name: 'adk_dart.oauth2_credential_refresher',
+      );
+      return authCredential;
+    }
+
+    final OAuth2RefreshHandler? handler = refreshHandler;
+    if (handler == null) {
       return authCredential;
     }
 
     try {
       final Map<String, Object?> tokens = await handler(oauth2, authScheme);
       return _applyTokens(authCredential, tokens);
-    } catch (_) {
-      return authCredential;
+    } on CredentialRevokedError {
+      rethrow;
+    } on CredentialRefresherError {
+      rethrow;
+    } catch (error) {
+      if (_isInvalidGrantError(error)) {
+        throw CredentialRevokedError(
+          'OAuth2 refresh token was rejected: $error',
+        );
+      }
+      throw CredentialRefresherError('Failed to refresh OAuth2 token: $error');
     }
+  }
+
+  bool _isInvalidGrantError(Object error) {
+    try {
+      final dynamic dynamicError = error;
+      if (dynamicError.error == 'invalid_grant') {
+        return true;
+      }
+    } catch (_) {
+      // Ignore if `.error` getter is not defined on the thrown object.
+    }
+    final String text = error.toString().toLowerCase();
+    return text.contains('invalid_grant');
   }
 
   AuthCredential _applyTokens(

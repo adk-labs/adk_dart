@@ -22,6 +22,7 @@ class CompactionRequestProcessor extends BaseLlmRequestProcessor {
           agentName: invocationContext.agent.name,
           currentBranch: invocationContext.branch,
           isolationScope: invocationContext.isolationScope,
+          abortSignal: invocationContext.onAbortSignal,
         );
     if (compacted) {
       invocationContext.tokenCompactionChecked = true;

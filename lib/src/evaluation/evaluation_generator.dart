@@ -1,6 +1,8 @@
 /// Evaluation trajectory generation helpers for eval sets.
 library;
 
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import '../agents/base_agent.dart';
@@ -40,6 +42,10 @@ class EvalCaseResponses {
 /// Generates inference trajectories from eval sets.
 class EvaluationGenerator {
   /// Runs [evalSet] against [rootAgent] and returns generated trajectories.
+  ///
+  /// When [parallelism] is provided (must be `>= 1`), at most [parallelism]
+  /// eval case runs execute concurrently while preserving the output ordering
+  /// of `evalSet.evalCases` and repetitions.
   static Future<List<EvalCaseResponses>> generateResponses({
     required EvalSet evalSet,
     required BaseAgent rootAgent,
@@ -47,29 +53,88 @@ class EvaluationGenerator {
     String appName = 'EvaluationGenerator',
     String userId = 'test_user_id',
     UserSimulatorProvider? userSimulatorProvider,
+    int? parallelism,
   }) async {
+    if (repeatNum < 1) {
+      throw ArgumentError.value(
+        repeatNum,
+        'repeatNum',
+        'Input should be greater than or equal to 1',
+      );
+    }
+    if (parallelism != null && parallelism < 1) {
+      throw ArgumentError.value(
+        parallelism,
+        'parallelism',
+        'Input should be greater than or equal to 1',
+      );
+    }
     final UserSimulatorProvider simulatorProvider =
         userSimulatorProvider ?? UserSimulatorProvider();
-    final List<EvalCaseResponses> results = <EvalCaseResponses>[];
 
-    for (final EvalCase evalCase in evalSet.evalCases) {
-      final List<List<Invocation>> responses = <List<Invocation>>[];
-      for (int i = 0; i < repeatNum; i += 1) {
-        final UserSimulator? userSimulator = _resolveUserSimulator(
-          evalCase,
-          simulatorProvider,
-        );
-        responses.add(
-          await _runEvalCase(
-            rootAgent: rootAgent,
-            evalCase: evalCase,
-            userSimulator: userSimulator,
-            appName: evalCase.sessionInput?.appName ?? appName,
-            userId: evalCase.sessionInput?.userId ?? userId,
-          ),
+    if (parallelism == null || parallelism == 1) {
+      final List<EvalCaseResponses> results = <EvalCaseResponses>[];
+      for (final EvalCase evalCase in evalSet.evalCases) {
+        final List<List<Invocation>> responses = <List<Invocation>>[];
+        for (int i = 0; i < repeatNum; i += 1) {
+          final UserSimulator? userSimulator = _resolveUserSimulator(
+            evalCase,
+            simulatorProvider,
+          );
+          responses.add(
+            await _runEvalCase(
+              rootAgent: rootAgent,
+              evalCase: evalCase,
+              userSimulator: userSimulator,
+              appName: evalCase.sessionInput?.appName ?? appName,
+              userId: evalCase.sessionInput?.userId ?? userId,
+            ),
+          );
+        }
+        results.add(
+          EvalCaseResponses(evalCase: evalCase, responses: responses),
         );
       }
-      results.add(EvalCaseResponses(evalCase: evalCase, responses: responses));
+      return results;
+    }
+
+    final _EvalSemaphore semaphore = _EvalSemaphore(parallelism);
+    final List<List<Future<List<Invocation>>>> futureMatrix =
+        <List<Future<List<Invocation>>>>[];
+    for (final EvalCase evalCase in evalSet.evalCases) {
+      final List<Future<List<Invocation>>> caseFutures =
+          <Future<List<Invocation>>>[];
+      for (int i = 0; i < repeatNum; i += 1) {
+        caseFutures.add(
+          semaphore.withPermit(() async {
+            final UserSimulator? userSimulator = _resolveUserSimulator(
+              evalCase,
+              simulatorProvider,
+            );
+            return _runEvalCase(
+              rootAgent: rootAgent,
+              evalCase: evalCase,
+              userSimulator: userSimulator,
+              appName: evalCase.sessionInput?.appName ?? appName,
+              userId: evalCase.sessionInput?.userId ?? userId,
+            );
+          }),
+        );
+      }
+      futureMatrix.add(caseFutures);
+    }
+
+    final List<EvalCaseResponses> results = <EvalCaseResponses>[];
+    for (int caseIdx = 0; caseIdx < evalSet.evalCases.length; caseIdx += 1) {
+      final List<List<Invocation>> responses = await Future.wait(
+        futureMatrix[caseIdx],
+      );
+      results.add(
+        EvalCaseResponses(
+          evalCase: evalSet.evalCases[caseIdx],
+          responses: responses,
+        ),
+      );
     }
     return results;
   }
@@ -189,6 +254,17 @@ class EvaluationGenerator {
       }
       yield event;
     }
+    if (invocationId == null) {
+      // The runner produced no events (for example, a silent turn or an early
+      // before_agent_callback exit). Emit a synthetic user event with a fresh
+      // invocation_id so the turn is still represented in the trajectory and
+      // later turns stay aligned with expected invocations.
+      yield Event(
+        invocationId: 'e-${Event.newId()}',
+        author: userAuthor,
+        content: userContent.copyWith(),
+      );
+    }
   }
 
   /// Collects initial user messages from an [EvalCase].
@@ -219,43 +295,105 @@ class EvaluationGenerator {
 
     final List<Invocation> invocations = <Invocation>[];
     eventsByInvocationId.forEach((String invocationId, List<Event> bucket) {
+      final ({
+        Map<int, Event> pairedUsageByTarget,
+        Set<int> consumedUsageIndices,
+      })
+      usagePairing = _pairStandaloneUsageEvents(bucket);
+      final Map<int, Event> pairedUsageByTarget =
+          usagePairing.pairedUsageByTarget;
+      final Set<int> consumedUsageIndices = usagePairing.consumedUsageIndices;
+
       EvalJsonMap? finalResponse;
+      Event? finalEvent;
+      int? finalEventIdx;
       EvalJsonMap? userContent;
       double invocationTimestamp = 0.0;
-      final List<InvocationEvent> eventsToAdd = <InvocationEvent>[];
 
-      for (final Event event in bucket) {
+      for (int idx = 0; idx < bucket.length; idx++) {
+        final Event event = bucket[idx];
         final String currentAuthor = (event.author).toLowerCase();
         if (currentAuthor == userAuthor) {
           userContent = _contentToEvalJson(event.content);
           invocationTimestamp = event.timestamp;
           continue;
         }
+        if (consumedUsageIndices.contains(idx)) {
+          continue;
+        }
+        if (event.content != null &&
+            event.content!.parts.isNotEmpty &&
+            event.isFinalResponse()) {
+          finalResponse = _contentToEvalJson(event.content);
+          finalEvent = event;
+          finalEventIdx = idx;
+        }
+      }
 
+      final List<InvocationEvent> eventsToAdd = <InvocationEvent>[];
+      for (int idx = 0; idx < bucket.length; idx++) {
+        final Event event = bucket[idx];
+        final String currentAuthor = (event.author).toLowerCase();
+        if (currentAuthor == userAuthor) {
+          continue;
+        }
+        if (consumedUsageIndices.contains(idx)) {
+          continue;
+        }
+
+        final Event? pairedUsage = pairedUsageByTarget[idx];
+        final Object? effectiveUsage =
+            event.usageMetadata ?? pairedUsage?.usageMetadata;
+        final String? effectiveModelVersion =
+            event.modelVersion ?? pairedUsage?.modelVersion;
+
+        if (identical(event, finalEvent) && idx == finalEventIdx) {
+          if (event.groundingMetadata != null || effectiveUsage != null) {
+            eventsToAdd.add(
+              InvocationEvent(
+                author: event.author.isEmpty ? defaultAuthor : event.author,
+                content: event.getFunctionCalls().isNotEmpty
+                    ? _contentToEvalJson(event.content)
+                    : null,
+                groundingMetadata: _metadataToEvalJson(event.groundingMetadata),
+                usageMetadata: _metadataToEvalJson(effectiveUsage),
+                modelVersion: effectiveModelVersion,
+              ),
+            );
+          }
+          continue;
+        }
+
+        bool shouldIncludeContent = false;
         if (event.content != null && event.content!.parts.isNotEmpty) {
-          if (event.isFinalResponse()) {
-            finalResponse = _contentToEvalJson(event.content);
-          } else {
-            bool shouldInclude = false;
-            for (final Part part in event.content!.parts) {
-              if (part.functionCall != null ||
-                  part.functionResponse != null ||
-                  part.inlineData != null ||
-                  part.fileData != null ||
-                  (part.text != null && part.text!.isNotEmpty)) {
-                shouldInclude = true;
-                break;
-              }
-            }
-            if (shouldInclude) {
-              eventsToAdd.add(
-                InvocationEvent(
-                  author: event.author.isEmpty ? defaultAuthor : event.author,
-                  content: _contentToEvalJson(event.content),
-                ),
-              );
+          for (final Part part in event.content!.parts) {
+            if (part.functionCall != null ||
+                part.functionResponse != null ||
+                part.inlineData != null ||
+                part.fileData != null ||
+                part.executableCode != null ||
+                part.codeExecutionResult != null ||
+                (part.text != null && part.text!.isNotEmpty)) {
+              shouldIncludeContent = true;
+              break;
             }
           }
+        }
+
+        if (shouldIncludeContent ||
+            event.groundingMetadata != null ||
+            effectiveUsage != null) {
+          eventsToAdd.add(
+            InvocationEvent(
+              author: event.author.isEmpty ? defaultAuthor : event.author,
+              content: shouldIncludeContent
+                  ? _contentToEvalJson(event.content)
+                  : null,
+              groundingMetadata: _metadataToEvalJson(event.groundingMetadata),
+              usageMetadata: _metadataToEvalJson(effectiveUsage),
+              modelVersion: effectiveModelVersion,
+            ),
+          );
         }
       }
 
@@ -272,6 +410,125 @@ class EvaluationGenerator {
     });
 
     return invocations;
+  }
+
+  static bool _isStandaloneUsageReport(Event event) {
+    return event.usageMetadata != null &&
+        (event.content == null || event.content!.parts.isEmpty) &&
+        event.groundingMetadata == null;
+  }
+
+  static bool _isModelCallEvent(Event event) {
+    if ((event.author).toLowerCase() == userAuthor) {
+      return false;
+    }
+    if (_isStandaloneUsageReport(event)) {
+      return false;
+    }
+    if (event.getFunctionResponses().isNotEmpty &&
+        event.getFunctionCalls().isEmpty) {
+      return false;
+    }
+    return (event.content != null && event.content!.parts.isNotEmpty) ||
+        event.groundingMetadata != null ||
+        event.usageMetadata != null;
+  }
+
+  static int? _findUsagePairIndex(
+    List<Event> invocationEvents,
+    int usageIndex,
+    Set<int> claimedEventIndices,
+  ) {
+    final Event usageEvent = invocationEvents[usageIndex];
+
+    bool isCompatible(int candidateIndex) {
+      if (claimedEventIndices.contains(candidateIndex)) {
+        return false;
+      }
+      final Event candidate = invocationEvents[candidateIndex];
+      if (!_isModelCallEvent(candidate)) {
+        return false;
+      }
+      if (candidate.usageMetadata != null) {
+        return false;
+      }
+      if (candidate.author != usageEvent.author) {
+        return false;
+      }
+      if (candidate.liveSessionId != usageEvent.liveSessionId) {
+        return false;
+      }
+      if (candidate.modelVersion != null &&
+          usageEvent.modelVersion != null &&
+          candidate.modelVersion != usageEvent.modelVersion) {
+        return false;
+      }
+      return true;
+    }
+
+    for (int idx = usageIndex - 1; idx >= 0; idx--) {
+      if (isCompatible(idx)) {
+        return idx;
+      }
+    }
+    for (int idx = usageIndex + 1; idx < invocationEvents.length; idx++) {
+      if (isCompatible(idx)) {
+        return idx;
+      }
+    }
+    return null;
+  }
+
+  static ({
+    Map<int, Event> pairedUsageByTarget,
+    Set<int> consumedUsageIndices,
+  })
+  _pairStandaloneUsageEvents(List<Event> invocationEvents) {
+    final Set<int> claimed = <int>{
+      for (int idx = 0; idx < invocationEvents.length; idx++)
+        if (!_isStandaloneUsageReport(invocationEvents[idx]) &&
+            invocationEvents[idx].usageMetadata != null)
+          idx,
+    };
+    final Map<int, Event> pairedUsageByTarget = <int, Event>{};
+    final Set<int> consumedUsageIndices = <int>{};
+
+    for (int idx = 0; idx < invocationEvents.length; idx++) {
+      final Event event = invocationEvents[idx];
+      if (!_isStandaloneUsageReport(event)) {
+        continue;
+      }
+      final int? targetIdx = _findUsagePairIndex(
+        invocationEvents,
+        idx,
+        claimed,
+      );
+      if (targetIdx != null) {
+        claimed.add(targetIdx);
+        pairedUsageByTarget[targetIdx] = event;
+        consumedUsageIndices.add(idx);
+      }
+    }
+    return (
+      pairedUsageByTarget: pairedUsageByTarget,
+      consumedUsageIndices: consumedUsageIndices,
+    );
+  }
+
+  static EvalJsonMap? _metadataToEvalJson(Object? metadata) {
+    if (metadata == null) {
+      return null;
+    }
+    if (metadata is Map) {
+      return asEvalJson(metadata);
+    }
+    try {
+      final Object? serialized = (metadata as dynamic).toJson();
+      if (serialized is Map) {
+        return asEvalJson(serialized);
+      }
+    } catch (_) {}
+    return <String, Object?>{'value': '$metadata'};
   }
 
   static Map<String, List<Event>> _collectEventsByInvocationId(
@@ -471,4 +728,32 @@ EvalJsonMap? _contentToEvalJson(Content? content) {
       return <String, Object?>{'text': part.text ?? ''};
     }).toList(),
   };
+}
+
+class _EvalSemaphore {
+  _EvalSemaphore(this._maxConcurrency);
+
+  final int _maxConcurrency;
+  int _current = 0;
+  final Queue<Completer<void>> _waiters = Queue<Completer<void>>();
+
+  Future<T> withPermit<T>(Future<T> Function() action) async {
+    if (_current >= _maxConcurrency) {
+      final Completer<void> waiter = Completer<void>();
+      _waiters.addLast(waiter);
+      await waiter.future;
+    } else {
+      _current += 1;
+    }
+    try {
+      return await action();
+    } finally {
+      if (_waiters.isNotEmpty) {
+        final Completer<void> next = _waiters.removeFirst();
+        next.complete();
+      } else {
+        _current -= 1;
+      }
+    }
+  }
 }

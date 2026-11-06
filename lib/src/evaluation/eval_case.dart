@@ -83,7 +83,13 @@ class InvocationResponse {
 /// One invocation event entry.
 class InvocationEvent {
   /// Creates an invocation event.
-  InvocationEvent({required this.author, this.content, this.groundingMetadata});
+  InvocationEvent({
+    required this.author,
+    this.content,
+    this.groundingMetadata,
+    this.usageMetadata,
+    this.modelVersion,
+  });
 
   /// Event author.
   final String author;
@@ -94,16 +100,30 @@ class InvocationEvent {
   /// Grounding metadata captured from model-internal tools (e.g. Google Search).
   final EvalJsonMap? groundingMetadata;
 
+  /// Token usage metadata captured from the LLM response.
+  final EvalJsonMap? usageMetadata;
+
+  /// Model version string reported on the LLM response.
+  final String? modelVersion;
+
   /// Creates invocation event from JSON.
   factory InvocationEvent.fromJson(EvalJsonMap json) {
     final Object? rawGroundingMetadata =
         json['groundingMetadata'] ?? json['grounding_metadata'];
+    final Object? rawUsageMetadata =
+        json['usageMetadata'] ?? json['usage_metadata'];
     return InvocationEvent(
       author: asNullableString(json['author']) ?? '',
       content: json['content'] == null ? null : asEvalJson(json['content']),
       groundingMetadata: rawGroundingMetadata == null
           ? null
           : asEvalJson(rawGroundingMetadata),
+      usageMetadata: rawUsageMetadata == null
+          ? null
+          : asEvalJson(rawUsageMetadata),
+      modelVersion: asNullableString(
+        json['modelVersion'] ?? json['model_version'],
+      ),
     );
   }
 
@@ -112,6 +132,8 @@ class InvocationEvent {
     String? author,
     Object? content = _evalCaseSentinel,
     Object? groundingMetadata = _evalCaseSentinel,
+    Object? usageMetadata = _evalCaseSentinel,
+    Object? modelVersion = _evalCaseSentinel,
   }) {
     return InvocationEvent(
       author: author ?? this.author,
@@ -121,6 +143,12 @@ class InvocationEvent {
       groundingMetadata: identical(groundingMetadata, _evalCaseSentinel)
           ? this.groundingMetadata
           : groundingMetadata as EvalJsonMap?,
+      usageMetadata: identical(usageMetadata, _evalCaseSentinel)
+          ? this.usageMetadata
+          : usageMetadata as EvalJsonMap?,
+      modelVersion: identical(modelVersion, _evalCaseSentinel)
+          ? this.modelVersion
+          : modelVersion as String?,
     );
   }
 
@@ -130,6 +158,8 @@ class InvocationEvent {
       'author': author,
       if (content != null) 'content': content,
       if (groundingMetadata != null) 'grounding_metadata': groundingMetadata,
+      if (usageMetadata != null) 'usage_metadata': usageMetadata,
+      if (modelVersion != null) 'model_version': modelVersion,
     };
   }
 }

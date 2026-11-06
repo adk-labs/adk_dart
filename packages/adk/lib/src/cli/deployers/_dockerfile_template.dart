@@ -79,6 +79,8 @@ COPY --chown=myuser:myuser "agents/{app_name}/" "/app/agents/{app_name}/"
 {install_agent_deps}
 # Copy agent - End
 
+{extra_packages_setup}
+
 EXPOSE {port}
 
 CMD {cmd_exec_form}
@@ -110,6 +112,7 @@ String renderDockerfile({
   String adkVersion = '1.0.0',
   String gcpEnvVars = '',
   bool hasRequirementsTxt = false,
+  String extraPackagesSetup = '',
 }) {
   final String safeAppName = validateAppName(appName);
   final String safePythonVersion = validatePythonVersion(pythonVersion);
@@ -132,6 +135,7 @@ String renderDockerfile({
       .replaceAll('{adk_version}', safeAdkVersion)
       .replaceAll('{app_name}', safeAppName)
       .replaceAll('{install_agent_deps}', installDeps)
+      .replaceAll('{extra_packages_setup}', extraPackagesSetup.trim())
       .replaceAll('{port}', '$port')
       .replaceAll('{cmd_exec_form}', execForm);
 }

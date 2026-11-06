@@ -12,12 +12,11 @@ import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../models/registry.dart';
 import '../../types/content.dart';
-import '../../version.dart';
+import '../../utils/client_labels_utils.dart' show modelConsultClientLabel;
 import '../base_tool.dart';
 import '../tool_context.dart';
 
-/// Client label sent on advisor LLM requests.
-const String modelConsultClientLabel = 'google-adk-model-consult/$adkVersion';
+export '../../utils/client_labels_utils.dart' show modelConsultClientLabel;
 
 /// Default tool name for [ModelConsultTool].
 const String defaultConsultModelToolName = 'consult_model';

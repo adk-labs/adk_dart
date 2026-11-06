@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../../tools/environment/base_environment.dart';
 
@@ -467,11 +468,30 @@ class E2BEnvironment extends BaseEnvironment {
     return sbx.readFile(resolved);
   }
 
+  /// Streams chunks of bytes from a file at [path].
   @override
-  Future<void> writeFile(Object path, String content) async {
+  Stream<List<int>> readFileStream(Object path) async* {
+    final List<int> data = await readFile(path);
+    if (data.isNotEmpty) {
+      yield data;
+    }
+  }
+
+  @override
+  Future<void> writeFile(Object path, Object content) async {
+    if (content is! String && content is! List<int>) {
+      throw ArgumentError(
+        'content must be str or bytes, got ${content.runtimeType}',
+      );
+    }
     final E2BSandboxClient sbx = await _ensureSandbox();
     final String resolved = _resolvePath(path);
-    await sbx.writeFile(resolved, content);
+    final Uint8List data = encodeWriteFileContent(content);
+    if (content is String) {
+      await sbx.writeFile(resolved, content);
+    } else {
+      await sbx.writeBytes(resolved, data);
+    }
   }
 
   /// Writes raw [bytes] to [path] in the sandbox filesystem.

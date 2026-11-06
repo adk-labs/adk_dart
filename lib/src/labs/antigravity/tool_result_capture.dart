@@ -74,7 +74,54 @@ class BuiltinTools {
   const BuiltinTools._();
 
   /// Built-in tool name used to invoke a native sub-agent trajectory.
+  static const String invokeSubagent = 'invoke_subagent';
+
+  /// Legacy built-in tool name used to start a native sub-agent trajectory.
   static const String startSubagent = 'start_subagent';
+}
+
+/// Extracts sub-agent names in invocation order from an `invoke_subagent` or
+/// `start_subagent` [call].
+List<String> extractSubagentNames(AntigravityToolCall call) {
+  if (call.name != BuiltinTools.invokeSubagent &&
+      call.name != BuiltinTools.startSubagent) {
+    return const <String>[];
+  }
+  if (call.args.isEmpty) {
+    return const <String>[];
+  }
+
+  final List<String> names = <String>[];
+  final Object? subagentsArg = call.args['Subagents'];
+  if (subagentsArg is Iterable) {
+    for (final Object? entry in subagentsArg) {
+      if (entry is Map) {
+        final Object? candidate =
+            entry['TypeName'] ??
+            entry['Role'] ??
+            entry['subagent_type'] ??
+            entry['subagent_name'] ??
+            entry['name'];
+        if (candidate is String && candidate.isNotEmpty) {
+          names.add(candidate);
+        }
+      }
+    }
+  }
+
+  if (names.isEmpty) {
+    final Object? single =
+        call.args['TypeName'] ??
+        call.args['Role'] ??
+        call.args['subagent_type'] ??
+        call.args['subagent_name'] ??
+        call.args['name'];
+    if (single is String && single.isNotEmpty) {
+      names.add(single);
+    }
+  }
+
+  return names;
 }
 
 /// Decision returned by a pre-tool hook.
@@ -275,21 +322,36 @@ class ToolResultBuffer {
       <String, AntigravityToolResult>{};
   final Queue<Map<String, Object?>> _pendingSubagents =
       Queue<Map<String, Object?>>();
+  final Set<String> _seenSubagentCalls = <String>{};
 
   /// Number of buffered tool results currently awaiting consumption.
   int get length => _byKey.length;
 
-  /// FIFO queue of `start_subagent` tool call argument dictionaries.
+  /// FIFO queue of `invoke_subagent` / `start_subagent` tool call argument dictionaries.
   Queue<Map<String, Object?>> get pendingSubagents => _pendingSubagents;
+
+  /// Set of sub-agent invocation tool call IDs already queued in this turn.
+  Set<String> get seenSubagentCalls => _seenSubagentCalls;
 
   static String _keyFor(String callId, int stepId) {
     return callId.isNotEmpty ? callId : 'step_$stepId';
   }
 
-  /// Records a `start_subagent` [call] for sub-agent trajectory attribution.
+  /// Records an `invoke_subagent` or `start_subagent` [call] for sub-agent
+  /// trajectory attribution.
   void recordSubagent(AntigravityToolCall call) {
-    if (call.name == BuiltinTools.startSubagent && call.args.isNotEmpty) {
-      _pendingSubagents.add(Map<String, Object?>.from(call.args));
+    final List<String> names = extractSubagentNames(call);
+    if (names.isEmpty) {
+      return;
+    }
+    if (call.id.isNotEmpty) {
+      if (_seenSubagentCalls.contains(call.id)) {
+        return;
+      }
+      _seenSubagentCalls.add(call.id);
+    }
+    for (final String n in names) {
+      _pendingSubagents.add(<String, Object?>{'name': n});
     }
   }
 
@@ -329,6 +391,7 @@ class ToolResultBuffer {
   void clear() {
     _byKey.clear();
     _pendingSubagents.clear();
+    _seenSubagentCalls.clear();
   }
 }
 

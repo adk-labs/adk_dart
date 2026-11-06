@@ -46,11 +46,14 @@ const Set<String> supportedTriggerSources = <String>{'pubsub', 'eventarc'};
 /// throw TransientError('Rate limit exceeded (429)');
 /// ```
 class TransientError implements Exception {
-  /// Creates a [TransientError] with a human-readable [message].
-  const TransientError([this.message = 'Transient error']);
+  /// Creates a [TransientError] with a human-readable [message] and optional [cause].
+  const TransientError([this.message = 'Transient error', this.cause]);
 
   /// Error description.
   final String message;
+
+  /// Optional underlying exception cause.
+  final Object? cause;
 
   @override
   String toString() => 'TransientError: $message';

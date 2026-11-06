@@ -41,14 +41,18 @@ class McpToolset extends BaseToolset {
     this.headerProvider,
     this.samplingCallback,
     this.elicitationCallback,
+    McpMessageHandler? messageHandler,
+    McpMessageHandler? notificationHandler,
     Map<String, Object?>? samplingCapabilities,
     this.propagateGroundingMetadata = false,
-  }) : samplingCapabilities = samplingCapabilities ?? <String, Object?>{} {
+  }) : messageHandler = messageHandler ?? notificationHandler,
+       samplingCapabilities = samplingCapabilities ?? <String, Object?>{} {
     McpSessionManager.instance.configureConnection(
       connectionParams: connectionParams,
       samplingCallback: samplingCallback,
       samplingCapabilities: this.samplingCapabilities,
       elicitationCallback: elicitationCallback,
+      messageHandler: this.messageHandler,
     );
   }
 
@@ -66,6 +70,12 @@ class McpToolset extends BaseToolset {
 
   /// Optional callback used to answer MCP `elicitation/create` requests.
   final McpElicitationCallback? elicitationCallback;
+
+  /// Optional callback invoked when the MCP server sends notifications or messages.
+  final McpMessageHandler? messageHandler;
+
+  /// Alias for [messageHandler] for notification handler compatibility.
+  McpMessageHandler? get notificationHandler => messageHandler;
 
   /// Optional MCP client capabilities advertised for sampling support.
   final Map<String, Object?> samplingCapabilities;
@@ -103,9 +113,16 @@ class McpToolset extends BaseToolset {
               return null;
             }
             final String description = _readString(descriptor['description']);
+            final String? title = descriptor['title'] is String
+                ? descriptor['title'] as String
+                : null;
+            final Map<String, Object?> annotations = _readObjectMap(
+              descriptor['annotations'],
+            );
             return McpTool(
               mcpTool: McpBaseTool(
                 name: name,
+                title: title,
                 description: description,
                 inputSchema: _readSchema(descriptor, const <String>[
                   'inputSchema',
@@ -116,6 +133,7 @@ class McpToolset extends BaseToolset {
                   'outputSchema',
                   'output_schema',
                 ]),
+                annotations: annotations.isEmpty ? null : annotations,
                 meta: _readObjectMap(descriptor['meta']),
               ),
               connectionParams: connectionParams,
@@ -143,15 +161,22 @@ class McpToolset extends BaseToolset {
   }
 
   /// Lists available MCP resource names.
-  Future<List<String>> listResources() async {
-    return McpSessionManager.instance.listResourcesAsync(connectionParams);
+  Future<List<String>> listResources({ReadonlyContext? readonlyContext}) async {
+    return McpSessionManager.instance.listResourcesAsync(
+      connectionParams,
+      headers: _buildHeaders(readonlyContext),
+    );
   }
 
   /// Reads one named MCP resource into content parts.
-  Future<List<McpResourceContent>> readResource(String resourceName) async {
+  Future<List<McpResourceContent>> readResource(
+    String resourceName, {
+    ReadonlyContext? readonlyContext,
+  }) async {
     return McpSessionManager.instance.readResourceAsync(
       connectionParams: connectionParams,
       resourceName: resourceName,
+      headers: _buildHeaders(readonlyContext),
     );
   }
 

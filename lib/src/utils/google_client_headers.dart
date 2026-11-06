@@ -1,6 +1,7 @@
 /// Header helpers for Google API client tracking metadata.
 library;
 
+import '../models/llm_request.dart';
 import 'client_labels_utils.dart';
 
 /// The standard tracking headers for the current runtime context.
@@ -69,4 +70,53 @@ Map<String, String> mergeTrackingHeaders(
   });
 
   return merged;
+}
+
+/// Merges tracking headers into [httpOptions] ([HttpOptions] or `Map`).
+///
+/// If [httpOptions] is `null` or an empty map, returns a new [HttpOptions]
+/// instance with tracking headers populated.
+Object mergeTrackingHttpOptions({
+  Object? httpOptions,
+  String? frameworkLabel,
+  Map<String, String>? environment,
+}) {
+  if (httpOptions == null || (httpOptions is Map && httpOptions.isEmpty)) {
+    return HttpOptions(
+      headers: mergeTrackingHeaders(
+        null,
+        frameworkLabel: frameworkLabel,
+        environment: environment,
+      ),
+    );
+  }
+  if (httpOptions is Map) {
+    final Object? rawHeaders = httpOptions['headers'];
+    Map<String, String>? headers;
+    if (rawHeaders is Map) {
+      headers = rawHeaders.map(
+        (Object? k, Object? v) =>
+            MapEntry<String, String>(k.toString(), v?.toString() ?? ''),
+      );
+    }
+    httpOptions['headers'] = mergeTrackingHeaders(
+      headers,
+      frameworkLabel: frameworkLabel,
+      environment: environment,
+    );
+    return httpOptions;
+  }
+  if (httpOptions is HttpOptions) {
+    httpOptions.headers = mergeTrackingHeaders(
+      httpOptions.headers,
+      frameworkLabel: frameworkLabel,
+      environment: environment,
+    );
+    return httpOptions;
+  }
+  throw ArgumentError.value(
+    httpOptions,
+    'httpOptions',
+    'Expected HttpOptions, Map, or null.',
+  );
 }

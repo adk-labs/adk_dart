@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
@@ -18,6 +19,7 @@ import '../artifacts/base_artifact_service.dart';
 import '../artifacts/in_memory_artifact_service.dart';
 import '../errors/invocation_not_found_error.dart';
 import '../errors/session_not_found_error.dart';
+import '../errors/stale_session_error.dart';
 import '../events/abort_events.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
@@ -492,16 +494,20 @@ class Runner {
 
     final Set<BaseToolset> toolsets = _collectToolsets(agent);
     try {
-      await for (final Event event in _execWithPlugin(
+      bool execSucceeded = false;
+      yield* _execWithPlugin(
         invocationContext: context,
         session: session,
         execute: (InvocationContext ctx) => ctx.agent.runAsync(ctx),
         isLiveCall: false,
-      )) {
-        yield event;
-      }
+        onNormalCompletion: () {
+          execSucceeded = true;
+        },
+      );
 
-      if (!skipPostInvocationCompaction &&
+      if (execSucceeded &&
+          !skipPostInvocationCompaction &&
+          !context.isAborted &&
           context.eventsCompactionConfig != null) {
         // Compaction runs on the success path. A failure here is an unhandled
         // runner error, so notify on_run_error_callback once and re-raise.
@@ -512,6 +518,7 @@ class Runner {
             sessionService: sessionService,
             agent: agent,
             skipTokenCompaction: context.tokenCompactionChecked,
+            abortSignal: context.onAbortSignal,
           );
         } catch (error) {
           await _notifyRunError(context.pluginManager, context, error);
@@ -608,14 +615,18 @@ class Runner {
       }
     });
 
-    for (final String key in currentState.keys) {
-      if (key.startsWith('app:') ||
-          key.startsWith('user:') ||
-          key.startsWith('temp:')) {
-        continue;
-      }
-      if (!stateAtRewindPoint.containsKey(key)) {
-        rewindStateDelta[key] = null;
+    for (int i = rewindEventIndex; i < session.events.length; i += 1) {
+      final Map<String, Object?> delta = session.events[i].actions.stateDelta;
+      for (final String key in delta.keys) {
+        if (key.startsWith('app:') ||
+            key.startsWith('user:') ||
+            key.startsWith('temp:')) {
+          continue;
+        }
+        if (!stateAtRewindPoint.containsKey(key) &&
+            currentState.containsKey(key)) {
+          rewindStateDelta[key] = null;
+        }
       }
     }
 
@@ -737,14 +748,12 @@ class Runner {
 
     final Set<BaseToolset> toolsets = _collectToolsets(agent);
     try {
-      await for (final Event event in _execWithPlugin(
+      yield* _execWithPlugin(
         invocationContext: context,
         session: session,
         execute: (InvocationContext ctx) => ctx.agent.runLive(ctx),
         isLiveCall: true,
-      )) {
-        yield event;
-      }
+      );
     } finally {
       await _cleanupToolsets(toolsets, ignoreErrors: true);
     }
@@ -1171,10 +1180,19 @@ class Runner {
         modifiedEvent: modified,
         runConfig: context.runConfig,
       );
-      await sessionService.appendEvent(
-        session: context.session,
-        event: outputEvent,
-      );
+      try {
+        await sessionService.appendEvent(
+          session: context.session,
+          event: outputEvent,
+        );
+      } on StaleSessionError {
+        developer.log(
+          'Skipping abort seal for invocation ${context.invocationId}; a '
+          'newer turn updated the session before abort cleanup completed.',
+          name: 'adk_dart.runner',
+        );
+        break;
+      }
       persistedEvents.add(outputEvent);
     }
     return persistedEvents;
@@ -1185,6 +1203,7 @@ class Runner {
     required Session session,
     required Stream<Event> Function(InvocationContext context) execute,
     required bool isLiveCall,
+    void Function()? onNormalCompletion,
   }) async* {
     if (invocationContext.isAborted) {
       return;
@@ -1194,7 +1213,19 @@ class Runner {
     // before_run callback, early-exit, and the main execution loop), not the
     // consumer-side yield. Failures here notify on_run_error_callback once and
     // re-raise; the notification is best-effort and never masks the error.
-    final StreamController<Event> output = StreamController<Event>();
+    final Completer<void> produceDone = Completer<void>();
+    bool produceFailed = false;
+    bool streamCancelledExternally = false;
+    late final StreamController<Event> output;
+    output = StreamController<Event>(
+      onCancel: () async {
+        if (!produceDone.isCompleted) {
+          streamCancelledExternally = true;
+          invocationContext.markAborted();
+          await produceDone.future;
+        }
+      },
+    );
 
     Future<void> produce() async {
       try {
@@ -1326,7 +1357,13 @@ class Runner {
             output.add(outputEvent);
           }
 
-          if (!isLiveCall && invocationContext.isAborted) {
+          if (!isLiveCall &&
+              ((invocationContext.abortSignal?.aborted ?? false) ||
+                  (invocationContext.isAborted &&
+                      hasUnsealedToolCalls(
+                        session.events,
+                        invocationId: invocationContext.invocationId,
+                      )))) {
             final List<Event> abortEvents =
                 await _synthesizeAbortEventsIfNeeded(invocationContext);
             for (final Event abortEvent in abortEvents) {
@@ -1335,7 +1372,13 @@ class Runner {
           }
         }
       } catch (error) {
-        if (!isLiveCall && invocationContext.isAborted) {
+        if (!isLiveCall &&
+            ((invocationContext.abortSignal?.aborted ?? false) ||
+                (invocationContext.isAborted &&
+                    hasUnsealedToolCalls(
+                      session.events,
+                      invocationId: invocationContext.invocationId,
+                    )))) {
           try {
             await _synthesizeAbortEventsIfNeeded(invocationContext);
           } catch (_) {}
@@ -1356,40 +1399,91 @@ class Runner {
     // producer surface through the stream after on_run_error notification.
     unawaited(
       produce().then(
-        (_) => output.close(),
+        (_) {
+          if (!produceDone.isCompleted) {
+            produceDone.complete();
+          }
+          return output.close();
+        },
         onError: (Object error, StackTrace stackTrace) {
+          produceFailed = true;
+          if (!produceDone.isCompleted) {
+            produceDone.complete();
+          }
           output.addError(error, stackTrace);
           return output.close();
         },
       ),
     );
 
+    bool streamCompletedNormally = false;
+    bool shouldRunAfterRun = false;
     try {
       yield* output.stream;
+      streamCompletedNormally = !streamCancelledExternally && !produceFailed;
     } finally {
-      if (!isLiveCall && invocationContext.isAborted) {
+      final bool wasAborted =
+          invocationContext.isAborted || streamCancelledExternally;
+      final bool hasUnsealedCalls =
+          !isLiveCall &&
+          hasUnsealedToolCalls(
+            session.events,
+            invocationId: invocationContext.invocationId,
+          );
+      if (!produceDone.isCompleted &&
+          (!streamCompletedNormally || wasAborted || hasUnsealedCalls)) {
+        invocationContext.markAborted();
+        await produceDone.future;
+      }
+      final bool hasUnsealedCallsAfterDrain =
+          !isLiveCall &&
+          hasUnsealedToolCalls(
+            session.events,
+            invocationId: invocationContext.invocationId,
+          );
+      if (!isLiveCall &&
+          (wasAborted || hasUnsealedCalls || hasUnsealedCallsAfterDrain)) {
         try {
           await _synthesizeAbortEventsIfNeeded(invocationContext);
         } catch (_) {}
       }
+      shouldRunAfterRun =
+          !produceFailed && (streamCompletedNormally || wasAborted);
+      if (!streamCompletedNormally && shouldRunAfterRun) {
+        try {
+          await invocationContext.pluginManager.runAfterRunCallback(
+            invocationContext: invocationContext,
+          );
+        } catch (error) {
+          await _notifyRunError(
+            invocationContext.pluginManager,
+            invocationContext,
+            error,
+          );
+          rethrow;
+        }
+      }
     }
 
-    // Step: run the after_run callbacks. A failure here
-    // (e.g. an after_run plugin raising, surfaced by PluginManager as a
-    // PluginManagerException) is still an unhandled runner error, so notify
-    // on_run_error_callback once and re-raise. on_run_error is
-    // notification-only, so there is no recursive notification.
-    try {
-      await invocationContext.pluginManager.runAfterRunCallback(
-        invocationContext: invocationContext,
-      );
-    } catch (error) {
-      await _notifyRunError(
-        invocationContext.pluginManager,
-        invocationContext,
-        error,
-      );
-      rethrow;
+    if (streamCompletedNormally && shouldRunAfterRun) {
+      // Step: run the after_run callbacks. A failure here
+      // (e.g. an after_run plugin raising, surfaced by PluginManager as a
+      // PluginManagerException) is still an unhandled runner error, so notify
+      // on_run_error_callback once and re-raise. on_run_error is
+      // notification-only, so there is no recursive notification.
+      try {
+        await invocationContext.pluginManager.runAfterRunCallback(
+          invocationContext: invocationContext,
+        );
+      } catch (error) {
+        await _notifyRunError(
+          invocationContext.pluginManager,
+          invocationContext,
+          error,
+        );
+        rethrow;
+      }
+      onNormalCompletion?.call();
     }
   }
 

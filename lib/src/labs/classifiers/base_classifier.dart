@@ -1,7 +1,10 @@
 /// Base classifier contract for answering typed probability questions.
 library;
 
+import 'dart:async';
+
 import '../../features/_feature_registry.dart';
+import '../../utils/client_labels_utils.dart';
 import 'types.dart';
 
 /// Stateless model that answers typed questions with probability distributions.
@@ -42,8 +45,25 @@ abstract class BaseClassifier {
     }
   }
 
+  /// Names the classifier in the client label of the requests it sends.
+  String get clientLabelKind => 'custom';
+
   /// Provider's model name.
   String model;
+
+  /// Labels requests sent inside [action] as coming from this classifier.
+  ///
+  /// Keeps the outer label instead when one is already set, such as during an
+  /// evaluation run.
+  Future<T> runWithClientLabelContext<T>(FutureOr<T> Function() action) async {
+    final String label = classifierClientLabel(clientLabelKind);
+    Future<T> runner() async => await action();
+    try {
+      return await clientLabelContext<Future<T>>(label, runner);
+    } on ArgumentError {
+      return await runner();
+    }
+  }
 
   /// Answers every question in [questions] against [input].
   Future<ClassifierResponse> classify({

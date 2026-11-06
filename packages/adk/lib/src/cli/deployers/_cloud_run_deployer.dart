@@ -161,6 +161,7 @@ class CloudRunDeployer extends Deployer {
     bool useLocalStorage = true,
     String? origins,
     List<String>? extraGcloudArgs,
+    List<String>? extraPackages,
   }) async {
     final String resolvedProject = await resolveProject(project);
     final List<String> validatedExtraArgs = validateGcloudExtraArgs(
@@ -192,6 +193,7 @@ class CloudRunDeployer extends Deployer {
         memoryServiceUri: memoryServiceUri,
         useLocalStorage: useLocalStorage,
         origins: origins,
+        extraPackages: extraPackages,
       );
 
       final String resolvedServiceName =

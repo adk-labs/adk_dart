@@ -19,6 +19,7 @@ import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
 import '../cli/_dev_deploy.dart' as dev_deploy;
 import '../cli/agent_graph.dart' as agent_graph;
+import '../cli/api_server.dart' show W3cTraceContext, extractW3cTraceContext;
 import '../cli/trigger_routes.dart';
 import '../cli/utils/agent_loader.dart';
 import 'package:adk_dart/src/errors/invocation_not_found_error.dart';
@@ -1103,12 +1104,14 @@ class _AdkDevWebContext {
     required String userId,
     required String sessionId,
     required Event event,
+    W3cTraceContext? traceContext,
   }) {
     final Map<String, Object?> trace = _traceFromEvent(
       appName: appName,
       userId: userId,
       sessionId: sessionId,
       event: event,
+      traceContext: traceContext,
     );
     _traceByEventId[event.id] = trace;
 
@@ -1130,10 +1133,19 @@ class _AdkDevWebContext {
       return left.compareTo(right);
     });
 
+    final int resolvedTraceInt = (traceContext?.traceId != null)
+        ? (int.tryParse(
+                traceContext!.traceId!.substring(
+                  traceContext.traceId!.length - 15,
+                ),
+                radix: 16,
+              ) ??
+              _stablePositiveInt(traceContext.traceId!))
+        : _stablePositiveInt(event.invocationId);
     final SpanContext contextSpan = SpanContext(
-      traceId: _stablePositiveInt(event.invocationId),
+      traceId: resolvedTraceInt,
       spanId: _stablePositiveInt(event.id),
-      isRemote: false,
+      isRemote: traceContext?.hasTraceContext ?? false,
       traceFlags: TraceFlags.sampled,
       traceState: const TraceState(),
     );
@@ -1143,7 +1155,7 @@ class _AdkDevWebContext {
       parent = SpanContext(
         traceId: contextSpan.traceId,
         spanId: int.tryParse(parentHex, radix: 16) ?? 0,
-        isRemote: false,
+        isRemote: traceContext?.hasTraceContext ?? false,
         traceFlags: TraceFlags.sampled,
         traceState: const TraceState(),
       );
@@ -1169,7 +1181,19 @@ class _AdkDevWebContext {
       eventId,
     );
     if (persisted != null) {
-      return persisted;
+      final Map<String, Object?> copy = Map<String, Object?>.from(persisted);
+      final Object? rawAttrs = copy['attributes'];
+      if (rawAttrs is Map) {
+        final Object? w3cTraceId = rawAttrs['w3c.trace_id'];
+        if (w3cTraceId is String && w3cTraceId.isNotEmpty) {
+          copy['trace_id'] = w3cTraceId;
+        }
+        final Object? w3cParentSpanId = rawAttrs['w3c.parent_span_id'];
+        if (w3cParentSpanId is String && w3cParentSpanId.isNotEmpty) {
+          copy['parent_span_id'] = w3cParentSpanId;
+        }
+      }
+      return copy;
     }
     final Map<String, Object?>? trace = _traceByEventId[eventId];
     return trace == null ? null : Map<String, Object?>.from(trace);
@@ -1182,14 +1206,24 @@ class _AdkDevWebContext {
     if (persisted.isNotEmpty) {
       return persisted
           .map<Map<String, Object?>>((ReadableSpan span) {
+            final Map<String, Object?> attrs = Map<String, Object?>.from(
+              span.attributes,
+            );
+            final Object? w3cTraceId = attrs['w3c.trace_id'];
+            final Object? w3cParentSpanId = attrs['w3c.parent_span_id'];
             return <String, Object?>{
               'name': span.name,
               'span_id': span.context.spanIdHex,
-              'trace_id': span.context.traceIdHex,
+              'trace_id': (w3cTraceId is String && w3cTraceId.isNotEmpty)
+                  ? w3cTraceId
+                  : span.context.traceIdHex,
               'start_time': span.startTimeUnixNano,
               'end_time': span.endTimeUnixNano,
-              'attributes': Map<String, Object?>.from(span.attributes),
-              'parent_span_id': span.parent?.spanIdHex,
+              'attributes': attrs,
+              'parent_span_id':
+                  (w3cParentSpanId is String && w3cParentSpanId.isNotEmpty)
+                  ? w3cParentSpanId
+                  : span.parent?.spanIdHex,
             };
           })
           .toList(growable: false);
@@ -1278,8 +1312,9 @@ Map<String, Object?> _traceFromEvent({
   required String userId,
   required String sessionId,
   required Event event,
+  W3cTraceContext? traceContext,
 }) {
-  final String traceId = event.invocationId;
+  final String traceId = traceContext?.traceId ?? event.invocationId;
   final String spanId = event.id;
   final List<FunctionCall> functionCalls = event.getFunctionCalls();
   final List<FunctionResponse> functionResponses = event.getFunctionResponses();
@@ -1301,6 +1336,18 @@ Map<String, Object?> _traceFromEvent({
     'event.artifact_delta': Map<String, int>.from(event.actions.artifactDelta),
     if (event.errorMessage != null) 'event.error_message': event.errorMessage,
     if (event.finishReason != null) 'event.finish_reason': event.finishReason,
+    if (traceContext?.traceparent != null)
+      'w3c.traceparent': traceContext!.traceparent,
+    if (traceContext?.traceId != null) 'w3c.trace_id': traceContext!.traceId,
+    if (traceContext?.parentSpanId != null)
+      'w3c.parent_span_id': traceContext!.parentSpanId,
+    if (traceContext?.tracestate != null)
+      'w3c.tracestate': traceContext!.tracestate,
+    if (traceContext != null && traceContext.hasBaggage) ...<String, Object?>{
+      'w3c.baggage': Map<String, String>.from(traceContext.baggage),
+      for (final MapEntry<String, String> entry in traceContext.baggage.entries)
+        'baggage.${entry.key}': entry.value,
+    },
   };
   return <String, Object?>{
     'name': _spanNameFromEvent(event),
@@ -1309,7 +1356,8 @@ Map<String, Object?> _traceFromEvent({
     'start_time': event.timestamp,
     'end_time': event.timestamp,
     'attributes': attributes,
-    'parent_span_id': event.customMetadata?['parent_span_id'],
+    'parent_span_id':
+        event.customMetadata?['parent_span_id'] ?? traceContext?.parentSpanId,
     'event_id': event.id,
   };
 }
@@ -1633,9 +1681,11 @@ Future<void> _handleRequest(
     return;
   }
 
-  final List<String> segments = Uri(
-    path: routedPath,
-  ).pathSegments.where((String s) => s.isNotEmpty).toList();
+  final List<String> segments = routedPath
+      .split('/')
+      .where((String s) => s.isNotEmpty)
+      .map(_decodePathSegment)
+      .toList();
 
   if (segments.length == 4 &&
       segments[0] == 'api' &&
@@ -2205,12 +2255,13 @@ Future<void> _handleTriggerRoute(
       statusCode: HttpStatus.notFound,
       message: error.message,
     );
-  } catch (error) {
+  } catch (_) {
     await _writeError(
       request,
       context,
       statusCode: HttpStatus.internalServerError,
-      message: 'Trigger execution failed: $error',
+      message: 'Trigger execution failed',
+      detail: 'Internal Server Error',
     );
   }
 }
@@ -2511,8 +2562,8 @@ Future<void> _handleScreencast(
         if (closed || socket.readyState != WebSocket.open) {
           break;
         }
-        final List<int> screenshot = state.screenshot;
-        if (screenshot.isNotEmpty) {
+        final List<int>? screenshot = state.screenshot;
+        if (screenshot != null && screenshot.isNotEmpty) {
           socket.add(screenshot);
         }
       } catch (_) {
@@ -3436,12 +3487,16 @@ Future<void> _handleLegacyPostMessage(
         newMessage: Content.userText(text),
       )
       .toList();
+  final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
+    request,
+  );
   for (final Event event in events) {
     context.recordTraceEvent(
       appName: context.defaultAppName,
       userId: userId,
       sessionId: validatedSessionId,
       event: event,
+      traceContext: requestTraceContext,
     );
   }
 
@@ -3842,29 +3897,40 @@ Future<void> _handleArtifactsRoute(
         const <String>['custom_metadata', 'customMetadata'],
       );
 
-      final int version = await context.artifactService.saveArtifact(
-        appName: appName,
-        userId: userId,
-        sessionId: sessionId,
-        filename: filename,
-        artifact: artifact,
-        customMetadata: customMetadata,
-      );
+      final ArtifactVersion? metadata;
+      try {
+        final int version = await context.artifactService.saveArtifact(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+          filename: filename,
+          artifact: artifact,
+          customMetadata: customMetadata,
+        );
 
-      final ArtifactVersion? metadata = await context.artifactService
-          .getArtifactVersion(
-            appName: appName,
-            userId: userId,
-            sessionId: sessionId,
-            filename: filename,
-            version: version,
-          );
+        metadata = await context.artifactService.getArtifactVersion(
+          appName: appName,
+          userId: userId,
+          sessionId: sessionId,
+          filename: filename,
+          version: version,
+        );
+      } catch (_) {
+        await _writeError(
+          request,
+          context,
+          statusCode: HttpStatus.internalServerError,
+          message: 'Error saving artifact',
+        );
+        return;
+      }
       if (metadata == null) {
         await _writeError(
           request,
           context,
           statusCode: HttpStatus.internalServerError,
-          message: 'Artifact metadata unavailable',
+          message: 'Artifact metadata unavailable.',
+          detail: 'Error saving artifact',
         );
         return;
       }
@@ -4091,12 +4157,16 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
           abortSignal: abortController.signal,
         )
         .toList();
+    final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
+      request,
+    );
     for (final Event event in events) {
       context.recordTraceEvent(
         appName: runRequest.appName,
         userId: runRequest.userId,
         sessionId: runRequest.sessionId,
         event: event,
+        traceContext: requestTraceContext,
       );
     }
   } on StateError catch (error) {
@@ -4275,6 +4345,9 @@ Future<void> _handleRunSse(
     },
   );
 
+  final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
+    request,
+  );
   try {
     await for (final Event event in runner.runAsync(
       userId: runRequest.userId,
@@ -4298,6 +4371,7 @@ Future<void> _handleRunSse(
         userId: runRequest.userId,
         sessionId: runRequest.sessionId,
         event: event,
+        traceContext: requestTraceContext,
       );
 
       final List<Event> eventsToStream = buildSseEventsForRun(
@@ -4445,6 +4519,9 @@ Future<void> _handleRunLive(
     int? closeCode;
     String closeReason = '';
 
+    final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
+      request,
+    );
     Future<void> forwardEvents() async {
       await for (final Event event in runner.runLive(
         liveRequestQueue: liveQueue,
@@ -4461,6 +4538,7 @@ Future<void> _handleRunLive(
           userId: userId,
           sessionId: sessionId,
           event: event,
+          traceContext: requestTraceContext,
         );
         socket.add(
           jsonEncode(
@@ -4711,12 +4789,16 @@ Future<void> _writeError(
   _AdkDevWebContext context, {
   required int statusCode,
   required String message,
+  String? detail,
 }) async {
   await _writeJson(
     request,
     context,
     statusCode: statusCode,
-    payload: <String, Object?>{'error': message},
+    payload: <String, Object?>{
+      'error': message,
+      'detail': detail ?? message,
+    },
   );
 }
 
@@ -5087,6 +5169,22 @@ Map<String, Object?> _eventToApiJson(
     event: pubEvent,
   ).toJson();
 
+  final Object? usageMeta = snake['usage_metadata'];
+  final Object? customMeta = snake['custom_metadata'];
+  Object? cacheCreationTokenCount = snake['cache_creation_token_count'];
+  if (cacheCreationTokenCount == null && usageMeta is Map) {
+    cacheCreationTokenCount =
+        usageMeta['cache_creation_token_count'] ??
+        usageMeta['cacheCreationTokenCount'] ??
+        usageMeta['cache_creation_tokens'] ??
+        usageMeta['cacheCreationTokens'];
+  }
+  if (cacheCreationTokenCount == null && customMeta is Map) {
+    cacheCreationTokenCount =
+        customMeta['cache_creation_token_count'] ??
+        customMeta['cacheCreationTokenCount'];
+  }
+
   return <String, Object?>{
     ...snake,
     'invocationId': snake['invocation_id'],
@@ -5095,7 +5193,8 @@ Map<String, Object?> _eventToApiJson(
     'sessionId': snake['session_id'],
     'customMetadata': snake['custom_metadata'],
     'usageMetadata': snake['usage_metadata'],
-    'cacheCreationTokenCount': snake['cache_creation_token_count'],
+    'cache_creation_token_count': cacheCreationTokenCount,
+    'cacheCreationTokenCount': cacheCreationTokenCount,
     'citationMetadata': snake['citation_metadata'],
     'groundingMetadata': snake['grounding_metadata'],
     'turnComplete': snake['turn_complete'],
@@ -7787,6 +7886,342 @@ Future<void> writeA2aSseTaskReplayForTesting(
   task: task,
   updates: updates,
 );
+
+String _decodePathSegment(String rawSegment) {
+  try {
+    return Uri.decodeComponent(rawSegment);
+  } on ArgumentError {
+    return rawSegment;
+  }
+}
+
+W3cTraceContext _extractRequestTraceContext(HttpRequest request) {
+  final Map<String, String> headerMap = <String, String>{};
+  request.headers.forEach((String name, List<String> values) {
+    if (values.isNotEmpty) {
+      headerMap[name] = values.join(', ');
+    }
+  });
+  return extractW3cTraceContext(headerMap);
+}
+
+/// Builds an artifact request URL path with `encodeURIComponent(artifactName)`
+/// matching `ArtifactService.getLatestArtifact` / `getArtifactVersion` in ADK Web.
+String buildArtifactUrlPath({
+  required String appName,
+  required String userId,
+  required String sessionId,
+  required String artifactName,
+  int? versionId,
+}) {
+  final String encodedArtifactName = Uri.encodeComponent(artifactName);
+  final String base =
+      '/apps/$appName/users/$userId/sessions/$sessionId/artifacts/$encodedArtifactName';
+  if (versionId == null) {
+    return base;
+  }
+  return '$base/versions/$versionId';
+}
+
+/// Line-buffered SSE stream decoder that carries partial lines across chunk
+/// reads and flushes trailing lines on stream completion.
+///
+/// Mirrors `AgentService.runSse` in ADK Web (`60a516e`).
+class SseLineFramer {
+  /// Creates an [SseLineFramer].
+  SseLineFramer();
+
+  String _lastData = '';
+
+  /// Unflushed partial line carried across chunk boundaries.
+  String get pendingPartialLine => _lastData;
+
+  /// Appends a UTF-8 text chunk, emitting parsed JSON objects for each complete
+  /// `data:` SSE line and preserving any trailing incomplete line in [_lastData].
+  List<Map<String, Object?>> addTextChunk(String chunk) {
+    final List<String> lines = (_lastData + chunk).split(RegExp(r'\r?\n'));
+    _lastData = lines.isEmpty ? '' : lines.removeLast();
+    final List<Map<String, Object?>> emitted = <Map<String, Object?>>[];
+    for (final String line in lines) {
+      final Map<String, Object?>? parsed = _parseSseLine(line);
+      if (parsed != null) {
+        emitted.add(parsed);
+      }
+    }
+    return emitted;
+  }
+
+  /// Flushes any remaining trailing line when the SSE stream completes (`done`).
+  List<Map<String, Object?>> flush() {
+    if (_lastData.isEmpty) {
+      return const <Map<String, Object?>>[];
+    }
+    final String remaining = _lastData;
+    _lastData = '';
+    final List<Map<String, Object?>> emitted = <Map<String, Object?>>[];
+    for (final String line in remaining.split(RegExp(r'\r?\n'))) {
+      final Map<String, Object?>? parsed = _parseSseLine(line);
+      if (parsed != null) {
+        emitted.add(parsed);
+      }
+    }
+    return emitted;
+  }
+
+  Map<String, Object?>? _parseSseLine(String line) {
+    if (!line.startsWith('data:')) {
+      return null;
+    }
+    final String jsonStr = line.replaceFirst(RegExp(r'^data:\s*'), '');
+    try {
+      final Object? decoded = jsonDecode(jsonStr);
+      if (decoded is Map) {
+        return decoded.map(
+          (Object? key, Object? value) => MapEntry('$key', value),
+        );
+      }
+    } catch (_) {
+      // Ignore malformed SSE data lines.
+    }
+    return null;
+  }
+}
+
+final RegExp _anchorTagRegex = RegExp(
+  r'<a\b([^>]*?\bhref\s*=\s*(?:"([^"]*)"|' "'" r"([^']*)'" r')[^>]*)>',
+  caseSensitive: false,
+);
+final RegExp _externalHttpHrefRegex = RegExp(r'^https?:\/\/', caseSensitive: false);
+
+/// Rewrites `<a href="...">` tags in rendered markdown [html] so that external
+/// HTTP/HTTPS links open in a new tab with `target="_blank"` and
+/// `rel="noopener noreferrer"`, while preserving relative, fragment (`#`),
+/// `mailto:`, and non-HTTP links.
+///
+/// Mirrors `MarkdownComponent.openExternalLinksInNewTab` in ADK Web (`ae60fcd`).
+String openExternalLinksInNewTabHtml(String html) {
+  return html.replaceAllMapped(_anchorTagRegex, (Match match) {
+    final String attrs = match.group(1)!;
+    final String href = match.group(2) ?? match.group(3) ?? '';
+    if (!_externalHttpHrefRegex.hasMatch(href)) {
+      return match.group(0)!;
+    }
+    String updatedAttrs = attrs;
+    if (!RegExp(r'\btarget\s*=', caseSensitive: false).hasMatch(updatedAttrs)) {
+      updatedAttrs = '$updatedAttrs target="_blank"';
+    }
+    if (!RegExp(r'\brel\s*=', caseSensitive: false).hasMatch(updatedAttrs)) {
+      updatedAttrs = '$updatedAttrs rel="noopener noreferrer"';
+    }
+    return '<a$updatedAttrs>';
+  });
+}
+
+/// Computes per-span `systemInstructionChanged` flags scoped to each agent so
+/// crossing an agent boundary does not falsely flag a system-instruction change.
+///
+/// Mirrors `TraceTabComponent.updateSystemInstructionFlags` in ADK Web (`f62b82a`).
+List<Map<String, Object?>> computeSystemInstructionFlagsByAgent(
+  List<Map<String, Object?>> spans, {
+  Map<String, Map<String, Object?>> eventDataByEventId =
+      const <String, Map<String, Object?>>{},
+}) {
+  final List<Map<String, Object?>> result = spans
+      .map((Map<String, Object?> s) => Map<String, Object?>.from(s))
+      .toList();
+  final List<Map<String, Object?>> llmSpans = <Map<String, Object?>>[];
+  for (final Map<String, Object?> span in result) {
+    final String label =
+        '${span['label'] ?? span['name'] ?? ''}'.toLowerCase();
+    if (label == 'call_llm') {
+      span['systemInstructionChanged'] = false;
+      llmSpans.add(span);
+    }
+  }
+  llmSpans.sort((Map<String, Object?> a, Map<String, Object?> b) {
+    final num startA = (a['start_time'] ?? a['startTime'] ?? 0) as num;
+    final num startB = (b['start_time'] ?? b['startTime'] ?? 0) as num;
+    return startA.compareTo(startB);
+  });
+
+  final Map<String, List<Map<String, Object?>>> spansByAgent =
+      <String, List<Map<String, Object?>>>{};
+  for (final Map<String, Object?> span in llmSpans) {
+    final String? eventId =
+        (span['attrEventId'] ??
+                (span['attributes'] is Map
+                    ? (span['attributes'] as Map)['gcp.vertex.agent.event_id']
+                    : null))
+            ?.toString();
+    final Map<String, Object?>? event =
+        eventId != null ? eventDataByEventId[eventId] : null;
+    final String agentName =
+        '${event?['author'] ?? span['attrAgentName'] ?? (span['attributes'] is Map ? (span['attributes'] as Map)['gen_ai.agent.name'] : null) ?? ''}';
+    spansByAgent.putIfAbsent(agentName, () => <Map<String, Object?>>[]).add(
+      span,
+    );
+  }
+
+  for (final List<Map<String, Object?>> agentSpans in spansByAgent.values) {
+    for (int i = 1; i < agentSpans.length; i += 1) {
+      final String prevSi = '${agentSpans[i - 1]['attrSystemInstruction'] ?? ''}';
+      final String currSi = '${agentSpans[i]['attrSystemInstruction'] ?? ''}';
+      if (prevSi.isNotEmpty && currSi.isNotEmpty && prevSi != currSi) {
+        agentSpans[i]['systemInstructionChanged'] = true;
+      }
+    }
+  }
+  return result;
+}
+
+/// Computes session usage metadata totals and per-invocation rows, including
+/// `cacheCreationTokenCount` (`Cache Creation Tokens` / `Total Cache Creation Tokens`).
+///
+/// Mirrors `sessionUsageMetadata` in `SessionTabComponent` in ADK Web (`9512e34`).
+Map<String, Object?> computeSessionUsageMetadataSummary(
+  List<Map<String, Object?>> events,
+) {
+  int totalPromptTokens = 0;
+  int totalCandidatesTokens = 0;
+  int totalCachedTokens = 0;
+  int totalCacheCreationTokens = 0;
+  int totalThinkingTokens = 0;
+  int totalToolUseTokens = 0;
+  int totalTokens = 0;
+  bool hasUsage = false;
+
+  final List<Map<String, Object?>> tableData = <Map<String, Object?>>[];
+  for (final Map<String, Object?> event in events) {
+    final Object? rawUsage = event['usageMetadata'] ?? event['usage_metadata'];
+    if (rawUsage is! Map) {
+      continue;
+    }
+    hasUsage = true;
+    final int promptTokens =
+        ((rawUsage['promptTokenCount'] ?? rawUsage['prompt_token_count'] ?? 0)
+                as num)
+            .toInt();
+    final int candidatesTokens =
+        ((rawUsage['candidatesTokenCount'] ??
+                    rawUsage['candidates_token_count'] ??
+                    0)
+                as num)
+            .toInt();
+    final int cachedTokens =
+        ((rawUsage['cachedContentTokenCount'] ??
+                    rawUsage['cached_content_token_count'] ??
+                    0)
+                as num)
+            .toInt();
+    final int cacheCreationTokens =
+        ((event['cacheCreationTokenCount'] ??
+                    event['cache_creation_token_count'] ??
+                    rawUsage['cacheCreationTokenCount'] ??
+                    rawUsage['cache_creation_token_count'] ??
+                    rawUsage['cacheCreationTokens'] ??
+                    rawUsage['cache_creation_tokens'] ??
+                    0)
+                as num)
+            .toInt();
+    final int thinkingTokens =
+        ((rawUsage['thoughtsTokenCount'] ??
+                    rawUsage['thoughts_token_count'] ??
+                    0)
+                as num)
+            .toInt();
+    final int toolUseTokens =
+        ((rawUsage['toolUsePromptTokenCount'] ??
+                    rawUsage['tool_use_prompt_token_count'] ??
+                    0)
+                as num)
+            .toInt();
+    final int eventTotal =
+        ((rawUsage['totalTokenCount'] ?? rawUsage['total_token_count'] ?? 0)
+                as num)
+            .toInt();
+
+    totalPromptTokens += promptTokens;
+    totalCandidatesTokens += candidatesTokens;
+    totalCachedTokens += cachedTokens;
+    totalCacheCreationTokens += cacheCreationTokens;
+    totalThinkingTokens += thinkingTokens;
+    totalToolUseTokens += toolUseTokens;
+    totalTokens += eventTotal;
+
+    tableData.add(<String, Object?>{
+      'Invocation ID': event['invocationId'] ?? event['invocation_id'] ?? 'N/A',
+      'Timestamp': event['timestamp'],
+      'Model': event['modelVersion'] ?? event['model_version'] ?? 'N/A',
+      'Prompt Tokens': promptTokens,
+      'Cached Tokens': cachedTokens,
+      'Cache Creation Tokens': cacheCreationTokens,
+      'Thinking Tokens': thinkingTokens,
+      'Tool Use Tokens': toolUseTokens,
+      'Candidates Tokens': candidatesTokens,
+      'Total Tokens': eventTotal,
+    });
+  }
+
+  if (!hasUsage) {
+    return <String, Object?>{
+      'rows': const <Map<String, Object?>>[],
+      'tableData': const <Map<String, Object?>>[],
+      'displayedColumns': const <String>[],
+    };
+  }
+
+  final List<Map<String, Object?>> rows = <Map<String, Object?>>[
+    <String, Object?>{'key': 'Total Prompt Tokens', 'value': totalPromptTokens},
+  ];
+  if (totalCachedTokens > 0) {
+    rows.add(<String, Object?>{
+      'key': 'Total Cached Tokens',
+      'value': totalCachedTokens,
+    });
+  }
+  if (totalCacheCreationTokens > 0) {
+    rows.add(<String, Object?>{
+      'key': 'Total Cache Creation Tokens',
+      'value': totalCacheCreationTokens,
+    });
+  }
+  if (totalThinkingTokens > 0) {
+    rows.add(<String, Object?>{
+      'key': 'Total Thinking Tokens',
+      'value': totalThinkingTokens,
+    });
+  }
+  if (totalToolUseTokens > 0) {
+    rows.add(<String, Object?>{
+      'key': 'Total Tool Use Tokens',
+      'value': totalToolUseTokens,
+    });
+  }
+  rows.addAll(<Map<String, Object?>>[
+    <String, Object?>{
+      'key': 'Total Candidates Tokens',
+      'value': totalCandidatesTokens,
+    },
+    <String, Object?>{'key': 'Total Tokens', 'value': totalTokens},
+  ]);
+
+  return <String, Object?>{
+    'rows': rows,
+    'tableData': tableData,
+    'displayedColumns': const <String>[
+      'Invocation ID',
+      'Timestamp',
+      'Model',
+      'Prompt Tokens',
+      'Cached Tokens',
+      'Cache Creation Tokens',
+      'Thinking Tokens',
+      'Tool Use Tokens',
+      'Candidates Tokens',
+      'Total Tokens',
+    ],
+  };
+}
 
 
 

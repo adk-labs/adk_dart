@@ -2,13 +2,19 @@
 library;
 
 import 'dart:async';
+import 'dart:developer' as developer;
+import 'dart:io';
 
+import '../../agents/abort_signal.dart';
 import '../../agents/invocation_context.dart';
 import '../../agents/run_config.dart';
+import '../../events/abort_events.dart';
 import '../../events/event.dart';
+import '../../events/node_path_builder.dart';
 import '../../platform/uuid.dart';
 import '../../runners/runner.dart';
 import '../../sessions/session.dart';
+import '../../types/content.dart';
 import '../converters/event_converter.dart';
 import '../converters/long_running_functions.dart';
 import '../converters/part_converter.dart';
@@ -16,6 +22,127 @@ import '../converters/request_converter.dart';
 import '../converters/utils.dart';
 import '../protocol.dart';
 import 'task_result_aggregator.dart';
+
+bool _isErrorEvent(Event event) {
+  return (event.errorCode != null && event.errorCode!.isNotEmpty) ||
+      (event.errorMessage != null && event.errorMessage!.isNotEmpty);
+}
+
+bool _isRootAgentEvent(Event event) {
+  if (event.branch != null && event.branch!.isNotEmpty) {
+    return false;
+  }
+  final String path = event.nodeInfo.path;
+  if (path.isEmpty) {
+    return true;
+  }
+  return NodePathBuilder.fromString(path).parent == null;
+}
+
+bool _hasResultPayload(Event event) {
+  if (event.output != null) {
+    return true;
+  }
+  final List<Part>? parts = event.content?.parts;
+  if (parts == null || parts.isEmpty) {
+    return false;
+  }
+  return parts.any(
+    (Part part) =>
+        !part.thought &&
+        ((part.text != null && part.text!.trim().isNotEmpty) ||
+            part.inlineData != null ||
+            part.fileData != null),
+  );
+}
+
+bool _isSuccessfulResult(Event event) {
+  return event.author != 'user' &&
+      event.partial != true &&
+      !_isErrorEvent(event) &&
+      _hasResultPayload(event) &&
+      event.isFinalResponse();
+}
+
+bool _isInBranchScope(String? branch, String? scope) {
+  if (scope == null || scope.isEmpty) {
+    return true;
+  }
+  if (branch == null || branch.isEmpty) {
+    return false;
+  }
+  return branch == scope || branch.startsWith('$scope.');
+}
+
+/// Tracks sub-agent error events and clears them when the enclosing scope
+/// subsequently produces a successful final response.
+class ErrorRecoveryTracker {
+  final List<Event> _unresolvedErrors = <Event>[];
+
+  /// Observes one streamed ADK [event] to record or resolve errors.
+  void observe(Event event) {
+    if (_isErrorEvent(event)) {
+      _unresolvedErrors.add(event);
+      return;
+    }
+    if (_isSuccessfulResult(event)) {
+      _unresolvedErrors.removeWhere(
+        (Event error) =>
+            !_isRootAgentEvent(error) &&
+            _isInBranchScope(error.branch, event.branch),
+      );
+    }
+  }
+
+  /// Whether [event] remains an unresolved error event.
+  bool isUnresolved(Event event) =>
+      _unresolvedErrors.any((Event item) => identical(item, event));
+
+  /// Most recent unresolved error event, if any.
+  Event? get unresolvedError =>
+      _unresolvedErrors.isNotEmpty ? _unresolvedErrors.last : null;
+}
+
+/// Logs an uncaught executor [error] with a correlation ID and returns a
+/// sanitized failure message for remote A2A peers.
+String reportA2aExecutorError(
+  Object error, [
+  StackTrace? stackTrace,
+  bool? debugErrorsOverride,
+]) {
+  final String rawUuid = newUuid().replaceAll('-', '');
+  final String errorId = rawUuid.length >= 12
+      ? rawUuid.substring(0, 12)
+      : rawUuid.padRight(12, '0');
+  developer.log(
+    'Error handling A2A request [error_id=$errorId]: $error',
+    name: 'adk_dart.a2a_agent_executor',
+    error: error,
+    stackTrace: stackTrace,
+  );
+  final bool debugErrors =
+      debugErrorsOverride ?? _isDebugErrorsEnabledFromEnv();
+  if (debugErrors) {
+    return 'Agent execution failed. (error_id: $errorId): ${error.runtimeType}: $error';
+  }
+  return 'Agent execution failed. (error_id: $errorId)';
+}
+
+bool _isDebugErrorsEnabledFromEnv() {
+  try {
+    final String? raw = Platform.environment['ADK_DEBUG_ERRORS'];
+    if (raw == null) {
+      return false;
+    }
+    final String normalized = raw.trim().toLowerCase();
+    return normalized == '1' ||
+        normalized == 'true' ||
+        normalized == 'yes' ||
+        normalized == 'on';
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Hook executed before A2A requests are converted and run.
 typedef A2aExecutorBeforeAgentInterceptor =
@@ -127,6 +254,111 @@ class A2aAgentExecutorConfig {
   List<A2aExecuteInterceptor>? executeInterceptors;
 }
 
+class _ActiveTaskRun {
+  _ActiveTaskRun({required this.taskId, required this.eventQueue});
+
+  final String taskId;
+  final A2aEventQueue eventQueue;
+  final AdkAbortSignal abortSignal = AdkAbortSignal();
+  final Completer<void> done = Completer<void>();
+  bool terminalCancelEmitted = false;
+}
+
+class _ActiveTaskRegistry {
+  final Map<String, _ActiveTaskRun> _runs = <String, _ActiveTaskRun>{};
+
+  _ActiveTaskRun start(String taskId, A2aEventQueue eventQueue) {
+    final _ActiveTaskRun run = _ActiveTaskRun(
+      taskId: taskId,
+      eventQueue: eventQueue,
+    );
+    if (taskId.isNotEmpty) {
+      _runs[taskId] = run;
+    }
+    return run;
+  }
+
+  _ActiveTaskRun? get(String taskId) => _runs[taskId];
+
+  void finish(_ActiveTaskRun run) {
+    if (_runs[run.taskId] == run) {
+      _runs.remove(run.taskId);
+    }
+    if (!run.done.isCompleted) {
+      run.done.complete();
+    }
+  }
+
+  Future<void> cancel(
+    A2aRequestContext context,
+    A2aEventQueue eventQueue,
+  ) async {
+    final String taskId = context.taskId;
+    final _ActiveTaskRun? activeRun = _runs[taskId];
+    if (activeRun == null) {
+      final A2aTaskState? currentState = context.currentTask?.status.state;
+      if (currentState == A2aTaskState.completed ||
+          currentState == A2aTaskState.failed ||
+          currentState == A2aTaskState.canceled) {
+        return;
+      }
+      await _enqueueCancelEvent(
+        eventQueue,
+        taskId: taskId,
+        contextId: context.contextId,
+      );
+      return;
+    }
+
+    final bool sameQueue = _sharesDeliveryPath(
+      activeRun.eventQueue,
+      eventQueue,
+    );
+    activeRun.abortSignal.abort();
+    await activeRun.done.future;
+    if (!activeRun.terminalCancelEmitted || !sameQueue) {
+      await _enqueueCancelEvent(
+        eventQueue,
+        taskId: taskId,
+        contextId: context.contextId,
+      );
+    }
+  }
+
+  static bool _sharesDeliveryPath(A2aEventQueue a, A2aEventQueue b) {
+    return identical(a, b);
+  }
+
+  static Future<void> _enqueueCancelEvent(
+    A2aEventQueue eventQueue, {
+    required String taskId,
+    required String contextId,
+  }) async {
+    try {
+      await eventQueue.enqueueEvent(
+        A2aTaskStatusUpdateEvent(
+          taskId: taskId,
+          contextId: contextId,
+          status: A2aTaskStatus(
+            state: A2aTaskState.canceled,
+            message: A2aMessage(
+              messageId: 'a2a_cancel_${newUuid()}',
+              role: A2aRole.agent,
+              parts: <A2aPart>[A2aPart.text('Task cancellation requested.')],
+            ),
+          ),
+          metadata: <String, Object?>{
+            getAdkMetadataKey('cancel_requested'): true,
+          },
+          finalEvent: true,
+        ),
+      );
+    } catch (_) {
+      // Best-effort enqueue when eventQueue is already closed or failing.
+    }
+  }
+}
+
 /// Executes A2A requests by delegating to an ADK [Runner].
 class A2aAgentExecutor {
   /// Creates an A2A executor.
@@ -136,6 +368,7 @@ class A2aAgentExecutor {
 
   Object _runner;
   final A2aAgentExecutorConfig _config;
+  final _ActiveTaskRegistry _activeTasks = _ActiveTaskRegistry();
 
   Future<Runner> _resolveRunner() async {
     if (_runner is Runner) {
@@ -165,40 +398,15 @@ class A2aAgentExecutor {
     );
   }
 
-  /// Attempts to cancel an in-flight A2A task.
+  /// Cancels an active task or emits a terminal `canceled` event if inactive.
   Future<void> cancel(
     A2aRequestContext context,
     A2aEventQueue eventQueue,
   ) async {
-    final A2aTaskState? currentState = context.currentTask?.status.state;
-    if (currentState == A2aTaskState.completed ||
-        currentState == A2aTaskState.failed) {
-      return;
+    if (context.taskId.isEmpty) {
+      throw ArgumentError('Task ID is required for task cancellation.');
     }
-
-    try {
-      await eventQueue.enqueueEvent(
-        A2aTaskStatusUpdateEvent(
-          taskId: context.taskId,
-          contextId: context.contextId,
-          finalEvent: true,
-          status: A2aTaskStatus(
-            state: A2aTaskState.failed,
-            message: A2aMessage(
-              messageId: 'a2a_cancel_${newUuid()}',
-              role: A2aRole.agent,
-              parts: <A2aPart>[A2aPart.text('Task cancellation requested.')],
-            ),
-          ),
-          metadata: <String, Object?>{
-            getAdkMetadataKey('cancel_requested'): true,
-          },
-        ),
-      );
-    } catch (_) {
-      // Cancellation is best effort; swallowing queue failures keeps the
-      // cancel path safe for callers.
-    }
+    await _activeTasks.cancel(context, eventQueue);
   }
 
   /// Executes [context] and emits converted events to [eventQueue].
@@ -211,44 +419,68 @@ class A2aAgentExecutor {
     }
     context = await _executeBeforeAgentInterceptors(context);
 
-    if (context.currentTask == null) {
-      await eventQueue.enqueueEvent(
-        A2aTaskStatusUpdateEvent(
-          taskId: context.taskId,
-          contextId: context.contextId,
-          status: A2aTaskStatus(
-            state: A2aTaskState.submitted,
-            message: context.message,
-          ),
-          finalEvent: false,
-        ),
-      );
-    }
-
+    final _ActiveTaskRun activeRun = _activeTasks.start(
+      context.taskId,
+      eventQueue,
+    );
     try {
-      await _handleRequest(context, eventQueue);
-    } catch (error) {
-      await eventQueue.enqueueEvent(
-        A2aTaskStatusUpdateEvent(
-          taskId: context.taskId,
-          contextId: context.contextId,
-          finalEvent: true,
-          status: A2aTaskStatus(
-            state: A2aTaskState.failed,
-            message: A2aMessage(
-              messageId: 'a2a_failure_${newUuid()}',
-              role: A2aRole.agent,
-              parts: <A2aPart>[A2aPart.text('$error')],
+      if (context.currentTask == null) {
+        await eventQueue.enqueueEvent(
+          A2aTaskStatusUpdateEvent(
+            taskId: context.taskId,
+            contextId: context.contextId,
+            status: A2aTaskStatus(
+              state: A2aTaskState.submitted,
+              message: context.message,
+            ),
+            finalEvent: false,
+          ),
+        );
+      }
+
+      try {
+        await _handleRequest(context, eventQueue, activeRun);
+      } catch (error, stackTrace) {
+        if (activeRun.abortSignal.aborted || error is AdkAbortException) {
+          if (!activeRun.terminalCancelEmitted) {
+            await eventQueue.enqueueEvent(
+              A2aTaskStatusUpdateEvent(
+                taskId: context.taskId,
+                contextId: context.contextId,
+                finalEvent: true,
+                status: A2aTaskStatus(state: A2aTaskState.canceled),
+              ),
+            );
+            activeRun.terminalCancelEmitted = true;
+          }
+          return;
+        }
+        final String failureText = reportA2aExecutorError(error, stackTrace);
+        await eventQueue.enqueueEvent(
+          A2aTaskStatusUpdateEvent(
+            taskId: context.taskId,
+            contextId: context.contextId,
+            finalEvent: true,
+            status: A2aTaskStatus(
+              state: A2aTaskState.failed,
+              message: A2aMessage(
+                messageId: 'a2a_failure_${newUuid()}',
+                role: A2aRole.agent,
+                parts: <A2aPart>[A2aPart.text(failureText)],
+              ),
             ),
           ),
-        ),
-      );
+        );
+      }
+    } finally {
+      _activeTasks.finish(activeRun);
     }
   }
 
   Future<void> _handleRequest(
     A2aRequestContext context,
     A2aEventQueue eventQueue,
+    _ActiveTaskRun activeRun,
   ) async {
     final Runner runner = await _resolveRunner();
 
@@ -273,6 +505,7 @@ class A2aAgentExecutor {
       runConfig: runRequest.runConfig ?? RunConfig(),
       resumabilityConfig: runner.resumabilityConfig,
       pluginManager: runner.pluginManager,
+      abortSignal: activeRun.abortSignal,
     );
 
     final A2aExecutorContext executorContext = A2aExecutorContext(
@@ -302,6 +535,8 @@ class A2aAgentExecutor {
     );
 
     final TaskResultAggregator taskResultAggregator = TaskResultAggregator();
+    final ErrorRecoveryTracker errorTracker = ErrorRecoveryTracker();
+    final List<(Event?, A2aMessage?)> failures = <(Event?, A2aMessage?)>[];
     final LongRunningFunctions longRunningFunctions = LongRunningFunctions(
       partConverter: _config.genAiPartConverter,
     );
@@ -310,35 +545,68 @@ class A2aAgentExecutor {
         ? runRequest.invocationId
         : null;
 
-    await for (final Event adkEvent in runner.runAsync(
+    bool aborted = activeRun.abortSignal.aborted;
+    final Stream<Event> eventStream = runner.runAsync(
       userId: runRequest.userId!,
       sessionId: runRequest.sessionId!,
       invocationId: invocationIdForRunAsync,
       newMessage: runRequest.newMessage,
       stateDelta: runRequest.stateDelta,
       runConfig: runRequest.runConfig,
-    )) {
-      final Event processedEvent = longRunningFunctions.processEvent(adkEvent);
-      final List<A2aEvent> a2aEvents = _config.eventConverter(
-        processedEvent,
-        invocationContext,
-        context.taskId,
-        context.contextId,
-        _config.genAiPartConverter,
-      );
+      abortSignal: activeRun.abortSignal,
+    );
 
-      for (final A2aEvent a2aEvent in a2aEvents) {
-        final A2aEvent? interceptedEvent = await _executeAfterEventInterceptors(
-          a2aEvent: a2aEvent,
-          executorContext: executorContext,
-          adkEvent: processedEvent,
-        );
-        if (interceptedEvent == null) {
-          continue;
+    await _consumeRunnerWithAbort(
+      eventStream: eventStream,
+      abortSignal: activeRun.abortSignal,
+      onEvent: (Event adkEvent) async {
+        if (isAbortEvent(adkEvent) || activeRun.abortSignal.aborted) {
+          aborted = true;
         }
-        taskResultAggregator.processEvent(interceptedEvent);
-        await eventQueue.enqueueEvent(interceptedEvent);
-      }
+        errorTracker.observe(adkEvent);
+        final bool isErrorEvent = _isErrorEvent(adkEvent);
+        final Event processedEvent = longRunningFunctions.processEvent(
+          adkEvent,
+        );
+        final List<A2aEvent> a2aEvents = _config.eventConverter(
+          processedEvent,
+          invocationContext,
+          context.taskId,
+          context.contextId,
+          _config.genAiPartConverter,
+        );
+
+        for (final A2aEvent a2aEvent in a2aEvents) {
+          final A2aEvent? interceptedEvent =
+              await _executeAfterEventInterceptors(
+                a2aEvent: a2aEvent,
+                executorContext: executorContext,
+                adkEvent: processedEvent,
+              );
+          if (interceptedEvent == null) {
+            continue;
+          }
+          if (interceptedEvent is A2aTaskStatusUpdateEvent &&
+              interceptedEvent.status.state == A2aTaskState.failed) {
+            failures.add((
+              isErrorEvent ? adkEvent : null,
+              interceptedEvent.status.message,
+            ));
+          }
+          taskResultAggregator.processEvent(interceptedEvent);
+          await eventQueue.enqueueEvent(interceptedEvent);
+        }
+      },
+    );
+    if (activeRun.abortSignal.aborted) {
+      aborted = true;
+    }
+
+    if (taskResultAggregator.taskState == A2aTaskState.failed) {
+      taskResultAggregator.keepFailures(<A2aMessage?>[
+        for (final (Event? source, A2aMessage? message) in failures)
+          if (source == null || errorTracker.isUnresolved(source)) message,
+      ]);
     }
 
     A2aTaskStatusUpdateEvent finalEvent;
@@ -347,7 +615,15 @@ class A2aAgentExecutor {
           taskId: context.taskId,
           contextId: context.contextId,
         );
-    if (taskResultAggregator.taskState == A2aTaskState.failed) {
+    if (aborted && taskResultAggregator.taskState != A2aTaskState.canceled) {
+      finalEvent = A2aTaskStatusUpdateEvent(
+        taskId: context.taskId,
+        contextId: context.contextId,
+        finalEvent: true,
+        status: A2aTaskStatus(state: A2aTaskState.canceled),
+      );
+    } else if (taskResultAggregator.taskState == A2aTaskState.canceled ||
+        taskResultAggregator.taskState == A2aTaskState.failed) {
       finalEvent = A2aTaskStatusUpdateEvent(
         taskId: context.taskId,
         contextId: context.contextId,
@@ -401,7 +677,89 @@ class A2aAgentExecutor {
       executorContext,
       finalEvent,
     );
+    activeRun.terminalCancelEmitted =
+        finalEvent.status.state == A2aTaskState.canceled;
     await eventQueue.enqueueEvent(finalEvent);
+  }
+
+  Future<void> _consumeRunnerWithAbort({
+    required Stream<Event> eventStream,
+    required AdkAbortSignal abortSignal,
+    required Future<void> Function(Event event) onEvent,
+  }) async {
+    final Completer<void> done = Completer<void>();
+    bool processingEvent = false;
+    Timer? abortWatchdog;
+    late final StreamSubscription<Event> subscription;
+
+    void scheduleAbortWatchdog() {
+      abortWatchdog?.cancel();
+      abortWatchdog = Timer(Duration.zero, () async {
+        if (done.isCompleted) {
+          return;
+        }
+        if (processingEvent) {
+          scheduleAbortWatchdog();
+          return;
+        }
+        try {
+          await subscription.cancel();
+        } catch (_) {
+          // Ignore errors during forced stream cancellation.
+        }
+        if (!done.isCompleted) {
+          done.complete();
+        }
+      });
+    }
+
+    subscription = eventStream.listen(
+      (Event event) async {
+        processingEvent = true;
+        subscription.pause();
+        try {
+          await onEvent(event);
+        } catch (error, stackTrace) {
+          if (!done.isCompleted) {
+            done.completeError(error, stackTrace);
+          }
+          await subscription.cancel();
+          return;
+        } finally {
+          processingEvent = false;
+        }
+        if (!done.isCompleted) {
+          subscription.resume();
+          if (abortSignal.aborted) {
+            scheduleAbortWatchdog();
+          }
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!done.isCompleted) {
+          done.completeError(error, stackTrace);
+        }
+      },
+      onDone: () {
+        if (!done.isCompleted) {
+          done.complete();
+        }
+      },
+      cancelOnError: true,
+    );
+
+    abortSignal.addListener((Object? _) {
+      if (!done.isCompleted) {
+        scheduleAbortWatchdog();
+      }
+    });
+
+    try {
+      await done.future;
+    } finally {
+      abortWatchdog?.cancel();
+      await subscription.cancel();
+    }
   }
 
   Future<Session> _prepareSession(

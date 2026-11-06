@@ -9,8 +9,10 @@ import 'package:http/http.dart' as http;
 import '../events/event.dart';
 import '../events/rewind_events.dart';
 import '../flows/llm_flows/contents.dart' show isAuthEvent;
+import '../models/llm_request.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
+import '../utils/google_client_headers.dart';
 import '../utils/vertex_ai_utils.dart';
 import 'base_memory_service.dart';
 import 'memory_entry.dart';
@@ -115,12 +117,14 @@ typedef VertexAiMemoryBankApiClientFactory =
       String? project,
       String? location,
       String? apiKey,
+      Object? httpOptions,
     });
 
 VertexAiMemoryBankApiClient _defaultMemoryBankApiClientFactory({
   String? project,
   String? location,
   String? apiKey,
+  Object? httpOptions,
 }) {
   final bool hasProjectAndLocation =
       (project?.isNotEmpty ?? false) && (location?.isNotEmpty ?? false);
@@ -129,6 +133,7 @@ VertexAiMemoryBankApiClient _defaultMemoryBankApiClientFactory({
       project: project,
       location: location,
       apiKey: apiKey,
+      httpOptions: httpOptions,
     );
   }
   throw ArgumentError(
@@ -158,11 +163,13 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
     this.project,
     this.location,
     this.apiKey,
+    Object? httpOptions,
     String apiVersion = 'v1beta1',
     http.Client? httpClient,
     VertexAiMemoryBankAccessTokenProvider? accessTokenProvider,
     VertexAiMemoryBankUriBuilder? uriBuilder,
-  }) : _apiVersion = apiVersion,
+  }) : httpOptions = mergeTrackingHttpOptions(httpOptions: httpOptions),
+       _apiVersion = apiVersion,
        _httpClient = httpClient ?? http.Client(),
        _accessTokenProvider =
            accessTokenProvider ?? _defaultVertexAiAccessTokenProvider,
@@ -176,6 +183,9 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
 
   /// Optional Express Mode API key.
   final String? apiKey;
+
+  /// Merged HTTP options ([HttpOptions] or `Map`) including ADK tracking headers.
+  final Object httpOptions;
   final String _apiVersion;
   final http.Client _httpClient;
   final VertexAiMemoryBankAccessTokenProvider _accessTokenProvider;
@@ -307,7 +317,11 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
       apiKey: apiKey,
     );
     final String? accessToken = await _accessTokenProvider();
+    final Map<String, String> optionHeaders = _extractHttpOptionHeaders(
+      httpOptions,
+    );
     final Map<String, String> headers = <String, String>{
+      ...optionHeaders,
       'content-type': 'application/json',
       'accept': 'application/json',
     };
@@ -336,6 +350,22 @@ class VertexAiMemoryBankHttpApiClient implements VertexAiMemoryBankApiClient {
     }
     return decoded.map((Object? key, Object? value) => MapEntry('$key', value));
   }
+}
+
+Map<String, String> _extractHttpOptionHeaders(Object? httpOptions) {
+  if (httpOptions is HttpOptions) {
+    return httpOptions.headers;
+  }
+  if (httpOptions is Map) {
+    final Object? rawHeaders = httpOptions['headers'];
+    if (rawHeaders is Map) {
+      return rawHeaders.map(
+        (Object? key, Object? value) =>
+            MapEntry<String, String>('$key', '${value ?? ''}'),
+      );
+    }
+  }
+  return const <String, String>{};
 }
 
 Future<String?> _defaultVertexAiAccessTokenProvider() async {
@@ -622,7 +652,7 @@ class VertexAiMemoryBankService extends BaseMemoryService {
     String? location,
     required String agentEngineId,
     String? expressModeApiKey,
-    VertexAiMemoryBankApiClientFactory? clientFactory,
+    Function? clientFactory,
   }) : _project = project,
        _location = location,
        _agentEngineId = agentEngineId,
@@ -650,20 +680,41 @@ class VertexAiMemoryBankService extends BaseMemoryService {
   final String? _location;
   final String _agentEngineId;
   final String? _expressModeApiKey;
-  final VertexAiMemoryBankApiClientFactory _clientFactory;
+  final Function _clientFactory;
 
   VertexAiMemoryBankApiClient? _client;
+
+  /// Returns an optional HTTP options override for the underlying API client.
+  Object? apiClientHttpOptionsOverride() => null;
 
   VertexAiMemoryBankApiClient _getApiClient() {
     final VertexAiMemoryBankApiClient? existing = _client;
     if (existing != null) {
       return existing;
     }
-    final VertexAiMemoryBankApiClient created = _clientFactory(
-      project: _project,
-      location: _location,
-      apiKey: _expressModeApiKey,
+    final Object httpOptions = mergeTrackingHttpOptions(
+      httpOptions: apiClientHttpOptionsOverride(),
     );
+    VertexAiMemoryBankApiClient created;
+    final dynamic factory = _clientFactory;
+    try {
+      created =
+          factory(
+                project: _project,
+                location: _location,
+                apiKey: _expressModeApiKey,
+                httpOptions: httpOptions,
+              )
+              as VertexAiMemoryBankApiClient;
+    } on NoSuchMethodError {
+      created =
+          factory(
+                project: _project,
+                location: _location,
+                apiKey: _expressModeApiKey,
+              )
+              as VertexAiMemoryBankApiClient;
+    }
     _client = created;
     return created;
   }
@@ -729,7 +780,8 @@ class VertexAiMemoryBankService extends BaseMemoryService {
     Map<String, Object?>? customMetadata,
   }) async {
     final List<Map<String, Object?>> directEvents = <Map<String, Object?>>[];
-    for (final Event event in eventsToProcess) {
+    for (final Event rawEvent in eventsToProcess) {
+      final Event event = _withoutThoughts(rawEvent);
       if (_shouldFilterOutEvent(event)) {
         continue;
       }
@@ -857,6 +909,20 @@ class VertexAiMemoryBankService extends BaseMemoryService {
   }
 }
 
+Event _withoutThoughts(Event event) {
+  final Content? content = event.content;
+  if (content == null || content.parts.isEmpty) {
+    return event;
+  }
+  final List<Part> nonThoughtParts = content.parts
+      .where((Part part) => !part.thought)
+      .toList(growable: false);
+  if (nonThoughtParts.length == content.parts.length) {
+    return event;
+  }
+  return event.copyWith(content: content.copyWith(parts: nonThoughtParts));
+}
+
 bool _shouldFilterOutEvent(Event event) {
   return _isEmptyContent(event.content) || isAuthEvent(event);
 }
@@ -866,6 +932,9 @@ bool _isEmptyContent(Content? content) {
     return true;
   }
   for (final Part part in content.parts) {
+    if (part.thought) {
+      continue;
+    }
     if ((part.text != null && part.text!.isNotEmpty) ||
         part.inlineData != null ||
         part.fileData != null) {

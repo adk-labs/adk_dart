@@ -133,7 +133,7 @@ class ComputerUseTool extends FunctionTool {
         return <String, Object?>{
           'image': <String, Object?>{
             'mimetype': 'image/png',
-            'data': base64Encode(result.screenshot),
+            'data': base64Encode(result.screenshot ?? const <int>[]),
           },
           'url': result.url,
         };

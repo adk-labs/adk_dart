@@ -216,7 +216,7 @@ class SqliteSessionService extends BaseSessionService {
               appName,
               userId,
               resolvedSessionId,
-              jsonEncode(deltas.session),
+              jsonEncode(coerceBytesForJson(deltas.session)),
               now,
               now,
             ],
@@ -508,7 +508,9 @@ class SqliteSessionService extends BaseSessionService {
           }
 
           if (delta.session.isNotEmpty) {
-            final String deltaJson = jsonEncode(delta.session);
+            final String deltaJson = jsonEncode(
+              coerceBytesForJson(delta.session),
+            );
             db.execute(
               'UPDATE sessions '
               'SET state=${_mergeStateSql(stateExpr: 'state', deltaExpr: '?')}, '
@@ -548,7 +550,7 @@ class SqliteSessionService extends BaseSessionService {
               session.id,
               event.invocationId,
               event.timestamp,
-              jsonEncode(_eventToJson(persistedEvent)),
+              jsonEncode(coerceBytesForJson(_eventToJson(persistedEvent))),
             ],
           );
         });
@@ -646,6 +648,7 @@ class SqliteSessionService extends BaseSessionService {
 
   void _prepareDatabase(_SqliteDatabase db) {
     db.execute('PRAGMA foreign_keys = ON');
+    db.execute('PRAGMA busy_timeout = 30000');
     db.execute(_appStatesTableSchema);
     db.execute(_userStatesTableSchema);
     db.execute(_sessionsTableSchema);
@@ -654,7 +657,7 @@ class SqliteSessionService extends BaseSessionService {
   }
 
   void _runTransaction(_SqliteDatabase db, void Function() action) {
-    db.execute('BEGIN');
+    db.execute('BEGIN IMMEDIATE');
     bool committed = false;
     try {
       action();
@@ -709,7 +712,7 @@ class SqliteSessionService extends BaseSessionService {
       'ON CONFLICT(app_name) DO UPDATE '
       'SET state=${_mergeStateSql(stateExpr: 'state', deltaExpr: 'excluded.state')}, '
       'update_time=excluded.update_time',
-      <Object?>[appName, jsonEncode(delta), updateTime],
+      <Object?>[appName, jsonEncode(coerceBytesForJson(delta)), updateTime],
     );
   }
 
@@ -726,7 +729,12 @@ class SqliteSessionService extends BaseSessionService {
       'ON CONFLICT(app_name, user_id) DO UPDATE '
       'SET state=${_mergeStateSql(stateExpr: 'state', deltaExpr: 'excluded.state')}, '
       'update_time=excluded.update_time',
-      <Object?>[appName, userId, jsonEncode(delta), updateTime],
+      <Object?>[
+        appName,
+        userId,
+        jsonEncode(coerceBytesForJson(delta)),
+        updateTime,
+      ],
     );
   }
 
@@ -1068,7 +1076,10 @@ Map<String, Object?> _eventToJson(Event event) {
     'actions': _eventActionsToJson(event.actions),
     if (!event.nodeInfo.isEmpty)
       'nodeInfo': eventNodeInfoToJson(event.nodeInfo),
-    if (event.hasOutput) 'output': event.output,
+    if (event.hasOutput)
+      'output': event.output is Uint8List
+          ? base64Url.encode(event.output as Uint8List)
+          : event.output,
     if (event.longRunningToolIds != null)
       'longRunningToolIds': event.longRunningToolIds!.toList(),
     if (event.branch != null) 'branch': event.branch,

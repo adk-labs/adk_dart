@@ -528,12 +528,52 @@ class AntigravityAgent extends BaseAgent {
     return null;
   }
 
+  String _fallbackSubagentAuthor() {
+    if (name == 'root_agent' || name == 'root') {
+      return 'subagent';
+    }
+    return '${name}_subagent';
+  }
+
+  static void _queueStepSubagentInvocations(
+    AntigravityStep step,
+    Queue<Map<String, Object?>> pendingSubagents,
+    Set<String> seenCalls,
+  ) {
+    if (step.toolCalls.isEmpty) {
+      return;
+    }
+    for (final AntigravityToolCall tc in step.toolCalls) {
+      final List<String> names = extractSubagentNames(tc);
+      if (names.isEmpty) {
+        continue;
+      }
+      if (tc.id.isNotEmpty) {
+        if (seenCalls.contains(tc.id)) {
+          continue;
+        }
+        seenCalls.add(tc.id);
+      }
+      for (final String n in names) {
+        pendingSubagents.add(<String, Object?>{'name': n});
+      }
+    }
+  }
+
   Map<String, String> _extractSessionSubagentAuthors(
     InvocationContext context,
   ) {
     final Map<String, String> resolved = <String, String>{};
+    final Set<String> excludedAuthors = <String>{
+      name,
+      'user',
+      'subagent',
+      'root_agent_subagent',
+      'root_subagent',
+      '${name}_subagent',
+    };
     for (final Event event in context.session.events) {
-      if (event.author == name || event.author == 'user') {
+      if (excludedAuthors.contains(event.author)) {
         continue;
       }
       final String? branch = event.branch;
@@ -563,6 +603,7 @@ class AntigravityAgent extends BaseAgent {
     required Map<String, List<Part>> subPendingThoughts,
     required Map<String, String> trajToAuthor,
     required Queue<Map<String, Object?>> pendingSubagents,
+    required Set<String> seenSubagentCalls,
   }) {
     final String stepTrajId = step.trajectoryId;
     final bool isSubagent =
@@ -573,6 +614,11 @@ class AntigravityAgent extends BaseAgent {
         step.depth > 0;
 
     if (!isSubagent) {
+      _queueStepSubagentInvocations(
+        step,
+        pendingSubagents,
+        seenSubagentCalls,
+      );
       return (name, context.branch, mainPendingFcs, mainPendingThoughts);
     }
 
@@ -580,8 +626,16 @@ class AntigravityAgent extends BaseAgent {
         ? stepTrajId
         : 'depth_${step.depth}';
     String? subAuthor = trajToAuthor[trajKey];
+    final String fallbackAuthor = _fallbackSubagentAuthor();
+    final Set<String> fallbackCandidates = <String>{
+      fallbackAuthor,
+      'subagent',
+      'root_agent_subagent',
+      'root_subagent',
+      '${name}_subagent',
+    };
 
-    if (subAuthor == null || subAuthor == 'subagent') {
+    if (subAuthor == null || fallbackCandidates.contains(subAuthor)) {
       if (step.type == StepType.toolCall && step.toolCalls.isNotEmpty) {
         for (final AntigravityToolCall tc in step.toolCalls) {
           final String? matched = _matchingSubagentByTool(tc.name);
@@ -601,21 +655,26 @@ class AntigravityAgent extends BaseAgent {
         }
       }
 
-      if (subAuthor == null && pendingSubagents.isNotEmpty) {
+      if ((subAuthor == null || fallbackCandidates.contains(subAuthor)) &&
+          pendingSubagents.isNotEmpty) {
         final Map<String, Object?> args = pendingSubagents.removeFirst();
         final String candidate =
-            '${args['subagent_type'] ?? args['subagent_name'] ?? args['name'] ?? 'subagent'}';
+            '${args['subagent_type'] ?? args['subagent_name'] ?? args['name'] ?? fallbackAuthor}';
         subAuthor =
             _configuredSubagentNames.isEmpty ||
                 _configuredSubagentNames.contains(candidate)
             ? candidate
-            : 'subagent';
-        trajToAuthor[trajKey] = subAuthor;
-      } else if (subAuthor == null) {
+            : fallbackAuthor;
+        if (subAuthor != fallbackAuthor) {
+          trajToAuthor[trajKey] = subAuthor;
+        }
+      } else if (subAuthor == null || fallbackCandidates.contains(subAuthor)) {
         subAuthor = _configuredSubagentNames.length == 1
             ? _configuredSubagentNames.first
-            : 'subagent';
-        trajToAuthor[trajKey] = subAuthor;
+            : fallbackAuthor;
+        if (subAuthor != fallbackAuthor) {
+          trajToAuthor[trajKey] = subAuthor;
+        }
       }
     }
 
@@ -722,6 +781,7 @@ class AntigravityAgent extends BaseAgent {
           subPendingThoughts: subPendingThoughts,
           trajToAuthor: trajToAuthor,
           pendingSubagents: active.resultBuffer.pendingSubagents,
+          seenSubagentCalls: active.resultBuffer.seenSubagentCalls,
         );
 
         for (final Event event in convertStepToEvents(
@@ -744,7 +804,8 @@ class AntigravityAgent extends BaseAgent {
           in subPendingFcs.entries) {
         final String trajKey = entry.key;
         final List<FunctionCall> pFcs = entry.value;
-        final String subAuthor = trajToAuthor[trajKey] ?? 'subagent';
+        final String subAuthor =
+            trajToAuthor[trajKey] ?? _fallbackSubagentAuthor();
         final String shortId = trajKey.length >= 8
             ? trajKey.substring(0, 8)
             : trajKey;
@@ -771,7 +832,8 @@ class AntigravityAgent extends BaseAgent {
         final String trajKey = entry.key;
         final List<Part> pThoughts = entry.value;
         if (pThoughts.isNotEmpty) {
-          final String subAuthor = trajToAuthor[trajKey] ?? 'subagent';
+          final String subAuthor =
+              trajToAuthor[trajKey] ?? _fallbackSubagentAuthor();
           final String shortId = trajKey.length >= 8
               ? trajKey.substring(0, 8)
               : trajKey;

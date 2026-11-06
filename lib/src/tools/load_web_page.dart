@@ -117,7 +117,7 @@ Future<String> loadWebPage(
     return text
         .split('\n')
         .map((String line) => line.trim())
-        .where((String line) => line.split(RegExp(r'\s+')).length > 3)
+        .where((String line) => countWords(line) > 3)
         .join('\n');
   } on TimeoutException {
     return 'Failed to fetch URL "$url": timed out after ${_formatDuration(timeout)}.';
@@ -304,4 +304,99 @@ String _extractText(String html) {
   text = text.replaceAll('&quot;', '"');
   text = text.replaceAll('&#39;', '\'');
   return text;
+}
+
+// Scripts written without spaces between words. Each of their letters counts as
+// a word when deciding whether a line is long enough to keep.
+const List<(int, int)> _unspacedScriptRanges = <(int, int)>[
+  (0x0E00, 0x0EFF), // Thai and Lao
+  (0x1000, 0x109F), // Myanmar
+  (0x1780, 0x17FF), // Khmer
+  (0x3040, 0x30FF), // Hiragana and Katakana
+  (0x3400, 0x4DBF), // CJK Unified Ideographs Extension A
+  (0x4E00, 0x9FFF), // CJK Unified Ideographs
+  (0xF900, 0xFAFF), // CJK Compatibility Ideographs
+  (0xFF66, 0xFF9F), // Halfwidth Katakana
+  (0x20000, 0x3FFFF), // Supplementary and Tertiary Ideographic Planes
+];
+
+final RegExp _unicodeLetterRegExp = RegExp(r'\p{L}', unicode: true);
+final RegExp _unicodeAlnumRegExp = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
+/// Returns whether [charOrRune] is a letter of a script written without spaces.
+bool isUnspacedLetter(String charOrRune) {
+  if (charOrRune.isEmpty) {
+    return false;
+  }
+  final int code = charOrRune.runes.first;
+  bool inRange = false;
+  for (final (int low, int high) in _unspacedScriptRanges) {
+    if (code >= low && code <= high) {
+      inRange = true;
+      break;
+    }
+  }
+  if (!inRange) {
+    return false;
+  }
+  return _unicodeLetterRegExp.hasMatch(String.fromCharCode(code));
+}
+
+/// Counts the words in a [line] of page text.
+///
+/// Words are separated by whitespace. In a script written without spaces, such
+/// as Chinese, Japanese, or Thai, each letter counts as a word, and runs of
+/// other characters around those letters count only if they hold a letter or a
+/// digit, so that a full stop such as `"。"` is not counted as a word.
+int countWords(String line) {
+  final String trimmed = line.trim();
+  if (trimmed.isEmpty) {
+    return 0;
+  }
+  final List<String> tokens = trimmed.split(RegExp(r'\s+'));
+  bool isAscii = true;
+  for (int i = 0; i < trimmed.length; i += 1) {
+    if (trimmed.codeUnitAt(i) > 0x7F) {
+      isAscii = false;
+      break;
+    }
+  }
+  if (isAscii) {
+    return tokens.length;
+  }
+
+  int count = 0;
+  for (final String token in tokens) {
+    final List<String> chars = <String>[
+      for (final int rune in token.runes) String.fromCharCode(rune),
+    ];
+    if (!chars.any(isUnspacedLetter)) {
+      count += 1;
+      continue;
+    }
+    int idx = 0;
+    while (idx < chars.length) {
+      final bool isLetter = isUnspacedLetter(chars[idx]);
+      int end = idx + 1;
+      while (end < chars.length && isUnspacedLetter(chars[end]) == isLetter) {
+        end += 1;
+      }
+      if (isLetter) {
+        count += end - idx;
+      } else {
+        bool hasAlnum = false;
+        for (int j = idx; j < end; j += 1) {
+          if (_unicodeAlnumRegExp.hasMatch(chars[j])) {
+            hasAlnum = true;
+            break;
+          }
+        }
+        if (hasAlnum) {
+          count += 1;
+        }
+      }
+      idx = end;
+    }
+  }
+  return count;
 }

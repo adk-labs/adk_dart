@@ -151,12 +151,38 @@ class EvalCaseResultMultiRunAggregator {
   }
 }
 
+bool _isCrashed(EvalCaseResult evalCaseResult) {
+  return evalCaseResult.finalEvalStatus == EvalStatus.failed &&
+      evalCaseResult.overallEvalMetricResults.isEmpty &&
+      evalCaseResult.metrics.isEmpty &&
+      !evalCaseResult.evalMetricResultPerInvocation.any(
+        (EvalMetricResultPerInvocation inv) =>
+            inv.evalMetricResults.isNotEmpty,
+      );
+}
+
 /// Computes the overall [EvalStatus] of a single [evalCaseResult] across its metrics.
 EvalStatus getRunStatus(EvalCaseResult evalCaseResult) {
+  if (_isCrashed(evalCaseResult)) {
+    return EvalStatus.notEvaluated;
+  }
+  if (evalCaseResult.finalEvalStatus == EvalStatus.failed) {
+    return EvalStatus.failed;
+  }
+  if (evalCaseResult.overallEvalMetricResults.any(
+    (EvalMetricResultSpec metricResult) =>
+        metricResult.evalStatus == EvalStatus.notEvaluated,
+  )) {
+    return EvalStatus.notEvaluated;
+  }
+  if (evalCaseResult.finalEvalStatus == EvalStatus.passed) {
+    return EvalStatus.passed;
+  }
   final List<EvalStatus> metricStatuses = <EvalStatus>[
     for (final EvalMetricResultSpec metricResult
         in evalCaseResult.overallEvalMetricResults)
-      if (metricResult.evalStatus != EvalStatus.notEvaluated)
+      if (metricResult.evalStatus != EvalStatus.notEvaluated &&
+          metricResult.evalStatus != EvalStatus.informational)
         metricResult.evalStatus,
   ];
   if (metricStatuses.isEmpty) {
@@ -168,7 +194,7 @@ EvalStatus getRunStatus(EvalCaseResult evalCaseResult) {
   return EvalStatus.failed;
 }
 
-/// Returns `true` when [multiRunConfig] configures any pass-count rule or cross-run criterion.
+/// Returns `true` when [multiRunConfig] configures any pass-count rule or gated cross-run criterion.
 bool hasPassCountRules(MultiRunConfig? multiRunConfig) {
   if (multiRunConfig == null) {
     return false;
@@ -178,8 +204,34 @@ bool hasPassCountRules(MultiRunConfig? multiRunConfig) {
             (Object rule) => rule is MultiRunCriterion,
           ) ??
           false) ||
-      (multiRunConfig.crossRunCriteria != null &&
-          multiRunConfig.crossRunCriteria!.isNotEmpty);
+      (multiRunConfig.crossRunCriteria?.any(
+            (MultiRunCriterion c) => c.threshold != null,
+          ) ??
+          false);
+}
+
+/// Validates that any `pass@k` or `pass^k` criterion has `k <= numRuns`.
+///
+/// Checked against the effective `num_runs` (after `--num_runs` CLI override),
+/// not `MultiRunConfig.numRuns`, so a config with `k: 5` works when `--num_runs 5`
+/// is passed on the command line.
+void checkPassKCriteriaAgainstNumRuns(
+  MultiRunConfig? multiRunConfig,
+  int numRuns,
+) {
+  if (multiRunConfig == null || multiRunConfig.crossRunCriteria == null) {
+    return;
+  }
+  for (int i = 0; i < multiRunConfig.crossRunCriteria!.length; i += 1) {
+    final MultiRunCriterion criterion = multiRunConfig.crossRunCriteria![i];
+    if (criterion is PassKMultiRunCriterion && criterion.k > numRuns) {
+      throw ArgumentError(
+        'multi_run_config.cross_run_criteria[$i]: k=${criterion.k} '
+        'is more than the $numRuns run(s) of each eval case. '
+        'Lower k, or raise num_runs in the eval config or with --num_runs.',
+      );
+    }
+  }
 }
 
 /// Returns the map of built-in and custom [AggregationMethod]s for [multiRunConfig].
@@ -214,11 +266,16 @@ String describeRunStatuses(List<EvalStatus> statuses, {int crashed = 0}) {
   final int passed = statuses
       .where((EvalStatus s) => s == EvalStatus.passed)
       .length;
-  final int failed =
-      statuses.where((EvalStatus s) => s == EvalStatus.failed).length - crashed;
-  final int notEval = statuses
+  final int rawFailed = statuses
+      .where((EvalStatus s) => s == EvalStatus.failed)
+      .length;
+  final int rawNotEval = statuses
       .where((EvalStatus s) => s == EvalStatus.notEvaluated)
       .length;
+  final int failed = rawFailed >= crashed ? rawFailed - crashed : rawFailed;
+  final int notEval = rawFailed < crashed && rawNotEval >= crashed
+      ? rawNotEval - crashed
+      : rawNotEval;
   final List<String> parts = <String>[];
   if (passed > 0 || (failed == 0 && notEval == 0 && crashed == 0)) {
     parts.add('$passed passed');
@@ -240,10 +297,13 @@ MethodResult _runAggregationMethod(
   List<RunResult> runs,
   double? threshold, {
   String? note,
+  bool informationalWhenNoThreshold = false,
 }) {
   final double? value = method.compute(runs);
   final EvalStatus status;
-  if (value == null) {
+  if (threshold == null && informationalWhenNoThreshold) {
+    status = EvalStatus.informational;
+  } else if (value == null) {
     status = EvalStatus.notEvaluated;
   } else if (threshold == null) {
     status = EvalStatus.informational;
@@ -413,21 +473,29 @@ List<MethodResult> _evaluateCrossRunCriteria(
   }
   final List<RunResult> caseRuns = <RunResult>[
     for (final EvalCaseResult r in perCaseResults)
-      RunResult(status: r.finalEvalStatus),
+      RunResult(status: getRunStatus(r)),
   ];
   final String runBreakdown = describeRunStatuses(
     <EvalStatus>[for (final RunResult r in caseRuns) r.status],
     crashed: countRunsFailedWithoutMetricResults(perCaseResults),
   );
-  return <MethodResult>[
-    for (final MultiRunCriterion criterion in multiRunConfig.crossRunCriteria!)
+  final List<MethodResult> results = <MethodResult>[];
+  for (final MultiRunCriterion criterion in multiRunConfig.crossRunCriteria!) {
+    AggregationMethod method = methods[criterion.method]!;
+    if (criterion is PassKMultiRunCriterion) {
+      method = method.withK(criterion.k);
+    }
+    results.add(
       _runAggregationMethod(
-        methods[criterion.method]!,
+        method,
         caseRuns,
         criterion.threshold,
         note: runBreakdown,
+        informationalWhenNoThreshold: true,
       ),
-  ];
+    );
+  }
+  return results;
 }
 
 /// Groups [evalCaseResults] by `(evalSetId, evalId)` and aggregates each case across runs.

@@ -95,6 +95,79 @@ enum SpanKind {
   }
 }
 
+/// OpenTelemetry span status code classification.
+enum StatusCode {
+  /// Default unset status.
+  unset('UNSET'),
+
+  /// Operation completed successfully.
+  ok('OK'),
+
+  /// Operation encountered an error.
+  error('ERROR');
+
+  const StatusCode(this.wireName);
+
+  /// Uppercase OpenTelemetry wire representation.
+  final String wireName;
+
+  /// Resolves a [StatusCode] from its [wireName], defaulting to [StatusCode.unset].
+  static StatusCode fromWireName(String? value) {
+    final String normalized = (value ?? '').trim().toUpperCase();
+    for (final StatusCode code in StatusCode.values) {
+      if (code.wireName == normalized) {
+        return code;
+      }
+    }
+    return StatusCode.unset;
+  }
+}
+
+/// OpenTelemetry span status consisting of a [statusCode] and optional [description].
+class SpanStatus {
+  /// Creates a span status.
+  const SpanStatus({
+    this.statusCode = StatusCode.unset,
+    this.description,
+  });
+
+  /// Default unset span status.
+  static const SpanStatus unset = SpanStatus();
+
+  /// Status code (`UNSET`, `OK`, or `ERROR`).
+  final StatusCode statusCode;
+
+  /// Optional human-readable description (typically set for [StatusCode.error]).
+  final String? description;
+
+  /// Whether this status represents the default unset state.
+  bool get isUnset =>
+      statusCode == StatusCode.unset &&
+      (description == null || description!.isEmpty);
+}
+
+/// Event recorded during a span's lifetime.
+class SpanEvent {
+  /// Creates a span event.
+  SpanEvent({
+    required this.name,
+    Map<String, Object?>? attributes,
+    this.timestampUnixNano,
+  }) : attributes = attributes ?? <String, Object?>{};
+
+  /// Event name.
+  final String name;
+
+  /// Event attributes.
+  final Map<String, Object?> attributes;
+
+  /// Event timestamp in Unix nanoseconds.
+  final int? timestampUnixNano;
+
+  /// Timestamp alias matching OpenTelemetry Python `Event.timestamp`.
+  int? get timestamp => timestampUnixNano;
+}
+
 /// Readable span model used for export and retrieval.
 class ReadableSpan {
   /// Creates a readable span.
@@ -106,7 +179,10 @@ class ReadableSpan {
     this.startTimeUnixNano,
     this.endTimeUnixNano,
     this.kind = SpanKind.internal,
-  }) : attributes = attributes ?? <String, Object?>{};
+    this.status = SpanStatus.unset,
+    List<SpanEvent>? events,
+  }) : attributes = attributes ?? <String, Object?>{},
+       events = events ?? const <SpanEvent>[];
 
   /// Span name.
   final String name;
@@ -128,6 +204,12 @@ class ReadableSpan {
 
   /// OpenTelemetry span kind.
   final SpanKind kind;
+
+  /// OpenTelemetry span status.
+  final SpanStatus status;
+
+  /// Events recorded on this span.
+  final List<SpanEvent> events;
 }
 
 /// Export result status.
@@ -180,7 +262,10 @@ class SqliteSpanExporter implements SpanExporter {
         invocation_id TEXT,
         event_id TEXT,
         attributes_json TEXT NOT NULL,
-        kind TEXT NOT NULL DEFAULT 'INTERNAL'
+        kind TEXT NOT NULL DEFAULT 'INTERNAL',
+        status_code TEXT NOT NULL DEFAULT 'UNSET',
+        status_description TEXT,
+        events_json TEXT NOT NULL DEFAULT '[]'
       )
     ''');
     final sqlite.ResultSet versionRows = _database.select(
@@ -189,19 +274,34 @@ class SqliteSpanExporter implements SpanExporter {
     final int userVersion = versionRows.isEmpty
         ? 0
         : (versionRows.first.values.first as int? ?? 0);
-    if (userVersion < 1) {
+    if (userVersion < 2) {
       final sqlite.ResultSet columns = _database.select(
         'PRAGMA table_info(spans);',
       );
-      final bool hasKindColumn = columns.any(
-        (sqlite.Row row) => '${row['name'] ?? ''}' == 'kind',
-      );
-      if (!hasKindColumn) {
+      final Set<String> existingColumns = columns
+          .map((sqlite.Row row) => '${row['name'] ?? ''}')
+          .toSet();
+      if (!existingColumns.contains('kind')) {
         _database.execute(
           "ALTER TABLE spans ADD COLUMN kind TEXT NOT NULL DEFAULT 'INTERNAL'",
         );
       }
-      _database.execute('PRAGMA user_version = 1');
+      if (!existingColumns.contains('status_code')) {
+        _database.execute(
+          "ALTER TABLE spans ADD COLUMN status_code TEXT NOT NULL DEFAULT 'UNSET'",
+        );
+      }
+      if (!existingColumns.contains('status_description')) {
+        _database.execute(
+          'ALTER TABLE spans ADD COLUMN status_description TEXT',
+        );
+      }
+      if (!existingColumns.contains('events_json')) {
+        _database.execute(
+          "ALTER TABLE spans ADD COLUMN events_json TEXT NOT NULL DEFAULT '[]'",
+        );
+      }
+      _database.execute('PRAGMA user_version = 2');
     }
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_spans_session_id ON spans(session_id)',
@@ -241,6 +341,72 @@ class SqliteSpanExporter implements SpanExporter {
     }
   }
 
+  String _serializeEvents(List<SpanEvent> events) {
+    if (events.isEmpty) {
+      return '[]';
+    }
+    try {
+      final List<Map<String, Object?>> payload = events
+          .map(
+            (SpanEvent event) => <String, Object?>{
+              'name': event.name,
+              'timestamp': event.timestampUnixNano,
+              'attributes': _normalizeJsonValue(event.attributes),
+            },
+          )
+          .toList(growable: false);
+      return jsonEncode(payload);
+    } catch (_) {
+      return '[]';
+    }
+  }
+
+  List<SpanEvent> _deserializeEvents(Object? eventsJson) {
+    if (eventsJson == null) {
+      return const <SpanEvent>[];
+    }
+    try {
+      final Object? decoded = eventsJson is String
+          ? jsonDecode(eventsJson)
+          : eventsJson;
+      if (decoded is! List) {
+        return const <SpanEvent>[];
+      }
+      final List<SpanEvent> result = <SpanEvent>[];
+      for (final Object? entry in decoded) {
+        if (entry is! Map) {
+          continue;
+        }
+        final Object? rawName = entry['name'];
+        final Object? rawTimestamp =
+            entry['timestamp'] ?? entry['timestamp_unix_nano'];
+        final Object? rawAttributes = entry['attributes'];
+        result.add(
+          SpanEvent(
+            name: '${rawName ?? ''}',
+            timestampUnixNano: rawTimestamp is num
+                ? rawTimestamp.toInt()
+                : (rawTimestamp is String ? int.tryParse(rawTimestamp) : null),
+            attributes: _deserializeAttributes(rawAttributes),
+          ),
+        );
+      }
+      return List<SpanEvent>.unmodifiable(result);
+    } catch (_) {
+      return const <SpanEvent>[];
+    }
+  }
+
+  SpanStatus _deserializeStatus(Object? rawCode, Object? rawDescription) {
+    final StatusCode code = StatusCode.fromWireName(rawCode as String?);
+    final String? description = rawDescription is String ? rawDescription : null;
+    if (code == StatusCode.unset &&
+        (description == null || description.isEmpty)) {
+      return SpanStatus.unset;
+    }
+    return SpanStatus(statusCode: code, description: description);
+  }
+
   @override
   SpanExportResult export(List<ReadableSpan> spans) {
     try {
@@ -256,9 +422,12 @@ class SqliteSpanExporter implements SpanExporter {
           invocation_id,
           event_id,
           attributes_json,
-          kind
+          kind,
+          status_code,
+          status_description,
+          events_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(span_id) DO UPDATE SET
           trace_id = excluded.trace_id,
           parent_span_id = excluded.parent_span_id,
@@ -269,7 +438,10 @@ class SqliteSpanExporter implements SpanExporter {
           invocation_id = excluded.invocation_id,
           event_id = excluded.event_id,
           attributes_json = excluded.attributes_json,
-          kind = excluded.kind
+          kind = excluded.kind,
+          status_code = excluded.status_code,
+          status_description = excluded.status_description,
+          events_json = excluded.events_json
       ''');
       for (final ReadableSpan span in spans) {
         final Map<String, Object?> attributes = Map<String, Object?>.from(
@@ -293,6 +465,9 @@ class SqliteSpanExporter implements SpanExporter {
           eventId == null ? null : '$eventId',
           _serializeAttributes(attributes),
           span.kind.wireName,
+          span.status.statusCode.wireName,
+          span.status.description,
+          _serializeEvents(span.events),
         ]);
       }
       statement.close();
@@ -344,6 +519,11 @@ class SqliteSpanExporter implements SpanExporter {
       startTimeUnixNano: row['start_time_unix_nano'] as int?,
       endTimeUnixNano: row['end_time_unix_nano'] as int?,
       kind: SpanKind.fromWireName(row['kind'] as String?),
+      status: _deserializeStatus(
+        row['status_code'],
+        row['status_description'],
+      ),
+      events: _deserializeEvents(row['events_json']),
     );
   }
 
@@ -360,7 +540,10 @@ class SqliteSpanExporter implements SpanExporter {
         end_time_unix_nano,
         session_id,
         attributes_json,
-        kind
+        kind,
+        status_code,
+        status_description,
+        events_json
       FROM spans
       WHERE trace_id IN (
         SELECT DISTINCT trace_id FROM spans WHERE session_id = ?
@@ -387,7 +570,10 @@ class SqliteSpanExporter implements SpanExporter {
         session_id,
         invocation_id,
         event_id,
-        attributes_json
+        attributes_json,
+        status_code,
+        status_description,
+        events_json
       FROM spans
       WHERE event_id = ?
       ORDER BY COALESCE(start_time_unix_nano, 0), span_id
@@ -399,6 +585,11 @@ class SqliteSpanExporter implements SpanExporter {
       return null;
     }
     final sqlite.Row row = rows.first;
+    final SpanStatus status = _deserializeStatus(
+      row['status_code'],
+      row['status_description'],
+    );
+    final List<SpanEvent> events = _deserializeEvents(row['events_json']);
     return <String, Object?>{
       'name': '${row['name'] ?? ''}',
       'span_id': '${row['span_id'] ?? ''}',
@@ -410,6 +601,21 @@ class SqliteSpanExporter implements SpanExporter {
       'event_id': row['event_id'],
       'session_id': row['session_id'],
       'invocation_id': row['invocation_id'],
+      if (!status.isUnset)
+        'status': <String, Object?>{
+          'status_code': status.statusCode.wireName,
+          if (status.description != null) 'description': status.description,
+        },
+      if (events.isNotEmpty)
+        'events': events
+            .map(
+              (SpanEvent event) => <String, Object?>{
+                'name': event.name,
+                'timestamp': event.timestampUnixNano,
+                'attributes': event.attributes,
+              },
+            )
+            .toList(growable: false),
     };
   }
 

@@ -6,6 +6,7 @@ import '../../agents/llm_agent.dart';
 import '../../code_executors/base_code_executor.dart';
 import '../../code_executors/code_execution_utils.dart';
 import '../../events/event.dart';
+import '../../events/event_actions.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../types/content.dart';
@@ -72,6 +73,38 @@ class CodeExecutionResponseProcessor extends BaseLlmResponseProcessor {
 
     final String? code = _extractFirstCodeBlock(content);
     if (code == null) {
+      final EventActions eventActions = EventActions();
+      for (final Part part in content.parts) {
+        final InlineData? inlineData = part.inlineData;
+        if (inlineData != null && inlineData.mimeType.startsWith('image/')) {
+          if (invocationContext.artifactService == null) {
+            throw StateError('Artifact service is not initialized.');
+          }
+          final String fileName =
+              (inlineData.displayName != null &&
+                  inlineData.displayName!.isNotEmpty)
+              ? inlineData.displayName!
+              : _defaultImageArtifactFileName(inlineData.mimeType);
+          final int version = await invocationContext.saveArtifact(
+            filename: fileName,
+            artifact: Part.fromInlineData(
+              mimeType: inlineData.mimeType,
+              data: inlineData.data,
+            ),
+          );
+          eventActions.artifactDelta[fileName] = version;
+          part.inlineData = null;
+          part.text = 'Saved as artifact: $fileName. ';
+        }
+      }
+      if (eventActions.artifactDelta.isNotEmpty) {
+        yield Event(
+          invocationId: invocationContext.invocationId,
+          author: invocationContext.agent.name,
+          branch: invocationContext.branch,
+          actions: eventActions,
+        );
+      }
       return;
     }
 
@@ -173,4 +206,14 @@ String _formatExecutionResult(Object result) {
     ].join('\n');
   }
   return 'Code execution result:\n$result';
+}
+
+String _defaultImageArtifactFileName(String mimeType) {
+  final DateTime now = DateTime.now();
+  String twoDigits(int n) => n.toString().padLeft(2, '0');
+  final String timestamp =
+      '${now.year}${twoDigits(now.month)}${twoDigits(now.day)}_'
+      '${twoDigits(now.hour)}${twoDigits(now.minute)}${twoDigits(now.second)}';
+  final String ext = mimeType.contains('/') ? mimeType.split('/').last : 'png';
+  return '$timestamp.$ext';
 }

@@ -184,6 +184,7 @@ class AgentEvaluator {
     Object? agentModule,
     required String evalDatasetFilePathOrDir,
     int repeatNum = numRuns,
+    int? parallelism,
     String? agentName,
     String? initialSessionFile,
     bool printDetailedResults = true,
@@ -191,6 +192,20 @@ class AgentEvaluator {
     MetricEvaluatorRegistry? metricRegistry,
     AgentModuleLoader? agentModuleLoader,
   }) async {
+    if (repeatNum < 1) {
+      throw ArgumentError.value(
+        repeatNum,
+        'repeatNum',
+        'Input should be greater than or equal to 1',
+      );
+    }
+    if (parallelism != null && parallelism < 1) {
+      throw ArgumentError.value(
+        parallelism,
+        'parallelism',
+        'Input should be greater than or equal to 1',
+      );
+    }
     final BaseAgent agentForEval = await _getAgentForEval(
       rootAgent: rootAgent,
       agentModule: agentModule,
@@ -219,6 +234,7 @@ class AgentEvaluator {
         evalSet: evalSet,
         evalConfig: evalConfig,
         repeatNum: repeatNum,
+        parallelism: parallelism,
         printDetailedResults: printDetailedResults,
         metricRegistry: metricRegistry,
       );
@@ -277,11 +293,26 @@ class AgentEvaluator {
     Map<String, double>? criteria,
     EvalConfig? evalConfig,
     int repeatNum = numRuns,
+    int? parallelism,
     String? agentName,
     bool printDetailedResults = true,
     MetricEvaluatorRegistry? metricRegistry,
     AgentModuleLoader? agentModuleLoader,
   }) async {
+    if (repeatNum < 1) {
+      throw ArgumentError.value(
+        repeatNum,
+        'repeatNum',
+        'Input should be greater than or equal to 1',
+      );
+    }
+    if (parallelism != null && parallelism < 1) {
+      throw ArgumentError.value(
+        parallelism,
+        'parallelism',
+        'Input should be greater than or equal to 1',
+      );
+    }
     final BaseAgent agentForEval = await _getAgentForEval(
       rootAgent: rootAgent,
       agentModule: agentModule,
@@ -295,6 +326,7 @@ class AgentEvaluator {
         criteria: criteria.map(
           (String key, double value) => MapEntry(key, value),
         ),
+        parallelism: evalConfig?.parallelism,
       );
     } else {
       effectiveConfig = evalConfig ?? getEvaluationCriteriaOrDefault(null);
@@ -307,7 +339,7 @@ class AgentEvaluator {
       userSimulatorConfig: effectiveConfig.userSimulatorConfig,
     );
     final MetricEvaluatorRegistry registry =
-        metricRegistry ?? defaultMetricEvaluatorRegistry;
+        metricRegistry ?? defaultMetricEvaluatorRegistry.fork();
 
     final List<EvalCaseResponses> generated =
         await EvaluationGenerator.generateResponses(
@@ -315,6 +347,7 @@ class AgentEvaluator {
           rootAgent: agentForEval,
           repeatNum: repeatNum,
           userSimulatorProvider: userSimulatorProvider,
+          parallelism: parallelism ?? effectiveConfig.parallelism,
         );
 
     final List<AgentEvalCaseSummary> summaries = <AgentEvalCaseSummary>[];

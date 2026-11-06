@@ -27,6 +27,7 @@ export 'package:adk_mcp/adk_mcp.dart'
         McpHttpStatusException,
         McpJsonRpcException,
         McpResourceContent,
+        McpServerMessage,
         StdioConnectionParams,
         StreamableHTTPConnectionParams;
 
@@ -50,6 +51,9 @@ typedef McpSamplingCallback =
 /// Callback invoked when an MCP server requests client elicitation (`elicitation/create`).
 typedef McpElicitationCallback =
     FutureOr<Object?> Function(Map<String, Object?> params);
+
+/// Callback invoked when an MCP server sends a notification or server message.
+typedef McpMessageHandler = FutureOr<void> Function(McpServerMessage message);
 
 /// Central registry and transport manager for MCP sessions.
 class McpSessionManager {
@@ -88,13 +92,17 @@ class McpSessionManager {
       <String, Map<String, Object?>>{};
   final Map<String, McpElicitationCallback> _elicitationCallbacksByUrl =
       <String, McpElicitationCallback>{};
+  final Map<String, McpMessageHandler> _messageHandlersByUrl =
+      <String, McpMessageHandler>{};
 
-  /// Configures per-connection MCP client-side sampling and elicitation support.
+  /// Configures per-connection MCP client-side sampling, elicitation, and message handler support.
   void configureConnection({
     required McpConnectionParams connectionParams,
     McpSamplingCallback? samplingCallback,
     Map<String, Object?>? samplingCapabilities,
     McpElicitationCallback? elicitationCallback,
+    McpMessageHandler? messageHandler,
+    McpMessageHandler? notificationHandler,
   }) {
     final String key = _connectionKey(connectionParams);
     if (samplingCallback == null) {
@@ -107,6 +115,13 @@ class McpSessionManager {
     } else {
       _elicitationCallbacksByUrl[key] = elicitationCallback;
     }
+    final McpMessageHandler? effectiveMessageHandler =
+        messageHandler ?? notificationHandler;
+    if (effectiveMessageHandler == null) {
+      _messageHandlersByUrl.remove(key);
+    } else {
+      _messageHandlersByUrl[key] = effectiveMessageHandler;
+    }
     if (samplingCapabilities == null || samplingCapabilities.isEmpty) {
       _samplingCapabilitiesByUrl.remove(key);
     } else {
@@ -114,6 +129,12 @@ class McpSessionManager {
         samplingCapabilities,
       );
     }
+  }
+
+  /// Dispatches a server [message] (such as a notification) to the configured
+  /// connection handler and updates internal caches.
+  static void dispatchServerMessage(McpServerMessage message) {
+    _handleServerMessage(message);
   }
 
   /// Registers local [tools] for the given MCP [connectionParams].
@@ -702,6 +723,7 @@ class McpSessionManager {
     _samplingCallbacksByUrl.clear();
     _samplingCapabilitiesByUrl.clear();
     _elicitationCallbacksByUrl.clear();
+    _messageHandlersByUrl.clear();
     _remoteClient.clear();
     unawaited(_stdioClient.close());
   }
@@ -740,13 +762,14 @@ class McpSessionManager {
     final String method = message.method.trim();
     if (method == 'notifications/tools/list_changed') {
       instance._remoteToolDescriptorsByUrl.remove(message.url);
-      return;
     }
-    if (method == 'notifications/resources/list_changed' ||
-        method == 'notifications/prompts/list_changed' ||
-        method == 'notifications/resources/updated') {
-      // No cached remote resources/prompts content exists today.
-      return;
+    final McpMessageHandler? handler =
+        instance._messageHandlersByUrl[message.url];
+    if (handler != null) {
+      final FutureOr<void> result = handler(message);
+      if (result is Future<void>) {
+        unawaited(result);
+      }
     }
   }
 
@@ -879,6 +902,9 @@ const int mcpInvalidRequestErrorCode = -32600;
 
 /// Message indicating the server discarded or terminated the session.
 const String mcpSessionTerminatedMessage = 'Session terminated';
+
+/// Operational major version of the MCP SDK supported by ADK (`< 2.0.0`).
+const int mcpSdkOperationalMajorVersion = 1;
 
 /// Checks whether an error is an MCP server reporting it no longer holds our session.
 bool isSessionTerminatedError(Object? error) {

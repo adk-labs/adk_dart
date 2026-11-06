@@ -154,11 +154,15 @@ class DatabaseSessionService extends BaseSessionService {
     Map<String, Object?>? state,
     String? sessionId,
   }) {
+    final String? normalizedSessionId =
+        (sessionId != null && sessionId.trim().isNotEmpty)
+        ? sessionId.trim()
+        : null;
     return _delegate.createSession(
       appName: appName,
       userId: userId,
       state: state,
-      sessionId: sessionId,
+      sessionId: normalizedSessionId,
     );
   }
 

@@ -181,12 +181,11 @@ String buildSkillSystemInstruction({
   if (scriptExecutionEnabled && skillsFolderPosix != null) {
     steps.add(
       'NOTE ON ENVIRONMENT EXECUTION: When using '
-      '`$p$runSkillScriptToolName` with the `command` parameter, all '
+      '`$p$runSkillScriptToolName`, all '
       'skill resources (including scripts and assets) are materialized in the '
-      'execution environment under `$skillsFolderPosix/<skill_name>/`. '
-      'Always specify file and script paths relative to or starting with '
-      '`$skillsFolderPosix/<skill_name>/` (e.g., '
-      '`$skillsFolderPosix/<skill_name>/scripts/<script_name>`).',
+      'execution environment under `$skillsFolderPosix/<skill_name>/` and '
+      'scripts execute with that skill directory as their working directory '
+      '(e.g., reference bundled assets as `assets/<asset_name>`).',
     );
   }
 
@@ -1145,25 +1144,10 @@ class _SkillScriptCodeExecutor {
     ];
 
     if (extension == 'py') {
-      final List<String> argv = <String>[normalizedScriptPath];
-      if (scriptArgs is List) {
-        argv.addAll(scriptArgs.map((Object? value) => '$value'));
-      } else {
-        final Map<String, Object?> longOptions =
-            scriptArgs as Map<String, Object?>? ?? <String, Object?>{};
-        longOptions.forEach((String key, Object? value) {
-          argv.add('--$key');
-          argv.add('$value');
-        });
-        shortOptions.forEach((String key, Object? value) {
-          argv.add('-$key');
-          argv.add('$value');
-        });
-        if (positionalArgs.isNotEmpty) {
-          argv.add('--');
-          argv.addAll(positionalArgs.map((Object? value) => '$value'));
-        }
-      }
+      final List<String> argv = <String>[
+        normalizedScriptPath,
+        ..._buildScriptCliArgs(scriptArgs, shortOptions, positionalArgs),
+      ];
       lines.addAll(<String>[
         '      sys.argv = ${jsonEncode(argv)}',
         '      try:',
@@ -1173,25 +1157,11 @@ class _SkillScriptCodeExecutor {
         '          raise e',
       ]);
     } else {
-      final List<String> command = <String>['bash', normalizedScriptPath];
-      if (scriptArgs is List) {
-        command.addAll(scriptArgs.map((Object? value) => '$value'));
-      } else {
-        final Map<String, Object?> longOptions =
-            scriptArgs as Map<String, Object?>? ?? <String, Object?>{};
-        longOptions.forEach((String key, Object? value) {
-          command.add('--$key');
-          command.add('$value');
-        });
-        shortOptions.forEach((String key, Object? value) {
-          command.add('-$key');
-          command.add('$value');
-        });
-        if (positionalArgs.isNotEmpty) {
-          command.add('--');
-          command.addAll(positionalArgs.map((Object? value) => '$value'));
-        }
-      }
+      final List<String> command = <String>[
+        'bash',
+        normalizedScriptPath,
+        ..._buildScriptCliArgs(scriptArgs, shortOptions, positionalArgs),
+      ];
       lines.addAll(<String>[
         '      try:',
         '        _r = subprocess.run(',
@@ -1260,6 +1230,63 @@ class _SkillScriptCodeExecutor {
   }
 }
 
+List<String> _buildScriptCliArgs(
+  Object? scriptArgs, [
+  Map<String, Object?>? shortOptions,
+  List<Object?>? positionalArgs,
+]) {
+  if (scriptArgs is List) {
+    return scriptArgs.map((Object? v) => '$v').toList(growable: false);
+  }
+  final List<String> cliArgs = <String>[];
+  if (scriptArgs is Map) {
+    scriptArgs.forEach((Object? k, Object? v) {
+      cliArgs.add('--$k');
+      cliArgs.add('$v');
+    });
+  }
+  if (shortOptions != null && shortOptions.isNotEmpty) {
+    shortOptions.forEach((String k, Object? v) {
+      cliArgs.add('-$k');
+      cliArgs.add('$v');
+    });
+  }
+  if (positionalArgs != null && positionalArgs.isNotEmpty) {
+    cliArgs.add('--');
+    cliArgs.addAll(positionalArgs.map((Object? v) => '$v'));
+  }
+  return cliArgs;
+}
+
+String? _scriptInterpreterForPath(String filePath) {
+  final String ext = filePath.contains('.')
+      ? filePath.split('.').last.toLowerCase()
+      : '';
+  if (ext == 'py') {
+    return 'python3';
+  }
+  if (ext == 'sh' || ext == 'bash') {
+    return 'bash';
+  }
+  return null;
+}
+
+final RegExp _safeShellTokenRegExp = RegExp(r'^[a-zA-Z0-9_@%+=:,./-]+$');
+
+String _shlexQuote(String s) {
+  if (s.isEmpty) {
+    return "''";
+  }
+  if (_safeShellTokenRegExp.hasMatch(s)) {
+    return s;
+  }
+  return "'${s.replaceAll("'", "'\"'\"'")}'";
+}
+
+String _shlexJoin(List<String> argv) {
+  return argv.map(_shlexQuote).join(' ');
+}
+
 /// Tool to execute scripts from a skill bundle.
 class RunSkillScriptTool extends BaseTool {
   /// Canonical tool name.
@@ -1287,12 +1314,6 @@ class RunSkillScriptTool extends BaseTool {
         'description':
             "The relative path to the script (e.g., 'scripts/setup.py').",
       },
-      if (_toolset.environment != null)
-        'command': <String, Object?>{
-          'type': 'string',
-          'description':
-              'Optional shell command to execute in the materialized skill environment.',
-        },
       'args': <String, Object?>{
         'anyOf': <Object?>[
           <String, Object?>{'type': 'object'},
@@ -1322,9 +1343,7 @@ class RunSkillScriptTool extends BaseTool {
       parameters: <String, Object?>{
         'type': 'object',
         'properties': properties,
-        'required': _toolset.environment != null
-            ? <String>['skill_name']
-            : <String>['skill_name', 'file_path'],
+        'required': <String>['skill_name', 'file_path'],
       },
     );
   }
@@ -1335,24 +1354,34 @@ class RunSkillScriptTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final Object? rawSkillName = args['skill_name'];
-    final Object? rawCommand = args['command'];
     final Object? rawScriptPath = args['file_path'] ?? args['script_path'];
     final Object? rawScriptArgs = args['args'];
     final Object? rawShortOptions = args['short_options'];
     final Object? rawPositionalArgs = args['positional_args'];
 
-    final List<String> errors = <String>[];
+    final List<String> missingArgs = <String>[];
     if (rawSkillName is! String || rawSkillName.trim().isEmpty) {
-      errors.add("Argument 'skill_name' is required.");
+      missingArgs.add("Argument 'skill_name' is required.");
     }
-    final bool hasCommand =
-        _toolset.environment != null &&
-        rawCommand is String &&
-        rawCommand.trim().isNotEmpty;
-    if (!hasCommand &&
-        (rawScriptPath is! String || rawScriptPath.trim().isEmpty)) {
-      errors.add("Argument 'file_path' is required.");
+    if (rawScriptPath is! String || rawScriptPath.trim().isEmpty) {
+      missingArgs.add("Argument 'file_path' is required.");
     }
+    if (missingArgs.isNotEmpty) {
+      return <String, Object?>{
+        'error': missingArgs.join('\n'),
+        'error_code': 'INVALID_ARGUMENTS',
+      };
+    }
+
+    if (args.containsKey('command')) {
+      return <String, Object?>{
+        'error':
+            "Argument 'command' is not supported; pass script arguments via 'args', 'short_options', or 'positional_args'.",
+        'error_code': 'INVALID_ARGUMENTS',
+      };
+    }
+
+    final List<String> errors = <String>[];
     if (rawScriptArgs != null &&
         rawScriptArgs is! Map &&
         rawScriptArgs is! List) {
@@ -1409,45 +1438,6 @@ class RunSkillScriptTool extends BaseTool {
       confirmedSkillName: skill.name,
     );
 
-    if (_toolset.environment != null) {
-      await _toolset._materializeSkillToEnvironment(skill);
-      final BaseEnvironment env = _toolset.environment!;
-      final String baseFolder = (_toolset.skillsFolder ?? '/skills')
-          .replaceAll(r'\', '/')
-          .replaceAll(RegExp(r'/+$'), '');
-      final String skillDir = '$baseFolder/${skill.name}';
-
-      if (hasCommand) {
-        final String command = rawCommand.trim();
-        final String cdAndCommand =
-            "mkdir -p '${skillDir.replaceAll("'", r"'\''")}' && cd '${skillDir.replaceAll("'", r"'\''")}' && $command";
-        try {
-          final EnvironmentExecutionResult execResult = await env.execute(
-            cdAndCommand,
-            timeout: Duration(seconds: _toolset._scriptTimeout),
-          );
-          final String status =
-              execResult.exitCode == 0 && !execResult.timedOut
-              ? 'success'
-              : 'error';
-          return <String, Object?>{
-            'skill_name': skill.name,
-            'command': command,
-            'stdout': execResult.stdout,
-            'stderr': execResult.stderr,
-            'exit_code': execResult.exitCode,
-            'timed_out': execResult.timedOut,
-            'status': status,
-          };
-        } catch (error) {
-          return <String, Object?>{
-            'error': "Failed to execute command '$command': $error",
-            'error_code': 'EXECUTION_ERROR',
-          };
-        }
-      }
-    }
-
     final String scriptPath = (rawScriptPath as String).trim();
     final Script? script = scriptPath.startsWith('scripts/')
         ? skill.resources.getScript(scriptPath.substring('scripts/'.length))
@@ -1465,60 +1455,54 @@ class RunSkillScriptTool extends BaseTool {
       confirmedResourceOrScriptPath: scriptPath,
     );
 
+    final Map<String, Object?> normalizedShortOptions = rawShortOptions is Map
+        ? rawShortOptions.map(
+            (Object? key, Object? value) => MapEntry('$key', value),
+          )
+        : <String, Object?>{};
+    final List<Object?> normalizedPositionalArgs = rawPositionalArgs is List
+        ? List<Object?>.from(rawPositionalArgs)
+        : <Object?>[];
+
     if (_toolset.environment != null &&
         _resolveCodeExecutor(_toolset._codeExecutor, toolContext) == null) {
-      final BaseEnvironment env = _toolset.environment!;
-      final String baseFolder = (_toolset.skillsFolder ?? '/skills')
-          .replaceAll(r'\', '/')
-          .replaceAll(RegExp(r'/+$'), '');
-      final String skillDir = '$baseFolder/${skill.name}';
-      final String normalizedScriptPath = scriptPath.startsWith('scripts/')
-          ? scriptPath
-          : 'scripts/$scriptPath';
-      final String ext = normalizedScriptPath.contains('.')
-          ? normalizedScriptPath.split('.').last.toLowerCase()
-          : '';
-      if (ext != 'py' && ext != 'sh' && ext != 'bash') {
-        final String extMsg = ext.isNotEmpty ? "'.$ext'" : '(no extension)';
+      final String? interpreter = _scriptInterpreterForPath(scriptPath);
+      if (interpreter == null) {
+        final String extMsg = scriptPath.contains('.')
+            ? "'.${scriptPath.split('.').last}'"
+            : '(no extension)';
         return <String, Object?>{
           'error':
               'Unsupported script type $extMsg. Supported types: .py, .sh, .bash',
           'error_code': 'UNSUPPORTED_SCRIPT_TYPE',
         };
       }
-      final String runner = ext == 'py' ? 'python3' : 'bash';
-      final List<String> cmdParts = <String>[runner, normalizedScriptPath];
-      if (rawScriptArgs is List) {
-        cmdParts.addAll(rawScriptArgs.map((Object? e) => '$e'));
-      } else {
-        if (rawScriptArgs is Map) {
-          rawScriptArgs.forEach((Object? k, Object? v) {
-            cmdParts.add('--$k');
-            cmdParts.add('$v');
-          });
-        }
-        if (rawShortOptions is Map) {
-          rawShortOptions.forEach((Object? k, Object? v) {
-            cmdParts.add('-$k');
-            cmdParts.add('$v');
-          });
-        }
-        if (rawPositionalArgs is List && rawPositionalArgs.isNotEmpty) {
-          cmdParts.add('--');
-          cmdParts.addAll(rawPositionalArgs.map((Object? e) => '$e'));
-        }
-      }
-      final String command = cmdParts
-          .map(
-            (String part) =>
-                part.contains(' ') ? "'${part.replaceAll("'", r"'\''")}'" : part,
-          )
-          .join(' ');
-      final String cdAndCommand =
-          "mkdir -p '${skillDir.replaceAll("'", r"'\''")}' && cd '${skillDir.replaceAll("'", r"'\''")}' && $command";
       try {
+        await _toolset._materializeSkillToEnvironment(skill);
+        final BaseEnvironment env = _toolset.environment!;
+        final String baseFolder = (_toolset.skillsFolder ?? '/skills')
+            .replaceAll(r'\', '/')
+            .replaceAll(RegExp(r'/+$'), '');
+        final String skillDir = '$baseFolder/${skill.name}';
+        final String normalizedFile = _validateSkillSubpath(
+          scriptPath,
+          subDir: 'scripts',
+          stripSubDir: true,
+        );
+        final String relativeScriptPath = 'scripts/$normalizedFile';
+        final List<String> argv = <String>[
+          interpreter,
+          relativeScriptPath,
+          ..._buildScriptCliArgs(
+            rawScriptArgs,
+            normalizedShortOptions,
+            normalizedPositionalArgs,
+          ),
+        ];
+        final String command =
+            'cd ${_shlexQuote(skillDir)} && ${_shlexJoin(argv)}';
         final EnvironmentExecutionResult execResult = await env.execute(
-          cdAndCommand,
+          command,
           timeout: Duration(seconds: _toolset._scriptTimeout),
         );
         final String status =
@@ -1570,14 +1554,8 @@ class RunSkillScriptTool extends BaseTool {
           : rawScriptArgs is List
           ? List<Object?>.from(rawScriptArgs)
           : null,
-      shortOptions: rawShortOptions is Map
-          ? rawShortOptions.map(
-              (Object? key, Object? value) => MapEntry('$key', value),
-            )
-          : <String, Object?>{},
-      positionalArgs: rawPositionalArgs is List
-          ? List<Object?>.from(rawPositionalArgs)
-          : <Object?>[],
+      shortOptions: normalizedShortOptions,
+      positionalArgs: normalizedPositionalArgs,
     );
   }
 

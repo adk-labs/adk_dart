@@ -16,6 +16,7 @@ import '../flows/llm_flows/persist_barrier.dart';
 import '../agents/llm/task/finish_task_tool.dart';
 import '../models/base_llm.dart';
 import '../models/llm_request.dart';
+import '../memory/in_memory_memory_service.dart';
 import '../plugins/base_plugin.dart';
 import '../plugins/plugin_manager.dart';
 import '../runners/runner.dart';
@@ -92,6 +93,213 @@ class _NestedCompactionPlugin extends BasePlugin {
   }
 }
 
+String _toCamelAlias(String snakeCase) {
+  final List<String> parts = snakeCase.split('_');
+  if (parts.length <= 1) {
+    return snakeCase;
+  }
+  final StringBuffer buffer = StringBuffer(parts.first);
+  for (int i = 1; i < parts.length; i += 1) {
+    final String part = parts[i];
+    if (part.isEmpty) {
+      continue;
+    }
+    buffer.write(part[0].toUpperCase());
+    if (part.length > 1) {
+      buffer.write(part.substring(1));
+    }
+  }
+  return buffer.toString();
+}
+
+String? _applyAliasGenerator(Object? generator, String fieldName) {
+  if (generator is String Function(String)) {
+    return generator(fieldName);
+  }
+  if (generator is String) {
+    final String normalized = generator.trim().toLowerCase();
+    if (normalized == 'to_camel' ||
+        normalized == 'tocamel' ||
+        normalized == 'camel' ||
+        normalized == 'camel_case') {
+      return _toCamelAlias(fieldName);
+    }
+  }
+  return null;
+}
+
+String _canonicalFieldName(String propertyKey, Map? propSchema) {
+  if (propSchema != null) {
+    final Object? explicitFieldName =
+        propSchema['field_name'] ?? propSchema['fieldName'];
+    if (explicitFieldName is String && explicitFieldName.isNotEmpty) {
+      return explicitFieldName;
+    }
+  }
+  return propertyKey;
+}
+
+List<Object> _propertyAliases(
+  String propertyKey,
+  String canonicalName,
+  Map? propSchema,
+  Object? aliasGenerator,
+) {
+  final List<Object> aliases = <Object>[propertyKey, canonicalName];
+  final String? generated = _applyAliasGenerator(aliasGenerator, canonicalName);
+  if (generated != null && generated.isNotEmpty) {
+    aliases.add(generated);
+  }
+  if (propSchema != null) {
+    for (final String key in const <String>[
+      'alias',
+      'validation_alias',
+      'validationAlias',
+      'serialization_alias',
+      'serializationAlias',
+    ]) {
+      final Object? rawAlias = propSchema[key];
+      if (rawAlias is String && rawAlias.isNotEmpty) {
+        aliases.add(rawAlias);
+      } else if (rawAlias is List && rawAlias.isNotEmpty) {
+        aliases.add(rawAlias);
+      } else if (rawAlias is Map && rawAlias['path'] is List) {
+        aliases.add(rawAlias['path'] as List);
+      }
+    }
+  }
+  return aliases;
+}
+
+(bool, Object?) _lookupPath(Map<String, Object?> source, List path) {
+  Object? current = source;
+  for (final Object? segment in path) {
+    if (segment is String) {
+      if (current is Map && current.containsKey(segment)) {
+        current = current[segment];
+      } else {
+        return (false, null);
+      }
+    } else if (segment is int) {
+      if (current is List && segment >= 0 && segment < current.length) {
+        current = current[segment];
+      } else {
+        return (false, null);
+      }
+    } else {
+      return (false, null);
+    }
+  }
+  return (true, current);
+}
+
+/// Canonicalizes [data] against [schema], resolving field aliases, applying
+/// defaults, and stripping `null` values (`exclude_none=True, by_alias=False`).
+Object? _canonicalizeInputForSchema(Object? schema, Object? data) {
+  if (schema is! Map || data == null) {
+    return data;
+  }
+  final Map<String, Object?> schemaMap = <String, Object?>{
+    for (final MapEntry<Object?, Object?> entry in schema.entries)
+      '${entry.key}': entry.value,
+  };
+  final Object? rawType = schemaMap['type'];
+  final String? type = rawType is String ? rawType.toLowerCase() : null;
+  if (type == 'array' && data is List) {
+    final Object? itemsSchema = schemaMap['items'];
+    return <Object?>[
+      for (final Object? item in data)
+        _canonicalizeInputForSchema(itemsSchema, item),
+    ];
+  }
+  if (data is! Map) {
+    return data;
+  }
+  final Map<String, Object?> inputMap = <String, Object?>{
+    for (final MapEntry<Object?, Object?> entry in data.entries)
+      '${entry.key}': entry.value,
+  };
+  final Object? rawProperties = schemaMap['properties'];
+  if (rawProperties is! Map) {
+    final Map<String, Object?> cleaned = <String, Object?>{};
+    inputMap.forEach((String k, Object? v) {
+      if (v != null) {
+        cleaned[k] = v;
+      }
+    });
+    return cleaned;
+  }
+
+  final Object? aliasGenerator =
+      schemaMap['alias_generator'] ?? schemaMap['aliasGenerator'];
+  final Map<String, Object?> result = <String, Object?>{};
+  final Set<String> consumedKeys = <String>{};
+
+  for (final MapEntry<Object?, Object?> propEntry in rawProperties.entries) {
+    final String propKey = '${propEntry.key}';
+    final Map? propSchema = propEntry.value is Map
+        ? propEntry.value as Map
+        : null;
+    final String canonicalName = _canonicalFieldName(propKey, propSchema);
+    final List<Object> candidates = _propertyAliases(
+      propKey,
+      canonicalName,
+      propSchema,
+      aliasGenerator,
+    );
+
+    bool found = false;
+    Object? rawValue;
+    for (final Object candidate in candidates) {
+      if (candidate is String && inputMap.containsKey(candidate)) {
+        found = true;
+        rawValue = inputMap[candidate];
+        consumedKeys.add(candidate);
+        break;
+      } else if (candidate is List && candidate.isNotEmpty) {
+        final (bool matched, Object? extracted) = _lookupPath(
+          inputMap,
+          candidate,
+        );
+        if (matched) {
+          found = true;
+          rawValue = extracted;
+          if (candidate.first is String) {
+            consumedKeys.add(candidate.first as String);
+          }
+          break;
+        }
+      }
+    }
+
+    if (!found && propSchema != null && propSchema.containsKey('default')) {
+      found = true;
+      rawValue = propSchema['default'];
+    }
+
+    if (found) {
+      final Object? canonicalValue = _canonicalizeInputForSchema(
+        propSchema,
+        rawValue,
+      );
+      if (canonicalValue != null) {
+        result[canonicalName] = canonicalValue;
+      }
+    }
+  }
+
+  // Preserve any extra keys not matched by schema properties if non-null.
+  inputMap.forEach((String key, Object? value) {
+    if (!consumedKeys.contains(key) &&
+        !result.containsKey(key) &&
+        value != null) {
+      result[key] = value;
+    }
+  });
+
+  return result;
+}
+
 Object? _normalizeInputSchemaForValidation(Object? schema) {
   if (schema is! Map) {
     return schema;
@@ -108,12 +316,38 @@ Object? _normalizeInputSchemaForValidation(Object? schema) {
           normalized.containsKey('required'))) {
     normalized['type'] = 'object';
   }
+  final Object? aliasGenerator =
+      normalized['alias_generator'] ?? normalized['aliasGenerator'];
+  final Map<String, String> aliasToCanonical = <String, String>{};
   final Object? properties = normalized['properties'];
   if (properties is Map) {
-    normalized['properties'] = <String, Object?>{
-      for (final MapEntry<Object?, Object?> entry in properties.entries)
-        '${entry.key}': _normalizeInputSchemaForValidation(entry.value),
-    };
+    final Map<String, Object?> normalizedProps = <String, Object?>{};
+    for (final MapEntry<Object?, Object?> entry in properties.entries) {
+      final String propKey = '${entry.key}';
+      final Map? propSchema = entry.value is Map ? entry.value as Map : null;
+      final String canonicalName = _canonicalFieldName(propKey, propSchema);
+      for (final Object alias in _propertyAliases(
+        propKey,
+        canonicalName,
+        propSchema,
+        aliasGenerator,
+      )) {
+        if (alias is String) {
+          aliasToCanonical[alias] = canonicalName;
+        }
+      }
+      normalizedProps[canonicalName] = _normalizeInputSchemaForValidation(
+        entry.value,
+      );
+    }
+    normalized['properties'] = normalizedProps;
+  }
+  final Object? required = normalized['required'];
+  if (required is List) {
+    normalized['required'] = <String>[
+      for (final Object? req in required)
+        aliasToCanonical['$req'] ?? '$req',
+    ];
   }
   return normalized;
 }
@@ -251,9 +485,13 @@ class AgentTool extends BaseTool {
     final String requestText;
     if (inputSchema != null) {
       try {
+        final Object? canonicalArgs = _canonicalizeInputForSchema(
+          inputSchema,
+          args,
+        );
         final Object? validatedInput = validateNodeData(
           _normalizeInputSchemaForValidation(inputSchema),
-          args,
+          canonicalArgs,
         );
         requestText = jsonEncode(validatedInput);
       } on InputValidationError catch (error) {
@@ -281,7 +519,7 @@ class AgentTool extends BaseTool {
       agent: agent,
       artifactService: ForwardingArtifactService(toolContext),
       sessionService: InMemorySessionService(),
-      memoryService: invocationContext.memoryService,
+      memoryService: invocationContext.memoryService ?? InMemoryMemoryService(),
       credentialService: invocationContext.credentialService,
       plugins: includePlugins
           ? invocationContext.pluginManager.plugins.toList(growable: false)
@@ -345,60 +583,62 @@ class AgentTool extends BaseTool {
         }
       }
     }
-    final session = await runner.sessionService.createSession(
-      appName: childAppName,
-      userId: invocationContext.userId,
-      state: stateSnapshot,
-    );
 
     Content? lastContent;
     String? lastErrorMessage;
     final Set<String> pendingToolIds = <String>{};
     Object? lastGroundingMetadata;
-    if (toolContext.abortSignal?.aborted == true) {
-      await runner.close();
-      return '';
-    }
-    await for (final Event event in runner.runAsync(
-      userId: session.userId,
-      sessionId: session.id,
-      newMessage: Content.userText(requestText),
-      stateDelta: tempState.isEmpty ? null : tempState,
-      runConfig: invocationContext.runConfig,
-      abortSignal: toolContext.abortSignal,
-    )) {
+    try {
+      final session = await runner.sessionService.createSession(
+        appName: childAppName,
+        userId: invocationContext.userId,
+        state: stateSnapshot,
+      );
       if (toolContext.abortSignal?.aborted == true) {
-        break;
+        return '';
       }
-      if (event.actions.stateDelta.isNotEmpty) {
-        event.actions.stateDelta.forEach((String key, Object? value) {
-          if (!key.startsWith(State.tempPrefix)) {
-            toolContext.state[key] = value;
-          }
-        });
-      }
-      if (event.errorMessage != null && event.errorMessage!.isNotEmpty) {
-        lastErrorMessage = event.errorMessage;
-      }
-      if (event.longRunningToolIds != null &&
-          event.longRunningToolIds!.isNotEmpty) {
-        pendingToolIds.addAll(event.longRunningToolIds!);
-      }
-      if (event.content != null) {
-        for (final FunctionResponse functionResponse
-            in event.getFunctionResponses()) {
-          if (functionResponse.id != null && functionResponse.id!.isNotEmpty) {
-            pendingToolIds.remove(functionResponse.id);
-          }
+      await for (final Event event in runner.runAsync(
+        userId: session.userId,
+        sessionId: session.id,
+        newMessage: Content.userText(requestText),
+        stateDelta: tempState.isEmpty ? null : tempState,
+        runConfig: invocationContext.runConfig,
+        abortSignal: toolContext.abortSignal,
+      )) {
+        if (toolContext.abortSignal?.aborted == true) {
+          break;
         }
-        lastContent = event.content;
+        if (event.actions.stateDelta.isNotEmpty) {
+          event.actions.stateDelta.forEach((String key, Object? value) {
+            if (!key.startsWith(State.tempPrefix)) {
+              toolContext.state[key] = value;
+            }
+          });
+        }
+        if (event.errorMessage != null && event.errorMessage!.isNotEmpty) {
+          lastErrorMessage = event.errorMessage;
+        }
+        if (event.longRunningToolIds != null &&
+            event.longRunningToolIds!.isNotEmpty) {
+          pendingToolIds.addAll(event.longRunningToolIds!);
+        }
+        if (event.content != null) {
+          for (final FunctionResponse functionResponse
+              in event.getFunctionResponses()) {
+            if (functionResponse.id != null &&
+                functionResponse.id!.isNotEmpty) {
+              pendingToolIds.remove(functionResponse.id);
+            }
+          }
+          lastContent = event.content;
+        }
+        if (event.groundingMetadata != null) {
+          lastGroundingMetadata = event.groundingMetadata;
+        }
       }
-      if (event.groundingMetadata != null) {
-        lastGroundingMetadata = event.groundingMetadata;
-      }
+    } finally {
+      await runner.close();
     }
-
-    await runner.close();
 
     if (propagateGroundingMetadata && lastGroundingMetadata != null) {
       toolContext.state['temp:_adk_grounding_metadata'] = lastGroundingMetadata;
@@ -446,7 +686,14 @@ class SingleTurnAgentTool extends AgentTool {
     final Object? inputSchema = _getInputSchema(agent);
     if (inputSchema != null) {
       try {
-        validateNodeData(_normalizeInputSchemaForValidation(inputSchema), args);
+        final Object? canonicalArgs = _canonicalizeInputForSchema(
+          inputSchema,
+          args,
+        );
+        validateNodeData(
+          _normalizeInputSchemaForValidation(inputSchema),
+          canonicalArgs,
+        );
       } on InputValidationError catch (error) {
         return _argValidationError(name, error);
       } on ArgumentError catch (error) {
@@ -523,7 +770,14 @@ class TaskAgentTool extends AgentTool {
     final Object? inputSchema = _getInputSchema(agent);
     if (inputSchema != null) {
       try {
-        validateNodeData(_normalizeInputSchemaForValidation(inputSchema), args);
+        final Object? canonicalArgs = _canonicalizeInputForSchema(
+          inputSchema,
+          args,
+        );
+        validateNodeData(
+          _normalizeInputSchemaForValidation(inputSchema),
+          canonicalArgs,
+        );
       } on InputValidationError catch (error) {
         return _argValidationError(name, error);
       } on ArgumentError catch (error) {
@@ -704,8 +958,9 @@ Event _mergeModifiedEvent(Event original, Event? modified) {
 }
 
 Object? _toolArgsToNodeInput(BaseAgent agent, Map<String, dynamic> args) {
-  if (_getInputSchema(agent) != null) {
-    return args;
+  final Object? inputSchema = _getInputSchema(agent);
+  if (inputSchema != null) {
+    return _canonicalizeInputForSchema(inputSchema, args);
   }
   if (args.containsKey('request')) {
     return args['request'];

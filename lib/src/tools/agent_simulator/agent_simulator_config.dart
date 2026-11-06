@@ -2,6 +2,7 @@
 library;
 
 import '../../models/llm_request.dart';
+import '../tool_args_matcher/tool_args_matcher.dart';
 
 /// Error payload returned when an injected failure is triggered.
 class InjectedError {
@@ -39,6 +40,7 @@ class InjectionConfig {
   InjectionConfig({
     this.injectionProbability = 1.0,
     this.matchArgs,
+    this.argsMatcher,
     this.injectedLatencySeconds = 0.0,
     this.randomSeed,
     this.injectedError,
@@ -64,6 +66,11 @@ class InjectionConfig {
         'and not neither.',
       );
     }
+    if (argsMatcher != null && (matchArgs == null || matchArgs!.isEmpty)) {
+      throw ArgumentError(
+        'InjectionConfig cannot have `args_matcher` without a non-empty `match_args`.',
+      );
+    }
   }
 
   /// Probability in `[0, 1]` that this injection applies.
@@ -71,6 +78,9 @@ class InjectionConfig {
 
   /// Optional argument subset that must match before injecting.
   Map<String, Object?>? matchArgs;
+
+  /// Optional matcher for comparing [matchArgs] with actual tool call arguments.
+  ToolArgsMatcher? argsMatcher;
 
   /// Artificial delay in seconds before returning simulated output.
   double injectedLatencySeconds;
@@ -90,6 +100,15 @@ class InjectionConfig {
     'match_args': matchArgs == null
         ? null
         : Map<String, Object?>.from(matchArgs!),
+    if (argsMatcher != null)
+      'args_matcher': <String, Object?>{
+        'default_matcher': argsMatcher!.defaultMatcher.toJson(),
+        'per_arg_matchers': argsMatcher!.perArgMatchers.map(
+          (String key, BaseArgMatcher value) =>
+              MapEntry<String, Object?>(key, value.toJson()),
+        ),
+        'allow_extra_args': argsMatcher!.allowExtraArgs,
+      },
     'injected_latency_seconds': injectedLatencySeconds,
     'random_seed': randomSeed,
     'injected_error': injectedError?.toJson(),
@@ -101,7 +120,7 @@ class InjectionConfig {
   /// Decodes an injection config from JSON.
   factory InjectionConfig.fromJson(Map<String, Object?> json) {
     Map<String, Object?>? matchArgs;
-    final Object? rawMatchArgs = json['match_args'];
+    final Object? rawMatchArgs = json['match_args'] ?? json['matchArgs'];
     if (rawMatchArgs is Map) {
       matchArgs = rawMatchArgs.map(
         (Object? key, Object? value) =>
@@ -109,8 +128,26 @@ class InjectionConfig {
       );
     }
 
+    ToolArgsMatcher? argsMatcher;
+    final Object? rawArgsMatcher = json['args_matcher'] ?? json['argsMatcher'];
+    if (rawArgsMatcher is ToolArgsMatcher) {
+      argsMatcher = rawArgsMatcher;
+    } else if (rawArgsMatcher is Map) {
+      argsMatcher = ToolArgsMatcher.fromJson(
+        rawArgsMatcher.map(
+          (Object? key, Object? value) =>
+              MapEntry<String, Object?>('$key', value),
+        ),
+      );
+    } else if (rawArgsMatcher != null) {
+      throw ArgumentError(
+        'InjectionConfig.args_matcher must be a ToolArgsMatcher or map.',
+      );
+    }
+
     Map<String, Object?>? injectedResponse;
-    final Object? rawInjectedResponse = json['injected_response'];
+    final Object? rawInjectedResponse =
+        json['injected_response'] ?? json['injectedResponse'];
     if (rawInjectedResponse is Map) {
       injectedResponse = rawInjectedResponse.map(
         (Object? key, Object? value) =>
@@ -119,7 +156,8 @@ class InjectionConfig {
     }
 
     InjectedError? injectedError;
-    final Object? rawInjectedError = json['injected_error'];
+    final Object? rawInjectedError =
+        json['injected_error'] ?? json['injectedError'];
     if (rawInjectedError is Map) {
       injectedError = InjectedError.fromJson(
         rawInjectedError.map(
@@ -129,14 +167,17 @@ class InjectionConfig {
       );
     }
 
-    final Object? probability = json['injection_probability'];
-    final Object? latency = json['injected_latency_seconds'];
-    final Object? randomSeed = json['random_seed'];
+    final Object? probability =
+        json['injection_probability'] ?? json['injectionProbability'];
+    final Object? latency =
+        json['injected_latency_seconds'] ?? json['injectedLatencySeconds'];
+    final Object? randomSeed = json['random_seed'] ?? json['randomSeed'];
     return InjectionConfig(
       injectionProbability: probability is num
           ? probability.toDouble()
           : double.tryParse('$probability') ?? 1.0,
       matchArgs: matchArgs,
+      argsMatcher: argsMatcher,
       injectedLatencySeconds: latency is num
           ? latency.toDouble()
           : double.tryParse('$latency') ?? 0,

@@ -133,22 +133,19 @@ abstract class BaseSessionService {
   /// Transient `temp:` keys stay visible in the live session state during the
   /// current invocation, but must not be written into stored event history.
   Event eventForPersistence(Event event) {
-    if (event.actions.stateDelta.isEmpty) {
-      return event;
+    final Event copied = event.copyWith();
+    if (copied.actions.stateDelta.isEmpty) {
+      return copied;
     }
 
-    final bool hasTempKeys = event.actions.stateDelta.keys.any(
-      (String key) => key.startsWith(State.tempPrefix),
-    );
-    if (!hasTempKeys) {
-      return event;
-    }
-
-    final Map<String, Object?> persistedDelta = Map<String, Object?>.from(
-      event.actions.stateDelta,
-    )..removeWhere((String key, Object? _) => key.startsWith(State.tempPrefix));
-    return event.copyWith(
-      actions: event.actions.copyWith(stateDelta: persistedDelta),
+    final Map<String, Object?> persistedDelta = <String, Object?>{
+      for (final MapEntry<String, Object?> entry
+          in copied.actions.stateDelta.entries)
+        if (!entry.key.startsWith(State.tempPrefix))
+          entry.key: _deepCopySessionValue(entry.value),
+    };
+    return copied.copyWith(
+      actions: copied.actions.copyWith(stateDelta: persistedDelta),
     );
   }
 
@@ -158,7 +155,27 @@ abstract class BaseSessionService {
     }
 
     event.actions.stateDelta.forEach((String key, Object? value) {
-      session.state[key] = value;
+      session.state[key] = _deepCopySessionValue(value);
     });
   }
+}
+
+Object? _deepCopySessionValue(Object? value) {
+  if (value is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': _deepCopySessionValue(entry.value),
+    };
+  }
+  if (value is List) {
+    return <Object?>[
+      for (final Object? item in value) _deepCopySessionValue(item),
+    ];
+  }
+  if (value is Set) {
+    return <Object?>{
+      for (final Object? item in value) _deepCopySessionValue(item),
+    };
+  }
+  return value;
 }

@@ -15,7 +15,15 @@ import 'llm_as_judge_utils.dart';
 /// Parsed rubric evaluation response item.
 class RubricResponse {
   /// Creates a rubric response item.
-  RubricResponse({this.propertyText, this.rationale, this.score});
+  RubricResponse({
+    this.rubricId,
+    this.propertyText,
+    this.rationale,
+    this.score,
+  });
+
+  /// Optional rubric ID referenced by the model output.
+  final String? rubricId;
 
   /// Rubric property text referenced by the model output.
   final String? propertyText;
@@ -35,24 +43,30 @@ abstract class AutoRaterResponseParser {
 
 /// Default parser for `Property/Rationale/Verdict` auto-rater output.
 class DefaultAutoRaterResponseParser implements AutoRaterResponseParser {
+  static final RegExp _idPattern = RegExp(
+    r'^\s*ID:\s*(.*)$',
+    multiLine: true,
+  );
   static final RegExp _propertyPattern = RegExp(
-    r'^Property:\s*(.*)$',
+    r'^\s*Property:\s*(.*)$',
     multiLine: true,
   );
   static final RegExp _rationalePattern = RegExp(
-    r'^Rationale:\s*(.*)$',
+    r'^\s*Rationale:\s*(.*)$',
     multiLine: true,
   );
   static final RegExp _verdictPattern = RegExp(
-    r'^Verdict:\s*(.*)$',
+    r'^\s*Verdict:\s*(.*)$',
     multiLine: true,
   );
 
   @override
   List<RubricResponse> parse(String autoRaterResponse) {
-    final List<String> properties = _propertyPattern
+    final List<RegExpMatch> propertyMatches = _propertyPattern
         .allMatches(autoRaterResponse)
-        .map((RegExpMatch match) => (match.group(1) ?? '').trim())
+        .toList();
+    final List<RegExpMatch> idMatches = _idPattern
+        .allMatches(autoRaterResponse)
         .toList();
     final List<String> rationales = _rationalePattern
         .allMatches(autoRaterResponse)
@@ -72,16 +86,27 @@ class DefaultAutoRaterResponseParser implements AutoRaterResponseParser {
         })
         .toList();
 
-    final int count = <int>[
-      properties.length,
-      rationales.length,
-      scores.length,
-    ].reduce((int a, int b) => a < b ? a : b);
+    if (!(propertyMatches.length == rationales.length &&
+        rationales.length == scores.length)) {
+      return <RubricResponse>[];
+    }
+
     final List<RubricResponse> responses = <RubricResponse>[];
-    for (int i = 0; i < count; i += 1) {
+    for (int i = 0; i < propertyMatches.length; i += 1) {
+      final RegExpMatch propertyMatch = propertyMatches[i];
+      final int previousStart = i > 0 ? propertyMatches[i - 1].start : -1;
+      String? rubricId;
+      for (final RegExpMatch idMatch in idMatches) {
+        if (previousStart < idMatch.start &&
+            idMatch.start < propertyMatch.start) {
+          final String candidate = (idMatch.group(1) ?? '').trim();
+          rubricId = candidate.isEmpty ? null : candidate;
+        }
+      }
       responses.add(
         RubricResponse(
-          propertyText: properties[i],
+          rubricId: rubricId,
+          propertyText: (propertyMatch.group(1) ?? '').trim(),
           rationale: rationales[i],
           score: scores[i],
         ),
@@ -220,8 +245,26 @@ class MeanInvocationResultsSummarizer implements InvocationResultsSummarizer {
   }
 }
 
-String _normalizeText(String text) {
-  return text.toLowerCase().trim();
+final RegExp _whitespacePattern = RegExp(r'\s+');
+final RegExp _leadingTrailingDecorationPattern = RegExp(
+  r'''^[ *_`#>\-\u2022"']+|[ *_`#>\-\u2022"']+$''',
+);
+
+String _normalizeText(Object? text) {
+  if (text is! String) {
+    return '';
+  }
+  final String replaced = text
+      .replaceAll('\u2018', "'")
+      .replaceAll('\u2019', "'")
+      .replaceAll('\u201c', '"')
+      .replaceAll('\u201d', '"')
+      .replaceAll('\u2013', '-')
+      .replaceAll('\u2014', '-');
+  final String collapsed = replaced.replaceAll(_whitespacePattern, ' ');
+  return collapsed
+      .replaceAll(_leadingTrailingDecorationPattern, '')
+      .toLowerCase();
 }
 
 /// Base evaluator for rubric-driven LLM-as-a-judge metrics.
@@ -252,9 +295,6 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
     _criterion = evalMetric.criterion is RubricsBasedCriterion
         ? evalMetric.criterion! as RubricsBasedCriterion
         : RubricsBasedCriterion.fromJson(evalMetric.criterion!.toJson());
-    if (_criterion.rubrics.isEmpty) {
-      throw ArgumentError('Rubrics are required.');
-    }
     _rubrics = _criterion.rubrics;
   }
 
@@ -302,6 +342,9 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
     }
 
     _effectiveRubricsList = rubricsById.values.toList(growable: false);
+    if (_effectiveRubricsList!.isEmpty) {
+      throw ArgumentError('Rubrics are required.');
+    }
   }
 
   /// Returns the effective rubric set for scoring.
@@ -316,6 +359,20 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
   }
 
   @override
+  AutoRaterScore convertAutoRaterResponseToScoreForInvocation(
+    LlmResponse autoRaterResponse, {
+    required Invocation actual,
+    required Invocation? expected,
+  }) {
+    createEffectiveRubricsList(actual.rubrics);
+    return super.convertAutoRaterResponseToScoreForInvocation(
+      autoRaterResponse,
+      actual: actual,
+      expected: expected,
+    );
+  }
+
+  @override
   AutoRaterScore convertAutoRaterResponseToScore(
     LlmResponse autoRaterResponse,
   ) {
@@ -324,19 +381,40 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
             .map((Part part) => part.text ?? '')
             .join('\n') ??
         '';
-    final List<RubricResponse> rubricResponses = _autoRaterResponseParser.parse(
-      responseText,
-    );
+    final List<RubricResponse> rubricResponses;
+    if (responseText.trim().isEmpty) {
+      developer.log(
+        'Auto-rater returned an empty response; no rubric verdicts could be parsed and this sample will not be scored.',
+        name: 'adk_dart.evaluation',
+      );
+      rubricResponses = <RubricResponse>[];
+    } else {
+      rubricResponses = _autoRaterResponseParser.parse(responseText);
+      if (rubricResponses.isEmpty) {
+        developer.log(
+          'Auto-rater response did not match the expected Property/Rationale/Verdict format; no rubric verdicts were parsed. Raw auto-rater response: $responseText',
+          name: 'adk_dart.evaluation',
+        );
+      }
+    }
     final List<RubricScore> rubricScores = <RubricScore>[];
 
-    final Map<String, Rubric> normalizedRubrics = <String, Rubric>{
-      for (final Rubric rubric in getEffectiveRubricsList())
-        _normalizeText(rubric.rubricContent.textProperty ?? ''): rubric,
-    };
+    final List<Rubric> effectiveRubrics = getEffectiveRubricsList();
+    final Map<String, Rubric> normalizedRubrics = <String, Rubric>{};
+    final Map<String, Rubric> rubricById = <String, Rubric>{};
+    for (final Rubric rubric in effectiveRubrics) {
+      normalizedRubrics[_normalizeText(rubric.rubricContent.textProperty)] =
+          rubric;
+      rubricById[rubric.rubricId] = rubric;
+    }
 
     for (final RubricResponse rubricResponse in rubricResponses) {
-      final String key = _normalizeText(rubricResponse.propertyText ?? '');
-      final Rubric? rubric = normalizedRubrics[key];
+      Rubric? rubric;
+      if (rubricResponse.rubricId != null &&
+          rubricResponse.rubricId!.isNotEmpty) {
+        rubric = rubricById[rubricResponse.rubricId!];
+      }
+      rubric ??= normalizedRubrics[_normalizeText(rubricResponse.propertyText)];
       if (rubric == null) {
         developer.log(
           'Rubric ${rubricResponse.propertyText} not found in the rubrics provided to the metric.',
@@ -351,6 +429,22 @@ abstract class RubricBasedEvaluator extends LlmAsJudge {
           score: rubricResponse.score,
         ),
       );
+    }
+
+    final Set<String> answeredRubricIds = <String>{
+      for (final RubricScore s in rubricScores)
+        if (s.score != null) s.rubricId,
+    };
+    final List<String> missingRubricIds = <String>[
+      for (final Rubric r in effectiveRubrics)
+        if (!answeredRubricIds.contains(r.rubricId)) r.rubricId,
+    ];
+    if (rubricResponses.isNotEmpty && missingRubricIds.isNotEmpty) {
+      developer.log(
+        'Auto-rater response has no verdict for rubric(s) $missingRubricIds; this sample will not be scored.',
+        name: 'adk_dart.evaluation',
+      );
+      return AutoRaterScore(rubricScores: <RubricScore>[]);
     }
 
     return AutoRaterScore(

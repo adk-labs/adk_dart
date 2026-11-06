@@ -184,15 +184,21 @@ class NetworkDatabaseSessionService extends BaseSessionService {
           );
         }
 
-        final Map<String, Object?> appStateBefore = await _getAppState(
-          db: db,
-          appName: appName,
-        );
-        final Map<String, Object?> userStateBefore = await _getUserState(
-          db: db,
-          appName: appName,
-          userId: userId,
-        );
+        final Map<String, Object?> appStateBefore = deltas.app.isNotEmpty
+            ? await _lockAndGetAppState(
+                db: db,
+                appName: appName,
+                updateTime: now,
+              )
+            : await _getAppState(db: db, appName: appName);
+        final Map<String, Object?> userStateBefore = deltas.user.isNotEmpty
+            ? await _lockAndGetUserState(
+                db: db,
+                appName: appName,
+                userId: userId,
+                updateTime: now,
+              )
+            : await _getUserState(db: db, appName: appName, userId: userId);
 
         final Map<String, Object?> appStateAfter = _mergeJsonState(
           appStateBefore,
@@ -229,7 +235,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
             appName,
             userId,
             resolvedSessionId,
-            jsonEncode(deltas.session),
+            jsonEncode(coerceBytesForJson(deltas.session)),
             now,
             now,
           ],
@@ -288,7 +294,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
           'WHERE app_name=? AND user_id=? AND session_id=?',
         );
         if (hasAfterTimestamp) {
-          eventQuery.write(' AND timestamp > ?');
+          eventQuery.write(' AND timestamp >= ?');
           parameters.add(config!.afterTimestamp);
         }
         eventQuery.write(
@@ -573,7 +579,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
           'SET state=?, update_time=? '
           'WHERE app_name=? AND user_id=? AND id=?',
           <Object?>[
-            jsonEncode(sessionState),
+            jsonEncode(coerceBytesForJson(sessionState)),
             event.timestamp,
             session.appName,
             session.userId,
@@ -592,7 +598,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
             session.id,
             event.invocationId,
             event.timestamp,
-            jsonEncode(encodeEventData(persistedEvent)),
+            jsonEncode(coerceBytesForJson(encodeEventData(persistedEvent))),
           ],
         );
       });
@@ -810,13 +816,14 @@ class NetworkDatabaseSessionService extends BaseSessionService {
     required Map<String, Object?> state,
     required double updateTime,
   }) async {
+    final Object? encodedState = coerceBytesForJson(state);
     if (_driver == _NetworkDriver.postgres) {
       await db.execute(
         'INSERT INTO app_states (app_name, state, update_time) '
         'VALUES (?, ?, ?) '
         'ON CONFLICT (app_name) DO UPDATE '
         'SET state=EXCLUDED.state, update_time=EXCLUDED.update_time',
-        <Object?>[appName, jsonEncode(state), updateTime],
+        <Object?>[appName, jsonEncode(encodedState), updateTime],
       );
       return;
     }
@@ -826,7 +833,7 @@ class NetworkDatabaseSessionService extends BaseSessionService {
       'VALUES (?, ?, ?) '
       'ON DUPLICATE KEY UPDATE '
       'state=VALUES(state), update_time=VALUES(update_time)',
-      <Object?>[appName, jsonEncode(state), updateTime],
+      <Object?>[appName, jsonEncode(encodedState), updateTime],
     );
   }
 
@@ -837,13 +844,14 @@ class NetworkDatabaseSessionService extends BaseSessionService {
     required Map<String, Object?> state,
     required double updateTime,
   }) async {
+    final Object? encodedState = coerceBytesForJson(state);
     if (_driver == _NetworkDriver.postgres) {
       await db.execute(
         'INSERT INTO user_states (app_name, user_id, state, update_time) '
         'VALUES (?, ?, ?, ?) '
         'ON CONFLICT (app_name, user_id) DO UPDATE '
         'SET state=EXCLUDED.state, update_time=EXCLUDED.update_time',
-        <Object?>[appName, userId, jsonEncode(state), updateTime],
+        <Object?>[appName, userId, jsonEncode(encodedState), updateTime],
       );
       return;
     }

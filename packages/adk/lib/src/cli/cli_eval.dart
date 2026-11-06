@@ -16,13 +16,19 @@ export 'package:adk_dart/src/evaluation/eval_case_result_multi_run_aggregator.da
         MethodResult,
         MultiRunCaseResult,
         aggregateEvalCaseResults,
+        checkPassKCriteriaAgainstNumRuns,
         countRunsFailedWithoutMetricResults,
         describeRunStatuses,
         getRunStatus,
         hasPassCountRules,
         loadAggregationMethods;
 export 'package:adk_dart/src/evaluation/eval_config.dart'
-    show getEvaluationCriteriaOrDefault, getEvalMetricsFromConfig;
+    show
+        MultiRunConfig,
+        MultiRunCriterion,
+        PassKMultiRunCriterion,
+        getEvaluationCriteriaOrDefault,
+        getEvalMetricsFromConfig;
 
 /// Converts [evalConfig] criteria into [EvalMetric] values used by the CLI.
 List<EvalMetric> resolveCliEvalMetricsFromConfig(

@@ -811,7 +811,7 @@ void main() {
   });
 
   group('A2aAgentExecutor cancel parity', () {
-    test('cancel emits terminal failed status without throwing', () async {
+    test('cancel emits terminal canceled status without throwing', () async {
       final A2aAgentExecutor executor = A2aAgentExecutor(runner: Object());
       final InMemoryA2aEventQueue queue = InMemoryA2aEventQueue();
 
@@ -837,7 +837,7 @@ void main() {
       expect(event.taskId, 'task-cancel');
       expect(event.contextId, 'ctx-cancel');
       expect(event.finalEvent, isTrue);
-      expect(event.status.state, A2aTaskState.failed);
+      expect(event.status.state, A2aTaskState.canceled);
       expect(event.metadata[getAdkMetadataKey('cancel_requested')], true);
       expect(
         event.status.message?.parts.single.textPart?.text,

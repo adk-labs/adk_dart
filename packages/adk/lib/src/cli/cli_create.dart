@@ -29,6 +29,81 @@ enum CreateAgentType {
   config,
 }
 
+const Set<String> _reservedAgentNameKeywords = <String>{
+  'False',
+  'None',
+  'True',
+  'and',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'case',
+  'class',
+  'const',
+  'continue',
+  'def',
+  'default',
+  'del',
+  'do',
+  'elif',
+  'else',
+  'enum',
+  'except',
+  'extends',
+  'false',
+  'final',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'new',
+  'nonlocal',
+  'not',
+  'null',
+  'or',
+  'pass',
+  'raise',
+  'rethrow',
+  'return',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+};
+
+final RegExp _identifierPattern = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
+
+/// Validates that [appName] is a valid identifier and not a reserved keyword.
+///
+/// Throws an [ArgumentError] when [appName] is not a valid identifier or is a
+/// Python/Dart reserved keyword.
+void validateAgentName(String appName) {
+  if (!_identifierPattern.hasMatch(appName)) {
+    throw ArgumentError(
+      "Invalid agent name '$appName': must be a valid identifier (letters, digits, and underscores only, not starting with a digit).",
+    );
+  }
+  if (_reservedAgentNameKeywords.contains(appName)) {
+    throw ArgumentError(
+      "Invalid agent name '$appName': cannot be a reserved keyword.",
+    );
+  }
+}
+
 /// Creates a new ADK project at [projectDir].
 ///
 /// When [appName] is omitted, the project directory name is used.
@@ -49,6 +124,10 @@ Future<int> runCreateCommand({
   String? type,
   IOSink? outSink,
 }) async {
+  final String resolvedAppName = (appName != null && appName.trim().isNotEmpty)
+      ? appName.trim()
+      : projectDirName(projectDir);
+  validateAgentName(resolvedAppName);
   await createDevProject(
     projectDirPath: projectDir,
     appName: appName,
@@ -58,9 +137,6 @@ Future<int> runCreateCommand({
     region: region,
     type: type,
   );
-  final String resolvedAppName = (appName != null && appName.trim().isNotEmpty)
-      ? appName.trim()
-      : projectDirName(projectDir);
   final IOSink sink = outSink ?? stdout;
   sink.writeln('Agent created in ${projectDir.trim()}:');
   sink.writeln('  - $resolvedAppName');

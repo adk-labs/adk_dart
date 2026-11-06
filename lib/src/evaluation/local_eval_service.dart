@@ -26,49 +26,92 @@ class LocalEvalService extends BaseEvalService {
   @override
   Stream<InferenceResult> performInference(InferenceRequest request) async* {
     final int numRuns = request.inferenceConfig.numRuns;
-    for (final EvalCase evalCase in request.evalCases) {
-      for (int rep = 0; rep < numRuns; rep += 1) {
-        final int? repetitionIndex = numRuns > 1 ? rep : null;
-        final Session session = await _runner.sessionService.createSession(
-          appName: _runner.appName,
-          userId: request.userId,
-        );
+    final int effectiveParallelism =
+        request.inferenceConfig.parallelism < 1
+            ? 1
+            : request.inferenceConfig.parallelism;
 
-        try {
-          final List<Event> events = request.inferenceConfig.useLive
-              ? await _runLiveInference(
-                  request: request,
-                  session: session,
-                  evalCase: evalCase,
-                )
-              : await _runner
-                    .runAsync(
-                      userId: request.userId,
-                      sessionId: session.id,
-                      newMessage: Content.userText(evalCase.input),
-                    )
-                    .toList();
-          final String response = _finalAgentText(events);
-          yield InferenceResult(
-            appName: request.appName,
-            evalCaseId: evalCase.evalId,
-            userInput: evalCase.input,
-            responseText: response,
-            sessionId: session.id,
-            status: InferenceStatus.success,
-            repetitionIndex: repetitionIndex,
-          );
-        } catch (error) {
-          yield InferenceResult(
-            appName: request.appName,
-            evalCaseId: evalCase.evalId,
-            userInput: evalCase.input,
-            sessionId: session.id,
-            status: InferenceStatus.failure,
-            errorMessage: '$error',
-            repetitionIndex: repetitionIndex,
-          );
+    Future<InferenceResult> runOne(EvalCase evalCase, int rep) async {
+      final int? repetitionIndex = numRuns > 1 ? rep : null;
+      final Session session = await _runner.sessionService.createSession(
+        appName: _runner.appName,
+        userId: request.userId,
+      );
+
+      try {
+        final List<Event> events = request.inferenceConfig.useLive
+            ? await _runLiveInference(
+                request: request,
+                session: session,
+                evalCase: evalCase,
+              )
+            : await _runner
+                  .runAsync(
+                    userId: request.userId,
+                    sessionId: session.id,
+                    newMessage: Content.userText(evalCase.input),
+                  )
+                  .toList();
+        final String response = _finalAgentText(events);
+        return InferenceResult(
+          appName: request.appName,
+          evalCaseId: evalCase.evalId,
+          userInput: evalCase.input,
+          responseText: response,
+          sessionId: session.id,
+          status: InferenceStatus.success,
+          repetitionIndex: repetitionIndex,
+        );
+      } catch (error) {
+        return InferenceResult(
+          appName: request.appName,
+          evalCaseId: evalCase.evalId,
+          userInput: evalCase.input,
+          sessionId: session.id,
+          status: InferenceStatus.failure,
+          errorMessage: '$error',
+          repetitionIndex: repetitionIndex,
+        );
+      }
+    }
+
+    final List<(EvalCase, int)> tasks = <(EvalCase, int)>[
+      for (final EvalCase evalCase in request.evalCases)
+        for (int rep = 0; rep < numRuns; rep += 1) (evalCase, rep),
+    ];
+
+    if (effectiveParallelism <= 1 || tasks.length <= 1) {
+      for (final (EvalCase evalCase, int rep) in tasks) {
+        yield await runOne(evalCase, rep);
+      }
+      return;
+    }
+
+    final List<InferenceResult?> results = List<InferenceResult?>.filled(
+      tasks.length,
+      null,
+    );
+    int nextIndex = 0;
+    Future<void> worker() async {
+      while (true) {
+        final int current = nextIndex;
+        if (current >= tasks.length) {
+          return;
         }
+        nextIndex += 1;
+        final (EvalCase evalCase, int rep) = tasks[current];
+        results[current] = await runOne(evalCase, rep);
+      }
+    }
+
+    final int workerCount =
+        effectiveParallelism < tasks.length ? effectiveParallelism : tasks.length;
+    await Future.wait(
+      List<Future<void>>.generate(workerCount, (_) => worker()),
+    );
+    for (final InferenceResult? result in results) {
+      if (result != null) {
+        yield result;
       }
     }
   }

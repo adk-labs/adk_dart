@@ -63,6 +63,9 @@ class McpContentBlock {
 
 /// Converts an ADK [Part] into an MCP [McpContentBlock].
 McpContentBlock? partToMcpContentBlock(Part part) {
+  if (part.thought) {
+    return null;
+  }
   if (part.text != null && part.text!.isNotEmpty) {
     return McpContentBlock.text(part.text!);
   }

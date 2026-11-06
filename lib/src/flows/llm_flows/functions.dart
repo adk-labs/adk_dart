@@ -376,6 +376,9 @@ Future<Event?> handleFunctionCallListAsync(
           _keptFunctionResponseEvents[error] = keptEvent;
         } catch (_) {}
       }
+      if (error is AdkAbortException && invocationContext.isAborted) {
+        return null;
+      }
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
@@ -757,7 +760,10 @@ Future<Event?> _runToolExecutionPipeline({
             rawFunctionName,
           );
         } else {
-          result = await tool.run(args: functionArgs, toolContext: toolContext);
+          result = await _awaitToolRunWithAbort(
+            invocationContext,
+            () => tool.run(args: functionArgs, toolContext: toolContext),
+          );
         }
         if (invocationContext.isAborted || (callState?.cancelled ?? false)) {
           _clearPendingToolInterrupts(toolContext);
@@ -805,6 +811,11 @@ Future<Event?> _runToolExecutionPipeline({
             toolContext: toolContext,
             cancelled: error is Exception ? error : Exception(error.toString()),
           );
+        }
+        if (callState == null &&
+            error is AdkAbortException &&
+            invocationContext.isAborted) {
+          return null;
         }
         rethrow;
       }
@@ -1146,16 +1157,41 @@ Part? _decodeComputerUseImagePart(
   }
 }
 
+Object? _unwrapEnums(Object? value) {
+  if (value is Enum) {
+    try {
+      final Object? enumValue = (value as dynamic).value;
+      if (enumValue != null) {
+        return _unwrapEnums(enumValue);
+      }
+    } catch (_) {
+      // Enum does not define a `.value` getter; fall back to `.name`.
+    }
+    return value.name;
+  }
+  if (value is Map) {
+    return <String, dynamic>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${_unwrapEnums(entry.key)}': _unwrapEnums(entry.value),
+    };
+  }
+  if (value is List) {
+    return value.map(_unwrapEnums).toList(growable: false);
+  }
+  return value;
+}
+
 Map<String, dynamic> _normalizeFunctionResult(Object? result) {
-  if (result is Map<String, dynamic>) {
-    return result;
+  final Object? unwrapped = _unwrapEnums(result);
+  if (unwrapped is Map<String, dynamic>) {
+    return unwrapped;
   }
 
-  if (result is Map) {
-    return Map<String, dynamic>.from(result);
+  if (unwrapped is Map) {
+    return Map<String, dynamic>.from(unwrapped);
   }
 
-  return <String, dynamic>{'result': result};
+  return <String, dynamic>{'result': unwrapped};
 }
 
 /// Merges multiple parallel function response events into one event.
@@ -1540,4 +1576,37 @@ Map<String, dynamic> _startLiveStreamingResult({
   return <String, dynamic>{
     'status': 'The function is running asynchronously and streaming results.',
   };
+}
+
+Future<Object?> _awaitToolRunWithAbort(
+  InvocationContext invocationContext,
+  FutureOr<Object?> Function() action,
+) {
+  final AdkAbortSignal signal = invocationContext.onAbortSignal;
+  if (signal.aborted || invocationContext.isAborted) {
+    return Future<Object?>.error(AdkAbortException(signal.reason));
+  }
+  final Completer<Object?> completer = Completer<Object?>();
+  void onAbort(Object? reason) {
+    if (!completer.isCompleted) {
+      completer.completeError(AdkAbortException(reason));
+    }
+  }
+
+  signal.addListener(onAbort);
+  Future<Object?>.sync(action).then(
+    (Object? value) {
+      signal.removeListener(onAbort);
+      if (!completer.isCompleted) {
+        completer.complete(value);
+      }
+    },
+    onError: (Object error, StackTrace stackTrace) {
+      signal.removeListener(onAbort);
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
+    },
+  );
+  return completer.future;
 }

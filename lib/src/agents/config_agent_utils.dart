@@ -42,6 +42,173 @@ const Set<String> _builtInAgentClasses = <String>{
   'SequentialAgent',
 };
 
+const Set<String> _blockedConfigKeys = <String>{
+  'sub_agent_promotion_safety_check',
+  'subAgentPromotionSafetyCheck',
+  'code_executor',
+  'codeExecutor',
+};
+
+const Set<String> _blockedConfigModules = <String>{
+  'builtins',
+  'ctypes',
+  'importlib',
+  'io',
+  'marshal',
+  'multiprocessing',
+  'os',
+  'pathlib',
+  'pickle',
+  'pty',
+  'runpy',
+  'shlex',
+  'shutil',
+  'signal',
+  'socket',
+  'subprocess',
+  'sys',
+  'tempfile',
+  'threading',
+  'types',
+  'webbrowser',
+  'http',
+  'urllib',
+  'xmlrpc',
+  'pdb',
+  'code',
+  'codeop',
+  'compileall',
+  'py_compile',
+  'zipimport',
+  'pkgutil',
+  'inspect',
+  'operator',
+  'functools',
+  'atexit',
+  'gc',
+  'linecache',
+  'mmap',
+  'posix',
+  'nt',
+  'pwd',
+  'grp',
+  'resource',
+  'syslog',
+  'termios',
+  'tty',
+  'fcntl',
+  'select',
+  'selectors',
+  'asyncio',
+  'concurrent',
+  'ssl',
+  'ftplib',
+  'poplib',
+  'imaplib',
+  'smtplib',
+  'telnetlib',
+  'sqlite3',
+  'dbm',
+  'shelve',
+  'tarfile',
+  'zipfile',
+  'gzip',
+  'bz2',
+  'lzma',
+  'zlib',
+  'trace',
+  'timeit',
+  'cProfile',
+  'profile',
+  'bdb',
+  'faulthandler',
+  'tracemalloc',
+  'venv',
+  'ensurepip',
+  'site',
+  'sysconfig',
+  'platform',
+  'locale',
+  'gettext',
+  'logging.config',
+  'unittest',
+  'doctest',
+  'pydoc',
+  'tkinter',
+  'turtle',
+  'idlelib',
+  'curses',
+  'msilib',
+  'winreg',
+  'winsound',
+  'msvcrt',
+  '_thread',
+  '_io',
+  '_ctypes',
+  'posixpath',
+  'ntpath',
+  'genericpath',
+  'dart:io',
+  'dart:isolate',
+  'dart:ffi',
+  'dart:mirrors',
+};
+
+void _enforceYamlKeyDenylist(Object? node, {String path = '<root>'}) {
+  if (node is Map) {
+    node.forEach((Object? rawKey, Object? value) {
+      final String key = '$rawKey';
+      final String keyPath = '$path.$key';
+      if (_blockedConfigKeys.contains(key) || key.startsWith('_')) {
+        throw ArgumentError(
+          "Configuration key '$key' at '$keyPath' is not allowed in "
+          'declarative agent configs.',
+        );
+      }
+      _enforceYamlKeyDenylist(value, path: keyPath);
+    });
+    return;
+  }
+  if (node is List) {
+    for (int i = 0; i < node.length; i += 1) {
+      _enforceYamlKeyDenylist(node[i], path: '$path[$i]');
+    }
+  }
+}
+
+void _validateSymbolReference(String name) {
+  final String trimmed = name.trim();
+  if (trimmed.isEmpty) {
+    throw ArgumentError('Invalid fully qualified name: $name');
+  }
+  final List<String> parts = trimmed.split('.');
+  final String symbolName = parts.last;
+  if (trimmed.startsWith('_') || symbolName.startsWith('_')) {
+    throw ArgumentError(
+      "Private symbol '$name' cannot be referenced from agent config.",
+    );
+  }
+  if ((trimmed.startsWith('google.adk.') ||
+          trimmed.startsWith('adk_dart.') ||
+          trimmed.startsWith('package:adk_dart/')) &&
+      parts.any((String segment) => segment.startsWith('_'))) {
+    throw ArgumentError(
+      "Private ADK module or symbol '$name' cannot be referenced from agent "
+      'config.',
+    );
+  }
+  final String topLevel = parts.first;
+  if (_blockedConfigModules.contains(trimmed) ||
+      _blockedConfigModules.contains(topLevel) ||
+      _blockedConfigModules.any(
+        (String blocked) => trimmed.startsWith('$blocked.'),
+      )) {
+    throw ArgumentError(
+      "Module or symbol '$name' is not allowed in declarative agent configs.",
+    );
+  }
+}
+
 /// Resolver bundle used while constructing agents from config.
 class AgentConfigResolvers {
   /// Creates a resolver bundle.
@@ -91,6 +258,7 @@ AgentConfig _loadConfigFromPath(String configPath) {
   if (decoded is! Map) {
     throw ArgumentError('Agent config must decode into a mapping.');
   }
+  _enforceYamlKeyDenylist(decoded);
   final Map<String, Object?> json = decoded.map(
     (Object? key, Object? value) => MapEntry('$key', value),
   );
@@ -102,6 +270,7 @@ Object? resolveFullyQualifiedName(
   String name, {
   required AgentConfigResolvers resolvers,
 }) {
+  _validateSymbolReference(name);
   final Object? value = resolvers.resolveSymbol(name);
   if (value != null) {
     return value;
@@ -248,6 +417,7 @@ BaseAgent _buildCustomAgent(
   final String configuredName = config.agentClass.trim().isEmpty
       ? 'LlmAgent'
       : config.agentClass.trim();
+  _validateSymbolReference(configuredName);
   final String shortName = configuredName.split('.').last;
   final CustomAgentFactory? factory =
       resolvers.customAgentFactories[configuredName] ??

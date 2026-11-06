@@ -515,6 +515,7 @@ class RemoteA2aAgent extends BaseAgent {
   Future<String> _fetchText(Uri uri) async {
     final HttpClient client = await _ensureHttpClient();
     final HttpClientRequest request = await client.getUrl(uri);
+    a2aVersionHeaders().forEach(request.headers.set);
     final HttpClientResponse response = await request.close().timeout(
       Duration(milliseconds: (timeout * 1000).round()),
     );

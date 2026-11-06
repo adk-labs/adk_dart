@@ -191,14 +191,17 @@ class DaytonaEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> writeFile(Object path, String content) async {
+  Future<void> writeFile(Object path, Object content) async {
+    final List<int> bytes = encodeWriteFileContent(content);
     await initialize();
     final String pathStr = path.toString();
     final http.Client client = _httpClient ?? http.Client();
     try {
       final Map<String, dynamic> payload = <String, dynamic>{
         'path': pathStr,
-        'content': content,
+        'content': content is String
+            ? content
+            : utf8.decode(bytes, allowMalformed: true),
       };
       final http.Response response = await client.post(
         Uri.parse('$_effectiveApiUrl/sandbox/$_sandboxId/file'),

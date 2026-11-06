@@ -13,6 +13,8 @@ import 'package:adk_dart/src/agents/llm_agent.dart';
 import 'package:adk_dart/src/agents/run_config.dart' show StreamingMode;
 import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/auth/credential_service/in_memory_credential_service.dart';
+import '../cli/_cli_generate_agent_card.dart';
+import '../cli/cli_create.dart' show validateAgentName;
 import '../cli/cli_deploy.dart';
 import '../cli/cli_eval.dart' as cli_eval;
 import '../cli/conformance/adk_web_server_client.dart';
@@ -76,6 +78,8 @@ Commands:
   api_server [agents_dir]
                         Starts an API server for agents.
   deploy                Deploys agent to hosted environments (cloud_run, docker, agent_engine, gke).
+  generate_agent_card <agent>
+                        Generates an A2A AgentCard JSON file from an agent definition.
   conformance           Conformance testing tools for ADK (record, test).
   migrate               ADK migration commands (session).
   telemetry             Manage telemetry settings (enable/disable/status).
@@ -107,6 +111,8 @@ Run options:
       --timeout         Execution timeout (e.g., 10s, 5m, 30)
       --in_memory       Force in-memory session, artifact, and memory storage
       --jsonl           Output events as structured JSONL lines to stdout
+      --reload_agents / --no-reload_agents
+                        Enable or disable live agent reload during interactive CLI runs
       --default_llm_model
                         Default LLM model name for agents that do not specify one
   -v, --verbose         Enable verbose (DEBUG) logging
@@ -252,6 +258,7 @@ class ParsedAdkCommand {
     this.timeout,
     this.inMemory = false,
     this.jsonl = false,
+    this.reloadAgents = false,
     this.defaultLlmModel,
     this.logLevel,
     required this.enableFeatures,
@@ -272,7 +279,6 @@ class ParsedAdkCommand {
        otelToCloud = false,
        reload = true,
        a2a = false,
-       reloadAgents = false,
        extraPlugins = const <String>[],
        triggerSources = const <String>[],
        triggerOidcAudience = null,
@@ -575,6 +581,15 @@ Future<int> runAdkCli(
     );
   }
 
+  if (args.first == 'generate_agent_card' ||
+      args.first == 'generate-agent-card') {
+    return runGenerateAgentCardCommand(
+      args.skip(1).toList(growable: false),
+      outSink: out,
+      errSink: err,
+    );
+  }
+
   if (args.first != 'test' &&
       (args.contains('-h') || args.contains('--help'))) {
     out.writeln(adkUsage);
@@ -809,6 +824,7 @@ class _ParsedEvalCliCommand {
     this.evalStorageUri,
     this.logLevel,
     this.numRuns,
+    this.parallelism,
     this.enableFeatures = const <String>[],
     this.disableFeatures = const <String>[],
   });
@@ -833,6 +849,9 @@ class _ParsedEvalCliCommand {
 
   /// Optional number of times to run each eval case.
   final int? numRuns;
+
+  /// Optional maximum number of eval cases to run in parallel.
+  final int? parallelism;
 
   /// Feature flags forced to enabled.
   final List<String> enableFeatures;
@@ -1275,6 +1294,11 @@ Future<int> _runEvalCliCommand(
   cli_eval.loadAggregationMethods(evalConfig.multiRunConfig);
   final int resolvedNumRuns =
       command.numRuns ?? evalConfig.multiRunConfig?.numRuns ?? 1;
+  cli_eval.checkPassKCriteriaAgainstNumRuns(
+    evalConfig.multiRunConfig,
+    resolvedNumRuns,
+  );
+  final int? resolvedParallelism = command.parallelism ?? evalConfig.parallelism;
 
   final List<EvalCaseResult> allResults = <EvalCaseResult>[];
   for (final _EvalTarget target in evalTargets) {
@@ -1307,6 +1331,7 @@ Future<int> _runEvalCliCommand(
         configFilePath: effectiveConfigFilePath,
         evalConfig: evalConfig,
         numRuns: resolvedNumRuns,
+        parallelism: resolvedParallelism,
       ),
     );
   }
@@ -2735,6 +2760,7 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
   String? evalStorageUri;
   String? logLevel;
   int? numRuns;
+  int? parallelism;
   bool verbose = false;
   final List<String> enableFeatures = <String>[];
   final List<String> disableFeatures = <String>[];
@@ -2776,6 +2802,29 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
         );
       }
       numRuns = parsed;
+      continue;
+    }
+    if (arg == '--parallelism') {
+      final String rawParallelism = _nextArg(args, i, '--parallelism');
+      final int? parsed = int.tryParse(rawParallelism.trim());
+      if (parsed == null || parsed < 1) {
+        throw CliUsageError(
+          "Invalid value for '--parallelism': $rawParallelism is not in the range x>=1.",
+        );
+      }
+      parallelism = parsed;
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--parallelism=')) {
+      final String rawParallelism = arg.substring('--parallelism='.length);
+      final int? parsed = int.tryParse(rawParallelism.trim());
+      if (parsed == null || parsed < 1) {
+        throw CliUsageError(
+          "Invalid value for '--parallelism': $rawParallelism is not in the range x>=1.",
+        );
+      }
+      parallelism = parsed;
       continue;
     }
     if (arg == '--eval_storage_uri') {
@@ -2845,6 +2894,7 @@ _ParsedEvalCliCommand _parseEvalCliCommand(List<String> args) {
     evalStorageUri: _emptyToNull(evalStorageUri),
     logLevel: resolvedLogLevel,
     numRuns: numRuns,
+    parallelism: parallelism,
     enableFeatures: _normalizeCsvValues(enableFeatures),
     disableFeatures: _normalizeCsvValues(disableFeatures),
   );
@@ -3178,6 +3228,7 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   String? configFilePath,
   EvalConfig? evalConfig,
   int numRuns = 1,
+  int? parallelism,
 }) async {
   final LocalEvalService evalService = LocalEvalService(
     rootAgent: rootAgent,
@@ -3185,6 +3236,8 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
   );
   final EvalConfig resolvedEvalConfig =
       evalConfig ?? cli_eval.getEvaluationCriteriaOrDefault(configFilePath);
+  final int effectiveParallelism =
+      parallelism ?? resolvedEvalConfig.parallelism ?? 4;
 
   final List<InferenceResult> inferenceResults = await evalService
       .performInference(
@@ -3195,6 +3248,7 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
           inferenceConfig: InferenceConfig(
             useLive: resolvedEvalConfig.liveModelConfig != null,
             numRuns: numRuns,
+            parallelism: effectiveParallelism,
           ),
         ),
       )
@@ -3210,7 +3264,10 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
         EvaluateRequest(
           inferenceResults: inferenceResults,
           evalCasesById: evalCasesById,
-          evaluateConfig: EvaluateConfig(evalMetrics: evalMetrics),
+          evaluateConfig: EvaluateConfig(
+            evalMetrics: evalMetrics,
+            parallelism: effectiveParallelism,
+          ),
         ),
       )
       .toList();
@@ -3992,6 +4049,7 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
   int? timeout;
   bool inMemory = false;
   bool jsonl = false;
+  bool reloadAgents = false;
   bool saveSession = false;
   bool useLocalStorage = true;
   bool explicitUseLocalStorageFlag = false;
@@ -4079,6 +4137,16 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     }
     if (arg == '--jsonl') {
       jsonl = true;
+      continue;
+    }
+    if (arg == '--reload_agents' || arg == '--reload-agents') {
+      reloadAgents = true;
+      continue;
+    }
+    if (arg == '--no-reload_agents' ||
+        arg == '--no_reload_agents' ||
+        arg == '--no-reload-agents') {
+      reloadAgents = false;
       continue;
     }
     if (arg == '--timeout') {
@@ -4278,6 +4346,7 @@ ParsedAdkCommand _parseRunCommand(List<String> args) {
     timeout: timeout,
     inMemory: inMemory,
     jsonl: jsonl,
+    reloadAgents: reloadAgents,
   );
 }
 
@@ -4898,6 +4967,11 @@ String _normalizeUrlPrefix(String raw) {
 }
 
 Future<int> _runCreateCommand(ParsedAdkCommand command, IOSink out) async {
+  final String resolvedAgentName =
+      (command.appName != null && command.appName!.trim().isNotEmpty)
+      ? command.appName!.trim()
+      : projectDirName(command.projectDir);
+  validateAgentName(resolvedAgentName);
   await createDevProject(
     projectDirPath: command.projectDir,
     appName: command.appName,
@@ -5211,31 +5285,53 @@ Future<int> _runRunCommand(
     out.writeln('Running agent $rootAgentName, type exit to exit.');
   }
 
+  StreamSubscription<FileSystemEvent>? reloadWatchSubscription;
+  if (command.reloadAgents) {
+    try {
+      final Directory watchDir = Directory(command.projectDir).absolute;
+      reloadWatchSubscription = watchDir.watch(recursive: true).listen((
+        FileSystemEvent event,
+      ) {
+        final String normalizedPath = event.path.replaceAll('\\', '/');
+        if (normalizedPath.contains('/.adk/') ||
+            normalizedPath.endsWith('/.adk')) {
+          return;
+        }
+      });
+    } on FileSystemException {
+      // FileSystemEntity.watch is not supported on all platforms/filesystems.
+    }
+  }
+
   final String? Function() readLineFunc = _resolveCliReadLine(readLine);
-  while (true) {
-    if (!command.jsonl) {
-      out.write('[user]: ');
-      await out.flush();
-    }
+  try {
+    while (true) {
+      if (!command.jsonl) {
+        out.write('[user]: ');
+        await out.flush();
+      }
 
-    final String? line = readLineFunc();
-    if (line == null) {
-      break;
-    }
-    final String input = line.trim();
-    if (input.isEmpty) {
-      continue;
-    }
-    if (input == 'exit' || input == 'quit') {
-      break;
-    }
+      final String? line = readLineFunc();
+      if (line == null) {
+        break;
+      }
+      final String input = line.trim();
+      if (input.isEmpty) {
+        continue;
+      }
+      if (input == 'exit' || input == 'quit') {
+        break;
+      }
 
-    final List<Event>? events = await sendMessageToSession(input);
-    if (events == null) {
-      await runtime.runner.close();
-      return 1;
+      final List<Event>? events = await sendMessageToSession(input);
+      if (events == null) {
+        await runtime.runner.close();
+        return 1;
+      }
+      _writeRunEvents(events, out: out, jsonl: command.jsonl, session: session);
     }
-    _writeRunEvents(events, out: out, jsonl: command.jsonl, session: session);
+  } finally {
+    await reloadWatchSubscription?.cancel();
   }
 
   if (command.saveSession) {

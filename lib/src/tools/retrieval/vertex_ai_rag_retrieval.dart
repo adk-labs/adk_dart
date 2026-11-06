@@ -5,6 +5,8 @@ import 'dart:convert';
 
 import '../../models/llm_request.dart';
 import '../../utils/model_name_utils.dart';
+import '../base_tool.dart';
+import '../tool_configs.dart';
 import '../tool_context.dart';
 import 'base_retrieval_tool.dart';
 
@@ -12,6 +14,13 @@ import 'base_retrieval_tool.dart';
 class VertexAiRagResource {
   /// Creates a Vertex AI RAG resource reference.
   VertexAiRagResource({required this.path});
+
+  /// Creates a Vertex AI RAG resource reference from a JSON map.
+  factory VertexAiRagResource.fromJson(Map<String, Object?> json) {
+    final Object? rawPath =
+        json['path'] ?? json['rag_corpus'] ?? json['ragCorpus'];
+    return VertexAiRagResource(path: '${rawPath ?? ''}');
+  }
 
   /// Resource path in Vertex AI RAG.
   final String path;
@@ -111,6 +120,46 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
   /// Optional handler for explicit tool-call query execution.
   final VertexAiRagQueryHandler? queryHandler;
   final bool Function() _modelIdCheckDisabledResolver;
+
+  /// Creates a [VertexAiRagRetrieval] tool from a [ToolArgsConfig] payload.
+  static VertexAiRagRetrieval fromConfig(
+    ToolArgsConfig config, [
+    String configAbsPath = '',
+  ]) {
+    final Map<String, Object?> kwargs = BaseTool.resolveConfigKwargs(
+      config,
+      const <String, String>{
+        'name': 'str',
+        'description': 'str',
+        'rag_corpora': 'list[str] | None',
+        'rag_resources': 'list[VertexAiRagResource] | None',
+        'similarity_top_k': 'int | None',
+        'vector_distance_threshold': 'float | None',
+      },
+      modelFactories: <String, Object? Function(Map<String, Object?>)>{
+        'VertexAiRagResource': VertexAiRagResource.fromJson,
+      },
+    );
+    final Object? rawCorpora = kwargs['rag_corpora'];
+    final Object? rawResources = kwargs['rag_resources'];
+    final Object? rawTopK = kwargs['similarity_top_k'];
+    final Object? rawThreshold = kwargs['vector_distance_threshold'];
+
+    return VertexAiRagRetrieval(
+      name: (kwargs['name'] as String?) ?? '',
+      description: (kwargs['description'] as String?) ?? '',
+      ragCorpora: rawCorpora is List
+          ? rawCorpora.map((Object? e) => '$e').toList(growable: false)
+          : null,
+      ragResources: rawResources is List
+          ? rawResources.whereType<VertexAiRagResource>().toList(growable: false)
+          : null,
+      similarityTopK: rawTopK is num ? rawTopK.toInt() : null,
+      vectorDistanceThreshold: rawThreshold is num
+          ? rawThreshold.toDouble()
+          : null,
+    );
+  }
 
   /// Injects model-side Vertex RAG retrieval for Gemini 2+ requests.
   @override

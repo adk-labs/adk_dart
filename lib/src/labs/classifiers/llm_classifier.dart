@@ -328,6 +328,9 @@ class LlmClassifier extends BaseClassifier {
 
   final BaseLlm? _explicitLlm;
 
+  @override
+  String get clientLabelKind => 'llm';
+
   /// Optional extra generation settings, such as temperature.
   ///
   /// Must not set `systemInstruction`, `responseSchema`, or
@@ -377,56 +380,58 @@ class LlmClassifier extends BaseClassifier {
   Future<ClassifierResponse> classify({
     required Object input,
     required Map<String, ClassifierQuestion> questions,
-  }) async {
-    if (questions.isEmpty) {
-      throw ArgumentError.value(
-        questions,
-        'questions',
-        'classify() needs at least one question.',
+  }) {
+    return runWithClientLabelContext(() async {
+      if (questions.isEmpty) {
+        throw ArgumentError.value(
+          questions,
+          'questions',
+          'classify() needs at least one question.',
+        );
+      }
+      final BaseLlm resolvedLlm = _getLlm();
+      final LlmRequest llmRequest = _buildRequest(input, questions);
+
+      LlmResponse? lastResponse;
+      await for (final LlmResponse response in resolvedLlm.generateContent(
+        llmRequest,
+        stream: false,
+      )) {
+        lastResponse = response;
+      }
+      if (lastResponse == null) {
+        throw StateError('Model ${resolvedLlm.model} returned no response.');
+      }
+
+      final String rawText = _responseText(lastResponse);
+      final String cleanedText = _stripMarkdownFences(rawText);
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(cleanedText);
+      } on FormatException catch (error) {
+        throw FormatException(
+          'Model ${resolvedLlm.model} did not return valid JSON: '
+          '${error.message}',
+          rawText,
+        );
+      }
+      if (decoded is! Map) {
+        throw FormatException(
+          'Model ${resolvedLlm.model} did not return a JSON object.',
+          rawText,
+        );
+      }
+
+      final Map<String, ClassifierAnswer> answers = <String, ClassifierAnswer>{
+        for (final MapEntry<String, ClassifierQuestion> entry
+            in questions.entries)
+          entry.key: _toAnswer(entry.key, entry.value, decoded[entry.key]),
+      };
+
+      return ClassifierResponse(
+        answers: answers,
+        modelVersion: lastResponse.modelVersion ?? resolvedLlm.model,
       );
-    }
-    final BaseLlm resolvedLlm = _getLlm();
-    final LlmRequest llmRequest = _buildRequest(input, questions);
-
-    LlmResponse? lastResponse;
-    await for (final LlmResponse response in resolvedLlm.generateContent(
-      llmRequest,
-      stream: false,
-    )) {
-      lastResponse = response;
-    }
-    if (lastResponse == null) {
-      throw StateError('Model ${resolvedLlm.model} returned no response.');
-    }
-
-    final String rawText = _responseText(lastResponse);
-    final String cleanedText = _stripMarkdownFences(rawText);
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(cleanedText);
-    } on FormatException catch (error) {
-      throw FormatException(
-        'Model ${resolvedLlm.model} did not return valid JSON: '
-        '${error.message}',
-        rawText,
-      );
-    }
-    if (decoded is! Map) {
-      throw FormatException(
-        'Model ${resolvedLlm.model} did not return a JSON object.',
-        rawText,
-      );
-    }
-
-    final Map<String, ClassifierAnswer> answers = <String, ClassifierAnswer>{
-      for (final MapEntry<String, ClassifierQuestion> entry
-          in questions.entries)
-        entry.key: _toAnswer(entry.key, entry.value, decoded[entry.key]),
-    };
-
-    return ClassifierResponse(
-      answers: answers,
-      modelVersion: lastResponse.modelVersion ?? resolvedLlm.model,
-    );
+    });
   }
 }

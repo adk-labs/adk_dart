@@ -4,6 +4,11 @@ library;
 import 'dart:io';
 
 import '../../version.dart';
+import '../cli_deploy.dart'
+    show
+        buildExtraPackagesSetup,
+        stageExtraPackages,
+        validateExtraPackages;
 import '_base_deployer.dart';
 import '_dockerfile_template.dart';
 
@@ -108,6 +113,7 @@ class DockerDeployer extends Deployer {
     bool useLocalStorage = true,
     String? origins,
     List<String>? extraGcloudArgs,
+    List<String>? extraPackages,
     bool buildImage = false,
   }) async {
     final Directory srcDir = Directory(agentFolder);
@@ -117,6 +123,11 @@ class DockerDeployer extends Deployer {
         'agentFolder',
         'Agent folder does not exist.',
       );
+    }
+
+    final List<String> resolvedExtraPackages = extraPackages ?? const <String>[];
+    if (resolvedExtraPackages.isNotEmpty) {
+      validateExtraPackages(resolvedExtraPackages);
     }
 
     final String effectiveAppName = validateAppName(
@@ -135,6 +146,19 @@ class DockerDeployer extends Deployer {
     );
     destAgentDir.createSync(recursive: true);
     _copyDirectorySync(srcDir, destAgentDir);
+
+    String extraPackagesSetup = '';
+    if (resolvedExtraPackages.isNotEmpty) {
+      final ({List<String> plainPackages, List<String> installablePackages})
+      staged = stageExtraPackages(
+        targetTempDir: targetTempDir,
+        extraPackages: resolvedExtraPackages,
+      );
+      extraPackagesSetup = buildExtraPackagesSetup(
+        plainPackages: staged.plainPackages,
+        installablePackages: staged.installablePackages,
+      );
+    }
 
     final bool hasRequirementsTxt = File(
       '${destAgentDir.path}${sep}requirements.txt',
@@ -169,6 +193,7 @@ class DockerDeployer extends Deployer {
       adkVersion: adkVersion ?? adkPackageVersion,
       gcpEnvVars: gcpEnvVars,
       hasRequirementsTxt: hasRequirementsTxt,
+      extraPackagesSetup: extraPackagesSetup,
     );
 
     File('${targetTempDir.path}${sep}Dockerfile').writeAsStringSync(

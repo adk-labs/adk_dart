@@ -9,6 +9,46 @@ import 'gemini_rest_api_client.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+List<Map<String, Object?>> _functionResponseMediaContents(
+  FunctionResponse functionResponse,
+) {
+  final List<Part>? responseParts = functionResponse.parts;
+  if (responseParts == null || responseParts.isEmpty) {
+    return const <Map<String, Object?>>[];
+  }
+  final List<Map<String, Object?>> mediaContents = <Map<String, Object?>>[];
+  for (final Part responsePart in responseParts) {
+    final InlineData? inlineData = responsePart.inlineData;
+    final FileData? fileData = responsePart.fileData;
+    if (inlineData != null) {
+      if (inlineData.data.isEmpty || inlineData.mimeType.isEmpty) {
+        _logWarning(
+          'Skipping function_response inline_data part without data or mime_type',
+        );
+        continue;
+      }
+      mediaContents.add(<String, Object?>{
+        'type': _contentTypeFromMimeType(inlineData.mimeType),
+        'mime_type': inlineData.mimeType,
+        'data': base64Encode(inlineData.data),
+      });
+    } else if (fileData != null) {
+      if (fileData.fileUri.isEmpty || (fileData.mimeType ?? '').isEmpty) {
+        _logWarning(
+          'Skipping function_response file_data part without file_uri or mime_type',
+        );
+        continue;
+      }
+      mediaContents.add(<String, Object?>{
+        'type': _contentTypeFromMimeType(fileData.mimeType),
+        'uri': fileData.fileUri,
+        'mime_type': fileData.mimeType,
+      });
+    }
+  }
+  return mediaContents;
+}
+
 /// Converts one [Part] into interactions API content format.
 Map<String, Object?>? convertPartToInteractionContent(Part part) {
   if (part.text != null) {
@@ -25,15 +65,33 @@ Map<String, Object?>? convertPartToInteractionContent(Part part) {
     };
   }
   if (part.functionResponse != null) {
-    Object result = part.functionResponse!.response;
+    final Object rawResponse = part.functionResponse!.response;
+    final bool isError =
+        rawResponse is Map &&
+        (rawResponse.containsKey('error') ||
+            rawResponse['isError'] == true ||
+            rawResponse['is_error'] == true);
+    Object result = rawResponse;
     if (result is! Map && result is! String && result is! List) {
       result = '$result';
+    }
+    final List<Map<String, Object?>> mediaContents =
+        _functionResponseMediaContents(part.functionResponse!);
+    if (mediaContents.isNotEmpty) {
+      final String textResult = result is Map || result is List
+          ? jsonEncode(result)
+          : '$result';
+      result = <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': textResult},
+        ...mediaContents,
+      ];
     }
     return <String, Object?>{
       'type': 'function_result',
       'name': part.functionResponse!.name,
       'call_id': part.functionResponse!.id ?? '',
       'result': result,
+      'is_error': isError,
     };
   }
   if (part.inlineData != null) {
@@ -242,27 +300,60 @@ Map<String, Object?> buildGenerationConfig(
   }
 
   final Object? thinkingConfig = config.thinkingConfig;
-  if (thinkingConfig is Map) {
-    final Object? thinkingLevel =
-        thinkingConfig['thinking_level'] ?? thinkingConfig['thinkingLevel'];
-    if (thinkingLevel != null) {
-      generationConfig['thinking_level'] = thinkingLevel;
-    }
-    final Object? thinkingSummaries =
-        thinkingConfig['thinking_summaries'] ??
-        thinkingConfig['thinkingSummaries'];
-    if (thinkingSummaries != null) {
-      generationConfig['thinking_summaries'] = thinkingSummaries;
-    } else if (thinkingConfig['include_thoughts'] != null ||
-        thinkingConfig['includeThoughts'] != null) {
-      final Object? includeThoughts =
+  if (thinkingConfig != null) {
+    Object? rawThinkingLevel;
+    Object? rawThinkingSummaries;
+    Object? rawIncludeThoughts;
+    if (thinkingConfig is Map) {
+      rawThinkingLevel =
+          thinkingConfig['thinking_level'] ?? thinkingConfig['thinkingLevel'];
+      rawThinkingSummaries =
+          thinkingConfig['thinking_summaries'] ??
+          thinkingConfig['thinkingSummaries'];
+      rawIncludeThoughts =
           thinkingConfig['include_thoughts'] ??
           thinkingConfig['includeThoughts'];
-      if (includeThoughts is bool) {
-        generationConfig['thinking_summaries'] = includeThoughts
-            ? 'auto'
-            : 'none';
+    } else {
+      final dynamic dyn = thinkingConfig;
+      try {
+        rawThinkingLevel = dyn.thinkingLevel;
+      } catch (_) {
+        try {
+          rawThinkingLevel = dyn.thinking_level;
+        } catch (_) {}
       }
+      try {
+        rawThinkingSummaries = dyn.thinkingSummaries;
+      } catch (_) {
+        try {
+          rawThinkingSummaries = dyn.thinking_summaries;
+        } catch (_) {}
+      }
+      try {
+        rawIncludeThoughts = dyn.includeThoughts;
+      } catch (_) {
+        try {
+          rawIncludeThoughts = dyn.include_thoughts;
+        } catch (_) {}
+      }
+    }
+
+    if (rawThinkingLevel != null) {
+      final String levelStr = rawThinkingLevel is Enum
+          ? rawThinkingLevel.name
+          : '$rawThinkingLevel'.split('.').last.trim();
+      if (levelStr.isNotEmpty &&
+          levelStr.toUpperCase() != 'THINKING_LEVEL_UNSPECIFIED' &&
+          levelStr.toLowerCase() != 'unspecified') {
+        generationConfig['thinking_level'] = levelStr.toLowerCase();
+      }
+    }
+    if (rawThinkingSummaries != null) {
+      generationConfig['thinking_summaries'] = rawThinkingSummaries;
+    } else if (rawIncludeThoughts is bool) {
+      generationConfig['thinking_summaries'] = rawIncludeThoughts
+          ? 'auto'
+          : 'none';
     }
   }
 
@@ -405,6 +496,39 @@ Map<String, Object?>? _buildUsageMetadata(Map<String, Object?>? usage) {
   };
 }
 
+(String, String) _interactionErrorCodeAndMessage(
+  Map<String, Object?> interaction,
+) {
+  final List<Object?> errors = _asList(interaction['errors']);
+  if (errors.isNotEmpty) {
+    final List<String> codes = <String>[];
+    final List<String> messages = <String>[];
+    for (final Object? err in errors) {
+      final Map<String, Object?> errMap = _asMap(err);
+      final String? code = _stringValue(errMap['code']);
+      if (code != null && code.isNotEmpty) {
+        codes.add(code);
+      }
+      final String? msg = _stringValue(errMap['message']);
+      if (msg != null && msg.isNotEmpty) {
+        messages.add(msg);
+      }
+    }
+    return (
+      codes.isNotEmpty ? codes.first : 'UNKNOWN_ERROR',
+      messages.isNotEmpty ? messages.join('; ') : 'Unknown error',
+    );
+  }
+  final Map<String, Object?> error = _asMap(interaction['error']);
+  if (error.isNotEmpty) {
+    return (
+      _stringValue(error['code']) ?? 'UNKNOWN_ERROR',
+      _stringValue(error['message']) ?? 'Unknown error',
+    );
+  }
+  return ('UNKNOWN_ERROR', 'Unknown error');
+}
+
 /// Converts a full interactions API object into an [LlmResponse].
 LlmResponse convertInteractionToLlmResponse(
   Map<String, Object?> interaction, {
@@ -419,11 +543,12 @@ LlmResponse convertInteractionToLlmResponse(
       _stringValue(interaction['model']) ?? fallbackModelVersion;
 
   if (status == 'failed') {
-    final Map<String, Object?> error = _asMap(interaction['error']);
+    final (String errorCode, String errorMessage) =
+        _interactionErrorCodeAndMessage(interaction);
     return LlmResponse(
       modelVersion: modelVersion,
-      errorCode: _stringValue(error['code']) ?? 'UNKNOWN_ERROR',
-      errorMessage: _stringValue(error['message']) ?? 'Unknown error.',
+      errorCode: errorCode,
+      errorMessage: errorMessage,
       interactionId: interactionId,
       turnComplete: true,
     );
@@ -464,6 +589,34 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
 
   if (outputType == 'text') {
     return Part.text(_stringValue(output['text']) ?? '');
+  }
+  if (outputType == 'thought') {
+    final List<int>? thoughtSignature = _decodeThoughtSignature(
+      output['signature'] ?? output['thought_signature'],
+    );
+    if (thoughtSignature != null && thoughtSignature.isNotEmpty) {
+      return Part(thought: true, thoughtSignature: thoughtSignature);
+    }
+    final Object? summaryRaw = output['summary'];
+    if (summaryRaw is List) {
+      final List<String> summaryTexts = <String>[];
+      for (final Object? item in summaryRaw) {
+        if (item is Map) {
+          final String? text = _stringValue(item['text']);
+          if (text != null && text.isNotEmpty) {
+            summaryTexts.add(text);
+          }
+        } else if (item is String && item.isNotEmpty) {
+          summaryTexts.add(item);
+        }
+      }
+      if (summaryTexts.isNotEmpty) {
+        return Part(text: summaryTexts.join(), thought: true);
+      }
+    } else if (summaryRaw is String && summaryRaw.isNotEmpty) {
+      return Part(text: summaryRaw, thought: true);
+    }
+    return null;
   }
   if (outputType == 'function_call') {
     final String? name = _stringValue(output['name']);
@@ -705,6 +858,33 @@ LlmResponse? convertInteractionEventToLlmResponse(
         interactionId: interactionId,
       );
     }
+    if (deltaType == 'thought_summary') {
+      final Object? contentObj = delta['content'];
+      final String text = contentObj is Map
+          ? (_stringValue(contentObj['text']) ?? '')
+          : (_stringValue(delta['text']) ?? _stringValue(contentObj) ?? '');
+      if (text.isEmpty) {
+        return null;
+      }
+      final Part part = Part(text: text, thought: true);
+      targetParts.add(part.copyWith());
+      return LlmResponse(
+        modelVersion: fallbackModelVersion,
+        content: Content(role: 'model', parts: <Part>[part]),
+        partial: true,
+        turnComplete: false,
+        interactionId: interactionId,
+      );
+    }
+    if (deltaType == 'thought_signature') {
+      final List<int>? thoughtSignature = _decodeThoughtSignature(
+        delta['signature'] ?? delta['thought_signature'],
+      );
+      if (thoughtSignature != null && thoughtSignature.isNotEmpty) {
+        targetParts.add(Part(thought: true, thoughtSignature: thoughtSignature));
+      }
+      return null;
+    }
     return null;
   }
 
@@ -774,6 +954,33 @@ LlmResponse? convertInteractionEventToLlmResponse(
         turnComplete: false,
         interactionId: interactionId,
       );
+    }
+    if (deltaType == 'thought_summary') {
+      final Object? contentObj = delta['content'];
+      final String text = contentObj is Map
+          ? (_stringValue(contentObj['text']) ?? '')
+          : (_stringValue(delta['text']) ?? _stringValue(contentObj) ?? '');
+      if (text.isEmpty) {
+        return null;
+      }
+      final Part part = Part(text: text, thought: true);
+      targetParts.add(part.copyWith());
+      return LlmResponse(
+        modelVersion: fallbackModelVersion,
+        content: Content(role: 'model', parts: <Part>[part]),
+        partial: true,
+        turnComplete: false,
+        interactionId: interactionId,
+      );
+    }
+    if (deltaType == 'thought_signature') {
+      final List<int>? thoughtSignature = _decodeThoughtSignature(
+        delta['signature'] ?? delta['thought_signature'],
+      );
+      if (thoughtSignature != null && thoughtSignature.isNotEmpty) {
+        targetParts.add(Part(thought: true, thoughtSignature: thoughtSignature));
+      }
+      return null;
     }
     if (deltaType == 'function_call') {
       final Part? part = convertInteractionOutputToPart(delta);
@@ -856,11 +1063,12 @@ LlmResponse? convertInteractionEventToLlmResponse(
       );
     }
     if (status == 'failed') {
-      final Map<String, Object?> error = _asMap(event['error']);
+      final (String errorCode, String errorMessage) =
+          _interactionErrorCodeAndMessage(event);
       return LlmResponse(
         modelVersion: fallbackModelVersion,
-        errorCode: _stringValue(error['code']) ?? 'UNKNOWN_ERROR',
-        errorMessage: _stringValue(error['message']) ?? 'Unknown error.',
+        errorCode: errorCode,
+        errorMessage: errorMessage,
         turnComplete: true,
         interactionId: interactionId,
       );

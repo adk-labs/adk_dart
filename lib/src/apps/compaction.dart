@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
 import '../agents/llm_agent.dart';
 import '../events/event.dart';
@@ -231,7 +233,11 @@ Future<bool> runCompactionForTokenThresholdConfig({
   String? agentName,
   String? currentBranch,
   String? isolationScope,
+  AdkAbortSignal? abortSignal,
 }) async {
+  if (abortSignal?.aborted == true) {
+    return false;
+  }
   if (!hasTokenThresholdConfig(config) || config == null) {
     return false;
   }
@@ -323,8 +329,9 @@ Future<bool> runCompactionForTokenThresholdConfig({
     trigger: 'token_threshold',
     author: resolvedAgentName,
     branch: currentBranch,
+    abortSignal: abortSignal,
   );
-  if (compactionEvent == null) {
+  if (compactionEvent == null || abortSignal?.aborted == true) {
     return false;
   }
   compactionEvent.isolationScope = isolationScope;
@@ -343,6 +350,7 @@ Stream<Event> runCompactionForSlidingWindow({
   required Session session,
   required BaseSessionService sessionService,
   bool skipTokenCompaction = false,
+  AdkAbortSignal? abortSignal,
 }) {
   return streamCompactionForSlidingWindowConfig(
     config: app.eventsCompactionConfig,
@@ -350,6 +358,7 @@ Stream<Event> runCompactionForSlidingWindow({
     sessionService: sessionService,
     agent: app.rootAgent,
     skipTokenCompaction: skipTokenCompaction,
+    abortSignal: abortSignal,
   );
 }
 
@@ -364,8 +373,9 @@ Stream<Event> streamCompactionForSlidingWindowConfig({
   String? currentBranch,
   bool skipTokenCompaction = false,
   String? isolationScope,
+  AdkAbortSignal? abortSignal,
 }) async* {
-  if (config == null) {
+  if (config == null || abortSignal?.aborted == true) {
     return;
   }
   final String resolvedAgentName = agentName ?? agent?.name ?? 'agent';
@@ -379,8 +389,9 @@ Stream<Event> streamCompactionForSlidingWindowConfig({
       agentName: agentName,
       currentBranch: currentBranch,
       isolationScope: isolationScope,
+      abortSignal: abortSignal,
     );
-    if (tokenCompacted) {
+    if (tokenCompacted || abortSignal?.aborted == true) {
       return;
     }
   }
@@ -393,8 +404,9 @@ Stream<Event> streamCompactionForSlidingWindowConfig({
     resolvedAgentName: resolvedAgentName,
     currentBranch: currentBranch,
     isolationScope: isolationScope,
+    abortSignal: abortSignal,
   );
-  if (compactionEvent != null) {
+  if (compactionEvent != null && abortSignal?.aborted != true) {
     yield compactionEvent;
   }
 }
@@ -410,8 +422,9 @@ Future<bool> runCompactionForSlidingWindowConfig({
   String? currentBranch,
   bool skipTokenCompaction = false,
   String? isolationScope,
+  AdkAbortSignal? abortSignal,
 }) async {
-  if (config == null) {
+  if (config == null || abortSignal?.aborted == true) {
     return false;
   }
   final String resolvedAgentName = agentName ?? agent?.name ?? 'agent';
@@ -425,9 +438,13 @@ Future<bool> runCompactionForSlidingWindowConfig({
       agentName: agentName,
       currentBranch: currentBranch,
       isolationScope: isolationScope,
+      abortSignal: abortSignal,
     );
     if (tokenCompacted) {
       return true;
+    }
+    if (abortSignal?.aborted == true) {
+      return false;
     }
   }
 
@@ -439,8 +456,9 @@ Future<bool> runCompactionForSlidingWindowConfig({
     resolvedAgentName: resolvedAgentName,
     currentBranch: currentBranch,
     isolationScope: isolationScope,
+    abortSignal: abortSignal,
   );
-  if (compactionEvent == null) {
+  if (compactionEvent == null || abortSignal?.aborted == true) {
     return false;
   }
   await sessionService.appendEvent(session: session, event: compactionEvent);
@@ -455,7 +473,11 @@ Future<Event?> _buildSlidingWindowCompactionEvent({
   required String resolvedAgentName,
   required String? currentBranch,
   required String? isolationScope,
+  AdkAbortSignal? abortSignal,
 }) async {
+  if (abortSignal?.aborted == true) {
+    return null;
+  }
   if (!hasSlidingWindowConfig(config)) {
     return null;
   }
@@ -534,8 +556,12 @@ Future<Event?> _buildSlidingWindowCompactionEvent({
     trigger: 'sliding_window',
     author: resolvedAgentName,
     branch: currentBranch,
+    abortSignal: abortSignal,
   );
-  if (compactionEvent != null && isolationScope != null) {
+  if (compactionEvent == null || abortSignal?.aborted == true) {
+    return null;
+  }
+  if (isolationScope != null) {
     compactionEvent.isolationScope = isolationScope;
   }
   return compactionEvent;
@@ -679,6 +705,44 @@ bool _isRangeWorthCompacting({
       _previousSummaryChars(events);
 }
 
+Future<T?> _awaitWithAbort<T>(
+  Future<T> future,
+  AdkAbortSignal? abortSignal,
+) async {
+  if (abortSignal == null) {
+    return future;
+  }
+  if (abortSignal.aborted) {
+    unawaited(future.then((_) {}, onError: (Object _, StackTrace _) {}));
+    return null;
+  }
+  final Completer<T?> completer = Completer<T?>();
+  void onAbort(Object? _) {
+    if (!completer.isCompleted) {
+      completer.complete(null);
+    }
+  }
+
+  abortSignal.addListener(onAbort);
+  unawaited(
+    future.then(
+      (T value) {
+        abortSignal.removeListener(onAbort);
+        if (!completer.isCompleted) {
+          completer.complete(value);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        abortSignal.removeListener(onAbort);
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    ),
+  );
+  return completer.future;
+}
+
 Future<Event?> _createCompactionEventWithTrace({
   required Session session,
   required EventsCompactionConfig config,
@@ -687,15 +751,24 @@ Future<Event?> _createCompactionEventWithTrace({
   required String trigger,
   required String author,
   String? branch,
+  AdkAbortSignal? abortSignal,
 }) {
   return tracing.tracer.inSpanAsync<Event?>(
     'compact_events $trigger',
     (tracing.TraceSpanRecord span) async {
+      if (abortSignal?.aborted == true) {
+        return null;
+      }
       final Object? rawSummarizer = config.summarizer;
       if (rawSummarizer is BaseEventsSummarizer) {
         try {
-          final Event? summarizedEvent = await rawSummarizer
-              .maybeSummarizeEvents(events: eventsToCompact);
+          final Event? summarizedEvent = await _awaitWithAbort<Event?>(
+            rawSummarizer.maybeSummarizeEvents(events: eventsToCompact),
+            abortSignal,
+          );
+          if (abortSignal?.aborted == true) {
+            return null;
+          }
           if (summarizedEvent != null) {
             final int charsSaved = _promptCharsSaved(
               events: events,
@@ -708,6 +781,9 @@ Future<Event?> _createCompactionEventWithTrace({
           }
           return summarizedEvent;
         } catch (error, stackTrace) {
+          if (abortSignal?.aborted == true) {
+            return null;
+          }
           if (_autoCreatedSummarizers[rawSummarizer] == true &&
               error is StateError) {
             // Fall through to deterministic fallback summary when the default
@@ -724,11 +800,14 @@ Future<Event?> _createCompactionEventWithTrace({
         }
       }
 
-      final Content? compacted = await _summarizeEventsOrNull(
-        eventsToCompact,
-        summarizer: rawSummarizer,
+      final Content? compacted = await _awaitWithAbort<Content?>(
+        _summarizeEventsOrNull(
+          eventsToCompact,
+          summarizer: rawSummarizer,
+        ),
+        abortSignal,
       );
-      if (compacted == null) {
+      if (compacted == null || abortSignal?.aborted == true) {
         return null;
       }
       final Event compactionEvent = Event(

@@ -13,6 +13,7 @@ import '../models/base_llm_connection.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
+import '../utils/content_utils.dart';
 import 'cascade_live_events.dart';
 import 'transforms.dart';
 
@@ -220,9 +221,7 @@ class CascadeLiveConnection extends BaseLlmConnection {
        _stt = stt,
        _tts = tts,
        _clock = clock ?? _defaultNow,
-       _contents = llmRequest.contents
-           .map((Content c) => c.copyWith())
-           .toList() {
+       _contents = filterMediaHistory(llmRequest.contents) {
     experimental(FeatureName.cascadeLive).checkEnabled();
     unawaited(_pumpIngress());
   }
@@ -276,12 +275,16 @@ class CascadeLiveConnection extends BaseLlmConnection {
   Set<String?> get droppedMimeTypes =>
       Set<String?>.unmodifiable(_droppedMimeTypes);
 
-  /// Seeds the conversation [history] without triggering a reasoning turn.
+  /// Seeds the conversation [history] and starts a reasoning turn when the
+  /// trailing entry is from `'user'`.
   @override
   Future<void> sendHistory(List<Content> history) async {
     _contents
       ..clear()
-      ..addAll(history.map((Content c) => c.copyWith()));
+      ..addAll(filterMediaHistory(history));
+    if (_contents.isNotEmpty && _contents.last.role == 'user') {
+      _startReasoning();
+    }
   }
 
   /// Appends non-partial [content] and starts a reasoning turn.

@@ -25,5 +25,6 @@ abstract class Deployer {
     bool useLocalStorage = true,
     String? origins,
     List<String>? extraGcloudArgs,
+    List<String>? extraPackages,
   });
 }

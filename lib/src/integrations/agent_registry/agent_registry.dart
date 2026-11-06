@@ -1,6 +1,7 @@
 /// Agent Registry-backed MCP and Remote A2A integration helpers.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -143,6 +144,22 @@ typedef AgentRegistryHttpPostProvider =
 typedef AgentRegistryAuthHeadersProvider =
     Future<Map<String, String>> Function();
 
+/// Synchronous or asynchronous header provider for Agent Registry MCP toolsets.
+typedef AgentRegistryMcpHeaderProvider =
+    FutureOr<Map<String, String>> Function(ReadonlyContext readonlyContext);
+
+/// Refreshable Google Cloud credentials used by [AgentRegistry].
+abstract class AgentRegistryCredentials {
+  /// Whether the current [token] is valid and does not require a refresh.
+  bool get valid;
+
+  /// Current bearer token value.
+  String? get token;
+
+  /// Refreshes the credentials when [valid] is `false`.
+  FutureOr<void> refresh();
+}
+
 /// MCP toolset backed by a single registered Agent Registry MCP server.
 class AgentRegistrySingleMcpToolset extends McpToolset {
   /// Creates an Agent Registry MCP toolset.
@@ -152,6 +169,7 @@ class AgentRegistrySingleMcpToolset extends McpToolset {
     required super.connectionParams,
     super.toolNamePrefix,
     super.headerProvider,
+    this.asyncHeaderProvider,
     this.authScheme,
     this.authCredential,
     this.continueUri,
@@ -171,6 +189,9 @@ class AgentRegistrySingleMcpToolset extends McpToolset {
   /// Stable MCP server identifier from Agent Registry.
   final String? mcpServerId;
 
+  /// Optional synchronous or asynchronous header provider.
+  final AgentRegistryMcpHeaderProvider? asyncHeaderProvider;
+
   /// Resolved or caller-provided auth scheme.
   final Object? authScheme;
 
@@ -179,6 +200,22 @@ class AgentRegistrySingleMcpToolset extends McpToolset {
 
   /// Optional caller-supplied continue URI preserved across rebinds.
   final String? continueUri;
+
+  /// Resolves dynamic headers for [readonlyContext], awaiting [asyncHeaderProvider]
+  /// when present.
+  Future<Map<String, String>> resolveHeaders(
+    ReadonlyContext readonlyContext,
+  ) async {
+    if (asyncHeaderProvider != null) {
+      return Map<String, String>.from(
+        await asyncHeaderProvider!(readonlyContext),
+      );
+    }
+    if (headerProvider != null) {
+      return Map<String, String>.from(headerProvider!(readonlyContext));
+    }
+    return <String, String>{};
+  }
 
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
@@ -232,6 +269,7 @@ class AgentRegistry {
     required this.projectId,
     required this.location,
     this.headerProvider,
+    this.credentials,
     AgentRegistryHttpGetProvider? httpGetProvider,
     AgentRegistryHttpPostProvider? httpPostProvider,
     AgentRegistryAuthHeadersProvider? authHeadersProvider,
@@ -239,27 +277,105 @@ class AgentRegistry {
            httpGetProvider ?? _defaultAgentRegistryHttpGetProvider,
        _httpPostProvider =
            httpPostProvider ?? _defaultAgentRegistryHttpPostProvider,
-       _authHeadersProvider =
-           authHeadersProvider ?? _defaultAgentRegistryAuthHeadersProvider {
+       _authHeadersProvider = authHeadersProvider {
     if (projectId.trim().isEmpty || location.trim().isEmpty) {
       throw ArgumentError('projectId and location must be provided');
     }
   }
 
   /// Google Cloud project id.
-  final String projectId;
+  String projectId;
 
   /// Google Cloud location.
-  final String location;
+  String location;
 
   /// Optional header provider forwarded to constructed MCP toolsets.
-  final Map<String, String> Function(ReadonlyContext)? headerProvider;
+  Map<String, String> Function(ReadonlyContext)? headerProvider;
+
+  /// Optional refreshable Google Cloud credentials.
+  AgentRegistryCredentials? credentials;
 
   final AgentRegistryHttpGetProvider _httpGetProvider;
   final AgentRegistryHttpPostProvider _httpPostProvider;
-  final AgentRegistryAuthHeadersProvider _authHeadersProvider;
+  final AgentRegistryAuthHeadersProvider? _authHeadersProvider;
+  Future<void> _connectLock = Future<void>.value();
+  Future<void> _authRefreshLock = Future<void>.value();
 
   String get _basePath => 'projects/$projectId/locations/$location';
+
+  Future<T> _withAuthRefreshLock<T>(Future<T> Function() action) async {
+    final Completer<void> completer = Completer<void>();
+    final Future<void> previous = _authRefreshLock;
+    _authRefreshLock = previous.whenComplete(() => completer.future);
+    try {
+      await previous;
+      return await action();
+    } finally {
+      completer.complete();
+    }
+  }
+
+  /// Refreshes [credentials] under a lock only when invalid and returns auth headers.
+  Future<Map<String, String>> getAuthHeaders() async {
+    if (credentials != null) {
+      final String? token = await _withAuthRefreshLock<String?>(() async {
+        final AgentRegistryCredentials creds = credentials!;
+        if (!creds.valid) {
+          try {
+            await creds.refresh();
+          } catch (error) {
+            throw StateError(
+              'Failed to refresh Google Cloud credentials: $error',
+            );
+          }
+        }
+        return creds.token;
+      });
+      return <String, String>{
+        'Authorization': 'Bearer ${token ?? ''}',
+        'Content-Type': 'application/json',
+      };
+    }
+    final AgentRegistryAuthHeadersProvider provider =
+        _authHeadersProvider ?? _defaultAgentRegistryAuthHeadersProvider;
+    return provider();
+  }
+
+  /// Serializes this client's state while omitting active locks and credentials.
+  Map<String, Object?> getState() {
+    return <String, Object?>{
+      'projectId': projectId,
+      'location': location,
+      'headerProvider': headerProvider,
+      '_credentials': null,
+      '_session': null,
+    };
+  }
+
+  /// Restores this client's state and reinitializes internal locks.
+  void setState(Map<String, Object?> state) {
+    if (state['projectId'] is String) {
+      projectId = state['projectId'] as String;
+    }
+    if (state['location'] is String) {
+      location = state['location'] as String;
+    }
+    if (state['headerProvider']
+        is Map<String, String> Function(ReadonlyContext)?) {
+      headerProvider =
+          state['headerProvider']
+              as Map<String, String> Function(ReadonlyContext)?;
+    }
+    credentials = state['_credentials'] as AgentRegistryCredentials?;
+    _connectLock = Future<void>.value();
+    _authRefreshLock = Future<void>.value();
+  }
+
+  /// Expose lock state for testing.
+  Object get connectLock => _connectLock;
+
+  /// Expose auth refresh lock state for testing.
+  Object get authRefreshLock => _authRefreshLock;
 
   /// Lists registered MCP servers.
   Future<Map<String, Object?>> listMcpServers({
@@ -362,15 +478,36 @@ class AgentRegistry {
       }
     }
 
+    final bool shouldAttachGoogleAuth =
+        resolvedAuthScheme == null &&
+        authCredential == null &&
+        _isGoogleApi(endpointUri);
+
+    Future<Map<String, String>> combinedHeaderProvider(
+      ReadonlyContext context,
+    ) async {
+      final Map<String, String> resolvedHeaders = <String, String>{};
+      if (shouldAttachGoogleAuth) {
+        resolvedHeaders.addAll(await getAuthHeaders());
+      }
+      if (headerProvider != null) {
+        resolvedHeaders.addAll(headerProvider!(context));
+      }
+      return resolvedHeaders;
+    }
+
     return AgentRegistrySingleMcpToolset(
       destinationResourceId: destinationResourceId,
       mcpServerId: mcpServerId,
       connectionParams: StreamableHTTPConnectionParams(
         url: endpointUri,
-        headers: await _authHeadersProvider(),
+        headers: shouldAttachGoogleAuth
+            ? await getAuthHeaders()
+            : <String, String>{},
       ),
       toolNamePrefix: prefix,
       headerProvider: headerProvider,
+      asyncHeaderProvider: combinedHeaderProvider,
       authScheme: resolvedAuthScheme,
       authCredential: authCredential,
       continueUri: continueUri,
@@ -680,7 +817,7 @@ class AgentRegistry {
     );
     try {
       final Map<String, String> headers = <String, String>{
-        ...await _authHeadersProvider(),
+        ...await getAuthHeaders(),
         'Content-Type': 'application/json',
       };
       final AgentRegistryHttpResponse response = method == 'POST'
@@ -987,4 +1124,13 @@ Future<AgentRegistryHttpResponse> _defaultAgentRegistryHttpPostProvider(
 Future<Map<String, String>> _defaultAgentRegistryAuthHeadersProvider() async {
   final String token = await resolveDefaultGoogleAccessToken();
   return <String, String>{'Authorization': 'Bearer $token'};
+}
+
+bool _isGoogleApi(String uri) {
+  final Uri? parsed = Uri.tryParse(uri);
+  if (parsed == null) {
+    return false;
+  }
+  final String host = parsed.host.toLowerCase();
+  return host == 'googleapis.com' || host.endsWith('.googleapis.com');
 }

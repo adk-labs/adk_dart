@@ -169,12 +169,16 @@ abstract class BaseAgent {
       }
 
       await for (final Event event in runLiveImpl(context)) {
+        parentContext.liveSessionResumptionHandle =
+            context.liveSessionResumptionHandle;
         if (context.isAborted) {
           return;
         }
         _stampIsolationScope(context, event);
         yield event;
       }
+      parentContext.liveSessionResumptionHandle =
+          context.liveSessionResumptionHandle;
 
       if (context.isAborted) {
         return;

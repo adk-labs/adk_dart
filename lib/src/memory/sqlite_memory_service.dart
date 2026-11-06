@@ -90,13 +90,38 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_entries_fts USING fts5(
 );
 ''';
 
-final RegExp _tokenRegex = RegExp(
-  r'[0-9a-z_\u00a0-\uffff]+',
-  caseSensitive: false,
-  unicode: true,
-);
+final RegExp _letterOrDigitCharRegex = RegExp(r'[\p{L}\p{N}]', unicode: true);
+final RegExp _letterCharRegex = RegExp(r'\p{L}', unicode: true);
+final RegExp _markCharRegex = RegExp(r'\p{M}', unicode: true);
 
 final RegExp _whitespaceRegex = RegExp(r'\s+');
+
+const List<(int, int)> _unspacedScriptRanges = <(int, int)>[
+  (0x0E00, 0x0E7F), // Thai
+  (0x1100, 0x11FF), // Hangul Jamo
+  (0x3040, 0x309F), // Hiragana
+  (0x30A0, 0x30FF), // Katakana
+  (0x3130, 0x318F), // Hangul Compatibility Jamo
+  (0x31F0, 0x31FF), // Katakana Phonetic Extensions
+  (0x3400, 0x4DBF), // CJK Unified Ideographs Extension A
+  (0x4E00, 0x9FFF), // CJK Unified Ideographs
+  (0xA960, 0xA97F), // Hangul Jamo Extended-A
+  (0xAC00, 0xD7FF), // Hangul Syllables and Jamo Extended-B
+  (0xF900, 0xFAFF), // CJK Compatibility Ideographs
+  (0xFF65, 0xFF9F), // Halfwidth Katakana
+  (0x20000, 0x2EBE0), // CJK Unified Ideographs Extensions B-I
+  (0x2F800, 0x2FA1F), // CJK Compatibility Ideographs Supplement
+];
+
+bool _isAlphaRune(int rune) {
+  if ((rune >= 0x41 && rune <= 0x5A) || (rune >= 0x61 && rune <= 0x7A)) {
+    return true;
+  }
+  if (rune < 0xA0) {
+    return false;
+  }
+  return _letterCharRegex.hasMatch(String.fromCharCode(rune));
+}
 
 bool _isAlphaOrDigitRune(int rune) {
   if ((rune >= 0x30 && rune <= 0x39) ||
@@ -107,16 +132,26 @@ bool _isAlphaOrDigitRune(int rune) {
   if (rune < 0xA0) {
     return false;
   }
-  // Latin Extended, Greek, Cyrillic, CJK, Hangul, Hiragana, Katakana, etc.
-  if ((rune >= 0x00C0 && rune <= 0x02AF) ||
-      (rune >= 0x0370 && rune <= 0x052F) ||
-      (rune >= 0x0530 && rune <= 0x1FFF) ||
-      (rune >= 0x2C00 && rune <= 0x2DFF) ||
-      (rune >= 0x3040 && rune <= 0x30FF) ||
-      (rune >= 0x3400 && rune <= 0x9FFF) ||
-      (rune >= 0xAC00 && rune <= 0xD7AF) ||
-      (rune >= 0xF900 && rune <= 0xFAFF)) {
-    return true;
+  return _letterOrDigitCharRegex.hasMatch(String.fromCharCode(rune));
+}
+
+bool _isMarkRune(int rune) {
+  if (rune < 0x0300) {
+    return false;
+  }
+  return _markCharRegex.hasMatch(String.fromCharCode(rune));
+}
+
+bool _hasUnspacedScript(String token) {
+  for (final int rune in token.runes) {
+    if (rune < 0x0E00) {
+      continue;
+    }
+    for (final (int start, int end) in _unspacedScriptRanges) {
+      if (rune >= start && rune <= end) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -139,12 +174,16 @@ String _splitScriptRuns(String text) {
   final StringBuffer out = StringBuffer();
   bool? prevLatin;
   for (final int rune in text.runes) {
-    if (_isAlphaOrDigitRune(rune) && !(rune >= 0x30 && rune <= 0x39)) {
+    if (_isAlphaRune(rune)) {
       final bool currLatin = _isLatinRune(rune);
       if (prevLatin != null && currLatin != prevLatin) {
         out.write(' ');
       }
       prevLatin = currLatin;
+    } else if (_isMarkRune(rune)) {
+      if (prevLatin == null) {
+        continue;
+      }
     } else {
       prevLatin = null;
     }
@@ -180,12 +219,25 @@ List<String> _extractTokens(String text) {
     return const <String>[];
   }
   final List<String> tokens = <String>[];
-  for (final RegExpMatch match in _tokenRegex.allMatches(text)) {
-    final String? token = match.group(0);
-    if (token == null || token.isEmpty) {
-      continue;
+  final StringBuffer current = StringBuffer();
+  for (final int rune in text.runes) {
+    if (_isAlphaOrDigitRune(rune) || rune == 0x5F) {
+      current.writeCharCode(rune);
+    } else if (_isMarkRune(rune)) {
+      if (current.isNotEmpty) {
+        current.writeCharCode(rune);
+      }
+    } else if (current.isNotEmpty) {
+      final String token = current.toString().toLowerCase();
+      if (token.isNotEmpty) {
+        tokens.add(token);
+      }
+      current.clear();
     }
-    if (token.length > 1 || token.codeUnitAt(0) > 127) {
+  }
+  if (current.isNotEmpty) {
+    final String token = current.toString().toLowerCase();
+    if (token.isNotEmpty) {
       tokens.add(token);
     }
   }
@@ -804,8 +856,9 @@ class SqliteMemoryService extends BaseMemoryService {
     final sqlite3.Database db = _openDatabase();
     List<sqlite3.Row> rows = const <sqlite3.Row>[];
     bool ftsFailed = false;
+    final bool useFts = _ftsEnabled && !tokens.any(_hasUnspacedScript);
 
-    if (_ftsEnabled) {
+    if (useFts) {
       final String ftsQuery = tokens
           .map((String token) => '"${token.replaceAll('"', '""')}"')
           .join(' OR ');
@@ -842,7 +895,7 @@ class SqliteMemoryService extends BaseMemoryService {
       }
     }
 
-    if (!_ftsEnabled || ftsFailed) {
+    if (!useFts || ftsFailed) {
       final List<String> likeClauses = List<String>.filled(
         tokens.length,
         r"search_text LIKE ? ESCAPE '\'",

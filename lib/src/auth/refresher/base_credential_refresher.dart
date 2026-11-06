@@ -29,3 +29,13 @@ class CredentialRefresherError implements Exception {
   @override
   String toString() => 'CredentialRefresherError: $message';
 }
+
+/// Exception thrown when a refresh credential has been permanently revoked or
+/// expired (for example, OAuth2 `invalid_grant`).
+class CredentialRevokedError extends CredentialRefresherError {
+  /// Creates a [CredentialRevokedError] with [message].
+  const CredentialRevokedError(super.message);
+
+  @override
+  String toString() => 'CredentialRevokedError: $message';
+}

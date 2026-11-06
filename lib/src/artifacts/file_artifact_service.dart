@@ -25,8 +25,7 @@ List<Directory> _iterArtifactDirs(Directory root) {
     if (entity is! Directory) {
       continue;
     }
-    final Directory versions = Directory(_appendPath(entity.path, 'versions'));
-    if (versions.existsSync()) {
+    if (_listVersionsOnDisk(entity).isNotEmpty) {
       artifactDirs.add(entity);
     }
   }

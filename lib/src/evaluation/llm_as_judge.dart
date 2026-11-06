@@ -105,6 +105,20 @@ abstract class LlmAsJudge extends Evaluator {
   /// Converts one auto-rater response into score data.
   AutoRaterScore convertAutoRaterResponseToScore(LlmResponse autoRaterResponse);
 
+  /// Converts one auto-rater response into score data for a specific invocation.
+  ///
+  /// [evaluateInvocations] formats the prompts of all invocations before any
+  /// judge response arrives. Subclasses that maintain per-invocation state while
+  /// formatting a prompt can override this method to restore that state before
+  /// the response is parsed.
+  AutoRaterScore convertAutoRaterResponseToScoreForInvocation(
+    LlmResponse autoRaterResponse, {
+    required Invocation actual,
+    required Invocation? expected,
+  }) {
+    return convertAutoRaterResponseToScore(autoRaterResponse);
+  }
+
   /// Aggregates repeated samples for a single invocation.
   PerInvocationResult aggregatePerInvocationSamples(
     List<PerInvocationResult> perInvocationSamples,
@@ -140,8 +154,13 @@ abstract class LlmAsJudge extends Evaluator {
       return EvaluationResult();
     }
 
-    final List<PerInvocationResult> perInvocationResults =
-        <PerInvocationResult>[];
+    final JudgeEvaluationSemaphore semaphore = JudgeEvaluationSemaphore(
+      _judgeModelOptions.parallelismLimit,
+    );
+    final List<Future<PerInvocationResult>> sampleTasks =
+        <Future<PerInvocationResult>>[];
+    final List<int> invocationIndices = <int>[];
+
     for (int i = 0; i < count; i += 1) {
       final Invocation actual = actualInvocations[i];
       final Invocation? expectedInvocation = expected[i];
@@ -150,24 +169,47 @@ abstract class LlmAsJudge extends Evaluator {
           ? 1
           : _judgeModelOptions.numSamples;
 
-      final List<PerInvocationResult> samples = <PerInvocationResult>[];
       for (int sampleIndex = 0; sampleIndex < numSamples; sampleIndex += 1) {
-        final LlmResponse autoRaterResponse = await _invokeAutoRater(prompt);
-        final AutoRaterScore score = convertAutoRaterResponseToScore(
-          autoRaterResponse,
-        );
-        samples.add(
-          PerInvocationResult(
-            actualInvocation: actual,
-            expectedInvocation: expectedInvocation,
-            score: score.score,
-            evalStatus: getEvalStatus(score.score, _criterion.threshold),
-            rubricScores: score.rubricScores,
-          ),
+        invocationIndices.add(i);
+        sampleTasks.add(
+          semaphore.withPermit(() async {
+            final LlmResponse autoRaterResponse = await _invokeAutoRater(
+              prompt,
+            );
+            final AutoRaterScore score =
+                convertAutoRaterResponseToScoreForInvocation(
+                  autoRaterResponse,
+                  actual: actual,
+                  expected: expectedInvocation,
+                );
+            return PerInvocationResult(
+              actualInvocation: actual,
+              expectedInvocation: expectedInvocation,
+              score: score.score,
+              evalStatus: getEvalStatus(score.score, _criterion.threshold),
+              rubricScores: score.rubricScores,
+            );
+          }),
         );
       }
+    }
 
-      if (samples.isNotEmpty) {
+    final List<PerInvocationResult> allSamples = await gatherCancellingOnError(
+      sampleTasks,
+    );
+    final Map<int, List<PerInvocationResult>> samplesByInvocation =
+        <int, List<PerInvocationResult>>{};
+    for (int idx = 0; idx < allSamples.length; idx += 1) {
+      samplesByInvocation
+          .putIfAbsent(invocationIndices[idx], () => <PerInvocationResult>[])
+          .add(allSamples[idx]);
+    }
+
+    final List<PerInvocationResult> perInvocationResults =
+        <PerInvocationResult>[];
+    for (int i = 0; i < count; i += 1) {
+      final List<PerInvocationResult>? samples = samplesByInvocation[i];
+      if (samples != null && samples.isNotEmpty) {
         perInvocationResults.add(aggregatePerInvocationSamples(samples));
       }
     }

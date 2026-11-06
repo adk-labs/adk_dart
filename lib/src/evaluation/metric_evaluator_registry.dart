@@ -70,6 +70,18 @@ class MetricEvaluatorRegistry {
       return MetricInfo.fromJson(entry.metricInfo.toJson());
     }).toList();
   }
+
+  /// Creates an isolated copy of this registry with the same registered metrics.
+  MetricEvaluatorRegistry fork() {
+    final MetricEvaluatorRegistry copy = MetricEvaluatorRegistry();
+    _registry.forEach((String name, _RegistryEntry entry) {
+      copy._registry[name] = _RegistryEntry(
+        factory: entry.factory,
+        metricInfo: MetricInfo.fromJson(entry.metricInfo.toJson()),
+      );
+    });
+    return copy;
+  }
 }
 
 /// Builds the default evaluator registry with all prebuilt metrics.

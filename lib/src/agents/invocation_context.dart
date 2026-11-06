@@ -71,6 +71,31 @@ class ActiveBackgroundTool {
   FutureOr<void> Function()? onCancel;
 }
 
+class _InvocationAbortState {
+  _InvocationAbortState(AdkAbortSignal? signal) {
+    bindSignal(signal);
+  }
+
+  final AdkAbortSignal internalSignal = AdkAbortSignal();
+  AdkAbortSignal? _boundSignal;
+  bool aborted = false;
+  bool abortEventSynthesized = false;
+
+  void bindSignal(AdkAbortSignal? signal) {
+    if (identical(_boundSignal, signal)) {
+      return;
+    }
+    _boundSignal = signal;
+    if (signal != null) {
+      if (signal.aborted) {
+        internalSignal.abort(signal.reason);
+      } else {
+        signal.addListener(internalSignal.abort);
+      }
+    }
+  }
+}
+
 /// Mutable invocation context shared across agent execution steps.
 class InvocationContext {
   /// Creates an invocation context for a single run.
@@ -117,7 +142,9 @@ class InvocationContext {
        credentialByKey = credentialByKey ?? <String, AuthCredential>{},
        callbackContextData = callbackContextData ?? <String, Object?>{},
        privateMetadata = privateMetadata ?? <String, Object?>{},
-       abortSignal = abortSignal ?? AdkAbortSignal();
+       _abortSignal = abortSignal ?? AdkAbortSignal() {
+    _abortState = _InvocationAbortState(_abortSignal);
+  }
 
   /// Artifact service used for persistence and retrieval.
   BaseArtifactService? artifactService;
@@ -203,21 +230,42 @@ class InvocationContext {
   /// Event compaction settings for this invocation.
   EventsCompactionConfig? eventsCompactionConfig;
 
+  AdkAbortSignal? _abortSignal;
+  late _InvocationAbortState _abortState;
+
   /// Cooperative cancellation signal for this invocation.
-  AdkAbortSignal? abortSignal;
+  AdkAbortSignal? get abortSignal => _abortSignal;
+  set abortSignal(AdkAbortSignal? value) {
+    _abortSignal = value;
+    _abortState.bindSignal(value);
+  }
+
+  /// Internal cancellation signal that triggers on either [abortSignal] or
+  /// internal invocation teardown ([markAborted]).
+  AdkAbortSignal get onAbortSignal => _abortState.internalSignal;
 
   /// Whether an abort event has already been synthesized for this invocation.
-  bool abortEventSynthesized = false;
-
-  bool _aborted = false;
+  bool get abortEventSynthesized => _abortState.abortEventSynthesized;
+  set abortEventSynthesized(bool value) {
+    _abortState.abortEventSynthesized = value;
+  }
 
   /// Whether this invocation has been cancelled.
-  bool get isAborted => _aborted || (abortSignal?.aborted ?? false);
+  bool get isAborted =>
+      _abortState.aborted || (_abortSignal?.aborted ?? false);
+
+  /// Marks this invocation as cancelled internally without mutating a
+  /// caller-supplied [abortSignal].
+  void markAborted([Object? reason]) {
+    _abortState.aborted = true;
+    _abortState.internalSignal.abort(reason);
+  }
 
   /// Requests cancellation of this invocation.
   void abort([Object? reason]) {
-    _aborted = true;
-    abortSignal?.abort(reason);
+    _abortState.aborted = true;
+    _abortState.internalSignal.abort(reason);
+    _abortSignal?.abort(reason);
   }
 
   /// Whether token compaction checks already ran.
@@ -763,6 +811,11 @@ class InvocationContext {
       privateMetadata: privateMetadata,
     )
       .._numberOfLlmCalls = _numberOfLlmCalls
-      ..abortEventSynthesized = abortEventSynthesized;
+      .._abortState =
+          (abortSignal == null || identical(abortSignal, this.abortSignal))
+          ? _abortState
+          : (_InvocationAbortState(abortSignal)
+              ..aborted = _abortState.aborted
+              ..abortEventSynthesized = _abortState.abortEventSynthesized);
   }
 }

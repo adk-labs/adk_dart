@@ -13,6 +13,16 @@ import 'dart:async';
 
 import '../platform/time.dart';
 
+/// HTTP header name for the A2A protocol version.
+const String a2aVersionHeader = 'A2A-Version';
+
+/// Current A2A protocol version sent by ADK A2A clients.
+const String a2aProtocolVersion = '0.3.0';
+
+/// Returns default HTTP headers advertising the A2A protocol version.
+Map<String, String> a2aVersionHeaders([String version = a2aProtocolVersion]) =>
+    <String, String>{a2aVersionHeader: version};
+
 /// Message author role in the A2A protocol.
 enum A2aRole {
   /// Message authored by the user or caller.

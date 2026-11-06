@@ -1,15 +1,22 @@
 import '../agents/llm_agent.dart';
+import '../flows/llm_flows/agent_transfer.dart';
 import '../models/base_llm.dart';
 import '../models/lite_llm.dart';
 import 'model_name_utils.dart';
 import 'variant_utils.dart';
+
+/// Whether [agent] has function tools, including transfer tools injected by
+/// `AgentTransferLlmRequestProcessor`.
+bool hasFunctionTools(LlmAgent agent) {
+  return agent.tools.isNotEmpty || getTransferTargets(agent).isNotEmpty;
+}
 
 /// Single source of truth for whether output schema can be set natively on LlmRequest.
 bool canSetNativeOutputSchema(LlmAgent agent) {
   if (agent.outputSchema == null) {
     return false;
   }
-  if (agent.tools.isEmpty) {
+  if (!hasFunctionTools(agent)) {
     return true;
   }
   return canUseOutputSchemaWithTools(agent.canonicalModel);

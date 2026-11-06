@@ -8,6 +8,9 @@ import '../types/id.dart';
 import 'event_actions.dart';
 import 'node_path_builder.dart';
 
+/// Key in [Event.customMetadata] storing a mapping of tool names to display titles.
+const String toolDisplayNamesMetadataKey = 'adk:tool_display_names';
+
 /// One runtime event emitted during an invocation.
 ///
 /// ```dart

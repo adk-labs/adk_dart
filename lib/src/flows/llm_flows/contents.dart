@@ -417,14 +417,11 @@ Content? buildTaskInputUserContent({
     }
   }
 
-  if (userContent != null && userContent.parts.isNotEmpty) {
-    final List<Part> parts = userContent.parts
-        .map((Part part) => part.copyWith())
-        .toList();
-    if (isSingleTurn) {
-      parts.add(Part.text(_singleTurnNudge));
-    }
-    return Content(role: 'user', parts: parts);
+  if (!isSingleTurn && userContent != null && userContent.parts.isNotEmpty) {
+    return Content(
+      role: 'user',
+      parts: userContent.parts.map((Part part) => part.copyWith()).toList(),
+    );
   }
   return null;
 }

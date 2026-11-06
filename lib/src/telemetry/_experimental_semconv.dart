@@ -187,9 +187,35 @@ void setOperationDetailsAttributesFromResponse(
 
   final Map<String, Object?>? outputMessage = _toOutputMessage(llmResponse);
   if (outputMessage != null) {
-    operationDetailsAttributes[genAiOutputMessages] = <Map<String, Object?>>[
-      outputMessage,
-    ];
+    final Object? existing = operationDetailsAttributes[genAiOutputMessages];
+    if (existing is List && existing.isNotEmpty && existing.first is Map) {
+      final Map<String, Object?> existingMsg = Map<String, Object?>.from(
+        existing.first as Map,
+      );
+      final List<Object?> mergedParts = <Object?>[
+        if (existingMsg['parts'] is List) ...(existingMsg['parts'] as List),
+        if (outputMessage['parts'] is List) ...(outputMessage['parts'] as List),
+      ];
+      existingMsg['parts'] = mergedParts;
+      final Object? newFinishReason = outputMessage['finish_reason'];
+      if (newFinishReason is String && newFinishReason.isNotEmpty) {
+        existingMsg['finish_reason'] = newFinishReason;
+      }
+      final Object? existingRole = existingMsg['role'];
+      final Object? newRole = outputMessage['role'];
+      if ((existingRole == null || '$existingRole'.isEmpty) &&
+          newRole is String &&
+          newRole.isNotEmpty) {
+        existingMsg['role'] = newRole;
+      }
+      operationDetailsAttributes[genAiOutputMessages] = <Map<String, Object?>>[
+        existingMsg,
+      ];
+    } else {
+      operationDetailsAttributes[genAiOutputMessages] = <Map<String, Object?>>[
+        outputMessage,
+      ];
+    }
   }
 }
 

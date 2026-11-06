@@ -78,8 +78,9 @@ class CustomMetricConfig {
 /// An aggregation method paired with a pass/fail threshold across runs.
 class MultiRunCriterion {
   /// Creates a multi-run pass/fail criterion.
-  MultiRunCriterion({required this.method, required this.threshold}) {
-    if (!threshold.isFinite || threshold < 0.0 || threshold > 1.0) {
+  MultiRunCriterion({required this.method, this.threshold}) {
+    if (threshold != null &&
+        (!threshold!.isFinite || threshold! < 0.0 || threshold! > 1.0)) {
       throw ArgumentError.value(
         threshold,
         'threshold',
@@ -92,7 +93,10 @@ class MultiRunCriterion {
   final String method;
 
   /// Minimum aggregated value in `[0.0, 1.0]` required to pass.
-  final double threshold;
+  ///
+  /// For `pass_at_k` and `pass_hat_k`, may be omitted (`null`) to report the
+  /// value without gating pass/fail.
+  final double? threshold;
 
   /// Decodes a [MultiRunCriterion] from JSON.
   factory MultiRunCriterion.fromJson(Map<String, Object?> json) {
@@ -109,12 +113,12 @@ class MultiRunCriterion {
       throw ArgumentError('MultiRunCriterion.method must be a non-empty String.');
     }
     final Object? rawThreshold = json['threshold'];
-    if (rawThreshold is bool || rawThreshold is! num) {
+    if (rawThreshold != null && (rawThreshold is bool || rawThreshold is! num)) {
       throw ArgumentError('MultiRunCriterion.threshold must be a number.');
     }
     return MultiRunCriterion(
       method: rawMethod,
-      threshold: rawThreshold.toDouble(),
+      threshold: rawThreshold == null ? null : (rawThreshold as num).toDouble(),
     );
   }
 
@@ -122,23 +126,107 @@ class MultiRunCriterion {
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'method': method,
-      'threshold': threshold,
+      if (threshold != null) 'threshold': threshold,
     };
   }
 
   @override
   bool operator ==(Object other) {
-    return other is MultiRunCriterion &&
+    return other.runtimeType == runtimeType &&
+        other is MultiRunCriterion &&
         other.method == method &&
         other.threshold == threshold;
   }
 
   @override
-  int get hashCode => Object.hash(method, threshold);
+  int get hashCode => Object.hash(runtimeType, method, threshold);
 
   @override
   String toString() =>
       'MultiRunCriterion(method: $method, threshold: $threshold)';
+}
+
+/// A `pass@k` or `pass^k` criterion over whole runs of an eval case.
+class PassKMultiRunCriterion extends MultiRunCriterion {
+  /// Creates a `pass@k` or `pass^k` criterion.
+  PassKMultiRunCriterion({
+    required super.method,
+    required this.k,
+    super.threshold,
+  }) {
+    if (method != 'pass_at_k' && method != 'pass_hat_k') {
+      throw ArgumentError.value(
+        method,
+        'method',
+        'Must be "pass_at_k" or "pass_hat_k"',
+      );
+    }
+    if (k < 1) {
+      throw ArgumentError.value(
+        k,
+        'k',
+        'Input should be greater than or equal to 1',
+      );
+    }
+  }
+
+  /// Sample size `k` for `pass@k` or `pass^k`. Must be `>= 1` and `<= num_runs`.
+  final int k;
+
+  /// Decodes a [PassKMultiRunCriterion] from JSON.
+  factory PassKMultiRunCriterion.fromJson(Map<String, Object?> json) {
+    const Set<String> allowedKeys = <String>{'method', 'k', 'threshold'};
+    for (final String key in json.keys) {
+      if (!allowedKeys.contains(key)) {
+        throw ArgumentError(
+          'Extra inputs are not permitted in PassKMultiRunCriterion: $key',
+        );
+      }
+    }
+    final Object? rawMethod = json['method'];
+    if (rawMethod is! String || rawMethod.isEmpty) {
+      throw ArgumentError(
+        'PassKMultiRunCriterion.method must be a non-empty String.',
+      );
+    }
+    final Object? rawK = json['k'];
+    if (rawK is bool || rawK is! int) {
+      throw ArgumentError('PassKMultiRunCriterion.k must be an int.');
+    }
+    final Object? rawThreshold = json['threshold'];
+    if (rawThreshold != null && (rawThreshold is bool || rawThreshold is! num)) {
+      throw ArgumentError('PassKMultiRunCriterion.threshold must be a number.');
+    }
+    return PassKMultiRunCriterion(
+      method: rawMethod,
+      k: rawK,
+      threshold: rawThreshold == null ? null : (rawThreshold as num).toDouble(),
+    );
+  }
+
+  @override
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'method': method,
+      'k': k,
+      if (threshold != null) 'threshold': threshold,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is PassKMultiRunCriterion &&
+        other.method == method &&
+        other.k == k &&
+        other.threshold == threshold;
+  }
+
+  @override
+  int get hashCode => Object.hash(method, k, threshold);
+
+  @override
+  String toString() =>
+      'PassKMultiRunCriterion(method: $method, k: $k, threshold: $threshold)';
 }
 
 /// Configuration for a custom cross-run aggregation method.
@@ -252,10 +340,15 @@ class MultiRunConfig {
   final Map<String, CustomCrossRunMethodConfig>? customMethods;
 
   void _validateMethodReferences() {
+    final Map<String, AggregationMethod> builtIns =
+        getBuiltInAggregationMethods();
     final Map<String, bool> usesScoresByName = <String, bool>{
-      for (final MapEntry<String, AggregationMethod> entry
-          in getBuiltInAggregationMethods().entries)
+      for (final MapEntry<String, AggregationMethod> entry in builtIns.entries)
         entry.key: entry.value.usesScores,
+    };
+    final Set<String> takesK = <String>{
+      for (final MapEntry<String, AggregationMethod> entry in builtIns.entries)
+        if (entry.value.computeWithK != null) entry.key,
     };
     if (customMethods != null) {
       for (final MapEntry<String, CustomCrossRunMethodConfig> entry
@@ -266,6 +359,16 @@ class MultiRunConfig {
           );
         }
         usesScoresByName[entry.key] = entry.value.usesScores;
+      }
+    }
+
+    void checkThreshold(MultiRunCriterion criterion, String where) {
+      if (criterion.threshold == null && !takesK.contains(criterion.method)) {
+        final List<String> sortedTakesK = takesK.toList()..sort();
+        throw ArgumentError(
+          '$where: "${criterion.method}" needs a threshold. '
+          'Only $sortedTakesK can leave it out, to only report a value.',
+        );
       }
     }
 
@@ -285,6 +388,12 @@ class MultiRunConfig {
           'Known methods: $known',
         );
       }
+      if (takesK.contains(name)) {
+        throw ArgumentError(
+          'Method "$name" in $where is only supported in cross_run_criteria '
+          '(with a "k" parameter).',
+        );
+      }
       if (usesScores && rule is MultiRunCriterion) {
         throw ArgumentError(
           'Score-combining method "$name" in $where compares '
@@ -298,6 +407,9 @@ class MultiRunConfig {
           'threshold: {"method": "$name", "threshold": <0..1>}.',
         );
       }
+      if (rule is MultiRunCriterion) {
+        checkThreshold(rule, where);
+      }
     }
 
     checkRule(crossRunScoring, 'cross_run_scoring');
@@ -308,7 +420,9 @@ class MultiRunConfig {
       }
     }
     if (crossRunCriteria != null) {
-      for (final MultiRunCriterion criterion in crossRunCriteria!) {
+      for (int i = 0; i < crossRunCriteria!.length; i += 1) {
+        final MultiRunCriterion criterion = crossRunCriteria![i];
+        final String where = 'cross_run_criteria[$i]';
         final bool? usesScores = usesScoresByName[criterion.method];
         if (usesScores == null) {
           final List<String> known = usesScoresByName.keys.toList()..sort();
@@ -325,6 +439,14 @@ class MultiRunConfig {
             'cross_run_scoring_by_metric.',
           );
         }
+        if (takesK.contains(criterion.method) &&
+            criterion is! PassKMultiRunCriterion) {
+          throw ArgumentError(
+            '$where: "${criterion.method}" requires a positive integer "k" '
+            '(use PassKMultiRunCriterion).',
+          );
+        }
+        checkThreshold(criterion, where);
       }
     }
   }
@@ -342,6 +464,14 @@ class MultiRunConfig {
     throw ArgumentError(
       'Invalid $fieldName: expected String or MultiRunCriterion map, got ${raw.runtimeType}.',
     );
+  }
+
+  static MultiRunCriterion _parseCrossRunCriterion(Map<String, Object?> map) {
+    final Object? method = map['method'];
+    if (method == 'pass_at_k' || method == 'pass_hat_k') {
+      return PassKMultiRunCriterion.fromJson(map);
+    }
+    return MultiRunCriterion.fromJson(map);
   }
 
   /// Decodes a [MultiRunConfig] from JSON.
@@ -426,7 +556,7 @@ class MultiRunConfig {
           if (item is MultiRunCriterion)
             item
           else if (item is Map)
-            MultiRunCriterion.fromJson(_castJsonMap(item))
+            _parseCrossRunCriterion(_castJsonMap(item))
           else
             throw ArgumentError(
               'cross_run_criteria items must be MultiRunCriterion maps.',
@@ -503,7 +633,15 @@ class EvalConfig {
     this.userSimulatorConfig,
     this.liveModelConfig,
     this.multiRunConfig,
+    this.parallelism,
   }) : criteria = criteria ?? <String, Object?>{} {
+    if (parallelism != null && parallelism! < 1) {
+      throw ArgumentError.value(
+        parallelism,
+        'parallelism',
+        'Input should be greater than or equal to 1',
+      );
+    }
     _checkCrossRunMetricNames();
   }
 
@@ -521,6 +659,9 @@ class EvalConfig {
 
   /// Optional configuration for running each eval case multiple times and aggregating across runs.
   final MultiRunConfig? multiRunConfig;
+
+  /// Optional cap on how many eval case runs execute concurrently during inference.
+  final int? parallelism;
 
   void _checkCrossRunMetricNames() {
     final Map<String, Object>? byMetric =
@@ -546,6 +687,7 @@ class EvalConfig {
     BaseUserSimulatorConfig? userSimulatorConfig,
     LiveModelConfig? liveModelConfig,
     MultiRunConfig? multiRunConfig,
+    int? parallelism,
   }) {
     return EvalConfig(
       criteria: criteria ?? Map<String, Object?>.from(this.criteria),
@@ -553,6 +695,7 @@ class EvalConfig {
       userSimulatorConfig: userSimulatorConfig ?? this.userSimulatorConfig,
       liveModelConfig: liveModelConfig ?? this.liveModelConfig,
       multiRunConfig: multiRunConfig ?? this.multiRunConfig,
+      parallelism: parallelism ?? this.parallelism,
     );
   }
 
@@ -573,6 +716,14 @@ class EvalConfig {
         json['liveModelConfig'] ?? json['live_model_config'];
     final Object? rawMultiRunConfig =
         json['multiRunConfig'] ?? json['multi_run_config'];
+    final Object? rawParallelism = json['parallelism'];
+    int? parallelism;
+    if (rawParallelism != null) {
+      if (rawParallelism is bool || rawParallelism is! int) {
+        throw ArgumentError('EvalConfig.parallelism must be an int.');
+      }
+      parallelism = rawParallelism;
+    }
     return EvalConfig(
       criteria: rawCriteria,
       customMetrics: customMetrics,
@@ -593,6 +744,7 @@ class EvalConfig {
           : (rawMultiRunConfig is Map
                 ? MultiRunConfig.fromJson(_castJsonMap(rawMultiRunConfig))
                 : null),
+      parallelism: parallelism,
     );
   }
 
@@ -611,6 +763,7 @@ class EvalConfig {
         'live_model_config': liveModelConfig!.toJson(),
       if (multiRunConfig != null)
         'multi_run_config': multiRunConfig!.toJson(),
+      if (parallelism != null) 'parallelism': parallelism,
     };
   }
 }

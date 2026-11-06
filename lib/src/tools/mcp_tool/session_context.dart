@@ -10,6 +10,7 @@ class SessionContext<T> {
     required Future<T> Function() startSession,
     Future<void> Function(T session)? closeSession,
     this.timeout = const Duration(seconds: 5),
+    this.messageHandler,
   }) : _startSession = startSession,
        _closeSession = closeSession;
 
@@ -18,6 +19,9 @@ class SessionContext<T> {
 
   /// Timeout applied when starting sessions.
   final Duration timeout;
+
+  /// Optional message/notification handler associated with this session context.
+  final Object? messageHandler;
 
   Future<T>? _starting;
   T? _session;

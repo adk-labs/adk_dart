@@ -11,6 +11,8 @@ import 'base_llm_connection.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+export '../utils/content_utils.dart' show filterMediaHistory;
+
 /// Transcription delta emitted by Gemini live sessions.
 class GeminiTranscriptionEvent {
   /// Creates a transcription event.
@@ -197,11 +199,7 @@ class GeminiLlmConnection extends BaseLlmConnection {
 
     if (_liveSession != null) {
       final GeminiLiveSession liveSession = _liveSession;
-      final List<Content> filtered = history
-          .map(filterMediaParts)
-          .whereType<Content>()
-          .map((Content content) => content.copyWith())
-          .toList();
+      final List<Content> filtered = filterMediaHistory(history);
       if (filtered.isEmpty) {
         return;
       }

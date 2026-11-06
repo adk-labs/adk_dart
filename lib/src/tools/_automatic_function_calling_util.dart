@@ -2,8 +2,9 @@
 library;
 
 import '../models/llm_request.dart';
-import 'base_tool.dart';
 import '_function_tool_declarations.dart';
+import '_gemini_schema_util.dart';
+import 'base_tool.dart';
 
 /// The mapping from Python-style type names to JSON schema types.
 final Map<String, String> pyTypeToSchemaType = <String, String>{
@@ -97,12 +98,12 @@ FunctionDeclaration _withoutIgnoredParams(
   FunctionDeclaration declaration,
   List<String>? ignoreParams,
 ) {
-  if (ignoreParams == null || ignoreParams.isEmpty) {
-    return declaration;
-  }
-  final Map<String, dynamic> parameters = <String, dynamic>{
+  final Map<String, dynamic> parameters = dereferenceSchema(<String, dynamic>{
     ...declaration.parameters,
-  };
+  });
+  if (ignoreParams == null || ignoreParams.isEmpty) {
+    return declaration.copyWith(parameters: parameters);
+  }
   final Map<String, dynamic> properties = (parameters['properties'] is Map)
       ? (parameters['properties'] as Map).map(
           (Object? key, Object? value) => MapEntry('$key', value),

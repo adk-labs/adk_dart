@@ -122,13 +122,24 @@ export 'src/integrations/bigquery/bigquery.dart'
         bigQuerySessionInfoKey;
 export 'src/integrations/e2b/e2b_environment.dart';
 export 'src/integrations/eleven_labs/eleven_labs.dart';
+export 'src/integrations/eventarc/eventarc.dart'
+    hide
+        EventarcCredentialsConfig,
+        EventarcToolConfig,
+        EventarcToolset,
+        getPublisherClient,
+        removePublisherClient,
+        cleanupClients,
+        publishMessage;
 export 'src/integrations/firestore/firestore.dart';
+export 'src/integrations/fsspec/fsspec.dart';
 export 'src/integrations/gcs/gcs.dart';
 export 'src/integrations/livekit/livekit.dart';
 export 'src/integrations/model_armor/model_armor.dart';
 export 'src/integrations/mongodb/mongodb.dart';
 export 'src/integrations/oci/oci.dart';
 export 'src/integrations/openai/openai.dart' hide OpenAiLlm, OpenAILlm;
+export 'src/integrations/openai/openai_decisions_classifier.dart';
 export 'src/integrations/opensandbox/opensandbox_environment.dart';
 export 'src/integrations/parameter_manager/parameter_manager.dart';
 export 'src/integrations/redis/redis.dart';
@@ -141,6 +152,7 @@ export 'src/integrations/secret_manager/secret_manager.dart'
         resolveDefaultGoogleAccessToken;
 export 'src/integrations/skill_registry/gcp_skill_registry.dart';
 export 'src/integrations/slack/slack_runner.dart';
+export 'src/integrations/teams/teams.dart';
 export 'src/integrations/typesafe/typesafe_classifier.dart';
 export 'src/integrations/vmaas/agent_engine_environment.dart';
 export 'src/integrations/vmaas/agent_engine_client.dart';
@@ -516,11 +528,13 @@ export 'src/utils/content_utils.dart';
 export 'src/utils/context_utils.dart';
 export 'src/utils/debug_output.dart';
 export 'src/utils/env_utils.dart';
+export 'src/utils/error_reporting.dart';
 export 'src/utils/feature_decorator.dart' hide FeatureDecorator;
 export 'src/utils/google_client_headers.dart';
 export 'src/utils/instructions_utils.dart';
 export 'src/utils/model_name_utils.dart';
 export 'src/utils/output_schema_utils.dart';
+export 'src/utils/schema_utils.dart' hide enforceStrictOpenAiSchema;
 export 'src/utils/streaming_utils.dart';
 export 'src/utils/variant_utils.dart';
 export 'src/utils/vertex_ai_utils.dart';

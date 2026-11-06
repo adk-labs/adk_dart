@@ -56,6 +56,19 @@ Content? filterMediaParts(Content content) {
   return Content(role: content.role, parts: filtered);
 }
 
+/// Filters media parts out of a list of history [Content] items, omitting
+/// entries whose parts are all removed.
+List<Content> filterMediaHistory(List<Content> history) {
+  final List<Content> filtered = <Content>[];
+  for (final Content content in history) {
+    final Content? cleaned = filterMediaParts(content);
+    if (cleaned != null) {
+      filtered.add(cleaned);
+    }
+  }
+  return filtered;
+}
+
 /// Extracts non-thought text from [content] joined by [separator].
 ///
 /// Returns `null` when [content] is `null` or contains no non-empty non-thought

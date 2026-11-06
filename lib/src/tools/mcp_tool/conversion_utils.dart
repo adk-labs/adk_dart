@@ -24,9 +24,37 @@ Map<String, Object?> geminiToJsonSchema(Map<String, dynamic> geminiSchema) {
 
 Map<String, Object?> _convertSchemaNode(Map<String, dynamic> schema) {
   final Map<String, Object?> result = <String, Object?>{};
+  final Object? rawAnyOf = schema['anyOf'] ?? schema['any_of'];
+  final Object? rawType = schema['type'];
+  final String? normalizedType = rawType is String
+      ? rawType.trim().toLowerCase()
+      : null;
+  final bool isUnspecifiedType =
+      normalizedType == null ||
+      normalizedType.isEmpty ||
+      normalizedType == 'type_unspecified';
+  final bool isUnionPlaceholder =
+      normalizedType == 'object' &&
+      rawAnyOf is List &&
+      rawAnyOf.isNotEmpty &&
+      schema['properties'] == null &&
+      schema['additionalProperties'] == null &&
+      schema['additional_properties'] == null &&
+      rawAnyOf.any((Object? branch) {
+        if (branch is! Map) {
+          return false;
+        }
+        final Object? branchType = branch['type'];
+        return branchType is String &&
+            branchType.trim().toLowerCase() != 'object';
+      });
+
   schema.forEach((String key, dynamic value) {
     switch (key) {
       case 'type':
+        if (isUnspecifiedType || isUnionPlaceholder) {
+          break;
+        }
         if (value is String) {
           result['type'] = value.toLowerCase();
         } else {
@@ -68,6 +96,7 @@ Map<String, Object?> _convertSchemaNode(Map<String, dynamic> schema) {
         }
         break;
       case 'anyOf':
+      case 'any_of':
         if (value is List) {
           result['anyOf'] = value
               .map((Object? item) {

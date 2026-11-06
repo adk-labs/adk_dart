@@ -159,7 +159,7 @@ class CredentialManager {
 
     final ExchangeResult exchangeResult = await _exchangeCredential(current);
     current = exchangeResult.credential;
-    final bool wasExchanged = exchangeResult.wasExchanged;
+    bool wasExchanged = exchangeResult.wasExchanged;
 
     if (_hasUnredeemedAuthCode(current)) {
       return null;
@@ -167,9 +167,39 @@ class CredentialManager {
 
     bool wasRefreshed = false;
     if (!wasExchanged) {
-      final _RefreshOutcome refreshResult = await _refreshCredential(current);
-      current = refreshResult.credential;
-      wasRefreshed = refreshResult.wasRefreshed;
+      try {
+        final _RefreshOutcome refreshResult = await _refreshCredential(current);
+        current = refreshResult.credential;
+        wasRefreshed = refreshResult.wasRefreshed;
+      } on CredentialRevokedError {
+        if (wasFromAuthResponse) {
+          return null;
+        }
+        await _saveCredential(context, null);
+        final AuthCredential? fresh = _loadFromAuthResponse(context);
+        if (fresh == null || _isSameRevokedCredential(fresh, current)) {
+          return null;
+        }
+        wasFromAuthResponse = true;
+        current = fresh;
+        final ExchangeResult reExchange = await _exchangeCredential(current);
+        current = reExchange.credential;
+        wasExchanged = reExchange.wasExchanged;
+        if (_hasUnredeemedAuthCode(current)) {
+          return null;
+        }
+        if (!wasExchanged) {
+          try {
+            final _RefreshOutcome retryRefresh = await _refreshCredential(
+              current,
+            );
+            current = retryRefresh.credential;
+            wasRefreshed = retryRefresh.wasRefreshed;
+          } on CredentialRevokedError {
+            return null;
+          }
+        }
+      }
     }
 
     if (wasFromAuthResponse || wasExchanged || wasRefreshed) {
@@ -177,6 +207,65 @@ class CredentialManager {
     }
 
     return current;
+  }
+
+  bool _isSameRevokedCredential(
+    AuthCredential candidate,
+    AuthCredential revoked,
+  ) {
+    if (_hasUnredeemedAuthCode(candidate)) {
+      return false;
+    }
+    final OAuth2Auth? candidateOauth2 = candidate.oauth2;
+    final OAuth2Auth? revokedOauth2 = revoked.oauth2;
+    if (candidateOauth2 == null || revokedOauth2 == null) {
+      return _sameCredentialValues(candidate, revoked);
+    }
+    if (candidateOauth2.refreshToken != null &&
+        candidateOauth2.refreshToken!.isNotEmpty &&
+        candidateOauth2.refreshToken == revokedOauth2.refreshToken) {
+      return true;
+    }
+    return candidateOauth2.accessToken == revokedOauth2.accessToken &&
+        candidateOauth2.refreshToken == revokedOauth2.refreshToken;
+  }
+
+  bool _sameCredentialValues(AuthCredential a, AuthCredential b) {
+    if (a.authType != b.authType ||
+        a.resourceRef != b.resourceRef ||
+        a.apiKey != b.apiKey) {
+      return false;
+    }
+    if (a.http?.scheme != b.http?.scheme ||
+        a.http?.credentials.username != b.http?.credentials.username ||
+        a.http?.credentials.password != b.http?.credentials.password ||
+        a.http?.credentials.token != b.http?.credentials.token) {
+      return false;
+    }
+    final OAuth2Auth? oa = a.oauth2;
+    final OAuth2Auth? ob = b.oauth2;
+    if ((oa == null) != (ob == null)) {
+      return false;
+    }
+    if (oa != null && ob != null) {
+      if (oa.clientId != ob.clientId ||
+          oa.clientSecret != ob.clientSecret ||
+          oa.authUri != ob.authUri ||
+          oa.nonce != ob.nonce ||
+          oa.state != ob.state ||
+          oa.redirectUri != ob.redirectUri ||
+          oa.authResponseUri != ob.authResponseUri ||
+          oa.authCode != ob.authCode ||
+          oa.accessToken != ob.accessToken ||
+          oa.refreshToken != ob.refreshToken ||
+          oa.idToken != ob.idToken ||
+          oa.expiresAt != ob.expiresAt ||
+          oa.expiresIn != ob.expiresIn ||
+          oa.audience != ob.audience) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool _hasUnredeemedAuthCode(AuthCredential credential) {
@@ -216,9 +305,9 @@ class CredentialManager {
 
   Future<void> _saveCredential(
     Context context,
-    AuthCredential credential,
+    AuthCredential? credential,
   ) async {
-    _authConfig.exchangedAuthCredential = credential.copyWith();
+    _authConfig.exchangedAuthCredential = credential?.copyWith();
 
     final Object? serviceObj = context.invocationContext.credentialService;
     if (serviceObj is BaseCredentialService) {
@@ -226,8 +315,10 @@ class CredentialManager {
       return;
     }
 
-    context.state[authResponseStateKey(_authConfig.credentialKey)] = credential
-        .copyWith();
+    if (credential != null) {
+      context.state[authResponseStateKey(_authConfig.credentialKey)] =
+          credential.copyWith();
+    }
   }
 
   Future<ExchangeResult> _exchangeCredential(AuthCredential credential) async {
@@ -259,11 +350,47 @@ class CredentialManager {
       return _RefreshOutcome(credential: credential, wasRefreshed: false);
     }
 
-    final AuthCredential refreshed = await refresher.refresh(
-      authCredential: credential,
-      authScheme: _authConfig.authScheme,
-    );
-    return _RefreshOutcome(credential: refreshed, wasRefreshed: true);
+    final AuthCredential? raw = _authConfig.rawAuthCredential;
+    if (raw != null &&
+        _isClientCredentialsFlow() &&
+        credential.oauth2 != null &&
+        (credential.oauth2!.refreshToken == null ||
+            credential.oauth2!.refreshToken!.isEmpty)) {
+      final ExchangeResult exchangeResult = await _exchangeCredential(
+        raw.copyWith(),
+      );
+      return _RefreshOutcome(
+        credential: exchangeResult.wasExchanged
+            ? exchangeResult.credential
+            : credential,
+        wasRefreshed: exchangeResult.wasExchanged,
+      );
+    }
+
+    try {
+      final AuthCredential refreshed = await refresher.refresh(
+        authCredential: credential,
+        authScheme: _authConfig.authScheme,
+      );
+      return _RefreshOutcome(
+        credential: refreshed,
+        wasRefreshed: !_sameCredentialValues(refreshed, credential),
+      );
+    } on CredentialRevokedError {
+      if (raw == null || !_isClientCredentialsFlow()) {
+        rethrow;
+      }
+      final ExchangeResult exchangeResult = await _exchangeCredential(
+        raw.copyWith(),
+      );
+      if (!exchangeResult.wasExchanged) {
+        rethrow;
+      }
+      return _RefreshOutcome(
+        credential: exchangeResult.credential,
+        wasRefreshed: true,
+      );
+    }
   }
 
   bool _isCredentialReady() {

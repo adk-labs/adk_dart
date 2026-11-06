@@ -62,6 +62,9 @@ enum FeatureName {
   /// Eventarc toolset integration.
   eventarcToolset('EVENTARC_TOOLSET'),
 
+  /// Filesystem specification (fsspec) artifact service integration.
+  fsspecArtifactService('FSSPEC_ARTIFACT_SERVICE'),
+
   /// Google Cloud IAM connector authentication.
   gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
 
@@ -136,6 +139,9 @@ enum FeatureName {
 
   /// Cloud Spanner vector store integration.
   spannerVectorStore('SPANNER_VECTOR_STORE'),
+
+  /// Multi-agent team coordination support.
+  teams('TEAMS'),
 
   /// Pluggable tool call argument matching support.
   toolArgsMatcher('TOOL_ARGS_MATCHER'),
@@ -267,6 +273,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.experimental,
         defaultOn: true,
       ),
+      FeatureName.fsspecArtifactService: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: false,
+      ),
       FeatureName.gcpIamConnectorAuth: const FeatureConfig(
         FeatureStage.experimental,
       ),
@@ -363,6 +373,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       ),
       FeatureName.spannerVectorStore: const FeatureConfig(
         FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.teams: const FeatureConfig(
+        FeatureStage.experimental,
         defaultOn: true,
       ),
       FeatureName.toolArgsMatcher: const FeatureConfig(

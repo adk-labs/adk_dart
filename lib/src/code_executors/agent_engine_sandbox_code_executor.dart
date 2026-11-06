@@ -82,7 +82,7 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
       );
       _projectId = projectId;
       _location = location;
-      _agentEngineResourceName = agentEngineResourceName;
+      this.agentEngineResourceName = agentEngineResourceName;
 
       if (_sandboxClient == null) {
         sandboxResourceName = '$agentEngineResourceName/sandboxEnvironments/0';
@@ -97,10 +97,63 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
 
   /// Sandbox resource name used for execution requests.
   String? sandboxResourceName;
+
+  /// Agent Engine resource name used to create sandboxes.
+  String? agentEngineResourceName;
+
   final AgentEngineSandboxClient? _sandboxClient;
-  String? _agentEngineResourceName;
-  late final String _projectId;
-  late final String _location;
+  late String _projectId;
+  late String _location;
+  Object _agentEngineCreationLock = Object();
+
+  /// Internal lock object used to serialize Agent Engine creation.
+  Object get agentEngineCreationLock => _agentEngineCreationLock;
+
+  /// Creates a deep copy of this executor with a fresh creation lock.
+  AgentEngineSandboxCodeExecutor clone() {
+    final AgentEngineSandboxCodeExecutor copy = AgentEngineSandboxCodeExecutor(
+      sandboxResourceName: sandboxResourceName,
+      agentEngineResourceName: agentEngineResourceName,
+      sandboxClient: _sandboxClient,
+    );
+    copy.agentEngineResourceName = agentEngineResourceName;
+    copy._projectId = _projectId;
+    copy._location = _location;
+    copy._agentEngineCreationLock = Object();
+    return copy;
+  }
+
+  /// Serializes executor state while excluding the non-serializable creation lock.
+  Map<String, Object?> getState() {
+    return <String, Object?>{
+      'sandbox_resource_name': sandboxResourceName,
+      'agent_engine_resource_name': agentEngineResourceName,
+      '__pydantic_private__': <String, Object?>{
+        '_project_id': _projectId,
+        '_location': _location,
+      },
+    };
+  }
+
+  /// Restores executor state and reinitializes the creation lock.
+  void setState(Map<String, Object?> state) {
+    if (state.containsKey('sandbox_resource_name')) {
+      sandboxResourceName = state['sandbox_resource_name'] as String?;
+    }
+    if (state.containsKey('agent_engine_resource_name')) {
+      agentEngineResourceName = state['agent_engine_resource_name'] as String?;
+    }
+    final Object? privateState = state['__pydantic_private__'];
+    if (privateState is Map) {
+      if (privateState['_project_id'] is String) {
+        _projectId = privateState['_project_id'] as String;
+      }
+      if (privateState['_location'] is String) {
+        _location = privateState['_location'] as String;
+      }
+    }
+    _agentEngineCreationLock = Object();
+  }
 
   Future<void> _ensureSandboxResourceName() async {
     if (sandboxResourceName != null && sandboxResourceName!.isNotEmpty) {
@@ -108,15 +161,15 @@ class AgentEngineSandboxCodeExecutor extends BaseCodeExecutor {
     }
 
     final AgentEngineSandboxClient? client = _sandboxClient;
-    final String? agentEngineResourceName = _agentEngineResourceName;
+    final String? engineResourceName = agentEngineResourceName;
     if (client == null ||
-        agentEngineResourceName == null ||
-        agentEngineResourceName.isEmpty) {
+        engineResourceName == null ||
+        engineResourceName.isEmpty) {
       throw StateError('Sandbox resource name is not initialized.');
     }
 
     sandboxResourceName = await client.createSandbox(
-      agentEngineResourceName: agentEngineResourceName,
+      agentEngineResourceName: engineResourceName,
     );
   }
 

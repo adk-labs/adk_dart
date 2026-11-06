@@ -1077,7 +1077,13 @@ Frontmatter readSkillProperties(String skillDirPath) {
 }
 
 /// Lists valid skills in a base directory keyed by directory name.
-Map<String, Frontmatter> listSkillsInDir(String skillsBasePath) {
+///
+/// When [onError] is provided, it is invoked with `(skillId, error)` for each
+/// skill directory that fails to load or validate instead of writing to stderr.
+Map<String, Frontmatter> listSkillsInDir(
+  String skillsBasePath, {
+  void Function(String skillId, Object error)? onError,
+}) {
   final Directory baseDir = Directory(skillsBasePath);
   if (!baseDir.existsSync() ||
       baseDir.statSync().type != FileSystemEntityType.directory) {
@@ -1107,10 +1113,14 @@ Map<String, Frontmatter> listSkillsInDir(String skillsBasePath) {
       }
       skills[skillId] = frontmatter;
     } catch (error) {
-      stderr.writeln(
-        "Skipping invalid skill '$skillId' in directory "
-        "'${baseDir.path}': ${_formatSkillError(error)}",
-      );
+      if (onError != null) {
+        onError(skillId, error);
+      } else {
+        stderr.writeln(
+          "Skipping invalid skill '$skillId' in directory "
+          "'${baseDir.path}': ${_formatSkillError(error)}",
+        );
+      }
     }
   }
 

@@ -19,6 +19,7 @@ import '../tools/base_tool.dart';
 import '../types/content.dart';
 import '../utils/model_name_utils.dart';
 import 'base_telemetry_service.dart';
+import 'metrics.dart';
 import 'sqlite_span_exporter.dart';
 import '_experimental_semconv.dart' as experimental_semconv;
 
@@ -921,14 +922,22 @@ Future<T> useInferenceSpan<T>(
 
   final bool useExperimentalSemconv = experimental_semconv
       .isExperimentalSemconv(environment: environment);
+  final String systemName = _resolveGenAiSystemName(
+    llmRequest.model,
+    environment: environment,
+  );
   final TraceSpanRecord span = tracer.startAsCurrentSpan(
     'generate_content ${llmRequest.model ?? ''}',
   );
   final GenerateContentSpan gcSpan = GenerateContentSpan(
     span,
     invocationContext: invocationContext,
+    requestModel: llmRequest.model,
+    systemName: systemName,
+    startTimeMicros: DateTime.now().microsecondsSinceEpoch,
   );
 
+  Object? caughtError;
   try {
     _setCommonGenerateContentAttributes(span, llmRequest, commonAttributes);
 
@@ -944,10 +953,6 @@ Future<T> useInferenceSpan<T>(
         environment: environment,
       );
     } else {
-      final String systemName = _resolveGenAiSystemName(
-        llmRequest.model,
-        environment: environment,
-      );
       span.setAttribute('gen_ai.system', systemName);
       _emitStablePromptLogs(
         llmRequest,
@@ -959,9 +964,64 @@ Future<T> useInferenceSpan<T>(
 
     return await run(gcSpan);
   } catch (error) {
+    caughtError = error;
     span.setAttribute('error.type', resolveErrorType(error));
     rethrow;
   } finally {
+    final int endMicros = DateTime.now().microsecondsSinceEpoch;
+    final Duration duration = Duration(
+      microseconds: endMicros - gcSpan.startTimeMicros,
+    );
+    final TokenUsage? tokenUsage =
+        TokenUsage.fromLlmResponses(gcSpan.responses) ??
+        gcSpan.fallbackTokenUsage;
+    final List<String> finishReasons = <String>[];
+    String? responseModel = gcSpan.firstChunkModel;
+    for (final LlmResponse response in gcSpan.responses) {
+      if (response.modelVersion != null && response.modelVersion!.isNotEmpty) {
+        responseModel = response.modelVersion;
+      }
+      if (response.finishReason != null && response.finishReason!.isNotEmpty) {
+        final String lowered = response.finishReason!.toLowerCase();
+        if (!finishReasons.contains(lowered)) {
+          finishReasons.add(lowered);
+        }
+      }
+    }
+    responseModel ??= llmRequest.model;
+    final Object? effectiveError =
+        caughtError ?? (span.attributes['error.type']);
+
+    recordClientOperationDuration(
+      invocationContext.agent.name,
+      duration,
+      requestModel: llmRequest.model,
+      responseModel: responseModel,
+      system: systemName,
+      serverAddress: gcSpan.serverAddress,
+      serverPort: gcSpan.serverPort,
+      finishReasons: finishReasons.isEmpty ? null : finishReasons,
+      error: effectiveError,
+    );
+    if (shouldEmitInferenceTokenMetrics(
+      system: systemName,
+      hasGenAiInstrumentor:
+          _instrumentedWithOpenTelemetryInstrumentationGoogleGenai(),
+      environment: environment,
+    )) {
+      recordInferenceTokenUsage(
+        tokenUsage: tokenUsage,
+        agentName: invocationContext.agent.name,
+        requestModel: llmRequest.model,
+        responseModel: responseModel,
+        system: systemName,
+        serverAddress: gcSpan.serverAddress,
+        serverPort: gcSpan.serverPort,
+        finishReasons: finishReasons.isEmpty ? null : finishReasons,
+        error: effectiveError,
+      );
+    }
+
     if (useExperimentalSemconv) {
       experimental_semconv.maybeLogCompletionDetails(
         span,
@@ -978,7 +1038,16 @@ Future<T> useInferenceSpan<T>(
 /// Span wrapper for generate-content operations.
 class GenerateContentSpan {
   /// Creates a generate-content span wrapper.
-  GenerateContentSpan(this.span, {this.invocationContext});
+  GenerateContentSpan(
+    this.span, {
+    this.invocationContext,
+    this.requestModel,
+    this.systemName,
+    this.serverAddress,
+    this.serverPort,
+    int? startTimeMicros,
+  }) : startTimeMicros =
+           startTimeMicros ?? DateTime.now().microsecondsSinceEpoch;
 
   /// Underlying trace span.
   final TraceSpanRecord span;
@@ -986,12 +1055,95 @@ class GenerateContentSpan {
   /// Invocation context associated with this inference span, if available.
   final InvocationContext? invocationContext;
 
+  /// Requested model name for this inference span.
+  final String? requestModel;
+
+  /// Resolved `gen_ai.system` value for this inference span.
+  final String? systemName;
+
+  /// Optional server address for this inference span.
+  final String? serverAddress;
+
+  /// Optional server port for this inference span.
+  final int? serverPort;
+
+  /// Start timestamp of the inference span in microseconds.
+  int startTimeMicros;
+
+  /// Timestamp of the last received streaming chunk in microseconds.
+  int? lastChunkTimeMicros;
+
+  /// Model version observed on the first streaming chunk.
+  String? firstChunkModel;
+
+  /// Responses accumulated during this inference span.
+  final List<LlmResponse> responses = <LlmResponse>[];
+
+  /// Fallback token usage recorded by streaming adapters when responses are not
+  /// retained or fail mid-stream.
+  TokenUsage? fallbackTokenUsage;
+
   /// Experimental operation details attributes.
   final Map<String, Object?> operationDetailsAttributes = <String, Object?>{};
 
   /// Common attributes shared by operation details logs.
   final Map<String, Object?> operationDetailsCommonAttributes =
       <String, Object?>{};
+}
+
+/// Records streaming chunk timing metrics for [response] within [span].
+///
+/// The first chunk emits both `gen_ai.client.operation.time_to_first_chunk`
+/// and `gen_ai.client.inference.chunk.duration`; subsequent chunks emit
+/// `gen_ai.client.inference.chunk.duration` using the elapsed time since the
+/// previous chunk.
+void recordInferenceChunk(
+  GenerateContentSpan? span,
+  LlmResponse response, {
+  int? nowMicros,
+  AdkMetricsRecorder? recorder,
+}) {
+  if (span == null || response.partial == false) {
+    return;
+  }
+  final int currentMicros =
+      nowMicros ?? DateTime.now().microsecondsSinceEpoch;
+  final bool isFirstChunk = span.lastChunkTimeMicros == null;
+  final int baselineMicros = span.lastChunkTimeMicros ?? span.startTimeMicros;
+  span.lastChunkTimeMicros = currentMicros;
+  final int deltaMicros = currentMicros >= baselineMicros
+      ? currentMicros - baselineMicros
+      : 0;
+  if (isFirstChunk) {
+    span.firstChunkModel =
+        (response.modelVersion != null && response.modelVersion!.isNotEmpty)
+        ? response.modelVersion
+        : span.requestModel;
+  }
+  final String? responseModel =
+      span.firstChunkModel ?? response.modelVersion ?? span.requestModel;
+  recordClientInferenceChunk(
+    Duration(microseconds: deltaMicros),
+    isFirstChunk: isFirstChunk,
+    agentName: span.invocationContext?.agent.name,
+    requestModel: span.requestModel,
+    responseModel: responseModel,
+    system: span.systemName,
+    serverAddress: span.serverAddress,
+    serverPort: span.serverPort,
+    recorder: recorder,
+  );
+}
+
+/// Records fallback [tokenUsage] on [span] for streaming or failed calls.
+void recordInferenceOutputTokenUsage(
+  GenerateContentSpan? span,
+  TokenUsage tokenUsage,
+) {
+  if (span == null) {
+    return;
+  }
+  span.fallbackTokenUsage = tokenUsage;
 }
 
 /// Records inference result attributes on a legacy span.
@@ -1029,6 +1181,9 @@ void traceInferenceResult(
   if (span is GenerateContentSpan) {
     generateContentSpan = span;
     targetSpan = span.span;
+    if (llmResponse.partial != true) {
+      span.responses.add(llmResponse);
+    }
   } else if (span is TraceSpanRecord) {
     targetSpan = span;
   }

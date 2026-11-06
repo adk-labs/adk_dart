@@ -1,7 +1,35 @@
 /// Shared utilities for session-state serialization and partitioning.
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'state.dart';
+
+/// Recursively coerces raw [Uint8List] byte buffers into JSON-compatible
+/// strings (UTF-8 decoded when valid, or base64-encoded for binary bytes).
+Object? coerceBytesForJson(Object? value) {
+  if (value is Uint8List) {
+    try {
+      return utf8.decode(value);
+    } on FormatException {
+      return base64.encode(value);
+    }
+  }
+  if (value is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': coerceBytesForJson(entry.value),
+    };
+  }
+  if (value is List) {
+    return value.map(coerceBytesForJson).toList(growable: false);
+  }
+  if (value is Set) {
+    return value.map(coerceBytesForJson).toList(growable: false);
+  }
+  return value;
+}
 
 /// Split representation of app, user, and session-scoped state entries.
 class SessionStateDelta {
@@ -73,5 +101,64 @@ Map<String, Object?> trimTempState(Map<String, Object?>? state) {
   return <String, Object?>{
     for (final MapEntry<String, Object?> entry in state.entries)
       if (!entry.key.startsWith(State.tempPrefix)) entry.key: entry.value,
+  };
+}
+
+/// Recursively converts [value] into a JSON-serializable structure.
+///
+/// Objects that expose `toJson()` or `toMap()` are converted via those methods
+/// before nested values are normalized.
+Object? makeJsonSafeValue(Object? value) {
+  if (value == null || value is bool || value is num || value is String) {
+    return value;
+  }
+  if (value is Uint8List) {
+    return coerceBytesForJson(value);
+  }
+  if (value is DateTime) {
+    return value.toIso8601String();
+  }
+  if (value is Uri) {
+    return value.toString();
+  }
+  if (value is Enum) {
+    return value.name;
+  }
+  if (value is Map) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}': makeJsonSafeValue(entry.value),
+    };
+  }
+  if (value is Iterable) {
+    return value.map(makeJsonSafeValue).toList(growable: false);
+  }
+  try {
+    final Object? jsonValue = (value as dynamic).toJson();
+    if (!identical(jsonValue, value)) {
+      return makeJsonSafeValue(jsonValue);
+    }
+  } catch (_) {
+    // Object does not provide `toJson()`.
+  }
+  try {
+    final Object? mapValue = (value as dynamic).toMap();
+    if (!identical(mapValue, value)) {
+      return makeJsonSafeValue(mapValue);
+    }
+  } catch (_) {
+    // Object does not provide `toMap()`.
+  }
+  return '$value';
+}
+
+/// Returns a copy of [state] with all values normalized via [makeJsonSafeValue].
+Map<String, Object?> makeJsonSafeState(Map<String, Object?>? state) {
+  if (state == null || state.isEmpty) {
+    return <String, Object?>{};
+  }
+  return <String, Object?>{
+    for (final MapEntry<String, Object?> entry in state.entries)
+      entry.key: makeJsonSafeValue(entry.value),
   };
 }

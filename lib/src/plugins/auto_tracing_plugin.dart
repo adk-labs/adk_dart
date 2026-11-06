@@ -1,6 +1,9 @@
 /// Plugin that records ADK callback spans using the Dart telemetry tracer.
 library;
 
+import 'dart:async';
+import 'dart:collection';
+
 import '../agents/base_agent.dart';
 import '../agents/callback_context.dart';
 import '../agents/invocation_context.dart';
@@ -611,6 +614,282 @@ class AutoTracingPlugin extends BasePlugin {
         null,
         recorder: recorder,
       );
+    }
+  }
+
+  /// Wraps a synchronous generator ([source]) inside a span named [spanName]
+  /// so that normal completion, errors, or explicit `.close()` calls on the
+  /// returned [CloseableSyncIterable] / [CloseableSyncIterator] always close
+  /// the underlying iterator/generator (calling [onClose] if provided) and end
+  /// the span.
+  CloseableSyncIterable<T> wrapSyncGenerator<T>(
+    String spanName,
+    Iterable<T> Function() source, {
+    Map<String, Object?>? attributes,
+    void Function()? onClose,
+  }) {
+    return CloseableSyncIterable<T>(
+      spanName: spanName,
+      source: source,
+      tracer: _tracer,
+      capturePayloads: capturePayloads,
+      maxReprLen: maxReprLen,
+      attributes: attributes,
+      onClose: onClose,
+    );
+  }
+
+  /// Wraps an asynchronous generator ([source]) inside a span named [spanName]
+  /// so that normal completion, errors, or early consumer cancellation (`break`
+  /// / `cancel()`) always cancel the underlying stream subscription (triggering
+  /// the inner `async*` `finally` block and [onClose] if provided) and end the
+  /// span.
+  Stream<T> wrapAsyncGenerator<T>(
+    String spanName,
+    Stream<T> Function() source, {
+    Map<String, Object?>? attributes,
+    FutureOr<void> Function()? onClose,
+  }) async* {
+    final adk_tracing.TraceSpanRecord span = _tracer.startAsCurrentSpan(
+      spanName,
+      attributes: attributes == null
+          ? null
+          : (Map<String, Object?>.from(attributes)
+              ..removeWhere((String _, Object? value) => value == null)),
+    );
+    final List<T> yielded = <T>[];
+    Stream<T>? stream;
+    try {
+      stream = source();
+      await for (final T item in stream) {
+        if (capturePayloads) {
+          yielded.add(item);
+        }
+        yield item;
+      }
+      if (capturePayloads) {
+        span.setAttribute('adk.fn.yield_count', yielded.length);
+        span.setAttribute('adk.fn.return', _safeRepr(yielded, maxReprLen));
+      }
+    } catch (error) {
+      span.setAttribute(
+        'error.type',
+        adk_tracing.resolveErrorType(error),
+      );
+      if (capturePayloads) {
+        span.setAttribute('adk.fn.exc_repr', _safeRepr(error, maxReprLen));
+      }
+      rethrow;
+    } finally {
+      try {
+        if (onClose != null) {
+          await onClose();
+        } else if (stream != null) {
+          try {
+            final Object? result = (stream as dynamic).aclose();
+            if (result is Future) {
+              await result;
+            }
+          } catch (_) {
+            // `await for` already cancels its StreamSubscription on break/throw.
+          }
+        }
+      } finally {
+        _tracer.endSpan(span);
+      }
+    }
+  }
+}
+
+/// Synchronous [Iterable] returned by [AutoTracingPlugin.wrapSyncGenerator]
+/// that tracks active iterators and supports explicit [close] on early exit.
+class CloseableSyncIterable<T> extends IterableBase<T> {
+  /// Creates a closeable traced synchronous iterable.
+  CloseableSyncIterable({
+    required this.spanName,
+    required this.source,
+    required adk_tracing.AdkTracer tracer,
+    required this.capturePayloads,
+    required this.maxReprLen,
+    this.attributes,
+    this.onClose,
+  }) : _tracer = tracer;
+
+  /// Span name recorded for each iteration.
+  final String spanName;
+
+  /// Underlying iterable factory.
+  final Iterable<T> Function() source;
+
+  final adk_tracing.AdkTracer _tracer;
+
+  /// Whether yielded payload summaries should be captured.
+  final bool capturePayloads;
+
+  /// Maximum representation length for captured payloads.
+  final int maxReprLen;
+
+  /// Optional initial span attributes.
+  final Map<String, Object?>? attributes;
+
+  /// Optional callback invoked when the iterator is closed.
+  final void Function()? onClose;
+
+  final List<CloseableSyncIterator<T>> _activeIterators =
+      <CloseableSyncIterator<T>>[];
+
+  @override
+  CloseableSyncIterator<T> get iterator {
+    final CloseableSyncIterator<T> it = CloseableSyncIterator<T>(
+      spanName: spanName,
+      source: source,
+      tracer: _tracer,
+      capturePayloads: capturePayloads,
+      maxReprLen: maxReprLen,
+      attributes: attributes,
+      onClose: onClose,
+    );
+    _activeIterators.add(it);
+    return it;
+  }
+
+  /// Closes any active iterators created from this iterable and ends their spans.
+  void close() {
+    for (final CloseableSyncIterator<T> it in _activeIterators.toList()) {
+      it.close();
+    }
+    _activeIterators.clear();
+  }
+}
+
+/// Synchronous [Iterator] that closes its underlying generator and span when
+/// exhausted, when an error is thrown, or when [close] is called explicitly.
+class CloseableSyncIterator<T> implements Iterator<T> {
+  /// Creates a closeable traced synchronous iterator.
+  CloseableSyncIterator({
+    required this.spanName,
+    required this.source,
+    required adk_tracing.AdkTracer tracer,
+    required this.capturePayloads,
+    required this.maxReprLen,
+    this.attributes,
+    this.onClose,
+  }) : _tracer = tracer;
+
+  /// Span name recorded for this iteration.
+  final String spanName;
+
+  /// Underlying iterable factory.
+  final Iterable<T> Function() source;
+
+  final adk_tracing.AdkTracer _tracer;
+
+  /// Whether yielded payload summaries should be captured.
+  final bool capturePayloads;
+
+  /// Maximum representation length for captured payloads.
+  final int maxReprLen;
+
+  /// Optional initial span attributes.
+  final Map<String, Object?>? attributes;
+
+  /// Optional callback invoked when the iterator is closed.
+  final void Function()? onClose;
+
+  adk_tracing.TraceSpanRecord? _span;
+  Iterable<T>? _iterable;
+  Iterator<T>? _inner;
+  final List<T> _yielded = <T>[];
+  bool _started = false;
+  bool _closed = false;
+  T? _current;
+
+  @override
+  T get current => _current as T;
+
+  @override
+  bool moveNext() {
+    if (_closed) {
+      return false;
+    }
+    if (!_started) {
+      _started = true;
+      _span = _tracer.startAsCurrentSpan(
+        spanName,
+        attributes: attributes == null
+            ? null
+            : (Map<String, Object?>.from(attributes!)
+                ..removeWhere((String _, Object? value) => value == null)),
+      );
+      try {
+        _iterable = source();
+        _inner = _iterable!.iterator;
+      } catch (error) {
+        _recordError(error);
+        close();
+        rethrow;
+      }
+    }
+
+    try {
+      final bool hasNext = _inner!.moveNext();
+      if (hasNext) {
+        final T item = _inner!.current;
+        _current = item;
+        if (capturePayloads) {
+          _yielded.add(item);
+        }
+        return true;
+      }
+      if (capturePayloads && _span != null) {
+        _span!.setAttribute('adk.fn.yield_count', _yielded.length);
+        _span!.setAttribute('adk.fn.return', _safeRepr(_yielded, maxReprLen));
+      }
+      close();
+      return false;
+    } catch (error) {
+      _recordError(error);
+      close();
+      rethrow;
+    }
+  }
+
+  void _recordError(Object error) {
+    final adk_tracing.TraceSpanRecord? span = _span;
+    if (span == null) {
+      return;
+    }
+    span.setAttribute('error.type', adk_tracing.resolveErrorType(error));
+    if (capturePayloads) {
+      span.setAttribute('adk.fn.exc_repr', _safeRepr(error, maxReprLen));
+    }
+  }
+
+  /// Closes the underlying iterator/iterable and ends the span if still active.
+  void close() {
+    if (_closed) {
+      return;
+    }
+    _closed = true;
+    try {
+      if (onClose != null) {
+        onClose!();
+      } else {
+        if (_inner != null) {
+          try {
+            (_inner as dynamic).close();
+          } catch (_) {}
+        }
+        if (_iterable != null) {
+          try {
+            (_iterable as dynamic).close();
+          } catch (_) {}
+        }
+      }
+    } finally {
+      if (_span != null) {
+        _tracer.endSpan(_span!);
+      }
     }
   }
 }

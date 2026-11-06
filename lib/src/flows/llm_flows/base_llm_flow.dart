@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import '../../agents/abort_signal.dart';
 import '../../agents/base_agent.dart';
 import '../../agents/callback_context.dart';
 import '../../agents/context.dart';
@@ -493,7 +494,9 @@ class BaseLlmFlow {
       return;
     }
 
-    if (context.runConfig?.saveLiveBlob == true) {
+    final bool isBargeIn =
+        response.interrupted == true && response.turnComplete != true;
+    if (context.runConfig?.saveLiveBlob == true && !isBargeIn) {
       final List<Event> flushed = await handleControlEventFlush(
         context,
         response,
@@ -514,6 +517,18 @@ class BaseLlmFlow {
       return;
     }
     yield finalized;
+
+    if (context.runConfig?.saveLiveBlob == true && isBargeIn) {
+      final List<Event> flushed = await handleControlEventFlush(
+        context,
+        response,
+      );
+      if (flushed.isNotEmpty) {
+        for (final Event event in flushed) {
+          yield event;
+        }
+      }
+    }
 
     if (finalized.getFunctionCalls().isNotEmpty) {
       if (finalized.partial == true) {
@@ -738,6 +753,9 @@ class BaseLlmFlow {
     InvocationContext context,
     Object? update,
   ) {
+    if (update == null) {
+      return;
+    }
     if (update is String && update.isNotEmpty) {
       context.liveSessionResumptionHandle = update;
       return;
@@ -748,6 +766,25 @@ class BaseLlmFlow {
       if (handle is String && handle.isNotEmpty) {
         context.liveSessionResumptionHandle = handle;
       }
+      return;
+    }
+    try {
+      final dynamic dynamicUpdate = update;
+      Object? handle;
+      try {
+        handle = dynamicUpdate.newHandle;
+      } catch (_) {
+        try {
+          handle = dynamicUpdate.new_handle;
+        } catch (_) {
+          handle = dynamicUpdate.handle;
+        }
+      }
+      if (handle is String && handle.isNotEmpty) {
+        context.liveSessionResumptionHandle = handle;
+      }
+    } catch (_) {
+      // Update object does not expose a handle property.
     }
   }
 
@@ -1171,6 +1208,11 @@ class BaseLlmFlow {
         return;
       }
 
+      await PersistBarrier.awaitPersisted(context, <Event>[finalized]);
+      if (context.isAborted) {
+        return;
+      }
+
       await for (final Event event in _postprocessHandleFunctionCallsAsync(
         context,
         finalized,
@@ -1299,12 +1341,23 @@ class BaseLlmFlow {
     final BaseLlm llm = _getLlm(context);
     context.incrementLlmCallCount();
 
+    bool streamCompleted = false;
+    bool notifiedOnCancel = false;
     try {
       await for (LlmResponse response in llm.generateContent(
         request.sanitizedForModelCall(),
         stream: context.runConfig?.streamingMode == StreamingMode.sse,
       )) {
         if (context.isAborted) {
+          notifiedOnCancel = true;
+          await _notifyModelCancelled(
+            context,
+            request,
+            modelResponseEvent,
+            AdkAbortException(
+              context.abortSignal?.reason ?? 'Model call cancelled',
+            ),
+          );
           return;
         }
         final LlmResponse? altered = await _handleAfterModelCallback(
@@ -1313,6 +1366,15 @@ class BaseLlmFlow {
           modelResponseEvent,
         );
         if (context.isAborted) {
+          notifiedOnCancel = true;
+          await _notifyModelCancelled(
+            context,
+            request,
+            modelResponseEvent,
+            AdkAbortException(
+              context.abortSignal?.reason ?? 'Model call cancelled',
+            ),
+          );
           return;
         }
         if (altered != null) {
@@ -1320,7 +1382,22 @@ class BaseLlmFlow {
         }
         yield response;
       }
+      streamCompleted = true;
     } catch (error) {
+      if (error is AdkAbortException || context.isAborted) {
+        notifiedOnCancel = true;
+        final Exception cancelException = error is Exception
+            ? error
+            : AdkAbortException(error.toString());
+        await _notifyModelCancelled(
+          context,
+          request,
+          modelResponseEvent,
+          cancelException,
+        );
+        rethrow;
+      }
+      notifiedOnCancel = true;
       final Exception exception = error is Exception
           ? error
           : Exception(error.toString());
@@ -1335,6 +1412,55 @@ class BaseLlmFlow {
         return;
       }
       rethrow;
+    } finally {
+      if (!streamCompleted && !notifiedOnCancel) {
+        await _notifyModelCancelled(
+          context,
+          request,
+          modelResponseEvent,
+          AdkAbortException(
+            context.abortSignal?.reason ?? 'Model call cancelled',
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _notifyModelCancelled(
+    InvocationContext context,
+    LlmRequest request,
+    Event modelResponseEvent,
+    Exception cancelled,
+  ) async {
+    final LlmAgent agent = context.agent as LlmAgent;
+    final CallbackContext callbackContext = Context(
+      context,
+      eventActions: modelResponseEvent.actions,
+    );
+
+    try {
+      await context.pluginManager.runOnModelErrorCallback(
+        callbackContext: callbackContext,
+        llmRequest: request,
+        error: cancelled,
+      );
+    } catch (_) {
+      // Ignore callback errors during cancellation cleanup.
+    }
+
+    for (final OnModelErrorCallback callback
+        in agent.canonicalOnModelErrorCallbacks) {
+      try {
+        await runWithCallbackScope<LlmResponse?>(
+          CallbackInfo(
+            type: CallbackType.onModelError,
+            name: resolveCallbackName(callback),
+          ),
+          () => callback(callbackContext, request, cancelled),
+        );
+      } catch (_) {
+        // Ignore callback errors during cancellation cleanup.
+      }
     }
   }
 
@@ -1569,10 +1695,48 @@ class BaseLlmFlow {
         flow_functions.populateClientFunctionCallId(finalized);
         finalized.longRunningToolIds = flow_functions
             .getLongRunningFunctionCalls(calls, request.toolsDict);
+        _populateToolDisplayNames(finalized, calls, request.toolsDict);
       }
     }
 
     return finalized;
+  }
+
+  void _populateToolDisplayNames(
+    Event modelResponseEvent,
+    List<FunctionCall> functionCalls,
+    Map<String, BaseTool> toolsDict,
+  ) {
+    final Map<String, String> displayNames = <String, String>{};
+    for (final FunctionCall functionCall in functionCalls) {
+      final String name = functionCall.name;
+      if (name.isEmpty || !toolsDict.containsKey(name)) {
+        continue;
+      }
+      final BaseTool tool = toolsDict[name]!;
+      String? title;
+      final Object? metaTitle = tool.customMetadata?['title'];
+      if (metaTitle is String && metaTitle.isNotEmpty) {
+        title = metaTitle;
+      } else {
+        try {
+          final Object? dynamicTitle = (tool as dynamic).title;
+          if (dynamicTitle is String && dynamicTitle.isNotEmpty) {
+            title = dynamicTitle;
+          }
+        } catch (_) {
+          // Tool does not define a `.title` getter.
+        }
+      }
+      if (title != null && title.isNotEmpty) {
+        displayNames[name] = title;
+      }
+    }
+    if (displayNames.isNotEmpty) {
+      modelResponseEvent.customMetadata ??= <String, dynamic>{};
+      modelResponseEvent.customMetadata![toolDisplayNamesMetadataKey] =
+          displayNames;
+    }
   }
 
   /// Flushes cached live audio and visual events based on control flags in [response].

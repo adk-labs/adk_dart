@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import '../agents/abort_signal.dart';
 import '../agents/base_agent.dart';
@@ -77,8 +78,9 @@ class WorkflowInvariantError extends StateError {
 /// expected key, matching Python's replay barrier semantics.
 class ReplaySequenceBarrier {
   /// Creates a replay sequence barrier.
-  ReplaySequenceBarrier(Iterable<String> sequence)
-    : sequence = List<String>.unmodifiable(sequence) {
+  ReplaySequenceBarrier(Iterable<String> sequence, {Iterable<String>? pending})
+    : sequence = List<String>.unmodifiable(sequence),
+      pending = Set<String>.unmodifiable(pending ?? const <String>{}) {
     for (final String key in this.sequence) {
       _events.putIfAbsent(key, Completer<void>.new);
     }
@@ -89,6 +91,9 @@ class ReplaySequenceBarrier {
 
   /// Chronological replay key sequence.
   final List<String> sequence;
+
+  /// Keys in [sequence] that were interrupted and not yet completed.
+  final Set<String> pending;
 
   /// Current expected sequence index.
   int currentIndex = 0;
@@ -552,7 +557,7 @@ class WorkflowContext {
         )) {
           interruptIds.addAll(state.interrupts);
           if (raiseOnWait) {
-            throw NodeInterruptedError();
+            throw NodeInterruptedError(interruptIds: state.interrupts);
           }
           return outputs[stateKey];
         }
@@ -589,6 +594,14 @@ class WorkflowContext {
         runId: effectiveRunId,
         parentKey: parentKey,
       );
+    } on NodeInterruptedError catch (error) {
+      interruptIds
+        ..addAll(childContext.interruptIds)
+        ..addAll(error.interruptIds);
+      if (raiseOnWait) {
+        rethrow;
+      }
+      return outputs[stateKey];
     } catch (_) {
       _failedInDynamicChild = true;
       rethrow;
@@ -619,11 +632,14 @@ class WorkflowContext {
       }
     }
     _recordNodeResult(this, result);
+    if (useAsOutput && result.route != null) {
+      route ??= result.route;
+    }
     if (result.interruptIds.isNotEmpty) {
       interruptIds.addAll(result.interruptIds);
     }
     if (raiseOnWait && (result.waiting || result.interruptIds.isNotEmpty)) {
-      throw NodeInterruptedError();
+      throw NodeInterruptedError(interruptIds: result.interruptIds);
     }
     return result.output;
   }
@@ -655,6 +671,23 @@ class WorkflowContext {
     final String? branch = invocationContext?.branch;
     if (branch != null && branch.isNotEmpty) {
       reserveRunIds(branch);
+    }
+    for (final String key in nodeStates.keys) {
+      reserveRunIds(key);
+    }
+    final List<Event>? events = invocationContext?.session.events;
+    final String? invocationId = invocationContext?.invocationId;
+    if (events != null) {
+      for (final Event event in events) {
+        if (invocationId != null &&
+            invocationId.isNotEmpty &&
+            event.invocationId != invocationId) {
+          continue;
+        }
+        if (event.nodeInfo.path.isNotEmpty) {
+          reserveRunIds(event.nodeInfo.path);
+        }
+      }
     }
   }
 
@@ -736,6 +769,7 @@ abstract class BaseNode {
     this.waitForOutput = false,
     this.retryConfig,
     this.timeout,
+    this.outputSchema,
   }) : dependsOn = dependsOn ?? const <String>[];
 
   /// Stable node name.
@@ -759,6 +793,9 @@ abstract class BaseNode {
   /// Optional per-attempt timeout.
   final Duration? timeout;
 
+  /// Optional output schema or type hint (such as [Uint8List]) for node output.
+  final Object? outputSchema;
+
   /// Whether this node requires all predecessor nodes to complete before running.
   bool get requiresAllPredecessors => false;
 
@@ -780,6 +817,7 @@ abstract class Node extends BaseNode {
     super.waitForOutput,
     super.retryConfig,
     super.timeout,
+    super.outputSchema,
   });
 }
 
@@ -798,6 +836,7 @@ class FunctionNode extends BaseNode {
     super.waitForOutput,
     super.retryConfig,
     super.timeout,
+    super.outputSchema,
     this.requireConfirmation = false,
   }) : super(
          rerunOnResume:
@@ -1036,6 +1075,7 @@ FunctionNode node(
   bool? rerunOnResume,
   RetryConfig? retryConfig,
   Duration? timeout,
+  Object? outputSchema,
   Object? requireConfirmation,
 }) {
   return buildNode(
@@ -1046,6 +1086,7 @@ FunctionNode node(
         rerunOnResume: rerunOnResume,
         retryConfig: retryConfig,
         timeout: timeout,
+        outputSchema: outputSchema,
         requireConfirmation: requireConfirmation,
       )
       as FunctionNode;
@@ -1068,6 +1109,7 @@ BaseNode buildNode(
   bool? waitForOutput,
   RetryConfig? retryConfig,
   Duration? timeout,
+  Object? outputSchema,
   Object? requireConfirmation,
 }) {
   if (nodeLike is NodeTool) {
@@ -1080,6 +1122,7 @@ BaseNode buildNode(
       waitForOutput: waitForOutput,
       retryConfig: retryConfig,
       timeout: timeout,
+      outputSchema: outputSchema,
       requireConfirmation: requireConfirmation,
     );
   }
@@ -1108,6 +1151,7 @@ BaseNode buildNode(
         waitForOutput == null &&
         retryConfig == null &&
         timeout == null &&
+        outputSchema == null &&
         (requireConfirmation == null ||
             (nodeLike is! FunctionNode && requireConfirmation == false))) {
       return nodeLike;
@@ -1132,6 +1176,7 @@ BaseNode buildNode(
       waitForOutput: waitForOutput ?? false,
       retryConfig: retryConfig,
       timeout: timeout,
+      outputSchema: outputSchema,
     );
   }
   if (nodeLike is BaseAgent) {
@@ -1139,6 +1184,17 @@ BaseNode buildNode(
       throw WorkflowConfigurationError(
         'require_confirmation is only supported on FunctionNode, got '
         '${nodeLike.runtimeType}.',
+      );
+    }
+    if (nodeLike is LlmAgent && nodeLike.parallelWorker) {
+      final int? maxParallelWorkers = nodeLike.maxParallelWorkers;
+      nodeLike.maxParallelWorkers = null;
+      nodeLike.parallelWorker = false;
+      return ParallelWorker(
+        node: nodeLike,
+        maxParallelWorkers: maxParallelWorkers,
+        retryConfig: retryConfig,
+        timeout: timeout,
       );
     }
     final bool agentWaitForOutput =
@@ -1154,6 +1210,7 @@ BaseNode buildNode(
       waitForOutput: agentWaitForOutput,
       retryConfig: retryConfig,
       timeout: timeout,
+      outputSchema: outputSchema,
     );
   }
   if (nodeLike is WorkflowFunction) {
@@ -1166,6 +1223,7 @@ BaseNode buildNode(
       waitForOutput: waitForOutput ?? false,
       retryConfig: retryConfig,
       timeout: timeout,
+      outputSchema: outputSchema,
       requireConfirmation: requireConfirmation ?? false,
     );
   }
@@ -1368,6 +1426,7 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
       waitForOutput: node.waitForOutput,
       retryConfig: retryConfig,
       timeout: node.timeout,
+      outputSchema: node.outputSchema,
       requireConfirmation: node.requireConfirmation,
     );
   }
@@ -1381,6 +1440,7 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
       waitForOutput: node.waitForOutput,
       retryConfig: retryConfig,
       timeout: node.timeout,
+      outputSchema: node.outputSchema,
     );
   }
   if (node is AgentNode) {
@@ -1394,6 +1454,7 @@ BaseNode _withRetryConfig(BaseNode node, RetryConfig? retryConfig) {
       waitForOutput: node.waitForOutput,
       retryConfig: retryConfig,
       timeout: node.timeout,
+      outputSchema: node.outputSchema,
     );
     node.agent.parentAgent = previousParent;
     return cloned;
@@ -1421,6 +1482,7 @@ class ToolNode extends BaseNode {
     super.waitForOutput,
     super.retryConfig,
     super.timeout,
+    super.outputSchema,
   }) : super(name: name ?? tool.name);
 
   /// Tool executed by this node.
@@ -1472,6 +1534,7 @@ class AgentNode extends BaseNode {
     super.waitForOutput,
     super.retryConfig,
     super.timeout,
+    super.outputSchema,
   }) : super(name: name ?? agent.name, rerunOnResume: rerunOnResume ?? true);
 
   /// Agent executed by this node.
@@ -1485,7 +1548,7 @@ class AgentNode extends BaseNode {
     // Matches adk-python _llm_agent_wrapper.run_llm_agent_as_node.
     if (agent is LlmAgent) {
       final LlmAgent llmAgent = agent as LlmAgent;
-      llmAgent.mode ??= 'single_turn';
+      llmAgent.mode ??= llmAgent.parentAgent != null ? 'chat' : 'single_turn';
       // Only default includeContents to 'none' when the user has not
       // explicitly set it (i.e. it is still at the constructor default
       // value of 'default').
@@ -1509,9 +1572,24 @@ class AgentNode extends BaseNode {
     final InvocationContext parentContext =
         context.invocationContext ?? _standaloneInvocationContext(name);
     final bool isResuming = context.resumeInputs.isNotEmpty;
-    final Content? userContent = (validatedInput == null || isResuming)
-        ? null
-        : _contentFromNodeInput(validatedInput);
+    final Content? userContent;
+    if (agent is LlmAgent) {
+      final LlmAgent llmAgent = agent as LlmAgent;
+      if ((llmAgent.mode == 'task' || llmAgent.mode == 'single_turn') &&
+          validatedInput != null &&
+          !isResuming) {
+        userContent = _contentFromNodeInput(validatedInput);
+      } else if (llmAgent.mode == 'single_turn' &&
+          parentContext.isolationScope != null) {
+        userContent = null;
+      } else {
+        userContent = parentContext.userContent;
+      }
+    } else {
+      userContent = (validatedInput == null || isResuming)
+          ? null
+          : _contentFromNodeInput(validatedInput);
+    }
     final String? nodeKey = context._currentNodeKey;
     final bool collectNestedWorkflowEvents =
         agent is Workflow &&
@@ -1591,7 +1669,13 @@ class AgentNode extends BaseNode {
       if (event.isFinalResponse() &&
           event.actions.endOfAgent == null &&
           event.actions.agentState == null) {
-        finalEvent = event;
+        if (agent is! Workflow ||
+            (event.nodeInfo.outputFor?.contains(
+                  _workflowRootPath(agent as Workflow),
+                ) ??
+                false)) {
+          finalEvent = event;
+        }
       }
       if (collectNestedWorkflowEvents) {
         nestedEvents.add(
@@ -1951,6 +2035,7 @@ class Workflow extends BaseAgent {
         byName: byName,
         dependencies: dependencies,
         edgePredecessors: edgePredecessors,
+        reachableFrom: reachableFrom,
         joinArrivals: joinArrivals,
         completed: completed,
         pending: pending,
@@ -2016,7 +2101,15 @@ class Workflow extends BaseAgent {
         );
       }
       for (final String name in ready) {
-        joinArrivals.remove(name);
+        final Set<String>? arrivals = joinArrivals[name];
+        if (arrivals != null) {
+          final Set<String>? reachable = reachableFrom[name];
+          if (reachable != null && reachable.contains(name)) {
+            arrivals.removeAll(reachable);
+          } else {
+            joinArrivals.remove(name);
+          }
+        }
       }
 
       // Schedule all ready tasks, then drain them by completion order. When a
@@ -2068,6 +2161,7 @@ class Workflow extends BaseAgent {
           byName: byName,
           dependencies: dependencies,
           edgePredecessors: edgePredecessors,
+          reachableFrom: reachableFrom,
           joinArrivals: joinArrivals,
           completed: completed,
           pending: pending,
@@ -2161,7 +2255,15 @@ class Workflow extends BaseAgent {
             replayedInFlight.add(name);
           }
           pending.remove(name);
-          joinArrivals.remove(name);
+          final Set<String>? arrivals = joinArrivals[name];
+          if (arrivals != null) {
+            final Set<String>? reachable = reachableFrom[name];
+            if (reachable != null && reachable.contains(name)) {
+              arrivals.removeAll(reachable);
+            } else {
+              joinArrivals.remove(name);
+            }
+          }
           running[name] =
               _runReadyNode(
                 context: context,
@@ -2213,6 +2315,7 @@ class Workflow extends BaseAgent {
         byName: byName,
         dependencies: dependencies,
         edgePredecessors: edgePredecessors,
+        reachableFrom: reachableFrom,
         joinArrivals: joinArrivals,
         completed: completed,
         pending: pending,
@@ -2378,11 +2481,14 @@ class Workflow extends BaseAgent {
         nodeInput: nodeInput,
       );
       return _resultFromRawNodeOutput(node, output, context: nodeContext);
-    } on NodeInterruptedError {
+    } on NodeInterruptedError catch (error) {
       return _NodeRunResult(
         name: name,
         output: null,
-        interruptIds: nodeContext.interruptIds,
+        interruptIds: <String>{
+          ...nodeContext.interruptIds,
+          ...error.interruptIds,
+        },
         waiting: true,
       );
     }
@@ -2482,6 +2588,7 @@ class Workflow extends BaseAgent {
     required Map<String, BaseNode> byName,
     required Map<String, Set<String>> dependencies,
     required Map<String, Set<String>> edgePredecessors,
+    required Map<String, Set<String>> reachableFrom,
     required Map<String, Set<String>> joinArrivals,
     required Set<String> completed,
     required Set<String> pending,
@@ -2522,8 +2629,14 @@ class Workflow extends BaseAgent {
         if (!targetNode.requiresAllPredecessors) {
           completed.remove(target);
           pending.add(target);
-          for (final Set<String> arrivals in joinArrivals.values) {
-            arrivals.remove(target);
+          for (final MapEntry<String, Set<String>> entry
+              in joinArrivals.entries) {
+            final Set<String>? reachable = reachableFrom[entry.key];
+            if (reachable == null ||
+                !reachable.contains(entry.key) ||
+                reachable.contains(target)) {
+              entry.value.remove(target);
+            }
           }
         } else {
           final Set<String> arrivals = joinArrivals[target] ?? const <String>{};
@@ -2568,9 +2681,6 @@ class Workflow extends BaseAgent {
     Object? output, {
     NodeState? state,
   }) {
-    if (output == null) {
-      return null;
-    }
     final NodeInfo nodeInfo = _nodeInfoForOutput(
       context,
       author,
@@ -2580,6 +2690,19 @@ class Workflow extends BaseAgent {
         (output is Event && output.getFunctionResponses().isNotEmpty)
         ? (state?.branch ?? context.branch)
         : (state?.outputBranch ?? state?.branch ?? context.branch);
+    if (output == null) {
+      if (state?.route != null) {
+        return Event(
+          invocationId: context.invocationId,
+          author: author,
+          branch: publishBranch,
+          isolationScope: context.isolationScope,
+          nodeInfo: nodeInfo,
+          actions: EventActions(route: state!.route),
+        );
+      }
+      return null;
+    }
     if (output is Event) {
       Event event = output.nodeInfo.isEmpty
           ? output.copyWith(nodeInfo: nodeInfo)
@@ -2595,6 +2718,11 @@ class Workflow extends BaseAgent {
       }
       if (event.isolationScope == null) {
         event = event.copyWith(isolationScope: context.isolationScope);
+      }
+      if (state?.route != null && event.actions.route == null) {
+        event = event.copyWith(
+          actions: event.actions.copyWith(route: state!.route),
+        );
       }
       return event;
     }
@@ -2621,6 +2749,18 @@ class Workflow extends BaseAgent {
         isolationScope: context.isolationScope,
         nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
         content: output,
+        actions: state?.route == null ? null : EventActions(route: state!.route),
+      );
+    }
+    if (output is Uint8List) {
+      return Event(
+        invocationId: context.invocationId,
+        author: author,
+        branch: publishBranch,
+        isolationScope: context.isolationScope,
+        nodeInfo: nodeInfo,
+        output: output,
+        actions: state?.route == null ? null : EventActions(route: state!.route),
       );
     }
     final String text = output is String ? output : jsonEncode(output);
@@ -2631,6 +2771,7 @@ class Workflow extends BaseAgent {
       isolationScope: context.isolationScope,
       nodeInfo: nodeInfo.copyWith(messageAsOutput: true),
       content: Content.modelText(text),
+      actions: state?.route == null ? null : EventActions(route: state!.route),
     );
   }
 }
@@ -3083,7 +3224,10 @@ _NodeRunResult _resultFromRawNodeOutput(
   String? name,
 }) {
   final bool outputDelegated = context?._outputDelegated == true;
-  final Object? workflowOutput = outputDelegated
+  final bool hasErrorOutput =
+      rawOutput is Event &&
+      (rawOutput.errorCode != null || rawOutput.errorMessage != null);
+  final Object? workflowOutput = outputDelegated && !hasErrorOutput
       ? null
       : context?._hasDirectOutput == true
       ? context!._directOutput
@@ -3145,6 +3289,9 @@ bool _recordNodeResult(WorkflowContext context, _NodeRunResult result) {
       state.interrupts
         ..clear()
         ..addAll(result.interruptIds);
+      if (result.waiting && result.output == null) {
+        state.outputFor.remove(_workflowOutputOwner);
+      }
     }
     return false;
   }
@@ -3311,6 +3458,8 @@ WorkflowResult _workflowResultFromEvents(
             if (_isCompletedNodeState(entry.value) &&
                 entry.value.runCounter < newCounter) {
               entry.value.status = NodeStatus.inactive;
+              outputs.remove(entry.key);
+              entry.value.outputFor.remove(_workflowOutputOwner);
             }
           }
         }
@@ -3325,7 +3474,14 @@ WorkflowResult _workflowResultFromEvents(
       if (hasClaimedBranch) {
         state.outputBranch = event.branch;
       } else {
-        state.branch = event.branch;
+        final bool isNativeEvent =
+            event.author.isEmpty ||
+            _workflowPathSegments(path)
+                .map(_workflowNodeNameFromSegment)
+                .contains(event.author);
+        if (isNativeEvent || state.branch == null) {
+          state.branch = event.branch;
+        }
       }
     }
     final List<String>? outputFor = _outputKeysFromPaths(
@@ -3345,7 +3501,11 @@ WorkflowResult _workflowResultFromEvents(
       state.route = route;
     }
 
-    final Object? eventOutput = _workflowOutputFromEvent(event);
+    final Object? eventOutput = _workflowOutputFromEvent(
+      event,
+      node: staticNodes[owner.key] ??
+          staticNodes[_workflowNodeNameFromSegment(owner.key)],
+    );
     if (hasOutput) {
       outputs[owner.key] = eventOutput;
     }
@@ -3582,14 +3742,128 @@ bool _hasMessageAsOutput(Event event) {
   return event.nodeInfo.messageAsOutput == true && event.content != null;
 }
 
-Object? _workflowOutputFromEvent(Event event) {
+bool _expectsBytesOutput(BaseNode? node) {
+  if (node == null) {
+    return false;
+  }
+  final Object? schema = node.outputSchema;
+  if (schema == Uint8List ||
+      '$schema' == 'List<int>' ||
+      schema == 'bytes' ||
+      schema == 'Uint8List') {
+    return true;
+  }
+  if (schema is Map &&
+      (schema['format'] == 'byte' || schema['format'] == 'binary')) {
+    return true;
+  }
+  if (node is FunctionNode) {
+    final String fnType = node.function.runtimeType.toString();
+    final int arrowIndex = fnType.lastIndexOf('=>');
+    if (arrowIndex >= 0) {
+      final String returnType = fnType.substring(arrowIndex + 2).trim();
+      if (returnType.contains('Uint8List')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+Uint8List _decodeBase64Bytes(String encoded) {
+  final String normalized = base64Url.normalize(encoded.trim());
+  try {
+    return base64Url.decode(normalized);
+  } on FormatException {
+    return base64.decode(base64.normalize(encoded.trim()));
+  }
+}
+
+String _stripJsonCodeFence(String text) {
+  final String trimmed = text.trim();
+  if (!trimmed.startsWith('```')) {
+    return text;
+  }
+  final int firstNewline = trimmed.indexOf('\n');
+  if (firstNewline < 0) {
+    return text;
+  }
+  final String body = trimmed.substring(firstNewline + 1);
+  if (body.endsWith('```')) {
+    return body.substring(0, body.length - 3).trim();
+  }
+  return text;
+}
+
+Object? _effectiveNodeOutputSchema(BaseNode? node) {
+  if (node == null) {
+    return null;
+  }
+  if (node.outputSchema != null) {
+    return node.outputSchema;
+  }
+  if (node is AgentNode && node.agent is LlmAgent) {
+    return (node.agent as LlmAgent).outputSchema;
+  }
+  if (node is AgentNode && node.agent is RemoteA2aAgent) {
+    return (node.agent as RemoteA2aAgent).outputSchema;
+  }
+  return null;
+}
+
+Object? _workflowOutputFromEvent(Event event, {BaseNode? node}) {
   if (event.hasOutput) {
-    return event.output;
+    final Object? raw = event.output;
+    if (_expectsBytesOutput(node)) {
+      if (raw is Uint8List) {
+        return raw;
+      }
+      if (raw is String) {
+        return _decodeBase64Bytes(raw);
+      }
+      if (raw is List<int>) {
+        return Uint8List.fromList(raw);
+      }
+    }
+    if (raw is String) {
+      final Object? schema = _effectiveNodeOutputSchema(node);
+      final bool isNonStringSchema =
+          schema != null &&
+          schema != String &&
+          schema != 'string' &&
+          !(schema is Map && schema['type'] == 'string');
+      if (isNonStringSchema) {
+        final String stripped = _stripJsonCodeFence(raw);
+        try {
+          return jsonDecode(stripped);
+        } on FormatException {
+          return stripped;
+        }
+      }
+    }
+    return raw;
   }
   if (!_hasMessageAsOutput(event)) {
     return null;
   }
-  return _outputFromAgentEvent(event);
+  final Object? raw = _outputFromAgentEvent(event);
+  if (raw is String) {
+    final Object? schema = _effectiveNodeOutputSchema(node);
+    final bool isNonStringSchema =
+        schema != null &&
+        schema != String &&
+        schema != 'string' &&
+        !(schema is Map && schema['type'] == 'string');
+    if (isNonStringSchema) {
+      final String stripped = _stripJsonCodeFence(raw);
+      try {
+        return jsonDecode(stripped);
+      } on FormatException {
+        return stripped;
+      }
+    }
+  }
+  return raw;
 }
 
 Set<String> _interruptIdsFromEvent(Event event) {
@@ -4064,6 +4338,12 @@ Map<String, Object?> _stateDeltaFromOutput(Object? output) {
 
 Event? _eventOutputFromRaw(Object? rawOutput, WorkflowContext? context) {
   if (rawOutput is Event) {
+    if (context?._outputDelegated == true &&
+        rawOutput.errorCode == null &&
+        rawOutput.errorMessage == null &&
+        rawOutput.hasOutput) {
+      return rawOutput.copyWith(output: null);
+    }
     if (context?._hasDirectOutput == true &&
         !rawOutput.hasOutput &&
         rawOutput.content == null) {
@@ -4174,5 +4454,9 @@ void _updateNodeStatus(
 /// Exception thrown when a dynamic workflow node pauses for user input or an interrupt.
 class NodeInterruptedError implements Exception {
   /// Creates a node interrupted error.
-  NodeInterruptedError();
+  NodeInterruptedError({Iterable<String>? interruptIds})
+    : interruptIds = Set<String>.unmodifiable(interruptIds ?? const <String>{});
+
+  /// Interrupt identifiers waiting for a response when the node paused.
+  final Set<String> interruptIds;
 }

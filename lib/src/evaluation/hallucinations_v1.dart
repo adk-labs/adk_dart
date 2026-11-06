@@ -250,56 +250,66 @@ class HallucinationsV1Evaluator extends Evaluator {
         ? actualInvocations.length
         : expected.length;
 
+    final JudgeEvaluationSemaphore semaphore = JudgeEvaluationSemaphore(
+      _judgeModelOptions.parallelismLimit,
+    );
     final List<PerInvocationResult> perInvocationResults =
-        <PerInvocationResult>[];
+        await gatherCancellingOnError(<Future<PerInvocationResult>>[
+          for (int i = 0; i < count; i += 1)
+            _evaluateInvocation(
+              actual: actualInvocations[i],
+              expected: expected[i],
+              semaphore: semaphore,
+            ),
+        ]);
 
-    for (int i = 0; i < count; i += 1) {
-      final Invocation actual = actualInvocations[i];
-      final Invocation? expectedInvocation = expected[i];
+    return _aggregateInvocationResults(perInvocationResults);
+  }
 
-      final List<_EvaluationStep> stepEvaluations = _getStepsToEvaluate(actual);
-      if (stepEvaluations.isEmpty) {
-        perInvocationResults.add(
-          PerInvocationResult(
-            actualInvocation: actual,
-            expectedInvocation: expectedInvocation,
-            score: null,
-            evalStatus: EvalStatus.notEvaluated,
-          ),
-        );
-        continue;
-      }
-
-      final List<double> scoresPerStep = <double>[];
-      for (final _EvaluationStep step in stepEvaluations) {
-        final double? score = await _evaluateNlResponse(
-          nlResponse: step.nlResponse,
-          context: step.context,
-        );
-        if (score != null) {
-          scoresPerStep.add(score);
-        }
-      }
-
-      final double? invocationScore = scoresPerStep.isEmpty
-          ? null
-          : scoresPerStep.reduce((double a, double b) => a + b) /
-                scoresPerStep.length;
-
-      perInvocationResults.add(
-        PerInvocationResult(
-          actualInvocation: actual,
-          expectedInvocation: expectedInvocation,
-          score: invocationScore,
-          evalStatus: getEvalStatus(
-            invocationScore,
-            _evalMetric.threshold ?? _criterion.threshold,
-          ),
-        ),
+  Future<PerInvocationResult> _evaluateInvocation({
+    required Invocation actual,
+    required Invocation? expected,
+    required JudgeEvaluationSemaphore semaphore,
+  }) async {
+    final List<_EvaluationStep> stepEvaluations = _getStepsToEvaluate(actual);
+    if (stepEvaluations.isEmpty) {
+      return PerInvocationResult(
+        actualInvocation: actual,
+        expectedInvocation: expected,
+        score: null,
+        evalStatus: EvalStatus.notEvaluated,
       );
     }
 
-    return _aggregateInvocationResults(perInvocationResults);
+    final List<double?> stepResults = await gatherCancellingOnError(
+      <Future<double?>>[
+        for (final _EvaluationStep step in stepEvaluations)
+          semaphore.withPermit(
+            () => _evaluateNlResponse(
+              nlResponse: step.nlResponse,
+              context: step.context,
+            ),
+          ),
+      ],
+    );
+    final List<double> scoresPerStep = stepResults
+        .whereType<double>()
+        .toList();
+
+    final double? invocationScore = scoresPerStep.isEmpty
+        ? null
+        : scoresPerStep.reduce((double a, double b) => a + b) /
+              scoresPerStep.length;
+
+    return PerInvocationResult(
+      actualInvocation: actual,
+      expectedInvocation: expected,
+      score: invocationScore,
+      evalStatus: getEvalStatus(
+        invocationScore,
+        _evalMetric.threshold ?? _criterion.threshold,
+      ),
+    );
   }
 
   Future<double?> _evaluateNlResponse({

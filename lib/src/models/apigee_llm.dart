@@ -3,11 +3,13 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:http/http.dart' as http;
 
 import '../types/content.dart';
 import '../utils/env_utils.dart';
+import '../utils/schema_utils.dart';
 import '../utils/system_environment/system_environment.dart';
 import 'google_llm.dart';
 import 'llm_request.dart';
@@ -17,6 +19,73 @@ const String _apigeeProxyUrlEnv = 'APIGEE_PROXY_URL';
 const String _projectEnv = 'GOOGLE_CLOUD_PROJECT';
 const String _locationEnv = 'GOOGLE_CLOUD_LOCATION';
 const String _refusalPrefix = '[[REFUSAL]]: ';
+const num _defaultSamplingValue = 1;
+
+final RegExp _reasoningModelRegex = RegExp(
+  r'(?:^|/)(?:o\d+|gpt-[56](?!.*-chat))(?:\..*|-.*|$)',
+  caseSensitive: false,
+);
+
+bool _isReasoningModel(String? model) {
+  if (model == null || model.isEmpty) {
+    return false;
+  }
+  return _reasoningModelRegex.hasMatch(model);
+}
+
+void _stripUnsupportedSamplingParams(
+  Map<String, Object?> kwargs,
+  String? model,
+) {
+  if (!_isReasoningModel(model)) {
+    return;
+  }
+  for (final String name in const <String>['temperature', 'top_p']) {
+    final Object? value = kwargs[name];
+    if (value != null && value != _defaultSamplingValue) {
+      kwargs.remove(name);
+      developer.log(
+        'Ignoring $name=$value: reasoning model $model accepts only the default '
+        'value ($_defaultSamplingValue); set it to that or remove it from the request config.',
+        name: 'adk_dart.models.apigee_llm',
+      );
+    }
+  }
+}
+
+Map<String, Object?> _schemaToJsonSchemaMap(Object responseSchema) {
+  if (responseSchema is Map) {
+    final Object? cloned = _deepCopyJsonValue(responseSchema);
+    if (cloned is Map<String, Object?>) {
+      return cloned;
+    }
+  }
+  try {
+    final dynamic dyn = responseSchema;
+    final Object? json = dyn.toJson();
+    if (json is Map) {
+      final Object? cloned = _deepCopyJsonValue(json);
+      if (cloned is Map<String, Object?>) {
+        return cloned;
+      }
+    }
+  } catch (_) {}
+  return <String, Object?>{};
+}
+
+Object? _deepCopyJsonValue(Object? value) {
+  if (value is Map) {
+    return value.map(
+      (Object? key, Object? item) => MapEntry('$key', _deepCopyJsonValue(item)),
+    );
+  }
+  if (value is List) {
+    return value
+        .map((Object? item) => _deepCopyJsonValue(item))
+        .toList(growable: false);
+  }
+  return value;
+}
 
 /// Apigee backend protocol families supported by this adapter.
 enum ApiType {
@@ -261,16 +330,50 @@ class _ChatCompletionsChunkCollection {
 
     final String finishReason = '${choice['finish_reason'] ?? ''}';
     if (finishReason.isNotEmpty && finishReason != 'null') {
-      responses.add(
-        LlmResponse(
-          content: Content(role: _role, parts: _finalParts()),
-          finishReason: ApigeeLlm._mapFinishReason(finishReason),
-          modelVersion: _model,
-          usageMetadata: _mapUsage(_usage),
-          customMetadata: _customMetadata(),
-          turnComplete: true,
-        ),
-      );
+      if (finishReason == 'length' && _hasIncompleteToolCallArgs()) {
+        if (_content.isNotEmpty) {
+          responses.add(
+            LlmResponse(
+              content: Content(
+                role: _role,
+                parts: <Part>[Part.text(_content.toString())],
+              ),
+              finishReason: 'MAX_TOKENS',
+              errorCode: 'MAX_TOKENS',
+              errorMessage: 'Maximum tokens reached',
+              modelVersion: _model,
+              usageMetadata: _mapUsage(_usage),
+              customMetadata: _customMetadata(),
+              turnComplete: true,
+            ),
+          );
+        }
+        responses.add(
+          LlmResponse(
+            finishReason: 'MAX_TOKENS',
+            errorCode: 'MAX_TOKENS',
+            errorMessage:
+                'Tool call arguments were truncated while streaming and could '
+                'not be parsed as valid JSON. Increase `max_output_tokens` and '
+                'retry.',
+            modelVersion: _model,
+            usageMetadata: _content.isNotEmpty ? null : _mapUsage(_usage),
+            customMetadata: _customMetadata(),
+            turnComplete: true,
+          ),
+        );
+      } else {
+        responses.add(
+          LlmResponse(
+            content: Content(role: _role, parts: _finalParts()),
+            finishReason: ApigeeLlm._mapFinishReason(finishReason),
+            modelVersion: _model,
+            usageMetadata: _mapUsage(_usage),
+            customMetadata: _customMetadata(),
+            turnComplete: true,
+          ),
+        );
+      }
       _lastToolCallIndex = null;
     }
     return responses;
@@ -388,6 +491,7 @@ class _ChatCompletionsChunkCollection {
     final String arguments = '${function['arguments'] ?? ''}';
     if (arguments.isNotEmpty && arguments != 'null') {
       state.arguments.write(arguments);
+      state.argumentDeltas.add(arguments);
     }
     if ((state.name ?? '').isEmpty && (state.id ?? '').isEmpty) {
       return null;
@@ -404,6 +508,19 @@ class _ChatCompletionsChunkCollection {
     );
   }
 
+  bool _hasIncompleteToolCallArgs() {
+    if (_toolCalls.isEmpty) {
+      return false;
+    }
+    for (final _StreamingToolCall state in _toolCalls.values) {
+      if (state.argumentDeltas.isEmpty ||
+          !_hasValidJsonObjectArgs(state.argumentDeltas.join())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   List<Part> _finalParts() {
     final List<Part> parts = <Part>[];
     if (_content.isNotEmpty) {
@@ -416,7 +533,7 @@ class _ChatCompletionsChunkCollection {
         Part.fromFunctionCall(
           name: state.name ?? '',
           id: state.id,
-          args: _decodeArguments(state.arguments.toString()),
+          args: _decodeArguments(state.argumentDeltas.join()),
         ),
       );
     }
@@ -445,6 +562,7 @@ class _StreamingToolCall {
   String? id;
   String? name;
   final StringBuffer arguments = StringBuffer();
+  final List<String> argumentDeltas = <String>[];
 }
 
 /// Apigee model adapter that supports both GenAI and chat-completions flows.
@@ -651,8 +769,9 @@ class ApigeeLlm extends Gemini {
       messages.addAll(_contentToMessages(content));
     }
 
+    final String modelId = getModelId(request.model ?? '');
     final Map<String, Object?> payload = <String, Object?>{
-      'model': getModelId(request.model ?? ''),
+      'model': modelId,
       'messages': messages,
       'stream': stream,
     };
@@ -664,8 +783,12 @@ class ApigeeLlm extends Gemini {
       payload['top_p'] = request.config.topP;
     }
     if (request.config.maxOutputTokens != null) {
-      payload['max_tokens'] = request.config.maxOutputTokens;
+      final String tokenLimitKey = _isReasoningModel(modelId)
+          ? 'max_completion_tokens'
+          : 'max_tokens';
+      payload[tokenLimitKey] = request.config.maxOutputTokens;
     }
+    _stripUnsupportedSamplingParams(payload, modelId);
     if (request.config.stopSequences.isNotEmpty) {
       payload['stop'] = request.config.stopSequences;
     }
@@ -687,10 +810,30 @@ class ApigeeLlm extends Gemini {
         payload['top_logprobs'] = request.config.logprobs;
       }
     }
-    if (request.config.responseJsonSchema != null) {
+    final Object? responseSchema =
+        request.config.responseJsonSchema ?? request.config.responseSchema;
+    if (responseSchema != null) {
+      final Object jsonSchema;
+      if (responseSchema is Map &&
+          responseSchema['name'] is String &&
+          responseSchema['schema'] is Map) {
+        jsonSchema = responseSchema;
+      } else {
+        final Map<String, Object?> schemaDict = _schemaToJsonSchemaMap(
+          responseSchema,
+        );
+        lowercaseSchemaTypes(schemaDict);
+        final Object? title = schemaDict['title'];
+        String name = title is String && title.isNotEmpty ? title : 'response';
+        name = name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        if (name.length > 64) {
+          name = name.substring(0, 64);
+        }
+        jsonSchema = <String, Object?>{'name': name, 'schema': schemaDict};
+      }
       payload['response_format'] = <String, Object?>{
         'type': 'json_schema',
-        'json_schema': request.config.responseJsonSchema!,
+        'json_schema': jsonSchema,
       };
     } else if (request.config.responseMimeType == 'application/json') {
       payload['response_format'] = const <String, Object?>{
@@ -746,14 +889,40 @@ class ApigeeLlm extends Gemini {
 
     final List<Object?> toolCalls =
         (message['tool_calls'] as List<Object?>?) ?? <Object?>[];
-    for (final Object? call in toolCalls) {
-      final Map<String, Object?> callMap = _asMap(call);
-      final Map<String, Object?> function = _asMap(callMap['function']);
-      parts.add(_parseFunctionCall(function, id: callMap['id']));
-    }
     final Map<String, Object?> functionCall = _asMap(message['function_call']);
-    if (functionCall.isNotEmpty) {
-      parts.add(_parseFunctionCall(functionCall));
+    final String? rawFinishReason = first['finish_reason'] as String?;
+    bool incompleteToolArgs = false;
+    if (rawFinishReason == 'length' &&
+        (toolCalls.isNotEmpty || functionCall.isNotEmpty)) {
+      final bool allFunctionCalls = toolCalls.every((Object? call) {
+        final Map<String, Object?> callMap = _asMap(call);
+        final Object? callType = callMap['type'];
+        return callType == null || callType == '' || callType == 'function';
+      });
+      if (allFunctionCalls) {
+        final bool invalidToolCallArgs = toolCalls.any((Object? call) {
+          final Map<String, Object?> callMap = _asMap(call);
+          final Map<String, Object?> function = _asMap(callMap['function']);
+          return !_hasValidJsonObjectArgs(function['arguments']);
+        });
+        final bool invalidFunctionCallArgs =
+            functionCall.isNotEmpty &&
+            !_hasValidJsonObjectArgs(functionCall['arguments']);
+        if (invalidToolCallArgs || invalidFunctionCallArgs) {
+          incompleteToolArgs = true;
+        }
+      }
+    }
+
+    if (!incompleteToolArgs) {
+      for (final Object? call in toolCalls) {
+        final Map<String, Object?> callMap = _asMap(call);
+        final Map<String, Object?> function = _asMap(callMap['function']);
+        parts.add(_parseFunctionCall(function, id: callMap['id']));
+      }
+      if (functionCall.isNotEmpty) {
+        parts.add(_parseFunctionCall(functionCall));
+      }
     }
 
     final Map<String, Object?> usage = _asMap(response['usage']);
@@ -771,9 +940,16 @@ class ApigeeLlm extends Gemini {
 
     return LlmResponse(
       modelVersion: response['model'] as String?,
-      content: Content(role: role, parts: parts),
+      content: (incompleteToolArgs && parts.isEmpty)
+          ? null
+          : Content(role: role, parts: parts),
       usageMetadata: usageMetadata,
-      finishReason: _mapFinishReason(first['finish_reason'] as String?),
+      finishReason: _mapFinishReason(rawFinishReason),
+      errorCode: incompleteToolArgs ? 'MAX_TOKENS' : null,
+      errorMessage: incompleteToolArgs
+          ? 'Tool call arguments were truncated and could not be parsed as '
+                'valid JSON. Increase `max_output_tokens` and retry.'
+          : null,
       customMetadata: <String, dynamic>{
         'id': response['id'],
         'created': response['created'],
@@ -1063,6 +1239,18 @@ int? _readIndex(Object? value) {
     return value.toInt();
   }
   return int.tryParse('${value ?? ''}');
+}
+
+bool _hasValidJsonObjectArgs(Object? rawArgs) {
+  if (rawArgs is! String || rawArgs.trim().isEmpty) {
+    return false;
+  }
+  try {
+    final Object? parsed = jsonDecode(rawArgs);
+    return parsed is Map;
+  } catch (_) {
+    return false;
+  }
 }
 
 Map<String, dynamic> _decodeArguments(String raw) {

@@ -113,7 +113,24 @@ Map<String, dynamic> dereferenceSchema(Map<String, dynamic> schema) {
     return node;
   }
 
+  bool hasRef(dynamic node) {
+    if (node is Map) {
+      if (node.containsKey(r'$ref')) {
+        return true;
+      }
+      return node.values.any(hasRef);
+    }
+    if (node is List) {
+      return node.any(hasRef);
+    }
+    return false;
+  }
+
   final Map<String, dynamic> result = _castMap(resolveRefs(schema, <String>{}));
+  if (!hasRef(result)) {
+    result.remove('definitions');
+    result.remove(r'$defs');
+  }
   return result;
 }
 

@@ -4,6 +4,8 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import '../../agents/readonly_context.dart';
 import '../../models/llm_request.dart';
@@ -77,6 +79,173 @@ RegExp _oldStringPattern(String oldString) {
       .map(RegExp.escape)
       .join(r'\r?\n');
   return RegExp(pattern);
+}
+
+/// Decodes [bytes] using UTF-8 with Python's `surrogateescape` error handler:
+/// invalid bytes `0x80..0xFF` are mapped to lone low surrogates `0xDC80..0xDCFF`.
+String _decodeUtf8SurrogateEscape(List<int> bytes) {
+  final List<int> codeUnits = <int>[];
+  int i = 0;
+  final int n = bytes.length;
+  while (i < n) {
+    final int b0 = bytes[i] & 0xFF;
+    if (b0 <= 0x7F) {
+      codeUnits.add(b0);
+      i += 1;
+      continue;
+    }
+    if (b0 >= 0xC2 && b0 <= 0xDF && i + 1 < n) {
+      final int b1 = bytes[i + 1] & 0xFF;
+      if (b1 >= 0x80 && b1 <= 0xBF) {
+        codeUnits.add(((b0 & 0x1F) << 6) | (b1 & 0x3F));
+        i += 2;
+        continue;
+      }
+    } else if (b0 >= 0xE0 && b0 <= 0xEF && i + 2 < n) {
+      final int b1 = bytes[i + 1] & 0xFF;
+      final int b2 = bytes[i + 2] & 0xFF;
+      final bool validB1 = switch (b0) {
+        0xE0 => b1 >= 0xA0 && b1 <= 0xBF,
+        0xED => b1 >= 0x80 && b1 <= 0x9F,
+        _ => b1 >= 0x80 && b1 <= 0xBF,
+      };
+      if (validB1 && b2 >= 0x80 && b2 <= 0xBF) {
+        codeUnits.add(((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F));
+        i += 3;
+        continue;
+      }
+    } else if (b0 >= 0xF0 && b0 <= 0xF4 && i + 3 < n) {
+      final int b1 = bytes[i + 1] & 0xFF;
+      final int b2 = bytes[i + 2] & 0xFF;
+      final int b3 = bytes[i + 3] & 0xFF;
+      final bool validB1 = switch (b0) {
+        0xF0 => b1 >= 0x90 && b1 <= 0xBF,
+        0xF4 => b1 >= 0x80 && b1 <= 0x8F,
+        _ => b1 >= 0x80 && b1 <= 0xBF,
+      };
+      if (validB1 &&
+          b2 >= 0x80 &&
+          b2 <= 0xBF &&
+          b3 >= 0x80 &&
+          b3 <= 0xBF) {
+        final int cp =
+            ((b0 & 0x07) << 18) |
+            ((b1 & 0x3F) << 12) |
+            ((b2 & 0x3F) << 6) |
+            (b3 & 0x3F);
+        final int offset = cp - 0x10000;
+        codeUnits.add(0xD800 + (offset >> 10));
+        codeUnits.add(0xDC00 + (offset & 0x3FF));
+        i += 4;
+        continue;
+      }
+    }
+    codeUnits.add(0xDC00 | b0);
+    i += 1;
+  }
+  return String.fromCharCodes(codeUnits);
+}
+
+/// Encodes [text] using UTF-8 with Python's `surrogateescape` error handler:
+/// lone low surrogates `0xDC80..0xDCFF` are mapped back to raw bytes `0x80..0xFF`.
+Uint8List _encodeUtf8SurrogateEscape(String text) {
+  final BytesBuilder out = BytesBuilder(copy: false);
+  for (int i = 0; i < text.length; i++) {
+    final int cu = text.codeUnitAt(i);
+    if (cu <= 0x7F) {
+      out.addByte(cu);
+    } else if (cu <= 0x7FF) {
+      out.addByte(0xC0 | (cu >> 6));
+      out.addByte(0x80 | (cu & 0x3F));
+    } else if (cu >= 0xD800 && cu <= 0xDBFF) {
+      if (i + 1 >= text.length) {
+        throw const FormatException('Unpaired high surrogate in text.');
+      }
+      final int low = text.codeUnitAt(i + 1);
+      if (low < 0xDC00 || low > 0xDFFF) {
+        throw const FormatException('Unpaired high surrogate in text.');
+      }
+      final int cp = 0x10000 + ((cu - 0xD800) << 10) + (low - 0xDC00);
+      out.addByte(0xF0 | (cp >> 18));
+      out.addByte(0x80 | ((cp >> 12) & 0x3F));
+      out.addByte(0x80 | ((cp >> 6) & 0x3F));
+      out.addByte(0x80 | (cp & 0x3F));
+      i += 1;
+    } else if (cu >= 0xDC80 && cu <= 0xDCFF) {
+      out.addByte(cu - 0xDC00);
+    } else if (cu >= 0xDC00 && cu <= 0xDC7F) {
+      throw const FormatException('Unpaired low surrogate in text.');
+    } else {
+      out.addByte(0xE0 | (cu >> 12));
+      out.addByte(0x80 | ((cu >> 6) & 0x3F));
+      out.addByte(0x80 | (cu & 0x3F));
+    }
+  }
+  return out.takeBytes();
+}
+
+Future<({List<Uint8List> selected, int total})> _readLineRange(
+  Stream<List<int>> stream,
+  int start,
+  int? end, {
+  required int maxBytes,
+}) async {
+  final BytesBuilder buf = BytesBuilder(copy: false);
+  final List<Uint8List> selected = <Uint8List>[];
+  int total = 0;
+  int collectedBytes = 0;
+  bool hasTrailingBytes = false;
+
+  await for (final List<int> chunk in stream) {
+    if (chunk.isEmpty) {
+      continue;
+    }
+    int pos = 0;
+    while (true) {
+      int nl = -1;
+      for (int idx = pos; idx < chunk.length; idx++) {
+        if (chunk[idx] == 0x0A) {
+          nl = idx;
+          break;
+        }
+      }
+      if (nl == -1) {
+        break;
+      }
+      total += 1;
+      final bool inRange = start <= total && (end == null || total <= end);
+      if (inRange && collectedBytes < maxBytes) {
+        buf.add(chunk.sublist(pos, nl));
+        final Uint8List lineBytes = buf.takeBytes();
+        selected.add(lineBytes);
+        collectedBytes += lineBytes.length + 1;
+      } else if (buf.isNotEmpty) {
+        buf.clear();
+      }
+      pos = nl + 1;
+    }
+    hasTrailingBytes = pos < chunk.length;
+    final bool inNext = start <= total + 1 && (end == null || total + 1 <= end);
+    if (inNext && collectedBytes < maxBytes) {
+      if (pos < chunk.length) {
+        buf.add(chunk.sublist(pos));
+      }
+    } else if (buf.isNotEmpty) {
+      buf.clear();
+    }
+  }
+
+  if (buf.isNotEmpty || hasTrailingBytes) {
+    total += 1;
+    if (buf.isNotEmpty &&
+        start <= total &&
+        (end == null || total <= end) &&
+        collectedBytes < maxBytes) {
+      selected.add(buf.takeBytes());
+    }
+  }
+
+  return (selected: selected, total: total);
 }
 
 /// Experimental toolset for command execution and file I/O.
@@ -307,32 +476,32 @@ class ReadFileTool extends BaseTool {
       }
     }
 
-    final int start = _readIntArg(args['start_line']) ?? 1;
-    final int? end = _readIntArg(args['end_line']);
-    if (start < 1) {
+    final int? rawStart = _readIntArg(args['start_line']);
+    final int? rawEnd = _readIntArg(args['end_line']);
+    final int start = math.max(1, rawStart == null || rawStart == 0 ? 1 : rawStart);
+    final int? endLine = (rawEnd == null || rawEnd == 0) ? null : rawEnd;
+    if (endLine != null && endLine < start) {
       return <String, Object?>{
         'status': 'error',
-        'error': '`start_line` must be >= 1.',
-      };
-    }
-    if (end != null && end < start) {
-      return <String, Object?>{
-        'status': 'error',
-        'error': '`start_line` ($start) is after `end_line` ($end).',
+        'error': '`start_line` ($start) is after `end_line` ($endLine).',
       };
     }
 
+    final int maxOutputChars = _maxOutputChars ?? _defaultMaxOutputChars;
+    final int maxBytes = maxOutputChars * 4;
+
     try {
-      final String text = utf8.decode(
-        await _environment.readFile(path),
-        allowMalformed: true,
-      );
-      List<String> lines = text.isEmpty ? <String>[] : text.split('\n');
-      if (lines.isNotEmpty && lines.last.isEmpty) {
-        lines = lines.sublist(0, lines.length - 1);
-      }
-      final int total = lines.length;
-      if (total == 0) {
+      final ({List<Uint8List> selected, int total}) lineRange =
+          await _readLineRange(
+            _environment.readFileStream(path),
+            start,
+            endLine,
+            maxBytes: maxBytes + 1,
+          );
+      final int total = lineRange.total;
+      final List<Uint8List> selected = lineRange.selected;
+      final int end = endLine == null ? total : math.min(total, endLine);
+      if (total == 0 && start == 1 && end == 0) {
         return <String, Object?>{'status': 'ok', 'content': ''};
       }
       if (start > total) {
@@ -343,20 +512,22 @@ class ReadFileTool extends BaseTool {
         };
       }
 
-      final int boundedEnd = end == null || end > total ? total : end;
-      final List<String> selected = lines.sublist(start - 1, boundedEnd);
-      final String numbered = List<String>.generate(selected.length, (int i) {
+      String numbered = List<String>.generate(selected.length, (int i) {
         final int lineNumber = start + i;
-        return '${lineNumber.toString().padLeft(6)}\t${selected[i].replaceFirst(RegExp(r'\r$'), '')}';
+        final String decodedLine = utf8
+            .decode(selected[i], allowMalformed: true)
+            .replaceFirst(RegExp(r'\r$'), '');
+        return '${lineNumber.toString().padLeft(6)}\t$decodedLine';
       }).join('\n');
+      if (numbered.length > maxOutputChars) {
+        numbered =
+            '${numbered.substring(0, maxOutputChars)}\n... (truncated, $total total lines)';
+      }
 
       return <String, Object?>{
         'status': 'ok',
-        'content': _truncateOutput(
-          numbered,
-          limit: _maxOutputChars ?? _defaultMaxOutputChars,
-        ),
-        if (start > 1 || boundedEnd < total) 'total_lines': total,
+        'content': numbered,
+        if (start > 1 || end < total) 'total_lines': total,
       };
     } on FileSystemException catch (error) {
       return <String, Object?>{'status': 'error', 'error': '$error'};
@@ -487,13 +658,20 @@ class EditFileTool extends BaseTool {
     final String newString = '${args['new_string'] ?? ''}';
 
     try {
-      final String content = utf8.decode(
-        await _environment.readFile(path),
-        allowMalformed: true,
-      );
+      final List<int> raw = await _environment.readFile(path);
+      final String content = _decodeUtf8SurrogateEscape(raw);
       final RegExp pattern = _oldStringPattern(oldString);
       final int occurrences = pattern.allMatches(content).length;
       if (occurrences == 0) {
+        if (oldString.contains('\ufffd') &&
+            pattern.hasMatch(utf8.decode(raw, allowMalformed: true))) {
+          return <String, Object?>{
+            'status': 'error',
+            'error':
+                'The file has bytes that are not valid UTF-8 near this text. '
+                'Choose an `old_string` that does not include them.',
+          };
+        }
         return <String, Object?>{
           'status': 'error',
           'error':
@@ -508,10 +686,25 @@ class EditFileTool extends BaseTool {
         };
       }
 
-      await _environment.writeFile(
-        path,
-        content.replaceFirstMapped(pattern, (_) => newString),
+      if (hasLoneUtf16Surrogates(newString)) {
+        return <String, Object?>{
+          'status': 'error',
+          'error':
+              '`new_string` contains characters that cannot be encoded. '
+              'The file was not modified.',
+        };
+      }
+
+      final String updated = content.replaceFirstMapped(
+        pattern,
+        (_) => newString,
       );
+      final Uint8List encoded = _encodeUtf8SurrogateEscape(updated);
+      try {
+        await _environment.writeFile(path, encoded);
+      } on TypeError {
+        await _environment.writeFile(path, updated);
+      }
       return <String, Object?>{'status': 'ok', 'message': 'Edited $path'};
     } on FileSystemException catch (error) {
       return <String, Object?>{'status': 'error', 'error': '$error'};

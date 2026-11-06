@@ -1,6 +1,9 @@
 /// Session storage schema v0 models and conversion helpers.
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../platform/time.dart';
@@ -446,7 +449,10 @@ class StorageEventV0 {
       'actions': _eventActionsToJson(actions),
       if (!nodeInfo.isEmpty)
         'node_info': eventNodeInfoToJson(nodeInfo, snakeCase: true),
-      if (hasOutput) 'output': output,
+      if (hasOutput)
+        'output': output is Uint8List
+            ? base64Url.encode(output as Uint8List)
+            : output,
       if (longRunningToolIdsJson != null)
         'long_running_tool_ids_json': longRunningToolIdsJson,
       if (branch != null) 'branch': branch,

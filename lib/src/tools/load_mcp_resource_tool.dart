@@ -69,11 +69,19 @@ NOTE: Call when you need access to resources.''',
       toolContext: toolContext,
       llmRequest: llmRequest,
     );
-    await _appendResourcesToLlmRequest(llmRequest);
+    await _appendResourcesToLlmRequest(
+      llmRequest: llmRequest,
+      toolContext: toolContext,
+    );
   }
 
-  Future<void> _appendResourcesToLlmRequest(LlmRequest llmRequest) async {
-    final List<String> resourceNames = await _mcpToolset.listResources();
+  Future<void> _appendResourcesToLlmRequest({
+    required LlmRequest llmRequest,
+    required ToolContext toolContext,
+  }) async {
+    final List<String> resourceNames = await _mcpToolset.listResources(
+      readonlyContext: toolContext,
+    );
     if (resourceNames.isNotEmpty) {
       llmRequest.appendInstructions(<String>[
         '''You have a list of MCP resources:
@@ -96,6 +104,7 @@ before answering questions related to the resources.
     for (final String resourceName in requestedNames) {
       final List<McpResourceContent> contents = await _mcpToolset.readResource(
         resourceName,
+        readonlyContext: toolContext,
       );
       for (final McpResourceContent content in contents) {
         final Part part = _mcpContentToPart(content, resourceName);

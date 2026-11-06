@@ -10,12 +10,20 @@ import 'base_tool.dart';
 import 'tool_context.dart';
 
 /// Policy controlling which bash commands may be executed.
+///
+/// Values for [maxMemoryBytes], [maxFileSizeBytes], and [maxChildProcesses]
+/// are enforced on the spawned subprocess. `null` leaves a limit unset, while
+/// `0` is enforced (for example, `maxFileSizeBytes: 0` lets the command write
+/// no bytes to files).
 class BashToolPolicy {
   /// Creates a bash policy with allowed command prefixes and execution guards.
   BashToolPolicy({
     List<String>? allowedCommandPrefixes,
     List<String>? blockedOperators,
     this.timeoutSeconds = 30,
+    this.maxMemoryBytes,
+    this.maxFileSizeBytes,
+    this.maxChildProcesses,
   }) : allowedCommandPrefixes = allowedCommandPrefixes ?? <String>['*'],
        blockedOperators = blockedOperators ?? const <String>[];
 
@@ -27,6 +35,93 @@ class BashToolPolicy {
 
   /// Command timeout in seconds. `null` disables the timeout.
   final int? timeoutSeconds;
+
+  /// Maximum virtual memory (address space) in bytes (`RLIMIT_AS`).
+  ///
+  /// `null` leaves the limit unset; `0` enforces a zero-byte limit.
+  final int? maxMemoryBytes;
+
+  /// Maximum size of files the process may create in bytes (`RLIMIT_FSIZE`).
+  ///
+  /// `null` leaves the limit unset; `0` enforces a zero-byte limit.
+  final int? maxFileSizeBytes;
+
+  /// Maximum number of child processes (`RLIMIT_NPROC`).
+  ///
+  /// `null` leaves the limit unset; `0` enforces a zero-process limit.
+  final int? maxChildProcesses;
+}
+
+/// Resource limit identifier constants matching Python `resource.RLIMIT_*`.
+abstract final class ResourceLimit {
+  /// Maximum size of a core file (`RLIMIT_CORE`).
+  static const String rlimitCore = 'RLIMIT_CORE';
+
+  /// Maximum area of address space (`RLIMIT_AS`).
+  static const String rlimitAs = 'RLIMIT_AS';
+
+  /// Maximum size of files created by the process (`RLIMIT_FSIZE`).
+  static const String rlimitFsize = 'RLIMIT_FSIZE';
+
+  /// Maximum number of processes (`RLIMIT_NPROC`).
+  static const String rlimitNproc = 'RLIMIT_NPROC';
+}
+
+/// Callback invoked for each resource limit applied by [setResourceLimits].
+typedef SetRlimitFn = void Function(String resource, (int, int) limits);
+
+/// Applies resource limits from [policy] via [setrlimit].
+///
+/// Mirrors Python's `_set_resource_limits(policy)`: `null` leaves a limit
+/// unset, whereas `0` is passed to [setrlimit] like any other non-null value.
+void setResourceLimits(BashToolPolicy policy, [SetRlimitFn? setrlimit]) {
+  if (Platform.isWindows || setrlimit == null) {
+    return;
+  }
+  try {
+    setrlimit(ResourceLimit.rlimitCore, (0, 0));
+    if (policy.maxMemoryBytes != null) {
+      setrlimit(
+        ResourceLimit.rlimitAs,
+        (policy.maxMemoryBytes!, policy.maxMemoryBytes!),
+      );
+    }
+    if (policy.maxFileSizeBytes != null) {
+      setrlimit(
+        ResourceLimit.rlimitFsize,
+        (policy.maxFileSizeBytes!, policy.maxFileSizeBytes!),
+      );
+    }
+    if (policy.maxChildProcesses != null) {
+      setrlimit(
+        ResourceLimit.rlimitNproc,
+        (policy.maxChildProcesses!, policy.maxChildProcesses!),
+      );
+    }
+  } catch (_) {
+    // Some platforms do not support all limits.
+  }
+}
+
+String _buildUlimitPrefix(BashToolPolicy policy) {
+  if (Platform.isWindows) {
+    return '';
+  }
+  final List<String> commands = <String>['ulimit -c 0 2>/dev/null || true'];
+  if (policy.maxFileSizeBytes != null) {
+    final int blocks = policy.maxFileSizeBytes! <= 0
+        ? 0
+        : ((policy.maxFileSizeBytes! + 511) ~/ 512);
+    commands.add('ulimit -S -H -f $blocks 2>/dev/null || ulimit -f $blocks');
+  }
+  if (policy.maxMemoryBytes != null && policy.maxMemoryBytes! > 0) {
+    final int kb = (policy.maxMemoryBytes! + 1023) ~/ 1024;
+    commands.add('ulimit -v $kb 2>/dev/null || true');
+  }
+  if (policy.maxChildProcesses != null && policy.maxChildProcesses! > 0) {
+    commands.add('ulimit -u ${policy.maxChildProcesses!} 2>/dev/null || true');
+  }
+  return '${commands.join('; ')}; ';
 }
 
 List<String>? _splitShellTokens(String input) {
@@ -135,20 +230,25 @@ String? _validateCommand(String command, BashToolPolicy policy) {
 /// Tool that executes bash commands after explicit user confirmation.
 class ExecuteBashTool extends BaseTool {
   /// Creates a bash execution tool.
-  ExecuteBashTool({Directory? workspace, BashToolPolicy? policy})
-    : _workspace = workspace ?? Directory.current,
-      _policy = policy ?? BashToolPolicy(),
-      _descriptionHint = _buildAllowedHint(policy ?? BashToolPolicy()),
-      super(
-        name: 'execute_bash',
-        description:
-            'Executes a bash command with the working directory set to the workspace. '
-            'Allowed: ${_buildAllowedHint(policy ?? BashToolPolicy())}. '
-            'All commands require user confirmation.',
-      );
+  ExecuteBashTool({
+    Directory? workspace,
+    BashToolPolicy? policy,
+    SetRlimitFn? setrlimit,
+  }) : _workspace = workspace ?? Directory.current,
+       _policy = policy ?? BashToolPolicy(),
+       _setrlimit = setrlimit,
+       _descriptionHint = _buildAllowedHint(policy ?? BashToolPolicy()),
+       super(
+         name: 'execute_bash',
+         description:
+             'Executes a bash command with the working directory set to the workspace. '
+             'Allowed: ${_buildAllowedHint(policy ?? BashToolPolicy())}. '
+             'All commands require user confirmation.',
+       );
 
   final Directory _workspace;
   final BashToolPolicy _policy;
+  final SetRlimitFn? _setrlimit;
   final String _descriptionHint;
 
   static String _buildAllowedHint(BashToolPolicy policy) {
@@ -215,9 +315,11 @@ class ExecuteBashTool extends BaseTool {
     }
 
     try {
+      setResourceLimits(_policy, _setrlimit);
+      final String effectiveCommand = '${_buildUlimitPrefix(_policy)}$command';
       final Process process = await Process.start('/bin/bash', <String>[
         '-lc',
-        command,
+        effectiveCommand,
       ], workingDirectory: _workspace.path);
       final Future<String> stdoutFuture = process.stdout
           .transform(utf8.decoder)

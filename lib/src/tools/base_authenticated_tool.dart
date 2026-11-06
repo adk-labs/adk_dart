@@ -16,6 +16,9 @@ abstract class BaseAuthenticatedTool extends BaseTool {
   BaseAuthenticatedTool({
     required super.name,
     required super.description,
+    super.title,
+    super.isLongRunning,
+    super.customMetadata,
     AuthConfig? authConfig,
     this.responseForAuthRequired,
   }) : _authConfig = authConfig,

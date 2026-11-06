@@ -57,6 +57,33 @@ class RunResult {
 /// Function signature for cross-run aggregation methods.
 typedef AggregationMethodFn = double? Function(List<RunResult> runs);
 
+/// Function signature for parameterized (`k`) cross-run aggregation methods.
+typedef AggregationMethodWithKFn =
+    double? Function(List<RunResult> runs, int k);
+
+const Map<String, String> _displayNameWithK = <String, String>{
+  'pass_at_k': 'pass@{k}',
+  'pass_hat_k': 'pass^{k}',
+};
+
+void _checkK(int k) {
+  if (k < 1) {
+    throw ArgumentError.value(k, 'k', 'k must be >= 1, got $k');
+  }
+}
+
+int _binomialCoeff(int n, int k) {
+  if (k < 0 || k > n) {
+    return 0;
+  }
+  final int effectiveK = math.min(k, n - k);
+  int result = 1;
+  for (int i = 0; i < effectiveK; i += 1) {
+    result = (result * (n - i)) ~/ (i + 1);
+  }
+  return result;
+}
+
 /// Descriptor for a cross-run aggregation method.
 class AggregationMethod {
   /// Creates an aggregation method descriptor.
@@ -65,6 +92,7 @@ class AggregationMethod {
     required this.compute,
     this.usesScores = true,
     this.custom = false,
+    this.computeWithK,
   });
 
   /// Canonical method name (for example `'mean_over_invocations'` or `'pass_rate'`).
@@ -82,6 +110,29 @@ class AggregationMethod {
 
   /// `true` when loaded from `MultiRunConfig.customMethods`.
   final bool custom;
+
+  /// If non-null, this method takes a `k` parameter (`pass_at_k`, `pass_hat_k`);
+  /// bind `k` with [withK] before calling [compute].
+  final AggregationMethodWithKFn? computeWithK;
+
+  /// Returns a copy with [k] bound into [compute] and [name] formatted for display.
+  AggregationMethod withK(int k) {
+    final AggregationMethodWithKFn? fn = computeWithK;
+    if (fn == null) {
+      throw _CustomAggregationReturnTypeError(
+        'Aggregation method "$name" does not take a k parameter.',
+      );
+    }
+    _checkK(k);
+    final String template = _displayNameWithK[name] ?? '$name(k={k})';
+    return AggregationMethod(
+      name: template.replaceAll('{k}', '$k'),
+      compute: (List<RunResult> runs) => fn(runs, k),
+      usesScores: usesScores,
+      custom: custom,
+      computeWithK: computeWithK,
+    );
+  }
 }
 
 /// Mean over all per-invocation scores across all runs.
@@ -149,6 +200,63 @@ double? passRate(List<RunResult> runs) {
   return total > 0 ? passed / total : null;
 }
 
+/// Unbiased estimator of `pass@k`: probability of `>= 1` pass in [k] draws.
+///
+/// Given `n` decided runs (`passed` or `failed`) with `c` passes, computes
+/// `1 - C(n - c, k) / C(n, k)` (Chen et al., 2021). Runs with status
+/// `notEvaluated` are ignored. Returns `null` when `n < k`.
+double? passAtK(List<RunResult> runs, int k) {
+  _checkK(k);
+  int passed = 0;
+  int decided = 0;
+  for (final RunResult run in runs) {
+    if (run.status == EvalStatus.passed) {
+      passed += 1;
+      decided += 1;
+    } else if (run.status == EvalStatus.failed) {
+      decided += 1;
+    }
+  }
+  if (decided < k) {
+    return null;
+  }
+  return 1.0 - _binomialCoeff(decided - passed, k) / _binomialCoeff(decided, k);
+}
+
+/// Unbiased estimator of `pass^k`: probability that all [k] draws pass.
+///
+/// Given `n` decided runs (`passed` or `failed`) with `c` passes, computes
+/// `C(c, k) / C(n, k)` (the finite-sample counterpart of `(c / n)^k` from
+/// Yao et al., 2024). Runs with status `notEvaluated` are ignored. Returns
+/// `null` when `n < k`.
+double? passHatK(List<RunResult> runs, int k) {
+  _checkK(k);
+  int passed = 0;
+  int decided = 0;
+  for (final RunResult run in runs) {
+    if (run.status == EvalStatus.passed) {
+      passed += 1;
+      decided += 1;
+    } else if (run.status == EvalStatus.failed) {
+      decided += 1;
+    }
+  }
+  if (decided < k) {
+    return null;
+  }
+  return _binomialCoeff(passed, k) / _binomialCoeff(decided, k);
+}
+
+AggregationMethodFn _requiresK(String name) {
+  double? placeholder(List<RunResult> runs) {
+    throw _CustomAggregationReturnTypeError(
+      'Aggregation method "$name" requires k; call .withK(k) first.',
+    );
+  }
+
+  return placeholder;
+}
+
 /// Default score-combining aggregation method (`mean_over_invocations`).
 const AggregationMethod defaultAggregationMethod = AggregationMethod(
   name: 'mean_over_invocations',
@@ -156,23 +264,35 @@ const AggregationMethod defaultAggregationMethod = AggregationMethod(
   usesScores: true,
 );
 
-const Map<String, AggregationMethod> _builtInMethods =
+final Map<String, AggregationMethod> _builtInMethods =
     <String, AggregationMethod>{
       'mean_over_invocations': defaultAggregationMethod,
-      'mean_of_runs': AggregationMethod(
+      'mean_of_runs': const AggregationMethod(
         name: 'mean_of_runs',
         compute: meanOfRuns,
         usesScores: true,
       ),
-      'min_over_runs': AggregationMethod(
+      'min_over_runs': const AggregationMethod(
         name: 'min_over_runs',
         compute: minOverRuns,
         usesScores: true,
       ),
-      'pass_rate': AggregationMethod(
+      'pass_rate': const AggregationMethod(
         name: 'pass_rate',
         compute: passRate,
         usesScores: false,
+      ),
+      'pass_at_k': AggregationMethod(
+        name: 'pass_at_k',
+        compute: _requiresK('pass_at_k'),
+        usesScores: false,
+        computeWithK: passAtK,
+      ),
+      'pass_hat_k': AggregationMethod(
+        name: 'pass_hat_k',
+        compute: _requiresK('pass_hat_k'),
+        usesScores: false,
+        computeWithK: passHatK,
       ),
     };
 

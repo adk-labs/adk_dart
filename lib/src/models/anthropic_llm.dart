@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../tools/base_tool.dart';
 import '../types/content.dart';
+import '../utils/schema_utils.dart';
 import '../utils/system_environment/system_environment.dart';
 import '../version.dart';
 import 'base_llm.dart';
@@ -25,6 +26,19 @@ const String _outputSchemaToolDescription =
     'Provide your final answer. Call this tool exactly once, with your whole '
     'answer in the structure its input describes.';
 const String _outputSchemaValueKey = 'response';
+const int _maxFileDataSize = 21 * 1024 * 1024;
+const Set<String> _supportedImageMimeTypes = <String>{
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+};
+const String _pdfMimeType = 'application/pdf';
+const String _continueOutputMessage =
+    'Continue processing previous requests as instructed. Exit or provide a '
+    'summary if no more outputs are needed.';
+const String _emptyMessagesFallback =
+    'Handle the requests as specified in the System Instruction.';
 const Set<String> _validAnthropicEfforts = <String>{
   'low',
   'medium',
@@ -36,6 +50,218 @@ const Set<String> _truncatingStopReasons = <String>{
   'max_tokens',
   'model_context_window_exceeded',
 };
+
+/// Metadata and raw bytes downloaded from a `gs://` object for Claude.
+class AnthropicGcsObject {
+  /// Creates a downloaded GCS object record.
+  const AnthropicGcsObject({
+    required this.bytes,
+    this.contentType,
+    int? size,
+  }) : size = size ?? bytes.length;
+
+  /// Raw object bytes.
+  final List<int> bytes;
+
+  /// Optional MIME type from object metadata.
+  final String? contentType;
+
+  /// Object size in bytes.
+  final int size;
+}
+
+/// Callback that downloads a GCS object for `gs://bucket/blob` URIs.
+typedef AnthropicGcsDownloader =
+    AnthropicGcsObject Function(String bucketName, String blobName);
+
+/// Optional process-wide GCS downloader override used by static helpers/tests.
+AnthropicGcsDownloader? anthropicGcsDownloaderForTest;
+
+(String, String) _parseGcsUri(String fileUri) {
+  final Uri? parsed = Uri.tryParse(fileUri);
+  if (parsed == null || parsed.scheme.toLowerCase() != 'gs') {
+    throw ArgumentError(
+      'Unsupported file URI for Claude: $fileUri. Only gs:// URIs are supported.',
+    );
+  }
+  final String bucket = parsed.host;
+  final String rawPath = parsed.path.startsWith('/')
+      ? parsed.path.substring(1)
+      : parsed.path;
+  final String blobName = Uri.decodeComponent(rawPath);
+  if (bucket.isEmpty || blobName.isEmpty) {
+    throw ArgumentError(
+      'Invalid GCS URI (missing bucket or object path): $fileUri',
+    );
+  }
+  return (bucket, blobName);
+}
+
+String? _guessMimeTypeFromPath(String path) {
+  final int dot = path.lastIndexOf('.');
+  if (dot < 0 || dot == path.length - 1) {
+    return null;
+  }
+  switch (path.substring(dot + 1).toLowerCase()) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'pdf':
+      return 'application/pdf';
+    case 'txt':
+      return 'text/plain';
+    case 'csv':
+      return 'text/csv';
+    case 'html':
+    case 'htm':
+      return 'text/html';
+    case 'json':
+      return 'application/json';
+    case 'mp3':
+      return 'audio/mpeg';
+    case 'wav':
+      return 'audio/wav';
+    case 'mp4':
+      return 'video/mp4';
+    default:
+      return null;
+  }
+}
+
+String _resolveFileDataMimeType(
+  String? partMimeType,
+  String? blobContentType,
+  String blobName,
+) {
+  for (final String? candidate in <String?>[partMimeType, blobContentType]) {
+    if (candidate != null && candidate.trim().isNotEmpty) {
+      final String normalized =
+          candidate.split(';').first.trim().toLowerCase();
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
+    }
+  }
+  final String? guessed = _guessMimeTypeFromPath(blobName);
+  if (guessed != null && guessed.isNotEmpty) {
+    return guessed.toLowerCase();
+  }
+  throw ArgumentError(
+    'Cannot determine MIME type for $blobName; set FileData.mime_type or the '
+    'GCS object content_type.',
+  );
+}
+
+(String, String) _fileDataToSource(
+  FileData fileData, {
+  Map<String, (String, String)>? downloads,
+  AnthropicGcsDownloader? gcsDownloader,
+}) {
+  final String fileUri = fileData.fileUri;
+  if (fileUri.isEmpty) {
+    throw ArgumentError('FileData.file_uri is required.');
+  }
+  final (String bucketName, String blobName) = _parseGcsUri(fileUri);
+  final String normalizedPartMime =
+      (fileData.mimeType ?? '').split(';').first.trim().toLowerCase();
+  final String cacheKey = '$fileUri|$normalizedPartMime';
+  if (downloads != null && downloads.containsKey(cacheKey)) {
+    return downloads[cacheKey]!;
+  }
+
+  final AnthropicGcsDownloader? downloader =
+      gcsDownloader ?? anthropicGcsDownloaderForTest;
+  if (downloader == null) {
+    throw StateError(
+      'No GCS downloader configured for AnthropicLlm to fetch $fileUri.',
+    );
+  }
+  final AnthropicGcsObject blob = downloader(bucketName, blobName);
+  if (blob.size > _maxFileDataSize) {
+    throw ArgumentError(
+      'GCS object $fileUri is ${blob.size} bytes, which exceeds the '
+      '$_maxFileDataSize-byte inline limit for Claude.',
+    );
+  }
+
+  final String mimeType = _resolveFileDataMimeType(
+    fileData.mimeType,
+    blob.contentType,
+    blobName,
+  );
+  if (!_supportedImageMimeTypes.contains(mimeType) &&
+      mimeType != _pdfMimeType) {
+    throw ArgumentError(
+      "Unsupported MIME type '$mimeType' for $fileUri; Claude only supports "
+      'PDFs and JPEG, PNG, GIF, or WebP images.',
+    );
+  }
+
+  final List<int> rawBytes = blob.bytes;
+  if (rawBytes.length > _maxFileDataSize) {
+    throw ArgumentError(
+      'GCS object $fileUri is ${rawBytes.length} bytes, which exceeds the '
+      '$_maxFileDataSize-byte inline limit for Claude.',
+    );
+  }
+
+  final (String, String) result = (mimeType, base64Encode(rawBytes));
+  if (downloads != null) {
+    downloads[cacheKey] = result;
+  }
+  return result;
+}
+
+Map<String, Object?> _fileDataToBlock(
+  FileData fileData, {
+  Map<String, (String, String)>? downloads,
+  AnthropicGcsDownloader? gcsDownloader,
+}) {
+  final (String mimeType, String data) = _fileDataToSource(
+    fileData,
+    downloads: downloads,
+    gcsDownloader: gcsDownloader,
+  );
+  if (mimeType == _pdfMimeType) {
+    return <String, Object?>{
+      'type': 'document',
+      'source': <String, Object?>{
+        'type': 'base64',
+        'media_type': _pdfMimeType,
+        'data': data,
+      },
+    };
+  }
+  return <String, Object?>{
+    'type': 'image',
+    'source': <String, Object?>{
+      'type': 'base64',
+      'media_type': mimeType,
+      'data': data,
+    },
+  };
+}
+
+void _ensureMessagesEndWithUser(List<Map<String, Object?>> messages) {
+  if (messages.isNotEmpty && messages.last['role'] == 'user') {
+    return;
+  }
+  final String text = messages.isNotEmpty
+      ? _continueOutputMessage
+      : _emptyMessagesFallback;
+  messages.add(<String, Object?>{
+    'role': 'user',
+    'content': <Map<String, Object?>>[
+      <String, Object?>{'type': 'text', 'text': text},
+    ],
+  });
+}
 
 LlmResponse _truncatedToolUseResponse({
   required String stopReason,
@@ -663,6 +889,7 @@ class AnthropicLlm extends BaseLlm {
     this.environment,
     this.baseUrl,
     this.apiVersion,
+    this.gcsDownloader,
     AnthropicRestTransport? restTransport,
     AnthropicGenerateHook? generateHook,
   }) : _generateHook = generateHook,
@@ -685,6 +912,9 @@ class AnthropicLlm extends BaseLlm {
 
   /// Optional `anthropic-version` header override.
   final String? apiVersion;
+
+  /// Optional downloader for `gs://` file URIs.
+  final AnthropicGcsDownloader? gcsDownloader;
   final AnthropicGenerateHook? _generateHook;
   final AnthropicRestTransport? _restTransport;
 
@@ -745,14 +975,129 @@ class AnthropicLlm extends BaseLlm {
   }
 
   /// Converts a [Part] into an Anthropic content block.
-  static Map<String, Object?> partToMessageBlock(Part part) {
-    return _partToMessageBlock(part, _ToolUseIdSanitizer());
+  static Map<String, Object?> partToMessageBlock(
+    Part part, {
+    Map<String, (String, String)>? downloads,
+    AnthropicGcsDownloader? gcsDownloader,
+  }) {
+    return _partToMessageBlock(
+      part,
+      _ToolUseIdSanitizer(),
+      downloads: downloads,
+      gcsDownloader: gcsDownloader,
+    );
+  }
+
+  static Object _toolResultContent(
+    FunctionResponse functionResponse, {
+    Map<String, (String, String)>? downloads,
+    AnthropicGcsDownloader? gcsDownloader,
+  }) {
+    final Object response = functionResponse.response;
+    String text = '';
+    if (response is Map && response['content'] is List) {
+      final List<String> lines = <String>[];
+      for (final Object? item in response['content'] as List<Object?>) {
+        if (item is Map && item['type'] == 'text' && item['text'] is String) {
+          lines.add(item['text'] as String);
+        } else if (item is Map || item is List) {
+          try {
+            lines.add(jsonEncode(item));
+          } catch (_) {
+            lines.add('$item');
+          }
+        } else if (item != null) {
+          lines.add('$item');
+        }
+      }
+      text = lines.join('\n');
+    } else if (response is Map &&
+        response['content'] is String &&
+        (response['content'] as String).isNotEmpty) {
+      text = response['content'] as String;
+    } else if (response is Map && response['result'] != null) {
+      final Object result = response['result'] as Object;
+      if (result is Map || result is List) {
+        text = jsonEncode(result);
+      } else {
+        text = '$result';
+      }
+    } else if (response is Map || response is List) {
+      try {
+        text = jsonEncode(response);
+      } catch (_) {
+        text = '$response';
+      }
+    } else {
+      text = '$response';
+    }
+
+    final List<Part>? responseParts = functionResponse.parts;
+    if (responseParts == null || responseParts.isEmpty) {
+      return text;
+    }
+
+    final List<Map<String, Object?>> partBlocks = <Map<String, Object?>>[];
+    for (final Part funcRespPart in responseParts) {
+      if (isImagePart(funcRespPart)) {
+        partBlocks.add(<String, Object?>{
+          'type': 'image',
+          'source': <String, Object?>{
+            'type': 'base64',
+            'media_type': funcRespPart.inlineData!.mimeType,
+            'data': base64Encode(funcRespPart.inlineData!.data),
+          },
+        });
+      } else if (isPdfPart(funcRespPart)) {
+        partBlocks.add(<String, Object?>{
+          'type': 'document',
+          'source': <String, Object?>{
+            'type': 'base64',
+            'media_type': funcRespPart.inlineData!.mimeType,
+            'data': base64Encode(funcRespPart.inlineData!.data),
+          },
+        });
+      } else if (funcRespPart.fileData != null) {
+        try {
+          partBlocks.add(
+            _fileDataToBlock(
+              funcRespPart.fileData!,
+              downloads: downloads,
+              gcsDownloader: gcsDownloader,
+            ),
+          );
+        } on Object catch (e) {
+          developer.log(
+            'Skipping file_data part in function response for Claude: $e',
+            name: 'adk_dart.models.anthropic_llm',
+          );
+        }
+      } else {
+        developer.log(
+          'Skipping unsupported part in function response for Claude.',
+          name: 'adk_dart.models.anthropic_llm',
+        );
+      }
+    }
+
+    if (partBlocks.isEmpty) {
+      return text;
+    }
+
+    final List<Map<String, Object?>> blocks = <Map<String, Object?>>[];
+    if (text.isNotEmpty) {
+      blocks.add(<String, Object?>{'type': 'text', 'text': text});
+    }
+    blocks.addAll(partBlocks);
+    return blocks;
   }
 
   static Map<String, Object?> _partToMessageBlock(
     Part part,
-    _ToolUseIdSanitizer sanitizer,
-  ) {
+    _ToolUseIdSanitizer sanitizer, {
+    Map<String, (String, String)>? downloads,
+    AnthropicGcsDownloader? gcsDownloader,
+  }) {
     if (part.thought) {
       if (part.text != null && part.text!.isNotEmpty) {
         return <String, Object?>{
@@ -785,43 +1130,6 @@ class AnthropicLlm extends BaseLlm {
     }
     if (part.functionResponse != null) {
       final Object response = part.functionResponse!.response;
-      String content = '';
-      if (response is Map && response['content'] is List) {
-        final List<String> lines = <String>[];
-        for (final Object? item in response['content'] as List<Object?>) {
-          if (item is Map && item['type'] == 'text' && item['text'] is String) {
-            lines.add(item['text'] as String);
-          } else if (item is Map || item is List) {
-            try {
-              lines.add(jsonEncode(item));
-            } catch (_) {
-              lines.add('$item');
-            }
-          } else if (item != null) {
-            lines.add('$item');
-          }
-        }
-        content = lines.join('\n');
-      } else if (response is Map &&
-          response['content'] is String &&
-          (response['content'] as String).isNotEmpty) {
-        content = response['content'] as String;
-      } else if (response is Map && response['result'] != null) {
-        final Object result = response['result'] as Object;
-        if (result is Map || result is List) {
-          content = jsonEncode(result);
-        } else {
-          content = '$result';
-        }
-      } else if (response is Map || response is List) {
-        try {
-          content = jsonEncode(response);
-        } catch (_) {
-          content = '$response';
-        }
-      } else {
-        content = '$response';
-      }
       final bool isError =
           response is Map &&
           (_isTruthy(response['isError']) || _isTruthy(response['is_error']));
@@ -829,7 +1137,11 @@ class AnthropicLlm extends BaseLlm {
         'type': 'tool_result',
         'tool_use_id': sanitizer.sanitize(part.functionResponse!.id),
         'is_error': isError,
-        'content': content,
+        'content': _toolResultContent(
+          part.functionResponse!,
+          downloads: downloads,
+          gcsDownloader: gcsDownloader,
+        ),
       };
     }
     if (isImagePart(part)) {
@@ -852,6 +1164,13 @@ class AnthropicLlm extends BaseLlm {
         },
       };
     }
+    if (part.fileData != null) {
+      return _fileDataToBlock(
+        part.fileData!,
+        downloads: downloads,
+        gcsDownloader: gcsDownloader,
+      );
+    }
     if (part.executableCode != null) {
       return <String, Object?>{
         'type': 'text',
@@ -869,20 +1188,47 @@ class AnthropicLlm extends BaseLlm {
   }
 
   /// Converts one [Content] into an Anthropic message payload.
-  static Map<String, Object?> contentToMessageParam(Content content) {
-    return _contentToMessageParam(content, _ToolUseIdSanitizer());
+  static Map<String, Object?> contentToMessageParam(
+    Content content, {
+    Map<String, (String, String)>? downloads,
+    AnthropicGcsDownloader? gcsDownloader,
+  }) {
+    return _contentToMessageParam(
+      content,
+      _ToolUseIdSanitizer(),
+      downloads: downloads,
+      gcsDownloader: gcsDownloader,
+    );
   }
 
   static Map<String, Object?> _contentToMessageParam(
     Content content,
-    _ToolUseIdSanitizer sanitizer,
-  ) {
+    _ToolUseIdSanitizer sanitizer, {
+    Map<String, (String, String)>? downloads,
+    AnthropicGcsDownloader? gcsDownloader,
+  }) {
     final List<Map<String, Object?>> blocks = <Map<String, Object?>>[];
     for (final Part part in content.parts) {
-      if (content.role != 'user' && (isImagePart(part) || isPdfPart(part))) {
-        continue;
+      if (content.role != 'user') {
+        if (isImagePart(part) || isPdfPart(part)) {
+          continue;
+        }
+        if (part.fileData != null) {
+          developer.log(
+            'File data is not supported for assistant turns in Claude; skipping part.',
+            name: 'adk_dart.models.anthropic_llm',
+          );
+          continue;
+        }
       }
-      blocks.add(_partToMessageBlock(part, sanitizer));
+      blocks.add(
+        _partToMessageBlock(
+          part,
+          sanitizer,
+          downloads: downloads,
+          gcsDownloader: gcsDownloader,
+        ),
+      );
     }
     return <String, Object?>{
       'role': toClaudeRole(content.role),
@@ -1010,7 +1356,6 @@ class AnthropicLlm extends BaseLlm {
   }) async* {
     final LlmRequest prepared = _cloneRequestPreservingFunctionCallIds(request);
     prepared.model ??= model;
-    maybeAppendUserContent(prepared);
     prepared.config.httpOptions ??= HttpOptions();
     final _OutputSchemaTool? outputSchemaTool = _resolveOutputSchemaTool(
       prepared,
@@ -1104,9 +1449,25 @@ class AnthropicLlm extends BaseLlm {
     _OutputSchemaTool? outputSchemaTool,
   }) {
     final _ToolUseIdSanitizer sanitizer = _ToolUseIdSanitizer();
+    final Map<String, (String, String)> downloads =
+        <String, (String, String)>{};
     final List<Map<String, Object?>> messages = request.contents
-        .map((Content content) => _contentToMessageParam(content, sanitizer))
+        .map(
+          (Content content) => _contentToMessageParam(
+            content,
+            sanitizer,
+            downloads: downloads,
+            gcsDownloader: gcsDownloader,
+          ),
+        )
+        .where((Map<String, Object?> message) {
+          final Object? content = message['content'];
+          return content is List
+              ? content.isNotEmpty
+              : (content is String && content.isNotEmpty);
+        })
         .toList();
+    _ensureMessagesEndWithUser(messages);
     List<Map<String, Object?>> tools = <Map<String, Object?>>[];
     final List<ToolDeclaration>? declarations = request.config.tools;
     if (declarations != null) {
@@ -1558,69 +1919,7 @@ Object? _deepCopyJsonValue(Object? value) {
 }
 
 void _updateTypeStrings(Object? value) {
-  if (value is List) {
-    for (final Object? item in value) {
-      _updateTypeStrings(item);
-    }
-    return;
-  }
-  if (value is! Map) {
-    return;
-  }
-
-  final Object? schemaType = value['type'];
-  if (schemaType is String) {
-    value['type'] = schemaType.toLowerCase();
-  }
-
-  for (final String dictKey in const <String>[
-    r'$defs',
-    'defs',
-    'dependentSchemas',
-    'patternProperties',
-    'properties',
-  ]) {
-    final Object? childDict = value[dictKey];
-    if (childDict is! Map) {
-      continue;
-    }
-    for (final Object? childValue in childDict.values) {
-      _updateTypeStrings(childValue);
-    }
-  }
-
-  for (final String singleKey in const <String>[
-    'additionalProperties',
-    'additional_properties',
-    'contains',
-    'else',
-    'if',
-    'items',
-    'not',
-    'propertyNames',
-    'then',
-    'unevaluatedProperties',
-  ]) {
-    final Object? childValue = value[singleKey];
-    if (childValue is Map || childValue is List) {
-      _updateTypeStrings(childValue);
-    }
-  }
-
-  for (final String listKey in const <String>[
-    'allOf',
-    'all_of',
-    'anyOf',
-    'any_of',
-    'oneOf',
-    'one_of',
-    'prefixItems',
-  ]) {
-    final Object? childList = value[listKey];
-    if (childList is List) {
-      _updateTypeStrings(childList);
-    }
-  }
+  lowercaseSchemaTypes(value);
 }
 
 Map<String, Object?> _decodeJsonObject(String body) {

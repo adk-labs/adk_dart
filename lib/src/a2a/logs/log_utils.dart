@@ -81,25 +81,31 @@ ${messagePartsLogs.isEmpty ? 'No parts' : messagePartsLogs.join(_newLine)}
 
 /// The multi-line debug log payload for an inbound A2A [response].
 String buildA2aResponseLog(Object response) {
+  final Object normalizedResponse = switch (response) {
+    (final A2aTask task, Object? _) => task,
+    _ => response,
+  };
   final List<String> resultDetails = <String>[];
   String statusMessageSection = 'None';
   String historySection = 'No history';
 
-  if (response is A2aTask) {
+  if (normalizedResponse is A2aTask) {
     resultDetails.addAll(<String>[
-      'Task ID: ${response.id}',
-      'Context ID: ${response.contextId}',
-      'Status State: ${response.status.state}',
-      'Status Timestamp: ${response.status.timestamp}',
-      'History Length: ${response.history.length}',
-      'Artifacts Count: ${response.artifacts.length}',
+      'Task ID: ${normalizedResponse.id}',
+      'Context ID: ${normalizedResponse.contextId}',
+      'Status State: ${normalizedResponse.status.state}',
+      'Status Timestamp: ${normalizedResponse.status.timestamp}',
+      'History Length: ${normalizedResponse.history.length}',
+      'Artifacts Count: ${normalizedResponse.artifacts.length}',
     ]);
 
-    if (response.metadata.isNotEmpty) {
-      resultDetails.add('Task Metadata: ${jsonEncode(response.metadata)}');
+    if (normalizedResponse.metadata.isNotEmpty) {
+      resultDetails.add(
+        'Task Metadata: ${jsonEncode(normalizedResponse.metadata)}',
+      );
     }
 
-    final A2aMessage? statusMessage = response.status.message;
+    final A2aMessage? statusMessage = normalizedResponse.status.message;
     if (statusMessage != null) {
       final List<String> partLogs = <String>[];
       for (int i = 0; i < statusMessage.parts.length; i += 1) {
@@ -120,10 +126,10 @@ ${partLogs.isEmpty ? 'No parts' : partLogs.join(_newLine)}''';
       }
     }
 
-    if (response.history.isNotEmpty) {
+    if (normalizedResponse.history.isNotEmpty) {
       final List<String> entries = <String>[];
-      for (int i = 0; i < response.history.length; i += 1) {
-        final A2aMessage message = response.history[i];
+      for (int i = 0; i < normalizedResponse.history.length; i += 1) {
+        final A2aMessage message = normalizedResponse.history[i];
         final List<String> partLogs = <String>[];
         for (int j = 0; j < message.parts.length; j += 1) {
           partLogs.add(
@@ -140,35 +146,35 @@ ${partLogs.isEmpty ? '  No parts' : partLogs.join(_newLine)}''');
       }
       historySection = entries.join(_newLine);
     }
-  } else if (response is A2aMessage) {
+  } else if (normalizedResponse is A2aMessage) {
     resultDetails.addAll(<String>[
-      'Message ID: ${response.messageId}',
-      'Role: ${response.role}',
-      'Task ID: ${response.taskId}',
-      'Context ID: ${response.contextId}',
+      'Message ID: ${normalizedResponse.messageId}',
+      'Role: ${normalizedResponse.role}',
+      'Task ID: ${normalizedResponse.taskId}',
+      'Context ID: ${normalizedResponse.contextId}',
     ]);
 
-    if (response.parts.isNotEmpty) {
+    if (normalizedResponse.parts.isNotEmpty) {
       resultDetails.add('Message Parts:');
-      for (int i = 0; i < response.parts.length; i += 1) {
+      for (int i = 0; i < normalizedResponse.parts.length; i += 1) {
         resultDetails.add(
-          '  Part $i: ${buildMessagePartLog(response.parts[i]).replaceAll('\n', '\n    ')}',
+          '  Part $i: ${buildMessagePartLog(normalizedResponse.parts[i]).replaceAll('\n', '\n    ')}',
         );
       }
     }
 
-    if (response.metadata.isNotEmpty) {
-      resultDetails.add('Metadata: ${jsonEncode(response.metadata)}');
+    if (normalizedResponse.metadata.isNotEmpty) {
+      resultDetails.add('Metadata: ${jsonEncode(normalizedResponse.metadata)}');
     }
   } else {
-    resultDetails.add('Data: $response');
+    resultDetails.add('Data: $normalizedResponse');
   }
 
   return '''
 A2A Response:
 -----------------------------------------------------------
 Type: SUCCESS
-Result Type: ${response.runtimeType}
+Result Type: ${normalizedResponse.runtimeType}
 -----------------------------------------------------------
 Result Details:
 ${resultDetails.join(_newLine)}

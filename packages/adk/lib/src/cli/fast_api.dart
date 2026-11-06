@@ -4,6 +4,7 @@ library;
 import 'dart:io';
 
 import 'adk_web_server.dart';
+export 'api_server.dart' show W3cTraceContext, extractW3cTraceContext;
 
 /// Thin wrapper around [AdkWebServer] for web and API server modes.
 class FastApiApp {

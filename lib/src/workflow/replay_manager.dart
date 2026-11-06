@@ -16,13 +16,23 @@ class ReplayManager {
   final Map<String, List<Event>> _transitiveEventsByParent =
       <String, List<Event>>{};
   int _indexedEventCount = -1;
+  String? _indexedInvocationId;
 
   void _ensureIndex(Context ctx) {
     final List<Event> events = ctx.invocationContext.session.events;
-    if (_indexedEventCount != events.length) {
-      _buildEventIndex(events, ctx.invocationContext.invocationId);
+    final String invocationId = ctx.invocationContext.invocationId;
+    if (_indexedEventCount != events.length ||
+        _indexedInvocationId != invocationId) {
+      _buildEventIndex(events, invocationId);
       _indexedEventCount = events.length;
+      _indexedInvocationId = invocationId;
     }
+  }
+
+  /// Returns indexed events for the active invocation, if any.
+  List<Event>? indexedInvocationEvents(Context ctx) {
+    _ensureIndex(ctx);
+    return _transitiveEventsByParent[''];
   }
 
   void _buildEventIndex(List<Event> events, String invocationId) {
@@ -31,8 +41,12 @@ class ReplayManager {
     final Map<String, String> fcToParent = <String, String>{};
 
     for (final Event event in events) {
+      final bool isActiveInvocation =
+          invocationId.isEmpty || event.invocationId == invocationId;
       if (event.author == 'user') {
-        _indexUserEvent(event, fcToParent);
+        if (isActiveInvocation) {
+          _indexUserEvent(event, fcToParent);
+        }
         continue;
       }
 
@@ -43,7 +57,9 @@ class ReplayManager {
 
       final String parentPath = parentNodePath(path);
 
-      _addEventToIndex(parentPath, event);
+      if (isActiveInvocation) {
+        _addEventToIndex(parentPath, event);
+      }
 
       // Track interrupts to route future user responses
       final Set<String> interruptIds = <String>{
@@ -135,17 +151,29 @@ class ReplayManager {
     return _parentSequenceBarriers.putIfAbsent(parentPath, () {
       _ensureIndex(ctx);
       final List<Event> events = _eventsByParent[parentPath] ?? <Event>[];
-      final List<String> seq = _scanSequence(
+      final (List<String> seq, Set<String> completed) = _scanSequence(
         events,
         ctx,
         parentPath,
         strictDirectChild: true,
       );
-      return ReplaySequenceBarrier(seq);
+      return ReplaySequenceBarrier(
+        seq,
+        pending: seq.toSet().difference(completed),
+      );
     });
   }
 
-  List<String> _scanSequence(
+  /// Releases a pending (interrupted) replay barrier key so replayed siblings
+  /// do not time out waiting for a slow resumed node.
+  Future<void> releasePendingSequence(String parentPath, String key) async {
+    final ReplaySequenceBarrier? barrier = _parentSequenceBarriers[parentPath];
+    if (barrier != null && barrier.pending.contains(key)) {
+      barrier.checkAndAdvance(key);
+    }
+  }
+
+  (List<String>, Set<String>) _scanSequence(
     List<Event> events,
     Context ctx,
     String basePath, {
@@ -198,7 +226,7 @@ class ReplayManager {
       }
     }
 
-    return sequence;
+    return (sequence, completed);
   }
 
   bool _eventHasResult(Event event) {

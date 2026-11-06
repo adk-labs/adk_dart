@@ -1,6 +1,8 @@
 /// Shared evaluation models and utility helpers.
 library;
 
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import '../models/llm_request.dart';
@@ -92,8 +94,20 @@ double? getAverageRubricScore(List<RubricScore> rubricScores) {
 
 /// Serializes app tool declarations into indented JSON.
 String getToolDeclarationsAsJsonStr(AppDetails appDetails) {
+  final Map<String, List<Object?>> toolsByAgent =
+      appDetails.getToolsByAgentName().map(
+        (String agent, List<Object?> tools) => MapEntry(
+          agent,
+          tools
+              .map(
+                (Object? t) =>
+                    t is ToolDeclaration ? serializeToolDeclarationToJson(t) : t,
+              )
+              .toList(),
+        ),
+      );
   final Map<String, Object?> payload = <String, Object?>{
-    'tool_declarations': appDetails.getToolsByAgentName(),
+    'tool_declarations': toolsByAgent,
   };
   return const JsonEncoder.withIndent('  ').convert(payload);
 }
@@ -143,4 +157,52 @@ String getGroundingMetadataAsJsonStr(Object? intermediateData) {
   return const JsonEncoder.withIndent(
     '  ',
   ).convert(<String, Object?>{'grounding_metadata': entries});
+}
+
+/// Async semaphore used to bound concurrent judge model requests.
+class JudgeEvaluationSemaphore {
+  /// Creates a semaphore with [maxConcurrency] permits.
+  JudgeEvaluationSemaphore(int maxConcurrency)
+    : _maxConcurrency = maxConcurrency < 1 ? 1 : maxConcurrency;
+
+  final int _maxConcurrency;
+  int _current = 0;
+  final Queue<Completer<void>> _waiters = Queue<Completer<void>>();
+
+  /// Runs [action] while holding one permit from this semaphore.
+  Future<T> withPermit<T>(Future<T> Function() action) async {
+    if (_current >= _maxConcurrency) {
+      final Completer<void> waiter = Completer<void>();
+      _waiters.addLast(waiter);
+      await waiter.future;
+    } else {
+      _current += 1;
+    }
+    try {
+      return await action();
+    } finally {
+      if (_waiters.isNotEmpty) {
+        final Completer<void> next = _waiters.removeFirst();
+        next.complete();
+      } else {
+        _current -= 1;
+      }
+    }
+  }
+}
+
+/// Runs [futures] concurrently, propagating the first error and draining siblings.
+Future<List<T>> gatherCancellingOnError<T>(Iterable<Future<T>> futures) async {
+  final List<Future<T>> taskList = futures.toList(growable: false);
+  if (taskList.isEmpty) {
+    return <T>[];
+  }
+  try {
+    return await Future.wait<T>(taskList, eagerError: true);
+  } catch (error) {
+    for (final Future<T> task in taskList) {
+      unawaited(task.then((_) {}, onError: (_) {}));
+    }
+    rethrow;
+  }
 }

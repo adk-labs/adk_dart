@@ -16,6 +16,14 @@ const Object _labelContextKey = Object();
 /// The default client label used by evaluation API calls.
 const String evalClientLabel = 'google-adk-eval/$adkVersion';
 
+/// Label used to denote advisor LLM calls made by ModelConsultTool.
+const String modelConsultClientLabel = 'google-adk-model-consult/$adkVersion';
+
+/// Returns the label for calls made by a classifier, such as `"llm"`.
+String classifierClientLabel(String kind) {
+  return 'google-adk-classifier/$adkVersion+$kind';
+}
+
 List<String> _getDefaultLabels({
   String? frameworkLabel,
   Map<String, String>? environment,

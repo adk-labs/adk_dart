@@ -15,9 +15,7 @@ String parentNodePath(String path) {
 
 /// Appends a child segment to a node path, as [NodePathBuilder] does.
 String joinNodePath(String? parentPath, String nodeName, [String? runId]) {
-  final String segment = (runId == null || runId.isEmpty)
-      ? nodeName
-      : '$nodeName@$runId';
+  final String segment = NodePathBuilder.segment(nodeName, runId);
   return (parentPath == null || parentPath.isEmpty)
       ? segment
       : '$parentPath/$segment';
@@ -28,6 +26,10 @@ String joinNodePath(String? parentPath, String nodeName, [String? runId]) {
 /// A node path is a sequence of segments, each identifying a node instance,
 /// typically in the form `node_name@run_id` or just `node_name`.
 class NodePathBuilder {
+  /// Formats a single path segment for [nodeName] and optional [runId].
+  static String segment(String nodeName, [String? runId]) =>
+      (runId == null || runId.isEmpty) ? nodeName : '$nodeName@$runId';
+
   /// Creates a node path from [segments].
   NodePathBuilder(Iterable<String> segments)
     : _segments = List<String>.unmodifiable(segments);
@@ -79,10 +81,7 @@ class NodePathBuilder {
 
   /// Returns a new path with [nodeName] appended.
   NodePathBuilder append(String nodeName, [String? runId]) {
-    final String segment = runId == null || runId.isEmpty
-        ? nodeName
-        : '$nodeName@$runId';
-    return NodePathBuilder(<String>[..._segments, segment]);
+    return NodePathBuilder(<String>[..._segments, segment(nodeName, runId)]);
   }
 
   /// Whether this path is a strict descendant of [ancestor].

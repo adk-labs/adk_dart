@@ -4,6 +4,7 @@ library;
 import 'dart:io';
 
 import '../dev/cli.dart' as dev_cli;
+import '_cli_generate_agent_card.dart';
 import 'cli_deploy.dart';
 import 'cli_create.dart';
 
@@ -37,6 +38,13 @@ Future<int> main(
         errSink: errSink,
         environment: environment,
       );
+    case 'generate_agent_card':
+    case 'generate-agent-card':
+      return runGenerateAgentCardCommand(
+        args.skip(1).toList(growable: false),
+        outSink: outSink,
+        errSink: errSink,
+      );
     default:
       return runAdkCli(args, outSink: outSink, errSink: errSink);
   }
@@ -61,6 +69,21 @@ Future<int> cliCreateCmd({
     project: project,
     region: region,
     type: type,
+    outSink: outSink,
+  );
+}
+
+/// Executes `adk generate_agent_card` behavior for compatibility wrappers.
+Future<File> cliGenerateAgentCardCmd({
+  required Object agent,
+  String? outputFile,
+  String? cardUrl,
+  IOSink? outSink,
+}) {
+  return generateAgentCard(
+    agent: agent,
+    outputFile: outputFile,
+    cardUrl: cardUrl,
     outSink: outSink,
   );
 }

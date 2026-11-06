@@ -31,15 +31,46 @@ abstract final class PersistBarrier {
     InvocationContext context,
     List<Event> events,
   ) async {
-    if (context.callbackContextData[_enabledKey] != true) {
+    if (context.callbackContextData[_enabledKey] != true || context.isAborted) {
       return;
     }
     for (final Event event in events) {
+      if (context.isAborted) {
+        return;
+      }
       final String eventId = event.id;
       if (eventId.isEmpty) {
         continue;
       }
-      await _barrier(context, eventId).future;
+      final Completer<void> barrier = _barrier(context, eventId);
+      if (barrier.isCompleted) {
+        continue;
+      }
+      final Completer<void> waiter = Completer<void>();
+      void onAbort(Object? _) {
+        if (!waiter.isCompleted) {
+          waiter.complete();
+        }
+      }
+
+      context.onAbortSignal.addListener(onAbort);
+      unawaited(
+        barrier.future.then(
+          (_) {
+            context.onAbortSignal.removeListener(onAbort);
+            if (!waiter.isCompleted) {
+              waiter.complete();
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            context.onAbortSignal.removeListener(onAbort);
+            if (!waiter.isCompleted) {
+              waiter.completeError(error, stackTrace);
+            }
+          },
+        ),
+      );
+      await waiter.future;
     }
   }
 

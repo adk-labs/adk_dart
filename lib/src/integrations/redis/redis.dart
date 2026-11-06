@@ -378,6 +378,28 @@ class RedisSessionService extends BaseSessionService {
     final String appKey = _appStateKey(appName);
     final String userKey = _userStateKey(appName, userId);
 
+    final double now = getTime();
+    final Session storageSession = Session(
+      id: sid,
+      appName: appName,
+      userId: userId,
+      state: sessionState,
+      events: <Event>[],
+      lastUpdateTime: now,
+    );
+
+    final bool created = await _redisClient.set(
+      key,
+      jsonEncode(_redisSessionToJson(storageSession)),
+      nx: true,
+      exSeconds: _effectiveTtl,
+    );
+    if (!created) {
+      throw AlreadyExistsError(
+        'Session $sid already exists for user $userId in app $appName.',
+      );
+    }
+
     final List<String?> rawStates = await Future.wait(<Future<String?>>[
       _redisClient.get(appKey),
       _redisClient.get(userKey),
@@ -400,28 +422,6 @@ class RedisSessionService extends BaseSessionService {
         userKey,
         jsonEncode(currentUser),
         exSeconds: _effectiveTtl,
-      );
-    }
-
-    final double now = getTime();
-    final Session storageSession = Session(
-      id: sid,
-      appName: appName,
-      userId: userId,
-      state: sessionState,
-      events: <Event>[],
-      lastUpdateTime: now,
-    );
-
-    final bool created = await _redisClient.set(
-      key,
-      jsonEncode(_redisSessionToJson(storageSession)),
-      nx: true,
-      exSeconds: _effectiveTtl,
-    );
-    if (!created) {
-      throw AlreadyExistsError(
-        'Session $sid already exists for user $userId in app $appName.',
       );
     }
 
@@ -606,6 +606,9 @@ class RedisSessionService extends BaseSessionService {
       session: session,
       event: event,
     );
+    if (appended.partial == true) {
+      return appended;
+    }
     session.lastUpdateTime = appended.timestamp;
 
     Map<String, Object?> sessionDelta = <String, Object?>{};
@@ -662,11 +665,9 @@ class RedisSessionService extends BaseSessionService {
         );
         storageSession.events = storedSession.events;
         storageSession.state = storedSession.state;
-        if (appended.partial != true) {
-          storageSession.events.add(appended);
-          if (sessionDelta.isNotEmpty) {
-            storageSession.state.addAll(sessionDelta);
-          }
+        storageSession.events.add(appended);
+        if (sessionDelta.isNotEmpty) {
+          storageSession.state.addAll(sessionDelta);
         }
       } else {
         storageSession.events = List<Event>.from(session.events);

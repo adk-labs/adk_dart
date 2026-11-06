@@ -416,6 +416,164 @@ const Set<String> _reservedExtraPackageNames = <String>{
   'deployment.yaml',
 };
 
+final RegExp _extraPackageNamePattern = RegExp(r'^[A-Za-z0-9._-]+$');
+
+/// Validates a staged extra-package basename for safe container copy/install.
+///
+/// Rejects empty strings, `.` and `..`, reserved staging names, and characters
+/// outside `[A-Za-z0-9._-]`.
+String validateExtraPackageName(String name) {
+  if (name.isEmpty ||
+      name == '.' ||
+      name == '..' ||
+      !_extraPackageNamePattern.hasMatch(name)) {
+    throw ArgumentError.value(
+      name,
+      'name',
+      "Invalid --extra_packages name '$name': only alphanumeric characters, dots, hyphens, and underscores are allowed.",
+    );
+  }
+  if (_reservedExtraPackageNames.contains(name)) {
+    throw ArgumentError.value(
+      name,
+      'name',
+      "Invalid --extra_packages name '$name': reserved staging name.",
+    );
+  }
+  return name;
+}
+
+/// Returns `true` when [packagePath] is an installable package directory
+/// (containing `pyproject.toml` or `setup.py`) or a wheel/archive file.
+bool isInstallableExtraPackage(String packagePath) {
+  final FileSystemEntityType entityType = FileSystemEntity.typeSync(packagePath);
+  if (entityType == FileSystemEntityType.directory) {
+    final String sep = Platform.pathSeparator;
+    return File('$packagePath${sep}pyproject.toml').existsSync() ||
+        File('$packagePath${sep}setup.py').existsSync();
+  }
+  if (entityType == FileSystemEntityType.file) {
+    final String lower = packagePath.toLowerCase();
+    return lower.endsWith('.whl') ||
+        lower.endsWith('.tar.gz') ||
+        lower.endsWith('.zip');
+  }
+  return false;
+}
+
+/// Stages [extraPackages] into [targetTempDir] (or [stagingDirPath]) and returns
+/// the categorized lists of plain and installable package basenames.
+({List<String> plainPackages, List<String> installablePackages})
+stageExtraPackages({
+  Directory? targetTempDir,
+  String? stagingDirPath,
+  required List<String> extraPackages,
+}) {
+  if (extraPackages.isEmpty) {
+    return (
+      plainPackages: const <String>[],
+      installablePackages: const <String>[],
+    );
+  }
+  validateExtraPackages(extraPackages);
+  final String resolvedStagingDir =
+      targetTempDir?.path ?? stagingDirPath ?? Directory.systemTemp.path;
+  final List<String> plainPackages = <String>[];
+  final List<String> installablePackages = <String>[];
+
+  for (final String rawPath in extraPackages) {
+    final String trimmed = rawPath.trim();
+    final List<String> segments = trimmed
+        .replaceAll('\\', '/')
+        .split('/')
+        .where((String s) => s.isNotEmpty)
+        .toList(growable: false);
+    final String basename = validateExtraPackageName(segments.last);
+    final FileSystemEntityType entityType = FileSystemEntity.typeSync(trimmed);
+    final String destPath =
+        '$resolvedStagingDir${Platform.pathSeparator}$basename';
+    if (entityType == FileSystemEntityType.directory) {
+      _copyExtraPackageDirectorySync(Directory(trimmed), Directory(destPath));
+    } else if (entityType == FileSystemEntityType.file) {
+      File(destPath).parent.createSync(recursive: true);
+      File(trimmed).copySync(destPath);
+    }
+    if (isInstallableExtraPackage(trimmed)) {
+      installablePackages.add(basename);
+    } else {
+      plainPackages.add(basename);
+    }
+  }
+
+  return (
+    plainPackages: plainPackages,
+    installablePackages: installablePackages,
+  );
+}
+
+/// Builds the Dockerfile setup instructions for staged extra packages.
+String buildExtraPackagesSetup({
+  List<String> plainPackages = const <String>[],
+  List<String> installablePackages = const <String>[],
+  List<String>? copyLines,
+  List<String>? installableNames,
+  List<String> nonInstallableNames = const <String>[],
+}) {
+  final List<String> effectiveInstallable =
+      installableNames ?? installablePackages;
+  final List<String> effectivePlain = nonInstallableNames.isNotEmpty
+      ? nonInstallableNames
+      : plainPackages;
+  final List<String> effectiveCopyLines =
+      copyLines ??
+      <String>[
+        for (final String name in <String>[
+          ...effectivePlain,
+          ...effectiveInstallable,
+        ])
+          'COPY --chown=myuser:myuser "${validateExtraPackageName(name)}" "/app/${validateExtraPackageName(name)}"',
+      ];
+  if (effectiveCopyLines.isEmpty &&
+      effectiveInstallable.isEmpty &&
+      effectivePlain.isEmpty) {
+    return '';
+  }
+  final List<String> lines = <String>[
+    '# Copy extra packages - Start',
+    ...effectiveCopyLines,
+  ];
+  for (final String name in effectiveInstallable) {
+    final String safeName = validateExtraPackageName(name);
+    lines.add('RUN pip install --no-cache-dir "/app/$safeName"');
+  }
+  if (effectivePlain.isNotEmpty) {
+    for (final String name in effectivePlain) {
+      validateExtraPackageName(name);
+    }
+    lines.add(r'ENV PYTHONPATH="/app:$PYTHONPATH"');
+  }
+  lines.add('# Copy extra packages - End');
+  return lines.join('\n');
+}
+
+void _copyExtraPackageDirectorySync(Directory source, Directory destination) {
+  if (!destination.existsSync()) {
+    destination.createSync(recursive: true);
+  }
+  for (final FileSystemEntity entity in source.listSync(followLinks: false)) {
+    final String name =
+        entity.uri.pathSegments.where((String s) => s.isNotEmpty).last;
+    if (entity is Directory) {
+      _copyExtraPackageDirectorySync(
+        entity,
+        Directory('${destination.path}${Platform.pathSeparator}$name'),
+      );
+    } else if (entity is File) {
+      entity.copySync('${destination.path}${Platform.pathSeparator}$name');
+    }
+  }
+}
+
 final RegExp _serviceAccountEmailPattern = RegExp(
   r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
 );
@@ -463,6 +621,7 @@ void validateExtraPackages(List<String> extraPackages) {
         "Invalid --extra_packages name '$basename': reserved staging name.",
       );
     }
+    validateExtraPackageName(basename);
     if (!seenBasenames.add(basename)) {
       throw ArgumentError(
         "Duplicate --extra_packages basename '$basename': each staged package must have a distinct top-level name.",

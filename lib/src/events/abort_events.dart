@@ -23,6 +23,36 @@ bool isPausedTaskReply(Event event) {
       event.isFinalResponse();
 }
 
+/// Returns whether [events] has any function calls in [invocationId] without a
+/// matching function response.
+bool hasUnsealedToolCalls(
+  List<Event> events, {
+  required String invocationId,
+}) {
+  final Set<String> answeredCallIds = <String>{};
+  final Set<String> callIds = <String>{};
+  for (final Event event in events) {
+    if (event.invocationId != invocationId) {
+      continue;
+    }
+    final Content? content = event.content;
+    if (content == null) {
+      continue;
+    }
+    for (final Part part in content.parts) {
+      final String? callId = part.functionCall?.id;
+      if (callId != null && callId.isNotEmpty) {
+        callIds.add(callId);
+      }
+      final String? responseId = part.functionResponse?.id;
+      if (responseId != null && responseId.isNotEmpty) {
+        answeredCallIds.add(responseId);
+      }
+    }
+  }
+  return callIds.difference(answeredCallIds).isNotEmpty;
+}
+
 /// Returns the events that seal an aborted invocation.
 ///
 /// Each dangling function call gets a synthetic error response carrying the
