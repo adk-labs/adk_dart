@@ -1,9 +1,9 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-11-06
+- Date (UTC): 2026-11-07
 - Source: `google/adk-go`
-- Latest SHA: `dd8330ffd3c0d08bcd56f56eb8569762995de2c8`
-- Previous SHA: `d0c978b0ce4fe2068be977eb5fd90a0add2dd462`
+- Latest SHA: `5d03ab689207e5638b2d3ca700d404b6417cf0f6`
+- Previous SHA: `dd8330ffd3c0d08bcd56f56eb8569762995de2c8`
 
 ## Summary
 
@@ -11,93 +11,109 @@
 
 ## Commits
 
-- [dd8330f](https://github.com/google/adk-go/commit/dd8330ffd3c0d08bcd56f56eb8569762995de2c8) docs: explain how a merged commit links an issue in the release notes (#2141) (Jan Wojtas, 2026-11-06)
-- [869020a](https://github.com/google/adk-go/commit/869020a1c3ba754790513f0371544e603ea3e238) fix(agentregistry): speak A2A 0.3 to 0.3 interfaces (#2145) (wolo, 2026-11-06)
-- [dc44b8c](https://github.com/google/adk-go/commit/dc44b8c96d3c54b613e06f1f746b920500d363ef) fix(workflow): return ctx.Err() instead of a partial ParallelWorker result (#2146) (Jan Wojtas, 2026-11-06)
-- [c7087e3](https://github.com/google/adk-go/commit/c7087e3e44b23e3adeb2bbe1911ef57e239983cd) feat(cli): configure Agent Engine deployment environment (#1981) (Jabrail, 2026-11-06)
-- [ca21a26](https://github.com/google/adk-go/commit/ca21a26fb0021c922a4489e22ba7b380299ae64e) perf(llminternal): use strings.Builder in streaming response aggregator (#2051) (Sega, 2026-11-06)
-- [010b91e](https://github.com/google/adk-go/commit/010b91e9807ad6c5c8f73da84c0187a50fde0164) fix(workflow): honor UUID provider for tool node call IDs (#2030) (Francesc Campoy, 2026-11-06)
-- [8be9129](https://github.com/google/adk-go/commit/8be9129edf02611366a8c58344046bba5ab25437) fix(llminternal): keep ModelVersion on the aggregated streaming response (#2070) (Aditya Singh, 2026-11-06)
-- [8ce8f01](https://github.com/google/adk-go/commit/8ce8f01ca5a628aa6e37cc4cd7c0525b92f7177f) fix(adkrest): answer 500, not 404, when /run cannot read the session (#2107) (Aditya Singh, 2026-11-06)
-- [249974d](https://github.com/google/adk-go/commit/249974dc15580f08d11629581641ad45a47f646e) feat(authhandler): add the server side of the end-user OAuth2 consent flow (#2143) (Sasha, 2026-11-06)
-- [82b64f4](https://github.com/google/adk-go/commit/82b64f452060f3bdd0f6034521d4fa82a503f6fe) fix(sequentialagent): stop RunLive on a sub-agent error, as Run does (#2151) (Prathmesh, 2026-11-06)
-- [ded357e](https://github.com/google/adk-go/commit/ded357e351dee44c023398a49d314aa326a59c94) fix(openaimodel): send executable code parts as text (#1956) (Mangesh Raut, 2026-11-06)
-- [de7088b](https://github.com/google/adk-go/commit/de7088bf4aa5c9445adbc4e8b362c5c1927dde95) fix(runner): treat the inbound message as a user turn (#1877) (Anzal Husain Abidi, 2026-11-06)
-- [9f7f1d4](https://github.com/google/adk-go/commit/9f7f1d49d306f1eb7df920285d21d0beeaa92813) chore(model/openaimodel): update media conversion tests and comments (#1888) (ktsoator, 2026-11-06)
-- [27c1cc5](https://github.com/google/adk-go/commit/27c1cc5d5e3f32a7d7a925b39024243b2cbe3c58) test(gemini): add unit test for maybeAppendUserContent (#2155) (adk-foundry-bot, 2026-11-05)
-- [217c3b0](https://github.com/google/adk-go/commit/217c3b0d54f6cb5aac9b8bec7f3907f158be622e) ci: require a conventional-commit subject on pull requests (#1487) (Jan Wojtas, 2026-11-06)
-- [123fea9](https://github.com/google/adk-go/commit/123fea94f49d7387c915602e4386a1b7ecd27aca) fix(triggers): use timer-and-select for context-aware retry backoff (#2052) (Sega, 2026-11-06)
-- [7af0f5f](https://github.com/google/adk-go/commit/7af0f5f06a545df1d59d0ee4e0c59063689dee9d) fix(session/database): delete a session's events explicitly in Delete (#1774) (Davide Imola, 2026-11-05)
-- [8360e75](https://github.com/google/adk-go/commit/8360e75d5c4bdd8dbf587f12c057a292f8270d3e) feat(mcptoolset): add tool name prefixes (#1821) (ktsoator, 2026-11-06)
-- [c377836](https://github.com/google/adk-go/commit/c377836c419a1d1a17e9b054c9aad34de68cf2a7) fix(adkrest): preserve debug span attribute types (#1988) (ktsoator, 2026-11-06)
-- [275e190](https://github.com/google/adk-go/commit/275e190e8c501b83dce6d77c22f69341cda44aa9) fix(openaimodel): refuse non-function Tool fields genai adds (#1983) (Mangesh Raut, 2026-11-06)
-- [7c87fdf](https://github.com/google/adk-go/commit/7c87fdff09af9311e05d488190dedc1aaaa7bc30) fix(remoteagent): resume tasks with mixed tool responses (#2148) (Chen Yufeiyang, 2026-11-06)
-- [a3ecc67](https://github.com/google/adk-go/commit/a3ecc670bfa2b786e6455742fda50dbc17e9358c) ci: release plugin/agentanalytics with release-please (#2147) (Jan Wojtas, 2026-11-05)
+- [5d03ab6](https://github.com/google/adk-go/commit/5d03ab689207e5638b2d3ca700d404b6417cf0f6) feat(exampletool): add example providers and a Vertex AI Example Store provider (#2157) (adk-foundry-bot, 2026-11-07)
+- [b08c5c2](https://github.com/google/adk-go/commit/b08c5c22904e6892104fdebae965e14c6e306bfc) fix(functioncallmodifier): skip nil parts in the after-model scan (#2193) (PratikDhanave, 2026-11-07)
+- [868b599](https://github.com/google/adk-go/commit/868b5993655f865d5aa6eee42a54f99aea0f8ecf) feat(tool/bigquerytoolset): add the BigQuery toolset with the dataset tools (#2171) (Gangavarapu Vivek, 2026-11-07)
+- [640eb4f](https://github.com/google/adk-go/commit/640eb4f1ba8756a5086096f97ce4535b2628ebd0) feat(artifact): support artifact:// reference parts in the in-memory service (#1164) (Mike Dabydeen, 2026-11-07)
+- [e9aba9e](https://github.com/google/adk-go/commit/e9aba9e200e0bb44fd1242d07d46d2ca6bfcba1f) test(session/database): use fixed ids in the tied timestamp order test (#2186) (Gangavarapu Vivek, 2026-11-07)
+- [8be7e25](https://github.com/google/adk-go/commit/8be7e250858a4f1ddd925d7d166c2695707e72b6) fix(session): define List order as last update time ascending (#1919) (Anzal Husain Abidi, 2026-11-07)
+- [dce89da](https://github.com/google/adk-go/commit/dce89da583637716a26a52712bc408e174a32173) fix(runner): route a function response to the calling sub-agent under a workflow root (#1808) (Gangavarapu Vivek, 2026-11-07)
+- [33a587e](https://github.com/google/adk-go/commit/33a587e28f1b3e7ea31fa9639e8f8007bb72c1cd) fix(llminternal): send live tool responses through the sender goroutine (#1903) (Hemang Varshney, 2026-11-07)
+- [8c2e2e2](https://github.com/google/adk-go/commit/8c2e2e2a4b293d2739f885822b304607ef2c6600) fix(llmagent): write finish_task output to OutputKey for task agents (#1977) (Jyotiraditya, 2026-11-07)
+- [1b4f6ee](https://github.com/google/adk-go/commit/1b4f6ee0d0bf0a50dd429b223da917fa48b68ee4) fix(artifact): copy parts in the in-memory service on save and load (#1782) (Anzal Husain Abidi, 2026-11-07)
+- [22ff183](https://github.com/google/adk-go/commit/22ff18397dfe8de12858e3b9c8948a8cc3676fff)     fix(llminternal): drop internal artifact parts from live history replay (#1765) (sunoj, 2026-11-07)
+- [ca7db16](https://github.com/google/adk-go/commit/ca7db168e51f05b7ab6b9930010250fcc27dff70) fix(runner): only auto-create a session when Get reports session.ErrNotFound (#1899) (Anzal Husain Abidi, 2026-11-07)
+- [7fafcbb](https://github.com/google/adk-go/commit/7fafcbbca3fa9bbc729ce7b080006f296f2930ab) fix(retryandreflect): drop invocation failure counts when the run ends (#2024) (Dmitry Sergeev, 2026-11-07)
+- [4cc7ce5](https://github.com/google/adk-go/commit/4cc7ce5f4ba73c239ecabdf23b064036473f3c4f) fix(agenttool): set SkipSummarization only after the input is valid (#2049) (Gangavarapu Vivek, 2026-11-07)
+- [d8e4744](https://github.com/google/adk-go/commit/d8e47448e6d3f6ef1c54d42806c31e9ec563558d) fix(llminternal): stop sending Gemini 3.x Live audio and images as mediaChunks (#2118) (Trainingcqy, 2026-11-07)
+- [4417f2d](https://github.com/google/adk-go/commit/4417f2d4f924e04599b6a03f1475c1e642962840) fix(retryandreflect): populate MaxRetries in retry-exceeded guidance template (#2174) (Abhinav Maurya, 2026-11-07)
+- [1a84f04](https://github.com/google/adk-go/commit/1a84f04f7306889a9ad7a5c929b0374b9a8257fc) fix(mcptoolset): let a CommandTransport reconnect (#2115) (Ryo Kusnadi, 2026-11-07)
+- [2e84254](https://github.com/google/adk-go/commit/2e842548d3ecf9542511534d0dd6aa1d6156b097) fix(agent): list a multi-agent loader's agents in sorted order (#2164) (msteiner-google, 2026-11-06)
+- [ab78c5a](https://github.com/google/adk-go/commit/ab78c5aeda134836596e5c204cf8c0361e403e5f) fix(llminternal): keep a single_turn sub-agent's transcript out of the root agent's context (#2128) (Gangavarapu Vivek, 2026-11-07)
+- [e83ab5b](https://github.com/google/adk-go/commit/e83ab5b0ebbcd0b58cb86bd79a30bb03af952c72) fix(functiontool): keep tool panics out of the model's function response (#2120) (Jan Wojtas, 2026-11-06)
+- [c8fff67](https://github.com/google/adk-go/commit/c8fff670009d0f56266b6570d27e60024e4c976e) fix(llmagent): return an error to the model when transfer_to_agent names an unknown agent (#2161) (msteiner-google, 2026-11-06)
+- [ba5d42b](https://github.com/google/adk-go/commit/ba5d42b85b62ce99e6431d31fe77a92796c5bd04) feat(telemetry): add a MeterProvider with OTLP and Google Cloud export (#2042) (argaj, 2026-11-06)
 
 ## Changed Files
 
-- `M	.github/.release-please-manifest.json`
-- `M	.github/release-please-config.json`
-- `A	.github/scripts/check-conventional-subject.sh`
-- `A	.github/workflows/require-conventional-subject.yml`
-- `M	AGENTS.md`
-- `M	CONTRIBUTING.md`
-- `M	agent/remoteagent/v2/a2a_e2e_test.go`
-- `M	agent/remoteagent/v2/utils.go`
-- `M	agent/remoteagent/v2/utils_test.go`
-- `M	agent/workflowagents/sequentialagent/agent.go`
-- `M	agent/workflowagents/sequentialagent/agent_test.go`
-- `M	agentregistry/factory.go`
-- `M	agentregistry/factory_test.go`
-- `M	agentregistry/remoteagent_e2e_test.go`
-- `M	cmd/adkgo/internal/deploy/agentengine/agentengine.go`
-- `A	cmd/adkgo/internal/deploy/agentengine/environment.go`
-- `A	cmd/adkgo/internal/deploy/agentengine/environment_test.go`
-- `A	internal/authhandler/authuri.go`
-- `A	internal/authhandler/authuri_test.go`
-- `A	internal/authhandler/exchange.go`
-- `A	internal/authhandler/exchange_internal_test.go`
-- `A	internal/authhandler/request.go`
-- `A	internal/authhandler/request_test.go`
-- `A	internal/authhandler/response.go`
-- `A	internal/authhandler/response_internal_test.go`
-- `A	internal/authhandler/store.go`
-- `A	internal/authhandler/store_internal_test.go`
-- `A	internal/authhandler/store_test.go`
-- `M	internal/llminternal/parallel_function_call_test.go`
-- `M	internal/llminternal/stream_aggregator.go`
-- `M	internal/llminternal/stream_aggregator_test.go`
-- `M	model/gemini/gemini_test.go`
-- `M	model/openaimodel/internal/completions/media_test.go`
-- `M	model/openaimodel/internal/completions/request.go`
-- `M	model/openaimodel/internal/completions/request_test.go`
-- `M	model/openaimodel/internal/responses/request.go`
-- `M	model/openaimodel/internal/responses/request_test.go`
-- `M	model/openaimodel/internal/shared/contents.go`
-- `M	model/openaimodel/internal/shared/contents_test.go`
-- `M	model/openaimodel/internal/shared/errors.go`
-- `M	model/openaimodel/internal/shared/media.go`
-- `M	model/openaimodel/internal/shared/tools.go`
-- `M	model/openaimodel/internal/shared/tools_test.go`
+- `M	agent/llmagent/llm_agent_wrapper.go`
+- `M	agent/llmagent/llmagent.go`
+- `M	agent/llmagent/llmagent_saveoutput_test.go`
+- `A	agent/llmagent/llmagent_task_outputkey_test.go`
+- `M	agent/llmagent/llmagent_test.go`
+- `A	agent/llmagent/single_turn_context_test.go`
+- `M	agent/llmagent/testdata/TestDelegation_03_ChatToSingleTurn.events.yaml`
+- `M	agent/llmagent/testdata/TestDelegation_03_ChatToSingleTurn.httprr`
+- `M	agent/loader.go`
+- `M	agent/loader_test.go`
+- `A	artifact/artifact_util.go`
+- `A	artifact/artifact_util_test.go`
+- `A	artifact/clone.go`
+- `A	artifact/clone_test.go`
+- `M	artifact/inmemory.go`
+- `A	artifact/inmemory_references_test.go`
+- `M	artifact/inmemory_test.go`
+- `M	artifact/request_validation_test.go`
+- `M	artifact/service.go`
+- `M	go.mod`
+- `M	go.sum`
+- `M	internal/llminternal/agent_transfer.go`
+- `M	internal/llminternal/agent_transfer_test.go`
+- `M	internal/llminternal/audio_cache_manager.go`
+- `M	internal/llminternal/base_flow.go`
+- `M	internal/llminternal/base_flow_live_test.go`
+- `M	internal/llminternal/base_flow_test.go`
+- `M	internal/llminternal/contents_processor.go`
+- `M	internal/llminternal/contents_processor_test.go`
+- `A	internal/llminternal/googlellm/live_artifacts.go`
+- `A	internal/llminternal/googlellm/live_artifacts_test.go`
+- `M	internal/llminternal/googlellm/live_connection.go`
+- `A	internal/llminternal/googlellm/live_connection_test.go`
+- `M	internal/llminternal/googlellm/variant.go`
+- `M	internal/llminternal/googlellm/variant_test.go`
+- `M	internal/llminternal/streaming_tool_test.go`
+- `A	internal/llminternal/tool_sub_branch.go`
+- `A	internal/llminternal/tool_sub_branch_test.go`
+- `M	internal/toolinternal/tool.go`
+- `M	internal/workflowinternal/single_turn_tool.go`
+- `M	plugin/functioncallmodifier/plugin.go`
+- `M	plugin/functioncallmodifier/plugin_test.go`
+- `M	plugin/retryandreflect/plugin.go`
+- `M	plugin/retryandreflect/plugin_test.go`
 - `M	runner/runner.go`
 - `M	runner/runner_test.go`
-- `M	server/adkrest/controllers/debug.go`
-- `M	server/adkrest/controllers/debug_test.go`
-- `M	server/adkrest/controllers/errors.go`
-- `M	server/adkrest/controllers/handlers.go`
-- `M	server/adkrest/controllers/runtime.go`
-- `M	server/adkrest/controllers/runtime_test.go`
-- `M	server/adkrest/controllers/triggers/pubsub_test.go`
-- `M	server/adkrest/controllers/triggers/triggers.go`
-- `M	server/adkrest/internal/services/debugtelemetry.go`
-- `M	server/adkrest/internal/services/debugtelemetry_test.go`
+- `A	runner/workflow_function_response_test.go`
+- `M	server/adkrest/controllers/sessions_test.go`
+- `M	server/adkrest/internal/fakes/testsessionservice.go`
 - `M	session/database/service.go`
 - `M	session/database/service_test.go`
-- `A	tool/mcptoolset/prefix_test.go`
+- `M	session/inmemory.go`
+- `A	session/inmemory_internal_test.go`
+- `M	session/inmemory_test.go`
+- `M	session/service.go`
+- `M	session/vertexai/session_test.go`
+- `M	session/vertexai/vertexai_client.go`
+- `M	telemetry/config.go`
+- `A	telemetry/metric_reader.go`
+- `M	telemetry/setup_otel.go`
+- `M	telemetry/telemetry.go`
+- `M	telemetry/telemetry_test.go`
+- `M	tool/agenttool/agent_tool.go`
+- `M	tool/agenttool/agent_tool_test.go`
+- `A	tool/bigquerytoolset/client.go`
+- `A	tool/bigquerytoolset/config.go`
+- `A	tool/bigquerytoolset/descriptions/get_dataset_info.txt`
+- `A	tool/bigquerytoolset/descriptions/list_dataset_ids.txt`
+- `A	tool/bigquerytoolset/doc.go`
+- `A	tool/bigquerytoolset/metadata.go`
+- `A	tool/bigquerytoolset/toolset.go`
+- `A	tool/bigquerytoolset/toolset_test.go`
+- `A	tool/exampletool/example_test.go`
+- `M	tool/exampletool/tool.go`
+- `M	tool/exampletool/tool_test.go`
+- `A	tool/exampletool/vertexai/vertexai.go`
+- `A	tool/exampletool/vertexai/vertexai_test.go`
+- `M	tool/functiontool/function.go`
+- `M	tool/functiontool/streaming_function.go`
 - `M	tool/mcptoolset/set.go`
-- `M	tool/mcptoolset/tool.go`
-- `M	tool/mcptoolset/tool_test.go`
-- `M	workflow/parallel_worker.go`
-- `M	workflow/parallel_worker_test.go`
-- `M	workflow/tool_node.go`
-- `M	workflow/tool_node_test.go`
+- `M	tool/mcptoolset/transport_config_test.go`
