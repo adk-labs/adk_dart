@@ -26,10 +26,10 @@ class AdkToolCallCard extends StatefulWidget {
   /// The name of the tool called.
   final String toolName;
 
-  /// Optional human-readable display title populated from `adk:tool_display_names`.
+  /// The optional human-readable display title populated from `adk:tool_display_names`.
   final String? displayTitle;
 
-  /// Effective title preferring [displayTitle] when non-empty, falling back to [toolName].
+  /// The effective title, preferring [displayTitle] when non-empty and falling back to [toolName].
   String get effectiveTitle =>
       (displayTitle != null && displayTitle!.trim().isNotEmpty)
           ? displayTitle!

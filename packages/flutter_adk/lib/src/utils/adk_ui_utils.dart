@@ -71,11 +71,10 @@ abstract final class AdkFormatters {
     }
   }
 
-  /// Decodes a `data:` URL containing text or base64-encoded UTF-8 payload.
+  /// Decodes a [dataUrl] containing text or base64-encoded UTF-8 payload.
   ///
-  /// Matches `adk-web`'s `ContentBubbleComponent.getTextContent` UTF-8 decoding
-  /// so non-ASCII characters (for example Korean, emoji, accented characters)
-  /// are preserved without mojibake.
+  /// Preserves non-ASCII characters (such as Korean, emoji, and accented
+  /// characters) without mojibake.
   static String decodeDataUrlTextUtf8(String? dataUrl) {
     if (dataUrl == null || dataUrl.isEmpty) {
       return '';
@@ -102,8 +101,8 @@ abstract final class AdkFormatters {
     }
   }
 
-  /// URL-encodes an artifact filename component so special characters (`#`, `?`, spaces)
-  /// are safely escaped in artifact API paths.
+  /// Encodes [artifactName] as a URL path component so special characters
+  /// (`#`, `?`, spaces) are safely escaped in artifact API paths.
   static String encodeArtifactFilename(String artifactName) {
     return Uri.encodeComponent(artifactName);
   }
@@ -113,19 +112,19 @@ abstract final class AdkFormatters {
 abstract final class AdkEventStreamUtils {
   /// Scans [events] and returns all open, unresolved long-running tool interrupts.
   ///
-  /// Delegates to `core.indexOpenInterrupts(events)`.
+  /// Delegates to [core.indexOpenInterrupts].
   static Map<String, core.OpenInterrupt> extractOpenInterrupts(
     List<core.Event> events,
   ) {
     return core.indexOpenInterrupts(events);
   }
 
-  /// Whether [events] currently contains at least one open, unanswered interrupt.
+  /// Returns whether [events] currently contains at least one open, unanswered interrupt.
   static bool hasOpenInterrupts(List<core.Event> events) {
     return extractOpenInterrupts(events).isNotEmpty;
   }
 
-  /// Whether [event] marks an aborted invocation (`INVOCATION_ABORTED`).
+  /// Returns whether [event] marks an aborted invocation ([core.invocationAbortedErrorCode]).
   static bool isAbortedEvent(core.Event event) {
     return core.isAbortEvent(event);
   }
@@ -148,7 +147,7 @@ abstract final class AdkEventStreamUtils {
         .join(splitter);
   }
 
-  /// Extracts the `adk:tool_display_names` map (`toolName -> displayTitle`) from [event].
+  /// Extracts the [core.toolDisplayNamesMetadataKey] map (`toolName -> displayTitle`) from [event].
   static Map<String, String> extractToolDisplayNames(core.Event event) {
     final Object? raw =
         event.customMetadata?[core.toolDisplayNamesMetadataKey];

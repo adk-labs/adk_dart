@@ -316,10 +316,10 @@ class AdkChatMessage {
   /// Name of the tool invoked, if any.
   final String? toolName;
 
-  /// Optional human-readable display title for the tool populated from `adk:tool_display_names`.
+  /// The optional human-readable display title for the tool populated from `adk:tool_display_names`.
   final String? toolDisplayTitle;
 
-  /// Effective tool title preferring [toolDisplayTitle] when non-empty, falling back to [toolName].
+  /// The effective tool title, preferring [toolDisplayTitle] when non-empty and falling back to [toolName].
   String? get effectiveToolTitle =>
       (toolDisplayTitle != null && toolDisplayTitle!.trim().isNotEmpty)
           ? toolDisplayTitle

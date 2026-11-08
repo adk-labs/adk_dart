@@ -34,7 +34,7 @@ class AdkArtifactItem {
   /// Custom metadata map.
   final Map<String, dynamic> metadata;
 
-  /// Decodes [content] if it is a `data:` URL using UTF-8 decoding, or returns [content] directly.
+  /// The decoded text of [content] when it is a `data:` URL, or [content] directly.
   String? get resolvedTextContent {
     final String? raw = content;
     if (raw == null) return null;
@@ -44,7 +44,7 @@ class AdkArtifactItem {
     return raw;
   }
 
-  /// URL-encoded filename safe for artifact download/API paths.
+  /// The URL-encoded [name] safe for artifact download and API paths.
   String get encodedFilename => AdkFormatters.encodeArtifactFilename(name);
 
   /// Guesses whether the artifact is code or structured data based on name.

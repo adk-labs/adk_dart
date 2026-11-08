@@ -38,7 +38,7 @@ class AdkMultiRunMetricSummary {
   /// Optional human-readable breakdown note.
   final String? note;
 
-  /// Human-friendly label for [methodName], formatting `'pass_at_k'` as `'pass@k'` and `'pass_hat_k'` as `'pass^k'`.
+  /// The human-friendly label for [methodName], formatting `'pass_at_k'` as `'pass@k'` and `'pass_hat_k'` as `'pass^k'`.
   String get displayMethodName {
     if (methodName == 'pass_at_k') {
       return 'pass@k';

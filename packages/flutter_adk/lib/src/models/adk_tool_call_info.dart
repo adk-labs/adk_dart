@@ -34,10 +34,10 @@ class AdkToolCallInfo {
   /// The name of the invoked tool.
   final String toolName;
 
-  /// Optional human-readable display title populated from `adk:tool_display_names`.
+  /// The optional human-readable display title populated from `adk:tool_display_names`.
   final String? displayTitle;
 
-  /// Effective label preferring [displayTitle] when non-empty, falling back to [toolName].
+  /// The effective label, preferring [displayTitle] when non-empty and falling back to [toolName].
   String get effectiveTitle =>
       (displayTitle != null && displayTitle!.trim().isNotEmpty)
           ? displayTitle!

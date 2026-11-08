@@ -17,8 +17,8 @@ final RegExp _vertexCachedContentFullPattern = RegExp(
   r'^projects/[^/]+/locations/[^/]+/cachedContents/[^/]+$',
 );
 
-/// Annotates a backend-compatibility [ArgumentError] with its `LlmRequest.config`
-/// field path and target backend.
+/// Annotates a backend-compatibility [exc] with its [LlmRequest.config]
+/// field path and target [vertexai] backend.
 ArgumentError annotateValueError(ArgumentError exc, {required bool vertexai}) {
   final String message = '${exc.message ?? exc}';
   final String target = vertexai ? 'Vertex AI' : 'the Gemini Developer API';
@@ -114,8 +114,8 @@ String? _clientStringProperty(Object client, String property) {
 
 /// Converts [llmRequest] into a `generateContent` JSON request body.
 ///
-/// Mirrors `to_generate_content_body` in Python ADK
-/// `src/google/adk/models/_generate_content_body.py`.
+/// Uses [vertexai], [apiClient], or [environment] to determine whether the
+/// request targets Vertex AI or the Gemini Developer API.
 Map<String, dynamic> toGenerateContentBody(
   LlmRequest llmRequest, {
   bool? vertexai,

@@ -160,19 +160,20 @@ void enforceStrictOpenAiSchema(Map<String, Object?> schema) {
   }
 }
 
-/// Path-based validation alias specification for nested map/list lookups.
+/// Path-based validation alias specification for nested map and list lookups.
 class AliasPath {
-  /// Creates a validation alias path from [first] and optional path segments.
+  /// Creates a validation alias path from [first] and optional [second],
+  /// [third], and [fourth] path segments.
   AliasPath(Object first, [Object? second, Object? third, Object? fourth])
     : path = <Object>[first, ?second, ?third, ?fourth];
 
   /// Creates a validation alias path from an explicit list of [path] segments.
   const AliasPath.fromList(this.path);
 
-  /// Ordered lookup path segments (strings for map keys, ints for list indices).
+  /// The ordered lookup path segments (`String` for map keys, `int` for list indices).
   final List<Object> path;
 
-  /// Resolves this path against [data], returning `(found, value)`.
+  /// Resolves this path against [data] and returns a `(found, value)` record.
   (bool, Object?) resolve(Map<String, Object?> data) {
     if (path.isEmpty) {
       return (false, null);
@@ -199,7 +200,8 @@ class AliasPath {
 
 /// Ordered set of candidate validation aliases (`String` or [AliasPath]).
 class AliasChoices {
-  /// Creates alias choices from candidate aliases.
+  /// Creates alias choices from [first] and optional [second], [third],
+  /// [fourth], and [fifth] candidate aliases.
   AliasChoices(
     Object first, [
     Object? second,
@@ -211,28 +213,26 @@ class AliasChoices {
   /// Creates alias choices from an explicit list of [choices].
   const AliasChoices.fromList(this.choices);
 
-  /// Candidate aliases (`String` or [AliasPath]) evaluated in order.
+  /// The candidate aliases (`String` or [AliasPath]) evaluated in order.
   final List<Object> choices;
 }
 
-/// Field metadata declaration mirroring Pydantic's `FieldInfo`.
+/// Field metadata declaration for alias-aware input validation.
 class FieldInfo {
   /// Creates field metadata with optional [alias], [validationAlias], and [defaultValue].
   const FieldInfo({this.alias, this.validationAlias, this.defaultValue});
 
-  /// String alias for the field.
+  /// The string alias for the field.
   final String? alias;
 
-  /// Validation alias (`String`, [AliasPath], or [AliasChoices]).
+  /// The validation alias (`String`, [AliasPath], or [AliasChoices]).
   final Object? validationAlias;
 
-  /// Default value when no input key matches.
+  /// The default value when no input key matches.
   final Object? defaultValue;
 }
 
-/// Returns top-level dict keys that [fields] consume during validation.
-///
-/// Mirrors `top_level_input_keys` in Python ADK `_schema_utils.py`.
+/// Returns top-level map keys that [fields] consume during validation.
 Set<String> topLevelInputKeys(Map<String, Object?> fields) {
   final Set<String> keys = fields.keys.toSet();
   for (final Object? rawField in fields.values) {
@@ -292,7 +292,8 @@ Set<String> topLevelInputKeys(Map<String, Object?> fields) {
 
 /// Resolves the input value for [fieldName] and [fieldInfo] from [data].
 ///
-/// Returns `(matched, value)` according to alias/validationAlias precedence.
+/// Returns a `(matched, value)` record according to [FieldInfo.validationAlias]
+/// and [FieldInfo.alias] precedence.
 (bool, Object?) resolveFieldInputValue(
   String fieldName,
   Object? fieldInfo,
