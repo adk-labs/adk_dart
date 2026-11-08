@@ -192,6 +192,17 @@ ADK Dart는 MCP 지원을 기본 내장하며, 프로토콜 프리미티브를 �
 - `packages/adk_mcp`: Dart용 MCP 전송/생명주기 코어
 - `adk_dart` MCP 계층: ADK 도구/런타임 연동 (`McpToolset`, `McpSessionManager`, `LoadMcpResourceTool`, `McpInstructionProvider`)
 
+## AI 코딩 에이전트 스킬 (Antigravity, Claude Code, Codex, Gemini CLI)
+
+본 저장소는 AI 코딩 에이전트가 ADK Dart 및 Flutter 패키지를 즉시 이해하고 정확한 코드를 작성할 수 있도록 루트 컨텍스트 파일([`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), [`GEMINI.md`](GEMINI.md))과 [`.agents/skills/`](.agents/skills/)(`.claude/skills/` 심볼릭 링크 포함) 하위 4종의 스킬을 기본 제공합니다:
+
+| 스킬 이름 | 경로 | 주요 역할 |
+| --- | --- | --- |
+| **`adk-dart-setup`** | [`.agents/skills/adk-dart-setup/SKILL.md`](.agents/skills/adk-dart-setup/SKILL.md) | 패키지(`adk`, `adk_dart`, `flutter_adk`) 및 도메인 배럴 선택, API 키/Vertex AI 환경 설정, `adk` CLI 사용법 |
+| **`adk-dart-agent-builder`** | [`.agents/skills/adk-dart-agent-builder/SKILL.md`](.agents/skills/adk-dart-agent-builder/SKILL.md) | `LlmAgent`, `FunctionTool`/`BaseTool`/`McpToolset`, ADK 2.0 `Workflow` DAG, 멀티 에이전트, 세션/상태, 콜백/플러그인, `pass@k`/`pass^k` 평가 작성 가이드 |
+| **`flutter-adk-ui-builder`** | [`.agents/skills/flutter-adk-ui-builder/SKILL.md`](.agents/skills/flutter-adk-ui-builder/SKILL.md) | Flutter 완성형 뷰(`AdkChatView`, `AdkDevStudioView`), 7종 컨트롤러, 특화 도구/평가 카드, `AdkTheme` & `AdkCardStyle`, 세션 스토리지 연동 가이드 |
+| **`adk-dart-architecture`** | [`.agents/skills/adk-dart-architecture/SKILL.md`](.agents/skills/adk-dart-architecture/SKILL.md) | 런타임 내부 구조, Web-safe(`adk_core.dart`) vs VM(`adk_dart.dart`) 경계 규칙 및 `adk-python` / `adk-web` 패리티 컨벤션 |
+
 ## 기능 하이라이트 코드 예제
 
 ### 단일 에이전트 정의

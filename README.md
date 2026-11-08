@@ -327,6 +327,17 @@ package:
 
 For most users, importing `package:adk_dart/adk_dart.dart` is sufficient.
 
+## AI Coding Agent Skills (Antigravity, Claude Code, Codex, Gemini CLI)
+
+This repository includes official agent instructions ([`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), [`GEMINI.md`](GEMINI.md)) and modular skills under [`.agents/skills/`](.agents/skills/) (also linked at `.claude/skills/`) so AI coding assistants can build and debug ADK Dart & Flutter apps accurately out of the box:
+
+| Skill | Path | Purpose |
+| --- | --- | --- |
+| **`adk-dart-setup`** | [`.agents/skills/adk-dart-setup/SKILL.md`](.agents/skills/adk-dart-setup/SKILL.md) | Package & barrel selection (`adk`, `adk_dart`, `flutter_adk`), API key / Vertex AI setup, and `adk` CLI commands. |
+| **`adk-dart-agent-builder`** | [`.agents/skills/adk-dart-agent-builder/SKILL.md`](.agents/skills/adk-dart-agent-builder/SKILL.md) | Building `LlmAgent`, `FunctionTool` / `BaseTool` / `McpToolset`, ADK 2.0 `Workflow` DAGs, multi-agent systems, sessions/state, callbacks/plugins, and `pass@k` / `pass^k` evaluations. |
+| **`flutter-adk-ui-builder`** | [`.agents/skills/flutter-adk-ui-builder/SKILL.md`](.agents/skills/flutter-adk-ui-builder/SKILL.md) | Building Flutter chat/studio UIs (`AdkChatView`, `AdkDevStudioView`), 7 controllers, specialized tool/eval cards, `AdkTheme` & `AdkCardStyle`, and `AdkStorageSessionService`. |
+| **`adk-dart-architecture`** | [`.agents/skills/adk-dart-architecture/SKILL.md`](.agents/skills/adk-dart-architecture/SKILL.md) | Runtime architecture, Web-safe (`adk_core.dart`) vs VM (`adk_dart.dart`) boundaries, and `adk-python` / `adk-web` parity conventions. |
+
 ## Documentation
 
 - Repository: <https://github.com/adk-labs/adk_dart>
