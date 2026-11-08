@@ -14,12 +14,16 @@ ADK Dart 是一个开源的代码优先（Code-First）Dart 工程框架，用�
 
 ## 最新更新
 
+- **ADK Python `2.14.0` 与 `adk-web` 完整对齐**：
+  - **运行时与模型**：新增用于官方 Gemini wire-format 序列化的 `LlmRequest.toGenerateContentBody()`、`Event.acceptConvenienceKwargs`、`LlmAgent.rejectMisplacedGenerateContentKwargs` 校验守卫、`AuthHandler.getAuthResponseAsync` 异步清理及 `FileArtifactService` 换行符保留。
+  - **工具、MCP 与工作流**：新增 `BaseTool.displayTitle`（通过 `adk:tool_display_names` 元数据暴露）、`FunctionTool` 枚举确认 wire 值保留、MCP 服务端终止时自动重建会话，以及 `ReplayManager` `waitForOutput` 恢复守卫。
+  - **评估与 Dev UI**：新增多轮评估指标 `pass@k`（`>= 1` 通过）与 `pass^k`（全部 `k` 通过）、`adk generate_agent_card` CLI 命令，以及 Web UI 中的 UTF-8 `data:` URL 解码。
+- **按领域划分的子入口 Barrel 与模块化架构**：除 `adk_dart.dart` 和 `adk_core.dart` 外，新增 9 个按领域划分的子入口（`package:adk_dart/{agents,workflow,evaluation,tools,models,sessions,integrations,a2a,telemetry}.dart`），并使用 `part` / `part of` 对大型子系统进行了模块化拆分。
 - **ADK 2.0 工作流与 Managed Agent 支持**：原生支持核心 ADK 2.0 架构特性：
   - **v2 工作流**：通过 `Workflow`、`BaseNode`、`JoinNode` 等实现声明式 DAG 节点图调度、依赖管理、条件分支路由与状态合并。
   - **Managed Agents**：通过 `ManagedAgent` 与 `RemoteMcpServer` 配置映射直接 RPC 连接 GCP Vertex AI Managed Agents Interactions API。
 - **MCP 协议核心包拆分**：新增 `packages/adk_mcp` 并将 Streamable HTTP MCP 传输层独立为专用模块化包。
 - **MCP 规范加固**：增强会话恢复、基于请求 ID 的 SSE 响应匹配、取消通知中断、具备能力感知的 RPC 调用以提升稳定性。
-- **兼容性全面扩展**：覆盖会话持久化存储、工具集反射、模型/工具集成层的完整运行时兼容性。
 
 ## 核心特性
 
@@ -32,7 +36,7 @@ ADK Dart 是一个开源的代码优先（Code-First）Dart 工程框架，用�
 
 ## ADK Python 兼容性现状
 
-ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生静态类型系统、异步流（`Stream<Event>`）、包结构及平台约束。当前发布基线追踪 `adk-python` `2.13.0`。
+ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生静态类型系统、异步流（`Stream<Event>`）、包结构及平台约束。当前发布基线追踪 `adk-python` `2.14.0`。
 
 状态图例：
 
@@ -42,7 +46,7 @@ ADK Dart 旨在表现与 `adk-python` 一致的行为，同时遵循 Dart 原生
 
 | `adk-python` 领域 | Dart 状态 | Dart 实现 API 与接口层 | 说明 |
 | --- | --- | --- | --- |
-| 包/版本基线 | ✅ | `adkVersion`, 包版本 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 均对齐至 `2026.10.29`；ADK 基线版本为 `2.13.0`。 |
+| 包/版本基线 | ✅ | `adkVersion`, 包版本 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 均对齐至 `2026.11.8`；ADK 基线版本为 `2.14.0`。 |
 | Agent 与 Runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 核心调用、实时回退、会话回滚/重退（Rewind）、会话状态、回调及 Agent Transfer 均已移植。 |
 | LLM 流程处理器 | ✅ | `flows/llm_flows` 下的请求/响应处理器 | 涵盖指令、身份、内容、Token 压缩、上下文缓存、代码执行、输出结构模式、工具确认（HITL）及 Agent 转移。 |
 | 工作流运行时 | ✅ | `Workflow`, `BaseNode`, 函数/工具/LLM 节点, `NodeTool`, 合并, 路由, 动态节点, 回放 | 重试、超时、输入请求/HITL、并行工作器、工作流回放与状态恢复 (State Restoration)、图序列化及 DOT 可视化均已实现。 |
@@ -103,9 +107,9 @@ dart pub add adk_dart
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.10.29
+  adk_dart: ^2026.11.8
   # 或使用统一 CLI 门面包：
-  # adk: ^2026.10.29
+  # adk: ^2026.11.8
 ```
 
 若需使用短别名门面包：
@@ -249,7 +253,7 @@ void main() {
 ### 开发者 CLI 与 Web UI
 
 ```bash
-dart pub global activate adk_dart
+dart pub global activate adk
 adk create my_agent
 cd my_agent
 adk run .

@@ -17,6 +17,11 @@ developer ergonomics.
 
 ## What's New
 
+- **ADK Python `2.14.0` & `adk-web` Parity**:
+  - **Runtime & Models**: Added `LlmRequest.toGenerateContentBody()` for official Gemini wire-format serialization, `Event.acceptConvenienceKwargs` (`author`, `text`, `thought`, `functionCall`, `functionResponse`, `customMetadata`), `LlmAgent.rejectMisplacedGenerateContentKwargs` guard, `AuthHandler.getAuthResponseAsync` async token/state cleanup, and `FileArtifactService` exact line-ending preservation.
+  - **Tools, MCP & Workflows**: Added `BaseTool.displayTitle` (surfaced via `adk:tool_display_names` metadata), `FunctionTool` enum confirmation wire values, automatic MCP session recreation on server termination, and `ReplayManager` `waitForOutput` resume guard.
+  - **Evaluation & Dev UI**: Added `pass@k` (`>= 1` pass) and `pass^k` (all `k` pass) multi-run evaluation criteria, `adk generate_agent_card` CLI command, and UTF-8 `data:` URL decoding in the Web UI.
+- **Domain-Scoped Sub-Entrypoint Barrels**: Added 9 selective domain entrypoints (`package:adk_dart/{agents,workflow,evaluation,tools,models,sessions,integrations,a2a,telemetry}.dart`) alongside `adk_dart.dart` and `adk_core.dart`, and modularized large internal subsystems using Dart `part` / `part of` files.
 - **ADK 2.0 Workflows & Managed Agent**: Added native support for core ADK 2.0 features:
   - **v2 Workflows**: Programmatic node graph scheduling, dependencies, conditional routing, and state merging via `Workflow`, `BaseNode`, `JoinNode`, etc.
   - **Managed Agents**: Direct connection to GCP Managed Agents Interactions API via `ManagedAgent` and `RemoteMcpServer` configuration mapping.
@@ -25,8 +30,6 @@ developer ergonomics.
 - **MCP Spec Hardening**: Improved MCP lifecycle and transport behavior
   (session recovery, SSE response matching by request id, cancellation
   notifications, capability-aware RPC usage).
-- **Compatibility Expansion**: Added broader runtime compatibility coverage across sessions,
-  toolsets, and model/tool integration layers in the `0.1.x` line.
 
 ## Key Features
 
@@ -47,7 +50,7 @@ developer ergonomics.
 
 ADK Dart is intended to behave like `adk-python` while using Dart-native
 types, async streams, package structure, and platform constraints. The current
-release baseline tracks `adk-python` `2.13.0`.
+release baseline tracks `adk-python` `2.14.0`.
 
 Status legend:
 
@@ -57,7 +60,7 @@ Status legend:
 
 | `adk-python` area | Dart status | Dart implementation surface | Notes |
 | --- | --- | --- | --- |
-| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm` are aligned on `2026.10.29`; exported ADK baseline is `2.13.0`. |
+| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm` are aligned on `2026.11.8`; exported ADK baseline is `2.14.0`. |
 | Agents and runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | Core invocation, live fallback, rewind, session state, callback, and transfer behavior are ported. |
 | LLM flow processors | ✅ | request/response processors under `flows/llm_flows` | Covers instructions, identity, contents, compaction, context cache, code execution, output schema, tool confirmation, auth preflight, and agent transfer. |
 | Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, `NodeTool` (workflow-as-tool), joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, START-edge routing guards, completed-task batching, strict node input-schema validation, graph serialization, and status-aware DOT output. |
@@ -234,8 +237,8 @@ Status legend:
 | Tools runtime | Toolbox integration without delegate | Y | Built-in native toolbox HTTP delegate is available (`/api/toolset/*`, `/api/tool/*/invoke`); custom delegate registration is still supported. |
 | Secrets | Secret Manager access without fetcher | Y | Built-in Secret Manager HTTP fetcher is available; injection is optional. |
 | Audio | Speech transcription runtime bootstrap | Partial | Recognizer is still required, but can now be provided per instance or globally via `AudioTranscriber.registerDefaultRecognizer(...)`. |
-| OpenAPI | External multi-file `$ref` resolution | N | Parser throws on external refs (`External references not supported`). |
-| Spanner | PostgreSQL vector/ANN support | Partial | ANN is unsupported for PostgreSQL path; feature set is partially constrained. |
+| OpenAPI | External multi-file `$ref` resolution | Y | Supports local pointers, relative file imports (`./`, `../`), and remote HTTP/HTTPS `$ref` resolution with deep caching and circular ref prevention. |
+| Spanner | PostgreSQL vector/ANN support | Y | Supports `spanner.approx_cosine_distance`, `approx_euclidean_distance`, and `approx_dot_product` for Spanner PostgreSQL dialect via JSONB options. |
 
 ## Installation
 
@@ -249,9 +252,9 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.10.29
+  adk_dart: ^2026.11.8
   # Or use the unified facade + CLI package:
-  # adk: ^2026.10.29
+  # adk: ^2026.11.8
 ```
 
 If you prefer a shorter import path, use the facade package:
@@ -430,7 +433,7 @@ void main() {
 ### Development CLI and Web UI
 
 ```bash
-dart pub global activate adk_dart
+dart pub global activate adk
 adk create my_agent
 cd my_agent
 adk run .

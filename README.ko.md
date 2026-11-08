@@ -14,12 +14,16 @@ ADK Dart는 모듈형 런타임 프리미티브, 도구 오케스트레이션 �
 
 ## 최신 업데이트
 
+- **ADK Python `2.14.0` 및 `adk-web` 완벽 패리티**:
+  - **런타임 및 모델**: 공식 Gemini wire-format 직렬화를 위한 `LlmRequest.toGenerateContentBody()`, `Event.acceptConvenienceKwargs`(`author`, `text`, `thought`, `functionCall`, `functionResponse`, `customMetadata`), `LlmAgent.rejectMisplacedGenerateContentKwargs` 검증 가드, `AuthHandler.getAuthResponseAsync` 비동기 토큰/상태 정리, `FileArtifactService` 줄바꿈 보존 지원.
+  - **도구, MCP 및 워크플로우**: `BaseTool.displayTitle`(`adk:tool_display_names` 메타데이터 노출), `FunctionTool` Enum 확인 와이어 값 보존, MCP 서버 종료 시 세션 자동 재생성, `ReplayManager` `waitForOutput` 재개 가드 추가.
+  - **평가 및 Dev UI**: 멀티 런 평가 지표 `pass@k`(`>= 1` 통과) 및 `pass^k`(전체 `k` 통과) 기준 추가, `adk generate_agent_card` CLI 명령어, Web UI UTF-8 `data:` URL 디코딩 반영.
+- **도메인별 서브 엔트리포인트 배럴 및 모듈화 아키텍처**: `adk_dart.dart`, `adk_core.dart` 외에 9개 도메인별 선택적 엔트리포인트(`package:adk_dart/{agents,workflow,evaluation,tools,models,sessions,integrations,a2a,telemetry}.dart`) 추가 및 대형 서브시스템 `part` / `part of` 모듈화.
 - **ADK 2.0 워크플로우 및 Managed Agent 지원**: 핵심 ADK 2.0 아키텍처 완벽 지원:
   - **v2 워크플로우**: `Workflow`, `BaseNode`, `JoinNode` 등을 활용한 선언적 DAG 노드 그래프 스케줄링, 의존성 관리, 조건부 분기 라우팅 및 상태 병합 지원.
   - **Managed Agents**: `ManagedAgent` 및 `RemoteMcpServer` 설정을 통한 GCP Vertex AI Managed Agents Interactions API 직접 RPC 연동 지원.
 - **MCP 프로토콜 코어 패키지 분리**: `packages/adk_mcp` 패키지를 추가하고 Streamable HTTP MCP 전송 계층을 독립 패키지로 모듈화.
 - **MCP 스펙 고도화**: 세션 복구, 요청 ID 기반 SSE 응답 매칭, 취소 알림 인터럽트, 기능(Capability) 기반 RPC 사용 등 MCP 생명주기 및 전송 안정성 강화.
-- **호환성 확장**: 세션 영속 스토리지, 툴셋 리플렉션, 모델/도구 통합 계층 전반에 걸친 광범위한 런타임 호환성 확보.
 
 ## 핵심 기능
 
@@ -32,7 +36,7 @@ ADK Dart는 모듈형 런타임 프리미티브, 도구 오케스트레이션 �
 
 ## ADK Python 호환성 현황
 
-ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stream<Event>`), 패키지 구조 및 플랫폼 제약 조건을 준수하면서 `adk-python`과 동일하게 동작하도록 설계되었습니다. 현재 릴리즈 기준선은 `adk-python` `2.13.0`을 추적합니다.
+ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stream<Event>`), 패키지 구조 및 플랫폼 제약 조건을 준수하면서 `adk-python`과 동일하게 동작하도록 설계되었습니다. 현재 릴리즈 기준선은 `adk-python` `2.14.0`을 추적합니다.
 
 상태 범례:
 
@@ -42,7 +46,7 @@ ADK Dart는 Dart 네이티브 정적 타입 시스템, 비동기 스트림(`Stre
 
 | `adk-python` 영역 | Dart 상태 | Dart 구현 API 및 인터페이스 | 비고 |
 | --- | --- | --- | --- |
-| 패키지/버전 기준선 | ✅ | `adkVersion`, 패키지 버전 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 최신(`2026.10.29`) 정렬 완료; ADK 기준 버전은 `2.13.0`. |
+| 패키지/버전 기준선 | ✅ | `adkVersion`, 패키지 버전 | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 최신(`2026.11.8`) 정렬 완료; ADK 기준 버전은 `2.14.0`. |
 | 에이전트 및 런너 | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 핵심 호출, 실시간 폴백, 세션 롤백 및 리와인드(Rewind), 세션 상태, 콜백 및 Agent Transfer 구현 완료. |
 | LLM 플로우 프로세서 | ✅ | `flows/llm_flows` 하위 요청/응답 프로세서 | 지침, 정체성, 컨텐츠, 토큰 컴팩션, 컨텍스트 캐시, 코드 실행, 출력 스키마, 툴 확인(HITL), 사전 인증 및 에이전트 전환 처리. |
 | 워크플로우 런타임 | ✅ | `Workflow`, `BaseNode`, 함수/도구/LLM-Agent 노드, `NodeTool`(도구화된 워크플로우), 조인, 라우트, 동적 노드, 리플레이 헬퍼 | 재시도, 타임아웃, 입력 요청/HITL, 병렬 워커, 워크플로우 리플레이 및 상태 복원(State Restoration), START 라우팅 가드, 완료 태스크 배칭, 엄격한 입력 스키마 검증, 그래프 직렬화, DOT 시각화 포팅 완료. |
@@ -132,9 +136,9 @@ dart pub add adk_dart
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.10.29
+  adk_dart: ^2026.11.8
   # 또는 통합 CLI 퍼사드 패키지:
-  # adk: ^2026.10.29
+  # adk: ^2026.11.8
 ```
 
 짧은 import 패키지(`adk`)를 사용하는 경우:
@@ -278,7 +282,7 @@ void main() {
 ### 개발용 CLI 및 Web UI
 
 ```bash
-dart pub global activate adk_dart
+dart pub global activate adk
 adk create my_agent
 cd my_agent
 adk run .

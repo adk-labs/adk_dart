@@ -14,6 +14,11 @@ ADK Dartは、モジュール型ランタイムプリミティブ、ツールオ
 
 ## 最新アップデート
 
+- **ADK Python `2.14.0` および `adk-web` 完全互換**:
+  - **ランタイムおよびモデル**: 公式Gemini wire-formatシリアライズ用の `LlmRequest.toGenerateContentBody()`, `Event.acceptConvenienceKwargs`, `LlmAgent.rejectMisplacedGenerateContentKwargs` ガード, `AuthHandler.getAuthResponseAsync`, `FileArtifactService` 改行コード保持をサポート。
+  - **ツール、MCP、ワークフロー**: `BaseTool.displayTitle` (`adk:tool_display_names` メタデータ), `FunctionTool` Enum確認ワイヤー値保持, MCPサーバー終了時のセッション自動再生成, `ReplayManager` `waitForOutput` 再開ガードを追加。
+  - **評価および Dev UI**: マルチラン評価基準 `pass@k` (`>= 1` 成功) / `pass^k` (全 `k` 成功), `adk generate_agent_card` CLIコマンド, Web UIでのUTF-8 `data:` URLデコードに対応。
+- **ドメイン別サブエントリポイントバレルおよびモジュール化**: `adk_dart.dart`, `adk_core.dart` に加え、9つのドメイン別エントリポイント (`package:adk_dart/{agents,workflow,evaluation,tools,models,sessions,integrations,a2a,telemetry}.dart`) を追加し、大規模サブシステムを `part` / `part of` でモジュール化。
 - **ADK 2.0 ワークフローおよび Managed Agent サポート**: コアなADK 2.0アーキテクチャを完全サポート:
   - **v2 ワークフロー**: `Workflow`, `BaseNode`, `JoinNode`等による宣言型DAGノードグラフスケジューリング、依存関係管理、条件分岐ルーティング、状態マージ。
   - **Managed Agents**: `ManagedAgent`および`RemoteMcpServer`設定を介したGCP Vertex AI Managed Agents Interactions APIとの直接RPC連携。
@@ -22,7 +27,7 @@ ADK Dartは、モジュール型ランタイムプリミティブ、ツールオ
 
 ## ADK Python 互換性ステータス
 
-ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.13.0`に準拠しています。
+ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.14.0`に準拠しています。
 
 ステータス凡例:
 
@@ -32,7 +37,7 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 
 | `adk-python` 領域 | Dart ステータス | Dart 実装 API およびインターフェース | 備考 |
 | --- | --- | --- | --- |
-| パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 最新(`2026.10.29`)アライメント完了; ADK基準は `2.13.0`。 |
+| パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 最新(`2026.11.8`)アライメント完了; ADK基準は `2.14.0`。 |
 | エージェントおよびランナー | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 呼び出し、フォールバック、セッションロールバック/リワインド（Rewind）、セッション状態、コールバック、Agent Transfer実装完了。 |
 | LLM フロープロセッサ | ✅ | `flows/llm_flows` 配下の要求/応答プロセッサ | 指示、ID、コンテンツ、トークンコンパクション、コンテキストキャッシュ、コード実行、出力スキーマ、ツール確認（HITL）、エージェント移行。 |
 | ワークフローランタイム | ✅ | `Workflow`, `BaseNode`, 関数/ツール/LLMノード, `NodeTool`, ジョイン, ルーティング, 動的ノード, リプレイ | リトライ、タイムアウト、入力要求/HITL、並列ワーカー、ワークフローリプレイおよび状態復元 (State Restoration)、グラフシリアライズ、DOT可視化。 |
@@ -51,8 +56,8 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 | データ/クラウド統合 | ⚠️ | BigQuery, Bigtable, Spanner, Pub/Sub, Secret Manager, Agent Registry, Slack, Toolbox | ランタイムクライアントおよびファサード実装済み。 |
 | スキル (Skills) | ✅ | `Skill`, `SkillToolset`, インメモリ/GCSスキルソース, スキルプロンプト整形 | インラインおよびディレクトリ読み込み対応（ファイルシステムはFlutter Web未対応）。 |
 | Flutter/Web-Safe API & UI Kit | ✅ | `adk_core`, `flutter_adk`, 20+ Turnkey M3 ウィジェット, 6種のリアクティブコントローラ, `AdkTheme`, WASM対応 | Flutter Web/WASM コンパイル検証済み (`flutter build web --wasm`)。`AdkChatView`, `AdkDevStudioView`, `AdkAgentManagementView`, 6種のコントローラ, SSEストリーミングを標準提供。 |
-| OpenAPI 外部参照 | 🚧 | OpenAPI パーサー/ツールセット | インライン/ローカル仕様対応済み。外部マルチファイル `$ref` 解決は対応予定。 |
-| Spanner PostgreSQL ANN | 🚧 | Spanner ベクトルツール | Spanner/Vectorコアパス対応済み。PostgreSQL ANN 動作は今後対応予定。 |
+| OpenAPI 外部参照 (`$ref`) | ✅ | `OpenApiSpecParser`, `externalDocuments`, マルチファイルスキーマリゾルバ | ローカルポインタ、相対ファイルパス (`./`, `../`)、リモート HTTP/HTTPS `$ref` キャッシュおよび循環参照防止をサポート。 |
+| Spanner PostgreSQL ANN | ✅ | `spanner.approx_cosine_distance`, `approx_euclidean_distance`, `approx_dot_product` | Spanner PostgreSQL ダイアレクトの JSONB オプションに基づく近似最近傍 (ANN) ベクトル検索をサポート。 |
 | 音声テキスト変換ランタイム | ⚠️ | オーディオ音声認識(STT) ランタイム | 音声認識(STT) オーケストレーション提供。認識器のインスタンス登録が必要。 |
 | Python サンプルツリー網羅 | 🚧 | サンプルコード, `flutter_adk/example`, ドキュメント | 代表的なDart/Flutterサンプルを提供。Python全サンプルツリーは順次拡充中。 |
 
@@ -93,9 +98,9 @@ dart pub add adk_dart
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.10.29
+  adk_dart: ^2026.11.8
   # または統合CLIファサードパッケージ:
-  # adk: ^2026.10.29
+  # adk: ^2026.11.8
 ```
 
 短いimportパッケージ（`adk`）を使用する場合:
@@ -239,7 +244,7 @@ void main() {
 ### 開発用 CLI および Web UI
 
 ```bash
-dart pub global activate adk_dart
+dart pub global activate adk
 adk create my_agent
 cd my_agent
 adk run .

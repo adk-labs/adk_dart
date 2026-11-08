@@ -8,7 +8,7 @@
 
 - Short import: `package:adk/adk.dart`
 - `adk_dart` API re-export
-- `adk` CLI entrypoint (`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`)
+- `adk` CLI entrypoint (`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk generate_agent_card`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`)
 
 ## `adk` を使うべきケース
 
@@ -63,7 +63,7 @@ dart pub add adk
 
 ```yaml
 dependencies:
-  adk: ^2026.10.29
+  adk: ^2026.11.8
 ```
 
 ## Links

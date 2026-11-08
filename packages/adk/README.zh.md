@@ -8,7 +8,7 @@
 
 - 短 import：`package:adk/adk.dart`
 - 重新导出 `adk_dart` API
-- 提供完整 `adk` CLI 入口（`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`）
+- 提供完整 `adk` CLI 入口（`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk generate_agent_card`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`）
 
 ## 什么时候用 `adk`？
 
@@ -62,7 +62,7 @@ dart pub add adk
 
 ```yaml
 dependencies:
-  adk: ^2026.10.29
+  adk: ^2026.11.8
 ```
 
 ## 参考

@@ -29,7 +29,7 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.10.29
+  flutter_adk: ^2026.11.8
 ```
 
 ---
@@ -263,7 +263,7 @@ AdkTheme(
 | **`AdkComputerActionCard`** | Dedicated card for `ComputerUseToolset` (`click_at`, `type_text_at`, `scroll_at`, `navigate`) with `(x, y)` coordinates and screenshot. | `AdkComputerActionCard(toolName: 'click_at', arguments: {'x': 320, 'y': 180});` |
 | **`AdkCompactionSummaryCard`** | Collapsible timeline card for compacted conversation history (`EventActions.compaction`). | `AdkCompactionSummaryCard(summaryText: '...', startTimestamp: ..., endTimestamp: ...);` |
 | **`AdkReflectRetryBanner`** | Status banner for `ReflectAndRetryToolPlugin` self-healing retries (`Attempt N/M`). | `AdkReflectRetryBanner(toolName: 'sql_query', attempt: 2, maxAttempts: 3);` |
-| **`AdkMultiRunEvalCard`** | Summary card for multi-run evaluation aggregation (`MultiRunCaseResult` pass rate, avg score, std dev). | `AdkMultiRunEvalCard.fromCoreResults(results: multiRunResults);` |
+| **`AdkMultiRunEvalCard`** | Summary card for multi-run evaluation aggregation (`MultiRunCaseResult` pass rate, avg score, std dev, `pass@k` / `pass^k`, and `[INFO]` informational badges). | `AdkMultiRunEvalCard.fromCoreResults(results: multiRunResults);` |
 | **`AdkPromptSuggestionsBar`** | Horizontally scrollable bar with quick-tap prompt chips. | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
 | **`AdkToolCallCard`** | Accordion card displaying tool name, arguments, execution status, and return values. | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
 | **`AdkWorkflowProgressIndicator`**| Step-by-step timeline progress bar tracking workflow node statuses. | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
@@ -284,13 +284,14 @@ AdkTheme(
 
 ### 4. UI Data Models (`package:flutter_adk/flutter_adk.dart`)
 
-- **`AdkChatMessage`**: Immutable chat message (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `tokenUsage`, `invocationId`, `metadata`).
-- **`AdkToolCallInfo`**: Tool execution state model (`callId`, `toolName`, `arguments`, `result`, `status`, `durationMs`).
+- **`AdkChatMessage`**: Immutable chat message (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolName`, `toolDisplayTitle`, `effectiveToolTitle`, `toolArgs`, `toolResult`, `tokenUsage`, `invocationId`, `metadata`).
+- **`AdkToolCallInfo`**: Tool execution state model (`callId`, `toolName`, `displayTitle`, `effectiveTitle`, `arguments`, `result`, `status`, `durationMs`).
 - **`AdkWorkflowStep`**: Workflow step model (`id`, `label`, `description`, `status`, `durationMs`, `output`).
 - **`AdkSessionInfo`**: Session history model (`id`, `title`, `messageCount`, `lastMessagePreview`, `updatedAt`).
 - **`AdkPromptSuggestion`**: Suggestion model (`text`, `label`, `icon`, `category`).
-- **`AdkTokenUsage`**: Token telemetry model (`promptTokens`, `completionTokens`, `totalTokens`, `thoughtTokens`, `cachedTokens`, `toolUsePromptTokens`, `trafficType`, `cacheHitRatio`, `estimateCostUsd`, `operator +`).
+- **`AdkTokenUsage`**: Token telemetry model (`promptTokens`, `completionTokens`, `totalTokens`, `thoughtTokens`, `cachedTokens`, `cacheCreationTokens`, `toolUsePromptTokens`, `trafficType`, `cacheHitRatio`, `estimateCostUsd`, `operator +`).
 - **`AdkVoiceState`**: Real-time voice state model (`status`, `decibels`, `isMuted`, `isActive`).
+- **`AdkFormatters` & `AdkEventStreamUtils`**: Stream and formatting utilities including `decodeDataUrlTextUtf8`, `encodeArtifactFilename`, `extractToolDisplayNames`, `extractVisibleText`, `isAbortedEvent`, and `detectSystemInstructionChangesByAgent`.
 
 ---
 

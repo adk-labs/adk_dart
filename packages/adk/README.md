@@ -7,13 +7,14 @@ English | [한국어](README.ko.md) | [日本語](README.ja.md) | [中文](READM
 
 `adk` is the command-line interface (CLI) toolchain and unified entrypoint for the Agent Development Kit (ADK) in Dart.
 
-It bundles the `adk` command-line executable (`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`) and provides top-level access to the full ADK Dart runtime via `package:adk/adk.dart`.
+It bundles the `adk` command-line executable (`adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk generate_agent_card`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, `adk doctor`, `adk --version`) and provides top-level access to the full ADK Dart runtime via `package:adk/adk.dart`.
 
 ---
 
 ## What's New
 
-- **100% `adk-python` CLI Parity**: Full support for `adk create` (`--type CODE|CONFIG|BASIC|WORKFLOW`), `adk run [query]` (`--jsonl`, `--timeout`, `--in_memory`, `--resume`, `--replay`), `adk web` / `adk api_server` (Eventarc/PubSub/Webhook triggers, OIDC validation, Enterprise/Express mode, `/dev/apps` routes), `adk deploy` (`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval_set generate_eval_cases`, `adk migrate session --allow-unsafe-unpickling`, and `adk test --rebuild`.
+- **100% `adk-python` `2.14.0` & `adk-web` CLI Parity**: Full support for `adk create` (`--type CODE|CONFIG|BASIC|WORKFLOW`), `adk run [query]` (`--jsonl`, `--timeout`, `--in_memory`, `--resume`, `--replay`), `adk web` / `adk api_server` (Eventarc/PubSub/Webhook triggers, OIDC validation, Enterprise/Express mode, `/dev/apps` routes, HTTP 500 unconfigured eval manager guard, UTF-8 `data:` URL decoding), `adk deploy` (`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval` (`pass@k` and `pass^k` multi-run criteria), `adk eval_set` (`create`, `add_eval_case`, `generate_eval_cases`), `adk optimize`, `adk generate_agent_card`, `adk migrate session --allow-unsafe-unpickling`, and `adk test --rebuild`.
+- **Modularized CLI & Dev Web Server Architecture**: Split CLI command dispatchers and Dev Web Server routes into focused `part` / `part of` modules (`cli_run_and_web.dart`, `cli_eval_and_optimize.dart`, `cli_conformance_and_migrate.dart`, `web_server_session_and_run_routes.dart`, `web_server_eval_and_a2a_routes.dart`, `web_server_assets_and_helpers.dart`).
 - **ADK 2.0 Workflows, CascadeLive & Managed Agent**: Exposes upstream ADK 2.0 Workflows, `CascadeLive` + `ElevenLabs` speech pipelines, and GCP Managed Agent APIs.
 - **Unified CLI Toolchain**: Ships the `adk` executable entrypoint for global activation (`dart pub global activate adk`) and local package workflows.
 - **Unified SDK Entrypoint**: Full ADK Dart agent, runner, workflow, and tool APIs accessible through a clean, top-level package namespace.
@@ -21,7 +22,7 @@ It bundles the `adk` command-line executable (`adk create`, `adk run`, `adk web`
 
 ## Key Features
 
-- **Global & Local CLI Toolchain**: Run `adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, and `adk doctor`.
+- **Global & Local CLI Toolchain**: Run `adk create`, `adk run`, `adk web`, `adk api_server`, `adk deploy`, `adk eval`, `adk eval_set`, `adk optimize`, `adk generate_agent_card`, `adk conformance`, `adk migrate session`, `adk telemetry`, `adk test`, and `adk doctor`.
 - **Complete ADK Runtime**: Seamlessly construct Agents, Sequential/Parallel/Loop workflows, LLM providers, and Tools.
 - **Top-Level Package Namespace**: Direct import via `import 'package:adk/adk.dart';`.
 
@@ -107,7 +108,7 @@ Or with `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk: ^2026.10.29
+  adk: ^2026.11.8
 ```
 
 For local repository development:

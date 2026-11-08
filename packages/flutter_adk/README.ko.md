@@ -29,7 +29,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.10.29
+  flutter_adk: ^2026.11.8
 ```
 
 ---
@@ -263,7 +263,7 @@ AdkTheme(
 | **`AdkComputerActionCard`** | `ComputerUseToolset` (`click_at`, `type_text_at`, `scroll_at`, `navigate`) 전용 좌표 배지 및 스크린샷 카드 | `AdkComputerActionCard(toolName: 'click_at', arguments: {'x': 320, 'y': 180});` |
 | **`AdkCompactionSummaryCard`** | 컨텍스트 컴팩션(`EventActions.compaction`) 요약 타임라인 배너 카드 | `AdkCompactionSummaryCard(summaryText: '...', startTimestamp: ..., endTimestamp: ...);` |
 | **`AdkReflectRetryBanner`** | `ReflectAndRetryToolPlugin` 자기 치유(Self-healing) 재시도 상태 배너 (`Attempt N/M`) | `AdkReflectRetryBanner(toolName: 'sql_query', attempt: 2, maxAttempts: 3);` |
-| **`AdkMultiRunEvalCard`** | 멀티 런 평가(`MultiRunCaseResult`) 통과율, 평균 점수, 표준편차 집계 카드 | `AdkMultiRunEvalCard.fromCoreResults(results: multiRunResults);` |
+| **`AdkMultiRunEvalCard`** | 멀티 런 평가(`MultiRunCaseResult`) 통과율, 평균 점수, 표준편차, `pass@k` / `pass^k` 및 `[INFO]` 정보성 배지 집계 카드 | `AdkMultiRunEvalCard.fromCoreResults(results: multiRunResults);` |
 | **`AdkPromptSuggestionsBar`** | 가로 스크롤 추천 질문 칩 바 | `AdkPromptSuggestionsBar(suggestions: [...], onSelected: (s) => ...);` |
 | **`AdkToolCallCard`** | 도구 이름, 전달 인자, 실행 상태, 반환 결과를 보여주는 아코디언 카드 | `AdkToolCallCard(toolName: 'search', arguments: {...}, result: {...});` |
 | **`AdkWorkflowProgressIndicator`**| 워크플로우 각 노드의 실행 타임라인 진행률 바 | `AdkWorkflowProgressIndicator(steps: workflowSteps);` |
@@ -284,13 +284,14 @@ AdkTheme(
 
 ### 4. UI 데이터 모델 (`package:flutter_adk/flutter_adk.dart`)
 
-- **`AdkChatMessage`**: 불변 대화 메시지 모델 (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolArgs`, `toolResult`, `tokenUsage`, `invocationId`, `metadata`).
-- **`AdkToolCallInfo`**: 도구 실행 상태 모델 (`callId`, `toolName`, `arguments`, `result`, `status`, `durationMs`).
+- **`AdkChatMessage`**: 불변 대화 메시지 모델 (`isUser`, `isModel`, `isTool`, `isSystem`, `isStreaming`, `thought`, `toolName`, `toolDisplayTitle`, `effectiveToolTitle`, `toolArgs`, `toolResult`, `tokenUsage`, `invocationId`, `metadata`).
+- **`AdkToolCallInfo`**: 도구 실행 상태 모델 (`callId`, `toolName`, `displayTitle`, `effectiveTitle`, `arguments`, `result`, `status`, `durationMs`).
 - **`AdkWorkflowStep`**: 워크플로우 단계 모델 (`id`, `label`, `description`, `status`, `durationMs`, `output`).
 - **`AdkSessionInfo`**: 세션 정보 모델 (`id`, `title`, `messageCount`, `lastMessagePreview`, `updatedAt`).
 - **`AdkPromptSuggestion`**: 추천 질문 모델 (`text`, `label`, `icon`, `category`).
-- **`AdkTokenUsage`**: 토큰 사용량 모델 (`promptTokens`, `completionTokens`, `totalTokens`, `thoughtTokens`, `cachedTokens`, `toolUsePromptTokens`, `trafficType`, `cacheHitRatio`, `estimateCostUsd`, `operator +`).
+- **`AdkTokenUsage`**: 토큰 사용량 모델 (`promptTokens`, `completionTokens`, `totalTokens`, `thoughtTokens`, `cachedTokens`, `cacheCreationTokens`, `toolUsePromptTokens`, `trafficType`, `cacheHitRatio`, `estimateCostUsd`, `operator +`).
 - **`AdkVoiceState`**: 실시간 음성 상태 모델 (`status`, `decibels`, `isMuted`, `isActive`).
+- **`AdkFormatters` & `AdkEventStreamUtils`**: `decodeDataUrlTextUtf8`, `encodeArtifactFilename`, `extractToolDisplayNames`, `extractVisibleText`, `isAbortedEvent`, `detectSystemInstructionChangesByAgent` 등 포맷팅 및 스트림 파싱 유틸리티.
 
 ---
 
