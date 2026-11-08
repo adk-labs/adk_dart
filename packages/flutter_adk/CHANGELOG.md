@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.11.8
+
+- Bumped package version to `2026.11.8` and dependency `adk_dart: ^2026.11.8`.
+- Added `AdkTokenUsage.cacheCreationTokens`, `AdkToolCallInfo.displayTitle` (`effectiveTitle`), `AdkChatMessage.toolDisplayTitle` (`effectiveToolTitle`), and `pass@k` / `pass^k` & `[INFO]` informational badges on `AdkMultiRunEvalCard`.
+- Added `AdkFormatters.decodeDataUrlTextUtf8`, `AdkFormatters.encodeArtifactFilename`, `AdkEventStreamUtils.extractToolDisplayNames`, `AdkEventStreamUtils.extractVisibleText`, `AdkEventStreamUtils.isAbortedEvent`, and `AdkEventStreamUtils.detectSystemInstructionChangesByAgent`.
+
 ## 2026.10.29
 
 - Bumped package version to `2026.10.29` and dependency `adk_dart: ^2026.10.29`.

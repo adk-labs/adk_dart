@@ -1,3 +1,17 @@
+## 2026.11.8
+
+- **Upstream `adk-python` `v2.14.0` & `adk-web` Parity (`3640e7d0c..dd7161f7a`, `dfac466d..07a07025`)**:
+  - Updated `adkVersion` to `'2.14.0'` and `adkPackageVersion` to `'2026.11.8'`.
+  - Added `LlmRequest.toGenerateContentBody()` (`lib/src/models/generate_content_body.dart`) for official Gemini wire-format serialization.
+  - Added `Event.acceptConvenienceKwargs` (`author`, `text`, `thought`, `functionCall`, `functionResponse`, `customMetadata`), `LlmAgent.rejectMisplacedGenerateContentKwargs` guard, `AuthHandler.getAuthResponseAsync` async token/state cleanup, and `FileArtifactService` exact line-ending preservation.
+  - Added `BaseTool.displayTitle` (`adk:tool_display_names` metadata), `FunctionTool` enum confirmation wire values, automatic MCP session recreation on server termination, and `ReplayManager` `waitForOutput` resume guard.
+  - Added `pass@k` (`>= 1` pass) and `pass^k` (all `k` pass) multi-run evaluation criteria in `lib/src/evaluation/multi_run_eval.dart`.
+- **Architecture Modularization & Domain-Scoped Entrypoint Barrels**:
+  - Added 9 selective domain entrypoints (`package:adk_dart/{agents,workflow,evaluation,tools,models,sessions,integrations,a2a,telemetry}.dart`) alongside `adk_dart.dart` and `adk_core.dart`.
+  - Modularized `workflow.dart`, `bigquery_agent_analytics_plugin.dart`, and `lite_llm.dart` into focused `part` / `part of` library units.
+- **Dependency Upgrades**:
+  - Upgraded `crypto` to `^3.0.8`, `googleapis_auth` to `^2.3.7`, `postgres` to `^3.6.0`, `sqlite3` to `^3.9.0`, `archive` to `^4.6.0`, and `analyzer` to `^14.7.0`.
+
 ## 2026.10.29
 
 - **Core, Context, Plugins & Compaction (`lib/src/agents/`, `lib/src/plugins/`, `lib/src/apps/`, `lib/src/events/`, `adk-python` `c19e10c05`, `c9c0e6c78`, `f1d8c7b7d`, `477a86b37`, `158b1f4c2`, `c5096ca52`, `3640e7d0c`)**:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.8
+
+- Bumped package version to `2026.11.8`.
+- Synced compatibility with `adk_dart` `2026.11.8` release (`adk-python` `v2.14.0` parity).
+
 ## 2026.10.29
 
 - Bumped package version to `2026.10.29`.
