@@ -3,8 +3,9 @@
 ## 2026.11.8
 
 - Bumped package version to `2026.11.8` and dependency `adk_dart: ^2026.11.8`.
-- **CLI & Dev Web Server `adk-python` `v2.14.0` & `adk-web` Parity**:
-  - Added `adk generate_agent_card` command, `pass@k` / `pass^k` multi-run evaluation output, HTTP 500 unconfigured eval manager guard, and UTF-8 `data:` URL decoding in bundled Web UI assets.
+- **100% `adk-python` `v2.14.0` & `adk-web` CLI & Server Parity**:
+  - Ported 1:1 `src/google/adk/cli/` module tree (`cli_tools_click`, `cli_create`, `cli_deploy`, `cli_eval`, `fast_api`, `adk_web_server`, `agent_graph`, `service_registry`, `trigger_routes`, `conformance/`, `deployers/`, `_telemetry/`, `utils/`, `built_in_agents/`).
+  - Added `adk generate_agent_card` command, `pass@k` / `pass^k` multi-run evaluation output, HTTP 500 unconfigured eval manager guard, and UTF-8 `data:` URL decoding in bundled Web UI assets (`e3e72dd24`, `b8a42797c`, `07a07025a`).
   - Modularized `cli.dart` and `web_server.dart` into focused `part` / `part of` files (`cli_run_and_web.dart`, `cli_eval_and_optimize.dart`, `cli_conformance_and_migrate.dart`, `web_server_session_and_run_routes.dart`, `web_server_eval_and_a2a_routes.dart`, `web_server_assets_and_helpers.dart`).
 - Upgraded `crypto` to `^3.0.8` and `sqlite3` to `^3.9.0`.
 

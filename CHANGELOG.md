@@ -2,10 +2,15 @@
 
 - **Upstream `adk-python` `v2.14.0` & `adk-web` Parity (`3640e7d0c..dd7161f7a`, `dfac466d..07a07025`)**:
   - Updated `adkVersion` to `'2.14.0'` and `adkPackageVersion` to `'2026.11.8'`.
-  - Added `LlmRequest.toGenerateContentBody()` (`lib/src/models/generate_content_body.dart`) for official Gemini wire-format serialization.
-  - Added `Event.acceptConvenienceKwargs` (`author`, `text`, `thought`, `functionCall`, `functionResponse`, `customMetadata`), `LlmAgent.rejectMisplacedGenerateContentKwargs` guard, `AuthHandler.getAuthResponseAsync` async token/state cleanup, and `FileArtifactService` exact line-ending preservation.
-  - Added `BaseTool.displayTitle` (`adk:tool_display_names` metadata), `FunctionTool` enum confirmation wire values, automatic MCP session recreation on server termination, and `ReplayManager` `waitForOutput` resume guard.
-  - Added `pass@k` (`>= 1` pass) and `pass^k` (all `k` pass) multi-run evaluation criteria in `lib/src/evaluation/multi_run_eval.dart`.
+  - **Core, Agents, Workflows & Events**:
+    - Added `Event.acceptConvenienceKwargs` (`author`, `text`, `thought`, `functionCall`, `functionResponse`, `customMetadata`), `LlmAgent.rejectMisplacedGenerateContentKwargs` guard (`generationConfig`/`safetySettings`/`thinkingConfig` -> `generateContentConfig`), `AuthHandler.getAuthResponseAsync` async token/state cleanup, and `FileArtifactService` exact line-ending preservation (`5bf4b5d12`, `e69e7db20`, `dd7161f7a`, `7c2b93909`).
+    - Added `ReplayManager` `waitForOutput` resume guard (`_resuming` check), `Workflow` subagent recursion cycle guard, and A2A `buildA2aServerUrl` / `extractA2aTasksPath` reverse-proxy path routing (`ec3de1446`, `6ef1682d6`, `56202b36e`).
+  - **Models, Plugins, Integrations & Telemetry**:
+    - Added `LlmRequest.toGenerateContentBody()` (`lib/src/models/generate_content_body.dart`) for official Gemini wire-format serialization (`0622d48ca`).
+    - Added `LiteLlm` system/developer prompt collapse on legacy models, `Gemini` non-empty `Part` validation, `VertexAiSessionService` empty content part pruning, `ReflectAndRetryToolPlugin` retry warning state persistence, `AgentSimulatorPlugin` multi-turn session injection, and `SqliteMemoryService` CJK bigram tokenization (`75fc85319`).
+  - **Tools, MCP & Evaluation**:
+    - Added `BaseTool.displayTitle` (`adk:tool_display_names` metadata), `FunctionTool` enum confirmation wire values, automatic MCP session recreation on server termination, and `OpenApiSpecParser` recursive multi-document `$ref` resolution (`b7bf023db`, `8136ca543`, `2a0866cf7`).
+    - Added `pass@k` (`>= 1` pass) and `pass^k` (all `k` pass) multi-run evaluation criteria in `lib/src/evaluation/multi_run_eval.dart` (`b8a42797c`).
 - **Architecture Modularization & Domain-Scoped Entrypoint Barrels**:
   - Added 9 selective domain entrypoints (`package:adk_dart/{agents,workflow,evaluation,tools,models,sessions,integrations,a2a,telemetry}.dart`) alongside `adk_dart.dart` and `adk_core.dart`.
   - Modularized `workflow.dart`, `bigquery_agent_analytics_plugin.dart`, and `lite_llm.dart` into focused `part` / `part of` library units.
