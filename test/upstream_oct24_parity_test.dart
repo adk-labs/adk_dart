@@ -141,7 +141,7 @@ InvocationContext _buildTestInvocationContext({
 void main() {
   group('1. Release version parity (ceb0627f1)', () {
     test('adkVersion is updated to 2.13.0', () {
-      expect(adkVersion, '2.13.0');
+      expect(adkVersion, '2.14.0');
     });
   });
 

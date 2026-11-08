@@ -230,16 +230,21 @@ class AdkChatController extends ChangeNotifier {
           return;
         }
 
+        final Map<String, String> toolDisplayNames =
+            AdkEventStreamUtils.extractToolDisplayNames(event);
+
         // Handle function calls, responses, and code execution inside content
         for (final adk.Part part in content.parts) {
           final adk.FunctionCall? fc = part.functionCall;
           if (fc != null) {
+            final String? displayTitle = toolDisplayNames[fc.name];
             _messages.add(
               AdkChatMessage.tool(
                 id: 'tool_call_${DateTime.now().microsecondsSinceEpoch}',
                 toolName: fc.name,
+                toolDisplayTitle: displayTitle,
                 toolArgs: fc.args,
-                text: 'Calling tool: ${fc.name}',
+                text: 'Calling tool: ${displayTitle ?? fc.name}',
                 author: event.author.isNotEmpty ? event.author : 'Tool',
               ),
             );
@@ -248,12 +253,14 @@ class AdkChatController extends ChangeNotifier {
 
           final adk.FunctionResponse? fr = part.functionResponse;
           if (fr != null) {
+            final String? displayTitle = toolDisplayNames[fr.name];
             _messages.add(
               AdkChatMessage.tool(
                 id: 'tool_resp_${DateTime.now().microsecondsSinceEpoch}',
                 toolName: fr.name,
+                toolDisplayTitle: displayTitle,
                 toolResult: fr.response,
-                text: 'Tool result: ${fr.name}',
+                text: 'Tool result: ${displayTitle ?? fr.name}',
                 author: 'Tool Result',
               ),
             );
@@ -468,6 +475,8 @@ class AdkChatController extends ChangeNotifier {
         }
       }
 
+      final Map<String, String> toolDisplayNames =
+          AdkEventStreamUtils.extractToolDisplayNames(event);
       bool attachedExtrasToModelMessage = false;
       for (final part in content.parts) {
         if (part.text != null && part.text!.isNotEmpty && !part.thought) {
@@ -499,22 +508,28 @@ class AdkChatController extends ChangeNotifier {
             attachedExtrasToModelMessage = true;
           }
         } else if (part.functionCall != null) {
+          final String toolName = part.functionCall!.name;
+          final String? displayTitle = toolDisplayNames[toolName];
           _messages.add(
             AdkChatMessage.tool(
-              id: 'hist_call_${part.functionCall!.name}',
-              toolName: part.functionCall!.name,
+              id: 'hist_call_$toolName',
+              toolName: toolName,
+              toolDisplayTitle: displayTitle,
               toolArgs: part.functionCall!.args,
-              text: 'Called tool: ${part.functionCall!.name}',
+              text: 'Called tool: ${displayTitle ?? toolName}',
               author: event.author,
             ),
           );
         } else if (part.functionResponse != null) {
+          final String toolName = part.functionResponse!.name;
+          final String? displayTitle = toolDisplayNames[toolName];
           _messages.add(
             AdkChatMessage.tool(
-              id: 'hist_resp_${part.functionResponse!.name}',
-              toolName: part.functionResponse!.name,
+              id: 'hist_resp_$toolName',
+              toolName: toolName,
+              toolDisplayTitle: displayTitle,
               toolResult: part.functionResponse!.response,
-              text: 'Tool result: ${part.functionResponse!.name}',
+              text: 'Tool result: ${displayTitle ?? toolName}',
               author: 'Tool',
             ),
           );
@@ -605,6 +620,7 @@ class AdkChatController extends ChangeNotifier {
       'author': m.author,
       'timestamp': m.timestamp.toIso8601String(),
       if (m.toolName != null) 'tool_name': m.toolName,
+      if (m.toolDisplayTitle != null) 'tool_display_title': m.toolDisplayTitle,
       if (m.toolArgs != null) 'tool_args': m.toolArgs,
       if (m.toolResult != null) 'tool_result': m.toolResult,
       if (m.codeExecution != null)

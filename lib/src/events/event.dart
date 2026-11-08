@@ -5,6 +5,7 @@ import '../models/llm_response.dart';
 import '../platform/time.dart';
 import '../types/content.dart';
 import '../types/id.dart';
+import '../utils/schema_utils.dart';
 import 'event_actions.dart';
 import 'node_path_builder.dart';
 
@@ -24,12 +25,12 @@ const String toolDisplayNamesMetadataKey = 'adk:tool_display_names';
 class Event extends LlmResponse {
   /// Creates an event.
   Event({
-    required this.invocationId,
-    required this.author,
+    this.invocationId = '',
+    this.author = '',
     EventActions? actions,
     NodeInfo? nodeInfo,
-    Content? message,
-    Map<String, Object?>? state,
+    Object? message,
+    Object? state,
     Object? route,
     String? nodePath,
     Object? output = _sentinel,
@@ -38,6 +39,8 @@ class Event extends LlmResponse {
     this.isolationScope,
     String? id,
     double? timestamp,
+    Map<String, Object?>? modelFields,
+    Map<String, Object?>? extraData,
     super.modelVersion,
     super.content,
     super.partial,
@@ -68,23 +71,113 @@ class Event extends LlmResponse {
        hasOutput = !identical(output, _sentinel),
        id = id ?? Event.newId(),
        timestamp = timestamp ?? getTime() {
-    if (message != null) {
+    final Set<String> subclassInputKeys = modelFields == null
+        ? const <String>{}
+        : topLevelInputKeys(modelFields);
+    if (message != null && !subclassInputKeys.contains('message')) {
       if (content != null) {
         throw ArgumentError(
           "'message' and 'content' are mutually exclusive. Use one or the other.",
         );
       }
-      content = message;
+      if (message is Content) {
+        content = message;
+      }
     }
-    if (state != null) {
-      this.actions.stateDelta = Map<String, Object?>.from(state);
+    if (state != null && !subclassInputKeys.contains('state')) {
+      if (state is Map) {
+        this.actions.stateDelta = state.map<String, Object?>(
+          (Object? k, Object? v) => MapEntry<String, Object?>('$k', v),
+        );
+      }
     }
-    if (route != null) {
+    if (route != null && !subclassInputKeys.contains('route')) {
       this.actions.route = route;
     }
-    if (nodePath != null) {
+    if (nodePath != null &&
+        !subclassInputKeys.contains('node_path') &&
+        !subclassInputKeys.contains('nodePath')) {
       this.nodeInfo.path = nodePath;
     }
+
+    if (modelFields != null) {
+      final Map<String, Object?> rawInputs = <String, Object?>{
+        'message': ?message,
+        'state': ?state,
+        'route': ?route,
+        'node_path': ?nodePath,
+        'nodePath': ?nodePath,
+        ...?extraData,
+      };
+      for (final MapEntry<String, Object?> entry in modelFields.entries) {
+        final (bool matched, Object? value) = resolveFieldInputValue(
+          entry.key,
+          entry.value,
+          rawInputs,
+        );
+        if (matched) {
+          customFields[entry.key] = value;
+        }
+      }
+    }
+  }
+
+  /// Subclass custom fields resolved via `modelFields` and validation aliases.
+  final Map<String, Object?> customFields = <String, Object?>{};
+
+  /// Pre-processes convenience kwargs (`message`, `state`, `route`, `node_path`)
+  /// while honoring any top-level keys claimed by subclass [modelFields].
+  static Map<String, Object?> acceptConvenienceKwargs(
+    Map<String, Object?> data, {
+    Map<String, Object?>? modelFields,
+  }) {
+    final Map<String, Object?> result = Map<String, Object?>.from(data);
+    final Set<String> subclassInputKeys = modelFields == null
+        ? const <String>{}
+        : topLevelInputKeys(modelFields);
+    if (result.containsKey('message') &&
+        !subclassInputKeys.contains('message')) {
+      if (result.containsKey('content') && result['content'] != null) {
+        throw ArgumentError(
+          "'message' and 'content' are mutually exclusive. Use one or the other.",
+        );
+      }
+      result['content'] = result.remove('message');
+    }
+    final bool hasCustomState = subclassInputKeys.contains('state');
+    final bool hasCustomRoute = subclassInputKeys.contains('route');
+    if ((!hasCustomState && result.containsKey('state')) ||
+        (!hasCustomRoute && result.containsKey('route'))) {
+      final Object? rawActions = result['actions'];
+      final EventActions actions = rawActions is EventActions
+          ? rawActions.copyWith()
+          : EventActions();
+      if (!hasCustomState && result.containsKey('state')) {
+        final Object? rawState = result.remove('state');
+        if (rawState is Map) {
+          actions.stateDelta = rawState.map<String, Object?>(
+            (Object? k, Object? v) => MapEntry<String, Object?>('$k', v),
+          );
+        }
+      }
+      if (!hasCustomRoute && result.containsKey('route')) {
+        actions.route = result.remove('route');
+      }
+      result['actions'] = actions;
+    }
+    if (result.containsKey('node_path') &&
+        !subclassInputKeys.contains('node_path')) {
+      final Object? nodePath = result.remove('node_path');
+      final Object? rawNodeInfo = result['node_info'] ?? result['nodeInfo'];
+      final NodeInfo nodeInfo = rawNodeInfo is NodeInfo
+          ? rawNodeInfo.copyWith()
+          : NodeInfo();
+      if (nodePath is String) {
+        nodeInfo.path = nodePath;
+      }
+      result['node_info'] = nodeInfo;
+    }
+    return result;
   }
 
   /// Invocation ID that produced this event.

@@ -513,6 +513,7 @@ class AdkMessageBubble extends StatelessWidget {
     if (useToolCallCard && (message.toolName != null || message.toolArgs != null || message.toolResult != null)) {
       return AdkToolCallCard(
         toolName: message.toolName ?? 'Unnamed Tool',
+        displayTitle: message.toolDisplayTitle,
         toolArgs: message.toolArgs,
         toolResult: message.toolResult,
         errorMessage: message.errorMessage,

@@ -6,6 +6,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import '../models/llm_request.dart';
+import '../types/content.dart';
 import 'app_details.dart';
 import 'common.dart';
 import 'eval_case.dart';
@@ -54,21 +55,84 @@ GenerateContentConfig buildJudgeRequestConfig(Object? userConfig) {
   return config;
 }
 
-/// Extracts plain text from an evaluation content payload.
-String? getTextFromContent(EvalJsonMap? content) {
+/// Extracts plain text from an evaluation content payload or [Invocation].
+///
+/// Parts with `thought == true` are excluded.
+String? getTextFromContent(
+  Object? content, {
+  bool includeIntermediateResponsesInFinal = false,
+}) {
   if (content == null) {
     return null;
   }
-  final List<String> textParts = asObjectList(content['parts'])
-      .map((Object? p) {
-        return asNullableString(asEvalJson(p)['text']) ?? '';
-      })
-      .where((String text) => text.isNotEmpty)
-      .toList();
-  if (textParts.isEmpty) {
-    return null;
+  if (content is Invocation) {
+    final List<String> texts = <String>[];
+    if (includeIntermediateResponsesInFinal &&
+        content.intermediateData is InvocationEvents) {
+      final InvocationEvents events =
+          content.intermediateData! as InvocationEvents;
+      for (final InvocationEvent event in events.invocationEvents) {
+        final String? eventText = getTextFromContent(event.content);
+        if (eventText != null && eventText.isNotEmpty) {
+          texts.add(eventText);
+        }
+      }
+    }
+    final String? finalText = getTextFromContent(content.finalResponse);
+    if (finalText != null && finalText.isNotEmpty) {
+      texts.add(finalText);
+    }
+    if (texts.isEmpty) {
+      return '';
+    }
+    return texts.join('\n');
   }
-  return textParts.join('\n');
+  if (content is Content) {
+    if (content.parts.isEmpty) {
+      return null;
+    }
+    final List<String> textParts = <String>[];
+    bool sawThoughtPart = false;
+    for (final Part part in content.parts) {
+      if (part.thought) {
+        sawThoughtPart = true;
+        continue;
+      }
+      final String text = part.text ?? '';
+      if (text.isNotEmpty) {
+        textParts.add(text);
+      }
+    }
+    if (textParts.isEmpty) {
+      return sawThoughtPart ? '' : null;
+    }
+    return textParts.join('\n');
+  }
+  if (content is Map) {
+    final EvalJsonMap map = asEvalJson(content);
+    final List<Object?> rawParts = asObjectList(map['parts']);
+    if (rawParts.isEmpty) {
+      return null;
+    }
+    final List<String> textParts = <String>[];
+    bool sawThoughtPart = false;
+    for (final Object? rawPart in rawParts) {
+      final EvalJsonMap partMap = asEvalJson(rawPart);
+      if (partMap['thought'] == true) {
+        sawThoughtPart = true;
+        continue;
+      }
+      final String text = asNullableString(partMap['text']) ?? '';
+      if (text.isNotEmpty) {
+        textParts.add(text);
+      }
+    }
+    if (textParts.isEmpty) {
+      return sawThoughtPart ? '' : null;
+    }
+    return textParts.join('\n');
+  }
+  return null;
 }
 
 /// Returns pass/fail status for [score] against [threshold].

@@ -10,6 +10,7 @@ class AdkTokenUsage {
     this.totalTokens = 0,
     this.thoughtTokens = 0,
     this.cachedTokens = 0,
+    this.cacheCreationTokens = 0,
     this.toolUsePromptTokens = 0,
     this.trafficType,
     this.latencyMs,
@@ -29,6 +30,9 @@ class AdkTokenUsage {
 
   /// Cached context tokens reused from an active context cache (`cachedContentTokenCount`).
   final int cachedTokens;
+
+  /// Input tokens written to create or populate context cache (`cacheCreationTokenCount`).
+  final int cacheCreationTokens;
 
   /// Tokens consumed specifically by tool declarations and tool-use prompts (`toolUsePromptTokenCount`).
   final int toolUsePromptTokens;
@@ -58,6 +62,7 @@ class AdkTokenUsage {
       totalTokens == 0 &&
       thoughtTokens == 0 &&
       cachedTokens == 0 &&
+      cacheCreationTokens == 0 &&
       toolUsePromptTokens == 0;
 
   /// Whether any token counter is greater than zero.
@@ -80,11 +85,15 @@ class AdkTokenUsage {
     double inputPricePerMillion = 0.15,
     double outputPricePerMillion = 0.60,
     double cachedInputPricePerMillion = 0.0375,
+    double cacheWritePricePerMillion = 0.1875,
   }) {
-    final int uncachedPrompt = (promptTokens - cachedTokens).clamp(0, promptTokens);
+    final int uncachedPrompt =
+        (promptTokens - cachedTokens - cacheCreationTokens)
+            .clamp(0, promptTokens);
     final int outputAndThoughts = completionTokens + thoughtTokens;
     return (uncachedPrompt * inputPricePerMillion / 1000000.0) +
         (cachedTokens * cachedInputPricePerMillion / 1000000.0) +
+        (cacheCreationTokens * cacheWritePricePerMillion / 1000000.0) +
         (outputAndThoughts * outputPricePerMillion / 1000000.0);
   }
 
@@ -99,6 +108,7 @@ class AdkTokenUsage {
       totalTokens: effectiveTotalTokens + other.effectiveTotalTokens,
       thoughtTokens: thoughtTokens + other.thoughtTokens,
       cachedTokens: cachedTokens + other.cachedTokens,
+      cacheCreationTokens: cacheCreationTokens + other.cacheCreationTokens,
       toolUsePromptTokens: toolUsePromptTokens + other.toolUsePromptTokens,
       trafficType: other.trafficType ?? trafficType,
       latencyMs: combinedLatency,
@@ -112,6 +122,7 @@ class AdkTokenUsage {
     int? totalTokens,
     int? thoughtTokens,
     int? cachedTokens,
+    int? cacheCreationTokens,
     int? toolUsePromptTokens,
     String? trafficType,
     int? latencyMs,
@@ -122,6 +133,7 @@ class AdkTokenUsage {
       totalTokens: totalTokens ?? this.totalTokens,
       thoughtTokens: thoughtTokens ?? this.thoughtTokens,
       cachedTokens: cachedTokens ?? this.cachedTokens,
+      cacheCreationTokens: cacheCreationTokens ?? this.cacheCreationTokens,
       toolUsePromptTokens: toolUsePromptTokens ?? this.toolUsePromptTokens,
       trafficType: trafficType ?? this.trafficType,
       latencyMs: latencyMs ?? this.latencyMs,
@@ -137,6 +149,7 @@ class AdkTokenUsage {
         other.totalTokens == totalTokens &&
         other.thoughtTokens == thoughtTokens &&
         other.cachedTokens == cachedTokens &&
+        other.cacheCreationTokens == cacheCreationTokens &&
         other.toolUsePromptTokens == toolUsePromptTokens &&
         other.trafficType == trafficType &&
         other.latencyMs == latencyMs;
@@ -149,6 +162,7 @@ class AdkTokenUsage {
         totalTokens,
         thoughtTokens,
         cachedTokens,
+        cacheCreationTokens,
         toolUsePromptTokens,
         trafficType,
         latencyMs,

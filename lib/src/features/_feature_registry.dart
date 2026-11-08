@@ -65,6 +65,9 @@ enum FeatureName {
   /// Filesystem specification (fsspec) artifact service integration.
   fsspecArtifactService('FSSPEC_ARTIFACT_SERVICE'),
 
+  /// Argument validation for function tools.
+  functionToolArgValidation('FUNCTION_TOOL_ARG_VALIDATION'),
+
   /// Google Cloud IAM connector authentication.
   gcpIamConnectorAuth('GCP_IAM_CONNECTOR_AUTH'),
 
@@ -274,6 +277,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         defaultOn: true,
       ),
       FeatureName.fsspecArtifactService: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: false,
+      ),
+      FeatureName.functionToolArgValidation: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: false,
       ),

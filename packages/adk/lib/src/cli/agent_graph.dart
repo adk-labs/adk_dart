@@ -107,9 +107,10 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
       final List<BaseTool> tools = await agent.canonicalTools();
       for (final BaseTool tool in tools) {
         final String toolNodeId = 'tool:${tool.name}';
+        final String toolLabel = tool.displayTitle ?? tool.name;
         final String caption = tool is FunctionTool
-            ? '🔧 ${tool.displayTitle}'
-            : '🧰 ${tool.displayTitle}';
+            ? '🔧 $toolLabel'
+            : '🧰 $toolLabel';
         nodes.putIfAbsent(
           toolNodeId,
           () => AgentGraphNode(id: toolNodeId, caption: caption, kind: 'tool'),
@@ -152,9 +153,10 @@ Future<AgentGraph> buildGraph(BaseAgent rootAgent) async {
         addEdge(nodeId, node.agent.name);
       } else if (node is ToolNode) {
         final String toolNodeId = 'tool:${node.tool.name}';
+        final String toolLabel = node.tool.displayTitle ?? node.tool.name;
         final String caption = node.tool is FunctionTool
-            ? '🔧 ${node.tool.displayTitle}'
-            : '🧰 ${node.tool.displayTitle}';
+            ? '🔧 $toolLabel'
+            : '🧰 $toolLabel';
         nodes.putIfAbsent(
           toolNodeId,
           () => AgentGraphNode(id: toolNodeId, caption: caption, kind: 'tool'),

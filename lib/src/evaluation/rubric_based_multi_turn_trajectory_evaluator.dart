@@ -307,10 +307,17 @@ String? _textFromContent(EvalJsonMap? content) {
   if (content == null) {
     return null;
   }
-  final List<String> parts = asObjectList(content['parts'])
-      .map((Object? part) => asNullableString(asEvalJson(part)['text']) ?? '')
-      .where((String text) => text.isNotEmpty)
-      .toList(growable: false);
+  final List<String> parts = <String>[];
+  for (final Object? rawPart in asObjectList(content['parts'])) {
+    final EvalJsonMap partMap = asEvalJson(rawPart);
+    if (partMap['thought'] == true) {
+      continue;
+    }
+    final String text = asNullableString(partMap['text']) ?? '';
+    if (text.isNotEmpty) {
+      parts.add(text);
+    }
+  }
   return parts.isEmpty ? null : parts.join(' ');
 }
 

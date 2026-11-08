@@ -458,7 +458,7 @@ class FileArtifactService extends BaseArtifactService {
             ? 'application/octet-stream'
             : artifact.inlineData!.mimeType;
       } else if (artifact.text != null) {
-        contentPath.writeAsStringSync(artifact.text!, encoding: utf8);
+        contentPath.writeAsBytesSync(utf8.encode(artifact.text!));
       } else {
         throw InputValidationError(
           'Artifact must have either inline_data or text content.',
@@ -571,7 +571,7 @@ class FileArtifactService extends BaseArtifactService {
     }
 
     try {
-      return Part.text(contentPath.readAsStringSync(encoding: utf8));
+      return Part.text(utf8.decode(contentPath.readAsBytesSync()));
     } on Object {
       return null;
     }

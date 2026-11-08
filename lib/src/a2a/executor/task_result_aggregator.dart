@@ -37,16 +37,17 @@ class TaskResultAggregator {
     if (_isCanceledStatusEvent(event)) {
       _taskState = A2aTaskState.canceled;
       _taskStatusMessage = event.status.message;
-    } else if (event.status.state == A2aTaskState.failed &&
-        _taskState != A2aTaskState.canceled) {
+      _failed = false;
+      _failureMessage = null;
+    } else if (_taskState == A2aTaskState.canceled) {
+      // Canceled is terminal and highest priority.
+    } else if (event.status.state == A2aTaskState.failed) {
       _failed = true;
       _failureMessage = event.status.message;
-    } else if (event.status.state == A2aTaskState.authRequired &&
-        _taskState != A2aTaskState.canceled) {
+    } else if (event.status.state == A2aTaskState.authRequired) {
       _taskState = A2aTaskState.authRequired;
       _taskStatusMessage = event.status.message;
     } else if (event.status.state == A2aTaskState.inputRequired &&
-        _taskState != A2aTaskState.canceled &&
         _taskState != A2aTaskState.authRequired) {
       _taskState = A2aTaskState.inputRequired;
       _taskStatusMessage = event.status.message;
@@ -59,14 +60,28 @@ class TaskResultAggregator {
 
   /// Retains only unresolved failure [messages] after error-recovery tracking.
   void keepFailures(List<A2aMessage?> messages) {
+    if (_taskState == A2aTaskState.canceled) {
+      _failed = false;
+      _failureMessage = null;
+      return;
+    }
     _failed = messages.isNotEmpty;
     _failureMessage = messages.isNotEmpty ? messages.last : null;
   }
 
   /// Aggregated task state.
-  A2aTaskState get taskState => _failed ? A2aTaskState.failed : _taskState;
+  A2aTaskState get taskState {
+    if (_taskState == A2aTaskState.canceled) {
+      return A2aTaskState.canceled;
+    }
+    return _failed ? A2aTaskState.failed : _taskState;
+  }
 
   /// Last observed task status message.
-  A2aMessage? get taskStatusMessage =>
-      _failed ? _failureMessage : _taskStatusMessage;
+  A2aMessage? get taskStatusMessage {
+    if (_taskState == A2aTaskState.canceled) {
+      return _taskStatusMessage;
+    }
+    return _failed ? _failureMessage : _taskStatusMessage;
+  }
 }

@@ -232,7 +232,12 @@ EvalJsonMap? _contentToEvalJson(Content? content) {
   return <String, Object?>{
     if (content.role != null) 'role': content.role,
     'parts': content.parts
-        .map((Part part) => <String, Object?>{'text': part.text ?? ''})
+        .map(
+          (Part part) => <String, Object?>{
+            'text': part.text ?? '',
+            if (part.thought) 'thought': true,
+          },
+        )
         .toList(),
   };
 }

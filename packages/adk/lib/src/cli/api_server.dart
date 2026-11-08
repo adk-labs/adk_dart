@@ -554,6 +554,8 @@ class AdkApiServer extends AdkWebServer {
     super.maxLiveMessageBytes,
     super.liveKeepaliveTimeout,
     super.maxLiveSessions,
+    super.evalSetsManager,
+    super.evalSetResultsManager,
   });
 
   /// Whether internal `__*` special agents are allowed on this server.

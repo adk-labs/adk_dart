@@ -6,6 +6,7 @@ import '../features/_feature_registry.dart';
 import '../integrations/_iam_connectors/gcp_auth_provider.dart';
 import '../integrations/_iam_connectors/gcp_iam_connector_auth.dart';
 import 'auth_credential.dart';
+import 'auth_handler.dart';
 import 'auth_provider_registry.dart';
 import 'auth_tool.dart';
 import 'base_auth_provider.dart';
@@ -143,7 +144,7 @@ class CredentialManager {
     bool wasFromAuthResponse = false;
 
     if (credential == null) {
-      credential = _loadFromAuthResponse(context);
+      credential = await _loadFromAuthResponse(context);
       wasFromAuthResponse = credential != null;
     }
 
@@ -176,7 +177,7 @@ class CredentialManager {
           return null;
         }
         await _saveCredential(context, null);
-        final AuthCredential? fresh = _loadFromAuthResponse(context);
+        final AuthCredential? fresh = await _loadFromAuthResponse(context);
         if (fresh == null || _isSameRevokedCredential(fresh, current)) {
           return null;
         }
@@ -293,14 +294,13 @@ class CredentialManager {
     return serviceObj.loadCredential(_authConfig, context);
   }
 
-  AuthCredential? _loadFromAuthResponse(Context context) {
-    final String key = authResponseStateKey(_authConfig.credentialKey);
-    final Object? value =
-        context.state[key] ?? context.state[_authConfig.credentialKey];
-    if (value is! AuthCredential) {
-      return null;
-    }
-    return value.copyWith();
+  Future<AuthCredential?> _loadFromAuthResponse(Context context) async {
+    return AuthHandler(
+      authConfig: _authConfig,
+      oauth2Exchanger: _exchangerRegistry.getExchanger(
+        AuthCredentialType.oauth2,
+      ),
+    ).getAuthResponseAsync(context.state);
   }
 
   Future<void> _saveCredential(
@@ -316,8 +316,12 @@ class CredentialManager {
     }
 
     if (credential != null) {
+      final AuthCredential sanitized = credential.copyWith();
+      if (sanitized.oauth2 != null) {
+        sanitized.oauth2!.clientSecret = null;
+      }
       context.state[authResponseStateKey(_authConfig.credentialKey)] =
-          credential.copyWith();
+          sanitized;
     }
   }
 

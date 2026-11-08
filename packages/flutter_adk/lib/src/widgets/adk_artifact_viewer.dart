@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/adk_ui_utils.dart';
+
 /// Data model representing an artifact generated or manipulated during an ADK session.
 @immutable
 class AdkArtifactItem {
@@ -17,7 +19,7 @@ class AdkArtifactItem {
   /// The unique name / filename of the artifact (e.g. `report.md`, `chart.json`).
   final String name;
 
-  /// String content of the artifact if text-based.
+  /// String content of the artifact if text-based (plain text or `data:` URL).
   final String? content;
 
   /// MIME type of the artifact (e.g. `text/markdown`, `application/json`).
@@ -31,6 +33,19 @@ class AdkArtifactItem {
 
   /// Custom metadata map.
   final Map<String, dynamic> metadata;
+
+  /// Decodes [content] if it is a `data:` URL using UTF-8 decoding, or returns [content] directly.
+  String? get resolvedTextContent {
+    final String? raw = content;
+    if (raw == null) return null;
+    if (raw.startsWith('data:')) {
+      return AdkFormatters.decodeDataUrlTextUtf8(raw);
+    }
+    return raw;
+  }
+
+  /// URL-encoded filename safe for artifact download/API paths.
+  String get encodedFilename => AdkFormatters.encodeArtifactFilename(name);
 
   /// Guesses whether the artifact is code or structured data based on name.
   bool get isCodeOrJson {
@@ -201,7 +216,7 @@ class _AdkArtifactViewerState extends State<AdkArtifactViewer> {
   bool _copied = false;
 
   void _copyContent() async {
-    final String content = widget.artifact.content ?? '';
+    final String content = widget.artifact.resolvedTextContent ?? '';
     if (mounted) setState(() => _copied = true);
     await Clipboard.setData(ClipboardData(text: content));
     Future<void>.delayed(const Duration(seconds: 2), () {
@@ -212,7 +227,8 @@ class _AdkArtifactViewerState extends State<AdkArtifactViewer> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final String content = widget.artifact.content ?? 'No content available.';
+    final String content =
+        widget.artifact.resolvedTextContent ?? 'No content available.';
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),

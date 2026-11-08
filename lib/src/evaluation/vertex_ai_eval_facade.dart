@@ -295,6 +295,54 @@ class MultiTurnVertexAiEvalFacade extends Evaluator {
     }
     return score >= _threshold ? EvalStatus.passed : EvalStatus.failed;
   }
+
+  /// Maps [invocation] at [turnIndex] into a multi-turn Vertex AI Eval turn
+  /// while keeping `thought` parts intact on intermediate and final events.
+  Map<String, Object?> mapInvocationTurn(
+    int turnIndex,
+    Invocation invocation,
+  ) {
+    final List<Map<String, Object?>> events = <Map<String, Object?>>[
+      Map<String, Object?>.from(invocation.userContent),
+    ];
+    if (invocation.intermediateData is InvocationEvents) {
+      final InvocationEvents intermediate =
+          invocation.intermediateData! as InvocationEvents;
+      for (final InvocationEvent event in intermediate.invocationEvents) {
+        if (event.content != null) {
+          events.add(Map<String, Object?>.from(event.content!));
+        }
+      }
+    } else if (invocation.intermediateData is IntermediateData) {
+      final IntermediateData intermediate =
+          invocation.intermediateData! as IntermediateData;
+      for (final Map<String, Object?> toolUse in intermediate.toolUses) {
+        events.add(<String, Object?>{
+          'role': 'model',
+          'parts': <Map<String, Object?>>[
+            <String, Object?>{'function_call': toolUse},
+          ],
+        });
+      }
+      for (final InvocationResponse intermediateResponse
+          in intermediate.intermediateResponses) {
+        events.add(<String, Object?>{
+          'role': 'model',
+          'parts': intermediateResponse.parts,
+        });
+      }
+    }
+    if (invocation.finalResponse != null) {
+      events.add(Map<String, Object?>.from(invocation.finalResponse!));
+    }
+    return <String, Object?>{
+      'turn_index': turnIndex,
+      'turn_id': invocation.invocationId.isEmpty
+          ? '$turnIndex'
+          : invocation.invocationId,
+      'events': events,
+    };
+  }
 }
 
 String _serializeConversation(

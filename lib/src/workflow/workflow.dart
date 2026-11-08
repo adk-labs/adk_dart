@@ -1073,6 +1073,7 @@ FunctionNode node(
   String description = '',
   List<String>? dependsOn,
   bool? rerunOnResume,
+  bool? waitForOutput,
   RetryConfig? retryConfig,
   Duration? timeout,
   Object? outputSchema,
@@ -1084,6 +1085,7 @@ FunctionNode node(
         description: description,
         dependsOn: dependsOn,
         rerunOnResume: rerunOnResume,
+        waitForOutput: waitForOutput,
         retryConfig: retryConfig,
         timeout: timeout,
         outputSchema: outputSchema,
@@ -1943,10 +1945,17 @@ class Workflow extends BaseAgent {
       yield event;
     }
 
+    final Map<String, BaseNode> byName = <String, BaseNode>{
+      for (final BaseNode node in nodes) node.name: node,
+    };
     final Set<String> outputKeys = <String>{
       ...workflowContext.outputs.keys,
       ...workflowContext._nodeEvents.keys,
       ...workflowContext._nodeOutputEvents.keys,
+      for (final MapEntry<String, NodeState> entry
+          in workflowContext.nodeStates.entries)
+        if (_isWaitingForPredecessorTrigger(entry.value, byName[entry.key]))
+          entry.key,
     };
     for (final String key in outputKeys) {
       if (key == START) {
@@ -1982,6 +1991,22 @@ class Workflow extends BaseAgent {
       );
       if (event != null) {
         yield event;
+      } else if (_isWaitingForPredecessorTrigger(
+            workflowContext.nodeStates[key],
+            byName[key],
+          ) &&
+          previousResult?.nodeStates[key]?.status != NodeStatus.waiting) {
+        yield Event(
+          invocationId: context.invocationId,
+          author: key,
+          branch: workflowContext.nodeStates[key]?.branch ?? context.branch,
+          isolationScope: context.isolationScope,
+          nodeInfo: _nodeInfoForOutput(
+            context,
+            key,
+            outputForKeys: workflowContext.nodeStates[key]?.outputFor,
+          ),
+        );
       }
     }
   }
@@ -1998,6 +2023,7 @@ class Workflow extends BaseAgent {
     final Map<String, Set<String>> edgePredecessors = _edgePredecessors(byName);
     final Map<String, Set<String>> reachableFrom = _reachableFrom(byName);
     final Map<String, Set<String>> joinArrivals = <String, Set<String>>{};
+    final Map<String, List<Object?>> triggerBuffer = <String, List<Object?>>{};
     _seedResumeInputs(context, byName);
     final Set<String> completed = <String>{
       START,
@@ -2007,20 +2033,43 @@ class Workflow extends BaseAgent {
           entry.key,
     };
     context.outputs[START] = context.input;
-    final Set<String> pending = <String>{
-      for (final String name in byName.keys)
-        if (!completed.contains(name) &&
-            !_hasUnresolvedWaitingInterrupts(
-              context.nodeStates[name],
-              rerunOnResume:
-                  (byName[name]?.rerunOnResume ?? false) &&
-                  context.nodeStates.values.any(
-                    (NodeState s) =>
-                        s.parentKey == name && s.interrupts.isNotEmpty,
-                  ),
-            ))
-          name,
-    };
+    final Set<String> pending = <String>{};
+    for (final String name in byName.keys) {
+      if (completed.contains(name)) {
+        continue;
+      }
+      final BaseNode node = byName[name]!;
+      final NodeState? state = context.nodeStates[name];
+      if (_hasUnresolvedWaitingInterrupts(
+        state,
+        rerunOnResume:
+            node.rerunOnResume &&
+            context.nodeStates.values.any(
+              (NodeState s) => s.parentKey == name && s.interrupts.isNotEmpty,
+            ),
+      )) {
+        continue;
+      }
+      if (_isWaitingForPredecessorTrigger(state, node)) {
+        continue;
+      }
+      if (_usesTriggerBuffer(node, edgePredecessors)) {
+        final bool isInactive =
+            state == null || state.status == NodeStatus.inactive;
+        if (isInactive && dependencies[name]!.contains(START)) {
+          triggerBuffer.putIfAbsent(name, () => <Object?>[]).add(
+            context.outputs[START],
+          );
+          pending.add(name);
+        } else if (state?.status == NodeStatus.waiting &&
+            (_rerunsWhileWaiting(node) || state!.resumeInputs.isNotEmpty)) {
+          triggerBuffer.putIfAbsent(name, () => <Object?>[]).add(state?.input);
+          pending.add(name);
+        }
+        continue;
+      }
+      pending.add(name);
+    }
     final Set<String> active = edges.isEmpty
         ? byName.keys.toSet()
         : _initialActiveNodes(byName);
@@ -2029,6 +2078,7 @@ class Workflow extends BaseAgent {
         continue;
       }
       final Set<String> activatedTargets = _activateDownstream(
+        context: context,
         fromNode: completedNode,
         route: context.nodeStates[completedNode]?.route,
         active: active,
@@ -2037,6 +2087,7 @@ class Workflow extends BaseAgent {
         edgePredecessors: edgePredecessors,
         reachableFrom: reachableFrom,
         joinArrivals: joinArrivals,
+        triggerBuffer: triggerBuffer,
         completed: completed,
         pending: pending,
         reactivateCompleted: false,
@@ -2055,6 +2106,7 @@ class Workflow extends BaseAgent {
         edgePredecessors: edgePredecessors,
         reachableFrom: reachableFrom,
         joinArrivals: joinArrivals,
+        triggerBuffer: triggerBuffer,
         pending: pending,
         completed: completed,
         active: active,
@@ -2087,6 +2139,7 @@ class Workflow extends BaseAgent {
                   edgePredecessors: edgePredecessors,
                   reachableFrom: reachableFrom,
                   joinArrivals: joinArrivals,
+                  triggerBuffer: triggerBuffer,
                   active: active,
                   pending: pending,
                   completed: completed,
@@ -2125,6 +2178,7 @@ class Workflow extends BaseAgent {
                     context: context,
                     byName: byName,
                     dependencies: dependencies,
+                    triggerBuffer: triggerBuffer,
                     name: name,
                   ).then(
                     (_NodeRunResult result) => _TaskOutcome.success(result),
@@ -2151,10 +2205,15 @@ class Workflow extends BaseAgent {
         final _NodeRunResult result = outcome.result!;
         final bool completedNode = _recordNodeResult(context, result);
         if (!completedNode) {
+          if (result.interruptIds.isEmpty &&
+              (triggerBuffer[result.name]?.isNotEmpty ?? false)) {
+            pending.add(result.name);
+          }
           continue;
         }
         completed.add(result.name);
         final Set<String> activatedTargets = _activateDownstream(
+          context: context,
           fromNode: result.name,
           route: result.route,
           active: active,
@@ -2163,6 +2222,7 @@ class Workflow extends BaseAgent {
           edgePredecessors: edgePredecessors,
           reachableFrom: reachableFrom,
           joinArrivals: joinArrivals,
+          triggerBuffer: triggerBuffer,
           completed: completed,
           pending: pending,
           reactivateCompleted: true,
@@ -2193,6 +2253,7 @@ class Workflow extends BaseAgent {
     required Map<String, Set<String>> edgePredecessors,
     required Map<String, Set<String>> reachableFrom,
     required Map<String, Set<String>> joinArrivals,
+    required Map<String, List<Object?>> triggerBuffer,
     required Set<String> pending,
     required Set<String> completed,
     required Set<String> active,
@@ -2228,6 +2289,7 @@ class Workflow extends BaseAgent {
                     edgePredecessors: edgePredecessors,
                     reachableFrom: reachableFrom,
                     joinArrivals: joinArrivals,
+                    triggerBuffer: triggerBuffer,
                     active: active,
                     pending: pending,
                     completed: completed,
@@ -2269,6 +2331,7 @@ class Workflow extends BaseAgent {
                 context: context,
                 byName: byName,
                 dependencies: dependencies,
+                triggerBuffer: triggerBuffer,
                 name: name,
               ).then(
                 (_NodeRunResult result) => _TaskOutcome.success(result),
@@ -2305,10 +2368,15 @@ class Workflow extends BaseAgent {
       final _NodeRunResult result = outcome.result!;
       final bool completedNode = _recordNodeResult(context, result);
       if (!completedNode) {
+        if (result.interruptIds.isEmpty &&
+            (triggerBuffer[result.name]?.isNotEmpty ?? false)) {
+          pending.add(result.name);
+        }
         continue;
       }
       completed.add(result.name);
       final Set<String> activatedTargets = _activateDownstream(
+        context: context,
         fromNode: result.name,
         route: result.route,
         active: active,
@@ -2317,6 +2385,7 @@ class Workflow extends BaseAgent {
         edgePredecessors: edgePredecessors,
         reachableFrom: reachableFrom,
         joinArrivals: joinArrivals,
+        triggerBuffer: triggerBuffer,
         completed: completed,
         pending: pending,
         reactivateCompleted: true,
@@ -2377,6 +2446,7 @@ class Workflow extends BaseAgent {
     required Map<String, Set<String>> edgePredecessors,
     required Map<String, Set<String>> reachableFrom,
     required Map<String, Set<String>> joinArrivals,
+    required Map<String, List<Object?>> triggerBuffer,
     required Set<String> active,
     required Set<String> pending,
     required Set<String> completed,
@@ -2386,6 +2456,10 @@ class Workflow extends BaseAgent {
       return false;
     }
     final BaseNode node = byName[name]!;
+    if (_usesTriggerBuffer(node, edgePredecessors)) {
+      return !running.containsKey(name) &&
+          (triggerBuffer[name]?.isNotEmpty ?? false);
+    }
     if (node.requiresAllPredecessors) {
       final Set<String> arrivals = joinArrivals[name] ?? const <String>{};
       final Set<String> edgePreds = edgePredecessors[name] ?? const <String>{};
@@ -2457,17 +2531,22 @@ class Workflow extends BaseAgent {
     required WorkflowContext context,
     required Map<String, BaseNode> byName,
     required Map<String, Set<String>> dependencies,
+    required Map<String, List<Object?>> triggerBuffer,
     required String name,
   }) async {
     final BaseNode node = byName[name]!;
     if (node is RequestInput) {
       context.requestInputNodeKeys.add(name);
     }
-    final Object? nodeInput = _nodeInput(
-      context: context,
-      dependencies: dependencies[name]!,
-      node: node,
-    );
+    final List<Object?>? queuedTriggers = triggerBuffer[name];
+    final Object? nodeInput =
+        (queuedTriggers != null && queuedTriggers.isNotEmpty)
+        ? queuedTriggers.removeAt(0)
+        : _nodeInput(
+            context: context,
+            dependencies: dependencies[name]!,
+            node: node,
+          );
     final NodeState? state = context.nodeStates[name];
     final WorkflowContext nodeContext = context._childExecutionContext(
       resumeInputs: state?.resumeInputs.isNotEmpty == true
@@ -2582,6 +2661,7 @@ class Workflow extends BaseAgent {
   }
 
   Set<String> _activateDownstream({
+    required WorkflowContext context,
     required String fromNode,
     required Object? route,
     required Set<String> active,
@@ -2590,6 +2670,7 @@ class Workflow extends BaseAgent {
     required Map<String, Set<String>> edgePredecessors,
     required Map<String, Set<String>> reachableFrom,
     required Map<String, Set<String>> joinArrivals,
+    required Map<String, List<Object?>> triggerBuffer,
     required Set<String> completed,
     required Set<String> pending,
     required bool reactivateCompleted,
@@ -2620,6 +2701,19 @@ class Workflow extends BaseAgent {
     for (final String target in activatedTargets) {
       final BaseNode? targetNode = byName[target];
       if (targetNode == null) {
+        continue;
+      }
+      if (_usesTriggerBuffer(targetNode, edgePredecessors)) {
+        final NodeState? targetState = context.nodeStates[target];
+        final bool isTargetInactive =
+            targetState == null || targetState.status == NodeStatus.inactive;
+        if (reactivateCompleted || isTargetInactive) {
+          triggerBuffer.putIfAbsent(target, () => <Object?>[]).add(
+            context.outputs[fromNode],
+          );
+          completed.remove(target);
+          pending.add(target);
+        }
         continue;
       }
       if (targetNode.requiresAllPredecessors) {
@@ -2780,7 +2874,13 @@ WorkflowResult? _rehydratedResultForContext(
   Workflow workflow,
   InvocationContext context,
 ) {
-  if (!context.isResumable) {
+  final bool hasUserFunctionResponse = context.session.events.any(
+    (Event event) =>
+        event.invocationId == context.invocationId &&
+        event.author == 'user' &&
+        event.getFunctionResponses().isNotEmpty,
+  );
+  if (!context.isResumable && !hasUserFunctionResponse) {
     return null;
   }
   final String rootPath = _workflowRootPath(workflow, context);
@@ -3032,7 +3132,13 @@ Future<Object?> _runNodeWithRetry({
   context._currentNodeKey = key;
   context._currentNodeRerunOnResume = node.rerunOnResume;
   state.input = nodeInput;
-  if (state.status == NodeStatus.inactive || state.runId == null) {
+  if (state.status == NodeStatus.inactive ||
+      state.runId == null ||
+      (node.waitForOutput &&
+          !_rerunsWhileWaiting(node) &&
+          state.status == NodeStatus.waiting &&
+          state.interrupts.isEmpty &&
+          state.resumeInputs.isEmpty)) {
     state.runCounter += 1;
     state.runId = runId ?? '${state.runCounter}';
   }
@@ -3448,7 +3554,10 @@ WorkflowResult _workflowResultFromEvents(
       state.runId = owner.runId;
       if (newCounter > prevCounter) {
         state.runCounter = newCounter;
-        if (prevCounter > 0 && staticNodes.containsKey(owner.key)) {
+        final BaseNode? ownerStaticNode = staticNodes[owner.key];
+        if (prevCounter > 0 &&
+            ownerStaticNode != null &&
+            !ownerStaticNode.waitForOutput) {
           // A static node started a new loop iteration: invalidate older
           // completed static nodes so downstream nodes re-run on resume.
           for (final MapEntry<String, NodeState> entry in states.entries) {
@@ -3543,6 +3652,8 @@ WorkflowResult _workflowResultFromEvents(
           state.resumeInputs.clear();
           outputs.remove(owner.key);
           resumedWaitingNodes.remove(owner.key);
+        } else {
+          state.status = NodeStatus.waiting;
         }
       }
       continue;
@@ -4061,6 +4172,33 @@ Object? _cloneNodeInputForAttempt(Object? input) {
 bool _isCompletedNodeState(NodeState state) {
   return state.status == NodeStatus.completed ||
       state.status == NodeStatus.succeeded;
+}
+
+bool _rerunsWhileWaiting(BaseNode node) {
+  return node.rerunOnResume || node is AgentNode || node is BaseAgent;
+}
+
+bool _isWaitingForPredecessorTrigger(NodeState? state, BaseNode? node) {
+  if (state == null || node == null) {
+    return false;
+  }
+  if (state.status != NodeStatus.waiting) {
+    return false;
+  }
+  if (state.interrupts.isNotEmpty || state.resumeInputs.isNotEmpty) {
+    return false;
+  }
+  return node.waitForOutput && !_rerunsWhileWaiting(node);
+}
+
+bool _usesTriggerBuffer(
+  BaseNode node,
+  Map<String, Set<String>> edgePredecessors,
+) {
+  return node.waitForOutput &&
+      !node.requiresAllPredecessors &&
+      node.dependsOn.isEmpty &&
+      (edgePredecessors[node.name]?.isNotEmpty ?? false);
 }
 
 bool _hasUnresolvedWaitingInterrupts(

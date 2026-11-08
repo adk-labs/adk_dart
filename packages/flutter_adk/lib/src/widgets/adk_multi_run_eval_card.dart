@@ -13,13 +13,14 @@ class AdkMultiRunMetricSummary {
     this.value,
     this.threshold,
     this.passed = true,
+    this.isInformational = false,
     this.note,
   });
 
   /// Name of the evaluated metric.
   final String metricName;
 
-  /// Aggregation method name (for example `'mean_over_invocations'`, `'mean_of_runs'`, `'min_over_runs'`).
+  /// Aggregation method name (for example `'mean_over_invocations'`, `'mean_of_runs'`, `'min_over_runs'`, `'pass_at_k'`, `'pass_hat_k'`).
   final String methodName;
 
   /// Aggregated score value, if evaluated.
@@ -31,8 +32,22 @@ class AdkMultiRunMetricSummary {
   /// Whether this aggregated metric passed its threshold.
   final bool passed;
 
+  /// Whether this metric was evaluated in report-only / informational mode (no threshold).
+  final bool isInformational;
+
   /// Optional human-readable breakdown note.
   final String? note;
+
+  /// Human-friendly label for [methodName], formatting `'pass_at_k'` as `'pass@k'` and `'pass_hat_k'` as `'pass^k'`.
+  String get displayMethodName {
+    if (methodName == 'pass_at_k') {
+      return 'pass@k';
+    }
+    if (methodName == 'pass_hat_k') {
+      return 'pass^k';
+    }
+    return methodName;
+  }
 }
 
 /// Summary of a single evaluation case executed across multiple repetitions.
@@ -60,16 +75,19 @@ class AdkMultiRunCaseSummary {
       evalId: result.evalId,
       totalRuns: total,
       passedRuns: passedCount,
-      passed: result.finalEvalStatus == core.EvalStatus.passed,
+      passed: result.finalEvalStatus == core.EvalStatus.passed ||
+          result.finalEvalStatus == core.EvalStatus.informational,
       metrics: result.metricMethods.entries.map((
         MapEntry<String, core.MethodResult> e,
       ) {
+        final bool isInfo = e.value.status == core.EvalStatus.informational;
         return AdkMultiRunMetricSummary(
           metricName: e.key,
           methodName: e.value.name,
           value: e.value.value,
           threshold: e.value.threshold,
-          passed: e.value.status == core.EvalStatus.passed,
+          passed: e.value.status == core.EvalStatus.passed || isInfo,
+          isInformational: isInfo,
           note: e.value.note,
         );
       }).toList(),
@@ -340,17 +358,20 @@ class AdkMultiRunEvalCard extends StatelessWidget {
                 final String valStr = m.value != null
                     ? m.value!.toStringAsFixed(2)
                     : 'N/A';
+                final String statusSuffix = m.isInformational ? ' [INFO]' : '';
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6.0,
                     vertical: 2.0,
                   ),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
+                    color: m.isInformational
+                        ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.6)
+                        : theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(6.0),
                   ),
                   child: Text(
-                    '${m.metricName} (${m.methodName}): $valStr',
+                    '${m.metricName} (${m.displayMethodName}): $valStr$statusSuffix',
                     style: effectiveStyle?.codeStyle ??
                         theme.textTheme.labelSmall?.copyWith(
                           fontFamily: 'monospace',

@@ -16,11 +16,13 @@ class AdkUsageMonitorCard extends StatelessWidget {
     this.inputPricePerMillion = 0.15,
     this.outputPricePerMillion = 0.60,
     this.cachedInputPricePerMillion = 0.0375,
+    this.cacheWritePricePerMillion = 0.1875,
     this.showCostEstimate = true,
     this.onReset,
     this.style,
     this.promptColor,
     this.cachedColor,
+    this.cacheCreationColor,
     this.completionColor,
     this.thoughtColor,
     this.leadingIcon,
@@ -52,6 +54,9 @@ class AdkUsageMonitorCard extends StatelessWidget {
   /// Price in USD per 1M cached input tokens.
   final double cachedInputPricePerMillion;
 
+  /// Price in USD per 1M cache creation (write) input tokens.
+  final double cacheWritePricePerMillion;
+
   /// Whether to compute and display the estimated USD cost.
   final bool showCostEstimate;
 
@@ -66,6 +71,9 @@ class AdkUsageMonitorCard extends StatelessWidget {
 
   /// Custom color for cached tokens in the stacked bar and legend.
   final Color? cachedColor;
+
+  /// Custom color for cache creation (write) tokens in the stacked bar and legend.
+  final Color? cacheCreationColor;
 
   /// Custom color for output completion tokens in the stacked bar and legend.
   final Color? completionColor;
@@ -106,16 +114,20 @@ class AdkUsageMonitorCard extends StatelessWidget {
         style;
     final int total = usage.effectiveTotalTokens;
     final int uncachedPrompt =
-        (usage.promptTokens - usage.cachedTokens).clamp(0, usage.promptTokens);
+        (usage.promptTokens - usage.cachedTokens - usage.cacheCreationTokens)
+            .clamp(0, usage.promptTokens);
     final double costUsd = usage.estimateCostUsd(
       inputPricePerMillion: inputPricePerMillion,
       outputPricePerMillion: outputPricePerMillion,
       cachedInputPricePerMillion: cachedInputPricePerMillion,
+      cacheWritePricePerMillion: cacheWritePricePerMillion,
     );
 
     final Color effectivePromptColor =
         promptColor ?? effectiveStyle?.accentColor ?? theme.colorScheme.primary;
     final Color effectiveCachedColor = cachedColor ?? Colors.amber.shade700;
+    final Color effectiveCacheCreationColor =
+        cacheCreationColor ?? Colors.orange.shade600;
     final Color effectiveCompletionColor =
         completionColor ?? Colors.teal.shade600;
     final Color effectiveThoughtColor =
@@ -230,6 +242,17 @@ class AdkUsageMonitorCard extends StatelessWidget {
                     subvalue:
                         '${AdkFormatters.formatTokens(usage.cachedTokens, compact: true)} cached',
                   ),
+                if (usage.cacheCreationTokens > 0)
+                  _buildSummaryKpi(
+                    theme,
+                    effectiveStyle,
+                    label: 'Cache Write',
+                    value: AdkFormatters.formatTokens(
+                      usage.cacheCreationTokens,
+                      compact: true,
+                    ),
+                    subvalue: '${usage.cacheCreationTokens} tok',
+                  ),
                 if (usage.latencyMs != null)
                   _buildSummaryKpi(
                     theme,
@@ -251,10 +274,12 @@ class AdkUsageMonitorCard extends StatelessWidget {
               total: total,
               uncachedPrompt: uncachedPrompt,
               cached: usage.cachedTokens,
+              cacheCreation: usage.cacheCreationTokens,
               completion: usage.completionTokens,
               thought: usage.thoughtTokens,
               promptColor: effectivePromptColor,
               cachedColor: effectiveCachedColor,
+              cacheCreationColor: effectiveCacheCreationColor,
               completionColor: effectiveCompletionColor,
               thoughtColor: effectiveThoughtColor,
             ),
@@ -280,6 +305,14 @@ class AdkUsageMonitorCard extends StatelessWidget {
                     color: effectiveCachedColor,
                     label: 'Cached',
                     tokens: usage.cachedTokens,
+                  ),
+                if (usage.cacheCreationTokens > 0)
+                  _buildLegendDot(
+                    theme,
+                    effectiveStyle,
+                    color: effectiveCacheCreationColor,
+                    label: 'Cache Write',
+                    tokens: usage.cacheCreationTokens,
                   ),
                 _buildLegendDot(
                   theme,
@@ -355,10 +388,12 @@ class AdkUsageMonitorCard extends StatelessWidget {
     required int total,
     required int uncachedPrompt,
     required int cached,
+    required int cacheCreation,
     required int completion,
     required int thought,
     required Color promptColor,
     required Color cachedColor,
+    required Color cacheCreationColor,
     required Color completionColor,
     required Color thoughtColor,
   }) {
@@ -387,6 +422,11 @@ class AdkUsageMonitorCard extends StatelessWidget {
               Expanded(
                 flex: cached,
                 child: ColoredBox(color: cachedColor),
+              ),
+            if (cacheCreation > 0)
+              Expanded(
+                flex: cacheCreation,
+                child: ColoredBox(color: cacheCreationColor),
               ),
             if (completion > 0)
               Expanded(

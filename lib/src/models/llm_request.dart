@@ -5,6 +5,7 @@ import 'dart:developer' as developer;
 
 import '../tools/base_tool.dart';
 import '../types/content.dart';
+import 'generate_content_body.dart' as body_converter;
 
 ToolDeclaration? _findToolWithFunctionDeclarations(LlmRequest request) {
   final List<ToolDeclaration>? tools = request.config.tools;
@@ -341,6 +342,22 @@ class GenerateContentConfig {
     this.cachedContent,
     this.httpOptions,
     Map<String, String>? labels,
+    this.safetySettings,
+    this.shouldReturnHttpResponse,
+    this.routingConfig,
+    this.modelSelectionConfig,
+    this.mediaResolution,
+    this.audioTimestamp,
+    this.imageConfig,
+    this.modelArmorConfig,
+    this.serviceTier,
+    this.audioTranscriptionConfig,
+    this.continuationToken,
+    this.automaticContinuation,
+    this.generationOutputConfig,
+    this.enableEnhancedCivicAnswers,
+    this.store,
+    this.enableAffectiveDialog,
   }) : stopSequences = stopSequences ?? <String>[],
        labels = labels ?? <String, String>{};
 
@@ -415,6 +432,54 @@ class GenerateContentConfig {
 
   /// Provider labels attached to this request.
   Map<String, String> labels;
+
+  /// Safety filter settings for model generation.
+  List<Object?>? safetySettings;
+
+  /// Client-only flag controlling whether raw HTTP responses are returned.
+  bool? shouldReturnHttpResponse;
+
+  /// Vertex AI model routing configuration.
+  Object? routingConfig;
+
+  /// Vertex AI model selection configuration.
+  Object? modelSelectionConfig;
+
+  /// Media resolution preference for multimodal inputs.
+  Object? mediaResolution;
+
+  /// Whether audio timestamps should be included in the response (Vertex AI).
+  bool? audioTimestamp;
+
+  /// Image generation/output configuration.
+  Object? imageConfig;
+
+  /// Vertex AI Model Armor configuration.
+  Object? modelArmorConfig;
+
+  /// Serving tier for this request.
+  Object? serviceTier;
+
+  /// Vertex AI audio transcription configuration.
+  Object? audioTranscriptionConfig;
+
+  /// Vertex AI continuation token for multi-part generation.
+  Object? continuationToken;
+
+  /// Client-only flag for automatic continuation.
+  bool? automaticContinuation;
+
+  /// Vertex AI generation output configuration (`outputConfig` on the wire).
+  Object? generationOutputConfig;
+
+  /// Whether enhanced civic answers are enabled (Gemini Developer API only).
+  bool? enableEnhancedCivicAnswers;
+
+  /// Whether to store the request/response (Gemini Developer API only).
+  bool? store;
+
+  /// Whether affective dialog behavior is enabled.
+  bool? enableAffectiveDialog;
 
   /// Returns a copy of this generation configuration.
   GenerateContentConfig copyWith({
@@ -508,6 +573,24 @@ class GenerateContentConfig {
           ? this.httpOptions?.copyWith()
           : httpOptions as HttpOptions?,
       labels: labels ?? Map<String, String>.from(this.labels),
+      safetySettings: safetySettings == null
+          ? null
+          : List<Object?>.from(safetySettings!),
+      shouldReturnHttpResponse: shouldReturnHttpResponse,
+      routingConfig: routingConfig,
+      modelSelectionConfig: modelSelectionConfig,
+      mediaResolution: mediaResolution,
+      audioTimestamp: audioTimestamp,
+      imageConfig: imageConfig,
+      modelArmorConfig: modelArmorConfig,
+      serviceTier: serviceTier,
+      audioTranscriptionConfig: audioTranscriptionConfig,
+      continuationToken: continuationToken,
+      automaticContinuation: automaticContinuation,
+      generationOutputConfig: generationOutputConfig,
+      enableEnhancedCivicAnswers: enableEnhancedCivicAnswers,
+      store: store,
+      enableAffectiveDialog: enableAffectiveDialog,
     );
   }
 }
@@ -872,6 +955,21 @@ class LlmRequest {
 
     developer.log('Sanitized request for model call.', name: 'adk_dart.models');
     return clone;
+  }
+
+  /// Converts this request into a Gemini / Vertex AI `generateContent` JSON
+  /// request body.
+  Map<String, dynamic> toGenerateContentBody({
+    bool? vertexai,
+    Object? apiClient,
+    Map<String, String>? environment,
+  }) {
+    return body_converter.toGenerateContentBody(
+      this,
+      vertexai: vertexai,
+      apiClient: apiClient,
+      environment: environment,
+    );
   }
 }
 

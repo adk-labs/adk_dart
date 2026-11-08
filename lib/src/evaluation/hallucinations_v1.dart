@@ -429,7 +429,7 @@ class HallucinationsV1Evaluator extends Evaluator {
 
       final List<EvalJsonMap> toolCalls = <EvalJsonMap>[];
       final List<EvalJsonMap> toolResponses = <EvalJsonMap>[];
-      final List<String> nlResponses = <String>[];
+      final String? nlResponse = getTextFromContent(content);
 
       for (final Object? rawPart in asObjectList(content['parts'])) {
         final EvalJsonMap part = asEvalJson(rawPart);
@@ -450,16 +450,10 @@ class HallucinationsV1Evaluator extends Evaluator {
         if (functionResponse != null && functionResponse.isNotEmpty) {
           toolResponses.add(functionResponse);
         }
-
-        final String? text = asNullableString(part['text']);
-        final bool isThought = part['thought'] == true;
-        if (!isThought && text != null && text.isNotEmpty) {
-          nlResponses.add(text);
-        }
       }
 
-      if (nlResponses.isNotEmpty) {
-        contextParts.add('${nlResponses.join('\n')}\n');
+      if (nlResponse != null && nlResponse.isNotEmpty) {
+        contextParts.add('$nlResponse\n');
       }
       if (toolCalls.isNotEmpty) {
         contextParts.add('tool_calls:');
@@ -645,7 +639,10 @@ EvalJsonMap? _contentToEvalJson(Content? content) {
           },
         };
       }
-      return <String, Object?>{'text': part.text ?? ''};
+      return <String, Object?>{
+        'text': part.text ?? '',
+        if (part.thought) 'thought': true,
+      };
     }).toList(),
   };
 }

@@ -14,6 +14,7 @@ class AdkTokenUsageBadge extends StatelessWidget {
     this.totalTokens,
     this.thoughtTokens = 0,
     this.cachedTokens = 0,
+    this.cacheCreationTokens = 0,
     this.latencyMs,
     this.estimatedCost,
     this.compact = false,
@@ -56,6 +57,7 @@ class AdkTokenUsageBadge extends StatelessWidget {
       totalTokens: usage.effectiveTotalTokens,
       thoughtTokens: usage.thoughtTokens,
       cachedTokens: usage.cachedTokens,
+      cacheCreationTokens: usage.cacheCreationTokens,
       latencyMs: usage.latencyMs,
       estimatedCost: estimatedCost,
       compact: compact,
@@ -87,6 +89,9 @@ class AdkTokenUsageBadge extends StatelessWidget {
 
   /// Number of cached context tokens reused.
   final int cachedTokens;
+
+  /// Number of input tokens written to create or populate context cache.
+  final int cacheCreationTokens;
 
   /// Optional generation latency in milliseconds.
   final int? latencyMs;
@@ -147,6 +152,7 @@ class AdkTokenUsageBadge extends StatelessWidget {
       'Response: $candidatesTokens tokens',
       if (thoughtTokens > 0) 'Thoughts: $thoughtTokens tokens',
       if (cachedTokens > 0) 'Cached: $cachedTokens tokens',
+      if (cacheCreationTokens > 0) 'Cache Write: $cacheCreationTokens tokens',
       'Total: $total tokens',
       if (latencyMs != null)
         'Latency: ${AdkFormatters.formatDuration(Duration(milliseconds: latencyMs!))}',

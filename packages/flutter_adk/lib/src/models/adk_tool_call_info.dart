@@ -18,6 +18,7 @@ class AdkToolCallInfo {
   /// Creates an [AdkToolCallInfo].
   const AdkToolCallInfo({
     required this.toolName,
+    this.displayTitle,
     this.callId,
     this.arguments = const <String, dynamic>{},
     this.result,
@@ -32,6 +33,15 @@ class AdkToolCallInfo {
 
   /// The name of the invoked tool.
   final String toolName;
+
+  /// Optional human-readable display title populated from `adk:tool_display_names`.
+  final String? displayTitle;
+
+  /// Effective label preferring [displayTitle] when non-empty, falling back to [toolName].
+  String get effectiveTitle =>
+      (displayTitle != null && displayTitle!.trim().isNotEmpty)
+          ? displayTitle!
+          : toolName;
 
   /// The input parameters/arguments passed to the tool.
   final Map<String, dynamic> arguments;
@@ -63,6 +73,7 @@ class AdkToolCallInfo {
   AdkToolCallInfo copyWith({
     String? callId,
     String? toolName,
+    String? displayTitle,
     Map<String, dynamic>? arguments,
     dynamic result,
     AdkToolStatus? status,
@@ -73,6 +84,7 @@ class AdkToolCallInfo {
     return AdkToolCallInfo(
       callId: callId ?? this.callId,
       toolName: toolName ?? this.toolName,
+      displayTitle: displayTitle ?? this.displayTitle,
       arguments: arguments ?? this.arguments,
       result: result ?? this.result,
       status: status ?? this.status,

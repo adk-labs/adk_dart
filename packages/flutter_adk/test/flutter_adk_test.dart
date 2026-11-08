@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adk/flutter_adk.dart';
@@ -502,4 +503,138 @@ void main() {
     expect(find.text('CUSTOM_TOKENS:30'), findsOneWidget);
     expect(find.text('CUSTOM_TOOL_CARD:my_custom_tool'), findsOneWidget);
   });
+
+  testWidgets(
+    'v2.14.0 & adk-web parity: cacheCreationTokens, tool display titles, pass@k/pass^k info chips, and UTF-8 data URL decoding',
+    (WidgetTester tester) async {
+      final Event event = Event(
+        id: 'evt_v214',
+        invocationId: 'inv_1',
+        author: 'planner_agent',
+        content: Content(
+          role: 'model',
+          parts: <Part>[
+            Part.text('Internal reasoning', thought: true),
+            Part.text('Visible answer'),
+            Part.fromFunctionCall(
+              name: 'search_db',
+              id: 'call_1',
+              args: <String, dynamic>{'q': 'adk'},
+            ),
+          ],
+        ),
+        usageMetadata: <String, Object?>{
+          'prompt_token_count': 500,
+          'candidates_token_count': 100,
+          'cached_content_token_count': 200,
+          'cache_creation_token_count': 150,
+          'total_token_count': 600,
+        },
+        customMetadata: <String, dynamic>{
+          toolDisplayNamesMetadataKey: <String, String>{
+            'search_db': 'Database Search',
+          },
+        },
+      );
+
+      final AdkTokenUsage? usage = AdkEventStreamUtils.extractTokenUsage(event);
+      expect(usage, isNotNull);
+      expect(usage!.cacheCreationTokens, 150);
+      expect(usage.cachedTokens, 200);
+      expect(AdkEventStreamUtils.extractVisibleText(event), 'Visible answer');
+
+      final List<AdkToolCallInfo> calls =
+          AdkEventStreamUtils.extractToolCalls(event);
+      expect(calls, hasLength(1));
+      expect(calls.first.displayTitle, 'Database Search');
+      expect(calls.first.effectiveTitle, 'Database Search');
+
+      // UTF-8 data URL decoding and artifact filename encoding
+      final String utf8Base64 =
+          'data:text/plain;base64,${base64Encode(utf8.encode('안녕하세요 ADK'))}';
+      expect(
+        AdkFormatters.decodeDataUrlTextUtf8(utf8Base64),
+        '안녕하세요 ADK',
+      );
+      expect(
+        AdkFormatters.encodeArtifactFilename('report #1?.md'),
+        'report%20%231%3F.md',
+      );
+
+      final AdkArtifactItem artifact = AdkArtifactItem(
+        name: 'korean #1.txt',
+        content: utf8Base64,
+      );
+      expect(artifact.resolvedTextContent, '안녕하세요 ADK');
+      expect(artifact.encodedFilename, 'korean%20%231.txt');
+
+      // Agent-scoped system instruction change detection
+      final Event e1 = Event(id: 'e1', invocationId: 'i1', author: 'agent_a');
+      final Event e2 = Event(id: 'e2', invocationId: 'i1', author: 'agent_b');
+      final Event e3 = Event(id: 'e3', invocationId: 'i2', author: 'agent_a');
+      final Set<String> changed =
+          AdkEventStreamUtils.detectSystemInstructionChangesByAgent(<({
+        Event event,
+        String? systemInstruction,
+      })>[
+        (event: e1, systemInstruction: 'Instruction A v1'),
+        (event: e2, systemInstruction: 'Instruction B v1'),
+        (event: e3, systemInstruction: 'Instruction A v2'),
+      ]);
+      expect(changed, equals(<String>{'e3'}));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              children: <Widget>[
+                AdkUsageMonitorCard(usage: usage),
+                AdkToolCallCard(
+                  toolName: 'search_db',
+                  displayTitle: 'Database Search',
+                ),
+                const AdkMultiRunEvalCard(
+                  caseSummaries: <AdkMultiRunCaseSummary>[
+                    AdkMultiRunCaseSummary(
+                      evalId: 'case_pass_k',
+                      totalRuns: 5,
+                      passedRuns: 4,
+                      passed: true,
+                      metrics: <AdkMultiRunMetricSummary>[
+                        AdkMultiRunMetricSummary(
+                          metricName: 'tool_trajectory_avg_score',
+                          methodName: 'pass_at_k',
+                          value: 0.95,
+                          passed: true,
+                          isInformational: true,
+                        ),
+                        AdkMultiRunMetricSummary(
+                          metricName: 'response_match_score',
+                          methodName: 'pass_hat_k',
+                          value: 0.60,
+                          threshold: 0.50,
+                          passed: true,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Cache Write'), findsOneWidget);
+      expect(find.text('Tool: Database Search (search_db)'), findsOneWidget);
+      expect(
+        find.text('tool_trajectory_avg_score (pass@k): 0.95 [INFO]'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('response_match_score (pass^k): 0.60'),
+        findsOneWidget,
+      );
+    },
+  );
 }

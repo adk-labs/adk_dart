@@ -548,6 +548,11 @@ class McpSessionManager {
     return result;
   }
 
+  static const Set<String> _trackingHeaderNames = <String>{
+    'user-agent',
+    'x-goog-api-client',
+  };
+
   /// Merges base connection headers with additional headers and ADK tracking tokens.
   Map<String, String>? mergeHeaders(
     McpConnectionParams connectionParams, {
@@ -556,30 +561,37 @@ class McpSessionManager {
     if (connectionParams is StdioConnectionParams) {
       return null;
     }
-    final Map<String, String> baseHeaders = <String, String>{};
+    Map<String, String> baseHeaders = <String, String>{};
     if (connectionParams is StreamableHTTPConnectionParams &&
         connectionParams.headers.isNotEmpty) {
-      baseHeaders.addAll(connectionParams.headers);
+      baseHeaders = <String, String>{
+        for (final MapEntry<String, String> entry
+            in connectionParams.headers.entries)
+          if (_trackingHeaderNames.contains(entry.key.toLowerCase()))
+            entry.key.toLowerCase(): entry.value
+          else
+            entry.key: entry.value,
+      };
     }
+    final Map<String, String> headers = mergeTrackingHeaders(baseHeaders);
     if (additionalHeaders != null && additionalHeaders.isNotEmpty) {
-      baseHeaders.addAll(additionalHeaders);
+      final Map<String, String> overrides = <String, String>{
+        for (final MapEntry<String, String> entry in additionalHeaders.entries)
+          if (_trackingHeaderNames.contains(entry.key.toLowerCase()))
+            entry.key.toLowerCase(): entry.value
+          else
+            entry.key: entry.value,
+      };
+      final Set<String> overrideNames = <String>{
+        for (final String key in overrides.keys) key.toLowerCase(),
+      };
+      headers.removeWhere(
+        (String key, String _) => overrideNames.contains(key.toLowerCase()),
+      );
+      headers.addAll(overrides);
+      return mergeTrackingHeaders(headers);
     }
-    final Map<String, String> normalizedHeaders = <String, String>{};
-    for (final MapEntry<String, String> entry in baseHeaders.entries) {
-      final String lowerKey = entry.key.toLowerCase();
-      if (lowerKey == 'user-agent') {
-        final String? existing = normalizedHeaders['User-Agent'];
-        normalizedHeaders['User-Agent'] =
-            existing == null || existing.isEmpty ? entry.value : entry.value;
-      } else if (lowerKey == 'x-goog-api-client') {
-        final String? existing = normalizedHeaders['x-goog-api-client'];
-        normalizedHeaders['x-goog-api-client'] =
-            existing == null || existing.isEmpty ? entry.value : entry.value;
-      } else {
-        normalizedHeaders[entry.key] = entry.value;
-      }
-    }
-    return mergeTrackingHeaders(normalizedHeaders);
+    return headers;
   }
 
   Future<void> _ensureInitialized(

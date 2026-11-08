@@ -24,6 +24,7 @@ import '../tools/node_tool.dart';
 import '../tools/tool_context.dart';
 import '../tools/vertex_ai_search_tool.dart';
 import '../types/content.dart';
+import '../utils/schema_utils.dart';
 import '../workflow/workflow.dart';
 import 'agent_state.dart';
 import 'base_agent.dart';
@@ -133,7 +134,24 @@ class LlmAgent extends BaseAgent {
     this.onToolErrorCallback,
     this.parallelWorker = false,
     this.maxParallelWorkers,
+    Map<String, Object?>? modelFields,
+    Map<String, Object?>? extraData,
   }) : tools = _adaptTools(tools) {
+    if (extraData != null) {
+      rejectMisplacedGenerateContentKwargs(extraData, modelFields: modelFields);
+    }
+    if (modelFields != null && extraData != null) {
+      for (final MapEntry<String, Object?> entry in modelFields.entries) {
+        final (bool matched, Object? value) = resolveFieldInputValue(
+          entry.key,
+          entry.value,
+          extraData,
+        );
+        if (matched) {
+          customFields[entry.key] = value;
+        }
+      }
+    }
     if (maxParallelWorkers != null && maxParallelWorkers! < 1) {
       throw ArgumentError.value(
         maxParallelWorkers,
@@ -150,6 +168,204 @@ class LlmAgent extends BaseAgent {
     _warnOnThinkingConfigPrecedence();
     _installTaskModeToolIfNeeded();
     _installModeSubAgentToolsIfNeeded();
+  }
+
+  /// Subclass custom fields resolved via `modelFields` and validation aliases.
+  final Map<String, Object?> customFields = <String, Object?>{};
+
+  static const Set<String> _baseAgentFieldKeys = <String>{
+    'name',
+    'description',
+    'sub_agents',
+    'subAgents',
+    'before_agent_callback',
+    'beforeAgentCallback',
+    'after_agent_callback',
+    'afterAgentCallback',
+    'model',
+    'instruction',
+    'global_instruction',
+    'globalInstruction',
+    'static_instruction',
+    'staticInstruction',
+    'tools',
+    'generate_content_config',
+    'generateContentConfig',
+    'disallow_transfer_to_parent',
+    'disallowTransferToParent',
+    'disallow_transfer_to_peers',
+    'disallowTransferToPeers',
+    'mode',
+    'include_contents',
+    'includeContents',
+    'input_schema',
+    'inputSchema',
+    'output_schema',
+    'outputSchema',
+    'output_key',
+    'outputKey',
+    'planner',
+    'code_executor',
+    'codeExecutor',
+    'before_model_callback',
+    'beforeModelCallback',
+    'after_model_callback',
+    'afterModelCallback',
+    'on_model_error_callback',
+    'onModelErrorCallback',
+    'before_tool_callback',
+    'beforeToolCallback',
+    'after_tool_callback',
+    'afterToolCallback',
+    'on_tool_error_callback',
+    'onToolErrorCallback',
+    'parallel_worker',
+    'parallelWorker',
+    'max_parallel_workers',
+    'maxParallelWorkers',
+  };
+
+  static const Set<String> _generateContentConfigFieldKeys = <String>{
+    'http_options',
+    'httpOptions',
+    'system_instruction',
+    'systemInstruction',
+    'temperature',
+    'top_p',
+    'topP',
+    'top_k',
+    'topK',
+    'candidate_count',
+    'candidateCount',
+    'max_output_tokens',
+    'maxOutputTokens',
+    'stop_sequences',
+    'stopSequences',
+    'response_logprobs',
+    'responseLogprobs',
+    'logprobs',
+    'presence_penalty',
+    'presencePenalty',
+    'frequency_penalty',
+    'frequencyPenalty',
+    'seed',
+    'response_mime_type',
+    'responseMimeType',
+    'response_schema',
+    'responseSchema',
+    'response_json_schema',
+    'responseJsonSchema',
+    'routing_config',
+    'routingConfig',
+    'model_selection_config',
+    'modelSelectionConfig',
+    'safety_settings',
+    'safetySettings',
+    'tools',
+    'tool_config',
+    'toolConfig',
+    'labels',
+    'cached_content',
+    'cachedContent',
+    'response_modalities',
+    'responseModalities',
+    'media_resolution',
+    'mediaResolution',
+    'speech_config',
+    'speechConfig',
+    'audio_timestamp',
+    'audioTimestamp',
+    'automatic_function_calling',
+    'automaticFunctionCalling',
+    'thinking_config',
+    'thinkingConfig',
+    'image_config',
+    'imageConfig',
+    'model_armor_config',
+    'modelArmorConfig',
+    'service_tier',
+    'serviceTier',
+    'audio_transcription_config',
+    'audioTranscriptionConfig',
+    'continuation_token',
+    'continuationToken',
+    'automatic_continuation',
+    'automaticContinuation',
+    'generation_output_config',
+    'generationOutputConfig',
+    'enable_enhanced_civic_answers',
+    'enableEnhancedCivicAnswers',
+    'store',
+    'enable_affective_dialog',
+    'enableAffectiveDialog',
+  };
+
+  /// Rejects misplaced `GenerateContentConfig` kwargs passed at the top level
+  /// of `LlmAgent`, while honoring subclass [modelFields] and validation aliases.
+  static Map<String, Object?> rejectMisplacedGenerateContentKwargs(
+    Map<String, Object?> data, {
+    Map<String, Object?>? modelFields,
+  }) {
+    final Set<String> agentFields = <String>{
+      ..._baseAgentFieldKeys,
+      if (modelFields != null) ...topLevelInputKeys(modelFields),
+    };
+    final List<String> misplaced =
+        data.keys
+            .where(
+              (String k) =>
+                  _generateContentConfigFieldKeys.contains(k) &&
+                  !agentFields.contains(k),
+            )
+            .toList()
+          ..sort();
+    if (misplaced.isNotEmpty) {
+      final String argsStr = misplaced
+          .map((String k) => '$k=${jsonEncode(data[k])}')
+          .join(', ');
+      final String names = misplaced.map((String k) => "'$k'").join(', ');
+      final String verb = misplaced.length == 1 ? 'belongs' : 'belong';
+      throw ArgumentError(
+        '$names $verb on GenerateContentConfig, not LlmAgent. Pass: '
+        'LlmAgent(..., generate_content_config=types.GenerateContentConfig('
+        '$argsStr))',
+      );
+    }
+    final List<String> unknown = data.keys
+        .where((String k) => !agentFields.contains(k))
+        .toList();
+    if (unknown.isNotEmpty) {
+      throw ArgumentError(
+        'Extra inputs are not permitted: ${unknown.join(', ')}',
+      );
+    }
+    return data;
+  }
+
+  /// Validates and constructs an [LlmAgent] from a map, honoring [modelFields].
+  static LlmAgent modelValidate(
+    Map<String, Object?> data, {
+    Map<String, Object?>? modelFields,
+  }) {
+    rejectMisplacedGenerateContentKwargs(data, modelFields: modelFields);
+    final String name = (data['name'] as String?) ?? '';
+    return LlmAgent(
+      name: name,
+      description: (data['description'] as String?) ?? '',
+      model: data['model'] ?? '',
+      instruction: data['instruction'] ?? '',
+      globalInstruction:
+          data['globalInstruction'] ?? data['global_instruction'] ?? '',
+      staticInstruction:
+          data['staticInstruction'] ?? data['static_instruction'],
+      tools: (data['tools'] as List?)?.cast<Object>(),
+      generateContentConfig:
+          (data['generateContentConfig'] ?? data['generate_content_config'])
+              as GenerateContentConfig?,
+      outputSchema: data['outputSchema'] ?? data['output_schema'],
+      modelFields: modelFields,
+      extraData: data,
+    );
   }
 
   static List<Object> _adaptTools(List<Object>? rawTools) {
@@ -813,19 +1029,21 @@ class LlmAgent extends BaseAgent {
     }
 
     if (config.tools != null && config.tools!.isNotEmpty) {
-      throw ArgumentError('All tools must be set via LlmAgent.tools.');
+      throw ArgumentError(
+        'All tools must be set via LlmAgent.tools. Move your tools to the LlmAgent(tools=[...]) parameter.',
+      );
     }
 
     if (config.systemInstruction != null &&
         config.systemInstruction!.isNotEmpty) {
       throw ArgumentError(
-        'System instruction must be set via LlmAgent.instruction.',
+        'System instruction must be set via LlmAgent.instruction. Move your instruction to LlmAgent(instruction="...").',
       );
     }
 
     if (config.responseSchema != null) {
       throw ArgumentError(
-        'Response schema must be set via LlmAgent.outputSchema.',
+        'Response schema must be set via LlmAgent.outputSchema. Move your schema to LlmAgent(output_schema=...).',
       );
     }
   }

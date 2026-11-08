@@ -3,10 +3,15 @@ library;
 
 import 'dart:io';
 
+import 'package:adk_dart/src/evaluation/eval_set_results_manager.dart';
+import 'package:adk_dart/src/evaluation/eval_sets_manager.dart';
+
 import '../dev/project.dart';
 import '../dev/runtime.dart';
 import '../dev/web_server.dart';
 
+export '../dev/web_server.dart'
+    show decodeDataUrlTextContentUtf8, defaultEvalManagerSentinel;
 export 'api_server.dart';
 export 'dev_server.dart';
 
@@ -46,7 +51,10 @@ class AdkWebServer {
     this.maxLiveMessageBytes = 16 * 1024 * 1024,
     this.liveKeepaliveTimeout = const Duration(seconds: 40),
     this.maxLiveSessions = 0,
-  });
+    Object? evalSetsManager = defaultEvalManagerSentinel,
+    Object? evalSetResultsManager = defaultEvalManagerSentinel,
+  }) : _evalSetsManagerArg = evalSetsManager,
+       _evalSetResultsManagerArg = evalSetResultsManager;
 
   /// Root directory containing one or more app folders.
   final String agentsDir;
@@ -144,6 +152,21 @@ class AdkWebServer {
   /// Maximum concurrent `/run_live` WebSocket sessions (`<= 0` means unlimited).
   final int maxLiveSessions;
 
+  final Object? _evalSetsManagerArg;
+  final Object? _evalSetResultsManagerArg;
+
+  /// Explicitly configured [EvalSetsManager], or `null` when unset/default.
+  EvalSetsManager? get evalSetsManager =>
+      identical(_evalSetsManagerArg, defaultEvalManagerSentinel)
+          ? null
+          : _evalSetsManagerArg as EvalSetsManager?;
+
+  /// Explicitly configured [EvalSetResultsManager], or `null` when unset/default.
+  EvalSetResultsManager? get evalSetResultsManager =>
+      identical(_evalSetResultsManagerArg, defaultEvalManagerSentinel)
+          ? null
+          : _evalSetResultsManagerArg as EvalSetResultsManager?;
+
   DevAgentRuntime? _runtime;
   HttpServer? _server;
 
@@ -189,6 +212,8 @@ class AdkWebServer {
       maxLiveMessageBytes: maxLiveMessageBytes,
       liveKeepaliveTimeout: liveKeepaliveTimeout,
       maxLiveSessions: maxLiveSessions,
+      evalSetsManager: _evalSetsManagerArg,
+      evalSetResultsManager: _evalSetResultsManagerArg,
     );
     _runtime = runtime;
     _server = server;

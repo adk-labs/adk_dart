@@ -179,6 +179,7 @@ class AdkChatMessage {
     this.isPartial = false,
     this.thought,
     this.toolName,
+    this.toolDisplayTitle,
     this.toolArgs,
     this.toolResult,
     this.codeExecution,
@@ -252,6 +253,7 @@ class AdkChatMessage {
   factory AdkChatMessage.tool({
     required String id,
     required String toolName,
+    String? toolDisplayTitle,
     Map<String, dynamic>? toolArgs,
     dynamic toolResult,
     String text = '',
@@ -265,6 +267,7 @@ class AdkChatMessage {
       text: text,
       author: author,
       toolName: toolName,
+      toolDisplayTitle: toolDisplayTitle,
       toolArgs: toolArgs,
       toolResult: toolResult,
       timestamp: timestamp,
@@ -312,6 +315,15 @@ class AdkChatMessage {
 
   /// Name of the tool invoked, if any.
   final String? toolName;
+
+  /// Optional human-readable display title for the tool populated from `adk:tool_display_names`.
+  final String? toolDisplayTitle;
+
+  /// Effective tool title preferring [toolDisplayTitle] when non-empty, falling back to [toolName].
+  String? get effectiveToolTitle =>
+      (toolDisplayTitle != null && toolDisplayTitle!.trim().isNotEmpty)
+          ? toolDisplayTitle
+          : toolName;
 
   /// Arguments passed to the tool, if any.
   final Map<String, dynamic>? toolArgs;
@@ -378,6 +390,7 @@ class AdkChatMessage {
     bool? isError,
     String? thought,
     String? toolName,
+    String? toolDisplayTitle,
     Map<String, dynamic>? toolArgs,
     Map<String, dynamic>? toolArguments,
     dynamic toolResult,
@@ -399,6 +412,7 @@ class AdkChatMessage {
       isPartial: isStreaming ?? isPartial ?? this.isPartial,
       thought: thought ?? this.thought,
       toolName: toolName ?? this.toolName,
+      toolDisplayTitle: toolDisplayTitle ?? this.toolDisplayTitle,
       toolArgs: toolArguments ?? toolArgs ?? this.toolArgs,
       toolResult: toolResult ?? this.toolResult,
       codeExecution: codeExecution ?? this.codeExecution,
@@ -422,6 +436,7 @@ class AdkChatMessage {
         other.text == text &&
         other.isPartial == isPartial &&
         other.toolName == toolName &&
+        other.toolDisplayTitle == toolDisplayTitle &&
         other.codeExecution == codeExecution &&
         other.grounding == grounding &&
         other.tokenUsage == tokenUsage &&
@@ -438,6 +453,7 @@ class AdkChatMessage {
         text,
         isPartial,
         toolName,
+        toolDisplayTitle,
         codeExecution,
         grounding,
         tokenUsage,

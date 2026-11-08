@@ -23,7 +23,7 @@ enum GoogleLLMVariant {
 
 /// Resolves the active Google LLM backend from environment flags.
 GoogleLLMVariant getGoogleLlmVariant({Map<String, String>? environment}) {
-  return isEnvEnabled('GOOGLE_GENAI_USE_VERTEXAI', environment: environment)
+  return isEnterpriseModeEnabled(environment: environment)
       ? GoogleLLMVariant.vertexAi
       : GoogleLLMVariant.geminiApi;
 }

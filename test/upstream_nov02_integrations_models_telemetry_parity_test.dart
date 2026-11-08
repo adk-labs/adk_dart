@@ -1063,7 +1063,7 @@ void main() {
       );
       recordInferenceChunk(
         gcSpan,
-        LlmResponse(modelVersion: 'gemini-2.5-pro-001', partial: false),
+        LlmResponse(modelVersion: 'gemini-2.5-pro-001', partial: true),
         nowMicros: 1650000,
         recorder: recorder,
       );

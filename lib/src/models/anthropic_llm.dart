@@ -1099,7 +1099,7 @@ class AnthropicLlm extends BaseLlm {
     AnthropicGcsDownloader? gcsDownloader,
   }) {
     if (part.thought) {
-      if (part.text != null && part.text!.isNotEmpty) {
+      if (part.text != null) {
         return <String, Object?>{
           'type': 'thinking',
           'thinking': part.text,
@@ -1802,7 +1802,8 @@ class AnthropicLlm extends BaseLlm {
     final List<Part> parts = <Part>[];
     for (final int index in sortedIndices) {
       final _AnthropicThinkingAccumulator? thinking = thinkingBlocks[index];
-      if (thinking != null && thinking.text.isNotEmpty) {
+      if (thinking != null &&
+          (thinking.text.isNotEmpty || thinking.signature != null)) {
         parts.add(
           Part.text(
             thinking.text.toString(),

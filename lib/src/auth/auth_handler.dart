@@ -125,12 +125,12 @@ class AuthHandler {
   /// Creates an auth flow coordinator for [authConfig].
   AuthHandler({
     required this.authConfig,
-    OAuth2CredentialExchanger? oauth2Exchanger,
+    BaseCredentialExchanger? oauth2Exchanger,
   }) : _oauth2Exchanger = oauth2Exchanger ?? OAuth2CredentialExchanger();
 
   /// Auth configuration currently being orchestrated.
   final AuthConfig authConfig;
-  final OAuth2CredentialExchanger _oauth2Exchanger;
+  final BaseCredentialExchanger _oauth2Exchanger;
 
   /// Exchanges the currently stored auth credential for access tokens.
   Future<AuthCredential> exchangeAuthToken() async {
@@ -199,6 +199,41 @@ class AuthHandler {
 
   /// Returns the stored auth response credential, if present.
   AuthCredential? getAuthResponse(State state) {
+    final (String _, AuthCredential? credential) = _readAuthResponseWithKey(
+      state,
+    );
+    return credential;
+  }
+
+  /// Asynchronously retrieves the stored auth response credential from [state],
+  /// exchanging an unredeemed OAuth2 authorization code (including public PKCE
+  /// flows without `client_secret`) and writing the exchanged credential
+  /// (without `client_secret`) back to [state].
+  Future<AuthCredential?> getAuthResponseAsync(State state) async {
+    final (String key, AuthCredential? stored) = _readAuthResponseWithKey(
+      state,
+    );
+    if (stored == null) {
+      return null;
+    }
+
+    final AuthCredential credential = _withConfiguredClient(
+      credential: stored,
+      rawCredential: authConfig.rawAuthCredential,
+    );
+    if (!_isExchangeable(credential, allowPublic: true)) {
+      return credential;
+    }
+
+    final ExchangeResult result = await _oauth2Exchanger.exchange(
+      authCredential: credential,
+      authScheme: authConfig.authScheme,
+    );
+    state[key] = _credentialWithoutClientSecret(result.credential);
+    return result.credential;
+  }
+
+  (String, AuthCredential?) _readAuthResponseWithKey(State state) {
     final List<String> keys = <String>[
       authTemporaryStateKey(authConfig.credentialKey),
       authResponseStateKey(authConfig.credentialKey),
@@ -210,11 +245,23 @@ class AuthHandler {
         continue;
       }
       if (value is AuthCredential) {
-        return value.copyWith();
+        return (key, value.copyWith());
+      }
+      if (value is Map) {
+        try {
+          final Map<String, Object?> normalized = value.map(
+            (Object? k, Object? v) => MapEntry<String, Object?>('$k', v),
+          );
+          if (normalized.containsKey('oauth2') ||
+              normalized.containsKey('authType') ||
+              normalized.containsKey('auth_type')) {
+            return (key, _authCredentialFromMap(normalized));
+          }
+        } catch (_) {}
       }
       try {
         if (value is String && value.isNotEmpty) {
-          return credentialFromString(value, authConfig.authScheme);
+          return (key, credentialFromString(value, authConfig.authScheme));
         }
       } on Object catch (error) {
         if (error is ArgumentError ||
@@ -225,7 +272,113 @@ class AuthHandler {
         rethrow;
       }
     }
-    return null;
+    return ('', null);
+  }
+
+  AuthCredential _authCredentialFromMap(Map<String, Object?> map) {
+    final String rawType =
+        '${map['authType'] ?? map['auth_type'] ?? 'oauth2'}'.toLowerCase();
+    final AuthCredentialType authType = switch (rawType) {
+      'apikey' || 'api_key' => AuthCredentialType.apiKey,
+      'http' => AuthCredentialType.http,
+      'serviceaccount' ||
+      'service_account' => AuthCredentialType.serviceAccount,
+      'openidconnect' || 'open_id_connect' => AuthCredentialType.openIdConnect,
+      _ => AuthCredentialType.oauth2,
+    };
+    OAuth2Auth? oauth2;
+    final Object? rawOauth2 = map['oauth2'];
+    if (rawOauth2 is OAuth2Auth) {
+      oauth2 = rawOauth2.copyWith();
+    } else if (rawOauth2 is Map) {
+      oauth2 = OAuth2Auth(
+        clientId:
+            (rawOauth2['clientId'] ?? rawOauth2['client_id']) as String?,
+        clientSecret:
+            (rawOauth2['clientSecret'] ?? rawOauth2['client_secret'])
+                as String?,
+        authUri: (rawOauth2['authUri'] ?? rawOauth2['auth_uri']) as String?,
+        state: rawOauth2['state'] as String?,
+        redirectUri:
+            (rawOauth2['redirectUri'] ?? rawOauth2['redirect_uri']) as String?,
+        authResponseUri:
+            (rawOauth2['authResponseUri'] ?? rawOauth2['auth_response_uri'])
+                as String?,
+        authCode: (rawOauth2['authCode'] ?? rawOauth2['auth_code']) as String?,
+        accessToken:
+            (rawOauth2['accessToken'] ?? rawOauth2['access_token']) as String?,
+        refreshToken:
+            (rawOauth2['refreshToken'] ?? rawOauth2['refresh_token'])
+                as String?,
+        idToken: (rawOauth2['idToken'] ?? rawOauth2['id_token']) as String?,
+        codeVerifier:
+            (rawOauth2['codeVerifier'] ?? rawOauth2['code_verifier'])
+                as String?,
+        codeChallengeMethod:
+            (rawOauth2['codeChallengeMethod'] ??
+                    rawOauth2['code_challenge_method'])
+                as String?,
+      );
+    }
+    return AuthCredential(
+      authType: authType,
+      apiKey: (map['apiKey'] ?? map['api_key']) as String?,
+      oauth2: oauth2,
+    );
+  }
+
+  AuthCredential _withConfiguredClient({
+    required AuthCredential credential,
+    required AuthCredential? rawCredential,
+  }) {
+    final AuthCredential updated = credential.copyWith();
+    final OAuth2Auth? rawOauth2 = rawCredential?.oauth2;
+    final OAuth2Auth? credOauth2 = updated.oauth2;
+    if (rawOauth2 == null || credOauth2 == null) {
+      return updated;
+    }
+    if (rawOauth2.clientId != null && rawOauth2.clientId!.isNotEmpty) {
+      credOauth2.clientId = rawOauth2.clientId;
+    }
+    if (rawOauth2.clientSecret != null && rawOauth2.clientSecret!.isNotEmpty) {
+      credOauth2.clientSecret = rawOauth2.clientSecret;
+    }
+    return updated;
+  }
+
+  AuthCredential _credentialWithoutClientSecret(AuthCredential credential) {
+    final AuthCredential copy = credential.copyWith();
+    if (copy.oauth2 != null) {
+      copy.oauth2!.clientSecret = null;
+    }
+    return copy;
+  }
+
+  bool _isExchangeable(
+    AuthCredential? credential, {
+    bool allowPublic = false,
+  }) {
+    if (credential == null || !_isOAuthScheme(authConfig.authScheme)) {
+      return false;
+    }
+    final OAuth2Auth? oauth2 = credential.oauth2;
+    if (oauth2 == null) {
+      return false;
+    }
+    if (oauth2.accessToken != null && oauth2.accessToken!.isNotEmpty) {
+      return false;
+    }
+    if (oauth2.clientId == null || oauth2.clientId!.isEmpty) {
+      return false;
+    }
+    final bool hasCodeOrUri =
+        (oauth2.authCode != null && oauth2.authCode!.isNotEmpty) ||
+        (oauth2.authResponseUri != null && oauth2.authResponseUri!.isNotEmpty);
+    if (!hasCodeOrUri) {
+      return false;
+    }
+    return allowPublic ||
+        (oauth2.clientSecret != null && oauth2.clientSecret!.isNotEmpty);
   }
 
   /// Produces an auth request config for interactive auth flows.

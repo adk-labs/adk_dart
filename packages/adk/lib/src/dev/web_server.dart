@@ -77,6 +77,28 @@ import 'a2a_push_delivery_queue.dart';
 import 'project.dart';
 import 'runtime.dart';
 
+/// Sentinel indicating that default evaluation managers should be created from options.
+const Object defaultEvalManagerSentinel = Object();
+
+/// Decodes a `data:...;base64,...` URL into a UTF-8 text string, matching
+/// `ContentBubbleComponent.getTextContent` in ADK Web.
+String decodeDataUrlTextContentUtf8(String? dataUrl) {
+  if (dataUrl == null || dataUrl.isEmpty) {
+    return '';
+  }
+  final int commaIndex = dataUrl.indexOf(',');
+  if (commaIndex == -1) {
+    return '';
+  }
+  final String base64Part = dataUrl.substring(commaIndex + 1);
+  try {
+    final List<int> bytes = base64Decode(base64Part);
+    return utf8.decode(bytes);
+  } catch (_) {
+    return 'Failed to decode text content';
+  }
+}
+
 /// Starts the ADK development web server and returns the bound [HttpServer].
 ///
 /// The server exposes API routes and optionally serves the bundled web UI.
@@ -132,6 +154,8 @@ Future<HttpServer> startAdkDevWebServer({
   int maxLiveMessageBytes = 16 * 1024 * 1024,
   Duration liveKeepaliveTimeout = const Duration(seconds: 40),
   int maxLiveSessions = 0,
+  Object? evalSetsManager = defaultEvalManagerSentinel,
+  Object? evalSetResultsManager = defaultEvalManagerSentinel,
 }) async {
   if (port < 0 || port > 65535) {
     throw ArgumentError.value(port, 'port', 'Port must be between 0 and 65535');
@@ -222,6 +246,8 @@ Future<HttpServer> startAdkDevWebServer({
     maxLiveMessageBytes: maxLiveMessageBytes,
     liveKeepaliveTimeout: liveKeepaliveTimeout,
     maxLiveSessions: maxLiveSessions,
+    evalSetsManager: evalSetsManager,
+    evalSetResultsManager: evalSetResultsManager,
   );
 
   final HttpServer server = await HttpServer.bind(resolvedHost, port);
@@ -374,6 +400,15 @@ String _resolveEvalLocalBaseDir({
   return candidate;
 }
 
+class _EvalManagerNotConfiguredException implements Exception {
+  const _EvalManagerNotConfiguredException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 // Per-server runtime context for request handling.
 class _AdkDevWebContext {
   // Creates a web server runtime context.
@@ -424,8 +459,8 @@ class _AdkDevWebContext {
   final BaseSessionService sessionService;
   final BaseArtifactService artifactService;
   final BaseMemoryService memoryService;
-  final EvalSetsManager evalSetsManager;
-  final EvalSetResultsManager evalSetResultsManager;
+  final EvalSetsManager? evalSetsManager;
+  final EvalSetResultsManager? evalSetResultsManager;
   final String? evalStorageUri;
   final SqliteSpanExporter spanExporter;
   final List<String> allowOrigins;
@@ -519,6 +554,8 @@ class _AdkDevWebContext {
     int maxLiveMessageBytes = 16 * 1024 * 1024,
     Duration liveKeepaliveTimeout = const Duration(seconds: 40),
     int maxLiveSessions = 0,
+    Object? evalSetsManager = defaultEvalManagerSentinel,
+    Object? evalSetResultsManager = defaultEvalManagerSentinel,
   }) async {
     final bool hasLogoText = logoText != null && logoText.isNotEmpty;
     final bool hasLogoImage = logoImageUrl != null && logoImageUrl.isNotEmpty;
@@ -561,11 +598,29 @@ class _AdkDevWebContext {
       baseDir: agentsRoot.path,
       memoryServiceUri: memoryServiceUri,
     );
-    final _EvalManagers evalManagers = _createEvalManagersFromOptions(
-      baseDir: agentsRoot.path,
-      evalStorageUri: evalStorageUri,
-      environment: environment,
+    final bool useDefaultEvalSets = identical(
+      evalSetsManager,
+      defaultEvalManagerSentinel,
     );
+    final bool useDefaultEvalResults = identical(
+      evalSetResultsManager,
+      defaultEvalManagerSentinel,
+    );
+    final _EvalManagers? evalManagers =
+        (useDefaultEvalSets || useDefaultEvalResults)
+        ? _createEvalManagersFromOptions(
+            baseDir: agentsRoot.path,
+            evalStorageUri: evalStorageUri,
+            environment: environment,
+          )
+        : null;
+    final EvalSetsManager? resolvedEvalSetsManager = useDefaultEvalSets
+        ? evalManagers!.evalSetsManager
+        : evalSetsManager as EvalSetsManager?;
+    final EvalSetResultsManager? resolvedEvalSetResultsManager =
+        useDefaultEvalResults
+        ? evalManagers!.evalSetResultsManager
+        : evalSetResultsManager as EvalSetResultsManager?;
 
     final Directory? webAssetsDir = enableWebUi
         ? await _resolveWebAssetsDir()
@@ -607,8 +662,8 @@ class _AdkDevWebContext {
       sessionService: sessionService,
       artifactService: artifactService,
       memoryService: memoryService,
-      evalSetsManager: evalManagers.evalSetsManager,
-      evalSetResultsManager: evalManagers.evalSetResultsManager,
+      evalSetsManager: resolvedEvalSetsManager,
+      evalSetResultsManager: resolvedEvalSetResultsManager,
       evalStorageUri: evalStorageUri,
       spanExporter: SqliteSpanExporter(
         dbPath:
@@ -651,6 +706,26 @@ class _AdkDevWebContext {
 
   String get defaultAppName => project.appName;
   String get defaultUserId => project.userId;
+
+  EvalSetsManager _getEvalSetsManager() {
+    final EvalSetsManager? manager = evalSetsManager;
+    if (manager == null) {
+      throw const _EvalManagerNotConfiguredException(
+        'Eval sets manager is not configured',
+      );
+    }
+    return manager;
+  }
+
+  EvalSetResultsManager _getEvalSetResultsManager() {
+    final EvalSetResultsManager? manager = evalSetResultsManager;
+    if (manager == null) {
+      throw const _EvalManagerNotConfiguredException(
+        'Eval set results manager is not configured',
+      );
+    }
+    return manager;
+  }
 
   // Whether internal special agents (app names starting with `__`, such as
   // a built-in agent-builder assistant) may be loaded and executed.
@@ -1993,6 +2068,31 @@ Future<bool> _handleEvalRoutes(
   List<String> segments, {
   required String appName,
 }) async {
+  try {
+    return await _handleEvalRoutesInner(
+      request,
+      context,
+      segments,
+      appName: appName,
+    );
+  } on _EvalManagerNotConfiguredException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.internalServerError,
+      message: error.message,
+      detail: error.message,
+    );
+    return true;
+  }
+}
+
+Future<bool> _handleEvalRoutesInner(
+  HttpRequest request,
+  _AdkDevWebContext context,
+  List<String> segments, {
+  required String appName,
+}) async {
   if (segments.length < 3) {
     return false;
   }
@@ -2914,7 +3014,7 @@ Future<void> _handleCreateEvalSet(
     'id',
     'name',
   ], required: true);
-  final EvalSet evalSet = await context.evalSetsManager.createEvalSet(
+  final EvalSet evalSet = await context._getEvalSetsManager().createEvalSet(
     appName,
     evalSetId,
   );
@@ -2931,7 +3031,7 @@ Future<void> _handleCreateEvalSetLegacy(
   required String appName,
   required String evalSetId,
 }) async {
-  await context.evalSetsManager.createEvalSet(appName, evalSetId);
+  await context._getEvalSetsManager().createEvalSet(appName, evalSetId);
   await _writeJson(request, context, payload: const <String, Object?>{});
 }
 
@@ -2941,9 +3041,10 @@ Future<void> _handleListEvalSets(
   required String appName,
   required bool legacy,
 }) async {
+  final EvalSetsManager evalSetsManager = context._getEvalSetsManager();
   List<String> evalSetIds = <String>[];
   try {
-    evalSetIds = await context.evalSetsManager.listEvalSets(appName);
+    evalSetIds = await evalSetsManager.listEvalSets(appName);
   } on NotFoundError {
     evalSetIds = <String>[];
   }
@@ -2964,7 +3065,8 @@ Future<void> _handleListEvalResults(
   required String appName,
   required bool legacy,
 }) async {
-  final List<String> evalResultIds = await context.evalSetResultsManager
+  final List<String> evalResultIds = await context
+      ._getEvalSetResultsManager()
       .listEvalSetResults(appName);
   if (legacy) {
     await _writeJson(request, context, payload: evalResultIds);
@@ -2983,7 +3085,8 @@ Future<void> _handleGetEvalResult(
   required String appName,
   required String evalResultId,
 }) async {
-  final EvalSetResult evalResult = await context.evalSetResultsManager
+  final EvalSetResult evalResult = await context
+      ._getEvalSetResultsManager()
       .getEvalSetResult(appName, evalResultId);
   await _writeJson(request, context, payload: evalResult.toJson());
 }
@@ -2994,6 +3097,7 @@ Future<void> _handleAddSessionToEvalSet(
   required String appName,
   required String evalSetId,
 }) async {
+  final EvalSetsManager evalSetsManager = context._getEvalSetsManager();
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final String evalId = _readString(payload, const <String>[
     'eval_id',
@@ -3040,7 +3144,7 @@ Future<void> _handleAddSessionToEvalSet(
     ),
     creationTimestamp: DateTime.now().millisecondsSinceEpoch / 1000,
   );
-  await context.evalSetsManager.addEvalCase(appName, evalSetId, evalCase);
+  await evalSetsManager.addEvalCase(appName, evalSetId, evalCase);
   await _writeJson(request, context, payload: const <String, Object?>{});
 }
 
@@ -3050,7 +3154,7 @@ Future<void> _handleListEvalsInEvalSet(
   required String appName,
   required String evalSetId,
 }) async {
-  final EvalSet? evalSet = await context.evalSetsManager.getEvalSet(
+  final EvalSet? evalSet = await context._getEvalSetsManager().getEvalSet(
     appName,
     evalSetId,
   );
@@ -3078,7 +3182,7 @@ Future<void> _handleGetEvalCase(
   required String evalSetId,
   required String evalCaseId,
 }) async {
-  final EvalCase? evalCase = await context.evalSetsManager.getEvalCase(
+  final EvalCase? evalCase = await context._getEvalSetsManager().getEvalCase(
     appName,
     evalSetId,
     evalCaseId,
@@ -3119,7 +3223,7 @@ Future<void> _handleUpdateEvalCase(
 
   final EvalCase withRouteId = _copyEvalCaseWithId(updatedEvalCase, evalCaseId);
   try {
-    await context.evalSetsManager.updateEvalCase(
+    await context._getEvalSetsManager().updateEvalCase(
       appName,
       evalSetId,
       withRouteId,
@@ -3159,7 +3263,7 @@ Future<void> _handleDeleteEvalCase(
   required String evalCaseId,
 }) async {
   try {
-    await context.evalSetsManager.deleteEvalCase(
+    await context._getEvalSetsManager().deleteEvalCase(
       appName,
       evalSetId,
       evalCaseId,
@@ -3183,7 +3287,7 @@ Future<void> _handleRunEval(
   required String evalSetId,
   required bool legacy,
 }) async {
-  final EvalSet? evalSet = await context.evalSetsManager.getEvalSet(
+  final EvalSet? evalSet = await context._getEvalSetsManager().getEvalSet(
     appName,
     evalSetId,
   );
@@ -3259,11 +3363,13 @@ Future<void> _handleRunEval(
         );
       })
       .toList(growable: false);
-  await context.evalSetResultsManager.saveEvalSetResult(
-    appName,
-    evalSetId,
-    normalizedResults,
-  );
+  if (context.evalSetResultsManager != null) {
+    await context.evalSetResultsManager!.saveEvalSetResult(
+      appName,
+      evalSetId,
+      normalizedResults,
+    );
+  }
 
   final List<Map<String, Object?>> runEvalResults = normalizedResults
       .map((EvalCaseResult value) => value.toJson())

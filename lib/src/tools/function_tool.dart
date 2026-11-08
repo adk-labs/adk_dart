@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../features/_feature_registry.dart';
 import '../models/llm_request.dart';
 import 'base_tool.dart';
 import 'tool_context.dart';
@@ -70,7 +71,7 @@ class FunctionTool extends BaseTool {
     ToolContext toolContext,
   ) async {
     final FunctionDeclaration? declaration = getDeclaration();
-    final Map<String, dynamic> processedArgs = _preprocessArgs(
+    final Map<String, dynamic> processedArgs = preprocessArgs(
       args,
       declaration,
     );
@@ -78,10 +79,23 @@ class FunctionTool extends BaseTool {
       return requireConfirmation as bool;
     }
     if (requireConfirmation is Function) {
+      final Map<String, dynamic> confirmationArgs =
+          isFeatureEnabled(FeatureName.functionToolArgValidation)
+              ? processedArgs
+              : _enumMembersToValues(processedArgs);
+      if (requireConfirmation is ConfirmationPredicate) {
+        try {
+          final FutureOr<bool> value =
+              (requireConfirmation as ConfirmationPredicate)(confirmationArgs);
+          return await value;
+        } catch (_) {
+          return false;
+        }
+      }
       try {
         final Object? result = await _invokeFunction(
           target: requireConfirmation as Function,
-          args: processedArgs,
+          args: confirmationArgs,
           toolContext: toolContext,
         );
         return result == true;
@@ -99,7 +113,7 @@ class FunctionTool extends BaseTool {
     required ToolContext toolContext,
   }) async {
     final FunctionDeclaration? declaration = getDeclaration();
-    final Map<String, dynamic> processedArgs = _preprocessArgs(
+    final Map<String, dynamic> processedArgs = preprocessArgs(
       args,
       declaration,
     );
@@ -120,7 +134,7 @@ class FunctionTool extends BaseTool {
       }
     }
 
-    if (await _requiresConfirmation(processedArgs)) {
+    if (await _requiresConfirmation(processedArgs, toolContext: toolContext)) {
       final confirmation = toolContext.toolConfirmation;
       if (confirmation == null) {
         toolContext.requestConfirmation(
@@ -140,6 +154,14 @@ class FunctionTool extends BaseTool {
     }
 
     return _invokeCallable(processedArgs, toolContext);
+  }
+
+  /// Preprocesses raw tool [args] against [declaration] before execution.
+  Map<String, dynamic> preprocessArgs(
+    Map<String, dynamic> args, [
+    FunctionDeclaration? declaration,
+  ]) {
+    return _preprocessArgs(args, declaration ?? getDeclaration());
   }
 
   Map<String, dynamic> _preprocessArgs(
@@ -310,30 +332,70 @@ class FunctionTool extends BaseTool {
     return (value: value, matched: false);
   }
 
-  Future<bool> _requiresConfirmation(Map<String, dynamic> args) async {
+  Future<bool> _requiresConfirmation(
+    Map<String, dynamic> args, {
+    ToolContext? toolContext,
+  }) async {
     final Object requirement = requireConfirmation;
     if (requirement is bool) {
       return requirement;
     }
 
-    if (requirement is ConfirmationPredicate) {
-      final Object value = requirement(args);
-      if (value is Future<bool>) {
-        return value;
-      }
-      return value as bool;
-    }
-
     if (requirement is Function) {
+      final Map<String, dynamic> confirmationArgs =
+          isFeatureEnabled(FeatureName.functionToolArgValidation)
+              ? args
+              : _enumMembersToValues(args);
+      if (requirement is ConfirmationPredicate) {
+        final FutureOr<bool> value = requirement(confirmationArgs);
+        return await value;
+      }
+
       final Object? result = await _invokeFunction(
         target: requirement,
-        args: args,
-        toolContext: null,
+        args: confirmationArgs,
+        toolContext: toolContext,
       );
       return result == true;
     }
 
     return false;
+  }
+
+  static Object? _enumMemberToValue(Enum item) {
+    try {
+      return (item as dynamic).value;
+    } catch (_) {
+      return item.name;
+    }
+  }
+
+  /// Converts [Enum] members in [args] (top-level or in a `List`/`Set`) back
+  /// to their wire values.
+  static Map<String, dynamic> enumMembersToValues(Map<String, dynamic> args) =>
+      _enumMembersToValues(args);
+
+  static Map<String, dynamic> _enumMembersToValues(Map<String, dynamic> args) {
+    final Map<String, dynamic> converted = <String, dynamic>{};
+    for (final MapEntry<String, dynamic> entry in args.entries) {
+      final Object? val = entry.value;
+      if (val is Enum) {
+        converted[entry.key] = _enumMemberToValue(val);
+      } else if (val is List) {
+        converted[entry.key] = <Object?>[
+          for (final Object? item in val)
+            if (item is Enum) _enumMemberToValue(item) else item,
+        ];
+      } else if (val is Set) {
+        converted[entry.key] = <Object?>{
+          for (final Object? item in val)
+            if (item is Enum) _enumMemberToValue(item) else item,
+        };
+      } else {
+        converted[entry.key] = val;
+      }
+    }
+    return converted;
   }
 
   /// Resolves the active streaming tool for [toolContext] by checking

@@ -299,6 +299,7 @@ export 'src/models/apigee_llm.dart';
 export 'src/models/anthropic_llm.dart';
 export 'src/models/lite_llm.dart';
 export 'src/models/interactions_utils.dart';
+export 'src/models/generate_content_body.dart';
 export 'src/models/llm_request.dart';
 export 'src/models/llm_response.dart';
 export 'src/models/registry.dart';

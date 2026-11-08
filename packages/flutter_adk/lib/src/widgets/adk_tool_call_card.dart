@@ -9,6 +9,7 @@ class AdkToolCallCard extends StatefulWidget {
   const AdkToolCallCard({
     super.key,
     required this.toolName,
+    this.displayTitle,
     this.toolArgs,
     this.toolResult,
     this.isRunning = false,
@@ -24,6 +25,15 @@ class AdkToolCallCard extends StatefulWidget {
 
   /// The name of the tool called.
   final String toolName;
+
+  /// Optional human-readable display title populated from `adk:tool_display_names`.
+  final String? displayTitle;
+
+  /// Effective title preferring [displayTitle] when non-empty, falling back to [toolName].
+  String get effectiveTitle =>
+      (displayTitle != null && displayTitle!.trim().isNotEmpty)
+          ? displayTitle!
+          : toolName;
 
   /// The arguments map passed to the tool.
   final Map<String, dynamic>? toolArgs;
@@ -168,7 +178,11 @@ class _AdkToolCallCardState extends State<AdkToolCallCard> {
                     const SizedBox(width: 8.0),
                     Expanded(
                       child: Text(
-                        'Tool: ${widget.toolName}',
+                        widget.displayTitle != null &&
+                                widget.displayTitle!.trim().isNotEmpty &&
+                                widget.displayTitle != widget.toolName
+                            ? 'Tool: ${widget.effectiveTitle} (${widget.toolName})'
+                            : 'Tool: ${widget.effectiveTitle}',
                         style: effectiveStyle?.titleStyle ??
                             theme.textTheme.titleSmall?.copyWith(
                               fontFamily: 'monospace',

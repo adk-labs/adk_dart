@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../../agents/readonly_context.dart';
 import '../../auth/auth_credential.dart';
@@ -340,21 +341,31 @@ class McpTool extends BaseAuthenticatedTool {
       providerHeaders: providerHeaders,
     );
 
-    final Object? response;
+    final Map<String, String>? effectiveHeaders = headers.isEmpty
+        ? null
+        : headers;
+    Object? response;
     try {
-      response = await _sessionManager.callTool(
-        connectionParams: _connectionParams,
-        toolName: _mcpTool.name,
-        args: args,
-        headers: headers.isEmpty ? null : headers,
-      );
-    } catch (error) {
-      if (isSessionTerminatedError(error)) {
-        await _sessionManager.discardSession(
-          _connectionParams,
-          headers: headers.isEmpty ? null : headers,
+      try {
+        response = await _callToolOnSession(
+          args: args,
+          headers: effectiveHeaders,
+        );
+      } catch (error) {
+        if (!isSessionTerminatedError(error)) {
+          rethrow;
+        }
+        developer.log(
+          'MCP session was terminated server-side; retrying ${_mcpTool.name} on a fresh session.',
+          name: 'google-adk',
+          level: 800,
+        );
+        response = await _callToolOnSession(
+          args: args,
+          headers: effectiveHeaders,
         );
       }
+    } catch (error) {
       if (!isFeatureEnabled(FeatureName.mcpGracefulErrorHandling)) {
         rethrow;
       }
@@ -376,6 +387,28 @@ class McpTool extends BaseAuthenticatedTool {
       );
     }
     return response;
+  }
+
+  Future<Object?> _callToolOnSession({
+    required Map<String, dynamic> args,
+    required Map<String, String>? headers,
+  }) async {
+    try {
+      return await _sessionManager.callTool(
+        connectionParams: _connectionParams,
+        toolName: _mcpTool.name,
+        args: args,
+        headers: headers,
+      );
+    } catch (error) {
+      if (isSessionTerminatedError(error)) {
+        await _sessionManager.discardSession(
+          _connectionParams,
+          headers: headers,
+        );
+      }
+      rethrow;
+    }
   }
 
   void _storeGroundingMetadataFromResult(

@@ -70,6 +70,43 @@ abstract final class AdkFormatters {
       return data.toString();
     }
   }
+
+  /// Decodes a `data:` URL containing text or base64-encoded UTF-8 payload.
+  ///
+  /// Matches `adk-web`'s `ContentBubbleComponent.getTextContent` UTF-8 decoding
+  /// so non-ASCII characters (for example Korean, emoji, accented characters)
+  /// are preserved without mojibake.
+  static String decodeDataUrlTextUtf8(String? dataUrl) {
+    if (dataUrl == null || dataUrl.isEmpty) {
+      return '';
+    }
+    final int commaIndex = dataUrl.indexOf(',');
+    if (commaIndex < 0) {
+      return dataUrl;
+    }
+    final String header = dataUrl.substring(0, commaIndex).toLowerCase();
+    final String payload = dataUrl.substring(commaIndex + 1);
+    if (header.contains(';base64')) {
+      try {
+        final String normalized = payload.replaceAll(RegExp(r'\s+'), '');
+        final List<int> bytes = base64Decode(base64.normalize(normalized));
+        return utf8.decode(bytes, allowMalformed: true);
+      } catch (_) {
+        return payload;
+      }
+    }
+    try {
+      return Uri.decodeComponent(payload);
+    } catch (_) {
+      return payload;
+    }
+  }
+
+  /// URL-encodes an artifact filename component so special characters (`#`, `?`, spaces)
+  /// are safely escaped in artifact API paths.
+  static String encodeArtifactFilename(String artifactName) {
+    return Uri.encodeComponent(artifactName);
+  }
 }
 
 /// Helper utilities for extracting UI models and state from ADK event streams.
@@ -88,6 +125,47 @@ abstract final class AdkEventStreamUtils {
     return extractOpenInterrupts(events).isNotEmpty;
   }
 
+  /// Whether [event] marks an aborted invocation (`INVOCATION_ABORTED`).
+  static bool isAbortedEvent(core.Event event) {
+    return core.isAbortEvent(event);
+  }
+
+  /// Extracts non-thought visible text parts from [event], joined by [splitter].
+  static String extractVisibleText(
+    core.Event event, {
+    String splitter = '\n',
+  }) {
+    final core.Content? content = event.content;
+    if (content == null || content.parts.isEmpty) {
+      return '';
+    }
+    return content.parts
+        .where(
+          (core.Part p) =>
+              !p.thought && p.text != null && p.text!.trim().isNotEmpty,
+        )
+        .map((core.Part p) => p.text!.trim())
+        .join(splitter);
+  }
+
+  /// Extracts the `adk:tool_display_names` map (`toolName -> displayTitle`) from [event].
+  static Map<String, String> extractToolDisplayNames(core.Event event) {
+    final Object? raw =
+        event.customMetadata?[core.toolDisplayNamesMetadataKey];
+    if (raw is! Map) {
+      return const <String, String>{};
+    }
+    final Map<String, String> result = <String, String>{};
+    for (final MapEntry<Object?, Object?> entry in raw.entries) {
+      final String key = '${entry.key ?? ''}'.trim();
+      final String value = '${entry.value ?? ''}'.trim();
+      if (key.isNotEmpty && value.isNotEmpty) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
   /// Extracts [AdkToolCallInfo] objects from a single ADK [event].
   static List<AdkToolCallInfo> extractToolCalls(core.Event event) {
     final core.Content? content = event.content;
@@ -95,6 +173,7 @@ abstract final class AdkEventStreamUtils {
       return const <AdkToolCallInfo>[];
     }
 
+    final Map<String, String> displayNames = extractToolDisplayNames(event);
     final List<AdkToolCallInfo> result = <AdkToolCallInfo>[];
     for (final core.Part part in content.parts) {
       final core.FunctionCall? call = part.functionCall;
@@ -102,6 +181,7 @@ abstract final class AdkEventStreamUtils {
         result.add(
           AdkToolCallInfo(
             toolName: call.name,
+            displayTitle: displayNames[call.name],
             callId: call.id,
             arguments: call.args.cast<String, dynamic>(),
             startTime: DateTime.fromMillisecondsSinceEpoch(
@@ -116,8 +196,12 @@ abstract final class AdkEventStreamUtils {
 
   /// Extracts an [AdkTokenUsage] object from an [event] if token metrics are present.
   static AdkTokenUsage? extractTokenUsage(core.Event event) {
+    final int customCacheCreation = _extractCacheCreationFromMetadata(event);
     final Object? rawUsage = event.usageMetadata;
     if (rawUsage == null) {
+      if (customCacheCreation > 0) {
+        return AdkTokenUsage(cacheCreationTokens: customCacheCreation);
+      }
       return null;
     }
 
@@ -142,6 +226,12 @@ abstract final class AdkEventStreamUtils {
               (rawUsage['cachedContentTokenCount'] as num?)?.toInt() ??
               (rawUsage['cached_tokens'] as num?)?.toInt() ??
               0;
+      final int cacheCreation =
+          (rawUsage['cache_creation_token_count'] as num?)?.toInt() ??
+              (rawUsage['cacheCreationTokenCount'] as num?)?.toInt() ??
+              (rawUsage['cache_creation_input_tokens'] as num?)?.toInt() ??
+              (rawUsage['cache_write_input_tokens'] as num?)?.toInt() ??
+              customCacheCreation;
       final int toolUsePrompt =
           (rawUsage['tool_use_prompt_token_count'] as num?)?.toInt() ??
               (rawUsage['toolUsePromptTokenCount'] as num?)?.toInt() ??
@@ -157,6 +247,7 @@ abstract final class AdkEventStreamUtils {
         totalTokens: total,
         thoughtTokens: thought,
         cachedTokens: cached,
+        cacheCreationTokens: cacheCreation,
         toolUsePromptTokens: toolUsePrompt,
         trafficType: trafficType,
       );
@@ -182,6 +273,12 @@ abstract final class AdkEventStreamUtils {
             (d.cachedTokens as num?)?.toInt() ??
             0;
       } catch (_) {}
+      int cacheCreation = customCacheCreation;
+      try {
+        cacheCreation = (d.cacheCreationTokenCount as num?)?.toInt() ??
+            (d.cache_creation_token_count as num?)?.toInt() ??
+            customCacheCreation;
+      } catch (_) {}
       int toolUsePrompt = 0;
       try {
         toolUsePrompt = (d.toolUsePromptTokenCount as num?)?.toInt() ?? 0;
@@ -195,11 +292,64 @@ abstract final class AdkEventStreamUtils {
         totalTokens: total,
         thoughtTokens: thought,
         cachedTokens: cached,
+        cacheCreationTokens: cacheCreation,
         toolUsePromptTokens: toolUsePrompt,
       );
     } catch (_) {
       return null;
     }
+  }
+
+  static int _extractCacheCreationFromMetadata(core.Event event) {
+    final Map<String, dynamic>? custom = event.customMetadata;
+    if (custom != null) {
+      final num? count = (custom['cacheCreationTokenCount'] as num?) ??
+          (custom['cache_creation_token_count'] as num?) ??
+          (custom['cache_creation_input_tokens'] as num?);
+      if (count != null) {
+        return count.toInt();
+      }
+    }
+    final Object? cacheMeta = event.cacheMetadata;
+    if (cacheMeta is Map) {
+      final num? count = (cacheMeta['cacheCreationTokenCount'] as num?) ??
+          (cacheMeta['cache_creation_token_count'] as num?);
+      if (count != null) {
+        return count.toInt();
+      }
+    }
+    return 0;
+  }
+
+  /// Detects events where an agent's system instruction changed compared to
+  /// that same agent's previous turn (`event.author` scoped, matching `adk-web`).
+  ///
+  /// Expects each entry in [eventsWithInstructions] to provide the [core.Event]
+  /// and its resolved system instruction string (if any). Returns the set of
+  /// event IDs where the system instruction changed for that specific agent.
+  static Set<String> detectSystemInstructionChangesByAgent(
+    Iterable<({core.Event event, String? systemInstruction})>
+        eventsWithInstructions,
+  ) {
+    final Map<String, String> lastInstructionByAuthor = <String, String>{};
+    final Set<String> changedEventIds = <String>{};
+
+    for (final ({core.Event event, String? systemInstruction}) item
+        in eventsWithInstructions) {
+      final String? instruction = item.systemInstruction;
+      if (instruction == null || instruction.isEmpty) {
+        continue;
+      }
+      final String author = item.event.author.isNotEmpty
+          ? item.event.author
+          : 'agent';
+      final String? previous = lastInstructionByAuthor[author];
+      if (previous != null && previous != instruction) {
+        changedEventIds.add(item.event.id);
+      }
+      lastInstructionByAuthor[author] = instruction;
+    }
+    return changedEventIds;
   }
 
   /// Aggregates cumulative [AdkTokenUsage] across a sequence of [events].
