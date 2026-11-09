@@ -904,10 +904,15 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
           };
           return result;
         }
-        if (_isFinishTaskSuccess(response.response) &&
-            pendingFinishArgs != null) {
-          result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
-          return result;
+        if (_isFinishTaskSuccess(response.response)) {
+          if (event.hasOutput) {
+            result.taskOutput = event.output;
+            return result;
+          }
+          if (pendingFinishArgs != null) {
+            result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
+            return result;
+          }
         }
       }
     }

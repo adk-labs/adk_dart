@@ -67,7 +67,7 @@ class Event extends LlmResponse {
     super.voiceActivity,
   }) : actions = actions ?? EventActions(),
        nodeInfo = nodeInfo ?? NodeInfo(),
-       output = identical(output, _sentinel) ? null : output,
+       _output = identical(output, _sentinel) ? null : output,
        hasOutput = !identical(output, _sentinel),
        id = id ?? Event.newId(),
        timestamp = timestamp ?? getTime() {
@@ -192,8 +192,15 @@ class Event extends LlmResponse {
   /// Workflow node metadata associated with this event.
   NodeInfo nodeInfo;
 
+  Object? _output;
+
   /// Generic workflow node output associated with this event.
-  Object? output;
+  Object? get output => _output;
+
+  set output(Object? value) {
+    _output = value;
+    hasOutput = true;
+  }
 
   /// Whether [output] was explicitly provided.
   bool hasOutput;

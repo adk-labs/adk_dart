@@ -1286,6 +1286,18 @@ bool _isFinishTaskErrorEvent(Event event) {
   return false;
 }
 
+/// Searches [session] events (and [completedFrEvent] metadata history) for the
+/// latest `finish_task` function call and returns its arguments.
+Map<String, dynamic>? findFinishTaskArgsFromHistory(
+  Session session, {
+  String? isolationScope,
+  Event? completedFrEvent,
+}) => _findFinishTaskArgsFromHistory(
+  session,
+  isolationScope: isolationScope,
+  completedFrEvent: completedFrEvent,
+);
+
 Map<String, dynamic>? _findFinishTaskArgsFromHistory(
   Session session, {
   String? isolationScope,
@@ -1293,7 +1305,10 @@ Map<String, dynamic>? _findFinishTaskArgsFromHistory(
 }) {
   String? matchingFcId;
   if (completedFrEvent != null) {
-    for (final FunctionResponse fr in completedFrEvent.getFunctionResponses()) {
+    final List<FunctionResponse> responses =
+        completedFrEvent.getFunctionResponses();
+    for (int i = responses.length - 1; i >= 0; i -= 1) {
+      final FunctionResponse fr = responses[i];
       if (fr.name == finishTaskToolName) {
         matchingFcId = fr.id;
         break;
@@ -1302,12 +1317,50 @@ Map<String, dynamic>? _findFinishTaskArgsFromHistory(
   }
 
   Map<String, dynamic>? argsFrom(Event event) {
-    for (final FunctionCall fc in event.getFunctionCalls()) {
+    final List<FunctionCall> calls = event.getFunctionCalls();
+    for (int i = calls.length - 1; i >= 0; i -= 1) {
+      final FunctionCall fc = calls[i];
       if (fc.name != finishTaskToolName) {
         continue;
       }
       if (matchingFcId == null || fc.id == matchingFcId) {
         return Map<String, dynamic>.from(fc.args);
+      }
+    }
+    // In unary (non-streaming) A2A responses, convertA2aTaskToEvent populates
+    // event.content from task.artifacts (the terminal finish_task FR) while
+    // the finish_task FC remains in task.history inside customMetadata.
+    final Map<String, dynamic>? customMetadata = event.customMetadata;
+    final Object? a2aResponse = customMetadata == null
+        ? null
+        : customMetadata['${a2aMetadataPrefix}response'];
+    final Object? history = a2aResponse is Map ? a2aResponse['history'] : null;
+    if (history is List) {
+      for (int mIdx = history.length - 1; mIdx >= 0; mIdx -= 1) {
+        final Object? message = history[mIdx];
+        if (message is! Map) {
+          continue;
+        }
+        final Object? parts = message['parts'];
+        if (parts is! List) {
+          continue;
+        }
+        for (int pIdx = parts.length - 1; pIdx >= 0; pIdx -= 1) {
+          final Object? part = parts[pIdx];
+          if (part is! Map) {
+            continue;
+          }
+          final Object? data = part['data'];
+          if (data is Map &&
+              data['name'] == finishTaskToolName &&
+              data.containsKey('args') &&
+              (matchingFcId == null || data['id'] == matchingFcId)) {
+            final Object? rawArgs = data['args'];
+            return rawArgs is Map
+                ? Map<String, dynamic>.from(rawArgs)
+                : <String, dynamic>{};
+          }
+        }
       }
     }
     return null;
