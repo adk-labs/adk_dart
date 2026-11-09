@@ -1,6 +1,8 @@
 /// Core evaluator result models and aggregation interface.
 library;
 
+import 'dart:async';
+
 import 'conversation_scenarios.dart';
 import 'eval_case.dart';
 import 'eval_metrics.dart';
@@ -63,7 +65,12 @@ abstract class Evaluator {
   Type get criterionType => BaseCriterion;
 
   /// Evaluates conversation invocations and returns structured scores.
-  Future<EvaluationResult> evaluateInvocations({
+  ///
+  /// `LocalEvalService` awaits an async implementation on the event loop and
+  /// schedules a synchronous one asynchronously across concurrent workers when
+  /// `EvaluateConfig.parallelism` is above `1`. A synchronous implementation
+  /// must not mutate unsynchronized shared state.
+  FutureOr<EvaluationResult> evaluateInvocations({
     required List<Invocation> actualInvocations,
     List<Invocation>? expectedInvocations,
     ConversationScenario? conversationScenario,

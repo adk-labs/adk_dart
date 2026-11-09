@@ -10,18 +10,33 @@ import '../events/event.dart';
 import '../runners/runner.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
+import '../utils/client_labels_utils.dart';
 import 'base_eval_service.dart';
+import 'conversation_scenarios.dart';
 import 'eval_case.dart';
 import 'eval_metric.dart';
+import 'eval_metrics.dart';
 import 'eval_result.dart';
+import 'eval_sets_manager.dart';
+import 'evaluator.dart';
+import 'metric_evaluator_registry.dart';
 
 /// Local evaluation service that runs eval cases with an in-memory runner.
 class LocalEvalService extends BaseEvalService {
   /// Creates a local eval service bound to [rootAgent].
-  LocalEvalService({required BaseAgent rootAgent, String appName = 'eval_app'})
-    : _runner = InMemoryRunner(agent: rootAgent, appName: appName);
+  LocalEvalService({
+    required BaseAgent rootAgent,
+    String appName = 'eval_app',
+    EvalSetsManager? evalSetsManager,
+    MetricEvaluatorRegistry? metricEvaluatorRegistry,
+  }) : _runner = InMemoryRunner(agent: rootAgent, appName: appName),
+       _evalSetsManager = evalSetsManager,
+       _metricEvaluatorRegistry =
+           metricEvaluatorRegistry ?? defaultMetricEvaluatorRegistry;
 
   final InMemoryRunner _runner;
+  final EvalSetsManager? _evalSetsManager;
+  final MetricEvaluatorRegistry _metricEvaluatorRegistry;
 
   @override
   Stream<InferenceResult> performInference(InferenceRequest request) async* {
@@ -118,52 +133,244 @@ class LocalEvalService extends BaseEvalService {
 
   @override
   Stream<EvalCaseResult> evaluate(EvaluateRequest request) async* {
-    for (final InferenceResult inference in request.inferenceResults) {
-      final EvalCase? evalCase = request.evalCasesById[inference.evalCaseId];
-      final String expected = evalCase?.expectedOutput ?? '';
-      final String actual = inference.responseText ?? '';
-      final String expectedNormalized = expected.trim().toLowerCase();
-      final String actualNormalized = actual.trim().toLowerCase();
-
-      final List<EvalMetricResult> metrics = <EvalMetricResult>[];
-      for (final EvalMetric metric in request.evaluateConfig.evalMetrics) {
-        switch (metric) {
-          case EvalMetric.finalResponseExactMatch:
-            final bool match =
-                expectedNormalized.isNotEmpty &&
-                actualNormalized == expectedNormalized;
-            metrics.add(
-              EvalMetricResult(
-                metric: metric,
-                score: match ? 1 : 0,
-                passed: match,
-                detail: 'Exact match against expected output.',
-              ),
-            );
-            break;
-          case EvalMetric.finalResponseContains:
-            final bool contains =
-                expectedNormalized.isNotEmpty &&
-                actualNormalized.contains(expectedNormalized);
-            metrics.add(
-              EvalMetricResult(
-                metric: metric,
-                score: contains ? 1 : 0,
-                passed: contains,
-                detail: 'Response contains expected output.',
-              ),
-            );
-            break;
-        }
-      }
-
-      yield EvalCaseResult(
-        evalCaseId: inference.evalCaseId,
-        metrics: metrics,
-        sessionId: inference.sessionId ?? '',
-        repetitionIndex: inference.repetitionIndex,
+    final int parallelism = request.evaluateConfig.parallelism;
+    if (parallelism < 1) {
+      throw ArgumentError(
+        '`parallelism` must be at least 1, got $parallelism.',
       );
     }
+
+    final List<InferenceResult> items = request.inferenceResults;
+    if (items.isEmpty) {
+      return;
+    }
+
+    if (parallelism == 1 || items.length == 1) {
+      for (final InferenceResult inference in items) {
+        yield await _evaluateSingleInferenceResult(
+          inference: inference,
+          request: request,
+        );
+      }
+      return;
+    }
+
+    final List<EvalCaseResult?> results = List<EvalCaseResult?>.filled(
+      items.length,
+      null,
+    );
+    int nextIndex = 0;
+    Future<void> worker() async {
+      while (true) {
+        final int current = nextIndex;
+        if (current >= items.length) {
+          return;
+        }
+        nextIndex += 1;
+        results[current] = await _evaluateSingleInferenceResult(
+          inference: items[current],
+          request: request,
+        );
+      }
+    }
+
+    final int workerCount =
+        parallelism < items.length ? parallelism : items.length;
+    await Future.wait(
+      List<Future<void>>.generate(workerCount, (_) => worker()),
+    );
+    for (final EvalCaseResult? result in results) {
+      if (result != null) {
+        yield result;
+      }
+    }
+  }
+
+  Future<EvalCaseResult> _evaluateSingleInferenceResult({
+    required InferenceResult inference,
+    required EvaluateRequest request,
+  }) async {
+    EvalCase? evalCase = request.evalCasesById[inference.evalCaseId];
+    if (evalCase == null &&
+        _evalSetsManager != null &&
+        inference.evalSetId.isNotEmpty) {
+      evalCase = await _evalSetsManager.getEvalCase(
+        inference.appName,
+        inference.evalSetId,
+        inference.evalCaseId,
+      );
+    }
+
+    final String expected = evalCase?.expectedOutput ?? '';
+    final String actual = inference.responseText ?? '';
+    final String expectedNormalized = expected.trim().toLowerCase();
+    final String actualNormalized = actual.trim().toLowerCase();
+
+    final List<EvalMetricResult> metrics = <EvalMetricResult>[];
+    for (final EvalMetric metric in request.evaluateConfig.evalMetrics) {
+      switch (metric) {
+        case EvalMetric.finalResponseExactMatch:
+          final bool match =
+              expectedNormalized.isNotEmpty &&
+              actualNormalized == expectedNormalized;
+          metrics.add(
+            EvalMetricResult(
+              metric: metric,
+              score: match ? 1 : 0,
+              passed: match,
+              detail: 'Exact match against expected output.',
+            ),
+          );
+          break;
+        case EvalMetric.finalResponseContains:
+          final bool contains =
+              expectedNormalized.isNotEmpty &&
+              actualNormalized.contains(expectedNormalized);
+          metrics.add(
+            EvalMetricResult(
+              metric: metric,
+              score: contains ? 1 : 0,
+              passed: contains,
+              detail: 'Response contains expected output.',
+            ),
+          );
+          break;
+      }
+    }
+
+    final List<EvalMetricResultSpec> overallEvalMetricResults =
+        <EvalMetricResultSpec>[];
+    if (request.evaluateConfig.evalMetricSpecs.isNotEmpty) {
+      final List<Invocation> actualInvocations =
+          inference.inferences ??
+          <Invocation>[
+            Invocation(
+              userContent: <String, Object?>{
+                'role': 'user',
+                'parts': <Object?>[
+                  <String, Object?>{'text': inference.userInput},
+                ],
+              },
+              finalResponse: inference.responseText == null
+                  ? null
+                  : <String, Object?>{
+                      'role': 'model',
+                      'parts': <Object?>[
+                        <String, Object?>{'text': inference.responseText},
+                      ],
+                    },
+            ),
+          ];
+      final List<Invocation>? expectedInvocations = evalCase?.conversation;
+
+      for (final EvalMetricSpec spec
+          in request.evaluateConfig.evalMetricSpecs) {
+        EvaluationResult evaluationResult;
+        try {
+          evaluationResult = await _runWithEvalClientLabel(
+            () => _evaluateMetric(
+              evalMetric: spec,
+              actualInvocations: actualInvocations,
+              expectedInvocations: expectedInvocations,
+              conversationScenario: evalCase?.conversationScenario,
+            ),
+          );
+        } catch (_) {
+          evaluationResult = EvaluationResult(
+            overallEvalStatus: EvalStatus.notEvaluated,
+          );
+        }
+
+        final double? score = evaluationResult.overallScore;
+        final double threshold =
+            spec.threshold ?? spec.criterion?.threshold ?? 0.0;
+        final EvalStatus evalStatus =
+            evaluationResult.overallEvalStatus != EvalStatus.notEvaluated
+            ? evaluationResult.overallEvalStatus
+            : (score != null
+                  ? (score >= threshold
+                        ? EvalStatus.passed
+                        : EvalStatus.failed)
+                  : EvalStatus.notEvaluated);
+        overallEvalMetricResults.add(
+          EvalMetricResultSpec(
+            metricName: spec.metricName,
+            threshold: spec.threshold,
+            criterion: spec.criterion,
+            customFunctionPath: spec.customFunctionPath,
+            score: score,
+            evalStatus: evalStatus,
+          ),
+        );
+        metrics.add(
+          EvalMetricResult(
+            metric: EvalMetric.finalResponseExactMatch,
+            metricNameOverride: spec.metricName,
+            score: score ?? 0.0,
+            threshold: spec.threshold,
+            evalStatus: evalStatus,
+            passed: evalStatus == EvalStatus.passed,
+          ),
+        );
+      }
+    }
+
+    EvalStatus? finalStatus;
+    if (overallEvalMetricResults.isNotEmpty) {
+      finalStatus = EvalStatus.notEvaluated;
+      for (final EvalMetricResultSpec result in overallEvalMetricResults) {
+        if (result.evalStatus == EvalStatus.passed) {
+          finalStatus = EvalStatus.passed;
+        } else if (result.evalStatus == EvalStatus.notEvaluated ||
+            result.evalStatus == EvalStatus.informational) {
+          continue;
+        } else {
+          finalStatus = EvalStatus.failed;
+          break;
+        }
+      }
+    }
+
+    return EvalCaseResult(
+      evalSetId: inference.evalSetId,
+      evalCaseId: inference.evalCaseId,
+      metrics: metrics,
+      overallEvalMetricResults: overallEvalMetricResults.isEmpty
+          ? null
+          : overallEvalMetricResults,
+      finalEvalStatus: finalStatus ?? EvalStatus.notEvaluated,
+      sessionId: inference.sessionId ?? '',
+      repetitionIndex: inference.repetitionIndex,
+    );
+  }
+
+  Future<EvaluationResult> _runWithEvalClientLabel(
+    Future<EvaluationResult> Function() action,
+  ) {
+    if (getClientLabels().contains(evalClientLabel)) {
+      return action();
+    }
+    return clientLabelContext(evalClientLabel, action);
+  }
+
+  Future<EvaluationResult> _evaluateMetric({
+    required EvalMetricSpec evalMetric,
+    required List<Invocation> actualInvocations,
+    required List<Invocation>? expectedInvocations,
+    required ConversationScenario? conversationScenario,
+  }) async {
+    final Evaluator metricEvaluator = _metricEvaluatorRegistry.getEvaluator(
+      evalMetric,
+    );
+    return Future<EvaluationResult>(() async {
+      final FutureOr<EvaluationResult> result = metricEvaluator
+          .evaluateInvocations(
+            actualInvocations: actualInvocations,
+            expectedInvocations: expectedInvocations,
+            conversationScenario: conversationScenario,
+          );
+      return await result;
+    });
   }
 
   Future<List<Event>> _runLiveInference({

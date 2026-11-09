@@ -60,17 +60,17 @@ class CustomMetricEvaluator extends Evaluator {
     List<Invocation>? expectedInvocations,
     ConversationScenario? conversationScenario,
   }) async {
-    final EvalMetricSpec evalMetric = EvalMetricSpec(
-      metricName: _evalMetric.metricName,
-      threshold: null,
-      criterion: _evalMetric.criterion,
-      customFunctionPath: _evalMetric.customFunctionPath,
-    );
-    return await _metricFunction(
-      evalMetric,
-      actualInvocations,
-      expectedInvocations,
-      conversationScenario,
-    );
+    final Map<String, Object?> copiedJson = _evalMetric.toJson();
+    copiedJson['threshold'] = null;
+    final EvalMetricSpec evalMetric = EvalMetricSpec.fromJson(copiedJson);
+    return Future<EvaluationResult>(() async {
+      final FutureOr<EvaluationResult> evalResult = _metricFunction(
+        evalMetric,
+        actualInvocations,
+        expectedInvocations,
+        conversationScenario,
+      );
+      return await evalResult;
+    });
   }
 }
