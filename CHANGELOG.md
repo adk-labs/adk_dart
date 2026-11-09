@@ -1,3 +1,16 @@
+## 2026.11.9
+
+- **Upstream `adk-python` Parity (`dd7161f7a..67b217d00`)**:
+  - Updated `adkPackageVersion` to `'2026.11.9'`.
+  - **A2A Unary Task History `finish_task` Resolution (`lib/src/agents/remote_a2a_agent.dart`, `lib/src/tools/agent_tool.dart`, `lib/src/events/event.dart`, `adk-python` `1cb926d5b`)**:
+    - Added `findFinishTaskArgsFromHistory` in `RemoteA2aAgent` to resolve `finish_task` call arguments from `Task.history` in unary (non-streaming) A2A `SendMessageSuccessResponse` payloads when the completed task's final `status.message` only carries the `finish_task` `FunctionResponse`.
+    - Updated `AgentTool` (`_runAgentInCurrentSession`) to honor `event.output` (`event.hasOutput`) when extracting `finish_task` tool results from `mode: 'task'` sub-agents, and updated `Event.output` setter to mark `hasOutput = true`.
+  - **Synchronous Metric Evaluator Isolation & `evalClientLabel` Propagation (`lib/src/evaluation/`, `adk-python` `67b217d00`)**:
+    - Updated `Evaluator.evaluateInvocations` to return `FutureOr<EvaluationResult>` and updated `LocalEvalService.evaluate` (`_evaluateMetric`) to run synchronous `Evaluator.evaluateInvocations` implementations via `Future<EvaluationResult>(() => ...)` while propagating the active `evalClientLabel` zone value (`runWithEvalClientLabel`).
+    - Updated `CustomMetricEvaluator.evaluateInvocations` to schedule synchronous custom metric callbacks off the caller frame with `evalClientLabel` propagation and preserve the original `EvalMetric` (`threshold: null` only on a cloned metric passed to the custom function).
+- **AI Coding Agent Skills Suite (`.agents/skills/`)**:
+  - Added 6 repository-bundled AI coding agent skills (`adk-dart-setup`, `adk-dart-agent-builder`, `adk-dart-architecture`, `adk-dart-cli-and-web`, `adk-dart-debug`, `flutter-adk-ui-builder`) with verified API signatures and automated validation tests (`test/repo_agent_skills_test.dart`).
+
 ## 2026.11.8
 
 - **Upstream `adk-python` `v2.14.0` & `adk-web` Parity (`3640e7d0c..dd7161f7a`, `dfac466d..07a07025`)**:

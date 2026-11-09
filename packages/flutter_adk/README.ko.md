@@ -29,7 +29,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.11.8
+  flutter_adk: ^2026.11.9
 ```
 
 ---

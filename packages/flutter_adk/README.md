@@ -29,7 +29,7 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.11.8
+  flutter_adk: ^2026.11.9
 ```
 
 ---

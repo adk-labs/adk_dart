@@ -15,7 +15,7 @@ description: >-
 
 # ADK Dart Architecture & Internals
 
-Checked against `adk_dart` `2026.11.8` (`adk-python` `2.14.0` baseline).
+Checked against `adk_dart` `2026.11.9` (`adk-python` `2.14.0` baseline).
 
 ## 1. Execution Model Overview
 

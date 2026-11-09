@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.9
+
+- Bumped package version to `2026.11.9` and dependency `adk_dart: ^2026.11.9`.
+- Synced LiteRT-LM runtime model bindings with `adk_dart` `2026.11.9`.
+
 ## 2026.11.8
 
 - Bumped package version to `2026.11.8` and dependency `adk_dart: ^2026.11.8`.

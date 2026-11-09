@@ -19,7 +19,7 @@ description: >-
 
 # Flutter ADK UI Builder (`flutter_adk`)
 
-Checked against `flutter_adk` `2026.11.8` (100% Flutter Web / `dart2wasm` compatible).
+Checked against `flutter_adk` `2026.11.9` (100% Flutter Web / `dart2wasm` compatible).
 
 Single import for both the Web-safe ADK runtime (`adk_core`) and all 43+ Material 3 UI components:
 

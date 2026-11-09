@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.9
+
+- Bumped package version to `2026.11.9` and dependency `adk_dart: ^2026.11.9`.
+- Synced Flutter UI Kit and re-exported `adk_core.dart` runtime primitives with `adk_dart` `2026.11.9` (`adk-python` `1cb926d5b`, `67b217d00` parity).
+
 ## 2026.11.8
 
 - Bumped package version to `2026.11.8` and dependency `adk_dart: ^2026.11.8`.
