@@ -9,7 +9,7 @@
 ///
 /// final step = FunctionNode(
 ///   name: 'greet',
-///   func: (context, input) async => 'Hello, $input!',
+///   function: (context, input) async => 'Hello, $input!',
 /// );
 /// ```
 ///

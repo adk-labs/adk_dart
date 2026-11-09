@@ -54,8 +54,9 @@ class AgentChatScreen extends StatelessWidget {
         showContextWindowMeter: true,
         showTokenUsage: true,
         useSpecializedToolCards: true,
-        suggestions: const <AdkPromptSuggestion>[
-          AdkPromptSuggestion(text: 'Summarize today\'s tasks', label: 'Summarize'),
+        suggestions: const <String>[
+          'Summarize today\'s tasks',
+          'Show available tools',
         ],
       ),
     );
@@ -77,13 +78,13 @@ class AgentChatScreen extends StatelessWidget {
 
 | Controller | Role & Key Methods |
 | --- | --- |
-| **`AdkChatController`** | Manages chat messages, SSE streaming, tool call states, `sessionTokenUsage`, and storage sync (`sendMessage`, `clearHistory`, `cancelGeneration`). |
-| **`AdkWorkflowController`** | Runs multi-step workflows, tracks `AdkWorkflowStep` statuses, and handles HITL pause/resume (`execute`, `approveAndResume`, `rejectAndCancel`). |
-| **`AdkSessionController`** | Manages multi-session creation, switching, renaming, deletion, and search (`loadAllSessions`, `createNewSession`, `switchSession`). |
-| **`AdkVoiceController`** | Manages microphone recording state, decibels, transcripts, and barge-in (`startListening`, `stopListening`, `toggleMute`). |
-| **`AdkSmartFormController`** | Extracts form values from tool args and validates required fields (`populateFromMap`, `submit`). |
-| **`AdkAgentLoggerController`** | Buffers real-time I/O and telemetry logs with category filtering and JSON export (`setCategory`, `exportJson`). |
-| **`AdkAgentManagerController`** | Central fleet registry for toggling agents and aggregating latency/token telemetry (`registerAgent`, `toggleAgent`, `updateInstruction`). |
+| **`AdkChatController`** | Manages chat messages, SSE streaming, tool call states, `sessionTokenUsage`, and storage sync (`sendMessage`, `loadSession`, `clearMessages`, `stopGeneration`, `rewindBeforeInvocation`, `exportTranscriptJson`, `resetTokenUsage`). |
+| **`AdkWorkflowController`** | Runs multi-step workflows, tracks `AdkWorkflowStep` statuses, and handles HITL pause/resume (`execute`, `approveAndResume`, `setStepStatus`, `cancel`, `reset`). |
+| **`AdkSessionController`** | Manages multi-session creation, switching, renaming, deletion, and search (`loadAllSessions`, `createNewSession`, `switchSession`, `updateSessionTitle`, `deleteSession`, `clearAllSessions`, `setSearchQuery`). |
+| **`AdkVoiceController`** | Manages microphone recording state, decibels, transcripts, and barge-in (`startListening`, `stopListening`, `startSpeaking`, `stopSpeaking`, `interrupt`, `toggleMute`). |
+| **`AdkSmartFormController`** | Extracts form values from tool args and validates required fields (`updateFieldValue`, `populateFromMap`, `validate`, `getFormData`, `submit`, `reset`). |
+| **`AdkAgentLoggerController`** | Buffers real-time I/O and telemetry logs with category filtering and JSON export (`addLog`, `recordEvent`, `setCategory`, `setSearchQuery`, `exportJson`, `clearLogs`). |
+| **`AdkAgentManagerController`** | Central fleet registry for toggling agents and aggregating latency/token telemetry (`registerAgent`, `unregisterAgent`, `toggleAgent`, `setActiveAgent`, `updateInstruction`, `recordInvocation`). |
 
 ---
 
@@ -140,15 +141,15 @@ AdkTheme(
 ## 5. Built-in UI Utilities (`AdkFormatters` & `AdkEventStreamUtils`)
 
 - **`AdkFormatters`**:
-  - `formatTokenCount(int)`, `formatLatencyMs(int)`, `formatBytes(int)`, `prettyJson(Object?)`
-  - `decodeDataUrlTextUtf8(String dataUrl)`: Decodes base64 or percent-encoded `data:` URLs using UTF-8 (preserving Korean/CJK/emoji characters).
-  - `encodeArtifactFilename(String filename)`: Percent-encodes special characters (`#`, `?`, `%`, spaces) for safe artifact URLs.
+  - `formatTokens(int, {bool compact = false})`, `formatDuration(Duration)`, `formatBytes(int)`, `formatJson(Object?)`
+  - `decodeDataUrlTextUtf8(String? dataUrl)`: Decodes base64 or percent-encoded `data:` URLs using UTF-8 (preserving Korean/CJK/emoji characters).
+  - `encodeArtifactFilename(String artifactName)`: Percent-encodes special characters (`#`, `?`, `%`, spaces) for safe artifact URLs.
 - **`AdkEventStreamUtils`**:
   - `extractToolCalls(Event)` (automatically maps `adk:tool_display_names` to `AdkToolCallInfo.displayTitle`)
   - `extractTokenUsage(Event)` (maps `cacheCreationTokens`, `cachedTokens`, `thoughtTokens`)
   - `extractVisibleText(Event)` (concatenates non-thought text parts)
   - `isAbortedEvent(Event)` (detects invocation abort / cancellation events)
-  - `detectSystemInstructionChangesByAgent(List<Event>)` (tracks system instruction changes scoped per agent author)
+  - `detectSystemInstructionChangesByAgent(Iterable<({Event event, String? systemInstruction})>)` (tracks system instruction changes scoped per agent author)
 
 For full widget parameter tables and copy-paste recipes, see:
 - [`packages/flutter_adk/docs/WIDGET_CATALOG.md`](../../../packages/flutter_adk/docs/WIDGET_CATALOG.md)

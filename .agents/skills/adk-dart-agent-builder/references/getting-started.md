@@ -81,7 +81,7 @@ Useful `Event` properties:
 
 ---
 
-## 3. Multi-Provider Models (`Gemini`, `AnthropicLlm`, `LiteLlm`, `LiteRtLlm`)
+## 3. Multi-Provider Models (`Gemini`, `AnthropicLlm`, `LiteLlm`, `GemmaLlm`, `ApigeeLlm`, `LiteRtLmModel`)
 
 ```dart
 // 1. Gemini (by model name string or explicit Gemini instance)
@@ -104,4 +104,23 @@ final Agent ollamaAgent = Agent(
     baseUrl: 'http://localhost:11434/v1',
   ),
 );
+
+// 4. Gemma via Gemini API / Vertex AI (`GemmaLlm`) or Apigee proxy (`ApigeeLlm`)
+final Agent gemmaAgent = Agent(
+  name: 'gemma_agent',
+  model: GemmaLlm(model: 'gemma-3-27b-it'),
+);
+
+final Agent apigeeAgent = Agent(
+  name: 'apigee_agent',
+  model: ApigeeLlm(model: 'apigee/gemini-2.5-flash'),
+);
+
+// 5. On-device LiteRT-LM (`package:adk_litertlm/adk_litertlm.dart`)
+// import 'package:adk_litertlm/adk_litertlm.dart';
+// import 'package:litertlm/litertlm.dart';
+// final LiteRtLmModel onDeviceModel = LiteRtLmModel.fromConfig(
+//   EngineConfig(modelPath: '/path/to/model.litertlm'),
+//   model: 'gemma-3-1b',
+// );
 ```

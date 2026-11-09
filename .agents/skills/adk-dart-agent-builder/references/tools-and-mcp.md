@@ -26,12 +26,11 @@ final FunctionTool weatherTool = FunctionTool(
   func: getWeather,
   name: 'get_weather',
   description: 'Gets the current weather for a city.',
-  displayTitle: 'Weather Lookup',
 );
 ```
 
 - **`ToolContext` Injection**: A parameter named `toolContext` (or typed `ToolContext`) is automatically injected by the runtime and excluded from the LLM schema.
-- **`displayTitle`**: Exposed in `event.customMetadata['adk:tool_display_names']` for UI cards.
+- **Tool Display Names**: MCP tools with `title` (or custom tools populating `customMetadata`) expose display titles in `event.customMetadata['adk:tool_display_names']` (`toolDisplayNamesMetadataKey`).
 - **Return Values**: Return JSON-serializable values (`Map<String, Object?>`, `List`, `String`, `num`, `bool`, `null`).
 
 ---
@@ -46,7 +45,6 @@ class StockPriceTool extends BaseTool {
       : super(
           name: 'get_stock_price',
           description: 'Fetches the current stock price for a ticker symbol.',
-          displayTitle: 'Stock Ticker Lookup',
         );
 
   @override
@@ -130,7 +128,7 @@ final McpToolset remoteMcp = McpToolset(
 final McpToolset stdioMcp = McpToolset(
   connectionParams: StdioConnectionParams(
     command: 'npx',
-    args: <String>['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+    arguments: <String>['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
   ),
 );
 ```
@@ -139,8 +137,29 @@ Always call `await runner.close()` (or `await remoteMcp.close()`) when finished 
 
 ---
 
-## 6. `OpenApiToolset`, `SkillToolset`, and Built-in Gemini Tools
+## 6. `OpenAPIToolset`, `SkillToolset`, `ToolSearchToolset`, `ModelConsultTool`, and Built-in Gemini Tools
 
-- **`OpenApiToolset`**: Parses OpenAPI 3.x YAML/JSON specs (including local/relative/remote multi-document `$ref` via `externalDocuments`) into callable `RestApiTool` instances.
-- **`SkillToolset`**: Exposes inline `Skill` definitions or directory-loaded skills (`loadSkillFromDir`) via `list_skills`, `load_skill`, and `load_skill_resource`.
+- **`OpenAPIToolset`**: Parses OpenAPI 3.x YAML/JSON specs (including local/relative/remote multi-document `$ref` via `externalDocuments`) into callable `RestApiTool` instances:
+  ```dart
+  final OpenAPIToolset petStore = OpenAPIToolset(
+    specStr: openApiJsonString,
+    specStrType: 'json',
+  );
+  ```
+- **`SkillToolset`**: Exposes inline `Skill` definitions or directory-loaded skills (`loadSkillFromDir`) via `list_skills`, `load_skill`, `load_skill_resource`, and `run_skill_script`:
+  ```dart
+  final SkillToolset skills = SkillToolset(
+    skills: <Skill>[loadSkillFromDir('.agents/skills/adk-dart-agent-builder')],
+    discoveryMode: SkillDiscoveryMode.lazy,
+    lifecycleConfig: SkillLifecycleConfig(enabled: true),
+  );
+  ```
+- **`ToolSearchToolset`**: Defers large tool catalogs behind a search tool (`tool_search`) so only relevant tools are loaded into the active prompt window:
+  ```dart
+  final ToolSearchToolset deferredTools = ToolSearchToolset(
+    tools: <Object>[weatherTool, StockPriceTool()],
+    config: const ToolSearchConfig(maxResults: 5),
+  );
+  ```
+- **`ModelConsultTool` & `ForceEscalationPlugin`**: Lets an agent consult a stronger advisor model (`consult_model`) mid-turn, optionally enforced by `ForceEscalationPlugin(forceFirstConsult: true, forceOnRepeat: 3, requireConsultBefore: <String>{'deploy'})`.
 - **Built-in Gemini Tools**: `GoogleSearchTool(bypassMultiToolsLimit: true)`, `UrlContextTool()`, `VertexAiSearchTool(...)`, `VertexRagRetrievalTool(...)`, and `BuiltInCodeExecutor()`.

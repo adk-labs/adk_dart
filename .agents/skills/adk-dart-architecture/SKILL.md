@@ -38,7 +38,7 @@ Checked against `adk_dart` `2026.11.8` (`adk-python` `2.14.0` baseline).
 | `lib/adk_dart.dart` | Dart VM / CLI / Server | Full SDK export surface (includes `dart:io`, `dart:ffi`, `dart:mirrors` integrations). |
 | `lib/adk_core.dart` | All Platforms (VM + Flutter Mobile/Desktop + **Flutter Web / WASM**) | Strictly Web-safe subset re-exported by `package:flutter_adk/flutter_adk.dart`. **Never** export `dart:io`, `dart:ffi`, or `dart:mirrors`-dependent libraries here. |
 | `lib/agents.dart` | Dart VM | Selective barrel for agents, contexts, runners, flows, planners, and plugins. |
-| `lib/workflow.dart` | All Platforms | Selective barrel for ADK 2.0 `Workflow`, `BaseNode`, `NodeTool`, and replay utilities. |
+| `lib/workflow.dart` | All Platforms | Selective barrel for ADK 2.0 `Workflow`, `BaseNode`, `WorkflowTool`, `NodeTool`, and replay utilities. |
 | `lib/evaluation.dart` | Dart VM | Selective barrel for `AgentEvaluator`, rubric/trajectory/ROUGE evaluators, and `pass@k` / `pass^k` multi-run aggregation. |
 | `lib/tools.dart` | Dart VM | Selective barrel for function/agent/MCP/OpenAPI/Google/data tools, skills, and code executors. |
 | `lib/models.dart` | All Platforms | Selective barrel for `BaseLlm`, `Gemini`, `AnthropicLlm`, `LiteLlm`, `GemmaLlm`, `ApigeeLlm`, and `LLMRegistry`. |
@@ -77,11 +77,11 @@ Large subsystems are split into focused `part` files while keeping a single libr
 | Concept | Path |
 | --- | --- |
 | `BaseAgent`, `LlmAgent` (`Agent`), `Context`, `InvocationContext`, `RunConfig` | `lib/src/agents/` |
-| `Workflow`, `BaseNode`, `JoinNode`, `NodeTool`, `ReplayManager` | `lib/src/workflow/` |
+| `Workflow`, `BaseNode`, `JoinNode`, `WorkflowTool`, `NodeTool`, `ReplayManager` | `lib/src/workflow/` |
 | `Runner`, `InMemoryRunner` | `lib/src/runners/` |
 | `Event`, `EventActions`, `NodePathBuilder`, `applyRewinds` | `lib/src/events/` |
 | `BaseLlm`, `LlmRequest`, `LlmResponse`, `Gemini`, `AnthropicLlm`, `LiteLlm`, `toGenerateContentBody` | `lib/src/models/` |
-| `BaseTool`, `FunctionTool`, `AgentTool`, `McpToolset`, `OpenApiToolset`, `SkillToolset` | `lib/src/tools/`, `lib/src/skills/` |
+| `BaseTool`, `FunctionTool`, `AgentTool`, `McpToolset`, `OpenAPIToolset`, `SkillToolset`, `ToolSearchToolset` | `lib/src/tools/`, `lib/src/skills/` |
 | `Session`, `State`, `InMemorySessionService`, `SqliteSessionService`, `DatabaseSessionService` | `lib/src/sessions/` |
 | `AgentEvaluator`, `MultiRunCaseResult`, `pass@k` / `pass^k`, `EvalCaseResultMultiRunAggregator` | `lib/src/evaluation/` |
 | `adk` CLI 1:1 Python parity modules (`cli_create`, `cli_deploy`, `cli_eval`, `adk_web_server`) | `packages/adk/lib/src/cli/`, `packages/adk/lib/src/dev/` |
