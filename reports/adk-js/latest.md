@@ -1,156 +1,46 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-11-09
+- Date (UTC): 2026-11-10
 - Source: `google/adk-js`
-- Latest SHA: `f41747828fcb02276d18281a88cee5ab5128e2ff`
-- Previous SHA: `eedc561304baedf4ff3587117df705dd0606eba1`
+- Latest SHA: `c9ff7b71359f27f0004e1bca60a2bad527826e18`
+- Previous SHA: `f41747828fcb02276d18281a88cee5ab5128e2ff`
 
 ## Summary
 
-- New commits: 24
+- New commits: 6
 
 ## Commits
 
-- [f417478](https://github.com/google/adk-js/commit/f41747828fcb02276d18281a88cee5ab5128e2ff) Test: pin the IntegrationRegistry.summary() inventory string (#1094) (adk-foundry-bot, 2026-11-09)
-- [76b05dc](https://github.com/google/adk-js/commit/76b05dcde86a648ee39e5573b49b4aa56a8e9d4a) fix(agents): keep a tool's outputKey value when the final event has no text (#1206) (Arjun Prabhulal, 2026-11-09)
-- [ed302e5](https://github.com/google/adk-js/commit/ed302e5342957498de95118b5f9b7f75e0095bbf) fix(tools): pass the parent's current state to a reused AgentTool session (#1207) (Arjun Prabhulal, 2026-11-09)
-- [482dcf8](https://github.com/google/adk-js/commit/482dcf8a85f47995aa44c96dcf1ad42c98c495d3) fix(tools): serialize array and object fields in RestApiTool form bodies (#1208) (Osama Ansar, 2026-11-10)
-- [41d4f03](https://github.com/google/adk-js/commit/41d4f034ba8f16fe795ea53178c078ba2bee68a2) fix(agents): skip function calls in partial events (#1228) (ni, 2026-11-09)
-- [d9f971e](https://github.com/google/adk-js/commit/d9f971e04ef0bef230cead86e295b1019b784a8a) fix(a2a): resume the matching peer task in mixed tool replies (#1230) (Chen Yufeiyang, 2026-11-10)
-- [dd3aa51](https://github.com/google/adk-js/commit/dd3aa514884fc51aedd6bd770a070452b4dea42d) fix(sessions): preserve empty user ID filters in database lists (#1231) (Chen Yufeiyang, 2026-11-10)
-- [7393fd8](https://github.com/google/adk-js/commit/7393fd8c3d66e21cd2f6f6196217c05f577b3f1d) fix(workflow): handle thrown objects without constructors (#1238) (Tianlang (Jackie) Chen, 2026-11-09)
-- [5340a87](https://github.com/google/adk-js/commit/5340a87214fb11288c2fe90afde385d3eb4039bd) fix(a2a): stop attributing a remote peer's message to the local user (#863) (herdiyanitdev, 2026-11-10)
-- [25359ab](https://github.com/google/adk-js/commit/25359ab1ac2ad7cef665b5493c673806f72a43ab) fix(dev): retain agent bundles while in use during watch invalidation (#1008) (Varun-S10, 2026-11-10)
-- [0b238ab](https://github.com/google/adk-js/commit/0b238ab7624dfc64ddc844ef7b0b0d89186a21f6) test: report cleanup failures in the build_setup integration teardown (#1057) (adk-foundry-bot, 2026-11-09)
-- [4285cfd](https://github.com/google/adk-js/commit/4285cfd53c544919fdd7053f224dda7803483021) chore(deps): bump markdown-it (#1120) (dependabot[bot], 2026-11-09)
-- [144efc5](https://github.com/google/adk-js/commit/144efc547afe1710da361fff1aefd284f6006da3) fix(cli): keep the drive letter of an absolute Windows eval set path (#1239) (Jae Birdsall, 2026-11-09)
-- [c5477e1](https://github.com/google/adk-js/commit/c5477e196b56e24dd6f7bbf880e1c8045066e540) fix(sessions): keep temp: state in the session for the rest of the invocation (#1209) (Mikhail Grechannikov, 2026-11-09)
-- [6f899b5](https://github.com/google/adk-js/commit/6f899b5b5d1d7043e78e1a86b4fe68ae8aa13d7b) refactor(agents): use LlmAgent.outputSchema in validation error and prose test names (#1218) (adk-foundry-bot, 2026-11-09)
-- [8e800f5](https://github.com/google/adk-js/commit/8e800f52cb9c6f5f1eefe26bd2deea2a94412702) test(tools): replace pytest test_* names and callable fixture names with Vitest prose (#1219) (adk-foundry-bot, 2026-11-09)
-- [a178840](https://github.com/google/adk-js/commit/a178840c432b66e8d20543a8a3931bd33f5d270f) fix(tools): serialize OpenAPI path, header, and cookie parameters and omit null values (#1241) (Varun-S10, 2026-11-10)
-- [a25cd30](https://github.com/google/adk-js/commit/a25cd300fd85b59ee02be0515ea8ef888f8cdebc) fix(workflow): wait for the runner to store node events (adk-python parity) (#978) (Alexey Kalenkevich, 2026-11-09)
-- [1604bda](https://github.com/google/adk-js/commit/1604bda845639b1f81c1cd183b69b042fa3d4e7e) fix(cli): pin adk-devtools in deploy images to the CLI's version, overridable with --adk_version (#1215) (Alexey Kalenkevich, 2026-11-09)
-- [fb66257](https://github.com/google/adk-js/commit/fb66257a976959ec14792989d42a4bceee81a5fe) feat(integrations): support extended thinking on Claude and skip thought and empty parts (#1160) (Scott Mansfield, 2026-11-09)
-- [53c6ba6](https://github.com/google/adk-js/commit/53c6ba6b767c7917365658f091756ffced0ea866) feat(integrations): add AnthropicLlm for the Anthropic API and make Claude extend it (#1140) (Scott Mansfield, 2026-11-09)
-- [02e080f](https://github.com/google/adk-js/commit/02e080ff8ca4fa2be724d0f8941bc8fd2e6bc5f2) fix(agents): leave thought parts out of the outputKey value (#1205) (Arjun Prabhulal, 2026-11-09)
-- [f37c2d3](https://github.com/google/adk-js/commit/f37c2d3d847a4b7c46db8b3e814765bb908ce3e8) fix(utils): keep schema constraints in the Gemini converter (#1154) (Kevin Dong, 2026-11-10)
-- [99dc7df](https://github.com/google/adk-js/commit/99dc7df5dc0be511e5fd771d7447b0d166426e57) fix(context): retain nonadjacent tool call and response pairs (#1152) (Kevin Dong, 2026-11-10)
+- [c9ff7b7](https://github.com/google/adk-js/commit/c9ff7b71359f27f0004e1bca60a2bad527826e18) feat(core): add agent and run error hooks and finalize aborted runs (#1156) (Zaid Lattouf, 2026-11-10)
+- [d98ee13](https://github.com/google/adk-js/commit/d98ee13004c97949211daba1a643f9a72bc7caa6) fix(agents): treat Object.prototype names as missing state keys in instructions (#1252) (G, 2026-11-10)
+- [86a2492](https://github.com/google/adk-js/commit/86a249271e995a25e3936a720fd5606ed20cb5c9) fix(skills): run a skill script named without the scripts/ prefix (#1254) (G, 2026-11-10)
+- [5f1a8f3](https://github.com/google/adk-js/commit/5f1a8f30792f40d7ddebd4e2c429d49eb589af27) chore(deps): bump the npm_and_yarn group across 1 directory with 5 updates (#1245) (dependabot[bot], 2026-11-10)
+- [53f5861](https://github.com/google/adk-js/commit/53f5861cd568d8d1d22a1f5c411d51dbaa6cf602) fix(agents): keep parallel tool responses when another call asks for confirmation (#1244) (coder-abu, 2026-11-11)
+- [8dad457](https://github.com/google/adk-js/commit/8dad4578fef657fa70f666f21fe1768b72fbdf69) test(integration): use placeholder GCP identifiers in agent_tool_vertexai_test (#1072) (adk-foundry-bot, 2026-11-09)
 
 ## Changed Files
 
-- `M	core/CHANGELOG.md`
-- `M	core/src/a2a/a2a_remote_agent.ts`
-- `M	core/src/a2a/a2a_remote_agent_utils.ts`
-- `M	core/src/a2a/event_converter_utils.ts`
+- `M	core/src/agents/base_agent.ts`
+- `M	core/src/agents/instructions.ts`
 - `M	core/src/agents/llm_agent.ts`
-- `M	core/src/cli/cli_eval.ts`
-- `M	core/src/context/compaction_utils.ts`
+- `M	core/src/plugins/base_plugin.ts`
+- `M	core/src/plugins/plugin_manager.ts`
+- `M	core/src/runner/runner.ts`
 - `M	core/src/sessions/base_session_service.ts`
-- `M	core/src/sessions/database_session_service.ts`
-- `M	core/src/tools/agent_tool.ts`
-- `M	core/src/tools/function_tool.ts`
-- `M	core/src/tools/openapi_tool/rest_api_tool.ts`
-- `M	core/src/utils/async_queue.ts`
-- `M	core/src/utils/gemini_schema_util.ts`
-- `M	core/src/utils/simple_zod_to_json.ts`
-- `M	core/src/workflow/node_runner.ts`
-- `M	core/src/workflow/utils/retry_utils.ts`
-- `M	core/test/a2a/event_converter_utils_test.ts`
-- `A	core/test/a2a/peer_role_user_confirmation_test.ts`
-- `M	core/test/a2a/remote_agent_test.ts`
-- `M	core/test/a2a/remote_agent_utils_test.ts`
-- `M	core/test/agents/base_agent_test.ts`
-- `M	core/test/agents/functions_test.ts`
-- `A	core/test/agents/llm_agent_output_key_no_text_test.ts`
-- `A	core/test/agents/llm_agent_output_key_thought_test.ts`
-- `M	core/test/agents/llm_agent_test.ts`
-- `M	core/test/agents/processors/instructions_llm_request_processor_test.ts`
-- `M	core/test/cli/cli_eval_test.ts`
-- `A	core/test/context/compaction_utils_test.ts`
-- `A	core/test/context/nonadjacent_tool_pair_compactor_test.ts`
-- `M	core/test/runner/runner_root_node_test.ts`
-- `M	core/test/sessions/database_session_service_test.ts`
+- `M	core/src/sessions/vertex_ai_session_service.ts`
+- `M	core/src/tools/skill/run_skill_script_tool.ts`
+- `M	core/src/utils/error_utils.ts`
+- `M	core/test/agents/instructions_test.ts`
+- `M	core/test/plugins/base_plugin_test.ts`
+- `M	core/test/plugins/plugin_manager_test.ts`
+- `M	core/test/runner/run_live_test.ts`
+- `M	core/test/runner/runner_abort_test.ts`
+- `A	core/test/runner/runner_plugin_lifecycle_test.ts`
 - `M	core/test/sessions/in_memory_session_service_test.ts`
-- `A	core/test/tools/agent_tool_state_test.ts`
-- `M	core/test/tools/agent_tool_test.ts`
-- `M	core/test/tools/base_tool_test.ts`
-- `M	core/test/tools/function_tool_test.ts`
-- `M	core/test/tools/google_api_tool/google_api_toolset_test.ts`
-- `M	core/test/tools/google_api_tool/google_api_toolsets_test.ts`
-- `M	core/test/tools/openapi_tool/rest_api_tool_test.ts`
-- `M	core/test/utils/async_queue_test.ts`
-- `M	core/test/utils/gemini_schema_util_test.ts`
-- `M	core/test/workflow/foundations_test.ts`
-- `M	core/test/workflow/function_node_test.ts`
-- `M	core/test/workflow/node_execution_test.ts`
-- `M	core/test/workflow/test_helpers.ts`
-- `M	dev/CHANGELOG.md`
-- `M	dev/src/cli/cli.ts`
-- `M	dev/src/cli/deploy/cli_deploy_agent_engine.ts`
-- `M	dev/src/cli/deploy/cli_deploy_cloud_run.ts`
-- `M	dev/src/cli/deploy/deploy_utils.ts`
-- `M	dev/src/server/adk_api_server.ts`
-- `M	dev/src/utils/agent_loader.ts`
-- `M	dev/test/cli/cli_deploy_agent_engine_test.ts`
-- `M	dev/test/cli/cli_deploy_cloud_run_test.ts`
-- `M	dev/test/cli/cli_test.ts`
-- `M	dev/test/integration/integration_registry_test.ts`
-- `M	dev/test/server/adk_api_server_origin_check_test.ts`
-- `M	dev/test/server/adk_api_server_test.ts`
-- `M	dev/test/utils/agent_loader_test.ts`
-- `M	docs/guides/auth/index.md`
-- `M	docs/guides/integrations/crewai/index.md`
-- `M	docs/guides/integrations/langchain/index.md`
-- `M	docs/guides/integrations/models/anthropic_llm/index.md`
-- `M	docs/guides/sessions/index.md`
-- `M	docs/guides/telemetry/index.md`
-- `M	docs/guides/tools/google_api_tool/index.md`
-- `M	eslint.config.js`
-- `M	integrations/CHANGELOG.md`
-- `M	integrations/src/index.ts`
-- `M	integrations/src/models/anthropic_llm.ts`
-- `M	integrations/src/models/anthropic_utils.ts`
-- `M	integrations/test/crewai/crewai_tool_test.ts`
-- `M	integrations/test/models/anthropic_llm_test.ts`
-- `M	integrations/test/models/anthropic_utils_test.ts`
+- `M	core/test/sessions/vertex_ai_session_service_test.ts`
+- `M	core/test/tools/function_tool_confirmation_test.ts`
+- `M	core/test/tools/skills/run_skill_script_tool_test.ts`
+- `M	core/test/utils/error_utils_test.ts`
+- `M	docs/guides/runners/index.md`
 - `M	package-lock.json`
-- `A	samples/integrations/anthropic/README.md`
-- `A	samples/integrations/anthropic/agent.ts`
-- `A	tests/integration/app_loader/agent_bundle_lifetime_test.ts`
-- `M	tests/integration/build_setup/build_setup_test.ts`
-- `A	tests/integration/models/anthropic_llm/anthropic_llm_test.ts`
-- `M	tests/integration/telemetry/agent/experimental-event-only.json`
-- `M	tests/integration/telemetry/agent/experimental-no-content.json`
-- `M	tests/integration/telemetry/agent/experimental-span-and-event.json`
-- `M	tests/integration/telemetry/agent/experimental-span-only.json`
-- `M	tests/integration/telemetry/agent/experimental-telemetry-no-capture.json`
-- `M	tests/integration/telemetry/agent/grounding.json`
-- `M	tests/integration/telemetry/agent/inference-error-valueerror-span-and-event.json`
-- `M	tests/integration/telemetry/agent/tool-error-valueerror-span-only.json`
-- `M	tests/integration/telemetry/agent/tool-error-valueerror.json`
-- `M	tests/integration/telemetry/agent_tool/experimental-telemetry.json`
-- `M	tests/integration/telemetry/agent_tool/no-experimental-telemetry.json`
-- `M	tests/integration/telemetry/conversational_agent_compaction/no-experimental-telemetry.json`
-- `M	tests/integration/telemetry/conversational_agent_compaction/token-threshold.json`
-- `M	tests/integration/telemetry/conversational_agent_compaction/untriggered.json`
-- `M	tests/integration/telemetry/mcp/experimental-span-and-event.json`
-- `M	tests/integration/telemetry/mcp/http-exchange.json`
-- `M	tests/integration/telemetry/multi_agent/experimental-telemetry.json`
-- `M	tests/integration/telemetry/multi_agent/no-experimental-telemetry.json`
-- `M	tests/integration/telemetry/nested_agents_in_workflow/experimental-telemetry.json`
-- `M	tests/integration/telemetry/nested_agents_in_workflow/no-experimental-telemetry.json`
-- `M	tests/integration/telemetry/node/experimental-event-only.json`
-- `M	tests/integration/telemetry/node/experimental-no-content.json`
-- `M	tests/integration/telemetry/node/experimental-span-and-event.json`
-- `M	tests/integration/telemetry/node/experimental-span-only.json`
-- `M	tests/integration/telemetry/skill/invalid-skill-resource.json`
-- `M	tests/integration/telemetry/skill/invalid-skill.json`
-- `M	tests/integration/telemetry/skill/skill-resource-telemetry.json`
-- `M	tests/integration/telemetry/skill/skill-script-telemetry.json`
-- `M	tests/integration/telemetry/skill/skill-telemetry-disabled.json`
-- `M	tests/integration/telemetry/skill/skill-telemetry.json`
-- `M	tests/integration/telemetry/streaming/experimental-event-only.json`
-- `M	tests/integration/telemetry/streaming/experimental-no-content.json`
-- `M	tests/integration/telemetry/streaming/experimental-span-and-event.json`
-- `M	tests/integration/telemetry/streaming/experimental-span-only.json`
-- `M	tests/integration/workflows/dynamic_fan_out_fan_in/model_responses.json`
+- `M	tests/integration/tools/agent_tool_vertexai_test.ts`
