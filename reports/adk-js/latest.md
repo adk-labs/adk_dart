@@ -1,46 +1,57 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-11-10
+- Date (UTC): 2026-11-11
 - Source: `google/adk-js`
-- Latest SHA: `c9ff7b71359f27f0004e1bca60a2bad527826e18`
-- Previous SHA: `f41747828fcb02276d18281a88cee5ab5128e2ff`
+- Latest SHA: `d1afe11605eea1d6a03339f0609a4f50ef564381`
+- Previous SHA: `c9ff7b71359f27f0004e1bca60a2bad527826e18`
 
 ## Summary
 
-- New commits: 6
+- New commits: 3
 
 ## Commits
 
-- [c9ff7b7](https://github.com/google/adk-js/commit/c9ff7b71359f27f0004e1bca60a2bad527826e18) feat(core): add agent and run error hooks and finalize aborted runs (#1156) (Zaid Lattouf, 2026-11-10)
-- [d98ee13](https://github.com/google/adk-js/commit/d98ee13004c97949211daba1a643f9a72bc7caa6) fix(agents): treat Object.prototype names as missing state keys in instructions (#1252) (G, 2026-11-10)
-- [86a2492](https://github.com/google/adk-js/commit/86a249271e995a25e3936a720fd5606ed20cb5c9) fix(skills): run a skill script named without the scripts/ prefix (#1254) (G, 2026-11-10)
-- [5f1a8f3](https://github.com/google/adk-js/commit/5f1a8f30792f40d7ddebd4e2c429d49eb589af27) chore(deps): bump the npm_and_yarn group across 1 directory with 5 updates (#1245) (dependabot[bot], 2026-11-10)
-- [53f5861](https://github.com/google/adk-js/commit/53f5861cd568d8d1d22a1f5c411d51dbaa6cf602) fix(agents): keep parallel tool responses when another call asks for confirmation (#1244) (coder-abu, 2026-11-11)
-- [8dad457](https://github.com/google/adk-js/commit/8dad4578fef657fa70f666f21fe1768b72fbdf69) test(integration): use placeholder GCP identifiers in agent_tool_vertexai_test (#1072) (adk-foundry-bot, 2026-11-09)
+- [d1afe11](https://github.com/google/adk-js/commit/d1afe11605eea1d6a03339f0609a4f50ef564381) feat(integrations): add BigQuery toolset to @google/adk-integrations (#1193) (adk-foundry-bot, 2026-11-11)
+- [7abc99d](https://github.com/google/adk-js/commit/7abc99def41d3f17f23826313a7243a08e5bd6a5) feat(cli): port adk-python v1.1.1 changes to cli (#1194) (adk-foundry-bot, 2026-11-11)
+- [3c836eb](https://github.com/google/adk-js/commit/3c836ebc056b9c6d7feacc20b96887e58105aa82) fix(a2a): keep agent instructions out of the published A2A agent card (#1255) (Scott Mansfield, 2026-11-10)
 
 ## Changed Files
 
-- `M	core/src/agents/base_agent.ts`
-- `M	core/src/agents/instructions.ts`
-- `M	core/src/agents/llm_agent.ts`
-- `M	core/src/plugins/base_plugin.ts`
-- `M	core/src/plugins/plugin_manager.ts`
-- `M	core/src/runner/runner.ts`
-- `M	core/src/sessions/base_session_service.ts`
-- `M	core/src/sessions/vertex_ai_session_service.ts`
-- `M	core/src/tools/skill/run_skill_script_tool.ts`
-- `M	core/src/utils/error_utils.ts`
-- `M	core/test/agents/instructions_test.ts`
-- `M	core/test/plugins/base_plugin_test.ts`
-- `M	core/test/plugins/plugin_manager_test.ts`
-- `M	core/test/runner/run_live_test.ts`
-- `M	core/test/runner/runner_abort_test.ts`
-- `A	core/test/runner/runner_plugin_lifecycle_test.ts`
-- `M	core/test/sessions/in_memory_session_service_test.ts`
-- `M	core/test/sessions/vertex_ai_session_service_test.ts`
-- `M	core/test/tools/function_tool_confirmation_test.ts`
-- `M	core/test/tools/skills/run_skill_script_tool_test.ts`
-- `M	core/test/utils/error_utils_test.ts`
-- `M	docs/guides/runners/index.md`
+- `M	core/src/a2a/agent_card.ts`
+- `M	core/src/cli/cli_eval.ts`
+- `A	core/src/cli/utils/cleanup.ts`
+- `M	core/src/common.ts`
+- `M	core/src/index.ts`
+- `M	core/test/a2a/agent_card_test.ts`
+- `M	core/test/cli/cli_eval_test.ts`
+- `A	core/test/cli/utils/cleanup_test.ts`
+- `M	dev/src/cli/cli.ts`
+- `M	dev/src/cli/cli_run.ts`
+- `M	dev/src/server/adk_api_server.ts`
+- `M	dev/src/utils/agent_loader.ts`
+- `M	dev/test/cli/cli_run_test.ts`
+- `M	dev/test/cli/cli_test.ts`
+- `M	dev/test/server/adk_api_server_test.ts`
+- `M	dev/test/server/agent_graph_test.ts`
+- `M	dev/test/utils/agent_loader_test.ts`
+- `M	docs/guides/README.md`
+- `M	docs/guides/cli/index.md`
+- `A	docs/guides/integrations/bigquery/index.md`
+- `M	integrations/package.json`
+- `A	integrations/src/bigquery/bigquery_credentials.ts`
+- `A	integrations/src/bigquery/bigquery_tool.ts`
+- `A	integrations/src/bigquery/bigquery_toolset.ts`
+- `A	integrations/src/bigquery/client.ts`
+- `A	integrations/src/bigquery/metadata_tool.ts`
+- `A	integrations/src/bigquery/query_tool.ts`
+- `A	integrations/src/bigquery/tool_error.ts`
+- `M	integrations/src/index.ts`
+- `A	integrations/test/bigquery/bigquery_credentials_test.ts`
+- `A	integrations/test/bigquery/bigquery_metadata_and_query_tool_test.ts`
+- `A	integrations/test/bigquery/bigquery_tool_test.ts`
+- `A	integrations/test/bigquery/bigquery_toolset_test.ts`
 - `M	package-lock.json`
-- `M	tests/integration/tools/agent_tool_vertexai_test.ts`
+- `M	samples/cli/README.md`
+- `M	samples/cli/agent.ts`
+- `A	samples/integrations/bigquery/README.md`
+- `A	samples/integrations/bigquery/agent.ts`

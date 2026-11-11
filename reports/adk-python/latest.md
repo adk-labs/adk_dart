@@ -1,86 +1,60 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-11-10
+- Date (UTC): 2026-11-11
 - Source: `google/adk-python`
-- Latest SHA: `61efa3003f896d715fd8ed07b570f73c01f81247`
-- Previous SHA: `b989d684945f8d16baf3d7a64cb784cdc9b58bd4`
+- Latest SHA: `59b0dd63c32cc5dbf8475f1e0e555770aabaa6f0`
+- Previous SHA: `61efa3003f896d715fd8ed07b570f73c01f81247`
 
 ## Summary
 
-- New commits: 14
+- New commits: 13
 
 ## Commits
 
-- [61efa300](https://github.com/google/adk-python/commit/61efa3003f896d715fd8ed07b570f73c01f81247) fix: initialize the environment from tool calls (Liang Wu, 2026-11-10)
-- [dc7d7431](https://github.com/google/adk-python/commit/dc7d7431a6d325003068bc3d19af2aa1262adca6) fix: run a node once when a list of routes matches several edges to it (hyeonsang010716, 2026-11-10)
-- [b4126cdd](https://github.com/google/adk-python/commit/b4126cddb2c982e6649dde36171cc6b82b704b2e) fix: pass a single_turn transfer target's reply downstream (Vishal Bulbule, 2026-11-10)
-- [58390078](https://github.com/google/adk-python/commit/5839007855d3f795c822f07b230755a5bf18feaa) fix: report empty Claude responses as model errors (emme1t, 2026-11-10)
-- [f0eb6139](https://github.com/google/adk-python/commit/f0eb6139c2cc072b768e6340dea43f093237a14e) fix: use agentidentitycredentials v1 client in /agent-identity/finalize (Google Team Member, 2026-11-10)
-- [e41b46bc](https://github.com/google/adk-python/commit/e41b46bc3df0591810a89bd370470093eed0040b) docs: use the current Agent Runtime product name in README (Google Team Member, 2026-11-10)
-- [c41bc42f](https://github.com/google/adk-python/commit/c41bc42fb8a7487d7e3cd3d62202005ea0d1375a) feat: list bundled resource paths in the load_skill response (Prajwal, 2026-11-10)
-- [6e448cf5](https://github.com/google/adk-python/commit/6e448cf59faa0b04d47f974f93b2022990fb0d23) fix(eval): don't fail a no-argument tool call over None vs empty args (Yusef Syed, 2026-11-10)
-- [cd8debd2](https://github.com/google/adk-python/commit/cd8debd2e7920512783217bc81f268824a81033e) fix(antigravity): pass cached token count in the turn usage event (Google Team Member, 2026-11-10)
-- [b79c529b](https://github.com/google/adk-python/commit/b79c529b57d2e9477e86521a8cdf47bd1d9fa98f) docs: say tool_filter does not apply to load_mcp_resource (Iliass Ayaou, 2026-11-10)
-- [fa647fcc](https://github.com/google/adk-python/commit/fa647fcc1ed93b171ae6f32580a51a649048910c) fix: run a task agent's after callbacks when finish_task succeeds (Arjun Prabhulal, 2026-11-10)
-- [efc7717b](https://github.com/google/adk-python/commit/efc7717bf478f2e0edba052a41d36cacdd43eddf) fix(workflow): clear open interrupts sealed by error function responses (Thomas Zettl, 2026-11-10)
-- [ab638443](https://github.com/google/adk-python/commit/ab638443816b425787dbb6b2fd835cdf03bbcbef) fix: fail on connector schema operation error and bound poll wait (Naveen Chatlapalli, 2026-11-09)
-- [19737966](https://github.com/google/adk-python/commit/197379667ca9b65973949032feb841dcfcf4e3a7) docs: remove experimental and allowlist notes for deferred service tier (Google Team Member, 2026-11-09)
+- [59b0dd63](https://github.com/google/adk-python/commit/59b0dd63c32cc5dbf8475f1e0e555770aabaa6f0) fix: do not score hallucinations_v1 responses with unlabelled sentences (shwetangsinha0509, 2026-11-11)
+- [9687bae1](https://github.com/google/adk-python/commit/9687bae1c91e0b3572529c955c81850c5a642409) fix: run code without an artifact service when it writes no files (gjija, 2026-11-11)
+- [098eefa2](https://github.com/google/adk-python/commit/098eefa2466d923cf5fec10b297057e012069d89) chore: migrate PyPI publishing workflow to OSS Exit Gate (Arturo Zarazua, 2026-11-11)
+- [e5ffe9c9](https://github.com/google/adk-python/commit/e5ffe9c9daed15b952e83d5d778fe89c251f1d48) fix: preserve required flag in RestApiTool serialization (TejasLamba2006, 2026-11-11)
+- [c0bcdaa4](https://github.com/google/adk-python/commit/c0bcdaa480a7547587fffd783f54bc408ae814a0) fix: clean up empty maps after deleting sessions (DisturbedCrow, 2026-11-10)
+- [ef812bd6](https://github.com/google/adk-python/commit/ef812bd6c40df54e35f38c4b3d2ac582e3b6e856) docs(samples): add an OpenAI Responses API sample with a reasoning model (Haran Rajkumar, 2026-11-10)
+- [353a771d](https://github.com/google/adk-python/commit/353a771d7603834432592abee15bea2b2e208852) fix: keep streamed OCI parallel tool calls separate and in order (gjija, 2026-11-10)
+- [ca42dcd1](https://github.com/google/adk-python/commit/ca42dcd186d2fab30eb0b57eac99712707921627) fix: take the first non-null union member in _remove_any_of (Pratik Dhanave, 2026-11-10)
+- [07958613](https://github.com/google/adk-python/commit/079586136e74221e0c2b795f531be8db935a44d7) fix: read LangGraphAgent reply text from content blocks (gjija, 2026-11-10)
+- [9e549adf](https://github.com/google/adk-python/commit/9e549adf7ed48fa2040f4a062a9a48680cc7ab6f) fix: flush debug logging trace and clear state on unhandled run errors (George Weale, 2026-11-10)
+- [825a3747](https://github.com/google/adk-python/commit/825a3747e9a9aea7b92eb5a6bb0d926304ded696) fix: exclude ADK client function calls from evaluated tool calls (Anoshor, 2026-11-10)
+- [3bb410c9](https://github.com/google/adk-python/commit/3bb410c90bb8c32bdf3229c00247476ae8c126cb) fix: stop emitting `required: true` inside optimization field schemas (Akash Kokare, 2026-11-10)
+- [61a4dc64](https://github.com/google/adk-python/commit/61a4dc642019345199702eeddfac03626fe8e50b) fix: give a cloned LlmAgent tools for its own sub-agents (Shangjie Chen, 2026-11-10)
 
 ## Changed Files
 
-- `M	README.md`
-- `M	contributing/samples/environment_and_skills/skills/tests/current_humidity.json`
-- `M	contributing/samples/environment_and_skills/skills/tests/current_weather.json`
-- `M	contributing/samples/environment_and_skills/skills/tests/support_hours.json`
-- `M	contributing/samples/environment_and_skills/skills/tests/wind_speed.json`
-- `M	contributing/samples/multi_agent/task_sub_agent/tests/10_burgers.json`
-- `M	contributing/samples/multi_agent/task_sub_agent/tests/3_burgers.json`
-- `M	contributing/samples/workflows/agent_in_workflow/tests/go_approve.json`
-- `M	contributing/samples/workflows/agent_in_workflow/tests/go_decline.json`
-- `M	contributing/samples/workflows/agent_in_workflow/tests/jane_doe.json`
-- `M	contributing/samples/workflows/agent_in_workflow/tests/jane_doe_and_phone_number.json`
-- `M	contributing/samples/workflows/agent_in_workflow/tests/phone_number.json`
-- `M	contributing/samples/workflows/agent_in_workflow/tests/wrong_name.json`
-- `M	docs/guides/environment/base_environment/index.md`
-- `M	docs/guides/models/service_tier/index.md`
-- `M	docs/guides/tools/mcp_tool/mcp_toolset/index.md`
-- `M	src/google/adk/agents/llm/task/_finish_task_tool.py`
-- `M	src/google/adk/cli/api_server.py`
-- `M	src/google/adk/environment/_base_environment.py`
-- `M	src/google/adk/evaluation/trajectory_evaluator.py`
-- `M	src/google/adk/events/_abort_events.py`
-- `M	src/google/adk/events/_interrupts.py`
-- `M	src/google/adk/labs/antigravity/_antigravity_agent.py`
-- `M	src/google/adk/models/anthropic_llm.py`
-- `M	src/google/adk/tools/application_integration_tool/clients/connections_client.py`
-- `M	src/google/adk/tools/environment/_constants.py`
-- `M	src/google/adk/tools/environment/_edit_file_tool.py`
-- `M	src/google/adk/tools/environment/_environment_toolset.py`
-- `M	src/google/adk/tools/environment/_execute_tool.py`
-- `M	src/google/adk/tools/environment/_read_file_tool.py`
-- `M	src/google/adk/tools/environment/_utils.py`
-- `M	src/google/adk/tools/environment/_write_file_tool.py`
-- `M	src/google/adk/tools/mcp_tool/mcp_toolset.py`
-- `M	src/google/adk/tools/skill_toolset.py`
-- `M	src/google/adk/workflow/_graph.py`
-- `M	src/google/adk/workflow/_llm_agent_wrapper.py`
-- `M	src/google/adk/workflow/utils/_rehydration_utils.py`
-- `M	src/google/adk/workflow/utils/_replay_manager.py`
-- `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/evaluation/test_trajectory_evaluator.py`
-- `M	tests/unittests/events/test_abort_events.py`
-- `M	tests/unittests/events/test_interrupts.py`
-- `M	tests/unittests/labs/antigravity/test_antigravity_agent.py`
-- `M	tests/unittests/models/test_anthropic_llm.py`
-- `M	tests/unittests/tools/application_integration_tool/clients/test_connections_client.py`
-- `A	tests/unittests/tools/environment/test_environment_utils.py`
-- `M	tests/unittests/tools/mcp_tool/test_mcp_toolset.py`
-- `M	tests/unittests/tools/test_environment_toolset.py`
-- `M	tests/unittests/tools/test_skill_toolset.py`
-- `M	tests/unittests/workflow/test_graph.py`
-- `M	tests/unittests/workflow/test_llm_agent_as_node.py`
-- `M	tests/unittests/workflow/test_task_api_e2e.py`
-- `M	tests/unittests/workflow/test_workflow_hitl.py`
-- `M	tests/unittests/workflow/test_workflow_routes.py`
-- `M	tests/unittests/workflow/utils/test_rehydration_utils.py`
-- `M	tests/unittests/workflow/utils/test_replay_manager.py`
+- `M	.github/workflows/release-publish.yml`
+- `M	contributing/samples/models/hello_world_openai/README.md`
+- `A	contributing/samples/models/openai_responses_reasoning/README.md`
+- `A	contributing/samples/models/openai_responses_reasoning/__init__.py`
+- `A	contributing/samples/models/openai_responses_reasoning/agent.py`
+- `A	contributing/samples/models/openai_responses_reasoning/run.py`
+- `M	docs/guides/optimization/agent_optimizer/index.md`
+- `M	src/google/adk/agents/langgraph_agent.py`
+- `M	src/google/adk/agents/llm_agent.py`
+- `M	src/google/adk/evaluation/eval_case.py`
+- `M	src/google/adk/evaluation/hallucinations_v1.py`
+- `M	src/google/adk/flows/llm_flows/extensions/_code_execution.py`
+- `M	src/google/adk/integrations/oci/_oci_genai_llm.py`
+- `M	src/google/adk/optimization/data_types.py`
+- `M	src/google/adk/optimization/local_eval_sampler.py`
+- `M	src/google/adk/plugins/debug_logging_plugin.py`
+- `M	src/google/adk/sessions/in_memory_session_service.py`
+- `M	src/google/adk/tools/_automatic_function_calling_util.py`
+- `M	src/google/adk/tools/openapi_tool/common/common.py`
+- `M	tests/unittests/agents/test_agent_clone.py`
+- `M	tests/unittests/agents/test_langgraph_agent.py`
+- `M	tests/unittests/evaluation/test_eval_case.py`
+- `M	tests/unittests/evaluation/test_hallucinations_v1.py`
+- `M	tests/unittests/flows/llm_flows/extensions/test_code_execution.py`
+- `M	tests/unittests/integrations/oci/test_oci_genai_llm.py`
+- `A	tests/unittests/optimization/data_types_test.py`
+- `M	tests/unittests/plugins/test_debug_logging_plugin.py`
+- `M	tests/unittests/sessions/test_session_service.py`
+- `M	tests/unittests/tools/openapi_tool/common/test_common.py`
+- `M	tests/unittests/tools/openapi_tool/openapi_spec_parser/test_rest_api_tool.py`
+- `M	tests/unittests/tools/test_build_function_declaration.py`
