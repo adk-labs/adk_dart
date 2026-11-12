@@ -19,6 +19,25 @@ class TrajectoryEvaluatorMetricInfoProvider extends MetricInfoProvider {
   }
 }
 
+/// Metric metadata provider for `tool_parameter_match`.
+class ToolParameterMatchEvaluatorMetricInfoProvider extends MetricInfoProvider {
+  @override
+  MetricInfo getMetricInfo() {
+    return MetricInfo(
+      metricName: PrebuiltMetricNames.toolParameterMatch,
+      description:
+          'This metric pairs expected and actual tool calls and scores the '
+          'expected arguments of each call with a configurable argument '
+          'matcher. Each call receives the mean score of its expected '
+          'arguments, and each invocation receives the mean score of its '
+          'expected calls. Higher values are better.',
+      metricValueInfo: MetricValueInfo(
+        interval: Interval(minValue: 0.0, maxValue: 1.0),
+      ),
+    );
+  }
+}
+
 /// Metric metadata provider for response evaluation and response matching.
 class ResponseEvaluatorMetricInfoProvider extends MetricInfoProvider {
   /// Creates a response metric info provider for [metricName].

@@ -107,6 +107,42 @@ class ApiParameter {
   /// A Python-style docstring line for this parameter.
   String toPydocString() => PydocHelper.generateParamDoc(this);
 
+  /// Serializes this parameter into a JSON-compatible map, preserving [required].
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'original_name': originalName,
+      'param_location': paramLocation,
+      'param_schema': Map<String, Object?>.from(paramSchema),
+      'description': description,
+      'py_name': pyName,
+      'required': required,
+      if (style != null) 'style': style,
+      if (explode != null) 'explode': explode,
+    };
+  }
+
+  /// Creates an [ApiParameter] from a serialized JSON map.
+  factory ApiParameter.fromJson(Object? value) {
+    final Map<String, Object?> data = _readMap(value);
+    final Object? rawName = data['original_name'] ?? data['originalName'];
+    final Object? rawLocation = data['param_location'] ?? data['paramLocation'];
+    final Object? rawPyName = data['py_name'] ?? data['pyName'];
+    final Object? rawRequired = data['required'];
+    final Object? rawExplode = data['explode'];
+    return ApiParameter(
+      originalName: rawName == null ? '' : '$rawName',
+      paramLocation: rawLocation == null ? '' : '$rawLocation',
+      paramSchema: _readMap(data['param_schema'] ?? data['paramSchema']),
+      description: data['description'] == null ? '' : '${data['description']}',
+      pyName: rawPyName == null || '$rawPyName'.isEmpty ? null : '$rawPyName',
+      required: _readParameterBool(rawRequired),
+      style: data['style'] == null || '${data['style']}'.isEmpty
+          ? null
+          : '${data['style']}',
+      explode: rawExplode == null ? null : _readParameterBool(rawExplode),
+    );
+  }
+
   /// Returns a copy with selectively replaced fields.
   ApiParameter copyWith({
     Object? originalName = _sentinel,
@@ -255,6 +291,20 @@ Map<String, Object?> _readMap(Object? value) {
     return value.map((Object? key, Object? item) => MapEntry('$key', item));
   }
   return <String, Object?>{};
+}
+
+bool _readParameterBool(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  if (value is String) {
+    final String normalized = value.toLowerCase();
+    return normalized == 'true' || normalized == '1';
+  }
+  return false;
 }
 
 const Object _sentinel = Object();

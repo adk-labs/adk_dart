@@ -338,9 +338,11 @@ class ComputerUseToolset extends BaseToolset {
     required BaseComputer computer,
     List<String>? excludedPredefinedFunctions,
     this.allowPrivateNetworkAccess = false,
+    super.toolFilter,
+    super.toolNamePrefix,
+    super.disableInvocationCache,
   }) : _computer = computer,
-       _excludedPredefinedFunctions = <String>{...?excludedPredefinedFunctions},
-       super();
+       _excludedPredefinedFunctions = <String>{...?excludedPredefinedFunctions};
 
   final BaseComputer _computer;
   final Set<String> _excludedPredefinedFunctions;

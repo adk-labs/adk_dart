@@ -17,6 +17,7 @@ import 'rubric_based_multi_turn_trajectory_evaluator.dart';
 import 'rubric_based_tool_use_quality_v1.dart';
 import 'safety_evaluator.dart';
 import 'simulation/per_turn_user_simulator_quality_v1.dart';
+import 'tool_parameter_match_evaluator.dart';
 import 'trajectory_evaluator.dart';
 
 /// Creates an [Evaluator] instance for one metric specification.
@@ -92,6 +93,11 @@ MetricEvaluatorRegistry getDefaultMetricEvaluatorRegistry() {
     metricInfo: TrajectoryEvaluatorMetricInfoProvider().getMetricInfo(),
     evaluatorFactory: (EvalMetricSpec evalMetric) =>
         TrajectoryEvaluator(evalMetric: evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: ToolParameterMatchEvaluatorMetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        ToolParameterMatchEvaluator(evalMetric),
   );
   registry.registerEvaluator(
     metricInfo: ResponseEvaluatorMetricInfoProvider(

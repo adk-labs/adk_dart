@@ -122,29 +122,9 @@ class ParsedOperation {
       'endpoint': endpoint.toJson(),
       'operation': operation,
       'parameters': parameters
-          .map(
-            (ApiParameter parameter) => <String, Object?>{
-              'original_name': parameter.originalName,
-              'param_location': parameter.paramLocation,
-              'param_schema': parameter.paramSchema,
-              'description': parameter.description,
-              'py_name': parameter.pyName,
-              'required': parameter.required,
-              if (parameter.style != null) 'style': parameter.style,
-              if (parameter.explode != null) 'explode': parameter.explode,
-            },
-          )
+          .map((ApiParameter parameter) => parameter.toJson())
           .toList(growable: false),
-      'return_value': <String, Object?>{
-        'original_name': returnValue.originalName,
-        'param_location': returnValue.paramLocation,
-        'param_schema': returnValue.paramSchema,
-        'description': returnValue.description,
-        'py_name': returnValue.pyName,
-        'required': returnValue.required,
-        if (returnValue.style != null) 'style': returnValue.style,
-        if (returnValue.explode != null) 'explode': returnValue.explode,
-      },
+      'return_value': returnValue.toJson(),
       if (authScheme != null) 'auth_scheme': _authSchemeToJson(authScheme),
       if (authCredential != null) 'auth_credential': authCredential,
       if (additionalContext != null) 'additional_context': additionalContext,
@@ -544,23 +524,10 @@ Object? _authSchemeToJson(Object? authScheme) {
 }
 
 ApiParameter _apiParameterFromObject(Object? value) {
-  final Map<String, Object?> data = _readMap(value);
-  return ApiParameter(
-    originalName:
-        _readString(data['original_name']) ??
-        _readString(data['originalName']) ??
-        '',
-    paramLocation:
-        _readString(data['param_location']) ??
-        _readString(data['paramLocation']) ??
-        '',
-    paramSchema: _readMap(data['param_schema'] ?? data['paramSchema']),
-    description: _readString(data['description']) ?? '',
-    pyName: _readString(data['py_name']) ?? _readString(data['pyName']),
-    required: _readBool(data['required']),
-    style: _readString(data['style']),
-    explode: data['explode'] == null ? null : _readBool(data['explode']),
-  );
+  if (value is ApiParameter) {
+    return value.copyWith();
+  }
+  return ApiParameter.fromJson(value);
 }
 
 AuthCredential? _readAuthCredential(Object? value) {
@@ -596,20 +563,6 @@ String? _readString(Object? value) {
   }
   final String text = '$value';
   return text.isEmpty ? null : text;
-}
-
-bool _readBool(Object? value) {
-  if (value is bool) {
-    return value;
-  }
-  if (value is num) {
-    return value != 0;
-  }
-  if (value is String) {
-    final String normalized = value.toLowerCase();
-    return normalized == 'true' || normalized == '1';
-  }
-  return false;
 }
 
 /// Parses a JSON [source] string into a [ParsedOperation].

@@ -378,6 +378,15 @@ class SearchSkillsTool extends BaseTool {
   }
 }
 
+List<String> _listSkillResources(Skill skill) {
+  final Resources resources = skill.resources;
+  return <String>[
+    for (final String name in resources.listReferences()) 'references/$name',
+    for (final String name in resources.listAssets()) 'assets/$name',
+    for (final String name in resources.listScripts()) 'scripts/$name',
+  ];
+}
+
 /// Tool to load a skill's main instructions.
 class LoadSkillTool extends BaseTool {
   /// Canonical tool name.
@@ -449,8 +458,6 @@ class LoadSkillTool extends BaseTool {
       confirmedSkillName: skill.name,
     );
 
-    await _toolset._materializeSkillToEnvironment(skill);
-
     final List<String> unloadedSkills = _toolset._recordActivation(
       toolContext.state,
       toolContext.agentName,
@@ -464,6 +471,10 @@ class LoadSkillTool extends BaseTool {
       'instructions': skill.instructions,
       'frontmatter': skill.frontmatter.toMap(),
     };
+    final List<String> resources = _listSkillResources(skill);
+    if (resources.isNotEmpty) {
+      result['resources'] = resources;
+    }
     if (unloadedSkills.isNotEmpty) {
       result['unloaded_skills'] = unloadedSkills;
     }
@@ -636,8 +647,6 @@ class LoadSkillResourceTool extends BaseTool {
       toolName: name,
       confirmedSkillName: skill.name,
     );
-
-    await _toolset._materializeSkillToEnvironment(skill);
 
     Object? content;
     if (resourcePath.startsWith('references/')) {
@@ -1594,9 +1603,11 @@ class SkillToolset extends BaseToolset {
     this.discoveryMode = SkillDiscoveryMode.lazy,
     super.toolNamePrefix,
     super.toolFilter,
+    super.disableInvocationCache = true,
   }) : _registry = registry,
        _codeExecutor = codeExecutor,
        _scriptTimeout = scriptTimeout,
+       _explicitSkillsFolder = skillsFolder,
        skillsFolder =
            skillsFolder ?? (environment != null ? '/skills' : null),
        lifecycleConfig =
@@ -1646,7 +1657,9 @@ class SkillToolset extends BaseToolset {
       <String, Map<String, Future<Skill?>>>{};
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
+  final String? _explicitSkillsFolder;
   final Set<String> _materializedSkills = <String>{};
+  final Map<String, String> _materializedSkillHashes = <String, String>{};
   bool _environmentInitialized = false;
   static const int _maxCacheTurns = 16;
 
@@ -1665,12 +1678,37 @@ class SkillToolset extends BaseToolset {
   /// Discovery mode for how skills are presented to the model.
   final SkillDiscoveryMode discoveryMode;
 
-  Future<void> _materializeSkillToEnvironment(Skill skill) async {
+  bool _isEnvInitialized(BaseEnvironment env) {
+    if (_environmentInitialized) {
+      return true;
+    }
+    try {
+      final Object? value = (env as dynamic).isInitialized;
+      if (value is bool) {
+        return value;
+      }
+    } on NoSuchMethodError {
+      // BaseEnvironment subclass without an isInitialized getter.
+    }
+    return false;
+  }
+
+  Future<void> _materializeSkillToEnvironment(
+    Skill skill, {
+    bool force = false,
+    bool initializeIfNeeded = true,
+  }) async {
     final BaseEnvironment? env = environment;
-    if (env == null || _materializedSkills.contains(skill.name)) {
+    if (env == null) {
       return;
     }
-    if (!_environmentInitialized) {
+    if (!force && _materializedSkills.contains(skill.name)) {
+      return;
+    }
+    if (!_isEnvInitialized(env)) {
+      if (!initializeIfNeeded) {
+        return;
+      }
       await env.initialize();
       _environmentInitialized = true;
     }
@@ -1731,6 +1769,7 @@ class SkillToolset extends BaseToolset {
     }
 
     _materializedSkills.add(skill.name);
+    _materializedSkillHashes[skill.name] = _skillContentHash(skill);
   }
 
   bool _hasScriptExecution(ReadonlyContext? context) {
@@ -2125,12 +2164,13 @@ class SkillToolset extends BaseToolset {
       codeExecutor: _codeExecutor,
       environment: environment,
       scriptTimeout: _scriptTimeout,
-      skillsFolder: skillsFolder,
+      skillsFolder: _explicitSkillsFolder,
       saveOutputArtifacts: saveOutputArtifacts,
       lifecycleConfig: lifecycleConfig,
       discoveryMode: discoveryMode,
       toolNamePrefix: toolNamePrefix,
       toolFilter: toolFilter,
+      disableInvocationCache: !useInvocationCache,
     );
   }
 
@@ -2228,11 +2268,18 @@ class SkillToolset extends BaseToolset {
         .map((BaseTool tool) => tool.name)
         .toSet();
 
+    final String? instructionSkillsFolder =
+        (_explicitSkillsFolder == null &&
+            environment != null &&
+            !_isEnvInitialized(environment!))
+        ? null
+        : skillsFolder;
+
     final List<String> instructions = <String>[
       buildSkillSystemInstruction(
         prefix: toolNamePrefix,
         allowedTools: selectedCoreTools,
-        skillsFolder: skillsFolder,
+        skillsFolder: instructionSkillsFolder,
         scriptExecutionEnabled: _offersScriptTool(toolContext),
       ),
     ];
@@ -2323,6 +2370,16 @@ class SkillToolset extends BaseToolset {
       if (currentHash == item.hash) {
         continue;
       }
+      try {
+        await _rematerializeSkill(skill, currentHash);
+      } catch (error, stackTrace) {
+        developer.log(
+          "Could not update skill '${item.name}' in environment: $error",
+          name: 'adk_dart.skill_toolset',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       developer.log(
         "Skill '${item.name}' changed since it was loaded; re-stating it.",
         name: 'adk_dart.skill_toolset',
@@ -2335,8 +2392,28 @@ class SkillToolset extends BaseToolset {
     return restatedInstructions;
   }
 
+  Future<void> _rematerializeSkill(Skill skill, String contentHash) async {
+    final BaseEnvironment? env = environment;
+    if (env == null || !_isEnvInitialized(env) || skillsFolder == null) {
+      return;
+    }
+    if (_materializedSkillHashes[skill.name] == contentHash) {
+      return;
+    }
+    await _materializeSkillToEnvironment(
+      skill,
+      force: true,
+      initializeIfNeeded: false,
+    );
+  }
+
   @override
   Future<void> close() async {
+    final BaseEnvironment? env = environment;
+    if (env != null && _isEnvInitialized(env)) {
+      await env.close();
+      _environmentInitialized = false;
+    }
     _fetchedSkillCache.clear();
     for (final BaseToolset toolset in _providedToolsets) {
       await toolset.close();

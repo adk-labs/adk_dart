@@ -1,6 +1,7 @@
 /// Evaluation case and invocation data models.
 library;
 
+import '../utils/function_call_names.dart';
 import 'app_details.dart';
 import 'common.dart';
 import 'conversation_scenarios.dart';
@@ -452,13 +453,28 @@ class EvalCase {
   }
 }
 
+// `adk_request_input` is kept: the public `request_input` tool is model-chosen.
+const Set<String> _frameworkFunctionCallNames = <String>{
+  requestConfirmationFunctionCallName,
+  requestEucFunctionCallName,
+};
+
+List<EvalJsonMap> _excludeClientFunctionEntries(List<EvalJsonMap> items) {
+  return items
+      .where(
+        (EvalJsonMap item) =>
+            !_frameworkFunctionCallNames.contains(item['name']),
+      )
+      .toList();
+}
+
 /// Returns all tool-call payloads from [intermediateData].
 List<EvalJsonMap> getAllToolCalls(Object? intermediateData) {
   if (intermediateData == null) {
     return <EvalJsonMap>[];
   }
   if (intermediateData is IntermediateData) {
-    return intermediateData.toolUses;
+    return _excludeClientFunctionEntries(intermediateData.toolUses);
   }
   if (intermediateData is InvocationEvents) {
     final List<EvalJsonMap> calls = <EvalJsonMap>[];
@@ -469,7 +485,7 @@ List<EvalJsonMap> getAllToolCalls(Object? intermediateData) {
       }
       calls.addAll(_extractFunctionCallsFromContent(content));
     }
-    return calls;
+    return _excludeClientFunctionEntries(calls);
   }
   if (intermediateData is Map) {
     final EvalJsonMap data = asEvalJson(intermediateData);
@@ -477,7 +493,9 @@ List<EvalJsonMap> getAllToolCalls(Object? intermediateData) {
         data.containsKey('invocationEvents')) {
       return getAllToolCalls(InvocationEvents.fromJson(data));
     }
-    return asEvalJsonList(data['tool_uses'] ?? data['toolUses']);
+    return _excludeClientFunctionEntries(
+      asEvalJsonList(data['tool_uses'] ?? data['toolUses']),
+    );
   }
   throw ArgumentError(
     'Unsupported type for intermediateData `${intermediateData.runtimeType}`',
@@ -490,7 +508,7 @@ List<EvalJsonMap> getAllToolResponses(Object? intermediateData) {
     return <EvalJsonMap>[];
   }
   if (intermediateData is IntermediateData) {
-    return intermediateData.toolResponses;
+    return _excludeClientFunctionEntries(intermediateData.toolResponses);
   }
   if (intermediateData is InvocationEvents) {
     final List<EvalJsonMap> responses = <EvalJsonMap>[];
@@ -501,7 +519,7 @@ List<EvalJsonMap> getAllToolResponses(Object? intermediateData) {
       }
       responses.addAll(_extractFunctionResponsesFromContent(content));
     }
-    return responses;
+    return _excludeClientFunctionEntries(responses);
   }
   if (intermediateData is Map) {
     final EvalJsonMap data = asEvalJson(intermediateData);
@@ -509,7 +527,9 @@ List<EvalJsonMap> getAllToolResponses(Object? intermediateData) {
         data.containsKey('invocationEvents')) {
       return getAllToolResponses(InvocationEvents.fromJson(data));
     }
-    return asEvalJsonList(data['tool_responses'] ?? data['toolResponses']);
+    return _excludeClientFunctionEntries(
+      asEvalJsonList(data['tool_responses'] ?? data['toolResponses']),
+    );
   }
   throw ArgumentError(
     'Unsupported type for intermediateData `${intermediateData.runtimeType}`',

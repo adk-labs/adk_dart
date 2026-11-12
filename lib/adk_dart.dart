@@ -241,6 +241,7 @@ export 'src/evaluation/simulation/user_simulator.dart';
 export 'src/evaluation/simulation/user_simulator_personas.dart';
 export 'src/evaluation/simulation/user_simulator_provider.dart';
 export 'src/evaluation/simulation/cloud_tts_llm.dart';
+export 'src/evaluation/tool_parameter_match_evaluator.dart';
 export 'src/evaluation/trajectory_evaluator.dart';
 export 'src/evaluation/vertex_ai_eval_facade.dart';
 export 'src/evaluation/vertex_ai_scenario_generation_facade.dart';

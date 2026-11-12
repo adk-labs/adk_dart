@@ -26,6 +26,27 @@ const String userAuthor = 'user';
 /// Fallback author label for agent-generated events.
 const String defaultAuthor = 'agent';
 
+/// Default application name used when an [EvalCase] has no [SessionInput].
+const String defaultEvalAppName = 'EvaluationGenerator';
+
+/// Default user identifier used when an [EvalCase] has no [SessionInput].
+const String defaultEvalUserId = 'test_user_id';
+
+/// Resolves `(appName, userId)` for an evaluation session from [initialSession].
+(String, String) getEvalSessionAppNameAndUserId(SessionInput? initialSession) {
+  if (initialSession == null) {
+    return (defaultEvalAppName, defaultEvalUserId);
+  }
+  return (
+    initialSession.appName.isNotEmpty
+        ? initialSession.appName
+        : defaultEvalAppName,
+    initialSession.userId.isNotEmpty
+        ? initialSession.userId
+        : defaultEvalUserId,
+  );
+}
+
 /// Generated responses for one [EvalCase] across repeated runs.
 class EvalCaseResponses {
   /// Creates generated responses for one eval case.
@@ -81,13 +102,17 @@ class EvaluationGenerator {
             evalCase,
             simulatorProvider,
           );
+          final (String caseAppName, String caseUserId) =
+              evalCase.sessionInput != null
+              ? getEvalSessionAppNameAndUserId(evalCase.sessionInput)
+              : (appName, userId);
           responses.add(
             await _runEvalCase(
               rootAgent: rootAgent,
               evalCase: evalCase,
               userSimulator: userSimulator,
-              appName: evalCase.sessionInput?.appName ?? appName,
-              userId: evalCase.sessionInput?.userId ?? userId,
+              appName: caseAppName,
+              userId: caseUserId,
             ),
           );
         }
@@ -111,12 +136,16 @@ class EvaluationGenerator {
               evalCase,
               simulatorProvider,
             );
+            final (String caseAppName, String caseUserId) =
+                evalCase.sessionInput != null
+                ? getEvalSessionAppNameAndUserId(evalCase.sessionInput)
+                : (appName, userId);
             return _runEvalCase(
               rootAgent: rootAgent,
               evalCase: evalCase,
               userSimulator: userSimulator,
-              appName: evalCase.sessionInput?.appName ?? appName,
-              userId: evalCase.sessionInput?.userId ?? userId,
+              appName: caseAppName,
+              userId: caseUserId,
             );
           }),
         );

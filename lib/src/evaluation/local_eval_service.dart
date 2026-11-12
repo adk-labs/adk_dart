@@ -6,11 +6,16 @@ import 'dart:async';
 import '../agents/base_agent.dart';
 import '../agents/live_request_queue.dart';
 import '../agents/run_config.dart';
+import '../artifacts/base_artifact_service.dart';
+import '../artifacts/in_memory_artifact_service.dart';
 import '../events/event.dart';
 import '../runners/runner.dart';
+import '../sessions/base_session_service.dart';
+import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
 import '../utils/client_labels_utils.dart';
+import '../workflow/workflow.dart';
 import 'base_eval_service.dart';
 import 'conversation_scenarios.dart';
 import 'eval_case.dart';
@@ -18,25 +23,56 @@ import 'eval_metric.dart';
 import 'eval_metrics.dart';
 import 'eval_result.dart';
 import 'eval_sets_manager.dart';
+import 'evaluation_generator.dart';
 import 'evaluator.dart';
 import 'metric_evaluator_registry.dart';
 
+BaseAgent _coerceEvalRootAgent(Object rootAgent) {
+  if (rootAgent is BaseAgent) {
+    return rootAgent;
+  }
+  if (rootAgent is BaseNode) {
+    return Workflow(
+      name: rootAgent.name,
+      description: rootAgent.description,
+      nodes: <BaseNode>[rootAgent],
+      edges: <Edge>[Edge(fromNode: START, toNode: rootAgent)],
+    );
+  }
+  throw ArgumentError.value(
+    rootAgent,
+    'rootAgent',
+    'Expected a BaseAgent or BaseNode.',
+  );
+}
+
 /// Local evaluation service that runs eval cases with an in-memory runner.
 class LocalEvalService extends BaseEvalService {
-  /// Creates a local eval service bound to [rootAgent].
+  /// Creates a local eval service bound to [rootAgent] ([BaseAgent] or [BaseNode]).
   LocalEvalService({
-    required BaseAgent rootAgent,
+    required Object rootAgent,
     String appName = 'eval_app',
     EvalSetsManager? evalSetsManager,
+    BaseSessionService? sessionService,
+    BaseArtifactService? artifactService,
     MetricEvaluatorRegistry? metricEvaluatorRegistry,
-  }) : _runner = InMemoryRunner(agent: rootAgent, appName: appName),
+  }) : _rootAgent = _coerceEvalRootAgent(rootAgent),
+       _defaultAppName = appName,
+       _sessionService = sessionService ?? InMemorySessionService(),
+       _artifactService = artifactService ?? InMemoryArtifactService(),
        _evalSetsManager = evalSetsManager,
        _metricEvaluatorRegistry =
            metricEvaluatorRegistry ?? defaultMetricEvaluatorRegistry;
 
-  final InMemoryRunner _runner;
+  final BaseAgent _rootAgent;
+  final String _defaultAppName;
+  final BaseSessionService _sessionService;
+  final BaseArtifactService _artifactService;
   final EvalSetsManager? _evalSetsManager;
   final MetricEvaluatorRegistry _metricEvaluatorRegistry;
+
+  /// Session service used to store and retrieve evaluation sessions.
+  BaseSessionService get sessionService => _sessionService;
 
   @override
   Stream<InferenceResult> performInference(InferenceRequest request) async* {
@@ -48,21 +84,38 @@ class LocalEvalService extends BaseEvalService {
 
     Future<InferenceResult> runOne(EvalCase evalCase, int rep) async {
       final int? repetitionIndex = numRuns > 1 ? rep : null;
-      final Session session = await _runner.sessionService.createSession(
-        appName: _runner.appName,
-        userId: request.userId,
+      final (String sessionAppName, String sessionUserId) =
+          evalCase.sessionInput != null
+          ? getEvalSessionAppNameAndUserId(evalCase.sessionInput)
+          : (
+              request.appName.isNotEmpty ? request.appName : _defaultAppName,
+              request.userId,
+            );
+      final Session session = await _sessionService.createSession(
+        appName: sessionAppName,
+        userId: sessionUserId,
+        state: evalCase.sessionInput == null
+            ? null
+            : Map<String, Object?>.from(evalCase.sessionInput!.state),
+      );
+      final Runner caseRunner = Runner(
+        appName: sessionAppName,
+        agent: _rootAgent,
+        sessionService: _sessionService,
+        artifactService: _artifactService,
       );
 
       try {
         final List<Event> events = request.inferenceConfig.useLive
             ? await _runLiveInference(
+                runner: caseRunner,
                 request: request,
                 session: session,
                 evalCase: evalCase,
               )
-            : await _runner
+            : await caseRunner
                   .runAsync(
-                    userId: request.userId,
+                    userId: sessionUserId,
                     sessionId: session.id,
                     newMessage: Content.userText(evalCase.input),
                   )
@@ -331,6 +384,14 @@ class LocalEvalService extends BaseEvalService {
       }
     }
 
+    final Session? sessionDetails = await _lookupSessionDetails(
+      sessionId: inference.sessionId,
+      evalCase: evalCase,
+      inferenceAppName: inference.appName,
+    );
+    final (String _, String defaultSessionUserId) =
+        getEvalSessionAppNameAndUserId(evalCase?.sessionInput);
+
     return EvalCaseResult(
       evalSetId: inference.evalSetId,
       evalCaseId: inference.evalCaseId,
@@ -340,8 +401,44 @@ class LocalEvalService extends BaseEvalService {
           : overallEvalMetricResults,
       finalEvalStatus: finalStatus ?? EvalStatus.notEvaluated,
       sessionId: inference.sessionId ?? '',
+      sessionDetails: sessionDetails,
+      userId: sessionDetails?.userId ?? defaultSessionUserId,
       repetitionIndex: inference.repetitionIndex,
     );
+  }
+
+  Future<Session?> _lookupSessionDetails({
+    required String? sessionId,
+    required EvalCase? evalCase,
+    required String inferenceAppName,
+  }) async {
+    if (sessionId == null || sessionId.isEmpty) {
+      return null;
+    }
+    final (String primaryAppName, String primaryUserId) =
+        getEvalSessionAppNameAndUserId(evalCase?.sessionInput);
+    final List<(String, String)> candidates = <(String, String)>[
+      (primaryAppName, primaryUserId),
+      if (evalCase?.sessionInput == null) ...<(String, String)>[
+        (inferenceAppName, primaryUserId),
+        (_defaultAppName, primaryUserId),
+      ],
+    ];
+    final Set<(String, String)> seen = <(String, String)>{};
+    for (final (String appName, String userId) in candidates) {
+      if (!seen.add((appName, userId))) {
+        continue;
+      }
+      final Session? found = await _sessionService.getSession(
+        appName: appName,
+        userId: userId,
+        sessionId: sessionId,
+      );
+      if (found != null) {
+        return found;
+      }
+    }
+    return null;
   }
 
   Future<EvaluationResult> _runWithEvalClientLabel(
@@ -374,6 +471,7 @@ class LocalEvalService extends BaseEvalService {
   }
 
   Future<List<Event>> _runLiveInference({
+    required Runner runner,
     required InferenceRequest request,
     required Session session,
     required EvalCase evalCase,
@@ -384,7 +482,7 @@ class LocalEvalService extends BaseEvalService {
     });
 
     final List<Event> events = <Event>[];
-    final Stream<Event> stream = _runner
+    final Stream<Event> stream = runner
         .runLive(
           liveRequestQueue: liveRequestQueue,
           session: session,

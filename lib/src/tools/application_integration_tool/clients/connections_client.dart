@@ -1,6 +1,7 @@
 /// Connections API client models for Application Integration.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -34,6 +35,14 @@ class ApplicationIntegrationHttpResponse {
 
 /// Client for Google Application Integration connector metadata APIs.
 class ConnectionsClient {
+  /// Default timeout in seconds when polling long-running connector schema operations.
+  static const int defaultOperationTimeoutSeconds = 300;
+
+  /// Default timeout duration when polling long-running connector schema operations.
+  static const Duration defaultOperationTimeout = Duration(
+    seconds: defaultOperationTimeoutSeconds,
+  );
+
   /// Creates a connections client.
   ConnectionsClient({
     required this.project,
@@ -43,6 +52,8 @@ class ConnectionsClient {
     ApplicationIntegrationRequestExecutor? requestExecutor,
     ApplicationIntegrationAccessTokenProvider? accessTokenProvider,
     Duration? pollInterval,
+    Duration? operationTimeout,
+    Duration Function()? monotonicClock,
     Future<void> Function(Duration duration)? sleeper,
   }) : _requestExecutor =
            requestExecutor ?? defaultApplicationIntegrationRequestExecutor,
@@ -50,7 +61,14 @@ class ConnectionsClient {
            accessTokenProvider ??
            defaultApplicationIntegrationAccessTokenProvider,
        _pollInterval = pollInterval ?? const Duration(seconds: 1),
+       _operationTimeout = operationTimeout ?? defaultOperationTimeout,
+       _monotonicClock = monotonicClock ?? _createDefaultMonotonicClock(),
        _sleeper = sleeper ?? Future<void>.delayed;
+
+  static Duration Function() _createDefaultMonotonicClock() {
+    final Stopwatch stopwatch = Stopwatch()..start();
+    return () => stopwatch.elapsed;
+  }
 
   /// Google Cloud project id.
   final String project;
@@ -67,6 +85,8 @@ class ConnectionsClient {
   final ApplicationIntegrationRequestExecutor _requestExecutor;
   final ApplicationIntegrationAccessTokenProvider _accessTokenProvider;
   final Duration _pollInterval;
+  final Duration _operationTimeout;
+  final Duration Function() _monotonicClock;
   final Future<void> Function(Duration duration) _sleeper;
 
   /// Base URL for Connector APIs.
@@ -910,14 +930,28 @@ class ConnectionsClient {
   Future<Map<String, Object?>> _pollOperation(String operationId) async {
     bool operationDone = false;
     Map<String, Object?> operationResponse = <String, Object?>{};
+    final Duration deadline = _monotonicClock() + _operationTimeout;
 
     while (!operationDone) {
+      if (_monotonicClock() >= deadline) {
+        throw TimeoutException(
+          'Operation $operationId did not complete within '
+          '${_operationTimeout.inSeconds} second timeout.',
+          _operationTimeout,
+        );
+      }
       final Uri getOperationUrl = Uri.parse('$connectorUrl/v1/$operationId');
       operationResponse = await _executeApiCall(getOperationUrl);
       operationDone = _readBool(operationResponse['done']) ?? false;
       if (!operationDone) {
         await _sleeper(_pollInterval);
       }
+    }
+
+    if (operationResponse['error'] != null) {
+      final Object? error = operationResponse['error'];
+      final Object? detail = error is Map ? (error['message'] ?? error) : error;
+      throw ArgumentError('Operation $operationId failed: $detail');
     }
 
     return operationResponse;

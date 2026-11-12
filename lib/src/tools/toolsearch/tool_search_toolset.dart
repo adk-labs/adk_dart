@@ -129,6 +129,7 @@ class ToolSearchToolset extends BaseToolset {
     String? searchToolDescription,
     super.toolFilter,
     super.toolNamePrefix,
+    super.disableInvocationCache = true,
   }) {
     _searchTool = SearchToolsTool(
       this,

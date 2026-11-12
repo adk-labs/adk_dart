@@ -13,14 +13,31 @@ typedef ToolPredicate =
 
 /// Base contract for grouped tool providers.
 abstract class BaseToolset {
-  /// Creates a toolset with optional filtering and name-prefix behavior.
-  BaseToolset({this.toolFilter, this.toolNamePrefix});
+  /// Creates a toolset with optional filtering, name-prefix, and invocation-caching behavior.
+  ///
+  /// Set [disableInvocationCache] to `true` when the tools returned by this
+  /// toolset can change within a single invocation.
+  BaseToolset({
+    this.toolFilter,
+    this.toolNamePrefix,
+    bool disableInvocationCache = false,
+  }) : _useInvocationCache = !disableInvocationCache;
 
   /// Tool filter expressed as a [ToolPredicate] or a list of tool names.
   Object? toolFilter;
 
   /// Optional prefix added by [getToolsWithPrefix].
   String? toolNamePrefix;
+
+  final bool _useInvocationCache;
+  bool _hasCachedInvocationTools = false;
+  String? _cachedInvocationId;
+  List<BaseTool>? _cachedPrefixedTools;
+
+  /// Whether tools are listed once per invocation and reused for the rest of it.
+  ///
+  /// Configured by the `disableInvocationCache` constructor argument.
+  bool get useInvocationCache => _useInvocationCache;
 
   /// Returns tools available for the current [readonlyContext].
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext});
@@ -29,18 +46,34 @@ abstract class BaseToolset {
   Future<List<BaseTool>> getToolsWithPrefix({
     ReadonlyContext? readonlyContext,
   }) async {
+    final String? invocationId = readonlyContext?.invocationId;
+
+    if (_useInvocationCache &&
+        _hasCachedInvocationTools &&
+        _cachedPrefixedTools != null &&
+        _cachedInvocationId == invocationId) {
+      return _cachedPrefixedTools!;
+    }
+
     final List<BaseTool> tools = await getTools(
       readonlyContext: readonlyContext,
     );
 
     if (toolNamePrefix == null || toolNamePrefix!.isEmpty) {
+      _hasCachedInvocationTools = true;
+      _cachedInvocationId = invocationId;
+      _cachedPrefixedTools = tools;
       return tools;
     }
 
     final String prefix = toolNamePrefix!;
-    return tools
+    final List<BaseTool> prefixedTools = tools
         .map((BaseTool tool) => _PrefixedTool(delegate: tool, prefix: prefix))
         .toList();
+    _hasCachedInvocationTools = true;
+    _cachedInvocationId = invocationId;
+    _cachedPrefixedTools = prefixedTools;
+    return prefixedTools;
   }
 
   /// Mutates outgoing [llmRequest] before model execution.

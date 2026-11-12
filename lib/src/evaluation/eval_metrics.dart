@@ -1,6 +1,7 @@
 /// Metric specifications and canonical metric identifiers.
 library;
 
+import '../tools/tool_args_matcher/tool_args_matcher.dart';
 import 'common.dart';
 import 'eval_case.dart';
 import 'eval_result.dart';
@@ -13,6 +14,12 @@ typedef Threshold = double;
 class PrebuiltMetricNames {
   /// Average score for tool trajectory quality.
   static const String toolTrajectoryAvgScore = 'tool_trajectory_avg_score';
+
+  /// Configurable tool parameter match score.
+  static const String toolParameterMatch = 'tool_parameter_match';
+
+  /// Alias for [toolParameterMatch].
+  static const String toolParameterMatchV1 = 'tool_parameter_match';
 
   /// LLM-judge score for response quality.
   static const String responseEvaluationScore = 'response_evaluation_score';
@@ -73,6 +80,9 @@ class PrebuiltMetricNames {
 enum PrebuiltMetrics {
   /// Average score for tool trajectory quality.
   toolTrajectoryAvgScore(PrebuiltMetricNames.toolTrajectoryAvgScore),
+
+  /// Configurable tool parameter match score.
+  toolParameterMatch(PrebuiltMetricNames.toolParameterMatch),
 
   /// LLM-judge score for response quality.
   responseEvaluationScore(PrebuiltMetricNames.responseEvaluationScore),
@@ -189,11 +199,17 @@ class JudgeModelOptions {
 /// Base criterion definition for evaluation thresholds and metadata.
 class BaseCriterion {
   /// Creates a base criterion.
-  BaseCriterion({required this.threshold, Map<String, Object?>? extra})
-    : extra = extra ?? <String, Object?>{};
+  BaseCriterion({
+    required this.threshold,
+    Map<String, Object?>? extra,
+    this.hasExplicitThreshold = true,
+  }) : extra = extra ?? <String, Object?>{};
 
   /// Minimum passing score.
   final double threshold;
+
+  /// Whether [threshold] was explicitly provided rather than defaulted.
+  final bool hasExplicitThreshold;
 
   /// Additional criterion metadata.
   final Map<String, Object?> extra;
@@ -201,18 +217,27 @@ class BaseCriterion {
   /// Creates a criterion from JSON or a numeric threshold.
   factory BaseCriterion.fromJson(Object? value) {
     if (value is num) {
-      return BaseCriterion(threshold: value.toDouble());
+      return BaseCriterion(
+        threshold: value.toDouble(),
+        hasExplicitThreshold: true,
+      );
     }
     final Map<String, Object?> map = asEvalJson(value);
+    final bool hasThreshold =
+        map.containsKey('threshold') && map['threshold'] != null;
     return BaseCriterion(
       threshold: asDoubleOr(map['threshold']),
       extra: map..remove('threshold'),
+      hasExplicitThreshold: hasThreshold,
     );
   }
 
   /// Converts this criterion to JSON.
   Map<String, Object?> toJson() {
-    return <String, Object?>{'threshold': threshold, ...extra};
+    return <String, Object?>{
+      if (hasExplicitThreshold) 'threshold': threshold,
+      ...extra,
+    };
   }
 }
 
@@ -444,6 +469,182 @@ extension MatchTypeX on MatchType {
       }
     }
     return MatchType.exact;
+  }
+}
+
+/// Criterion for evaluating tool parameter matches with [ToolArgsMatcher].
+class ToolParameterMatchCriterion extends BaseCriterion {
+  /// Creates a tool parameter match criterion.
+  ToolParameterMatchCriterion({
+    double? threshold,
+    this.argsMatcher,
+    Object? matchType = MatchType.inOrder,
+    super.extra,
+  }) : matchType = parseStrictMatchType(matchType),
+       super(
+         threshold: threshold ?? 0.0,
+         hasExplicitThreshold: threshold != null,
+       ) {
+    if (super.extra.isNotEmpty) {
+      throw ArgumentError.value(
+        super.extra.keys.first,
+        'extra',
+        'Unexpected field `${super.extra.keys.first}` in ToolParameterMatchCriterion.',
+      );
+    }
+  }
+
+  /// Optional argument matcher configuration overriding exact argument equality.
+  final ToolArgsMatcher? argsMatcher;
+
+  /// Strategy used to pair expected and actual tool calls before scoring args.
+  final MatchType matchType;
+
+  /// Parses [value] strictly into a [MatchType], rejecting unknown strings.
+  static MatchType parseStrictMatchType(Object? value) {
+    if (value is MatchType) {
+      return value;
+    }
+    if (value is int && value >= 0 && value < MatchType.values.length) {
+      return MatchType.values[value];
+    }
+    if (value is String) {
+      switch (value.trim()) {
+        case 'EXACT':
+        case 'exact':
+          return MatchType.exact;
+        case 'IN_ORDER':
+        case 'in_order':
+        case 'inOrder':
+          return MatchType.inOrder;
+        case 'ANY_ORDER':
+        case 'any_order':
+        case 'anyOrder':
+          return MatchType.anyOrder;
+      }
+    }
+    throw ArgumentError.value(
+      value,
+      'matchType',
+      'Invalid matchType `$value`; expected EXACT, IN_ORDER, or ANY_ORDER.',
+    );
+  }
+
+  static ToolArgsMatcher? _parseStrictArgsMatcher(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is ToolArgsMatcher) {
+      return value;
+    }
+    if (value is! Map) {
+      throw ArgumentError.value(
+        value,
+        'argsMatcher',
+        'Expected a ToolArgsMatcher or config mapping.',
+      );
+    }
+    const Set<String> allowedKeys = <String>{
+      'defaultMatcher',
+      'default_matcher',
+      'perArgMatchers',
+      'per_arg_matchers',
+      'allowExtraArgs',
+      'allow_extra_args',
+    };
+    final Map<String, Object?> map = value.map(
+      (Object? k, Object? v) => MapEntry<String, Object?>('$k', v),
+    );
+    for (final String key in map.keys) {
+      if (!allowedKeys.contains(key)) {
+        throw ArgumentError.value(
+          key,
+          'argsMatcher',
+          'Unexpected field `$key` in ToolArgsMatcher config.',
+        );
+      }
+    }
+    final Object? rawAllowExtra =
+        map['allowExtraArgs'] ?? map['allow_extra_args'];
+    if (rawAllowExtra != null && rawAllowExtra is! bool) {
+      throw ArgumentError.value(
+        rawAllowExtra,
+        'allowExtraArgs',
+        '`allowExtraArgs` must be a boolean.',
+      );
+    }
+    if (map.isEmpty) {
+      return ToolArgsMatcher();
+    }
+    return ToolArgsMatcher.fromJson(map);
+  }
+
+  /// Creates a [ToolParameterMatchCriterion] from JSON, rejecting unknown fields.
+  factory ToolParameterMatchCriterion.fromJson(Object? value) {
+    if (value is ToolParameterMatchCriterion) {
+      return value;
+    }
+    if (value is! Map) {
+      throw ArgumentError.value(
+        value,
+        'criterion',
+        'Expected a mapping for ToolParameterMatchCriterion.',
+      );
+    }
+    const Set<String> allowedKeys = <String>{
+      'threshold',
+      'argsMatcher',
+      'args_matcher',
+      'matchType',
+      'match_type',
+    };
+    final Map<String, Object?> map = value.map(
+      (Object? k, Object? v) => MapEntry<String, Object?>('$k', v),
+    );
+    for (final String key in map.keys) {
+      if (!allowedKeys.contains(key)) {
+        throw ArgumentError.value(
+          key,
+          'criterion',
+          'Unexpected field `$key` in ToolParameterMatchCriterion.',
+        );
+      }
+    }
+    double? threshold;
+    if (map.containsKey('threshold') && map['threshold'] != null) {
+      final Object? rawThreshold = map['threshold'];
+      if (rawThreshold is! num || rawThreshold is bool) {
+        throw ArgumentError.value(
+          rawThreshold,
+          'threshold',
+          '`threshold` must be a number.',
+        );
+      }
+      threshold = rawThreshold.toDouble();
+    }
+    final bool hasMatchType =
+        (map.containsKey('matchType') && map['matchType'] != null) ||
+        (map.containsKey('match_type') && map['match_type'] != null);
+    final Object? rawMatchType = map['matchType'] ?? map['match_type'];
+    return ToolParameterMatchCriterion(
+      threshold: threshold,
+      argsMatcher: _parseStrictArgsMatcher(
+        map['argsMatcher'] ?? map['args_matcher'],
+      ),
+      matchType: hasMatchType
+          ? parseStrictMatchType(rawMatchType)
+          : MatchType.inOrder,
+    );
+  }
+
+  /// Converts this criterion to JSON.
+  @override
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      if (hasExplicitThreshold) 'threshold': threshold,
+      if (argsMatcher != null) 'args_matcher': argsMatcher!.toJson(),
+      'match_type': matchType.wireName,
+    };
   }
 }
 

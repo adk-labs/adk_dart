@@ -527,15 +527,21 @@ class ToolArgsMatcher {
   /// upstream-style [defaultMatcher] + [perArgMatchers].
   ToolArgsMatcher({
     Map<String, BaseArgMatcher>? expectedArgs,
-    BaseArgMatcher? defaultMatcher,
-    Map<String, BaseArgMatcher>? perArgMatchers,
+    Object? defaultMatcher,
+    Map<String, Object?>? perArgMatchers,
     bool? allowExtraArgs,
-  }) : defaultMatcher = defaultMatcher ?? const ExactArgMatcher(),
+  }) : defaultMatcher = defaultMatcher == null
+           ? const ExactArgMatcher()
+           : _coerceArgMatcher(defaultMatcher),
        perArgMatchers = Map<String, BaseArgMatcher>.unmodifiable(
-         perArgMatchers ?? expectedArgs ?? const <String, BaseArgMatcher>{},
+         _coerceArgMatcherMap(perArgMatchers) ??
+             expectedArgs ??
+             const <String, BaseArgMatcher>{},
        ),
        expectedArgs = Map<String, BaseArgMatcher>.unmodifiable(
-         expectedArgs ?? perArgMatchers ?? const <String, BaseArgMatcher>{},
+         expectedArgs ??
+             _coerceArgMatcherMap(perArgMatchers) ??
+             const <String, BaseArgMatcher>{},
        ),
        allowExtraArgs = allowExtraArgs ?? (expectedArgs == null);
 
@@ -912,6 +918,27 @@ class ToolArgsMatcher {
     }
     return matcher.match(actual);
   }
+
+  /// Serializes this argument matcher configuration to JSON.
+  Map<String, Object?> toJson() => <String, Object?>{
+    'default_matcher': defaultMatcher.toJson(),
+    'per_arg_matchers': perArgMatchers.map(
+      (String k, BaseArgMatcher v) => MapEntry<String, Object?>(k, v.toJson()),
+    ),
+    'allow_extra_args': allowExtraArgs,
+  };
+}
+
+Map<String, BaseArgMatcher>? _coerceArgMatcherMap(
+  Map<String, Object?>? matchers,
+) {
+  if (matchers == null) {
+    return null;
+  }
+  return <String, BaseArgMatcher>{
+    for (final MapEntry<String, Object?> entry in matchers.entries)
+      entry.key: _coerceArgMatcher(entry.value),
+  };
 }
 
 BaseArgMatcher _coerceArgMatcher(Object? value) {

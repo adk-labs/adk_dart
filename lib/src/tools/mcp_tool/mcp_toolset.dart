@@ -8,6 +8,7 @@ import '../../auth/auth_credential.dart';
 import '../../auth/auth_tool.dart';
 import '../base_tool.dart';
 import '../base_toolset.dart';
+import '../load_mcp_resource_tool.dart';
 import 'mcp_session_manager.dart';
 import 'mcp_tool.dart';
 
@@ -16,6 +17,10 @@ typedef McpHeaderProvider =
     Map<String, String> Function(ReadonlyContext readonlyContext);
 
 /// Toolset that exposes tools and resources from one MCP connection.
+///
+/// Note: [toolFilter] selects among the MCP server's tools. It does not apply
+/// to the built-in `load_mcp_resource` tool added when [useMcpResources] is
+/// `true`.
 ///
 /// ```dart
 /// final mcpToolset = McpToolset(
@@ -33,10 +38,14 @@ typedef McpHeaderProvider =
 /// ```
 class McpToolset extends BaseToolset {
   /// Creates an MCP toolset bound to [connectionParams].
+  ///
+  /// Note: [toolFilter] selects among the server's tools and does not apply to
+  /// `load_mcp_resource` when [useMcpResources] is `true`.
   McpToolset({
     required this.connectionParams,
     super.toolFilter,
     super.toolNamePrefix,
+    super.disableInvocationCache,
     this.authConfig,
     this.headerProvider,
     this.samplingCallback,
@@ -45,6 +54,7 @@ class McpToolset extends BaseToolset {
     McpMessageHandler? notificationHandler,
     Map<String, Object?>? samplingCapabilities,
     this.propagateGroundingMetadata = false,
+    this.useMcpResources = false,
   }) : messageHandler = messageHandler ?? notificationHandler,
        samplingCapabilities = samplingCapabilities ?? <String, Object?>{} {
     McpSessionManager.instance.configureConnection(
@@ -83,6 +93,12 @@ class McpToolset extends BaseToolset {
   /// If true, each listed tool copies `meta.adk_grounding_metadata` into
   /// `temp:_adk_grounding_metadata`.
   final bool propagateGroundingMetadata;
+
+  /// Whether to expose the built-in `load_mcp_resource` tool alongside server tools.
+  ///
+  /// Note: [toolFilter] selects among the server's tools and does not apply to
+  /// `load_mcp_resource`.
+  final bool useMcpResources;
 
   /// Returns filtered MCP tools discovered from cache or remote server.
   @override
@@ -147,17 +163,17 @@ class McpToolset extends BaseToolset {
           .toList(growable: false);
     }
 
-    if (tools.isEmpty) {
-      return const <BaseTool>[];
-    }
-
-    return tools
+    final List<BaseTool> selectedTools = tools
         .where(
           (BaseTool tool) =>
               !mcpReservedToolNames.contains(tool.name) &&
               isToolSelected(tool, readonlyContext),
         )
-        .toList(growable: false);
+        .toList();
+    if (useMcpResources) {
+      selectedTools.add(LoadMcpResourceTool(this));
+    }
+    return List<BaseTool>.unmodifiable(selectedTools);
   }
 
   /// Lists available MCP resource names.
@@ -300,6 +316,8 @@ class McpToolsetConfig {
     this.streamableHttpConnectionParams,
     this.toolFilter,
     this.toolNamePrefix,
+    this.disableInvocationCache = false,
+    this.useMcpResources = false,
   });
 
   /// Legacy stdio server parameters.
@@ -319,4 +337,10 @@ class McpToolsetConfig {
 
   /// Optional prefix prepended to exposed tool names.
   final String? toolNamePrefix;
+
+  /// Whether to opt out of caching tools per invocation.
+  final bool disableInvocationCache;
+
+  /// Whether to expose the built-in `load_mcp_resource` tool.
+  final bool useMcpResources;
 }

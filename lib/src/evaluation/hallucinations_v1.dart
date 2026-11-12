@@ -187,6 +187,20 @@ class _EvaluationStep {
   final String nlResponse;
 }
 
+class _InvocationEvaluationMeta {
+  _InvocationEvaluationMeta({
+    required this.result,
+    required this.hasSteps,
+    required this.hasUnscoredSteps,
+    this.bestCaseScore,
+  });
+
+  final PerInvocationResult result;
+  final bool hasSteps;
+  final bool hasUnscoredSteps;
+  final double? bestCaseScore;
+}
+
 /// Evaluator for hallucination metrics using LLM-judge prompts.
 class HallucinationsV1Evaluator extends Evaluator {
   /// Creates a hallucination evaluator from [evalMetric].
@@ -253,8 +267,8 @@ class HallucinationsV1Evaluator extends Evaluator {
     final JudgeEvaluationSemaphore semaphore = JudgeEvaluationSemaphore(
       _judgeModelOptions.parallelismLimit,
     );
-    final List<PerInvocationResult> perInvocationResults =
-        await gatherCancellingOnError(<Future<PerInvocationResult>>[
+    final List<_InvocationEvaluationMeta> invocationMetas =
+        await gatherCancellingOnError(<Future<_InvocationEvaluationMeta>>[
           for (int i = 0; i < count; i += 1)
             _evaluateInvocation(
               actual: actualInvocations[i],
@@ -263,21 +277,25 @@ class HallucinationsV1Evaluator extends Evaluator {
             ),
         ]);
 
-    return _aggregateInvocationResults(perInvocationResults);
+    return _aggregateInvocationResults(invocationMetas);
   }
 
-  Future<PerInvocationResult> _evaluateInvocation({
+  Future<_InvocationEvaluationMeta> _evaluateInvocation({
     required Invocation actual,
     required Invocation? expected,
     required JudgeEvaluationSemaphore semaphore,
   }) async {
     final List<_EvaluationStep> stepEvaluations = _getStepsToEvaluate(actual);
     if (stepEvaluations.isEmpty) {
-      return PerInvocationResult(
-        actualInvocation: actual,
-        expectedInvocation: expected,
-        score: null,
-        evalStatus: EvalStatus.notEvaluated,
+      return _InvocationEvaluationMeta(
+        result: PerInvocationResult(
+          actualInvocation: actual,
+          expectedInvocation: expected,
+          score: null,
+          evalStatus: EvalStatus.notEvaluated,
+        ),
+        hasSteps: false,
+        hasUnscoredSteps: false,
       );
     }
 
@@ -295,20 +313,46 @@ class HallucinationsV1Evaluator extends Evaluator {
     final List<double> scoresPerStep = stepResults
         .whereType<double>()
         .toList();
+    final double threshold = _evalMetric.threshold ?? _criterion.threshold;
 
-    final double? invocationScore = scoresPerStep.isEmpty
-        ? null
-        : scoresPerStep.reduce((double a, double b) => a + b) /
-              scoresPerStep.length;
+    if (scoresPerStep.length < stepEvaluations.length) {
+      final int unscoredCount = stepEvaluations.length - scoresPerStep.length;
+      final double scoredSum = scoresPerStep.fold<double>(
+        0.0,
+        (double a, double b) => a + b,
+      );
+      final double bestCaseScore =
+          (scoredSum + unscoredCount * 1.0) / stepEvaluations.length;
+      final double? invocationScore = bestCaseScore < threshold
+          ? bestCaseScore
+          : null;
+      return _InvocationEvaluationMeta(
+        result: PerInvocationResult(
+          actualInvocation: actual,
+          expectedInvocation: expected,
+          score: invocationScore,
+          evalStatus: getEvalStatus(invocationScore, threshold),
+        ),
+        hasSteps: true,
+        hasUnscoredSteps: true,
+        bestCaseScore: bestCaseScore,
+      );
+    }
 
-    return PerInvocationResult(
-      actualInvocation: actual,
-      expectedInvocation: expected,
-      score: invocationScore,
-      evalStatus: getEvalStatus(
-        invocationScore,
-        _evalMetric.threshold ?? _criterion.threshold,
+    final double invocationScore =
+        scoresPerStep.reduce((double a, double b) => a + b) /
+        scoresPerStep.length;
+
+    return _InvocationEvaluationMeta(
+      result: PerInvocationResult(
+        actualInvocation: actual,
+        expectedInvocation: expected,
+        score: invocationScore,
+        evalStatus: getEvalStatus(invocationScore, threshold),
       ),
+      hasSteps: true,
+      hasUnscoredSteps: false,
+      bestCaseScore: invocationScore,
     );
   }
 
@@ -347,16 +391,25 @@ class HallucinationsV1Evaluator extends Evaluator {
     final List<Map<String, Object?>> validationResults =
         _parseValidationResults(validatorText);
 
+    if (validationResults.length != sentences.length) {
+      return null;
+    }
+
     final List<double> scores = <double>[];
-    for (final Map<String, Object?> result in validationResults) {
-      final String label = (result['label'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
+    for (int i = 0; i < sentences.length; i += 1) {
+      final Map<String, Object?> result = validationResults[i];
+      final String resultSentence = (result['sentence'] ?? '').toString();
+      if (_normalizeSentence(resultSentence) !=
+          _normalizeSentence(sentences[i])) {
+        return null;
+      }
+      final String label = _normalizeLabel((result['label'] ?? '').toString());
       if (_positiveLabels.contains(label)) {
         scores.add(1.0);
       } else if (_negativeLabels.contains(label)) {
         scores.add(0.0);
+      } else {
+        return null;
       }
     }
 
@@ -540,12 +593,18 @@ class HallucinationsV1Evaluator extends Evaluator {
   }
 
   EvaluationResult _aggregateInvocationResults(
-    List<PerInvocationResult> perInvocationResults,
+    List<_InvocationEvaluationMeta> invocationMetas,
   ) {
-    final List<PerInvocationResult> validResults = perInvocationResults
-        .where((PerInvocationResult result) => result.score != null)
-        .toList();
-    if (validResults.isEmpty) {
+    final List<PerInvocationResult> perInvocationResults = <PerInvocationResult>[
+      for (final _InvocationEvaluationMeta meta in invocationMetas) meta.result,
+    ];
+    final List<_InvocationEvaluationMeta> evaluatedOrUnscored = <
+      _InvocationEvaluationMeta
+    >[
+      for (final _InvocationEvaluationMeta meta in invocationMetas)
+        if (meta.hasSteps) meta,
+    ];
+    if (evaluatedOrUnscored.isEmpty) {
       return EvaluationResult(
         overallScore: null,
         overallEvalStatus: EvalStatus.notEvaluated,
@@ -553,21 +612,62 @@ class HallucinationsV1Evaluator extends Evaluator {
       );
     }
 
+    final double threshold = _evalMetric.threshold ?? _criterion.threshold;
+    final bool anyUnscored = evaluatedOrUnscored.any(
+      (_InvocationEvaluationMeta meta) => meta.hasUnscoredSteps,
+    );
+    if (anyUnscored) {
+      final double overallBestCaseScore =
+          evaluatedOrUnscored.fold<double>(
+            0.0,
+            (double sum, _InvocationEvaluationMeta meta) =>
+                sum + (meta.bestCaseScore ?? 1.0),
+          ) /
+          evaluatedOrUnscored.length;
+      final double? overallScore = overallBestCaseScore < threshold
+          ? overallBestCaseScore
+          : null;
+      return EvaluationResult(
+        overallScore: overallScore,
+        overallEvalStatus: getEvalStatus(overallScore, threshold),
+        perInvocationResults: perInvocationResults,
+      );
+    }
+
     final double overallScore =
-        validResults
-            .map((PerInvocationResult value) => value.score!)
+        evaluatedOrUnscored
+            .map((_InvocationEvaluationMeta meta) => meta.result.score!)
             .reduce((double a, double b) => a + b) /
-        validResults.length;
+        evaluatedOrUnscored.length;
 
     return EvaluationResult(
       overallScore: overallScore,
-      overallEvalStatus: getEvalStatus(
-        overallScore,
-        _evalMetric.threshold ?? _criterion.threshold,
-      ),
+      overallEvalStatus: getEvalStatus(overallScore, threshold),
       perInvocationResults: perInvocationResults,
     );
   }
+}
+
+String _normalizeSentence(String sentence) {
+  final String withoutTags = sentence.replaceAll(
+    RegExp(r'</?sentence>', caseSensitive: false),
+    '',
+  );
+  final String trimmedQuotes = withoutTags.replaceAll(
+    RegExp(
+      "^['\"`\\u2018\\u2019\\u201c\\u201d\\s]+|['\"`\\u2018\\u2019\\u201c\\u201d\\s]+\$",
+    ),
+    '',
+  );
+  return trimmedQuotes.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+}
+
+String _normalizeLabel(String rawLabel) {
+  return rawLabel
+      .trim()
+      .replaceAll(RegExp(r'^`+|`+$'), '')
+      .trim()
+      .toLowerCase();
 }
 
 List<String> _parseSentences(String responseText) {

@@ -209,7 +209,9 @@ class TrajectoryEvaluator extends Evaluator {
     if (_ignoreArgs) {
       return true;
     }
-    return _jsonDeepEqual(lhs['args'], rhs['args']);
+    final Object lhsArgs = lhs['args'] ?? const <String, Object?>{};
+    final Object rhsArgs = rhs['args'] ?? const <String, Object?>{};
+    return _jsonDeepEqual(lhsArgs, rhsArgs);
   }
 
   bool _jsonDeepEqual(Object? lhs, Object? rhs) {
