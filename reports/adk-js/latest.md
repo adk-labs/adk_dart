@@ -1,57 +1,291 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-11-11
+- Date (UTC): 2026-11-12
 - Source: `google/adk-js`
-- Latest SHA: `d1afe11605eea1d6a03339f0609a4f50ef564381`
-- Previous SHA: `c9ff7b71359f27f0004e1bca60a2bad527826e18`
+- Latest SHA: `b1b94c0d501c3d1eb028aa413d783d6573f6c785`
+- Previous SHA: `d1afe11605eea1d6a03339f0609a4f50ef564381`
 
 ## Summary
 
-- New commits: 3
+- New commits: 41
 
 ## Commits
 
-- [d1afe11](https://github.com/google/adk-js/commit/d1afe11605eea1d6a03339f0609a4f50ef564381) feat(integrations): add BigQuery toolset to @google/adk-integrations (#1193) (adk-foundry-bot, 2026-11-11)
-- [7abc99d](https://github.com/google/adk-js/commit/7abc99def41d3f17f23826313a7243a08e5bd6a5) feat(cli): port adk-python v1.1.1 changes to cli (#1194) (adk-foundry-bot, 2026-11-11)
-- [3c836eb](https://github.com/google/adk-js/commit/3c836ebc056b9c6d7feacc20b96887e58105aa82) fix(a2a): keep agent instructions out of the published A2A agent card (#1255) (Scott Mansfield, 2026-11-10)
+- [b1b94c0](https://github.com/google/adk-js/commit/b1b94c0d501c3d1eb028aa413d783d6573f6c785) Release: v2.5.0 (#1197) (Alexey Kalenkevich, 2026-11-12)
+- [e7ad559](https://github.com/google/adk-js/commit/e7ad5591e61d19874fe34f3357c6071b01af63cb) feat(cli): port adk-python v1.3.0 changes to cli (#1276) (adk-foundry-bot, 2026-11-12)
+- [cdcaf15](https://github.com/google/adk-js/commit/cdcaf15e95bbb775957a78cb56a21a176b46a20d) fix(server): reject non-object JSON and handle stream errors on reasoning_engine (#1285) (adk-foundry-bot, 2026-11-12)
+- [e258ee7](https://github.com/google/adk-js/commit/e258ee763b98c05a4bbd553c933a4109ec34d62f) fix(agents): skip set_model_response in task mode and fix function call ID preservation (#1280) (adk-foundry-bot, 2026-11-12)
+- [e705a2b](https://github.com/google/adk-js/commit/e705a2b33bbf38856c05a52410f74f5852f31143) fix(build): map @google/adk-devtools in tsconfig and await test server port (#1277) (adk-foundry-bot, 2026-11-12)
+- [390b010](https://github.com/google/adk-js/commit/390b010b65c076c76b7f0e99832aa7633c97a184) feat(integrations): add WriteMode and BigQueryToolConfig for BigQuery tools (#1292) (adk-foundry-bot, 2026-11-12)
+- [02e4106](https://github.com/google/adk-js/commit/02e4106edce27cff9d022ff8ff8e2151f4763de8) docs(core): mark unused LOGGING_FORMAT constant as deprecated (#1287) (adk-foundry-bot, 2026-11-12)
+- [9230e51](https://github.com/google/adk-js/commit/9230e515f9c8e3c8304a1facafe3516a7342e81c) fix(core): guard null and prototype keys in failover_utils (#1281) (adk-foundry-bot, 2026-11-12)
+- [0dcfd57](https://github.com/google/adk-js/commit/0dcfd57204205ef15dba1ab3a2790937f912e8da) fix(telemetry): ignore blank error types and support numeric tool error codes (#1279) (adk-foundry-bot, 2026-11-12)
+- [915dbe2](https://github.com/google/adk-js/commit/915dbe25e429529dd08c3fb109609479d6d552a1) fix(core): normalize artifact MIME types and use placeholders for binary instructions (#1282) (adk-foundry-bot, 2026-11-12)
+- [40fb076](https://github.com/google/adk-js/commit/40fb0766e3ec0486cf7cc1e3fb66d7a9584d30fa) fix(tools): validate GoogleApiToolset config, keep path schemas, and scope sample fetch (#1284) (adk-foundry-bot, 2026-11-12)
+- [9c7fe22](https://github.com/google/adk-js/commit/9c7fe221107c86ec30996b64ff426c4dadf68f9b) fix(skills): validate frontmatter delimiters, empty mappings, and 0-byte zip files (#1278) (adk-foundry-bot, 2026-11-12)
+- [875f5d9](https://github.com/google/adk-js/commit/875f5d9d3ff5e9feb3d309e24228a886560b2541) feat(dev): support kebab-case CLI flags and command aliases (#1290) (adk-foundry-bot, 2026-11-12)
+- [a839a9a](https://github.com/google/adk-js/commit/a839a9a5f943c35b1081919ddc951c2a0e21fb66) fix(core): skip registered global providers in maybeSetOtelProviders (#1291) (adk-foundry-bot, 2026-11-12)
+- [c7eb73f](https://github.com/google/adk-js/commit/c7eb73f303ca7fdd1022b89b9f0222bd781a02a0) fix(core): update LoadMemoryTool description and LoadMemoryResponse types (#1288) (adk-foundry-bot, 2026-11-12)
+- [203e1f8](https://github.com/google/adk-js/commit/203e1f8997496dac0da4f713317dc686e48a7480) fix(core): combine duplicate header entries in mergeTrackingHeaders (#1283) (adk-foundry-bot, 2026-11-12)
+- [68b4173](https://github.com/google/adk-js/commit/68b417314b2eb36ef6aa66c5b96caf1e3b7b6e26) fix(core): clarify OpenAPI OperationParser docstring helpers and error messages (#1289) (adk-foundry-bot, 2026-11-12)
+- [de7f94b](https://github.com/google/adk-js/commit/de7f94b3860e852e35841ead24327766361a2209) fix(core): propagate partial flag in NlPlanningResponseProcessor (#1286) (adk-foundry-bot, 2026-11-12)
+- [6ac2ad2](https://github.com/google/adk-js/commit/6ac2ad2f92ed0e1b9648a9d00b302b3b63e61701) fix(models): shallow-copy inlineData and fileData before stripping displayName (#1275) (adk-foundry-bot, 2026-11-12)
+- [13912a9](https://github.com/google/adk-js/commit/13912a986c61294d712cf9a8360974bd978fbe38) fix(agents): fix AgentEngineClient wire protocol, SSE parsing, and optional aiplatform peer (#1271) (adk-foundry-bot, 2026-11-12)
+- [5742de1](https://github.com/google/adk-js/commit/5742de11783805ed2e197f5114ed2f22eaec745a) fix(sessions): fix DatabaseSessionService datetime precision, schema init, and StaleSessionError (#1263) (adk-foundry-bot, 2026-11-12)
+- [f6723b8](https://github.com/google/adk-js/commit/f6723b8c141398e22a5b9af280907267b59e64c7) fix(server): prevent path traversal in loadDotenvForAgent and eval set routes (#1264) (adk-foundry-bot, 2026-11-12)
+- [2ae8efb](https://github.com/google/adk-js/commit/2ae8efbbab942d05cdd43940d72046ef03076cdf) feat(cli): port adk-python v1.2.1 changes to cli (#1236) (adk-foundry-bot, 2026-11-11)
+- [f4b5f3c](https://github.com/google/adk-js/commit/f4b5f3cfb942c3f77933f9cf6bc53a8e27f0d958) feat(tools): add sortByColumns support to Application Integration list operations (#1235) (adk-foundry-bot, 2026-11-11)
+- [75a77f3](https://github.com/google/adk-js/commit/75a77f38aee43d0a33dbae22cabbb12ab00ea0f1) feat(tools): keep supported schema formats and honor stdio MCP timeout (#1233) (adk-foundry-bot, 2026-11-11)
+- [8c0bb43](https://github.com/google/adk-js/commit/8c0bb433c692cc3490d41b87e45f70155cc70d37) fix(core): order browser export condition and types in core/package.json (#1274) (adk-foundry-bot, 2026-11-11)
+- [f35fb46](https://github.com/google/adk-js/commit/f35fb467f4a29af9a5b4014f7d92076f7182e109) fix(cli): harden tmp log setup, honor otel_to_cloud, and set failure exit codes (#1269) (adk-foundry-bot, 2026-11-11)
+- [25be897](https://github.com/google/adk-js/commit/25be897502425a14e1bdc0e2f1ba578181c531ed) fix(cli): preserve Agent Engine scaling on update and fix agent staging in deploy_utils (#1266) (adk-foundry-bot, 2026-11-11)
+- [e004394](https://github.com/google/adk-js/commit/e004394c0d7c26b96123093149086d504d942d68) fix(code_executors): fix ContainerCodeExecutor container lifecycle and image build caching (#1268) (adk-foundry-bot, 2026-11-11)
+- [263cc0e](https://github.com/google/adk-js/commit/263cc0e2dc0d2f12be9964f6ec143ab2b5a0c72b) fix(integrations): fix LangchainTool and CrewaiTool type compatibility and schema handling (#1273) (adk-foundry-bot, 2026-11-11)
+- [5dd7c08](https://github.com/google/adk-js/commit/5dd7c08bf26700e638337bc94ff0f44168607880) fix(agents): prevent thought leaks and empty parts in convertForeignEvent (#1267) (adk-foundry-bot, 2026-11-11)
+- [059a9f3](https://github.com/google/adk-js/commit/059a9f3f83c98d92497730ef65dee099a38305c8) fix(integrations): order browser export condition and types in package.json (#1265) (adk-foundry-bot, 2026-11-11)
+- [2f13a84](https://github.com/google/adk-js/commit/2f13a84e3d3a5601e395f5dfedbb0150640299d5) feat(a2a): propagate trace context across A2A calls (#1226) (adk-foundry-bot, 2026-11-11)
+- [4e79ff2](https://github.com/google/adk-js/commit/4e79ff212cc48af729acad4496f577d393428f00) feat(telemetry): continue Agent Engine request traces and record the support id (#1224) (adk-foundry-bot, 2026-11-11)
+- [7234f6c](https://github.com/google/adk-js/commit/7234f6cda2f556fdcbacc6095d6ed9b7adabf462) feat(telemetry): export on the request path on Agent Runtime (#1222) (adk-foundry-bot, 2026-11-11)
+- [89b8c96](https://github.com/google/adk-js/commit/89b8c9694693054d10c7f6108893b7b5338a5b87) refactor(tools): remove Python idioms in application_integration_tool (#1221) (adk-foundry-bot, 2026-11-11)
+- [5678529](https://github.com/google/adk-js/commit/5678529664a5793b122831f031889525822c3398) feat: port adk-python v1.2.1 changes to models and sessions (#1196) (adk-foundry-bot, 2026-11-11)
+- [6dc73f7](https://github.com/google/adk-js/commit/6dc73f79135d68a69d4a063ea10dc66786552a67) test(bigquery): cover empty credentials.scopes fallback and document BIGQUERY_DEFAULT_SCOPE (#1195) (adk-foundry-bot, 2026-11-11)
+- [a2022f4](https://github.com/google/adk-js/commit/a2022f413d92070ebe5926a90cdb9b9067a98232) refactor(tools): use camelCase client methods and options constructor in ToolboxToolset (#1220) (adk-foundry-bot, 2026-11-11)
+- [2fea9df](https://github.com/google/adk-js/commit/2fea9dfd26b96e05292d4c6e228731cd67b11831) fix(core): invoke plugin beforeAgentCallback and afterAgentCallback (#1137) (Reginald Alfret V, 2026-11-12)
+- [46d51d3](https://github.com/google/adk-js/commit/46d51d3f1414d37e38c98924879db9bea20a17e7) feat(integrations): add BigQuery agent analytics plugin (#1134) (Adrian Trzeciak, 2026-11-11)
 
 ## Changed Files
 
+- `M	.release-please-manifest.json`
+- `M	core/CHANGELOG.md`
+- `M	core/package.json`
+- `M	core/src/a2a/a2a_remote_agent.ts`
 - `M	core/src/a2a/agent_card.ts`
+- `M	core/src/a2a/agent_to_a2a.ts`
+- `M	core/src/agents/agent_engine_client.ts`
+- `M	core/src/agents/base_agent.ts`
+- `M	core/src/agents/instructions.ts`
+- `M	core/src/agents/processors/content_processor_utils.ts`
+- `M	core/src/agents/processors/content_request_processor.ts`
+- `M	core/src/agents/processors/instructions_llm_request_processor.ts`
+- `M	core/src/agents/processors/nl_planning_processor.ts`
 - `M	core/src/cli/cli_eval.ts`
-- `A	core/src/cli/utils/cleanup.ts`
+- `M	core/src/cli/utils/envs.ts`
+- `M	core/src/cli/utils/evals.ts`
+- `M	core/src/cli/utils/logs.ts`
+- `A	core/src/cli/utils/path_validation.ts`
+- `M	core/src/code_executors/container_code_executor.ts`
 - `M	core/src/common.ts`
 - `M	core/src/index.ts`
-- `M	core/test/a2a/agent_card_test.ts`
+- `M	core/src/models/google_llm.ts`
+- `M	core/src/plugins/base_plugin.ts`
+- `M	core/src/sessions/database_session_service.ts`
+- `M	core/src/sessions/db/operations.ts`
+- `M	core/src/sessions/db/schema.ts`
+- `M	core/src/sessions/vertex_ai_session_service.ts`
+- `M	core/src/skills/loader.ts`
+- `M	core/src/telemetry/api/instrumentation.ts`
+- `M	core/src/telemetry/api/internal/common/attributes.ts`
+- `M	core/src/telemetry/api/internal/common/error.ts`
+- `A	core/src/telemetry/api/internal/metrics/inference_start_hook.ts`
+- `A	core/src/telemetry/api/internal/trace/propagation.ts`
+- `M	core/src/telemetry/api/internal/trace/workflow.ts`
+- `A	core/src/telemetry/export/agent_engine.ts`
+- `A	core/src/telemetry/export/agent_runtime.ts`
+- `M	core/src/telemetry/export/google_cloud.ts`
+- `A	core/src/telemetry/export/request_driven_metric_reader.ts`
+- `M	core/src/telemetry/export/setup.ts`
+- `M	core/src/tools/agent_tool.ts`
+- `M	core/src/tools/application_integration_tool/application_integration_toolset.ts`
+- `M	core/src/tools/application_integration_tool/clients/connections_client.ts`
+- `M	core/src/tools/application_integration_tool/clients/integration_client.ts`
+- `M	core/src/tools/application_integration_tool/integration_connector_tool.ts`
+- `M	core/src/tools/google_api_tool/google_api_toolset.ts`
+- `M	core/src/tools/google_api_tool/googleapi_to_openapi_converter.ts`
+- `M	core/src/tools/load_artifacts_tool.ts`
+- `M	core/src/tools/load_memory_tool.ts`
+- `M	core/src/tools/mcp/mcp_session_manager.ts`
+- `M	core/src/tools/mcp/mcp_tool.ts`
+- `M	core/src/tools/mcp/mcp_toolset.ts`
+- `M	core/src/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger.ts`
+- `M	core/src/tools/openapi_tool/openapi_spec_parser/operation_parser.ts`
+- `M	core/src/tools/toolbox_toolset.ts`
+- `M	core/src/utils/client_labels.ts`
+- `M	core/src/utils/failover_utils.ts`
+- `M	core/src/utils/gemini_schema_util.ts`
+- `M	core/src/version.ts`
+- `M	core/test/a2a/agent_to_a2a_test.ts`
+- `A	core/test/a2a/trace_propagation_test.ts`
+- `M	core/test/agents/agent_engine_client_test.ts`
+- `M	core/test/agents/base_agent_test.ts`
+- `M	core/test/agents/functions_test.ts`
+- `M	core/test/agents/instructions_test.ts`
+- `M	core/test/agents/processors/content_processor_utils_test.ts`
+- `M	core/test/agents/processors/content_request_processor_test.ts`
+- `M	core/test/agents/processors/instructions_llm_request_processor_test.ts`
+- `M	core/test/agents/processors/nl_planning_processor_test.ts`
 - `M	core/test/cli/cli_eval_test.ts`
-- `A	core/test/cli/utils/cleanup_test.ts`
+- `M	core/test/cli/utils/envs_test.ts`
+- `M	core/test/cli/utils/evals_test.ts`
+- `M	core/test/cli/utils/logs_test.ts`
+- `A	core/test/cli/utils/path_validation_test.ts`
+- `M	core/test/code_executors/built_in_code_executor_test.ts`
+- `M	core/test/code_executors/container_code_executor_test.ts`
+- `M	core/test/code_executors/unsafe_local_code_executor_test.ts`
+- `M	core/test/models/google_llm_test.ts`
+- `M	core/test/package_install_weight_test.ts`
+- `M	core/test/sessions/database_session_service_test.ts`
+- `M	core/test/sessions/db/operations_test.ts`
+- `M	core/test/sessions/in_memory_session_service_test.ts`
+- `M	core/test/sessions/vertex_ai_session_service_test.ts`
+- `M	core/test/skills/loader_test.ts`
+- `A	core/test/telemetry/agent_runtime_test.ts`
+- `M	core/test/telemetry/google_cloud_test.ts`
+- `M	core/test/telemetry/import_boundaries_test.ts`
+- `M	core/test/telemetry/instrumentation_test.ts`
+- `A	core/test/telemetry/request_driven_metric_reader_properties_test.ts`
+- `A	core/test/telemetry/request_driven_metric_reader_test.ts`
+- `M	core/test/telemetry/setup_duplicate_registration_test.ts`
+- `M	core/test/telemetry/setup_test.ts`
+- `M	core/test/tools/application_integration_tool/application_integration_toolset_test.ts`
+- `M	core/test/tools/application_integration_tool/clients/connections_client_test.ts`
+- `M	core/test/tools/application_integration_tool/clients/integration_client_test.ts`
+- `M	core/test/tools/application_integration_tool/integration_connector_tool_test.ts`
+- `M	core/test/tools/function_tool_test.ts`
+- `M	core/test/tools/google_api_tool/google_api_toolset_test.ts`
+- `M	core/test/tools/google_api_tool/googleapi_to_openapi_converter_test.ts`
+- `M	core/test/tools/load_artifacts_tool_test.ts`
+- `M	core/test/tools/load_memory_tool_test.ts`
+- `M	core/test/tools/mcp/mcp_session_manager_test.ts`
+- `M	core/test/tools/mcp/mcp_tool_test.ts`
+- `M	core/test/tools/mcp/mcp_toolset_test.ts`
+- `M	core/test/tools/openapi_tool/auth/credential_exchangers/oauth2_exchanger_test.ts`
+- `M	core/test/tools/openapi_tool/operation_parser_test.ts`
+- `M	core/test/tools/openapi_tool/rest_api_tool_parity_test.ts`
+- `M	core/test/tools/toolbox_toolset_test.ts`
+- `M	core/test/utils/case_utils_test.ts`
+- `M	core/test/utils/client_labels_test.ts`
+- `M	core/test/utils/failover_utils_test.ts`
+- `M	core/test/utils/gemini_schema_util_test.ts`
+- `M	dev/CHANGELOG.md`
+- `M	dev/package.json`
 - `M	dev/src/cli/cli.ts`
 - `M	dev/src/cli/cli_run.ts`
+- `M	dev/src/cli/deploy/cli_deploy_agent_engine.ts`
+- `M	dev/src/cli/deploy/cli_deploy_cloud_run.ts`
+- `M	dev/src/cli/deploy/deploy_utils.ts`
 - `M	dev/src/server/adk_api_server.ts`
+- `A	dev/src/server/agent_runtime_middleware.ts`
 - `M	dev/src/utils/agent_loader.ts`
+- `A	dev/src/utils/redact_uri.ts`
+- `M	dev/src/utils/telemetry_utils.ts`
+- `M	dev/src/version.ts`
+- `M	dev/test/cli/cli_deploy_agent_engine_test.ts`
+- `M	dev/test/cli/cli_deploy_cloud_run_test.ts`
 - `M	dev/test/cli/cli_run_test.ts`
 - `M	dev/test/cli/cli_test.ts`
+- `M	dev/test/index_test.ts`
 - `M	dev/test/server/adk_api_server_test.ts`
-- `M	dev/test/server/agent_graph_test.ts`
+- `A	dev/test/server/agent_runtime_middleware_test.ts`
 - `M	dev/test/utils/agent_loader_test.ts`
+- `A	dev/test/utils/redact_uri_test.ts`
+- `M	dev/test/utils/telemetry_utils_test.ts`
 - `M	docs/guides/README.md`
 - `M	docs/guides/cli/index.md`
-- `A	docs/guides/integrations/bigquery/index.md`
+- `M	docs/guides/code_executors/index.md`
+- `M	docs/guides/integrations/bigquery/index.md`
+- `M	docs/guides/integrations/models/anthropic_llm/index.md`
+- `A	docs/guides/integrations/plugins/bigquery_agent_analytics_plugin/index.md`
+- `M	docs/guides/telemetry/index.md`
+- `M	docs/guides/tools/application_integration_tool/index.md`
+- `M	docs/guides/tools/index.md`
+- `M	docs/guides/tools/mcp_tool/index.md`
+- `M	docs/guides/tools/openapi_tool/index.md`
+- `M	eslint.config.js`
+- `M	integrations/CHANGELOG.md`
+- `M	integrations/README.md`
+- `M	integrations/build.js`
 - `M	integrations/package.json`
-- `A	integrations/src/bigquery/bigquery_credentials.ts`
-- `A	integrations/src/bigquery/bigquery_tool.ts`
-- `A	integrations/src/bigquery/bigquery_toolset.ts`
-- `A	integrations/src/bigquery/client.ts`
-- `A	integrations/src/bigquery/metadata_tool.ts`
-- `A	integrations/src/bigquery/query_tool.ts`
-- `A	integrations/src/bigquery/tool_error.ts`
+- `M	integrations/src/bigquery/bigquery_tool.ts`
+- `M	integrations/src/bigquery/bigquery_toolset.ts`
+- `M	integrations/src/bigquery/client.ts`
+- `A	integrations/src/bigquery/config.ts`
+- `M	integrations/src/bigquery/query_tool.ts`
+- `A	integrations/src/bigquery_analytics/batch_processor.ts`
+- `A	integrations/src/bigquery_analytics/callback_helpers.ts`
+- `A	integrations/src/bigquery_analytics/callback_support.ts`
+- `A	integrations/src/bigquery_analytics/config.ts`
+- `A	integrations/src/bigquery_analytics/content_parser.ts`
+- `A	integrations/src/bigquery_analytics/eval_view_sql.ts`
+- `A	integrations/src/bigquery_analytics/event_row.ts`
+- `A	integrations/src/bigquery_analytics/formatter_outcome.ts`
+- `A	integrations/src/bigquery_analytics/gcs_offloader.ts`
+- `A	integrations/src/bigquery_analytics/index.ts`
+- `A	integrations/src/bigquery_analytics/plugin.ts`
+- `A	integrations/src/bigquery_analytics/python_json.ts`
+- `A	integrations/src/bigquery_analytics/python_strings.ts`
+- `A	integrations/src/bigquery_analytics/sanitize.ts`
+- `A	integrations/src/bigquery_analytics/schema.ts`
+- `A	integrations/src/bigquery_analytics/snake_case.ts`
+- `A	integrations/src/bigquery_analytics/table_setup.ts`
+- `A	integrations/src/bigquery_analytics/tool_origin.ts`
+- `A	integrations/src/bigquery_analytics/trace_manager.ts`
+- `A	integrations/src/bigquery_analytics/types.ts`
+- `A	integrations/src/bigquery_analytics/views.ts`
+- `A	integrations/src/bigquery_analytics/write_client.ts`
+- `A	integrations/src/bigquery_analytics/writer_lifecycle.ts`
+- `M	integrations/src/crewai/crewai_tool.ts`
 - `M	integrations/src/index.ts`
-- `A	integrations/test/bigquery/bigquery_credentials_test.ts`
-- `A	integrations/test/bigquery/bigquery_metadata_and_query_tool_test.ts`
-- `A	integrations/test/bigquery/bigquery_tool_test.ts`
-- `A	integrations/test/bigquery/bigquery_toolset_test.ts`
+- `M	integrations/src/langchain/langchain_tool.ts`
+- `M	integrations/src/models/anthropic_llm.ts`
+- `M	integrations/src/models/anthropic_utils.ts`
+- `M	integrations/src/version.ts`
+- `M	integrations/test/bigquery/bigquery_credentials_test.ts`
+- `M	integrations/test/bigquery/bigquery_metadata_and_query_tool_test.ts`
+- `A	integrations/test/bigquery/bigquery_tool_config_test.ts`
+- `M	integrations/test/bigquery/bigquery_tool_test.ts`
+- `M	integrations/test/bigquery/bigquery_toolset_test.ts`
+- `A	integrations/test/bigquery_analytics/batch_processor_sdk_test.ts`
+- `A	integrations/test/bigquery_analytics/batch_processor_test.ts`
+- `A	integrations/test/bigquery_analytics/callback_helpers_test.ts`
+- `A	integrations/test/bigquery_analytics/code_point_row_test.ts`
+- `A	integrations/test/bigquery_analytics/config_test.ts`
+- `A	integrations/test/bigquery_analytics/content_parser_test.ts`
+- `A	integrations/test/bigquery_analytics/event_row_test.ts`
+- `A	integrations/test/bigquery_analytics/fake_writer_client.ts`
+- `A	integrations/test/bigquery_analytics/fixtures/python_schema_views.json`
+- `A	integrations/test/bigquery_analytics/golden.ts`
+- `A	integrations/test/bigquery_analytics/plugin_test.ts`
+- `A	integrations/test/bigquery_analytics/python_json_test.ts`
+- `A	integrations/test/bigquery_analytics/python_strings_test.ts`
+- `A	integrations/test/bigquery_analytics/sanitize_test.ts`
+- `A	integrations/test/bigquery_analytics/schema_test.ts`
+- `A	integrations/test/bigquery_analytics/snake_case_test.ts`
+- `A	integrations/test/bigquery_analytics/table_setup_test.ts`
+- `A	integrations/test/bigquery_analytics/tool_origin_test.ts`
+- `A	integrations/test/bigquery_analytics/trace_manager_test.ts`
+- `A	integrations/test/bigquery_analytics/views_test.ts`
+- `A	integrations/test/bigquery_analytics/write_client_test.ts`
+- `A	integrations/test/bigquery_analytics/writer_lifecycle_test.ts`
+- `M	integrations/test/crewai/crewai_tool_test.ts`
+- `M	integrations/test/langchain/langchain_tool_test.ts`
+- `M	integrations/test/models/anthropic_llm_test.ts`
+- `M	integrations/test/models/anthropic_utils_test.ts`
 - `M	package-lock.json`
+- `M	package.json`
 - `M	samples/cli/README.md`
 - `M	samples/cli/agent.ts`
-- `A	samples/integrations/bigquery/README.md`
-- `A	samples/integrations/bigquery/agent.ts`
+- `M	samples/integrations/bigquery/README.md`
+- `M	samples/integrations/bigquery/agent.ts`
+- `A	samples/integrations/bigquery_agent_analytics/README.md`
+- `A	samples/integrations/bigquery_agent_analytics/agent.ts`
+- `M	samples/tools/google_api_tool/agent.ts`
+- `M	tests/e2e/.env.template`
+- `M	tests/integration/build_setup/js_commonjs/db_init_check.js`
+- `M	tests/integration/build_setup/js_esm/db_init_check.js`
+- `M	tests/integration/build_setup/package_resolution_test.ts`
+- `M	tests/integration/build_setup/ts_commonjs/db_init_check.ts`
+- `M	tests/integration/build_setup/ts_esm/db_init_check.ts`
+- `M	tests/integration/build_setup/web_build_test.ts`
+- `M	tests/integration/test_case_utils.ts`
+- `M	tests/integration/tools/agent_tool_test.ts`
+- `M	tsconfig.json`
