@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../agents/context.dart';
 import '../../tools/computer_use/base_computer.dart';
 import '../../tools/environment/base_environment.dart';
 import '../../tools/tool_context.dart';
@@ -433,10 +434,17 @@ class AgentEngineEnvironment extends BaseEnvironment {
   String? get activeSandboxResourceName => _activeSandboxResourceName;
 
   /// Whether this environment has been initialized.
+  @override
   bool get isInitialized => _initialized;
 
   @override
-  Future<void> initialize() async {
+  set isInitialized(bool value) {
+    _initialized = value;
+    super.isInitialized = value;
+  }
+
+  @override
+  Future<void> initialize({Context? ctx}) async {
     if (_initialized) {
       return;
     }
@@ -456,6 +464,7 @@ class AgentEngineEnvironment extends BaseEnvironment {
       _createdSandbox = true;
     }
     _initialized = true;
+    super.isInitialized = true;
   }
 
   @override
@@ -464,8 +473,9 @@ class AgentEngineEnvironment extends BaseEnvironment {
     Duration timeout = const Duration(seconds: 30),
     String? workingDir,
     Map<String, String>? envVars,
+    Context? ctx,
   }) async {
-    await initialize();
+    await initialize(ctx: ctx);
     final Duration effectiveTimeout = timeout > maxExecutionTimeout
         ? maxExecutionTimeout
         : timeout;
@@ -539,8 +549,8 @@ class AgentEngineEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<List<int>> readFile(Object path) async {
-    await initialize();
+  Future<List<int>> readFile(Object path, {Context? ctx}) async {
+    await initialize(ctx: ctx);
     final String resolved = _resolvePath('$path');
     if (_client != null) {
       return _client.readFile(
@@ -562,19 +572,19 @@ class AgentEngineEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> writeFile(Object path, String content) async {
-    await writeBytes(path, utf8.encode(content));
+  Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
+    await writeBytes(path, encodeWriteFileContent(content), ctx: ctx);
   }
 
   /// Writes raw [bytes] to [path] inside the Agent Engine sandbox.
-  Future<void> writeBytes(Object path, List<int> bytes) async {
+  Future<void> writeBytes(Object path, List<int> bytes, {Context? ctx}) async {
     if (bytes.length > maxWriteFileBytes) {
       throw ArgumentError(
         'Content size (${bytes.length} bytes) exceeds the 64 MiB write limit '
         '($maxWriteFileBytes bytes).',
       );
     }
-    await initialize();
+    await initialize(ctx: ctx);
     final String resolved = _resolvePath('$path');
     if (_client != null) {
       await _client.writeFile(
@@ -595,6 +605,7 @@ class AgentEngineEnvironment extends BaseEnvironment {
     final String? active = _activeSandboxResourceName;
     final bool shouldDelete = deleteOnClose && _createdSandbox;
     _initialized = false;
+    super.isInitialized = false;
     _activeSandboxResourceName = null;
     _createdSandbox = false;
     _inMemoryFallbackFiles.clear();

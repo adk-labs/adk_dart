@@ -46,9 +46,25 @@ void main() {
           'EditFile',
           'WriteFile',
         ]);
-        expect(request.config.systemInstruction, contains(workspace.path));
         expect(
           request.config.systemInstruction,
+          isNot(contains('Your environment is at ')),
+        );
+        await tools['Execute']!.run(
+          args: <String, dynamic>{'command': 'echo ready'},
+          toolContext: _toolContext(),
+        );
+        final LlmRequest initializedRequest = LlmRequest(model: 'test-model');
+        await toolset.processLlmRequest(
+          toolContext: _toolContext(),
+          llmRequest: initializedRequest,
+        );
+        expect(
+          initializedRequest.config.systemInstruction,
+          contains(workspace.path),
+        );
+        expect(
+          initializedRequest.config.systemInstruction,
           startsWith('Your environment is at '),
         );
         await toolset.close();

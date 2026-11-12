@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../../agents/context.dart';
 import '../../features/_feature_registry.dart';
 import 'base_environment.dart';
 
@@ -42,7 +43,6 @@ class DaytonaEnvironment extends BaseEnvironment {
 
   final http.Client? _httpClient;
   String? _sandboxId;
-  bool _isInitialized = false;
 
   String get _effectiveApiKey =>
       apiKey ?? Platform.environment['DAYTONA_API_KEY'] ?? '';
@@ -59,9 +59,9 @@ class DaytonaEnvironment extends BaseEnvironment {
   };
 
   @override
-  Future<void> initialize() async {
+  Future<void> initialize({Context? ctx}) async {
     isFeatureEnabled(FeatureName.daytonaEnvironment);
-    if (_isInitialized && _sandboxId != null) {
+    if (isInitialized && _sandboxId != null) {
       return;
     }
 
@@ -89,10 +89,10 @@ class DaytonaEnvironment extends BaseEnvironment {
         // Fallback to synthetic sandbox identifier if mocking/local proxy
         _sandboxId = 'daytona-${DateTime.now().millisecondsSinceEpoch}';
       }
-      _isInitialized = true;
+      isInitialized = true;
     } catch (_) {
       _sandboxId = 'daytona-${DateTime.now().millisecondsSinceEpoch}';
-      _isInitialized = true;
+      isInitialized = true;
     } finally {
       if (_httpClient == null) {
         client.close();
@@ -103,6 +103,7 @@ class DaytonaEnvironment extends BaseEnvironment {
   @override
   Future<void> close() async {
     if (_sandboxId == null) {
+      isInitialized = false;
       return;
     }
 
@@ -115,7 +116,7 @@ class DaytonaEnvironment extends BaseEnvironment {
     } catch (_) {
     } finally {
       _sandboxId = null;
-      _isInitialized = false;
+      isInitialized = false;
       if (_httpClient == null) {
         client.close();
       }
@@ -126,8 +127,9 @@ class DaytonaEnvironment extends BaseEnvironment {
   Future<EnvironmentExecutionResult> execute(
     String command, {
     Duration timeout = const Duration(seconds: 30),
+    Context? ctx,
   }) async {
-    await initialize();
+    await initialize(ctx: ctx);
 
     final http.Client client = _httpClient ?? http.Client();
     try {
@@ -170,8 +172,8 @@ class DaytonaEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<List<int>> readFile(Object path) async {
-    await initialize();
+  Future<List<int>> readFile(Object path, {Context? ctx}) async {
+    await initialize(ctx: ctx);
     final String pathStr = path.toString();
     final http.Client client = _httpClient ?? http.Client();
     try {
@@ -191,9 +193,9 @@ class DaytonaEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> writeFile(Object path, Object content) async {
+  Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
     final List<int> bytes = encodeWriteFileContent(content);
-    await initialize();
+    await initialize(ctx: ctx);
     final String pathStr = path.toString();
     final http.Client client = _httpClient ?? http.Client();
     try {

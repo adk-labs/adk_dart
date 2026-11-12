@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../agents/context.dart';
 import '../../tools/environment/base_environment.dart';
 
 /// Default home directory inside E2B sandboxes.
@@ -363,7 +364,14 @@ class E2BEnvironment extends BaseEnvironment {
   E2BSandboxClient get client => _client;
 
   /// Returns `true` if the sandbox has been initialized and not yet closed.
+  @override
   bool get isInitialized => _initialized;
+
+  @override
+  set isInitialized(bool value) {
+    _initialized = value;
+    super.isInitialized = value;
+  }
 
   /// Returns the sandbox working directory (`/home/user` by default).
   ///
@@ -412,7 +420,7 @@ class E2BEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> initialize() async {
+  Future<void> initialize({Context? ctx}) async {
     if (_initialized) {
       return;
     }
@@ -423,6 +431,7 @@ class E2BEnvironment extends BaseEnvironment {
       envVars: envVars,
     );
     _initialized = true;
+    super.isInitialized = true;
   }
 
   @override
@@ -432,6 +441,7 @@ class E2BEnvironment extends BaseEnvironment {
         await _client.close();
       } finally {
         _initialized = false;
+        super.isInitialized = false;
       }
     }
   }
@@ -440,6 +450,7 @@ class E2BEnvironment extends BaseEnvironment {
   Future<EnvironmentExecutionResult> execute(
     String command, {
     Duration timeout = const Duration(seconds: 30),
+    Context? ctx,
   }) async {
     final E2BSandboxClient sbx = await _ensureSandbox();
     try {
@@ -462,7 +473,7 @@ class E2BEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<List<int>> readFile(Object path) async {
+  Future<List<int>> readFile(Object path, {Context? ctx}) async {
     final E2BSandboxClient sbx = await _ensureSandbox();
     final String resolved = _resolvePath(path);
     return sbx.readFile(resolved);
@@ -470,15 +481,15 @@ class E2BEnvironment extends BaseEnvironment {
 
   /// Streams chunks of bytes from a file at [path].
   @override
-  Stream<List<int>> readFileStream(Object path) async* {
-    final List<int> data = await readFile(path);
+  Stream<List<int>> readFileStream(Object path, {Context? ctx}) async* {
+    final List<int> data = await readFile(path, ctx: ctx);
     if (data.isNotEmpty) {
       yield data;
     }
   }
 
   @override
-  Future<void> writeFile(Object path, Object content) async {
+  Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
     if (content is! String && content is! List<int>) {
       throw ArgumentError(
         'content must be str or bytes, got ${content.runtimeType}',
@@ -495,7 +506,7 @@ class E2BEnvironment extends BaseEnvironment {
   }
 
   /// Writes raw [bytes] to [path] in the sandbox filesystem.
-  Future<void> writeBytes(Object path, List<int> bytes) async {
+  Future<void> writeBytes(Object path, List<int> bytes, {Context? ctx}) async {
     final E2BSandboxClient sbx = await _ensureSandbox();
     final String resolved = _resolvePath(path);
     await sbx.writeBytes(resolved, bytes);

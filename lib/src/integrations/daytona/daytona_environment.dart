@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../../agents/context.dart';
 import '../../environment/base_environment.dart';
 import '../../features/_feature_registry.dart';
 
@@ -44,7 +45,6 @@ class DaytonaEnvironment extends BaseEnvironment {
 
   final http.Client? _httpClient;
   String? _sandboxId;
-  bool _isInitialized = false;
 
   /// Active Daytona sandbox identifier, if initialized.
   String? get sandboxId => _sandboxId;
@@ -64,9 +64,9 @@ class DaytonaEnvironment extends BaseEnvironment {
   };
 
   @override
-  Future<void> initialize() async {
+  Future<void> initialize({Context? ctx}) async {
     isFeatureEnabled(FeatureName.daytonaEnvironment);
-    if (_isInitialized && _sandboxId != null) {
+    if (isInitialized && _sandboxId != null) {
       return;
     }
 
@@ -93,10 +93,10 @@ class DaytonaEnvironment extends BaseEnvironment {
       } else {
         _sandboxId = 'daytona-${DateTime.now().millisecondsSinceEpoch}';
       }
-      _isInitialized = true;
+      isInitialized = true;
     } catch (_) {
       _sandboxId = 'daytona-${DateTime.now().millisecondsSinceEpoch}';
-      _isInitialized = true;
+      isInitialized = true;
     } finally {
       if (_httpClient == null) {
         client.close();
@@ -107,6 +107,7 @@ class DaytonaEnvironment extends BaseEnvironment {
   @override
   Future<void> close() async {
     if (_sandboxId == null) {
+      isInitialized = false;
       return;
     }
 
@@ -119,7 +120,7 @@ class DaytonaEnvironment extends BaseEnvironment {
     } catch (_) {
     } finally {
       _sandboxId = null;
-      _isInitialized = false;
+      isInitialized = false;
       if (_httpClient == null) {
         client.close();
       }
@@ -130,8 +131,9 @@ class DaytonaEnvironment extends BaseEnvironment {
   Future<ExecutionResult> execute(
     String command, {
     Duration timeout = const Duration(seconds: 30),
+    Context? ctx,
   }) async {
-    await initialize();
+    await initialize(ctx: ctx);
 
     final http.Client client = _httpClient ?? http.Client();
     try {
@@ -174,8 +176,8 @@ class DaytonaEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<Uint8List> readFile(Object path) async {
-    await initialize();
+  Future<Uint8List> readFile(Object path, {Context? ctx}) async {
+    await initialize(ctx: ctx);
     final String pathStr = _resolvePath(path);
     final http.Client client = _httpClient ?? http.Client();
     try {
@@ -195,13 +197,13 @@ class DaytonaEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> writeFile(Object path, Object content) async {
+  Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
     if (content is! String && content is! List<int>) {
       throw ArgumentError(
         'content must be str or bytes, got ${content.runtimeType}',
       );
     }
-    await initialize();
+    await initialize(ctx: ctx);
     final Uint8List data = encodeWriteFileContent(content);
     final String pathStr = _resolvePath(path);
     final http.Client client = _httpClient ?? http.Client();

@@ -160,28 +160,34 @@ class _SlowEnvironment extends BaseEnvironment {
   int closeCount = 0;
 
   @override
-  Future<void> initialize() async {
+  Future<void> initialize({Context? ctx}) async {
+    if (isInitialized) {
+      return;
+    }
     await Future<void>.delayed(const Duration(milliseconds: 20));
     initCount++;
+    isInitialized = true;
   }
 
   @override
   Future<void> close() async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     closeCount++;
+    isInitialized = false;
   }
 
   @override
   Future<EnvironmentExecutionResult> execute(
     String command, {
     Duration timeout = const Duration(seconds: 30),
+    Context? ctx,
   }) async => const EnvironmentExecutionResult(exitCode: 0);
 
   @override
-  Future<List<int>> readFile(Object path) async => const <int>[];
+  Future<List<int>> readFile(Object path, {Context? ctx}) async => const <int>[];
 
   @override
-  Future<void> writeFile(Object path, String content) async {}
+  Future<void> writeFile(Object path, String content, {Context? ctx}) async {}
 }
 
 void main() {
@@ -491,9 +497,33 @@ void main() {
       final EnvironmentToolset envToolset = EnvironmentToolset(
         environment: env,
       );
+      final List<BaseTool> envTools = await envToolset.getTools();
+      expect(env.initCount, equals(0));
+      final BaseTool executeTool = envTools.firstWhere(
+        (BaseTool t) => t.name == 'Execute',
+      );
+      final Session toolSession = Session(
+        id: 's_env',
+        appName: 'app',
+        userId: 'u1',
+      );
+      final ToolContext toolCtx = Context(
+        InvocationContext(
+          invocationId: 'inv_env',
+          agent: LlmAgent(name: 'env_agent', model: 'gemini-2.5-flash'),
+          session: toolSession,
+          sessionService: InMemorySessionService(),
+        ),
+      );
       await Future.wait(<Future<Object?>>[
-        envToolset.getTools(),
-        envToolset.getTools(),
+        executeTool.run(
+          args: <String, dynamic>{'command': 'echo 1'},
+          toolContext: toolCtx,
+        ),
+        executeTool.run(
+          args: <String, dynamic>{'command': 'echo 2'},
+          toolContext: toolCtx,
+        ),
       ]);
       expect(env.initCount, equals(1));
 

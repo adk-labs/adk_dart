@@ -8,3 +8,10 @@ export 'base_environment.dart'
         ExecutionResult,
         encodeWriteFileContent;
 export 'local_environment.dart' show LocalEnvironment;
+export '../tools/environment/environment_toolset.dart'
+    show
+        EnvironmentLockCancelledException,
+        closeIfInitialized,
+        ensureInitialized,
+        environmentInstruction,
+        environmentWorkingDirInstruction;

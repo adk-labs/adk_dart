@@ -15,6 +15,7 @@ export 'src/integrations/agent_identity/agent_identity.dart'
     hide GcpAuthProvider, GcpAuthProviderScheme;
 export 'src/integrations/agent_registry/agent_registry.dart';
 export 'src/integrations/bigquery/bigquery.dart';
+export 'src/integrations/daytona/daytona_environment.dart';
 export 'src/integrations/e2b/e2b_environment.dart';
 export 'src/integrations/eleven_labs/eleven_labs.dart';
 export 'src/integrations/eventarc/eventarc.dart';

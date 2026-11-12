@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../agents/context.dart';
 import 'base_environment.dart';
 
 const int _streamChunkSize = 64 * 1024;
@@ -16,18 +17,25 @@ class LocalEnvironment extends BaseEnvironment {
   LocalEnvironment({super.workingDirectory});
 
   @override
-  Future<void> initialize() async {
+  Future<void> initialize({Context? ctx}) async {
     if (!await workingDirectory.exists()) {
       await workingDirectory.create(recursive: true);
     }
+    isInitialized = true;
+  }
+
+  @override
+  Future<void> close() async {
+    isInitialized = false;
   }
 
   @override
   Future<EnvironmentExecutionResult> execute(
     String command, {
     Duration timeout = const Duration(seconds: 30),
+    Context? ctx,
   }) async {
-    await initialize();
+    await initialize(ctx: ctx);
 
     final Process process = await Process.start('/bin/bash', <String>[
       '-lc',
@@ -59,14 +67,14 @@ class LocalEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<List<int>> readFile(Object path) async {
-    await initialize();
+  Future<List<int>> readFile(Object path, {Context? ctx}) async {
+    await initialize(ctx: ctx);
     return _resolveFile(path).readAsBytes();
   }
 
   @override
-  Stream<List<int>> readFileStream(Object path) async* {
-    await initialize();
+  Stream<List<int>> readFileStream(Object path, {Context? ctx}) async* {
+    await initialize(ctx: ctx);
     final File file = _resolveFile(path);
     final RandomAccessFile raf = await file.open(mode: FileMode.read);
     try {
@@ -83,9 +91,9 @@ class LocalEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<void> writeFile(Object path, Object content) async {
+  Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
     final Uint8List data = encodeWriteFileContent(content);
-    await initialize();
+    await initialize(ctx: ctx);
     final File file = _resolveFile(path);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(data, flush: true);

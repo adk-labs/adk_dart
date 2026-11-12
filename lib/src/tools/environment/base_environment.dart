@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../agents/context.dart';
+
 /// Returns `true` when [value] contains any unpaired UTF-16 surrogate code unit.
 bool hasLoneUtf16Surrogates(String value) {
   for (int i = 0; i < value.length; i++) {
@@ -83,33 +85,38 @@ abstract class BaseEnvironment {
   /// Workspace root used by environment operations.
   final Directory workingDirectory;
 
-  /// Performs any one-time setup required before tool calls.
-  Future<void> initialize() async {}
+  /// Whether this environment has been initialized and not yet closed.
+  bool isInitialized = false;
+
+  /// Performs any setup required before tool calls, optionally using [ctx].
+  Future<void> initialize({Context? ctx}) async {}
 
   /// Releases any resources retained by the environment.
   Future<void> close() async {}
 
-  /// Executes [command] within [workingDirectory].
+  /// Executes [command] within [workingDirectory], optionally using [ctx].
   Future<EnvironmentExecutionResult> execute(
     String command, {
     Duration timeout = const Duration(seconds: 30),
+    Context? ctx,
   });
 
-  /// Reads bytes from a file relative to [workingDirectory].
-  Future<List<int>> readFile(Object path);
+  /// Reads bytes from a file relative to [workingDirectory], optionally using [ctx].
+  Future<List<int>> readFile(Object path, {Context? ctx});
 
   /// Streams raw byte chunks from a file relative to [workingDirectory].
   ///
-  /// The default implementation reads the full file via [readFile] and yields
-  /// it as a single chunk when non-empty. Subclasses may override this to stream
-  /// in fixed-size chunks without buffering the entire file in memory.
-  Stream<List<int>> readFileStream(Object path) async* {
-    final List<int> data = await readFile(path);
+  /// The default implementation reads the full file via [readFile] with [ctx]
+  /// and yields it as a single chunk when non-empty. Subclasses may override
+  /// this to stream in fixed-size chunks without buffering the entire file in
+  /// memory.
+  Stream<List<int>> readFileStream(Object path, {Context? ctx}) async* {
+    final List<int> data = await readFile(path, ctx: ctx);
     if (data.isNotEmpty) {
       yield data;
     }
   }
 
   /// Writes [content] (`String` or `List<int>`) to a file relative to [workingDirectory].
-  Future<void> writeFile(Object path, covariant Object content);
+  Future<void> writeFile(Object path, covariant Object content, {Context? ctx});
 }

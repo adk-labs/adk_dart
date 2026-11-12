@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../agents/context.dart';
 import '../../tools/environment/base_environment.dart';
 
 /// Client interface for communicating with an OpenSandbox instance.
@@ -229,10 +230,17 @@ class OpenSandboxEnvironment extends BaseEnvironment {
   String? get activeSandboxId => _activeSandboxId;
 
   /// Whether this environment has been initialized.
+  @override
   bool get isInitialized => _initialized;
 
   @override
-  Future<void> initialize() async {
+  set isInitialized(bool value) {
+    _initialized = value;
+    super.isInitialized = value;
+  }
+
+  @override
+  Future<void> initialize({Context? ctx}) async {
     if (_initialized) {
       return;
     }
@@ -244,6 +252,7 @@ class OpenSandboxEnvironment extends BaseEnvironment {
           envVars: envVars,
         );
     _initialized = true;
+    super.isInitialized = true;
   }
 
   @override
@@ -252,8 +261,9 @@ class OpenSandboxEnvironment extends BaseEnvironment {
     Duration timeout = const Duration(seconds: 30),
     String? workingDir,
     Map<String, String>? envVars,
+    Context? ctx,
   }) async {
-    await initialize();
+    await initialize(ctx: ctx);
     final Map<String, String> mergedEnv = <String, String>{
       ...this.envVars,
       ...?envVars,
@@ -268,20 +278,20 @@ class OpenSandboxEnvironment extends BaseEnvironment {
   }
 
   @override
-  Future<List<int>> readFile(Object path) async {
-    await initialize();
+  Future<List<int>> readFile(Object path, {Context? ctx}) async {
+    await initialize(ctx: ctx);
     final String resolved = _resolvePath('$path');
     return _client.readFile(sandboxId: _activeSandboxId!, path: resolved);
   }
 
   @override
-  Future<void> writeFile(Object path, String content) async {
-    await writeBytes(path, utf8.encode(content));
+  Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
+    await writeBytes(path, encodeWriteFileContent(content), ctx: ctx);
   }
 
   /// Writes raw [bytes] to [path] inside the sandbox.
-  Future<void> writeBytes(Object path, List<int> bytes) async {
-    await initialize();
+  Future<void> writeBytes(Object path, List<int> bytes, {Context? ctx}) async {
+    await initialize(ctx: ctx);
     final String resolved = _resolvePath('$path');
     await _client.writeFile(
       sandboxId: _activeSandboxId!,
@@ -297,6 +307,7 @@ class OpenSandboxEnvironment extends BaseEnvironment {
     }
     final String? id = _activeSandboxId;
     _initialized = false;
+    super.isInitialized = false;
     _activeSandboxId = null;
     if (id != null && sandboxId == null) {
       await _client.closeSandbox(id);

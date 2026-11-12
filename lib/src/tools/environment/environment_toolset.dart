@@ -2,11 +2,13 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../../agents/context.dart';
 import '../../agents/readonly_context.dart';
 import '../../models/llm_request.dart';
 import '../base_tool.dart';
@@ -16,10 +18,13 @@ import 'base_environment.dart';
 
 const int _defaultTimeoutSeconds = 30;
 const int _defaultMaxOutputChars = 30000;
-const String _environmentInstructionTemplate =
-    '''Your environment is at {working_dir}/
 
-# Environment Rules
+/// System-instruction header template reporting the active environment directory.
+const String environmentWorkingDirInstruction =
+    'Your environment is at {working_dir}/\n';
+
+/// System-instruction rules injected by [EnvironmentToolset].
+const String environmentInstruction = '''# Environment Rules
 
 DO:
 - Chain sequential, dependent commands with `&&` in a single `Execute` call
@@ -30,6 +35,148 @@ DON'T:
 - Combine `EditFile` or `ReadFile` with `Execute` in the same response (Instead, call the file tool first, then `Execute` in the next turn)
 - Use multiple `Execute` calls for dependent commands (they run in parallel)
 ''';
+
+/// Exception thrown when an operation waiting on an environment lock is cancelled.
+class EnvironmentLockCancelledException implements Exception {
+  /// Creates a lock-cancellation exception.
+  const EnvironmentLockCancelledException();
+
+  @override
+  String toString() =>
+      'EnvironmentLockCancelledException: Environment lock acquisition was cancelled.';
+}
+
+class _EnvironmentLockTicket {
+  final Completer<void> ready = Completer<void>();
+  bool cancelled = false;
+}
+
+class _AsyncEnvironmentLock {
+  bool _locked = false;
+  final Queue<_EnvironmentLockTicket> _waiters =
+      Queue<_EnvironmentLockTicket>();
+
+  Future<T> synchronized<T>(
+    Future<T> Function() action, {
+    Future<void>? cancelSignal,
+  }) async {
+    if (!_locked) {
+      _locked = true;
+      try {
+        return await action();
+      } finally {
+        _release();
+      }
+    }
+
+    final _EnvironmentLockTicket ticket = _EnvironmentLockTicket();
+    _waiters.addLast(ticket);
+
+    if (cancelSignal != null) {
+      bool settled = false;
+      final Completer<void> race = Completer<void>();
+      unawaited(
+        ticket.ready.future.then((_) {
+          if (!settled) {
+            settled = true;
+            race.complete();
+          }
+        }),
+      );
+      unawaited(
+        cancelSignal.then((_) {
+          if (!settled) {
+            settled = true;
+            ticket.cancelled = true;
+            _waiters.remove(ticket);
+            if (ticket.ready.isCompleted) {
+              _release();
+            }
+            race.completeError(const EnvironmentLockCancelledException());
+          }
+        }),
+      );
+      await race.future;
+    } else {
+      await ticket.ready.future;
+    }
+
+    try {
+      return await action();
+    } finally {
+      _release();
+    }
+  }
+
+  void _release() {
+    while (_waiters.isNotEmpty) {
+      final _EnvironmentLockTicket next = _waiters.removeFirst();
+      if (!next.cancelled) {
+        next.ready.complete();
+        return;
+      }
+    }
+    _locked = false;
+  }
+}
+
+final Expando<_AsyncEnvironmentLock> _envLocks = Expando<_AsyncEnvironmentLock>(
+  'adkEnvironmentLocks',
+);
+
+_AsyncEnvironmentLock _lockFor(BaseEnvironment environment) {
+  _AsyncEnvironmentLock? lock = _envLocks[environment];
+  if (lock == null) {
+    lock = _AsyncEnvironmentLock();
+    _envLocks[environment] = lock;
+  }
+  return lock;
+}
+
+/// Returns `true` when [environment] currently has a weak per-environment lock entry.
+bool hasEnvironmentLock(BaseEnvironment environment) =>
+    _envLocks[environment] != null;
+
+/// Initializes [environment] under a per-environment lock with calling [ctx].
+///
+/// Runs [BaseEnvironment.initialize] one call at a time for [environment] and
+/// marks [BaseEnvironment.isInitialized] `true` if the implementation did not
+/// already update its own flag.
+Future<void> ensureInitialized(
+  BaseEnvironment environment, [
+  Context? ctx,
+  Future<void>? cancelSignal,
+]) async {
+  await _lockFor(environment).synchronized<void>(() async {
+    await environment.initialize(ctx: ctx);
+    if (!environment.isInitialized) {
+      try {
+        environment.isInitialized = true;
+      } on UnsupportedError {
+        // Subclass manages a read-only `isInitialized` getter on its own.
+      }
+    }
+  }, cancelSignal: cancelSignal);
+}
+
+/// Closes [environment] under its per-environment lock if currently initialized.
+Future<void> closeIfInitialized(
+  BaseEnvironment environment, {
+  Future<void>? cancelSignal,
+}) async {
+  await _lockFor(environment).synchronized<void>(() async {
+    if (environment.isInitialized) {
+      await environment.close();
+      if (environment.isInitialized) {
+        try {
+          environment.isInitialized = false;
+        } on UnsupportedError {
+          // Subclass manages a read-only `isInitialized` getter on its own.
+        }
+      }
+    }
+  }, cancelSignal: cancelSignal);
+}
 
 String _truncateOutput(String text, {int limit = _defaultMaxOutputChars}) {
   if (text.length <= limit) {
@@ -64,7 +211,8 @@ String _trimTrailingSeparator(String path) {
   if (path.length <= 1) {
     return path;
   }
-  while (path.endsWith(Platform.pathSeparator) && path.length > 1) {
+  while ((path.endsWith(Platform.pathSeparator) || path.endsWith('/')) &&
+      path.length > 1) {
     path = path.substring(0, path.length - 1);
   }
   return path;
@@ -254,9 +402,10 @@ class EnvironmentToolset extends BaseToolset {
   EnvironmentToolset({
     required BaseEnvironment environment,
     int? maxOutputChars,
+    super.toolFilter,
+    super.toolNamePrefix,
   }) : _maxOutputChars = maxOutputChars,
-       _environment = environment,
-       super();
+       _environment = environment;
 
   /// Environment used to execute commands and perform file I/O.
   final BaseEnvironment _environment;
@@ -264,40 +413,17 @@ class EnvironmentToolset extends BaseToolset {
   /// Optional character limit for command and file output truncation.
   final int? _maxOutputChars;
 
-  bool _initialized = false;
-  Future<void> _lock = Future<void>.value();
-
-  Future<T> _withLock<T>(Future<T> Function() action) async {
-    final Completer<void> next = Completer<void>();
-    final Future<void> previous = _lock;
-    _lock = next.future;
-    try {
-      await previous;
-      return await action();
-    } finally {
-      next.complete();
-    }
-  }
-
-  Future<void> _ensureInitialized() async {
-    await _withLock<void>(() async {
-      if (_initialized) {
-        return;
-      }
-      await _environment.initialize();
-      _initialized = true;
-    });
-  }
-
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
-    await _ensureInitialized();
-    return <BaseTool>[
+    final List<BaseTool> allTools = <BaseTool>[
       ExecuteTool(_environment, maxOutputChars: _maxOutputChars),
       ReadFileTool(_environment, maxOutputChars: _maxOutputChars),
       EditFileTool(_environment),
       WriteFileTool(_environment),
     ];
+    return allTools
+        .where((BaseTool tool) => isToolSelected(tool, readonlyContext))
+        .toList(growable: false);
   }
 
   @override
@@ -305,26 +431,21 @@ class EnvironmentToolset extends BaseToolset {
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
-    await _ensureInitialized();
-    final String instruction = _environmentInstructionTemplate.replaceAll(
-      '{working_dir}',
-      _trimTrailingSeparator(_environment.workingDirectory.path),
-    );
+    String instruction = environmentInstruction;
+    if (_environment.isInitialized) {
+      final String workingDir = environmentWorkingDirInstruction.replaceAll(
+        '{working_dir}',
+        _trimTrailingSeparator(_environment.workingDirectory.path),
+      );
+      instruction = '$workingDir\n$instruction';
+    }
     llmRequest.appendInstructions(<String>[instruction]);
   }
 
   @override
   Future<void> close() async {
-    await _withLock<void>(() async {
-      if (!_initialized) {
-        return;
-      }
-      try {
-        await _environment.close();
-      } finally {
-        _initialized = false;
-      }
-    });
+    await closeIfInitialized(_environment);
+    await super.close();
   }
 }
 
@@ -377,9 +498,11 @@ class ExecuteTool extends BaseTool {
     }
 
     try {
+      await ensureInitialized(_environment, toolContext);
       final EnvironmentExecutionResult result = await _environment.execute(
         command,
         timeout: const Duration(seconds: _defaultTimeoutSeconds),
+        ctx: toolContext,
       );
       final Map<String, Object?> payload = <String, Object?>{'status': 'ok'};
       if (result.stdout.isNotEmpty) {
@@ -491,9 +614,10 @@ class ReadFileTool extends BaseTool {
     final int maxBytes = maxOutputChars * 4;
 
     try {
+      await ensureInitialized(_environment, toolContext);
       final ({List<Uint8List> selected, int total}) lineRange =
           await _readLineRange(
-            _environment.readFileStream(path),
+            _environment.readFileStream(path, ctx: toolContext),
             start,
             endLine,
             maxBytes: maxBytes + 1,
@@ -587,7 +711,8 @@ class WriteFileTool extends BaseTool {
 
     final String content = '${args['content'] ?? ''}';
     try {
-      await _environment.writeFile(path, content);
+      await ensureInitialized(_environment, toolContext);
+      await _environment.writeFile(path, content, ctx: toolContext);
       return <String, Object?>{'status': 'ok', 'message': 'Wrote $path'};
     } catch (error) {
       return <String, Object?>{'status': 'error', 'error': '$error'};
@@ -658,7 +783,8 @@ class EditFileTool extends BaseTool {
     final String newString = '${args['new_string'] ?? ''}';
 
     try {
-      final List<int> raw = await _environment.readFile(path);
+      await ensureInitialized(_environment, toolContext);
+      final List<int> raw = await _environment.readFile(path, ctx: toolContext);
       final String content = _decodeUtf8SurrogateEscape(raw);
       final RegExp pattern = _oldStringPattern(oldString);
       final int occurrences = pattern.allMatches(content).length;
@@ -701,9 +827,9 @@ class EditFileTool extends BaseTool {
       );
       final Uint8List encoded = _encodeUtf8SurrogateEscape(updated);
       try {
-        await _environment.writeFile(path, encoded);
+        await _environment.writeFile(path, encoded, ctx: toolContext);
       } on TypeError {
-        await _environment.writeFile(path, updated);
+        await _environment.writeFile(path, updated, ctx: toolContext);
       }
       return <String, Object?>{'status': 'ok', 'message': 'Edited $path'};
     } on FileSystemException catch (error) {

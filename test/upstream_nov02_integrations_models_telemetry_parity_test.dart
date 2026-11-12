@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:adk_dart/src/agents/invocation_context.dart';
 import 'package:adk_dart/src/agents/llm_agent.dart';
+import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
 import 'package:adk_dart/src/environment/environment.dart' as env_pkg;
 import 'package:adk_dart/src/errors/already_exists_error.dart';
 import 'package:adk_dart/src/events/event.dart';
@@ -241,9 +242,12 @@ void main() {
     late FsspecArtifactService service;
 
     setUp(() {
+      overrideFeatureEnabled(FeatureName.fsspecArtifactService, true);
       fs = InMemoryFsspecFilesystem(protocol: 'memory');
       service = FsspecArtifactService('memory://bucket/root', fs: fs);
     });
+
+    tearDown(resetFeatureRegistryForTest);
 
     test('loads, versions, lists, and inspects session and user-scoped artifacts', () async {
       fs.putFile(
@@ -308,35 +312,40 @@ void main() {
       );
       expect(versions, <int>[0, 1]);
 
-      await expectLater(
-        () => service.getArtifactVersion(
-          appName: 'my_app',
-          userId: 'user_1',
-          sessionId: 'sess_1',
-          filename: 'report.txt',
-        ),
-        throwsUnimplementedError,
+      final ArtifactVersion? versionInfo = await service.getArtifactVersion(
+        appName: 'my_app',
+        userId: 'user_1',
+        sessionId: 'sess_1',
+        filename: 'report.txt',
       );
+      expect(versionInfo?.version, 1);
 
-      // Read-only service throws UnsupportedError on saveArtifact / deleteArtifact.
-      await expectLater(
-        () => service.saveArtifact(
-          appName: 'my_app',
-          userId: 'user_1',
-          sessionId: 'sess_1',
-          filename: 'report.txt',
-          artifact: Part.text('v2'),
+      final int savedVersion = await service.saveArtifact(
+        appName: 'my_app',
+        userId: 'user_1',
+        sessionId: 'sess_1',
+        filename: 'report.txt',
+        artifact: Part.fromInlineData(
+          mimeType: 'application/octet-stream',
+          data: utf8.encode('v2'),
         ),
-        throwsUnsupportedError,
       );
-      await expectLater(
-        () => service.deleteArtifact(
+      expect(savedVersion, 2);
+
+      await service.deleteArtifact(
+        appName: 'my_app',
+        userId: 'user_1',
+        sessionId: 'sess_1',
+        filename: 'report.txt',
+      );
+      expect(
+        await service.loadArtifact(
           appName: 'my_app',
           userId: 'user_1',
           sessionId: 'sess_1',
           filename: 'report.txt',
         ),
-        throwsUnsupportedError,
+        isNull,
       );
     });
 
