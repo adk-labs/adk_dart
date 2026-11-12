@@ -1,3 +1,25 @@
+## 2026.11.12
+
+- **Upstream `adk-python` Parity (`67b217d00..df9f9d045`)**:
+  - Updated `adkPackageVersion` to `'2026.11.12'`.
+  - **Core, Agents, Workflows, Events, Auth, Plugins & Sessions**:
+    - Added `extractLangGraphMessageText` and structured content-block parsing (`LangGraphMessage.assistantBlocks`) in `LangGraphAgent` (`079586136`).
+    - Set `skipSummarization = true` on `FinishTaskTool` success so delegated `mode: 'task'` agents and `Workflow` task nodes execute agent and plugin `afterAgentCallback`s while closing immediately on live sessions or same-turn `transfer_to_agent` (`fa647fcc1`).
+    - Passed `single_turn` transfer target replies downstream in `Workflow` without rerunning the target on resume (`b4126cddb`).
+    - Rebuilt `FinishTaskTool`, `SingleTurnAgentTool`, and `TaskAgentTool` onto cloned `LlmAgent` instances and cloned `subAgents` without mutating caller tool lists (`61a4dc642`).
+    - Scheduled service-account and OpenAPI credential exchanges off the caller's synchronous turn (`9651df04d`).
+    - Left paused long-running calls (`guardedCallIds`) open on external run cancellation while sealing on explicit `abortSignal.abort()`, preserved raw text answers when `RequestInput` schemas expect strings, and cleared open interrupts sealed by error `FunctionResponse`s (`e1e231cb3`, `b989d6849`, `efc7717bf`).
+    - Allowed code execution without an `artifactService` when no output files are written, added `DebugLoggingPlugin.onRunErrorCallback` to flush YAML traces and clear invocation state on unhandled run errors, pruned empty maps in `InMemorySessionService.deleteSession`, deduplicated multi-route `Workflow` targets, and named the calling node in `rerunOnResume: false` errors (`9687bae1c`, `9e549adf7`, `c0bcdaa48`, `dc7d7431a`, `ba43b4f0a`).
+  - **Environments, Integrations, Models, Live, Memory & Optimization**:
+    - Added optional `{Context? ctx}` and `isInitialized` across `BaseEnvironment`, `LocalEnvironment`, `DaytonaEnvironment`, `E2bEnvironment`, `OpenSandboxEnvironment`, and `AgentEngineEnvironment`, and switched `EnvironmentToolset` and `SkillToolset` to lazy tool-call-time initialization via `ensureInitialized` / `closeIfInitialized` (`1bd22e34d`, `61efa3003`).
+    - Added full read/write/delete/version-metadata support (`saveArtifact`, `deleteArtifact`, `listArtifactKeys`, `listVersions`, `listArtifactVersions`, `getArtifactVersion`, Rapid GCS streaming, `artifact://` reference resolution, and rewind tombstones) to `FsspecArtifactService` (`df9f9d045`).
+    - Preserved arrival order and separation of parallel streamed tool calls in `OciGenAiLlm`, reported empty non-`STOP` Claude responses as model errors in `AnthropicLlm`, emitted `cached_content_token_count` in `AntigravityAgent` turn usage events, and added `cascadeLiveClientLabel` telemetry headers on `CascadeLiveConnection` reasoning turns (`353a771d7`, `583900785`, `cd8debd2e`, `9620b4296`).
+    - Split mixed-script search queries in `InMemoryMemoryService`, reused `VertexAiRagClient` instances per `Zone`, and stopped emitting property-level `required: true` inside optimization field JSON schemas (`e9f9790f9`, `112491db8`, `3bb410c90`).
+  - **Tools & Evaluation**:
+    - Added configurable `ToolParameterMatchEvaluator`, `ToolParameterMatchCriterion`, and `PrebuiltMetrics.toolParameterMatch` (`tool_parameter_match`) with `exact`, `inOrder`, and Kuhn-Munkres `anyOrder` matching (`04ba41209`).
+    - Left `hallucinations_v1` steps with missing or unlabelled sentences unscored (`EvalStatus.notEvaluated` unless `bestCaseScore < threshold`), excluded ADK framework client calls (`adk_request_confirmation`, `adk_request_credential`) from evaluated tool calls, treated `null` and `{}` tool args identically in `TrajectoryEvaluator`, and populated `sessionDetails` on every `EvalCaseResult` (`59b0dd63c`, `825a3747e`, `6e448cf59`, `f1b1f9d96`).
+    - Listed bundled `resources` (`references/`, `assets/`, `scripts/`) in `LoadSkillTool` responses, added `disableInvocationCache` on `BaseToolset` (and `useMcpResources` on `McpToolset`), preserved `ApiParameter.required` in `RestApiTool` serialization, took the first non-null union member in `removeAnyOf`, and failed fast with bounded polling timeouts on connector schema operation errors in `ConnectionsClient` (`c41bc42fb`, `b979abe57`, `b79c529b5`, `e5ffe9c9d`, `ca42dcd18`, `ab6384438`).
+
 ## 2026.11.9
 
 - **Upstream `adk-python` Parity (`dd7161f7a..67b217d00`)**:

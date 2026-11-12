@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.11.12
+
+- Bumped package version to `2026.11.12` and dependency `adk_dart: ^2026.11.12`.
+- **Upstream `adk-python` CLI & `adk-web` Parity (`67b217d00..df9f9d045`, `07a0702..969cee9`)**:
+  - Added `POST /agent-identity/finalize` route and `AuthProviderCredentialsServiceClient` (`RestAuthProviderCredentialsServiceClient`, `finalizeAgentIdentityCredentials`) using Agent Identity Credentials v1 `/authProviders/` resource paths (`f0eb6139c`).
+  - Disabled server `traceparent` continuation when `GOOGLE_CLOUD_AGENT_ENGINE_ID` is set so unsampled Agent Engine headers do not suppress ADK spans (`88b3afe70`).
+  - Respected `display_name` from `.agent_engine_config.json` in `adk deploy agent_engine` (`resolveAgentEngineConfig`) unless overridden by `--display_name` (`319b5a70e`).
+  - Supported standalone `BaseNode` / `Workflow` roots across `AgentLoader`, `AgentTestRunner`, and dev graph endpoints, and preserved raw string answers for string-typed interactive HITL prompts in `adk run` (`f0086e3f4`, `b989d6849`).
+  - Rebuilt bundled `adk-web` static UI assets (`packages/adk/lib/src/cli/browser/`) with app-selector tooltip/line-wrapping and window-centered OAuth / Agent Identity popups (`6528d2f`, `969cee9`).
+
 ## 2026.11.9
 
 - Bumped package version to `2026.11.9` and dependency `adk_dart: ^2026.11.9`.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.12
+
+- Bumped package version to `2026.11.12` and dependency `adk_dart: ^2026.11.12`.
+- Updated `AdkSkillToolCard` to display bundled skill `resources` chips (`references/`, `assets/`, `scripts/`) on `load_skill` responses (`c41bc42fb`).
+- Added `AdkFormatters.centeredPopupFeatures` mirroring `adk-web` window-centered OAuth and Agent Identity popup positioning (`969cee9`).
+- Synced re-exported `adk_core.dart` runtime primitives with `adk_dart` `2026.11.12`.
+
 ## 2026.11.9
 
 - Bumped package version to `2026.11.9` and dependency `adk_dart: ^2026.11.9`.
