@@ -73,14 +73,16 @@ bool isInterruptEvent(Event event) =>
 /// Indexes interrupts in [events] that have not yet been answered.
 ///
 /// An interrupt is considered answered when a subsequent user [FunctionResponse]
-/// in [events] carries `fr.id == interruptId`, or arrives on a sub-branch whose
-/// run IDs contain `interruptId`.
+/// (or a synthetic error [FunctionResponse] carrying [Event.errorCode]) in
+/// [events] carries `fr.id == interruptId`, or when a user [FunctionResponse]
+/// arrives on a sub-branch whose run IDs contain `interruptId`.
 Map<String, OpenInterrupt> indexOpenInterrupts(Iterable<Event> events) {
   final Map<String, OpenInterrupt> index = <String, OpenInterrupt>{};
   final Map<String, String> callAuthorById = <String, String>{};
 
   for (final Event event in events) {
-    final List<String> branchRunIds = event.branch != null && event.branch!.isNotEmpty
+    final List<String> branchRunIds =
+        event.branch != null && event.branch!.isNotEmpty
         ? BranchPath.fromString(event.branch).orderedRunIds
         : const <String>[];
 
@@ -92,7 +94,7 @@ Map<String, OpenInterrupt> indexOpenInterrupts(Iterable<Event> events) {
       }
     }
 
-    if (event.author == 'user') {
+    if (event.author == 'user' || event.errorCode != null) {
       final List<FunctionResponse> responses = event.getFunctionResponses();
       for (final FunctionResponse fr in responses) {
         if (fr.id != null) {
@@ -100,7 +102,10 @@ Map<String, OpenInterrupt> indexOpenInterrupts(Iterable<Event> events) {
         }
       }
 
-      if (branchRunIds.isNotEmpty && responses.isNotEmpty && index.isNotEmpty) {
+      if (event.author == 'user' &&
+          branchRunIds.isNotEmpty &&
+          responses.isNotEmpty &&
+          index.isNotEmpty) {
         for (final String interruptId in index.keys.toList()) {
           if (branchRunIds.contains(interruptId)) {
             index.remove(interruptId);

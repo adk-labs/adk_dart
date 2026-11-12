@@ -245,7 +245,9 @@ List<Content> getCurrentTurnContents({
         unmatchedResponseIds.remove(call.id);
       }
     }
-    if (event.author == 'user') {
+    final bool isSubmittedResult =
+        event.author == 'user' && event.getFunctionResponses().isNotEmpty;
+    if (isSubmittedResult) {
       for (final FunctionResponse response in event.getFunctionResponses()) {
         if (response.id != null && toolCallIds.contains(response.id)) {
           unmatchedResponseIds.add(response.id!);
@@ -272,6 +274,7 @@ List<Content> getCurrentTurnContents({
           ) &&
           (event.author == 'user' || _isOtherAgentReply(agentName, event)) &&
           !_isDirectTransfer(event) &&
+          !isSubmittedResult &&
           !isToolSubBranchEvent(
             currentBranch,
             event,

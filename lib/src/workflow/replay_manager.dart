@@ -1,8 +1,8 @@
 import '../agents/base_agent.dart';
 import '../agents/context.dart';
 import '../events/event.dart';
+import '../events/interrupts.dart';
 import '../events/node_path_builder.dart';
-import '../events/request_input.dart';
 import '../types/content.dart';
 import 'workflow.dart';
 
@@ -53,6 +53,10 @@ class ReplayManager {
 
       final String path = event.nodeInfo.path;
       if (path.isEmpty) {
+        if (event.errorCode != null && isActiveInvocation) {
+          // Routes pathless error seals to the owning interrupt's parent.
+          _indexEventByResponseIds(event, fcToParent);
+        }
         continue;
       }
 
@@ -62,15 +66,32 @@ class ReplayManager {
         _addEventToIndex(parentPath, event);
       }
 
-      // Track interrupts to route future user responses
-      final Set<String> interruptIds = <String>{
-        ...?event.longRunningToolIds,
-        ...event.actions.requestedToolConfirmations.keys,
-      };
-      for (final String fid in interruptIds) {
+      // Track interrupts to route future user responses and error seals.
+      for (final String fid in extractEventInterruptIds(event)) {
         fcToParent[fid] = parentPath;
       }
     }
+  }
+
+  Set<String> _indexEventByResponseIds(
+    Event event,
+    Map<String, String> fcToParent,
+  ) {
+    final Set<String> addedParents = <String>{};
+    final Content? content = event.content;
+    if (content == null || content.parts.isEmpty) {
+      return addedParents;
+    }
+    for (final Part part in content.parts) {
+      final String? frId = part.functionResponse?.id;
+      if (frId != null && frId.isNotEmpty && fcToParent.containsKey(frId)) {
+        final String parent = fcToParent[frId]!;
+        if (addedParents.add(parent)) {
+          _addEventToIndex(parent, event);
+        }
+      }
+    }
+    return addedParents;
   }
 
   void _indexUserEvent(Event event, Map<String, String> fcToParent) {
@@ -78,15 +99,20 @@ class ReplayManager {
     if (content == null || content.parts.isEmpty) {
       return;
     }
-    bool matched = false;
-    final Set<String> addedParents = <String>{};
-    for (final Part part in content.parts) {
-      final String? frId = part.functionResponse?.id;
-      if (frId != null && frId.isNotEmpty && fcToParent.containsKey(frId)) {
-        final String parent = fcToParent[frId]!;
-        if (!addedParents.contains(parent)) {
-          _addEventToIndex(parent, event);
-          addedParents.add(parent);
+    final Set<String> addedParents = _indexEventByResponseIds(
+      event,
+      fcToParent,
+    );
+    bool matched = addedParents.isNotEmpty;
+
+    if (event.branch != null && event.branch!.isNotEmpty) {
+      final Set<String> branchRunIds = BranchPath.fromString(
+        event.branch,
+      ).orderedRunIds.toSet();
+      for (final MapEntry<String, String> entry in fcToParent.entries) {
+        if (branchRunIds.contains(entry.key) &&
+            addedParents.add(entry.value)) {
+          _addEventToIndex(entry.value, event);
           matched = true;
         }
       }
@@ -185,9 +211,69 @@ class ReplayManager {
     );
     final List<String> sequence = <String>[];
     final Set<String> completed = <String>{};
+    final Map<String, String> interruptOwner = <String, String>{};
+    final Map<String, Set<String>> openInterrupts = <String, Set<String>>{};
+    final String invocationId = ctx.invocationContext.invocationId;
 
     for (final Event event in events) {
+      if (invocationId.isNotEmpty && event.invocationId != invocationId) {
+        continue;
+      }
+
+      if (event.author == 'user' &&
+          event.content != null &&
+          event.content!.parts.isNotEmpty) {
+        for (final Part part in event.content!.parts) {
+          final String? frId = part.functionResponse?.id;
+          if (frId != null && frId.isNotEmpty) {
+            final String? ownerSeg = interruptOwner.remove(frId);
+            if (ownerSeg != null) {
+              openInterrupts[ownerSeg]?.remove(frId);
+            } else if (event.branch != null && event.branch!.isNotEmpty) {
+              final Set<String> branchRunIds = BranchPath.fromString(
+                event.branch,
+              ).orderedRunIds.toSet();
+              for (final String intId
+                  in interruptOwner.keys
+                      .where(branchRunIds.contains)
+                      .toList(growable: false)) {
+                final String? seg = interruptOwner.remove(intId);
+                if (seg != null) {
+                  openInterrupts[seg]?.remove(intId);
+                }
+              }
+            }
+          }
+        }
+        continue;
+      }
+
       final String eventNodePath = event.nodeInfo.path;
+      if (event.errorCode != null &&
+          event.content != null &&
+          event.content!.parts.isNotEmpty) {
+        for (final Part part in event.content!.parts) {
+          final String? frId = part.functionResponse?.id;
+          if (frId != null && frId.isNotEmpty) {
+            final String? ownerSeg = interruptOwner.remove(frId);
+            if (ownerSeg != null) {
+              final Set<String>? openSet = openInterrupts[ownerSeg];
+              if (openSet != null) {
+                openSet.remove(frId);
+                if (openSet.isEmpty &&
+                    (eventNodePath.isEmpty || !completed.contains(ownerSeg))) {
+                  completed.remove(ownerSeg);
+                  sequence.remove(ownerSeg);
+                }
+              }
+            }
+          }
+        }
+      }
+      if (eventNodePath.isEmpty) {
+        continue;
+      }
+
       final NodePathBuilder eventPathBuilder = NodePathBuilder.fromString(
         eventNodePath,
       );
@@ -199,7 +285,11 @@ class ReplayManager {
       final NodePathBuilder childPath = basePathBuilder.getDirectChild(
         eventPathBuilder,
       );
-      if (strictDirectChild && eventPathBuilder != childPath) {
+      final bool isInterrupt = _isInterruptEvent(event);
+      if (strictDirectChild &&
+          eventPathBuilder != childPath &&
+          !(event.nodeInfo.outputFor?.contains(childPath.toString()) ?? false) &&
+          !isInterrupt) {
         continue;
       }
 
@@ -207,7 +297,13 @@ class ReplayManager {
 
       if (_isTerminalEvent(event)) {
         final bool hasResult = _eventHasResult(event);
-        final bool isInterrupt = _isInterruptEvent(event);
+        if (isInterrupt) {
+          completed.remove(segment);
+          for (final String fid in extractEventInterruptIds(event)) {
+            interruptOwner[fid] = segment;
+            openInterrupts.putIfAbsent(segment, () => <String>{}).add(fid);
+          }
+        }
         if (event.errorCode != null && !hasResult && !isInterrupt) {
           if (sequence.contains(segment) && !completed.contains(segment)) {
             sequence.remove(segment);
@@ -237,11 +333,7 @@ class ReplayManager {
         event.actions.transferToAgent != null;
   }
 
-  bool _isInterruptEvent(Event event) {
-    return (event.longRunningToolIds?.isNotEmpty == true) ||
-        event.actions.requestedToolConfirmations.isNotEmpty ||
-        getRequestInputInterruptIds(event).isNotEmpty;
-  }
+  bool _isInterruptEvent(Event event) => isInterruptEvent(event);
 
   bool _isTerminalEvent(Event event) {
     return event.isFinalResponse() ||

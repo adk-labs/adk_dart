@@ -166,9 +166,12 @@ class LlmAgent extends BaseAgent {
     }
     _validateGenerateContentConfig(generateContentConfig);
     _warnOnThinkingConfigPrecedence();
-    _installTaskModeToolIfNeeded();
-    _installModeSubAgentToolsIfNeeded();
+    _installInitialModeTools(rawTools: tools);
   }
+
+  /// Mode tools added during construction, tracked by identity so [clone] can
+  /// rebuild them for the cloned agent and its own sub-agents.
+  List<BaseTool> _constructedModeTools = <BaseTool>[];
 
   /// Subclass custom fields resolved via `modelFields` and validation aliases.
   final Map<String, Object?> customFields = <String, Object?>{};
@@ -474,10 +477,37 @@ class LlmAgent extends BaseAgent {
   /// Optional upper bound on concurrent workers when [parallelWorker] is true.
   int? maxParallelWorkers;
 
-  /// Returns a cloned LLM agent with optional field overrides.
+  static const Map<String, String> _llmCloneFieldAliases = <String, String>{
+    'global_instruction': 'globalInstruction',
+    'static_instruction': 'staticInstruction',
+    'generate_content_config': 'generateContentConfig',
+    'disallow_transfer_to_parent': 'disallowTransferToParent',
+    'disallow_transfer_to_peers': 'disallowTransferToPeers',
+    'include_contents': 'includeContents',
+    'input_schema': 'inputSchema',
+    'output_schema': 'outputSchema',
+    'output_key': 'outputKey',
+    'code_executor': 'codeExecutor',
+    'before_model_callback': 'beforeModelCallback',
+    'after_model_callback': 'afterModelCallback',
+    'on_model_error_callback': 'onModelErrorCallback',
+    'before_tool_callback': 'beforeToolCallback',
+    'after_tool_callback': 'afterToolCallback',
+    'on_tool_error_callback': 'onToolErrorCallback',
+    'parallel_worker': 'parallelWorker',
+    'max_parallel_workers': 'maxParallelWorkers',
+  };
+
+  /// Returns a cloned LLM agent with optional field overrides, rebuilding its
+  /// mode tools (`finish_task` and `single_turn`/`task` sub-agent tools) for
+  /// the clone and its own sub-agents.
   @override
   LlmAgent clone({Map<String, Object?>? update}) {
-    final Map<String, Object?> cloneUpdate = normalizeCloneUpdate(update);
+    final Map<String, Object?> baseNormalized = normalizeCloneUpdate(update);
+    final Map<String, Object?> cloneUpdate = <String, Object?>{
+      for (final MapEntry<String, Object?> entry in baseNormalized.entries)
+        (_llmCloneFieldAliases[entry.key] ?? entry.key): entry.value,
+    };
     validateCloneUpdateFields(
       update: cloneUpdate,
       allowedFields: <String>{
@@ -509,7 +539,28 @@ class LlmAgent extends BaseAgent {
     );
 
     final List<BaseAgent> clonedSubAgents = cloneSubAgentsField(cloneUpdate);
-    final List<Object> clonedTools = _cloneToolsForClone(cloneUpdate);
+    final bool hasToolsUpdate = cloneUpdate.containsKey('tools');
+    final List<Object> rawCloneTools = hasToolsUpdate
+        ? cloneListFieldValue<Object>(
+            update: cloneUpdate,
+            fieldName: 'tools',
+            currentValue: tools,
+          )
+        : List<Object>.from(tools);
+    final Set<Object> constructedIds = Set<Object>.identity()
+      ..addAll(_constructedModeTools);
+    final Set<Object> currentIds = Set<Object>.identity()..addAll(tools);
+    final List<Object> keptTools = <Object>[
+      for (final Object tool in rawCloneTools)
+        if (!constructedIds.contains(tool)) tool,
+    ];
+    final Set<String> takenNames = <String>{
+      for (final Object tool in keptTools)
+        if (tool is BaseTool) tool.name,
+      for (final BaseTool tool in _constructedModeTools)
+        if (!currentIds.contains(tool)) tool.name,
+    };
+
     final LlmAgent clonedAgent = LlmAgent(
       name: cloneFieldValue<String>(
         update: cloneUpdate,
@@ -558,7 +609,7 @@ class LlmAgent extends BaseAgent {
         fieldName: 'staticInstruction',
         currentValue: staticInstruction,
       ),
-      tools: clonedTools,
+      tools: <Object>[],
       generateContentConfig: cloneFieldValue<GenerateContentConfig?>(
         update: cloneUpdate,
         fieldName: 'generateContentConfig',
@@ -652,7 +703,16 @@ class LlmAgent extends BaseAgent {
     );
     clonedAgent.subAgents = clonedSubAgents;
     relinkClonedSubAgents(clonedAgent);
-    clonedAgent._installModeSubAgentToolsIfNeeded();
+    final List<BaseTool> rebuiltTools = <BaseTool>[
+      for (final BaseTool tool in clonedAgent._buildModeTools())
+        if (!takenNames.contains(tool.name)) tool,
+    ];
+    if (hasToolsUpdate && constructedIds.isEmpty && rebuiltTools.isEmpty) {
+      clonedAgent.tools = _adaptTools(rawCloneTools);
+    } else {
+      clonedAgent.tools = <Object>[..._adaptTools(keptTools), ...rebuiltTools];
+    }
+    clonedAgent._constructedModeTools = rebuiltTools;
     return clonedAgent;
   }
 
@@ -1079,43 +1139,64 @@ class LlmAgent extends BaseAgent {
     }
   }
 
-  void _installTaskModeToolIfNeeded() {
-    if (mode != 'task') {
-      return;
-    }
-    for (int index = 0; index < tools.length; index += 1) {
-      final Object tool = tools[index];
-      if (tool is FinishTaskTool) {
-        if (tool.taskAgentName != name) {
-          tools[index] = FinishTaskTool.fromSchema(
-            taskAgentName: name,
-            outputSchema: outputSchema,
-          );
+  void _installInitialModeTools({required List<Object>? rawTools}) {
+    bool hasExplicitFinishTask = false;
+    if (mode == 'task') {
+      for (int index = 0; index < tools.length; index += 1) {
+        final Object tool = tools[index];
+        if (tool is FinishTaskTool) {
+          hasExplicitFinishTask = true;
+          if (tool.taskAgentName != name) {
+            if (identical(tools, rawTools)) {
+              tools = List<Object>.from(tools);
+            }
+            tools[index] = FinishTaskTool.fromSchema(
+              taskAgentName: name,
+              outputSchema: outputSchema,
+            );
+          }
+          break;
         }
-        return;
-      }
-      if (tool is BaseTool) {
-        if (tool.name == finishTaskToolName) {
-          return;
+        if ((tool is BaseTool && tool.name == finishTaskToolName) ||
+            '$tool'.contains(finishTaskToolName)) {
+          hasExplicitFinishTask = true;
+          break;
         }
       }
-      if ('$tool'.contains(finishTaskToolName)) {
-        return;
-      }
     }
-    tools.add(
-      FinishTaskTool.fromSchema(
-        taskAgentName: name,
-        outputSchema: outputSchema,
-      ),
-    );
+
+    final List<BaseTool> builtTools = <BaseTool>[
+      for (final BaseTool candidate in _buildModeTools())
+        if (!(candidate.name == finishTaskToolName && hasExplicitFinishTask) &&
+            !_hasToolNamed(candidate.name))
+          candidate,
+    ];
+    _constructedModeTools = builtTools;
+    if (builtTools.isNotEmpty) {
+      if (identical(tools, rawTools)) {
+        tools = List<Object>.from(tools);
+      }
+      tools.addAll(builtTools);
+    }
   }
 
-  void _installModeSubAgentToolsIfNeeded() {
+  /// Builds the tools implied by this agent's [mode] and its [subAgents]' modes.
+  List<BaseTool> _buildModeTools() {
+    final List<BaseTool> built = <BaseTool>[];
+    if (mode == 'task') {
+      built.add(
+        FinishTaskTool.fromSchema(
+          taskAgentName: name,
+          outputSchema: outputSchema,
+        ),
+      );
+    }
+
     for (final BaseAgent subAgent in subAgents) {
       // `mode` participates for any agent class that declares it (LlmAgent,
-      // ManagedAgent); a sub-agent without a mode is never wrapped and stays
-      // an LLM-transfer target. LlmAgent sub-agents default to chat mode.
+      // ManagedAgent, RemoteA2aAgent); a sub-agent without a mode is never
+      // wrapped and stays an LLM-transfer target. LlmAgent sub-agents default
+      // to chat mode.
       String? subAgentMode;
       if (subAgent is LlmAgent) {
         subAgentMode = subAgent.mode;
@@ -1129,15 +1210,13 @@ class LlmAgent extends BaseAgent {
         subAgentMode = subAgent.mode;
       }
 
-      if (_hasToolNamed(subAgent.name)) {
-        continue;
-      }
       if (subAgentMode == 'single_turn') {
-        tools.add(SingleTurnAgentTool(agent: subAgent));
+        built.add(SingleTurnAgentTool(agent: subAgent));
       } else if (subAgentMode == 'task') {
-        tools.add(TaskAgentTool(agent: subAgent));
+        built.add(TaskAgentTool(agent: subAgent));
       }
     }
+    return built;
   }
 
   bool _hasToolNamed(String toolName) {
@@ -1150,30 +1229,6 @@ class LlmAgent extends BaseAgent {
       }
     }
     return false;
-  }
-
-  List<Object> _cloneToolsForClone(Map<String, Object?> update) {
-    if (update.containsKey('tools')) {
-      return cloneListFieldValue<Object>(
-        update: update,
-        fieldName: 'tools',
-        currentValue: tools,
-      );
-    }
-
-    return tools
-        .where((Object tool) => !_isGeneratedSubAgentModeTool(tool))
-        .toList();
-  }
-
-  bool _isGeneratedSubAgentModeTool(Object tool) {
-    if (tool is! SingleTurnAgentTool && tool is! TaskAgentTool) {
-      return false;
-    }
-    final AgentTool agentTool = tool as AgentTool;
-    return subAgents.any(
-      (BaseAgent subAgent) => identical(agentTool.agent, subAgent),
-    );
   }
 }
 

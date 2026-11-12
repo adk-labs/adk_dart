@@ -1,6 +1,8 @@
 /// LLM flow pipeline components and processors.
 library;
 
+import 'dart:convert';
+
 import '../../agents/invocation_context.dart';
 import '../../agents/llm_agent.dart';
 import '../../code_executors/base_code_executor.dart';
@@ -128,10 +130,26 @@ class CodeExecutionResponseProcessor extends BaseLlmResponseProcessor {
       result = CodeExecutionResult(exitCode: -1, stderr: '$error');
     }
 
+    final EventActions resultActions = EventActions();
+    for (final CodeExecutionFile outputFile in result.outputFiles) {
+      if (invocationContext.artifactService == null) {
+        throw StateError('Artifact service is not initialized.');
+      }
+      final int version = await invocationContext.saveArtifact(
+        filename: outputFile.name,
+        artifact: Part.fromInlineData(
+          mimeType: outputFile.mimeType,
+          data: _getContentAsBytes(outputFile.content),
+        ),
+      );
+      resultActions.artifactDelta[outputFile.name] = version;
+    }
+
     yield Event(
       invocationId: invocationContext.invocationId,
       author: invocationContext.agent.name,
       branch: invocationContext.branch,
+      actions: resultActions,
       content: Content(
         role: 'model',
         parts: <Part>[
@@ -206,6 +224,20 @@ String _formatExecutionResult(Object result) {
     ].join('\n');
   }
   return 'Code execution result:\n$result';
+}
+
+List<int> _getContentAsBytes(Object content) {
+  if (content is List<int>) {
+    return content;
+  }
+  if (content is String) {
+    try {
+      return base64Decode(content);
+    } catch (_) {
+      return utf8.encode(content);
+    }
+  }
+  return utf8.encode('$content');
 }
 
 String _defaultImageArtifactFileName(String mimeType) {

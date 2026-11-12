@@ -140,7 +140,11 @@ class CredentialManager {
       return _authConfig.rawAuthCredential?.copyWith();
     }
 
-    AuthCredential? credential = await _loadExistingCredential(context);
+    AuthCredential? credential;
+    if (_authConfig.rawAuthCredential?.authType !=
+        AuthCredentialType.serviceAccount) {
+      credential = await _loadExistingCredential(context);
+    }
     bool wasFromAuthResponse = false;
 
     if (credential == null) {
@@ -332,6 +336,16 @@ class CredentialManager {
     if (exchanger == null) {
       return ExchangeResult(credential: credential, wasExchanged: false);
     }
+    if (exchanger is ServiceAccountCredentialExchanger) {
+      // Yield to the event loop before running service-account credential
+      // exchange so synchronous JWT/crypto work does not starve sibling tasks.
+      return Future<ExchangeResult>(
+        () => exchanger.exchange(
+          authCredential: credential,
+          authScheme: _authConfig.authScheme,
+        ),
+      );
+    }
     return exchanger.exchange(
       authCredential: credential,
       authScheme: _authConfig.authScheme,
@@ -412,13 +426,17 @@ class CredentialManager {
       return false;
     }
 
-    if (raw.authType != AuthCredentialType.oauth2 &&
-        raw.authType != AuthCredentialType.openIdConnect) {
+    final String scheme = _authConfig.authScheme.toLowerCase();
+    if (scheme.contains('authorization_code')) {
       return false;
     }
 
-    final String scheme = _authConfig.authScheme.toLowerCase();
-    if (scheme.contains('authorization_code')) {
+    if (raw.authType == AuthCredentialType.serviceAccount) {
+      return true;
+    }
+
+    if (raw.authType != AuthCredentialType.oauth2 &&
+        raw.authType != AuthCredentialType.openIdConnect) {
       return false;
     }
 

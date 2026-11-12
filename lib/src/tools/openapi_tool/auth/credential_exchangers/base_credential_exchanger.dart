@@ -17,7 +17,10 @@ class AuthCredentialMissingError implements Exception {
 
 /// Base interface for converting credentials into request-ready forms.
 abstract class BaseAuthCredentialExchanger {
-  /// Exchanges [authCredential] for the given [authScheme].
+  /// Asynchronously exchanges [authCredential] for the given [authScheme].
+  ///
+  /// Implementations may perform network or token-signing work and are awaited
+  /// off the caller's synchronous turn by `ToolAuthHandler`.
   Future<AuthCredential?> exchangeCredential(
     Object authScheme, [
     AuthCredential? authCredential,

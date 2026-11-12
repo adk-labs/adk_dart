@@ -1,15 +1,32 @@
 /// Tool used by task-mode LLM agents to signal task completion.
 library;
 
+import '../../../events/event.dart';
 import '../../../models/llm_request.dart';
 import '../../../tools/base_tool.dart';
 import '../../../tools/tool_context.dart';
+import '../../../types/content.dart';
 
 /// Function name used by task agents to signal completion.
 const String finishTaskToolName = 'finish_task';
 
 /// Success result returned by [FinishTaskTool.run].
 const String finishTaskSuccessResult = 'Task completed.';
+
+/// Error result returned by `finish_task` when a delegated task fails.
+const String finishTaskErrorResult = 'Task failed.';
+
+/// Whether [event] contains a terminal `finish_task` [FunctionResponse].
+bool isFinishTaskTerminalFr(Event event) {
+  for (final FunctionResponse fr in event.getFunctionResponses()) {
+    if (fr.name == finishTaskToolName) {
+      final Object? result = fr.response['result'];
+      return result == finishTaskSuccessResult ||
+          result == finishTaskErrorResult;
+    }
+  }
+  return false;
+}
 
 /// Tool that validates final task output and signals completion.
 class FinishTaskTool extends BaseTool {
@@ -146,6 +163,10 @@ no accompanying text output.''';
       };
     }
 
+    // Skip the follow-up LLM summarization turn so the task agent ends
+    // cleanly after emitting the `finish_task` FunctionResponse and runs its
+    // after-agent callbacks.
+    toolContext.actions.skipSummarization = true;
     return finishTaskSuccessResult;
   }
 

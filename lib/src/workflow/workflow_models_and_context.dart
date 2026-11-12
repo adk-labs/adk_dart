@@ -298,6 +298,7 @@ class WorkflowContext {
   bool _outputDelegated = false;
   bool _failedInDynamicChild = false;
   final Map<String, int> _childRunCounters = <String, int>{};
+  BaseNode? _currentNode;
   String? _currentNodeKey;
   bool? _currentNodeRerunOnResume;
   final Map<String, List<Event>> _nodeEvents;
@@ -336,6 +337,9 @@ class WorkflowContext {
   /// Mutable session state map (or a fallback map when running standalone).
   Map<String, Object?> get state =>
       invocationContext?.session.state ?? _fallbackState;
+
+  /// Currently executing node in this workflow context, if any.
+  BaseNode? get node => _currentNode;
 
   /// Path of the currently executing node within its workflow.
   String get nodePath {
@@ -436,9 +440,18 @@ class WorkflowContext {
   }) async {
     throwIfCancelled();
     if (_currentNodeRerunOnResume == false) {
+      final String callerName =
+          _currentNode?.name ??
+          (_currentNodeKey != null && _currentNodeKey!.isNotEmpty
+              ? _currentNodeKey!.split('@').first
+              : nodePath);
       throw StateError(
-        'A workflow node must have rerunOnResume: true before it can '
-        'schedule dynamic child nodes.',
+        "Node '$callerName' calls context.runNode but has "
+        'rerunOnResume: false; set rerunOnResume: true on it (e.g. '
+        'node(myNode, rerunOnResume: true)). Reason is that dynamically '
+        'scheduled nodes might be interrupted, and the workflow '
+        'wakes-up/re-runs the parent node, so it can get the child node '
+        'response.',
       );
     }
     final BaseNode node = buildNode(
@@ -629,20 +642,19 @@ class WorkflowContext {
     if (branch != null && branch.isNotEmpty) {
       reserveRunIds(branch);
     }
-    for (final String key in nodeStates.keys) {
-      reserveRunIds(key);
-    }
-    final List<Event>? events = invocationContext?.session.events;
-    final String? invocationId = invocationContext?.invocationId;
-    if (events != null) {
-      for (final Event event in events) {
-        if (invocationId != null &&
-            invocationId.isNotEmpty &&
-            event.invocationId != invocationId) {
-          continue;
-        }
-        if (event.nodeInfo.path.isNotEmpty) {
-          reserveRunIds(event.nodeInfo.path);
+    if (nodeStates.isEmpty) {
+      final List<Event>? events = invocationContext?.session.events;
+      final String? invocationId = invocationContext?.invocationId;
+      if (events != null) {
+        for (final Event event in events) {
+          if (invocationId != null &&
+              invocationId.isNotEmpty &&
+              event.invocationId != invocationId) {
+            continue;
+          }
+          if (event.nodeInfo.path.isNotEmpty) {
+            reserveRunIds(event.nodeInfo.path);
+          }
         }
       }
     }

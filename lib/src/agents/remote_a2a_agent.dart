@@ -19,9 +19,8 @@ import '../types/content.dart';
 import 'base_agent.dart';
 import 'invocation_context.dart';
 import 'llm/task/finish_task_tool.dart';
-
-/// Error result returned by `finish_task` when a delegated task fails.
-const String finishTaskErrorResult = 'Task failed.';
+export 'llm/task/finish_task_tool.dart'
+    show finishTaskErrorResult, isFinishTaskTerminalFr;
 
 /// Default wrapper parameter key used by `finish_task` for non-object schemas.
 const String finishTaskDefaultWrapperKey = 'result';
@@ -52,18 +51,6 @@ String? getOutputWrapperKey(Object? outputSchema) {
     return null;
   }
   return finishTaskDefaultWrapperKey;
-}
-
-/// Whether [event] contains a terminal `finish_task` [FunctionResponse].
-bool isFinishTaskTerminalFr(Event event) {
-  for (final FunctionResponse fr in event.getFunctionResponses()) {
-    if (fr.name == finishTaskToolName) {
-      final Object? result = fr.response['result'];
-      return result == finishTaskSuccessResult ||
-          result == finishTaskErrorResult;
-    }
-  }
-  return false;
 }
 
 const Set<A2aTaskState> _unfinishedTaskStates = <A2aTaskState>{

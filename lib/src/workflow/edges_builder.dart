@@ -223,7 +223,51 @@ class RouteMap {
         'complete it with then(node).',
       );
     }
-    return List<Edge>.unmodifiable(_edges);
+    final List<Edge> coalesced = <Edge>[];
+    final Map<String, int> targetIndex = <String, int>{};
+    for (final Edge edge in _edges) {
+      if (edge.route == null || edge.route == DEFAULT_ROUTE) {
+        coalesced.add(edge);
+        continue;
+      }
+      final int? existingIdx = targetIndex[edge.toNode];
+      if (existingIdx == null) {
+        targetIndex[edge.toNode] = coalesced.length;
+        coalesced.add(edge);
+        continue;
+      }
+      final Edge existing = coalesced[existingIdx];
+      final List<Object> existingRoutes = _routeList(existing.route!);
+      final List<Object> newRoutes = _routeList(edge.route!);
+      final bool overlaps = existingRoutes.toSet().intersection(
+        newRoutes.toSet(),
+      ).isNotEmpty;
+      if (overlaps) {
+        // Keep overlapping edges separate so graph validation rejects duplicate routes.
+        coalesced.add(edge);
+        continue;
+      }
+      final List<Object> merged = List<Object>.unmodifiable(<Object>[
+        ...existingRoutes,
+        ...newRoutes,
+      ]);
+      coalesced[existingIdx] = Edge(
+        fromNode: existing.fromNode,
+        toNode: existing.toNode,
+        route: merged,
+      );
+    }
+    return List<Edge>.unmodifiable(coalesced);
+  }
+
+  static List<Object> _routeList(Object route) {
+    if (route is List<Object>) {
+      return route;
+    }
+    if (route is Iterable) {
+      return <Object>[for (final Object? item in route) ?item];
+    }
+    return <Object>[route];
   }
 
   void _complete(RouteMapEntry entry, Object route, List<Object> targets) {

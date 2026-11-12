@@ -231,6 +231,7 @@ Future<Object?> _runNodeWithRetry({
   final String key = stateKey ?? node.name;
   final NodeState state = context.nodeStates.putIfAbsent(key, NodeState.new);
   state.parentKey ??= parentKey;
+  context._currentNode = node;
   context._currentNodeKey = key;
   context._currentNodeRerunOnResume = node.rerunOnResume;
   state.input = nodeInput;
@@ -636,6 +637,47 @@ WorkflowResult _workflowResultFromEvents(
     }
 
     final String path = event.nodeInfo.path;
+    if (event.errorCode != null && event.getFunctionResponses().isNotEmpty) {
+      final bool hasEventPath = path.isNotEmpty;
+      final _WorkflowEventOwner? sealPathOwner =
+          hasEventPath && _isWorkflowNodePath(path, effectiveWorkflowPath)
+          ? _workflowEventOwnerForPath(
+              path,
+              workflowPath: effectiveWorkflowPath,
+              staticNodes: staticNodes,
+            )
+          : null;
+      final bool isDirectSeal =
+          sealPathOwner != null && !sealPathOwner.hasDescendants;
+      for (final FunctionResponse fr in event.getFunctionResponses()) {
+        final String? frId = fr.id;
+        if (frId == null || frId.isEmpty) {
+          continue;
+        }
+        responseSchemas.remove(frId);
+        final String? ownerKey = interruptOwner.remove(frId);
+        if (ownerKey != null) {
+          final NodeState? oState = states[ownerKey];
+          if (oState != null) {
+            oState.interrupts.remove(frId);
+            if (!hasEventPath || isDirectSeal) {
+              outputs.remove(ownerKey);
+              oState.route = null;
+              resumedWaitingNodes.remove(ownerKey);
+            } else if (oState.status == NodeStatus.waiting &&
+                oState.interrupts.isEmpty &&
+                (outputs.containsKey(ownerKey) || oState.route != null)) {
+              oState.status = NodeStatus.completed;
+              oState.error = null;
+            }
+            if (!hasEventPath) {
+              oState.status = NodeStatus.failed;
+              oState.error = event.errorMessage ?? event.errorCode;
+            }
+          }
+        }
+      }
+    }
     if (!_isWorkflowNodePath(path, effectiveWorkflowPath)) {
       continue;
     }
@@ -706,23 +748,31 @@ WorkflowResult _workflowResultFromEvents(
         ..addAll(outputFor);
     }
 
+    final bool isDelegatedToOwner =
+        outputFor != null && outputFor.contains(owner.key);
+    final bool isDirectOrDelegated =
+        !owner.hasDescendants || isDelegatedToOwner;
+
     final Object? route = event.actions.route;
-    final bool hasRoute = route != null;
+    final bool hasRoute = route != null && isDirectOrDelegated;
     if (hasRoute) {
       state.route = route;
     }
 
-    final Object? eventOutput = _workflowOutputFromEvent(
-      event,
-      node: staticNodes[owner.key] ??
-          staticNodes[_workflowNodeNameFromSegment(owner.key)],
-    );
-    if (hasOutput) {
+    final Object? eventOutput = isDirectOrDelegated
+        ? _workflowOutputFromEvent(
+            event,
+            node:
+                staticNodes[owner.key] ??
+                staticNodes[_workflowNodeNameFromSegment(owner.key)],
+          )
+        : null;
+    if (hasOutput && isDirectOrDelegated) {
       outputs[owner.key] = eventOutput;
     }
 
-    final bool hasResult = hasOutput || hasRoute;
-    final bool hasError = event.errorCode != null;
+    final bool hasResult = (hasOutput && isDirectOrDelegated) || hasRoute;
+    final bool hasError = event.errorCode != null && isDirectOrDelegated;
     if (hasResult) {
       state.error = null;
       if (state.status != NodeStatus.waiting ||
@@ -742,7 +792,8 @@ WorkflowResult _workflowResultFromEvents(
 
     final Set<String> interruptIds = _interruptIdsFromEvent(event);
     if (interruptIds.isEmpty) {
-      if (!hasResult &&
+      if (isDirectOrDelegated &&
+          !hasResult &&
           !hasError &&
           state.status != NodeStatus.failed &&
           (state.status != NodeStatus.waiting ||
@@ -809,11 +860,12 @@ void _applyWorkflowResumeResponses(
       ownerKey,
       () => NodeState(status: NodeStatus.waiting),
     );
-    Object? responseData = _unwrapWorkflowResumeResponse(response.response);
-    responseData = _validateWorkflowResumeResponse(
-      responseData,
-      responseSchemas[interruptId],
+    final Object? schema = responseSchemas[interruptId];
+    Object? responseData = _unwrapWorkflowResumeResponse(
+      response.response,
+      parseJson: !_schemaExpectsText(schema),
     );
+    responseData = _validateWorkflowResumeResponse(responseData, schema);
     state.resumeInputs[interruptId] = responseData;
     state.interrupts.remove(interruptId);
 
@@ -847,11 +899,13 @@ class _WorkflowEventOwner {
     required this.key,
     required this.runId,
     required this.parentRunId,
+    this.hasDescendants = false,
   });
 
   final String key;
   final String? runId;
   final String? parentRunId;
+  final bool hasDescendants;
 }
 
 _WorkflowEventOwner? _workflowEventOwnerForPath(
@@ -885,6 +939,7 @@ _WorkflowEventOwner? _workflowEventOwnerForPath(
       key: key,
       runId: _workflowRunIdFromSegment(directChildSegment),
       parentRunId: _workflowRunIdFromSegment(workflowPathSegments.last),
+      hasDescendants: true,
     );
   } else {
     if (leafName.isEmpty) {
@@ -1107,12 +1162,45 @@ Object? _responseSchemaFromEvent(Event event, String interruptId) {
   return null;
 }
 
-Object? _unwrapWorkflowResumeResponse(Object? response) {
+bool _schemaExpectsText(Object? schema) {
+  if (schema == String || schema == 'string') {
+    return true;
+  }
+  if (schema is! Map) {
+    return false;
+  }
+  final Object? typeValue = schema['type'];
+  if (typeValue == 'string') {
+    return true;
+  }
+  if (typeValue is List && typeValue.isNotEmpty) {
+    final Set<Object?> types = typeValue.toSet();
+    if (types.contains('string') &&
+        types.difference(const <Object?>{'string', 'null'}).isEmpty) {
+      return true;
+    }
+  }
+  final Object? options = schema['anyOf'] ?? schema['oneOf'];
+  if (options is List && options.isNotEmpty) {
+    final Set<Object?> optionTypes = <Object?>{
+      for (final Object? option in options)
+        option is Map ? option['type'] : null,
+    };
+    return optionTypes.contains('string') &&
+        optionTypes.difference(const <Object?>{'string', 'null'}).isEmpty;
+  }
+  return false;
+}
+
+Object? _unwrapWorkflowResumeResponse(
+  Object? response, {
+  bool parseJson = true,
+}) {
   if (response is Map &&
       response.length == 1 &&
       response.containsKey('result')) {
     final Object? value = response['result'];
-    if (value is String) {
+    if (value is String && parseJson) {
       try {
         return jsonDecode(value);
       } on FormatException {
@@ -1125,8 +1213,26 @@ Object? _unwrapWorkflowResumeResponse(Object? response) {
 }
 
 Object? _validateWorkflowResumeResponse(Object? value, Object? schema) {
+  if (schema == String || schema == 'string') {
+    return value is String ? value : '$value';
+  }
+  if (schema == int) {
+    return _coerceWorkflowInt(value);
+  }
+  if (schema == double || schema == num) {
+    return _coerceWorkflowNum(value);
+  }
+  if (schema == bool) {
+    return _coerceWorkflowBool(value);
+  }
   if (schema is! Map) {
     return value;
+  }
+  if (_schemaExpectsText(schema)) {
+    if (value == null && _schemaAllowsNull(schema)) {
+      return null;
+    }
+    return value is String ? value : '$value';
   }
   final Object? type = schema['type'];
   switch (type) {
@@ -1154,6 +1260,23 @@ Object? _validateWorkflowResumeResponse(Object? value, Object? schema) {
     default:
       return value;
   }
+}
+
+bool _schemaAllowsNull(Map<dynamic, dynamic> schema) {
+  final Object? typeValue = schema['type'];
+  if (typeValue == 'null') {
+    return true;
+  }
+  if (typeValue is List && typeValue.contains('null')) {
+    return true;
+  }
+  final Object? options = schema['anyOf'] ?? schema['oneOf'];
+  if (options is List) {
+    return options.any(
+      (Object? option) => option is Map && option['type'] == 'null',
+    );
+  }
+  return false;
 }
 
 int _coerceWorkflowInt(Object? value) {
@@ -1325,6 +1448,12 @@ Object? _outputFromResumeInputs(Map<String, Object?> resumeInputs) {
 
 String _nodeName(Object node) {
   if (node is BaseNode) {
+    return node.name;
+  }
+  if (node is BaseAgent) {
+    return node.name;
+  }
+  if (node is BaseTool) {
     return node.name;
   }
   return '$node';

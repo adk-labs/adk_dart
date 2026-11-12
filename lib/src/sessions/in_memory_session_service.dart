@@ -34,6 +34,15 @@ class InMemorySessionService extends BaseSessionService {
   final Map<String, Map<String, Map<String, Object?>>> _userState =
       <String, Map<String, Map<String, Object?>>>{};
 
+  /// Stored session map keyed by `appName -> userId -> sessionId`.
+  Map<String, Map<String, Map<String, Session>>> get sessions => _sessions;
+
+  /// Stored application-scoped state map keyed by `appName`.
+  Map<String, Map<String, Object?>> get appState => _appState;
+
+  /// Stored user-scoped state map keyed by `appName -> userId`.
+  Map<String, Map<String, Map<String, Object?>>> get userState => _userState;
+
   @override
   Future<Session> createSession({
     required String appName,
@@ -181,8 +190,21 @@ class InMemorySessionService extends BaseSessionService {
     required String userId,
     required String sessionId,
   }) async {
-    final Map<String, Session>? userSessions = _sessions[appName]?[userId];
-    userSessions?.remove(sessionId);
+    final Map<String, Map<String, Session>>? appSessions = _sessions[appName];
+    if (appSessions == null) {
+      return;
+    }
+    final Map<String, Session>? userSessions = appSessions[userId];
+    if (userSessions == null || !userSessions.containsKey(sessionId)) {
+      return;
+    }
+    userSessions.remove(sessionId);
+    if (userSessions.isEmpty) {
+      appSessions.remove(userId);
+    }
+    if (appSessions.isEmpty) {
+      _sessions.remove(appName);
+    }
   }
 
   @override

@@ -839,22 +839,62 @@ class AgentNode extends BaseNode {
         agent is Workflow &&
         nodeKey != null &&
         context.invocationContext != null;
-    final String? ownerPath = collectNestedWorkflowEvents
+    final String? currentNodePath =
+        nodeKey != null && context.invocationContext != null
         ? _nodePathForOutputKey(parentContext, nodeKey)
+        : null;
+    final String? ownerPath = collectNestedWorkflowEvents
+        ? currentNodePath
         : null;
     final String? nodeBranch =
         ownerPath ??
         (nodeKey != null ? context.nodeStates[nodeKey]?.branch : null) ??
         parentContext.branch;
+    final bool isSingleTurnLlm =
+        agent is LlmAgent && (agent as LlmAgent).mode == 'single_turn';
     final InvocationContext agentContext = parentContext.copyWith(
       agent: agent,
       userContent: userContent,
       branch: nodeBranch,
-    );
+      nodePath: currentNodePath ?? parentContext.nodePath,
+    )..userContent = userContent;
+    if (isSingleTurnLlm) {
+      agentContext.liveRequestQueue = null;
+    }
+
+    Event? injectedInputEvent;
+    if (isSingleTurnLlm && userContent != null && !isResuming) {
+      injectedInputEvent = Event(
+        invocationId: agentContext.invocationId,
+        author: 'user',
+        content: userContent.copyWith(role: 'user'),
+        branch: nodeBranch,
+        isolationScope: agentContext.isolationScope,
+        nodeInfo: currentNodePath != null
+            ? NodeInfo(path: currentNodePath)
+            : null,
+      );
+      agentContext.session.events.add(injectedInputEvent);
+    } else if (isSingleTurnLlm && isResuming && currentNodePath != null) {
+      for (final Event sessionEvent in agentContext.session.events) {
+        if (sessionEvent.author == 'user' &&
+            sessionEvent.nodeInfo.isEmpty &&
+            sessionEvent.getFunctionResponses().any(
+              (FunctionResponse fr) =>
+                  fr.id != null && context.resumeInputs.containsKey(fr.id),
+            )) {
+          sessionEvent.nodeInfo = NodeInfo(path: currentNodePath);
+        }
+      }
+    }
+
     final List<Event> nestedEvents = <Event>[];
+    final List<Event> addedIntraNodeEvents = <Event>[];
     final bool isTaskMode =
         (agent is LlmAgent && (agent as LlmAgent).mode == 'task') ||
         (agent is RemoteA2aAgent && (agent as RemoteA2aAgent).mode == 'task');
+    final bool isLive =
+        agentContext.liveRequestQueue != null && !isSingleTurnLlm;
     final Set<String> taskSubagentToolNames = <String>{
       if (agent is LlmAgent && (agent as LlmAgent).mode == 'task')
         for (final Object tool in (agent as LlmAgent).tools)
@@ -862,91 +902,188 @@ class AgentNode extends BaseNode {
     };
     Map<String, dynamic>? pendingFinishArgs;
     String? pendingFinishCallId;
+    String? rejectedFinishCallId;
+    bool hasFinishedTaskOutput = false;
+    Object? finishedTaskOutput;
+    bool pausedOnInterrupt = false;
+    Event? lastInterruptEvent;
 
     Event? finalEvent;
-    await for (final Event event in agent.runAsync(agentContext)) {
-      _mergeStateDelta(agentContext.session, event.actions.stateDelta);
-      if (isTaskMode) {
-        final List<FunctionCall> calls = event.getFunctionCalls();
-        final bool hasTaskSubagentCall = calls.any(
-          (FunctionCall call) => taskSubagentToolNames.contains(call.name),
-        );
-        for (final FunctionCall call in calls) {
-          if (call.name == finishTaskToolName && !hasTaskSubagentCall) {
-            pendingFinishArgs = Map<String, dynamic>.from(call.args);
-            pendingFinishCallId = call.id;
+    try {
+      final Stream<Event> eventStream = isLive
+          ? agent.runLive(agentContext)
+          : agent.runAsync(agentContext);
+      await for (final Event event in eventStream) {
+        if (agent is! Workflow) {
+          if (currentNodePath != null && event.nodeInfo.isEmpty) {
+            event.nodeInfo = NodeInfo(path: currentNodePath);
           }
+          if (event.partial != true &&
+              !agentContext.session.events.any(
+                (Event existing) => existing.id == event.id,
+              )) {
+            agentContext.session.events.add(event);
+            addedIntraNodeEvents.add(event);
+          }
+          PersistBarrier.markPersisted(agentContext, event.id);
         }
-        for (final FunctionResponse response in event.getFunctionResponses()) {
-          if (response.name == finishTaskToolName &&
-              (pendingFinishCallId == null ||
-                  response.id == pendingFinishCallId)) {
-            if (response.response['result'] == finishTaskErrorResult ||
-                (event.errorMessage != null &&
-                    event.errorMessage!.isNotEmpty)) {
-              return <String, Object?>{
-                'error': event.errorMessage ?? finishTaskErrorResult,
-              };
+        _mergeStateDelta(agentContext.session, event.actions.stateDelta);
+        if (isInterruptEvent(event)) {
+          lastInterruptEvent = event;
+        }
+        if (hasFinishedTaskOutput) {
+          // A sibling tool's pause request would strand the finished result.
+          if (event.getFunctionCalls().isNotEmpty) {
+            break;
+          }
+          // Let remaining non-call events (and agent/plugin after callbacks) run.
+          continue;
+        }
+        if (isTaskMode) {
+          final List<FunctionCall> calls = event.getFunctionCalls();
+          final bool hasTaskSubagentCall = calls.any(
+            (FunctionCall call) => taskSubagentToolNames.contains(call.name),
+          );
+          for (final FunctionCall call in calls) {
+            if (call.name == finishTaskToolName) {
+              if (!hasTaskSubagentCall) {
+                pendingFinishArgs = Map<String, dynamic>.from(call.args);
+                pendingFinishCallId = call.id;
+              } else {
+                rejectedFinishCallId = call.id;
+              }
             }
-            if (response.response['result'] == finishTaskSuccessResult &&
-                pendingFinishArgs != null) {
-              final Object? outputSchema = agent is LlmAgent
-                  ? (agent as LlmAgent).outputSchema
-                  : agent is RemoteA2aAgent
-                  ? (agent as RemoteA2aAgent).outputSchema
-                  : null;
-              final Object? taskOutput = _extractTaskOutput(
-                outputSchema,
-                pendingFinishArgs,
-              );
-              if (agent is LlmAgent) {
-                final LlmAgent llmAgent = agent as LlmAgent;
-                if (llmAgent.outputKey != null && taskOutput != null) {
-                  agentContext.session.state[llmAgent.outputKey!] = taskOutput;
+          }
+          for (final FunctionResponse response in event.getFunctionResponses()) {
+            if (response.name == finishTaskToolName) {
+              if (rejectedFinishCallId != null &&
+                  response.id == rejectedFinishCallId) {
+                response.response = <String, dynamic>{
+                  'error':
+                      'Cannot call finish_task in the same turn as a '
+                      'task sub-agent tool call. Call finish_task after '
+                      'the sub-agent result is available.',
+                };
+                // The rejected finish_task does not end the turn.
+                event.actions.skipSummarization = null;
+                rejectedFinishCallId = null;
+                continue;
+              }
+              if (pendingFinishCallId == null ||
+                  response.id == pendingFinishCallId) {
+                if (response.response['result'] == finishTaskErrorResult ||
+                    (event.errorMessage != null &&
+                        event.errorMessage!.isNotEmpty)) {
+                  return <String, Object?>{
+                    'error': event.errorMessage ?? finishTaskErrorResult,
+                  };
+                }
+                if (response.response['result'] == finishTaskSuccessResult &&
+                    (pendingFinishArgs != null || event.hasOutput)) {
+                  final Object? outputSchema = agent is LlmAgent
+                      ? (agent as LlmAgent).outputSchema
+                      : agent is RemoteA2aAgent
+                      ? (agent as RemoteA2aAgent).outputSchema
+                      : null;
+                  final Object? taskOutput = event.hasOutput
+                      ? event.output
+                      : _extractTaskOutput(outputSchema, pendingFinishArgs!);
+                  if (agent is LlmAgent) {
+                    final LlmAgent llmAgent = agent as LlmAgent;
+                    if (llmAgent.outputKey != null && taskOutput != null) {
+                      agentContext.session.state[llmAgent.outputKey!] =
+                          taskOutput;
+                    }
+                  }
+                  finishedTaskOutput = taskOutput;
+                  hasFinishedTaskOutput = true;
+                  // A live session does not end on its own, and a transfer in
+                  // the same turn runs at the parent; close the run here.
+                  if (isLive ||
+                      (event.actions.transferToAgent != null &&
+                          event.actions.transferToAgent!.isNotEmpty)) {
+                    return finishedTaskOutput;
+                  }
+                  continue;
                 }
               }
-              return taskOutput;
             }
           }
         }
-      }
-      if (event.isFinalResponse() &&
-          event.actions.endOfAgent == null &&
-          event.actions.agentState == null) {
-        if (agent is! Workflow ||
-            (event.nodeInfo.outputFor?.contains(
-                  _workflowRootPath(agent as Workflow),
-                ) ??
-                false)) {
-          finalEvent = event;
+        if (event.isFinalResponse() &&
+            event.actions.endOfAgent == null &&
+            event.actions.agentState == null) {
+          if (agent is! Workflow ||
+              (event.nodeInfo.outputFor?.contains(
+                    _workflowRootPath(agent as Workflow),
+                  ) ??
+                  false)) {
+            finalEvent = event;
+          }
+        }
+        if (collectNestedWorkflowEvents) {
+          nestedEvents.add(
+            _rewriteNestedWorkflowEvent(
+              event,
+              nestedWorkflow: agent as Workflow,
+              ownerPath: ownerPath!,
+            ),
+          );
         }
       }
-      if (collectNestedWorkflowEvents) {
-        nestedEvents.add(
-          _rewriteNestedWorkflowEvent(
-            event,
-            nestedWorkflow: agent as Workflow,
-            ownerPath: ownerPath!,
-          ),
-        );
+
+      if (collectNestedWorkflowEvents && nestedEvents.isNotEmpty) {
+        context._nodeEvents[nodeKey] = nestedEvents;
+      }
+
+      if (hasFinishedTaskOutput) {
+        return finishedTaskOutput;
+      }
+
+      if (finalEvent == null) {
+        if (lastInterruptEvent != null) {
+          pausedOnInterrupt = true;
+          agentContext.session.events.removeWhere(
+            (Event e) => e.id == lastInterruptEvent!.id,
+          );
+          addedIntraNodeEvents.removeWhere(
+            (Event e) => e.id == lastInterruptEvent!.id,
+          );
+          return lastInterruptEvent;
+        }
+        return null;
+      }
+      if (isSingleTurnLlm) {
+        // A single_turn agent runs its transfer target inline, so the target's
+        // reply is already this node's output. Clear any residual transfer so
+        // downstream scheduling does not run the target again.
+        finalEvent.actions.transferToAgent = null;
+      }
+      final Object? finalOutput = _outputFromAgentEvent(finalEvent);
+      if (agent is LlmAgent) {
+        final LlmAgent llmAgent = agent as LlmAgent;
+        if (llmAgent.outputKey != null && finalOutput != null) {
+          agentContext.session.state[llmAgent.outputKey!] = finalOutput;
+        }
+      }
+      return finalOutput;
+    } finally {
+      if (!pausedOnInterrupt) {
+        if (injectedInputEvent != null) {
+          agentContext.session.events.removeWhere(
+            (Event e) => e.id == injectedInputEvent!.id,
+          );
+        }
+        if (isSingleTurnLlm && addedIntraNodeEvents.isNotEmpty) {
+          final Set<String> addedIds = addedIntraNodeEvents
+              .map((Event e) => e.id)
+              .toSet();
+          agentContext.session.events.removeWhere(
+            (Event e) => addedIds.contains(e.id),
+          );
+        }
       }
     }
-
-    if (collectNestedWorkflowEvents && nestedEvents.isNotEmpty) {
-      context._nodeEvents[nodeKey] = nestedEvents;
-    }
-
-    if (finalEvent == null) {
-      return null;
-    }
-    final Object? finalOutput = _outputFromAgentEvent(finalEvent);
-    if (agent is LlmAgent) {
-      final LlmAgent llmAgent = agent as LlmAgent;
-      if (llmAgent.outputKey != null && finalOutput != null) {
-        agentContext.session.state[llmAgent.outputKey!] = finalOutput;
-      }
-    }
-    return finalOutput;
   }
 }
 

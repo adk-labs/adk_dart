@@ -819,6 +819,7 @@ class _InlineAgentRunResult {
   Content? lastContent;
   Object? lastGroundingMetadata;
   Object? taskOutput;
+  String? transferToAgent;
 }
 
 Future<_InlineAgentRunResult> _runAgentInCurrentSession({
@@ -863,10 +864,23 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
   final _InlineAgentRunResult result = _InlineAgentRunResult();
   Map<String, dynamic>? pendingFinishArgs;
   String? pendingFinishCallId;
+  bool finished = false;
 
   await for (final Event emitted in agent.runAsync(childContext)) {
     if (childContext.isAborted) {
       return result;
+    }
+
+    if (finished) {
+      // A sibling tool's pause/confirmation request would strand the finished result.
+      if (emitted.getFunctionCalls().isNotEmpty) {
+        return result;
+      }
+      final Event? trailing = await _appendInlineEvent(childContext, emitted);
+      if (trailing != null && trailing.actions.stateDelta.isNotEmpty) {
+        toolContext.state.addAll(trailing.actions.stateDelta);
+      }
+      continue;
     }
 
     final Event? event = await _appendInlineEvent(childContext, emitted);
@@ -905,13 +919,24 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
           return result;
         }
         if (_isFinishTaskSuccess(response.response)) {
+          final String? transferTarget = event.actions.transferToAgent;
           if (event.hasOutput) {
             result.taskOutput = event.output;
-            return result;
+            if (transferTarget != null && transferTarget.isNotEmpty) {
+              result.transferToAgent = transferTarget;
+              return result;
+            }
+            finished = true;
+            break;
           }
           if (pendingFinishArgs != null) {
             result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
-            return result;
+            if (transferTarget != null && transferTarget.isNotEmpty) {
+              result.transferToAgent = transferTarget;
+              return result;
+            }
+            finished = true;
+            break;
           }
         }
       }
@@ -1030,6 +1055,9 @@ void _propagateRunResult(
   if (propagateGroundingMetadata && result.lastGroundingMetadata != null) {
     toolContext.state['temp:_adk_grounding_metadata'] =
         result.lastGroundingMetadata;
+  }
+  if (result.transferToAgent != null && result.transferToAgent!.isNotEmpty) {
+    toolContext.actions.transferToAgent = result.transferToAgent;
   }
 }
 

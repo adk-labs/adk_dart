@@ -237,8 +237,12 @@ class ToolAuthHandler {
 
   Future<AuthCredential?> _exchangeCredential(AuthCredential credential) async {
     try {
-      final AuthCredential? exchanged = await credentialExchanger
-          .exchangeCredential(authScheme ?? '', credential);
+      final AuthCredential? exchanged = await Future<AuthCredential?>(
+        () => credentialExchanger.exchangeCredential(
+          authScheme ?? '',
+          credential,
+        ),
+      );
       if (exchanged == null || _isUnexchangedOAuthCredential(exchanged)) {
         return null;
       }

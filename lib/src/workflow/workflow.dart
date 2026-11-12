@@ -16,9 +16,11 @@ import '../agents/remote_a2a_agent.dart';
 import '../errors/input_validation_error.dart';
 import '../events/event.dart';
 import '../events/event_actions.dart';
+import '../events/interrupts.dart';
 import '../events/node_path_builder.dart';
 import '../events/request_input.dart';
 import '../flows/llm_flows/functions.dart';
+import '../flows/llm_flows/persist_barrier.dart';
 import '../models/llm_request.dart';
 import '../sessions/in_memory_session_service.dart';
 import '../sessions/session.dart';
@@ -190,6 +192,59 @@ class Workflow extends BaseAgent {
       inputSchema: inputSchema,
       outputSchema: outputSchema,
     );
+  }
+
+  /// Returns the downstream target node names matched from [nodeName] for
+  /// [routesToMatch], preserving first-seen edge order without duplicates.
+  List<String> getNextPendingNodes(
+    String nodeName, {
+    Object? routesToMatch,
+  }) {
+    return resolveNextPendingNodes(
+      edges,
+      nodeName,
+      routesToMatch: routesToMatch,
+    );
+  }
+
+  /// Resolves the downstream target node names in [graphEdges] originating
+  /// from [nodeName] that match [routesToMatch].
+  ///
+  /// When multiple edges between the same pair of nodes carry disjoint routes
+  /// matched by [routesToMatch], each target node name is returned at most
+  /// once in first-matched order.
+  static List<String> resolveNextPendingNodes(
+    Iterable<Edge> graphEdges,
+    String nodeName, {
+    Object? routesToMatch,
+  }) {
+    bool matchedSpecificRoute = false;
+    final List<String> defaultTargets = <String>[];
+    final List<String> nextPendingNodes = <String>[];
+    for (final Edge edge in graphEdges) {
+      if (edge.fromNode != nodeName) {
+        continue;
+      }
+      if (edge.route == null) {
+        nextPendingNodes.add(edge.toNode);
+        continue;
+      }
+      if (edge.route == DEFAULT_ROUTE) {
+        defaultTargets.add(edge.toNode);
+        continue;
+      }
+      if (_routeMatches(edge.route, routesToMatch)) {
+        matchedSpecificRoute = true;
+        nextPendingNodes.add(edge.toNode);
+      }
+    }
+    if (!matchedSpecificRoute) {
+      nextPendingNodes.addAll(defaultTargets);
+    }
+    // Edges between the same two nodes may carry disjoint routes, so a list of
+    // routes can match more than one of them. Trigger each target once, in
+    // first-matched order.
+    return nextPendingNodes.toSet().toList(growable: false);
   }
 
   void _emitNodeCheckpoint(WorkflowContext context) {
@@ -377,7 +432,9 @@ class Workflow extends BaseAgent {
       }
       if (_usesTriggerBuffer(node, edgePredecessors)) {
         final bool isInactive =
-            state == null || state.status == NodeStatus.inactive;
+            state == null ||
+            state.status == NodeStatus.inactive ||
+            state.status == NodeStatus.failed;
         if (isInactive && dependencies[name]!.contains(START)) {
           triggerBuffer.putIfAbsent(name, () => <Object?>[]).add(
             context.outputs[START],
@@ -471,6 +528,14 @@ class Workflow extends BaseAgent {
               .toList()
             ..sort();
       if (ready.isEmpty) {
+        if (_allPendingBlockedByWaiting(
+          context: context,
+          pending: pending,
+          active: active,
+          reachableFrom: reachableFrom,
+        )) {
+          break;
+        }
         throw StateError(
           'Workflow graph has unresolved or cyclic dependencies.',
         );
@@ -621,6 +686,14 @@ class Workflow extends BaseAgent {
                 .toList()
               ..sort();
         if (ready.isEmpty && running.isEmpty && pending.any(active.contains)) {
+          if (_allPendingBlockedByWaiting(
+            context: context,
+            pending: pending,
+            active: active,
+            reachableFrom: reachableFrom,
+          )) {
+            break;
+          }
           throw StateError(
             'Workflow graph has unresolved or cyclic dependencies.',
           );
@@ -835,6 +908,33 @@ class Workflow extends BaseAgent {
   // Task-mode agents are multi-turn and pause for user input. While one is
   // waiting, the scheduler stops dispatching further parallel branches so the
   // suspended task keeps exclusive control of the conversation.
+  bool _allPendingBlockedByWaiting({
+    required WorkflowContext context,
+    required Set<String> pending,
+    required Set<String> active,
+    required Map<String, Set<String>> reachableFrom,
+  }) {
+    final List<String> waitingNodes = context.nodeStates.entries
+        .where((MapEntry<String, NodeState> e) => e.value.status == NodeStatus.waiting)
+        .map((MapEntry<String, NodeState> e) => e.key)
+        .toList();
+    if (waitingNodes.isEmpty) {
+      return false;
+    }
+    for (final String nodeName in pending) {
+      if (!active.contains(nodeName)) {
+        continue;
+      }
+      final bool blockedByWaiting = waitingNodes.any(
+        (String w) => w == nodeName || (reachableFrom[w]?.contains(nodeName) ?? false),
+      );
+      if (!blockedByWaiting) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool _hasWaitingTaskAgent(WorkflowContext context) {
     for (final BaseNode node in nodes) {
       if (node is AgentNode &&
@@ -997,28 +1097,11 @@ class Workflow extends BaseAgent {
     required Set<String> pending,
     required bool reactivateCompleted,
   }) {
-    bool matchedSpecificRoute = false;
-    final List<String> defaultTargets = <String>[];
-    final Set<String> activatedTargets = <String>{};
-    for (final Edge edge in edges.where(
-      (Edge edge) => edge.fromNode == fromNode,
-    )) {
-      if (edge.route == null) {
-        activatedTargets.add(edge.toNode);
-        continue;
-      }
-      if (edge.route == DEFAULT_ROUTE) {
-        defaultTargets.add(edge.toNode);
-        continue;
-      }
-      if (_routeMatches(edge.route, route)) {
-        matchedSpecificRoute = true;
-        activatedTargets.add(edge.toNode);
-      }
-    }
-    if (!matchedSpecificRoute) {
-      activatedTargets.addAll(defaultTargets);
-    }
+    final Set<String> activatedTargets = resolveNextPendingNodes(
+      edges,
+      fromNode,
+      routesToMatch: route,
+    ).toSet();
     active.addAll(activatedTargets);
     for (final String target in activatedTargets) {
       final BaseNode? targetNode = byName[target];
@@ -1028,7 +1111,9 @@ class Workflow extends BaseAgent {
       if (_usesTriggerBuffer(targetNode, edgePredecessors)) {
         final NodeState? targetState = context.nodeStates[target];
         final bool isTargetInactive =
-            targetState == null || targetState.status == NodeStatus.inactive;
+            targetState == null ||
+            targetState.status == NodeStatus.inactive ||
+            targetState.status == NodeStatus.failed;
         if (reactivateCompleted || isTargetInactive) {
           triggerBuffer.putIfAbsent(target, () => <Object?>[]).add(
             context.outputs[fromNode],

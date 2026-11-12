@@ -252,12 +252,22 @@ abstract class BaseAgent {
     return parentContext.copyWith(agent: this);
   }
 
+  static const Map<String, String> _baseCloneFieldAliases = <String, String>{
+    'parent_agent': 'parentAgent',
+    'sub_agents': 'subAgents',
+    'before_agent_callback': 'beforeAgentCallback',
+    'after_agent_callback': 'afterAgentCallback',
+  };
+
   /// Normalizes clone [update] maps into mutable JSON-like maps.
   Map<String, Object?> normalizeCloneUpdate(Map<String, Object?>? update) {
     if (update == null) {
       return <String, Object?>{};
     }
-    return Map<String, Object?>.from(update);
+    return <String, Object?>{
+      for (final MapEntry<String, Object?> entry in update.entries)
+        (_baseCloneFieldAliases[entry.key] ?? entry.key): entry.value,
+    };
   }
 
   /// Validates clone-update [update] keys against [allowedFields].

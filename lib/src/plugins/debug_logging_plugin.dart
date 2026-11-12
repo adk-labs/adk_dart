@@ -293,6 +293,26 @@ class DebugLoggingPlugin extends BasePlugin {
   Future<void> afterRunCallback({
     required InvocationContext invocationContext,
   }) async {
+    await _flushInvocation(invocationContext);
+  }
+
+  /// Flushes invocation debug state and clears in-memory state when an
+  /// unhandled error escapes runner execution.
+  @override
+  Future<void> onRunErrorCallback({
+    required InvocationContext invocationContext,
+    required Object error,
+  }) async {
+    if (!_invocationStates.containsKey(invocationContext.invocationId)) {
+      return;
+    }
+    await _flushInvocation(invocationContext, error: error);
+  }
+
+  Future<void> _flushInvocation(
+    InvocationContext invocationContext, {
+    Object? error,
+  }) async {
     final String invocationId = invocationContext.invocationId;
     final _InvocationDebugState? state = _invocationStates[invocationId];
     if (state == null) {
@@ -312,7 +332,18 @@ class DebugLoggingPlugin extends BasePlugin {
       );
     }
 
-    _addEntry(invocationId, 'invocation_end');
+    if (error == null) {
+      _addEntry(invocationId, 'invocation_end');
+    } else {
+      _addEntry(
+        invocationId,
+        'invocation_error',
+        data: <String, Object?>{
+          'error_type': error.runtimeType.toString(),
+          'error_message': '$error',
+        },
+      );
+    }
     try {
       final Map<String, Object?> outputData = state.toJson();
       final JsonEncoder encoder = const JsonEncoder.withIndent('  ');
@@ -322,8 +353,8 @@ class DebugLoggingPlugin extends BasePlugin {
         mode: FileMode.append,
         flush: true,
       );
-    } catch (error) {
-      stderr.writeln('Failed to write debug data: $error');
+    } catch (writeError) {
+      stderr.writeln('Failed to write debug data: $writeError');
     } finally {
       _invocationStates.remove(invocationId);
     }

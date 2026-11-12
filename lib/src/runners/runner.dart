@@ -25,6 +25,7 @@ import '../events/event.dart';
 import '../events/event_actions.dart';
 import '../events/internal_metadata.dart';
 import '../events/interrupts.dart';
+import '../events/node_path_builder.dart';
 import '../events/rewind_events.dart';
 import '../flows/llm_flows/agent_transfer.dart';
 import '../flows/llm_flows/persist_barrier.dart';
@@ -37,6 +38,7 @@ import '../sessions/session.dart';
 import '../tools/base_toolset.dart';
 import '../tools/node_tool.dart';
 import '../types/content.dart';
+import '../utils/function_call_names.dart';
 import '../workflow/workflow.dart';
 
 const Set<String> _llmResponseErrorCodes = <String>{
@@ -1156,8 +1158,9 @@ class Runner {
   }
 
   Future<List<Event>> _synthesizeAbortEventsIfNeeded(
-    InvocationContext context,
-  ) async {
+    InvocationContext context, {
+    Set<String> keepOpen = const <String>{},
+  }) async {
     if (context.abortEventSynthesized) {
       return <Event>[];
     }
@@ -1167,6 +1170,7 @@ class Runner {
       invocationId: context.invocationId,
       rootAgentName: agent.name,
       branch: context.branch,
+      keepOpen: keepOpen,
     );
     final List<Event> persistedEvents = <Event>[];
     for (final Event abortEvent in abortEvents) {
@@ -1216,10 +1220,23 @@ class Runner {
     final Completer<void> produceDone = Completer<void>();
     bool produceFailed = false;
     bool streamCancelledExternally = false;
+    bool explicitAbortBeforeCancel = invocationContext.isAborted;
+
+    Set<String> currentKeepOpen() {
+      final bool explicitAbort =
+          (invocationContext.abortSignal?.aborted ?? false) ||
+          explicitAbortBeforeCancel ||
+          (!streamCancelledExternally && invocationContext.isAborted);
+      return explicitAbort
+          ? const <String>{}
+          : guardedCallIds(invocationContext);
+    }
+
     late final StreamController<Event> output;
     output = StreamController<Event>(
       onCancel: () async {
         if (!produceDone.isCompleted) {
+          explicitAbortBeforeCancel = invocationContext.isAborted;
           streamCancelledExternally = true;
           invocationContext.markAborted();
           await produceDone.future;
@@ -1357,30 +1374,40 @@ class Runner {
             output.add(outputEvent);
           }
 
+          final Set<String> keepOpenOnProduce = currentKeepOpen();
           if (!isLiveCall &&
               ((invocationContext.abortSignal?.aborted ?? false) ||
                   (invocationContext.isAborted &&
                       hasUnsealedToolCalls(
                         session.events,
                         invocationId: invocationContext.invocationId,
+                        keepOpen: keepOpenOnProduce,
                       )))) {
             final List<Event> abortEvents =
-                await _synthesizeAbortEventsIfNeeded(invocationContext);
+                await _synthesizeAbortEventsIfNeeded(
+                  invocationContext,
+                  keepOpen: keepOpenOnProduce,
+                );
             for (final Event abortEvent in abortEvents) {
               output.add(abortEvent);
             }
           }
         }
       } catch (error) {
+        final Set<String> keepOpenOnError = currentKeepOpen();
         if (!isLiveCall &&
             ((invocationContext.abortSignal?.aborted ?? false) ||
                 (invocationContext.isAborted &&
                     hasUnsealedToolCalls(
                       session.events,
                       invocationId: invocationContext.invocationId,
+                      keepOpen: keepOpenOnError,
                     )))) {
           try {
-            await _synthesizeAbortEventsIfNeeded(invocationContext);
+            await _synthesizeAbortEventsIfNeeded(
+              invocationContext,
+              keepOpen: keepOpenOnError,
+            );
           } catch (_) {}
         }
         // Notify plugins of the unhandled execution error. Covers failures in
@@ -1424,27 +1451,37 @@ class Runner {
     } finally {
       final bool wasAborted =
           invocationContext.isAborted || streamCancelledExternally;
+      final Set<String> initialKeepOpen = currentKeepOpen();
       final bool hasUnsealedCalls =
           !isLiveCall &&
           hasUnsealedToolCalls(
             session.events,
             invocationId: invocationContext.invocationId,
+            keepOpen: initialKeepOpen,
           );
       if (!produceDone.isCompleted &&
           (!streamCompletedNormally || wasAborted || hasUnsealedCalls)) {
         invocationContext.markAborted();
         await produceDone.future;
       }
+      final Set<String> finalKeepOpen =
+          (!streamCompletedNormally && !wasAborted && hasUnsealedCalls)
+          ? initialKeepOpen
+          : currentKeepOpen();
       final bool hasUnsealedCallsAfterDrain =
           !isLiveCall &&
           hasUnsealedToolCalls(
             session.events,
             invocationId: invocationContext.invocationId,
+            keepOpen: finalKeepOpen,
           );
       if (!isLiveCall &&
           (wasAborted || hasUnsealedCalls || hasUnsealedCallsAfterDrain)) {
         try {
-          await _synthesizeAbortEventsIfNeeded(invocationContext);
+          await _synthesizeAbortEventsIfNeeded(
+            invocationContext,
+            keepOpen: finalKeepOpen,
+          );
         } catch (_) {}
       }
       shouldRunAfterRun =
@@ -1889,4 +1926,48 @@ class _RunnerParams {
 
 String _newInvocationContextId() {
   return 'invocation_${DateTime.now().microsecondsSinceEpoch}';
+}
+
+/// Returns the IDs of function calls that an open interrupt still waits on.
+///
+/// Includes each open interrupt's own call ID, the original call ID that a
+/// confirmation (`adk_request_confirmation`) or credential
+/// (`adk_request_credential`) request was raised for, and the ancestor call IDs
+/// on the branch where the interrupt was raised.
+Set<String> guardedCallIds(InvocationContext invocationContext) {
+  final List<Event> events = <Event>[
+    for (final Event event in invocationContext.session.events)
+      if (event.invocationId == invocationContext.invocationId) event,
+  ];
+  final Map<String, OpenInterrupt> openIds = indexOpenInterrupts(events);
+  if (openIds.isEmpty) {
+    return const <String>{};
+  }
+  final Set<String> guarded = Set<String>.from(openIds.keys);
+  for (final Event event in events) {
+    for (final FunctionCall fc in event.getFunctionCalls()) {
+      final String? callId = fc.id;
+      if (callId == null || !openIds.containsKey(callId)) {
+        continue;
+      }
+      if (event.branch != null && event.branch!.isNotEmpty) {
+        guarded.addAll(BranchPath.fromString(event.branch).orderedRunIds);
+      }
+      if (fc.name == requestConfirmationFunctionCallName) {
+        final Object? original = fc.args['originalFunctionCall'];
+        if (original is Map) {
+          final Object? origId = original['id'];
+          if (origId is String && origId.isNotEmpty) {
+            guarded.add(origId);
+          }
+        }
+      } else if (fc.name == requestEucFunctionCallName) {
+        final Object? origId = fc.args['functionCallId'];
+        if (origId is String && origId.isNotEmpty) {
+          guarded.add(origId);
+        }
+      }
+    }
+  }
+  return Set<String>.unmodifiable(guarded);
 }

@@ -22,8 +22,12 @@ enum LangGraphMessageRole {
 
 /// A single message sent to or received from LangGraph.
 class LangGraphMessage {
-  /// Creates a LangGraph message.
-  LangGraphMessage({required this.role, required this.content});
+  /// Creates a LangGraph message with string [content].
+  LangGraphMessage({
+    required this.role,
+    required this.content,
+    Object? rawContent,
+  }) : rawContent = rawContent ?? content;
 
   /// Creates a system-role message.
   factory LangGraphMessage.system(String content) {
@@ -46,16 +50,86 @@ class LangGraphMessage {
     );
   }
 
+  /// Creates an assistant-role message from structured content [blocks].
+  factory LangGraphMessage.assistantBlocks(List<Object?> blocks) {
+    final List<Object?> copiedBlocks = List<Object?>.unmodifiable(blocks);
+    return LangGraphMessage(
+      role: LangGraphMessageRole.assistant,
+      content: extractLangGraphMessageText(copiedBlocks),
+      rawContent: copiedBlocks,
+    );
+  }
+
   /// Message role.
   final LangGraphMessageRole role;
 
-  /// Message text content.
+  /// Extracted plain-text message content.
   final String content;
+
+  /// Underlying raw content (`String` or structured content block list).
+  final Object rawContent;
+
+  /// Plain-text view of [rawContent], matching LangChain `BaseMessage.text`.
+  String get text => extractLangGraphMessageText(rawContent);
+}
+
+/// Extracts plain-text reply content from a LangGraph invoke result or message.
+///
+/// Strings pass through unchanged. Lists of LangChain/LangGraph content blocks
+/// (such as `[{'type': 'reasoning', ...}, {'type': 'text', 'text': '...'}]`),
+/// message maps (`{'content': ...}` or `{'messages': [...]}`), and
+/// [LangGraphMessage] instances return the concatenated text of their `'text'`
+/// blocks, or `''` when no text blocks are present.
+String extractLangGraphMessageText(Object? messageOrContent) {
+  if (messageOrContent == null) {
+    return '';
+  }
+  if (messageOrContent is String) {
+    return messageOrContent;
+  }
+  if (messageOrContent is LangGraphMessage) {
+    return extractLangGraphMessageText(messageOrContent.rawContent);
+  }
+  if (messageOrContent is List) {
+    final StringBuffer buffer = StringBuffer();
+    for (final Object? item in messageOrContent) {
+      if (item is String) {
+        buffer.write(item);
+      } else if (item is Map) {
+        final Object? blockType = item['type'];
+        final Object? textValue = item['text'];
+        if ((blockType == null || blockType == 'text') && textValue is String) {
+          buffer.write(textValue);
+        }
+      }
+    }
+    return buffer.toString();
+  }
+  if (messageOrContent is Map) {
+    if (messageOrContent.containsKey('messages')) {
+      final Object? messages = messageOrContent['messages'];
+      if (messages is List && messages.isNotEmpty) {
+        return extractLangGraphMessageText(messages.last);
+      }
+      return '';
+    }
+    final Object? textProp = messageOrContent['text'];
+    if (textProp is String && !messageOrContent.containsKey('content')) {
+      return textProp;
+    }
+    if (messageOrContent.containsKey('content')) {
+      return extractLangGraphMessageText(messageOrContent['content']);
+    }
+  }
+  return '$messageOrContent';
 }
 
 /// Callback that invokes a LangGraph workflow.
+///
+/// May return a plain `String`, a [LangGraphMessage], a list of content blocks,
+/// or a LangGraph state map containing `'messages'` or `'content'`.
 typedef LangGraphInvoker =
-    FutureOr<String> Function({
+    FutureOr<Object?> Function({
       required List<LangGraphMessage> messages,
       required String threadId,
     });
@@ -168,9 +242,10 @@ class LangGraphAgent extends BaseAgent {
       ...getMessages(ctx.session.events),
     ];
 
-    final String result = await Future<String>.value(
+    final Object? rawResult = await Future<Object?>.value(
       invokeGraph(messages: messages, threadId: threadId),
     );
+    final String result = extractLangGraphMessageText(rawResult);
 
     yield Event(
       invocationId: ctx.invocationId,

@@ -947,7 +947,11 @@ class BaseLlmFlow {
         events.isNotEmpty &&
         (context.shouldPauseInvocation(events.last) ||
             (events.length > 1 &&
-                context.shouldPauseInvocation(events[events.length - 2])));
+                _hasUnansweredPauseCalls(
+                  context,
+                  events[events.length - 2],
+                  events.last,
+                )));
     if (shouldPauseForLongRunning) {
       return;
     }
@@ -1001,6 +1005,32 @@ class BaseLlmFlow {
         yield event;
       }
     }
+  }
+
+  bool _hasUnansweredPauseCalls(
+    InvocationContext context,
+    Event pauseEvent,
+    Event trailingEvent,
+  ) {
+    if (!context.shouldPauseInvocation(pauseEvent)) {
+      return false;
+    }
+    if (trailingEvent.author != 'user' && trailingEvent.errorCode == null) {
+      return true;
+    }
+    final Set<String> pauseIds = <String>{
+      ...?pauseEvent.longRunningToolIds,
+      for (final FunctionCall call in pauseEvent.getFunctionCalls())
+        if (call.id != null &&
+            (call.name == 'adk_request_input' ||
+                call.name == 'adk_request_credential'))
+          call.id!,
+    };
+    final Set<String> answeredIds = <String>{
+      for (final FunctionResponse fr in trailingEvent.getFunctionResponses())
+        if (fr.id != null) fr.id!,
+    };
+    return pauseIds.difference(answeredIds).isNotEmpty;
   }
 
   Stream<Event> _preprocessAsync(
