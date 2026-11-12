@@ -118,7 +118,8 @@ class InMemoryMemoryService extends BaseMemoryService {
     final Map<String?, List<Event>> sessions =
         _sessionEventsByUserKey[key] ?? <String?, List<Event>>{};
 
-    final Set<String> queryWords = _extractWordsLower(query);
+    final Set<String> wholeWordsInQuery = _extractWordsLower(query);
+    final Set<String> wordsInQuery = _extractSearchableWords(query);
     final bool matchAll = query.trim().isEmpty;
     final List<(int, MemoryEntry)> scoredMemories = <(int, MemoryEntry)>[];
 
@@ -138,18 +139,26 @@ class InMemoryMemoryService extends BaseMemoryService {
         if (text.isEmpty) {
           continue;
         }
-        final String textLower = text.toLowerCase();
-        final Set<String> eventWords = _extractWordsLower(text);
-        if (eventWords.isEmpty && _isAscii(text)) {
+        final String normalizedEventText = _normalizeCommonNfc(text);
+        final String textLower = normalizedEventText.toLowerCase();
+        final Set<String> wordsInEvent = _extractSearchableWords(
+          normalizedEventText,
+        );
+        if (wordsInEvent.isEmpty && _isAscii(normalizedEventText)) {
           continue;
         }
         int matchedWords = 0;
         if (matchAll) {
           matchedWords = 1;
         } else {
-          for (final String queryWord in queryWords) {
-            if (eventWords.contains(queryWord) ||
-                (!_isAscii(queryWord) && textLower.contains(queryWord))) {
+          for (final String queryWord in wordsInQuery) {
+            if (wordsInEvent.contains(queryWord) ||
+                // A script run split out of a query word, such as `と` from
+                // `Pythonと`, would match nearly any Japanese text as a
+                // substring; restrict substring matching to whole query words.
+                (wholeWordsInQuery.contains(queryWord) &&
+                    !_isAscii(queryWord) &&
+                    textLower.contains(queryWord))) {
               matchedWords += 1;
             }
           }
@@ -218,10 +227,165 @@ bool _isAscii(String str) {
   return true;
 }
 
+bool _isLatin(int rune) {
+  if (rune < 0x80) {
+    return (rune >= 0x30 && rune <= 0x39) ||
+        (rune >= 0x41 && rune <= 0x5A) ||
+        (rune >= 0x61 && rune <= 0x7A) ||
+        rune == 0x5F;
+  }
+  if ((rune >= 0x00C0 && rune <= 0x00D6) ||
+      (rune >= 0x00D8 && rune <= 0x00F6) ||
+      (rune >= 0x00F8 && rune <= 0x024F)) {
+    return true;
+  }
+  if ((rune >= 0x1D00 && rune <= 0x1D25) ||
+      (rune >= 0x1D6B && rune <= 0x1D77) ||
+      (rune >= 0x1D79 && rune <= 0x1D9A) ||
+      (rune >= 0x1E00 && rune <= 0x1EFF) ||
+      rune == 0x2071 ||
+      rune == 0x207F ||
+      (rune >= 0x2090 && rune <= 0x209C) ||
+      (rune >= 0x2C60 && rune <= 0x2C7F) ||
+      (rune >= 0xA720 && rune <= 0xA7FF) ||
+      (rune >= 0xAB30 && rune <= 0xAB65) ||
+      (rune >= 0xFB00 && rune <= 0xFB06)) {
+    return true;
+  }
+  return false;
+}
+
+const Map<(int, int), int> _commonNfcCompositions = <(int, int), int>{
+  // Grave
+  (0x0041, 0x0300): 0x00C0,
+  (0x0045, 0x0300): 0x00C8,
+  (0x0049, 0x0300): 0x00CC,
+  (0x004F, 0x0300): 0x00D2,
+  (0x0055, 0x0300): 0x00D9,
+  (0x0061, 0x0300): 0x00E0,
+  (0x0065, 0x0300): 0x00E8,
+  (0x0069, 0x0300): 0x00EC,
+  (0x006F, 0x0300): 0x00F2,
+  (0x0075, 0x0300): 0x00F9,
+  // Acute
+  (0x0041, 0x0301): 0x00C1,
+  (0x0045, 0x0301): 0x00C9,
+  (0x0049, 0x0301): 0x00CD,
+  (0x004F, 0x0301): 0x00D3,
+  (0x0055, 0x0301): 0x00DA,
+  (0x0059, 0x0301): 0x00DD,
+  (0x0061, 0x0301): 0x00E1,
+  (0x0065, 0x0301): 0x00E9,
+  (0x0069, 0x0301): 0x00ED,
+  (0x006F, 0x0301): 0x00F3,
+  (0x0075, 0x0301): 0x00FA,
+  (0x0079, 0x0301): 0x00FD,
+  // Circumflex
+  (0x0041, 0x0302): 0x00C2,
+  (0x0045, 0x0302): 0x00CA,
+  (0x0049, 0x0302): 0x00CE,
+  (0x004F, 0x0302): 0x00D4,
+  (0x0055, 0x0302): 0x00DB,
+  (0x0061, 0x0302): 0x00E2,
+  (0x0065, 0x0302): 0x00EA,
+  (0x0069, 0x0302): 0x00EE,
+  (0x006F, 0x0302): 0x00F4,
+  (0x0075, 0x0302): 0x00FB,
+  // Tilde
+  (0x0041, 0x0303): 0x00C3,
+  (0x004E, 0x0303): 0x00D1,
+  (0x004F, 0x0303): 0x00D5,
+  (0x0061, 0x0303): 0x00E3,
+  (0x006E, 0x0303): 0x00F1,
+  (0x006F, 0x0303): 0x00F5,
+  // Breve / Dot above
+  (0x0047, 0x0306): 0x011E,
+  (0x0067, 0x0306): 0x011F,
+  (0x0049, 0x0307): 0x0130,
+  // Diaeresis
+  (0x0041, 0x0308): 0x00C4,
+  (0x0045, 0x0308): 0x00CB,
+  (0x0049, 0x0308): 0x00CF,
+  (0x004F, 0x0308): 0x00D6,
+  (0x0055, 0x0308): 0x00DC,
+  (0x0059, 0x0308): 0x0178,
+  (0x0061, 0x0308): 0x00E4,
+  (0x0065, 0x0308): 0x00EB,
+  (0x0069, 0x0308): 0x00EF,
+  (0x006F, 0x0308): 0x00F6,
+  (0x0075, 0x0308): 0x00FC,
+  (0x0079, 0x0308): 0x00FF,
+  // Ring above / Cedilla
+  (0x0041, 0x030A): 0x00C5,
+  (0x0061, 0x030A): 0x00E5,
+  (0x0043, 0x0327): 0x00C7,
+  (0x0063, 0x0327): 0x00E7,
+  (0x0053, 0x0327): 0x015E,
+  (0x0073, 0x0327): 0x015F,
+};
+
+String _normalizeCommonNfc(String text) {
+  if (_isAscii(text)) {
+    return text;
+  }
+  final List<int> runes = text.runes.toList(growable: false);
+  bool changed = false;
+  final List<int> out = <int>[];
+  int i = 0;
+  while (i < runes.length) {
+    int current = runes[i];
+    while (i + 1 < runes.length) {
+      final int? composed = _commonNfcCompositions[(current, runes[i + 1])];
+      if (composed == null) {
+        break;
+      }
+      current = composed;
+      changed = true;
+      i += 1;
+    }
+    out.add(current);
+    i += 1;
+  }
+  return changed ? String.fromCharCodes(out) : text;
+}
+
+final RegExp _unicodeWordPattern = RegExp(
+  r'[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*',
+  unicode: true,
+);
+
 Set<String> _extractWordsLower(String text) {
-  final RegExp exp = RegExp(r'[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*', unicode: true);
-  return exp
-      .allMatches(text)
+  final String normalized = _normalizeCommonNfc(text);
+  return _unicodeWordPattern
+      .allMatches(normalized)
       .map((Match match) => match.group(0)!.toLowerCase())
       .toSet();
+}
+
+Set<String> _extractSearchableWords(String text) {
+  final String normalized = _normalizeCommonNfc(text);
+  final Set<String> words = <String>{};
+  for (final Match match in _unicodeWordPattern.allMatches(normalized)) {
+    final String word = match.group(0)!;
+    words.add(word.toLowerCase());
+    if (!_isAscii(word)) {
+      // Split before lowercasing: `'İ'.toLowerCase()` expands to `'i\u0307'`,
+      // where `\u0307` is not Latin, which would otherwise yield a stray `'i'`.
+      final StringBuffer run = StringBuffer();
+      bool? currentIsLatin;
+      for (final int rune in word.runes) {
+        final bool runeIsLatin = _isLatin(rune);
+        if (currentIsLatin != null && runeIsLatin != currentIsLatin) {
+          words.add(run.toString().toLowerCase());
+          run.clear();
+        }
+        currentIsLatin = runeIsLatin;
+        run.writeCharCode(rune);
+      }
+      if (run.isNotEmpty) {
+        words.add(run.toString().toLowerCase());
+      }
+    }
+  }
+  return words;
 }

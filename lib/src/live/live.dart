@@ -13,7 +13,9 @@ export 'cascade_live_connection.dart'
         CascadeConnectionClosedException,
         CascadeLiveConnection,
         LiveClientRealtimeInput,
-        LiveTranscription;
+        LiveTranscription,
+        sendsGoogleTrackingHeaders,
+        withClientLabel;
 export 'cascade_live_events.dart'
     show
         AgentSpokenOutput,

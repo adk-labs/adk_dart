@@ -1,10 +1,19 @@
 /// Vertex AI RAG retrieval tool and configuration models.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
+import '../../memory/vertex_ai_rag_memory_service.dart'
+    show
+        VertexAiRagClient,
+        VertexAiRagClientFactory,
+        VertexAiRagContext,
+        VertexAiRagRetrievalResponse,
+        VertexRagStoreRagResource;
 import '../../models/llm_request.dart';
 import '../../utils/model_name_utils.dart';
+import '../../utils/system_environment/system_environment.dart';
 import '../base_tool.dart';
 import '../tool_configs.dart';
 import '../tool_context.dart';
@@ -104,6 +113,8 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
     int? similarityTopK,
     double? vectorDistanceThreshold,
     this.queryHandler,
+    this.clientFactory,
+    Map<String, String> Function()? environmentProvider,
     bool Function()? modelIdCheckDisabledResolver,
   }) : vertexRagStore = VertexAiRagStore(
          ragCorpora: ragCorpora,
@@ -111,6 +122,7 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
          similarityTopK: similarityTopK,
          vectorDistanceThreshold: vectorDistanceThreshold,
        ),
+       _environmentProvider = environmentProvider ?? readSystemEnvironment,
        _modelIdCheckDisabledResolver =
            modelIdCheckDisabledResolver ?? isGeminiModelIdCheckDisabled;
 
@@ -119,7 +131,56 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
 
   /// Optional handler for explicit tool-call query execution.
   final VertexAiRagQueryHandler? queryHandler;
+
+  /// Optional factory used to build and cache [VertexAiRagClient] instances per
+  /// execution [Zone] and `(project, location)` pair.
+  final VertexAiRagClientFactory? clientFactory;
+  final Map<String, String> Function() _environmentProvider;
   final bool Function() _modelIdCheckDisabledResolver;
+  final Expando<Map<(String?, String?), VertexAiRagClient>>
+  _apiClientsPerZone =
+      Expando<Map<(String?, String?), VertexAiRagClient>>(
+        'VertexAiRagRetrieval._apiClientsPerZone',
+      );
+
+  /// Resolves `(project, location)` preferring a fully-qualified corpus path
+  /// over `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`.
+  (String?, String?) projectAndLocation() {
+    String? storeProject;
+    String? storeLocation;
+    String? corpusName;
+    if (vertexRagStore.ragCorpora != null &&
+        vertexRagStore.ragCorpora!.isNotEmpty) {
+      corpusName = vertexRagStore.ragCorpora!.first;
+    } else if (vertexRagStore.ragResources != null &&
+        vertexRagStore.ragResources!.isNotEmpty) {
+      corpusName = vertexRagStore.ragResources!.first.path;
+    }
+
+    if (corpusName != null && corpusName.startsWith('projects/')) {
+      final List<String> parts = corpusName.split('/');
+      if (parts.length >= 4 &&
+          parts[0] == 'projects' &&
+          parts[2] == 'locations') {
+        storeProject = _nonEmptyOrNull(parts[1]);
+        storeLocation = _nonEmptyOrNull(parts[3]);
+      }
+    }
+
+    final Map<String, String> env = _environmentProvider();
+    return (
+      storeProject ?? _nonEmptyOrNull(env['GOOGLE_CLOUD_PROJECT']),
+      storeLocation ?? _nonEmptyOrNull(env['GOOGLE_CLOUD_LOCATION']),
+    );
+  }
+
+  VertexAiRagStore _retrievalStore() {
+    return VertexAiRagStore(
+      ragCorpora: vertexRagStore.ragCorpora,
+      ragResources: vertexRagStore.ragResources,
+      vectorDistanceThreshold: vertexRagStore.vectorDistanceThreshold,
+    );
+  }
 
   /// Creates a [VertexAiRagRetrieval] tool from a [ToolArgsConfig] payload.
   static VertexAiRagRetrieval fromConfig(
@@ -185,7 +246,8 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
     );
   }
 
-  /// Executes retrieval through [queryHandler] when provided.
+  /// Executes retrieval through [queryHandler] or [clientFactory] when
+  /// provided.
   @override
   Future<Object?> run({
     required Map<String, dynamic> args,
@@ -197,21 +259,63 @@ class VertexAiRagRetrieval extends BaseRetrievalTool {
     }
 
     final VertexAiRagQueryHandler? handler = queryHandler;
-    if (handler == null) {
+    if (handler != null) {
+      final List<String> results = await handler(
+        text: query.trim(),
+        ragResources: vertexRagStore.ragResources,
+        ragCorpora: vertexRagStore.ragCorpora,
+        similarityTopK: vertexRagStore.similarityTopK,
+        vectorDistanceThreshold: vertexRagStore.vectorDistanceThreshold,
+      );
+
+      if (results.isEmpty) {
+        return 'No matching result found with the config: $vertexRagStore';
+      }
+      return results;
+    }
+
+    final VertexAiRagClientFactory? factory = clientFactory;
+    if (factory == null) {
       return 'No matching result found with the config: $vertexRagStore';
     }
 
-    final List<String> results = await handler(
+    final (String? project, String? location) = projectAndLocation();
+    final Zone currentZone = Zone.current;
+    Map<(String?, String?), VertexAiRagClient>? clients =
+        _apiClientsPerZone[currentZone];
+    if (clients == null) {
+      clients = <(String?, String?), VertexAiRagClient>{};
+      _apiClientsPerZone[currentZone] = clients;
+    }
+    final (String?, String?) cacheKey = (project, location);
+    VertexAiRagClient? client = clients[cacheKey];
+    if (client == null) {
+      client = factory(project: project, location: location);
+      clients[cacheKey] = client;
+    }
+
+    final VertexAiRagStore store = _retrievalStore();
+    final VertexAiRagRetrievalResponse response = await client.retrievalQuery(
       text: query.trim(),
-      ragResources: vertexRagStore.ragResources,
-      ragCorpora: vertexRagStore.ragCorpora,
+      ragResources: store.ragResources
+          ?.map((VertexAiRagResource r) => VertexRagStoreRagResource(ragCorpus: r.path))
+          .toList(growable: false),
+      ragCorpora: store.ragCorpora,
       similarityTopK: vertexRagStore.similarityTopK,
-      vectorDistanceThreshold: vertexRagStore.vectorDistanceThreshold,
+      vectorDistanceThreshold: store.vectorDistanceThreshold,
     );
-
-    if (results.isEmpty) {
+    if (response.contexts.isEmpty) {
       return 'No matching result found with the config: $vertexRagStore';
     }
-    return results;
+    return response.contexts
+        .map((VertexAiRagContext context) => context.text)
+        .toList(growable: false);
   }
+}
+
+String? _nonEmptyOrNull(String? value) {
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  return value;
 }

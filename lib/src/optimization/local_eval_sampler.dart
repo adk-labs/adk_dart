@@ -51,15 +51,40 @@ class LocalEvalSamplerConfig {
   final List<String>? validationEvalCaseIds;
 
   /// Parses one config payload from JSON.
+  ///
+  /// Throws a [FormatException] when any required field (`eval_config`,
+  /// `app_name`, `train_eval_set`) is missing.
   factory LocalEvalSamplerConfig.fromJson(Map<String, Object?> json) {
+    final List<String> missing = <String>[];
+    final Object? rawEvalConfig = json.containsKey('evalConfig')
+        ? json['evalConfig']
+        : json['eval_config'];
+    if (rawEvalConfig == null) {
+      missing.add('eval_config');
+    }
+    final Object? rawAppName = json.containsKey('appName')
+        ? json['appName']
+        : json['app_name'];
+    if (rawAppName == null) {
+      missing.add('app_name');
+    }
+    final Object? rawTrainEvalSet = json.containsKey('trainEvalSet')
+        ? json['trainEvalSet']
+        : json['train_eval_set'];
+    if (rawTrainEvalSet == null) {
+      missing.add('train_eval_set');
+    }
+    if (missing.isNotEmpty) {
+      throw FormatException(
+        'Missing required field(s): ${missing.join(', ')}',
+      );
+    }
     return LocalEvalSamplerConfig(
-      evalConfig: EvalConfig.fromJson(
-        _asObjectMap(json['evalConfig'] ?? json['eval_config']),
-      ),
-      appName: (json['appName'] ?? json['app_name'] ?? '').toString().trim(),
-      trainEvalSet: (json['trainEvalSet'] ?? json['train_eval_set'] ?? '')
-          .toString()
-          .trim(),
+      evalConfig: rawEvalConfig is EvalConfig
+          ? rawEvalConfig
+          : EvalConfig.fromJson(_asObjectMap(rawEvalConfig)),
+      appName: '$rawAppName'.trim(),
+      trainEvalSet: '$rawTrainEvalSet'.trim(),
       trainEvalCaseIds: _asStringList(
         json['trainEvalCaseIds'] ?? json['train_eval_case_ids'],
       ),
@@ -82,6 +107,73 @@ class LocalEvalSamplerConfig {
       if (validationEvalSet != null) 'validation_eval_set': validationEvalSet,
       if (validationEvalCaseIds != null)
         'validation_eval_case_ids': validationEvalCaseIds,
+    };
+  }
+
+  /// Standard JSON Schema for [LocalEvalSamplerConfig].
+  static Map<String, Object?> jsonSchema() {
+    return <String, Object?>{
+      'title': 'LocalEvalSamplerConfig',
+      'type': 'object',
+      'properties': <String, Object?>{
+        'eval_config': <String, Object?>{
+          'title': 'Eval Config',
+          'description': 'The configuration for the evaluation.',
+          'type': 'object',
+        },
+        'app_name': <String, Object?>{
+          'title': 'App Name',
+          'description': 'The app name to use for evaluation.',
+          'type': 'string',
+        },
+        'train_eval_set': <String, Object?>{
+          'title': 'Train Eval Set',
+          'description': 'The name of the eval set to use for optimization.',
+          'type': 'string',
+        },
+        'train_eval_case_ids': <String, Object?>{
+          'title': 'Train Eval Case Ids',
+          'description':
+              'The IDs of the eval cases from the train_eval_set to use for'
+              ' training. If None, all eval cases in the train_eval_set will be'
+              ' used.',
+          'anyOf': <Object?>[
+            <String, Object?>{
+              'type': 'array',
+              'items': <String, Object?>{'type': 'string'},
+            },
+            <String, Object?>{'type': 'null'},
+          ],
+          'default': null,
+        },
+        'validation_eval_set': <String, Object?>{
+          'title': 'Validation Eval Set',
+          'description':
+              'The name of the eval set to use for validation. If None, the'
+              ' train_eval_set will be used for validation as well.',
+          'anyOf': <Object?>[
+            <String, Object?>{'type': 'string'},
+            <String, Object?>{'type': 'null'},
+          ],
+          'default': null,
+        },
+        'validation_eval_case_ids': <String, Object?>{
+          'title': 'Validation Eval Case Ids',
+          'description':
+              'The IDs of the eval cases from the validation_eval_set to use'
+              ' for validation. If None, all eval cases in the'
+              ' validation_eval_set will be used.',
+          'anyOf': <Object?>[
+            <String, Object?>{
+              'type': 'array',
+              'items': <String, Object?>{'type': 'string'},
+            },
+            <String, Object?>{'type': 'null'},
+          ],
+          'default': null,
+        },
+      },
+      'required': <String>['eval_config', 'app_name', 'train_eval_set'],
     };
   }
 }

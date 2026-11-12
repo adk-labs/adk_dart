@@ -10,9 +10,11 @@ import '../features/_feature_decorator.dart';
 import '../features/_feature_registry.dart';
 import '../models/base_llm.dart';
 import '../models/base_llm_connection.dart';
+import '../models/google_llm.dart';
 import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../types/content.dart';
+import '../utils/client_labels_utils.dart';
 import '../utils/content_utils.dart';
 import 'cascade_live_events.dart';
 import 'transforms.dart';
@@ -153,6 +155,53 @@ class _AsyncQueue<T> {
 
 const int _defaultPcmRate = 24000;
 
+const List<String> _trackingHeaderKeys = <String>[
+  'x-goog-api-client',
+  'user-agent',
+];
+
+/// Whether [llm] calls Google APIs that accept ADK tracking headers.
+///
+/// Non-Google adapters (such as `LiteLlm`) must not receive Google tracking
+/// headers because they forward `config.httpOptions.headers` to third-party
+/// providers.
+bool sendsGoogleTrackingHeaders(BaseLlm llm) => llm is Gemini;
+
+/// Returns a copy of [config] whose tracking headers also carry [label].
+///
+/// [Gemini] merges these headers with its own tracking headers, keeping any
+/// outer label (such as `evalClientLabel`) alongside [label].
+GenerateContentConfig withClientLabel(
+  GenerateContentConfig? config,
+  String label,
+) {
+  final GenerateContentConfig copied =
+      config?.copyWith() ?? GenerateContentConfig();
+  final HttpOptions httpOptions =
+      copied.httpOptions?.copyWith() ?? HttpOptions();
+  final Map<String, String> headers = Map<String, String>.from(
+    httpOptions.headers,
+  );
+  for (final String key in _trackingHeaderKeys) {
+    String? existingKey;
+    for (final String candidate in headers.keys) {
+      if (candidate.toLowerCase() == key) {
+        existingKey = candidate;
+        break;
+      }
+    }
+    final String? existingValue = existingKey == null
+        ? null
+        : headers.remove(existingKey);
+    headers[key] = (existingValue != null && existingValue.isNotEmpty)
+        ? '$existingValue $label'
+        : label;
+  }
+  httpOptions.headers = headers;
+  copied.httpOptions = httpOptions;
+  return copied;
+}
+
 final Stopwatch _monotonicClock = Stopwatch()..start();
 
 double _defaultNow() => _monotonicClock.elapsedMicroseconds / 1000000.0;
@@ -216,11 +265,14 @@ class CascadeLiveConnection extends BaseLlmConnection {
     LiveEgress tts, {
     this.onEmit,
     double Function()? clock,
+    bool Function(BaseLlm llm)? sendsGoogleTrackingHeadersPredicate,
   }) : _llmRequest = llmRequest,
        _llm = llm,
        _stt = stt,
        _tts = tts,
        _clock = clock ?? _defaultNow,
+       _sendsGoogleTrackingHeaders =
+           sendsGoogleTrackingHeadersPredicate ?? sendsGoogleTrackingHeaders,
        _contents = filterMediaHistory(llmRequest.contents) {
     experimental(FeatureName.cascadeLive).checkEnabled();
     unawaited(_pumpIngress());
@@ -235,6 +287,7 @@ class CascadeLiveConnection extends BaseLlmConnection {
   final LiveIngress _stt;
   final LiveEgress _tts;
   final double Function() _clock;
+  final bool Function(BaseLlm llm) _sendsGoogleTrackingHeaders;
 
   /// Optional observer invoked whenever a response is emitted.
   void Function(LlmResponse response)? onEmit;
@@ -963,10 +1016,13 @@ class CascadeLiveConnection extends BaseLlmConnection {
   }
 
   LlmRequest _buildRequest() {
+    final GenerateContentConfig config = _sendsGoogleTrackingHeaders(_llm)
+        ? withClientLabel(_llmRequest.config, cascadeLiveClientLabel)
+        : _llmRequest.config.copyWith();
     return LlmRequest(
       model: _llm.model,
       contents: _contents.map((Content c) => c.copyWith()).toList(),
-      config: _llmRequest.config.copyWith(),
+      config: config,
       liveConnectConfig: _llmRequest.liveConnectConfig.copyWith(),
       toolsDict: Map<String, dynamic>.from(_llmRequest.toolsDict).map(
         (String k, dynamic v) => MapEntry(k, v),

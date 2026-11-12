@@ -890,6 +890,7 @@ class AntigravityAgent extends BaseAgent {
           branch: context.branch,
           usageMetadata: <String, Object?>{
             'prompt_token_count': usage.promptTokenCount,
+            'cached_content_token_count': usage.cachedContentTokenCount,
             'candidates_token_count': usage.candidatesTokenCount,
             'total_token_count': usage.totalTokenCount,
             'thoughts_token_count': usage.thoughtsTokenCount,

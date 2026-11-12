@@ -284,6 +284,27 @@ LlmResponse _truncatedToolUseResponse({
   );
 }
 
+(String?, String?) _emptyResponseError({
+  required String? stopReason,
+  required String? finishReason,
+  required List<Part> parts,
+}) {
+  final bool hasContent = parts.any(
+    (Part part) =>
+        !part.thought &&
+        ((part.text != null && part.text!.isNotEmpty) ||
+            part.functionCall != null),
+  );
+  if (hasContent || finishReason == null || finishReason == 'STOP') {
+    return (null, null);
+  }
+  final String stopReasonRepr = stopReason == null ? 'None' : "'$stopReason'";
+  return (
+    finishReason,
+    'Claude stopped with $finishReason ($stopReasonRepr) and no content.',
+  );
+}
+
 Map<String, Object?> _buildToolChoice(
   GenerateContentConfig? config, {
   bool forcedToolUseBlocked = false,
@@ -1339,11 +1360,20 @@ class AnthropicLlm extends BaseLlm {
       }
     }
 
+    final String? finishReason = toGoogleFinishReason(stopReason);
+    final (String? errorCode, String? errorMessage) = _emptyResponseError(
+      stopReason: stopReason,
+      finishReason: finishReason,
+      parts: parts,
+    );
+
     return LlmResponse(
       content: Content(role: 'model', parts: parts),
       usageMetadata: usageMetadata,
       cacheCreationTokenCount: cacheCreationInputTokens,
-      finishReason: toGoogleFinishReason(stopReason),
+      finishReason: finishReason,
+      errorCode: errorCode,
+      errorMessage: errorMessage,
       modelVersion: model,
     );
   }
@@ -1822,7 +1852,7 @@ class AnthropicLlm extends BaseLlm {
         );
       }
       final StringBuffer? text = textBlocks[index];
-      if (text != null && text.isNotEmpty) {
+      if (text != null) {
         parts.add(Part.text(text.toString()));
       }
       final _AnthropicToolUseAccumulator? tool = toolUseBlocks[index];
@@ -1837,12 +1867,22 @@ class AnthropicLlm extends BaseLlm {
       }
     }
 
+    final String? resolvedFinishReason =
+        finishReason ?? toGoogleFinishReason(stopReasonRaw);
+    final (String? errorCode, String? errorMessage) = _emptyResponseError(
+      stopReason: stopReasonRaw,
+      finishReason: resolvedFinishReason,
+      parts: parts,
+    );
+
     LlmResponse finalResponse = LlmResponse(
       modelVersion: modelVersion ?? request.model,
       content: Content(role: 'model', parts: parts),
       usageMetadata: usageMetadata,
       cacheCreationTokenCount: cacheCreationTokens,
-      finishReason: finishReason,
+      finishReason: resolvedFinishReason,
+      errorCode: errorCode,
+      errorMessage: errorMessage,
       partial: false,
       turnComplete: true,
     );

@@ -284,6 +284,7 @@ class AntigravityTurnUsage {
   /// Creates turn usage statistics.
   const AntigravityTurnUsage({
     this.promptTokenCount = 0,
+    this.cachedContentTokenCount,
     this.candidatesTokenCount = 0,
     this.totalTokenCount = 0,
     this.thoughtsTokenCount = 0,
@@ -291,6 +292,9 @@ class AntigravityTurnUsage {
 
   /// Number of tokens in the prompt.
   final int promptTokenCount;
+
+  /// Number of cached prompt tokens, or `null` when unreported.
+  final int? cachedContentTokenCount;
 
   /// Number of tokens in the generated response candidates.
   final int candidatesTokenCount;

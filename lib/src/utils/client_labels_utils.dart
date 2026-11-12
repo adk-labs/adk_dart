@@ -19,6 +19,9 @@ const String evalClientLabel = 'google-adk-eval/$adkVersion';
 /// Label used to denote advisor LLM calls made by ModelConsultTool.
 const String modelConsultClientLabel = 'google-adk-model-consult/$adkVersion';
 
+/// Label used to denote reasoning LLM calls made by CascadeLive.
+const String cascadeLiveClientLabel = 'google-adk-cascade-live/$adkVersion';
+
 /// Returns the label for calls made by a classifier, such as `"llm"`.
 String classifierClientLabel(String kind) {
   return 'google-adk-classifier/$adkVersion+$kind';

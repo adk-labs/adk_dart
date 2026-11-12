@@ -1,6 +1,7 @@
 /// Vertex AI RAG-backed memory service and retrieval models.
 library;
 
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -8,6 +9,7 @@ import '../events/event.dart';
 import '../events/rewind_events.dart';
 import '../sessions/session.dart';
 import '../types/content.dart';
+import '../utils/system_environment/system_environment.dart';
 import '_utils.dart';
 import 'base_memory_service.dart';
 import 'memory_entry.dart';
@@ -189,6 +191,11 @@ class _RankedContext {
   final double distance;
 }
 
+/// Factory that constructs a [VertexAiRagClient] for a given GCP [project] and
+/// [location].
+typedef VertexAiRagClientFactory =
+    VertexAiRagClient Function({String? project, String? location});
+
 /// Memory service that stores sessions in a Vertex AI RAG corpus.
 class VertexAiRagMemoryService extends BaseMemoryService {
   /// Creates a RAG-backed memory service.
@@ -196,8 +203,14 @@ class VertexAiRagMemoryService extends BaseMemoryService {
     String? ragCorpus,
     int? similarityTopK,
     double vectorDistanceThreshold = 10,
+    String? project,
+    String? location,
+    Map<String, String>? environment,
     VertexAiRagClient? ragClient,
-  }) : _ragClient = ragClient ?? InMemoryVertexAiRagClient(),
+    VertexAiRagClientFactory? ragClientFactory,
+  }) : _explicitRagClient = ragClient,
+       _ragClientFactory = ragClientFactory,
+       _similarityTopK = similarityTopK,
        _vertexRagStore = VertexRagStore(
          ragResources: ragCorpus == null
              ? <VertexRagStoreRagResource>[]
@@ -206,10 +219,65 @@ class VertexAiRagMemoryService extends BaseMemoryService {
                ],
          similarityTopK: similarityTopK,
          vectorDistanceThreshold: vectorDistanceThreshold,
-       );
+       ) {
+    final Map<String, String> env = environment ?? readSystemEnvironment();
+    String? resolvedProject = _nonEmptyOrNull(
+      project ?? env['GOOGLE_CLOUD_PROJECT'],
+    );
+    String? resolvedLocation = _nonEmptyOrNull(
+      location ?? env['GOOGLE_CLOUD_LOCATION'],
+    );
+    if ((resolvedProject == null || resolvedLocation == null) &&
+        ragCorpus != null &&
+        ragCorpus.startsWith('projects/')) {
+      final List<String> parts = ragCorpus.split('/');
+      if (parts.length >= 4 &&
+          parts[0] == 'projects' &&
+          parts[2] == 'locations') {
+        resolvedProject ??= _nonEmptyOrNull(parts[1]);
+        resolvedLocation ??= _nonEmptyOrNull(parts[3]);
+      }
+    }
+    _project = resolvedProject;
+    _location = resolvedLocation;
+  }
 
-  final VertexAiRagClient _ragClient;
+  late final String? _project;
+  late final String? _location;
+  final int? _similarityTopK;
+  final VertexAiRagClient? _explicitRagClient;
+  final VertexAiRagClientFactory? _ragClientFactory;
+  late final VertexAiRagClient _defaultInMemoryClient =
+      InMemoryVertexAiRagClient();
+  final Expando<VertexAiRagClient> _apiClientPerZone =
+      Expando<VertexAiRagClient>('VertexAiRagMemoryService._apiClientPerZone');
   final VertexRagStore _vertexRagStore;
+
+  /// Resolved Google Cloud project ID, if configured.
+  String? get project => _project;
+
+  /// Resolved Google Cloud location, if configured.
+  String? get location => _location;
+
+  VertexAiRagClient _getApiClient() {
+    if (_explicitRagClient != null) {
+      return _explicitRagClient;
+    }
+    if (_ragClientFactory == null) {
+      return _defaultInMemoryClient;
+    }
+    final Zone currentZone = Zone.current;
+    VertexAiRagClient? client = _apiClientPerZone[currentZone];
+    if (client == null) {
+      client = _buildApiClient();
+      _apiClientPerZone[currentZone] = client;
+    }
+    return client;
+  }
+
+  VertexAiRagClient _buildApiClient() {
+    return _ragClientFactory!(project: _project, location: _location);
+  }
 
   @override
   Future<void> addSessionToMemory(
@@ -250,8 +318,9 @@ class VertexAiRagMemoryService extends BaseMemoryService {
       throw ArgumentError('Rag resources must be set.');
     }
 
+    final VertexAiRagClient client = _getApiClient();
     for (final VertexRagStoreRagResource ragResource in resources) {
-      await _ragClient.uploadFile(
+      await client.uploadFile(
         corpusName: ragResource.ragCorpus,
         text: output.toString(),
         displayName: _buildSourceDisplayName(
@@ -269,14 +338,14 @@ class VertexAiRagMemoryService extends BaseMemoryService {
     required String userId,
     required String query,
   }) async {
-    final VertexAiRagRetrievalResponse response = await _ragClient
-        .retrievalQuery(
-          text: query,
-          ragResources: _vertexRagStore.ragResources,
-          ragCorpora: _vertexRagStore.ragCorpora,
-          similarityTopK: _vertexRagStore.similarityTopK,
-          vectorDistanceThreshold: _vertexRagStore.vectorDistanceThreshold,
-        );
+    final VertexAiRagClient client = _getApiClient();
+    final VertexAiRagRetrievalResponse response = await client.retrievalQuery(
+      text: query,
+      ragResources: _vertexRagStore.ragResources,
+      ragCorpora: _vertexRagStore.ragCorpora,
+      similarityTopK: _similarityTopK ?? _vertexRagStore.similarityTopK,
+      vectorDistanceThreshold: _vertexRagStore.vectorDistanceThreshold,
+    );
 
     final LinkedHashMap<String, List<List<Event>>> sessionEventsMap =
         LinkedHashMap<String, List<List<Event>>>();
@@ -482,4 +551,11 @@ Set<String> _tokenize(String text) {
       .allMatches(text.toLowerCase())
       .map((Match match) => match.group(0)!)
       .toSet();
+}
+
+String? _nonEmptyOrNull(String? value) {
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  return value;
 }

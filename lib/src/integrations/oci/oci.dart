@@ -429,8 +429,9 @@ class OCIGenAILlm extends BaseLlm {
   ) async* {
     final StringBuffer accumulatedText = StringBuffer();
     final StringBuffer accumulatedThought = StringBuffer();
-    final List<Map<String, Object?>> accumulatedToolCalls =
-        <Map<String, Object?>>[];
+    final Map<Object, Map<String, Object?>> toolAcc =
+        <Object, Map<String, Object?>>{};
+    Object? lastKey;
     String? finishReason;
     Map<String, Object?>? usageData;
 
@@ -478,12 +479,17 @@ class OCIGenAILlm extends BaseLlm {
         }
       }
 
+      // OCI's tool calls carry no `index` by default. Gemini sends each whole
+      // call in its own chunk; other providers may send the id and name first,
+      // then argument pieces that carry neither. Group pieces by `index` when
+      // one is sent, else by `id`. A piece with a `name` but no `id` starts a
+      // new call; a piece with neither continues the call resolved last.
       final Object? toolCalls = message['toolCalls'];
       if (toolCalls is List) {
         for (final Object? tc in toolCalls) {
           final Map<String, Object?>? tcMap = _asStringMap(tc);
           if (tcMap != null) {
-            _accumulateToolCallChunk(accumulatedToolCalls, tcMap);
+            lastKey = _accumulateToolCallChunk(toolAcc, tcMap, lastKey);
           }
         }
       }
@@ -496,7 +502,7 @@ class OCIGenAILlm extends BaseLlm {
     if (accumulatedText.isNotEmpty) {
       finalParts.add(Part.text(accumulatedText.toString()));
     }
-    for (final Map<String, Object?> tc in accumulatedToolCalls) {
+    for (final Map<String, Object?> tc in toolAcc.values) {
       Map<String, Object?> args = <String, Object?>{};
       final String rawArgs = (tc['arguments'] as String?) ?? '';
       if (rawArgs.isNotEmpty) {
@@ -513,18 +519,17 @@ class OCIGenAILlm extends BaseLlm {
           args = <String, Object?>{};
         }
       }
-      final String? tcId = tc['id'] as String?;
       finalParts.add(
         Part.fromFunctionCall(
           name: (tc['name'] as String?) ?? '',
           args: args,
-          id: (tcId != null && tcId.isNotEmpty) ? tcId : null,
+          id: (tc['id'] as String?) ?? '',
         ),
       );
     }
 
     String? effectiveFinish = finishReason;
-    if (accumulatedToolCalls.isNotEmpty) {
+    if (toolAcc.isNotEmpty) {
       effectiveFinish = finishReasonToolCalls;
     }
 
@@ -541,34 +546,43 @@ class OCIGenAILlm extends BaseLlm {
 /// Idiomatic Dart alias for [OCIGenAILlm].
 typedef OciGenAiLlm = OCIGenAILlm;
 
-/// Accumulates a streaming OCI tool call chunk into [accumulated].
-void _accumulateToolCallChunk(
-  List<Map<String, Object?>> accumulated,
+/// Accumulates a streaming OCI tool call chunk into [toolAcc] and returns the
+/// resolved key for this chunk.
+Object _accumulateToolCallChunk(
+  Map<Object, Map<String, Object?>> toolAcc,
   Map<String, Object?> chunk,
+  Object? lastKey,
 ) {
+  final Object? tcIndex = chunk['index'];
   final String? tcId = chunk['id'] as String?;
   final String? tcName = chunk['name'] as String?;
   final String tcArgs = (chunk['arguments'] as String?) ?? '';
 
-  if (tcName != null && tcName.isNotEmpty) {
-    accumulated.add(<String, Object?>{
-      'id': tcId ?? '',
-      'name': tcName,
-      'arguments': tcArgs,
-    });
-  } else if (accumulated.isNotEmpty) {
-    final Map<String, Object?> last = accumulated.last;
-    last['arguments'] = '${last['arguments'] ?? ''}$tcArgs';
-    if ((last['id'] as String? ?? '').isEmpty && tcId != null) {
-      last['id'] = tcId;
-    }
+  final Object key;
+  if (tcIndex != null) {
+    key = tcIndex;
+  } else if (tcId != null && tcId.isNotEmpty) {
+    key = tcId;
+  } else if ((tcName != null && tcName.isNotEmpty) || lastKey == null) {
+    key = toolAcc.length;
   } else {
-    accumulated.add(<String, Object?>{
-      'id': tcId ?? '',
-      'name': '',
-      'arguments': tcArgs,
-    });
+    key = lastKey;
   }
+
+  final Map<String, Object?> entry = toolAcc.putIfAbsent(
+    key,
+    () => <String, Object?>{'id': '', 'name': '', 'arguments': ''},
+  );
+  if (tcId != null && tcId.isNotEmpty) {
+    entry['id'] = tcId;
+  }
+  if (tcName != null && tcName.isNotEmpty) {
+    entry['name'] = tcName;
+  }
+  if (tcArgs.isNotEmpty) {
+    entry['arguments'] = '${entry['arguments'] ?? ''}$tcArgs';
+  }
+  return key;
 }
 
 /// Converts an ADK [Content] object into one or more OCI message maps.
