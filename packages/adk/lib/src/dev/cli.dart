@@ -14,6 +14,8 @@ import 'package:adk_dart/src/agents/run_config.dart' show StreamingMode;
 import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/auth/credential_service/in_memory_credential_service.dart';
 import '../cli/_cli_generate_agent_card.dart';
+import '../cli/cli.dart'
+    show collectPendingHitlFunctionCalls, promptForFunctionCall;
 import '../cli/cli_create.dart' show validateAgentName;
 import '../cli/cli_deploy.dart';
 import '../cli/cli_eval.dart' as cli_eval;

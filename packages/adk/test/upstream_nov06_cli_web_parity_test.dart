@@ -662,9 +662,9 @@ void main() {
       expect(columns, contains('Cache Creation Tokens'));
     });
 
-    test('Bundled browser main-NZEGJ4FM.js contains all Nov 06 adk-web updates', () async {
+    test('Bundled browser main-TXG3WSWW.js contains all Nov 06 adk-web updates', () async {
       final File bundleFile = File(
-        'lib/src/cli/browser/main-NZEGJ4FM.js',
+        'lib/src/cli/browser/main-TXG3WSWW.js',
       );
       final String js = await bundleFile.readAsString();
       expect(

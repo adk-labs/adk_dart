@@ -1863,14 +1863,17 @@ String _decodePathSegment(String rawSegment) {
   }
 }
 
-W3cTraceContext _extractRequestTraceContext(HttpRequest request) {
+W3cTraceContext _extractRequestTraceContext(
+  HttpRequest request, {
+  Map<String, String>? environment,
+}) {
   final Map<String, String> headerMap = <String, String>{};
   request.headers.forEach((String name, List<String> values) {
     if (values.isNotEmpty) {
       headerMap[name] = values.join(', ');
     }
   });
-  return extractW3cTraceContext(headerMap);
+  return extractW3cTraceContext(headerMap, environment: environment);
 }
 
 /// Builds an artifact request URL path with `encodeURIComponent(artifactName)`

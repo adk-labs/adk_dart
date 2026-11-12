@@ -11,6 +11,85 @@ Map<String, Object?> _serializeAppSummary(Map<String, Object?> detail) {
   };
 }
 
+Future<void> _handleFinalizeAgentIdentityCredentials(
+  HttpRequest request,
+  _AdkDevWebContext context,
+) async {
+  final Map<String, Object?> body;
+  try {
+    final Map<String, dynamic> decoded = await _readJsonBody(request);
+    body = decoded.map((String key, dynamic value) => MapEntry(key, value));
+  } on FormatException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: error.message,
+    );
+    return;
+  }
+
+  final FinalizeAgentIdentityCredentialsRequest finalizeReq;
+  try {
+    finalizeReq = FinalizeAgentIdentityCredentialsRequest.fromJson(body);
+  } on FormatException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.unprocessableEntity,
+      message: error.message,
+    );
+    return;
+  }
+
+  try {
+    final Map<String, String> result = await finalizeAgentIdentityCredentials(
+      finalizeReq,
+      environment: context.environment,
+    );
+    await _writeJson(request, context, payload: result);
+  } on AgentIdentityMissingDependencyException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.internalServerError,
+      message: error.message,
+    );
+  } on FormatException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: error.message,
+    );
+  } on AgentIdentityInvalidArgumentException catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.badRequest,
+      message: 'Invalid credentials request: ${error.message}',
+    );
+  } on AgentIdentityApiException catch (error) {
+    final int statusCode =
+        (error.code != null && error.code! >= 400 && error.code! < 500)
+            ? error.code!
+            : HttpStatus.internalServerError;
+    await _writeError(
+      request,
+      context,
+      statusCode: statusCode,
+      message: 'Failed to finalize credentials: ${error.message}',
+    );
+  } catch (error) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.internalServerError,
+      message: 'Failed to finalize credentials: $error',
+    );
+  }
+}
+
 Future<void> _handleTriggerRoute(
   HttpRequest request,
   _AdkDevWebContext context, {
@@ -503,6 +582,7 @@ Future<void> _handleGetEventGraph(
   required String userId,
   required String sessionId,
   required String eventId,
+  bool isDevGraphRoute = false,
 }) async {
   final Event? event = await context.readSessionEvent(
     appName: appName,
@@ -515,9 +595,17 @@ Future<void> _handleGetEventGraph(
     return;
   }
 
+  final Runner runner = await context.getRunner(appName, request: request);
+  if (context.shouldReturnEmptyDevGraph(
+    appName,
+    isDevGraphRoute: isDevGraphRoute,
+  )) {
+    await _writeJson(request, context, payload: const <String, Object?>{});
+    return;
+  }
+
   final Set<(String, String)> highlights = _extractLiveHighlights(event);
 
-  final Runner runner = await context.getRunner(appName, request: request);
   final Map<String, NodeStatus> nodeStatuses = _nodeStatusesFromAgentState(
     event.actions.agentState,
   );
@@ -537,8 +625,16 @@ Future<void> _handleGetAppGraph(
   HttpRequest request,
   _AdkDevWebContext context, {
   required String appName,
+  bool isDevGraphRoute = false,
 }) async {
   final Runner runner = await context.getRunner(appName, request: request);
+  if (context.shouldReturnEmptyDevGraph(
+    appName,
+    isDevGraphRoute: isDevGraphRoute,
+  )) {
+    await _writeJson(request, context, payload: const <String, Object?>{});
+    return;
+  }
   final String dotSrc = await _buildAgentGraphDot(runner.agent);
   await _writeJson(
     request,
@@ -865,6 +961,7 @@ Future<void> _handleLegacyPostMessage(
       .toList();
   final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
     request,
+    environment: context.environment,
   );
   for (final Event event in events) {
     context.recordTraceEvent(
@@ -1285,6 +1382,7 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
         .toList();
     final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
       request,
+      environment: context.environment,
     );
     for (final Event event in events) {
       context.recordTraceEvent(
@@ -1473,6 +1571,7 @@ Future<void> _handleRunSse(
 
   final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
     request,
+    environment: context.environment,
   );
   try {
     await for (final Event event in runner.runAsync(
@@ -1647,6 +1746,7 @@ Future<void> _handleRunLive(
 
     final W3cTraceContext requestTraceContext = _extractRequestTraceContext(
       request,
+      environment: context.environment,
     );
     Future<void> forwardEvents() async {
       await for (final Event event in runner.runLive(

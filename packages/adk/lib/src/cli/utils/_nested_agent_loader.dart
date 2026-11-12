@@ -262,7 +262,8 @@ class NestedAgentLoader extends AgentLoader {
     }
   }
 
-  /// Loads an agent module (with caching & `.env`) and returns its root agent or app.
+  /// Loads an agent module (with caching & `.env`) and returns its root agent,
+  /// workflow node, or app.
   @override
   AgentOrApp loadAgent(String agentName) {
     final AgentOrApp? cached = agentCache[agentName];

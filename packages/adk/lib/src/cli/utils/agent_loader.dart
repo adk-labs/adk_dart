@@ -327,7 +327,10 @@ class AgentLoader extends BaseAgentLoader {
   }
 
   /// Returns `true` if [agent] configures a [ComputerUseToolset].
-  bool isComputerUseAgent(BaseAgent agent) {
+  bool isComputerUseAgent(Object agent) {
+    if (agent is! BaseAgent) {
+      return false;
+    }
     bool hasComputerUse = false;
     final dynamic dynamicAgent = agent;
     if (dynamicAgent.tools is List<Object>) {

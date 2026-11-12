@@ -442,5 +442,44 @@ void main() {
         ),
       );
     });
+
+    testWidgets(
+      'AdkSkillToolCard renders bundled resource paths on load_skill and AdkFormatters centers OAuth popups',
+      (WidgetTester tester) async {
+        expect(
+          AdkFormatters.centeredPopupFeatures(
+            screenX: 100,
+            screenY: 50,
+            outerWidth: 1400,
+            outerHeight: 900,
+          ),
+          'width=600,height=700,left=500,top=150',
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: AdkSkillToolCard(
+                toolName: 'load_skill',
+                toolArgs: <String, dynamic>{'skill_name': 'deploy'},
+                toolResult: <String, dynamic>{
+                  'skill_name': 'deploy',
+                  'instructions': 'Run deploy script.',
+                  'resources': <String>[
+                    'references/guide.md',
+                    'scripts/deploy.sh',
+                  ],
+                },
+                initiallyExpanded: true,
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Bundled resources (2):'), findsOneWidget);
+        expect(find.text('references/guide.md'), findsOneWidget);
+        expect(find.text('scripts/deploy.sh'), findsOneWidget);
+      },
+    );
   });
 }

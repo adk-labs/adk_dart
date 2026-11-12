@@ -448,7 +448,10 @@ environment:
       final File samplerConfigFile = File('${tempDir.path}${Platform.pathSeparator}sampler_config.json');
       samplerConfigFile.writeAsStringSync(jsonEncode(<String, Object?>{
         'app_name': 'mismatched_app_name',
-        'eval_dataset_file_path': 'dataset.json',
+        'train_eval_set': 'dataset',
+        'eval_config': <String, Object?>{
+          'criteria': <String, Object?>{'final_response_match_v2': 1.0},
+        },
       }));
 
       final _CaptureSink err4 = _CaptureSink();

@@ -392,6 +392,8 @@ class AdkDevServer extends AdkApiServer {
     super.maxLiveMessageBytes,
     super.liveKeepaliveTimeout,
     super.maxLiveSessions,
+    super.agentLoader,
+    super.environment,
     super.evalSetsManager,
     super.evalSetResultsManager,
   });

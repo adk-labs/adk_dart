@@ -106,6 +106,23 @@ abstract final class AdkFormatters {
   static String encodeArtifactFilename(String artifactName) {
     return Uri.encodeComponent(artifactName);
   }
+
+  /// Computes `window.open()` popup feature coordinates centered over the
+  /// current window, mirroring `centeredPopupFeatures` in `adk-web`.
+  static String centeredPopupFeatures({
+    required num screenX,
+    required num screenY,
+    required num outerWidth,
+    required num outerHeight,
+    int width = 600,
+    int height = 700,
+  }) {
+    final double deltaX = (outerWidth - width) / 2.0;
+    final double deltaY = (outerHeight - height) / 2.0;
+    final int left = (screenX + (deltaX > 0 ? deltaX : 0.0)).round();
+    final int top = (screenY + (deltaY > 0 ? deltaY : 0.0)).round();
+    return 'width=$width,height=$height,left=$left,top=$top';
+  }
 }
 
 /// Helper utilities for extracting UI models and state from ADK event streams.

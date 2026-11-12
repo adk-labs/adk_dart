@@ -18,6 +18,7 @@ export 'src/cli/agent_graph.dart';
 export 'src/cli/agent_test_runner.dart';
 export 'src/cli/api_server.dart';
 export 'src/cli/built_in_agents/__init__.dart';
+export 'src/cli/cli.dart' hide runAdkCli;
 export 'src/cli/cli_create.dart';
 export 'src/cli/cli_deploy.dart';
 export 'src/cli/cli_eval.dart';

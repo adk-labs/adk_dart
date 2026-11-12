@@ -1081,6 +1081,9 @@ void main() {
       samplerFile.writeAsStringSync(jsonEncode(<String, Object?>{
         'app_name': optAppName,
         'train_eval_set': <String, Object?>{'eval_set_id': 'set1'},
+        'eval_config': <String, Object?>{
+          'criteria': <String, Object?>{'final_response_match_v2': 1.0},
+        },
       }));
       final _CaptureSink errOptFs = _CaptureSink();
       final int codeOptFs = await runAdkCli(

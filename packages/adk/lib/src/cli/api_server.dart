@@ -3,7 +3,10 @@
 /// Mirrors `google.adk.cli.api_server`.
 library;
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'adk_web_server.dart';
 
@@ -171,6 +174,322 @@ bool isRequestOriginAllowed({
     return false;
   }
   return requestOrigin != null && requestOrigin == origin;
+}
+
+/// Environment variable overriding the Agent Identity Credentials API host.
+const String agentIdentityCredentialsTargetHostEnv =
+    'AGENT_IDENTITY_CREDENTIALS_TARGET_HOST';
+
+/// Environment variable set by Vertex AI Agent Engine runtimes.
+const String googleCloudAgentEngineIdEnv = 'GOOGLE_CLOUD_AGENT_ENGINE_ID';
+
+/// Default production endpoint for the Agent Identity Credentials v1 API.
+const String defaultAgentIdentityCredentialsEndpoint =
+    'https://agentidentitycredentials.googleapis.com';
+
+/// Request model for `POST /agent-identity/finalize`.
+class FinalizeAgentIdentityCredentialsRequest {
+  /// Creates a [FinalizeAgentIdentityCredentialsRequest].
+  const FinalizeAgentIdentityCredentialsRequest({
+    required this.connectorName,
+    required this.userId,
+    required this.userIdValidationState,
+    required this.consentNonce,
+  });
+
+  /// Full connector resource name, e.g. `projects/.../connectors/github`.
+  final String connectorName;
+
+  /// End-user identity the credential is being stored for.
+  final String userId;
+
+  /// URL-safe Base64 validation state returned by the connector redirect.
+  final String userIdValidationState;
+
+  /// Single-use nonce from the original consent challenge.
+  final String consentNonce;
+
+  /// Parses a [FinalizeAgentIdentityCredentialsRequest] from JSON.
+  factory FinalizeAgentIdentityCredentialsRequest.fromJson(
+    Map<String, Object?> json,
+  ) {
+    String readRequiredField(String snakeKey, String camelKey) {
+      final Object? value = json.containsKey(snakeKey)
+          ? json[snakeKey]
+          : json[camelKey];
+      if (value is! String) {
+        throw FormatException("Field '$snakeKey' is required and must be a string.");
+      }
+      return value;
+    }
+
+    return FinalizeAgentIdentityCredentialsRequest(
+      connectorName: readRequiredField('connector_name', 'connectorName'),
+      userId: readRequiredField('user_id', 'userId'),
+      userIdValidationState: readRequiredField(
+        'user_id_validation_state',
+        'userIdValidationState',
+      ),
+      consentNonce: readRequiredField('consent_nonce', 'consentNonce'),
+    );
+  }
+
+  /// Serializes this request to a JSON map.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'connector_name': connectorName,
+      'user_id': userId,
+      'user_id_validation_state': userIdValidationState,
+      'consent_nonce': consentNonce,
+    };
+  }
+}
+
+/// Request payload sent to `AuthProviderCredentialsService.FinalizeCredentials`.
+///
+/// Mirrors `google.cloud.agentidentitycredentials_v1.FinalizeCredentialsRequest`.
+class FinalizeCredentialsRequest {
+  /// Creates a [FinalizeCredentialsRequest].
+  const FinalizeCredentialsRequest({
+    required this.authProvider,
+    required this.userId,
+    required this.userIdValidationState,
+    required this.consentNonce,
+  });
+
+  /// Auth provider resource name (`projects/.../authProviders/...`).
+  final String authProvider;
+
+  /// End-user identity for whom credentials are finalized.
+  final String userId;
+
+  /// Raw decoded validation state bytes.
+  final Uint8List userIdValidationState;
+
+  /// Single-use consent nonce.
+  final String consentNonce;
+}
+
+/// Exception thrown when Agent Identity support dependencies are unavailable.
+class AgentIdentityMissingDependencyException implements Exception {
+  /// Creates an [AgentIdentityMissingDependencyException].
+  const AgentIdentityMissingDependencyException([
+    this.message =
+        'Agent Identity support requires: pip install "google-adk[agent-identity]"',
+  ]);
+
+  /// Error detail message.
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Exception thrown when the Agent Identity API rejects request arguments (400).
+class AgentIdentityInvalidArgumentException implements Exception {
+  /// Creates an [AgentIdentityInvalidArgumentException].
+  const AgentIdentityInvalidArgumentException(this.message);
+
+  /// Backend validation error message.
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Exception thrown when the Agent Identity API call fails with an HTTP/gRPC code.
+class AgentIdentityApiException implements Exception {
+  /// Creates an [AgentIdentityApiException].
+  const AgentIdentityApiException(this.message, {this.code});
+
+  /// Error message returned by the API.
+  final String message;
+
+  /// Optional HTTP status code (e.g. `403`, `404`, `503`).
+  final int? code;
+
+  @override
+  String toString() => message;
+}
+
+/// Client interface for the Agent Identity Credentials v1 `AuthProviderCredentialsService`.
+abstract interface class AuthProviderCredentialsServiceClient {
+  /// Finalizes a 3LO user-consent credential exchange.
+  FutureOr<void> finalizeCredentials(FinalizeCredentialsRequest request);
+}
+
+/// REST transport implementation of [AuthProviderCredentialsServiceClient].
+class RestAuthProviderCredentialsServiceClient
+    implements AuthProviderCredentialsServiceClient {
+  /// Creates a [RestAuthProviderCredentialsServiceClient].
+  RestAuthProviderCredentialsServiceClient({
+    String? apiEndpoint,
+    HttpClient? httpClient,
+    Map<String, String>? environment,
+  }) : apiEndpoint = _normalizeEndpoint(
+         apiEndpoint ?? defaultAgentIdentityCredentialsEndpoint,
+       ),
+       _httpClient = httpClient,
+       _environment = environment;
+
+  /// Target base endpoint URL (for example `https://agentidentitycredentials.googleapis.com`).
+  final String apiEndpoint;
+  final HttpClient? _httpClient;
+  final Map<String, String>? _environment;
+
+  static String _normalizeEndpoint(String raw) {
+    final String trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return defaultAgentIdentityCredentialsEndpoint;
+    }
+    final String withScheme =
+        trimmed.startsWith('http://') || trimmed.startsWith('https://')
+            ? trimmed
+            : 'https://$trimmed';
+    return withScheme.endsWith('/')
+        ? withScheme.substring(0, withScheme.length - 1)
+        : withScheme;
+  }
+
+  @override
+  Future<void> finalizeCredentials(FinalizeCredentialsRequest request) async {
+    final String resourcePath = request.authProvider.startsWith('/')
+        ? request.authProvider.substring(1)
+        : request.authProvider;
+    final Uri uri = Uri.parse(
+      '$apiEndpoint/v1/$resourcePath:finalizeCredentials',
+    );
+    final HttpClient client = _httpClient ?? HttpClient();
+    try {
+      final HttpClientRequest httpRequest = await client.postUrl(uri);
+      httpRequest.headers.contentType = ContentType.json;
+      final Map<String, String> env = _environment ?? Platform.environment;
+      final String? bearerToken =
+          env['GOOGLE_OAUTH_ACCESS_TOKEN'] ?? env['CLOUD_SDK_ACCESS_TOKEN'];
+      if (bearerToken != null && bearerToken.trim().isNotEmpty) {
+        httpRequest.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer ${bearerToken.trim()}',
+        );
+      }
+      httpRequest.write(
+        jsonEncode(<String, Object?>{
+          'userId': request.userId,
+          'userIdValidationState': base64Encode(request.userIdValidationState),
+          'consentNonce': request.consentNonce,
+        }),
+      );
+      final HttpClientResponse response = await httpRequest.close();
+      final String responseBody = await utf8.decoder.bind(response).join();
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return;
+      }
+      String errorMessage =
+          'HTTP ${response.statusCode}: ${responseBody.trim()}';
+      try {
+        final Object? decoded = jsonDecode(responseBody);
+        if (decoded is Map && decoded['error'] is Map) {
+          final Map<Object?, Object?> errMap =
+              decoded['error'] as Map<Object?, Object?>;
+          if (errMap['message'] is String) {
+            errorMessage = errMap['message'] as String;
+          }
+        }
+      } on FormatException {
+        // Keep raw body message.
+      }
+      if (response.statusCode == HttpStatus.badRequest) {
+        throw AgentIdentityInvalidArgumentException(errorMessage);
+      }
+      throw AgentIdentityApiException(errorMessage, code: response.statusCode);
+    } finally {
+      if (_httpClient == null) {
+        client.close(force: false);
+      }
+    }
+  }
+}
+
+/// Factory signature for creating an [AuthProviderCredentialsServiceClient].
+typedef AuthProviderCredentialsClientFactory =
+    AuthProviderCredentialsServiceClient Function({
+      String? apiEndpoint,
+      String transport,
+      Map<String, String>? environment,
+    });
+
+/// Optional override used by tests to mock `AuthProviderCredentialsServiceClient`.
+AuthProviderCredentialsClientFactory?
+authProviderCredentialsClientFactoryTestingOverride;
+
+final RegExp _strictUrlSafeBase64RegExp = RegExp(r'^[A-Za-z0-9+/_-]*={0,2}$');
+
+/// Decodes a padded or unpadded URL-safe Base64 `user_id_validation_state`
+/// string into raw bytes, throwing a [FormatException] when invalid.
+Uint8List decodeUserIdValidationStateBase64(String raw) {
+  final int padCount = (4 - (raw.length % 4)) % 4;
+  final String padded = '$raw${'=' * padCount}';
+  if (!_strictUrlSafeBase64RegExp.hasMatch(padded)) {
+    throw const FormatException('Non-base64 digit found');
+  }
+  final String normalized = padded.replaceAll('-', '+').replaceAll('_', '/');
+  return base64Decode(normalized);
+}
+
+/// Finalizes Agent Identity 3LO credentials for [request], matching
+/// `finalize_agent_identity_credentials` in `google.adk.cli.api_server`.
+Future<Map<String, String>> finalizeAgentIdentityCredentials(
+  FinalizeAgentIdentityCredentialsRequest request, {
+  Map<String, String>? environment,
+  AuthProviderCredentialsClientFactory? clientFactory,
+}) async {
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String? targetHost = env[agentIdentityCredentialsTargetHostEnv];
+  final String? apiEndpoint = (targetHost != null && targetHost.isNotEmpty)
+      ? targetHost
+      : null;
+
+  final AuthProviderCredentialsClientFactory resolvedFactory =
+      clientFactory ??
+      authProviderCredentialsClientFactoryTestingOverride ??
+      (({
+        String? apiEndpoint,
+        String transport = 'rest',
+        Map<String, String>? environment,
+      }) => RestAuthProviderCredentialsServiceClient(
+        apiEndpoint: apiEndpoint,
+        environment: environment,
+      ));
+
+  final AuthProviderCredentialsServiceClient client = resolvedFactory(
+    apiEndpoint: apiEndpoint,
+    transport: 'rest',
+    environment: env,
+  );
+
+  final Uint8List stateBytes;
+  try {
+    stateBytes = decodeUserIdValidationStateBase64(
+      request.userIdValidationState,
+    );
+  } on FormatException catch (error) {
+    throw FormatException(
+      'Invalid base64 user_id_validation_state: ${error.message}',
+    );
+  }
+
+  final FinalizeCredentialsRequest finalizeRequest = FinalizeCredentialsRequest(
+    authProvider: request.connectorName.replaceAll(
+      '/connectors/',
+      '/authProviders/',
+    ),
+    userId: request.userId,
+    userIdValidationState: stateBytes,
+    consentNonce: request.consentNonce,
+  );
+
+  await client.finalizeCredentials(finalizeRequest);
+  return const <String, String>{'status': 'ok'};
 }
 
 /// Request model for `/run` and `/run_sse`.
@@ -423,11 +742,33 @@ final RegExp _traceparentRegex = RegExp(
   r'^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$',
 );
 
+/// Returns `true` when native incoming request tracing is enabled for the HTTP
+/// server.
+///
+/// On Vertex AI Agent Engine (`GOOGLE_CLOUD_AGENT_ENGINE_ID` non-empty),
+/// incoming `traceparent` headers belong to the platform (often unsampled), so
+/// server-level `traceparent` continuation is disabled (`telemetry={"tracing": False}`).
+bool isServerTracingEnabled({Map<String, String>? environment}) {
+  final String? agentEngineId =
+      (environment ?? Platform.environment)[googleCloudAgentEngineIdEnv];
+  return agentEngineId == null || agentEngineId.isEmpty;
+}
+
 /// Extracts standard W3C Trace Context (`traceparent`, `tracestate`) and
 /// W3C `baggage` headers from incoming HTTP [headers] (case-insensitive).
 ///
-/// Mirrors `otel.extract(dict(request.headers))` in `fast_api.py`.
-W3cTraceContext extractW3cTraceContext(Map<String, String> headers) {
+/// When [environment] sets a non-empty `GOOGLE_CLOUD_AGENT_ENGINE_ID`,
+/// incoming `traceparent` and `tracestate` headers are ignored so unsampled
+/// Agent Engine platform spans do not become parent spans or suppress sampling.
+///
+/// Mirrors `otel.extract(dict(request.headers))` and
+/// `FastAPI(..., telemetry={"tracing": not os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID")})`
+/// in `api_server.py`.
+W3cTraceContext extractW3cTraceContext(
+  Map<String, String> headers, {
+  Map<String, String>? environment,
+}) {
+  final bool tracingEnabled = isServerTracingEnabled(environment: environment);
   String? rawTraceparent;
   String? rawTracestate;
   String? rawBaggage;
@@ -449,7 +790,7 @@ W3cTraceContext extractW3cTraceContext(Map<String, String> headers) {
   String? traceFlags;
   String? tracestate;
 
-  if (rawTraceparent != null && rawTraceparent.isNotEmpty) {
+  if (tracingEnabled && rawTraceparent != null && rawTraceparent.isNotEmpty) {
     final RegExpMatch? match = _traceparentRegex.firstMatch(rawTraceparent);
     if (match != null) {
       final String version = match.group(1)!;
@@ -554,9 +895,16 @@ class AdkApiServer extends AdkWebServer {
     super.maxLiveMessageBytes,
     super.liveKeepaliveTimeout,
     super.maxLiveSessions,
+    super.agentLoader,
+    super.environment,
     super.evalSetsManager,
     super.evalSetResultsManager,
   });
+
+  /// Telemetry options matching FastAPI's `telemetry` configuration.
+  Map<String, Object?> get telemetryConfig => <String, Object?>{
+    'tracing': isServerTracingEnabled(environment: environment),
+  };
 
   /// Whether internal `__*` special agents are allowed on this server.
   bool get allowSpecialAgents => false;

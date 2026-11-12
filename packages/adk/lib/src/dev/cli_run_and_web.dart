@@ -416,6 +416,70 @@ Future<int> _runRunCommand(
         return 1;
       }
       _writeRunEvents(events, out: out, jsonl: command.jsonl, session: session);
+
+      List<Event> latestEvents = events;
+      bool eofReached = false;
+      while (true) {
+        final List<({String id, String name, Map<String, Object?> args})>
+        pendingHitl = collectPendingHitlFunctionCalls(latestEvents);
+        if (pendingHitl.isEmpty) {
+          break;
+        }
+        final List<Part> responseParts = <Part>[];
+        for (final ({String id, String name, Map<String, Object?> args}) pending
+            in pendingHitl) {
+          String? capturedLine;
+          final Content hitlContent = await promptForFunctionCall(
+            functionCallId: pending.id,
+            functionName: pending.name,
+            args: pending.args,
+            out: command.jsonl ? null : out,
+            readLine: (String prompt) async {
+              if (!command.jsonl) {
+                out.write(prompt);
+                await out.flush();
+              }
+              capturedLine = readLineFunc();
+              return capturedLine ?? '';
+            },
+          );
+          if (capturedLine == null) {
+            eofReached = true;
+            break;
+          }
+          responseParts.addAll(hitlContent.parts);
+        }
+        if (eofReached || responseParts.isEmpty) {
+          break;
+        }
+        try {
+          final Future<List<Event>> hitlFuture = runtime.runner
+              .runAsync(
+                userId: userId,
+                sessionId: session.id,
+                newMessage: Content(role: 'user', parts: responseParts),
+              )
+              .toList();
+          latestEvents = command.timeout != null
+              ? await hitlFuture.timeout(Duration(seconds: command.timeout!))
+              : await hitlFuture;
+        } on TimeoutException {
+          errSink.writeln(
+            'ERROR: Execution timed out after ${command.timeout} seconds.',
+          );
+          await runtime.runner.close();
+          return 1;
+        }
+        _writeRunEvents(
+          latestEvents,
+          out: out,
+          jsonl: command.jsonl,
+          session: session,
+        );
+      }
+      if (eofReached) {
+        break;
+      }
     }
   } finally {
     await reloadWatchSubscription?.cancel();

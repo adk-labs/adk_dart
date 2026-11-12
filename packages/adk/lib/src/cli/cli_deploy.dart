@@ -1,6 +1,7 @@
 /// Deployment command parsing and execution for `adk deploy`.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 /// Resolved deployment configuration used to build `gcloud` or `docker` commands.
@@ -1594,11 +1595,98 @@ List<String> toDocker(DeployCommand command) {
   ];
 }
 
+/// Resolves the Agent Engine configuration dictionary for [agentFolder],
+/// applying `--display_name` and `--description` overrides while preserving
+/// non-empty `display_name` values from `.agent_engine_config.json` before
+/// falling back to the agent folder basename (`app_name`).
+Map<String, Object?> resolveAgentEngineConfig({
+  required String agentFolder,
+  String agentEngineConfigFile = '',
+  String displayName = '',
+  String description = '',
+  String? appName,
+  IOSink? out,
+}) {
+  final Directory agentDir = Directory(agentFolder).absolute;
+  final String parentFolder = agentDir.parent.path;
+  final String resolvedAppName = (appName != null && appName.trim().isNotEmpty)
+      ? appName.trim()
+      : agentDir.uri.pathSegments
+            .where((String segment) => segment.isNotEmpty)
+            .last;
+
+  String configPath = agentEngineConfigFile.trim();
+  if (configPath.isNotEmpty && !File(configPath).existsSync()) {
+    throw FileSystemException(
+      'Agent Platform config file not found: $parentFolder/$configPath',
+      configPath,
+    );
+  }
+  if (configPath.isEmpty) {
+    configPath =
+        '${agentDir.path}${Platform.pathSeparator}.agent_engine_config.json';
+  }
+
+  final Map<String, Object?> agentConfig = <String, Object?>{};
+  final File configFile = File(configPath);
+  if (configFile.existsSync()) {
+    out?.writeln('Reading agent platform config from $configPath');
+    final Object? decoded = jsonDecode(configFile.readAsStringSync());
+    if (decoded is Map) {
+      agentConfig.addAll(
+        decoded.map((Object? key, Object? value) => MapEntry('$key', value)),
+      );
+    }
+  }
+
+  if (displayName.isNotEmpty) {
+    if (agentConfig.containsKey('display_name')) {
+      out?.writeln(
+        'Overriding display_name in agent platform config with $displayName',
+      );
+    }
+    agentConfig['display_name'] = displayName;
+  } else {
+    final Object? existingDisplayName = agentConfig['display_name'];
+    if (existingDisplayName is! String || existingDisplayName.isEmpty) {
+      agentConfig['display_name'] = resolvedAppName;
+    }
+  }
+
+  if (description.isNotEmpty) {
+    if (agentConfig.containsKey('description')) {
+      out?.writeln(
+        'Overriding description in agent platform config with $description',
+      );
+    }
+    agentConfig['description'] = description;
+  }
+
+  return agentConfig;
+}
+
 /// The `gcloud alpha ai reasoning-engines deploy` command from [command].
 List<String> toAgentEngine(DeployCommand command) {
   validateGcloudExtraArgs(command.extraArgs);
   validateServiceAccountEmail(command.serviceAccount);
   validateExtraPackages(command.extraPackages);
+  String? resolvedDisplayName;
+  if (command.agentFolder != null && command.agentFolder!.trim().isNotEmpty ||
+      command.agentEngineConfigFile.trim().isNotEmpty) {
+    final Map<String, Object?> agentConfig = resolveAgentEngineConfig(
+      agentFolder: command.agentFolder ?? '.',
+      agentEngineConfigFile: command.agentEngineConfigFile,
+      displayName: command.displayName,
+      description: command.description,
+      appName: command.appName,
+    );
+    final Object? candidate = agentConfig['display_name'];
+    if (candidate is String && candidate.isNotEmpty) {
+      resolvedDisplayName = candidate;
+    }
+  } else if (command.displayName.isNotEmpty) {
+    resolvedDisplayName = command.displayName;
+  }
   return <String>[
     'gcloud',
     'alpha',
@@ -1610,6 +1698,10 @@ List<String> toAgentEngine(DeployCommand command) {
     command.region,
     '--image',
     command.image,
+    if (resolvedDisplayName != null && resolvedDisplayName.isNotEmpty) ...<String>[
+      '--display-name',
+      resolvedDisplayName,
+    ],
     if (command.serviceAccount != null) ...<String>[
       '--service-account',
       command.serviceAccount!,

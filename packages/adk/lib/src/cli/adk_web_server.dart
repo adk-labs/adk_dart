@@ -9,6 +9,7 @@ import 'package:adk_dart/src/evaluation/eval_sets_manager.dart';
 import '../dev/project.dart';
 import '../dev/runtime.dart';
 import '../dev/web_server.dart';
+import 'utils/base_agent_loader.dart';
 
 export '../dev/web_server.dart'
     show decodeDataUrlTextContentUtf8, defaultEvalManagerSentinel;
@@ -51,6 +52,8 @@ class AdkWebServer {
     this.maxLiveMessageBytes = 16 * 1024 * 1024,
     this.liveKeepaliveTimeout = const Duration(seconds: 40),
     this.maxLiveSessions = 0,
+    this.agentLoader,
+    this.environment,
     Object? evalSetsManager = defaultEvalManagerSentinel,
     Object? evalSetResultsManager = defaultEvalManagerSentinel,
   }) : _evalSetsManagerArg = evalSetsManager,
@@ -152,6 +155,12 @@ class AdkWebServer {
   /// Maximum concurrent `/run_live` WebSocket sessions (`<= 0` means unlimited).
   final int maxLiveSessions;
 
+  /// Optional custom [BaseAgentLoader] used instead of the default filesystem loader.
+  final BaseAgentLoader? agentLoader;
+
+  /// Optional environment map override (defaults to `Platform.environment`).
+  final Map<String, String>? environment;
+
   final Object? _evalSetsManagerArg;
   final Object? _evalSetResultsManagerArg;
 
@@ -212,6 +221,8 @@ class AdkWebServer {
       maxLiveMessageBytes: maxLiveMessageBytes,
       liveKeepaliveTimeout: liveKeepaliveTimeout,
       maxLiveSessions: maxLiveSessions,
+      agentLoader: agentLoader,
+      environment: environment,
       evalSetsManager: _evalSetsManagerArg,
       evalSetResultsManager: _evalSetResultsManagerArg,
     );

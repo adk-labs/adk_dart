@@ -19,9 +19,20 @@ import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
 import '../cli/_dev_deploy.dart' as dev_deploy;
 import '../cli/agent_graph.dart' as agent_graph;
-import '../cli/api_server.dart' show W3cTraceContext, extractW3cTraceContext;
+import '../cli/api_server.dart'
+    show
+        AgentIdentityApiException,
+        AgentIdentityInvalidArgumentException,
+        AgentIdentityMissingDependencyException,
+        FinalizeAgentIdentityCredentialsRequest,
+        W3cTraceContext,
+        extractW3cTraceContext,
+        finalizeAgentIdentityCredentials;
 import '../cli/trigger_routes.dart';
 import '../cli/utils/agent_loader.dart';
+import '../cli/utils/base_agent_loader.dart'
+    as base_loader
+    show BaseAgentLoader, asBaseAgent, isStandaloneWorkflowNode;
 import 'package:adk_dart/src/errors/invocation_not_found_error.dart';
 import 'package:adk_dart/src/errors/session_not_found_error.dart';
 import 'package:adk_dart/src/events/event.dart';
@@ -154,6 +165,7 @@ Future<HttpServer> startAdkDevWebServer({
   TriggerAuthVerifier? triggerAuthVerifier,
   String? geminiEnterpriseAppName,
   bool expressMode = false,
+  base_loader.BaseAgentLoader? agentLoader,
   Map<String, String>? environment,
   int maxLiveMessageBytes = 16 * 1024 * 1024,
   Duration liveKeepaliveTimeout = const Duration(seconds: 40),
@@ -246,6 +258,7 @@ Future<HttpServer> startAdkDevWebServer({
     triggerAuthVerifier: triggerAuthVerifier,
     geminiEnterpriseAppName: geminiEnterpriseAppName,
     expressMode: expressMode,
+    agentLoader: agentLoader,
     environment: environment,
     maxLiveMessageBytes: maxLiveMessageBytes,
     liveKeepaliveTimeout: liveKeepaliveTimeout,
@@ -421,6 +434,8 @@ class _AdkDevWebContext {
     required this.project,
     required this.agentsDir,
     required this.agentLoader,
+    this.hasExplicitAgentLoader = false,
+    required this.environment,
     required this.sessionService,
     required this.artifactService,
     required this.memoryService,
@@ -459,7 +474,9 @@ class _AdkDevWebContext {
   final DevAgentRuntime runtime;
   final DevProjectConfig project;
   final String agentsDir;
-  final AgentLoader agentLoader;
+  final base_loader.BaseAgentLoader agentLoader;
+  final bool hasExplicitAgentLoader;
+  final Map<String, String> environment;
   final BaseSessionService sessionService;
   final BaseArtifactService artifactService;
   final BaseMemoryService memoryService;
@@ -554,6 +571,7 @@ class _AdkDevWebContext {
     List<String> triggerSources = const <String>[],
     TriggerAuthVerifier? triggerAuthVerifier,
     TriggerRouter? customTriggerRouter,
+    base_loader.BaseAgentLoader? agentLoader,
     Map<String, String>? environment,
     int maxLiveMessageBytes = 16 * 1024 * 1024,
     Duration liveKeepaliveTimeout = const Duration(seconds: 40),
@@ -657,12 +675,18 @@ class _AdkDevWebContext {
                 triggerSources: normalizedTriggerSources,
                 verifyAuth: triggerAuthVerifier,
               ));
+    final Map<String, String> resolvedEnvironment =
+        environment ?? Platform.environment;
     context = _AdkDevWebContext(
       runtime: runtime,
       project: project,
       agentsDir: agentsRoot.path,
-      agentLoader: webServerAgentLoaderTestingOverride?.call(agentsRoot.path) ??
+      agentLoader:
+          agentLoader ??
+          webServerAgentLoaderTestingOverride?.call(agentsRoot.path) ??
           AgentLoader(agentsRoot.path),
+      hasExplicitAgentLoader: agentLoader != null,
+      environment: resolvedEnvironment,
       sessionService: sessionService,
       artifactService: artifactService,
       memoryService: memoryService,
@@ -860,10 +884,38 @@ class _AdkDevWebContext {
   }
 
   BaseAgent? asBaseAgent(Object? value) {
-    if (value is BaseAgent) {
-      return value;
+    if (value == null) {
+      return null;
     }
-    return null;
+    try {
+      return base_loader.asBaseAgent(value);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  bool shouldReturnEmptyDevGraph(
+    String appName, {
+    required bool isDevGraphRoute,
+  }) {
+    final String resolvedAppName = appName.trim().isEmpty
+        ? defaultAppName
+        : appName.trim();
+    try {
+      final Object loaded = agentLoader.loadAgent(resolvedAppName);
+      if (base_loader.isStandaloneWorkflowNode(loaded)) {
+        return true;
+      }
+      if (isDevGraphRoute) {
+        final Object root = loaded is App ? loaded.rootAgent : loaded;
+        if (root is Workflow || base_loader.isStandaloneWorkflowNode(root)) {
+          return true;
+        }
+      }
+    } on Object {
+      // Fallback handled by caller.
+    }
+    return false;
   }
 
   Future<Runner> _createRunner(String appName) async {
@@ -939,7 +991,9 @@ class _AdkDevWebContext {
 
   List<String> listAppNames() {
     final Set<String> names = agentLoader.listAgents().toSet();
-    names.add(defaultAppName);
+    if (!hasExplicitAgentLoader) {
+      names.add(defaultAppName);
+    }
     final List<String> sorted = names.toList()..sort();
     return sorted;
   }
@@ -957,7 +1011,7 @@ class _AdkDevWebContext {
         .where((String value) => value.isNotEmpty)
         .toSet();
 
-    if (!knownNames.contains(defaultAppName)) {
+    if (!hasExplicitAgentLoader && !knownNames.contains(defaultAppName)) {
       final BaseAgent defaultRootAgent = runtime.runner.agent;
       details.add(<String, Object?>{
         'name': defaultAppName,
@@ -1696,6 +1750,11 @@ Future<void> _handleRequest(
     }
   }
 
+  if (routedPath == '/agent-identity/finalize' && request.method == 'POST') {
+    await _handleFinalizeAgentIdentityCredentials(request, context);
+    return;
+  }
+
   if (routedPath == '/list-apps' && request.method == 'GET') {
     final bool detailed = _isTruthy(request.uri.queryParameters['detailed']);
     if (detailed) {
@@ -1903,7 +1962,12 @@ Future<bool> _handlePythonStyleRoutes(
   if (segments.length == 3 &&
       (segments[2] == 'graph' || segments[2] == 'build_graph') &&
       request.method == 'GET') {
-    await _handleGetAppGraph(request, context, appName: appName);
+    await _handleGetAppGraph(
+      request,
+      context,
+      appName: appName,
+      isDevGraphRoute: rawSegments.first == 'dev' && segments[2] == 'graph',
+    );
     return true;
   }
   if (segments.length == 3 &&
@@ -2059,6 +2123,7 @@ Future<bool> _handlePythonStyleRoutes(
       userId: userId,
       sessionId: sessionId,
       eventId: segments[7],
+      isDevGraphRoute: rawSegments.first == 'dev',
     );
     return true;
   }

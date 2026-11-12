@@ -408,6 +408,13 @@ class _AdkSkillToolCardState extends State<AdkSkillToolCard> {
       final String? description = frontmatter is Map
           ? frontmatter['description']?.toString()
           : null;
+      final Object? rawResources = _responseMap['resources'];
+      final List<String> resources = rawResources is List
+          ? rawResources
+              .map((Object? item) => '${item ?? ''}'.trim())
+              .where((String path) => path.isNotEmpty)
+              .toList(growable: false)
+          : const <String>[];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -419,6 +426,33 @@ class _AdkSkillToolCardState extends State<AdkSkillToolCard> {
                     fontStyle: FontStyle.italic,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
+            ),
+            const SizedBox(height: 8.0),
+          ],
+          if (resources.isNotEmpty) ...<Widget>[
+            Text(
+              'Bundled resources (${resources.length}):',
+              style: effectiveStyle?.subtitleStyle ??
+                  theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 4.0),
+            Wrap(
+              spacing: 6.0,
+              runSpacing: 4.0,
+              children: resources.map((String path) {
+                return Chip(
+                  label: Text(
+                    path,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
             ),
             const SizedBox(height: 8.0),
           ],

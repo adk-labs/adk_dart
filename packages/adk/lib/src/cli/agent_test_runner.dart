@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/src/agents/base_agent.dart';
+import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/events/event.dart';
 import 'package:adk_dart/src/models/base_llm.dart';
 import 'package:adk_dart/src/models/llm_request.dart';
@@ -12,6 +13,7 @@ import 'package:adk_dart/src/models/llm_response.dart';
 import 'package:adk_dart/src/runners/runner.dart';
 import 'package:adk_dart/src/sessions/session.dart';
 import 'package:adk_dart/src/types/content.dart';
+import 'utils/base_agent_loader.dart';
 
 String _basenameWithoutExtension(String filePath) {
   final String cleaned = filePath.replaceAll(RegExp(r'[/\\]+$'), '');
@@ -382,13 +384,19 @@ List<Map<String, Object?>> normalizeEvents(List<Map<String, Object?>> events) {
   return normalizeIds(ordered);
 }
 
-/// Runs a single agent replay test case against [rootAgent] using recorded
-/// session JSON from [testFile].
+/// Runs a single agent replay test case against [rootAgent] (a [BaseAgent] or
+/// workflow `BaseNode`) or [app] using recorded session JSON from [testFile].
 Future<List<Map<String, Object?>>> runAgentReplayTest({
-  required BaseAgent rootAgent,
+  Object? rootAgent,
   required File testFile,
   String? appName,
+  App? app,
 }) async {
+  if (rootAgent == null && app == null) {
+    throw ArgumentError('Either rootAgent or app must be provided.');
+  }
+  final BaseAgent? resolvedAgent =
+      rootAgent == null ? null : asBaseAgent(rootAgent);
   final Object? decoded = jsonDecode(await testFile.readAsString());
   if (decoded is! Map) {
     throw FormatException('Invalid session test file: ${testFile.path}');
@@ -403,6 +411,7 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
   final List<Content> userTurns = extractUserContent(recordedEvents);
   final String resolvedAppName =
       appName ??
+      app?.name ??
       (sessionJson['app_name'] as String?) ??
       (sessionJson['appName'] as String?) ??
       _basenameWithoutExtension(testFile.path);
@@ -415,10 +424,9 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
       ? Map<String, Object?>.from(sessionJson['state'] as Map)
       : <String, Object?>{};
 
-  final InMemoryRunner runner = InMemoryRunner(
-    agent: rootAgent,
-    appName: resolvedAppName,
-  );
+  final InMemoryRunner runner = app != null
+      ? InMemoryRunner(app: app, appName: resolvedAppName)
+      : InMemoryRunner(agent: resolvedAgent, appName: resolvedAppName);
   final Session session = await runner.sessionService.createSession(
     appName: resolvedAppName,
     userId: userId,
@@ -427,11 +435,21 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
 
   final List<Map<String, Object?>> actualEvents = <Map<String, Object?>>[];
   for (final Content userContent in userTurns) {
+    final List<Event> turnEvents = <Event>[];
     await for (final Event event in runner.runAsync(
       userId: userId,
       sessionId: session.id,
       newMessage: userContent,
     )) {
+      turnEvents.add(event);
+    }
+    final Event userEvent = Event(
+      author: 'user',
+      content: userContent,
+      invocationId: turnEvents.isNotEmpty ? turnEvents.first.invocationId : '',
+    );
+    actualEvents.add(_eventToJson(userEvent));
+    for (final Event event in turnEvents) {
       actualEvents.add(_eventToJson(event));
     }
   }
@@ -453,13 +471,20 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
   return actualEvents;
 }
 
-/// Rebuilds `*.test.json` files in [agentDir] by running [rootAgent] and
-/// writing the updated event stream back to disk.
+/// Rebuilds `*.test.json` files in [agentDir] by running [rootAgent] (a
+/// [BaseAgent] or workflow `BaseNode`) or [app] and writing the updated event
+/// stream back to disk.
 Future<void> rebuildTests({
-  required BaseAgent rootAgent,
+  Object? rootAgent,
   required String agentDir,
   String? appName,
+  App? app,
 }) async {
+  if (rootAgent == null && app == null) {
+    throw ArgumentError('Either rootAgent or app must be provided.');
+  }
+  final BaseAgent? resolvedAgent =
+      rootAgent == null ? null : asBaseAgent(rootAgent);
   final List<File> testFiles = getTestFiles(agentDir);
   for (final File testFile in testFiles) {
     final Object? decoded = jsonDecode(await testFile.readAsString());
@@ -475,6 +500,7 @@ Future<void> rebuildTests({
     final List<Content> userTurns = extractUserContent(recordedEvents);
     final String resolvedAppName =
         appName ??
+        app?.name ??
         (sessionJson['app_name'] as String?) ??
         (sessionJson['appName'] as String?) ??
         _basenameWithoutExtension(testFile.path);
@@ -486,10 +512,9 @@ Future<void> rebuildTests({
         ? Map<String, Object?>.from(sessionJson['state'] as Map)
         : <String, Object?>{};
 
-    final InMemoryRunner runner = InMemoryRunner(
-      agent: rootAgent,
-      appName: resolvedAppName,
-    );
+    final InMemoryRunner runner = app != null
+        ? InMemoryRunner(app: app, appName: resolvedAppName)
+        : InMemoryRunner(agent: resolvedAgent, appName: resolvedAppName);
     final Session session = await runner.sessionService.createSession(
       appName: resolvedAppName,
       userId: userId,
@@ -498,11 +523,23 @@ Future<void> rebuildTests({
 
     final List<Map<String, Object?>> rebuiltEvents = <Map<String, Object?>>[];
     for (final Content userContent in userTurns) {
+      final List<Event> turnEvents = <Event>[];
       await for (final Event event in runner.runAsync(
         userId: userId,
         sessionId: session.id,
         newMessage: userContent,
       )) {
+        turnEvents.add(event);
+      }
+      final Event userEvent = Event(
+        author: 'user',
+        content: userContent,
+        invocationId: turnEvents.isNotEmpty
+            ? turnEvents.first.invocationId
+            : '',
+      );
+      rebuiltEvents.add(_eventToJson(userEvent));
+      for (final Event event in turnEvents) {
         rebuiltEvents.add(_eventToJson(event));
       }
     }
