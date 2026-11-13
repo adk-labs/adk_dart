@@ -1,197 +1,119 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-11-12
+- Date (UTC): 2026-11-13
 - Source: `google/adk-go`
-- Latest SHA: `d9ecb345cd902a22cd123b18761d1638f3fc4e63`
-- Previous SHA: `11f4e29f588ee0f08d2e372f76737412075460bf`
+- Latest SHA: `0990f9e2cb9df71c579db6c9731efa403641fc51`
+- Previous SHA: `d9ecb345cd902a22cd123b18761d1638f3fc4e63`
 
 ## Summary
 
-- New commits: 11
+- New commits: 16
 
 ## Commits
 
-- [d9ecb34](https://github.com/google/adk-go/commit/d9ecb345cd902a22cd123b18761d1638f3fc4e63) fix(session): count a final error event as a final response (#2285) (Sasha, 2026-11-12)
-- [8ed375d](https://github.com/google/adk-go/commit/8ed375d1ca0760679aa8102131c34c1ea06e6daa) fix(skilltoolset): list skills under "result" and trim SKILL.md instructions (#2283) (Sasha, 2026-11-12)
-- [5842992](https://github.com/google/adk-go/commit/58429928be440a4f4c5b3d508e1225d921109125) fix(adka2a): refuse a cancel request without a task id (#2284) (Sasha, 2026-11-12)
-- [e5f60ec](https://github.com/google/adk-go/commit/e5f60ec6981ac30aa2be25fc4563c2ecbe3b1231) chore: enable the modernize linter (#2282) (Jan Wojtas, 2026-11-12)
-- [e107821](https://github.com/google/adk-go/commit/e10782197d416b469184f55a41771d47648d087a) fix(plugin): suppress cancellation causes in agent error callback (#2260) (Zuhaib Ahmed, 2026-11-12)
-- [8662085](https://github.com/google/adk-go/commit/866208570641e917b1da907b8405c90487b032be) fix(llminternal): look past transfer_to_agent hand-overs for the current turn's start (#2248) (Aditya Singh, 2026-11-12)
-- [9eb1e3b](https://github.com/google/adk-go/commit/9eb1e3b701f21612a15b6dc45cabacfec57c3ba0) feat(memory): add events to memory incrementally and match adk-python search word rules (#2278) (Sasha, 2026-11-12)
-- [51e8fe4](https://github.com/google/adk-go/commit/51e8fe4c9e149f630ebe19ed5e8776b8fb3e745d) fix(llminternal): resume tool confirmations only from adk_request_confirmation calls (#2279) (Sasha, 2026-11-12)
-- [ead2778](https://github.com/google/adk-go/commit/ead2778fab78a7733b8c4beb09b23410a5ad7694) fix(adka2a): do not panic on a status update with no convertible parts (#2276) (Sasha, 2026-11-12)
-- [983d689](https://github.com/google/adk-go/commit/983d689e538280503a56e5b2e3304f98d3e49b76) fix(workflow): call the second use_as_output child a delegate in the error (#2277) (Sasha, 2026-11-12)
-- [21920b1](https://github.com/google/adk-go/commit/21920b10701bee4fce1566636aa98efa747d6292) feat(vertexairagtool): support for VertexAI RAG Tool (#2122) (Karol Droste, 2026-11-12)
+- [0990f9e](https://github.com/google/adk-go/commit/0990f9e2cb9df71c579db6c9731efa403641fc51) fix(runner): start a new invocation for answers spanning invocations (#2312) (Sasha, 2026-11-13)
+- [3188db9](https://github.com/google/adk-go/commit/3188db983957caaae7f051bd04a9ac6592bb476b) fix(llminternal): keep streamed function-call and event ids stable (#2308) (Sasha, 2026-11-13)
+- [e0cbfd3](https://github.com/google/adk-go/commit/e0cbfd30207d41e68bf0c1abeae566c3ca154490) fix(llminternal): give tool callbacks a copy of the call arguments (#2313) (Sasha, 2026-11-13)
+- [d642dbf](https://github.com/google/adk-go/commit/d642dbfdb77fd4a288ae1627fc95712575a21ea4) fix(runner): keep the original event's identity when a plugin replaces it (#2306) (Sasha, 2026-11-13)
+- [fc6de07](https://github.com/google/adk-go/commit/fc6de07dbff56c1ff28dc04043d8edb3d766ba51) fix(llminternal): keep responses that carry only grounding metadata (#2310) (Sasha, 2026-11-13)
+- [5b3d897](https://github.com/google/adk-go/commit/5b3d897b19898a31df19ab786ee85670e69e9a61) fix(agentanalytics): redact credential-named types and guard omitzero in JSONFormatter (#2249) (Haiyuan Cao, 2026-11-13)
+- [67fc01b](https://github.com/google/adk-go/commit/67fc01b1bbbe717b92a4cc58dc4d8fa0b886ee64) fix(llmagent): keep a node's parsed structured output on its event (#2291) (Sasha, 2026-11-13)
+- [f1f0d2d](https://github.com/google/adk-go/commit/f1f0d2deb82170b9c746bfe741972efa789aae67) fix(loadartifactstool): return an error result for non-string names (#2307) (Sasha, 2026-11-13)
+- [5fd47b2](https://github.com/google/adk-go/commit/5fd47b21e9abc19a6c01ed1367191201991e3b4d) fix(adka2a): carry video metadata under adk_video_metadata (#2303) (Sasha, 2026-11-13)
+- [10f8486](https://github.com/google/adk-go/commit/10f8486912925969add825eaca9752773a859bd4) fix(runner): refuse a user message that contains a function call (#2302) (Sasha, 2026-11-13)
+- [1ced38b](https://github.com/google/adk-go/commit/1ced38bab7a49998e32aa4524a2b7c04d312db09) fix: send {"result": null} when a tool returns nothing (#2281) (Sasha, 2026-11-13)
+- [8cddb9d](https://github.com/google/adk-go/commit/8cddb9d453041b23e39e175930a335eb10ca2778) fix(llminternal): skip live responses that carry nothing (#2301) (Sasha, 2026-11-13)
+- [13acad5](https://github.com/google/adk-go/commit/13acad55ab894d23f571f4315d393f5970bca146) refactor: replace temporary address-taken variables with new(expr) (#2290) (Oleksandr Redko, 2026-11-13)
+- [a8a9b93](https://github.com/google/adk-go/commit/a8a9b9367967753435f98452a9998e7c77672479) fix(agenttool): answer an empty sub-agent reply with {"result": ""} (#2287) (Sasha, 2026-11-13)
+- [6522e5b](https://github.com/google/adk-go/commit/6522e5b4e8112c38be32975220fced6cf3db7720) fix(workflow): accept a workflow with no edges (#2286) (Sasha, 2026-11-13)
+- [1d9ae5b](https://github.com/google/adk-go/commit/1d9ae5b9f48120ed188218bc44d74dba1517c1de) fix(sequentialagent): return the sequential agent from FindAgent (#2288) (Sasha, 2026-11-13)
 
 ## Changed Files
 
-- `M	.github/workflows/go.yml`
-- `M	.golangci.yml`
-- `M	AGENTS.md`
-- `M	CONTRIBUTING.md`
-- `M	agent/agent.go`
-- `M	agent/agent_on_error_test.go`
-- `M	agent/identity_concurrency_test.go`
+- `M	agent/common_context_delta_test.go`
+- `M	agent/common_context_test.go`
 - `M	agent/identity_matrix_test.go`
+- `M	agent/identity_test.go`
+- `M	agent/llmagent/llm_agent_wrapper.go`
 - `M	agent/llmagent/llm_agent_wrapper_test.go`
-- `M	agent/llmagent/llmagent_delegation_test.go`
-- `M	agent/llmagent/llmagent_task_outputkey_test.go`
-- `M	agent/remoteagent/a2a_agent_compat_test.go`
-- `M	agent/remoteagent/v2/a2a_agent_test.go`
+- `M	agent/llmagent/llmagent_test.go`
+- `M	agent/llmagent/testdata/TestDelegation_05_ChatChainedThroughChatToTask.httprr`
+- `M	agent/llmagent/testdata/TestDelegation_09_ChatPeerTransferAcrossSiblings.httprr`
 - `M	agent/remoteagent/v2/a2a_e2e_test.go`
-- `M	agent/remoteagent/v2/auth_test.go`
-- `M	agent/workflowagent/hitl_test.go`
-- `M	agent/workflowagents/parallelagent/agent_test.go`
-- `M	agentregistry/mcptoolset_e2e_test.go`
-- `M	agentregistry/requester_test.go`
-- `M	artifact/clone.go`
-- `M	artifact/gcsartifact/gcs_test.go`
-- `M	artifact/gcsartifact/service.go`
-- `M	auth/gcp/provider_internal_test.go`
-- `M	auth/gcp/provider_test.go`
-- `M	auth/providers_internal_test.go`
-- `M	auth/store_internal_test.go`
-- `M	auth/transport.go`
-- `M	auth/transport_test.go`
-- `M	client/agentengine/jsonl.go`
-- `M	client/agentengine/jsonl_test.go`
-- `M	cmd/adkgo/internal/deploy/agentengine/agentengine.go`
-- `M	cmd/adkgo/internal/deploy/agentengine/agentengine_test.go`
-- `M	cmd/adkgo/internal/deploy/cloudrun/cloudrun.go`
-- `M	cmd/adkgo/internal/deploy/cloudrun/cloudrun_test.go`
-- `M	cmd/launcher/console/console.go`
-- `M	cmd/launcher/web/web_test.go`
-- `M	examples/anthropic/main.go`
-- `M	examples/compactionrecall/main.go`
-- `A	examples/tools/vertexairagtool/main.go`
-- `M	exp/classifier/classifier.go`
+- `M	agent/workflowagent/reentry_test.go`
+- `M	agent/workflowagents/sequentialagent/agent.go`
+- `M	agent/workflowagents/sequentialagent/agent_test.go`
+- `M	artifact/inmemory_test.go`
+- `M	examples/workflow/hitl_rerun/main.go`
+- `M	exp/classifier/classifier_test.go`
+- `M	exp/classifier/llm.go`
 - `M	exp/classifier/llm_test.go`
-- `M	exp/classifier/typesafe/errors.go`
-- `M	exp/doc.go`
-- `A	exp/vertexairagtool/vertexairag.go`
-- `A	exp/vertexairagtool/vertexairag_test.go`
-- `M	go.mod`
-- `M	internal/adkcontext/adkcontext_test.go`
-- `M	internal/agent/compactionctx/compactionctx_test.go`
-- `M	internal/agent/runconfig/limits_test.go`
-- `M	internal/authhandler/authuri_test.go`
-- `M	internal/authhandler/store_internal_test.go`
-- `M	internal/cli/util/text_helpers_test.go`
-- `M	internal/compactioninternal/compactor.go`
+- `M	exp/classifier/node_test.go`
+- `M	exp/classifier/typesafe/typesafe_test.go`
+- `M	exp/vertexairagtool/vertexairag.go`
+- `M	exp/vertexairagtool/vertexairag_test.go`
+- `M	internal/authhandler/response.go`
+- `M	internal/authhandler/store.go`
 - `M	internal/compactioninternal/summary_event.go`
-- `M	internal/compactioninternal/tail_retention.go`
-- `M	internal/context/identity_concurrency_test.go`
-- `M	internal/httprr_directives_test.go`
+- `M	internal/context/from_context_test.go`
+- `M	internal/llminternal/agent_transfer.go`
 - `M	internal/llminternal/base_flow.go`
 - `M	internal/llminternal/base_flow_live_config_test.go`
 - `M	internal/llminternal/base_flow_live_test.go`
-- `M	internal/llminternal/base_flow_telemetry_test.go`
 - `M	internal/llminternal/base_flow_test.go`
-- `M	internal/llminternal/compaction_concurrent_test.go`
-- `M	internal/llminternal/compaction_processor_test.go`
+- `M	internal/llminternal/clone_test.go`
 - `M	internal/llminternal/contents_processor.go`
 - `M	internal/llminternal/contents_processor_test.go`
-- `M	internal/llminternal/functions_test.go`
+- `M	internal/llminternal/googlellm/live_connection.go`
+- `M	internal/llminternal/handle_function_calls_async_test.go`
 - `M	internal/llminternal/live_reconnect_test.go`
-- `M	internal/llminternal/request_confirmation_processor.go`
-- `M	internal/llminternal/request_confirmation_processor_test.go`
+- `M	internal/llminternal/outputschema_processor_test.go`
+- `M	internal/llminternal/stream_aggregator.go`
 - `M	internal/llminternal/stream_aggregator_test.go`
-- `M	internal/telemetry/instrumentation_test.go`
-- `M	internal/telemetry/logger_test.go`
-- `M	internal/telemetry/telemetry.go`
-- `M	internal/telemetry/telemetry_test.go`
-- `M	internal/toolinternal/tool.go`
-- `M	internal/typeutil/convert.go`
-- `M	internal/utils/schema_test.go`
-- `M	internal/workflowinternal/finish_task_tool_test.go`
-- `A	memory/example_test.go`
-- `M	memory/inmemory.go`
-- `M	memory/inmemory_search_test.go`
-- `M	memory/inmemory_test.go`
-- `M	memory/service.go`
+- `M	internal/llminternal/streaming_tool_test.go`
 - `M	model/anthropicmodel/anthropicmodel_test.go`
-- `M	model/anthropicmodel/cache.go`
-- `M	model/anthropicmodel/errors.go`
-- `M	model/anthropicmodel/response.go`
-- `M	model/apigee/apigee.go`
-- `M	model/gemini/continuation_test.go`
-- `M	model/gemini/gemini_test.go`
+- `M	model/gemini/gemini.go`
 - `M	model/openaimodel/internal/completions/request_test.go`
+- `M	model/openaimodel/internal/completions/stream.go`
 - `M	model/openaimodel/internal/responses/request_test.go`
-- `M	model/openaimodel/openaimodel_test.go`
-- `M	model/registry_test.go`
-- `M	platform/exec_test.go`
-- `M	plugin/agentanalytics/batch_processor.go`
-- `M	plugin/agentanalytics/batch_processor_test.go`
-- `M	plugin/agentanalytics/bigquery_agent_analytics_plugin.go`
+- `M	model/openaimodel/internal/shared/config_test.go`
 - `M	plugin/agentanalytics/bigquery_agent_analytics_plugin_test.go`
-- `M	plugin/agentanalytics/events.go`
-- `M	plugin/agentanalytics/events_test.go`
-- `M	plugin/agentanalytics/gcs_offloader.go`
+- `M	plugin/agentanalytics/doc_test.go`
 - `M	plugin/agentanalytics/gcs_offloader_test.go`
-- `M	plugin/agentanalytics/redaction.go`
-- `M	plugin/agentanalytics/schema_upgrade.go`
-- `M	plugin/agentanalytics/trace_manager.go`
+- `M	plugin/agentanalytics/json_formatter.go`
+- `M	plugin/agentanalytics/json_formatter_test.go`
 - `M	plugin/agentanalytics/trace_manager_test.go`
+- `M	plugin/agentanalytics/views_test.go`
 - `M	plugin/functioncallmodifier/plugin_test.go`
-- `M	plugin/plugin.go`
+- `M	plugin/functioncallmodifier/testdata/TestPluginCallbackIntegration_transfer_to_agent_tool.httprr`
 - `M	runner/compaction_test.go`
+- `M	runner/hitl_integration_test.go`
+- `M	runner/live_runner_test.go`
+- `A	runner/output_schema_resume_test.go`
+- `M	runner/run_node.go`
 - `M	runner/run_node_test.go`
-- `M	server/adka2a/v2/events.go`
-- `M	server/adka2a/v2/events_test.go`
-- `M	server/adka2a/v2/executor.go`
-- `M	server/adka2a/v2/executor_test.go`
-- `M	server/adkrest/controllers/runtime_live_test.go`
-- `M	server/adkrest/controllers/triggers/eventarc.go`
-- `M	server/adkrest/controllers/triggers/eventarc_test.go`
+- `M	runner/runner.go`
+- `M	runner/runner_test.go`
+- `M	server/adka2a/v2/parts.go`
+- `M	server/adka2a/v2/parts_test.go`
 - `M	server/adkrest/controllers/triggers/pubsub_test.go`
-- `M	server/adkrest/handler_security_test.go`
-- `M	server/adkrest/handler_test.go`
-- `M	server/adkrest/internal/routers/auth_test.go`
-- `M	server/adkrest/internal/routers/routers.go`
-- `M	server/adkrest/internal/services/agentgraphgenerator.go`
-- `M	server/adkrest/internal/services/agentgraphgenerator_test.go`
-- `M	server/adkrest/internal/services/debugtelemetry_test.go`
-- `M	server/agentengine/internal/helper/encode.go`
-- `M	server/agentengine/internal/models/session.go`
-- `M	session/compaction/llm_summarizer_test.go`
-- `M	session/database/session_test.go`
-- `M	session/event_test.go`
-- `M	session/inmemory_test.go`
 - `M	session/session.go`
-- `M	session/sessiontestsuite/service_suite.go`
-- `M	session/vertexai/session_test.go`
-- `M	telemetry/telemetry_test.go`
+- `M	tool/agenttool/agent_tool.go`
 - `M	tool/agenttool/agent_tool_test.go`
-- `M	tool/exampletool/example_test.go`
-- `M	tool/functiontool/streaming_function_test.go`
-- `M	tool/mcptoolset/client_cancellation_test.go`
+- `M	tool/exitlooptool/tool.go`
+- `M	tool/exitlooptool/tool_test.go`
+- `M	tool/functiontool/function_test.go`
+- `M	tool/loadartifactstool/load_artifacts_tool.go`
+- `M	tool/loadartifactstool/load_artifacts_tool_test.go`
 - `M	tool/mcptoolset/conversion_test.go`
-- `M	tool/mcptoolset/tracking.go`
-- `M	tool/skilltoolset/instruction_test.go`
-- `M	tool/skilltoolset/internal/skilltool/list_skills.go`
-- `M	tool/skilltoolset/internal/skilltool/tools_test.go`
-- `M	tool/skilltoolset/skill/filesystem_source.go`
-- `M	tool/skilltoolset/skill/filesystem_source_test.go`
-- `M	tool/toolauth/model_json.go`
-- `M	tool/toolsearch/toolsearch_test.go`
-- `M	workflow/agent_node_mode_mutation_test.go`
-- `M	workflow/base_node_test.go`
-- `M	workflow/dynamic_scheduler_test.go`
-- `M	workflow/errors.go`
-- `M	workflow/function_node.go`
-- `M	workflow/max_concurrency_test.go`
-- `M	workflow/model_output_schema.go`
-- `M	workflow/model_output_schema_test.go`
-- `M	workflow/parallel_worker.go`
-- `M	workflow/parallel_worker_test.go`
-- `M	workflow/persistence.go`
-- `M	workflow/resume.go`
+- `M	workflow/agent_node_output_schema_test.go`
+- `M	workflow/config.go`
+- `M	workflow/dynamic_node.go`
+- `M	workflow/function_node_test.go`
+- `M	workflow/parallel_worker_branch_test.go`
+- `M	workflow/persistence_test.go`
 - `M	workflow/review_cache_regressions_test.go`
-- `M	workflow/review_cleanup_retry_test.go`
 - `M	workflow/run_node_test.go`
-- `M	workflow/scheduler_test.go`
 - `M	workflow/validation.go`
-- `M	workflow/workflow.go`
-- `M	workflow/workflow_node.go`
-- `M	workflow/workflow_node_test.go`
+- `M	workflow/validation_test.go`
+- `M	workflow/workflow_test.go`
