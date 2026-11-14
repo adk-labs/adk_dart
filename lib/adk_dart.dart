@@ -134,6 +134,7 @@ export 'src/integrations/eventarc/eventarc.dart'
 export 'src/integrations/firestore/firestore.dart';
 export 'src/integrations/fsspec/fsspec.dart';
 export 'src/integrations/gcs/gcs.dart';
+export 'src/integrations/google_maps/google_maps.dart';
 export 'src/integrations/livekit/livekit.dart';
 export 'src/integrations/model_armor/model_armor.dart';
 export 'src/integrations/mongodb/mongodb.dart';
