@@ -1,115 +1,65 @@
 # ADK JS Daily Change Report
 
-- Date (UTC): 2026-11-13
+- Date (UTC): 2026-11-14
 - Source: `google/adk-js`
-- Latest SHA: `5389c26dfdc8bda1f2866410fa2cc9217a041e03`
-- Previous SHA: `b1b94c0d501c3d1eb028aa413d783d6573f6c785`
+- Latest SHA: `a662b30976d68625a7348f3139bb41806aad7818`
+- Previous SHA: `5389c26dfdc8bda1f2866410fa2cc9217a041e03`
 
 ## Summary
 
-- New commits: 12
+- New commits: 4
 
 ## Commits
 
-- [5389c26](https://github.com/google/adk-js/commit/5389c26dfdc8bda1f2866410fa2cc9217a041e03) feat(integrations): add WriteMode.PROTECTED to BigQuery execute_sql (#1318) (adk-foundry-bot, 2026-11-13)
-- [86c4aa6](https://github.com/google/adk-js/commit/86c4aa6ecbea8bb3afcdd89552c94ec36da1bffd) chore(a2a): add ADK context id helpers to A2A converters (#1313) (adk-foundry-bot, 2026-11-13)
-- [077dbfb](https://github.com/google/adk-js/commit/077dbfbdb5aacd02b76f527b9fa1a4d4c20a9152) feat(cli): store eval sets and results in GCS with --eval_storage_uri (#1314) (adk-foundry-bot, 2026-11-13)
-- [e75433e](https://github.com/google/adk-js/commit/e75433e6626f8e1e802d1aec2a770a637cdceb7c) fix(runner): route a user function response to the calling agent without resumability (#1312) (adk-foundry-bot, 2026-11-13)
-- [013fee6](https://github.com/google/adk-js/commit/013fee67e8e29582e5ae7a193cce503ab3d20069) test: cover live RunConfig forwarding and runner credential service (#1310) (adk-foundry-bot, 2026-11-13)
-- [6f80d23](https://github.com/google/adk-js/commit/6f80d23ad14c83e4d8829835388e3e93a81a5e4e) feat(tools): add authentication to MCP tool calls (#1307) (adk-foundry-bot, 2026-11-12)
-- [b001b63](https://github.com/google/adk-js/commit/b001b63ea93ebb20d30df8efbecf4b613221b2ed) feat(dev): support session event import, agentengine session URIs, and default credential service (#1304) (adk-foundry-bot, 2026-11-12)
-- [dc9bf84](https://github.com/google/adk-js/commit/dc9bf847beb03255ff16cd439462465526a5bd86) feat(tools): add BaseAuthenticatedTool and AuthenticatedFunctionTool (#1306) (adk-foundry-bot, 2026-11-12)
-- [4e2f0b2](https://github.com/google/adk-js/commit/4e2f0b25fd7545285dcc5089295a67b4713258b1) feat(tools): support automatic OAuth2 token refresh in ToolAuthHandler (#1305) (adk-foundry-bot, 2026-11-12)
-- [0cc97a7](https://github.com/google/adk-js/commit/0cc97a781d39c15bff43e600d524c83877f91811) feat(auth): add CredentialManager and port auth credential changes (#1299) (adk-foundry-bot, 2026-11-12)
-- [63ebe41](https://github.com/google/adk-js/commit/63ebe41401100c23143b6f36b21141cf4430eb17) docs(a2a): add A2A developer guide, sample, and converter unit tests (#1300) (adk-foundry-bot, 2026-11-12)
-- [93f0002](https://github.com/google/adk-js/commit/93f0002097928526f35995810968d536ddfd7715) test: port adk-python v1.4.2 changes to models, sessions, utils (#1296) (adk-foundry-bot, 2026-11-12)
+- [a662b30](https://github.com/google/adk-js/commit/a662b30976d68625a7348f3139bb41806aad7818) feat(cli): reload only the changed agent with --reload_agents (#1322) (adk-foundry-bot, 2026-11-13)
+- [4776b47](https://github.com/google/adk-js/commit/4776b4728744b6d70a70c8bef5565ce3b3074e3c) feat(a2a): add a request timeout and a card resolution error to RemoteA2AAgent (#1323) (adk-foundry-bot, 2026-11-13)
+- [1ce9cfa](https://github.com/google/adk-js/commit/1ce9cfa11dff999a96002ce6968be81d18e85b8f) feat(a2a): add auth-required task state, runner caching and request logs (#1320) (adk-foundry-bot, 2026-11-13)
+- [70612f2](https://github.com/google/adk-js/commit/70612f2f0c56988ac8c35cfecd5226a486e75cfe) fix(agents): give each streamed model event its own timestamp (#1319) (adk-foundry-bot, 2026-11-13)
 
 ## Changed Files
 
+- `M	core/src/a2a/a2a_event.ts`
+- `M	core/src/a2a/a2a_remote_agent.ts`
+- `M	core/src/a2a/a2a_remote_agent_run_processor.ts`
+- `M	core/src/a2a/a2a_remote_agent_utils.ts`
+- `M	core/src/a2a/agent_card.ts`
+- `M	core/src/a2a/agent_executor.ts`
+- `M	core/src/a2a/event_converter_utils.ts`
+- `M	core/src/a2a/event_processor_utils.ts`
+- `M	core/src/a2a/index.ts`
+- `A	core/src/a2a/log_utils.ts`
 - `M	core/src/a2a/metadata_converter_utils.ts`
-- `M	core/src/agents/functions.ts`
-- `M	core/src/agents/invocation_context.ts`
-- `M	core/src/auth/auth_handler.ts`
-- `A	core/src/auth/credential_manager.ts`
-- `M	core/src/auth/credential_service/session_state_credential_service.ts`
-- `M	core/src/auth/oauth2/oauth2_credential_refresher.ts`
-- `M	core/src/cli/cli_eval.ts`
-- `A	core/src/cli/gcs_eval_managers.ts`
-- `M	core/src/common.ts`
-- `M	core/src/errors/not_found_error.ts`
-- `M	core/src/index.ts`
-- `M	core/src/runner/runner.ts`
-- `A	core/src/tools/authenticated_function_tool.ts`
-- `A	core/src/tools/base_authenticated_tool.ts`
-- `M	core/src/tools/function_tool.ts`
-- `A	core/src/tools/mcp/mcp_auth_utils.ts`
-- `M	core/src/tools/mcp/mcp_session_manager.ts`
-- `M	core/src/tools/mcp/mcp_tool.ts`
-- `M	core/src/tools/mcp/mcp_toolset.ts`
-- `M	core/src/tools/openapi_tool/openapi_spec_parser/tool_auth_handler.ts`
-- `M	core/src/utils/client_labels.ts`
+- `M	core/src/agents/llm_agent.ts`
+- `M	core/src/sessions/in_memory_session_service.ts`
+- `A	core/src/utils/fetch_utils.ts`
+- `M	core/test/a2a/a2a_event_test.ts`
+- `M	core/test/a2a/a2a_remote_agent_run_processor_test.ts`
+- `A	core/test/a2a/a2a_remote_agent_test.ts`
+- `M	core/test/a2a/agent_card_test.ts`
 - `M	core/test/a2a/agent_executor_test.ts`
 - `M	core/test/a2a/event_converter_utils_test.ts`
 - `M	core/test/a2a/event_processor_utils_test.ts`
-- `M	core/test/a2a/metadata_converter_utils_test.ts`
-- `M	core/test/a2a/part_converter_utils_test.ts`
-- `M	core/test/agents/invocation_context_test.ts`
-- `A	core/test/agents/llm_agent_include_contents_test.ts`
-- `M	core/test/agents/processors/basic_llm_request_processor_test.ts`
-- `M	core/test/auth/auth_handler_test.ts`
-- `A	core/test/auth/credential_manager_test.ts`
-- `M	core/test/auth/credential_service/in_memory_credential_service_test.ts`
-- `M	core/test/auth/credential_service/session_state_credential_service_test.ts`
-- `M	core/test/auth/exchanger/credential_exchanger_test.ts`
-- `M	core/test/auth/refresher/credential_refresher_registry_test.ts`
-- `M	core/test/cli/cli_eval_test.ts`
-- `A	core/test/cli/gcs_eval_managers_test.ts`
-- `M	core/test/models/google_llm_test.ts`
+- `A	core/test/a2a/log_utils_test.ts`
+- `M	core/test/a2a/remote_agent_test.ts`
+- `M	core/test/a2a/remote_agent_utils_test.ts`
+- `M	core/test/a2a/request_metadata_test.ts`
+- `M	core/test/agents/base_agent_test.ts`
+- `M	core/test/agents/llm_agent_test.ts`
+- `M	core/test/agents/run_config_test.ts`
 - `M	core/test/runner/run_live_test.ts`
-- `M	core/test/runner/runner_test.ts`
+- `M	core/test/sessions/database_session_service_test.ts`
+- `M	core/test/sessions/in_memory_session_service_test.ts`
 - `M	core/test/sessions/vertex_ai_session_service_test.ts`
-- `A	core/test/tools/authenticated_function_tool_test.ts`
-- `A	core/test/tools/base_authenticated_tool_test.ts`
-- `M	core/test/tools/built_in_tool_test.ts`
-- `M	core/test/tools/mcp/mcp_session_manager_test.ts`
+- `M	core/test/tools/function_tool_test.ts`
+- `M	core/test/tools/google_search_tool_test.ts`
 - `M	core/test/tools/mcp/mcp_tool_test.ts`
-- `M	core/test/tools/mcp/mcp_toolset_test.ts`
-- `M	core/test/tools/openapi_tool/tool_auth_handler_test.ts`
-- `M	core/test/tools/vertex_ai_search_tool_test.ts`
-- `M	dev/src/cli/cli.ts`
-- `M	dev/src/cli/cli_run.ts`
-- `M	dev/src/server/adk_api_client.ts`
+- `A	core/test/utils/fetch_utils_test.ts`
 - `M	dev/src/server/adk_api_server.ts`
-- `A	dev/src/server/session_event_utils.ts`
-- `M	dev/test/cli/cli_run_test.ts`
+- `M	dev/src/utils/agent_loader.ts`
 - `M	dev/test/cli/cli_test.ts`
-- `M	dev/test/server/adk_api_client_test.ts`
 - `M	dev/test/server/adk_api_server_test.ts`
-- `A	dev/test/server/session_event_utils_test.ts`
+- `M	dev/test/utils/agent_loader_test.ts`
 - `M	docs/guides/README.md`
-- `A	docs/guides/a2a/index.md`
-- `M	docs/guides/auth/index.md`
+- `M	docs/guides/a2a/index.md`
 - `M	docs/guides/cli/index.md`
-- `M	docs/guides/flows/index.md`
-- `M	docs/guides/integrations/bigquery/index.md`
-- `M	docs/guides/runners/index.md`
-- `M	docs/guides/tools/index.md`
-- `M	docs/guides/tools/mcp_tool/index.md`
-- `M	docs/guides/tools/openapi_tool/index.md`
-- `M	integrations/src/bigquery/bigquery_toolset.ts`
-- `M	integrations/src/bigquery/client.ts`
-- `M	integrations/src/bigquery/config.ts`
-- `M	integrations/src/bigquery/query_tool.ts`
-- `M	integrations/src/index.ts`
-- `M	integrations/test/bigquery/bigquery_metadata_and_query_tool_test.ts`
-- `M	integrations/test/bigquery/bigquery_tool_config_test.ts`
-- `M	integrations/test/bigquery/bigquery_toolset_test.ts`
-- `A	samples/a2a/README.md`
-- `A	samples/a2a/agent.ts`
-- `M	samples/auth/README.md`
-- `M	samples/auth/agent.ts`
 - `M	samples/cli/README.md`
-- `M	samples/integrations/bigquery/README.md`
-- `M	samples/tools/README.md`
-- `M	samples/tools/agent.ts`
-- `M	samples/tools/mcp_tool/README.md`
