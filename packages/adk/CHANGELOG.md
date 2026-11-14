@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.14
+
+- Bumped package version to `2026.11.14` and dependency `adk_dart: ^2026.11.14`.
+- **Upstream `adk-python` CLI & Server Parity (`df9f9d045..287c0b0e6`)**:
+  - Added `prettyPrintMultiRunSummaryTable` (`formatRunSymbol`, `getRunMetricScore`, `formatSummaryMetricLine`, `formatCriterionSummary`), default Pass Rate case-by-run summary output in `adk eval` when `--num_runs > 1` or `multi_run_config` is configured, and `multi_run_case_summaries` persistence in `.evalset_result.json` (`287c0b0e6`).
+  - Defaulted `setupObserver` and `tearDownObserver` to `null` in `ApiServer` / `AdkWebServer` / `DevServer` so file watchers are only created when agent reload (`--reload_agents`) is enabled, preventing leaked watchers in tests and non-reload server runs (`12aab4aaa`).
+
 ## 2026.11.12
 
 - Bumped package version to `2026.11.12` and dependency `adk_dart: ^2026.11.12`.

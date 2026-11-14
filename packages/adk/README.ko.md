@@ -8,7 +8,7 @@
 
 ## 최신 업데이트
 
-- **`adk-python` `2.14.0` 및 `adk-web` CLI 100% 패리티**: `adk create`(`--type CODE|CONFIG|BASIC|WORKFLOW`), `adk run [query]`(`--jsonl`, `--timeout`, `--in_memory`, `--resume`, `--replay`), `adk web` / `adk api_server`(Eventarc/PubSub/Webhook 트리거, OIDC 검증, Enterprise/Express 모드, `/dev/apps` 라우트, 평가 매니저 미설정 시 HTTP 500 반환, UTF-8 `data:` URL 디코딩), `adk deploy`(`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval`(`pass@k` 및 `pass^k` 멀티 런 지표), `adk eval_set`(`create`, `add_eval_case`, `generate_eval_cases`), `adk optimize`, `adk generate_agent_card`, `adk migrate session --allow-unsafe-unpickling`, `adk test --rebuild` 완벽 지원
+- **`adk-python` `2.14.1` 및 `adk-web` CLI 100% 패리티**: `adk create`(`--type CODE|CONFIG|BASIC|WORKFLOW`), `adk run [query]`(`--jsonl`, `--timeout`, `--in_memory`, `--resume`, `--replay`), `adk web` / `adk api_server`(Eventarc/PubSub/Webhook 트리거, OIDC 검증, Enterprise/Express 모드, `/dev/apps` 라우트, 평가 매니저 미설정 시 HTTP 500 반환, UTF-8 `data:` URL 디코딩), `adk deploy`(`cloud_run`, `docker`, `agent_engine`, `gke`), `adk eval`(`pass@k` 및 `pass^k` 멀티 런 지표), `adk eval_set`(`create`, `add_eval_case`, `generate_eval_cases`), `adk optimize`, `adk generate_agent_card`, `adk migrate session --allow-unsafe-unpickling`, `adk test --rebuild` 완벽 지원
 - **모듈화된 CLI 및 Dev Web Server 아키텍처**: CLI 커맨드 핸들러와 Dev Web Server 라우트를 기능별 `part` / `part of` 파일(`cli_run_and_web.dart`, `cli_eval_and_optimize.dart`, `cli_conformance_and_migrate.dart`, `web_server_session_and_run_routes.dart`, `web_server_eval_and_a2a_routes.dart`, `web_server_assets_and_helpers.dart`)로 구조화
 - **ADK 2.0 워크플로우, CascadeLive & Managed Agent**: ADK 2.0 `Workflow`, `CascadeLive` + `ElevenLabs` 실시간 음성 파이프라인, GCP `ManagedAgent` API 기본 노출
 
@@ -72,7 +72,7 @@ dart pub add adk
 
 ```yaml
 dependencies:
-  adk: ^2026.11.12
+  adk: ^2026.11.14
 ```
 
 ## 참고

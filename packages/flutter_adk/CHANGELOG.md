@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.14
+
+- Bumped package version to `2026.11.14` and dependency `adk_dart: ^2026.11.14`.
+- Enhanced `AdkMultiRunEvalCard` (`AdkMultiRunSummary`, `AdkMultiRunMetricSummary`, `AdkMultiRunCriterionResult`) to render persisted `MultiRunCaseSummary` / `MethodResult` payloads, per-run status strips (`Runs`: `P`/`F`/`C`/`-`), default `Pass Rate` summary badges, `crashedRuns` / `notEvaluatedRuns` chips, and per-metric run score lists (`runs: [...]`, `287c0b0e6`).
+- Added Google Maps Platform tool recognition (`get_street_view_image`, `validate_address`, `reverse_geocode`) across `AdkToolCallInfo`, `AdkToolCallCard`, `AdkToolInspectorView`, and `AdkUiUtils` (`5371bb12f`).
+- Synced re-exported `adk_core.dart` runtime primitives with `adk_dart` `2026.11.14` (`adk-python` `v2.14.1` parity).
+
 ## 2026.11.12
 
 - Bumped package version to `2026.11.12` and dependency `adk_dart: ^2026.11.12`.

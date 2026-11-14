@@ -4,7 +4,7 @@ description: >-
   Builds ADK Dart agents and workflows: LlmAgent (Agent) with Gemini, Claude,
   LiteLLM (OpenAI, Ollama, Groq, DeepSeek), GemmaLlm, ApigeeLlm, or LiteRtLmModel;
   FunctionTool, BaseTool, AgentTool, ModelConsultTool, McpToolset, OpenAPIToolset,
-  SkillToolset, and ToolSearchToolset; ADK 2.0 Workflow DAG graphs (BaseNode,
+  GoogleMapsToolset, SkillToolset, and ToolSearchToolset; ADK 2.0 Workflow DAG graphs (BaseNode,
   FunctionNode, AgentNode, JoinNode, WorkflowTool, NodeTool, routed edges,
   dynamic ctx.runNode, RequestInput HITL pause/resume); multi-agent
   SequentialAgent, ParallelAgent, LoopAgent, subAgents transfer, RemoteA2aAgent,
@@ -17,7 +17,7 @@ description: >-
 
 # ADK Dart Agent Builder
 
-Checked against `adk_dart` `2026.11.12` (`adk-python` `2.14.0` baseline).
+Checked against `adk_dart` `2026.11.14` (`adk-python` `2.14.1` baseline).
 
 Read only the reference file that matches the task at hand to keep context lean:
 
@@ -26,7 +26,7 @@ Read only the reference file that matches the task at hand to keep context lean:
 | Task | Reference |
 | --- | --- |
 | First `LlmAgent` (`Agent`), running with `InMemoryRunner`, reading `Stream<Event>`, SSE streaming, multi-LLM models (`Gemini`, `AnthropicLlm`, `LiteLlm`, `GemmaLlm`, `ApigeeLlm`, `LiteRtLmModel`) | [getting-started.md](references/getting-started.md) |
-| `FunctionTool`, custom `BaseTool`, confirmation-gated tools (`requireConfirmation`), `AgentTool`, `ModelConsultTool`, built-in Gemini tools, `McpToolset`, `OpenAPIToolset`, `SkillToolset`, `ToolSearchToolset` | [tools-and-mcp.md](references/tools-and-mcp.md) |
+| `FunctionTool`, custom `BaseTool`, confirmation-gated tools (`requireConfirmation`), `AgentTool`, `ModelConsultTool`, built-in Gemini tools, `McpToolset`, `OpenAPIToolset`, `GoogleMapsToolset`, `SkillToolset`, `ToolSearchToolset` | [tools-and-mcp.md](references/tools-and-mcp.md) |
 | ADK 2.0 `Workflow` DAGs (`BaseNode`, `FunctionNode`, `AgentNode`, `JoinNode`, `WorkflowTool`, `NodeTool`, routed edges, dynamic `ctx.runNode`, HITL `RequestInput`), plus `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `subAgents`, `RemoteA2aAgent`, and task mode (`mode: 'task'`) | [workflows-and-multi-agent.md](references/workflows-and-multi-agent.md) |
 | `Context` / `ToolContext`, session state & `temp:` keys, `SessionService` (`InMemory`, `Sqlite`, `Database`, `MongoDb`, `VertexAi`), `App` & `EventsCompactionConfig`, artifacts, memory, callbacks, plugins, and `AgentEvaluator` (`pass@k` / `pass^k`) | [state-sessions-callbacks-eval.md](references/state-sessions-callbacks-eval.md) |
 | Common pitfalls ("Rules that bite"), Web/WASM safety (`adk_core.dart` vs `adk_dart.dart`), and unit testing with a fake `BaseLlm` | [best-practices.md](references/best-practices.md) |

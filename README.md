@@ -17,7 +17,7 @@ developer ergonomics.
 
 ## What's New
 
-- **ADK Python `2.14.0` & `adk-web` Parity**:
+- **ADK Python `2.14.1` & `adk-web` Parity**:
   - **Runtime & Models**: Added `LlmRequest.toGenerateContentBody()` for official Gemini wire-format serialization, `Event.acceptConvenienceKwargs` (`author`, `text`, `thought`, `functionCall`, `functionResponse`, `customMetadata`), `LlmAgent.rejectMisplacedGenerateContentKwargs` guard, `AuthHandler.getAuthResponseAsync` async token/state cleanup, and `FileArtifactService` exact line-ending preservation.
   - **Tools, MCP & Workflows**: Added `BaseTool.displayTitle` (surfaced via `adk:tool_display_names` metadata), `FunctionTool` enum confirmation wire values, automatic MCP session recreation on server termination, and `ReplayManager` `waitForOutput` resume guard.
   - **Evaluation & Dev UI**: Added `pass@k` (`>= 1` pass) and `pass^k` (all `k` pass) multi-run evaluation criteria, `adk generate_agent_card` CLI command, and UTF-8 `data:` URL decoding in the Web UI.
@@ -50,7 +50,7 @@ developer ergonomics.
 
 ADK Dart is intended to behave like `adk-python` while using Dart-native
 types, async streams, package structure, and platform constraints. The current
-release baseline tracks `adk-python` `2.14.0`.
+release baseline tracks `adk-python` `2.14.1`.
 
 Status legend:
 
@@ -60,7 +60,7 @@ Status legend:
 
 | `adk-python` area | Dart status | Dart implementation surface | Notes |
 | --- | --- | --- | --- |
-| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm` are aligned on `2026.11.12`; exported ADK baseline is `2.14.0`. |
+| Package/version baseline | ✅ | `adkVersion`, package versions | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, and `adk_litertlm` are aligned on `2026.11.14`; exported ADK baseline is `2.14.1`. |
 | Agents and runner | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | Core invocation, live fallback, rewind, session state, callback, and transfer behavior are ported. |
 | LLM flow processors | ✅ | request/response processors under `flows/llm_flows` | Covers instructions, identity, contents, compaction, context cache, code execution, output schema, tool confirmation, auth preflight, and agent transfer. |
 | Workflow runtime | ✅ | `Workflow`, `BaseNode`, function/tool/LLM-agent nodes, `NodeTool` (workflow-as-tool), joins, routes, dynamic nodes, replay helpers | Python v2 workflow primitives are ported, including retry, timeout, request-input/HITL, parallel workers, replay/rehydration, START-edge routing guards, completed-task batching, strict node input-schema validation, graph serialization, and status-aware DOT output. |
@@ -252,9 +252,9 @@ Or add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.11.12
+  adk_dart: ^2026.11.14
   # Or use the unified facade + CLI package:
-  # adk: ^2026.11.12
+  # adk: ^2026.11.14
 ```
 
 If you prefer a shorter import path, use the facade package:

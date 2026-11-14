@@ -14,7 +14,7 @@ ADK Dartは、モジュール型ランタイムプリミティブ、ツールオ
 
 ## 最新アップデート
 
-- **ADK Python `2.14.0` および `adk-web` 完全互換**:
+- **ADK Python `2.14.1` および `adk-web` 完全互換**:
   - **ランタイムおよびモデル**: 公式Gemini wire-formatシリアライズ用の `LlmRequest.toGenerateContentBody()`, `Event.acceptConvenienceKwargs`, `LlmAgent.rejectMisplacedGenerateContentKwargs` ガード, `AuthHandler.getAuthResponseAsync`, `FileArtifactService` 改行コード保持をサポート。
   - **ツール、MCP、ワークフロー**: `BaseTool.displayTitle` (`adk:tool_display_names` メタデータ), `FunctionTool` Enum確認ワイヤー値保持, MCPサーバー終了時のセッション自動再生成, `ReplayManager` `waitForOutput` 再開ガードを追加。
   - **評価および Dev UI**: マルチラン評価基準 `pass@k` (`>= 1` 成功) / `pass^k` (全 `k` 成功), `adk generate_agent_card` CLIコマンド, Web UIでのUTF-8 `data:` URLデコードに対応。
@@ -27,7 +27,7 @@ ADK Dartは、モジュール型ランタイムプリミティブ、ツールオ
 
 ## ADK Python 互換性ステータス
 
-ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.14.0`に準拠しています。
+ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<Event>`）、パッケージ構造、プラットフォーム制約を尊重しながら、`adk-python`と同様に動作するように設計されています。現在のリリースベースラインは`adk-python` `2.14.1`に準拠しています。
 
 ステータス凡例:
 
@@ -37,7 +37,7 @@ ADK Dartは、Dartの静的型システム、非同期ストリーム（`Stream<
 
 | `adk-python` 領域 | Dart ステータス | Dart 実装 API およびインターフェース | 備考 |
 | --- | --- | --- | --- |
-| パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 最新(`2026.11.12`)アライメント完了; ADK基準は `2.14.0`。 |
+| パッケージ/バージョン基準 | ✅ | `adkVersion`, パッケージバージョン | `adk_dart`, `adk`, `adk_mcp`, `flutter_adk`, `adk_litertlm` 最新(`2026.11.14`)アライメント完了; ADK基準は `2.14.1`。 |
 | エージェントおよびランナー | ✅ | `BaseAgent`, `LlmAgent`/`Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `Runner`, `InMemoryRunner` | 呼び出し、フォールバック、セッションロールバック/リワインド（Rewind）、セッション状態、コールバック、Agent Transfer実装完了。 |
 | LLM フロープロセッサ | ✅ | `flows/llm_flows` 配下の要求/応答プロセッサ | 指示、ID、コンテンツ、トークンコンパクション、コンテキストキャッシュ、コード実行、出力スキーマ、ツール確認（HITL）、エージェント移行。 |
 | ワークフローランタイム | ✅ | `Workflow`, `BaseNode`, 関数/ツール/LLMノード, `NodeTool`, ジョイン, ルーティング, 動的ノード, リプレイ | リトライ、タイムアウト、入力要求/HITL、並列ワーカー、ワークフローリプレイおよび状態復元 (State Restoration)、グラフシリアライズ、DOT可視化。 |
@@ -98,9 +98,9 @@ dart pub add adk_dart
 
 ```yaml
 dependencies:
-  adk_dart: ^2026.11.12
+  adk_dart: ^2026.11.14
   # または統合CLIファサードパッケージ:
-  # adk: ^2026.11.12
+  # adk: ^2026.11.14
 ```
 
 短いimportパッケージ（`adk`）を使用する場合:

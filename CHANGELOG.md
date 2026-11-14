@@ -1,3 +1,19 @@
+## 2026.11.14
+
+- **Upstream `adk-python` `v2.14.1` Parity (`df9f9d045..287c0b0e6`)**:
+  - Updated `adkVersion` to `'2.14.1'` (`1ae967e33`) and `adkPackageVersion` to `'2026.11.14'`.
+  - **Google Maps Platform Integration (`lib/src/integrations/google_maps/`)**:
+    - Added `GoogleMapsToolset`, `GoogleMapsConfig`, `StreetViewResult`, `PropertyClassification`, `AddressType`, and three built-in tools (`get_street_view_image`, `validate_address`, `reverse_geocode`) with explicit API key, `MAPS_API_KEY`, and Secret Manager (`MAPS_API_KEY_SECRET_RESOURCE` + optional service-account impersonation) credential resolution, JPEG artifact persistence (`Part.fromInlineData` with `street_view_image_b64` fallback), HTTPS/SSRF validation, and bounded LRU caching (`5371bb12f`).
+  - **Live Background Function Calls & Remote A2A Workflow Output**:
+    - Executed every live function call in its own background task in `runLive` (and `runAsync` with `supportCfc: true`) via `launchFunctionCallsLive` and `mergeFunctionResponses` so model audio, transcriptions, and interruptions continue streaming, yielded each finished `FunctionResponse` individually in completion order, isolated live tool exceptions as error responses (`onToolErrorCallback`), left `behavior: null` declarations unset, cancelled running live tools on session restarts, drained non-streaming tools up to `10s` on normal exit, normalized `null` long-running returns, and yielded finished tool responses before rethrowing when the live connection fails (`e5dd820da`, `e237ec06c`, `1a0ddabf1`).
+    - Prevented failed remote A2A tasks (`TASK_STATE_FAILED` / `failed`) from having their failure text promoted to `event.output` in `RemoteA2aAgent.promoteResponseToOutput` while preserving completed tasks carrying an `errorCode` such as `MAX_TOKENS` (`f67cc356c`).
+  - **Plugins, Nested `AgentTool` State Isolation & Telemetry**:
+    - Stamped `InvocationContext.parentInvocationId` on nested `AgentTool` runs (`includePlugins: true`), isolated nested/concurrent/short-circuited `AgentTool` trace stacks and stamped `attributes.adk.{parent_session_id,parent_invocation_id}` in `BigQueryAgentAnalyticsPlugin`, hardened ASCII-escape canonicalized credential sanitization (`_sanitizeSensitiveText`, `HybridContentParser`), added `BigQueryLoggerConfig.responseTextKey` (`content.text_summary`), and synced `eval_view_ctes_v1.sql` (`5ce1d0c15`).
+    - Added `lib/src/utils/credential_names.dart` (`isCredentialType`, `isCredentialArgName`) and credential material masking (`maskCredentialValues`, `safeJsonSerialize`) across telemetry serialization and `AutoTracingPlugin` (`b6952874a`).
+    - Traced sub-agents with unset `model` via `LlmAgent.canonicalModel` (`5112046cb`), stamped `GenerateContentSpan.endedAtMicros` to exclude tool execution runtime from fallback model call duration (`8d857f47d`), set `{inference_call}` and `{tool_call}` semconv units on `gen_ai.invoke_agent.*` metrics (`56b25c619`), recorded the 7 `gen_ai.client.inference.*` token counters/histograms in every schema version (`1` and `2`, `1de97607c`), and honored `RunConfig.telemetry` in `ModelConsultTool` advisor calls (`f9d948c58`).
+  - **Multi-Run Evaluation Summaries**:
+    - Added `MethodResult`, `MultiRunCaseSummary`, `EvalSetResult.multiRunCaseSummaries`, `EvaluateConfig.multiRunConfig`, and `summarizeEvalCaseResults` / `summarizeMultiRunCaseResult`, persisting cross-run verdicts, run counts (`numRuns`, `passedRuns`, `failedRuns`, `crashedRuns`, `notEvaluatedRuns`), `passRate`, `overallEvalMetricResults`, `metricMethods`, and `crossRunResults` across `LocalEvalService` and local/GCS/in-memory `EvalSetResultsManager`s (`287c0b0e6`).
+
 ## 2026.11.12
 
 - **Upstream `adk-python` Parity (`67b217d00..df9f9d045`)**:
