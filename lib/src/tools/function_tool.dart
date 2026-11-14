@@ -36,6 +36,7 @@ class FunctionTool extends BaseTool {
     List<String>? toolContextParamNames,
     FunctionDeclaration? declaration,
     super.behavior,
+    super.responseScheduling,
   }) : _cachedDeclaration = declaration,
        toolContextParamNames = _normalizeToolContextParamNames(
          toolContextParamNames,
@@ -398,6 +399,23 @@ class FunctionTool extends BaseTool {
     return converted;
   }
 
+  /// Whether [func]'s static signature returns a [Stream].
+  bool get isStreamingFunction {
+    final String sig = func.runtimeType.toString();
+    final int arrowIndex = sig.lastIndexOf('=>');
+    if (arrowIndex < 0) {
+      return false;
+    }
+    final String returnType = sig.substring(arrowIndex + 2).trim();
+    return returnType == 'Stream' || returnType.startsWith('Stream<');
+  }
+
+  /// Whether [func]'s signature declares an `inputStream` parameter.
+  bool get acceptsInputStream {
+    final String sig = func.runtimeType.toString();
+    return RegExp(r'\binputStream\b').hasMatch(sig);
+  }
+
   /// Resolves the active streaming tool for [toolContext] by checking
   /// [ToolContext.functionCallId] first and falling back to [name].
   Object? resolveActiveStreamingTool(ToolContext toolContext) {
@@ -416,6 +434,18 @@ class FunctionTool extends BaseTool {
   Object? _extractActiveInputStream(ToolContext? toolContext) {
     if (toolContext == null) {
       return null;
+    }
+    // In live mode (bidirectional streaming), each function call gets its own
+    // dedicated stream registered in activeBackgroundTools keyed by call id.
+    final String? callId = toolContext.functionCallId;
+    if (callId != null && callId.isNotEmpty) {
+      final Object? backgroundStream = toolContext
+          .invocationContext
+          .activeBackgroundTools[callId]
+          ?.inputStream;
+      if (backgroundStream != null) {
+        return backgroundStream;
+      }
     }
     final dynamic activeTool = resolveActiveStreamingTool(toolContext);
     if (activeTool == null) {

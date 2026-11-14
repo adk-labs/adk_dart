@@ -2,13 +2,17 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../../agents/abort_signal.dart';
 import '../../agents/active_streaming_tool.dart';
+import '../../agents/base_agent.dart';
 import '../../agents/callback_context.dart';
 import '../../agents/context.dart';
 import '../../agents/invocation_context.dart';
+import '../../agents/live_request_queue.dart';
 import '../../agents/llm/task/finish_task_tool.dart';
 import '../../agents/run_config.dart';
 import '../../auth/auth_tool.dart';
@@ -18,6 +22,7 @@ import '../../plugins/base_plugin.dart';
 import '../../tools/agent_tool.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/computer_use/computer_use_tool.dart';
+import '../../tools/function_tool.dart';
 import '../../tools/tool_confirmation.dart';
 import '../../tools/tool_context.dart';
 import '../../types/content.dart';
@@ -208,6 +213,15 @@ Event? generateRequestConfirmationEvent(
 }
 
 /// Handles function calls attached to [functionCallEvent] in live mode.
+///
+/// Deprecated: `runLive` no longer uses [handleFunctionCallsLive]. Live
+/// function calls are launched in background tasks via
+/// [launchFunctionCallsLive] instead.
+@Deprecated(
+  'handleFunctionCallsLive is deprecated: runLive no longer uses it, '
+  'there is no replacement outside runLive, and it will be removed in a '
+  'future version.',
+)
 Future<Event?> handleFunctionCallsLive(
   InvocationContext invocationContext,
   Event functionCallEvent,
@@ -586,12 +600,18 @@ Future<Map<String, dynamic>> _stopStreamingTools(
   String functionName,
 ) async {
   bool stoppedAny = false;
+  Object? caughtError;
+  StackTrace? caughtStackTrace;
 
   final List<MapEntry<String, ActiveBackgroundTool>> matchingBackground =
       invocationContext.activeBackgroundTools.entries
           .where(
             (MapEntry<String, ActiveBackgroundTool> entry) =>
-                entry.value.toolName == functionName,
+                entry.value.toolName == functionName &&
+                (entry.value.isGenerator ||
+                    entry.value.onCancel != null ||
+                    entry.value.task != null) &&
+                _backgroundTaskDone[entry.value] != true,
           )
           .toList(growable: false);
   for (final MapEntry<String, ActiveBackgroundTool> entry
@@ -599,8 +619,26 @@ Future<Map<String, dynamic>> _stopStreamingTools(
     stoppedAny = true;
     try {
       await entry.value.onCancel?.call();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      if (error is! AdkAbortException && caughtError == null) {
+        caughtError = error;
+        caughtStackTrace = stackTrace;
+      }
+    }
     entry.value.inputStream?.close();
+    if (entry.value.task != null) {
+      try {
+        await Future.any<void>(<Future<void>>[
+          entry.value.task!,
+          Future<void>.delayed(_liveToolShutdownTimeout),
+        ]);
+      } catch (error, stackTrace) {
+        if (error is! AdkAbortException && caughtError == null) {
+          caughtError = error;
+          caughtStackTrace = stackTrace;
+        }
+      }
+    }
     invocationContext.activeBackgroundTools.remove(entry.key);
   }
 
@@ -614,13 +652,16 @@ Future<Map<String, dynamic>> _stopStreamingTools(
           entry.key.startsWith('$functionName@') ||
           entry.key.startsWith('${functionName}_');
       if (matchesKey &&
-          (entry.value.task != null ||
-              entry.value.stream != null ||
-              entry.value.onCancel != null)) {
+          (entry.value.task != null || entry.value.onCancel != null)) {
         stoppedAny = true;
         try {
           await entry.value.onCancel?.call();
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          if (error is! AdkAbortException && caughtError == null) {
+            caughtError = error;
+            caughtStackTrace = stackTrace;
+          }
+        }
         entry.value.stream?.close();
         entry.value.task = null;
         entry.value.stream = null;
@@ -629,6 +670,10 @@ Future<Map<String, dynamic>> _stopStreamingTools(
         legacyStreaming.remove(entry.key);
       }
     }
+  }
+
+  if (caughtError != null) {
+    Error.throwWithStackTrace(caughtError, caughtStackTrace!);
   }
 
   if (stoppedAny) {
@@ -735,6 +780,7 @@ Future<Event?> _runToolExecutionPipeline({
               invocationContext: invocationContext,
               toolName: tool.name,
               functionArgs: functionArgs,
+              excludeCallId: functionCall.id,
             )) {
           functionResponse = <String, dynamic>{
             'status':
@@ -748,7 +794,11 @@ Future<Event?> _runToolExecutionPipeline({
         final Object? result;
         if (functionCall.name == 'stop_streaming' &&
             functionArgs.containsKey('function_name') &&
-            tool is _StopStreamingTool) {
+            (tool is _StopStreamingTool ||
+                invocationContext.liveRequestQueue != null ||
+                invocationContext.activeBackgroundTools.isNotEmpty ||
+                (invocationContext.activeStreamingTools?.isNotEmpty ??
+                    false))) {
           final Object? rawFunctionName = functionArgs['function_name'];
           if (rawFunctionName is! String) {
             throw ArgumentError(
@@ -791,7 +841,8 @@ Future<Event?> _runToolExecutionPipeline({
           functionResponse = pendingStatus;
         } else {
           rawResult = result;
-          functionResponse = tool.defersResponse && result == null
+          functionResponse =
+              (tool.isLongRunning || tool.defersResponse) && result == null
               ? <String, dynamic>{}
               : _normalizeFunctionResult(result);
         }
@@ -1439,11 +1490,15 @@ Future<bool> _deduplicateOrRestartLiveStreamingTool({
   required InvocationContext invocationContext,
   required String toolName,
   required Map<String, dynamic> functionArgs,
+  String? excludeCallId,
 }) async {
   for (final MapEntry<String, ActiveBackgroundTool> entry
       in invocationContext.activeBackgroundTools.entries.toList(
         growable: false,
       )) {
+    if (excludeCallId != null && entry.key == excludeCallId) {
+      continue;
+    }
     final ActiveBackgroundTool active = entry.value;
     if (active.toolName != toolName || !active.isGenerator) {
       continue;
@@ -1609,4 +1664,1009 @@ Future<Object?> _awaitToolRunWithAbort(
     },
   );
   return completer.future;
+}
+
+/// Default timeout for waiting on running non-streaming tool calls when a live
+/// run ends normally.
+const Duration defaultLiveToolFinishTimeout = Duration(seconds: 10);
+
+const Duration _liveToolShutdownTimeout = Duration(seconds: 1);
+
+final Expando<bool> _backgroundTaskDone = Expando<bool>(
+  'ActiveBackgroundTool.done',
+);
+
+/// FIFO event queue used to collect finished live background tool responses.
+class LiveFunctionResponseQueue {
+  final Queue<Event> _items = Queue<Event>();
+  final Queue<Completer<Event>> _getWaiters = Queue<Completer<Event>>();
+  Completer<void>? _itemAvailable;
+
+  /// Whether there are no queued function response events.
+  bool get isEmpty => _items.isEmpty;
+
+  /// Whether at least one function response event is queued.
+  bool get isNotEmpty => _items.isNotEmpty;
+
+  /// Number of queued function response events.
+  int get length => _items.length;
+
+  /// Enqueues [event] at the tail of the queue without awaiting.
+  void putNowait(Event event) {
+    while (_getWaiters.isNotEmpty) {
+      final Completer<Event> waiter = _getWaiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete(event);
+        return;
+      }
+    }
+    _items.addLast(event);
+    final Completer<void>? available = _itemAvailable;
+    if (available != null && !available.isCompleted) {
+      _itemAvailable = null;
+      available.complete();
+    }
+  }
+
+  /// Re-queues [event] at the front of the queue to preserve completion order.
+  void putFrontNowait(Event event) {
+    while (_getWaiters.isNotEmpty) {
+      final Completer<Event> waiter = _getWaiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete(event);
+        return;
+      }
+    }
+    _items.addFirst(event);
+    final Completer<void>? available = _itemAvailable;
+    if (available != null && !available.isCompleted) {
+      _itemAvailable = null;
+      available.complete();
+    }
+  }
+
+  /// Removes and returns the next queued [Event] synchronously.
+  Event getNowait() {
+    if (_items.isEmpty) {
+      throw StateError('LiveFunctionResponseQueue is empty.');
+    }
+    return _items.removeFirst();
+  }
+
+  /// Awaits and removes the next [Event] in FIFO order.
+  Future<Event> get() {
+    if (_items.isNotEmpty) {
+      return Future<Event>.value(_items.removeFirst());
+    }
+    final Completer<Event> waiter = Completer<Event>();
+    _getWaiters.addLast(waiter);
+    return waiter.future;
+  }
+
+  /// Completes when at least one item is present in the queue without popping.
+  Future<void> waitForItem() {
+    if (_items.isNotEmpty) {
+      return Future<void>.value();
+    }
+    return (_itemAvailable ??= Completer<void>()).future;
+  }
+}
+
+/// Whether [tool] is a live streaming function tool (`Stream`-returning).
+bool isLiveStreamingTool(BaseTool? tool) {
+  return tool is FunctionTool && tool.isStreamingFunction;
+}
+
+LiveRequestQueue? _newLiveInputStream(BaseTool? tool) {
+  if (tool is FunctionTool && tool.acceptsInputStream) {
+    return LiveRequestQueue();
+  }
+  return null;
+}
+
+Map<String, dynamic> _pendingStreamingResponse() {
+  return <String, dynamic>{
+    'status':
+        'The function is running asynchronously and the results are pending.',
+  };
+}
+
+Event _buildLiveInternalErrorResponseEvent({
+  required InvocationContext invocationContext,
+  required String toolName,
+  required String functionCallId,
+  required String? liveSessionId,
+  FunctionResponseScheduling? scheduling,
+}) {
+  final String resolvedName = toolName.isEmpty ? '<unnamed>' : toolName;
+  final Part part = Part.fromFunctionResponse(
+    name: resolvedName,
+    id: functionCallId,
+    response: <String, dynamic>{
+      'error': 'Invoking `$resolvedName()` failed with an internal error.',
+    },
+  );
+  if (scheduling != null && part.functionResponse != null) {
+    part.functionResponse!.scheduling = scheduling;
+  }
+  return Event(
+    invocationId: invocationContext.invocationId,
+    author: invocationContext.agent.name,
+    branch: invocationContext.branch,
+    content: Content(role: 'user', parts: <Part>[part]),
+    liveSessionId: liveSessionId,
+  );
+}
+
+void _applyResponseScheduling(Event event, BaseTool tool) {
+  if (tool.responseScheduling == null || event.content == null) {
+    return;
+  }
+  for (final Part part in event.content!.parts) {
+    if (part.functionResponse != null) {
+      part.functionResponse!.scheduling = tool.responseScheduling;
+    }
+  }
+}
+
+Future<Object?> _awaitLiveToolRunWithAbort(
+  InvocationContext invocationContext,
+  AdkAbortSignal callAbortSignal,
+  FutureOr<Object?> Function() action,
+) {
+  final AdkAbortSignal parentSignal = invocationContext.onAbortSignal;
+  if (parentSignal.aborted || invocationContext.isAborted) {
+    return Future<Object?>.error(AdkAbortException(parentSignal.reason));
+  }
+  if (callAbortSignal.aborted) {
+    return Future<Object?>.error(AdkAbortException(callAbortSignal.reason));
+  }
+
+  final Completer<Object?> completer = Completer<Object?>();
+  void onAbort(Object? reason) {
+    if (!completer.isCompleted) {
+      completer.completeError(AdkAbortException(reason));
+    }
+  }
+
+  parentSignal.addListener(onAbort);
+  callAbortSignal.addListener(onAbort);
+  Future<Object?>.sync(action).then(
+    (Object? value) {
+      parentSignal.removeListener(onAbort);
+      callAbortSignal.removeListener(onAbort);
+      if (!completer.isCompleted) {
+        completer.complete(value);
+      }
+    },
+    onError: (Object error, StackTrace stackTrace) {
+      parentSignal.removeListener(onAbort);
+      callAbortSignal.removeListener(onAbort);
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
+    },
+  );
+  return completer.future;
+}
+
+Future<Map<String, dynamic>?> _runLiveBeforeToolCallbacks({
+  required InvocationContext invocationContext,
+  required LlmAgent agent,
+  required BaseTool tool,
+  required Map<String, dynamic> functionArgs,
+  required ToolContext toolContext,
+  required bool Function() isCancelled,
+}) async {
+  final Map<String, dynamic>? pluginBefore = await invocationContext
+      .pluginManager
+      .runBeforeToolCallback(
+        tool: tool,
+        toolArgs: functionArgs,
+        toolContext: toolContext,
+      );
+  if (isCancelled()) {
+    return null;
+  }
+  if (pluginBefore != null) {
+    return pluginBefore;
+  }
+
+  for (final BeforeToolCallback callback
+      in agent.canonicalBeforeToolCallbacks) {
+    if (isCancelled()) {
+      return null;
+    }
+    final Map<String, dynamic>? value =
+        await runWithCallbackScope<Map<String, dynamic>?>(
+          CallbackInfo(
+            type: CallbackType.beforeTool,
+            name: resolveCallbackName(callback),
+          ),
+          () => callback(tool, functionArgs, toolContext),
+        );
+    if (isCancelled()) {
+      return null;
+    }
+    if (value != null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+Future<Map<String, dynamic>?> _runLiveAfterToolCallbacks({
+  required InvocationContext invocationContext,
+  required LlmAgent agent,
+  required BaseTool tool,
+  required Map<String, dynamic> functionArgs,
+  required ToolContext toolContext,
+  required Map<String, dynamic> functionResponse,
+  required bool Function() isCancelled,
+}) async {
+  final Map<String, dynamic>? pluginAfter = await invocationContext
+      .pluginManager
+      .runAfterToolCallback(
+        tool: tool,
+        toolArgs: functionArgs,
+        toolContext: toolContext,
+        result: functionResponse,
+      );
+  if (isCancelled()) {
+    return null;
+  }
+  if (pluginAfter != null) {
+    return pluginAfter;
+  }
+
+  for (final AfterToolCallback callback in agent.canonicalAfterToolCallbacks) {
+    if (isCancelled()) {
+      return null;
+    }
+    final Map<String, dynamic>? value =
+        await runWithCallbackScope<Map<String, dynamic>?>(
+          CallbackInfo(
+            type: CallbackType.afterTool,
+            name: resolveCallbackName(callback),
+          ),
+          () => callback(tool, functionArgs, toolContext, functionResponse),
+        );
+    if (isCancelled()) {
+      return null;
+    }
+    if (value != null) {
+      return value;
+    }
+  }
+  return functionResponse;
+}
+
+Future<void> _pumpLiveStreamResult({
+  required InvocationContext invocationContext,
+  required BaseTool tool,
+  required String callId,
+  required Map<String, dynamic> functionArgs,
+  required Stream<Object?> stream,
+  required bool Function() isCancelled,
+  required void Function(Future<void> Function()? cancelFn) setStreamCanceller,
+  LiveFunctionResponseQueue? functionResponseQueue,
+}) async {
+  final LiveRequestQueue? liveRequestQueue = invocationContext.liveRequestQueue;
+  if (liveRequestQueue == null) {
+    throw StateError('Streaming tools require a live request queue.');
+  }
+
+  final Completer<void> streamDone = Completer<void>();
+  StreamSubscription<Object?>? subscription;
+
+  final Map<String, ActiveStreamingTool> streamingMap =
+      invocationContext.activeStreamingTools ??=
+          <String, ActiveStreamingTool>{};
+  late final ActiveStreamingTool legacyEntry;
+
+  Future<void> cancelStream() async {
+    final StreamSubscription<Object?>? sub = subscription;
+    subscription = null;
+    if (identical(streamingMap[tool.name], legacyEntry)) {
+      streamingMap.remove(tool.name);
+    }
+    if (sub != null) {
+      await sub.cancel();
+    }
+    if (!streamDone.isCompleted) {
+      streamDone.complete();
+    }
+  }
+
+  legacyEntry = ActiveStreamingTool(
+    task: streamDone.future,
+    arguments: Map<String, dynamic>.from(functionArgs),
+    onCancel: cancelStream,
+  );
+  streamingMap[tool.name] = legacyEntry;
+  setStreamCanceller(cancelStream);
+
+  subscription = stream.listen(
+    (Object? item) {
+      if (isCancelled() || invocationContext.liveRequestQueue == null) {
+        unawaited(cancelStream());
+        return;
+      }
+      // Events emitted by streaming tools are caller-only and not forwarded to
+      // the model's LiveRequestQueue.
+      if (item is Event) {
+        if (functionResponseQueue != null) {
+          final Content? adjustedContent = item.content?.copyWith(role: 'user');
+          functionResponseQueue.putNowait(
+            item.copyWith(
+              invocationId: invocationContext.invocationId,
+              author: item.author.isNotEmpty
+                  ? item.author
+                  : invocationContext.agent.name,
+              branch: '${tool.name}@$callId',
+              content: adjustedContent,
+            ),
+          );
+        }
+        return;
+      }
+      final Part part = Part.fromFunctionResponse(
+        name: tool.name,
+        id: callId,
+        response: _normalizeFunctionResult(item),
+      );
+      if (tool.responseScheduling != null && part.functionResponse != null) {
+        part.functionResponse!.scheduling = tool.responseScheduling;
+      }
+      final Content content = Content(role: 'user', parts: <Part>[part]);
+      invocationContext.liveRequestQueue!.sendContent(content);
+    },
+    onError: (Object error, StackTrace stackTrace) {
+      if (identical(streamingMap[tool.name], legacyEntry)) {
+        streamingMap.remove(tool.name);
+      }
+      setStreamCanceller(null);
+      if (!streamDone.isCompleted) {
+        if (isCancelled()) {
+          streamDone.complete();
+        } else {
+          streamDone.completeError(error, stackTrace);
+        }
+      }
+    },
+    onDone: () {
+      if (identical(streamingMap[tool.name], legacyEntry)) {
+        streamingMap.remove(tool.name);
+      }
+      setStreamCanceller(null);
+      if (!streamDone.isCompleted) {
+        streamDone.complete();
+      }
+    },
+    cancelOnError: true,
+  );
+
+  if (isCancelled()) {
+    await cancelStream();
+    return;
+  }
+  await streamDone.future;
+}
+
+/// Runs one live [functionCall] in its own background task and pushes its
+/// finished [Event] onto [functionResponseQueue].
+void launchFunctionCallLive({
+  required InvocationContext invocationContext,
+  required FunctionCall functionCall,
+  required Map<String, BaseTool> toolsDict,
+  required LlmAgent agent,
+  required LiveFunctionResponseQueue functionResponseQueue,
+  String? liveSessionId,
+}) {
+  final String toolName = functionCall.name;
+  final String callId =
+      (functionCall.id != null && functionCall.id!.isNotEmpty)
+      ? functionCall.id!
+      : generateClientFunctionCallId();
+  functionCall.id ??= callId;
+
+  final Map<String, dynamic> functionArgs = Map<String, dynamic>.from(
+    functionCall.args,
+  );
+  bool callCancelled = false;
+  final AdkAbortSignal callAbortSignal = AdkAbortSignal();
+  Future<void> Function()? cancelActiveStream;
+
+  bool isCancelled() =>
+      callCancelled || callAbortSignal.aborted || invocationContext.isAborted;
+
+  Future<void> onCancel() async {
+    callCancelled = true;
+    callAbortSignal.abort('Live background tool call cancelled');
+    final Future<void> Function()? streamCancel = cancelActiveStream;
+    cancelActiveStream = null;
+    if (streamCancel != null) {
+      await streamCancel();
+    }
+  }
+
+  final BaseTool? knownTool = toolsDict[toolName];
+  final bool staticIsStreaming = isLiveStreamingTool(knownTool);
+  final LiveRequestQueue? inputStream = staticIsStreaming
+      ? _newLiveInputStream(knownTool)
+      : null;
+
+  final Completer<void> taskCompleter = Completer<void>();
+  ActiveBackgroundTool currentEntry = ActiveBackgroundTool(
+    toolName: toolName,
+    functionCallId: callId,
+    task: taskCompleter.future,
+    isGenerator: staticIsStreaming,
+    inputStream: inputStream,
+    arguments: Map<String, dynamic>.from(functionArgs),
+    onCancel: onCancel,
+  );
+  _backgroundTaskDone[currentEntry] = false;
+  invocationContext.activeBackgroundTools[callId] = currentEntry;
+
+  unawaited(() async {
+    try {
+      final ToolContext toolContext = Context(
+        invocationContext,
+        functionCallId: callId,
+      );
+
+      BaseTool tool;
+      try {
+        if (toolName == 'stop_streaming' &&
+            !toolsDict.containsKey('stop_streaming') &&
+            functionArgs.containsKey('function_name')) {
+          tool = _StopStreamingTool();
+        } else {
+          tool = _getTool(functionCall, toolsDict);
+        }
+      } catch (error) {
+        if (isCancelled()) {
+          return;
+        }
+        final Exception exception = error is Exception
+            ? error
+            : Exception(error.toString());
+        final BaseTool missing = _MissingTool(toolName);
+        final Map<String, dynamic>? callbackResponse =
+            await _runOnToolErrorCallbacks(
+              invocationContext: invocationContext,
+              agent: agent,
+              tool: missing,
+              toolArgs: functionArgs,
+              toolContext: toolContext,
+              error: exception,
+            );
+        if (isCancelled()) {
+          return;
+        }
+        final Map<String, dynamic> onError =
+            callbackResponse ??
+            _buildToolNotFoundResponse(missing.name, toolsDict);
+        final Event missingEvent = _buildResponseEvent(
+          tool: missing,
+          functionResult: onError,
+          toolContext: toolContext,
+          invocationContext: invocationContext,
+        )..liveSessionId = liveSessionId;
+        functionResponseQueue.putNowait(missingEvent);
+        return;
+      }
+
+      if (isLiveStreamingTool(tool)) {
+        Map<String, dynamic>? functionResponse =
+            await _runLiveBeforeToolCallbacks(
+              invocationContext: invocationContext,
+              agent: agent,
+              tool: tool,
+              functionArgs: functionArgs,
+              toolContext: toolContext,
+              isCancelled: isCancelled,
+            );
+        if (isCancelled()) {
+          return;
+        }
+
+        bool shouldStartStream = false;
+        Object? rawResult = functionResponse;
+        if (functionResponse == null) {
+          final bool requiresConfirmation = await tool.checkRequireConfirmation(
+            functionArgs,
+            toolContext,
+          );
+          if (isCancelled()) {
+            return;
+          }
+          if (requiresConfirmation) {
+            final ToolConfirmation? confirmation = toolContext.toolConfirmation;
+            if (confirmation == null) {
+              toolContext.requestConfirmation(
+                hint:
+                    'Please approve or reject the tool call ${tool.name}() by '
+                    'responding with a FunctionResponse with an expected '
+                    'ToolConfirmation payload.',
+              );
+              toolContext.actions.skipSummarization = true;
+              functionResponse = <String, dynamic>{
+                'error':
+                    'This tool call requires confirmation, please approve or reject.',
+              };
+            } else if (confirmation.confirmed != true) {
+              functionResponse = <String, dynamic>{
+                'error': 'This tool call is rejected.',
+              };
+            }
+          }
+        }
+
+        if (functionResponse == null) {
+          if (invocationContext.liveRequestQueue != null &&
+              await _deduplicateOrRestartLiveStreamingTool(
+                invocationContext: invocationContext,
+                toolName: tool.name,
+                functionArgs: functionArgs,
+                excludeCallId: callId,
+              )) {
+            functionResponse = <String, dynamic>{
+              'status': 'The function is already running and streaming results.',
+            };
+            rawResult = functionResponse;
+          }
+        }
+
+        if (functionResponse == null) {
+          shouldStartStream = true;
+          functionResponse = _pendingStreamingResponse();
+          rawResult = functionResponse;
+        }
+
+        final Map<String, dynamic>? finalPendingResponse =
+            await _runLiveAfterToolCallbacks(
+              invocationContext: invocationContext,
+              agent: agent,
+              tool: tool,
+              functionArgs: functionArgs,
+              toolContext: toolContext,
+              functionResponse: functionResponse,
+              isCancelled: isCancelled,
+            );
+        if (isCancelled() || finalPendingResponse == null) {
+          return;
+        }
+
+        final Event pendingEvent = _buildResponseEvent(
+          tool: tool,
+          functionResult: finalPendingResponse,
+          toolContext: toolContext,
+          invocationContext: invocationContext,
+          rawResult: identical(finalPendingResponse, functionResponse)
+              ? rawResult
+              : finalPendingResponse,
+        )..liveSessionId = liveSessionId;
+        _applyResponseScheduling(pendingEvent, tool);
+        functionResponseQueue.putNowait(pendingEvent);
+
+        if (shouldStartStream && !isCancelled()) {
+          final LiveRequestQueue? liveRequestQueue =
+              invocationContext.liveRequestQueue;
+          if (liveRequestQueue == null) {
+            throw StateError('Streaming tools require a live request queue.');
+          }
+          final Object? streamOrPayload = await _awaitLiveToolRunWithAbort(
+            invocationContext,
+            callAbortSignal,
+            () => tool.run(args: functionArgs, toolContext: toolContext),
+          );
+          if (isCancelled()) {
+            return;
+          }
+          if (streamOrPayload is Stream) {
+            await _pumpLiveStreamResult(
+              invocationContext: invocationContext,
+              tool: tool,
+              callId: callId,
+              functionArgs: functionArgs,
+              stream: streamOrPayload,
+              isCancelled: isCancelled,
+              setStreamCanceller: (Future<void> Function()? fn) {
+                cancelActiveStream = fn;
+              },
+              functionResponseQueue: functionResponseQueue,
+            );
+          } else {
+            final Part part = Part.fromFunctionResponse(
+              name: tool.name,
+              id: callId,
+              response: _normalizeFunctionResult(streamOrPayload),
+            );
+            if (tool.responseScheduling != null &&
+                part.functionResponse != null) {
+              part.functionResponse!.scheduling = tool.responseScheduling;
+            }
+            liveRequestQueue.sendContent(
+              Content(role: 'user', parts: <Part>[part]),
+            );
+          }
+        }
+        return;
+      }
+
+      // Non-streaming tool execution path (also handles dynamic Stream returns).
+      Map<String, dynamic>? functionResponse =
+          await _runLiveBeforeToolCallbacks(
+            invocationContext: invocationContext,
+            agent: agent,
+            tool: tool,
+            functionArgs: functionArgs,
+            toolContext: toolContext,
+            isCancelled: isCancelled,
+          );
+      if (isCancelled()) {
+        return;
+      }
+
+      Object? rawResult = functionResponse;
+      Stream<Object?>? dynamicStream;
+
+      if (functionResponse == null) {
+        try {
+          if (isCancelled()) {
+            _clearPendingToolInterrupts(toolContext);
+            await notifyToolCancelled(
+              invocationContext: invocationContext,
+              agent: agent,
+              tool: tool,
+              toolArgs: functionArgs,
+              toolContext: toolContext,
+            );
+            return;
+          }
+
+          final bool requiresConfirmation = await tool.checkRequireConfirmation(
+            functionArgs,
+            toolContext,
+          );
+          if (requiresConfirmation) {
+            final ToolConfirmation? confirmation = toolContext.toolConfirmation;
+            if (confirmation == null) {
+              toolContext.requestConfirmation(
+                hint:
+                    'Please approve or reject the tool call ${tool.name}() by '
+                    'responding with a FunctionResponse with an expected '
+                    'ToolConfirmation payload.',
+              );
+              toolContext.actions.skipSummarization = true;
+              functionResponse = <String, dynamic>{
+                'error':
+                    'This tool call requires confirmation, please approve or reject.',
+              };
+            } else if (confirmation.confirmed != true) {
+              functionResponse = <String, dynamic>{
+                'error': 'This tool call is rejected.',
+              };
+            }
+          }
+
+          if (functionResponse == null) {
+            final Object? result;
+            if (toolName == 'stop_streaming' &&
+                functionArgs.containsKey('function_name')) {
+              final Object? rawFunctionName = functionArgs['function_name'];
+              if (rawFunctionName is! String) {
+                throw ArgumentError(
+                  'stop_streaming requires a string function_name.',
+                );
+              }
+              result = await _stopStreamingTools(
+                invocationContext,
+                rawFunctionName,
+              );
+            } else {
+              result = await _awaitLiveToolRunWithAbort(
+                invocationContext,
+                callAbortSignal,
+                () => tool.run(args: functionArgs, toolContext: toolContext),
+              );
+            }
+
+            if (isCancelled()) {
+              _clearPendingToolInterrupts(toolContext);
+              await notifyToolCancelled(
+                invocationContext: invocationContext,
+                agent: agent,
+                tool: tool,
+                toolArgs: functionArgs,
+                toolContext: toolContext,
+              );
+              return;
+            }
+
+            if (result is Stream) {
+              if (invocationContext.liveRequestQueue != null &&
+                  await _deduplicateOrRestartLiveStreamingTool(
+                    invocationContext: invocationContext,
+                    toolName: tool.name,
+                    functionArgs: functionArgs,
+                    excludeCallId: callId,
+                  )) {
+                functionResponse = <String, dynamic>{
+                  'status':
+                      'The function is already running and streaming results.',
+                };
+                rawResult = functionResponse;
+              } else {
+                dynamicStream = result;
+                currentEntry = ActiveBackgroundTool(
+                  toolName: toolName,
+                  functionCallId: callId,
+                  task: taskCompleter.future,
+                  isGenerator: true,
+                  inputStream: inputStream,
+                  arguments: Map<String, dynamic>.from(functionArgs),
+                  onCancel: onCancel,
+                );
+                _backgroundTaskDone[currentEntry] = false;
+                invocationContext.activeBackgroundTools[callId] = currentEntry;
+                functionResponse = _pendingStreamingResponse();
+                rawResult = functionResponse;
+              }
+            } else {
+              rawResult = result;
+              functionResponse =
+                  (tool.isLongRunning || tool.defersResponse) && result == null
+                  ? <String, dynamic>{}
+                  : _normalizeFunctionResult(result);
+            }
+          }
+        } catch (error) {
+          _clearPendingToolInterrupts(toolContext);
+          if (error is AdkAbortException || isCancelled()) {
+            await notifyToolCancelled(
+              invocationContext: invocationContext,
+              agent: agent,
+              tool: tool,
+              toolArgs: functionArgs,
+              toolContext: toolContext,
+              cancelled: error is Exception
+                  ? error
+                  : Exception(error.toString()),
+            );
+            return;
+          }
+          final Exception exception = error is Exception
+              ? error
+              : Exception(error.toString());
+          final Map<String, dynamic>? handled = await _runOnToolErrorCallbacks(
+            invocationContext: invocationContext,
+            agent: agent,
+            tool: tool,
+            toolArgs: functionArgs,
+            toolContext: toolContext,
+            error: exception,
+          );
+          if (handled == null) {
+            rethrow;
+          }
+          functionResponse = handled;
+          rawResult = handled;
+        }
+      }
+
+      final Map<String, dynamic>? finalResponse =
+          await _runLiveAfterToolCallbacks(
+            invocationContext: invocationContext,
+            agent: agent,
+            tool: tool,
+            functionArgs: functionArgs,
+            toolContext: toolContext,
+            functionResponse: functionResponse,
+            isCancelled: isCancelled,
+          );
+      if (isCancelled() || finalResponse == null) {
+        return;
+      }
+
+      if ((tool.isLongRunning || tool.defersResponse) &&
+          finalResponse.isEmpty &&
+          dynamicStream == null) {
+        return;
+      }
+
+      final Event responseEvent = _buildResponseEvent(
+        tool: tool,
+        functionResult: finalResponse,
+        toolContext: toolContext,
+        invocationContext: invocationContext,
+        rawResult: identical(finalResponse, functionResponse)
+            ? rawResult
+            : finalResponse,
+      )..liveSessionId = liveSessionId;
+      _applyResponseScheduling(responseEvent, tool);
+      functionResponseQueue.putNowait(responseEvent);
+
+      if (dynamicStream != null && !isCancelled()) {
+        await _pumpLiveStreamResult(
+          invocationContext: invocationContext,
+          tool: tool,
+          callId: callId,
+          functionArgs: functionArgs,
+          stream: dynamicStream,
+          isCancelled: isCancelled,
+          setStreamCanceller: (Future<void> Function()? fn) {
+            cancelActiveStream = fn;
+          },
+          functionResponseQueue: functionResponseQueue,
+        );
+      }
+    } catch (error, stackTrace) {
+      if (isCancelled() || error is AdkAbortException) {
+        return;
+      }
+      // Avoid crashing stateful live sessions when tools fail. Instead, log and
+      // emit an error response so that the failure isn't silent.
+      developer.log(
+        'Error running live function call $toolName ($callId): $error',
+        name: 'adk_dart.live_caller',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      functionResponseQueue.putNowait(
+        _buildLiveInternalErrorResponseEvent(
+          invocationContext: invocationContext,
+          toolName: toolName,
+          functionCallId: callId,
+          liveSessionId: liveSessionId,
+          scheduling: toolsDict[toolName]?.responseScheduling,
+        ),
+      );
+    } finally {
+      if (identical(
+        invocationContext.activeBackgroundTools[callId],
+        currentEntry,
+      )) {
+        invocationContext.activeBackgroundTools.remove(callId);
+      }
+      inputStream?.close();
+      _backgroundTaskDone[currentEntry] = true;
+      if (!taskCompleter.isCompleted) {
+        taskCompleter.complete();
+      }
+    }
+  }());
+}
+
+/// Launches every function call in [functionCallEvent] in its own background
+/// task and queues each call's response event onto [functionResponseQueue] as
+/// it finishes.
+void launchFunctionCallsLive(
+  InvocationContext invocationContext,
+  Event functionCallEvent,
+  Map<String, BaseTool> toolsDict,
+  LiveFunctionResponseQueue functionResponseQueue,
+) {
+  if (functionCallEvent.partial == true) {
+    return;
+  }
+  final BaseAgent baseAgent = invocationContext.agent;
+  if (baseAgent is! LlmAgent) {
+    return;
+  }
+  for (final FunctionCall functionCall
+      in functionCallEvent.getFunctionCalls()) {
+    launchFunctionCallLive(
+      invocationContext: invocationContext,
+      functionCall: functionCall,
+      toolsDict: toolsDict,
+      agent: baseAgent,
+      functionResponseQueue: functionResponseQueue,
+      liveSessionId: functionCallEvent.liveSessionId,
+    );
+  }
+}
+
+/// Waits up to [timeout] for running non-streaming background tool calls on
+/// [invocationContext] to finish.
+///
+/// Streaming calls (`isGenerator == true`) run until stopped, so they are not
+/// waited for. Calls still running after [timeout] are logged and left for
+/// [stopBackgroundToolTasks] to cancel.
+Future<void> waitForLiveToolCalls(
+  InvocationContext invocationContext, {
+  Duration timeout = defaultLiveToolFinishTimeout,
+}) async {
+  final List<ActiveBackgroundTool> running = <ActiveBackgroundTool>[
+    for (final ActiveBackgroundTool active
+        in invocationContext.activeBackgroundTools.values)
+      if (!active.isGenerator &&
+          active.task != null &&
+          _backgroundTaskDone[active] != true)
+        active,
+  ];
+  if (running.isEmpty) {
+    return;
+  }
+
+  final Completer<void> timeoutCompleter = Completer<void>();
+  final Timer timer = Timer(timeout, () {
+    if (!timeoutCompleter.isCompleted) {
+      timeoutCompleter.complete();
+    }
+  });
+  try {
+    await Future.any<void>(<Future<void>>[
+      Future.wait<void>(
+        running.map(
+          (ActiveBackgroundTool active) =>
+              active.task!.then<void>((_) {}, onError: (Object _) {}),
+        ),
+      ),
+      timeoutCompleter.future,
+    ]);
+  } finally {
+    timer.cancel();
+  }
+
+  final List<ActiveBackgroundTool> stillRunning = <ActiveBackgroundTool>[
+    for (final ActiveBackgroundTool active in running)
+      if (invocationContext.activeBackgroundTools.containsKey(
+            active.functionCallId,
+          ) &&
+          _backgroundTaskDone[active] != true)
+        active,
+  ];
+  if (stillRunning.isNotEmpty) {
+    final String summary = stillRunning
+        .map(
+          (ActiveBackgroundTool a) => '${a.toolName} (${a.functionCallId})',
+        )
+        .join(', ');
+    developer.log(
+      'Tool calls still running after ${timeout.inMilliseconds / 1000.0} '
+      'seconds will be cancelled: $summary',
+      name: 'adk_dart.live_flow',
+      level: 900,
+    );
+  }
+}
+
+/// Cancels all running background tool tasks registered on [invocationContext].
+Future<void> stopBackgroundToolTasks(
+  InvocationContext invocationContext,
+) async {
+  invocationContext.activeNonBlockingToolTasks?.clear();
+  final List<ActiveBackgroundTool> activeTools = invocationContext
+      .activeBackgroundTools
+      .values
+      .toList(growable: false);
+  if (activeTools.isEmpty) {
+    return;
+  }
+  for (final ActiveBackgroundTool active in activeTools) {
+    try {
+      await active.onCancel?.call();
+    } catch (_) {}
+    active.inputStream?.close();
+  }
+  final List<Future<void>> tasks = <Future<void>>[
+    for (final ActiveBackgroundTool active in activeTools)
+      if (active.task != null && _backgroundTaskDone[active] != true)
+        active.task!.then<void>((_) {}, onError: (Object _) {}),
+  ];
+  if (tasks.isNotEmpty) {
+    final Timer shutdownTimer = Timer(_liveToolShutdownTimeout, () {});
+    try {
+      await Future.any<void>(<Future<void>>[
+        Future.wait<void>(tasks),
+        Future<void>.delayed(_liveToolShutdownTimeout),
+      ]);
+    } finally {
+      shutdownTimer.cancel();
+    }
+  }
+  invocationContext.activeBackgroundTools.clear();
 }

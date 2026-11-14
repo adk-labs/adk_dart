@@ -6,12 +6,12 @@ import '../types/content.dart';
 import 'tool_configs.dart';
 import 'tool_context.dart';
 
-/// Controls whether a tool is blocking or non-blocking in Live API mode.
+/// Controls whether the model waits for a tool's response in Live API mode.
 enum ToolBehavior {
-  /// The model waits for the tool response before continuing.
+  /// The model waits for the tool response before continuing, unless the user interrupts.
   blocking('BLOCKING'),
 
-  /// The model continues the conversation while the tool executes in the background.
+  /// The model continues the conversation while the tool runs.
   nonBlocking('NON_BLOCKING');
 
   /// Creates a [ToolBehavior] with its [wireValue].
@@ -19,6 +19,20 @@ enum ToolBehavior {
 
   /// Wire format string representation.
   final String wireValue;
+}
+
+final Expando<ToolBehavior> _liveDeclarationBehavior = Expando<ToolBehavior>(
+  'FunctionDeclaration.behavior',
+);
+
+/// Live function-declaration behavior attached to [FunctionDeclaration].
+extension LiveFunctionDeclarationBehavior on FunctionDeclaration {
+  /// Optional Live API tool behavior (`BLOCKING` or `NON_BLOCKING`).
+  ToolBehavior? get behavior => _liveDeclarationBehavior[this];
+
+  set behavior(ToolBehavior? value) {
+    _liveDeclarationBehavior[this] = value;
+  }
 }
 
 /// Base contract for one callable tool exposed to the model runtime.
@@ -56,7 +70,17 @@ abstract class BaseTool {
   /// Arbitrary metadata attached to this tool declaration.
   Map<String, dynamic>? customMetadata;
 
-  /// Controls whether the tool is blocking or non-blocking in Live mode.
+  /// Controls whether the model waits for the tool's response (Live API only).
+  ///
+  /// Sent on the tool's function declaration. In live mode, ADK runs every
+  /// function call in a background task regardless of this setting.
+  ///
+  /// - [ToolBehavior.nonBlocking]: the model continues the conversation while
+  ///   the tool runs.
+  /// - [ToolBehavior.blocking]: the model waits for the tool response before
+  ///   continuing, unless the user interrupts.
+  /// - `null`: declared [ToolBehavior.nonBlocking] if [responseScheduling] is
+  ///   set; otherwise left unset, so the model backend's default applies.
   ToolBehavior? behavior;
 
   /// Live response scheduling policy for this tool.

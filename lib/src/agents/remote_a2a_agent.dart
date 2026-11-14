@@ -347,6 +347,91 @@ class RemoteA2aAgent extends BaseAgent {
   /// Whether remote card/client resolution has completed.
   bool get isResolved => _isResolved;
 
+  /// Task states that represent in-progress or input-awaiting work.
+  ///
+  /// Events stamped with one of these states carry intermediate or
+  /// waiting-for-input content, never the final answer, so they must not be
+  /// promoted to the workflow node's output. A2A 0.3 serializes the state with
+  /// hyphenated names, A2A 1.x with proto enum names, and internal Dart A2A
+  /// serialization uses camelCase enum names.
+  static const Set<String> _nonFinalTaskStates = <String>{
+    'submitted',
+    'working',
+    'input-required',
+    'auth-required',
+    'unknown',
+    'inputRequired',
+    'authRequired',
+    'TASK_STATE_SUBMITTED',
+    'TASK_STATE_WORKING',
+    'TASK_STATE_INPUT_REQUIRED',
+    'TASK_STATE_AUTH_REQUIRED',
+    'TASK_STATE_UNSPECIFIED',
+  };
+
+  static const Set<String> _failedTaskStates = <String>{
+    'failed',
+    'TASK_STATE_FAILED',
+  };
+
+  /// Copies the text of a terminal remote response onto [Event.output].
+  ///
+  /// Returns `true` iff this call assigned [Event.output]. Skips:
+  /// - partial events and events whose [Event.output] is already set;
+  /// - error events from a failed A2A task (an error code on a completed task,
+  ///   such as a `MAX_TOKENS` finish reason, still yields the answer);
+  /// - events that do not belong to [nodePath];
+  /// - events from a task whose status is not yet final;
+  /// - thought parts, function calls, and function responses.
+  bool promoteResponseToOutput(Event event, String? nodePath) {
+    if (event.partial == true || (event.hasOutput && event.output != null)) {
+      return false;
+    }
+    if (nodePath == null ||
+        nodePath.isEmpty ||
+        event.nodeInfo.path != nodePath) {
+      return false;
+    }
+    if (event.content == null || event.content!.parts.isEmpty) {
+      return false;
+    }
+
+    final Object? responseMeta =
+        event.customMetadata?['${a2aMetadataPrefix}response'];
+    if (responseMeta is Map) {
+      final Object? status = responseMeta['status'];
+      // A2A 1.x MessageToDict omits the default TASK_STATE_UNSPECIFIED.
+      final Object? state = status is Map
+          ? (status['state'] ?? 'TASK_STATE_UNSPECIFIED')
+          : null;
+      if (state is String && _nonFinalTaskStates.contains(state)) {
+        return false;
+      }
+      if (event.errorCode != null &&
+          state is String &&
+          _failedTaskStates.contains(state)) {
+        return false;
+      }
+    }
+
+    final List<String> textChunks = <String>[
+      for (final Part part in event.content!.parts)
+        if (part.text != null &&
+            part.text!.isNotEmpty &&
+            !part.thought &&
+            part.functionCall == null &&
+            part.functionResponse == null)
+          part.text!,
+    ];
+    if (textChunks.isEmpty) {
+      return false;
+    }
+
+    event.output = textChunks.join();
+    event.nodeInfo = event.nodeInfo.copyWith(messageAsOutput: true);
+    return true;
+  }
+
   /// Returns a cloned remote A2A agent with optional field overrides.
   @override
   RemoteA2aAgent clone({Map<String, Object?>? update}) {
@@ -1059,6 +1144,7 @@ class RemoteA2aAgent extends BaseAgent {
         }
 
         A2aTask? lastTask;
+        bool outputPromoted = false;
         await for (final Object a2aResponse in _a2aClient!.sendMessage(
           request: a2aRequest,
           requestMetadata: parameters.requestMetadata,
@@ -1096,13 +1182,30 @@ class RemoteA2aAgent extends BaseAgent {
           );
 
           if (a2aResponse is A2aClientEvent) {
+            final A2aEvent? updateEvent = a2aResponse.$2;
             event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
-              _a2aTaskToJson(a2aResponse.$1),
+              _a2aTaskToJson(
+                a2aResponse.$1,
+                statusOverride: updateEvent is A2aTaskStatusUpdateEvent
+                    ? updateEvent.status
+                    : null,
+              ),
             );
           } else if (a2aResponse is A2aMessage) {
             event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
               _a2aMessageToJson(a2aResponse),
             );
+          }
+
+          if (ctx.nodePath != null && ctx.nodePath!.isNotEmpty) {
+            if (event.nodeInfo.isEmpty) {
+              event.nodeInfo = NodeInfo(path: ctx.nodePath!);
+            }
+            if (mode != 'task' &&
+                !outputPromoted &&
+                promoteResponseToOutput(event, ctx.nodePath)) {
+              outputPromoted = true;
+            }
           }
 
           if (mode == 'task' && isFinishTaskTerminalFr(event)) {
@@ -1551,11 +1654,14 @@ Map<String, Object?> _a2aMessageToJson(A2aMessage? message) {
   };
 }
 
-Map<String, Object?> _a2aTaskToJson(A2aTask task) {
+Map<String, Object?> _a2aTaskToJson(
+  A2aTask task, {
+  A2aTaskStatus? statusOverride,
+}) {
   return <String, Object?>{
     'id': task.id,
     'context_id': task.contextId,
-    'status': _a2aTaskStatusToJson(task.status),
+    'status': _a2aTaskStatusToJson(statusOverride ?? task.status),
     'history': task.history.map(_a2aMessageToJson).toList(growable: false),
     'artifacts': task.artifacts.map(_a2aArtifactToJson).toList(growable: false),
     'metadata': task.metadata.isEmpty

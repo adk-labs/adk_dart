@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 
 import '../../agents/abort_signal.dart';
 import '../../agents/base_agent.dart';
@@ -19,6 +20,7 @@ import '../../auth/credential_manager.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../features/_feature_registry.dart';
+import '../../live/cascade_live_connection.dart' show LiveTranscription;
 import '../../models/base_llm.dart';
 import '../../models/base_llm_connection.dart';
 import '../../models/conformance_replay_llm.dart';
@@ -58,6 +60,39 @@ class _LiveReconnectRequested implements Exception {
   final Object? reason;
 }
 
+class _LiveSessionRestartRequested implements Exception {
+  const _LiveSessionRestartRequested();
+}
+
+class _MergedLiveStreamEntry {
+  _MergedLiveStreamEntry(this.event, this.handled);
+
+  final Event event;
+  final Completer<void> handled;
+}
+
+class _MergedLiveEntryQueue {
+  final Queue<_MergedLiveStreamEntry?> _entries =
+      Queue<_MergedLiveStreamEntry?>();
+  Completer<void>? _waiter;
+
+  void push(_MergedLiveStreamEntry? entry) {
+    _entries.addLast(entry);
+    final Completer<void>? waiter = _waiter;
+    if (waiter != null && !waiter.isCompleted) {
+      _waiter = null;
+      waiter.complete();
+    }
+  }
+
+  Future<_MergedLiveStreamEntry?> pop() async {
+    while (_entries.isEmpty) {
+      await (_waiter ??= Completer<void>()).future;
+    }
+    return _entries.removeFirst();
+  }
+}
+
 /// Core LLM flow coordinator for request/response processing and tool loops.
 class BaseLlmFlow {
   /// Creates a base LLM flow.
@@ -77,6 +112,154 @@ class BaseLlmFlow {
   /// Realtime cache manager used for live audio and media blob handling.
   RealtimeCacheManager get realtimeCacheManager => audioCacheManager;
 
+  /// Maximum time a normally ending live run waits for running non-streaming
+  /// tool calls to finish before cancelling them.
+  Duration liveToolFinishTimeout = flow_functions.defaultLiveToolFinishTimeout;
+
+  /// Optional delay before closing the parent connection on live agent handoff.
+  Duration liveTransferAgentDelay = Duration.zero;
+
+  /// Optional delay before ending a live run on `task_completed`.
+  Duration liveTaskCompletionDelay = Duration.zero;
+
+  /// Merges live [modelEvents] and [functionResponseQueue] into a single
+  /// backpressured stream without reading ahead or losing queued responses on
+  /// connection drop or reconnect.
+  Stream<Event> mergeFunctionResponses(
+    Stream<Event> modelEvents,
+    flow_functions.LiveFunctionResponseQueue functionResponseQueue,
+  ) async* {
+    final _MergedLiveEntryQueue merged = _MergedLiveEntryQueue();
+    final StreamIterator<Event> modelIterator = StreamIterator<Event>(
+      modelEvents,
+    );
+    final Completer<void> stopAllSignal = Completer<void>();
+    final Completer<void> stopFunctionSignal = Completer<void>();
+    bool stopAll = false;
+    bool stopFunction = false;
+    bool modelIteratorCancelled = false;
+    bool modelPumpDone = false;
+    Object? modelPumpError;
+    StackTrace? modelPumpStackTrace;
+
+    Future<void> cancelModelIteratorOnce() {
+      if (modelIteratorCancelled) {
+        return Future<void>.value();
+      }
+      modelIteratorCancelled = true;
+      return modelIterator.cancel();
+    }
+
+    Future<void> stopFunctionPumpOnce(Future<void> functionPumpFuture) async {
+      stopFunction = true;
+      if (!stopFunctionSignal.isCompleted) {
+        stopFunctionSignal.complete();
+      }
+      await functionPumpFuture;
+    }
+
+    final Future<void> modelPumpFuture = () async {
+      try {
+        while (!stopAll) {
+          final bool hasNext = await modelIterator.moveNext();
+          if (!hasNext || stopAll) {
+            break;
+          }
+          final Completer<void> handled = Completer<void>();
+          merged.push(_MergedLiveStreamEntry(modelIterator.current, handled));
+          await Future.any<void>(<Future<void>>[
+            handled.future,
+            stopAllSignal.future,
+          ]);
+        }
+      } catch (error, stackTrace) {
+        if (!stopAll) {
+          modelPumpError = error;
+          modelPumpStackTrace = stackTrace;
+        }
+      } finally {
+        modelPumpDone = true;
+        merged.push(null);
+        await cancelModelIteratorOnce();
+      }
+    }();
+
+    final Future<void> functionPumpFuture = () async {
+      while (!stopAll && !stopFunction) {
+        if (functionResponseQueue.isEmpty) {
+          await Future.any<void>(<Future<void>>[
+            functionResponseQueue.waitForItem(),
+            stopFunctionSignal.future,
+            stopAllSignal.future,
+          ]);
+          if (stopAll || stopFunction) {
+            break;
+          }
+          if (functionResponseQueue.isEmpty) {
+            continue;
+          }
+        }
+        final Event result = functionResponseQueue.getNowait();
+        final Completer<void> handled = Completer<void>();
+        merged.push(_MergedLiveStreamEntry(result, handled));
+        try {
+          await Future.any<void>(<Future<void>>[
+            handled.future,
+            stopFunctionSignal.future,
+            stopAllSignal.future,
+          ]);
+        } finally {
+          if (!handled.isCompleted) {
+            functionResponseQueue.putFrontNowait(result);
+          }
+        }
+        if (!handled.isCompleted) {
+          break;
+        }
+      }
+    }();
+
+    try {
+      while (true) {
+        final _MergedLiveStreamEntry? entry = await merged.pop();
+        if (entry == null || modelPumpDone) {
+          break;
+        }
+        try {
+          yield entry.event;
+        } finally {
+          if (!entry.handled.isCompleted) {
+            entry.handled.complete();
+          }
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      await stopFunctionPumpOnce(functionPumpFuture);
+      if (modelPumpError == null) {
+        while (functionResponseQueue.isNotEmpty) {
+          yield functionResponseQueue.getNowait();
+        }
+      } else {
+        Error.throwWithStackTrace(modelPumpError!, modelPumpStackTrace!);
+      }
+    } finally {
+      stopAll = true;
+      stopFunction = true;
+      if (!stopFunctionSignal.isCompleted) {
+        stopFunctionSignal.complete();
+      }
+      if (!stopAllSignal.isCompleted) {
+        stopAllSignal.complete();
+      }
+      await cancelModelIteratorOnce();
+      await Future.wait<void>(<Future<void>>[
+        modelPumpFuture,
+        functionPumpFuture,
+      ]);
+    }
+  }
+
   /// Runs the flow in live mode when a live queue is available.
   Stream<Event> runLive(InvocationContext context) async* {
     if (context.isAborted) {
@@ -93,116 +276,259 @@ class BaseLlmFlow {
 
     final BaseLlm llm = _getLlm(context);
     if (!_supportsLiveConnect(llm)) {
-      await for (final Event event in _runLiveFallback(context, liveQueue)) {
-        yield event;
-      }
-      return;
-    }
-
-    final LlmRequest request = LlmRequest();
-    await for (final Event event in _preprocessAsync(
-      context,
-      request,
-      live: true,
-    )) {
-      if (context.isAborted) {
-        return;
-      }
-      yield event;
-    }
-    if (context.endInvocation || context.isAborted) {
-      return;
-    }
-
-    int reconnectAttempts = 0;
-    try {
-      while (true) {
-        _applyLiveSessionResumptionHandle(context, request);
-        _applyLiveInitialHistoryConfig(context, request);
-
-        final BaseLlmConnection connection = _connectLive(llm, request);
-        final Completer<void> stopSending = Completer<void>();
-        Future<void>? sendTask;
-        Future<void>? closeTask;
-        bool closedByClient = false;
-
-        Future<void> closeConnectionOnce() {
-          closeTask ??= connection.close();
-          return closeTask!;
+      try {
+        await for (final Event event in _runLiveFallback(context, liveQueue)) {
+          yield event;
         }
+      } finally {
+        context.liveRequestQueue?.close();
+        await flow_functions.stopBackgroundToolTasks(context);
+      }
+      return;
+    }
 
-        try {
-          if (request.contents.isNotEmpty &&
-              !_hasLiveSessionResumptionHandle(context)) {
-            await connection.sendHistory(
-              request.contents
-                  .map((Content content) => content.copyWith())
-                  .toList(growable: false),
-            );
-          }
+    final flow_functions.LiveFunctionResponseQueue functionResponseQueue =
+        flow_functions.LiveFunctionResponseQueue();
+    bool keepLiveQueueOpen = false;
 
-          sendTask = _sendToModel(
-            connection,
-            context,
-            closeConnection: closeConnectionOnce,
-            cancelSignal: stopSending.future,
-            onTerminalClose: () {
-              closedByClient = true;
-            },
-          );
-          await for (final Event event in _receiveFromModel(
-            connection,
-            context,
-            request,
-          )) {
-            if (context.isAborted) {
-              return;
-            }
-            reconnectAttempts = 0;
-            yield event;
-            if (event.getFunctionResponses().isNotEmpty &&
-                event.content != null) {
-              context.liveRequestQueue?.sendContent(event.content!.copyWith());
-            }
-          }
+    Stream<Event> finishInFlightCalls() async* {
+      await flow_functions.waitForLiveToolCalls(
+        context,
+        timeout: liveToolFinishTimeout,
+      );
+      while (functionResponseQueue.isNotEmpty) {
+        yield functionResponseQueue.getNowait();
+      }
+    }
 
-          if (closedByClient) {
+    try {
+      try {
+        final LlmRequest request = LlmRequest();
+        await for (final Event event in _preprocessAsync(
+          context,
+          request,
+          live: true,
+        )) {
+          if (context.isAborted) {
             return;
           }
-          return;
-        } on _LiveReconnectRequested {
-          if (!_canRetryLiveConnection(context, reconnectAttempts)) {
-            rethrow;
-          }
-          reconnectAttempts += 1;
-        } on RecoverableLiveConnectionException catch (error, stackTrace) {
-          if (!_canRetryLiveConnection(context, reconnectAttempts)) {
-            Error.throwWithStackTrace(error, stackTrace);
-          }
-          reconnectAttempts += 1;
-        } finally {
-          if (!stopSending.isCompleted) {
-            stopSending.complete();
-          }
-          if (sendTask != null) {
-            try {
-              await sendTask;
-            } catch (_) {}
-          }
-          await closeConnectionOnce();
+          yield event;
         }
+        if (context.endInvocation || context.isAborted) {
+          return;
+        }
+
+        int reconnectAttempts = 0;
+        while (true) {
+          _applyLiveSessionResumptionHandle(context, request);
+          _applyLiveInitialHistoryConfig(context, request);
+
+          final BaseLlmConnection connection = _connectLive(llm, request);
+          final Completer<void> stopSending = Completer<void>();
+          Future<void>? sendTask;
+          Future<void>? closeTask;
+          bool closedByClient = false;
+
+          Future<void> closeConnectionOnce() {
+            closeTask ??= connection.close();
+            return closeTask!;
+          }
+
+          try {
+            if (request.contents.isNotEmpty &&
+                !_hasLiveSessionResumptionHandle(context)) {
+              await connection.sendHistory(
+                request.contents
+                    .map((Content content) => content.copyWith())
+                    .toList(growable: false),
+              );
+            }
+
+            sendTask = _sendToModel(
+              connection,
+              context,
+              request,
+              closeConnection: closeConnectionOnce,
+              cancelSignal: stopSending.future,
+              onTerminalClose: () {
+                closedByClient = true;
+              },
+              onBlockedEvent: functionResponseQueue.putNowait,
+            );
+
+            final StreamIterator<Event> mergedIterator = StreamIterator<Event>(
+              mergeFunctionResponses(
+                _receiveFromModel(connection, context, request),
+                functionResponseQueue,
+              ),
+            );
+            bool mergedCancelled = false;
+            Future<void> cancelMergedOnce() {
+              if (mergedCancelled) {
+                return Future<void>.value();
+              }
+              mergedCancelled = true;
+              return mergedIterator.cancel();
+            }
+
+            try {
+              while (await mergedIterator.moveNext()) {
+                final Event event = mergedIterator.current;
+                if (context.isAborted) {
+                  await cancelMergedOnce();
+                  return;
+                }
+                reconnectAttempts = 0;
+                yield event;
+
+                if (event.getFunctionCalls().isNotEmpty &&
+                    event.partial != true) {
+                  flow_functions.launchFunctionCallsLive(
+                    context,
+                    event,
+                    request.toolsDict,
+                    functionResponseQueue,
+                  );
+                }
+
+                if (event.getFunctionResponses().isNotEmpty &&
+                    event.content != null) {
+                  context.liveRequestQueue?.sendContent(
+                    event.content!.copyWith(),
+                  );
+                }
+
+                final String? transferToAgent = event.actions.transferToAgent;
+                if (transferToAgent != null && transferToAgent.isNotEmpty) {
+                  await cancelMergedOnce();
+                  await flow_functions.stopBackgroundToolTasks(context);
+                  while (functionResponseQueue.isNotEmpty) {
+                    yield functionResponseQueue.getNowait();
+                  }
+                  if (liveTransferAgentDelay > Duration.zero) {
+                    await Future<void>.delayed(liveTransferAgentDelay);
+                  } else {
+                    await Future<void>.delayed(Duration.zero);
+                  }
+                  if (!stopSending.isCompleted) {
+                    stopSending.complete();
+                  }
+                  if (sendTask != null) {
+                    try {
+                      await sendTask;
+                    } catch (_) {}
+                    sendTask = null;
+                  }
+                  await closeConnectionOnce();
+
+                  final BaseAgent agentToRun = _getAgentToRun(
+                    context,
+                    transferToAgent,
+                    allowSelfTransfer: true,
+                  );
+                  final InvocationContext childContext =
+                      _createLiveTransferContext(context);
+                  keepLiveQueueOpen = true;
+                  await for (final Event childEvent in agentToRun.runLive(
+                    childContext,
+                  )) {
+                    if (context.isAborted || childContext.isAborted) {
+                      return;
+                    }
+                    yield childEvent;
+                  }
+                  return;
+                }
+
+                if (event.getFunctionResponses().any(
+                  (FunctionResponse fr) => fr.name == 'task_completed',
+                )) {
+                  await cancelMergedOnce();
+                  if (liveTaskCompletionDelay > Duration.zero) {
+                    await Future<void>.delayed(liveTaskCompletionDelay);
+                  } else {
+                    await Future<void>.delayed(Duration.zero);
+                    await Future<void>.delayed(Duration.zero);
+                  }
+                  while (functionResponseQueue.isNotEmpty) {
+                    yield functionResponseQueue.getNowait();
+                  }
+                  if (!stopSending.isCompleted) {
+                    stopSending.complete();
+                  }
+                  keepLiveQueueOpen = true;
+                  return;
+                }
+              }
+            } finally {
+              await cancelMergedOnce();
+            }
+
+            if (closedByClient) {
+              yield* finishInFlightCalls();
+              return;
+            }
+            yield* finishInFlightCalls();
+            return;
+          } on _LiveSessionRestartRequested {
+            if (!stopSending.isCompleted) {
+              stopSending.complete();
+            }
+            if (sendTask != null) {
+              try {
+                await sendTask;
+              } catch (_) {}
+              sendTask = null;
+            }
+            await closeConnectionOnce();
+            await flow_functions.stopBackgroundToolTasks(context);
+            while (functionResponseQueue.isNotEmpty) {
+              yield functionResponseQueue.getNowait();
+            }
+            final InvocationContext restartContext = _createLiveTransferContext(
+              context,
+            );
+            keepLiveQueueOpen = true;
+            await for (final Event restartedEvent in runLive(restartContext)) {
+              if (context.isAborted || restartContext.isAborted) {
+                return;
+              }
+              yield restartedEvent;
+            }
+            return;
+          } on _LiveReconnectRequested {
+            if (!_canRetryLiveConnection(context, reconnectAttempts)) {
+              rethrow;
+            }
+            reconnectAttempts += 1;
+          } on RecoverableLiveConnectionException catch (error, stackTrace) {
+            if (!_canRetryLiveConnection(context, reconnectAttempts)) {
+              Error.throwWithStackTrace(error, stackTrace);
+            }
+            reconnectAttempts += 1;
+          } finally {
+            if (!stopSending.isCompleted) {
+              stopSending.complete();
+            }
+            if (sendTask != null) {
+              try {
+                await sendTask;
+              } catch (_) {}
+            }
+            await closeConnectionOnce();
+          }
+        }
+      } catch (error, stackTrace) {
+        while (functionResponseQueue.isNotEmpty) {
+          yield functionResponseQueue.getNowait();
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
     } finally {
-      context.liveRequestQueue?.close();
-      context.activeNonBlockingToolTasks?.clear();
-      for (final ActiveBackgroundTool active
-          in context.activeBackgroundTools.values.toList(growable: false)) {
-        try {
-          await active.onCancel?.call();
-        } catch (_) {}
-        active.inputStream?.close();
+      if (!keepLiveQueueOpen) {
+        context.liveRequestQueue?.close();
       }
-      context.activeBackgroundTools.clear();
+      await flow_functions.stopBackgroundToolTasks(context);
     }
   }
 
@@ -280,12 +606,88 @@ class BaseLlmFlow {
     }
   }
 
+  Future<Event?> _screenLiveUserContent(
+    InvocationContext context,
+    Content content,
+    LlmRequest request,
+  ) async {
+    if (context.agent is! LlmAgent) {
+      return null;
+    }
+    final LlmRequest callbackRequest = LlmRequest(
+      model: request.model,
+      contents: <Content>[content.copyWith()],
+      config: request.config.copyWith(),
+      liveConnectConfig: request.liveConnectConfig.copyWith(),
+      toolsDict: Map<String, BaseTool>.from(request.toolsDict),
+      cacheConfig: request.cacheConfig,
+      cacheMetadata: request.cacheMetadata,
+      cacheableContentsTokenCount: request.cacheableContentsTokenCount,
+      previousInteractionId: request.previousInteractionId,
+      serviceTier: request.serviceTier,
+    );
+    final Event callbackResponseEvent = Event(
+      id: Event.newId(),
+      invocationId: context.invocationId,
+      author: context.agent.name,
+      branch: context.branch,
+    );
+    final LlmResponse? blockedResponse = await _handleBeforeModelCallback(
+      context,
+      callbackRequest,
+      callbackResponseEvent,
+    );
+    if (blockedResponse != null) {
+      final Event blockedEvent = _finalizeModelResponseEvent(
+        callbackRequest,
+        blockedResponse,
+        callbackResponseEvent,
+      )..turnComplete = true;
+      return blockedEvent;
+    }
+    return null;
+  }
+
+  static ({String? text, bool finished}) _extractTranscriptionInfo(
+    Object? raw,
+  ) {
+    if (raw == null) {
+      return (text: null, finished: false);
+    }
+    if (raw is Map) {
+      final Object? rawText = raw['text'];
+      return (
+        text: rawText is String ? rawText : null,
+        finished: raw['finished'] == true,
+      );
+    }
+    try {
+      final dynamic dynamicRaw = raw;
+      String? text;
+      bool finished = false;
+      try {
+        final Object? rawText = dynamicRaw.text;
+        if (rawText is String) {
+          text = rawText;
+        }
+      } catch (_) {}
+      try {
+        finished = dynamicRaw.finished == true;
+      } catch (_) {}
+      return (text: text, finished: finished);
+    } catch (_) {
+      return (text: null, finished: false);
+    }
+  }
+
   Future<void> _sendToModel(
     BaseLlmConnection connection,
-    InvocationContext context, {
+    InvocationContext context,
+    LlmRequest request, {
     required Future<void> Function() closeConnection,
     required Future<void> cancelSignal,
     void Function()? onTerminalClose,
+    void Function(Event event)? onBlockedEvent,
   }) async {
     while (true) {
       if (context.isAborted) {
@@ -364,8 +766,22 @@ class BaseLlmFlow {
       if (content.parts.any((Part part) => part.functionCall != null)) {
         throw ArgumentError('User message cannot contain function calls.');
       }
+      final bool isOnlyFunctionResponses =
+          content.parts.isNotEmpty &&
+          content.parts.every((Part part) => part.functionResponse != null);
       content = _normalizeLiveContentRole(content);
       content = await _appendLiveUserContent(context, content);
+      if (!isOnlyFunctionResponses) {
+        final Event? blockedEvent = await _screenLiveUserContent(
+          context,
+          content,
+          request,
+        );
+        if (blockedEvent != null) {
+          onBlockedEvent?.call(blockedEvent);
+          continue;
+        }
+      }
       await connection.sendContent(content.copyWith());
     }
   }
@@ -375,6 +791,7 @@ class BaseLlmFlow {
     InvocationContext context,
     LlmRequest request,
   ) async* {
+    String turnOutputTranscription = '';
     await for (final LlmResponse response in connection.receive()) {
       if (context.isAborted) {
         return;
@@ -385,6 +802,9 @@ class BaseLlmFlow {
       );
       _maybeUpdateLiveSessionResumptionHandle(context, response.customMetadata);
       final bool reconnectRequested = response.goAway != null;
+      if (response.turnComplete == true || response.interrupted == true) {
+        turnOutputTranscription = '';
+      }
 
       final Event modelResponseEvent = Event(
         id: Event.newId(),
@@ -396,6 +816,40 @@ class BaseLlmFlow {
             : context.agent.name,
         branch: context.branch,
       );
+
+      if (response.outputTranscription != null) {
+        final ({String? text, bool finished}) outInfo =
+            _extractTranscriptionInfo(response.outputTranscription);
+        if (outInfo.finished) {
+          turnOutputTranscription = '';
+        } else if (outInfo.text != null && outInfo.text!.isNotEmpty) {
+          turnOutputTranscription += outInfo.text!;
+        }
+
+        if (turnOutputTranscription.isNotEmpty && context.agent is LlmAgent) {
+          final LlmResponse callbackLlmResponse = response.copyWith(
+            outputTranscription: LiveTranscription(
+              text: turnOutputTranscription,
+              finished: false,
+            ),
+          );
+          final LlmResponse? blockedResponse = await _handleAfterModelCallback(
+            context,
+            callbackLlmResponse,
+            modelResponseEvent,
+          );
+          if (blockedResponse != null &&
+              !identical(blockedResponse, callbackLlmResponse)) {
+            final Event blockedOutputEvent = _finalizeModelResponseEvent(
+              request,
+              blockedResponse,
+              modelResponseEvent,
+            )..turnComplete = true;
+            yield blockedOutputEvent;
+            throw const _LiveSessionRestartRequested();
+          }
+        }
+      }
 
       await for (final Event event in _postprocessLive(
         context,
@@ -419,6 +873,26 @@ class BaseLlmFlow {
           );
         }
         yield event;
+      }
+
+      if (response.inputTranscription != null && context.agent is LlmAgent) {
+        final ({String? text, bool finished}) inInfo =
+            _extractTranscriptionInfo(response.inputTranscription);
+        if (inInfo.finished && inInfo.text != null && inInfo.text!.isNotEmpty) {
+          final Content spokenContent = Content(
+            role: 'user',
+            parts: <Part>[Part.text(inInfo.text!)],
+          );
+          final Event? blockedEvent = await _screenLiveUserContent(
+            context,
+            spokenContent,
+            request,
+          );
+          if (blockedEvent != null) {
+            yield blockedEvent;
+            throw const _LiveSessionRestartRequested();
+          }
+        }
       }
 
       if (reconnectRequested) {
@@ -526,39 +1000,6 @@ class BaseLlmFlow {
       if (flushed.isNotEmpty) {
         for (final Event event in flushed) {
           yield event;
-        }
-      }
-    }
-
-    if (finalized.getFunctionCalls().isNotEmpty) {
-      if (finalized.partial == true) {
-        return;
-      }
-
-      final Event? functionResponseEvent = await flow_functions
-          .handleFunctionCallsLive(context, finalized, request.toolsDict);
-      if (context.isAborted) {
-        return;
-      }
-      if (functionResponseEvent != null) {
-        yield functionResponseEvent;
-        final String? transferToAgent =
-            functionResponseEvent.actions.transferToAgent;
-        if (transferToAgent != null && transferToAgent.isNotEmpty) {
-          final BaseAgent agentToRun = _getAgentToRun(
-            context,
-            transferToAgent,
-            allowSelfTransfer: true,
-          );
-          final InvocationContext childContext = _createLiveTransferContext(
-            context,
-          );
-          await for (final Event event in agentToRun.runLive(childContext)) {
-            if (context.isAborted || childContext.isAborted) {
-              return;
-            }
-            yield event;
-          }
         }
       }
     }
@@ -706,6 +1147,7 @@ class BaseLlmFlow {
       ),
     );
     childContext.liveSessionResumptionHandle = null;
+    childContext.activeBackgroundTools = <String, ActiveBackgroundTool>{};
     return childContext;
   }
 
@@ -990,6 +1432,16 @@ class BaseLlmFlow {
       if (context.isAborted) {
         return;
       }
+      if (context.runConfig?.supportCfc == true) {
+        yield response is Event
+            ? response
+            : _finalizeModelResponseEvent(
+                request,
+                response,
+                modelResponseEvent,
+              );
+        continue;
+      }
       await for (final Event event in _postprocessAsync(
         context,
         request,
@@ -1177,7 +1629,37 @@ class BaseLlmFlow {
         llmRequest: request,
       );
     }
+    if (context.liveRequestQueue != null) {
+      markLiveFunctionDeclarationBehavior(request);
+    }
     context.canonicalToolsCache = tools;
+  }
+
+  /// Marks `FunctionDeclaration.behavior` on [request] for live sessions.
+  static void markLiveFunctionDeclarationBehavior(LlmRequest request) {
+    final List<ToolDeclaration>? tools = request.config.tools;
+    if (tools == null || tools.isEmpty) {
+      return;
+    }
+    for (final ToolDeclaration geminiTool in tools) {
+      for (final FunctionDeclaration declaration
+          in geminiTool.functionDeclarations) {
+        if (declaration.name.isEmpty) {
+          continue;
+        }
+        final BaseTool? tool = request.toolsDict[declaration.name];
+        if (tool == null) {
+          continue;
+        }
+        if (flow_functions.isLiveStreamingTool(tool)) {
+          declaration.behavior = ToolBehavior.nonBlocking;
+        } else if (tool.behavior != null) {
+          declaration.behavior = tool.behavior;
+        } else if (tool.responseScheduling != null) {
+          declaration.behavior = ToolBehavior.nonBlocking;
+        }
+      }
+    }
   }
 
   Stream<Event> _postprocessAsync(
@@ -1374,6 +1856,58 @@ class BaseLlmFlow {
     bool streamCompleted = false;
     bool notifiedOnCancel = false;
     try {
+      if (context.runConfig?.supportCfc == true) {
+        if (context.liveRequestQueue == null ||
+            context.liveRequestQueue!.closed) {
+          context.liveRequestQueue = LiveRequestQueue();
+        }
+        await for (Event event in runLive(context)) {
+          if (context.isAborted) {
+            notifiedOnCancel = true;
+            await _notifyModelCancelled(
+              context,
+              request,
+              modelResponseEvent,
+              AdkAbortException(
+                context.abortSignal?.reason ?? 'Model call cancelled',
+              ),
+            );
+            return;
+          }
+          final LlmResponse? altered = await _handleAfterModelCallback(
+            context,
+            event,
+            modelResponseEvent,
+          );
+          if (context.isAborted) {
+            notifiedOnCancel = true;
+            await _notifyModelCancelled(
+              context,
+              request,
+              modelResponseEvent,
+              AdkAbortException(
+                context.abortSignal?.reason ?? 'Model call cancelled',
+              ),
+            );
+            return;
+          }
+          if (altered != null && !identical(altered, event)) {
+            event = altered is Event
+                ? altered
+                : _finalizeModelResponseEvent(request, altered, event);
+          }
+          if (context.runConfig?.streamingMode == StreamingMode.sse ||
+              event.partial != true) {
+            yield event;
+          }
+          if (event.turnComplete == true) {
+            context.liveRequestQueue?.close();
+          }
+        }
+        streamCompleted = true;
+        return;
+      }
+
       await for (LlmResponse response in llm.generateContent(
         request.sanitizedForModelCall(),
         stream: context.runConfig?.streamingMode == StreamingMode.sse,
