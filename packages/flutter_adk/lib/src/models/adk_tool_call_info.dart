@@ -43,6 +43,15 @@ class AdkToolCallInfo {
           ? displayTitle!
           : toolName;
 
+  /// Whether [toolName] is one of the built-in Google Maps toolset tools
+  /// (`get_street_view_image`, `validate_address`, `reverse_geocode`).
+  bool get isGoogleMapsTool {
+    final String normalized = toolName.trim().split(RegExp(r'[:./]')).last;
+    return normalized == 'get_street_view_image' ||
+        normalized == 'validate_address' ||
+        normalized == 'reverse_geocode';
+  }
+
   /// The input parameters/arguments passed to the tool.
   final Map<String, dynamic> arguments;
 

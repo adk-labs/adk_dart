@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:adk_dart/adk_core.dart' as adk;
 import 'package:flutter/material.dart';
 
+import '../utils/adk_ui_utils.dart';
+
 /// A developer inspector widget displaying all tools registered to an agent,
 /// their descriptions, and their parameter schemas.
 class AdkToolInspectorView extends StatelessWidget {
@@ -89,16 +91,46 @@ class AdkToolInspectorView extends StatelessWidget {
           ),
           child: ExpansionTile(
             leading: Icon(
-              Icons.build_rounded,
+              AdkFormatters.iconForTool(
+                name,
+                defaultIcon: Icons.build_rounded,
+              ),
               color: theme.colorScheme.primary,
               size: 20.0,
             ),
-            title: Text(
-              name,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.bold,
-              ),
+            title: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    name,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (AdkFormatters.isGoogleMapsTool(name))
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6.0,
+                      vertical: 2.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(
+                        alpha: 0.7,
+                      ),
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Text(
+                      'Google Maps',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontSize: 10.0,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             subtitle: description.isNotEmpty
                 ? Text(

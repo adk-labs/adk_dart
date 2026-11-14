@@ -30,6 +30,7 @@ Future<int> main(
     case 'run':
     case 'web':
     case 'api_server':
+    case 'eval':
       return runAdkCli(args, outSink: outSink, errSink: errSink);
     case 'deploy':
       return runDeployCommand(

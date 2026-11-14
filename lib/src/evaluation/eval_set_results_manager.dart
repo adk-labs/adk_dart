@@ -9,8 +9,9 @@ abstract class EvalSetResultsManager {
   Future<void> saveEvalSetResult(
     String appName,
     String evalSetId,
-    List<EvalCaseResult> evalCaseResults,
-  );
+    List<EvalCaseResult> evalCaseResults, {
+    List<MultiRunCaseSummary>? multiRunCaseSummaries,
+  });
 
   /// Loads one stored eval set result by identifier.
   Future<EvalSetResult> getEvalSetResult(

@@ -2,9 +2,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../theme/adk_theme.dart';
+import '../utils/adk_ui_utils.dart';
 
 /// An expandable card widget displaying tool execution arguments, progress, and results.
 class AdkToolCallCard extends StatefulWidget {
+  /// Returns `true` when [toolName] is one of the Google Maps tools
+  /// (`get_street_view_image`, `validate_address`, `reverse_geocode`).
+  static bool isGoogleMapsTool(String? toolName) =>
+      AdkFormatters.isGoogleMapsTool(toolName);
+
+  /// Returns the leading [IconData] for [toolName].
+  static IconData iconForTool(String? toolName) =>
+      AdkFormatters.iconForTool(toolName);
+
   /// Creates an [AdkToolCallCard].
   const AdkToolCallCard({
     super.key,
@@ -171,7 +181,7 @@ class _AdkToolCallCardState extends State<AdkToolCallCard> {
                       Icon(
                         hasError
                             ? Icons.error_outline
-                            : Icons.build_circle_outlined,
+                            : AdkToolCallCard.iconForTool(widget.toolName),
                         size: 18.0,
                         color: statusColor,
                       ),
@@ -192,6 +202,29 @@ class _AdkToolCallCardState extends State<AdkToolCallCard> {
                             ),
                       ),
                     ),
+                    if (AdkToolCallCard.isGoogleMapsTool(widget.toolName)) ...<Widget>[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6.0,
+                          vertical: 2.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer.withValues(
+                            alpha: 0.7,
+                          ),
+                          borderRadius: BorderRadius.circular(6.0),
+                        ),
+                        child: Text(
+                          'Google Maps',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6.0),
+                    ],
                     if (widget.trailingWidget != null) ...<Widget>[
                       widget.trailingWidget!,
                       const SizedBox(width: 4.0),

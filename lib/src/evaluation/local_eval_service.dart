@@ -19,9 +19,13 @@ import '../workflow/workflow.dart';
 import 'base_eval_service.dart';
 import 'conversation_scenarios.dart';
 import 'eval_case.dart';
+import 'eval_case_result_multi_run_aggregator.dart';
+import 'eval_config.dart';
 import 'eval_metric.dart';
 import 'eval_metrics.dart';
 import 'eval_result.dart';
+import 'eval_set.dart';
+import 'eval_set_results_manager.dart';
 import 'eval_sets_manager.dart';
 import 'evaluation_generator.dart';
 import 'evaluator.dart';
@@ -53,6 +57,7 @@ class LocalEvalService extends BaseEvalService {
     required Object rootAgent,
     String appName = 'eval_app',
     EvalSetsManager? evalSetsManager,
+    EvalSetResultsManager? evalSetResultsManager,
     BaseSessionService? sessionService,
     BaseArtifactService? artifactService,
     MetricEvaluatorRegistry? metricEvaluatorRegistry,
@@ -61,6 +66,7 @@ class LocalEvalService extends BaseEvalService {
        _sessionService = sessionService ?? InMemorySessionService(),
        _artifactService = artifactService ?? InMemoryArtifactService(),
        _evalSetsManager = evalSetsManager,
+       _evalSetResultsManager = evalSetResultsManager,
        _metricEvaluatorRegistry =
            metricEvaluatorRegistry ?? defaultMetricEvaluatorRegistry;
 
@@ -69,6 +75,7 @@ class LocalEvalService extends BaseEvalService {
   final BaseSessionService _sessionService;
   final BaseArtifactService _artifactService;
   final EvalSetsManager? _evalSetsManager;
+  final EvalSetResultsManager? _evalSetResultsManager;
   final MetricEvaluatorRegistry _metricEvaluatorRegistry;
 
   /// Session service used to store and retrieve evaluation sessions.
@@ -81,6 +88,27 @@ class LocalEvalService extends BaseEvalService {
         request.inferenceConfig.parallelism < 1
             ? 1
             : request.inferenceConfig.parallelism;
+
+    List<EvalCase> resolvedEvalCases = request.evalCases;
+    if (resolvedEvalCases.isEmpty &&
+        _evalSetsManager != null &&
+        request.evalSetId.isNotEmpty) {
+      final EvalSet? evalSet = await _evalSetsManager.getEvalSet(
+        request.appName,
+        request.evalSetId,
+      );
+      if (evalSet != null) {
+        final Set<String>? filterIds =
+            request.evalCaseIds != null && request.evalCaseIds!.isNotEmpty
+            ? request.evalCaseIds!.toSet()
+            : null;
+        resolvedEvalCases = filterIds == null
+            ? evalSet.evalCases
+            : evalSet.evalCases
+                  .where((EvalCase c) => filterIds.contains(c.evalId))
+                  .toList(growable: false);
+      }
+    }
 
     Future<InferenceResult> runOne(EvalCase evalCase, int rep) async {
       final int? repetitionIndex = numRuns > 1 ? rep : null;
@@ -123,6 +151,7 @@ class LocalEvalService extends BaseEvalService {
         final String response = _finalAgentText(events);
         return InferenceResult(
           appName: request.appName,
+          evalSetId: request.evalSetId,
           evalCaseId: evalCase.evalId,
           userInput: evalCase.input,
           responseText: response,
@@ -133,6 +162,7 @@ class LocalEvalService extends BaseEvalService {
       } catch (error) {
         return InferenceResult(
           appName: request.appName,
+          evalSetId: request.evalSetId,
           evalCaseId: evalCase.evalId,
           userInput: evalCase.input,
           sessionId: session.id,
@@ -144,7 +174,7 @@ class LocalEvalService extends BaseEvalService {
     }
 
     final List<(EvalCase, int)> tasks = <(EvalCase, int)>[
-      for (final EvalCase evalCase in request.evalCases)
+      for (final EvalCase evalCase in resolvedEvalCases)
         for (int rep = 0; rep < numRuns; rep += 1) (evalCase, rep),
     ];
 
@@ -198,43 +228,93 @@ class LocalEvalService extends BaseEvalService {
       return;
     }
 
+    final Map<String, List<(String, EvalCaseResult)>> resultsBySet =
+        <String, List<(String, EvalCaseResult)>>{};
+
+    void recordForPersistence(InferenceResult inference, EvalCaseResult result) {
+      final String appName = inference.appName.isNotEmpty
+          ? inference.appName
+          : _defaultAppName;
+      resultsBySet
+          .putIfAbsent(inference.evalSetId, () => <(String, EvalCaseResult)>[])
+          .add((appName, result));
+    }
+
     if (parallelism == 1 || items.length == 1) {
       for (final InferenceResult inference in items) {
-        yield await _evaluateSingleInferenceResult(
-          inference: inference,
-          request: request,
-        );
+        final EvalCaseResult evalCaseResult =
+            await _evaluateSingleInferenceResult(
+              inference: inference,
+              request: request,
+            );
+        recordForPersistence(inference, evalCaseResult);
+        yield evalCaseResult;
       }
-      return;
-    }
-
-    final List<EvalCaseResult?> results = List<EvalCaseResult?>.filled(
-      items.length,
-      null,
-    );
-    int nextIndex = 0;
-    Future<void> worker() async {
-      while (true) {
-        final int current = nextIndex;
-        if (current >= items.length) {
-          return;
+    } else {
+      final List<EvalCaseResult?> results = List<EvalCaseResult?>.filled(
+        items.length,
+        null,
+      );
+      int nextIndex = 0;
+      Future<void> worker() async {
+        while (true) {
+          final int current = nextIndex;
+          if (current >= items.length) {
+            return;
+          }
+          nextIndex += 1;
+          results[current] = await _evaluateSingleInferenceResult(
+            inference: items[current],
+            request: request,
+          );
         }
-        nextIndex += 1;
-        results[current] = await _evaluateSingleInferenceResult(
-          inference: items[current],
-          request: request,
-        );
+      }
+
+      final int workerCount =
+          parallelism < items.length ? parallelism : items.length;
+      await Future.wait(
+        List<Future<void>>.generate(workerCount, (_) => worker()),
+      );
+      for (int i = 0; i < results.length; i += 1) {
+        final EvalCaseResult? result = results[i];
+        if (result != null) {
+          recordForPersistence(items[i], result);
+          yield result;
+        }
       }
     }
 
-    final int workerCount =
-        parallelism < items.length ? parallelism : items.length;
-    await Future.wait(
-      List<Future<void>>.generate(workerCount, (_) => worker()),
-    );
-    for (final EvalCaseResult? result in results) {
-      if (result != null) {
-        yield result;
+    if (_evalSetResultsManager != null) {
+      final MultiRunConfig? multiRunConfig =
+          request.evaluateConfig.multiRunConfig;
+      for (final MapEntry<String, List<(String, EvalCaseResult)>> entry
+          in resultsBySet.entries) {
+        final String evalSetId =
+            entry.key.isEmpty ? 'default' : entry.key;
+        final String appName = entry.value.first.$1;
+        final List<EvalCaseResult> cases = <EvalCaseResult>[
+          for (final (String _, EvalCaseResult item) in entry.value) item,
+        ];
+        final bool hasMultipleRuns =
+            cases.length > <String>{for (final EvalCaseResult c in cases) c.evalId}.length;
+        if (multiRunConfig != null || hasMultipleRuns) {
+          final List<MultiRunCaseSummary> summaries = summarizeEvalCaseResults(
+            cases,
+            multiRunConfig: multiRunConfig,
+          );
+          await _evalSetResultsManager.saveEvalSetResult(
+            appName,
+            evalSetId,
+            cases,
+            multiRunCaseSummaries: summaries,
+          );
+        } else {
+          await _evalSetResultsManager.saveEvalSetResult(
+            appName,
+            evalSetId,
+            cases,
+          );
+        }
       }
     }
   }
@@ -251,6 +331,27 @@ class LocalEvalService extends BaseEvalService {
         inference.appName,
         inference.evalSetId,
         inference.evalCaseId,
+      );
+    }
+
+    if (inference.status == InferenceStatus.failure) {
+      final Session? sessionDetails = await _lookupSessionDetails(
+        sessionId: inference.sessionId,
+        evalCase: evalCase,
+        inferenceAppName: inference.appName,
+      );
+      final (String _, String defaultSessionUserId) =
+          getEvalSessionAppNameAndUserId(evalCase?.sessionInput);
+      return EvalCaseResult(
+        evalSetId: inference.evalSetId,
+        evalCaseId: inference.evalCaseId,
+        metrics: const <EvalMetricResult>[],
+        overallEvalMetricResults: const <EvalMetricResultSpec>[],
+        finalEvalStatus: EvalStatus.failed,
+        sessionId: inference.sessionId ?? '',
+        sessionDetails: sessionDetails,
+        userId: sessionDetails?.userId ?? defaultSessionUserId,
+        repetitionIndex: inference.repetitionIndex,
       );
     }
 

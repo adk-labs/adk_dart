@@ -329,6 +329,343 @@ class EvalCaseResult {
   }
 }
 
+/// How one aggregation rule judged the runs of an eval case.
+///
+/// The rule's target is either a single metric or the whole eval case.
+class MethodResult {
+  /// Creates a method evaluation result.
+  const MethodResult({
+    required this.name,
+    this.value,
+    this.threshold,
+    required this.status,
+    this.note,
+  });
+
+  /// Aggregation method name (e.g. `"mean_over_invocations"`).
+  final String name;
+
+  /// Computed aggregated value over the runs (`null` when not evaluated).
+  final double? value;
+
+  /// Value needed to pass (`null` when informational).
+  final double? threshold;
+
+  /// Resulting evaluation status (`passed`, `failed`, `notEvaluated`, or `informational`).
+  final EvalStatus status;
+
+  /// Optional human-readable breakdown (such as per-run pass/fail counts).
+  final String? note;
+
+  /// Creates a [MethodResult] from JSON (supporting snake_case and camelCase).
+  factory MethodResult.fromJson(Map<String, Object?> json) {
+    final Object? rawValue = json['value'];
+    final Object? rawThreshold = json['threshold'];
+    final Object? rawStatus = json['status'];
+    return MethodResult(
+      name: (json['name'] ?? '').toString(),
+      value: rawValue is num ? rawValue.toDouble() : null,
+      threshold: rawThreshold is num ? rawThreshold.toDouble() : null,
+      status: rawStatus == null
+          ? EvalStatus.notEvaluated
+          : _evalStatusFromString(rawStatus.toString()),
+      note: json['note'] as String?,
+    );
+  }
+
+  /// Serializes this [MethodResult] to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'name': name,
+      'value': value,
+      'threshold': threshold,
+      'status': _evalStatusToJson(status),
+      if (note != null) 'note': note,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is MethodResult &&
+        other.name == name &&
+        other.value == value &&
+        other.threshold == threshold &&
+        other.status == status &&
+        other.note == note;
+  }
+
+  @override
+  int get hashCode => Object.hash(name, value, threshold, status, note);
+
+  @override
+  String toString() =>
+      'MethodResult(name: $name, value: $value, threshold: $threshold, status: $status, note: $note)';
+}
+
+/// Persisted cross-run summary for one eval case across all of its runs.
+class MultiRunCaseSummary {
+  /// Creates a persisted multi-run case summary.
+  MultiRunCaseSummary({
+    this.evalSetId = '',
+    String? evalId,
+    String? evalCaseId,
+    required this.finalEvalStatus,
+    required this.numRuns,
+    required this.passedRuns,
+    required this.failedRuns,
+    this.crashedRuns = 0,
+    this.notEvaluatedRuns = 0,
+    this.passRate,
+    List<EvalMetricResultSpec>? overallEvalMetricResults,
+    List<EvalMetricResult>? metrics,
+    Map<String, MethodResult>? metricMethods,
+    List<MethodResult>? crossRunResults,
+    this.maxCrashedRuns = 0,
+  }) : evalId = evalId ?? evalCaseId ?? '',
+       overallEvalMetricResults = List<EvalMetricResultSpec>.unmodifiable(
+         overallEvalMetricResults ??
+             (metrics != null
+                 ? EvalCaseResult._specsFromMetrics(metrics)
+                 : const <EvalMetricResultSpec>[]),
+       ),
+       metricMethods = Map<String, MethodResult>.unmodifiable(
+         metricMethods ?? const <String, MethodResult>{},
+       ),
+       crossRunResults = List<MethodResult>.unmodifiable(
+         crossRunResults ?? const <MethodResult>[],
+       );
+
+  /// Eval set identifier.
+  final String evalSetId;
+
+  /// Eval case identifier.
+  final String evalId;
+
+  /// Alias for [evalId].
+  String get evalCaseId => evalId;
+
+  /// Final status of the eval case across all of its runs.
+  final EvalStatus finalEvalStatus;
+
+  /// Total number of runs recorded for this eval case.
+  final int numRuns;
+
+  /// Number of runs that passed as a whole (`getRunStatus == EvalStatus.passed`).
+  final int passedRuns;
+
+  /// Number of runs that failed as a whole (`getRunStatus == EvalStatus.failed`).
+  final int failedRuns;
+
+  /// Number of runs that failed without producing any metric results.
+  final int crashedRuns;
+
+  /// Number of non-crashed runs whose whole-run status was [EvalStatus.notEvaluated].
+  final int notEvaluatedRuns;
+
+  /// Fraction of decided (passed or failed) runs that passed, or `null` if no run was decided.
+  final double? passRate;
+
+  /// One result per metric, aggregated across all runs.
+  final List<EvalMetricResultSpec> overallEvalMetricResults;
+
+  /// Aggregated metric results exposed as [EvalMetricResult] values.
+  List<EvalMetricResult> get metrics =>
+      EvalCaseResult._metricsFromSpecs(overallEvalMetricResults);
+
+  /// How each metric was judged on the runs, keyed by metric name.
+  final Map<String, MethodResult> metricMethods;
+
+  /// How each configured cross-run criterion judged the runs, in order.
+  final List<MethodResult> crossRunResults;
+
+  /// How many runs may crash before the case fails.
+  final int maxCrashedRuns;
+
+  /// Creates a [MultiRunCaseSummary] from JSON (supporting snake_case and camelCase).
+  factory MultiRunCaseSummary.fromJson(Map<String, Object?> json) {
+    final List<EvalMetricResultSpec> overallSpecs = <EvalMetricResultSpec>[];
+    final Object? rawOverallMetrics =
+        json['overall_eval_metric_results'] ?? json['overallEvalMetricResults'];
+    if (rawOverallMetrics is List) {
+      for (final Object? item in rawOverallMetrics) {
+        if (item is Map) {
+          overallSpecs.add(_metricResultSpecFromJson(_castJsonMap(item)));
+        }
+      }
+    }
+
+    final Map<String, MethodResult> parsedMetricMethods =
+        <String, MethodResult>{};
+    final Object? rawMetricMethods =
+        json['metric_methods'] ?? json['metricMethods'];
+    if (rawMetricMethods is Map) {
+      for (final MapEntry<Object?, Object?> entry in rawMetricMethods.entries) {
+        if (entry.value is Map) {
+          parsedMetricMethods['${entry.key}'] = MethodResult.fromJson(
+            _castJsonMap(entry.value as Map),
+          );
+        }
+      }
+    }
+
+    final List<MethodResult> parsedCrossRunResults = <MethodResult>[];
+    final Object? rawCrossRunResults =
+        json['cross_run_results'] ?? json['crossRunResults'];
+    if (rawCrossRunResults is List) {
+      for (final Object? item in rawCrossRunResults) {
+        if (item is Map) {
+          parsedCrossRunResults.add(
+            MethodResult.fromJson(_castJsonMap(item)),
+          );
+        }
+      }
+    }
+
+    final Object? rawPassRate = json['pass_rate'] ?? json['passRate'];
+    return MultiRunCaseSummary(
+      evalSetId: (json['eval_set_id'] ?? json['evalSetId'] ?? '').toString(),
+      evalId:
+          (json['eval_id'] ?? json['evalId'] ?? json['evalCaseId'] ?? '')
+              .toString(),
+      finalEvalStatus: _evalStatusFromString(
+        (json['final_eval_status'] ?? json['finalEvalStatus'] ?? '').toString(),
+      ),
+      numRuns: _asInt(json['num_runs'] ?? json['numRuns']),
+      passedRuns: _asInt(json['passed_runs'] ?? json['passedRuns']),
+      failedRuns: _asInt(json['failed_runs'] ?? json['failedRuns']),
+      crashedRuns: _asInt(json['crashed_runs'] ?? json['crashedRuns']),
+      notEvaluatedRuns: _asInt(
+        json['not_evaluated_runs'] ?? json['notEvaluatedRuns'],
+      ),
+      passRate: rawPassRate is num ? rawPassRate.toDouble() : null,
+      overallEvalMetricResults: overallSpecs,
+      metricMethods: parsedMetricMethods,
+      crossRunResults: parsedCrossRunResults,
+      maxCrashedRuns: _asInt(json['max_crashed_runs'] ?? json['maxCrashedRuns']),
+    );
+  }
+
+  /// Serializes this [MultiRunCaseSummary] to JSON.
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'eval_set_id': evalSetId,
+      'eval_id': evalId,
+      'final_eval_status': _evalStatusToJson(finalEvalStatus),
+      'num_runs': numRuns,
+      'passed_runs': passedRuns,
+      'failed_runs': failedRuns,
+      'crashed_runs': crashedRuns,
+      'not_evaluated_runs': notEvaluatedRuns,
+      'pass_rate': passRate,
+      'overall_eval_metric_results': overallEvalMetricResults
+          .map((EvalMetricResultSpec value) => value.toJson())
+          .toList(),
+      'metric_methods': metricMethods.map(
+        (String key, MethodResult value) => MapEntry(key, value.toJson()),
+      ),
+      'cross_run_results': crossRunResults
+          .map((MethodResult value) => value.toJson())
+          .toList(),
+      'max_crashed_runs': maxCrashedRuns,
+    };
+  }
+
+  static bool _metricSpecsEqual(
+    List<EvalMetricResultSpec> a,
+    List<EvalMetricResultSpec> b,
+  ) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i += 1) {
+      final EvalMetricResultSpec x = a[i];
+      final EvalMetricResultSpec y = b[i];
+      if (x.metricName != y.metricName ||
+          x.threshold != y.threshold ||
+          x.score != y.score ||
+          x.evalStatus != y.evalStatus ||
+          x.customFunctionPath != y.customFunctionPath) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _metricMethodsEqual(
+    Map<String, MethodResult> a,
+    Map<String, MethodResult> b,
+  ) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (final MapEntry<String, MethodResult> entry in a.entries) {
+      if (b[entry.key] != entry.value) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _methodListEqual(List<MethodResult> a, List<MethodResult> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i += 1) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is MultiRunCaseSummary &&
+        other.evalSetId == evalSetId &&
+        other.evalId == evalId &&
+        other.finalEvalStatus == finalEvalStatus &&
+        other.numRuns == numRuns &&
+        other.passedRuns == passedRuns &&
+        other.failedRuns == failedRuns &&
+        other.crashedRuns == crashedRuns &&
+        other.notEvaluatedRuns == notEvaluatedRuns &&
+        other.passRate == passRate &&
+        other.maxCrashedRuns == maxCrashedRuns &&
+        _metricSpecsEqual(
+          other.overallEvalMetricResults,
+          overallEvalMetricResults,
+        ) &&
+        _metricMethodsEqual(other.metricMethods, metricMethods) &&
+        _methodListEqual(other.crossRunResults, crossRunResults);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    evalSetId,
+    evalId,
+    finalEvalStatus,
+    numRuns,
+    passedRuns,
+    failedRuns,
+    crashedRuns,
+    notEvaluatedRuns,
+    passRate,
+    maxCrashedRuns,
+    Object.hashAll(
+      overallEvalMetricResults.map(
+        (EvalMetricResultSpec m) =>
+            Object.hash(m.metricName, m.threshold, m.score, m.evalStatus),
+      ),
+    ),
+    Object.hashAllUnordered(
+      metricMethods.entries.map(
+        (MapEntry<String, MethodResult> e) => Object.hash(e.key, e.value),
+      ),
+    ),
+    Object.hashAll(crossRunResults),
+  );
+}
+
 /// Aggregated result for an eval-set execution.
 class EvalSetResult {
   /// Creates an eval-set result.
@@ -337,6 +674,7 @@ class EvalSetResult {
     this.evalSetResultName,
     required this.evalSetId,
     List<EvalCaseResult>? evalCaseResults,
+    this.multiRunCaseSummaries,
     this.creationTimestamp = 0,
   }) : evalCaseResults = evalCaseResults ?? <EvalCaseResult>[];
 
@@ -351,6 +689,9 @@ class EvalSetResult {
 
   /// Per-case evaluation results.
   final List<EvalCaseResult> evalCaseResults;
+
+  /// Optional persisted multi-run summaries for each eval case.
+  final List<MultiRunCaseSummary>? multiRunCaseSummaries;
 
   /// Creation timestamp in seconds since epoch.
   final double creationTimestamp;
@@ -367,6 +708,16 @@ class EvalSetResult {
       }
     }
 
+    List<MultiRunCaseSummary>? summaries;
+    final Object? rawSummaries =
+        json['multiRunCaseSummaries'] ?? json['multi_run_case_summaries'];
+    if (rawSummaries is List) {
+      summaries = <MultiRunCaseSummary>[
+        for (final Object? item in rawSummaries)
+          if (item is Map) MultiRunCaseSummary.fromJson(_castJsonMap(item)),
+      ];
+    }
+
     return EvalSetResult(
       evalSetResultId:
           (json['evalSetResultId'] ?? json['eval_set_result_id'] ?? '')
@@ -376,6 +727,7 @@ class EvalSetResult {
               as String?,
       evalSetId: (json['evalSetId'] ?? json['eval_set_id'] ?? '').toString(),
       evalCaseResults: caseResults,
+      multiRunCaseSummaries: summaries,
       creationTimestamp: _asDouble(
         json['creationTimestamp'] ?? json['creation_timestamp'],
       ),
@@ -391,6 +743,10 @@ class EvalSetResult {
       'eval_case_results': evalCaseResults
           .map((EvalCaseResult value) => value.toJson())
           .toList(),
+      if (multiRunCaseSummaries != null)
+        'multi_run_case_summaries': multiRunCaseSummaries!
+            .map((MultiRunCaseSummary value) => value.toJson())
+            .toList(),
       'creation_timestamp': creationTimestamp,
     };
   }
@@ -467,6 +823,16 @@ EvalMetricResultSpec _metricResultSpecFromJson(Map<String, Object?> json) {
 double _asDouble(Object? value) {
   if (value is num) {
     return value.toDouble();
+  }
+  return 0;
+}
+
+int _asInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
   }
   return 0;
 }

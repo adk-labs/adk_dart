@@ -123,6 +123,59 @@ abstract final class AdkFormatters {
     final int top = (screenY + (deltaY > 0 ? deltaY : 0.0)).round();
     return 'width=$width,height=$height,left=$left,top=$top';
   }
+
+  /// Canonical built-in Google Maps tool names.
+  static const Set<String> googleMapsToolNames = <String>{
+    'get_street_view_image',
+    'validate_address',
+    'reverse_geocode',
+  };
+
+  static String _bareToolName(String? toolName) {
+    if (toolName == null || toolName.trim().isEmpty) {
+      return '';
+    }
+    return toolName.trim().split(RegExp(r'[:./]')).last;
+  }
+
+  /// Whether [toolName] is a recognized Google Maps tool (`get_street_view_image`,
+  /// `validate_address`, or `reverse_geocode`).
+  static bool isGoogleMapsTool(String? toolName) {
+    return googleMapsToolNames.contains(_bareToolName(toolName));
+  }
+
+  /// Returns a human-friendly label for a recognized Google Maps [toolName],
+  /// or `null` if [toolName] is not a Google Maps tool.
+  static String? googleMapsToolLabel(String? toolName) {
+    switch (_bareToolName(toolName)) {
+      case 'get_street_view_image':
+        return 'Street View Image';
+      case 'validate_address':
+        return 'Validate Address';
+      case 'reverse_geocode':
+        return 'Reverse Geocode';
+      default:
+        return null;
+    }
+  }
+
+  /// Resolves an [IconData] for [toolName], using specialized Google Maps icons
+  /// when recognized and [defaultIcon] otherwise.
+  static IconData iconForTool(
+    String? toolName, {
+    IconData defaultIcon = Icons.build_circle_outlined,
+  }) {
+    switch (_bareToolName(toolName)) {
+      case 'get_street_view_image':
+        return Icons.streetview;
+      case 'validate_address':
+        return Icons.where_to_vote_outlined;
+      case 'reverse_geocode':
+        return Icons.place_outlined;
+      default:
+        return defaultIcon;
+    }
+  }
 }
 
 /// Helper utilities for extracting UI models and state from ADK event streams.

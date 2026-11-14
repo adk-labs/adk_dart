@@ -481,5 +481,183 @@ void main() {
         expect(find.text('scripts/deploy.sh'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'AdkMultiRunEvalCard renders persisted MultiRunCaseSummary, Runs strip, Pass Rate, crashed/notEvaluated badges, and per-metric run scores',
+      (WidgetTester tester) async {
+        final EvalSetResult evalSetResult = EvalSetResult(
+          evalSetResultId: 'app_set_1',
+          evalSetId: 'set_1',
+          evalCaseResults: <EvalCaseResult>[
+            EvalCaseResult(
+              evalSetId: 'set_1',
+              evalId: 'flaky_case',
+              finalEvalStatus: EvalStatus.passed,
+              metrics: <EvalMetricResult>[
+                EvalMetricResult(
+                  metric: EvalMetric.finalResponseExactMatch,
+                  metricNameOverride: 'response_match_score',
+                  score: 1.0,
+                  threshold: 0.8,
+                  evalStatus: EvalStatus.passed,
+                ),
+              ],
+              sessionId: 's0',
+              repetitionIndex: 0,
+            ),
+            EvalCaseResult(
+              evalSetId: 'set_1',
+              evalId: 'flaky_case',
+              finalEvalStatus: EvalStatus.failed,
+              metrics: <EvalMetricResult>[
+                EvalMetricResult(
+                  metric: EvalMetric.finalResponseExactMatch,
+                  metricNameOverride: 'response_match_score',
+                  score: 0.6,
+                  threshold: 0.8,
+                  evalStatus: EvalStatus.failed,
+                ),
+              ],
+              sessionId: 's1',
+              repetitionIndex: 1,
+            ),
+            EvalCaseResult(
+              evalSetId: 'set_1',
+              evalId: 'flaky_case',
+              finalEvalStatus: EvalStatus.failed,
+              metrics: const <EvalMetricResult>[],
+              overallEvalMetricResults: const <EvalMetricResultSpec>[],
+              sessionId: 's2',
+              repetitionIndex: 2,
+            ),
+          ],
+          multiRunCaseSummaries: <MultiRunCaseSummary>[
+            MultiRunCaseSummary(
+              evalSetId: 'set_1',
+              evalId: 'flaky_case',
+              finalEvalStatus: EvalStatus.passed,
+              numRuns: 3,
+              passedRuns: 1,
+              failedRuns: 1,
+              crashedRuns: 1,
+              notEvaluatedRuns: 0,
+              passRate: 0.5,
+              metrics: <EvalMetricResult>[
+                EvalMetricResult(
+                  metric: EvalMetric.finalResponseExactMatch,
+                  metricNameOverride: 'response_match_score',
+                  score: 0.8,
+                  threshold: 0.8,
+                  evalStatus: EvalStatus.passed,
+                ),
+              ],
+              metricMethods: const <String, MethodResult>{
+                'response_match_score': MethodResult(
+                  name: 'mean_over_invocations',
+                  value: 0.8,
+                  threshold: 0.8,
+                  status: EvalStatus.passed,
+                ),
+              },
+              crossRunResults: const <MethodResult>[
+                MethodResult(
+                  name: 'pass_at_2',
+                  value: 1.0,
+                  threshold: 0.9,
+                  status: EvalStatus.passed,
+                ),
+              ],
+              maxCrashedRuns: 1,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: AdkMultiRunEvalCard.fromEvalSetResult(
+                  evalSetResult: evalSetResult,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('flaky_case'), findsOneWidget);
+        expect(find.text('1/3 runs passed'), findsOneWidget);
+        expect(find.text('Runs: PFC'), findsOneWidget);
+        expect(find.text('Pass Rate: 50%'), findsOneWidget);
+        expect(find.text('1 crashed'), findsOneWidget);
+        expect(find.text('pass_at_2=1.00 (PASSED)'), findsOneWidget);
+        expect(
+          find.text(
+            'response_match_score (mean_over_invocations): 0.80 (runs: [1.00, 0.60, -])',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Google Maps tool recognition surfaces icons and badges on AdkToolCallCard and AdkToolInspectorView',
+      (WidgetTester tester) async {
+        expect(AdkToolCallCard.isGoogleMapsTool('get_street_view_image'), isTrue);
+        expect(AdkToolCallCard.isGoogleMapsTool('validate_address'), isTrue);
+        expect(AdkToolCallCard.isGoogleMapsTool('reverse_geocode'), isTrue);
+        expect(AdkToolCallCard.isGoogleMapsTool('maps:validate_address'), isTrue);
+        expect(AdkToolCallCard.isGoogleMapsTool('lookup_user'), isFalse);
+
+        expect(
+          AdkToolCallCard.iconForTool('get_street_view_image'),
+          Icons.streetview,
+        );
+        expect(
+          AdkToolCallCard.iconForTool('validate_address'),
+          Icons.where_to_vote_outlined,
+        );
+        expect(
+          AdkToolCallCard.iconForTool('reverse_geocode'),
+          Icons.place_outlined,
+        );
+        expect(
+          AdkFormatters.googleMapsToolLabel('get_street_view_image'),
+          'Street View Image',
+        );
+
+        const AdkToolCallInfo mapsInfo = AdkToolCallInfo(
+          toolName: 'reverse_geocode',
+        );
+        expect(mapsInfo.isGoogleMapsTool, isTrue);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: <Widget>[
+                  AdkToolCallCard(
+                    toolName: 'get_street_view_image',
+                    toolArgs: <String, dynamic>{'location': 'Mountain View, CA'},
+                  ),
+                  AdkToolCallCard(
+                    toolName: 'validate_address',
+                    toolArgs: <String, dynamic>{'address': '1600 Amphitheatre Pkwy'},
+                  ),
+                  AdkToolCallCard(
+                    toolName: 'reverse_geocode',
+                    toolArgs: <String, dynamic>{'lat': 37.422, 'lng': -122.084},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        expect(find.byIcon(Icons.streetview), findsOneWidget);
+        expect(find.byIcon(Icons.where_to_vote_outlined), findsOneWidget);
+        expect(find.byIcon(Icons.place_outlined), findsOneWidget);
+        expect(find.text('Google Maps'), findsNWidgets(3));
+      },
+    );
   });
 }

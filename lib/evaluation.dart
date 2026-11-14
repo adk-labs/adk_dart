@@ -1,7 +1,8 @@
 /// Agent evaluation framework, metrics, LLM-as-a-Judge, and user simulation.
 ///
 /// Provides [AgentEvaluator], [EvalSet], [EvalCase], [EvalMetric], and
-/// multi-run aggregation models such as [MultiRunCaseResult] and [MethodResult].
+/// multi-run aggregation models such as [MultiRunCaseResult],
+/// [MultiRunCaseSummary], and [MethodResult].
 ///
 /// ```dart
 /// import 'package:adk_dart/evaluation.dart';

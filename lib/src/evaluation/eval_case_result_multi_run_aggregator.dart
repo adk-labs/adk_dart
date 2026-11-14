@@ -7,49 +7,7 @@ import 'eval_metrics.dart';
 import 'eval_result.dart';
 import 'multi_run_aggregation_methods.dart';
 
-/// Output of running one aggregation method on a metric or across an eval case.
-class MethodResult {
-  /// Creates a method evaluation result.
-  const MethodResult({
-    required this.name,
-    this.value,
-    this.threshold,
-    required this.status,
-    this.note,
-  });
-
-  /// Aggregation method name.
-  final String name;
-
-  /// Computed aggregated value (`null` when not evaluated).
-  final double? value;
-
-  /// Threshold compared against [value] (`null` when informational).
-  final double? threshold;
-
-  /// Resulting evaluation status (`passed`, `failed`, `notEvaluated`, or `informational`).
-  final EvalStatus status;
-
-  /// Optional human-readable breakdown (such as per-run pass/fail counts).
-  final String? note;
-
-  @override
-  bool operator ==(Object other) {
-    return other is MethodResult &&
-        other.name == name &&
-        other.value == value &&
-        other.threshold == threshold &&
-        other.status == status &&
-        other.note == note;
-  }
-
-  @override
-  int get hashCode => Object.hash(name, value, threshold, status, note);
-
-  @override
-  String toString() =>
-      'MethodResult(name: $name, value: $value, threshold: $threshold, status: $status, note: $note)';
-}
+export 'eval_result.dart' show MethodResult, MultiRunCaseSummary;
 
 /// Aggregated cross-run result for one `(evalSetId, evalId)` pair.
 class MultiRunCaseResult {
@@ -252,9 +210,7 @@ Map<String, AggregationMethod> loadAggregationMethods(
 int countRunsFailedWithoutMetricResults(List<EvalCaseResult> perCaseResults) {
   int count = 0;
   for (final EvalCaseResult result in perCaseResults) {
-    if (result.finalEvalStatus == EvalStatus.failed &&
-        result.overallEvalMetricResults.isEmpty &&
-        result.metrics.isEmpty) {
+    if (_isCrashed(result)) {
       count += 1;
     }
   }
@@ -343,20 +299,16 @@ List<RunResult> _buildMetricRuns(
         }
       }
     }
-    if (overall != null) {
-      runs.add(
-        RunResult(
-          status: overall.evalStatus,
-          score: overall.score,
-          invocationScores: invScores,
-        ),
-      );
-    } else if (caseResult.finalEvalStatus == EvalStatus.failed &&
-        caseResult.overallEvalMetricResults.isEmpty) {
-      runs.add(RunResult(status: EvalStatus.failed));
-    } else {
-      runs.add(RunResult(status: EvalStatus.notEvaluated));
+    if (overall == null && invScores.isEmpty) {
+      continue;
     }
+    runs.add(
+      RunResult(
+        status: overall?.evalStatus ?? EvalStatus.notEvaluated,
+        score: overall?.score,
+        invocationScores: invScores,
+      ),
+    );
   }
   return runs;
 }
@@ -603,3 +555,66 @@ List<MultiRunCaseResult> aggregateEvalCaseResults(
 
   return aggregated;
 }
+
+/// Converts a [MultiRunCaseResult] into a serializable [MultiRunCaseSummary].
+MultiRunCaseSummary summarizeMultiRunCaseResult(MultiRunCaseResult caseResult) {
+  final List<EvalCaseResult> runs = caseResult.runs;
+  final List<EvalStatus> statuses = <EvalStatus>[
+    for (final EvalCaseResult run in runs) getRunStatus(run),
+  ];
+  final int crashedRuns = countRunsFailedWithoutMetricResults(runs);
+  final int passedRuns = statuses
+      .where((EvalStatus s) => s == EvalStatus.passed)
+      .length;
+  final int failedRuns = statuses
+      .where((EvalStatus s) => s == EvalStatus.failed)
+      .length;
+  final int decidedRuns = passedRuns + failedRuns;
+  final int notEvaluatedRuns = statuses.length - decidedRuns - crashedRuns;
+  final double? passRate = decidedRuns > 0 ? passedRuns / decidedRuns : null;
+  return MultiRunCaseSummary(
+    evalSetId: caseResult.evalSetId,
+    evalId: caseResult.evalId,
+    finalEvalStatus: caseResult.finalEvalStatus,
+    numRuns: runs.length,
+    passedRuns: passedRuns,
+    failedRuns: failedRuns,
+    crashedRuns: crashedRuns,
+    notEvaluatedRuns: notEvaluatedRuns < 0 ? 0 : notEvaluatedRuns,
+    passRate: passRate,
+    overallEvalMetricResults: List<EvalMetricResultSpec>.from(
+      caseResult.overallEvalMetricResults,
+    ),
+    metricMethods: Map<String, MethodResult>.from(caseResult.metricMethods),
+    crossRunResults: List<MethodResult>.from(caseResult.crossRunResults),
+    maxCrashedRuns: caseResult.maxCrashedRuns,
+  );
+}
+
+/// Aggregates per-run [evalCaseResults] into serializable [MultiRunCaseSummary] values.
+List<MultiRunCaseSummary> summarizeEvalCaseResults(
+  List<EvalCaseResult> evalCaseResults, {
+  MultiRunConfig? multiRunConfig,
+}) {
+  return <MultiRunCaseSummary>[
+    for (final MultiRunCaseResult caseResult in aggregateEvalCaseResults(
+      evalCaseResults,
+      multiRunConfig: multiRunConfig,
+    ))
+      summarizeMultiRunCaseResult(caseResult),
+  ];
+}
+
+/// Alias for [summarizeMultiRunCaseResult].
+MultiRunCaseSummary buildMultiRunCaseSummary(MultiRunCaseResult caseResult) =>
+    summarizeMultiRunCaseResult(caseResult);
+
+/// Alias for [summarizeEvalCaseResults].
+List<MultiRunCaseSummary> buildMultiRunCaseSummaries(
+  List<EvalCaseResult> evalCaseResults, {
+  MultiRunConfig? multiRunConfig,
+}) => summarizeEvalCaseResults(
+  evalCaseResults,
+  multiRunConfig: multiRunConfig,
+);
+

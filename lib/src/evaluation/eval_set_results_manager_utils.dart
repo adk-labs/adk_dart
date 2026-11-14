@@ -19,8 +19,9 @@ String sanitizeEvalSetResultName(String evalSetResultName) {
 EvalSetResult createEvalSetResult(
   String appName,
   String evalSetId,
-  List<EvalCaseResult> evalCaseResults,
-) {
+  List<EvalCaseResult> evalCaseResults, {
+  List<MultiRunCaseSummary>? multiRunCaseSummaries,
+}) {
   final double timestamp = DateTime.now().millisecondsSinceEpoch / 1000;
   final String id = '${appName}_${evalSetId}_$timestamp';
   return EvalSetResult(
@@ -28,6 +29,7 @@ EvalSetResult createEvalSetResult(
     evalSetResultName: sanitizeEvalSetResultName(id),
     evalSetId: evalSetId,
     evalCaseResults: evalCaseResults,
+    multiRunCaseSummaries: multiRunCaseSummaries,
     creationTimestamp: timestamp,
   );
 }

@@ -386,6 +386,9 @@ Future<int> _runEvalCliCommand(
       'Each eval case was run $resolvedNumRuns times and judged on all $resolvedNumRuns runs.',
     );
   }
+  final bool showMultiRunSummary =
+      resolvedNumRuns > 1 ||
+      cli_eval.hasPassCountRules(evalConfig.multiRunConfig);
   final List<String> evalSetIds = summaryByEvalSet.keys.toList(growable: false)
     ..sort();
   for (final String evalSetId in evalSetIds) {
@@ -393,6 +396,18 @@ Future<int> _runEvalCliCommand(
     out.writeln(
       '$evalSetId:\n  Tests passed: ${counts.$1}\n  Tests failed: ${counts.$2}',
     );
+    if (showMultiRunSummary) {
+      final String summaryTable = cli_eval.prettyPrintMultiRunSummaryTable(
+        aggregateEvalResults
+            .where(
+              (cli_eval.MultiRunCaseResult r) => r.evalSetId == evalSetId,
+            )
+            .toList(growable: false),
+      );
+      if (summaryTable.isNotEmpty) {
+        out.write(summaryTable);
+      }
+    }
   }
 
   if (command.printDetailedResults) {
@@ -1173,11 +1188,34 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
           evalCasesById: evalCasesById,
           evaluateConfig: EvaluateConfig(
             evalMetrics: evalMetrics,
+            multiRunConfig: resolvedEvalConfig.multiRunConfig,
             parallelism: effectiveParallelism,
           ),
         ),
       )
       .toList();
+
+  final Map<String, double?> configuredThresholds = <String, double?>{};
+  for (final cli_eval.EvalMetricSpec spec
+      in cli_eval.getEvalMetricsFromConfig(resolvedEvalConfig)) {
+    final double? thresh = spec.threshold ?? spec.criterion?.threshold;
+    configuredThresholds[spec.metricName] = thresh;
+    switch (spec.metricName) {
+      case 'final_response_exact_match':
+        configuredThresholds.putIfAbsent(
+          EvalMetric.finalResponseExactMatch.name,
+          () => thresh,
+        );
+      case 'final_response_contains':
+      case 'response_match_score':
+      case 'tool_trajectory_avg_score':
+      default:
+        configuredThresholds.putIfAbsent(
+          EvalMetric.finalResponseContains.name,
+          () => thresh,
+        );
+    }
+  }
 
   final Map<(String, int?), InferenceResult> inferenceByCaseAndRep =
       <(String, int?), InferenceResult>{
@@ -1194,11 +1232,37 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
         final InferenceResult? inference =
             inferenceByCaseAndRep[(value.evalCaseId, value.repetitionIndex)] ??
             inferenceByEvalCaseId[value.evalCaseId];
+        final bool isCrashed = inference?.status == InferenceStatus.failure;
+        final List<EvalMetricResult> enrichedMetrics = isCrashed
+            ? const <EvalMetricResult>[]
+            : value.metrics
+                  .map((EvalMetricResult m) {
+                    final double? thresh =
+                        m.threshold ?? configuredThresholds[m.metricName];
+                    if (thresh == m.threshold) {
+                      return m;
+                    }
+                    return EvalMetricResult(
+                      metric: m.metric,
+                      metricNameOverride: m.metricName,
+                      score: m.score,
+                      passed: m.passed,
+                      detail: m.detail,
+                      threshold: thresh,
+                      evalStatus: m.evalStatus,
+                    );
+                  })
+                  .toList(growable: false);
         return EvalCaseResult(
           evalCaseId: value.evalCaseId,
-          metrics: value.metrics,
+          metrics: enrichedMetrics,
+          overallEvalMetricResults: isCrashed
+              ? const <cli_eval.EvalMetricResultSpec>[]
+              : null,
           evalSetId: evalSetId,
-          finalEvalStatus: _deriveEvalStatusFromMetrics(value.metrics),
+          finalEvalStatus: isCrashed
+              ? EvalStatus.failed
+              : _deriveEvalStatusFromMetrics(enrichedMetrics),
           sessionId: value.sessionId.isNotEmpty
               ? value.sessionId
               : (inference?.sessionId ?? ''),
@@ -1210,10 +1274,25 @@ Future<List<EvalCaseResult>> _evaluateEvalSet({
         );
       })
       .toList(growable: false);
+
+  final bool hasMultipleRuns =
+      numRuns > 1 ||
+      normalizedResults.length >
+          <String>{
+            for (final EvalCaseResult c in normalizedResults) c.evalId,
+          }.length;
+  final List<cli_eval.MultiRunCaseSummary>? multiRunSummaries =
+      (resolvedEvalConfig.multiRunConfig != null || hasMultipleRuns)
+          ? cli_eval.summarizeEvalCaseResults(
+              normalizedResults,
+              multiRunConfig: resolvedEvalConfig.multiRunConfig,
+            )
+          : null;
   await evalSetResultsManager.saveEvalSetResult(
     appName,
     evalSetId,
     normalizedResults,
+    multiRunCaseSummaries: multiRunSummaries,
   );
   return normalizedResults;
 }

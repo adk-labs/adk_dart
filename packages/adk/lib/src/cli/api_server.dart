@@ -9,6 +9,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'adk_web_server.dart';
+export 'adk_web_server.dart'
+    show
+        AgentsFileObserver,
+        AgentsFileObserverFactory,
+        SetupObserverCallback,
+        TearDownObserverCallback,
+        agentsFileObserverFactoryTestingOverride;
 
 /// Alias for [AdkApiServer].
 typedef ApiServer = AdkApiServer;
@@ -897,6 +904,8 @@ class AdkApiServer extends AdkWebServer {
     super.maxLiveSessions,
     super.agentLoader,
     super.environment,
+    super.setupObserver,
+    super.tearDownObserver,
     super.evalSetsManager,
     super.evalSetResultsManager,
   });

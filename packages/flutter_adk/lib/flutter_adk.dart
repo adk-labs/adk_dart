@@ -28,6 +28,17 @@ library;
 import 'flutter_adk_platform_interface.dart';
 
 export 'package:adk_dart/adk_core.dart' hide State;
+export 'package:adk_dart/src/evaluation/eval_metric.dart' show EvalMetric;
+export 'package:adk_dart/src/evaluation/eval_metrics.dart'
+    show EvalMetricResultSpec;
+export 'package:adk_dart/src/evaluation/eval_result.dart'
+    show
+        EvalCaseResult,
+        EvalMetricResult,
+        EvalSetResult,
+        EvalStatus,
+        MethodResult,
+        MultiRunCaseSummary;
 
 export 'src/controllers/adk_agent_logger_controller.dart';
 export 'src/controllers/adk_agent_manager_controller.dart';

@@ -1,10 +1,14 @@
 /// Helpers used by CLI evaluation and reporting commands.
 library;
 
+import 'dart:io';
+
+import 'package:adk_dart/src/evaluation/base_eval_service.dart';
+import 'package:adk_dart/src/evaluation/eval_case.dart';
 import 'package:adk_dart/src/evaluation/eval_case_result_multi_run_aggregator.dart';
 import 'package:adk_dart/src/evaluation/eval_config.dart'
     as core_eval_config
-    show EvalConfig;
+    show EvalConfig, MultiRunConfig;
 import 'package:adk_dart/src/evaluation/eval_metric.dart';
 import 'package:adk_dart/src/evaluation/eval_metrics.dart';
 import 'package:adk_dart/src/evaluation/eval_result.dart';
@@ -15,13 +19,18 @@ export 'package:adk_dart/src/evaluation/eval_case_result_multi_run_aggregator.da
     show
         MethodResult,
         MultiRunCaseResult,
+        MultiRunCaseSummary,
         aggregateEvalCaseResults,
+        buildMultiRunCaseSummaries,
+        buildMultiRunCaseSummary,
         checkPassKCriteriaAgainstNumRuns,
         countRunsFailedWithoutMetricResults,
         describeRunStatuses,
         getRunStatus,
         hasPassCountRules,
-        loadAggregationMethods;
+        loadAggregationMethods,
+        summarizeEvalCaseResults,
+        summarizeMultiRunCaseResult;
 export 'package:adk_dart/src/evaluation/eval_config.dart'
     show
         MultiRunConfig,
@@ -29,6 +38,8 @@ export 'package:adk_dart/src/evaluation/eval_config.dart'
         PassKMultiRunCriterion,
         getEvaluationCriteriaOrDefault,
         getEvalMetricsFromConfig;
+export 'package:adk_dart/src/evaluation/eval_metrics.dart'
+    show EvalMetricResultSpec, EvalMetricSpec;
 
 /// Converts [evalConfig] criteria into [EvalMetric] values used by the CLI.
 List<EvalMetric> resolveCliEvalMetricsFromConfig(
@@ -168,6 +179,178 @@ String? describeCrashedRuns(MultiRunCaseResult result) {
   }
   return '  Crashed runs: $crashed/${result.runs.length} '
       '(within max allowed: ${result.maxCrashedRuns})';
+}
+
+/// Collects evaluation results from [evalService], forwarding [multiRunConfig].
+Future<List<EvalCaseResult>> collectEvalResults({
+  required List<InferenceResult> inferenceResults,
+  required BaseEvalService evalService,
+  List<EvalMetric>? evalMetrics,
+  List<EvalMetricSpec>? evalMetricSpecs,
+  Map<String, EvalCase>? evalCasesById,
+  int? parallelism,
+  core_eval_config.MultiRunConfig? multiRunConfig,
+}) async {
+  final EvaluateConfig evaluateConfig = EvaluateConfig(
+    evalMetrics: evalMetrics,
+    evalMetricSpecs: evalMetricSpecs,
+    multiRunConfig: multiRunConfig,
+    parallelism: parallelism ?? 4,
+  );
+  final EvaluateRequest evaluateRequest = EvaluateRequest(
+    inferenceResults: inferenceResults,
+    evalCasesById: evalCasesById,
+    evaluateConfig: evaluateConfig,
+  );
+  return evalService.evaluate(evaluateRequest).toList();
+}
+
+/// Returns a single-character symbol (`C`, `P`, `F`, or `-`) for one [run].
+String formatRunSymbol(EvalCaseResult run) {
+  if (countRunsFailedWithoutMetricResults(<EvalCaseResult>[run]) > 0) {
+    return 'C';
+  }
+  final EvalStatus status = getRunStatus(run);
+  if (status == EvalStatus.passed) {
+    return 'P';
+  }
+  if (status == EvalStatus.failed) {
+    return 'F';
+  }
+  return '-';
+}
+
+/// Returns a single [run]'s score for [metricName], or `null` if unavailable.
+double? getRunMetricScore(EvalCaseResult run, String metricName) {
+  for (final EvalMetricResultSpec metricResult
+      in run.overallEvalMetricResults) {
+    if (metricResult.metricName == metricName && metricResult.score != null) {
+      return metricResult.score;
+    }
+  }
+  final List<double> invocationScores = <double>[
+    for (final EvalMetricResultPerInvocation invocation
+        in run.evalMetricResultPerInvocation)
+      for (final EvalMetricResultSpec metricResult
+          in invocation.evalMetricResults)
+        if (metricResult.metricName == metricName && metricResult.score != null)
+          metricResult.score!,
+  ];
+  if (invocationScores.isNotEmpty) {
+    final double total = invocationScores.fold<double>(
+      0.0,
+      (double sum, double s) => sum + s,
+    );
+    return total / invocationScores.length;
+  }
+  return null;
+}
+
+/// Formats one indented per-metric line with per-run scores (`runs: [...]`).
+String formatSummaryMetricLine(
+  EvalMetricResultSpec metricResult,
+  List<EvalCaseResult> runs,
+) {
+  final String scoreStr = metricResult.score != null
+      ? metricResult.score!.toStringAsFixed(2)
+      : 'n/a';
+  final List<String> perRunScores = <String>[
+    for (final EvalCaseResult run in runs)
+      switch (getRunMetricScore(run, metricResult.metricName)) {
+        final double runScore => runScore.toStringAsFixed(2),
+        null => '-',
+      },
+  ];
+  final String runsStr = 'runs: [${perRunScores.join(', ')}]';
+  final double? effectiveThreshold =
+      metricResult.threshold ?? metricResult.criterion?.threshold;
+  if (metricResult.evalStatus == EvalStatus.informational ||
+      effectiveThreshold == null) {
+    return '    ${metricResult.metricName}: $scoreStr ($runsStr)';
+  }
+  return '    ${metricResult.metricName}: $scoreStr '
+      '(threshold ${effectiveThreshold.toStringAsFixed(2)}, '
+      '${_evalStatusUpperName(metricResult.evalStatus)}, $runsStr)';
+}
+
+/// Formats one cross-run criterion [res] for the case header line.
+String formatCriterionSummary(MethodResult res) {
+  final String valStr =
+      res.value != null ? res.value!.toStringAsFixed(2) : 'n/a';
+  if (res.status == EvalStatus.informational ||
+      res.status == EvalStatus.notEvaluated) {
+    return '${res.name}=$valStr';
+  }
+  return '${res.name}=$valStr (${_evalStatusUpperName(res.status)})';
+}
+
+/// Formats (and optionally prints to [outSink]) a compact case-by-run summary
+/// with default Pass Rate and per-run scores.
+String prettyPrintMultiRunSummaryTable(
+  List<MultiRunCaseResult> aggregateEvalResults, {
+  IOSink? outSink,
+}) {
+  if (aggregateEvalResults.isEmpty) {
+    return '';
+  }
+
+  final List<MultiRunCaseSummary> summaries = <MultiRunCaseSummary>[
+    for (final MultiRunCaseResult caseResult in aggregateEvalResults)
+      summarizeMultiRunCaseResult(caseResult),
+  ];
+  int idWidth = 0;
+  int statusWidth = 0;
+  for (final MultiRunCaseSummary summary in summaries) {
+    if (summary.evalId.length > idWidth) {
+      idWidth = summary.evalId.length;
+    }
+    final int statusLen = _evalStatusUpperName(summary.finalEvalStatus).length;
+    if (statusLen > statusWidth) {
+      statusWidth = statusLen;
+    }
+  }
+
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < aggregateEvalResults.length; i += 1) {
+    final MultiRunCaseResult caseResult = aggregateEvalResults[i];
+    final MultiRunCaseSummary summary = summaries[i];
+    out.writeln('');
+    final String runStrip = caseResult.runs.map(formatRunSymbol).join();
+    final int decidedRuns = summary.passedRuns + summary.failedRuns;
+    final String passRateStr = summary.passRate != null
+        ? '${(summary.passRate! * 100).toStringAsFixed(0)}%'
+        : 'n/a';
+    final String runsPart =
+        '$runStrip  ${summary.passedRuns}/$decidedRuns ($passRateStr)';
+    final List<String> headerParts = <String>[
+      '  ${summary.evalId.padRight(idWidth)}',
+      _evalStatusUpperName(summary.finalEvalStatus).padRight(statusWidth),
+      runsPart,
+    ];
+    if (summary.crossRunResults.isNotEmpty) {
+      headerParts.add(
+        summary.crossRunResults.map(formatCriterionSummary).join('  '),
+      );
+    }
+    out.writeln(headerParts.join('  '));
+
+    final List<EvalMetricResultSpec> gated = <EvalMetricResultSpec>[
+      for (final EvalMetricResultSpec m in summary.overallEvalMetricResults)
+        if (m.evalStatus != EvalStatus.informational) m,
+    ];
+    final List<EvalMetricResultSpec> shownMetrics = gated.isNotEmpty
+        ? gated
+        : List<EvalMetricResultSpec>.from(summary.overallEvalMetricResults);
+    for (final EvalMetricResultSpec metricResult in shownMetrics) {
+      out.writeln(formatSummaryMetricLine(metricResult, caseResult.runs));
+    }
+  }
+
+  final String rendered = out.toString();
+  if (outSink != null) {
+    outSink.write(rendered);
+  }
+  return rendered;
 }
 
 /// Formats aggregated multi-run evaluation results across [numRuns] runs.

@@ -23,12 +23,14 @@ class LocalEvalSetResultsManager extends EvalSetResultsManager {
   Future<void> saveEvalSetResult(
     String appName,
     String evalSetId,
-    List<EvalCaseResult> evalCaseResults,
-  ) async {
+    List<EvalCaseResult> evalCaseResults, {
+    List<MultiRunCaseSummary>? multiRunCaseSummaries,
+  }) async {
     final EvalSetResult evalSetResult = createEvalSetResult(
       appName,
       evalSetId,
       evalCaseResults,
+      multiRunCaseSummaries: multiRunCaseSummaries,
     );
 
     final String appEvalHistoryDir = _getEvalHistoryDir(appName);

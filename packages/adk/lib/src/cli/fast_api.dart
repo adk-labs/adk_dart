@@ -4,7 +4,16 @@ library;
 import 'dart:io';
 
 import 'adk_web_server.dart';
-export 'api_server.dart' show W3cTraceContext, extractW3cTraceContext;
+import 'utils/base_agent_loader.dart';
+export 'api_server.dart'
+    show
+        AgentsFileObserver,
+        AgentsFileObserverFactory,
+        SetupObserverCallback,
+        TearDownObserverCallback,
+        W3cTraceContext,
+        agentsFileObserverFactoryTestingOverride,
+        extractW3cTraceContext;
 
 /// Thin wrapper around [AdkWebServer] for web and API server modes.
 class FastApiApp {
@@ -40,7 +49,60 @@ class FastApiApp {
     this.triggerOidcServiceAccounts = const <String>[],
     this.geminiEnterpriseAppName,
     this.expressMode = false,
-  }) : withUi = withUi ?? enableWebUi;
+    this.agentLoader,
+    this.setupObserver,
+    this.tearDownObserver,
+  }) : withUi = withUi ?? enableWebUi {
+    if (reloadAgents || setupObserver != null) {
+      _server = _buildServer()
+        ..getFastApiApp(
+          allowOrigins: allowOrigins,
+          setupObserver: setupObserver,
+          tearDownObserver: tearDownObserver,
+          withUi: this.withUi,
+        );
+    }
+  }
+
+  /// Creates a [FastApiApp] bound to an existing [AdkWebServer] instance.
+  FastApiApp.bound({
+    required AdkWebServer server,
+    List<String>? allowOrigins,
+    bool? withUi,
+  }) : agentsDir = server.agentsDir,
+       appName = server.appName,
+       port = server.port,
+       host = server.host,
+       allowOrigins = allowOrigins ?? server.allowOrigins,
+       sessionServiceUri = server.sessionServiceUri,
+       artifactServiceUri = server.artifactServiceUri,
+       memoryServiceUri = server.memoryServiceUri,
+       evalStorageUri = server.evalStorageUri,
+       useLocalStorage = server.useLocalStorage,
+       urlPrefix = server.urlPrefix,
+       autoCreateSession = server.autoCreateSession,
+       enableWebUi = withUi ?? server.enableWebUi,
+       withUi = withUi ?? server.enableWebUi,
+       logoText = server.logoText,
+       logoImageUrl = server.logoImageUrl,
+       avatarConfig = server.avatarConfig,
+       maxLlmCalls = server.maxLlmCalls,
+       defaultLlmModel = server.defaultLlmModel,
+       reload = server.reload,
+       reloadAgents = server.reloadAgents,
+       traceToCloud = server.traceToCloud,
+       otelToCloud = server.otelToCloud,
+       a2a = server.a2a,
+       extraPlugins = server.extraPlugins,
+       triggerSources = server.triggerSources,
+       triggerOidcAudience = server.triggerOidcAudience,
+       triggerOidcServiceAccounts = server.triggerOidcServiceAccounts,
+       geminiEnterpriseAppName = server.geminiEnterpriseAppName,
+       expressMode = server.expressMode,
+       agentLoader = server.agentLoader,
+       setupObserver = server.setupObserver,
+       tearDownObserver = server.tearDownObserver,
+       _server = server;
 
   /// Root directory that contains ADK agent projects.
   final String agentsDir;
@@ -132,11 +194,22 @@ class FastApiApp {
   /// Whether Gemini Enterprise Express Mode is enabled.
   final bool expressMode;
 
+  /// Optional custom [BaseAgentLoader] used for agent reloading.
+  final BaseAgentLoader? agentLoader;
+
+  /// Optional callback for setting up the agents file watcher.
+  final SetupObserverCallback? setupObserver;
+
+  /// Optional callback for tearing down the agents file watcher.
+  final TearDownObserverCallback? tearDownObserver;
+
   AdkWebServer? _server;
 
-  /// Starts the wrapped [AdkWebServer] instance.
-  Future<HttpServer> start() async {
-    final AdkWebServer server = AdkWebServer(
+  /// Underlying [AdkWebServer] when initialized, or `null`.
+  AdkWebServer? get server => _server;
+
+  AdkWebServer _buildServer() {
+    return AdkWebServer(
       agentsDir: agentsDir,
       appName: appName,
       port: port,
@@ -166,12 +239,20 @@ class FastApiApp {
       triggerOidcServiceAccounts: triggerOidcServiceAccounts,
       geminiEnterpriseAppName: geminiEnterpriseAppName,
       expressMode: expressMode,
+      agentLoader: agentLoader,
+      setupObserver: setupObserver,
+      tearDownObserver: tearDownObserver,
     );
+  }
+
+  /// Starts the wrapped [AdkWebServer] instance.
+  Future<HttpServer> start() async {
+    final AdkWebServer server = _server ?? _buildServer();
     _server = server;
     return server.start();
   }
 
-  /// Stops the running server instance, if one has been started.
+  /// Stops the running server instance and tears down any active file observer.
   Future<void> stop() async {
     await _server?.stop();
     _server = null;
@@ -210,6 +291,9 @@ FastApiApp getFastApiApp({
   List<String> triggerOidcServiceAccounts = const <String>[],
   String? geminiEnterpriseAppName,
   bool expressMode = false,
+  BaseAgentLoader? agentLoader,
+  SetupObserverCallback? setupObserver,
+  TearDownObserverCallback? tearDownObserver,
 }) {
   return FastApiApp(
     agentsDir: agentsDir,
@@ -242,5 +326,8 @@ FastApiApp getFastApiApp({
     triggerOidcServiceAccounts: triggerOidcServiceAccounts,
     geminiEnterpriseAppName: geminiEnterpriseAppName,
     expressMode: expressMode,
+    agentLoader: agentLoader,
+    setupObserver: setupObserver,
+    tearDownObserver: tearDownObserver,
   );
 }

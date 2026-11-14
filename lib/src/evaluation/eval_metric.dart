@@ -1,6 +1,7 @@
 /// Evaluation metric definitions and evaluation runtime options.
 library;
 
+import 'eval_config.dart';
 import 'eval_metrics.dart';
 
 /// Built-in evaluation metrics supported by the evaluator.
@@ -18,6 +19,7 @@ class EvaluateConfig {
   EvaluateConfig({
     List<EvalMetric>? evalMetrics,
     List<EvalMetricSpec>? evalMetricSpecs,
+    this.multiRunConfig,
     this.parallelism = 4,
   }) : evalMetrics =
            evalMetrics ??
@@ -31,6 +33,9 @@ class EvaluateConfig {
 
   /// Registry-backed [EvalMetricSpec] entries to evaluate for each eval case.
   final List<EvalMetricSpec> evalMetricSpecs;
+
+  /// Optional configuration for aggregating results across multiple runs of each eval case.
+  final MultiRunConfig? multiRunConfig;
 
   /// Maximum evaluation parallelism.
   final int parallelism;

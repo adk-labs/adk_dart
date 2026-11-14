@@ -87,16 +87,25 @@ class InferenceRequest {
   /// Creates an inference request.
   InferenceRequest({
     required this.appName,
-    required this.evalCases,
+    this.evalSetId = '',
+    List<EvalCase>? evalCases,
+    this.evalCaseIds,
     this.userId = 'eval_user',
     InferenceConfig? inferenceConfig,
-  }) : inferenceConfig = inferenceConfig ?? InferenceConfig();
+  }) : evalCases = evalCases ?? const <EvalCase>[],
+       inferenceConfig = inferenceConfig ?? InferenceConfig();
 
   /// App module name used for execution.
   final String appName;
 
+  /// Eval set identifier used when resolving cases from an `EvalSetsManager`.
+  final String evalSetId;
+
   /// Evaluation cases to run through the app.
   final List<EvalCase> evalCases;
+
+  /// Optional subset of eval case IDs to run from [evalSetId].
+  final List<String>? evalCaseIds;
 
   /// User identifier used for generated sessions.
   final String userId;
@@ -110,9 +119,9 @@ class EvaluateRequest {
   /// Creates an evaluation request.
   EvaluateRequest({
     required this.inferenceResults,
-    required this.evalCasesById,
+    Map<String, EvalCase>? evalCasesById,
     required this.evaluateConfig,
-  });
+  }) : evalCasesById = evalCasesById ?? const <String, EvalCase>{};
 
   /// Inference outputs to score.
   final List<InferenceResult> inferenceResults;

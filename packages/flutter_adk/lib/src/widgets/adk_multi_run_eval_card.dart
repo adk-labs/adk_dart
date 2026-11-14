@@ -3,6 +3,120 @@ import 'package:flutter/material.dart';
 
 import '../theme/adk_theme.dart';
 
+String _formatRunSymbol(core.EvalCaseResult run) {
+  if (core.countRunsFailedWithoutMetricResults(<core.EvalCaseResult>[run]) >
+      0) {
+    return 'C';
+  }
+  final core.EvalStatus status = core.getRunStatus(run);
+  if (status == core.EvalStatus.passed) {
+    return 'P';
+  }
+  if (status == core.EvalStatus.failed) {
+    return 'F';
+  }
+  return '-';
+}
+
+double? _extractRunMetricScore(core.EvalCaseResult run, String metricName) {
+  for (final core.EvalMetricResultSpec metricResult
+      in run.overallEvalMetricResults) {
+    if (metricResult.metricName == metricName && metricResult.score != null) {
+      return metricResult.score;
+    }
+  }
+  final List<double> invocationScores = <double>[
+    for (final core.EvalMetricResultPerInvocation inv
+        in run.evalMetricResultPerInvocation)
+      for (final core.EvalMetricResultSpec metricResult
+          in inv.evalMetricResults)
+        if (metricResult.metricName == metricName && metricResult.score != null)
+          metricResult.score!,
+  ];
+  if (invocationScores.isNotEmpty) {
+    final double sum = invocationScores.fold<double>(
+      0.0,
+      (double acc, double val) => acc + val,
+    );
+    return sum / invocationScores.length;
+  }
+  return null;
+}
+
+String _statusUpperLabel(core.EvalStatus status) {
+  switch (status) {
+    case core.EvalStatus.passed:
+      return 'PASSED';
+    case core.EvalStatus.failed:
+      return 'FAILED';
+    case core.EvalStatus.notEvaluated:
+      return 'NOT_EVALUATED';
+    case core.EvalStatus.informational:
+      return 'INFORMATIONAL';
+  }
+}
+
+/// Cross-run criterion summary (such as `pass@3` or `pass^3`) for one eval case.
+@immutable
+class AdkMultiRunCriterionSummary {
+  /// Creates an [AdkMultiRunCriterionSummary].
+  const AdkMultiRunCriterionSummary({
+    required this.name,
+    this.value,
+    this.threshold,
+    this.passed = true,
+    this.isInformational = false,
+    this.statusLabel = 'PASSED',
+    this.note,
+  });
+
+  /// Converts a persisted [core.MethodResult] into an [AdkMultiRunCriterionSummary].
+  factory AdkMultiRunCriterionSummary.fromMethodResult(core.MethodResult res) {
+    final bool isInfo =
+        res.status == core.EvalStatus.informational ||
+        res.status == core.EvalStatus.notEvaluated;
+    return AdkMultiRunCriterionSummary(
+      name: res.name,
+      value: res.value,
+      threshold: res.threshold,
+      passed: res.status == core.EvalStatus.passed || isInfo,
+      isInformational: isInfo,
+      statusLabel: _statusUpperLabel(res.status),
+      note: res.note,
+    );
+  }
+
+  /// Criterion name (e.g. `'pass_at_3'`, `'pass@3'`, `'pass^3'`).
+  final String name;
+
+  /// Computed cross-run criterion value, if evaluated.
+  final double? value;
+
+  /// Optional gating threshold.
+  final double? threshold;
+
+  /// Whether the criterion passed (or was informational).
+  final bool passed;
+
+  /// Whether the criterion is report-only (`INFORMATIONAL` or `NOT_EVALUATED`).
+  final bool isInformational;
+
+  /// Uppercase status label (`PASSED`, `FAILED`, `INFORMATIONAL`, `NOT_EVALUATED`).
+  final String statusLabel;
+
+  /// Optional breakdown note.
+  final String? note;
+
+  /// Formatted summary matching CLI output (`name=0.67` or `name=0.67 (PASSED)`).
+  String get formattedSummary {
+    final String valStr = value != null ? value!.toStringAsFixed(2) : 'n/a';
+    if (isInformational) {
+      return '$name=$valStr';
+    }
+    return '$name=$valStr ($statusLabel)';
+  }
+}
+
 /// Per-metric aggregated score summary across multiple evaluation runs.
 @immutable
 class AdkMultiRunMetricSummary {
@@ -15,6 +129,7 @@ class AdkMultiRunMetricSummary {
     this.passed = true,
     this.isInformational = false,
     this.note,
+    this.perRunScores = const <double?>[],
   });
 
   /// Name of the evaluated metric.
@@ -38,6 +153,21 @@ class AdkMultiRunMetricSummary {
   /// Optional human-readable breakdown note.
   final String? note;
 
+  /// Optional per-run score list in repetition order (`null` when a run produced no score).
+  final List<double?> perRunScores;
+
+  /// Formatted per-run score strip (`runs: [1.00, 0.50, -]`), or `null` when [perRunScores] is empty.
+  String? get formattedRunScoresStrip {
+    if (perRunScores.isEmpty) {
+      return null;
+    }
+    final List<String> formatted = <String>[
+      for (final double? s in perRunScores)
+        s != null ? s.toStringAsFixed(2) : '-',
+    ];
+    return 'runs: [${formatted.join(', ')}]';
+  }
+
   /// The human-friendly label for [methodName], formatting `'pass_at_k'` as `'pass@k'` and `'pass_hat_k'` as `'pass^k'`.
   String get displayMethodName {
     if (methodName == 'pass_at_k') {
@@ -59,38 +189,130 @@ class AdkMultiRunCaseSummary {
     required this.totalRuns,
     required this.passedRuns,
     required this.passed,
+    this.failedRuns = 0,
+    this.crashedRuns = 0,
+    this.notEvaluatedRuns = 0,
+    this.runStatusStrip,
+    double? passRateOverride,
     this.metrics = const <AdkMultiRunMetricSummary>[],
-  });
+    this.crossRunCriteria = const <AdkMultiRunCriterionSummary>[],
+  }) : _passRateOverride = passRateOverride;
 
   /// Converts an ADK [core.MultiRunCaseResult] into an [AdkMultiRunCaseSummary].
   factory AdkMultiRunCaseSummary.fromCore(core.MultiRunCaseResult result) {
-    final int total = result.runs.length;
-    final int passedCount = result.runs
-        .where(
-          (core.EvalCaseResult r) =>
-              core.getRunStatus(r) == core.EvalStatus.passed,
-        )
-        .length;
-    return AdkMultiRunCaseSummary(
-      evalId: result.evalId,
-      totalRuns: total,
-      passedRuns: passedCount,
-      passed: result.finalEvalStatus == core.EvalStatus.passed ||
-          result.finalEvalStatus == core.EvalStatus.informational,
-      metrics: result.metricMethods.entries.map((
-        MapEntry<String, core.MethodResult> e,
-      ) {
-        final bool isInfo = e.value.status == core.EvalStatus.informational;
-        return AdkMultiRunMetricSummary(
-          metricName: e.key,
-          methodName: e.value.name,
-          value: e.value.value,
-          threshold: e.value.threshold,
-          passed: e.value.status == core.EvalStatus.passed || isInfo,
-          isInformational: isInfo,
-          note: e.value.note,
+    final core.MultiRunCaseSummary persisted =
+        core.summarizeMultiRunCaseResult(result);
+    return AdkMultiRunCaseSummary.fromCoreSummary(
+      persisted,
+      runs: result.runs,
+    );
+  }
+
+  /// Converts a persisted ADK [core.MultiRunCaseSummary] (with optional per-repetition
+  /// [runs] from [core.EvalSetResult.evalCaseResults]) into an [AdkMultiRunCaseSummary].
+  factory AdkMultiRunCaseSummary.fromCoreSummary(
+    core.MultiRunCaseSummary summary, {
+    List<core.EvalCaseResult>? runs,
+  }) {
+    final List<core.EvalCaseResult>? matchingRuns = runs
+        ?.where((core.EvalCaseResult r) => r.evalId == summary.evalId)
+        .toList(growable: false);
+
+    final String statusStrip;
+    if (matchingRuns != null && matchingRuns.isNotEmpty) {
+      statusStrip = matchingRuns.map(_formatRunSymbol).join();
+    } else {
+      statusStrip =
+          '${'P' * summary.passedRuns}'
+          '${'F' * summary.failedRuns}'
+          '${'C' * summary.crashedRuns}'
+          '${'-' * summary.notEvaluatedRuns}';
+    }
+
+    final List<AdkMultiRunMetricSummary> uiMetrics =
+        <AdkMultiRunMetricSummary>[];
+    if (summary.metricMethods.isNotEmpty) {
+      final Map<String, core.EvalMetricResultSpec> specsByName =
+          <String, core.EvalMetricResultSpec>{
+            for (final core.EvalMetricResultSpec s
+                in summary.overallEvalMetricResults)
+              s.metricName: s,
+          };
+      for (final MapEntry<String, core.MethodResult> entry
+          in summary.metricMethods.entries) {
+        final String metricName = entry.key;
+        final core.MethodResult methodResult = entry.value;
+        final core.EvalMetricResultSpec? spec = specsByName[metricName];
+        final bool isInfo =
+            methodResult.status == core.EvalStatus.informational &&
+            (spec == null || spec.evalStatus == core.EvalStatus.informational);
+        final bool metricPassed = spec != null
+            ? (spec.evalStatus == core.EvalStatus.passed ||
+                  spec.evalStatus == core.EvalStatus.informational)
+            : (methodResult.status == core.EvalStatus.passed || isInfo);
+        final List<double?> perRunScores =
+            matchingRuns != null && matchingRuns.isNotEmpty
+            ? <double?>[
+                for (final core.EvalCaseResult r in matchingRuns)
+                  _extractRunMetricScore(r, metricName),
+              ]
+            : const <double?>[];
+        uiMetrics.add(
+          AdkMultiRunMetricSummary(
+            metricName: metricName,
+            methodName: methodResult.name,
+            value: spec?.score ?? methodResult.value,
+            threshold:
+                methodResult.threshold ??
+                spec?.threshold ??
+                spec?.criterion?.threshold,
+            passed: metricPassed,
+            isInformational: isInfo,
+            note: methodResult.note,
+            perRunScores: perRunScores,
+          ),
         );
-      }).toList(),
+      }
+    } else {
+      for (final core.EvalMetricResultSpec spec
+          in summary.overallEvalMetricResults) {
+        final bool isInfo = spec.evalStatus == core.EvalStatus.informational;
+        final List<double?> perRunScores =
+            matchingRuns != null && matchingRuns.isNotEmpty
+            ? <double?>[
+                for (final core.EvalCaseResult r in matchingRuns)
+                  _extractRunMetricScore(r, spec.metricName),
+              ]
+            : const <double?>[];
+        uiMetrics.add(
+          AdkMultiRunMetricSummary(
+            metricName: spec.metricName,
+            methodName: 'mean_over_invocations',
+            value: spec.score,
+            threshold: spec.threshold ?? spec.criterion?.threshold,
+            passed: spec.evalStatus == core.EvalStatus.passed || isInfo,
+            isInformational: isInfo,
+            perRunScores: perRunScores,
+          ),
+        );
+      }
+    }
+
+    return AdkMultiRunCaseSummary(
+      evalId: summary.evalId,
+      totalRuns: summary.numRuns,
+      passedRuns: summary.passedRuns,
+      failedRuns: summary.failedRuns,
+      crashedRuns: summary.crashedRuns,
+      notEvaluatedRuns: summary.notEvaluatedRuns,
+      runStatusStrip: statusStrip,
+      passRateOverride: summary.passRate,
+      passed: summary.finalEvalStatus == core.EvalStatus.passed ||
+          summary.finalEvalStatus == core.EvalStatus.informational,
+      metrics: uiMetrics,
+      crossRunCriteria: summary.crossRunResults
+          .map(AdkMultiRunCriterionSummary.fromMethodResult)
+          .toList(growable: false),
     );
   }
 
@@ -103,14 +325,59 @@ class AdkMultiRunCaseSummary {
   /// Number of repetition runs that passed all metrics.
   final int passedRuns;
 
+  /// Number of repetition runs that failed metrics.
+  final int failedRuns;
+
+  /// Number of repetition runs that crashed without metric results.
+  final int crashedRuns;
+
+  /// Number of non-crashed repetition runs that were not evaluated.
+  final int notEvaluatedRuns;
+
+  /// Compact per-run status strip (`P` passed, `F` failed, `C` crashed, `-` not evaluated).
+  final String? runStatusStrip;
+
+  final double? _passRateOverride;
+
   /// Whether the case passed overall cross-run evaluation criteria.
   final bool passed;
 
   /// Per-metric aggregated results for this case.
   final List<AdkMultiRunMetricSummary> metrics;
 
+  /// Configured case-level cross-run criteria results.
+  final List<AdkMultiRunCriterionSummary> crossRunCriteria;
+
+  /// Number of decided runs (`passedRuns + failedRuns`), falling back to non-crashed/non-unevaluated runs.
+  int get decidedRuns {
+    if (passedRuns + failedRuns > 0) {
+      return passedRuns + failedRuns;
+    }
+    final int remaining = totalRuns - crashedRuns - notEvaluatedRuns;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  /// Fraction of decided runs that passed (`0.0` to `1.0`), or `null` when no run was decided.
+  double? get decidedPassRate {
+    if (_passRateOverride != null) {
+      return _passRateOverride;
+    }
+    final int decided = decidedRuns;
+    return decided > 0 ? passedRuns / decided : null;
+  }
+
   /// Pass rate across runs in the range `0.0` to `1.0`.
-  double get passRate => totalRuns > 0 ? passedRuns / totalRuns : 0.0;
+  double get passRate =>
+      decidedPassRate ?? (totalRuns > 0 ? passedRuns / totalRuns : 0.0);
+
+  /// Formatted pass rate label (for example `'Pass Rate: 67%'` or `'Pass Rate: n/a'`).
+  String get formattedPassRateLabel {
+    final double? rate = decidedPassRate;
+    if (rate == null) {
+      return 'Pass Rate: n/a';
+    }
+    return 'Pass Rate: ${(rate * 100).round()}%';
+  }
 }
 
 /// A summary card widget that displays aggregated statistics across multi-run evaluation cases.
@@ -157,6 +424,115 @@ class AdkMultiRunEvalCard extends StatelessWidget {
       key: key,
       title: title,
       caseSummaries: results.map(AdkMultiRunCaseSummary.fromCore).toList(),
+      style: style,
+      passColor: passColor,
+      warnColor: warnColor,
+      failColor: failColor,
+      leadingIcon: leadingIcon,
+      trailingWidget: trailingWidget,
+      headerBuilder: headerBuilder,
+      caseRowBuilder: caseRowBuilder,
+      metricChipBuilder: metricChipBuilder,
+    );
+  }
+
+  /// Creates an [AdkMultiRunEvalCard] from persisted [core.MultiRunCaseSummary] models.
+  factory AdkMultiRunEvalCard.fromCoreSummaries({
+    Key? key,
+    required List<core.MultiRunCaseSummary> summaries,
+    List<core.EvalCaseResult>? evalCaseResults,
+    String title = 'Multi-Run Evaluation Summary',
+    AdkCardStyle? style,
+    Color? passColor,
+    Color? warnColor,
+    Color? failColor,
+    Widget? leadingIcon,
+    Widget? trailingWidget,
+    Widget Function(
+      BuildContext context,
+      int passedCases,
+      int totalCases,
+      double passRate,
+    )? headerBuilder,
+    Widget Function(BuildContext context, AdkMultiRunCaseSummary summary)?
+        caseRowBuilder,
+    Widget Function(BuildContext context, AdkMultiRunMetricSummary metric)?
+        metricChipBuilder,
+  }) {
+    return AdkMultiRunEvalCard(
+      key: key,
+      title: title,
+      caseSummaries: summaries
+          .map(
+            (core.MultiRunCaseSummary s) => AdkMultiRunCaseSummary.fromCoreSummary(
+              s,
+              runs: evalCaseResults,
+            ),
+          )
+          .toList(growable: false),
+      style: style,
+      passColor: passColor,
+      warnColor: warnColor,
+      failColor: failColor,
+      leadingIcon: leadingIcon,
+      trailingWidget: trailingWidget,
+      headerBuilder: headerBuilder,
+      caseRowBuilder: caseRowBuilder,
+      metricChipBuilder: metricChipBuilder,
+    );
+  }
+
+  /// Creates an [AdkMultiRunEvalCard] from a stored [core.EvalSetResult], using
+  /// persisted [core.EvalSetResult.multiRunCaseSummaries] when available and
+  /// falling back to aggregating [core.EvalSetResult.evalCaseResults].
+  factory AdkMultiRunEvalCard.fromEvalSetResult({
+    Key? key,
+    required core.EvalSetResult evalSetResult,
+    core.MultiRunConfig? multiRunConfig,
+    String title = 'Multi-Run Evaluation Summary',
+    AdkCardStyle? style,
+    Color? passColor,
+    Color? warnColor,
+    Color? failColor,
+    Widget? leadingIcon,
+    Widget? trailingWidget,
+    Widget Function(
+      BuildContext context,
+      int passedCases,
+      int totalCases,
+      double passRate,
+    )? headerBuilder,
+    Widget Function(BuildContext context, AdkMultiRunCaseSummary summary)?
+        caseRowBuilder,
+    Widget Function(BuildContext context, AdkMultiRunMetricSummary metric)?
+        metricChipBuilder,
+  }) {
+    final List<core.MultiRunCaseSummary>? persisted =
+        evalSetResult.multiRunCaseSummaries;
+    if (persisted != null && persisted.isNotEmpty) {
+      return AdkMultiRunEvalCard.fromCoreSummaries(
+        key: key,
+        summaries: persisted,
+        evalCaseResults: evalSetResult.evalCaseResults,
+        title: title,
+        style: style,
+        passColor: passColor,
+        warnColor: warnColor,
+        failColor: failColor,
+        leadingIcon: leadingIcon,
+        trailingWidget: trailingWidget,
+        headerBuilder: headerBuilder,
+        caseRowBuilder: caseRowBuilder,
+        metricChipBuilder: metricChipBuilder,
+      );
+    }
+    return AdkMultiRunEvalCard.fromCoreResults(
+      key: key,
+      results: core.aggregateEvalCaseResults(
+        evalSetResult.evalCaseResults,
+        multiRunConfig: multiRunConfig,
+      ),
+      title: title,
       style: style,
       passColor: passColor,
       warnColor: warnColor,
@@ -310,6 +686,8 @@ class AdkMultiRunEvalCard extends StatelessWidget {
     AdkCardStyle? effectiveStyle,
     AdkMultiRunCaseSummary item,
   ) {
+    final bool hasStrip =
+        item.runStatusStrip != null && item.runStatusStrip!.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Column(
@@ -346,6 +724,40 @@ class AdkMultiRunEvalCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 3.0),
+          Wrap(
+            spacing: 6.0,
+            runSpacing: 4.0,
+            children: <Widget>[
+              if (hasStrip)
+                _buildInfoBadge(
+                  theme: theme,
+                  label: 'Runs: ${item.runStatusStrip}',
+                ),
+              _buildInfoBadge(
+                theme: theme,
+                label: item.formattedPassRateLabel,
+              ),
+              if (item.crashedRuns > 0)
+                _buildInfoBadge(
+                  theme: theme,
+                  label: '${item.crashedRuns} crashed',
+                  isWarning: true,
+                ),
+              if (item.notEvaluatedRuns > 0)
+                _buildInfoBadge(
+                  theme: theme,
+                  label: '${item.notEvaluatedRuns} not evaluated',
+                ),
+              for (final AdkMultiRunCriterionSummary criterion
+                  in item.crossRunCriteria)
+                _buildInfoBadge(
+                  theme: theme,
+                  label: criterion.formattedSummary,
+                  isWarning: !criterion.passed,
+                ),
+            ],
+          ),
           if (item.metrics.isNotEmpty) ...<Widget>[
             const SizedBox(height: 4.0),
             Wrap(
@@ -359,6 +771,9 @@ class AdkMultiRunEvalCard extends StatelessWidget {
                     ? m.value!.toStringAsFixed(2)
                     : 'N/A';
                 final String statusSuffix = m.isInformational ? ' [INFO]' : '';
+                final String? runsStrip = m.formattedRunScoresStrip;
+                final String runsSuffix =
+                    runsStrip != null ? ' ($runsStrip)' : '';
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6.0,
@@ -371,7 +786,7 @@ class AdkMultiRunEvalCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6.0),
                   ),
                   child: Text(
-                    '${m.metricName} (${m.displayMethodName}): $valStr$statusSuffix',
+                    '${m.metricName} (${m.displayMethodName}): $valStr$statusSuffix$runsSuffix',
                     style: effectiveStyle?.codeStyle ??
                         theme.textTheme.labelSmall?.copyWith(
                           fontFamily: 'monospace',
@@ -383,6 +798,37 @@ class AdkMultiRunEvalCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBadge({
+    required ThemeData theme,
+    required String label,
+    bool isWarning = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+      decoration: BoxDecoration(
+        color: isWarning
+            ? theme.colorScheme.errorContainer.withValues(alpha: 0.7)
+            : theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(5.0),
+        border: Border.all(
+          color: isWarning
+              ? theme.colorScheme.error.withValues(alpha: 0.4)
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          fontFamily: 'monospace',
+          fontSize: 10.0,
+          color: isWarning
+              ? theme.colorScheme.onErrorContainer
+              : theme.colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

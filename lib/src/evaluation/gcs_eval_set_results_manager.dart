@@ -53,13 +53,15 @@ class GcsEvalSetResultsManager extends EvalSetResultsManager {
   Future<void> saveEvalSetResult(
     String appName,
     String evalSetId,
-    List<EvalCaseResult> evalCaseResults,
-  ) async {
+    List<EvalCaseResult> evalCaseResults, {
+    List<MultiRunCaseSummary>? multiRunCaseSummaries,
+  }) async {
     await _ensureBucketExists();
     final EvalSetResult result = createEvalSetResult(
       appName,
       evalSetId,
       evalCaseResults,
+      multiRunCaseSummaries: multiRunCaseSummaries,
     );
     await _writeEvalSetResult(
       getEvalSetResultBlobName(appName, result.evalSetResultId),

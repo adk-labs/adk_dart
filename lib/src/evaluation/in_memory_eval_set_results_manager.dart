@@ -15,12 +15,14 @@ class InMemoryEvalSetResultsManager extends EvalSetResultsManager {
   Future<void> saveEvalSetResult(
     String appName,
     String evalSetId,
-    List<EvalCaseResult> evalCaseResults,
-  ) async {
+    List<EvalCaseResult> evalCaseResults, {
+    List<MultiRunCaseSummary>? multiRunCaseSummaries,
+  }) async {
     final EvalSetResult result = createEvalSetResult(
       appName,
       evalSetId,
       evalCaseResults,
+      multiRunCaseSummaries: multiRunCaseSummaries,
     );
     final Map<String, EvalSetResult> byId = _resultsByApp.putIfAbsent(
       appName,
