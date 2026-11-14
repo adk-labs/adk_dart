@@ -49,6 +49,71 @@ const String genAiToolRequestSizeMetric = 'gen_ai.tool.request.size';
 /// Metric name for tool response sizes.
 const String genAiToolResponseSizeMetric = 'gen_ai.tool.response.size';
 
+/// Metric name for model calls made directly within an agent invocation.
+const String genAiInvokeAgentInferenceCallsMetric =
+    'gen_ai.invoke_agent.inference_calls';
+
+/// Metric name for tool calls made directly within an agent invocation.
+const String genAiInvokeAgentToolCallsMetric = 'gen_ai.invoke_agent.tool_calls';
+
+/// Counter metric name for semconv input token usage.
+const String genAiClientInferenceUsageInputTokensMetric =
+    'gen_ai.client.inference.usage.input_tokens';
+
+/// Counter metric name for semconv output token usage.
+const String genAiClientInferenceUsageOutputTokensMetric =
+    'gen_ai.client.inference.usage.output_tokens';
+
+/// Counter metric name for semconv cache-read input token usage.
+const String genAiClientInferenceUsageCacheReadInputTokensMetric =
+    'gen_ai.client.inference.usage.cache_read.input_tokens';
+
+/// Counter metric name for semconv cache-write input token usage.
+const String genAiClientInferenceUsageCacheWriteInputTokensMetric =
+    'gen_ai.client.inference.usage.cache_write.input_tokens';
+
+/// Counter metric name for semconv reasoning output token usage.
+const String genAiClientInferenceUsageReasoningOutputTokensMetric =
+    'gen_ai.client.inference.usage.reasoning.output_tokens';
+
+/// Histogram metric name for semconv per-operation input token counts.
+const String genAiClientInferenceOperationInputTokensMetric =
+    'gen_ai.client.inference.operation.input_tokens';
+
+/// Histogram metric name for semconv per-operation output token counts.
+const String genAiClientInferenceOperationOutputTokensMetric =
+    'gen_ai.client.inference.operation.output_tokens';
+
+/// Environment variable pinning the ADK telemetry schema version (`1` vs `2`).
+const String adkTelemetrySchemaVersionOptIn =
+    'ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN';
+
+/// Legacy telemetry schema version (`1` / `otel_semconv_1_36`).
+const int schemaVersionLegacy = 1;
+
+/// Semconv-aligned telemetry schema version (`2` / `otel_semconv_1_44`).
+const int schemaVersionSemconvAligned = 2;
+
+/// Explicit histogram bucket boundaries for agent call-count metrics.
+const List<int> callCountBucketBounds = <int>[
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  8,
+  12,
+  16,
+  24,
+  32,
+  64,
+  128,
+  256,
+  512,
+];
+
 /// Explicit histogram bucket boundaries for agent invocation durations (s).
 const List<double> agentDurationBucketBounds = <double>[
   0.1,
@@ -879,6 +944,148 @@ bool shouldEmitInferenceTokenMetrics({
   return true;
 }
 
+/// Resolves the active ADK telemetry schema version (`1` or `2`).
+int resolveTelemetrySchemaVersion({Map<String, String>? environment}) {
+  final Map<String, String> env = environment ?? _safeMetricsEnvironment;
+  final String optIn = (env[adkTelemetrySchemaVersionOptIn] ?? '').trim();
+  if (optIn == '1' || optIn == 'otel_semconv_1_36') {
+    return schemaVersionLegacy;
+  }
+  return schemaVersionSemconvAligned;
+}
+
+/// Returns `true` when [model] refers to a Google Gemini model.
+bool isGeminiModelName(String? model) {
+  if (model == null || model.isEmpty) {
+    return false;
+  }
+  return model.startsWith('gemini-') || model.contains('/models/gemini-');
+}
+
+bool _useVertexAi(Map<String, String> env) {
+  final String raw = (env['GOOGLE_GENAI_USE_VERTEXAI'] ?? '')
+      .trim()
+      .toLowerCase();
+  return raw == '1' || raw == 'true';
+}
+
+/// Resolves the semconv `gen_ai.provider.name` value for [model].
+String resolveGenAiProviderName(
+  String? model, {
+  Map<String, String>? environment,
+}) {
+  final Map<String, String> env = environment ?? _safeMetricsEnvironment;
+  if (isGeminiModelName(model)) {
+    return _useVertexAi(env) ? 'gcp.vertex.agent' : 'gcp.gemini';
+  }
+  if (model != null && model.startsWith('claude-')) {
+    return 'anthropic';
+  }
+  return '_other';
+}
+
+/// Resolves the legacy schema v1 `gen_ai.system` / provider name for [model].
+String resolveGenAiSystemNameV1(
+  String? model, {
+  Map<String, String>? environment,
+}) {
+  final Map<String, String> env = environment ?? _safeMetricsEnvironment;
+  if (isGeminiModelName(model)) {
+    return _useVertexAi(env) ? 'gcp.vertex.agent' : 'gemini';
+  }
+  if (model != null && model.startsWith('claude-')) {
+    return 'anthropic';
+  }
+  return '_other';
+}
+
+/// Records the number of model calls made directly within an agent invocation.
+void recordInvokeAgentInferenceCalls(
+  String agentName,
+  int count, {
+  AdkMetricsRecorder? recorder,
+}) {
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiInvokeAgentInferenceCallsMetric,
+      value: count,
+      unit: '{inference_call}',
+      description:
+          'Model calls made directly within an agent invocation, excluding sub-agents.',
+      attributes: <String, Object?>{
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.name': agentName,
+      },
+      explicitBucketBoundariesAdvisory: callCountBucketBounds,
+    ),
+  );
+}
+
+/// Records the number of tool calls made directly within an agent invocation.
+void recordInvokeAgentToolCalls(
+  String agentName,
+  int count, {
+  AdkMetricsRecorder? recorder,
+}) {
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiInvokeAgentToolCallsMetric,
+      value: count,
+      unit: '{tool_call}',
+      description:
+          'Tool calls made directly within an agent invocation, excluding sub-agents.',
+      attributes: <String, Object?>{
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.name': agentName,
+      },
+      explicitBucketBoundariesAdvisory: callCountBucketBounds,
+    ),
+  );
+}
+
+/// Computes elapsed duration in seconds from recorded span times when present,
+/// falling back to `[fallbackStartMicros, fallbackEndMicros ?? now]`.
+double getElapsedSeconds({
+  int? spanStartTimeUnixNano,
+  int? spanEndTimeUnixNano,
+  required int fallbackStartMicros,
+  int? fallbackEndMicros,
+}) {
+  if (spanStartTimeUnixNano != null && spanEndTimeUnixNano != null) {
+    final int deltaNanos = spanEndTimeUnixNano - spanStartTimeUnixNano;
+    return deltaNanos > 0 ? deltaNanos / 1000000000.0 : 0.0;
+  }
+  final int endMicros =
+      fallbackEndMicros ?? DateTime.now().microsecondsSinceEpoch;
+  final int deltaMicros = endMicros - fallbackStartMicros;
+  return deltaMicros > 0 ? deltaMicros / 1000000.0 : 0.0;
+}
+
+/// Whether ADK should emit the 7 semconv-genai `gen_ai.client.inference.*`
+/// token metrics for [model].
+///
+/// Emitted in every ADK telemetry schema version (`1` and `2`), except when an
+/// active `opentelemetry-instrumentation-google-genai` version (`> 0.7b2`)
+/// already records them for a Gemini model.
+bool shouldEmitSemconvInferenceTokenMetrics(
+  String? model, {
+  required bool hasGenAiInstrumentor,
+  String? instrumentorVersion,
+  Map<String, String>? environment,
+}) {
+  if (!hasGenAiInstrumentor || !isGeminiModelName(model)) {
+    return true;
+  }
+  final Map<String, String> env = environment ?? _safeMetricsEnvironment;
+  return !_instrumentorEmitsInferenceTokenMetrics(
+    hasGenAiInstrumentor: true,
+    instrumentorVersion: instrumentorVersion,
+    env: env,
+  );
+}
+
 /// Records semconv-genai inference token usage samples from [tokenUsage],
 /// including detail and modality breakdowns, and optional [error] attributes
 /// for failed inference calls.
@@ -889,6 +1096,7 @@ void recordInferenceTokenUsage({
   String? requestModel,
   String? responseModel,
   String? system,
+  String? providerName,
   String? serverAddress,
   int? serverPort,
   List<String>? finishReasons,
@@ -907,6 +1115,8 @@ void recordInferenceTokenUsage({
     if (responseModel != null && responseModel.isNotEmpty)
       'gen_ai.response.model': responseModel,
     if (system != null && system.isNotEmpty) 'gen_ai.system': system,
+    if (providerName != null && providerName.isNotEmpty)
+      'gen_ai.provider.name': providerName,
     if (serverAddress != null && serverAddress.isNotEmpty)
       'server.address': serverAddress,
     'server.port': ?serverPort,
@@ -1015,6 +1225,7 @@ void recordClientTokenUsage({
   String? serverAddress,
   int? serverPort,
   Object? error,
+  Map<String, String>? environment,
   AdkMetricsRecorder? recorder,
 }) {
   if (responses.isEmpty) {
@@ -1040,17 +1251,269 @@ void recordClientTokenUsage({
   }
   responseModel ??= llmRequest.model;
 
+  final int schemaVer = resolveTelemetrySchemaVersion(environment: environment);
+  final String providerName = schemaVer < schemaVersionSemconvAligned
+      ? resolveGenAiSystemNameV1(llmRequest.model, environment: environment)
+      : resolveGenAiProviderName(llmRequest.model, environment: environment);
+
   recordInferenceTokenUsage(
     tokenUsage: tokenUsage,
     agentName: agentName,
     requestModel: llmRequest.model,
     responseModel: responseModel,
     system: system,
+    providerName: providerName,
     serverAddress: serverAddress,
     serverPort: serverPort,
     finishReasons: finishReasons.isEmpty ? null : finishReasons,
     error: error,
     recorder: recorder,
+  );
+}
+
+List<ModalityTokenUsage> _extractSemconvModalityTokens(Object? details) {
+  if (details is! Iterable) {
+    return const <ModalityTokenUsage>[];
+  }
+  final Map<String, int> totals = <String, int>{};
+  for (final Object? item in details) {
+    if (item == null) {
+      continue;
+    }
+    final Object? rawModality = _readModalityField(item);
+    if (rawModality == null) {
+      continue;
+    }
+    String modality;
+    if (rawModality is Enum) {
+      modality = rawModality.name;
+    } else {
+      modality = '$rawModality';
+      if (modality.contains('.')) {
+        modality = modality.split('.').last;
+      }
+    }
+    modality = modality.trim().toLowerCase();
+    if (modality.isEmpty) {
+      continue;
+    }
+    if (modality == 'modality_unspecified') {
+      modality = 'text';
+    }
+    final int tokenCount =
+        _readIntField(item, const <String>['token_count', 'tokenCount']) ?? 0;
+    if (tokenCount > 0) {
+      totals[modality] = (totals[modality] ?? 0) + tokenCount;
+    }
+  }
+  return <ModalityTokenUsage>[
+    for (final MapEntry<String, int> entry in totals.entries)
+      ModalityTokenUsage(entry.key, entry.value),
+  ];
+}
+
+Map<String, int> _splitByModality(
+  int total,
+  List<ModalityTokenUsage>? details,
+) {
+  final Map<String, int> byModality = <String, int>{};
+  int sumDetails = 0;
+  if (details != null) {
+    for (final ModalityTokenUsage entry in details) {
+      if (entry.modality.isEmpty || entry.tokenCount <= 0) {
+        continue;
+      }
+      byModality[entry.modality] =
+          (byModality[entry.modality] ?? 0) + entry.tokenCount;
+      sumDetails += entry.tokenCount;
+    }
+  }
+  final int unknown = total - sumDetails;
+  if (unknown > 0) {
+    byModality['unknown'] = (byModality['unknown'] ?? 0) + unknown;
+  }
+  byModality.removeWhere((String _, int count) => count == 0);
+  return byModality;
+}
+
+/// Records the 7 semconv-genai inference token metrics (`gen_ai.client.inference.*`).
+///
+/// Every model call records each metric once, including failed calls (`0` when
+/// unreported). Always uses the semconv `gen_ai.provider.name` regardless of
+/// `ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN`.
+void recordSemconvInferenceTokenUsage({
+  required LlmRequest llmRequest,
+  required List<LlmResponse> responses,
+  Object? error,
+  Map<String, String>? environment,
+  AdkMetricsRecorder? recorder,
+}) {
+  final LlmResponse? lastResponse = responses.isEmpty ? null : responses.last;
+  final TokenUsage tokenUsage =
+      TokenUsage.fromLlmResponses(responses) ?? const TokenUsage();
+
+  Object? lastUsageMeta;
+  for (final LlmResponse response in responses) {
+    if (response.usageMetadata != null) {
+      lastUsageMeta = response.usageMetadata;
+    }
+  }
+  List<ModalityTokenUsage> inputDetails = tokenUsage.inputTokensByModality;
+  List<ModalityTokenUsage> outputDetails = tokenUsage.outputTokensByModality;
+  List<ModalityTokenUsage> cacheReadDetails =
+      tokenUsage.cacheReadInputTokensByModality;
+  if (lastUsageMeta != null) {
+    final List<ModalityTokenUsage> promptDetails =
+        _extractSemconvModalityTokens(
+          _readObjectField(
+            lastUsageMeta,
+            const <String>['prompt_tokens_details', 'promptTokensDetails'],
+          ),
+        );
+    final List<ModalityTokenUsage> toolDetails = _extractSemconvModalityTokens(
+      _readObjectField(
+        lastUsageMeta,
+        const <String>[
+          'tool_use_prompt_tokens_details',
+          'toolUsePromptTokensDetails',
+        ],
+      ),
+    );
+    final Map<String, int> combinedInput = <String, int>{
+      for (final ModalityTokenUsage item in promptDetails)
+        item.modality: item.tokenCount,
+    };
+    for (final ModalityTokenUsage item in toolDetails) {
+      combinedInput[item.modality] =
+          (combinedInput[item.modality] ?? 0) + item.tokenCount;
+    }
+    inputDetails = <ModalityTokenUsage>[
+      for (final MapEntry<String, int> entry in combinedInput.entries)
+        ModalityTokenUsage(entry.key, entry.value),
+    ];
+    outputDetails = _extractSemconvModalityTokens(
+      _readObjectField(
+        lastUsageMeta,
+        const <String>['candidates_tokens_details', 'candidatesTokensDetails'],
+      ),
+    );
+    cacheReadDetails = _extractSemconvModalityTokens(
+      _readObjectField(
+        lastUsageMeta,
+        const <String>['cache_tokens_details', 'cacheTokensDetails'],
+      ),
+    );
+  }
+
+  final Map<String, Object?> inferenceAttrs = <String, Object?>{
+    'gen_ai.operation.name': 'generate_content',
+    'gen_ai.provider.name': resolveGenAiProviderName(
+      llmRequest.model,
+      environment: environment,
+    ),
+    if (llmRequest.model != null && llmRequest.model!.isNotEmpty)
+      'gen_ai.request.model': llmRequest.model,
+  };
+  if (lastResponse != null) {
+    final String? responseModel =
+        (lastResponse.modelVersion != null &&
+            lastResponse.modelVersion!.isNotEmpty)
+        ? lastResponse.modelVersion
+        : llmRequest.model;
+    if (responseModel != null && responseModel.isNotEmpty) {
+      inferenceAttrs['gen_ai.response.model'] = responseModel;
+    }
+  }
+
+  final Map<String, Object?> histogramAttrs = <String, Object?>{
+    ...inferenceAttrs,
+    if (error != null)
+      'error.type': error is String ? error : error.runtimeType.toString(),
+  };
+
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiClientInferenceOperationInputTokensMetric,
+      value: tokenUsage.inputTokens ?? 0,
+      unit: '{token}',
+      description: 'Input tokens used in a GenAI inference operation.',
+      attributes: histogramAttrs,
+      explicitBucketBoundariesAdvisory: tokenUsageBucketBounds,
+    ),
+  );
+  _record(
+    recorder,
+    AdkMetricRecord(
+      name: genAiClientInferenceOperationOutputTokensMetric,
+      value: tokenUsage.outputTokens ?? 0,
+      unit: '{token}',
+      description: 'Output tokens generated in a GenAI inference operation.',
+      attributes: histogramAttrs,
+      explicitBucketBoundariesAdvisory: tokenUsageBucketBounds,
+    ),
+  );
+
+  void addByModality({
+    required String metricName,
+    required String description,
+    required int? tokens,
+    required List<ModalityTokenUsage>? details,
+  }) {
+    Map<String, int> byModality = _splitByModality(tokens ?? 0, details);
+    if (byModality.isEmpty) {
+      byModality = <String, int>{'unknown': 0};
+    }
+    for (final MapEntry<String, int> entry in byModality.entries) {
+      _record(
+        recorder,
+        AdkMetricRecord(
+          name: metricName,
+          value: entry.value,
+          unit: '{token}',
+          description: description,
+          attributes: <String, Object?>{
+            ...inferenceAttrs,
+            'gen_ai.token.modality': entry.key,
+          },
+        ),
+      );
+    }
+  }
+
+  addByModality(
+    metricName: genAiClientInferenceUsageInputTokensMetric,
+    description: 'Cumulative input tokens used across GenAI inference calls.',
+    tokens: tokenUsage.inputTokens,
+    details: inputDetails,
+  );
+  addByModality(
+    metricName: genAiClientInferenceUsageOutputTokensMetric,
+    description:
+        'Cumulative output tokens generated across GenAI inference calls.',
+    tokens: tokenUsage.outputTokens,
+    details: outputDetails,
+  );
+  addByModality(
+    metricName: genAiClientInferenceUsageCacheReadInputTokensMetric,
+    description:
+        'Cumulative cached input tokens read across GenAI inference calls.',
+    tokens: tokenUsage.cacheReadInputTokens,
+    details: cacheReadDetails,
+  );
+  addByModality(
+    metricName: genAiClientInferenceUsageCacheWriteInputTokensMetric,
+    description:
+        'Cumulative cache-creation input tokens written across GenAI inference calls.',
+    tokens: tokenUsage.cacheWriteInputTokens,
+    details: null,
+  );
+  addByModality(
+    metricName: genAiClientInferenceUsageReasoningOutputTokensMetric,
+    description:
+        'Cumulative reasoning output tokens generated across GenAI inference calls.',
+    tokens: tokenUsage.reasoningOutputTokens,
+    details: null,
   );
 }
 

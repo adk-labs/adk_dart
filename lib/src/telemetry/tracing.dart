@@ -8,6 +8,7 @@ import 'dart:io';
 import '../agents/base_agent.dart';
 import '../agents/invocation_context.dart';
 import '../agents/llm_agent.dart';
+import '../agents/run_config.dart';
 import '../errors/tool_execution_error.dart';
 import '../events/event.dart';
 import '../models/base_llm.dart';
@@ -17,11 +18,15 @@ import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../tools/base_tool.dart';
 import '../types/content.dart';
+import '../utils/credential_names.dart';
+import '../utils/function_call_names.dart';
 import '../utils/model_name_utils.dart';
 import 'base_telemetry_service.dart';
 import 'metrics.dart';
 import 'sqlite_span_exporter.dart';
 import '_experimental_semconv.dart' as experimental_semconv;
+
+export '../utils/credential_names.dart';
 
 /// Environment key controlling whether request and response payloads are
 /// captured in span attributes.
@@ -88,6 +93,8 @@ class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
     this.name, {
     Map<String, Object?>? attributes,
     this.kind = SpanKind.internal,
+    this.startTimeUnixNano,
+    this.endTimeUnixNano,
   }) : attributes = attributes ?? <String, Object?>{};
 
   /// Span name.
@@ -98,6 +105,12 @@ class TraceSpanRecord implements experimental_semconv.SpanAttributeWriter {
 
   /// OpenTelemetry span kind.
   final SpanKind kind;
+
+  /// Optional recorded span start timestamp in Unix nanoseconds.
+  int? startTimeUnixNano;
+
+  /// Optional recorded span end timestamp in Unix nanoseconds.
+  int? endTimeUnixNano;
 
   /// Updates the span [name] to [newName].
   void updateName(String newName) {
@@ -904,6 +917,8 @@ Future<T> useInferenceSpan<T>(
   Future<T> Function(GenerateContentSpan? span) run, {
   Map<String, String>? environment,
 }) async {
+  final TelemetryConfig telemetryConfig =
+      telemetryConfigFromInvocationContext(invocationContext);
   final Map<String, Object?> commonAttributes = _buildCommonInferenceAttributes(
     invocationContext,
     modelResponseEvent,
@@ -911,8 +926,11 @@ Future<T> useInferenceSpan<T>(
   final Map<String, Object?> logOnlyCommonAttributes =
       _buildLogOnlyInferenceAttributes(invocationContext);
 
-  if (_isGeminiAgent(invocationContext.agent) &&
-      _instrumentedWithOpenTelemetryInstrumentationGoogleGenai()) {
+  if (!_shouldEmitNativeTelemetry(
+    invocationContext.agent,
+    telemetryConfig,
+    environment: environment,
+  )) {
     return _runWithExtraGenerateContentAttributes(
       commonAttributes,
       () => run(null),
@@ -920,12 +938,20 @@ Future<T> useInferenceSpan<T>(
     );
   }
 
-  final bool useExperimentalSemconv = experimental_semconv
-      .isExperimentalSemconv(environment: environment);
+  final bool useExperimentalSemconv = telemetryConfig
+      .shouldUseExperimentalGenAiSemconv(environment: environment);
   final String systemName = _resolveGenAiSystemName(
     llmRequest.model,
     environment: environment,
   );
+  if (useExperimentalSemconv &&
+      resolveTelemetrySchemaVersion(environment: environment) >=
+          schemaVersionSemconvAligned) {
+    commonAttributes['gen_ai.provider.name'] = resolveGenAiProviderName(
+      llmRequest.model,
+      environment: environment,
+    );
+  }
   final TraceSpanRecord span = tracer.startAsCurrentSpan(
     'generate_content ${llmRequest.model ?? ''}',
   );
@@ -968,9 +994,14 @@ Future<T> useInferenceSpan<T>(
     span.setAttribute('error.type', resolveErrorType(error));
     rethrow;
   } finally {
-    final int endMicros = DateTime.now().microsecondsSinceEpoch;
+    final double elapsedSeconds = getElapsedSeconds(
+      spanStartTimeUnixNano: span.startTimeUnixNano,
+      spanEndTimeUnixNano: span.endTimeUnixNano,
+      fallbackStartMicros: gcSpan.startTimeMicros,
+      fallbackEndMicros: gcSpan.endedAtMicros,
+    );
     final Duration duration = Duration(
-      microseconds: endMicros - gcSpan.startTimeMicros,
+      microseconds: (elapsedSeconds * 1000000.0).round(),
     );
     final TokenUsage? tokenUsage =
         TokenUsage.fromLlmResponses(gcSpan.responses) ??
@@ -991,6 +1022,14 @@ Future<T> useInferenceSpan<T>(
     responseModel ??= llmRequest.model;
     final Object? effectiveError =
         caughtError ?? (span.attributes['error.type']);
+    final bool hasGenAiInst =
+        _instrumentedWithOpenTelemetryInstrumentationGoogleGenai();
+    final int schemaVer = resolveTelemetrySchemaVersion(
+      environment: environment,
+    );
+    final String clientProviderName = schemaVer < schemaVersionSemconvAligned
+        ? resolveGenAiSystemNameV1(llmRequest.model, environment: environment)
+        : resolveGenAiProviderName(llmRequest.model, environment: environment);
 
     recordClientOperationDuration(
       invocationContext.agent.name,
@@ -1005,8 +1044,8 @@ Future<T> useInferenceSpan<T>(
     );
     if (shouldEmitInferenceTokenMetrics(
       system: systemName,
-      hasGenAiInstrumentor:
-          _instrumentedWithOpenTelemetryInstrumentationGoogleGenai(),
+      hasGenAiInstrumentor: hasGenAiInst,
+      instrumentorVersion: _genAiInstrumentorVersion,
       environment: environment,
     )) {
       recordInferenceTokenUsage(
@@ -1015,10 +1054,24 @@ Future<T> useInferenceSpan<T>(
         requestModel: llmRequest.model,
         responseModel: responseModel,
         system: systemName,
+        providerName: clientProviderName,
         serverAddress: gcSpan.serverAddress,
         serverPort: gcSpan.serverPort,
         finishReasons: finishReasons.isEmpty ? null : finishReasons,
         error: effectiveError,
+      );
+    }
+    if (shouldEmitSemconvInferenceTokenMetrics(
+      llmRequest.model,
+      hasGenAiInstrumentor: hasGenAiInst,
+      instrumentorVersion: _genAiInstrumentorVersion,
+      environment: environment,
+    )) {
+      recordSemconvInferenceTokenUsage(
+        llmRequest: llmRequest,
+        responses: gcSpan.responses,
+        error: effectiveError,
+        environment: environment,
       );
     }
 
@@ -1078,6 +1131,18 @@ class GenerateContentSpan {
 
   /// Responses accumulated during this inference span.
   final List<LlmResponse> responses = <LlmResponse>[];
+
+  /// Timestamp in microseconds when the model response finished (`finishReason`
+  /// arrived), excluding any subsequent tool execution runtime.
+  int? endedAtMicros;
+
+  /// Marks this inference span's model-call phase ended at [nowMicros] (or now).
+  void endInference([int? nowMicros]) {
+    if (endedAtMicros != null) {
+      return;
+    }
+    endedAtMicros = nowMicros ?? DateTime.now().microsecondsSinceEpoch;
+  }
 
   /// Fallback token usage recorded by streaming adapters when responses are not
   /// retained or fail mid-stream.
@@ -1184,6 +1249,9 @@ void traceInferenceResult(
     if (llmResponse.partial != true) {
       span.responses.add(llmResponse);
     }
+    if (span.endedAtMicros != null) {
+      return;
+    }
   } else if (span is TraceSpanRecord) {
     targetSpan = span;
   }
@@ -1213,13 +1281,23 @@ void traceInferenceResult(
     environment: environment,
   );
 
-  if (experimental_semconv.isExperimentalSemconv(environment: environment) &&
+  final TelemetryConfig telemetryConfig = generateContentSpan != null
+      ? telemetryConfigFromInvocationContext(
+          generateContentSpan.invocationContext,
+        )
+      : const TelemetryConfig();
+  if (telemetryConfig.shouldUseExperimentalGenAiSemconv(
+        environment: environment,
+      ) &&
       generateContentSpan != null) {
     experimental_semconv.setOperationDetailsAttributesFromResponse(
       llmResponse,
       generateContentSpan.operationDetailsAttributes,
       generateContentSpan.operationDetailsCommonAttributes,
     );
+    if (finishReason != null && finishReason.isNotEmpty) {
+      generateContentSpan.endInference();
+    }
     return;
   }
 
@@ -1228,6 +1306,9 @@ void traceInferenceResult(
     invocationContext: generateContentSpan?.invocationContext,
     environment: environment,
   );
+  if (finishReason != null && finishReason.isNotEmpty) {
+    generateContentSpan?.endInference();
+  }
 }
 
 Map<String, Object?> _buildLlmRequestForTrace(LlmRequest llmRequest) {
@@ -1426,29 +1507,289 @@ Map<String, Object?> _partToJson(Part part, {required bool includeInlineData}) {
   return data;
 }
 
-String _safeJsonSerialize(Object? value) {
+const Set<String> _authCredentialTypeValues = <String>{
+  'apiKey',
+  'http',
+  'oauth2',
+  'openIdConnect',
+  'serviceAccount',
+  'api_key',
+  'open_id_connect',
+  'service_account',
+};
+
+const Set<String> _credentialSecretKeys = <String>{
+  'api_key',
+  'apiKey',
+  'password',
+  'token',
+  'additional_headers',
+  'additionalHeaders',
+  'client_secret',
+  'clientSecret',
+  'nonce',
+  'state',
+  'auth_response_uri',
+  'authResponseUri',
+  'auth_code',
+  'authCode',
+  'access_token',
+  'accessToken',
+  'refresh_token',
+  'refreshToken',
+  'id_token',
+  'idToken',
+  'code_verifier',
+  'codeVerifier',
+  'service_account_credential',
+  'serviceAccountCredential',
+  'private_key',
+  'privateKey',
+};
+
+String _formatJsonMapKey(Object? key) {
+  if (key is String) {
+    return key;
+  }
+  if (key is bool) {
+    return key ? 'true' : 'false';
+  }
+  if (key is num) {
+    return '$key';
+  }
+  if (key is Enum) {
+    try {
+      final Object? customValue = (key as dynamic).value;
+      if (customValue is String) {
+        return customValue;
+      }
+      if (customValue != null) {
+        return '$customValue';
+      }
+    } catch (_) {}
+    return key.name;
+  }
+  if (key is Iterable) {
+    return key.map((Object? item) => _formatJsonMapKey(item)).join(',');
+  }
+  return '$key';
+}
+
+/// Walks live [value] alongside its JSON-dumped form [dumped] and masks any
+/// values whose live runtime type is a known credential carrier.
+Object? maskCredentialValues(Object? value, Object? dumped) {
+  if (isCredentialType(value)) {
+    return redacted;
+  }
+  if (value is Map && dumped is Map) {
+    final Map<String, Object?> byDumpKey = <String, Object?>{};
+    for (final MapEntry<Object?, Object?> entry in value.entries) {
+      byDumpKey[_formatJsonMapKey(entry.key)] = entry.value;
+    }
+    final Map<String, Object?> masked = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in dumped.entries)
+        '${entry.key}': entry.value,
+    };
+    for (final MapEntry<String, Object?> entry in byDumpKey.entries) {
+      if (masked.containsKey(entry.key)) {
+        masked[entry.key] = maskCredentialValues(
+          entry.value,
+          masked[entry.key],
+        );
+      }
+    }
+    return masked;
+  }
+  if (value is Iterable &&
+      value is! String &&
+      dumped is List &&
+      value.length == dumped.length) {
+    final List<Object?> liveList = value.toList(growable: false);
+    return <Object?>[
+      for (int i = 0; i < liveList.length; i += 1)
+        maskCredentialValues(liveList[i], dumped[i]),
+    ];
+  }
+  return dumped;
+}
+
+Map<String, Object?> _stripCredentialSecretsFromMap(Map<Object?, Object?> map) {
+  final Map<String, Object?> out = <String, Object?>{};
+  for (final MapEntry<Object?, Object?> entry in map.entries) {
+    final String key = '${entry.key}';
+    if (_credentialSecretKeys.contains(key)) {
+      continue;
+    }
+    final Object? val = entry.value;
+    if (val is Map) {
+      out[key] = _stripCredentialSecretsFromMap(val);
+    } else if (val is List) {
+      out[key] = <Object?>[
+        for (final Object? item in val)
+          item is Map ? _stripCredentialSecretsFromMap(item) : item,
+      ];
+    } else {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+Map<String, Object?> _redactAuthConfigSecrets(Map<Object?, Object?> config) {
+  final Map<String, Object?> redactedConfig = <String, Object?>{};
+  for (final MapEntry<Object?, Object?> entry in config.entries) {
+    final String key = '${entry.key}';
+    final Object? val = entry.value;
+    if ((key == 'raw_auth_credential' ||
+            key == 'rawAuthCredential' ||
+            key == 'exchanged_auth_credential' ||
+            key == 'exchangedAuthCredential') &&
+        val is Map) {
+      redactedConfig[key] = _stripCredentialSecretsFromMap(val);
+    } else {
+      redactedConfig[key] = _redactCredentialSecrets(val);
+    }
+  }
+  return redactedConfig;
+}
+
+Object? _redactCredentialSecrets(Object? value) {
+  if (value is List) {
+    return <Object?>[
+      for (final Object? item in value) _redactCredentialSecrets(item),
+    ];
+  }
+  if (value is! Map) {
+    return value;
+  }
+  final Object? authType = value['auth_type'] ?? value['authType'];
+  if (authType is String && _authCredentialTypeValues.contains(authType)) {
+    return _stripCredentialSecretsFromMap(value);
+  }
+  if (value['raw_auth_credential'] is Map ||
+      value['rawAuthCredential'] is Map ||
+      value['exchanged_auth_credential'] is Map ||
+      value['exchangedAuthCredential'] is Map) {
+    return _redactAuthConfigSecrets(value);
+  }
+
+  final Map<String, Object?> out = <String, Object?>{};
+  for (final MapEntry<Object?, Object?> entry in value.entries) {
+    final String key = '${entry.key}';
+    final Object? item = entry.value;
+    if (key == 'args' &&
+        value['name'] == requestEucFunctionCallName &&
+        item is Map) {
+      final Map<String, Object?> argsCopy = <String, Object?>{};
+      for (final MapEntry<Object?, Object?> argEntry in item.entries) {
+        final String argKey = '${argEntry.key}';
+        if ((argKey == 'auth_config' || argKey == 'authConfig') &&
+            argEntry.value is Map) {
+          argsCopy[argKey] = _redactAuthConfigSecrets(argEntry.value as Map);
+        } else {
+          argsCopy[argKey] = _redactCredentialSecrets(argEntry.value);
+        }
+      }
+      out[key] = argsCopy;
+    } else if ((key == 'requested_auth_configs' ||
+            key == 'requestedAuthConfigs') &&
+        item is Map) {
+      out[key] = <String, Object?>{
+        for (final MapEntry<Object?, Object?> cfgEntry in item.entries)
+          '${cfgEntry.key}': cfgEntry.value is Map
+              ? _redactAuthConfigSecrets(cfgEntry.value as Map)
+              : _redactCredentialSecrets(cfgEntry.value),
+      };
+    } else {
+      out[key] = _redactCredentialSecrets(item);
+    }
+  }
+  return out;
+}
+
+Object? _redactCredentials(Object? value, Set<int> active) {
+  if (value == null || value is String || value is num || value is bool) {
+    return value;
+  }
+  if (isCredentialType(value)) {
+    return redacted;
+  }
+  if (value is Enum) {
+    try {
+      final Object? enumValue = (value as dynamic).value;
+      if (enumValue == null ||
+          enumValue is String ||
+          enumValue is num ||
+          enumValue is bool) {
+        return enumValue;
+      }
+    } catch (_) {}
+    return value.name;
+  }
+
+  final int id = identityHashCode(value);
+  if (!active.add(id)) {
+    throw const FormatException('Circular reference detected');
+  }
   try {
-    return jsonEncode(_normalizeForJson(value));
+    if (value is Map) {
+      final Map<String, Object?> out = <String, Object?>{};
+      for (final MapEntry<Object?, Object?> entry in value.entries) {
+        out[_formatJsonMapKey(entry.key)] = _redactCredentials(
+          entry.value,
+          active,
+        );
+      }
+      return out;
+    }
+    if (value is Iterable) {
+      return <Object?>[
+        for (final Object? item in value) _redactCredentials(item, active),
+      ];
+    }
+    if (value is Event) {
+      return _redactCredentials(_eventToJson(value), active);
+    }
+    if (value is Content) {
+      return _redactCredentials(
+        _contentToJson(value, includeInlineData: true),
+        active,
+      );
+    }
+    if (value is Part) {
+      return _redactCredentials(
+        _partToJson(value, includeInlineData: true),
+        active,
+      );
+    }
+    try {
+      final Object? dumped = (value as dynamic).toJson();
+      final Object? masked = maskCredentialValues(value, dumped);
+      return _redactCredentials(masked, active);
+    } on NoSuchMethodError {
+      // Fall through to string representation when `toJson` is absent.
+    }
+    return '$value';
+  } finally {
+    active.remove(id);
+  }
+}
+
+/// Serializes [value] to JSON while masking live credential carriers,
+/// stripping dumped `AuthCredential` / `AuthConfig` secret fields, and
+/// returning `'<not serializable>'` on circular references or failures.
+String safeJsonSerialize(Object? value) {
+  try {
+    final Object? normalized = _redactCredentialSecrets(
+      _redactCredentials(value, <int>{}),
+    );
+    return jsonEncode(normalized);
   } catch (_) {
     return '<not serializable>';
   }
 }
 
-Object? _normalizeForJson(Object? value) {
-  if (value == null || value is String || value is num || value is bool) {
-    return value;
-  }
-  if (value is Map) {
-    return value.map(
-      (Object? key, Object? nested) =>
-          MapEntry('$key', _normalizeForJson(nested)),
-    );
-  }
-  if (value is Iterable) {
-    return value.map(_normalizeForJson).toList();
-  }
-  return '$value';
-}
+String _safeJsonSerialize(Object? value) => safeJsonSerialize(value);
 
 bool _shouldAddRequestResponseToSpans({Map<String, String>? environment}) {
   final Map<String, String> env = environment ?? Platform.environment;
@@ -1693,21 +2034,39 @@ void _setCommonGenerateContentAttributes(
 typedef GenAiInstrumentationDetector = bool Function();
 
 GenAiInstrumentationDetector _genAiInstrumentationDetector = () => false;
+String? _genAiInstrumentorVersion;
 
 /// Sets the detector used to identify external GenAI instrumentation.
 ///
 /// This is intended for tests.
 void setGenAiInstrumentationDetectorForTest(
-  GenAiInstrumentationDetector detector,
-) {
+  GenAiInstrumentationDetector detector, {
+  String? version,
+}) {
   _genAiInstrumentationDetector = detector;
+  _genAiInstrumentorVersion = version;
 }
+
+/// Sets the simulated `opentelemetry-instrumentation-google-genai` version for tests.
+void setGenAiInstrumentorVersionForTest(String? version) {
+  _genAiInstrumentorVersion = version;
+}
+
+/// Returns the simulated `opentelemetry-instrumentation-google-genai` version, if set.
+String? getGenAiInstrumentorVersionForTest() => _genAiInstrumentorVersion;
 
 /// Restores the default GenAI instrumentation detector.
 ///
 /// This is intended for tests.
 void resetGenAiInstrumentationDetectorForTest() {
   _genAiInstrumentationDetector = () => false;
+  _genAiInstrumentorVersion = null;
+}
+
+/// Returns `true` when external `opentelemetry-instrumentation-google-genai`
+/// instrumentation is active.
+bool isGenAiInstrumented() {
+  return _genAiInstrumentationDetector();
 }
 
 bool _instrumentedWithOpenTelemetryInstrumentationGoogleGenai() {
@@ -1766,16 +2125,113 @@ T _runWithExtraGenerateContentAttributes<T>(
   );
 }
 
+String? _agentModelName(BaseAgent agent) {
+  if (agent is! LlmAgent) {
+    return null;
+  }
+  final Object model = agent.model;
+  if (model is String) {
+    if (model.isEmpty) {
+      try {
+        return agent.canonicalModel.model;
+      } catch (_) {
+        return LlmAgent.defaultModel;
+      }
+    }
+    return model;
+  }
+  if (model is BaseLlm) {
+    return model.model;
+  }
+  return null;
+}
+
 bool _isGeminiAgent(BaseAgent agent) {
   if (agent is! LlmAgent) {
     return false;
   }
 
   final Object model = agent.model;
-  if (model is String) {
-    return isGeminiModel(model);
+  if (model is Gemini) {
+    return true;
   }
-  return model is Gemini;
+  if (model is BaseLlm) {
+    return isGeminiModel(model.model);
+  }
+  final String? modelName = _agentModelName(agent);
+  return modelName != null && isGeminiModel(modelName);
+}
+
+bool _instrumentorHasStableMode() {
+  final String? version = _genAiInstrumentorVersion?.trim();
+  if (version == null || version.isEmpty) {
+    return false;
+  }
+  final Match? majorMatch = RegExp(r'^(\d+)').firstMatch(version);
+  if (majorMatch == null) {
+    return false;
+  }
+  final int? major = int.tryParse(majorMatch.group(1)!);
+  return major != null && major < 1;
+}
+
+/// Returns `true` when the external `opentelemetry-instrumentation-google-genai`
+/// instrumentor records a Gemini inference under [telemetryConfig].
+bool genaiInstrumentorRecordsInference(
+  TelemetryConfig telemetryConfig, {
+  Map<String, String>? environment,
+}) {
+  if (!_instrumentedWithOpenTelemetryInstrumentationGoogleGenai()) {
+    return false;
+  }
+  final Map<String, String> env = environment ?? Platform.environment;
+  final String ignoreRunConfig =
+      (env['ADK_TELEMETRY_IGNORE_RUN_CONFIG'] ?? '').trim().toLowerCase();
+  final bool ignorePerRequest =
+      ignoreRunConfig == '1' || ignoreRunConfig == 'true';
+
+  bool wantsExperimental;
+  if (!ignorePerRequest &&
+      telemetryConfig.genaiSemconvStabilityOptIn != null) {
+    final Set<String> tokens = telemetryConfig.genaiSemconvStabilityOptIn!
+        .split(',')
+        .map((String s) => s.trim())
+        .toSet();
+    wantsExperimental =
+        tokens.contains('experimental') ||
+        tokens.contains('gen_ai_latest_experimental');
+  } else if (!ignorePerRequest && telemetryConfig.useExperimentalSemconv) {
+    wantsExperimental = true;
+  } else if (experimental_semconv.isExperimentalSemconv(environment: env)) {
+    wantsExperimental = true;
+  } else {
+    wantsExperimental =
+        resolveTelemetrySchemaVersion(environment: env) >=
+        schemaVersionSemconvAligned;
+  }
+
+  if (!wantsExperimental) {
+    return false;
+  }
+  if (_instrumentorHasStableMode() &&
+      !experimental_semconv.isExperimentalSemconv(environment: env)) {
+    return false;
+  }
+  return true;
+}
+
+bool _shouldEmitNativeTelemetry(
+  BaseAgent agent,
+  TelemetryConfig telemetryConfig, {
+  Map<String, String>? environment,
+}) {
+  if (!_isGeminiAgent(agent)) {
+    return true;
+  }
+  return !genaiInstrumentorRecordsInference(
+    telemetryConfig,
+    environment: environment,
+  );
 }
 
 String? _genAiSystemNameFromModel(
@@ -1821,13 +2277,7 @@ String _inferenceSystemName(
   }
   final BaseAgent? agent = invocationContext?.agent;
   if (agent is LlmAgent) {
-    final Object model = agent.model;
-    String? modelName;
-    if (model is String) {
-      modelName = model;
-    } else if (model is BaseLlm) {
-      modelName = model.model;
-    }
+    final String? modelName = _agentModelName(agent);
     final String? fromAgent = _genAiSystemNameFromModel(
       modelName,
       environment: environment,
@@ -1849,12 +2299,67 @@ Map<String, Object?> _dropNullEntries(Map<String, Object?> values) {
   return cleaned;
 }
 
+const String _internalTelemetryMetadataKey =
+    '__adk_internal_telemetry_config';
+
+final Expando<TelemetryConfig> _runConfigTelemetryExpando =
+    Expando<TelemetryConfig>('RunConfig.telemetry');
+
+/// Attaches per-run [TelemetryConfig] to [RunConfig].
+extension RunConfigTelemetryExtension on RunConfig {
+  /// Per-invocation telemetry configuration override, if set.
+  TelemetryConfig? get telemetry {
+    final TelemetryConfig? attached = _runConfigTelemetryExpando[this];
+    if (attached != null) {
+      return attached;
+    }
+    final Object? fromInternal = customMetadata?[_internalTelemetryMetadataKey];
+    if (fromInternal is TelemetryConfig) {
+      return fromInternal;
+    }
+    final Object? fromMeta = customMetadata?['telemetry'];
+    if (fromMeta is TelemetryConfig) {
+      return fromMeta;
+    }
+    return null;
+  }
+
+  set telemetry(TelemetryConfig? value) {
+    _runConfigTelemetryExpando[this] = value;
+    if (value != null) {
+      final Map<String, dynamic> meta = customMetadata ?? <String, dynamic>{};
+      meta[_internalTelemetryMetadataKey] = value;
+      customMetadata = meta;
+    } else if (customMetadata != null) {
+      customMetadata!.remove(_internalTelemetryMetadataKey);
+      if (customMetadata!.isEmpty) {
+        customMetadata = null;
+      }
+    }
+  }
+}
+
+/// Resolves [TelemetryConfig] from [invocationContext] if present.
+TelemetryConfig telemetryConfigFromInvocationContext(
+  InvocationContext? invocationContext,
+) {
+  if (invocationContext == null) {
+    return const TelemetryConfig();
+  }
+  final RunConfig? runConfig = invocationContext.runConfig;
+  if (runConfig == null) {
+    return const TelemetryConfig();
+  }
+  return runConfig.telemetry ?? const TelemetryConfig();
+}
+
 /// Configuration for telemetry capture behavior.
 class TelemetryConfig {
   /// Creates a [TelemetryConfig].
   const TelemetryConfig({
     this.captureMessageContent = true,
     this.useExperimentalSemconv = false,
+    this.genaiSemconvStabilityOptIn,
   });
 
   /// Whether message and tool content payloads are captured on spans/logs.
@@ -1862,6 +2367,32 @@ class TelemetryConfig {
 
   /// Whether OpenTelemetry GenAI experimental semantic conventions are enabled.
   final bool useExperimentalSemconv;
+
+  /// Optional per-request override for `OTEL_SEMCONV_STABILITY_OPT_IN`
+  /// (for example `'stable'` or `'gen_ai_latest_experimental'`).
+  final String? genaiSemconvStabilityOptIn;
+
+  /// Resolves whether experimental GenAI semantic conventions apply for this
+  /// configuration under [environment].
+  bool shouldUseExperimentalGenAiSemconv({Map<String, String>? environment}) {
+    final Map<String, String> env = environment ?? Platform.environment;
+    final String ignoreRunConfig =
+        (env['ADK_TELEMETRY_IGNORE_RUN_CONFIG'] ?? '').trim().toLowerCase();
+    if (ignoreRunConfig != '1' && ignoreRunConfig != 'true') {
+      if (genaiSemconvStabilityOptIn != null) {
+        final Set<String> tokens = genaiSemconvStabilityOptIn!
+            .split(',')
+            .map((String token) => token.trim())
+            .toSet();
+        return tokens.contains('experimental') ||
+            tokens.contains('gen_ai_latest_experimental');
+      }
+      if (useExperimentalSemconv) {
+        return true;
+      }
+    }
+    return experimental_semconv.isExperimentalSemconv(environment: env);
+  }
 }
 
 /// Scoped telemetry context holder for node and agent execution.

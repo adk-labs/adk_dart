@@ -289,6 +289,15 @@ class InvocationContext {
   /// Invocation-scoped private metadata cache shared across context copies.
   Map<String, Object?> privateMetadata;
 
+  /// The caller's [invocationId] when this invocation runs nested inside it.
+  ///
+  /// Only the nested runner built by `AgentTool.run` sets this, and only when
+  /// `includePlugins` is `true`, so shared plugins can attribute the nested run
+  /// to the call that started it. When a tool builds its own `Runner` (such as
+  /// an `AgentTool` subclass that overrides `run`), it stays `null` and plugins
+  /// treat the nested run as an independent top-level invocation.
+  String? parentInvocationId;
+
   int _numberOfLlmCalls = 0;
 
   /// Whether resumable execution is enabled.
@@ -810,6 +819,7 @@ class InvocationContext {
       callbackContextData: callbackContextData,
       privateMetadata: privateMetadata,
     )
+      ..parentInvocationId = parentInvocationId
       .._numberOfLlmCalls = _numberOfLlmCalls
       .._abortState =
           (abortSignal == null || identical(abortSignal, this.abortSignal))

@@ -164,6 +164,7 @@ class BigQueryLoggerConfig {
     this.payloadColumnDenylist,
     this.maxObservationSummariesPerSegment = 200,
     this.toolResultClassifier,
+    this.responseTextKey,
     this.onSchemaError,
     this.onSchemaReady,
   }) : clusteringFields =
@@ -172,6 +173,13 @@ class BigQueryLoggerConfig {
        customTags = customTags ?? <String, Object?>{},
        finalResponseToolNames = finalResponseToolNames ?? <String>{} {
     validatePayloadColumnDenylist(payloadColumnDenylist);
+    if (responseTextKey != null && responseTextKey!.trim().isEmpty) {
+      throw ArgumentError.value(
+        responseTextKey,
+        'responseTextKey',
+        'response_text_key must be a non-empty str or None.',
+      );
+    }
   }
 
   /// Whether event logging is enabled.
@@ -276,6 +284,10 @@ class BigQueryLoggerConfig {
 
   /// Optional classifier for tool results that report errors without throwing.
   ToolResultClassifier? toolResultClassifier;
+
+  /// Optional JSON object key used to populate `content.text_summary` on
+  /// structured `AGENT_RESPONSE` events while keeping `content.response`.
+  String? responseTextKey;
 
   /// Optional callback invoked when schema or view setup fails.
   void Function(Object error, StackTrace stackTrace)? onSchemaError;
@@ -588,6 +600,7 @@ class _SpanRecord {
     required this.spanId,
     required this.startMicros,
     this.name = '',
+    this.parentSpanId,
     this.agentName,
     this.isLlmAgent = false,
     List<String>? childAgentNames,
@@ -596,6 +609,7 @@ class _SpanRecord {
   final String spanId;
   final int startMicros;
   final String name;
+  final String? parentSpanId;
   final String? agentName;
   final bool isLlmAgent;
   final List<String> childAgentNames;
@@ -608,11 +622,13 @@ class _CompletedInvocationTrace {
     required this.traceId,
     required this.rootSpanId,
     required this.rootAgentName,
+    this.sessionId,
   });
 
   final String traceId;
   final String? rootSpanId;
   final String? rootAgentName;
+  final String? sessionId;
 }
 
 class _TracePair {
@@ -630,6 +646,20 @@ class _PopResult {
   final int? durationMs;
 }
 
+String? _getNestedParentInvocationId(CallbackContext? callbackContext) {
+  if (callbackContext == null) {
+    return null;
+  }
+  final String? parentInvId =
+      callbackContext.invocationContext.parentInvocationId;
+  if (parentInvId != null &&
+      parentInvId.isNotEmpty &&
+      parentInvId != callbackContext.invocationId) {
+    return parentInvId;
+  }
+  return null;
+}
+
 /// Tracks trace and span state across callback boundaries.
 class _TraceManager {
   static const int maxCompletedInvocations = 1024;
@@ -638,14 +668,57 @@ class _TraceManager {
   static final Map<String, String> _rootAgentNameByInvocation =
       <String, String>{};
   static final Map<String, String> _rootSpanIdByInvocation = <String, String>{};
+  static final Map<String, String> _traceIdByInvocation = <String, String>{};
+  static final Map<String, String> _sessionIdByInvocation = <String, String>{};
+  static final Map<String, String?> _enclosingParentSpanIdByInvocation =
+      <String, String?>{};
+  static final Map<String, String> _parentSessionIdByInvocation =
+      <String, String>{};
   static final Map<String, _CompletedInvocationTrace> _completedInvocations =
       <String, _CompletedInvocationTrace>{};
   static final Random _random = Random();
+
+  static void _recordSessionAndParentLinkage(CallbackContext callbackContext) {
+    final String invocationId = callbackContext.invocationId;
+    final String sessionId = callbackContext.session.id;
+    if (sessionId.isNotEmpty) {
+      _sessionIdByInvocation[invocationId] = sessionId;
+    }
+    final String? parentInvId = _getNestedParentInvocationId(callbackContext);
+    if (parentInvId != null) {
+      _traceIdByInvocation.putIfAbsent(
+        invocationId,
+        () =>
+            _traceIdByInvocation[parentInvId] ??
+            _completedInvocations[parentInvId]?.traceId ??
+            parentInvId,
+      );
+      _enclosingParentSpanIdByInvocation.putIfAbsent(
+        invocationId,
+        () => _getCurrentSpanIdByInvocationId(parentInvId),
+      );
+      final String? parentSessId =
+          _sessionIdByInvocation[parentInvId] ??
+          _completedInvocations[parentInvId]?.sessionId ??
+          (callbackContext.invocationContext.privateMetadata[
+                  '_adk_parent_session_id']
+              as String?);
+      if (parentSessId != null && parentSessId.isNotEmpty) {
+        _parentSessionIdByInvocation.putIfAbsent(
+          invocationId,
+          () => parentSessId,
+        );
+      }
+    } else {
+      _traceIdByInvocation.putIfAbsent(invocationId, () => invocationId);
+    }
+  }
 
   /// Initializes trace state for an invocation if missing.
   static void initTrace(CallbackContext callbackContext) {
     final String invocationId = callbackContext.invocationId;
     _completedInvocations.remove(invocationId);
+    _recordSessionAndParentLinkage(callbackContext);
     _spanRecordsByInvocation.putIfAbsent(
       invocationId,
       () => <_SpanRecord>[],
@@ -654,12 +727,70 @@ class _TraceManager {
       invocationId,
       () => callbackContext.invocationContext.agent.rootAgent.name,
     );
-    _rootSpanIdByInvocation.putIfAbsent(invocationId, _newSpanId);
+  }
+
+  /// Ensures an `invocation` root span is present on the current invocation's
+  /// stack, linking it to any enclosing parent `AgentTool` span.
+  static String ensureInvocationSpan(CallbackContext callbackContext) {
+    initTrace(callbackContext);
+    final String invocationId = callbackContext.invocationId;
+    final List<_SpanRecord> stack = _spanRecordsByInvocation.putIfAbsent(
+      invocationId,
+      () => <_SpanRecord>[],
+    );
+    if (stack.isNotEmpty) {
+      return stack.first.spanId;
+    }
+    final String? enclosingParentSpanId =
+        _enclosingParentSpanIdByInvocation[invocationId];
+    return pushSpan(
+      callbackContext,
+      'invocation',
+      parentSpanId: enclosingParentSpanId,
+    );
   }
 
   /// The trace identifier for the current invocation.
   static String getTraceId(CallbackContext callbackContext) {
-    return callbackContext.invocationId;
+    _recordSessionAndParentLinkage(callbackContext);
+    final String invocationId = callbackContext.invocationId;
+    return _traceIdByInvocation[invocationId] ??
+        _completedInvocations[invocationId]?.traceId ??
+        invocationId;
+  }
+
+  /// Returns the enclosing parent `session_id` when running inside `AgentTool`.
+  static String? getNestedParentSessionId(CallbackContext callbackContext) {
+    final String? parentInvId = _getNestedParentInvocationId(callbackContext);
+    if (parentInvId == null) {
+      return null;
+    }
+    _recordSessionAndParentLinkage(callbackContext);
+    return _parentSessionIdByInvocation[callbackContext.invocationId] ??
+        _sessionIdByInvocation[parentInvId] ??
+        _completedInvocations[parentInvId]?.sessionId ??
+        (callbackContext.invocationContext.privateMetadata[
+                '_adk_parent_session_id']
+            as String?);
+  }
+
+  /// Returns the enclosing parent span ID for a nested `AgentTool` invocation.
+  static String? getEnclosingParentSpanId(CallbackContext callbackContext) {
+    final String? parentInvId = _getNestedParentInvocationId(callbackContext);
+    if (parentInvId == null) {
+      return null;
+    }
+    _recordSessionAndParentLinkage(callbackContext);
+    return _enclosingParentSpanIdByInvocation[callbackContext.invocationId] ??
+        _getCurrentSpanIdByInvocationId(parentInvId);
+  }
+
+  static String? _getCurrentSpanIdByInvocationId(String invocationId) {
+    final List<_SpanRecord>? stack = _spanRecordsByInvocation[invocationId];
+    if (stack == null || stack.isEmpty) {
+      return _completedInvocations[invocationId]?.rootSpanId;
+    }
+    return stack.last.spanId;
   }
 
   /// Pushes a new span and returns its identifier.
@@ -667,6 +798,7 @@ class _TraceManager {
     CallbackContext callbackContext,
     String spanName, {
     BaseAgent? agent,
+    String? parentSpanId,
   }) {
     final String invocationId = callbackContext.invocationId;
     final _CompletedInvocationTrace? completed =
@@ -691,6 +823,7 @@ class _TraceManager {
           spanId: spanId,
           startMicros: DateTime.now().microsecondsSinceEpoch,
           name: spanName,
+          parentSpanId: stack.isEmpty ? parentSpanId : null,
           agentName: agent?.name,
           isLlmAgent: agent is LlmAgent,
           childAgentNames: agent == null
@@ -723,12 +856,20 @@ class _TraceManager {
       }
     }
 
-    final String spanId = _newSpanId();
+    String spanId = _newSpanId();
+    final String? effectiveBottomParent = stack.isEmpty
+        ? (parentSpanId ?? _enclosingParentSpanIdByInvocation[invocationId])
+        : null;
+    while (spanId == effectiveBottomParent ||
+        (stack.isNotEmpty && spanId == stack.last.spanId)) {
+      spanId = _newSpanId();
+    }
     stack.add(
       _SpanRecord(
         spanId: spanId,
         startMicros: DateTime.now().microsecondsSinceEpoch,
         name: spanName,
+        parentSpanId: effectiveBottomParent,
         agentName: agent?.name,
         isLlmAgent: agent is LlmAgent,
         childAgentNames: agent == null
@@ -766,7 +907,7 @@ class _TraceManager {
     final _SpanRecord record = stack.removeAt(taskIndex);
     final String? parentSpanId = taskIndex > 0
         ? stack[taskIndex - 1].spanId
-        : null;
+        : record.parentSpanId;
     if (parentSpanId != null) {
       for (int j = 0; j < stack.length; j += 1) {
         final _SpanRecord candidate = stack[j];
@@ -783,16 +924,25 @@ class _TraceManager {
     final int durationMs = ((nowMicros - record.startMicros) / 1000).round();
     return _PopResult(
       spanId: record.spanId,
-      parentSpanId: parentSpanId,
+      parentSpanId: parentSpanId == record.spanId ? null : parentSpanId,
       durationMs: durationMs,
     );
   }
 
   /// Pops the current span and returns timing information.
-  static _PopResult popSpan(CallbackContext callbackContext) {
+  ///
+  /// When [expectedKind] is provided and the top span's `name` does not match,
+  /// leaves the stack intact and returns an empty [_PopResult].
+  static _PopResult popSpan(
+    CallbackContext callbackContext, {
+    String? expectedKind,
+  }) {
     final String invocationId = callbackContext.invocationId;
     final List<_SpanRecord>? stack = _spanRecordsByInvocation[invocationId];
     if (stack == null || stack.isEmpty) {
+      if (expectedKind != null) {
+        return _PopResult();
+      }
       final _CompletedInvocationTrace? completed =
           _completedInvocations[invocationId];
       if (completed != null) {
@@ -804,16 +954,72 @@ class _TraceManager {
       return _PopResult();
     }
 
+    if (expectedKind != null && stack.last.name != expectedKind) {
+      return _PopResult();
+    }
+
     final _SpanRecord record = stack.removeLast();
     final int nowMicros = DateTime.now().microsecondsSinceEpoch;
     final int durationMs = ((nowMicros - record.startMicros) / 1000).round();
     final String? parentSpanId = stack.isEmpty
-        ? _completedInvocations[invocationId]?.rootSpanId
+        ? (record.parentSpanId ??
+              getEnclosingParentSpanId(callbackContext) ??
+              _completedInvocations[invocationId]?.rootSpanId)
         : stack.last.spanId;
     return _PopResult(
       spanId: record.spanId,
-      parentSpanId: parentSpanId,
+      parentSpanId: parentSpanId == record.spanId ? null : parentSpanId,
       durationMs: durationMs,
+    );
+  }
+
+  /// Pops the run-end root `invocation` span, optionally unwinding unclosed
+  /// child spans (`unwindChildren: true` on normal `afterRunCallback`, `false`
+  /// on `onRunErrorCallback`).
+  static _PopResult popRunEndSpan(
+    CallbackContext callbackContext, {
+    required bool unwindChildren,
+  }) {
+    final String invocationId = callbackContext.invocationId;
+    final List<_SpanRecord>? stack = _spanRecordsByInvocation[invocationId];
+    final String? enclosingParent = getEnclosingParentSpanId(callbackContext);
+    if (stack == null || stack.isEmpty) {
+      return _PopResult(parentSpanId: enclosingParent);
+    }
+    if (unwindChildren) {
+      for (int i = stack.length - 1; i >= 0; i -= 1) {
+        if (stack[i].name == 'invocation') {
+          final _SpanRecord record = stack[i];
+          stack.removeRange(i, stack.length);
+          final int nowMicros = DateTime.now().microsecondsSinceEpoch;
+          final int durationMs = ((nowMicros - record.startMicros) / 1000)
+              .round();
+          final String? parentSpanId = stack.isEmpty
+              ? (record.parentSpanId ?? enclosingParent)
+              : stack.last.spanId;
+          return _PopResult(
+            spanId: record.spanId,
+            parentSpanId: parentSpanId == record.spanId ? null : parentSpanId,
+            durationMs: durationMs,
+          );
+        }
+      }
+      stack.clear();
+      return _PopResult(parentSpanId: enclosingParent);
+    }
+
+    final _PopResult popped = popSpan(
+      callbackContext,
+      expectedKind: 'invocation',
+    );
+    if (popped.spanId == null) {
+      stack.clear();
+      return _PopResult(parentSpanId: enclosingParent);
+    }
+    return _PopResult(
+      spanId: popped.spanId,
+      parentSpanId: popped.parentSpanId ?? enclosingParent,
+      durationMs: popped.durationMs,
     );
   }
 
@@ -827,12 +1033,17 @@ class _TraceManager {
       if (completed != null) {
         return _TracePair(spanId: completed.rootSpanId, parentSpanId: null);
       }
-      return _TracePair();
+      return _TracePair(
+        spanId: null,
+        parentSpanId: getEnclosingParentSpanId(callbackContext),
+      );
     }
     final String spanId = stack.last.spanId;
     final String? parentSpanId = stack.length > 1
         ? stack[stack.length - 2].spanId
-        : _completedInvocations[invocationId]?.rootSpanId;
+        : (stack.first.parentSpanId ??
+              getEnclosingParentSpanId(callbackContext) ??
+              _completedInvocations[invocationId]?.rootSpanId);
     return _TracePair(
       spanId: spanId,
       parentSpanId: parentSpanId == spanId ? null : parentSpanId,
@@ -888,7 +1099,8 @@ class _TraceManager {
   static String? getRootAgentName(CallbackContext callbackContext) {
     final String invocationId = callbackContext.invocationId;
     return _rootAgentNameByInvocation[invocationId] ??
-        _completedInvocations[invocationId]?.rootAgentName;
+        _completedInvocations[invocationId]?.rootAgentName ??
+        callbackContext.invocationContext.agent.rootAgent.name;
   }
 
   /// Archives and clears active trace state for a completed invocation.
@@ -903,12 +1115,22 @@ class _TraceManager {
     final String? rootSpanId =
         _rootSpanIdByInvocation.remove(invocationId) ??
         (stack != null && stack.isNotEmpty ? stack.first.spanId : null);
+    final String traceId =
+        _traceIdByInvocation.remove(invocationId) ?? invocationId;
+    final String? sessionId =
+        _sessionIdByInvocation.remove(invocationId) ??
+        (callbackContext.session.id.isNotEmpty
+            ? callbackContext.session.id
+            : null);
+    _enclosingParentSpanIdByInvocation.remove(invocationId);
+    _parentSessionIdByInvocation.remove(invocationId);
     if (invocationId.isNotEmpty) {
       _completedInvocations.remove(invocationId);
       _completedInvocations[invocationId] = _CompletedInvocationTrace(
-        traceId: invocationId,
+        traceId: traceId,
         rootSpanId: rootSpanId,
         rootAgentName: rootAgentName,
+        sessionId: sessionId,
       );
       while (_completedInvocations.length > maxCompletedInvocations) {
         _completedInvocations.remove(_completedInvocations.keys.first);

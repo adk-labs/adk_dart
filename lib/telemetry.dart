@@ -23,3 +23,4 @@ export 'src/telemetry/metrics.dart';
 export 'src/telemetry/setup.dart';
 export 'src/telemetry/sqlite_span_exporter.dart';
 export 'src/telemetry/tracing.dart';
+export 'src/utils/credential_names.dart';

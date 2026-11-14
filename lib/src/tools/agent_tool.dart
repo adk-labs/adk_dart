@@ -93,6 +93,41 @@ class _NestedCompactionPlugin extends BasePlugin {
   }
 }
 
+class _NestedParentInvocationPlugin extends BasePlugin {
+  _NestedParentInvocationPlugin({
+    required this.parentInvocationId,
+    required this.parentSessionId,
+  }) : super(name: '_adk_agent_tool_parent_invocation');
+
+  final String parentInvocationId;
+  final String parentSessionId;
+
+  void _stamp(InvocationContext invocationContext) {
+    invocationContext.parentInvocationId = parentInvocationId;
+    if (parentSessionId.isNotEmpty) {
+      invocationContext.privateMetadata['_adk_parent_session_id'] =
+          parentSessionId;
+    }
+  }
+
+  @override
+  Future<Content?> onUserMessageCallback({
+    required InvocationContext invocationContext,
+    required Content userMessage,
+  }) async {
+    _stamp(invocationContext);
+    return null;
+  }
+
+  @override
+  Future<Content?> beforeRunCallback({
+    required InvocationContext invocationContext,
+  }) async {
+    _stamp(invocationContext);
+    return null;
+  }
+}
+
 String _toCamelAlias(String snakeCase) {
   final List<String> parts = snakeCase.split('_');
   if (parts.length <= 1) {
@@ -521,8 +556,19 @@ class AgentTool extends BaseTool {
       sessionService: InMemorySessionService(),
       memoryService: invocationContext.memoryService ?? InMemoryMemoryService(),
       credentialService: invocationContext.credentialService,
+      skipPostInvocationCompaction: true,
       plugins: includePlugins
-          ? invocationContext.pluginManager.plugins.toList(growable: false)
+          ? <BasePlugin>[
+              _NestedParentInvocationPlugin(
+                parentInvocationId: invocationContext.invocationId,
+                parentSessionId: invocationContext.session.id,
+              ),
+              ...invocationContext.pluginManager.plugins.where(
+                (BasePlugin p) =>
+                    p is! _NestedParentInvocationPlugin &&
+                    p is! _NestedCompactionPlugin,
+              ),
+            ]
           : null,
     );
     if (includePlugins) {
@@ -846,6 +892,7 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
   );
   if (!includePlugins) {
     childContext.pluginManager = PluginManager();
+    childContext.parentInvocationId = null;
   }
 
   if (appendUserContent) {

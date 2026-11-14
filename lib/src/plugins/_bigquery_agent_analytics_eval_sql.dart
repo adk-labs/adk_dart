@@ -333,6 +333,19 @@ const String _evalViewCtesTemplate = r'''WITH
       session_id IS NOT NULL
       AND invocation_id IS NOT NULL{raw_where_clause}
   ),
+  -- Keeps only top-level session events, excluding throwaway in-memory
+  -- sessions created by nested AgentTool calls (which carry
+  -- attributes.adk.parent_session_id and already appear as tool calls inside
+  -- their parent session's trace).  Rows without that field, or from tables
+  -- that withhold attributes, evaluate to NULL and are kept.
+  SessionEvents AS (
+    SELECT
+      *
+    FROM
+      RawEvents
+    WHERE
+      JSON_VALUE(attributes, '$.adk.parent_session_id') IS NULL
+  ),
   -- Each event with the fields that later steps read parsed out of its JSON
   -- payload: its author, the tool name and args, whether the tool is a
   -- framework tool, the user text, the model response before it is unwrapped,
@@ -406,6 +419,10 @@ const String _evalViewCtesTemplate = r'''WITH
           )
         )
       ) AS is_function_response,
+      -- Keep sentinels on $.text_summary and $.response in TypedEvents so
+      -- COALESCE fails closed instead of falling back to $.response.
+      -- ResponseEvents maps those sentinels to NULL, while top-level string
+      -- content excludes them directly below.
       IF(
         event_type = 'AGENT_RESPONSE',
         COALESCE(
@@ -415,11 +432,30 @@ const String _evalViewCtesTemplate = r'''WITH
             JSON_VALUE(content, '$.text_summary'),
             NULL
           ),
-          NULLIF(JSON_VALUE(content, '$.response'), ''),
+          IF(
+            TRIM(JSON_VALUE(content, '$.response')) != '',
+            JSON_VALUE(content, '$.response'),
+            NULL
+          ),
           IF(
             JSON_TYPE(JSON_QUERY(content, '$.response'))
               IN ('object', 'array'),
             TO_JSON_STRING(JSON_QUERY(content, '$.response')),
+            NULL
+          ),
+          IF(
+            JSON_TYPE(content) = 'string'
+              AND TRIM(JSON_VALUE(content, '$')) != ''
+              AND JSON_VALUE(content, '$') NOT IN (
+                '[FORMATTER_FAILED]',
+                '[FORMATTING FAILED]',
+                '[REDACTED]',
+                '[CONTENT_PARSE_FAILED]',
+                '[UNPARSEABLE_JSON_BLOB]',
+                '[UNSUPPORTED_OBJECT]',
+                '[REDACTED_SENSITIVE_TEXT]'
+              ),
+            JSON_VALUE(content, '$'),
             NULL
           )
         ),
@@ -439,7 +475,7 @@ const String _evalViewCtesTemplate = r'''WITH
         AS usage_completion,
       SAFE_CAST(JSON_VALUE(latency_ms, '$.total_ms') AS INT64) AS total_ms
     FROM
-      RawEvents
+      SessionEvents
   ),
   -- Marks the real tool calls, the calls of tools other than the framework
   -- tools, and unwraps the text of each model response.  It also counts the
@@ -476,16 +512,38 @@ const String _evalViewCtesTemplate = r'''WITH
           REGEXP_CONTAINS(formatted_response, r"(?s)^text: '.*'$")
           AND NOT REGEXP_CONTAINS(
             formatted_response,
-            r' [|] (?:call: |resp: |Executable code |Code execution result )'
+            r"' [|] (?:call: |resp: |Executable code |Code execution result )"
           )
-          AND NOT REGEXP_CONTAINS(formatted_response, r' [|] other(?: [|] |$)')
-          THEN NULLIF(
+          AND NOT REGEXP_CONTAINS(
+            formatted_response, r"' [|] other(?: [|] |$)"
+          )
+          THEN IF(
+            TRIM(
+              REGEXP_REPLACE(
+                REGEXP_REPLACE(formatted_response, r"^text: '|'$", ''),
+                r"' [|] text: '",
+                CHR(10)
+              )
+            ) != ''
+              AND REGEXP_REPLACE(
+                REGEXP_REPLACE(formatted_response, r"^text: '|'$", ''),
+                r"' [|] text: '",
+                CHR(10)
+              ) NOT IN (
+                '[FORMATTER_FAILED]',
+                '[FORMATTING FAILED]',
+                '[REDACTED]',
+                '[CONTENT_PARSE_FAILED]',
+                '[UNPARSEABLE_JSON_BLOB]',
+                '[UNSUPPORTED_OBJECT]',
+                '[REDACTED_SENSITIVE_TEXT]'
+              ),
             REGEXP_REPLACE(
               REGEXP_REPLACE(formatted_response, r"^text: '|'$", ''),
               r"' [|] text: '",
               CHR(10)
             ),
-            ''
+            NULL
           )
         WHEN
           NOT REGEXP_CONTAINS(
@@ -495,7 +553,17 @@ const String _evalViewCtesTemplate = r'''WITH
           AND NOT REGEXP_CONTAINS(
             formatted_response, r"^(?:None$|text: '|other(?: [|] |$))"
           )
-          THEN NULLIF(formatted_response, '')
+          AND TRIM(formatted_response) != ''
+          AND formatted_response NOT IN (
+            '[FORMATTER_FAILED]',
+            '[FORMATTING FAILED]',
+            '[REDACTED]',
+            '[CONTENT_PARSE_FAILED]',
+            '[UNPARSEABLE_JSON_BLOB]',
+            '[UNSUPPORTED_OBJECT]',
+            '[REDACTED_SENSITIVE_TEXT]'
+          )
+          THEN formatted_response
         ELSE NULL
       END AS response_text
     FROM
@@ -903,7 +971,7 @@ const String _evalViewCtesTemplate = r'''WITH
         NULL
       ) AS tool_declarations
     FROM
-      RawEvents
+      SessionEvents
     WHERE
       agent IS NOT NULL
   ),
@@ -984,7 +1052,7 @@ const String _evalViewCtesTemplate = r'''WITH
         LIMIT 1
       )[SAFE_OFFSET(0)] AS logged_system_prompt
     FROM
-      RawEvents
+      SessionEvents
     WHERE
       event_type = 'LLM_REQUEST'
       AND agent IS NOT NULL

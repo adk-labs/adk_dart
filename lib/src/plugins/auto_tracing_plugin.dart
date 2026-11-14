@@ -15,14 +15,115 @@ import '../telemetry/tracing.dart' as adk_tracing;
 import '../tools/base_tool.dart';
 import '../tools/tool_context.dart';
 import '../types/content.dart';
+import '../utils/credential_names.dart';
 import 'base_plugin.dart';
 
 const int _defaultMaxReprLen = 4096;
+const int _maxRedactDepth = 10;
+const int _maxRedactNodes = 1024;
 
-String _safeRepr(Object? value, int maxLen) {
+class _RedactBudget {
+  int nodes = 0;
+}
+
+Object? _redactForRepr(
+  Object? value, {
+  int depth = 0,
+  _RedactBudget? budget,
+  Set<int>? active,
+}) {
+  if (value == null || value is bool || value is num || value is String) {
+    return value;
+  }
+  if (isCredentialType(value)) {
+    return redacted;
+  }
+  final _RedactBudget tracker = budget ?? _RedactBudget();
+  tracker.nodes += 1;
+  if (depth >= _maxRedactDepth || tracker.nodes > _maxRedactNodes) {
+    return '<...>';
+  }
+  final Set<int> seen = active ?? <int>{};
+  final int id = identityHashCode(value);
+  if (!seen.add(id)) {
+    return '<...>';
+  }
+  try {
+    if (value is Map) {
+      final Map<Object?, Object?> out = <Object?, Object?>{};
+      for (final MapEntry<Object?, Object?> entry in value.entries) {
+        if (tracker.nodes > _maxRedactNodes) {
+          out['<...>'] = '<...>';
+          break;
+        }
+        final Object? redactedKey = _redactForRepr(
+          entry.key,
+          depth: depth + 1,
+          budget: tracker,
+          active: seen,
+        );
+        if (entry.key is String && isCredentialArgName(entry.key as String)) {
+          out[redactedKey] = redacted;
+        } else {
+          out[redactedKey] = _redactForRepr(
+            entry.value,
+            depth: depth + 1,
+            budget: tracker,
+            active: seen,
+          );
+        }
+      }
+      return out;
+    }
+    if (value is List) {
+      final List<Object?> out = <Object?>[];
+      for (final Object? item in value) {
+        if (tracker.nodes > _maxRedactNodes) {
+          out.add('<...>');
+          break;
+        }
+        out.add(
+          _redactForRepr(
+            item,
+            depth: depth + 1,
+            budget: tracker,
+            active: seen,
+          ),
+        );
+      }
+      return out;
+    }
+    if (value is Set) {
+      final Set<Object?> out = <Object?>{};
+      for (final Object? item in value) {
+        if (tracker.nodes > _maxRedactNodes) {
+          out.add('<...>');
+          break;
+        }
+        out.add(
+          _redactForRepr(
+            item,
+            depth: depth + 1,
+            budget: tracker,
+            active: seen,
+          ),
+        );
+      }
+      return out;
+    }
+    return value;
+  } finally {
+    seen.remove(id);
+  }
+}
+
+/// Safely renders [value] for auto-tracing attributes after redacting
+/// credential types and credential-keyed map entries.
+String safeReprForAutoTracing(Object? value, [int maxLen = _defaultMaxReprLen]) {
   String repr;
   try {
-    repr = '$value';
+    final Object? sanitized = _redactForRepr(value);
+    repr = '$sanitized';
   } catch (error) {
     repr = '<unrepresentable ${value.runtimeType}: $error>';
   }
@@ -31,6 +132,22 @@ String _safeRepr(Object? value, int maxLen) {
   }
   return '${repr.substring(0, maxLen)}...[${repr.length - maxLen} more chars]';
 }
+
+/// Formats argument [name] and [value] for auto-tracing span attributes,
+/// redacting secret-named parameters before rendering.
+String formatArgForAutoTracing(
+  String name,
+  Object? value, [
+  int maxLen = _defaultMaxReprLen,
+]) {
+  if (isCredentialArgName(name)) {
+    return redacted;
+  }
+  return safeReprForAutoTracing(value, maxLen);
+}
+
+String _safeRepr(Object? value, int maxLen) =>
+    safeReprForAutoTracing(value, maxLen);
 
 String _spanKey(String invocationId, String kind) => '$invocationId:$kind';
 
@@ -55,6 +172,8 @@ class _ActiveSpan {
   final Content? userContent;
   final String? functionCallId;
   final List<Event> events = <Event>[];
+  int inferenceCallCount = 0;
+  int toolCallCount = 0;
 }
 
 class _PendingToolResponseMetric {
@@ -216,6 +335,10 @@ class AutoTracingPlugin extends BasePlugin {
     required CallbackContext callbackContext,
     required LlmRequest llmRequest,
   }) async {
+    _incrementInnermostAgentCounter(
+      callbackContext.invocationId,
+      isInference: true,
+    );
     if (!traceModels) {
       return null;
     }
@@ -280,6 +403,10 @@ class AutoTracingPlugin extends BasePlugin {
     required Map<String, dynamic> toolArgs,
     required ToolContext toolContext,
   }) async {
+    _incrementInnermostAgentCounter(
+      toolContext.invocationId,
+      isInference: false,
+    );
     if (!traceTools) {
       return null;
     }
@@ -503,6 +630,16 @@ class AutoTracingPlugin extends BasePlugin {
           active.events,
           recorder: recorder,
         );
+        adk_metrics.recordInvokeAgentInferenceCalls(
+          agentName,
+          active.inferenceCallCount,
+          recorder: recorder,
+        );
+        adk_metrics.recordInvokeAgentToolCalls(
+          agentName,
+          active.toolCallCount,
+          recorder: recorder,
+        );
       case 'tool':
         final String? toolName = active.toolName;
         final String? agentName = active.agentName;
@@ -543,6 +680,27 @@ class AutoTracingPlugin extends BasePlugin {
     for (final _ActiveSpan active in spans) {
       if (active.kind == 'agent') {
         active.events.add(event);
+      }
+    }
+  }
+
+  void _incrementInnermostAgentCounter(
+    String invocationId, {
+    required bool isInference,
+  }) {
+    final List<_ActiveSpan>? spans = _spansByInvocation[invocationId];
+    if (spans == null) {
+      return;
+    }
+    for (int i = spans.length - 1; i >= 0; i -= 1) {
+      final _ActiveSpan active = spans[i];
+      if (active.kind == 'agent') {
+        if (isInference) {
+          active.inferenceCallCount += 1;
+        } else {
+          active.toolCallCount += 1;
+        }
+        return;
       }
     }
   }

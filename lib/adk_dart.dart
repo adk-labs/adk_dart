@@ -529,6 +529,7 @@ export 'src/utils/cache_performance_analyzer.dart';
 export 'src/utils/client_labels_utils.dart';
 export 'src/utils/content_utils.dart';
 export 'src/utils/context_utils.dart';
+export 'src/utils/credential_names.dart';
 export 'src/utils/debug_output.dart';
 export 'src/utils/env_utils.dart';
 export 'src/utils/error_reporting.dart';

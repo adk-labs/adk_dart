@@ -11,6 +11,8 @@ import '../../models/base_llm.dart';
 import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../models/registry.dart';
+import '../../telemetry/metrics.dart';
+import '../../telemetry/tracing.dart';
 import '../../types/content.dart';
 import '../../utils/client_labels_utils.dart' show modelConsultClientLabel;
 import '../base_tool.dart';
@@ -162,13 +164,14 @@ class AdvisorResult {
   }
 }
 
-/// Error payload returned when an advisor model consultation fails.
-class AdvisorError {
+/// Error payload returned or thrown when an advisor model consultation fails.
+class AdvisorError implements Exception {
   /// Creates an advisor consultation error record.
   const AdvisorError({
     required this.error,
     required this.errorCode,
     this.model,
+    this.cause,
   });
 
   /// Human-readable error message.
@@ -180,6 +183,9 @@ class AdvisorError {
   /// Identifier of the advisor model that was queried, if known.
   final String? model;
 
+  /// Underlying exception or error cause, if any.
+  final Object? cause;
+
   /// Serializes this error to a JSON-compatible map.
   Map<String, Object?> toJson() {
     return <String, Object?>{
@@ -189,6 +195,247 @@ class AdvisorError {
       if (model != null) 'model': model,
     };
   }
+
+  @override
+  String toString() => 'AdvisorError($errorCode): $error';
+}
+
+void _recordAdvisorTelemetry({
+  required String agentName,
+  required LlmRequest request,
+  required List<LlmResponse> responses,
+  required Duration duration,
+  Object? error,
+  TelemetryConfig? telemetryConfig,
+  Map<String, String>? environment,
+  AdkMetricsRecorder? recorder,
+}) {
+  try {
+    final TelemetryConfig effectiveConfig =
+        telemetryConfig ?? const TelemetryConfig();
+    final bool instrumentorRecords =
+        isGeminiModelName(request.model) &&
+        genaiInstrumentorRecordsInference(
+          effectiveConfig,
+          environment: environment,
+        );
+    final bool emitInferenceTokens = shouldEmitSemconvInferenceTokenMetrics(
+      request.model,
+      hasGenAiInstrumentor: isGenAiInstrumented(),
+      instrumentorVersion: getGenAiInstrumentorVersionForTest(),
+      environment: environment,
+    );
+    if (!instrumentorRecords && !emitInferenceTokens) {
+      return;
+    }
+
+    if (!instrumentorRecords) {
+      String? responseModel;
+      final List<String> finishReasons = <String>[];
+      for (final LlmResponse response in responses) {
+        if (response.modelVersion != null &&
+            response.modelVersion!.isNotEmpty) {
+          responseModel = response.modelVersion;
+        }
+        if (response.finishReason != null &&
+            response.finishReason!.isNotEmpty) {
+          final String lowered = response.finishReason!.toLowerCase();
+          if (!finishReasons.contains(lowered)) {
+            finishReasons.add(lowered);
+          }
+        }
+      }
+      final String systemName = resolveGenAiProviderName(
+        request.model,
+        environment: environment,
+      );
+      recordClientOperationDuration(
+        agentName,
+        duration,
+        requestModel: request.model,
+        responseModel: responseModel ?? request.model,
+        system: systemName,
+        finishReasons: finishReasons.isEmpty ? null : finishReasons,
+        error: error,
+        recorder: recorder,
+      );
+      if (responses.isNotEmpty) {
+        recordClientTokenUsage(
+          agentName: agentName,
+          llmRequest: request,
+          responses: responses,
+          system: systemName,
+          error: error,
+          environment: environment,
+          recorder: recorder,
+        );
+      }
+    }
+
+    if (emitInferenceTokens) {
+      recordSemconvInferenceTokenUsage(
+        llmRequest: request,
+        responses: responses,
+        error: error,
+        environment: environment,
+        recorder: recorder,
+      );
+    }
+  } catch (_) {
+    // Telemetry errors must never break an advisor consultation.
+  }
+}
+
+/// Calls [llm] as an advisor model over [contents] and records advisor metrics.
+///
+/// Throws [AdvisorError] if the model call fails or returns an error payload
+/// without advice.
+Future<AdvisorResult> callAdvisor(
+  BaseLlm llm,
+  List<Content> contents, {
+  String systemInstruction = defaultAdvisorSystemInstruction,
+  GenerateContentConfig? generateContentConfig,
+  Duration? timeout,
+  String agentName = defaultConsultModelToolName,
+  TelemetryConfig? telemetryConfig,
+  Map<String, String>? environment,
+  AdkMetricsRecorder? recorder,
+}) async {
+  final GenerateContentConfig requestConfig =
+      (generateContentConfig?.copyWith() ?? GenerateContentConfig())
+        ..systemInstruction = systemInstruction;
+  final Map<String, String> existingHeaders =
+      requestConfig.httpOptions?.headers ?? const <String, String>{};
+  final String existingApiClient = existingHeaders['x-goog-api-client'] ?? '';
+  final String mergedApiClient = existingApiClient.isEmpty
+      ? modelConsultClientLabel
+      : '$existingApiClient $modelConsultClientLabel';
+  requestConfig.httpOptions = HttpOptions(
+    apiVersion: requestConfig.httpOptions?.apiVersion,
+    retryOptions: requestConfig.httpOptions?.retryOptions,
+    headers: <String, String>{
+      ...existingHeaders,
+      'x-goog-api-client': mergedApiClient,
+    },
+  );
+
+  final LlmRequest request = LlmRequest(
+    model: llm.model,
+    contents: contents,
+    config: requestConfig,
+  );
+
+  return withModelConsultClientLabel(modelConsultClientLabel, () async {
+    final Stopwatch stopwatch = Stopwatch()..start();
+    final List<LlmResponse> responses = <LlmResponse>[];
+    final StringBuffer adviceBuffer = StringBuffer();
+    final StringBuffer thoughtBuffer = StringBuffer();
+    Object? usageMetadata;
+    String? errorCode;
+    String? errorMessage;
+
+    Future<void> consumeStream() async {
+      await for (final LlmResponse response in llm.generateContent(
+        request,
+        stream: false,
+      )) {
+        responses.add(response);
+        if (response.errorCode != null || response.errorMessage != null) {
+          errorCode = response.errorCode ?? 'MODEL_ERROR';
+          errorMessage =
+              response.errorMessage ?? 'Advisor model returned an error.';
+        }
+        if (response.usageMetadata != null) {
+          usageMetadata = response.usageMetadata;
+        }
+        final Content? content = response.content;
+        if (content == null) {
+          continue;
+        }
+        for (final Part part in content.parts) {
+          if (part.thought) {
+            if (part.text != null && part.text!.isNotEmpty) {
+              thoughtBuffer.write(part.text);
+            }
+            continue;
+          }
+          if (part.text != null && part.text!.isNotEmpty) {
+            adviceBuffer.write(part.text);
+          }
+        }
+      }
+    }
+
+    try {
+      if (timeout != null && timeout > Duration.zero) {
+        await consumeStream().timeout(timeout);
+      } else {
+        await consumeStream();
+      }
+    } catch (error) {
+      stopwatch.stop();
+      _recordAdvisorTelemetry(
+        agentName: agentName,
+        request: request,
+        responses: responses,
+        duration: stopwatch.elapsed,
+        error: error,
+        telemetryConfig: telemetryConfig,
+        environment: environment,
+        recorder: recorder,
+      );
+      if (error is AdvisorError) {
+        rethrow;
+      }
+      throw AdvisorError(
+        error: 'Advisor consultation failed: $error',
+        errorCode: 'EXECUTION_ERROR',
+        model: llm.model,
+        cause: error,
+      );
+    }
+
+    stopwatch.stop();
+    if (errorMessage != null && adviceBuffer.isEmpty) {
+      final String resolvedErrorCode = errorCode ?? 'MODEL_ERROR';
+      _recordAdvisorTelemetry(
+        agentName: agentName,
+        request: request,
+        responses: responses,
+        duration: stopwatch.elapsed,
+        error: resolvedErrorCode,
+        telemetryConfig: telemetryConfig,
+        environment: environment,
+        recorder: recorder,
+      );
+      throw AdvisorError(
+        error: errorMessage!,
+        errorCode: resolvedErrorCode,
+        model: llm.model,
+      );
+    }
+
+    _recordAdvisorTelemetry(
+      agentName: agentName,
+      request: request,
+      responses: responses,
+      duration: stopwatch.elapsed,
+      telemetryConfig: telemetryConfig,
+      environment: environment,
+      recorder: recorder,
+    );
+
+    final String advice = adviceBuffer.toString().trim();
+    final String thoughts = thoughtBuffer.toString().trim();
+    return AdvisorResult(
+      advice: advice,
+      model: llm.model,
+      thoughts: thoughts.isEmpty ? null : thoughts,
+      usage: usageMetadata != null
+          ? AdvisorUsage.fromUsageMetadata(usageMetadata)
+          : null,
+    );
+  });
 }
 
 /// Tool that allows an agent to consult a secondary advisor LLM for guidance.
@@ -211,6 +458,8 @@ class ModelConsultTool extends BaseTool {
     int? maxConsultationsPerInvocation,
     int? maxUses,
     this.sessionMaxUses,
+    this.environment,
+    this.metricsRecorder,
   }) : maxConsultationsPerInvocation = maxConsultationsPerInvocation ?? maxUses,
        super(
          description:
@@ -259,6 +508,12 @@ class ModelConsultTool extends BaseTool {
 
   /// Optional cap on how many consultations may occur across a multi-turn session.
   final int? sessionMaxUses;
+
+  /// Optional environment overrides used when resolving advisor telemetry rules.
+  final Map<String, String>? environment;
+
+  /// Optional metrics recorder override used when recording advisor metrics.
+  final AdkMetricsRecorder? metricsRecorder;
 
   /// Resolved advisor [BaseLlm] instance.
   BaseLlm get resolvedModel {
@@ -415,98 +670,34 @@ class ModelConsultTool extends BaseTool {
       toolContext: toolContext,
     );
 
-    final GenerateContentConfig requestConfig =
-        (generateContentConfig?.copyWith() ?? GenerateContentConfig())
-          ..systemInstruction = advisorInstruction;
-    final Map<String, String> existingHeaders =
-        requestConfig.httpOptions?.headers ?? const <String, String>{};
-    final String existingApiClient = existingHeaders['x-goog-api-client'] ?? '';
-    final String mergedApiClient = existingApiClient.isEmpty
-        ? modelConsultClientLabel
-        : '$existingApiClient $modelConsultClientLabel';
-    requestConfig.httpOptions = HttpOptions(
-      apiVersion: requestConfig.httpOptions?.apiVersion,
-      retryOptions: requestConfig.httpOptions?.retryOptions,
-      headers: <String, String>{
-        ...existingHeaders,
-        'x-goog-api-client': mergedApiClient,
-      },
-    );
-
-    final LlmRequest request = LlmRequest(
-      model: advisorLlm.model,
-      contents: <Content>[
-        Content(role: 'user', parts: <Part>[Part.text(prompt)]),
-      ],
-      config: requestConfig,
-    );
+    final TelemetryConfig? telemetryConfig = toolContext.runConfig?.telemetry;
 
     try {
-      return await withModelConsultClientLabel(modelConsultClientLabel, () async {
-        final StringBuffer adviceBuffer = StringBuffer();
-        final StringBuffer thoughtBuffer = StringBuffer();
-        Object? usageMetadata;
-        String? errorCode;
-        String? errorMessage;
+      final AdvisorResult result = await callAdvisor(
+        advisorLlm,
+        <Content>[
+          Content(role: 'user', parts: <Part>[Part.text(prompt)]),
+        ],
+        systemInstruction: advisorInstruction,
+        generateContentConfig: generateContentConfig,
+        agentName: name,
+        telemetryConfig: telemetryConfig,
+        environment: environment,
+        recorder: metricsRecorder,
+      );
 
-        await for (final LlmResponse response in advisorLlm.generateContent(
-          request,
-          stream: false,
-        )) {
-          if (response.errorCode != null || response.errorMessage != null) {
-            errorCode = response.errorCode ?? 'MODEL_ERROR';
-            errorMessage =
-                response.errorMessage ?? 'Advisor model returned an error.';
-          }
-          if (response.usageMetadata != null) {
-            usageMetadata = response.usageMetadata;
-          }
-          final Content? content = response.content;
-          if (content == null) {
-            continue;
-          }
-          for (final Part part in content.parts) {
-            if (part.thought) {
-              if (part.text != null && part.text!.isNotEmpty) {
-                thoughtBuffer.write(part.text);
-              }
-              continue;
-            }
-            if (part.text != null && part.text!.isNotEmpty) {
-              adviceBuffer.write(part.text);
-            }
-          }
-        }
+      final String sessionKey = sessionUsesStateKey(toolName: name);
+      toolContext.state[sessionKey] = sessionUses(toolContext) + 1;
 
-        if (errorMessage != null && adviceBuffer.isEmpty) {
-          return AdvisorError(
-            error: errorMessage,
-            errorCode: errorCode ?? 'MODEL_ERROR',
-            model: advisorLlm.model,
-          ).toJson();
-        }
+      final String turnKey = turnUsesStateKey(
+        toolName: name,
+        invocationId: toolContext.invocationId,
+      );
+      toolContext.state[turnKey] = turnUses(toolContext) + 1;
 
-        final String advice = adviceBuffer.toString().trim();
-        final String thoughts = thoughtBuffer.toString().trim();
-
-        final String sessionKey = sessionUsesStateKey(toolName: name);
-        toolContext.state[sessionKey] = sessionUses(toolContext) + 1;
-
-        final String turnKey = turnUsesStateKey(
-          toolName: name,
-          invocationId: toolContext.invocationId,
-        );
-        toolContext.state[turnKey] = turnUses(toolContext) + 1;
-
-        return AdvisorResult(
-          advice: advice,
-          model: advisorLlm.model,
-          thoughts: thoughts.isEmpty ? null : thoughts,
-          usage: usageMetadata != null
-              ? AdvisorUsage.fromUsageMetadata(usageMetadata)
-              : null,
-        ).toJson();
-      });
+      return result.toJson();
+    } on AdvisorError catch (error) {
+      return error.toJson();
     } catch (error) {
       return AdvisorError(
         error: 'Advisor consultation failed: $error',

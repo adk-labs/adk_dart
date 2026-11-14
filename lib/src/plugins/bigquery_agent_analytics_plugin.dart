@@ -157,6 +157,14 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         'max_observation_summaries_per_segment must be an int >= 1.',
       );
     }
+    if (this.config.responseTextKey != null &&
+        this.config.responseTextKey!.trim().isEmpty) {
+      throw ArgumentError.value(
+        this.config.responseTextKey,
+        'responseTextKey',
+        'response_text_key must be a non-empty str or None.',
+      );
+    }
     if (this.config.createEvalViews) {
       _validateEvalViewConfig(prefix: 'Cannot enable createEvalViews=true');
     }
@@ -520,6 +528,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
+      _TraceManager.ensureInvocationSpan(callbackContext);
       await _logEvent(
         'USER_MESSAGE_RECEIVED',
         callbackContext,
@@ -564,6 +573,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
+      if (event.partial != true) {
+        _TraceManager.popSpan(callbackContext, expectedKind: 'llm_request');
+      }
 
       if (_workflowObservationsEnabled) {
         try {
@@ -711,24 +723,50 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           (event.longRunningToolIds == null ||
               event.longRunningToolIds!.isEmpty);
       if (isAgentResponse) {
-        final List<Part> visibleTextParts = content.parts
-            .where(
-              (Part part) =>
-                  part.text != null && part.text!.isNotEmpty && !part.thought,
-            )
-            .map((Part part) => part.copyWith())
-            .toList(growable: false);
+        final List<Part> visibleTextParts = <Part>[];
+        final List<String> visibleTexts = <String>[];
+        for (final Part part in content.parts) {
+          if (part.text != null && part.text!.isNotEmpty && !part.thought) {
+            visibleTextParts.add(part.copyWith());
+            visibleTexts.add(part.text!);
+          }
+        }
         if (visibleTextParts.isNotEmpty) {
           final _FormatResult formatted = _formatContent(
             Content(role: content.role, parts: visibleTextParts),
             maxLen: config.maxContentLength,
           );
+          bool truncated = formatted.isTruncated;
+          Map<String, Object?> rawContent = <String, Object?>{
+            'response': formatted.text,
+          };
+          if (config.responseTextKey != null) {
+            String firstNonWs = '';
+            for (final String text in visibleTexts) {
+              final String stripped = _stripBomWs(text);
+              if (stripped.isNotEmpty) {
+                firstNonWs = stripped;
+                break;
+              }
+            }
+            final (String, bool)? summary = firstNonWs.startsWith('{')
+                ? _extractStructuredResponseSummary(visibleTexts.join('\n'))
+                : null;
+            if (summary != null) {
+              rawContent = <String, Object?>{
+                'text_summary': summary.$1,
+                'response': formatted.text,
+              };
+              truncated = truncated || summary.$2;
+            }
+          }
           await _logEvent(
             'AGENT_RESPONSE',
             callbackContext,
-            rawContent: <String, Object?>{'response': formatted.text},
-            isTruncated: formatted.isTruncated,
+            rawContent: rawContent,
+            isTruncated: truncated,
             eventData: EventData(
+              sourceEvent: event,
               extraAttributes: <String, Object?>{
                 'source_event_id': event.id,
                 'source_event_author': event.author,
@@ -756,6 +794,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       final CallbackContext callbackContext = CallbackContext(
         invocationContext,
       );
+      _TraceManager.ensureInvocationSpan(callbackContext);
       await _logEvent('INVOCATION_STARTING', callbackContext);
       return null;
     });
@@ -775,7 +814,21 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           callbackContext,
           drainCallback: 'after_run',
         );
-        await _logEvent('INVOCATION_COMPLETED', callbackContext);
+        final String traceId = _TraceManager.getTraceId(callbackContext);
+        final _PopResult popResult = _TraceManager.popRunEndSpan(
+          callbackContext,
+          unwindChildren: true,
+        );
+        await _logEvent(
+          'INVOCATION_COMPLETED',
+          callbackContext,
+          eventData: EventData(
+            traceIdOverride: traceId,
+            spanIdOverride: popResult.spanId,
+            parentSpanIdOverride: popResult.parentSpanId,
+            latencyMs: popResult.durationMs,
+          ),
+        );
       } finally {
         _workflowSegments.remove(invocationContext.invocationId);
         await flush();
@@ -799,11 +852,20 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           callbackContext,
           drainCallback: 'on_run_error',
         );
+        final String traceId = _TraceManager.getTraceId(callbackContext);
+        final _PopResult popResult = _TraceManager.popRunEndSpan(
+          callbackContext,
+          unwindChildren: false,
+        );
         await _logEvent(
           'INVOCATION_ERROR',
           callbackContext,
           rawContent: <String, Object?>{'error_traceback': '$error'},
           eventData: EventData(
+            traceIdOverride: traceId,
+            spanIdOverride: popResult.spanId,
+            parentSpanIdOverride: popResult.parentSpanId,
+            latencyMs: popResult.durationMs,
             status: 'ERROR',
             errorMessage: '$error',
           ),
@@ -841,17 +903,54 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required CallbackContext callbackContext,
   }) async {
     return _safeCallback<Content?>('afterAgentCallback', () async {
-      final _PopResult popResult = _TraceManager.popSpan(callbackContext);
+      final _PopResult popResult = _TraceManager.popSpan(
+        callbackContext,
+        expectedKind: 'agent',
+      );
       await _logEvent(
         'AGENT_COMPLETED',
         callbackContext,
         eventData: EventData(
           latencyMs: popResult.durationMs,
           spanIdOverride: popResult.spanId,
-          parentSpanIdOverride: popResult.parentSpanId,
+          parentSpanIdOverride: popResult.spanId != null
+              ? popResult.parentSpanId
+              : null,
         ),
       );
       return null;
+    });
+  }
+
+  /// Logs unhandled agent execution errors and pops any matching agent span.
+  @override
+  Future<void> onAgentErrorCallback({
+    required BaseAgent agent,
+    required CallbackContext callbackContext,
+    required Object error,
+    String? errorTraceback,
+  }) async {
+    await _safeCallback<void>('onAgentErrorCallback', () async {
+      final _PopResult popResult = _TraceManager.popSpan(
+        callbackContext,
+        expectedKind: 'agent',
+      );
+      await _logEvent(
+        'AGENT_ERROR',
+        callbackContext,
+        rawContent: <String, Object?>{
+          'error_traceback': errorTraceback ?? '$error',
+        },
+        eventData: EventData(
+          status: 'ERROR',
+          errorMessage: '$error',
+          latencyMs: popResult.durationMs,
+          spanIdOverride: popResult.spanId,
+          parentSpanIdOverride: popResult.spanId != null
+              ? popResult.parentSpanId
+              : null,
+        ),
+      );
     });
   }
 
@@ -862,6 +961,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required LlmRequest llmRequest,
   }) async {
     return _safeCallback<LlmResponse?>('beforeModelCallback', () async {
+      _TraceManager.popSpan(callbackContext, expectedKind: 'llm_request');
       final Map<String, Object?> attributes = <String, Object?>{};
 
       final GenerateContentConfig llmConfig = llmRequest.config;
@@ -973,8 +1073,11 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           _TraceManager.recordFirstToken(callbackContext, spanId);
           tfftMs = _TraceManager.timeToFirstTokenMs(callbackContext, spanId);
         }
-        final _PopResult popResult = _TraceManager.popSpan(callbackContext);
-        popped = true;
+        final _PopResult popResult = _TraceManager.popSpan(
+          callbackContext,
+          expectedKind: 'llm_request',
+        );
+        popped = popResult.spanId != null;
         durationMs = popResult.durationMs;
         spanId = popResult.spanId ?? spanId;
         parentSpanId = popResult.parentSpanId ?? parentSpanId;
@@ -1007,15 +1110,21 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
     required Exception error,
   }) async {
     return _safeCallback<LlmResponse?>('onModelErrorCallback', () async {
-      final _PopResult popResult = _TraceManager.popSpan(callbackContext);
+      final _PopResult popResult = _TraceManager.popSpan(
+        callbackContext,
+        expectedKind: 'llm_request',
+      );
       await _logEvent(
         'LLM_ERROR',
         callbackContext,
         eventData: EventData(
+          status: 'ERROR',
           errorMessage: '$error',
           latencyMs: popResult.durationMs,
           spanIdOverride: popResult.spanId,
-          parentSpanIdOverride: popResult.parentSpanId,
+          parentSpanIdOverride: popResult.spanId != null
+              ? popResult.parentSpanId
+              : null,
         ),
       );
       return null;
@@ -1063,7 +1172,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
       }
 
       final String toolOrigin = _getToolOrigin(tool);
-      final _PopResult popResult = _TraceManager.popSpan(toolContext);
+      final _PopResult popResult = _TraceManager.popSpan(
+        toolContext,
+        expectedKind: 'tool',
+      );
       final String? errorMessage = classifyToolResultError(
         tool: tool,
         toolArgs: toolArgs,
@@ -1091,7 +1203,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
             errorMessage: errorMessage,
             latencyMs: popResult.durationMs,
             spanIdOverride: popResult.spanId,
-            parentSpanIdOverride: popResult.parentSpanId,
+            parentSpanIdOverride: popResult.spanId != null
+                ? popResult.parentSpanId
+                : null,
           ),
         );
         return null;
@@ -1114,7 +1228,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         eventData: EventData(
           latencyMs: popResult.durationMs,
           spanIdOverride: popResult.spanId,
-          parentSpanIdOverride: popResult.parentSpanId,
+          parentSpanIdOverride: popResult.spanId != null
+              ? popResult.parentSpanId
+              : null,
         ),
       );
 
@@ -1123,11 +1239,25 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           toolArgs,
           config.maxContentLength,
         );
+        bool argsIsTruncated = argsTruncated.isTruncated;
+        Map<String, Object?> responseRawContent = <String, Object?>{
+          'response': argsTruncated.value,
+        };
+        final (String, bool)? summary = _extractStructuredResponseSummary(
+          toolArgs,
+        );
+        if (summary != null) {
+          responseRawContent = <String, Object?>{
+            'text_summary': summary.$1,
+            'response': argsTruncated.value,
+          };
+          argsIsTruncated = argsIsTruncated || summary.$2;
+        }
         await _logEvent(
           'AGENT_RESPONSE',
           toolContext,
-          rawContent: <String, Object?>{'response': argsTruncated.value},
-          isTruncated: argsTruncated.isTruncated,
+          rawContent: responseRawContent,
+          isTruncated: argsIsTruncated,
           eventData: EventData(
             extraAttributes: <String, Object?>{'source_tool': tool.name},
           ),
@@ -1152,7 +1282,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           toolArgs,
           config.maxContentLength,
         );
-        final _PopResult popResult = _TraceManager.popSpan(toolContext);
+        final _PopResult popResult = _TraceManager.popSpan(
+          toolContext,
+          expectedKind: 'tool',
+        );
         String errorMessage;
         try {
           final String rendered = '$error';
@@ -1178,7 +1311,9 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
             errorMessage: errorMessage,
             latencyMs: popResult.durationMs,
             spanIdOverride: popResult.spanId,
-            parentSpanIdOverride: popResult.parentSpanId,
+            parentSpanIdOverride: popResult.spanId != null
+                ? popResult.parentSpanId
+                : null,
           ),
         );
         return null;
@@ -1432,7 +1567,57 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
 
     final EventData resolvedEventData = eventData ?? EventData();
     String? effectiveErrorMessage = resolvedEventData.errorMessage;
-    Object? normalizedContent = rawContent;
+    Object? preFormattedContent = rawContent;
+    bool errorFailedClosed = false;
+    if (effectiveErrorMessage != null) {
+      final String rawErrorMsg = effectiveErrorMessage;
+      String safeError;
+      bool errorLost;
+      try {
+        (safeError, errorLost) = _sanitizeSensitiveText(
+          rawErrorMsg,
+          config.maxContentLength,
+        );
+      } catch (_) {
+        safeError = '[REDACTED_SENSITIVE_TEXT]';
+        errorLost = true;
+      }
+      errorFailedClosed =
+          safeError == '[REDACTED_SENSITIVE_TEXT]' &&
+          rawErrorMsg != '[REDACTED_SENSITIVE_TEXT]';
+      effectiveErrorMessage = safeError;
+      isTruncated = isTruncated || errorLost;
+    }
+    if ((eventType == 'AGENT_ERROR' || eventType == 'INVOCATION_ERROR') &&
+        preFormattedContent is Map) {
+      final Map<String, Object?> copy = Map<String, Object?>.from(
+        preFormattedContent,
+      );
+      final Object? errorTraceback = copy['error_traceback'];
+      if (errorTraceback is String) {
+        String safeTb;
+        bool tbLost;
+        if (errorFailedClosed) {
+          safeTb = '[REDACTED_SENSITIVE_TEXT]';
+          tbLost = true;
+        } else {
+          try {
+            (safeTb, tbLost) = _sanitizeSensitiveText(
+              errorTraceback,
+              config.maxContentLength,
+            );
+          } catch (_) {
+            safeTb = '[REDACTED_SENSITIVE_TEXT]';
+            tbLost = true;
+          }
+        }
+        copy['error_traceback'] = safeTb;
+        preFormattedContent = copy;
+        isTruncated = isTruncated || tbLost;
+      }
+    }
+
+    Object? normalizedContent = preFormattedContent;
     final BigQueryContentFormatter? formatter = config.contentFormatter;
     if (formatter != null) {
       try {
@@ -1452,13 +1637,13 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         // Fail closed so a masking/formatting error cannot leak raw content.
         normalizedContent = null;
         if (config.logContentFormatterErrorDetails) {
-          final _TruncateResult truncatedFormatterError =
-              _recursiveSmartTruncate(formatterError, config.maxContentLength);
-          isTruncated = isTruncated || truncatedFormatterError.isTruncated;
+          final (String safeFormatterErr, bool errLost) =
+              _sanitizeSensitiveText(formatterError, config.maxContentLength);
+          isTruncated = isTruncated || errLost;
           resolvedEventData.adkExtras['content_formatter_error'] =
-              truncatedFormatterError.value;
+              safeFormatterErr;
           if (effectiveErrorMessage == null || effectiveErrorMessage.isEmpty) {
-            effectiveErrorMessage = '${truncatedFormatterError.value ?? ''}';
+            effectiveErrorMessage = safeFormatterErr;
           }
         }
       }
@@ -1471,8 +1656,10 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
         resolvedEventData.traceIdOverride ??
         _TraceManager.getTraceId(callbackContext);
     final String? spanId = resolvedEventData.spanIdOverride ?? pair.spanId;
-    final String? parentSpanId =
+    final String? rawParentSpanId =
         resolvedEventData.parentSpanIdOverride ?? pair.parentSpanId;
+    final String? parentSpanId =
+        (spanId != null && rawParentSpanId == spanId) ? null : rawParentSpanId;
 
     final bool contentPartsPersisted = _contentPartsPersisted();
     if (!contentPartsPersisted) {
@@ -1641,6 +1828,60 @@ WHERE event_type = '$escapedEventType'
         .trim();
   }
 
+  (String, bool)? _extractStructuredResponseSummary(Object? payload) {
+    final String? key = config.responseTextKey;
+    if (key == null) {
+      return null;
+    }
+    final String canonicalKey = _canonicalizeCommonAsciiEscapes(key);
+    if (_isSensitiveTextKey(canonicalKey)) {
+      return null;
+    }
+    Object? candidate;
+    if (payload is String) {
+      final String stripped = _stripBomWs(payload);
+      if (!stripped.startsWith('{') ||
+          stripped.length > _maxJsonInspectChars ||
+          _jsonNestingExceedsLimit(stripped)) {
+        return null;
+      }
+      try {
+        final Object? parsed = jsonDecode(stripped);
+        if (parsed is Map) {
+          candidate = parsed[key];
+        }
+      } catch (_) {
+        return null;
+      }
+    } else if (payload is Map) {
+      candidate = payload[key];
+    }
+    if (candidate is! String) {
+      return null;
+    }
+    final String trimmedCandidate = candidate.trim();
+    if (trimmedCandidate.isEmpty ||
+        _responseTextSentinels.contains(trimmedCandidate)) {
+      return null;
+    }
+    final (String rawSanitized, bool rawTruncated) =
+        HybridContentParser.sanitizeRawText(candidate);
+    final String trimmedRaw = rawSanitized.trim();
+    if (trimmedRaw.isEmpty || _responseTextSentinels.contains(trimmedRaw)) {
+      return null;
+    }
+    final (String sanitizedText, bool sensTruncated) = _sanitizeSensitiveText(
+      rawSanitized,
+      config.maxContentLength,
+    );
+    final String trimmedSanitized = sanitizedText.trim();
+    if (trimmedSanitized.isEmpty ||
+        _responseTextSentinels.contains(trimmedSanitized)) {
+      return null;
+    }
+    return (sanitizedText, rawTruncated || sensTruncated);
+  }
+
   Map<String, Object?> _buildAdkEnvelope(
     CallbackContext callbackContext,
     Event? sourceEvent,
@@ -1649,6 +1890,16 @@ WHERE event_type = '$escapedEventType'
       'schema_version': _schemaVersion,
       'app_name': callbackContext.session.appName,
     };
+    final String? parentInvId = _getNestedParentInvocationId(callbackContext);
+    if (parentInvId != null) {
+      final String? parentSessionId = _TraceManager.getNestedParentSessionId(
+        callbackContext,
+      );
+      if (parentSessionId != null && parentSessionId.isNotEmpty) {
+        adk['parent_session_id'] = parentSessionId;
+      }
+      adk['parent_invocation_id'] = parentInvId;
+    }
     if (sourceEvent == null) {
       return adk;
     }
@@ -1866,6 +2117,18 @@ WHERE event_type = '$escapedEventType'
         case 'tool_result_classifier':
           if (entry.value is ToolResultClassifier) {
             config.toolResultClassifier = entry.value as ToolResultClassifier;
+          }
+        case 'response_text_key':
+          if (entry.value == null) {
+            config.responseTextKey = null;
+          } else if (entry.value is String) {
+            config.responseTextKey = entry.value as String;
+          } else {
+            throw ArgumentError.value(
+              entry.value,
+              'response_text_key',
+              'response_text_key must be a non-empty str or None.',
+            );
           }
       }
     }
