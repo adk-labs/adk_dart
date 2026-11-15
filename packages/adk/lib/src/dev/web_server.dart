@@ -5,9 +5,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:adk_dart/src/a2a/executor/a2a_agent_executor.dart';
 import 'package:meta/meta.dart';
+import 'package:yaml/yaml.dart';
 import 'package:adk_dart/src/a2a/protocol.dart';
 import 'package:adk_dart/src/a2a/utils/agent_card_builder.dart';
 import 'package:adk_dart/src/agents/abort_signal.dart';
@@ -19,6 +21,17 @@ import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/artifacts/base_artifact_service.dart';
 import '../cli/_dev_deploy.dart' as dev_deploy;
 import '../cli/agent_graph.dart' as agent_graph;
+import '../cli/agent_test_runner.dart'
+    show getTestFiles, rebuildTests, runAgentReplayTest;
+import '../cli/dev_server.dart'
+    show
+        CreateTestRequest,
+        checkCodeReference,
+        devTestRunnerProcessStarterTestingOverride,
+        requireLocalAgentBuilderClient,
+        streamTestOutput;
+import '../cli/fast_api.dart'
+    show ReasoningEngineQueryRequest, allowedAgentEngineClassMethods;
 import '../cli/api_server.dart'
     show
         AgentIdentityApiException,
@@ -61,6 +74,7 @@ import 'package:adk_dart/src/errors/not_found_error.dart';
 import '../version.dart';
 import 'package:adk_dart/src/events/event_actions.dart';
 import 'package:adk_dart/src/memory/base_memory_service.dart';
+import 'package:adk_dart/src/memory/memory_entry.dart';
 import 'package:adk_dart/src/models/llm_request.dart';
 import 'package:adk_dart/src/plugins/base_plugin.dart';
 import 'package:adk_dart/src/plugins/context_filter_plugin.dart';
@@ -91,6 +105,7 @@ import 'runtime.dart';
 
 part 'web_server_session_and_run_routes.dart';
 part 'web_server_eval_and_a2a_routes.dart';
+part 'web_server_builder_and_tests_routes.dart';
 part 'web_server_assets_and_helpers.dart';
 /// Sentinel indicating that default evaluation managers should be created from options.
 const Object defaultEvalManagerSentinel = Object();
@@ -1791,6 +1806,25 @@ Future<void> _handleRequest(
         'otel_to_cloud': context.otelToCloud,
       },
     );
+    return;
+  }
+
+  if (routedPath == '/api/reasoning_engine' && request.method == 'POST') {
+    await _handleReasoningEngine(request, context);
+    return;
+  }
+
+  if (routedPath == '/api/stream_reasoning_engine' &&
+      request.method == 'POST') {
+    await _handleStreamReasoningEngine(request, context);
+    return;
+  }
+
+  if (await _handleBuilderRoutes(request, context, routedPath)) {
+    return;
+  }
+
+  if (await _handleDevReplayTestsRoutes(request, context, routedPath)) {
     return;
   }
 

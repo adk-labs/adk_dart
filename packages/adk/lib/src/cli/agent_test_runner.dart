@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:adk_dart/src/agents/base_agent.dart';
+import 'package:adk_dart/src/agents/llm_agent.dart';
 import 'package:adk_dart/src/apps/app.dart';
 import 'package:adk_dart/src/events/event.dart';
 import 'package:adk_dart/src/models/base_llm.dart';
@@ -39,18 +40,43 @@ const Set<String> excludedEventFields = <String>{
 // ignore: constant_identifier_names
 const Set<String> EXCLUDED_EVENT_FIELDS = excludedEventFields;
 
-/// Finds all `*.test.json` files inside [agentDir] or its `tests` subdirectory.
+/// Finds all `*.test.json` files inside [agentDir] as well as `*.json` test
+/// fixtures inside `[agentDir]/tests`, or returns `[File(agentDir)]` when
+/// [agentDir] directly points to a `.json` file.
 List<File> getTestFiles(String agentDir) {
+  final File singleFile = File(agentDir);
+  if (singleFile.existsSync() && !Directory(agentDir).existsSync()) {
+    return agentDir.endsWith('.json') ? <File>[singleFile] : const <File>[];
+  }
+
   final Directory root = Directory(agentDir);
   if (!root.existsSync()) {
     return const <File>[];
   }
+  final String normalizedRoot = root.absolute.path.replaceAll('\\', '/');
   final List<File> files = <File>[];
   for (final FileSystemEntity entity in root.listSync(
     recursive: true,
     followLinks: false,
   )) {
-    if (entity is File && entity.path.endsWith('.test.json')) {
+    if (entity is! File) {
+      continue;
+    }
+    final String fullPath = entity.absolute.path.replaceAll('\\', '/');
+    String relPath = fullPath.startsWith('$normalizedRoot/')
+        ? fullPath.substring(normalizedRoot.length + 1)
+        : fullPath;
+    if (relPath.startsWith('/')) {
+      relPath = relPath.substring(1);
+    }
+    final List<String> segments = relPath.split('/');
+    if (segments.contains('tmp')) {
+      continue;
+    }
+    if (fullPath.endsWith('.test.json') ||
+        (fullPath.endsWith('.json') &&
+            segments.length >= 2 &&
+            segments.sublist(0, segments.length - 1).contains('tests'))) {
       files.add(entity);
     }
   }
@@ -384,6 +410,67 @@ List<Map<String, Object?>> normalizeEvents(List<Map<String, Object?>> events) {
   return normalizeIds(ordered);
 }
 
+Map<String, Object?> _canonicalizeEventForReplayComparison(
+  Map<String, Object?> raw,
+) {
+  final String? id = raw['id'] as String?;
+  final String? invocationId =
+      (raw['invocation_id'] ?? raw['invocationId']) as String?;
+  final String? author = raw['author'] as String?;
+  final String? branch = raw['branch'] as String?;
+  final Object? rawContent = raw['content'];
+
+  Map<String, Object?>? canonicalContent;
+  if (rawContent is Map) {
+    final Content parsed = _contentFromJson(
+      Map<String, Object?>.from(rawContent),
+    );
+    canonicalContent = <String, Object?>{
+      if (parsed.role != null) 'role': parsed.role,
+      'parts': parsed.parts.map((Part part) {
+        return <String, Object?>{
+          if (part.text != null) 'text': part.text,
+          if (part.thought) 'thought': true,
+          if (part.functionCall != null)
+            'function_call': <String, Object?>{
+              if (part.functionCall!.id != null) 'id': part.functionCall!.id,
+              'name': part.functionCall!.name,
+              'args': part.functionCall!.args,
+            },
+          if (part.functionResponse != null)
+            'function_response': <String, Object?>{
+              if (part.functionResponse!.id != null)
+                'id': part.functionResponse!.id,
+              'name': part.functionResponse!.name,
+              'response': part.functionResponse!.response,
+            },
+        };
+      }).toList(),
+    };
+  }
+
+  return <String, Object?>{
+    'id': ?id,
+    'invocation_id': ?invocationId,
+    'author': ?author,
+    'branch': ?branch,
+    'content': ?canonicalContent,
+  };
+}
+bool _hasConfiguredModelCredentials(Map<String, String> env) {
+  for (final String key in const <String>[
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'GOOGLE_GENAI_USE_VERTEXAI',
+  ]) {
+    final String val = (env[key] ?? '').trim();
+    if (val.isNotEmpty) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /// Runs a single agent replay test case against [rootAgent] (a [BaseAgent] or
 /// workflow `BaseNode`) or [app] using recorded session JSON from [testFile].
 Future<List<Map<String, Object?>>> runAgentReplayTest({
@@ -391,11 +478,13 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
   required File testFile,
   String? appName,
   App? app,
+  bool useMockModelWhenUnconfigured = false,
+  Map<String, String>? environment,
 }) async {
   if (rootAgent == null && app == null) {
     throw ArgumentError('Either rootAgent or app must be provided.');
   }
-  final BaseAgent? resolvedAgent =
+  BaseAgent? resolvedAgent =
       rootAgent == null ? null : asBaseAgent(rootAgent);
   final Object? decoded = jsonDecode(await testFile.readAsString());
   if (decoded is! Map) {
@@ -407,6 +496,31 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
           .whereType<Map>()
           .map((Map item) => Map<String, Object?>.from(item))
           .toList();
+
+  if (useMockModelWhenUnconfigured &&
+      app == null &&
+      resolvedAgent is LlmAgent &&
+      resolvedAgent.model is String &&
+      resolvedAgent.subAgents.isEmpty &&
+      !_hasConfiguredModelCredentials(environment ?? Platform.environment)) {
+    resolvedAgent = LlmAgent(
+      name: resolvedAgent.name,
+      description: resolvedAgent.description,
+      model: MockModel.fromEvents(recordedEvents),
+      instruction: resolvedAgent.instruction,
+      globalInstruction: resolvedAgent.globalInstruction,
+      tools: List<Object>.from(resolvedAgent.tools),
+      disallowTransferToParent: resolvedAgent.disallowTransferToParent,
+      disallowTransferToPeers: resolvedAgent.disallowTransferToPeers,
+      outputKey: resolvedAgent.outputKey,
+      beforeAgentCallback: resolvedAgent.beforeAgentCallback,
+      afterAgentCallback: resolvedAgent.afterAgentCallback,
+      beforeModelCallback: resolvedAgent.beforeModelCallback,
+      afterModelCallback: resolvedAgent.afterModelCallback,
+      beforeToolCallback: resolvedAgent.beforeToolCallback,
+      afterToolCallback: resolvedAgent.afterToolCallback,
+    );
+  }
 
   final List<Content> userTurns = extractUserContent(recordedEvents);
   final String resolvedAppName =
@@ -455,10 +569,10 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
   }
 
   final List<Map<String, Object?>> normalizedRecorded = normalizeEvents(
-    recordedEvents,
+    recordedEvents.map(_canonicalizeEventForReplayComparison).toList(),
   );
   final List<Map<String, Object?>> normalizedActual = normalizeEvents(
-    actualEvents,
+    actualEvents.map(_canonicalizeEventForReplayComparison).toList(),
   );
 
   if (jsonEncode(normalizedRecorded) != jsonEncode(normalizedActual)) {
@@ -471,12 +585,13 @@ Future<List<Map<String, Object?>>> runAgentReplayTest({
   return actualEvents;
 }
 
-/// Rebuilds `*.test.json` files in [agentDir] by running [rootAgent] (a
-/// [BaseAgent] or workflow `BaseNode`) or [app] and writing the updated event
-/// stream back to disk.
+/// Rebuilds `*.test.json` / `tests/*.json` files in [agentDir] (or a single
+/// [testFilePath]) by running [rootAgent] (a [BaseAgent] or workflow
+/// `BaseNode`) or [app] and writing the updated event stream back to disk.
 Future<void> rebuildTests({
   Object? rootAgent,
   required String agentDir,
+  String? testFilePath,
   String? appName,
   App? app,
 }) async {
@@ -485,7 +600,7 @@ Future<void> rebuildTests({
   }
   final BaseAgent? resolvedAgent =
       rootAgent == null ? null : asBaseAgent(rootAgent);
-  final List<File> testFiles = getTestFiles(agentDir);
+  final List<File> testFiles = getTestFiles(testFilePath ?? agentDir);
   for (final File testFile in testFiles) {
     final Object? decoded = jsonDecode(await testFile.readAsString());
     if (decoded is! Map) {

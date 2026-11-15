@@ -15,6 +15,78 @@ export 'api_server.dart'
         agentsFileObserverFactoryTestingOverride,
         extractW3cTraceContext;
 
+/// Allowed Vertex AI Agent Engine / Reasoning Engine adapter `class_method`
+/// names mapped to whether the method uses the streaming endpoint
+/// (`/api/stream_reasoning_engine` when `true`, `/api/reasoning_engine` when
+/// `false`), mirroring `_ALLOWED_AGENT_ENGINE_CLASS_METHODS` in `fast_api.py`.
+const Map<String, bool> allowedAgentEngineClassMethods = <String, bool>{
+  'create_session': false,
+  'async_create_session': false,
+  'list_sessions': false,
+  'async_list_sessions': false,
+  'get_session': false,
+  'async_get_session': false,
+  'delete_session': false,
+  'async_delete_session': false,
+  'query': false,
+  'async_query': false,
+  'async_add_session_to_memory': false,
+  'async_search_memory': false,
+  'async_save_artifact': false,
+  'async_load_artifact': false,
+  'async_list_artifact_keys': false,
+  'async_delete_artifact': false,
+  'async_list_versions': false,
+  'async_list_artifact_versions': false,
+  'async_get_artifact_version': false,
+  'stream_query': true,
+  'async_stream_query': true,
+  'streaming_agent_run_with_events': true,
+};
+
+/// Request payload for `/api/reasoning_engine` and `/api/stream_reasoning_engine`.
+class ReasoningEngineQueryRequest {
+  /// Creates a [ReasoningEngineQueryRequest].
+  const ReasoningEngineQueryRequest({
+    required this.classMethod,
+    this.input = const <String, Object?>{},
+  });
+
+  /// Method name on the Vertex AI Reasoning Engine / `AdkApp` adapter.
+  final String classMethod;
+
+  /// Keyword arguments forwarded to [classMethod].
+  final Map<String, Object?> input;
+
+  /// Parses and validates a [ReasoningEngineQueryRequest] from decoded JSON.
+  factory ReasoningEngineQueryRequest.fromJson(Map<String, Object?> json) {
+    final Object? rawMethod = json['class_method'];
+    if (rawMethod == null) {
+      throw const FormatException('class_method cannot be None');
+    }
+    if (rawMethod is! String || rawMethod.trim().isEmpty) {
+      throw const FormatException('class_method must be a non-empty string');
+    }
+    final Object? rawInput = json['input'];
+    if (rawInput != null && rawInput is! Map) {
+      throw const FormatException('input must be a JSON object');
+    }
+    final Map<String, Object?> inputMap = rawInput == null
+        ? const <String, Object?>{}
+        : Map<String, Object?>.from(rawInput as Map);
+    return ReasoningEngineQueryRequest(
+      classMethod: rawMethod.trim(),
+      input: inputMap,
+    );
+  }
+
+  /// Serializes this request to JSON.
+  Map<String, Object?> toJson() => <String, Object?>{
+    'class_method': classMethod,
+    'input': input,
+  };
+}
+
 /// Thin wrapper around [AdkWebServer] for web and API server modes.
 class FastApiApp {
   /// Creates a FastAPI-compatible app wrapper.
@@ -50,6 +122,7 @@ class FastApiApp {
     this.geminiEnterpriseAppName,
     this.expressMode = false,
     this.agentLoader,
+    this.environment,
     this.setupObserver,
     this.tearDownObserver,
   }) : withUi = withUi ?? enableWebUi {
@@ -100,6 +173,7 @@ class FastApiApp {
        geminiEnterpriseAppName = server.geminiEnterpriseAppName,
        expressMode = server.expressMode,
        agentLoader = server.agentLoader,
+       environment = server.environment,
        setupObserver = server.setupObserver,
        tearDownObserver = server.tearDownObserver,
        _server = server;
@@ -197,6 +271,9 @@ class FastApiApp {
   /// Optional custom [BaseAgentLoader] used for agent reloading.
   final BaseAgentLoader? agentLoader;
 
+  /// Optional environment map override forwarded to [AdkWebServer].
+  final Map<String, String>? environment;
+
   /// Optional callback for setting up the agents file watcher.
   final SetupObserverCallback? setupObserver;
 
@@ -240,6 +317,7 @@ class FastApiApp {
       geminiEnterpriseAppName: geminiEnterpriseAppName,
       expressMode: expressMode,
       agentLoader: agentLoader,
+      environment: environment,
       setupObserver: setupObserver,
       tearDownObserver: tearDownObserver,
     );
@@ -292,6 +370,7 @@ FastApiApp getFastApiApp({
   String? geminiEnterpriseAppName,
   bool expressMode = false,
   BaseAgentLoader? agentLoader,
+  Map<String, String>? environment,
   SetupObserverCallback? setupObserver,
   TearDownObserverCallback? tearDownObserver,
 }) {
@@ -327,6 +406,7 @@ FastApiApp getFastApiApp({
     geminiEnterpriseAppName: geminiEnterpriseAppName,
     expressMode: expressMode,
     agentLoader: agentLoader,
+    environment: environment,
     setupObserver: setupObserver,
     tearDownObserver: tearDownObserver,
   );

@@ -11,19 +11,23 @@ import 'api_server.dart';
 /// Alias for [AdkDevServer].
 typedef DevServer = AdkDevServer;
 
-/// Request model for generating a replay test from an existing session.
+/// Request model for generating or saving a replay test from a session.
 class CreateTestRequest {
   /// Creates a [CreateTestRequest].
   const CreateTestRequest({
-    required this.sessionId,
-    required this.userId,
+    this.sessionData,
+    this.sessionId = '',
+    this.userId = '',
     this.testName,
   });
 
-  /// Source session ID.
+  /// Full serialized session payload (`session_data`) sent by ADK Web.
+  final Map<String, Object?>? sessionData;
+
+  /// Source session ID when creating a test by session lookup.
   final String sessionId;
 
-  /// User ID owning the session.
+  /// User ID owning the session when creating a test by session lookup.
   final String userId;
 
   /// Optional test file basename.
@@ -31,7 +35,11 @@ class CreateTestRequest {
 
   /// Parses a [CreateTestRequest] from JSON.
   factory CreateTestRequest.fromJson(Map<String, Object?> json) {
+    final Object? rawSessionData = json['session_data'] ?? json['sessionData'];
     return CreateTestRequest(
+      sessionData: rawSessionData is Map
+          ? Map<String, Object?>.from(rawSessionData)
+          : null,
       sessionId: '${json['session_id'] ?? json['sessionId'] ?? ''}',
       userId: '${json['user_id'] ?? json['userId'] ?? ''}',
       testName: (json['test_name'] ?? json['testName']) as String?,
@@ -41,8 +49,9 @@ class CreateTestRequest {
   /// Serializes this request to a JSON map.
   Map<String, Object?> toJson() {
     return <String, Object?>{
-      'session_id': sessionId,
-      'user_id': userId,
+      if (sessionData != null) 'session_data': sessionData,
+      if (sessionId.isNotEmpty || sessionData == null) 'session_id': sessionId,
+      if (userId.isNotEmpty || sessionData == null) 'user_id': userId,
       if (testName != null) 'test_name': testName,
     };
   }
@@ -315,25 +324,149 @@ void requireLocalAgentBuilderClient({
   }
 }
 
+const Set<String> _blockedBuilderYamlKeys = <String>{'args'};
+
+const Set<String> _builderCodeReferenceKeys = <String>{
+  'after_agent_callbacks',
+  'after_model_callbacks',
+  'after_tool_callbacks',
+  'agent_class',
+  'before_agent_callbacks',
+  'before_model_callbacks',
+  'before_tool_callbacks',
+  'code',
+  'input_schema',
+  'model_code',
+  'output_schema',
+  'tools',
+};
+
+const List<String> _allowedBuiltinYamlPrefixes = <String>[
+  'google.adk.agents.',
+  'google.adk.tools.',
+];
+
+const Set<String> _shadowedExternalModules = <String>{
+  'builtins',
+  'dart',
+  'dotenv',
+  'google',
+  'importlib',
+  'io',
+  'isolate',
+  'os',
+  'pathlib',
+  'shutil',
+  'subprocess',
+  'sys',
+};
+
+List<String> _extractCodeReferences(Object? value) {
+  if (value is String) {
+    return <String>[value];
+  }
+  if (value is Map) {
+    final Object? name = value['name'];
+    if (name is String) {
+      return <String>[name];
+    }
+    return const <String>[];
+  }
+  if (value is List) {
+    final List<String> refs = <String>[];
+    for (final Object? item in value) {
+      if (item is String) {
+        refs.add(item);
+      } else if (item is Map && item['name'] is String) {
+        refs.add(item['name'] as String);
+      }
+    }
+    return refs;
+  }
+  return const <String>[];
+}
+
+bool _isAllowedCodeReference(String? appName, String ref) {
+  final String trimmed = ref.trim();
+  if (trimmed.isEmpty) {
+    return false;
+  }
+  if (!trimmed.contains('.')) {
+    return true;
+  }
+  for (final String prefix in _allowedBuiltinYamlPrefixes) {
+    if (trimmed.startsWith(prefix)) {
+      final String remainder = trimmed.substring(prefix.length);
+      return remainder.isNotEmpty && !remainder.contains('.');
+    }
+  }
+  if (appName == null ||
+      appName.isEmpty ||
+      _shadowedExternalModules.contains(appName)) {
+    return false;
+  }
+  return trimmed.startsWith('$appName.') && trimmed.length > appName.length + 1;
+}
+
 /// Recursively inspects a parsed YAML/JSON structure and throws an
-/// [ArgumentError] if any `code` reference key is present (preventing arbitrary
-/// code execution from untrusted YAML definitions).
-void checkCodeReference(Object? value) {
+/// [ArgumentError] if any blocked key (`args`) or unauthorized code reference
+/// is present (preventing arbitrary code execution from untrusted YAML
+/// definitions).
+void checkCodeReference(
+  Object? value, {
+  String? appName,
+  String? filename,
+}) {
   if (value is Map) {
     for (final MapEntry<Object?, Object?> entry in value.entries) {
-      if ('${entry.key}' == 'code') {
+      final String key = '${entry.key}';
+      if (_blockedBuilderYamlKeys.contains(key)) {
+        final String location = filename == null ? '' : ' in $filename';
+        throw ArgumentError(
+          "YAML key '$key' is not allowed$location.",
+        );
+      }
+      if (key == 'code' && appName == null) {
         throw ArgumentError(
           'Arbitrary code references ("code") are not allowed in visual builder YAML.',
         );
       }
-      checkCodeReference(entry.value);
+      if (_builderCodeReferenceKeys.contains(key)) {
+        final List<String> refs = _extractCodeReferences(entry.value);
+        if (key == 'code' && refs.isEmpty) {
+          throw ArgumentError(
+            'Arbitrary code references ("code") are not allowed in visual builder YAML.',
+          );
+        }
+        for (final String ref in refs) {
+          if (key == 'code' && !ref.trim().contains('.')) {
+            throw ArgumentError(
+              "Code reference '$ref' in '$key' must be qualified under '${appName ?? ''}'.",
+            );
+          }
+          if (!_isAllowedCodeReference(appName, ref)) {
+            final String location = filename == null ? '' : ' ($filename)';
+            throw ArgumentError(
+              "Code reference '$ref' in '$key'$location is not allowed.",
+            );
+          }
+        }
+      }
+      checkCodeReference(entry.value, appName: appName, filename: filename);
     }
   } else if (value is List) {
     for (final Object? item in value) {
-      checkCodeReference(item);
+      checkCodeReference(item, appName: appName, filename: filename);
     }
   }
 }
+
+/// Process starter signature for overriding `/dev/apps/{app_name}/tests/run` in tests.
+typedef DevTestRunnerProcessStarter =
+    Future<Process> Function({required String agentDir, String? testFilePath});
+
+/// Optional override for spawning an external test runner subprocess in `/tests/run`.
+DevTestRunnerProcessStarter? devTestRunnerProcessStarterTestingOverride;
 
 /// Streams combined stdout and stderr lines from a test runner [process].
 Stream<String> streamTestOutput(Process process) async* {
