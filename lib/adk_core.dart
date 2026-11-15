@@ -139,7 +139,7 @@ export 'src/tools/vertex_ai_search_tool.dart';
 export 'src/tools/vertex_rag_retrieval_tool.dart';
 
 export 'src/types/content.dart';
-export 'src/workflow/workflow.dart' hide RetryConfig;
+export 'src/workflow/workflow.dart';
 export 'src/workflow/edges_builder.dart';
 export 'src/workflow/replay_manager.dart';
 export 'src/labs/classifiers/classifiers.dart';

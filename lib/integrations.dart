@@ -1,8 +1,9 @@
 /// External cloud, platform, and third-party service integrations.
 ///
-/// Exports connectors and toolsets for Google Cloud (BigQuery, Firestore,
-/// GCS, Secret Manager, Parameter Manager, Model Armor), Google Maps Platform,
-/// OpenAI, LiveKit, ElevenLabs, MongoDB, Redis, E2B, OpenSandbox, and Slack.
+/// Exports connectors and toolsets for Google Cloud (API Registry, BigQuery,
+/// Cloud Run, Eventarc, Firestore, GCS, Secret Manager, Parameter Manager,
+/// Model Armor), Google Maps Platform, OpenAI, CrewAI, LangChain, LiveKit,
+/// ElevenLabs, MongoDB, Redis, Daytona, E2B, OpenSandbox, Slack, and Teams.
 ///
 /// ```dart
 /// import 'package:adk_dart/integrations.dart';
@@ -14,7 +15,10 @@ export 'src/integrations/_iam_connectors/gcp_iam_connector_auth.dart';
 export 'src/integrations/agent_identity/agent_identity.dart'
     hide GcpAuthProvider, GcpAuthProviderScheme;
 export 'src/integrations/agent_registry/agent_registry.dart';
+export 'src/integrations/api_registry/api_registry.dart';
 export 'src/integrations/bigquery/bigquery.dart';
+export 'src/integrations/cloud_run/cloud_run.dart';
+export 'src/integrations/crewai/crewai_tool.dart';
 export 'src/integrations/daytona/daytona_environment.dart';
 export 'src/integrations/e2b/e2b_environment.dart';
 export 'src/integrations/eleven_labs/eleven_labs.dart';
@@ -23,6 +27,7 @@ export 'src/integrations/firestore/firestore.dart';
 export 'src/integrations/fsspec/fsspec.dart';
 export 'src/integrations/gcs/gcs.dart';
 export 'src/integrations/google_maps/google_maps.dart';
+export 'src/integrations/langchain/langchain_tool.dart';
 export 'src/integrations/livekit/livekit.dart';
 export 'src/integrations/model_armor/model_armor.dart';
 export 'src/integrations/mongodb/mongodb.dart';

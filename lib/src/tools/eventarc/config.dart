@@ -7,11 +7,19 @@ import '../_google_credentials.dart';
 class EventarcToolConfig {
   /// Creates an Eventarc tool configuration.
   const EventarcToolConfig({
+    this.projectId,
+    this.publishTimeout = 15.0,
     this.defaultBus,
     this.defaultSource,
     this.retryAttempts = 3,
     this.timeout = const Duration(seconds: 30),
   });
+
+  /// Optional project ID for telemetry and API calls.
+  final String? projectId;
+
+  /// Timeout in seconds for publishing messages. Defaults to `15.0`.
+  final double publishTimeout;
 
   /// Optional default Eventarc message bus resource name.
   ///

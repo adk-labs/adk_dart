@@ -668,7 +668,7 @@ class OpenAILlm extends BaseLlm {
   static List<RegExp> supportedModels() {
     return <RegExp>[
       RegExp(r'gpt-.*'),
-      RegExp(r'o\d+-.*'),
+      RegExp(r'o\d+.*'),
       RegExp(r'openai\/.+'),
     ];
   }

@@ -126,7 +126,6 @@ export 'src/integrations/eventarc/eventarc.dart'
     hide
         EventarcCredentialsConfig,
         EventarcToolConfig,
-        EventarcToolset,
         getPublisherClient,
         removePublisherClient,
         cleanupClients,
@@ -139,7 +138,7 @@ export 'src/integrations/livekit/livekit.dart';
 export 'src/integrations/model_armor/model_armor.dart';
 export 'src/integrations/mongodb/mongodb.dart';
 export 'src/integrations/oci/oci.dart';
-export 'src/integrations/openai/openai.dart' hide OpenAiLlm, OpenAILlm;
+export 'src/integrations/openai/openai.dart';
 export 'src/integrations/openai/openai_decisions_classifier.dart';
 export 'src/integrations/opensandbox/opensandbox_environment.dart';
 export 'src/integrations/parameter_manager/parameter_manager.dart';
@@ -185,6 +184,8 @@ export 'src/events/interrupts.dart';
 export 'src/evaluation/base_eval_service.dart';
 export 'src/evaluation/agent_evaluator.dart';
 export 'src/evaluation/app_details.dart';
+export 'src/evaluation/audio_utils.dart';
+export 'src/evaluation/efficiency_evaluators.dart';
 export 'src/evaluation/common.dart';
 export 'src/evaluation/constants.dart';
 export 'src/evaluation/conversation_scenarios.dart';
@@ -399,6 +400,7 @@ export 'src/tools/agent_simulator/strategies/base.dart';
 export 'src/tools/agent_simulator/strategies/tool_spec_mock_strategy.dart';
 export 'src/tools/agent_simulator/tool_connection_analyzer.dart';
 export 'src/tools/agent_simulator/tool_connection_map.dart';
+export 'src/environment/base_environment.dart' show ExecutionResult;
 export 'src/tools/environment/environment.dart';
 export 'src/tools/environment/daytona_environment.dart';
 export 'src/tools/environment_simulation/environment_simulation.dart';

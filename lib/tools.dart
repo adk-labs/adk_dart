@@ -31,6 +31,7 @@ export 'src/code_executors/container_code_executor.dart';
 export 'src/code_executors/gke_code_executor.dart';
 export 'src/code_executors/unsafe_local_code_executor.dart';
 export 'src/code_executors/vertex_ai_code_executor.dart';
+export 'src/environment/base_environment.dart' show ExecutionResult;
 export 'src/skills/_utils.dart';
 export 'src/skills/models.dart';
 export 'src/skills/prompt.dart';

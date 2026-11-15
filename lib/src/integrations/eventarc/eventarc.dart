@@ -14,9 +14,11 @@ import '../../tools/eventarc/config.dart';
 import '../../tools/eventarc/message_tool.dart' as message_tool;
 import '../../tools/google_tool.dart';
 import '../../version.dart';
+import 'domain_specific_publish.dart';
 
 export '../../tools/eventarc/config.dart';
 export '../../tools/eventarc/message_tool.dart';
+export 'domain_specific_publish.dart';
 
 const double _cacheTtlSeconds = 1800.0;
 const int _cacheMaxSize = 10;
@@ -260,28 +262,60 @@ class EventarcToolset extends BaseToolset {
   /// Creates an Eventarc toolset.
   EventarcToolset({
     super.toolFilter,
-    EventarcCredentialsConfig? credentialsConfig,
+    super.toolNamePrefix,
+    this.credentialsConfig,
     EventarcToolConfig? toolConfig,
-  }) : _credentialsConfig = credentialsConfig,
-       _toolSettings = toolConfig ?? const EventarcToolConfig();
+    this.publishInvoker,
+  }) : toolConfig = toolConfig ?? const EventarcToolConfig() {
+    isFeatureEnabled(FeatureName.eventarcToolset);
+    _tools.add(
+      GoogleTool(
+        func: message_tool.publishMessage,
+        name: 'publish_message',
+        credentialsConfig: credentialsConfig,
+        toolSettings: this.toolConfig,
+      ),
+    );
+  }
 
-  final EventarcCredentialsConfig? _credentialsConfig;
-  final EventarcToolConfig _toolSettings;
+  /// Optional Google Cloud credentials configuration for Eventarc requests.
+  final EventarcCredentialsConfig? credentialsConfig;
+
+  /// Configuration settings applied to tools created by this toolset.
+  final EventarcToolConfig toolConfig;
+
+  /// Optional custom publish invoker used by domain-specific publish tools.
+  final EventarcPublishInvoker? publishInvoker;
+
+  final List<GoogleTool> _tools = <GoogleTool>[];
+
+  /// Creates and registers a domain-specific publish tool on this toolset.
+  DomainSpecificPublishTool createPublishTool({
+    required String name,
+    required String description,
+    required Object? bus,
+    required CloudEventAttributesBinding ceAttributesBinding,
+    Object? payloadSchema,
+    EventarcPublishInvoker? publishInvoker,
+  }) {
+    final DomainSpecificPublishTool tool = buildDomainSpecificTool(
+      toolset: this,
+      name: name,
+      description: description,
+      bus: bus,
+      ceAttributesBinding: ceAttributesBinding,
+      payloadSchema: payloadSchema,
+      publishInvoker: publishInvoker ?? this.publishInvoker,
+    );
+    _tools.add(tool);
+    return tool;
+  }
 
   @override
   Future<List<BaseTool>> getTools({ReadonlyContext? readonlyContext}) async {
     isFeatureEnabled(FeatureName.eventarcToolset);
 
-    final List<GoogleTool> allTools = <GoogleTool>[
-      GoogleTool(
-        func: message_tool.publishMessage,
-        name: 'publish_message',
-        credentialsConfig: _credentialsConfig,
-        toolSettings: _toolSettings,
-      ),
-    ];
-
-    return allTools
+    return _tools
         .where((GoogleTool tool) => isToolSelected(tool, readonlyContext))
         .toList();
   }
