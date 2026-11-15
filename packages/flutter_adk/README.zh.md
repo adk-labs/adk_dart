@@ -74,7 +74,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.11.14
+  flutter_adk: ^2026.11.15
 ```
 
 ## 快速上手 (开箱即用的聊天 UI)

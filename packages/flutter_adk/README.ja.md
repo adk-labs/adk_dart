@@ -75,7 +75,7 @@ flutter pub add flutter_adk
 
 ```yaml
 dependencies:
-  flutter_adk: ^2026.11.14
+  flutter_adk: ^2026.11.15
 ```
 
 ## クイックスタート (ターンキーチャットUI)

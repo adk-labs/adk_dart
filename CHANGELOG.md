@@ -1,3 +1,19 @@
+## 2026.11.15
+
+- **Nov 14 Sync Parity Fixes (`df9f9d045..287c0b0e6` follow-up)**:
+  - Fixed the inverted instrumentor guard in `ModelConsultTool` advisor telemetry, aligned the client provider name with the telemetry schema version (`f9d948c58`).
+  - Preserved `FunctionDeclaration.behavior` across `copyWith()` and serialized it as `behavior` in Gemini Live/REST payloads; added `LiveRequest.partial` for streamed vs terminal live tool content and `execute_tool` tracing for live calls (`e5dd820da`).
+  - Stopped failed `RemoteA2aAgent` task text from being promoted to workflow node output and downstream `JoinNode`s (`f67cc356c`).
+  - Completed the credential name allowlist (`additional_headers`, `auth_config`, `auth_credential`, `auth_response_uri`, `code_verifier`, `private_key_id`, and `_auth_config` / `_authorization` / `_cookie` / `_cookies` suffixes) and masked standalone credential objects in telemetry serialization (`b6952874a`).
+  - Isolated inline `AgentTool` runs with a fresh `invocationId` + `parentInvocationId`, and logged `[FORMATTER_FAILED]` when a BigQuery analytics `contentFormatter` throws (`5ce1d0c15`).
+- **Barrels & Integrations**:
+  - Added `package:adk_dart/live.dart`, exported live from `adk_core.dart`, and exported `api_registry`, `cloud_run`, `crewai`, `langchain` from `integrations.dart`; `labs/openai` now re-exports the canonical `integrations/openai` `OpenAILlm`; exported `ExecutionResult` from `tools.dart`.
+  - Added Eventarc domain-specific publishing (`AgentProvided`, `CloudEventAttributesBinding`, `MISSING`, `OMIT`, `buildDomainSpecificTool`).
+  - Completed `GeminiSTT` (session rotation, replay buffer, retry, dynamic sample rate) and `GeminiTTS` (bounded segment prefetch, WAV/PCM normalization, retry).
+- **Evaluation**:
+  - Added `ToolCallCountV1Evaluator`, `InferenceCallCountV1Evaluator`, `InvocationDurationV1Evaluator`, `TokenUsageV1Evaluator`, registered them in the default registry, added `registerCustomMetricsFromConfig`, and 16 kHz PCM resampling (`parseSampleRate`, `resamplePcm16`, `toLiveInput`) for `LlmAudioUserSimulator`.
+  - `Interval.toJson` now emits `null` for non-finite bounds so `/metrics-info` serializes the new unbounded metrics.
+
 ## 2026.11.14
 
 - **Upstream `adk-python` `v2.14.1` Parity (`df9f9d045..287c0b0e6`)**:

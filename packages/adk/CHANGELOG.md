@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.11.15
+
+- Bumped package version to `2026.11.15` and dependency `adk_dart: ^2026.11.15`.
+- Wired the Visual Agent Builder (`/dev/apps/{app}/builder*`), Dev UI replay tests (`/dev/apps/{app}/tests*`), and Vertex AI Reasoning Engine adapter (`/api/reasoning_engine`, `/api/stream_reasoning_engine`) HTTP routes.
+
+
 ## 2026.11.14
 
 - Bumped package version to `2026.11.14` and dependency `adk_dart: ^2026.11.14`.

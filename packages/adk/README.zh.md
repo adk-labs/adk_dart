@@ -62,7 +62,7 @@ dart pub add adk
 
 ```yaml
 dependencies:
-  adk: ^2026.11.14
+  adk: ^2026.11.15
 ```
 
 ## 参考
