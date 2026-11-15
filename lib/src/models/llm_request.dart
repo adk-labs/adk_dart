@@ -20,6 +20,8 @@ ToolDeclaration? _findToolWithFunctionDeclarations(LlmRequest request) {
   return null;
 }
 
+const Object _declarationUnset = Object();
+
 /// Function-calling declaration exposed to the model.
 class FunctionDeclaration {
   /// Creates a function declaration.
@@ -27,6 +29,7 @@ class FunctionDeclaration {
     required this.name,
     this.description = '',
     JsonMap? parameters,
+    this.behavior,
   }) : parameters = parameters ?? <String, dynamic>{};
 
   /// The function name.
@@ -38,16 +41,23 @@ class FunctionDeclaration {
   /// JSON schema parameters for the function.
   JsonMap parameters;
 
+  /// Optional Live API tool behavior (`BLOCKING` or `NON_BLOCKING`).
+  ToolBehavior? behavior;
+
   /// Returns a copy of this declaration with optional overrides.
   FunctionDeclaration copyWith({
     String? name,
     String? description,
     JsonMap? parameters,
+    Object? behavior = _declarationUnset,
   }) {
     return FunctionDeclaration(
       name: name ?? this.name,
       description: description ?? this.description,
       parameters: parameters ?? Map<String, dynamic>.from(this.parameters),
+      behavior: identical(behavior, _declarationUnset)
+          ? this.behavior
+          : behavior as ToolBehavior?,
     );
   }
 }

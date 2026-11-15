@@ -1010,7 +1010,15 @@ class AgentNode extends BaseNode {
             }
           }
         }
-        if (event.isFinalResponse() &&
+        final bool isCandidateFinalEvent =
+            event.isFinalResponse() ||
+            (event.partial != true &&
+                event.getFunctionCalls().isEmpty &&
+                event.getFunctionResponses().isEmpty &&
+                (event.hasOutput ||
+                    event.nodeInfo.messageAsOutput == true ||
+                    _isUnpromotedErrorEvent(event)));
+        if (isCandidateFinalEvent &&
             event.actions.endOfAgent == null &&
             event.actions.agentState == null) {
           if (agent is! Workflow ||
@@ -1065,6 +1073,15 @@ class AgentNode extends BaseNode {
         if (llmAgent.outputKey != null && finalOutput != null) {
           agentContext.session.state[llmAgent.outputKey!] = finalOutput;
         }
+      }
+      if (finalOutput == null && _isUnpromotedErrorEvent(finalEvent)) {
+        agentContext.session.events.removeWhere(
+          (Event e) => e.id == finalEvent!.id,
+        );
+        addedIntraNodeEvents.removeWhere(
+          (Event e) => e.id == finalEvent!.id,
+        );
+        return finalEvent;
       }
       return finalOutput;
     } finally {

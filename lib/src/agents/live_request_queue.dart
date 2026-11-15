@@ -26,6 +26,7 @@ class LiveRequest {
     this.blob,
     this.activityStart,
     this.activityEnd,
+    this.partial,
     this.close = false,
   });
 
@@ -40,6 +41,10 @@ class LiveRequest {
 
   /// Activity-end marker payload.
   LiveActivityEnd? activityEnd;
+
+  /// Whether [content] is an intermediate streamed chunk (`true`) or terminal
+  /// single-value payload (`false`).
+  bool? partial;
 
   /// Whether this request closes the queue.
   bool close;
@@ -67,11 +72,11 @@ class LiveRequestQueue {
   }
 
   /// Enqueues [content] as a live request.
-  void sendContent(Content content) {
+  void sendContent(Content content, {bool? partial}) {
     if (_closed) {
       return;
     }
-    _enqueue(LiveRequest(content: content));
+    _enqueue(LiveRequest(content: content, partial: partial));
   }
 
   /// Enqueues raw realtime [blob] data.

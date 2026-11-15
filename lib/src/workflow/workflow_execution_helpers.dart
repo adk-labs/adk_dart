@@ -297,6 +297,11 @@ Future<Object?> _runNodeWithRetry({
           'ctx.route.',
         );
       }
+      if (output is Event && _isUnpromotedErrorEvent(output)) {
+        _updateNodeStatus(context, state, NodeStatus.failed);
+        state.error = output.errorMessage ?? output.errorCode;
+        return output;
+      }
       _updateNodeStatus(context, state, NodeStatus.completed);
       state.error = null;
       return output;
@@ -467,7 +472,8 @@ _NodeRunResult _resultFromRawNodeOutput(
             node is Workflow ||
             (node is AgentNode && node.agent is Workflow)) &&
         !hasOutput &&
-        route == null,
+        route == null &&
+        !(rawOutput is Event && _isUnpromotedErrorEvent(rawOutput)),
   );
 }
 
@@ -1658,12 +1664,21 @@ void _validateNodeValue(
   }
 }
 
+bool _isUnpromotedErrorEvent(Event event) {
+  return event.errorCode != null &&
+      !event.hasOutput &&
+      event.nodeInfo.messageAsOutput != true;
+}
+
 Object? _outputFromAgentEvent(Event event) {
   if (event.partial == true) {
     return null;
   }
   if (event.hasOutput) {
     return event.output;
+  }
+  if (_isUnpromotedErrorEvent(event)) {
+    return null;
   }
   final Content? content = event.content;
   if (content == null) {
@@ -1729,6 +1744,9 @@ Object? _workflowOutputFromRaw(Object? output) {
     if (output.hasOutput) {
       return output.output;
     }
+    if (_isUnpromotedErrorEvent(output)) {
+      return null;
+    }
     if (output.content == null) {
       return null;
     }
@@ -1738,6 +1756,9 @@ Object? _workflowOutputFromRaw(Object? output) {
 
 bool _hasWorkflowOutput(Object? output) {
   if (output is Event) {
+    if (_isUnpromotedErrorEvent(output)) {
+      return false;
+    }
     return output.hasOutput || output.content != null;
   }
   return output != null;

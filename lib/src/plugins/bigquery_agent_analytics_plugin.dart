@@ -1635,7 +1635,7 @@ class BigQueryAgentAnalyticsPlugin extends BasePlugin {
           formatterError = '${error.runtimeType}';
         }
         // Fail closed so a masking/formatting error cannot leak raw content.
-        normalizedContent = null;
+        normalizedContent = '[FORMATTER_FAILED]';
         if (config.logContentFormatterErrorDetails) {
           final (String safeFormatterErr, bool errLost) =
               _sanitizeSensitiveText(formatterError, config.maxContentLength);

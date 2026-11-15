@@ -476,6 +476,7 @@ Map<String, dynamic> _serializeToolDeclaration(ToolDeclaration tool) {
             if (decl.description.isNotEmpty) 'description': decl.description,
             if (decl.parameters.isNotEmpty)
               'parameters': _serializeDynamic(decl.parameters),
+            if (decl.behavior != null) 'behavior': decl.behavior!.wireValue,
           },
         )
         .toList();

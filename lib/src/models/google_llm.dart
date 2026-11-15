@@ -706,6 +706,8 @@ class Gemini extends BaseLlm {
                   'description': declaration.description,
                 if (declaration.parameters.isNotEmpty)
                   'parameters': _jsonCompatible(declaration.parameters),
+                if (declaration.behavior != null)
+                  'behavior': declaration.behavior!.wireValue,
               },
             )
             .toList(growable: false);

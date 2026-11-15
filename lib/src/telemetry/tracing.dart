@@ -422,11 +422,19 @@ void traceToolCall(
   Event? functionResponseEvent, {
   Object? error,
   String? errorType,
+  InvocationContext? invocationContext,
   TraceSpanRecord? span,
   Map<String, String>? environment,
 }) {
   final TraceSpanRecord targetSpan =
       span ?? tracer.currentSpan ?? tracer.startAsCurrentSpan('execute_tool');
+  final TelemetryConfig telemetryConfig = telemetryConfigFromInvocationContext(
+    invocationContext,
+  );
+  final bool captureLegacyContent =
+      telemetryConfig.captureMessageContent &&
+      _shouldAddRequestResponseToSpans(environment: environment);
+
   targetSpan
     ..setAttribute('gen_ai.operation.name', 'execute_tool')
     ..setAttribute('gen_ai.tool.description', tool.description)
@@ -435,17 +443,24 @@ void traceToolCall(
     ..setAttribute('gcp.vertex.agent.llm_request', '{}')
     ..setAttribute('gcp.vertex.agent.llm_response', '{}');
 
+  if (invocationContext != null) {
+    targetSpan.setAttribute(
+      'gen_ai.agent.name',
+      invocationContext.agent.name,
+    );
+  }
+
   if (error != null) {
-    final String errorType =
+    final String resolvedErrorType =
         error is ToolExecutionError && error.errorType != null
         ? error.errorType!
         : error.runtimeType.toString();
-    targetSpan.setAttribute('error.type', errorType);
+    targetSpan.setAttribute('error.type', resolvedErrorType);
   } else if (errorType != null && errorType.isNotEmpty) {
     targetSpan.setAttribute('error.type', errorType);
   }
 
-  if (_shouldAddRequestResponseToSpans(environment: environment)) {
+  if (captureLegacyContent) {
     targetSpan.setAttribute(
       'gcp.vertex.agent.tool_call_args',
       _safeJsonSerialize(args),
@@ -456,12 +471,14 @@ void traceToolCall(
 
   String toolCallId = '<not specified>';
   Object? toolResponse = '<not specified>';
+  bool hasResponse = false;
   if (functionResponseEvent?.content?.parts.isNotEmpty ?? false) {
     final FunctionResponse? functionResponse =
         functionResponseEvent!.content!.parts.first.functionResponse;
     if (functionResponse != null) {
       toolCallId = functionResponse.id ?? toolCallId;
       toolResponse = functionResponse.response;
+      hasResponse = true;
     }
   }
 
@@ -476,13 +493,29 @@ void traceToolCall(
   if (toolResponse is! Map) {
     toolResponse = <String, Object?>{'result': toolResponse};
   }
-  if (_shouldAddRequestResponseToSpans(environment: environment)) {
+  final String serializedToolResponse = _safeJsonSerialize(toolResponse);
+  if (captureLegacyContent) {
     targetSpan.setAttribute(
       'gcp.vertex.agent.tool_response',
-      _safeJsonSerialize(toolResponse),
+      serializedToolResponse,
     );
   } else {
     targetSpan.setAttribute('gcp.vertex.agent.tool_response', '{}');
+  }
+  if (resolveTelemetrySchemaVersion(environment: environment) >=
+          schemaVersionSemconvAligned &&
+      telemetryConfig.captureMessageContent &&
+      _shouldAddContentToExperimentalSpans(environment: environment)) {
+    targetSpan.setAttribute(
+      'gen_ai.tool.call.arguments',
+      _safeJsonSerialize(args),
+    );
+    if (hasResponse) {
+      targetSpan.setAttribute(
+        'gen_ai.tool.call.result',
+        serializedToolResponse,
+      );
+    }
   }
 }
 
@@ -490,11 +523,15 @@ void traceToolCall(
 void traceMergedToolCalls(
   String responseEventId,
   Event functionResponseEvent, {
+  InvocationContext? invocationContext,
   TraceSpanRecord? span,
   Map<String, String>? environment,
 }) {
   final TraceSpanRecord targetSpan =
       span ?? tracer.currentSpan ?? tracer.startAsCurrentSpan('execute_tool');
+  final TelemetryConfig telemetryConfig = telemetryConfigFromInvocationContext(
+    invocationContext,
+  );
 
   targetSpan
     ..setAttribute('gen_ai.operation.name', 'execute_tool')
@@ -506,11 +543,31 @@ void traceMergedToolCalls(
     ..setAttribute('gcp.vertex.agent.llm_request', '{}')
     ..setAttribute('gcp.vertex.agent.llm_response', '{}');
 
-  final String eventJson = _safeJsonSerialize(
-    _eventToJson(functionResponseEvent),
-  );
-  if (_shouldAddRequestResponseToSpans(environment: environment)) {
-    targetSpan.setAttribute('gcp.vertex.agent.tool_response', eventJson);
+  if (telemetryConfig.captureMessageContent &&
+      _shouldAddRequestResponseToSpans(environment: environment)) {
+    final List<Part> parts =
+        functionResponseEvent.content?.parts ?? const <Part>[];
+    String toolResponseJson;
+    try {
+      toolResponseJson = _safeJsonSerialize(<Object?>[
+        for (final Part part in parts)
+          if (part.functionResponse != null)
+            _redactCredentialSecrets(
+              maskCredentialValues(
+                part.functionResponse,
+                <String, Object?>{
+                  'name': part.functionResponse!.name,
+                  'response': part.functionResponse!.response,
+                  if (part.functionResponse!.id != null)
+                    'id': part.functionResponse!.id,
+                },
+              ),
+            ),
+      ]);
+    } catch (_) {
+      toolResponseJson = '<not serializable>';
+    }
+    targetSpan.setAttribute('gcp.vertex.agent.tool_response', toolResponseJson);
   } else {
     targetSpan.setAttribute('gcp.vertex.agent.tool_response', '{}');
   }
@@ -1543,9 +1600,71 @@ const Set<String> _credentialSecretKeys = <String>{
   'codeVerifier',
   'service_account_credential',
   'serviceAccountCredential',
+  'private_key_id',
+  'privateKeyId',
   'private_key',
   'privateKey',
 };
+
+const Set<String> _standaloneSerializedSecretKeys = <String>{
+  'password',
+  'additional_headers',
+  'additionalHeaders',
+  'client_secret',
+  'clientSecret',
+  'auth_response_uri',
+  'authResponseUri',
+  'auth_code',
+  'authCode',
+  'access_token',
+  'accessToken',
+  'refresh_token',
+  'refreshToken',
+  'id_token',
+  'idToken',
+  'code_verifier',
+  'codeVerifier',
+  'service_account_credential',
+  'serviceAccountCredential',
+  'private_key_id',
+  'privateKeyId',
+  'private_key',
+  'privateKey',
+};
+
+bool _isJsonSchemaDescriptor(Object? value) {
+  if (value is! Map || value['type'] is! String) {
+    return false;
+  }
+  const Set<String> schemaMetaKeys = <String>{
+    'type',
+    'description',
+    'nullable',
+    'items',
+    'properties',
+    'required',
+    'enum',
+    'default',
+    'format',
+    'title',
+    'anyOf',
+    'oneOf',
+    'allOf',
+    r'$ref',
+  };
+  return value.keys.every((Object? k) => schemaMetaKeys.contains('$k'));
+}
+
+bool _isStandaloneHttpCredentialsMap(Map<Object?, Object?> map) {
+  if (map.isEmpty) {
+    return false;
+  }
+  const Set<String> httpCredKeys = <String>{'username', 'password', 'token'};
+  if (!map.keys.every((Object? k) => httpCredKeys.contains('$k'))) {
+    return false;
+  }
+  return map.containsKey('username') || map.containsKey('password');
+}
 
 String _formatJsonMapKey(Object? key) {
   if (key is String) {
@@ -1580,6 +1699,76 @@ String _formatJsonMapKey(Object? key) {
 Object? maskCredentialValues(Object? value, Object? dumped) {
   if (isCredentialType(value)) {
     return redacted;
+  }
+  if (value is FunctionResponse && dumped is Map) {
+    final Map<String, Object?> masked = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in dumped.entries)
+        '${entry.key}': entry.value,
+    };
+    if (masked.containsKey('response')) {
+      masked['response'] = maskCredentialValues(
+        value.response,
+        masked['response'],
+      );
+    }
+    return masked;
+  }
+  if (value is FunctionCall && dumped is Map) {
+    final Map<String, Object?> masked = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in dumped.entries)
+        '${entry.key}': entry.value,
+    };
+    if (masked.containsKey('args')) {
+      masked['args'] = maskCredentialValues(value.args, masked['args']);
+    }
+    return masked;
+  }
+  if (value is Part && dumped is Map) {
+    final Map<String, Object?> masked = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in dumped.entries)
+        '${entry.key}': entry.value,
+    };
+    if (value.functionCall != null) {
+      for (final String k in const <String>['function_call', 'functionCall']) {
+        if (masked.containsKey(k)) {
+          masked[k] = maskCredentialValues(value.functionCall, masked[k]);
+        }
+      }
+    }
+    if (value.functionResponse != null) {
+      for (final String k in const <String>[
+        'function_response',
+        'functionResponse',
+      ]) {
+        if (masked.containsKey(k)) {
+          masked[k] = maskCredentialValues(value.functionResponse, masked[k]);
+        }
+      }
+    }
+    return masked;
+  }
+  if (value is Content && dumped is Map) {
+    final Map<String, Object?> masked = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in dumped.entries)
+        '${entry.key}': entry.value,
+    };
+    if (masked['parts'] is List) {
+      masked['parts'] = maskCredentialValues(value.parts, masked['parts']);
+    }
+    return masked;
+  }
+  if (value is Event && dumped is Map) {
+    final Map<String, Object?> masked = <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in dumped.entries)
+        '${entry.key}': entry.value,
+    };
+    if (value.content != null && masked.containsKey('content')) {
+      masked['content'] = maskCredentialValues(
+        value.content,
+        masked['content'],
+      );
+    }
+    return masked;
   }
   if (value is Map && dumped is Map) {
     final Map<String, Object?> byDumpKey = <String, Object?>{};
@@ -1669,9 +1858,23 @@ Object? _redactCredentialSecrets(Object? value) {
   if (value['raw_auth_credential'] is Map ||
       value['rawAuthCredential'] is Map ||
       value['exchanged_auth_credential'] is Map ||
-      value['exchangedAuthCredential'] is Map) {
+      value['exchangedAuthCredential'] is Map ||
+      value['auth_scheme'] is Map ||
+      value['authScheme'] is Map) {
     return _redactAuthConfigSecrets(value);
   }
+  if (_isStandaloneHttpCredentialsMap(value)) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        '${entry.key}':
+            ('${entry.key}' == 'password' || '${entry.key}' == 'token') &&
+                entry.value != null
+            ? redacted
+            : entry.value,
+    };
+  }
+  final bool isStandaloneHttpAuthMap =
+      value['scheme'] is String && value['credentials'] is Map;
 
   final Map<String, Object?> out = <String, Object?>{};
   for (final MapEntry<Object?, Object?> entry in value.entries) {
@@ -1691,6 +1894,10 @@ Object? _redactCredentialSecrets(Object? value) {
         }
       }
       out[key] = argsCopy;
+    } else if (key == 'response' &&
+        value['name'] == requestEucFunctionCallName &&
+        item is Map) {
+      out[key] = _redactAuthConfigSecrets(item);
     } else if ((key == 'requested_auth_configs' ||
             key == 'requestedAuthConfigs') &&
         item is Map) {
@@ -1700,6 +1907,22 @@ Object? _redactCredentialSecrets(Object? value) {
               ? _redactAuthConfigSecrets(cfgEntry.value as Map)
               : _redactCredentialSecrets(cfgEntry.value),
       };
+    } else if (isStandaloneHttpAuthMap &&
+        key == 'credentials' &&
+        item is Map) {
+      out[key] = <String, Object?>{
+        for (final MapEntry<Object?, Object?> credEntry in item.entries)
+          '${credEntry.key}':
+              ('${credEntry.key}' == 'password' ||
+                      '${credEntry.key}' == 'token') &&
+                  credEntry.value != null
+              ? redacted
+              : _redactCredentialSecrets(credEntry.value),
+      };
+    } else if (_standaloneSerializedSecretKeys.contains(key) &&
+        item != null &&
+        !_isJsonSchemaDescriptor(item)) {
+      out[key] = redacted;
     } else {
       out[key] = _redactCredentialSecrets(item);
     }
@@ -1767,7 +1990,14 @@ Object? _redactCredentials(Object? value, Set<int> active) {
       final Object? masked = maskCredentialValues(value, dumped);
       return _redactCredentials(masked, active);
     } on NoSuchMethodError {
-      // Fall through to string representation when `toJson` is absent.
+      // Fall through to `toMap` or string representation when `toJson` is absent.
+    }
+    try {
+      final Object? dumped = (value as dynamic).toMap();
+      final Object? masked = maskCredentialValues(value, dumped);
+      return _redactCredentials(masked, active);
+    } on NoSuchMethodError {
+      // Fall through to string representation when `toMap` is absent.
     }
     return '$value';
   } finally {

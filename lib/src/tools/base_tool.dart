@@ -21,19 +21,8 @@ enum ToolBehavior {
   final String wireValue;
 }
 
-final Expando<ToolBehavior> _liveDeclarationBehavior = Expando<ToolBehavior>(
-  'FunctionDeclaration.behavior',
-);
-
-/// Live function-declaration behavior attached to [FunctionDeclaration].
-extension LiveFunctionDeclarationBehavior on FunctionDeclaration {
-  /// Optional Live API tool behavior (`BLOCKING` or `NON_BLOCKING`).
-  ToolBehavior? get behavior => _liveDeclarationBehavior[this];
-
-  set behavior(ToolBehavior? value) {
-    _liveDeclarationBehavior[this] = value;
-  }
-}
+/// Live function-declaration behavior compatibility extension on [FunctionDeclaration].
+extension LiveFunctionDeclarationBehavior on FunctionDeclaration {}
 
 /// Base contract for one callable tool exposed to the model runtime.
 abstract class BaseTool {

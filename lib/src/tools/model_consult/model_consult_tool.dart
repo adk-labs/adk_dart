@@ -225,14 +225,45 @@ void _recordAdvisorTelemetry({
       instrumentorVersion: getGenAiInstrumentorVersionForTest(),
       environment: environment,
     );
-    if (!instrumentorRecords && !emitInferenceTokens) {
+    if (instrumentorRecords && !emitInferenceTokens) {
       return;
+    }
+
+    List<LlmResponse> normalizedResponses = responses;
+    Object? lastUsageMeta;
+    String? lastModelVersion;
+    for (final LlmResponse response in responses) {
+      if (response.usageMetadata != null) {
+        lastUsageMeta = response.usageMetadata;
+      }
+      if (response.modelVersion != null && response.modelVersion!.isNotEmpty) {
+        lastModelVersion = response.modelVersion;
+      }
+    }
+    if (responses.isNotEmpty) {
+      final LlmResponse last = responses.last;
+      final Object? mergedUsage = last.usageMetadata ?? lastUsageMeta;
+      final String? mergedModelVersion =
+          (last.modelVersion != null && last.modelVersion!.isNotEmpty)
+          ? last.modelVersion
+          : lastModelVersion;
+      if (!identical(mergedUsage, last.usageMetadata) ||
+          mergedModelVersion != last.modelVersion) {
+        final LlmResponse tail = last.copyWith(
+          usageMetadata: mergedUsage,
+          modelVersion: mergedModelVersion,
+        );
+        normalizedResponses = <LlmResponse>[
+          ...responses.sublist(0, responses.length - 1),
+          tail,
+        ];
+      }
     }
 
     if (!instrumentorRecords) {
       String? responseModel;
       final List<String> finishReasons = <String>[];
-      for (final LlmResponse response in responses) {
+      for (final LlmResponse response in normalizedResponses) {
         if (response.modelVersion != null &&
             response.modelVersion!.isNotEmpty) {
           responseModel = response.modelVersion;
@@ -245,26 +276,28 @@ void _recordAdvisorTelemetry({
           }
         }
       }
-      final String systemName = resolveGenAiProviderName(
-        request.model,
+      final int schemaVer = resolveTelemetrySchemaVersion(
         environment: environment,
       );
+      final String providerName = schemaVer < schemaVersionSemconvAligned
+          ? resolveGenAiSystemNameV1(request.model, environment: environment)
+          : resolveGenAiProviderName(request.model, environment: environment);
       recordClientOperationDuration(
         agentName,
         duration,
         requestModel: request.model,
         responseModel: responseModel ?? request.model,
-        system: systemName,
+        system: providerName,
         finishReasons: finishReasons.isEmpty ? null : finishReasons,
         error: error,
         recorder: recorder,
       );
-      if (responses.isNotEmpty) {
+      if (lastUsageMeta != null && normalizedResponses.isNotEmpty) {
         recordClientTokenUsage(
           agentName: agentName,
           llmRequest: request,
-          responses: responses,
-          system: systemName,
+          responses: normalizedResponses,
+          system: providerName,
           error: error,
           environment: environment,
           recorder: recorder,
@@ -275,7 +308,7 @@ void _recordAdvisorTelemetry({
     if (emitInferenceTokens) {
       recordSemconvInferenceTokenUsage(
         llmRequest: request,
-        responses: responses,
+        responses: normalizedResponses,
         error: error,
         environment: environment,
         recorder: recorder,

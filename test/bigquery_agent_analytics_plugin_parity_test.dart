@@ -558,7 +558,7 @@ void main() {
 
       expect(sink.rows, hasLength(1));
       expect(sink.rows.first['event_type'], 'LLM_REQUEST');
-      expect(sink.rows.first['content'], isNull);
+      expect(sink.rows.first['content'], '[FORMATTER_FAILED]');
       expect(sink.rows.first['content_parts'], isEmpty);
     });
 

@@ -19,6 +19,7 @@ import '../../auth/auth_tool.dart';
 import '../../events/event.dart';
 import '../../events/event_actions.dart';
 import '../../plugins/base_plugin.dart';
+import '../../telemetry/tracing.dart';
 import '../../tools/agent_tool.dart';
 import '../../tools/base_tool.dart';
 import '../../tools/computer_use/computer_use_tool.dart';
@@ -1605,9 +1606,27 @@ Map<String, dynamic> _startLiveStreamingResult({
           ),
         ],
       );
-      invocationContext.liveRequestQueue!.sendContent(content);
+      invocationContext.liveRequestQueue!.sendContent(content, partial: true);
     },
     onError: (Object _) {
+      if (!invocationContext.isAborted &&
+          invocationContext.liveRequestQueue != null) {
+        final Part errorPart = Part.fromFunctionResponse(
+          name: tool.name,
+          id: callId,
+          response: <String, dynamic>{
+            'error': 'Invoking `${tool.name}()` failed with an internal error.',
+          },
+        );
+        if (tool.responseScheduling != null &&
+            errorPart.functionResponse != null) {
+          errorPart.functionResponse!.scheduling = tool.responseScheduling;
+        }
+        invocationContext.liveRequestQueue!.sendContent(
+          Content(role: 'user', parts: <Part>[errorPart]),
+          partial: false,
+        );
+      }
       invocationContext.activeBackgroundTools.remove(callId);
       if (identical(streamingMap[tool.name], streamingEntry)) {
         streamingMap.remove(tool.name);
@@ -2019,7 +2038,7 @@ Future<void> _pumpLiveStreamResult({
         part.functionResponse!.scheduling = tool.responseScheduling;
       }
       final Content content = Content(role: 'user', parts: <Part>[part]);
-      invocationContext.liveRequestQueue!.sendContent(content);
+      invocationContext.liveRequestQueue!.sendContent(content, partial: true);
     },
     onError: (Object error, StackTrace stackTrace) {
       if (identical(streamingMap[tool.name], legacyEntry)) {
@@ -2110,6 +2129,30 @@ void launchFunctionCallLive({
   invocationContext.activeBackgroundTools[callId] = currentEntry;
 
   unawaited(() async {
+    final int spanStartUnixNano = DateTime.now().microsecondsSinceEpoch * 1000;
+    BaseTool? resolvedToolForSpan;
+    bool pendingResponseEmitted = false;
+
+    void recordLiveToolSpan(
+      BaseTool spanTool,
+      Event? responseEvent, {
+      Object? error,
+      String? errorType,
+    }) {
+      tracer.inSpan('execute_tool ${spanTool.name}', (TraceSpanRecord span) {
+        span.startTimeUnixNano = spanStartUnixNano;
+        span.endTimeUnixNano = DateTime.now().microsecondsSinceEpoch * 1000;
+        traceToolCall(
+          spanTool,
+          functionArgs,
+          responseEvent,
+          error: error,
+          errorType: errorType,
+          span: span,
+        );
+      });
+    }
+
     try {
       final ToolContext toolContext = Context(
         invocationContext,
@@ -2125,6 +2168,7 @@ void launchFunctionCallLive({
         } else {
           tool = _getTool(functionCall, toolsDict);
         }
+        resolvedToolForSpan = tool;
       } catch (error) {
         if (isCancelled()) {
           return;
@@ -2154,6 +2198,14 @@ void launchFunctionCallLive({
           toolContext: toolContext,
           invocationContext: invocationContext,
         )..liveSessionId = liveSessionId;
+        recordLiveToolSpan(
+          missing,
+          missingEvent,
+          error: callbackResponse == null ? exception : null,
+          errorType: callbackResponse != null
+              ? missing.detectErrorInResponse(onError)
+              : null,
+        );
         functionResponseQueue.putNowait(missingEvent);
         return;
       }
@@ -2249,6 +2301,12 @@ void launchFunctionCallLive({
               : finalPendingResponse,
         )..liveSessionId = liveSessionId;
         _applyResponseScheduling(pendingEvent, tool);
+        recordLiveToolSpan(
+          tool,
+          pendingEvent,
+          errorType: tool.detectErrorInResponse(finalPendingResponse),
+        );
+        pendingResponseEmitted = true;
         functionResponseQueue.putNowait(pendingEvent);
 
         if (shouldStartStream && !isCancelled()) {
@@ -2290,6 +2348,7 @@ void launchFunctionCallLive({
             }
             liveRequestQueue.sendContent(
               Content(role: 'user', parts: <Part>[part]),
+              partial: false,
             );
           }
         }
@@ -2474,6 +2533,7 @@ void launchFunctionCallLive({
       if ((tool.isLongRunning || tool.defersResponse) &&
           finalResponse.isEmpty &&
           dynamicStream == null) {
+        recordLiveToolSpan(tool, null);
         return;
       }
 
@@ -2487,6 +2547,12 @@ void launchFunctionCallLive({
             : finalResponse,
       )..liveSessionId = liveSessionId;
       _applyResponseScheduling(responseEvent, tool);
+      recordLiveToolSpan(
+        tool,
+        responseEvent,
+        errorType: tool.detectErrorInResponse(finalResponse),
+      );
+      pendingResponseEmitted = true;
       functionResponseQueue.putNowait(responseEvent);
 
       if (dynamicStream != null && !isCancelled()) {
@@ -2515,15 +2581,29 @@ void launchFunctionCallLive({
         error: error,
         stackTrace: stackTrace,
       );
-      functionResponseQueue.putNowait(
-        _buildLiveInternalErrorResponseEvent(
-          invocationContext: invocationContext,
-          toolName: toolName,
-          functionCallId: callId,
-          liveSessionId: liveSessionId,
-          scheduling: toolsDict[toolName]?.responseScheduling,
-        ),
+      final Event errorEvent = _buildLiveInternalErrorResponseEvent(
+        invocationContext: invocationContext,
+        toolName: toolName,
+        functionCallId: callId,
+        liveSessionId: liveSessionId,
+        scheduling: toolsDict[toolName]?.responseScheduling,
       );
+      if (!pendingResponseEmitted) {
+        recordLiveToolSpan(
+          resolvedToolForSpan ?? _MissingTool(toolName),
+          errorEvent,
+          error: error,
+        );
+        functionResponseQueue.putNowait(errorEvent);
+      } else if (invocationContext.liveRequestQueue != null &&
+          errorEvent.content != null) {
+        invocationContext.liveRequestQueue!.sendContent(
+          errorEvent.content!,
+          partial: false,
+        );
+      } else {
+        functionResponseQueue.putNowait(errorEvent);
+      }
     } finally {
       if (identical(
         invocationContext.activeBackgroundTools[callId],

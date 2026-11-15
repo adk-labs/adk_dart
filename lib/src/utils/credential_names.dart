@@ -2,6 +2,7 @@
 library;
 
 import '../auth/auth_credential.dart';
+import '../auth/auth_schemes.dart';
 import '../auth/auth_tool.dart';
 
 /// Placeholder substituted for redacted credential values.
@@ -17,6 +18,7 @@ const Set<String> credentialTypeNames = <String>{
   'HttpCredentials',
   'OAuth2Auth',
   'OAuth2Session',
+  'OpenIdConnectWithConfig',
   'ServiceAccount',
   'ServiceAccountAuth',
   'ServiceAccountCredential',
@@ -28,15 +30,20 @@ const Set<String> credentialTypeNames = <String>{
 /// Normalized parameter and mapping-key names that commonly carry secrets.
 const Set<String> credentialArgNames = <String>{
   'access_token',
+  'additional_headers',
   'api_key',
   'apikey',
   'auth_code',
+  'auth_config',
+  'auth_credential',
   'auth_header',
   'auth_headers',
+  'auth_response_uri',
   'auth_token',
   'authorization',
   'bearer_token',
   'client_secret',
+  'code_verifier',
   'cookie',
   'cookies',
   'credential',
@@ -48,6 +55,7 @@ const Set<String> credentialArgNames = <String>{
   'passwd',
   'password',
   'private_key',
+  'private_key_id',
   'proxy_authorization',
   'refresh_token',
   'secret',
@@ -65,9 +73,13 @@ const Set<String> credentialArgNames = <String>{
 const List<String> credentialArgSuffixes = <String>[
   '_api_key',
   '_apikey',
+  '_auth_config',
   '_auth_token',
+  '_authorization',
   '_bearer_token',
   '_client_secret',
+  '_cookie',
+  '_cookies',
   '_credential',
   '_credentials',
   '_jwt',
@@ -99,6 +111,7 @@ bool isCredentialType(Object? value) {
       value is HttpAuth ||
       value is HttpCredentials ||
       value is OAuth2Auth ||
+      value is OpenIdConnectWithConfig ||
       value is ServiceAccountAuth ||
       value is ServiceAccountCredential) {
     return true;

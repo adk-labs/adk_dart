@@ -922,7 +922,7 @@ void main() {
         userMessage: Content.userText('hello'),
       );
       final Map<String, Object?> defaultRow = defaultPlugin.loggedRows.single;
-      expect(defaultRow['content'], isNull);
+      expect(defaultRow['content'], '[FORMATTER_FAILED]');
       expect(defaultRow['error_message'], isNull);
       final Map<String, Object?> defaultAttrs =
           jsonDecode('${defaultRow['attributes']}') as Map<String, Object?>;
@@ -949,7 +949,7 @@ void main() {
         userMessage: Content.userText('hello'),
       );
       final Map<String, Object?> optInRow = optInPlugin.loggedRows.single;
-      expect(optInRow['content'], isNull);
+      expect(optInRow['content'], '[FORMATTER_FAILED]');
       expect('${optInRow['error_message']}', contains('formatter boom'));
       final Map<String, Object?> optInAttrs =
           jsonDecode('${optInRow['attributes']}') as Map<String, Object?>;

@@ -17,6 +17,7 @@ import '../agents/llm/task/finish_task_tool.dart';
 import '../models/base_llm.dart';
 import '../models/llm_request.dart';
 import '../memory/in_memory_memory_service.dart';
+import '../platform/uuid.dart';
 import '../plugins/base_plugin.dart';
 import '../plugins/plugin_manager.dart';
 import '../runners/runner.dart';
@@ -884,113 +885,175 @@ Future<_InlineAgentRunResult> _runAgentInCurrentSession({
 
   final Object? nodeInput = _toolArgsToNodeInput(agent, args);
   final Content userContent = _nodeInputToContent(nodeInput);
+  const String parentSessionMetaKey = '_adk_parent_session_id';
+  const String tempParentSessionStateKey =
+      '${State.tempPrefix}$parentSessionMetaKey';
+  final bool hadParentMeta = parentContext.privateMetadata.containsKey(
+    parentSessionMetaKey,
+  );
+  final Object? previousParentMeta =
+      parentContext.privateMetadata[parentSessionMetaKey];
+  final bool hadParentSessionState = parentContext.session.state.containsKey(
+    parentSessionMetaKey,
+  );
+  final Object? previousParentSessionState =
+      parentContext.session.state[parentSessionMetaKey];
+  final bool hadTempParentSessionState = parentContext.session.state
+      .containsKey(tempParentSessionStateKey);
+  final Object? previousTempParentSessionState =
+      parentContext.session.state[tempParentSessionStateKey];
+
   final InvocationContext childContext = parentContext.copyWith(
+    invocationId: 'e-${newUuid()}',
     agent: agent,
     branch: branch,
     isolationScope: isolationScope,
     userContent: userContent,
   );
-  if (!includePlugins) {
+  if (includePlugins) {
+    childContext.parentInvocationId = parentContext.invocationId;
+    if (parentContext.session.id.isNotEmpty) {
+      childContext.privateMetadata[parentSessionMetaKey] =
+          parentContext.session.id;
+    } else {
+      childContext.privateMetadata.remove(parentSessionMetaKey);
+    }
+  } else {
     childContext.pluginManager = PluginManager();
     childContext.parentInvocationId = null;
+    childContext.privateMetadata.remove(parentSessionMetaKey);
   }
 
-  if (appendUserContent) {
-    await _appendInlineEvent(
-      childContext,
-      Event(
-        invocationId: childContext.invocationId,
-        author: 'user',
-        branch: childContext.branch,
-        isolationScope: childContext.isolationScope,
-        content: userContent.copyWith(),
-      ),
-    );
+  void mergeFilteredStateDelta(Map<String, Object?> stateDelta) {
+    if (stateDelta.isEmpty) {
+      return;
+    }
+    for (final MapEntry<String, Object?> entry in stateDelta.entries) {
+      if (entry.key == parentSessionMetaKey ||
+          entry.key == tempParentSessionStateKey) {
+        continue;
+      }
+      toolContext.state[entry.key] = entry.value;
+    }
   }
 
-  final _InlineAgentRunResult result = _InlineAgentRunResult();
-  Map<String, dynamic>? pendingFinishArgs;
-  String? pendingFinishCallId;
-  bool finished = false;
-
-  await for (final Event emitted in agent.runAsync(childContext)) {
-    if (childContext.isAborted) {
-      return result;
+  try {
+    if (appendUserContent) {
+      await _appendInlineEvent(
+        childContext,
+        Event(
+          invocationId: childContext.invocationId,
+          author: 'user',
+          branch: childContext.branch,
+          isolationScope: childContext.isolationScope,
+          content: userContent.copyWith(),
+        ),
+      );
     }
 
-    if (finished) {
-      // A sibling tool's pause/confirmation request would strand the finished result.
-      if (emitted.getFunctionCalls().isNotEmpty) {
+    final _InlineAgentRunResult result = _InlineAgentRunResult();
+    Map<String, dynamic>? pendingFinishArgs;
+    String? pendingFinishCallId;
+    bool finished = false;
+
+    await for (final Event emitted in agent.runAsync(childContext)) {
+      if (childContext.isAborted) {
         return result;
       }
-      final Event? trailing = await _appendInlineEvent(childContext, emitted);
-      if (trailing != null && trailing.actions.stateDelta.isNotEmpty) {
-        toolContext.state.addAll(trailing.actions.stateDelta);
-      }
-      continue;
-    }
 
-    final Event? event = await _appendInlineEvent(childContext, emitted);
-    if (event == null || childContext.isAborted) {
-      return result;
-    }
-
-    if (event.actions.stateDelta.isNotEmpty) {
-      toolContext.state.addAll(event.actions.stateDelta);
-    }
-    if (event.partial != true && event.content != null) {
-      result.lastContent = event.content;
-    }
-    if (event.partial != true && event.groundingMetadata != null) {
-      result.lastGroundingMetadata = event.groundingMetadata;
-    }
-
-    for (final FunctionCall call in event.getFunctionCalls()) {
-      if (call.name == finishTaskToolName) {
-        pendingFinishCallId = call.id;
-        pendingFinishArgs = Map<String, dynamic>.from(call.args);
-      }
-    }
-
-    for (final FunctionResponse response in event.getFunctionResponses()) {
-      if (response.name == finishTaskToolName &&
-          (pendingFinishCallId == null || response.id == pendingFinishCallId)) {
-        if (_isFinishTaskError(response.response) ||
-            (event.errorMessage != null && event.errorMessage!.isNotEmpty)) {
-          result.taskOutput = <String, dynamic>{
-            'error':
-                event.errorMessage ??
-                response.response['error'] ??
-                finishTaskErrorResult,
-          };
+      if (finished) {
+        // A sibling tool's pause/confirmation request would strand the finished result.
+        if (emitted.getFunctionCalls().isNotEmpty) {
           return result;
         }
-        if (_isFinishTaskSuccess(response.response)) {
-          final String? transferTarget = event.actions.transferToAgent;
-          if (event.hasOutput) {
-            result.taskOutput = event.output;
-            if (transferTarget != null && transferTarget.isNotEmpty) {
-              result.transferToAgent = transferTarget;
-              return result;
-            }
-            finished = true;
-            break;
+        final Event? trailing = await _appendInlineEvent(childContext, emitted);
+        if (trailing != null && trailing.actions.stateDelta.isNotEmpty) {
+          mergeFilteredStateDelta(trailing.actions.stateDelta);
+        }
+        continue;
+      }
+
+      final Event? event = await _appendInlineEvent(childContext, emitted);
+      if (event == null || childContext.isAborted) {
+        return result;
+      }
+
+      if (event.actions.stateDelta.isNotEmpty) {
+        mergeFilteredStateDelta(event.actions.stateDelta);
+      }
+      if (event.partial != true && event.content != null) {
+        result.lastContent = event.content;
+      }
+      if (event.partial != true && event.groundingMetadata != null) {
+        result.lastGroundingMetadata = event.groundingMetadata;
+      }
+
+      for (final FunctionCall call in event.getFunctionCalls()) {
+        if (call.name == finishTaskToolName) {
+          pendingFinishCallId = call.id;
+          pendingFinishArgs = Map<String, dynamic>.from(call.args);
+        }
+      }
+
+      for (final FunctionResponse response in event.getFunctionResponses()) {
+        if (response.name == finishTaskToolName &&
+            (pendingFinishCallId == null ||
+                response.id == pendingFinishCallId)) {
+          if (_isFinishTaskError(response.response) ||
+              (event.errorMessage != null && event.errorMessage!.isNotEmpty)) {
+            result.taskOutput = <String, dynamic>{
+              'error':
+                  event.errorMessage ??
+                  response.response['error'] ??
+                  finishTaskErrorResult,
+            };
+            return result;
           }
-          if (pendingFinishArgs != null) {
-            result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
-            if (transferTarget != null && transferTarget.isNotEmpty) {
-              result.transferToAgent = transferTarget;
-              return result;
+          if (_isFinishTaskSuccess(response.response)) {
+            final String? transferTarget = event.actions.transferToAgent;
+            if (event.hasOutput) {
+              result.taskOutput = event.output;
+              if (transferTarget != null && transferTarget.isNotEmpty) {
+                result.transferToAgent = transferTarget;
+                return result;
+              }
+              finished = true;
+              break;
             }
-            finished = true;
-            break;
+            if (pendingFinishArgs != null) {
+              result.taskOutput = _extractTaskOutput(agent, pendingFinishArgs);
+              if (transferTarget != null && transferTarget.isNotEmpty) {
+                result.transferToAgent = transferTarget;
+                return result;
+              }
+              finished = true;
+              break;
+            }
           }
         }
       }
     }
-  }
 
-  return result;
+    return result;
+  } finally {
+    if (hadParentMeta) {
+      parentContext.privateMetadata[parentSessionMetaKey] = previousParentMeta;
+    } else {
+      parentContext.privateMetadata.remove(parentSessionMetaKey);
+    }
+    if (hadParentSessionState) {
+      parentContext.session.state[parentSessionMetaKey] =
+          previousParentSessionState;
+    } else {
+      parentContext.session.state.remove(parentSessionMetaKey);
+    }
+    if (hadTempParentSessionState) {
+      parentContext.session.state[tempParentSessionStateKey] =
+          previousTempParentSessionState;
+    } else {
+      parentContext.session.state.remove(tempParentSessionStateKey);
+    }
+  }
 }
 
 Future<Event?> _appendInlineEvent(
