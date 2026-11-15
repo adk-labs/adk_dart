@@ -839,9 +839,10 @@ class Interval {
   /// Converts this interval to JSON.
   Map<String, Object?> toJson() {
     return <String, Object?>{
-      'min_value': minValue,
+      // Pydantic serializes non-finite floats (e.g. inf) as null in JSON mode.
+      'min_value': minValue.isFinite ? minValue : null,
       'open_at_min': openAtMin,
-      'max_value': maxValue,
+      'max_value': maxValue.isFinite ? maxValue : null,
       'open_at_max': openAtMax,
     };
   }

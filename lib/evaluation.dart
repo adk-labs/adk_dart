@@ -20,14 +20,17 @@
 /// @docImport 'src/evaluation/eval_set.dart';
 library;
 
+export 'src/agents/common_configs.dart' show ArgumentConfig, CodeConfig;
 export 'src/evaluation/_retry_options_utils.dart';
 export 'src/evaluation/agent_evaluator.dart';
 export 'src/evaluation/app_details.dart';
+export 'src/evaluation/audio_utils.dart';
 export 'src/evaluation/base_eval_service.dart';
 export 'src/evaluation/common.dart';
 export 'src/evaluation/constants.dart';
 export 'src/evaluation/conversation_scenarios.dart';
 export 'src/evaluation/custom_metric_evaluator.dart';
+export 'src/evaluation/efficiency_evaluators.dart';
 export 'src/evaluation/eval_case.dart';
 export 'src/evaluation/eval_case_result_multi_run_aggregator.dart';
 export 'src/evaluation/eval_config.dart';

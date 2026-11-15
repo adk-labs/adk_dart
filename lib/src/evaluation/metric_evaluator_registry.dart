@@ -3,6 +3,8 @@ library;
 
 import '../errors/not_found_error.dart';
 import 'custom_metric_evaluator.dart';
+import 'efficiency_evaluators.dart';
+import 'eval_config.dart';
 import 'eval_metrics.dart';
 import 'evaluator.dart';
 import 'final_response_match_v2.dart';
@@ -33,15 +35,26 @@ class _RegistryEntry {
 /// Registry mapping metric names to evaluator factories and metadata.
 class MetricEvaluatorRegistry {
   final Map<String, _RegistryEntry> _registry = <String, _RegistryEntry>{};
+  final Map<String, String> _customFunctionPaths = <String, String>{};
 
   /// Returns an evaluator for [evalMetric].
   ///
-  /// If [EvalMetricSpec.customFunctionPath] is set, this returns a
-  /// [CustomMetricEvaluator].
+  /// When a custom function path was registered from an [EvalConfig] via
+  /// [registerCustomMetricsFromConfig], that path takes precedence over
+  /// [EvalMetricSpec.customFunctionPath].
   Evaluator getEvaluator(EvalMetricSpec evalMetric) {
     final _RegistryEntry? entry = _registry[evalMetric.metricName];
     if (entry == null) {
       throw NotFoundError('${evalMetric.metricName} not found in registry.');
+    }
+
+    final String? registeredCustomPath =
+        _customFunctionPaths[evalMetric.metricName];
+    if (registeredCustomPath != null && registeredCustomPath.isNotEmpty) {
+      return CustomMetricEvaluator(
+        evalMetric: evalMetric,
+        customFunctionPath: registeredCustomPath,
+      );
     }
 
     if (evalMetric.customFunctionPath != null &&
@@ -59,10 +72,25 @@ class MetricEvaluatorRegistry {
     required MetricInfo metricInfo,
     required EvaluatorFactory evaluatorFactory,
   }) {
+    _register(
+      metricInfo: metricInfo,
+      evaluatorFactory: evaluatorFactory,
+      customFunctionPath: null,
+    );
+  }
+
+  void _register({
+    required MetricInfo metricInfo,
+    required EvaluatorFactory evaluatorFactory,
+    required String? customFunctionPath,
+  }) {
     _registry[metricInfo.metricName] = _RegistryEntry(
       factory: evaluatorFactory,
       metricInfo: metricInfo,
     );
+    if (customFunctionPath != null) {
+      _customFunctionPaths[metricInfo.metricName] = customFunctionPath;
+    }
   }
 
   /// Returns metadata for all registered metrics.
@@ -81,6 +109,7 @@ class MetricEvaluatorRegistry {
         metricInfo: MetricInfo.fromJson(entry.metricInfo.toJson()),
       );
     });
+    copy._customFunctionPaths.addAll(_customFunctionPaths);
     return copy;
   }
 }
@@ -170,9 +199,87 @@ MetricEvaluatorRegistry getDefaultMetricEvaluatorRegistry() {
         PerTurnUserSimulatorQualityV1(evalMetric),
   );
 
+  // Efficiency metrics.
+  registry.registerEvaluator(
+    metricInfo: ToolCallCountV1MetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        ToolCallCountV1Evaluator(evalMetric: evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: InferenceCallCountV1MetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        InferenceCallCountV1Evaluator(evalMetric: evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: TokenUsageV1MetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        TokenUsageV1Evaluator(evalMetric: evalMetric),
+  );
+  registry.registerEvaluator(
+    metricInfo: InvocationDurationV1MetricInfoProvider().getMetricInfo(),
+    evaluatorFactory: (EvalMetricSpec evalMetric) =>
+        InvocationDurationV1Evaluator(evalMetric: evalMetric),
+  );
+
   return registry;
 }
 
 /// Shared default evaluator registry instance.
 final MetricEvaluatorRegistry defaultMetricEvaluatorRegistry =
     getDefaultMetricEvaluatorRegistry();
+
+MetricInfo _getDefaultMetricInfo(String metricName, {String description = ''}) {
+  return MetricInfo(
+    metricName: metricName,
+    description: description,
+    metricValueInfo: MetricValueInfo(
+      interval: Interval(minValue: 0.0, maxValue: 1.0),
+    ),
+  );
+}
+
+/// Registers custom metrics declared in [evalConfig] into
+/// [metricEvaluatorRegistry] (or [defaultMetricEvaluatorRegistry] when omitted).
+///
+/// Entries without a `metricInfo` receive a default [MetricInfo] with a
+/// `[0.0, 1.0]` value interval. Returns the registry in which the metrics were
+/// registered.
+MetricEvaluatorRegistry registerCustomMetricsFromConfig(
+  EvalConfig evalConfig, [
+  MetricEvaluatorRegistry? metricEvaluatorRegistry,
+]) {
+  final MetricEvaluatorRegistry targetRegistry =
+      metricEvaluatorRegistry ?? defaultMetricEvaluatorRegistry;
+  final Map<String, CustomMetricConfig>? customMetrics =
+      evalConfig.customMetrics;
+  if (customMetrics == null || customMetrics.isEmpty) {
+    return targetRegistry;
+  }
+
+  customMetrics.forEach((String metricName, CustomMetricConfig config) {
+    final MetricInfo metricInfo;
+    if (config.metricInfo != null) {
+      final Map<String, Object?> copiedJson = config.metricInfo!.toJson();
+      copiedJson['metric_name'] = metricName;
+      copiedJson.remove('metricName');
+      metricInfo = MetricInfo.fromJson(copiedJson);
+    } else {
+      metricInfo = _getDefaultMetricInfo(
+        metricName,
+        description: config.description,
+      );
+    }
+
+    final String functionPath = config.codeConfig.name;
+    targetRegistry._register(
+      metricInfo: metricInfo,
+      evaluatorFactory: (EvalMetricSpec evalMetric) => CustomMetricEvaluator(
+        evalMetric: evalMetric,
+        customFunctionPath: functionPath,
+      ),
+      customFunctionPath: functionPath,
+    );
+  });
+
+  return targetRegistry;
+}
