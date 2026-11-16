@@ -42,7 +42,7 @@ dart pub add adk_mcp
 
 ```yaml
 dependencies:
-  adk_mcp: ^2026.11.15
+  adk_mcp: ^2026.11.16
 ```
 
 ## 参考

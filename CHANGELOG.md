@@ -1,3 +1,14 @@
+## 2026.11.16
+
+- **Upstream `adk-python` Parity (`287c0b0e6..c6586f19a`)**:
+  - Updated `adkPackageVersion` to `'2026.11.16'` (`adkVersion = '2.14.1'`).
+  - **Environment `workingDir` Discovery Before Initialization (`d05e48203`)**:
+    - Added non-abstract `Directory? get workingDir` on `BaseEnvironment` (defaulting to `null` when unknown), made `LocalEnvironment()` report `workingDir == null` until `initialize()` creates a temporary workspace (and reset to `null` on `close()`), and exposed fixed sandbox paths (`DaytonaEnvironment`, `E2BEnvironment`, `OpenSandboxEnvironment`, `AgentEngineEnvironment`) immediately before `initialize()` and after `close()`.
+    - Added `workingDirOrNone` (tolerating legacy `StateError` before `initialize()`) and updated `EnvironmentToolset` and `SkillToolset` to advertise the environment / skills directory based on `workingDir` rather than `isInitialized` without prematurely starting sandboxes.
+  - **`DYNAMIC_INSTRUCTION_ROUTING` Enabled by Default (`c6586f19a`)**:
+    - Added `FeatureName.dynamicInstructionRouting` (`defaultOn: true`) and synced upstream `FeatureName` registry entries (`eventarcToolConfig`, `fallbackModel`, `inMemorySessionServiceLightCopy`, `livekit`, `mongodbToolSettings`, `mongodbToolset`, `skillLifecycle`).
+    - Added `LlmRequest.appendDynamicInstructions`, `LlmRequest.insertTransientUserContent`, `labelDynamicInstruction` (`<<<BEGIN_SYSTEM_INSTRUCTION>>>` ... `<<<END_SYSTEM_INSTRUCTION>>>` fencing with marker elision), and `finalizeDynamicInstructions` / `DynamicInstructionsLlmRequestProcessor` in `BaseLlmFlow`, routing tool-contributed dynamic instructions (`LoadArtifactsTool`, `LoadMcpResourceTool`) and `PreloadMemoryTool` context into transient user content while preserving static-instruction cache prefixes.
+
 ## 2026.11.15
 
 - **Nov 14 Sync Parity Fixes (`df9f9d045..287c0b0e6` follow-up)**:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.16
+
+- Bumped package version to `2026.11.16` and dependency `adk_dart: ^2026.11.16`.
+- Synced CLI feature registry and runtime flows with `adk_dart` `2026.11.16` (`287c0b0e6..c6586f19a` parity).
+
 ## 2026.11.15
 
 - Bumped package version to `2026.11.15` and dependency `adk_dart: ^2026.11.15`.
