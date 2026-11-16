@@ -337,12 +337,17 @@ class E2BEnvironment extends BaseEnvironment {
     this.apiKey,
     Map<String, String>? envVars,
     E2BSandboxClient? client,
-    super.workingDirectory,
+    Directory? workingDir,
+    Directory? workingDirectory,
   }) : envVars = envVars == null
            ? null
            : Map<String, String>.unmodifiable(envVars),
        _client = client ?? HttpE2BSandboxClient(apiKey: apiKey),
-       _hasExplicitWorkingDir = workingDirectory != null;
+       _explicitWorkingDir = workingDir ?? workingDirectory,
+       super(
+         workingDirectory:
+             workingDir ?? workingDirectory ?? Directory(e2bSandboxHome),
+       );
 
   /// E2B sandbox template name or ID.
   final String image;
@@ -357,7 +362,7 @@ class E2BEnvironment extends BaseEnvironment {
   final Map<String, String>? envVars;
 
   final E2BSandboxClient _client;
-  final bool _hasExplicitWorkingDir;
+  final Directory? _explicitWorkingDir;
   bool _initialized = false;
 
   /// Underlying [E2BSandboxClient] used by this environment.
@@ -375,16 +380,12 @@ class E2BEnvironment extends BaseEnvironment {
 
   /// Returns the sandbox working directory (`/home/user` by default).
   ///
-  /// Throws a [StateError] if [initialize] has not been called.
-  Directory get workingDir {
-    if (!_initialized) {
-      throw StateError('Sandbox is not started. Call initialize() first.');
-    }
-    return Directory(_sandboxWorkingDirPath);
-  }
+  /// A fixed path in every sandbox, known before [initialize] starts one.
+  @override
+  Directory get workingDir => Directory(_sandboxWorkingDirPath);
 
   String get _sandboxWorkingDirPath =>
-      _hasExplicitWorkingDir ? workingDirectory.path : e2bSandboxHome;
+      _explicitWorkingDir?.path ?? e2bSandboxHome;
 
   String _resolvePath(Object path) {
     final String rawPath = switch (path) {

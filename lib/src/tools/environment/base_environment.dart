@@ -78,12 +78,24 @@ class EnvironmentExecutionResult {
 
 /// Contract for environments that expose shell execution and file I/O.
 abstract class BaseEnvironment {
-  /// Creates an environment rooted at [workingDirectory].
-  BaseEnvironment({Directory? workingDirectory})
-    : workingDirectory = (workingDirectory ?? Directory.current).absolute;
+  /// Creates an environment optionally rooted at [workingDirectory] (or [workingDir]).
+  BaseEnvironment({Directory? workingDirectory, Directory? workingDir})
+    : _configuredWorkingDirectory = (workingDir ?? workingDirectory)?.absolute;
 
-  /// Workspace root used by environment operations.
-  final Directory workingDirectory;
+  final Directory? _configuredWorkingDirectory;
+
+  /// The absolute path to the environment's working directory.
+  ///
+  /// `null` when the environment does not know its working directory yet,
+  /// for example a temporary directory that [initialize] creates. An
+  /// environment whose working directory is a fixed path returns it before
+  /// [initialize]. The default implementation returns `null` unless an
+  /// explicit directory was passed to [BaseEnvironment.new].
+  Directory? get workingDir => _configuredWorkingDirectory;
+
+  /// Workspace root used by environment operations when known, falling back to
+  /// `Directory.current.absolute` for backward compatibility.
+  Directory get workingDirectory => workingDir ?? Directory.current.absolute;
 
   /// Whether this environment has been initialized and not yet closed.
   bool isInitialized = false;

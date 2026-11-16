@@ -19,7 +19,8 @@ import 'base_environment.dart';
 const int _defaultTimeoutSeconds = 30;
 const int _defaultMaxOutputChars = 30000;
 
-/// System-instruction header template reporting the active environment directory.
+/// System-instruction header template prepended to the rules once the
+/// environment has a working directory.
 const String environmentWorkingDirInstruction =
     'Your environment is at {working_dir}/\n';
 
@@ -131,6 +132,20 @@ _AsyncEnvironmentLock _lockFor(BaseEnvironment environment) {
     _envLocks[environment] = lock;
   }
   return lock;
+}
+
+/// Returns [environment]'s working directory, or `null` when it has none yet.
+///
+/// Environments written before [BaseEnvironment.workingDir] could return `null`
+/// throw [StateError] from it until [BaseEnvironment.initialize] has run. That
+/// counts as `null` here, so reading it while building a model request does not
+/// fail.
+Directory? workingDirOrNone(BaseEnvironment environment) {
+  try {
+    return environment.workingDir;
+  } on StateError {
+    return null;
+  }
 }
 
 /// Returns `true` when [environment] currently has a weak per-environment lock entry.
@@ -426,18 +441,25 @@ class EnvironmentToolset extends BaseToolset {
         .toList(growable: false);
   }
 
+  /// Injects environment-level system instructions into [llmRequest].
+  ///
+  /// Does not initialize the environment. While the environment has no working
+  /// directory, the instruction leaves it out.
   @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
     required LlmRequest llmRequest,
   }) async {
     String instruction = environmentInstruction;
-    if (_environment.isInitialized) {
-      final String workingDir = environmentWorkingDirInstruction.replaceAll(
+    // TODO: Read the working directory through a method that takes `ctx`, so
+    // a session-scoped environment can answer from `ctx.state`.
+    final Directory? workingDir = workingDirOrNone(_environment);
+    if (workingDir != null) {
+      final String header = environmentWorkingDirInstruction.replaceAll(
         '{working_dir}',
-        _trimTrailingSeparator(_environment.workingDirectory.path),
+        _trimTrailingSeparator(workingDir.path),
       );
-      instruction = '$workingDir\n$instruction';
+      instruction = '$header\n$instruction';
     }
     llmRequest.appendInstructions(<String>[instruction]);
   }

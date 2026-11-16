@@ -12,6 +12,9 @@ import '../../agents/context.dart';
 import '../../environment/base_environment.dart';
 import '../../features/_feature_registry.dart';
 
+/// Default home directory inside Daytona sandboxes.
+const String daytonaSandboxHome = '/workspaces';
+
 /// A persistent remote workspace sandbox backed by Daytona.
 ///
 /// Provides isolated remote shell execution and file CRUD operations in the cloud.
@@ -24,9 +27,15 @@ class DaytonaEnvironment extends BaseEnvironment {
     this.timeout = const Duration(seconds: 300),
     this.envVars,
     Directory? workingDir,
+    Directory? workingDirectory,
     http.Client? httpClient,
   }) : _httpClient = httpClient,
-       super(workingDirectory: workingDir ?? Directory('/home/daytona'));
+       _workingDir =
+           workingDir ?? workingDirectory ?? Directory(daytonaSandboxHome),
+       super(
+         workingDirectory:
+             workingDir ?? workingDirectory ?? Directory(daytonaSandboxHome),
+       );
 
   /// Daytona API key. If null, resolved from `DAYTONA_API_KEY` env var.
   final String? apiKey;
@@ -44,7 +53,14 @@ class DaytonaEnvironment extends BaseEnvironment {
   final Map<String, String>? envVars;
 
   final http.Client? _httpClient;
+  final Directory _workingDir;
   String? _sandboxId;
+
+  /// Returns the sandbox working directory (`/workspaces` by default).
+  ///
+  /// A fixed path in every sandbox, known before [initialize] starts one.
+  @override
+  Directory get workingDir => _workingDir;
 
   /// Active Daytona sandbox identifier, if initialized.
   String? get sandboxId => _sandboxId;

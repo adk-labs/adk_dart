@@ -348,6 +348,29 @@ class ShellBackedAgentEngineSandboxClient
   }
 }
 
+/// Default workspace directory inside Agent Engine sandboxes.
+const String agentEngineSandboxWorkspace = '/workspace';
+
+Directory _coerceAgentEngineWorkingDir(
+  Object? workingDir, {
+  required Directory fallback,
+}) {
+  if (workingDir == null) {
+    return fallback;
+  }
+  if (workingDir is Directory) {
+    return workingDir;
+  }
+  if (workingDir is String) {
+    return Directory(workingDir);
+  }
+  throw ArgumentError.value(
+    workingDir,
+    'workingDir',
+    'Expected Directory or String.',
+  );
+}
+
 /// Execution environment backed by a Vertex AI Agent Engine (VMaaS) sandbox.
 ///
 /// ```dart
@@ -361,15 +384,25 @@ class AgentEngineEnvironment extends BaseEnvironment {
   AgentEngineEnvironment({
     this.agentEngineResourceName,
     this.sandboxResourceName,
-    this.workingDir = '/workspace',
+    Object? workingDir,
     this.ttl,
     this.sandboxConfig,
     this.deleteOnClose = false,
     this.maxUnreachableRetries = defaultMaxUnreachableRetries,
     this.unreachableRetryDelay = Duration.zero,
     AgentEngineEnvironmentClient? client,
-    super.workingDirectory,
-  }) : _client = client {
+    Directory? workingDirectory,
+  }) : _workingDir = _coerceAgentEngineWorkingDir(
+         workingDir,
+         fallback: workingDirectory ?? Directory(agentEngineSandboxWorkspace),
+       ),
+       _client = client,
+       super(
+         workingDirectory: _coerceAgentEngineWorkingDir(
+           workingDir,
+           fallback: workingDirectory ?? Directory(agentEngineSandboxWorkspace),
+         ),
+       ) {
     if ((agentEngineResourceName == null ||
             agentEngineResourceName!.trim().isEmpty) &&
         (sandboxResourceName == null || sandboxResourceName!.trim().isEmpty)) {
@@ -406,8 +439,13 @@ class AgentEngineEnvironment extends BaseEnvironment {
   /// Optional resource name of an existing Agent Engine sandbox.
   final String? sandboxResourceName;
 
-  /// Default working directory inside the sandbox.
-  final String workingDir;
+  final Directory _workingDir;
+
+  /// Default working directory inside the sandbox (`/workspace` by default).
+  ///
+  /// A fixed path in every sandbox, known before [initialize] starts one.
+  @override
+  Directory get workingDir => _workingDir;
 
   /// Optional time-to-live for newly created sandboxes.
   final Duration? ttl;
@@ -479,7 +517,7 @@ class AgentEngineEnvironment extends BaseEnvironment {
     final Duration effectiveTimeout = timeout > maxExecutionTimeout
         ? maxExecutionTimeout
         : timeout;
-    final String effectiveWorkingDir = workingDir ?? this.workingDir;
+    final String effectiveWorkingDir = workingDir ?? this.workingDir.path;
     final String wrappedCommand = _wrapCommandWithEnvAndWorkingDir(
       command: command,
       workingDir: effectiveWorkingDir,
@@ -619,7 +657,7 @@ class AgentEngineEnvironment extends BaseEnvironment {
     if (normalized.startsWith('/')) {
       return normalized;
     }
-    final String base = workingDir.replaceAll(RegExp(r'/+$'), '');
+    final String base = workingDir.path.replaceAll(RegExp(r'/+$'), '');
     return '$base/$normalized';
   }
 

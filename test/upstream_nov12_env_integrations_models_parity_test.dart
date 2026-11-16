@@ -55,8 +55,18 @@ Context _makeContext({String invocationId = 'inv_nov12'}) {
 }
 
 class _ContextCapturingEnvironment extends BaseEnvironment {
-  _ContextCapturingEnvironment({Directory? workingDirectory})
-    : super(workingDirectory: workingDirectory ?? Directory('/workspace'));
+  _ContextCapturingEnvironment({
+    Directory? workingDirectory,
+    Directory? initializedWorkingDirectory,
+  }) : _workingDir = workingDirectory,
+       _initializedWorkingDir =
+           initializedWorkingDirectory ?? Directory('/workspace');
+
+  Directory? _workingDir;
+  final Directory _initializedWorkingDir;
+
+  @override
+  Directory? get workingDir => _workingDir;
 
   final List<(String, Context?)> calls = <(String, Context?)>[];
   int initCount = 0;
@@ -75,6 +85,7 @@ class _ContextCapturingEnvironment extends BaseEnvironment {
     if (initError != null) {
       throw initError!;
     }
+    _workingDir ??= _initializedWorkingDir;
     isInitialized = true;
   }
 
@@ -713,10 +724,10 @@ void main() {
     );
 
     test(
-      'EnvironmentToolset defers initialization to tool calls and injects working_dir only after init',
+      'EnvironmentToolset defers initialization to tool calls and injects working_dir once known',
       () async {
         final _ContextCapturingEnvironment env = _ContextCapturingEnvironment(
-          workingDirectory: Directory('/workspace/proj'),
+          initializedWorkingDirectory: Directory('/workspace/proj'),
         );
         final EnvironmentToolset toolset = EnvironmentToolset(environment: env);
         final Context ctx = _makeContext(invocationId: 'inv_lazy_tools');

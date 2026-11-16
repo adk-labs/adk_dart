@@ -179,6 +179,29 @@ class HttpOpenSandboxClient implements OpenSandboxClient {
   }
 }
 
+/// Default working directory inside OpenSandbox containers.
+const String openSandboxHome = '/workspace';
+
+Directory _coerceOpenSandboxWorkingDir(
+  Object? workingDir, {
+  required Directory fallback,
+}) {
+  if (workingDir == null) {
+    return fallback;
+  }
+  if (workingDir is Directory) {
+    return workingDir;
+  }
+  if (workingDir is String) {
+    return Directory(workingDir);
+  }
+  throw ArgumentError.value(
+    workingDir,
+    'workingDir',
+    'Expected Directory or String.',
+  );
+}
+
 /// Execution environment backed by an OpenSandbox container instance.
 ///
 /// ```dart
@@ -192,26 +215,41 @@ class OpenSandboxEnvironment extends BaseEnvironment {
   /// Creates an OpenSandbox execution environment.
   OpenSandboxEnvironment({
     this.image = 'ubuntu:latest',
-    this.workingDir = '/workspace',
+    Object? workingDir,
     this.sandboxId,
     this.timeout = const Duration(minutes: 10),
     this.envVars = const <String, String>{},
     Uri? endpoint,
     String? apiKey,
     OpenSandboxClient? client,
-    super.workingDirectory,
-  }) : _client =
+    Directory? workingDirectory,
+  }) : _workingDir = _coerceOpenSandboxWorkingDir(
+         workingDir,
+         fallback: workingDirectory ?? Directory(openSandboxHome),
+       ),
+       _client =
            client ??
            HttpOpenSandboxClient(
              endpoint: endpoint ?? Uri.parse('http://localhost:8080'),
              apiKey: apiKey,
-           );
+           ),
+       super(
+         workingDirectory: _coerceOpenSandboxWorkingDir(
+           workingDir,
+           fallback: workingDirectory ?? Directory(openSandboxHome),
+         ),
+       );
 
   /// Container image used when creating a new sandbox.
   final String image;
 
-  /// Default working directory inside the sandbox.
-  final String workingDir;
+  final Directory _workingDir;
+
+  /// Default working directory inside the sandbox (`/workspace` by default).
+  ///
+  /// A fixed path in every sandbox, known before [initialize] starts one.
+  @override
+  Directory get workingDir => _workingDir;
 
   /// Optional pre-existing sandbox identifier to attach to.
   final String? sandboxId;
@@ -271,7 +309,7 @@ class OpenSandboxEnvironment extends BaseEnvironment {
     return _client.execute(
       sandboxId: _activeSandboxId!,
       command: command,
-      workingDir: workingDir ?? this.workingDir,
+      workingDir: workingDir ?? this.workingDir.path,
       timeout: timeout,
       envVars: mergedEnv.isEmpty ? null : mergedEnv,
     );
@@ -319,7 +357,7 @@ class OpenSandboxEnvironment extends BaseEnvironment {
     if (normalized.startsWith('/')) {
       return normalized;
     }
-    final String base = workingDir.replaceAll(RegExp(r'/+$'), '');
+    final String base = workingDir.path.replaceAll(RegExp(r'/+$'), '');
     return '$base/$normalized';
   }
 }

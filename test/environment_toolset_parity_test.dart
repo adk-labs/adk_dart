@@ -24,13 +24,9 @@ void main() {
     test(
       'injects environment instruction and exposes expected tools',
       () async {
-        final Directory workspace = await Directory.systemTemp.createTemp(
-          'environment_toolset_',
-        );
-        addTearDown(() => workspace.delete(recursive: true));
-
+        final LocalEnvironment environment = LocalEnvironment();
         final EnvironmentToolset toolset = EnvironmentToolset(
-          environment: LocalEnvironment(workingDirectory: workspace),
+          environment: environment,
         );
         final LlmRequest request = LlmRequest(model: 'test-model');
 
@@ -59,15 +55,17 @@ void main() {
           toolContext: _toolContext(),
           llmRequest: initializedRequest,
         );
+        expect(environment.workingDir, isNotNull);
         expect(
           initializedRequest.config.systemInstruction,
-          contains(workspace.path),
+          contains(environment.workingDir!.path),
         );
         expect(
           initializedRequest.config.systemInstruction,
           startsWith('Your environment is at '),
         );
         await toolset.close();
+        expect(environment.workingDir, isNull);
       },
     );
 

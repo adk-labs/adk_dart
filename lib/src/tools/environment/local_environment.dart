@@ -12,20 +12,57 @@ import 'base_environment.dart';
 const int _streamChunkSize = 64 * 1024;
 
 /// Local environment that executes commands and accesses files on disk.
+///
+/// When [workingDirectory] (or [workingDir]) is not specified, a temporary
+/// directory is created on [initialize] and removed on [close].
 class LocalEnvironment extends BaseEnvironment {
-  /// Creates a local environment rooted at [workingDirectory].
-  LocalEnvironment({super.workingDirectory});
+  /// Creates a local environment optionally rooted at [workingDirectory] (or [workingDir]).
+  LocalEnvironment({
+    Directory? workingDirectory,
+    Directory? workingDir,
+    Map<String, String>? envVars,
+  }) : _workingDir = (workingDir ?? workingDirectory)?.absolute,
+       envVars = envVars == null
+           ? null
+           : Map<String, String>.unmodifiable(envVars);
+
+  /// Extra environment variables merged into the subprocess environment.
+  final Map<String, String>? envVars;
+
+  Directory? _workingDir;
+  bool _autoCreated = false;
+
+  @override
+  Directory? get workingDir => _workingDir;
 
   @override
   Future<void> initialize({Context? ctx}) async {
-    if (!await workingDirectory.exists()) {
-      await workingDirectory.create(recursive: true);
+    if (_workingDir == null) {
+      final Directory created = await Directory.systemTemp.createTemp(
+        'adk_workspace_',
+      );
+      _workingDir = created.absolute;
+      _autoCreated = true;
+    } else if (!await _workingDir!.exists()) {
+      await _workingDir!.create(recursive: true);
     }
     isInitialized = true;
   }
 
   @override
   Future<void> close() async {
+    if (_autoCreated && _workingDir != null) {
+      final Directory dir = _workingDir!;
+      _workingDir = null;
+      _autoCreated = false;
+      try {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      } on FileSystemException {
+        // Ignore cleanup errors, matching upstream shutil.rmtree(..., ignore_errors=True).
+      }
+    }
     isInitialized = false;
   }
 
@@ -35,12 +72,17 @@ class LocalEnvironment extends BaseEnvironment {
     Duration timeout = const Duration(seconds: 30),
     Context? ctx,
   }) async {
-    await initialize(ctx: ctx);
+    final Directory dir = _requireWorkingDir();
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
 
-    final Process process = await Process.start('/bin/bash', <String>[
-      '-lc',
-      command,
-    ], workingDirectory: workingDirectory.path);
+    final Process process = await Process.start(
+      '/bin/bash',
+      <String>['-lc', command],
+      workingDirectory: dir.path,
+      environment: envVars,
+    );
     final Future<String> stdoutFuture = process.stdout
         .transform(utf8.decoder)
         .join();
@@ -68,13 +110,11 @@ class LocalEnvironment extends BaseEnvironment {
 
   @override
   Future<List<int>> readFile(Object path, {Context? ctx}) async {
-    await initialize(ctx: ctx);
     return _resolveFile(path).readAsBytes();
   }
 
   @override
   Stream<List<int>> readFileStream(Object path, {Context? ctx}) async* {
-    await initialize(ctx: ctx);
     final File file = _resolveFile(path);
     final RandomAccessFile raf = await file.open(mode: FileMode.read);
     try {
@@ -92,26 +132,35 @@ class LocalEnvironment extends BaseEnvironment {
 
   @override
   Future<void> writeFile(Object path, Object content, {Context? ctx}) async {
+    _requireWorkingDir();
     final Uint8List data = encodeWriteFileContent(content);
-    await initialize(ctx: ctx);
     final File file = _resolveFile(path);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(data, flush: true);
   }
 
+  Directory _requireWorkingDir() {
+    final Directory? dir = _workingDir;
+    if (dir == null) {
+      throw StateError('`working_dir` is not set. Call initialize() first.');
+    }
+    return dir;
+  }
+
   File _resolveFile(Object path) {
+    final Directory dir = _requireWorkingDir();
     final String input = _stringifyPath(path).trim();
     if (input.isEmpty) {
       throw ArgumentError('Path is required.');
     }
 
-    final Uri baseUri = workingDirectory.absolute.uri;
+    final Uri baseUri = dir.absolute.uri;
     final String normalizedInput = input.replaceAll('\\', '/');
     final Uri resolvedUri = _looksLikeAbsolutePath(input)
         ? Uri.file(input)
         : baseUri.resolve(normalizedInput);
     final String resolvedPath = File.fromUri(resolvedUri).absolute.path;
-    final String rootPath = workingDirectory.absolute.path;
+    final String rootPath = dir.absolute.path;
     final String rootPrefix = rootPath.endsWith(Platform.pathSeparator)
         ? rootPath
         : '$rootPath${Platform.pathSeparator}';

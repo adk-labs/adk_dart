@@ -116,16 +116,26 @@ class _CountingToolset extends BaseToolset {
 }
 
 class _FakeEnvironment extends BaseEnvironment {
-  _FakeEnvironment({super.workingDirectory});
+  _FakeEnvironment({
+    Directory? workingDirectory,
+    Directory? initializedWorkingDirectory,
+  }) : _workingDir = workingDirectory,
+       _initializedWorkingDir = initializedWorkingDirectory;
 
+  Directory? _workingDir;
+  final Directory? _initializedWorkingDir;
   int initializeCount = 0;
   int closeCount = 0;
   final Map<String, List<int>> writtenFiles = <String, List<int>>{};
   final List<String> executedCommands = <String>[];
 
   @override
+  Directory? get workingDir => _workingDir;
+
+  @override
   Future<void> initialize({Context? ctx}) async {
     initializeCount += 1;
+    _workingDir ??= _initializedWorkingDir;
     isInitialized = true;
   }
 
@@ -593,7 +603,12 @@ void main() {
         }
       });
 
-      final _FakeEnvironment env = _FakeEnvironment(workingDirectory: tempDir);
+      final _FakeEnvironment env = _FakeEnvironment(
+        initializedWorkingDirectory: tempDir,
+      );
+      final String tempDirPosix = tempDir.path
+          .replaceAll(r'\', '/')
+          .replaceAll(RegExp(r'/+$'), '');
       final Skill richSkill = Skill(
         frontmatter: Frontmatter(
           name: 'data-skill',
@@ -620,7 +635,7 @@ void main() {
       );
       final Context ctx = _makeContext();
 
-      // Before environment initialization, default skillsFolder is NOT advertised in system instructions.
+      // While workingDir is unknown, default skillsFolder is NOT advertised in system instructions.
       final LlmRequest beforeInitReq = LlmRequest();
       await toolset.processLlmRequest(
         toolContext: ctx,
@@ -628,7 +643,10 @@ void main() {
       );
       final String beforeSysInstruction =
           beforeInitReq.config.systemInstruction ?? '';
-      expect(beforeSysInstruction, isNot(contains('Skills location:')));
+      expect(
+        beforeSysInstruction,
+        isNot(contains('$tempDirPosix/skills/<skill_name>/')),
+      );
       expect(env.initializeCount, 0);
 
       final List<BaseTool> tools = await toolset.getTools(readonlyContext: ctx);
@@ -683,7 +701,7 @@ void main() {
       expect(env.initializeCount, 1);
       expect(
         env.writtenFiles.keys,
-        contains('/skills/data-skill/scripts/run.sh'),
+        contains('$tempDirPosix/skills/data-skill/scripts/run.sh'),
       );
 
       final LlmRequest afterInitReq = LlmRequest();
@@ -691,7 +709,10 @@ void main() {
         toolContext: ctx,
         llmRequest: afterInitReq,
       );
-      expect(afterInitReq.config.systemInstruction, contains('skills'));
+      expect(
+        afterInitReq.config.systemInstruction,
+        contains('$tempDirPosix/skills/<skill_name>/'),
+      );
 
       await toolset.close();
       expect(env.closeCount, 1);
