@@ -96,12 +96,13 @@ void main() {
       );
 
       await tool.processLlmRequest(toolContext: context, llmRequest: request);
+      expect(request.config.systemInstruction, isNull);
       expect(
-        request.config.systemInstruction,
+        request.dynamicInstructions.single,
         contains('You have a list of MCP resources'),
       );
       expect(
-        request.config.systemInstruction,
+        request.dynamicInstructions.single,
         contains('["docs://guide"]\n\nWhen the user asks'),
       );
       expect(

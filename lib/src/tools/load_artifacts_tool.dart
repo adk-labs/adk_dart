@@ -149,7 +149,7 @@ web UI).''',
     }
 
     if (artifactNames.isNotEmpty) {
-      llmRequest.appendInstructions(<String>[
+      llmRequest.appendDynamicInstructions(<String>[
         'You have a list of artifacts:\n'
             '  ${_jsonDumpsStringList(artifactNames)}\n\n'
             '  When the user asks questions about any of the artifacts, you should call the\n'
@@ -167,72 +167,83 @@ web UI).''',
     if (tail.parts.isEmpty) {
       return;
     }
-    final FunctionResponse? response = tail.parts.first.functionResponse;
-    if (response == null || response.name != name) {
-      return;
-    }
 
-    final Object? payloadNames = response.response['artifact_names'];
-    if (payloadNames is! List ||
-        !payloadNames.every((dynamic item) => item is String)) {
-      return;
-    }
-    final List<String> rawArtifactNames = payloadNames.cast<String>();
     final Set<String> availableNames = artifactNames.toSet();
-    for (final String requestedName in rawArtifactNames) {
-      final String? resolvedName = _resolveRequestedArtifactName(
-        requestedName,
-        availableNames,
-      );
-      if (resolvedName == null) {
-        final String? filteredOutName = _resolveRequestedArtifactName(
-          requestedName,
-          filteredOutNames,
+    for (final Part part in tail.parts) {
+      final FunctionResponse? response = part.functionResponse;
+      if (response == null || response.name != name) {
+        continue;
+      }
+
+      final Object? payloadNames = response.response['artifact_names'];
+      if (payloadNames is! List ||
+          !payloadNames.every((dynamic item) => item is String)) {
+        developer.log(
+          'Ignoring invalid artifact_names in load_artifacts response.',
+          name: 'adk_dart.tools.load_artifacts_tool',
         );
-        if (filteredOutName != null) {
-          developer.log(
-            'Artifact "$requestedName" was filtered out by '
-            'process_artifact_names and cannot be loaded.',
-            name: 'adk_dart.tools.load_artifacts_tool',
+        continue;
+      }
+      final List<String> rawArtifactNames = payloadNames.cast<String>();
+      for (final String requestedName in rawArtifactNames) {
+        final String? resolvedName = _resolveRequestedArtifactName(
+          requestedName,
+          availableNames,
+        );
+        if (resolvedName == null) {
+          final String? filteredOutName = _resolveRequestedArtifactName(
+            requestedName,
+            filteredOutNames,
           );
+          if (filteredOutName != null) {
+            developer.log(
+              'Artifact "$requestedName" was filtered out by '
+              'process_artifact_names and cannot be loaded.',
+              name: 'adk_dart.tools.load_artifacts_tool',
+            );
+          } else {
+            developer.log(
+              'Artifact "$requestedName" is not in the list of available '
+              'artifacts.',
+              name: 'adk_dart.tools.load_artifacts_tool',
+            );
+          }
+          continue;
+        }
+
+        String artifactName = resolvedName;
+        Part? artifact = await toolContext.loadArtifact(artifactName);
+        if (artifact == null &&
+            !artifactName.startsWith(_userNamespacePrefix)) {
+          artifactName = '$_userNamespacePrefix$artifactName';
+          artifact = await toolContext.loadArtifact(artifactName);
+        }
+        if (artifact == null) {
+          continue;
+        }
+
+        Part? processed;
+        if (processArtifact != null) {
+          processed = await processArtifact!(artifact, artifactName);
         } else {
-          developer.log(
-            'Artifact "$requestedName" is not in the list of available '
-            'artifacts.',
-            name: 'adk_dart.tools.load_artifacts_tool',
+          processed = _asSafePart(
+            artifact,
+            requestedName,
+            enableSpreadsheetParsing: enableSpreadsheetParsing,
           );
         }
-        continue;
-      }
 
-      String artifactName = resolvedName;
-      Part? artifact = await toolContext.loadArtifact(artifactName);
-      if (artifact == null && !artifactName.startsWith(_userNamespacePrefix)) {
-        artifactName = '$_userNamespacePrefix$artifactName';
-        artifact = await toolContext.loadArtifact(artifactName);
-      }
-      if (artifact == null) {
-        continue;
-      }
-
-      Part? processed;
-      if (processArtifact != null) {
-        processed = await processArtifact!(artifact, artifactName);
-      } else {
-        processed = _asSafePart(
-          artifact,
-          requestedName,
-          enableSpreadsheetParsing: enableSpreadsheetParsing,
-        );
-      }
-
-      if (processed != null) {
-        llmRequest.contents.add(
-          Content(
-            role: 'user',
-            parts: <Part>[Part.text('Artifact $requestedName is:'), processed],
-          ),
-        );
+        if (processed != null) {
+          llmRequest.contents.add(
+            Content(
+              role: 'user',
+              parts: <Part>[
+                Part.text('Artifact $requestedName is:'),
+                processed,
+              ],
+            ),
+          );
+        }
       }
     }
   }

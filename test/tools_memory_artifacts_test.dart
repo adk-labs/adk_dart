@@ -111,10 +111,13 @@ void main() {
     final LlmRequest request = LlmRequest();
 
     await tool.processLlmRequest(toolContext: toolContext, llmRequest: request);
-    expect(request.config.systemInstruction, contains('<PAST_CONVERSATIONS>'));
-    expect(request.config.systemInstruction, contains('stored'));
-    expect(request.config.systemInstruction, isNot(startsWith('\n')));
-    expect(request.config.systemInstruction, isNot(contains('memory: stored')));
+    expect(request.config.systemInstruction, isNull);
+    expect(request.contents, hasLength(1));
+    final String recalledText = request.contents.single.parts.single.text!;
+    expect(recalledText, contains('<PAST_CONVERSATIONS>'));
+    expect(recalledText, contains('stored'));
+    expect(recalledText, isNot(startsWith('\n')));
+    expect(recalledText, isNot(contains('memory: stored')));
   });
 
   test(
@@ -148,8 +151,9 @@ void main() {
         llmRequest: request,
       );
 
+      expect(request.config.systemInstruction, isNull);
       expect(
-        request.config.systemInstruction,
+        request.dynamicInstructions.single,
         startsWith('You have a list of artifacts:\n  ["report.txt"]'),
       );
       final bool hasArtifactBody = request.contents.any(

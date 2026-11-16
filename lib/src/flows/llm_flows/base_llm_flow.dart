@@ -35,9 +35,54 @@ import '../../tools/tool_context.dart';
 import '../../types/content.dart';
 import 'agent_transfer.dart';
 import 'audio_cache_manager.dart';
+import 'contents.dart' show addInstructionsToUserContent;
 import 'functions.dart' as flow_functions;
+import 'instructions.dart' show labelDynamicInstruction;
 import 'output_schema_processor.dart' as output_schema;
 import 'persist_barrier.dart';
+
+/// Finalizes and resolves tool-contributed dynamic instructions on [llmRequest].
+Future<void> finalizeDynamicInstructions(
+  InvocationContext invocationContext,
+  LlmRequest llmRequest,
+) async {
+  if (llmRequest.dynamicInstructions.isEmpty) {
+    return;
+  }
+
+  final String combinedText = llmRequest.dynamicInstructions.join('\n\n');
+
+  if (isFeatureEnabled(FeatureName.dynamicInstructionRouting)) {
+    final Content instructionContent = Content(
+      role: 'user',
+      parts: <Part>[Part.text(labelDynamicInstruction(combinedText))],
+    );
+    await addInstructionsToUserContent(
+      invocationContext,
+      llmRequest,
+      <Content>[instructionContent],
+    );
+  } else {
+    llmRequest.appendInstructions(<String>[combinedText]);
+  }
+
+  llmRequest.clearDynamicInstructions();
+}
+
+/// Request processor that folds tool-contributed dynamic instructions into the
+/// request after tools have been resolved.
+class DynamicInstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
+  /// Creates a dynamic instructions request processor.
+  DynamicInstructionsLlmRequestProcessor();
+
+  @override
+  Stream<Event> runAsync(
+    InvocationContext context,
+    LlmRequest request,
+  ) async* {
+    await finalizeDynamicInstructions(context, request);
+  }
+}
 
 /// Contract for preprocessing a model request into emitted events.
 abstract class BaseLlmRequestProcessor {
@@ -1539,6 +1584,7 @@ class BaseLlmFlow {
     }
 
     await _processAgentTools(context, request);
+    await finalizeDynamicInstructions(context, request);
   }
 
   Stream<Event> _resolveToolsetAuth(InvocationContext context) async* {

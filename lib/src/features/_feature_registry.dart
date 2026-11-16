@@ -47,6 +47,9 @@ enum FeatureName {
   /// Data Agent toolset integration.
   dataAgentToolset('DATA_AGENT_TOOLSET'),
 
+  /// Routes tool-contributed dynamic instructions into user content.
+  dynamicInstructionRouting('DYNAMIC_INSTRUCTION_ROUTING'),
+
   /// Daytona sandbox environment integration.
   daytonaEnvironment('DAYTONA_ENVIRONMENT'),
 
@@ -59,8 +62,14 @@ enum FeatureName {
   /// Environment simulation support for evaluation and testing.
   environmentSimulation('ENVIRONMENT_SIMULATION'),
 
+  /// Configuration options for Eventarc tools.
+  eventarcToolConfig('EVENTARC_TOOL_CONFIG'),
+
   /// Eventarc toolset integration.
   eventarcToolset('EVENTARC_TOOLSET'),
+
+  /// Model wrapper that falls back across candidate models on retriable errors.
+  fallbackModel('FALLBACK_MODEL'),
 
   /// Filesystem specification (fsspec) artifact service integration.
   fsspecArtifactService('FSSPEC_ARTIFACT_SERVICE'),
@@ -86,8 +95,14 @@ enum FeatureName {
   /// Google API tool wrapper support.
   googleTool('GOOGLE_TOOL'),
 
+  /// Lightweight session copy optimization for in-memory sessions.
+  inMemorySessionServiceLightCopy('IN_MEMORY_SESSION_SERVICE_LIGHT_COPY'),
+
   /// JSON Schema support in function declarations.
   jsonSchemaForFuncDecl('JSON_SCHEMA_FOR_FUNC_DECL'),
+
+  /// LiveKit realtime audio/video transport integration.
+  livekit('LIVEKIT'),
 
   /// MCP agent server integration.
   mcpAgentServer('MCP_AGENT_SERVER'),
@@ -103,6 +118,12 @@ enum FeatureName {
 
   /// MongoDB session service integration.
   mongodbSessionService('MONGODB_SESSION_SERVICE'),
+
+  /// Settings for MongoDB tools.
+  mongodbToolSettings('MONGODB_TOOL_SETTINGS'),
+
+  /// MongoDB toolset integration.
+  mongodbToolset('MONGODB_TOOLSET'),
 
   /// OpenAPI toolset integration.
   openapiToolset('OPENAPI_TOOLSET'),
@@ -124,6 +145,9 @@ enum FeatureName {
 
   /// Cloud Pub/Sub toolset integration.
   pubsubToolset('PUBSUB_TOOLSET'),
+
+  /// Lifecycle hooks for agent skills.
+  skillLifecycle('SKILL_LIFECYCLE'),
 
   /// Agent skill toolset support.
   skillToolset('SKILL_TOOLSET'),
@@ -256,6 +280,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.dynamicInstructionRouting: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.daytonaEnvironment: const FeatureConfig(
         FeatureStage.stable,
         defaultOn: true,
@@ -272,7 +300,15 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.eventarcToolConfig: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.eventarcToolset: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.fallbackModel: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),
@@ -307,8 +343,16 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.inMemorySessionServiceLightCopy: const FeatureConfig(
+        FeatureStage.wip,
+        defaultOn: false,
+      ),
       FeatureName.jsonSchemaForFuncDecl: const FeatureConfig(
         FeatureStage.stable,
+        defaultOn: true,
+      ),
+      FeatureName.livekit: const FeatureConfig(
+        FeatureStage.experimental,
         defaultOn: true,
       ),
       FeatureName.mcpAgentServer: const FeatureConfig(
@@ -330,6 +374,14 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       FeatureName.mongodbSessionService: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: false,
+      ),
+      FeatureName.mongodbToolSettings: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.mongodbToolset: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
       ),
       FeatureName.openapiToolset: const FeatureConfig(
         FeatureStage.stable,
@@ -358,6 +410,10 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
       FeatureName.pubsubToolset: const FeatureConfig(
         FeatureStage.stable,
         defaultOn: true,
+      ),
+      FeatureName.skillLifecycle: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: false,
       ),
       FeatureName.skillToolset: const FeatureConfig(
         FeatureStage.stable,

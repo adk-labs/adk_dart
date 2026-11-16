@@ -1113,9 +1113,9 @@ void main() {
 
     test('unknown outbound part is converted to text fallback', () {
       final Map<String, Object?> block = AnthropicLlm.partToMessageBlock(
-        Part.fromFileData(
-          fileUri: 'gs://bucket/sample.csv',
+        Part.fromInlineData(
           mimeType: 'text/csv',
+          data: <int>[1, 2, 3],
           displayName: 'sample.csv',
         ),
       );
@@ -1124,7 +1124,18 @@ void main() {
         '${block['text']}',
         contains('Unsupported anthropic part payload'),
       );
-      expect('${block['text']}', contains('gs://bucket/sample.csv'));
+      expect('${block['text']}', contains('sample.csv'));
+
+      expect(
+        () => AnthropicLlm.partToMessageBlock(
+          Part.fromFileData(
+            fileUri: 'https://example.com/sample.csv',
+            mimeType: 'text/csv',
+            displayName: 'sample.csv',
+          ),
+        ),
+        throwsArgumentError,
+      );
     });
 
     test(

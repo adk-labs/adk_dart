@@ -69,6 +69,21 @@ void main() {
             (Uri uri, {required Map<String, String> headers}) async {
               requestedUris.add(uri);
               expect(headers, containsPair('Authorization', 'Bearer token'));
+              if (uri.path.endsWith('/third-party')) {
+                return AgentRegistryHttpResponse(
+                  statusCode: 200,
+                  body: <String, Object?>{
+                    'displayName': 'External Server',
+                    'mcpServerId': 'mcp-ext',
+                    'interfaces': <Map<String, Object?>>[
+                      <String, Object?>{
+                        'url': 'https://mcp.example.com',
+                        'protocolBinding': 'JSONRPC',
+                      },
+                    ],
+                  },
+                );
+              }
               return AgentRegistryHttpResponse(
                 statusCode: 200,
                 body: <String, Object?>{
@@ -76,7 +91,7 @@ void main() {
                   'mcpServerId': 'mcp-123',
                   'interfaces': <Map<String, Object?>>[
                     <String, Object?>{
-                      'url': 'https://mcp.example.com',
+                      'url': 'https://mcp.googleapis.com/v1',
                       'protocolBinding': 'JSONRPC',
                     },
                   ],
@@ -102,12 +117,20 @@ void main() {
         contains('/v1alpha/projects/p/locations/l/mcpServers/test'),
       );
       expect(toolset.toolNamePrefix, 'Test_Prefix');
-      expect(params.url, 'https://mcp.example.com');
+      expect(params.url, 'https://mcp.googleapis.com/v1');
       expect(params.headers, containsPair('Authorization', 'Bearer token'));
       expect(
         resolvedTools.single.customMetadata?['gcp.mcp.server.destination.id'],
         'mcp-123',
       );
+
+      final McpToolset thirdPartyToolset = await registry.getMcpToolset(
+        'projects/p/locations/l/mcpServers/third-party',
+      );
+      final StreamableHTTPConnectionParams thirdPartyParams =
+          thirdPartyToolset.connectionParams as StreamableHTTPConnectionParams;
+      expect(thirdPartyParams.url, 'https://mcp.example.com');
+      expect(thirdPartyParams.headers, isEmpty);
     });
 
     test('builds fallback RemoteA2aAgent from registry metadata', () async {

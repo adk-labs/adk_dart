@@ -113,7 +113,11 @@ class ContentsLlmRequestProcessor extends BaseLlmRequestProcessor {
       );
     }
 
-    addInstructionsToUserContent(llmRequest, instructionContents);
+    await addInstructionsToUserContent(
+      invocationContext,
+      llmRequest,
+      instructionContents,
+    );
   }
 }
 
@@ -300,33 +304,17 @@ List<Content> getCurrentTurnContents({
   return const <Content>[];
 }
 
-/// Inserts instruction contents before trailing user messages.
-void addInstructionsToUserContent(
+/// Inserts instruction-related [instructionContents] at the proper position in
+/// the conversation flow.
+Future<void> addInstructionsToUserContent(
+  InvocationContext invocationContext,
   LlmRequest llmRequest,
   List<Content> instructionContents,
-) {
+) async {
   if (instructionContents.isEmpty) {
     return;
   }
-
-  int insertIndex = llmRequest.contents.length;
-  for (int i = llmRequest.contents.length - 1; i >= 0; i -= 1) {
-    final Content content = llmRequest.contents[i];
-    if (content.role != 'user') {
-      insertIndex = i + 1;
-      break;
-    }
-    if (_contentContainsFunctionResponse(content)) {
-      insertIndex = i + 1;
-      break;
-    }
-    insertIndex = i;
-  }
-
-  llmRequest.contents.insertAll(
-    insertIndex,
-    instructionContents.map((Content content) => content.copyWith()),
-  );
+  llmRequest.insertTransientUserContent(instructionContents);
 }
 
 /// Inserts transient model input context before the invocation user content.
@@ -1139,10 +1127,6 @@ Event? _presentOtherAgentMessage(Event event, {bool includeThoughts = false}) {
     isolationScope: event.isolationScope,
     content: content,
   );
-}
-
-bool _contentContainsFunctionResponse(Content content) {
-  return content.parts.any((Part part) => part.functionResponse != null);
 }
 
 bool _isFunctionCallEvent(Event event, String functionName) {

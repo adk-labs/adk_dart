@@ -83,7 +83,7 @@ NOTE: Call when you need access to resources.''',
       readonlyContext: toolContext,
     );
     if (resourceNames.isNotEmpty) {
-      llmRequest.appendInstructions(<String>[
+      llmRequest.appendDynamicInstructions(<String>[
         '''You have a list of MCP resources:
 ${_jsonDumpsStringList(resourceNames)}
 

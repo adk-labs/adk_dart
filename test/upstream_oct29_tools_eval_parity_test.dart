@@ -389,12 +389,13 @@ void main() {
         llmRequest: llmRequest,
       );
 
+      expect(llmRequest.config.systemInstruction, isNull);
       expect(
-        llmRequest.config.systemInstruction,
+        llmRequest.dynamicInstructions.single,
         contains('["visible.txt"]'),
       );
       expect(
-        llmRequest.config.systemInstruction,
+        llmRequest.dynamicInstructions.single,
         isNot(contains('secret.txt')),
       );
       final String appendedTexts = llmRequest.contents

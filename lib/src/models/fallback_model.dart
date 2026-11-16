@@ -62,20 +62,29 @@ class _RequestSnapshot {
     required this.contents,
     required this.config,
     required this.liveConnectConfig,
+    required this.dynamicInstructions,
     required this.isManagedAgent,
+    required this.hasStaticInstruction,
+    required this.staticInstructionPrefixEndIndex,
   });
 
   final List<Content> contents;
   final GenerateContentConfig config;
   final LiveConnectConfig liveConnectConfig;
+  final List<String> dynamicInstructions;
   final bool isManagedAgent;
+  final bool hasStaticInstruction;
+  final int? staticInstructionPrefixEndIndex;
 
   factory _RequestSnapshot.of(LlmRequest request) {
     return _RequestSnapshot(
       contents: request.contents.map((Content c) => c.copyWith()).toList(),
       config: request.config.copyWith(),
       liveConnectConfig: request.liveConnectConfig.copyWith(),
+      dynamicInstructions: List<String>.from(request.dynamicInstructions),
       isManagedAgent: request.isManagedAgent,
+      hasStaticInstruction: request.hasStaticInstruction,
+      staticInstructionPrefixEndIndex: request.staticInstructionPrefixEndIndex,
     );
   }
 
@@ -83,7 +92,12 @@ class _RequestSnapshot {
     request.contents = contents.map((Content c) => c.copyWith()).toList();
     request.config = config.copyWith();
     request.liveConnectConfig = liveConnectConfig.copyWith();
+    request
+      ..clearDynamicInstructions()
+      ..appendDynamicInstructions(dynamicInstructions);
     request.isManagedAgent = isManagedAgent;
+    request.hasStaticInstruction = hasStaticInstruction;
+    request.staticInstructionPrefixEndIndex = staticInstructionPrefixEndIndex;
   }
 }
 

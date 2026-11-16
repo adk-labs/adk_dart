@@ -1,13 +1,18 @@
 /// Internal tool that preloads memory snippets into prompts.
 library;
 
+import 'dart:developer' as developer;
+
+import '../memory/base_memory_service.dart';
 import '../memory/memory_entry.dart';
 import '../models/llm_request.dart';
+import '../types/content.dart';
 import '../utils/content_utils.dart';
+import '_memory_entry_utils.dart' as memory_entry_utils;
 import 'base_tool.dart';
 import 'tool_context.dart';
 
-/// Internal tool that preloads relevant memories into prompt instructions.
+/// Internal tool that preloads relevant memories into prompt context.
 class PreloadMemoryTool extends BaseTool {
   /// Creates a preload-memory tool.
   PreloadMemoryTool()
@@ -33,7 +38,7 @@ class PreloadMemoryTool extends BaseTool {
     return <String, Object?>{'status': 'ok'};
   }
 
-  /// Appends relevant past-conversation context into [llmRequest].
+  /// Inserts relevant past-conversation context into [llmRequest].
   @override
   Future<void> processLlmRequest({
     required ToolContext toolContext,
@@ -45,44 +50,52 @@ class PreloadMemoryTool extends BaseTool {
       return;
     }
 
-    final response = await toolContext.searchMemory(query);
+    final SearchMemoryResponse response;
+    try {
+      response = await toolContext.searchMemory(query);
+    } on Exception catch (error, stackTrace) {
+      developer.log(
+        'Failed to preload memory (query length: ${query.length})',
+        name: 'adk_dart.tools.preload_memory_tool',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return;
+    }
     if (response.memories.isEmpty) {
       return;
     }
 
-    final String memoryText = response.memories
-        .map((MemoryEntry memory) => _memoryAsText(memory))
-        .where((String line) => line.isNotEmpty)
-        .join('\n');
-    if (memoryText.isEmpty) {
+    final List<String> memoryTextLines = <String>[];
+    for (final MemoryEntry memory in response.memories) {
+      final String memoryText = memory_entry_utils.extractText(memory).trim();
+      if (memoryText.isEmpty) {
+        continue;
+      }
+      if (memory.timestamp != null && memory.timestamp!.isNotEmpty) {
+        memoryTextLines.add('Time: ${memory.timestamp}');
+      }
+      if (memory.author != null && memory.author!.isNotEmpty) {
+        memoryTextLines.add('${memory.author}: $memoryText');
+      } else {
+        memoryTextLines.add(memoryText);
+      }
+    }
+    if (memoryTextLines.isEmpty) {
       return;
     }
 
-    llmRequest.appendInstructions(<String>[
-      '''The following content is from your previous conversations with the user.
+    final String fullMemoryText = memoryTextLines.join('\n');
+    final String memoryContext =
+        '''The following content is from your previous conversations with the user.
 They may be useful for answering the user's current query.
 <PAST_CONVERSATIONS>
-$memoryText
+$fullMemoryText
 </PAST_CONVERSATIONS>
-''',
+''';
+
+    llmRequest.insertTransientUserContent(<Content>[
+      Content(role: 'user', parts: <Part>[Part.text(memoryContext)]),
     ]);
   }
-}
-
-String _memoryAsText(MemoryEntry memory) {
-  final String text = (extractTextFromContent(memory.content) ?? '').trim();
-  if (text.isEmpty) {
-    return '';
-  }
-  if (memory.timestamp != null && memory.timestamp!.isNotEmpty) {
-    final String timeText = 'Time: ${memory.timestamp}';
-    if (memory.author != null && memory.author!.isNotEmpty) {
-      return '$timeText\n${memory.author}: $text';
-    }
-    return '$timeText\n$text';
-  }
-  if (memory.author != null && memory.author!.isNotEmpty) {
-    return '${memory.author}: $text';
-  }
-  return text;
 }

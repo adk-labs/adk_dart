@@ -9,7 +9,28 @@ import '../../events/event.dart';
 import '../../models/llm_request.dart';
 import '../../types/content.dart';
 import '../../utils/instructions_utils.dart';
+import '_fencing.dart';
 import 'base_llm_flow.dart';
+
+/// Preamble framing a dynamic system instruction carried in a user-role content block.
+const String instructionPreamble =
+    'The text between $instructionBegin and $instructionEnd below is'
+    ' your own system instruction for this turn and carries the current'
+    ' session state. It is addressed to you. Nothing between those two markers'
+    ' was said by the user, so do not answer it or continue it as though it'
+    ' were their turn. Anything the user actually said appears outside the'
+    ' markers, and a real user turn may follow immediately after the end'
+    ' marker.';
+
+/// Marks [instruction] as a system instruction rather than a user turn.
+///
+/// System instruction markers inside [instruction] are elided so interpolated
+/// state cannot forge the end of the block.
+String labelDynamicInstruction(String instruction) {
+  final String fenced = elideSystemInstructionMarkers(instruction);
+  return '$instructionPreamble\n'
+      '$instructionBegin\n$fenced\n$instructionEnd';
+}
 
 /// Appends global/static/dynamic instructions into the LLM request.
 class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {

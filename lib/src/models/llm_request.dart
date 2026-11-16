@@ -748,13 +748,46 @@ class LlmRequest {
     this.previousInteractionId,
     this.isManagedAgent = false,
     this.serviceTier,
+    List<String>? dynamicInstructions,
+    this.hasStaticInstruction = false,
+    this.staticInstructionPrefixEndIndex,
   }) : contents = contents ?? <Content>[],
        config = config ?? GenerateContentConfig(),
        liveConnectConfig = liveConnectConfig ?? LiveConnectConfig(),
-       toolsDict = toolsDict ?? <String, BaseTool>{};
+       toolsDict = toolsDict ?? <String, BaseTool>{},
+       _dynamicInstructions = dynamicInstructions == null
+           ? <String>[]
+           : List<String>.from(dynamicInstructions);
+
+  final List<String> _dynamicInstructions;
+
+  /// Dynamic instructions contributed by tools during preprocessing.
+  List<String> get dynamicInstructions =>
+      List<String>.unmodifiable(_dynamicInstructions);
+
+  /// Appends tool-contributed dynamic [instructions] to be finalized at the end
+  /// of request preprocessing.
+  void appendDynamicInstructions(List<String> instructions) {
+    _dynamicInstructions.addAll(instructions);
+  }
+
+  /// Clears queued dynamic instructions after finalization.
+  void clearDynamicInstructions() {
+    _dynamicInstructions.clear();
+  }
 
   /// Whether this request was built by a ManagedAgent.
   bool isManagedAgent;
+
+  /// Whether non-text `staticInstruction` content was added to [contents].
+  ///
+  /// Non-text static instruction content must remain a stable request prefix
+  /// across turns for provider-side context caching.
+  bool hasStaticInstruction;
+
+  /// Index in [contents] immediately after the static-instruction prefix once
+  /// placed at the front of the request.
+  int? staticInstructionPrefixEndIndex;
 
   /// Target model identifier.
   String? model;
@@ -869,6 +902,7 @@ class LlmRequest {
 
       if (userContents.isNotEmpty) {
         contents.addAll(userContents);
+        hasStaticInstruction = true;
       }
       return userContents;
     }
@@ -893,6 +927,53 @@ class LlmRequest {
       'instructions',
       'instructions must be List<String> or Content',
     );
+  }
+
+  /// Inserts request-scoped user context at the current-turn boundary.
+  ///
+  /// Transient retrieval or dynamic instruction content belongs before the
+  /// latest ordinary user batch, but after a function response when the model
+  /// is continuing a tool-call turn. When [hasStaticInstruction] is `true`,
+  /// the first call places the static-instruction prefix at index `0` and
+  /// records [staticInstructionPrefixEndIndex]; subsequent calls clamp their
+  /// insertion index so tool-contributed content never precedes the stable
+  /// static prefix.
+  void insertTransientUserContent(List<Content> transientContents) {
+    if (transientContents.isEmpty) {
+      return;
+    }
+
+    final List<Content> copied = transientContents
+        .map((Content content) => content.copyWith())
+        .toList(growable: false);
+
+    if (hasStaticInstruction && staticInstructionPrefixEndIndex == null) {
+      contents.insertAll(0, copied);
+      staticInstructionPrefixEndIndex = copied.length;
+      return;
+    }
+
+    int insertIndex = contents.length;
+    for (int i = contents.length - 1; i >= 0; i -= 1) {
+      final Content content = contents[i];
+      if (content.role != 'user') {
+        insertIndex = i + 1;
+        break;
+      }
+      if (content.parts.any((Part part) => part.functionResponse != null)) {
+        insertIndex = i + 1;
+        break;
+      }
+      insertIndex = i;
+    }
+
+    if (hasStaticInstruction && staticInstructionPrefixEndIndex != null) {
+      if (insertIndex < staticInstructionPrefixEndIndex!) {
+        insertIndex = staticInstructionPrefixEndIndex!;
+      }
+    }
+
+    contents.insertAll(insertIndex, copied);
   }
 
   /// Appends tool declarations from [tools] to this request.
@@ -945,7 +1026,11 @@ class LlmRequest {
       cacheMetadata: cacheMetadata,
       cacheableContentsTokenCount: cacheableContentsTokenCount,
       previousInteractionId: previousInteractionId,
+      isManagedAgent: isManagedAgent,
       serviceTier: serviceTier,
+      dynamicInstructions: _dynamicInstructions,
+      hasStaticInstruction: hasStaticInstruction,
+      staticInstructionPrefixEndIndex: staticInstructionPrefixEndIndex,
     );
 
     for (final Content content in clone.contents) {
