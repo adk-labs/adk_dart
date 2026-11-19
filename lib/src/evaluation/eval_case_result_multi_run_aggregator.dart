@@ -71,6 +71,58 @@ class MultiRunCaseResult {
   final int maxCrashedRuns;
 }
 
+/// The mean of one cross-run criterion's values over the cases of an eval set.
+///
+/// Averaged over the eval cases, `pass@k` and `pass^k` show what no single case
+/// can: whether failures are concentrated in a few cases or spread across all
+/// of them. Two eval sets with the same mean pass rate can differ widely here.
+class CrossRunCriterionSummary {
+  /// Creates a cross-run criterion summary.
+  const CrossRunCriterionSummary({
+    required this.name,
+    required this.mean,
+    required this.numCasesWithValue,
+    required this.numCases,
+  });
+
+  /// The criterion's name as shown in output, e.g. `"pass^3"`.
+  final String name;
+
+  /// The mean of the per-case values, or `null` if no case had a value.
+  final double? mean;
+
+  /// How many cases had a value and so were averaged.
+  final int numCasesWithValue;
+
+  /// How many cases the eval set has.
+  final int numCases;
+
+  /// Encodes this summary to JSON.
+  Map<String, Object?> toJson() => <String, Object?>{
+    'name': name,
+    'mean': mean,
+    'num_cases_with_value': numCasesWithValue,
+    'num_cases': numCases,
+  };
+
+  @override
+  bool operator ==(Object other) {
+    return other is CrossRunCriterionSummary &&
+        other.name == name &&
+        other.mean == mean &&
+        other.numCasesWithValue == numCasesWithValue &&
+        other.numCases == numCases;
+  }
+
+  @override
+  int get hashCode => Object.hash(name, mean, numCasesWithValue, numCases);
+
+  @override
+  String toString() =>
+      'CrossRunCriterionSummary(name: $name, mean: $mean, '
+      'numCasesWithValue: $numCasesWithValue, numCases: $numCases)';
+}
+
 /// Aggregator that combines per-repetition [EvalCaseResult] instances into
 /// [MultiRunCaseResult] summaries.
 ///
@@ -617,4 +669,52 @@ List<MultiRunCaseSummary> buildMultiRunCaseSummaries(
   evalCaseResults,
   multiRunConfig: multiRunConfig,
 );
+
+/// Returns the mean of each cross-run criterion over [caseResults].
+///
+/// The cases come from one eval set judged by one `multiRunConfig`, so the
+/// i-th cross-run result of every case is the same criterion, and the summaries
+/// keep that order. A case with no value for a criterion is left out of its
+/// mean: one with fewer decided runs than the criterion's `k`, or one run once
+/// that the config did not judge, which has no cross-run results at all. Each
+/// summary says how many cases it averaged, so a mean over few cases is not
+/// read as one over all of them.
+List<CrossRunCriterionSummary> summarizeCrossRunCriteria(
+  List<MultiRunCaseResult> caseResults,
+) {
+  final Map<(int, String), List<double>> valuesByCriterion =
+      <(int, String), List<double>>{};
+  for (final MultiRunCaseResult caseResult in caseResults) {
+    for (int index = 0; index < caseResult.crossRunResults.length; index += 1) {
+      final MethodResult methodResult = caseResult.crossRunResults[index];
+      final List<double> values = valuesByCriterion.putIfAbsent(
+        (index, methodResult.name),
+        () => <double>[],
+      );
+      if (methodResult.value != null) {
+        values.add(methodResult.value!);
+      }
+    }
+  }
+  final List<(int, String)> sortedKeys = valuesByCriterion.keys.toList()
+    ..sort(((int, String) a, (int, String) b) {
+      final int idxCmp = a.$1.compareTo(b.$1);
+      return idxCmp != 0 ? idxCmp : a.$2.compareTo(b.$2);
+    });
+  return <CrossRunCriterionSummary>[
+    for (final (int, String) key in sortedKeys)
+      () {
+        final List<double> values = valuesByCriterion[key]!;
+        final double? mean = values.isEmpty
+            ? null
+            : values.reduce((double a, double b) => a + b) / values.length;
+        return CrossRunCriterionSummary(
+          name: key.$2,
+          mean: mean,
+          numCasesWithValue: values.length,
+          numCases: caseResults.length,
+        );
+      }(),
+  ];
+}
 

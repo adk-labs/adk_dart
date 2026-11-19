@@ -16,6 +16,7 @@ import '../../tools/base_tool.dart';
 import '../../tools/_google_access_token.dart';
 import '../../tools/mcp_tool/mcp_session_manager.dart';
 import '../../tools/mcp_tool/mcp_toolset.dart';
+import '../../utils/google_client_headers.dart';
 
 export '../agent_identity/agent_identity.dart' show GcpAuthProviderScheme;
 
@@ -481,7 +482,7 @@ class AgentRegistry {
     final bool shouldAttachGoogleAuth =
         resolvedAuthScheme == null &&
         authCredential == null &&
-        _isGoogleApi(endpointUri);
+        isGoogleApisUrl(endpointUri);
 
     Future<Map<String, String>> combinedHeaderProvider(
       ReadonlyContext context,
@@ -1124,13 +1125,4 @@ Future<AgentRegistryHttpResponse> _defaultAgentRegistryHttpPostProvider(
 Future<Map<String, String>> _defaultAgentRegistryAuthHeadersProvider() async {
   final String token = await resolveDefaultGoogleAccessToken();
   return <String, String>{'Authorization': 'Bearer $token'};
-}
-
-bool _isGoogleApi(String uri) {
-  final Uri? parsed = Uri.tryParse(uri);
-  if (parsed == null) {
-    return false;
-  }
-  final String host = parsed.host.toLowerCase();
-  return host == 'googleapis.com' || host.endsWith('.googleapis.com');
 }

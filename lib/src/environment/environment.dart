@@ -5,6 +5,7 @@ export 'base_environment.dart'
     show
         BaseEnvironment,
         EnvironmentExecutionResult,
+        EnvironmentScope,
         ExecutionResult,
         encodeWriteFileContent;
 export 'local_environment.dart' show LocalEnvironment;

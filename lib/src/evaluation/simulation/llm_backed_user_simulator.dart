@@ -8,6 +8,7 @@ import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../models/registry.dart';
 import '../../types/content.dart';
+import '../../utils/model_name_utils.dart';
 import '../_retry_options_utils.dart';
 import '../conversation_scenarios.dart';
 import '../eval_config.dart';
@@ -20,6 +21,10 @@ import 'user_simulator_personas.dart';
 
 const String _authorUser = 'user';
 const String _stopSignal = '</finished>';
+const Map<String, Object?> _defaultThinkingConfig = <String, Object?>{
+  'include_thoughts': true,
+  'thinking_budget': 10240,
+};
 
 /// Configuration for an LLM-backed user simulator.
 class LlmBackedUserSimulatorConfig extends BaseUserSimulatorConfig {
@@ -172,7 +177,12 @@ class LlmBackedUserSimulator
 
     final LlmRequest llmRequest = LlmRequest(
       model: config.model,
-      config: config.modelConfiguration.copyWith(),
+      config: withGemini4ThinkingLevel(
+        config.modelConfiguration.copyWith(),
+        model: config.model,
+        defaultThinkingConfig: _defaultThinkingConfig,
+        thinkingLevel: 'MEDIUM',
+      ),
       contents: <Content>[
         Content(role: _authorUser, parts: <Part>[Part.text(prompt)]),
       ],

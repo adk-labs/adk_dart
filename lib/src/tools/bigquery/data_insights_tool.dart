@@ -11,6 +11,22 @@ import 'config.dart';
 /// API client identifier sent to the Gemini Data Analytics endpoint.
 const String gdaClientId = 'GOOGLE_ADK';
 
+const int _maxSearchScopeEntries = 100;
+
+const Map<String, String> _searchScopeKeys = <String, String>{
+  'includeProjectIds': 'includeProjectIds',
+  'include_project_ids': 'includeProjectIds',
+  'includeDatasetReferences': 'includeDatasetReferences',
+  'include_dataset_references': 'includeDatasetReferences',
+};
+
+const Map<String, String> _datasetReferenceKeys = <String, String>{
+  'projectId': 'projectId',
+  'project_id': 'projectId',
+  'datasetId': 'datasetId',
+  'dataset_id': 'datasetId',
+};
+
 /// Signature for stream providers used by BigQuery insights tools.
 typedef BigQueryInsightsStreamProvider =
     Future<Stream<String>> Function({
@@ -23,17 +39,29 @@ BigQueryInsightsStreamProvider _insightsStreamProvider =
     _defaultInsightsStreamProvider;
 
 /// Executes a BigQuery Data Insights request for [userQueryWithContext].
+///
+/// Provide [tableReferences] when exact tables are known, [searchScope] when
+/// only the BigQuery projects or datasets holding relevant tables are known,
+/// or both.
 Future<Map<String, Object?>> askDataInsights({
   required String projectId,
   required String userQueryWithContext,
-  required List<Map<String, String>> tableReferences,
-  required Object credentials,
-  required Object settings,
+  List<Map<String, String>>? tableReferences,
+  Object? credentials,
+  Object? settings,
+  Object? searchScope,
 }) async {
   try {
-    final BigQueryToolConfig toolSettings = BigQueryToolConfig.fromObject(
-      settings,
-    );
+    final Map<String, Object?> bqDatasourceReferences =
+        _buildBqDatasourceReferences(tableReferences, searchScope);
+    if (credentials == null) {
+      throw ArgumentError(
+        'credentials are required to call the Conversational Analytics API.',
+      );
+    }
+    final BigQueryToolConfig toolSettings = settings == null
+        ? BigQueryToolConfig()
+        : BigQueryToolConfig.fromObject(settings);
 
     final String? accessToken = _extractAccessToken(credentials);
     if (accessToken == null || accessToken.isEmpty) {
@@ -70,7 +98,7 @@ Future<Map<String, Object?>> askDataInsights({
       ],
       'inlineContext': <String, Object?>{
         'datasourceReferences': <String, Object?>{
-          'bq': <String, Object?>{'tableReferences': tableReferences},
+          'bq': bqDatasourceReferences,
         },
         'systemInstruction': instructions,
         'options': <String, Object?>{
@@ -93,6 +121,133 @@ Future<Map<String, Object?>> askDataInsights({
   } catch (error) {
     return <String, Object?>{'status': 'ERROR', 'error_details': '$error'};
   }
+}
+
+Map<String, Object?> _buildBqDatasourceReferences(
+  List<Map<String, String>>? tableReferences,
+  Object? searchScope,
+) {
+  if (tableReferences == null && searchScope == null) {
+    throw ArgumentError(
+      'At least one of table_references or search_scope must be provided.',
+    );
+  }
+  final Map<String, Object?> bqReferences = <String, Object?>{};
+  if (tableReferences != null) {
+    bqReferences['tableReferences'] = tableReferences;
+  }
+  if (searchScope != null) {
+    bqReferences['searchScope'] = _normalizeSearchScope(searchScope);
+  }
+  return bqReferences;
+}
+
+Map<String, Object?> _normalizeSearchScope(Object searchScope) {
+  if (searchScope is! Map) {
+    throw ArgumentError('search_scope must be a dictionary.');
+  }
+  final Map<String, Object?> scope = _toRestKeys(
+    searchScope,
+    _searchScopeKeys,
+    'search_scope',
+  );
+  final Map<String, Object?> normalized = <String, Object?>{};
+
+  final Object? projectIds = scope['includeProjectIds'];
+  if (projectIds != null) {
+    if (projectIds is! List || !projectIds.every(_isNonBlankString)) {
+      throw ArgumentError(
+        'includeProjectIds must be a list of non-blank project IDs.',
+      );
+    }
+    if (projectIds.length > _maxSearchScopeEntries) {
+      throw ArgumentError(
+        'includeProjectIds must not contain more than '
+        '$_maxSearchScopeEntries project IDs.',
+      );
+    }
+    if (projectIds.isNotEmpty) {
+      normalized['includeProjectIds'] = <String>[
+        for (final Object? projectId in projectIds)
+          (projectId! as String).trim(),
+      ];
+    }
+  }
+
+  final Object? datasetReferences = scope['includeDatasetReferences'];
+  if (datasetReferences != null) {
+    if (datasetReferences is! List ||
+        !datasetReferences.every((Object? ref) => ref is Map)) {
+      throw ArgumentError(
+        'includeDatasetReferences must be a list of dictionaries, each with '
+        'a projectId and a datasetId.',
+      );
+    }
+    if (datasetReferences.length > _maxSearchScopeEntries) {
+      throw ArgumentError(
+        'includeDatasetReferences must not contain more than '
+        '$_maxSearchScopeEntries dataset references.',
+      );
+    }
+    final List<Map<String, String>> restReferences = <Map<String, String>>[];
+    for (final Object? reference in datasetReferences) {
+      final Map<String, Object?> restReference = _toRestKeys(
+        reference! as Map,
+        _datasetReferenceKeys,
+        'includeDatasetReferences entry',
+      );
+      if (!_isNonBlankString(restReference['projectId']) ||
+          !_isNonBlankString(restReference['datasetId'])) {
+        throw ArgumentError(
+          'Each includeDatasetReferences entry must have a non-blank '
+          'projectId and datasetId.',
+        );
+      }
+      restReferences.add(<String, String>{
+        'projectId': (restReference['projectId']! as String).trim(),
+        'datasetId': (restReference['datasetId']! as String).trim(),
+      });
+    }
+    if (restReferences.isNotEmpty) {
+      normalized['includeDatasetReferences'] = restReferences;
+    }
+  }
+
+  if (normalized.isEmpty) {
+    throw ArgumentError(
+      'search_scope must contain non-empty includeProjectIds or '
+      'includeDatasetReferences.',
+    );
+  }
+  return normalized;
+}
+
+Map<String, Object?> _toRestKeys(
+  Map<Object?, Object?> value,
+  Map<String, String> restKeys,
+  String label,
+) {
+  final Map<String, Object?> renamed = <String, Object?>{};
+  for (final MapEntry<Object?, Object?> entry in value.entries) {
+    final Object? key = entry.key;
+    final String? restKey = key is String ? restKeys[key] : null;
+    if (restKey == null) {
+      final List<String> supported = restKeys.values.toSet().toList()..sort();
+      throw ArgumentError(
+        '$label has unsupported key $key; supported keys: '
+        '${supported.join(', ')}.',
+      );
+    }
+    if (renamed.containsKey(restKey)) {
+      throw ArgumentError('$label sets $restKey more than once.');
+    }
+    renamed[restKey] = entry.value;
+  }
+  return renamed;
+}
+
+bool _isNonBlankString(Object? value) {
+  return value is String && value.trim().isNotEmpty;
 }
 
 Future<List<Map<String, Object?>>> _getStream({

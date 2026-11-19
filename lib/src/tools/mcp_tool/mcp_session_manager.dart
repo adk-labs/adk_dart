@@ -573,7 +573,14 @@ class McpSessionManager {
             entry.key: entry.value,
       };
     }
-    final Map<String, String> headers = mergeTrackingHeaders(baseHeaders);
+    final String? url = connectionParams is StreamableHTTPConnectionParams
+        ? connectionParams.url
+        : null;
+    final bool excludeRuntimeTag = !isGoogleApisUrl(url);
+    final Map<String, String> headers = mergeTrackingHeaders(
+      baseHeaders,
+      excludeRuntimeTag: excludeRuntimeTag,
+    );
     if (additionalHeaders != null && additionalHeaders.isNotEmpty) {
       final Map<String, String> overrides = <String, String>{
         for (final MapEntry<String, String> entry in additionalHeaders.entries)
@@ -589,7 +596,10 @@ class McpSessionManager {
         (String key, String _) => overrideNames.contains(key.toLowerCase()),
       );
       headers.addAll(overrides);
-      return mergeTrackingHeaders(headers);
+      return mergeTrackingHeaders(
+        headers,
+        excludeRuntimeTag: excludeRuntimeTag,
+      );
     }
     return headers;
   }

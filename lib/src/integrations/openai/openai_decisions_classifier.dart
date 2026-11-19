@@ -193,7 +193,8 @@ class OpenAIDecisionsClassifier extends BaseClassifier {
               'Authorization': 'Bearer $key',
               'Content-Type': 'application/json',
               'Accept': 'application/json',
-              'User-Agent': getClientLabels().join(' '),
+              // OpenAI is a third party, so the hosting runtime is not sent.
+              'User-Agent': getClientLabels(excludeRuntimeTag: true).join(' '),
             },
             body: jsonEncode(payload),
           )

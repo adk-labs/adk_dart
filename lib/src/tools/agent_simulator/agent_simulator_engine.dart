@@ -11,6 +11,7 @@ import '../../agents/llm_agent.dart';
 import '../../agents/readonly_context.dart';
 import '../../models/llm_request.dart';
 import '../../tools/base_tool.dart';
+import '../../utils/model_name_utils.dart';
 import '../tool_args_matcher/tool_args_matcher.dart';
 import 'agent_simulator_config.dart' as simulator_config;
 import 'strategies/base.dart' as simulator_strategies;
@@ -43,6 +44,17 @@ simulator_strategies.BaseMockStrategy _createMockStrategy(
     );
   }
   throw ArgumentError('Unknown mock strategy type: $mockStrategyType');
+}
+
+GenerateContentConfig _simulationModelConfiguration(
+  simulator_config.AgentSimulatorConfig config,
+) {
+  return withGemini4ThinkingLevel(
+    config.simulationModelConfiguration,
+    model: config.simulationModel,
+    defaultThinkingConfig: simulator_config.defaultAgentSimulatorThinkingConfig,
+    thinkingLevel: 'MEDIUM',
+  );
 }
 
 ToolArgsMatcher _withDefaultSemanticModel(
@@ -277,7 +289,7 @@ class AgentSimulatorEngine {
       if (agent is LlmAgent) {
         _analyzer ??= ToolConnectionAnalyzer(
           llmName: _config.simulationModel,
-          llmConfig: _config.simulationModelConfiguration,
+          llmConfig: _simulationModelConfiguration(_config),
         );
         final List<BaseTool> tools = await agent.canonicalTools(
           toolContext is ReadonlyContext ? toolContext : null,
@@ -351,7 +363,7 @@ class AgentSimulatorEngine {
     final simulator_strategies.BaseMockStrategy strategy = _strategyFactory(
       toolSimConfig.mockStrategyType,
       _config.simulationModel,
-      _config.simulationModelConfiguration,
+      _simulationModelConfiguration(_config),
     );
     return strategy.mock(
       tool,

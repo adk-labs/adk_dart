@@ -3,7 +3,7 @@ library;
 
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:io' show Directory;
+import 'dart:io' show Directory, FileSystemException;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -26,6 +26,8 @@ const int _defaultScriptTimeout = 300;
 const int _maxSkillPayloadBytes = 16 * 1024 * 1024;
 const String _legacyBinaryFileDetectedMsg =
     'Binary file detected. The runtime will attach it to the next model request.';
+const String _skillHashMarkerFile = '.adk_skill_hash';
+
 const String _binaryFileDetectedMsg =
     'Binary file detected. The content has been injected into the conversation history for you to analyze.';
 
@@ -1493,8 +1495,14 @@ class RunSkillScriptTool extends BaseTool {
         final BaseEnvironment env = _toolset.environment!;
         await ensureInitialized(env, toolContext);
         _toolset._environmentInitialized = true;
+        final String normalizedFile = _validateSkillSubpath(
+          scriptPath,
+          subDir: 'scripts',
+          stripSubDir: true,
+        );
         await _toolset._materializeSkillToEnvironment(
           skill,
+          normalizedScriptFile: normalizedFile,
           initializeIfNeeded: false,
           ctx: toolContext,
         );
@@ -1508,11 +1516,6 @@ class RunSkillScriptTool extends BaseTool {
             .replaceAll(r'\', '/')
             .replaceAll(RegExp(r'/+$'), '');
         final String skillDir = '$baseFolder/${skill.name}';
-        final String normalizedFile = _validateSkillSubpath(
-          scriptPath,
-          subDir: 'scripts',
-          stripSubDir: true,
-        );
         final String relativeScriptPath = 'scripts/$normalizedFile';
         final List<String> argv = <String>[
           interpreter,
@@ -1672,8 +1675,6 @@ class SkillToolset extends BaseToolset {
   final BaseCodeExecutor? _codeExecutor;
   final int _scriptTimeout;
   final String? _explicitSkillsFolder;
-  final Set<String> _materializedSkills = <String>{};
-  final Map<String, String> _materializedSkillHashes = <String, String>{};
   bool _environmentInitialized = false;
   static const int _maxCacheTurns = 16;
 
@@ -1724,15 +1725,13 @@ class SkillToolset extends BaseToolset {
 
   Future<void> _materializeSkillToEnvironment(
     Skill skill, {
+    String? normalizedScriptFile,
     bool force = false,
     bool initializeIfNeeded = true,
     ToolContext? ctx,
   }) async {
     final BaseEnvironment? env = environment;
     if (env == null) {
-      return;
-    }
-    if (!force && _materializedSkills.contains(skill.name)) {
       return;
     }
     if (!_isEnvInitialized(env)) {
@@ -1752,6 +1751,50 @@ class SkillToolset extends BaseToolset {
         .replaceAll(r'\', '/')
         .replaceAll(RegExp(r'/+$'), '');
     final String skillRoot = '$baseFolder/${skill.name}';
+    final String markerPath = '$skillRoot/$_skillHashMarkerFile';
+    final String contentHash = _skillContentHash(skill);
+
+    if (!force) {
+      List<int>? marker;
+      try {
+        marker = await env.readFile(markerPath, ctx: ctx);
+      } on FileSystemException {
+        marker = null;
+      } on StateError {
+        marker = null;
+      }
+
+      final bool stale;
+      if (marker == null || marker.isEmpty) {
+        stale = true;
+      } else if (utf8.decode(marker, allowMalformed: true).trim() ==
+          contentHash) {
+        stale = false;
+      } else if (lifecycleConfig.enabled && lifecycleConfig.revalidateSkills) {
+        stale = true;
+      } else if (normalizedScriptFile != null) {
+        // Without revalidateSkills the written copy is kept, but a script it
+        // lacks still triggers a write, as before the marker existed.
+        bool scriptExists;
+        try {
+          await env.readFile(
+            '$skillRoot/scripts/$normalizedScriptFile',
+            ctx: ctx,
+          );
+          scriptExists = true;
+        } on FileSystemException {
+          scriptExists = false;
+        } on StateError {
+          scriptExists = false;
+        }
+        stale = !scriptExists;
+      } else {
+        stale = false;
+      }
+      if (!stale) {
+        return;
+      }
+    }
 
     await env.writeFile('$skillRoot/SKILL.md', skill.instructions, ctx: ctx);
 
@@ -1816,8 +1859,8 @@ class SkillToolset extends BaseToolset {
       }
     }
 
-    _materializedSkills.add(skill.name);
-    _materializedSkillHashes[skill.name] = _skillContentHash(skill);
+    // Write the marker last so a failed or partial write is retried next run.
+    await env.writeFile(markerPath, contentHash, ctx: ctx);
   }
 
   bool _hasScriptExecution(ReadonlyContext? context) {
@@ -2416,16 +2459,6 @@ class SkillToolset extends BaseToolset {
       if (currentHash == item.hash) {
         continue;
       }
-      try {
-        await _rematerializeSkill(skill, currentHash, toolContext);
-      } catch (error, stackTrace) {
-        developer.log(
-          "Could not update skill '${item.name}' in environment: $error",
-          name: 'adk_dart.skill_toolset',
-          error: error,
-          stackTrace: stackTrace,
-        );
-      }
       developer.log(
         "Skill '${item.name}' changed since it was loaded; re-stating it.",
         name: 'adk_dart.skill_toolset',
@@ -2436,29 +2469,6 @@ class SkillToolset extends BaseToolset {
       );
     }
     return restatedInstructions;
-  }
-
-  Future<void> _rematerializeSkill(
-    Skill skill,
-    String contentHash, [
-    ToolContext? ctx,
-  ]) async {
-    final BaseEnvironment? env = environment;
-    if (env == null || !_isEnvInitialized(env)) {
-      return;
-    }
-    if (skillsFolder == null) {
-      return;
-    }
-    if (_materializedSkillHashes[skill.name] == contentHash) {
-      return;
-    }
-    await _materializeSkillToEnvironment(
-      skill,
-      force: true,
-      initializeIfNeeded: false,
-      ctx: ctx,
-    );
   }
 
   @override

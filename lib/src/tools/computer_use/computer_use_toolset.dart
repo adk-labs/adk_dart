@@ -11,6 +11,7 @@ import 'dart:typed_data';
 
 import '../../agents/readonly_context.dart';
 import '../../models/llm_request.dart';
+import '../../utils/model_name_utils.dart';
 import '../base_tool.dart';
 import '../base_toolset.dart';
 import '../tool_context.dart';
@@ -61,18 +62,7 @@ const Map<String, List<String>> _modernToLegacyMap = <String, List<String>>{
 };
 
 bool _isModernGeminiModel(String? modelName) {
-  if (modelName == null || modelName.isEmpty) {
-    return false;
-  }
-  final RegExpMatch? match = RegExp(
-    r'gemini-(\d+)(?:\.(\d+))?',
-    caseSensitive: false,
-  ).firstMatch(modelName);
-  if (match == null) {
-    return false;
-  }
-  final int major = int.tryParse(match.group(1) ?? '') ?? 0;
-  return major >= 3;
+  return isGemini3OrNewer(modelName);
 }
 
 bool _isNonPublicIpAddress(InternetAddress address) {

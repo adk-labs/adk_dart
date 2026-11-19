@@ -10,24 +10,12 @@ import '../../errors/input_validation_error.dart';
 import '../../features/_feature_decorator.dart';
 import '../../features/_feature_registry.dart';
 import '../../types/content.dart';
+import 'backends.dart';
 
 const String _userNamespacePrefix = 'user:';
 const String _userNamespaceSegment = 'user';
 const String _defaultMimeType = 'application/octet-stream';
-const Set<String> _gcsProtocols = <String>{'gs', 'gcs'};
 const Set<String> _localProtocols = <String>{'file', 'local'};
-const Set<String> _rapidPreconditionErrorNames = <String>{
-  'FailedPrecondition',
-  'PreconditionFailed',
-};
-const Set<String> _rapidSetxattrsReservedKeys = <String>{
-  'self',
-  'path',
-  'content_type',
-  'content_encoding',
-  'fixed_key_metadata',
-  'timeout',
-};
 const int _maxSaveVersionAttempts = 10;
 const int _maxArtifactReferenceDepth = 5;
 
@@ -445,42 +433,6 @@ List<String> _fsProtocols(FilesystemProtocol fs) {
   return (scheme, rest);
 }
 
-double _parseTimestamp(
-  Map<String, Object?> info, {
-  double Function()? clock,
-}) {
-  for (final String field in const <String>[
-    'timeCreated',
-    'created',
-    'mtime',
-    'LastModified',
-    'updated',
-  ]) {
-    final Object? raw = info[field];
-    if (raw is num) {
-      return raw.toDouble();
-    }
-    if (raw is DateTime) {
-      return raw.toUtc().microsecondsSinceEpoch / 1000000.0;
-    }
-    if (raw is String && raw.isNotEmpty) {
-      final bool hasExplicitZone =
-          raw.endsWith('Z') ||
-          raw.endsWith('z') ||
-          RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(raw) ||
-          RegExp(r'[+-]\d{4}$').hasMatch(raw);
-      final String normalizedIso = hasExplicitZone ? raw : '${raw}Z';
-      final DateTime? parsed = DateTime.tryParse(normalizedIso);
-      if (parsed != null) {
-        return parsed.toUtc().microsecondsSinceEpoch / 1000000.0;
-      }
-    }
-  }
-  return clock != null
-      ? clock()
-      : DateTime.now().millisecondsSinceEpoch / 1000.0;
-}
-
 bool _isFileExistsError(Object error) {
   if (error is PathExistsException || error is FsspecFileExistsException) {
     return true;
@@ -619,6 +571,10 @@ abstract class FilesystemProtocol {
   /// Optional gcsfs helper returning the bucket type for [bucket] (e.g.
   /// `'ZONAL_HIERARCHICAL'` on Rapid GCS buckets).
   String? syncLookupBucketType(String bucket) => null;
+
+  /// Returns user metadata for [path] (used by S3 / `s3fs` backends whose
+  /// `info()` and listings omit user metadata).
+  Map<String, String> metadata(String path) => const <String, String>{};
 }
 
 class _InMemoryWriteStream extends FsspecWriteStream {
@@ -851,6 +807,29 @@ class InMemoryFsspecFilesystem extends FilesystemProtocol {
       throw PathNotFoundException(path, const OSError('File not found', 2));
     }
     return List<int>.from(data);
+  }
+
+  @override
+  Map<String, String> metadata(String path) {
+    final String normalized = stripProtocol(path);
+    if (!_files.containsKey(normalized)) {
+      throw PathNotFoundException(path, const OSError('File not found', 2));
+    }
+    final Map<String, Object?>? entryInfo = _metadata[normalized];
+    final Object? rawMeta = entryInfo?['metadata'];
+    if (rawMeta is! Map) {
+      return const <String, String>{};
+    }
+    final bool isS3 = _fsProtocols(
+      this,
+    ).any((String p) => p == 's3' || p == 's3a');
+    return <String, String>{
+      for (final MapEntry<Object?, Object?> entry in rawMeta.entries)
+        if (entry.key != null && entry.value != null)
+          (isS3
+              ? '${entry.key}'.toLowerCase().replaceAll('_', '-')
+              : '${entry.key}'): '${entry.value}',
+    };
   }
 
   @override
@@ -1323,30 +1302,22 @@ class FsspecArtifactService extends BaseArtifactService {
 
   final double Function()? _clock;
   late final FilesystemProtocol _fs;
+  late final FsspecBackendAdapter _backend =
+      FsspecBackendAdapter.forFilesystem(_fs, clock: _clock);
   late final String? _scheme;
   late final String _root;
 
   /// Underlying fsspec filesystem instance.
   FilesystemProtocol get fs => _fs;
 
+  /// Per-backend adapter handling object creation and metadata reads.
+  FsspecBackendAdapter get backend => _backend;
+
   /// Normalized root path within [fs].
   String get rootPath => _root;
 
-  bool _isGcs() {
-    return _fsProtocols(_fs).toSet().intersection(_gcsProtocols).isNotEmpty;
-  }
-
   bool _isLocal() {
     return _fsProtocols(_fs).toSet().intersection(_localProtocols).isNotEmpty;
-  }
-
-  bool _isRapidGcsBucket(String key) {
-    final (String, String, Object?)? parts = _fs.splitPath(key);
-    if (parts == null) {
-      return false;
-    }
-    final String? bucketType = _fs.syncLookupBucketType(parts.$1);
-    return bucketType != null && bucketType.endsWith('ZONAL_HIERARCHICAL');
   }
 
   String _canonicalUri(String key) {
@@ -1448,96 +1419,6 @@ class FsspecArtifactService extends BaseArtifactService {
     return matched;
   }
 
-  void _removeFailedVersion(String key) {
-    try {
-      _fs.rmFile(key);
-    } catch (_) {
-      // Best-effort cleanup; preserve original write error for the caller.
-    }
-    _fs.invalidateCache(key);
-  }
-
-  void _writeVersion(
-    String key,
-    List<int> data,
-    String? contentType,
-    Map<String, String> blobMetadata,
-  ) {
-    if (!_isGcs()) {
-      if (_isLocal()) {
-        final FsspecWriteStream stream = _fs.openWrite(key, mode: 'xb');
-        try {
-          if (data.isNotEmpty) {
-            stream.write(data);
-          }
-          stream.close();
-        } catch (_) {
-          stream.close();
-          rethrow;
-        }
-      } else {
-        _fs.pipeFile(key, data, mode: 'create');
-      }
-      return;
-    }
-
-    if (_isRapidGcsBucket(key)) {
-      final List<String> reserved =
-          blobMetadata.keys
-              .where(_rapidSetxattrsReservedKeys.contains)
-              .toList()
-            ..sort();
-      if (reserved.isNotEmpty) {
-        throw FsspecInputValidationError(
-          'custom_metadata keys are not supported on Rapid GCS buckets:'
-          ' ${reserved.join(', ')}.',
-        );
-      }
-      final FsspecWriteStream stream = _fs.openWrite(
-        key,
-        mode: 'wb',
-        generation: 0,
-        finalizeOnClose: true,
-      );
-      try {
-        if (data.isNotEmpty) {
-          stream.write(data);
-        }
-        stream.close();
-      } catch (exc) {
-        stream.closed = true;
-        final String excName = exc.runtimeType.toString();
-        if (exc is GcsPreconditionError ||
-            _rapidPreconditionErrorNames.contains(excName)) {
-          throw FsspecFileExistsException(key, cause: exc);
-        }
-        if (stream.aaow != null) {
-          _removeFailedVersion(key);
-        }
-        rethrow;
-      }
-      try {
-        _fs.setxattrs(
-          key,
-          contentType: contentType ?? _defaultMimeType,
-          metadata: blobMetadata,
-        );
-      } catch (_) {
-        _removeFailedVersion(key);
-        rethrow;
-      }
-      return;
-    }
-
-    _fs.pipeFile(
-      key,
-      data,
-      mode: 'create',
-      contentType: contentType,
-      metadata: blobMetadata.isEmpty ? null : blobMetadata,
-    );
-  }
-
   @override
   Future<int> saveArtifact({
     required String appName,
@@ -1585,10 +1466,10 @@ class FsspecArtifactService extends BaseArtifactService {
     late final String? contentType;
     if (artifact.inlineData != null) {
       final InlineData inline = artifact.inlineData!;
-      if (blobMetadata.isNotEmpty && !_isGcs()) {
+      if (blobMetadata.isNotEmpty && !_backend.storesCustomMetadata) {
         throw FsspecInputValidationError(
           'Saving custom_metadata requires a filesystem backend that'
-          ' persists custom object metadata (such as gs://).',
+          ' persists custom object metadata (such as gs:// or s3://).',
         );
       }
       data = inline.data;
@@ -1598,10 +1479,10 @@ class FsspecArtifactService extends BaseArtifactService {
         blobMetadata[_adkDisplayNameMetadataKey] = displayName;
       }
     } else if (artifact.text != null) {
-      if (!_isGcs()) {
+      if (!_backend.storesCustomMetadata) {
         throw FsspecInputValidationError(
           'Saving text artifacts requires a filesystem backend that'
-          ' persists custom object metadata (such as gs://).',
+          ' persists custom object metadata (such as gs:// or s3://).',
         );
       }
       data = utf8.encode(artifact.text!);
@@ -1615,10 +1496,10 @@ class FsspecArtifactService extends BaseArtifactService {
           'Artifact file_data must have a file_uri.',
         );
       }
-      if (!_isGcs()) {
+      if (!_backend.storesCustomMetadata) {
         throw FsspecInputValidationError(
           'Saving file_data URI references requires a filesystem backend'
-          ' that persists custom object metadata (such as gs://).',
+          ' that persists custom object metadata (such as gs:// or s3://).',
         );
       }
       if (_isArtifactRef(artifact)) {
@@ -1650,10 +1531,6 @@ class FsspecArtifactService extends BaseArtifactService {
       );
     }
 
-    if (!_isGcs() && !_fs.autoMkdir) {
-      _fs.makedirs(artifactPath, existOk: true);
-    }
-
     final List<int> versions = _versionsUnder(artifactPath);
     int version = versions.isEmpty ? 0 : versions.last + 1;
 
@@ -1661,7 +1538,12 @@ class FsspecArtifactService extends BaseArtifactService {
     while (true) {
       final String key = '$artifactPath/$version';
       try {
-        _writeVersion(key, data, contentType, blobMetadata);
+        _backend.createObject(
+          key,
+          data,
+          contentType: contentType,
+          metadata: blobMetadata,
+        );
       } catch (error) {
         if (!_isFileExistsError(error)) {
           rethrow;
@@ -1724,28 +1606,13 @@ class FsspecArtifactService extends BaseArtifactService {
     }
     final String key = '$artifactPath/$resolvedVersion';
 
-    _fs.invalidateCache(key);
-    Map<String, Object?> info;
-    try {
-      info = _fs.info(key);
-    } catch (error) {
-      if (_isMissingError(error)) {
-        return null;
-      }
-      rethrow;
-    }
-    if ((info['type'] ?? 'file') != 'file') {
+    final FsspecObjectMetadata? objectMetadata = _backend.readMetadata(key);
+    if (objectMetadata == null) {
       return null;
     }
 
-    final String? storedContentType = _nonEmptyString(
-      info['contentType'] ?? info['ContentType'],
-    );
-    final Map<String, Object?> metadata = _metadataMap(info['metadata']);
-
-    final String? fileUri =
-        _nonEmptyString(metadata[_adkFileUriMetadataKey]) ??
-        _nonEmptyString(metadata[_legacyFileUriMetadataKey]);
+    final String? storedContentType = objectMetadata.contentType;
+    final String? fileUri = objectMetadata.fileUri;
     if (fileUri != null) {
       if (fileUri.startsWith('artifact://')) {
         final _ParsedArtifactUri parsedUri = _resolveArtifactReference(
@@ -1766,9 +1633,7 @@ class FsspecArtifactService extends BaseArtifactService {
       }
       return Part.fromFileData(
         fileUri: fileUri,
-        mimeType:
-            _nonEmptyString(metadata[_adkFileMimeTypeMetadataKey]) ??
-            storedContentType,
+        mimeType: objectMetadata.fileMimeType ?? storedContentType,
       );
     }
 
@@ -1782,17 +1647,19 @@ class FsspecArtifactService extends BaseArtifactService {
       rethrow;
     }
 
-    if (metadata[_adkIsTextMetadataKey] == 'true') {
+    if (objectMetadata.isText) {
       return Part.text(utf8.decode(data, allowMalformed: false));
     }
 
     final Part loaded = Part.fromInlineData(
       data: data,
       mimeType: storedContentType ?? _guessMime(filename),
-      displayName: _nonEmptyString(metadata[_adkDisplayNameMetadataKey]),
+      displayName: objectMetadata.displayName,
     );
     if (_isRewindTombstone(loaded) ||
-        (!_isGcs() && data.isEmpty && storedContentType == null)) {
+        (!_backend.storesCustomMetadata &&
+            data.isEmpty &&
+            storedContentType == null)) {
       return null;
     }
     return loaded;
@@ -1914,26 +1781,20 @@ class FsspecArtifactService extends BaseArtifactService {
     int version,
     String key,
     String filename,
-    Map<String, Object?> info,
+    FsspecObjectMetadata objectMetadata,
   ) {
-    final String? storedContentType = _nonEmptyString(
-      info['contentType'] ?? info['ContentType'],
-    );
-    final Map<String, Object?> metadata = _metadataMap(info['metadata']);
-    final bool hasFileUri =
-        _nonEmptyString(metadata[_adkFileUriMetadataKey]) != null ||
-        _nonEmptyString(metadata[_legacyFileUriMetadataKey]) != null;
+    final String? storedContentType = objectMetadata.contentType;
+    final bool hasFileUri = objectMetadata.fileUri != null;
     final String? mimeType = hasFileUri
-        ? (_nonEmptyString(metadata[_adkFileMimeTypeMetadataKey]) ??
-              storedContentType)
+        ? (objectMetadata.fileMimeType ?? storedContentType)
         : (storedContentType ?? _guessMime(filename));
 
     return ArtifactVersion(
       version: version,
       canonicalUri: _canonicalUri(key),
-      createTime: _parseTimestamp(info, clock: _clock),
+      createTime: objectMetadata.createTime,
       mimeType: mimeType,
-      customMetadata: _userMetadata(metadata),
+      customMetadata: objectMetadata.userMetadata,
     );
   }
 
@@ -1950,7 +1811,9 @@ class FsspecArtifactService extends BaseArtifactService {
       sessionId,
       filename,
     );
-    final List<ArtifactVersion> artifactVersions = <ArtifactVersion>[];
+    final Map<String, Map<String, Object?>> versionEntries =
+        <String, Map<String, Object?>>{};
+    final Map<String, int> versionByKey = <String, int>{};
     _findDetail(artifactPath).forEach((
       String suffix,
       Map<String, Object?> info,
@@ -1960,9 +1823,19 @@ class FsspecArtifactService extends BaseArtifactService {
         return;
       }
       final String key = '$artifactPath/$version';
-      artifactVersions.add(
-        _buildArtifactVersion(version, key, filename, info),
-      );
+      versionEntries[key] = info;
+      versionByKey[key] = version;
+    });
+    final Map<String, FsspecObjectMetadata> metadataByKey = _backend
+        .readListingMetadata(versionEntries);
+    final List<ArtifactVersion> artifactVersions = <ArtifactVersion>[];
+    metadataByKey.forEach((String key, FsspecObjectMetadata objectMetadata) {
+      final int? version = versionByKey[key];
+      if (version != null) {
+        artifactVersions.add(
+          _buildArtifactVersion(version, key, filename, objectMetadata),
+        );
+      }
     });
     artifactVersions.sort(
       (ArtifactVersion a, ArtifactVersion b) => a.version.compareTo(b.version),
@@ -1998,36 +1871,15 @@ class FsspecArtifactService extends BaseArtifactService {
     }
     final String key = '$artifactPath/$resolvedVersion';
 
-    _fs.invalidateCache(key);
-    Map<String, Object?> info;
-    try {
-      info = _fs.info(key);
-    } catch (error) {
-      if (_isMissingError(error)) {
-        return null;
-      }
-      rethrow;
-    }
-    if ((info['type'] ?? 'file') != 'file') {
+    final FsspecObjectMetadata? objectMetadata = _backend.readMetadata(key);
+    if (objectMetadata == null) {
       return null;
     }
-    return _buildArtifactVersion(resolvedVersion, key, filename, info);
-  }
-
-  static String? _nonEmptyString(Object? value) {
-    if (value is String && value.isNotEmpty) {
-      return value;
-    }
-    return null;
-  }
-
-  static Map<String, Object?> _metadataMap(Object? raw) {
-    if (raw is! Map) {
-      return const <String, Object?>{};
-    }
-    return <String, Object?>{
-      for (final MapEntry<Object?, Object?> entry in raw.entries)
-        if (entry.key != null) '${entry.key}': entry.value,
-    };
+    return _buildArtifactVersion(
+      resolvedVersion,
+      key,
+      filename,
+      objectMetadata,
+    );
   }
 }

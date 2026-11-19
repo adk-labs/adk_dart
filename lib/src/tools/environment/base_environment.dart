@@ -6,6 +6,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../agents/context.dart';
+import 'environment_scope.dart';
+
+export 'environment_scope.dart' show EnvironmentScope;
 
 /// Returns `true` when [value] contains any unpaired UTF-16 surrogate code unit.
 bool hasLoneUtf16Surrogates(String value) {
@@ -99,6 +102,17 @@ abstract class BaseEnvironment {
 
   /// Whether this environment has been initialized and not yet closed.
   bool isInitialized = false;
+
+  /// Which agent runs share one resource of this environment.
+  ///
+  /// The environment and skill toolsets run [initialize] one call at a time
+  /// within a scope: for the whole environment with [EnvironmentScope.shared],
+  /// per user with [EnvironmentScope.user], and per session with
+  /// [EnvironmentScope.session].
+  ///
+  /// The value must not change during the life of the environment. The
+  /// default implementation returns [EnvironmentScope.shared].
+  EnvironmentScope get scope => EnvironmentScope.shared;
 
   /// Performs any setup required before tool calls, optionally using [ctx].
   Future<void> initialize({Context? ctx}) async {}

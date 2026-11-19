@@ -11,6 +11,7 @@ import 'dart:typed_data';
 import '../../agents/context.dart';
 import '../../agents/readonly_context.dart';
 import '../../models/llm_request.dart';
+import '../../sessions/session.dart';
 import '../base_tool.dart';
 import '../base_toolset.dart';
 import '../tool_context.dart';
@@ -121,17 +122,170 @@ class _AsyncEnvironmentLock {
   }
 }
 
-final Expando<_AsyncEnvironmentLock> _envLocks = Expando<_AsyncEnvironmentLock>(
-  'adkEnvironmentLocks',
-);
+class _LockEntry {
+  final _AsyncEnvironmentLock lock = _AsyncEnvironmentLock();
+  int users = 0;
+}
 
-_AsyncEnvironmentLock _lockFor(BaseEnvironment environment) {
-  _AsyncEnvironmentLock? lock = _envLocks[environment];
-  if (lock == null) {
-    lock = _AsyncEnvironmentLock();
-    _envLocks[environment] = lock;
+class _CloseGate {
+  int initializing = 0;
+  int closing = 0;
+  final List<Completer<void>> _initWaiters = <Completer<void>>[];
+  final List<Completer<void>> _closeWaiters = <Completer<void>>[];
+
+  Future<void> _wait(
+    List<Completer<void>> waiters, {
+    Future<void>? cancelSignal,
+  }) async {
+    final Completer<void> waiter = Completer<void>();
+    waiters.add(waiter);
+    if (cancelSignal == null) {
+      await waiter.future;
+      return;
+    }
+    bool settled = false;
+    final Completer<void> race = Completer<void>();
+    unawaited(
+      waiter.future.then((_) {
+        if (!settled) {
+          settled = true;
+          race.complete();
+        }
+      }),
+    );
+    unawaited(
+      cancelSignal.then((_) {
+        if (!settled) {
+          settled = true;
+          waiters.remove(waiter);
+          race.completeError(const EnvironmentLockCancelledException());
+        }
+      }),
+    );
+    await race.future;
   }
-  return lock;
+
+  void _notify(List<Completer<void>> waiters) {
+    if (waiters.isEmpty) {
+      return;
+    }
+    final List<Completer<void>> pending = List<Completer<void>>.of(waiters);
+    waiters.clear();
+    for (final Completer<void> waiter in pending) {
+      if (!waiter.isCompleted) {
+        waiter.complete();
+      }
+    }
+  }
+
+  Future<T> withInitializing<T>(
+    Future<T> Function() action, {
+    Future<void>? cancelSignal,
+  }) async {
+    while (closing > 0) {
+      await _wait(_initWaiters, cancelSignal: cancelSignal);
+    }
+    initializing += 1;
+    try {
+      return await action();
+    } finally {
+      initializing -= 1;
+      if (initializing == 0) {
+        _notify(_closeWaiters);
+      }
+    }
+  }
+
+  Future<T> withClosing<T>(
+    Future<T> Function() action, {
+    Future<void>? cancelSignal,
+  }) async {
+    closing += 1;
+    try {
+      while (initializing > 0) {
+        await _wait(_closeWaiters, cancelSignal: cancelSignal);
+      }
+      return await action();
+    } finally {
+      closing -= 1;
+      if (closing == 0) {
+        _notify(_initWaiters);
+      }
+    }
+  }
+}
+
+final Expando<Map<String, _LockEntry>> _envLocks =
+    Expando<Map<String, _LockEntry>>('adkEnvironmentLocks');
+final Expando<_CloseGate> _envGates = Expando<_CloseGate>('adkEnvironmentGates');
+
+_CloseGate _gateFor(BaseEnvironment environment) {
+  _CloseGate? gate = _envGates[environment];
+  if (gate == null) {
+    gate = _CloseGate();
+    _envGates[environment] = gate;
+  }
+  return gate;
+}
+
+Future<T> _withEnvLock<T>(
+  BaseEnvironment environment,
+  String key,
+  Future<T> Function() action, {
+  Future<void>? cancelSignal,
+}) async {
+  Map<String, _LockEntry>? entries = _envLocks[environment];
+  if (entries == null) {
+    entries = <String, _LockEntry>{};
+    _envLocks[environment] = entries;
+  }
+  final _LockEntry entry = entries.putIfAbsent(key, _LockEntry.new);
+  entry.users += 1;
+  try {
+    return await entry.lock.synchronized<T>(action, cancelSignal: cancelSignal);
+  } finally {
+    entry.users -= 1;
+    // Drop a lock nobody uses, so an environment that serves many sessions
+    // does not keep one lock for each of them.
+    if (entry.users == 0) {
+      entries.remove(key);
+    }
+  }
+}
+
+Session _requireSession(
+  BaseEnvironment environment,
+  EnvironmentScope scope,
+  Context? ctx,
+) {
+  if (ctx == null) {
+    throw ArgumentError(
+      '${environment.runtimeType} has the ${scope.value} scope, so it can '
+      'only be initialized with a context that has a session.',
+    );
+  }
+  return ctx.session;
+}
+
+String _scopeLockKey(BaseEnvironment environment, Context? ctx) {
+  final EnvironmentScope scope = environment.scope;
+  if (scope == EnvironmentScope.user) {
+    final Session session = _requireSession(
+      environment,
+      EnvironmentScope.user,
+      ctx,
+    );
+    return 'user\x00${session.appName}\x00${session.userId}';
+  }
+  if (scope == EnvironmentScope.session) {
+    final Session session = _requireSession(
+      environment,
+      EnvironmentScope.session,
+      ctx,
+    );
+    return 'session\x00${session.appName}\x00${session.userId}\x00${session.id}';
+  }
+  return '';
 }
 
 /// Returns [environment]'s working directory, or `null` when it has none yet.
@@ -152,45 +306,63 @@ Directory? workingDirOrNone(BaseEnvironment environment) {
 bool hasEnvironmentLock(BaseEnvironment environment) =>
     _envLocks[environment] != null;
 
-/// Initializes [environment] under a per-environment lock with calling [ctx].
+/// Returns the number of currently active per-scope lock entries for [environment].
+int activeEnvironmentLockCount(BaseEnvironment environment) =>
+    _envLocks[environment]?.length ?? 0;
+
+/// Initializes [environment] under a per-scope lock with calling [ctx].
 ///
-/// Runs [BaseEnvironment.initialize] one call at a time for [environment] and
-/// marks [BaseEnvironment.isInitialized] `true` if the implementation did not
-/// already update its own flag.
+/// Calls within [environment]'s [BaseEnvironment.scope] run one at a time, so
+/// concurrent tool calls do not set a resource up twice: all calls for a
+/// [EnvironmentScope.shared] environment, and the calls of one user or one
+/// session for a [EnvironmentScope.user] or [EnvironmentScope.session]
+/// environment. Calls for other users or sessions of such an environment run
+/// concurrently. No call runs while [closeIfInitialized] closes the
+/// environment. Marks [BaseEnvironment.isInitialized] `true` if the
+/// implementation did not already update its own flag.
 Future<void> ensureInitialized(
   BaseEnvironment environment, [
   Context? ctx,
   Future<void>? cancelSignal,
 ]) async {
-  await _lockFor(environment).synchronized<void>(() async {
-    await environment.initialize(ctx: ctx);
-    if (!environment.isInitialized) {
-      try {
-        environment.isInitialized = true;
-      } on UnsupportedError {
-        // Subclass manages a read-only `isInitialized` getter on its own.
-      }
-    }
-  }, cancelSignal: cancelSignal);
-}
-
-/// Closes [environment] under its per-environment lock if currently initialized.
-Future<void> closeIfInitialized(
-  BaseEnvironment environment, {
-  Future<void>? cancelSignal,
-}) async {
-  await _lockFor(environment).synchronized<void>(() async {
-    if (environment.isInitialized) {
-      await environment.close();
-      if (environment.isInitialized) {
+  final String key = _scopeLockKey(environment, ctx);
+  await _gateFor(environment).withInitializing<void>(
+    () => _withEnvLock<void>(environment, key, () async {
+      await environment.initialize(ctx: ctx);
+      if (!environment.isInitialized) {
         try {
-          environment.isInitialized = false;
+          environment.isInitialized = true;
         } on UnsupportedError {
           // Subclass manages a read-only `isInitialized` getter on its own.
         }
       }
-    }
-  }, cancelSignal: cancelSignal);
+    }, cancelSignal: cancelSignal),
+    cancelSignal: cancelSignal,
+  );
+}
+
+/// Closes [environment] if currently initialized, waiting for in-flight
+/// [ensureInitialized] calls across all scopes and holding new ones until the
+/// close finishes.
+Future<void> closeIfInitialized(
+  BaseEnvironment environment, {
+  Future<void>? cancelSignal,
+}) async {
+  await _gateFor(environment).withClosing<void>(
+    () => _withEnvLock<void>(environment, '', () async {
+      if (environment.isInitialized) {
+        await environment.close();
+        if (environment.isInitialized) {
+          try {
+            environment.isInitialized = false;
+          } on UnsupportedError {
+            // Subclass manages a read-only `isInitialized` getter on its own.
+          }
+        }
+      }
+    }, cancelSignal: cancelSignal),
+    cancelSignal: cancelSignal,
+  );
 }
 
 String _truncateOutput(String text, {int limit = _defaultMaxOutputChars}) {

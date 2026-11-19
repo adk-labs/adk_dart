@@ -301,6 +301,13 @@ class ToolSimulationConfig {
   }
 }
 
+/// Default thinking configuration for simulator LLM calls.
+const Map<String, Object?> defaultAgentSimulatorThinkingConfig =
+    <String, Object?>{
+      'include_thoughts': false,
+      'thinking_budget': 10240,
+    };
+
 /// Top-level configuration for the agent simulator subsystem.
 class AgentSimulatorConfig {
   /// Creates an agent simulator configuration.
@@ -311,7 +318,12 @@ class AgentSimulatorConfig {
     this.tracingPath,
     this.environmentData,
   }) : simulationModelConfiguration =
-           simulationModelConfiguration ?? GenerateContentConfig() {
+           simulationModelConfiguration ??
+           GenerateContentConfig(
+             thinkingConfig: Map<String, Object?>.from(
+               defaultAgentSimulatorThinkingConfig,
+             ),
+           ) {
     if (toolSimulationConfigs.isEmpty) {
       throw ArgumentError('toolSimulationConfigs must be provided.');
     }

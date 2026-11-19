@@ -81,6 +81,9 @@ class LlmAudioUserSimulatorConfig extends BaseUserSimulatorConfig {
   final String model;
 
   /// Configuration for the text generation model.
+  ///
+  /// Its default thinking budget is sent as thinking level `MEDIUM` to
+  /// Gemini 4 and later models.
   final GenerateContentConfig modelConfiguration;
 
   /// Audio/TTS model identifier.

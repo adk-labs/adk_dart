@@ -9,6 +9,7 @@ import '../models/llm_request.dart';
 import '../models/llm_response.dart';
 import '../models/registry.dart';
 import '../types/content.dart';
+import '../utils/model_name_utils.dart';
 import 'agent_optimizer.dart';
 import 'data_types.dart';
 import 'sampler.dart';
@@ -28,6 +29,11 @@ Focus on clarity, structure, and providing actionable guidance for the agent.
 
 **Output only the new, full, improved agent prompt. Do not add any other text, explanations, or markdown formatting.**
 ''';
+
+const Map<String, Object?> _defaultThinkingConfig = <String, Object?>{
+  'include_thoughts': true,
+  'thinking_budget': 10240,
+};
 
 /// Configuration for [SimplePromptOptimizer].
 class SimplePromptOptimizerConfig {
@@ -92,7 +98,12 @@ class SimplePromptOptimizer
 
     final LlmRequest request = LlmRequest(
       model: _llm.model,
-      config: _config.modelConfiguration.copyWith(),
+      config: withGemini4ThinkingLevel(
+        _config.modelConfiguration.copyWith(),
+        model: _llm.model,
+        defaultThinkingConfig: _defaultThinkingConfig,
+        thinkingLevel: 'HIGH',
+      ),
       contents: <Content>[
         Content(role: 'user', parts: <Part>[Part.text(promptForOptimizer)]),
       ],

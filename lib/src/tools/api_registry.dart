@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../agents/readonly_context.dart';
+import '../utils/google_client_headers.dart';
 import '_google_access_token.dart';
 import 'base_toolset.dart';
 import 'mcp_tool/mcp_session_manager.dart';
@@ -234,7 +235,9 @@ class ApiRegistry {
       name: nameValue,
       connectionParams: StreamableHTTPConnectionParams(
         url: resolvedUrl,
-        headers: authHeaders,
+        headers: isGoogleApisUrl(resolvedUrl)
+            ? authHeaders
+            : const <String, String>{},
       ),
       payload: payload,
     );

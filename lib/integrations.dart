@@ -20,6 +20,7 @@ export 'src/integrations/bigquery/bigquery.dart';
 export 'src/integrations/cloud_run/cloud_run.dart';
 export 'src/integrations/crewai/crewai_tool.dart';
 export 'src/integrations/daytona/daytona_environment.dart';
+export 'src/integrations/discovery_engine/discovery_engine.dart';
 export 'src/integrations/e2b/e2b_environment.dart';
 export 'src/integrations/eleven_labs/eleven_labs.dart';
 export 'src/integrations/eventarc/eventarc.dart';

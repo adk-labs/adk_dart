@@ -471,6 +471,64 @@ class AgentEngineEnvironment extends BaseEnvironment {
   /// Active sandbox resource name once initialized.
   String? get activeSandboxResourceName => _activeSandboxResourceName;
 
+  /// Returns a serializable state snapshot matching Python's `__getstate__`.
+  ///
+  /// Throws an [UnsupportedError] when an explicit `client` was passed, since
+  /// live transport clients cannot be serialized. A sandbox created by this
+  /// environment is omitted so a restored copy creates its own sandbox; an
+  /// explicitly supplied [sandboxResourceName] is preserved.
+  Map<String, Object?> toSerializableState() {
+    if (_client != null) {
+      throw UnsupportedError(
+        'An AgentEngineEnvironment given a client cannot be serialized, since '
+        'an Agent Platform client cannot be. Pass agentEngineResourceName or '
+        'sandboxResourceName instead of a client.',
+      );
+    }
+    return <String, Object?>{
+      'agentEngineResourceName': agentEngineResourceName,
+      'sandboxResourceName': _createdSandbox ? null : sandboxResourceName,
+      'workingDir': _workingDir.path,
+      'ttlMicroseconds': ttl?.inMicroseconds,
+      'sandboxConfig': sandboxConfig,
+      'deleteOnClose': deleteOnClose,
+      'maxUnreachableRetries': maxUnreachableRetries,
+      'unreachableRetryDelayMicroseconds':
+          unreachableRetryDelay.inMicroseconds,
+      'createdSandbox': false,
+    };
+  }
+
+  /// Restores an [AgentEngineEnvironment] from [state] produced by
+  /// [toSerializableState], matching Python's `__setstate__`.
+  ///
+  /// Resets [isInitialized] to `false` so the next [initialize] call verifies
+  /// any named sandbox again.
+  static AgentEngineEnvironment fromSerializableState(
+    Map<String, Object?> state,
+  ) {
+    final int? ttlMicros = state['ttlMicroseconds'] as int?;
+    final int? retryDelayMicros =
+        state['unreachableRetryDelayMicroseconds'] as int?;
+    final AgentEngineEnvironment env = AgentEngineEnvironment(
+      agentEngineResourceName: state['agentEngineResourceName'] as String?,
+      sandboxResourceName: state['sandboxResourceName'] as String?,
+      workingDir: state['workingDir'] as String?,
+      ttl: ttlMicros == null ? null : Duration(microseconds: ttlMicros),
+      sandboxConfig: state['sandboxConfig'] as String?,
+      deleteOnClose: (state['deleteOnClose'] as bool?) ?? false,
+      maxUnreachableRetries:
+          (state['maxUnreachableRetries'] as int?) ??
+          defaultMaxUnreachableRetries,
+      unreachableRetryDelay: retryDelayMicros == null
+          ? Duration.zero
+          : Duration(microseconds: retryDelayMicros),
+    );
+    env._initialized = false;
+    env._createdSandbox = false;
+    return env;
+  }
+
   /// Whether this environment has been initialized.
   @override
   bool get isInitialized => _initialized;
@@ -1964,7 +2022,8 @@ class SandboxManager {
     this.customContainerTemplateName = 'computer_use_template',
     this.imageUri,
     VmaasVertexAiControlClient? controlClient,
-  }) : _controlClient =
+  }) : _ownsClient = controlClient == null,
+       _controlClient =
            controlClient ??
            InMemoryVmaasVertexAiControlClient(
              projectId: projectId ?? 'default-project',
@@ -1992,10 +2051,53 @@ class SandboxManager {
   /// Optional custom container image URI.
   final String? imageUri;
 
+  final bool _ownsClient;
   final VmaasVertexAiControlClient _controlClient;
 
   /// Underlying [VmaasVertexAiControlClient].
   VmaasVertexAiControlClient get controlClient => _controlClient;
+
+  /// Returns a serializable state snapshot matching Python's `__getstate__`.
+  ///
+  /// Throws an [UnsupportedError] if this manager was constructed with an
+  /// external [controlClient], since live clients cannot be serialized.
+  Map<String, Object?> toSerializableState() {
+    if (!_ownsClient) {
+      throw UnsupportedError(
+        'A SandboxManager given a client, such as the one of an '
+        'AgentEngineEnvironment given vertexai_client, cannot be serialized, '
+        'since an Agent Platform client cannot be. Pass projectId and '
+        'location instead of a client, for example to deploy the agent.',
+      );
+    }
+    return <String, Object?>{
+      'projectId': projectId,
+      'location': location,
+      'serviceAccountEmail': serviceAccountEmail,
+      'agentEngineName': agentEngineName,
+      'shellTemplateName': shellTemplateName,
+      'customContainerTemplateName': customContainerTemplateName,
+      'imageUri': imageUri,
+    };
+  }
+
+  /// Restores a [SandboxManager] from [state] produced by
+  /// [toSerializableState], creating a fresh local control client.
+  static SandboxManager fromSerializableState(Map<String, Object?> state) {
+    return SandboxManager(
+      projectId: state['projectId'] as String?,
+      location: (state['location'] as String?) ?? 'us-central1',
+      serviceAccountEmail: state['serviceAccountEmail'] as String?,
+      agentEngineName:
+          (state['agentEngineName'] as String?) ?? 'computer_use_engine',
+      shellTemplateName:
+          (state['shellTemplateName'] as String?) ?? 'shell_template',
+      customContainerTemplateName:
+          (state['customContainerTemplateName'] as String?) ??
+          'computer_use_template',
+      imageUri: state['imageUri'] as String?,
+    );
+  }
 
   /// Finds or creates an Agent Engine matching [agentEngineName].
   Future<String> getAgentEngineName() async {

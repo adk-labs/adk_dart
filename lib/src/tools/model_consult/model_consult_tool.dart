@@ -23,6 +23,63 @@ export '../../utils/client_labels_utils.dart' show modelConsultClientLabel;
 /// Default tool name for [ModelConsultTool].
 const String defaultConsultModelToolName = 'consult_model';
 
+/// Supported SDK thinking level names mapped from lowercase name to wire value.
+const Map<String, String> supportedAdvisorThinkingLevels = <String, String>{
+  'minimal': 'MINIMAL',
+  'low': 'LOW',
+  'medium': 'MEDIUM',
+  'high': 'HIGH',
+  'xhigh': 'XHIGH',
+};
+
+/// Maps a user-supplied thinking [level] to its canonical wire value, or `null`.
+///
+/// Accepts case-insensitive SDK thinking level names (such as `'minimal'`,
+/// `'low'`, `'medium'`, `'high'`, or `'xhigh'`), `'none'` / `'off'` / `''` /
+/// `null` to leave thinking unset, or an [Enum] whose name matches a supported
+/// thinking level.
+String? resolveThinkingLevel(Object? level) {
+  if (level == null) {
+    return null;
+  }
+  final String raw;
+  if (level is Enum) {
+    raw = level.name;
+  } else if (level is String) {
+    raw = level;
+  } else {
+    throw ArgumentError.value(
+      level,
+      'level',
+      'Unsupported thinking_level type: ${level.runtimeType}.',
+    );
+  }
+  final String normalized = raw.trim().toLowerCase();
+  if (normalized.isEmpty || normalized == 'none' || normalized == 'off') {
+    return null;
+  }
+  final String? resolved = supportedAdvisorThinkingLevels[normalized];
+  if (resolved == null) {
+    throw ArgumentError.value(
+      level,
+      'level',
+      'Invalid thinking_level "$level". Expected one of '
+          '${supportedAdvisorThinkingLevels.keys.toList()}, "none", "off", or null.',
+    );
+  }
+  return resolved;
+}
+
+String? _sentThinkingLevel(Object? thinkingConfig) {
+  if (thinkingConfig is! Map) {
+    return null;
+  }
+  final Object? raw =
+      thinkingConfig['thinking_level'] ?? thinkingConfig['thinkingLevel'];
+  final String? resolved = resolveThinkingLevel(raw);
+  return resolved?.toLowerCase();
+}
+
 /// Default system instruction passed to the advisor model.
 const String defaultAdvisorSystemInstruction =
     'You are an expert advisor assisting an AI agent. '
@@ -138,6 +195,7 @@ class AdvisorResult {
     required this.model,
     this.thoughts,
     this.usage,
+    this.thinkingLevel,
   });
 
   /// Guidance text returned by the advisor model.
@@ -152,6 +210,10 @@ class AdvisorResult {
   /// Optional token usage statistics for the consultation call.
   final AdvisorUsage? usage;
 
+  /// Normalized lowercase thinking level actually sent on the request that
+  /// produced [advice], or `null` if that request set none.
+  final String? thinkingLevel;
+
   /// Serializes this result to a JSON-compatible map.
   Map<String, Object?> toJson() {
     return <String, Object?>{
@@ -160,6 +222,7 @@ class AdvisorResult {
       'advice': advice,
       if (thoughts != null && thoughts!.isNotEmpty) 'thoughts': thoughts,
       if (usage != null) 'usage': usage!.toJson(),
+      if (thinkingLevel != null) 'thinking_level': thinkingLevel,
     };
   }
 }
@@ -328,15 +391,22 @@ Future<AdvisorResult> callAdvisor(
   List<Content> contents, {
   String systemInstruction = defaultAdvisorSystemInstruction,
   GenerateContentConfig? generateContentConfig,
+  Object? thinkingLevel,
   Duration? timeout,
   String agentName = defaultConsultModelToolName,
   TelemetryConfig? telemetryConfig,
   Map<String, String>? environment,
   AdkMetricsRecorder? recorder,
 }) async {
+  final String? resolvedThinkingLevel = resolveThinkingLevel(thinkingLevel);
   final GenerateContentConfig requestConfig =
       (generateContentConfig?.copyWith() ?? GenerateContentConfig())
         ..systemInstruction = systemInstruction;
+  if (resolvedThinkingLevel != null && requestConfig.thinkingConfig == null) {
+    requestConfig.thinkingConfig = <String, Object?>{
+      'thinking_level': resolvedThinkingLevel,
+    };
+  }
   final Map<String, String> existingHeaders =
       requestConfig.httpOptions?.headers ?? const <String, String>{};
   final String existingApiClient = existingHeaders['x-goog-api-client'] ?? '';
@@ -467,6 +537,7 @@ Future<AdvisorResult> callAdvisor(
       usage: usageMetadata != null
           ? AdvisorUsage.fromUsageMetadata(usageMetadata)
           : null,
+      thinkingLevel: _sentThinkingLevel(request.config.thinkingConfig),
     );
   });
 }
@@ -488,12 +559,14 @@ class ModelConsultTool extends BaseTool {
     this.advisorInstruction = defaultAdvisorSystemInstruction,
     this.contextConfig = const ModelConsultContextConfig(),
     this.generateContentConfig,
+    Object? thinkingLevel,
     int? maxConsultationsPerInvocation,
     int? maxUses,
     this.sessionMaxUses,
     this.environment,
     this.metricsRecorder,
-  }) : maxConsultationsPerInvocation = maxConsultationsPerInvocation ?? maxUses,
+  }) : thinkingLevel = resolveThinkingLevel(thinkingLevel)?.toLowerCase(),
+       maxConsultationsPerInvocation = maxConsultationsPerInvocation ?? maxUses,
        super(
          description:
              description ??
@@ -532,6 +605,10 @@ class ModelConsultTool extends BaseTool {
 
   /// Optional generation configuration overrides for the advisor request.
   final GenerateContentConfig? generateContentConfig;
+
+  /// Normalized lowercase advisor thinking level (such as `minimal`, `low`,
+  /// `medium`, `high`, or `xhigh`), or `null`.
+  final String? thinkingLevel;
 
   /// Optional cap on how many consultations may occur in one invocation.
   final int? maxConsultationsPerInvocation;
@@ -713,6 +790,7 @@ class ModelConsultTool extends BaseTool {
         ],
         systemInstruction: advisorInstruction,
         generateContentConfig: generateContentConfig,
+        thinkingLevel: thinkingLevel,
         agentName: name,
         telemetryConfig: telemetryConfig,
         environment: environment,
@@ -845,6 +923,7 @@ class ConsultModelTool extends ModelConsultTool {
     super.advisorInstruction,
     super.contextConfig,
     super.generateContentConfig,
+    super.thinkingLevel,
     super.maxConsultationsPerInvocation,
   });
 }

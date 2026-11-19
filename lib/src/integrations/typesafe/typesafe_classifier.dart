@@ -407,7 +407,8 @@ class TypesafeClassifier extends BaseClassifier {
     final Map<String, String> headers = <String, String>{
       'Authorization': 'Bearer $_apiKey',
       'Content-Type': 'application/json',
-      'User-Agent': getClientLabels().join(' '),
+      // Typesafe is a third party, so the hosting runtime is not sent.
+      'User-Agent': getClientLabels(excludeRuntimeTag: true).join(' '),
     };
     final Duration timeoutDuration = Duration(
       milliseconds: (timeout * 1000).round(),

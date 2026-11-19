@@ -120,6 +120,7 @@ export 'src/integrations/bigquery/bigquery.dart'
         BigQueryToolset,
         ExecuteSqlTool,
         bigQuerySessionInfoKey;
+export 'src/integrations/discovery_engine/discovery_engine.dart';
 export 'src/integrations/e2b/e2b_environment.dart';
 export 'src/integrations/eleven_labs/eleven_labs.dart';
 export 'src/integrations/eventarc/eventarc.dart'
@@ -167,6 +168,7 @@ export 'src/errors/input_validation_error.dart';
 export 'src/errors/invocation_not_found_error.dart';
 export 'src/errors/not_found_error.dart';
 export 'src/errors/session_not_found_error.dart';
+export 'src/errors/session_persistence_error.dart';
 export 'src/errors/stale_session_error.dart';
 export 'src/errors/tool_execution_error.dart';
 
@@ -356,8 +358,10 @@ export 'src/skills/prompt.dart';
 export 'src/skills/_utils.dart';
 
 export 'src/sessions/base_session_service.dart';
+export 'src/sessions/buffered_session_service.dart';
 export 'src/sessions/database_session_service.dart';
 export 'src/sessions/in_memory_session_service.dart';
+export 'src/sessions/session_write_buffer.dart';
 export 'src/sessions/migration/migrate_from_sqlalchemy_pickle.dart';
 export 'src/sessions/migration/migrate_from_sqlalchemy_sqlite.dart';
 export 'src/sessions/migration/migration_runner.dart';

@@ -11,6 +11,7 @@ import '../../models/llm_request.dart';
 import '../../models/llm_response.dart';
 import '../../models/registry.dart';
 import '../../types/content.dart';
+import '../../utils/model_name_utils.dart';
 import 'tool_args_matcher.dart';
 
 /// Default Gemini model used by [SemanticArgMatcher] when none is configured.
@@ -394,6 +395,22 @@ class SemanticArgMatcher extends BaseArgMatcher {
     return lines.join('\n');
   }
 
+  static const int _thinkingBudget = 512;
+
+  static Map<String, Object?> _defaultThinkingConfig(String? modelName) {
+    final int? major = geminiMajorVersion(modelName);
+    if (major != null && major >= 4) {
+      return <String, Object?>{
+        'include_thoughts': false,
+        'thinking_level': 'LOW',
+      };
+    }
+    return <String, Object?>{
+      'include_thoughts': false,
+      'thinking_budget': _thinkingBudget,
+    };
+  }
+
   Future<ArgMatchResult> _askModel({
     required String toolName,
     required String argName,
@@ -402,9 +419,22 @@ class SemanticArgMatcher extends BaseArgMatcher {
     Object? expectedValue,
     Object? actualValue,
   }) async {
+    final String modelName = model ?? defaultSemanticMatchModel;
     final GenerateContentConfig config =
         generateContentConfig?.copyWith() ??
-        GenerateContentConfig(temperature: 0.0);
+        GenerateContentConfig(
+          temperature: 0.0,
+          thinkingConfig: _defaultThinkingConfig(modelName),
+        );
+    if (generateContentConfig != null) {
+      final GenerateContentConfig adjusted = withGemini4ThinkingLevel(
+        config,
+        model: modelName,
+        defaultThinkingConfig: _defaultThinkingConfig(null),
+        thinkingLevel: 'LOW',
+      );
+      config.thinkingConfig = adjusted.thinkingConfig;
+    }
     config.systemInstruction = _systemInstruction;
     config.responseMimeType = 'application/json';
     config.responseSchema = _semanticMatchResponseSchema;
@@ -416,7 +446,7 @@ class SemanticArgMatcher extends BaseArgMatcher {
       actualJson: actualJson,
     );
     final LlmRequest request = LlmRequest(
-      model: model ?? defaultSemanticMatchModel,
+      model: modelName,
       contents: <Content>[
         Content(
           role: 'user',

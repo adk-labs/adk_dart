@@ -2,5 +2,6 @@
 library;
 
 export 'base_environment.dart';
+export 'environment_scope.dart';
 export 'environment_toolset.dart';
 export 'local_environment.dart';

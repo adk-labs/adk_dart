@@ -477,6 +477,11 @@ class RedisSessionService extends BaseSessionService {
     );
 
     if (config != null) {
+      if (config.afterTimestamp != null) {
+        session.events = session.events
+            .where((Event e) => e.timestamp >= config.afterTimestamp!)
+            .toList();
+      }
       if (config.numRecentEvents != null) {
         final int count = config.numRecentEvents!;
         if (count == 0) {
@@ -486,11 +491,6 @@ class RedisSessionService extends BaseSessionService {
             session.events.length - count,
           );
         }
-      }
-      if (config.afterTimestamp != null) {
-        session.events = session.events
-            .where((Event e) => e.timestamp >= config.afterTimestamp!)
-            .toList();
       }
     }
     return session;
