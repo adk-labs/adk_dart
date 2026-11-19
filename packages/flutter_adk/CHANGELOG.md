@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.19
+
+- Bumped package version to `2026.11.19` and dependency `adk_dart: ^2026.11.19`.
+- Synced Flutter widgets and controllers with `adk_dart` `2026.11.19`.
+
 ## 2026.11.16
 
 - Bumped package version to `2026.11.16` and dependency `adk_dart: ^2026.11.16`.

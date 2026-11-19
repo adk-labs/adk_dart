@@ -22,7 +22,7 @@ dart pub add adk_litertlm
 
 ```yaml
 dependencies:
-  adk_litertlm: ^2026.11.16
+  adk_litertlm: ^2026.11.19
 ```
 
 ## はじめに

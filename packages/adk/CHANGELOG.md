@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.11.19
+
+- Bumped package version to `2026.11.19` and dependency `adk_dart: ^2026.11.19`.
+- **ADK Web `v1.0.8` (`969cee92b..4b7d11542`)**: Rebuilt and synced the bundled Dev UI browser assets (`main-PJ4DBNMP.js`).
+- **Upstream `adk-python` CLI & Server Parity (`c6586f19a..fb08c7842`)**:
+  - Removed Visual Agent Builder endpoints (`/dev/apps/{app}/builder*`, `/builder/app/{app}*`) and built-in `__` agents (`c890aa317`, `e2a21ac23`), and stopped tagging YAML agents as Visual Builder apps in telemetry (`fb08c7842`).
+  - Required a local loopback client for `POST /config/telemetry` (`3e6c5868f`), logged redacted `/run` response payloads (`ba774bcc3`), supported non-LLM root nodes in `app-info` (`ec2ac7c5e`), and printed cross-run criterion means in `adk eval` (`b64b540c1`).
+  - Passed each `adk deploy --allow_origins` as its own server argument (`1ade0ba68`), improved `extra_packages` install/reinstall ordering & project detection (`5e91ab0a5`, `c16dac705`), and validated agent imports on Agent Engine container startup (`7d2c7b75d`).
+
 ## 2026.11.16
 
 - Bumped package version to `2026.11.16` and dependency `adk_dart: ^2026.11.16`.

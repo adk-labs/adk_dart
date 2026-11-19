@@ -2,7 +2,7 @@
 library;
 
 /// The current version of the `adk` package.
-const String adkPackageVersion = '2026.11.16';
+const String adkPackageVersion = '2026.11.19';
 
 /// The target compatibility version of the upstream ADK specification.
 const String adkSpecVersion = '2.0';

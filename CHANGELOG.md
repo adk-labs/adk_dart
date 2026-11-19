@@ -1,3 +1,23 @@
+## 2026.11.19
+
+- **Upstream `adk-python` Parity (`c6586f19a..fb08c7842`, 51 commits)**:
+  - Updated `adkPackageVersion` to `'2026.11.19'` (`adkVersion = '2.14.1'`).
+  - **Core, Sessions, Workflow, A2A & Plugins**:
+    - Added `BufferedSessionService`, `SessionWriteBuffer`, `SessionPersistenceError`, and `BaseSessionService.appendEvents` / `flushSession` for background batched session persistence (`e1deb17f5`, `f4fab7885`), and preserved out-of-order timestamp events in `InMemorySessionService` and `RedisSessionService` `getSession` (`b7c9c40f8`).
+    - Persisted streamed `RemoteA2aAgent` output even without `last_chunk` (`dbae28d3c`), coalesced workflow node status checkpoints per scheduler tick (`6dbe5bb6d`), and ignored unsupported resume response schema shapes (`01b4b5a76`).
+    - Isolated `McpInstructionProvider` from session state (`889ddd313`), stopped `MultimodalToolResultsPlugin` resending inline media in session mode (`2b7e32098`), widened `getAgentsDict` to support non-LLM root nodes (`ec2ac7c5e`), dropped `parentAgent` from `BaseAgent.toString()` (`8ec642c12`), and defaulted `ManagedAgent` Developer API calls to `v1beta` (`30cb66ec1`).
+    - Unified `isGoogleApisUrl` across ADK (`72578551c`), tagged Cloud Run (`cloud_run`) and Kubernetes (`k8s`) runtimes in client labels (`1997a12b8`), and omitted hosting runtime tags on non-Google API endpoints (`c38ecdae6`).
+  - **Models, Context Caching & Live Connections**:
+    - Added `BaseLlmConnection.sendContextUpdate` across `GeminiLlmConnection` and `CascadeLiveConnection` (`6ccd07b79`).
+    - Kept Gemini Developer API on `v1beta` by default (`aa0f434a8`), merged ADK tracking headers on live sessions with caller-supplied clients (`761538ab2`), accepted content lists in Interactions code execution results (`6959bac7b`), and treated Gemini 4+ as Gemini 3+ in `LiteLlm` (`de1d3079e`).
+    - Attached initial `cachedContent` seeds on turn 1 (`3256db08c`) and stopped retrying context cache creation on models that refuse explicit caching (`43e959ee4`).
+    - Added `FeatureName.bufferedSessionService` and `FeatureName.checkGrounding` to the feature registry.
+  - **Integrations, Environments, Skills, Tools, Evaluation & Optimization**:
+    - Added Discovery Engine `CheckGroundingClient` and grounding models (`lib/src/integrations/discovery_engine/`, `abcc0205b`).
+    - Refactored `FsspecArtifactService` into per-backend adapters (`backends.dart`) with S3 artifact metadata support (`90c3a2941`, `b916291fc`), added `searchScope` to BigQuery `askDataInsights` (`9eb6d9d93`), and added serializable state helpers to `AgentEngineEnvironment` / `SandboxManager` (`fa9ae7e01`).
+    - Added `EnvironmentScope` with per-scope initialization locking (`691ecbeed`) and updated `SkillToolset` to stop writing skills during request building and lazily refresh stale `.adk_skill_hash` copies when scripts run (`5f2f2279c`, `d94b5e214`).
+    - Accepted all SDK thinking levels in `ModelConsultTool` and reported the actually sent level (`c74df83c0`, `8fa57e82a`), routed Gemini 4+ default thinking budgets to `thinking_level` via `withGemini4ThinkingLevel` across `SemanticArgMatcher`, simulators, and prompt optimizers (`fa7b20458`, `36ac021eb`), and added `CrossRunCriterionSummary` / `summarizeCrossRunCriteria` (`b64b540c1`).
+
 ## 2026.11.16
 
 - **Upstream `adk-python` Parity (`287c0b0e6..c6586f19a`)**:
