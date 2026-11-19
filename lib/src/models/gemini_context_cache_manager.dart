@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../agents/context_cache_config.dart';
 import '../types/content.dart';
@@ -9,7 +10,39 @@ import 'cache_metadata.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
-const int _geminiMinimumCacheTokens = 4096;
+const int _gemini25MinCacheTokens = 2048;
+const int _gemini3MinCacheTokens = 4096;
+const List<String> _explicitCachingUnsupportedSubstrings = <String>[
+  'does not support explicit context caching',
+  'explicit caching is not supported for ',
+  'is not supported for context caching',
+];
+final Set<String> _modelsWithoutExplicitCaching = <String>{};
+
+/// Clears the in-memory set of `(scope, model)` entries that reported explicit
+/// context caching as unsupported. Intended for test isolation.
+void clearExplicitCachingRefusalCacheForTest() {
+  _modelsWithoutExplicitCaching.clear();
+}
+
+int? _minimumCacheTokens(String? model) {
+  final String raw = model ?? '';
+  final String modelName = raw.contains('/') ? raw.split('/').last : raw;
+  if (modelName.startsWith('gemini-2.5-')) {
+    return _gemini25MinCacheTokens;
+  }
+  if (modelName.startsWith('gemini-3')) {
+    return _gemini3MinCacheTokens;
+  }
+  return null;
+}
+
+bool _isExplicitCachingUnsupported(Object error) {
+  final String message = '$error'.toLowerCase();
+  return _explicitCachingUnsupportedSubstrings.any(
+    (String phrase) => message.contains(phrase),
+  );
+}
 
 /// Result returned by cache creation calls.
 class GeminiCreatedCache {
@@ -163,7 +196,8 @@ class GeminiContextCacheManager {
         return reused;
       }
 
-      if (existing.cacheName != null) {
+      // Only cleanup an active cache that this manager created.
+      if (existing.cacheName != null && existing.createdAt != null) {
         await cleanupCache(existing.cacheName!);
       }
 
@@ -186,6 +220,7 @@ class GeminiContextCacheManager {
           request.cacheMetadata = recreated;
           return recreated;
         }
+        request.config.cachedContent = null;
         final CacheMetadata fingerprintOnly = CacheMetadata(
           fingerprint: currentFingerprint,
           contentsCount: existing.contentsCount,
@@ -195,12 +230,37 @@ class GeminiContextCacheManager {
       }
 
       final int totalContentsCount = request.contents.length;
+      request.config.cachedContent = null;
       final CacheMetadata fingerprintOnly = CacheMetadata(
         fingerprint: _generateCacheFingerprint(request, totalContentsCount),
         contentsCount: totalContentsCount,
       );
       request.cacheMetadata = fingerprintOnly;
       return fingerprintOnly;
+    }
+
+    // No existing cache metadata - check for a pre-created cached_content seed.
+    final String? seedCacheName = request.config.cachedContent;
+    if (seedCacheName != null && seedCacheName.isNotEmpty) {
+      // Seed cache covers static instructions/tools (0 dynamic contents).
+      final String fingerprint = _generateCacheFingerprint(request, 0);
+      _applyCacheToRequest(
+        request,
+        cacheName: seedCacheName,
+        cacheContentsCount: 0,
+      );
+      final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final CacheMetadata seeded = CacheMetadata(
+        cacheName: seedCacheName,
+        expireTime: now + cacheConfig.ttlSeconds,
+        fingerprint: fingerprint,
+        invocationsUsed: 1,
+        contentsCount: 0,
+        // This manager did not create the cache, so it never deletes it.
+        createdAt: null,
+      );
+      request.cacheMetadata = seeded;
+      return seeded;
     }
 
     final int totalContentsCount = request.contents.length;
@@ -260,6 +320,12 @@ class GeminiContextCacheManager {
     if (cacheMetadata.cacheName == null) {
       return false;
     }
+    // Check if an externally created seed cache was changed or unset.
+    final String? currentSeed = request.config.cachedContent;
+    if (cacheMetadata.createdAt == null &&
+        currentSeed != cacheMetadata.cacheName) {
+      return false;
+    }
     final double? expiresAt = cacheMetadata.expireTime;
     if (expiresAt != null &&
         DateTime.now().millisecondsSinceEpoch / 1000.0 >= expiresAt) {
@@ -285,25 +351,35 @@ class GeminiContextCacheManager {
     if (cacheClient == null) {
       return null;
     }
+    final String model = request.model ?? '';
+    if (model.isEmpty) {
+      return null;
+    }
+    final Map<String, dynamic> scope = _cacheScope();
+    final List<String> sortedKeys = scope.keys.toList()..sort();
+    final Map<String, dynamic> sortedScope = <String, dynamic>{
+      for (final String key in sortedKeys) key: scope[key],
+    };
+    final String refusalKey = '${jsonEncode(sortedScope)}::$model';
+    if (_modelsWithoutExplicitCaching.contains(refusalKey)) {
+      return null;
+    }
+
     final int? previousTokenCount = request.cacheableContentsTokenCount;
     if (previousTokenCount == null) {
       return null;
     }
-    final int minimumTokenCount =
-        cacheConfig.minTokens > _geminiMinimumCacheTokens
-        ? cacheConfig.minTokens
-        : _geminiMinimumCacheTokens;
+    if (previousTokenCount < cacheConfig.minTokens) {
+      return null;
+    }
 
     final int cacheablePrefixTokens = _estimateCacheablePrefixTokens(
       request,
       cacheContentsCount,
     );
-    if (cacheablePrefixTokens < minimumTokenCount) {
-      return null;
-    }
-
-    final String model = request.model ?? '';
-    if (model.isEmpty) {
+    final int? minimumCacheTokens = _minimumCacheTokens(model);
+    if (minimumCacheTokens != null &&
+        cacheablePrefixTokens < minimumCacheTokens) {
       return null;
     }
     try {
@@ -333,7 +409,19 @@ class GeminiContextCacheManager {
         contentsCount: cacheContentsCount,
         createdAt: now,
       );
-    } catch (_) {
+    } catch (error) {
+      if (_isExplicitCachingUnsupported(error)) {
+        if (_modelsWithoutExplicitCaching.add(refusalKey)) {
+          developer.log(
+            'Model $model does not support explicit context caching; '
+            'ContextCacheConfig has no effect for this model and requests '
+            'will be sent without an explicit cache.',
+            name: 'adk_dart.models.gemini_context_cache_manager',
+            level: 900,
+          );
+        }
+        return null;
+      }
       return null;
     }
   }

@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../types/content.dart';
 import '../utils/env_utils.dart';
+import '../utils/google_client_headers.dart';
 import '../utils/schema_utils.dart';
 import '../utils/system_environment/system_environment.dart';
 import 'google_llm.dart';
@@ -631,6 +632,7 @@ class ApigeeLlm extends Gemini {
   bool get isVertexAi => _isVertexAi;
 
   /// Resolved API version segment extracted from the model path.
+  @override
   String get apiVersion => _apiVersion;
 
   /// Vertex project resolved from environment when using Vertex AI mode.
@@ -638,6 +640,30 @@ class ApigeeLlm extends Gemini {
 
   /// Vertex location resolved from environment when using Vertex AI mode.
   String? get location => _location;
+
+  @override
+  bool excludeRuntimeTag() {
+    // The proxy URL is the customer's, not a Google API endpoint.
+    return true;
+  }
+
+  @override
+  HttpOptions get clientHttpOptions {
+    final String? effectiveApiVersion = _apiVersion.isNotEmpty
+        ? _apiVersion
+        : (configuredApiVersion() ??
+              (_isVertexAi ? null : geminiDefaultApiVersion));
+    final String? configuredBaseUrl =
+        proxyUrl ?? (environment ?? _safeEnvironment)[_apigeeProxyUrlEnv];
+    return buildAdkHttpOptions(
+      clientKwargs: clientKwargs,
+      defaultHeaders: customHeaders,
+      apiVersion: effectiveApiVersion,
+      baseUrl: configuredBaseUrl,
+      excludeRuntimeTag: excludeRuntimeTag(),
+      environment: environment,
+    );
+  }
 
   /// Regex patterns supported by this adapter.
   static List<RegExp> supportedModels() {
@@ -664,7 +690,11 @@ class ApigeeLlm extends Gemini {
         request: prepared,
         stream: stream,
         baseUrl: configuredBaseUrl,
-        headers: Map<String, String>.from(customHeaders),
+        headers: mergeTrackingHeaders(
+          customHeaders,
+          excludeRuntimeTag: excludeRuntimeTag(),
+          environment: environment,
+        ),
       );
       return;
     }

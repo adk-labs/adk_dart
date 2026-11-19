@@ -285,8 +285,15 @@ void main() {
       expect(merged.headers.containsKey('x-goog-api-client'), isTrue);
     });
 
-    test('rejects liveConnectConfig.httpOptions in Gemini.connect', () async {
-      final Gemini llm = Gemini(model: 'gemini-2.5-flash');
+    test('merges tracking headers into liveConnectConfig.httpOptions in Gemini.connect', () async {
+      LlmRequest? captured;
+      final Gemini llm = Gemini(
+        model: 'gemini-2.5-flash',
+        liveSessionFactory: (LlmRequest req) {
+          captured = req;
+          throw StateError('stop');
+        },
+      );
       final LlmRequest request = LlmRequest(
         model: 'gemini-2.5-flash',
         liveConnectConfig: LiveConnectConfig(
@@ -295,7 +302,15 @@ void main() {
       );
       expect(
         () => llm.connect(request),
-        throwsA(isA<ArgumentError>()),
+        throwsA(isA<StateError>()),
+      );
+      expect(captured, isNotNull);
+      expect(captured!.liveConnectConfig.httpOptions?.headers['a'], 'b');
+      expect(
+        captured!.liveConnectConfig.httpOptions?.headers.containsKey(
+          'x-goog-api-client',
+        ),
+        isTrue,
       );
     });
   });

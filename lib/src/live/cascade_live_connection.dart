@@ -437,6 +437,19 @@ class CascadeLiveConnection extends BaseLlmConnection {
     _audioIn.add(null);
   }
 
+  /// Replaces the instruction or tools on the open connection.
+  ///
+  /// No-op for [CascadeLiveConnection] because each turn copies the shared
+  /// `llmRequest`, which the flow updates.
+  @override
+  Future<void> sendContextUpdate({
+    String? systemInstruction,
+    List<ToolDeclaration>? tools,
+  }) async {
+    // Each turn copies the shared llm_request, which the flow updates.
+    return;
+  }
+
   /// Yields [LlmResponse] events until the connection is closed.
   ///
   /// Throws the ingress error if the STT transform failed, or throws

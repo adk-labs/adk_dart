@@ -62,6 +62,12 @@ class _FakeLiveSession implements GeminiLiveSession {
   }
 
   @override
+  Future<void> sendContextUpdate({
+    Content? systemInstruction,
+    List<ToolDeclaration>? tools,
+  }) async {}
+
+  @override
   Future<void> sendToolResponses({
     required List<FunctionResponse> functionResponses,
   }) async {
@@ -208,12 +214,14 @@ void main() {
         final String fingerprint = manager.fingerprintCacheableContents(
           request,
         );
+        final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
         request.cacheMetadata = CacheMetadata(
           cacheName: 'caches/existing',
-          expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 + 300,
+          expireTime: now + 300,
           fingerprint: fingerprint,
           invocationsUsed: 0,
           contentsCount: 1,
+          createdAt: now - 10,
         );
 
         final CacheMetadata? metadata = await manager.handleContextCaching(
@@ -245,12 +253,14 @@ void main() {
           request,
         );
         request.cacheableContentsTokenCount = 5000;
+        final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
         request.cacheMetadata = CacheMetadata(
           cacheName: 'caches/expired',
-          expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 - 1,
+          expireTime: now - 1,
           fingerprint: fingerprint,
           invocationsUsed: 0,
           contentsCount: 1,
+          createdAt: now - 100,
         );
 
         final CacheMetadata? metadata = await manager.handleContextCaching(
@@ -283,12 +293,14 @@ void main() {
           request,
         );
         request.cacheableContentsTokenCount = 5000;
+        final double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
         request.cacheMetadata = CacheMetadata(
           cacheName: 'caches/expired',
-          expireTime: DateTime.now().millisecondsSinceEpoch / 1000.0 - 1,
+          expireTime: now - 1,
           fingerprint: fingerprint,
           invocationsUsed: 0,
           contentsCount: 1,
+          createdAt: now - 100,
         );
 
         final CacheMetadata? metadata = await manager.handleContextCaching(

@@ -2,6 +2,7 @@
 library;
 
 import '../types/content.dart';
+import 'llm_request.dart';
 import 'llm_response.dart';
 
 /// Recoverable failure raised by live connections when reconnection is possible.
@@ -52,6 +53,16 @@ abstract class BaseLlmConnection {
 
   /// Signals the end of user speech activity when manual VAD is enabled.
   Future<void> sendActivityEnd() async {}
+
+  /// Replaces the instruction or tools on the open connection.
+  ///
+  /// Pass [systemInstruction] to replace the current instruction, or `null` to
+  /// keep it. Pass [tools] to replace the current tools, or `null` to keep
+  /// them.
+  Future<void> sendContextUpdate({
+    String? systemInstruction,
+    List<ToolDeclaration>? tools,
+  }) async {}
 
   /// Receives responses emitted by the model connection.
   Stream<LlmResponse> receive();

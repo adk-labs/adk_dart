@@ -5,6 +5,7 @@ import 'dart:async';
 
 import '../types/content.dart';
 import '../utils/content_utils.dart';
+import '../utils/model_name_utils.dart';
 import '../utils/variant_utils.dart';
 import 'base_llm.dart';
 import 'base_llm_connection.dart';
@@ -149,6 +150,12 @@ abstract class GeminiLiveSession {
   /// Sends realtime binary input [blob] to the live session.
   Future<void> sendRealtimeInput({required RealtimeBlob blob});
 
+  /// Replaces the system instruction or tools on the open live session.
+  Future<void> sendContextUpdate({
+    Content? systemInstruction,
+    List<ToolDeclaration>? tools,
+  }) async {}
+
   /// Receives live-session messages from the transport.
   Stream<GeminiLiveSessionMessage> receive();
 
@@ -268,6 +275,39 @@ class GeminiLlmConnection extends BaseLlmConnection {
 
   @override
   Stream<LlmResponse> receive() => _responses.stream;
+
+  @override
+  Future<void> sendContextUpdate({
+    String? systemInstruction,
+    List<ToolDeclaration>? tools,
+  }) async {
+    if (!_isGemini3xLive(_modelVersion)) {
+      throw StateError(
+        'Context updates need a Gemini 3.x Live model, not $_modelVersion.',
+      );
+    }
+    if (_liveSession != null) {
+      await _liveSession.sendContextUpdate(
+        systemInstruction:
+            systemInstruction != null && systemInstruction.isNotEmpty
+            ? Content(
+                role: 'system',
+                parts: <Part>[Part.text(systemInstruction)],
+              )
+            : null,
+        tools: tools,
+      );
+      return;
+    }
+    if (systemInstruction != null && systemInstruction.isNotEmpty) {
+      _initialRequest.config.systemInstruction = systemInstruction;
+    }
+    if (tools != null) {
+      _initialRequest.config.tools = tools
+          .map((ToolDeclaration tool) => tool.copyWith())
+          .toList();
+    }
+  }
 
   @override
   Future<void> close() async {
@@ -555,4 +595,22 @@ class GeminiLlmConnection extends BaseLlmConnection {
     );
     _textBuffer = '';
   }
+}
+
+bool _isGemini35LiveTranslate(String? modelString) {
+  if (modelString == null || modelString.isEmpty) {
+    return false;
+  }
+  final String modelName = extractModelName(modelString);
+  return modelName.startsWith('gemini-3.5-live-translate');
+}
+
+bool _isGemini3xLive(String? modelString) {
+  if (modelString == null || modelString.isEmpty) {
+    return false;
+  }
+  final String modelName = extractModelName(modelString);
+  return modelName.startsWith('gemini-3.') &&
+      modelName.contains('-live') &&
+      !_isGemini35LiveTranslate(modelString);
 }

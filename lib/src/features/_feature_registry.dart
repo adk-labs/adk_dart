@@ -32,8 +32,14 @@ enum FeatureName {
   /// Bigtable toolset integration.
   bigtableToolset('BIGTABLE_TOOLSET'),
 
+  /// Buffered session service for batching session writes.
+  bufferedSessionService('BUFFERED_SESSION_SERVICE'),
+
   /// Cascaded STT -> LLM -> TTS live audio pipeline.
   cascadeLive('CASCADE_LIVE'),
+
+  /// Grounding verification support.
+  checkGrounding('CHECK_GROUNDING'),
 
   /// Probability-distribution classifiers and classifier routing nodes.
   classifier('CLASSIFIER'),
@@ -260,7 +266,15 @@ final Map<FeatureName, FeatureConfig> _featureRegistry =
         FeatureStage.stable,
         defaultOn: true,
       ),
+      FeatureName.bufferedSessionService: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
       FeatureName.cascadeLive: const FeatureConfig(
+        FeatureStage.experimental,
+        defaultOn: true,
+      ),
+      FeatureName.checkGrounding: const FeatureConfig(
         FeatureStage.experimental,
         defaultOn: true,
       ),

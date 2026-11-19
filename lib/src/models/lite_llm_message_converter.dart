@@ -1150,8 +1150,11 @@ void _applyThinkingConfigToPayload(
   final bool isAdaptiveAnthropic =
       isAnthropic &&
       (isClaude47 || _claude46Substrings.any(lowerModel.contains));
-  final bool isGemini = lowerModel.contains('gemini-');
-  final bool isGemini3OrNewer = isGemini && lowerModel.contains('gemini-3');
+  final String strippedLower = lowerModel.contains('/')
+      ? lowerModel.split('/').last
+      : lowerModel;
+  final bool isGemini = isGeminiModel(strippedLower);
+  final bool gemini3OrNewer = isGemini3OrNewer(strippedLower);
   final int? effectiveMaxTokens =
       (payload['max_completion_tokens'] as int?) ??
       (payload['max_tokens'] as int?);
@@ -1198,7 +1201,7 @@ void _applyThinkingConfigToPayload(
       payload['reasoning_effort'] = effort;
     }
   } else if (thinkingBudget == 0) {
-    if (!isGemini3OrNewer && (isAnthropic || isGemini)) {
+    if (!gemini3OrNewer && (isAnthropic || isGemini)) {
       if (isGemini) {
         if (!lowerModel.contains('gemini-2.5-pro')) {
           payload['thinking'] = <String, Object?>{
@@ -1209,11 +1212,11 @@ void _applyThinkingConfigToPayload(
       } else {
         payload['thinking'] = <String, Object?>{'type': 'disabled'};
       }
-    } else if (isGemini3OrNewer) {
+    } else if (gemini3OrNewer) {
       payload['reasoning_effort'] = 'none';
     }
   } else if (thinkingBudget != null && thinkingBudget > 0) {
-    if (!isGemini3OrNewer && !isClaude47 && (isAnthropic || isGemini)) {
+    if (!gemini3OrNewer && !isClaude47 && (isAnthropic || isGemini)) {
       int minBudget = 0;
       if (isAnthropic) {
         minBudget = _anthropicMinThinkingBudgetTokens;
@@ -1260,7 +1263,7 @@ void _applyThinkingConfigToPayload(
           levelStr.toUpperCase() == 'THINKING_LEVEL_UNSPECIFIED' ||
           levelStr.toLowerCase() == 'unspecified') &&
       (thinkingBudget == null || thinkingBudget < 0)) {
-    if (includeThoughts == true && !isGemini3OrNewer) {
+    if (includeThoughts == true && !gemini3OrNewer) {
       if (isAnthropic) {
         if (isClaude47) {
           payload['thinking'] = <String, Object?>{'type': 'adaptive'};

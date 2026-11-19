@@ -21,6 +21,10 @@ import 'interactions_utils.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
 
+/// Default API version used for the Gemini Developer API when none is
+/// explicitly configured.
+const String geminiDefaultApiVersion = 'v1beta';
+
 /// Hook for overriding Gemini generation behavior.
 typedef GeminiGenerateHook =
     Stream<LlmResponse> Function(LlmRequest request, bool stream);
@@ -87,7 +91,9 @@ class Gemini extends BaseLlm {
     this.useInteractionsApi = false,
     this.retryOptions,
     this.baseUrl,
+    this.apiVersion,
     this.speechConfig,
+    this.client,
     this.clientKwargs,
     this.cacheManager = const GeminiContextCacheManager(),
     this.environment,
@@ -107,8 +113,18 @@ class Gemini extends BaseLlm {
   /// Optional base URL override for Gemini REST endpoints.
   final String? baseUrl;
 
+  /// Optional API version override (e.g. `'v1'`, `'v1beta'`).
+  ///
+  /// When unset, `GOOGLE_GENAI_API_VERSION` is consulted (treating `'beta'` as
+  /// unset), and finally the Gemini Developer API defaults to `'v1beta'` while
+  /// Vertex AI uses the SDK default.
+  final String? apiVersion;
+
   /// Optional speech config used for live connections.
   final Object? speechConfig;
+
+  /// Optional caller-supplied client instance.
+  final Object? client;
 
   /// Optional client keyword arguments forwarded to the underlying Gemini client.
   final Map<String, Object?>? clientKwargs;
@@ -149,29 +165,83 @@ class Gemini extends BaseLlm {
       _normalizedEndpoint.apiVersion ??
       (apiBackend == GoogleLLMVariant.vertexAi ? 'v1beta1' : 'v1alpha');
 
-  String? _resolveEnvApiVersion() {
+  /// Returns the explicitly configured API version, if any.
+  ///
+  /// Resolution order:
+  ///   1. The [apiVersion] field set on this instance.
+  ///   2. The `GOOGLE_GENAI_API_VERSION` environment variable. Its `'beta'`
+  ///      value asks for each backend's beta version, which is what an unset
+  ///      version gets, so it counts as unset.
+  String? configuredApiVersion() {
+    if (apiVersion != null && apiVersion!.isNotEmpty) {
+      return apiVersion;
+    }
     final Map<String, String> env = environment ?? readSystemEnvironment();
-    final String? version = env['GOOGLE_GENAI_API_VERSION'];
-    if (version == null || version.trim().isEmpty) {
+    final String? version = env['GOOGLE_GENAI_API_VERSION']?.trim();
+    if (version == null || version.isEmpty || version == 'beta') {
       return null;
     }
-    return version.trim();
+    return version;
   }
 
+  String? _rawConfiguredBaseUrl() {
+    final Object? rawHttpOptions =
+        clientKwargs?['http_options'] ?? clientKwargs?['httpOptions'];
+    if (rawHttpOptions is HttpOptions &&
+        rawHttpOptions.baseUrl != null &&
+        rawHttpOptions.baseUrl!.isNotEmpty) {
+      return rawHttpOptions.baseUrl;
+    }
+    if (rawHttpOptions is Map) {
+      final String? configured = _stringValue(
+        rawHttpOptions['base_url'] ?? rawHttpOptions['baseUrl'],
+      );
+      if (configured != null && configured.isNotEmpty) {
+        return configured;
+      }
+    }
+    return _normalizedEndpoint.baseUrl ?? baseUrl;
+  }
+
+  /// Returns whether tracking headers must leave out the hosting runtime tag.
+  ///
+  /// Subclasses or configurations whose requests go to a non-Google endpoint
+  /// return `true`.
+  bool excludeRuntimeTag() {
+    final String? configuredBaseUrl = _rawConfiguredBaseUrl();
+    if (configuredBaseUrl != null && configuredBaseUrl.isNotEmpty) {
+      return !isGoogleApisUrl(configuredBaseUrl);
+    }
+    return false;
+  }
+
+  bool get _isVertexClient =>
+      apiBackend == GoogleLLMVariant.vertexAi ||
+      clientKwargs?['vertexai'] == true;
+
   /// Resolved client-level [HttpOptions] for standard Gemini requests.
-  HttpOptions get clientHttpOptions => buildAdkHttpOptions(
-    clientKwargs: clientKwargs,
-    retryOptions: _resolveRetryOptions(requestRetryOptions: null),
-    apiVersion: _normalizedEndpoint.apiVersion ?? _resolveEnvApiVersion(),
-    baseUrl: _normalizedEndpoint.baseUrl,
-    environment: environment,
-  );
+  HttpOptions get clientHttpOptions {
+    String? resolvedApiVersion =
+        _normalizedEndpoint.apiVersion ?? configuredApiVersion();
+    if (resolvedApiVersion == null && !_isVertexClient) {
+      resolvedApiVersion = geminiDefaultApiVersion;
+    }
+    return buildAdkHttpOptions(
+      clientKwargs: clientKwargs,
+      retryOptions: _resolveRetryOptions(requestRetryOptions: null),
+      apiVersion: resolvedApiVersion,
+      baseUrl: _normalizedEndpoint.baseUrl,
+      excludeRuntimeTag: excludeRuntimeTag(),
+      environment: environment,
+    );
+  }
 
   /// Resolved client-level [HttpOptions] for Live API connections.
   HttpOptions get liveClientHttpOptions => buildAdkHttpOptions(
     clientKwargs: clientKwargs,
     apiVersion: _liveApiVersion,
     baseUrl: _normalizedEndpoint.baseUrl,
+    excludeRuntimeTag: excludeRuntimeTag(),
     environment: environment,
   );
 
@@ -274,6 +344,8 @@ class Gemini extends BaseLlm {
               'v1beta',
           headers: prepared.config.httpOptions?.headers,
           retryOptions: resolvedRetryOptions,
+          excludeRuntimeTag: excludeRuntimeTag(),
+          environment: environment,
         )) {
           _raiseForMalformedFunctionCall(response);
           yield response;
@@ -419,11 +491,6 @@ class Gemini extends BaseLlm {
 
   /// Creates a live-capable connection for [request].
   BaseLlmConnection connect(LlmRequest request) {
-    if (request.liveConnectConfig.httpOptions != null) {
-      throw ArgumentError(
-        "http_options must be set via Gemini(clientKwargs: {'http_options': ...}), not on liveConnectConfig, because the live client is initialized with client-level HTTP options.",
-      );
-    }
     final LlmRequest prepared = request.sanitizedForModelCall();
     prepared.model = prepared.model ?? model;
     if (speechConfig != null) {
@@ -439,6 +506,33 @@ class Gemini extends BaseLlm {
     prepared.liveConnectConfig.tools = prepared.config.tools
         ?.map((ToolDeclaration tool) => tool.copyWith())
         .toList();
+
+    // ADK adds its tracking headers only to clients it builds, so a
+    // caller-supplied client lacks them. Caller http_options headers replace
+    // the client's headers of the same name, which would drop ADK's tags, so
+    // those need them merged in too.
+    if (client != null || prepared.liveConnectConfig.httpOptions != null) {
+      final HttpOptions? originalOptions = request.liveConnectConfig.httpOptions;
+      final HttpOptions? existingOptions =
+          prepared.liveConnectConfig.httpOptions;
+      final HttpOptions? copiedOptions = existingOptions?.copyWith();
+      final String? preservedBaseUrl =
+          originalOptions?.baseUrl ?? existingOptions?.baseUrl;
+      if (copiedOptions != null && preservedBaseUrl != null) {
+        copiedOptions.baseUrl = preservedBaseUrl;
+      }
+      final Object merged = mergeTrackingHttpOptions(
+        httpOptions: copiedOptions,
+        excludeRuntimeTag: excludeRuntimeTag(),
+        environment: environment,
+      );
+      if (merged is HttpOptions) {
+        if (preservedBaseUrl != null && merged.baseUrl == null) {
+          merged.baseUrl = preservedBaseUrl;
+        }
+        prepared.liveConnectConfig.httpOptions = merged;
+      }
+    }
 
     return GeminiLlmConnection(
       model: this,
@@ -519,7 +613,11 @@ class Gemini extends BaseLlm {
   }
 
   Map<String, String> _mergeTrackingHeaders(Map<String, String>? headers) {
-    return mergeTrackingHeaders(headers, environment: environment);
+    return mergeTrackingHeaders(
+      headers,
+      excludeRuntimeTag: excludeRuntimeTag(),
+      environment: environment,
+    );
   }
 
   Map<String, Object?> _buildGenerateContentPayload(LlmRequest request) {
@@ -1373,6 +1471,7 @@ HttpOptions buildAdkHttpOptions({
   HttpRetryOptions? retryOptions,
   String? apiVersion,
   String? baseUrl,
+  bool excludeRuntimeTag = false,
   Map<String, String>? environment,
 }) {
   final Object? rawHttpOptions =
@@ -1407,7 +1506,11 @@ HttpOptions buildAdkHttpOptions({
 
   final HttpOptions built = HttpOptions(
     retryOptions: resolvedRetryOptions,
-    headers: mergeTrackingHeaders(mergedHeaders, environment: environment),
+    headers: mergeTrackingHeaders(
+      mergedHeaders,
+      excludeRuntimeTag: excludeRuntimeTag,
+      environment: environment,
+    ),
     apiVersion: resolvedApiVersion,
   );
   built.baseUrl = resolvedBaseUrl;
@@ -1422,6 +1525,7 @@ Map<String, Object?> withAdkHttpOptions({
   HttpRetryOptions? retryOptions,
   String? apiVersion,
   String? baseUrl,
+  bool excludeRuntimeTag = false,
   Map<String, String>? environment,
 }) {
   final HttpOptions resolved = buildAdkHttpOptions(
@@ -1430,6 +1534,7 @@ Map<String, Object?> withAdkHttpOptions({
     retryOptions: retryOptions,
     apiVersion: apiVersion,
     baseUrl: baseUrl,
+    excludeRuntimeTag: excludeRuntimeTag,
     environment: environment,
   );
   final Map<String, Object?> mergedKwargs = <String, Object?>{...?clientKwargs};

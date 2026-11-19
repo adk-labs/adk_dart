@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import '../types/content.dart';
+import '../utils/google_client_headers.dart';
 import 'gemini_rest_api_client.dart';
 import 'llm_request.dart';
 import 'llm_response.dart';
@@ -559,8 +560,7 @@ LlmResponse convertInteractionToLlmResponse(
   );
   final List<Part> parts = outputsRaw
       .map(_asMap)
-      .map(convertInteractionOutputToPart)
-      .whereType<Part>()
+      .expand(convertInteractionOutputToParts)
       .toList(growable: false);
 
   final Map<String, Object?> usage = _asMap(interaction['usage']);
@@ -578,6 +578,82 @@ LlmResponse convertInteractionToLlmResponse(
     turnComplete: turnComplete,
     interactionId: interactionId,
   );
+}
+
+List<Part> _convertInteractionContentsToParts(List<Object?> contents) {
+  final List<Part> parts = <Part>[];
+  for (final Object? rawItem in contents) {
+    final Map<String, Object?> item = _asMap(rawItem);
+    final String? contentType = _stringValue(item['type']);
+    if (contentType == 'text') {
+      parts.add(Part.text(_stringValue(item['text']) ?? ''));
+    } else if (contentType == 'image' ||
+        contentType == 'audio' ||
+        contentType == 'document' ||
+        contentType == 'video') {
+      final String mimeType = _stringValue(item['mime_type']) ?? '';
+      final List<int>? bytes = _decodeBytes(item['data']);
+      if (bytes != null) {
+        parts.add(Part.fromInlineData(mimeType: mimeType, data: bytes));
+      } else {
+        final String? uri = _stringValue(item['uri']);
+        if (uri != null && uri.isNotEmpty) {
+          parts.add(Part.fromFileData(fileUri: uri, mimeType: mimeType));
+        }
+      }
+    }
+  }
+  return parts;
+}
+
+/// Converts one interactions output/step row into zero or more [Part] objects.
+///
+/// Handles multi-part outputs such as `model_output` content lists and
+/// `code_execution_result` content lists containing text and media items.
+List<Part> convertInteractionOutputToParts(Map<String, Object?> output) {
+  final String? outputType = _stringValue(output['type']);
+  if (outputType == null || outputType.isEmpty) {
+    return const <Part>[];
+  }
+
+  if (outputType == 'model_output') {
+    return _convertInteractionContentsToParts(_asList(output['content']));
+  }
+
+  if (outputType == 'code_execution_result') {
+    final Object? rawResult = output['result'];
+    final bool isError = output['is_error'] == true;
+    String textOutput = '';
+    List<Part> mediaParts = const <Part>[];
+    if (rawResult is List) {
+      final List<Object?> nonTextItems = <Object?>[];
+      final StringBuffer textBuffer = StringBuffer();
+      for (final Object? item in rawResult) {
+        final Map<String, Object?> itemMap = _asMap(item);
+        if (_stringValue(itemMap['type']) == 'text') {
+          textBuffer.write(_stringValue(itemMap['text']) ?? '');
+        } else {
+          nonTextItems.add(item);
+        }
+      }
+      textOutput = textBuffer.toString();
+      mediaParts = _convertInteractionContentsToParts(nonTextItems);
+    } else {
+      textOutput = _stringValue(rawResult) ?? '';
+    }
+    return <Part>[
+      Part(
+        codeExecutionResult: <String, Object?>{
+          'output': textOutput,
+          'outcome': isError ? 'OUTCOME_FAILED' : 'OUTCOME_OK',
+        },
+      ),
+      ...mediaParts,
+    ];
+  }
+
+  final Part? single = convertInteractionOutputToPart(output);
+  return single == null ? const <Part>[] : <Part>[single];
 }
 
 /// Converts one interactions output row into a [Part].
@@ -658,7 +734,14 @@ Part? convertInteractionOutputToPart(Map<String, Object?> output) {
     return null;
   }
   if (outputType == 'code_execution_result') {
-    final String result = _stringValue(output['result']) ?? '';
+    final Object? rawResult = output['result'];
+    final String result = rawResult is List
+        ? rawResult
+              .map(_asMap)
+              .where((Map<String, Object?> item) => _stringValue(item['type']) == 'text')
+              .map((Map<String, Object?> item) => _stringValue(item['text']) ?? '')
+              .join()
+        : (_stringValue(rawResult) ?? '');
     final bool isError = output['is_error'] == true;
     return Part(
       codeExecutionResult: <String, Object?>{
@@ -1104,6 +1187,8 @@ Stream<LlmResponse> generateContentViaInteractions({
   String apiVersion = 'v1beta',
   Map<String, String>? headers,
   HttpRetryOptions? retryOptions,
+  bool excludeRuntimeTag = false,
+  Map<String, String>? environment,
 }) async* {
   if (invoker != null) {
     yield* invoker(llmRequest, stream: stream);
@@ -1152,6 +1237,12 @@ Stream<LlmResponse> generateContentViaInteractions({
       'previous_interaction_id': id,
   };
 
+  final Map<String, String> effectiveHeaders = mergeTrackingHeaders(
+    headers ?? llmRequest.config.httpOptions?.headers,
+    excludeRuntimeTag: excludeRuntimeTag,
+    environment: environment,
+  );
+
   if (stream) {
     final InteractionsStreamState streamState = InteractionsStreamState();
     final List<Part> aggregatedParts = streamState.parts;
@@ -1164,7 +1255,7 @@ Stream<LlmResponse> generateContentViaInteractions({
           payload: payload,
           baseUrl: baseUrl,
           apiVersion: apiVersion,
-          headers: headers,
+          headers: effectiveHeaders,
           retryOptions: retryOptions,
         )) {
       currentInteractionId ??=
@@ -1215,7 +1306,7 @@ Stream<LlmResponse> generateContentViaInteractions({
         payload: payload,
         baseUrl: baseUrl,
         apiVersion: apiVersion,
-        headers: headers,
+        headers: effectiveHeaders,
         retryOptions: retryOptions,
       );
   yield convertInteractionToLlmResponse(

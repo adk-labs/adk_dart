@@ -2,6 +2,15 @@
 library;
 
 /// Context-cache policy settings for an agent/app.
+///
+/// Unless an agent provides a pre-created cache via
+/// `LlmAgent.generateContentConfig.cachedContent`, caching begins on the
+/// second turn of a session at the earliest and requires the cacheable prefix
+/// to reach the model-specific minimum: 2048 tokens for Gemini 2.5 or 4096
+/// tokens for Gemini 3. Short or single-turn sessions are therefore only cached
+/// when seeded via `cachedContent`. This config has no effect on a model that
+/// does not support explicit context caching, such as Gemini 4: its requests
+/// are sent without an explicit cache.
 class ContextCacheConfig {
   /// Creates a context cache config.
   ContextCacheConfig({

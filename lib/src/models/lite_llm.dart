@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../platform/uuid.dart';
 import '../types/content.dart';
+import '../utils/model_name_utils.dart';
 import '../utils/schema_utils.dart';
 import '../utils/system_environment/system_environment.dart';
 import 'base_llm.dart';

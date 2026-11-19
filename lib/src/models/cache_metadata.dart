@@ -1,4 +1,12 @@
 /// Metadata describing a cached prompt/context entry.
+///
+/// This class stores cache identification, usage tracking, and lifecycle
+/// information for a particular cache instance. It can be in two states:
+///
+/// 1. Active cache state: [cacheName] is set and all fields are populated,
+///    except [createdAt] when ADK did not create the cache.
+/// 2. Fingerprint-only state: [cacheName] is `null`, and only [fingerprint]
+///    and [contentsCount] are set for prefix matching.
 class CacheMetadata {
   /// Creates cache metadata.
   CacheMetadata({
@@ -37,7 +45,10 @@ class CacheMetadata {
   /// Number of content items included in the cache.
   final int contentsCount;
 
-  /// Cache creation timestamp in Unix seconds.
+  /// Unix timestamp when ADK created the cache.
+  ///
+  /// `null` when no active cache exists, or when the active cache was created
+  /// outside ADK. ADK only deletes caches it created.
   final double? createdAt;
 
   /// Whether this cache will expire within the safety buffer window.
