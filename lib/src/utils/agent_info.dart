@@ -1,6 +1,8 @@
 /// Utilities for inspecting [LlmAgent] hierarchies and tool declarations.
 library;
 
+import 'dart:developer' as developer;
+
 import '../agents/base_agent.dart';
 import '../agents/llm_agent.dart';
 import '../models/llm_request.dart';
@@ -109,33 +111,86 @@ Future<List<ToolDeclaration>> getToolsInfo(List<Object> tools) async {
   return declarations;
 }
 
-/// Returns a map of [AgentInfo] keyed by agent name for [agent] and its
-/// [LlmAgent] sub-agents.
-Future<Map<String, AgentInfo>> getAgentsDict(LlmAgent agent) async {
-  final Map<String, AgentInfo> agentsDict = <String, AgentInfo>{};
+Iterable<Object> _iterStaticChildren(Object node) {
+  if (node is Workflow) {
+    return <Object>[...node.subAgents, ...node.nodes];
+  }
+  if (node is BaseAgent) {
+    return node.subAgents;
+  }
+  if (node is AgentNode) {
+    return <Object>[node.agent];
+  }
+  if (node is ParallelWorker) {
+    return <Object>[node.wrappedNode];
+  }
+  return const <Object>[];
+}
 
-  Future<void> traverse(LlmAgent currentAgent) async {
-    if (agentsDict.containsKey(currentAgent.name)) {
-      return;
+Iterable<Object> _walkStaticNodes(Object root) sync* {
+  final Set<Object> visited = Set<Object>.identity();
+  final List<Object> stack = <Object>[root];
+  while (stack.isNotEmpty) {
+    final Object current = stack.removeLast();
+    if (!visited.add(current)) {
+      continue;
     }
+    yield current;
+    final List<Object> children = _iterStaticChildren(current).toList();
+    for (int i = children.length - 1; i >= 0; i -= 1) {
+      stack.add(children[i]);
+    }
+  }
+}
 
-    final List<String> subAgentNames = <String>[];
-    for (final BaseAgent subAgent in currentAgent.subAgents) {
+List<String> _nearestLlmSubAgentNames(BaseAgent agent) {
+  final Set<String> names = <String>{};
+  final Set<BaseAgent> visited = Set<BaseAgent>.identity()..add(agent);
+
+  void collect(BaseAgent current) {
+    for (final BaseAgent subAgent in current.subAgents) {
+      if (!visited.add(subAgent)) {
+        continue;
+      }
       if (subAgent is LlmAgent) {
-        await traverse(subAgent);
-        subAgentNames.add(subAgent.name);
+        names.add(subAgent.name);
+      } else {
+        collect(subAgent);
       }
     }
+  }
 
-    agentsDict[currentAgent.name] = AgentInfo(
-      name: currentAgent.name,
-      description: currentAgent.description,
-      instruction: currentAgent.instruction,
-      tools: await getToolsInfo(currentAgent.tools),
-      subAgents: subAgentNames,
+  collect(agent);
+  return names.toList(growable: false);
+}
+
+/// Returns a map of [AgentInfo] keyed by agent name for every [LlmAgent]
+/// reachable from [agent] (which may be an [LlmAgent], any non-LLM
+/// [BaseAgent] such as `SequentialAgent` or [Workflow], or a [BaseNode]).
+Future<Map<String, AgentInfo>> getAgentsDict(Object agent) async {
+  final Map<String, AgentInfo> agentsDict = <String, AgentInfo>{};
+
+  for (final Object node in _walkStaticNodes(agent)) {
+    if (node is! LlmAgent) {
+      continue;
+    }
+    if (agentsDict.containsKey(node.name)) {
+      developer.log(
+        "Duplicate LlmAgent name '${node.name}' encountered while collecting "
+        'app info; keeping first agent.',
+        name: 'adk_dart.agent_info',
+      );
+      continue;
+    }
+
+    agentsDict[node.name] = AgentInfo(
+      name: node.name,
+      description: node.description,
+      instruction: node.instruction,
+      tools: await getToolsInfo(node.tools),
+      subAgents: _nearestLlmSubAgentNames(node),
     );
   }
 
-  await traverse(agent);
   return agentsDict;
 }

@@ -57,6 +57,7 @@ export 'src/errors/already_exists_error.dart';
 export 'src/errors/input_validation_error.dart';
 export 'src/errors/not_found_error.dart';
 export 'src/errors/session_not_found_error.dart';
+export 'src/errors/session_persistence_error.dart';
 export 'src/errors/stale_session_error.dart';
 export 'src/errors/tool_execution_error.dart';
 
@@ -98,7 +99,9 @@ export 'src/plugins/tool_call_integrity_plugin.dart';
 export 'src/runners/runner.dart';
 
 export 'src/sessions/base_session_service.dart';
+export 'src/sessions/buffered_session_service.dart';
 export 'src/sessions/in_memory_session_service.dart';
+export 'src/sessions/session_write_buffer.dart';
 export 'src/sessions/mongodb_session_service.dart';
 export 'src/sessions/schemas/v1.dart';
 export 'src/sessions/schemas/shared.dart';

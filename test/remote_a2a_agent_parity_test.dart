@@ -710,13 +710,15 @@ void main() {
             )
             .toList();
 
-        expect(events, hasLength(5));
+        expect(events, hasLength(6));
         expect(events[0].content?.parts.first.thought, isTrue);
         expect(events[1].content?.parts.first.thought, isTrue);
         expect(events[2].partial, isTrue);
-        expect(events[3].partial, isFalse);
-        expect(events[2].id, events[3].id);
-        expect(events[4].content?.parts.first.thought, isFalse);
+        expect(events[3].partial, isTrue);
+        expect(events[4].partial, isFalse);
+        expect(events[2].id, events[4].id);
+        expect(events[4].content?.parts.first.text, 'partialfinal artifact');
+        expect(events[5].content?.parts.first.thought, isFalse);
 
         for (final Event event in events) {
           expect(event.customMetadata?['a2a:request'], isA<Map>());

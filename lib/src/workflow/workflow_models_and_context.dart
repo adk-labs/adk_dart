@@ -322,6 +322,9 @@ class WorkflowContext {
   // Intermediate checkpoint events.
   final List<Event> _checkpointEvents = <Event>[];
 
+  // Whether node statuses changed since the last checkpoint flush.
+  bool _checkpointPending = false;
+
   /// Node outputs keyed by node name.
   final Map<String, Object?> outputs;
 

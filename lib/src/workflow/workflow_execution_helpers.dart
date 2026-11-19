@@ -1219,19 +1219,14 @@ Object? _unwrapWorkflowResumeResponse(
 }
 
 Object? _validateWorkflowResumeResponse(Object? value, Object? schema) {
-  if (schema == String || schema == 'string') {
-    return value is String ? value : '$value';
-  }
-  if (schema == int) {
-    return _coerceWorkflowInt(value);
-  }
-  if (schema == double || schema == num) {
-    return _coerceWorkflowNum(value);
-  }
-  if (schema == bool) {
-    return _coerceWorkflowBool(value);
+  if (schema == null) {
+    return value;
   }
   if (schema is! Map) {
+    developer.log(
+      'Skipping validation of resume response: $schema is not a JSON Schema.',
+      name: 'adk_dart.workflow',
+    );
     return value;
   }
   if (_schemaExpectsText(schema)) {

@@ -1063,6 +1063,157 @@ class RemoteA2aAgent extends BaseAgent {
     return current;
   }
 
+  Future<Event?> _runAfterRequestInterceptors(
+    InvocationContext ctx,
+    Object a2aResponse,
+    Event event,
+  ) {
+    return _executeAfterRequestInterceptors(ctx, a2aResponse, event);
+  }
+
+  Future<List<Event>> _collectArtifactUpdateEvents(
+    InvocationContext ctx,
+    Object a2aResponse,
+    A2aTaskArtifactUpdateEvent update,
+    Event? event,
+    _StreamingArtifactAggregator aggregator,
+  ) async {
+    final String artifactId = update.artifact.artifactId;
+    final bool isAppend = update.append;
+    final bool isLastChunk = update.lastChunk;
+    final List<Event> events = <Event>[];
+
+    if (event == null || !_eventHasOwnPayload(event)) {
+      // An empty closing marker: flush whatever was streamed for the artifact.
+      final _OpenArtifactBuffer? buf =
+          (isLastChunk && aggregator.hasOpenBuffer(artifactId))
+          ? aggregator.popBuffer(artifactId)
+          : null;
+      if (buf != null) {
+        final Event? closed = await _runAfterRequestInterceptors(
+          ctx,
+          a2aResponse,
+          buf.toEvent(author: name, ctx: ctx),
+        );
+        if (closed != null) {
+          events.add(closed);
+        }
+      }
+      return events;
+    }
+
+    if (event.partial == true) {
+      final Event? intercepted = await _runAfterRequestInterceptors(
+        ctx,
+        a2aResponse,
+        event,
+      );
+      if (intercepted == null) {
+        return events;
+      }
+      aggregator.recordPartial(artifactId, intercepted, append: isAppend);
+      events.add(intercepted);
+      return events;
+    }
+
+    if (isAppend && aggregator.hasOpenBuffer(artifactId)) {
+      // A delta closing chunk carries only the tail of the artifact: stream it
+      // as one more partial chunk, then emit the aggregated whole.
+      final Event delta = event.copyWith(partial: true);
+      final Event? interceptedDelta = await _runAfterRequestInterceptors(
+        ctx,
+        a2aResponse,
+        delta,
+      );
+      final _OpenArtifactBuffer? buf = aggregator.popBuffer(artifactId);
+      if (interceptedDelta != null) {
+        buf?.recordEvent(interceptedDelta);
+        events.add(interceptedDelta);
+      }
+      if (buf != null && buf.hasParts) {
+        buf.applyToEvent(event, ctx);
+        final Event? finalEvent = await _runAfterRequestInterceptors(
+          ctx,
+          a2aResponse,
+          event,
+        );
+        if (finalEvent != null) {
+          events.add(finalEvent);
+        }
+      }
+      return events;
+    }
+
+    // A full replacement (`append` false with `lastChunk` true) already carries
+    // the whole artifact, so any chunks streamed for it are superseded.
+    aggregator.discardArtifact(artifactId);
+    final Event? intercepted = await _runAfterRequestInterceptors(
+      ctx,
+      a2aResponse,
+      event,
+    );
+    if (intercepted != null) {
+      events.add(intercepted);
+    }
+    return events;
+  }
+
+  Future<(List<Event>, Event?)> _collectTaskOrMessageEvents(
+    InvocationContext ctx,
+    Object a2aResponse,
+    Event? event,
+    _StreamingArtifactAggregator aggregator, {
+    required A2aTask? task,
+    required bool isTaskSnapshot,
+    required bool boundaryResponse,
+  }) async {
+    final List<Event> events = <Event>[];
+    Event? boundaryEvent;
+
+    if (isTaskSnapshot && _hasUserFacingParts(event)) {
+      aggregator.discardTaskArtifacts(task);
+    }
+
+    if (boundaryResponse) {
+      final bool hadOwnPayload = _eventHasOwnPayload(event);
+      final List<Event> candidates = aggregator.finalizeAtBoundary(
+        event,
+        author: name,
+        ctx: ctx,
+      );
+      for (int idx = 0; idx < candidates.length; idx += 1) {
+        final Event? intercepted = await _runAfterRequestInterceptors(
+          ctx,
+          a2aResponse,
+          candidates[idx],
+        );
+        if (intercepted == null) {
+          continue;
+        }
+        events.add(intercepted);
+        if (event != null && hadOwnPayload && idx == candidates.length - 1) {
+          boundaryEvent = intercepted;
+        }
+      }
+      return (events, boundaryEvent);
+    }
+
+    if (event != null) {
+      final Event? intercepted = await _runAfterRequestInterceptors(
+        ctx,
+        a2aResponse,
+        event,
+      );
+      if (intercepted != null) {
+        if (intercepted.partial == true) {
+          aggregator.recordPartial('', intercepted, append: true);
+        }
+        events.add(intercepted);
+      }
+    }
+    return (events, boundaryEvent);
+  }
+
   /// Sends current conversation context to the remote A2A endpoint.
   @override
   Stream<Event> runAsyncImpl(InvocationContext ctx) async* {
@@ -1143,112 +1294,157 @@ class RemoteA2aAgent extends BaseAgent {
           parameters.requestMetadata = a2aRequestMetaProvider!(ctx, a2aRequest);
         }
 
+        final _StreamingArtifactAggregator artifactAggregator =
+            _StreamingArtifactAggregator();
         A2aTask? lastTask;
+        Object? lastA2aResponse;
         bool outputPromoted = false;
         await for (final Object a2aResponse in _a2aClient!.sendMessage(
           request: a2aRequest,
           requestMetadata: parameters.requestMetadata,
           context: parameters.clientCallContext,
         )) {
+          lastA2aResponse = a2aResponse;
           developer.log(
             buildA2aResponseLog(_responseForLog(a2aResponse)),
             name: 'adk_dart.remote_a2a_agent',
           );
 
           A2aTask? task;
+          A2aEvent? update;
           if (a2aResponse is A2aClientEvent) {
             task = a2aResponse.$1;
+            update = a2aResponse.$2;
             lastTask = task;
           } else {
             lastTask = null;
           }
 
-          Event? event = await _handleA2aResponse(a2aResponse, ctx);
-          if (event == null) {
-            continue;
-          }
-          event = await _executeAfterRequestInterceptors(
-            ctx,
-            a2aResponse,
-            event,
-          );
-          if (event == null) {
-            continue;
-          }
-
-          event.customMetadata ??= <String, dynamic>{};
-          event.customMetadata!['${a2aMetadataPrefix}request'] = _pruneNulls(
-            _a2aMessageToJson(a2aRequest),
-          );
-
-          if (a2aResponse is A2aClientEvent) {
-            final A2aEvent? updateEvent = a2aResponse.$2;
-            event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
-              _a2aTaskToJson(
-                a2aResponse.$1,
-                statusOverride: updateEvent is A2aTaskStatusUpdateEvent
-                    ? updateEvent.status
-                    : null,
-              ),
+          final Event? event = await _handleA2aResponse(a2aResponse, ctx);
+          final bool boundaryResponse = _isBoundaryResponse(a2aResponse);
+          Event? boundaryFailureEvent;
+          final List<Event> eventsToEmit;
+          if (update is A2aTaskArtifactUpdateEvent) {
+            eventsToEmit = await _collectArtifactUpdateEvents(
+              ctx,
+              a2aResponse,
+              update,
+              event,
+              artifactAggregator,
             );
-          } else if (a2aResponse is A2aMessage) {
-            event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
-              _a2aMessageToJson(a2aResponse),
-            );
-          }
-
-          if (ctx.nodePath != null && ctx.nodePath!.isNotEmpty) {
-            if (event.nodeInfo.isEmpty) {
-              event.nodeInfo = NodeInfo(path: ctx.nodePath!);
-            }
-            if (mode != 'task' &&
-                !outputPromoted &&
-                promoteResponseToOutput(event, ctx.nodePath)) {
-              outputPromoted = true;
-            }
-          }
-
-          if (mode == 'task' && isFinishTaskTerminalFr(event)) {
-            if (_isFinishTaskErrorEvent(event)) {
-              event.errorMessage ??=
-                  'Remote A2A task failed: $finishTaskErrorResult';
-            } else if (event.errorMessage == null) {
-              final Map<String, dynamic>? args = _findFinishTaskArgsFromHistory(
-                ctx.session,
-                isolationScope: ctx.isolationScope,
-                completedFrEvent: event,
-              );
-              if (args != null) {
-                final String? wrapperKey = getOutputWrapperKey(outputSchema);
-                if (wrapperKey != null && args.containsKey(wrapperKey)) {
-                  event.output = args[wrapperKey];
-                } else {
-                  event.output = args;
-                }
-              } else {
-                event.output = <String, Object?>{};
-                developer.log(
-                  "Could not find finish_task arguments for isolation scope "
-                  "'${ctx.isolationScope}'. Completing the task with an empty output.",
-                  name: 'adk_dart.remote_a2a_agent',
+          } else {
+            final (List<Event> collected, Event? boundaryFailure) =
+                await _collectTaskOrMessageEvents(
+                  ctx,
+                  a2aResponse,
+                  event,
+                  artifactAggregator,
+                  task: task,
+                  isTaskSnapshot:
+                      a2aResponse is A2aClientEvent && update == null,
+                  boundaryResponse: boundaryResponse,
                 );
+            eventsToEmit = collected;
+            boundaryFailureEvent = boundaryFailure;
+          }
+
+          if (eventsToEmit.isEmpty) {
+            continue;
+          }
+
+          for (int emitIdx = 0; emitIdx < eventsToEmit.length; emitIdx += 1) {
+            final Event emittedEvent = eventsToEmit[emitIdx];
+            _stampA2aExchangeMetadata(
+              emittedEvent,
+              a2aRequest: a2aRequest,
+              a2aResponse: a2aResponse,
+            );
+
+            if (ctx.nodePath != null && ctx.nodePath!.isNotEmpty) {
+              if (emittedEvent.nodeInfo.isEmpty) {
+                emittedEvent.nodeInfo = NodeInfo(path: ctx.nodePath!);
+              }
+              if (mode != 'task' &&
+                  !outputPromoted &&
+                  emittedEvent.partial != true &&
+                  promoteResponseToOutput(emittedEvent, ctx.nodePath)) {
+                outputPromoted = true;
               }
             }
-            yield event;
-            shouldReleaseTaskControl = true;
-            return;
-          }
 
-          yield event;
+            if (mode == 'task' && isFinishTaskTerminalFr(emittedEvent)) {
+              final List<Event> flushedBeforeFinish = <Event>[];
+              for (final Event pendingEvent in artifactAggregator.flushAll(
+                author: name,
+                ctx: ctx,
+              )) {
+                final Event? interceptedPending =
+                    await _runAfterRequestInterceptors(
+                      ctx,
+                      a2aResponse,
+                      pendingEvent,
+                    );
+                if (interceptedPending == null) {
+                  continue;
+                }
+                _stampA2aExchangeMetadata(
+                  interceptedPending,
+                  a2aRequest: a2aRequest,
+                  a2aResponse: a2aResponse,
+                );
+                flushedBeforeFinish.add(interceptedPending);
+                yield interceptedPending;
+              }
+              if (_isFinishTaskErrorEvent(emittedEvent)) {
+                emittedEvent.errorMessage ??=
+                    'Remote A2A task failed: $finishTaskErrorResult';
+              } else if (emittedEvent.errorMessage == null) {
+                final Map<String, dynamic>? args =
+                    _findFinishTaskArgsFromHistory(
+                      ctx.session,
+                      isolationScope: ctx.isolationScope,
+                      completedFrEvent: emittedEvent,
+                      pendingEvents: <Event>[
+                        ...eventsToEmit.sublist(0, emitIdx),
+                        ...flushedBeforeFinish,
+                      ],
+                    );
+                if (args != null) {
+                  final String? wrapperKey = getOutputWrapperKey(outputSchema);
+                  if (wrapperKey != null && args.containsKey(wrapperKey)) {
+                    emittedEvent.output = args[wrapperKey];
+                  } else {
+                    emittedEvent.output = args;
+                  }
+                } else {
+                  emittedEvent.output = <String, Object?>{};
+                  developer.log(
+                    "Could not find finish_task arguments for isolation scope "
+                    "'${ctx.isolationScope}'. Completing the task with an empty output.",
+                    name: 'adk_dart.remote_a2a_agent',
+                  );
+                }
+              }
+              yield emittedEvent;
+              shouldReleaseTaskControl = true;
+              return;
+            }
+
+            yield emittedEvent;
+          }
 
           if (mode == 'task' &&
               task != null &&
               (task.status.state == A2aTaskState.failed ||
                   task.status.state == A2aTaskState.canceled)) {
             final bool isCancel = task.status.state == A2aTaskState.canceled;
+            final Event? failureSourceEvent = boundaryResponse
+                ? boundaryFailureEvent
+                : eventsToEmit.last;
             final String errorText = isCancel
                 ? 'Task canceled'
-                : (_textFromEventContent(event.content) ?? 'Unknown error');
+                : (_textFromEventContent(failureSourceEvent?.content) ??
+                    'Unknown error');
             final (
               Event errorEvent,
               Event failureEvent,
@@ -1266,8 +1462,51 @@ class RemoteA2aAgent extends BaseAgent {
           }
         }
 
-        if (lastTask != null &&
-            _unfinishedTaskStates.contains(lastTask.status.state)) {
+        final bool streamUnfinished =
+            lastTask != null &&
+            _unfinishedTaskStates.contains(lastTask.status.state);
+        if (!streamUnfinished && artifactAggregator.hasOpenBuffers) {
+          // The stream closed on a finished task without a closing boundary
+          // for these artifacts, so persist what was streamed.
+          final Object? fallbackResponse = lastTask != null
+              ? (lastTask, null)
+              : lastA2aResponse;
+          for (Event flushedEvent in artifactAggregator.flushAll(
+            author: name,
+            ctx: ctx,
+          )) {
+            if (fallbackResponse != null) {
+              final Event? interceptedFlushed =
+                  await _runAfterRequestInterceptors(
+                    ctx,
+                    fallbackResponse,
+                    flushedEvent,
+                  );
+              if (interceptedFlushed == null) {
+                continue;
+              }
+              flushedEvent = interceptedFlushed;
+              _stampA2aExchangeMetadata(
+                flushedEvent,
+                a2aRequest: a2aRequest,
+                a2aResponse: fallbackResponse,
+              );
+            }
+            if (ctx.nodePath != null && ctx.nodePath!.isNotEmpty) {
+              if (flushedEvent.nodeInfo.isEmpty) {
+                flushedEvent.nodeInfo = NodeInfo(path: ctx.nodePath!);
+              }
+              if (mode != 'task' &&
+                  !outputPromoted &&
+                  promoteResponseToOutput(flushedEvent, ctx.nodePath)) {
+                outputPromoted = true;
+              }
+            }
+            yield flushedEvent;
+          }
+        }
+
+        if (streamUnfinished) {
           taskErrorMessage =
               'A2A response stream ended before task ${lastTask.id} reached a '
               'terminal state.';
@@ -1382,16 +1621,19 @@ Map<String, dynamic>? findFinishTaskArgsFromHistory(
   Session session, {
   String? isolationScope,
   Event? completedFrEvent,
+  List<Event> pendingEvents = const <Event>[],
 }) => _findFinishTaskArgsFromHistory(
   session,
   isolationScope: isolationScope,
   completedFrEvent: completedFrEvent,
+  pendingEvents: pendingEvents,
 );
 
 Map<String, dynamic>? _findFinishTaskArgsFromHistory(
   Session session, {
   String? isolationScope,
   Event? completedFrEvent,
+  List<Event> pendingEvents = const <Event>[],
 }) {
   String? matchingFcId;
   if (completedFrEvent != null) {
@@ -1463,6 +1705,13 @@ Map<String, dynamic>? _findFinishTaskArgsFromHistory(
     }
   }
 
+  for (int i = pendingEvents.length - 1; i >= 0; i -= 1) {
+    final Map<String, dynamic>? args = argsFrom(pendingEvents[i]);
+    if (args != null) {
+      return args;
+    }
+  }
+
   for (int i = session.events.length - 1; i >= 0; i -= 1) {
     final Event event = session.events[i];
     if (isolationScope != null &&
@@ -1476,6 +1725,343 @@ Map<String, dynamic>? _findFinishTaskArgsFromHistory(
     }
   }
   return null;
+}
+
+bool _isPlainTextPart(Part part) {
+  return part.text != null &&
+      !part.thought &&
+      part.functionCall == null &&
+      part.functionResponse == null &&
+      part.inlineData == null &&
+      part.fileData == null &&
+      part.executableCode == null &&
+      part.codeExecutionResult == null;
+}
+
+bool _isBoundaryResponse(Object a2aResponse) {
+  if (a2aResponse is A2aMessage) {
+    return true;
+  }
+  if (a2aResponse is! A2aClientEvent) {
+    return false;
+  }
+  final A2aTask task = a2aResponse.$1;
+  final A2aEvent? update = a2aResponse.$2;
+  if (update == null) {
+    return _taskResponseBoundaryStates.contains(task.status.state);
+  }
+  if (update is A2aTaskStatusUpdateEvent) {
+    return _taskResponseBoundaryStates.contains(update.status.state);
+  }
+  return false;
+}
+
+void _stampA2aExchangeMetadata(
+  Event event, {
+  required A2aMessage? a2aRequest,
+  required Object a2aResponse,
+}) {
+  event.customMetadata ??= <String, dynamic>{};
+  if (a2aRequest != null) {
+    event.customMetadata!['${a2aMetadataPrefix}request'] = _pruneNulls(
+      _a2aMessageToJson(a2aRequest),
+    );
+  }
+  if (a2aResponse is A2aClientEvent) {
+    final A2aEvent? updateEvent = a2aResponse.$2;
+    event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
+      _a2aTaskToJson(
+        a2aResponse.$1,
+        statusOverride: updateEvent is A2aTaskStatusUpdateEvent
+            ? updateEvent.status
+            : null,
+      ),
+    );
+  } else if (a2aResponse is A2aMessage) {
+    event.customMetadata!['${a2aMetadataPrefix}response'] = _pruneNulls(
+      _a2aMessageToJson(a2aResponse),
+    );
+  }
+}
+
+bool _eventHasOwnPayload(Event? event) {
+  if (event == null) {
+    return false;
+  }
+  final Content? content = event.content;
+  if (content != null && content.parts.isNotEmpty) {
+    return true;
+  }
+  return (event.errorMessage != null && event.errorMessage!.isNotEmpty) ||
+      (event.errorCode != null && event.errorCode!.isNotEmpty);
+}
+
+bool _hasUserFacingParts(Event? event) {
+  if (event == null) {
+    return false;
+  }
+  final Content? content = event.content;
+  if (content == null || content.parts.isEmpty) {
+    return false;
+  }
+  return content.parts.any((Part part) => !part.thought);
+}
+
+bool _byteListsEqual(List<int>? a, List<int>? b) {
+  if (a == null || b == null) {
+    return a == b;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (int i = 0; i < a.length; i += 1) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+class _OpenArtifactBuffer {
+  _OpenArtifactBuffer(this.artifactId);
+
+  final String artifactId;
+  String? fallbackEventId;
+  final List<Part> _parts = <Part>[];
+  String _role = 'model';
+  final Map<String, dynamic> _customMetadata = <String, dynamic>{};
+  Object? _groundingMetadata;
+  Object? _citationMetadata;
+  Object? _usageMetadata;
+  final Set<String> _longRunningToolIds = <String>{};
+  bool? _escalate;
+  bool? _skipSummarization;
+
+  bool get hasParts => _parts.isNotEmpty;
+
+  void recordEvent(Event event) {
+    if (fallbackEventId == null && event.id.isNotEmpty) {
+      fallbackEventId = event.id;
+    }
+    final Content? content = event.content;
+    if (content != null) {
+      if (content.role != null && content.role!.isNotEmpty) {
+        _role = content.role!;
+      }
+      for (final Part part in content.parts) {
+        _appendPart(part);
+      }
+    }
+    final Map<String, dynamic>? customMetadata = event.customMetadata;
+    if (customMetadata != null) {
+      customMetadata.forEach((String key, dynamic value) {
+        if (key == '${a2aMetadataPrefix}request' ||
+            key == '${a2aMetadataPrefix}response') {
+          return;
+        }
+        _customMetadata[key] = value;
+      });
+    }
+    if (event.groundingMetadata != null) {
+      _groundingMetadata = event.groundingMetadata;
+    }
+    if (event.citationMetadata != null) {
+      _citationMetadata = event.citationMetadata;
+    }
+    if (event.usageMetadata != null) {
+      _usageMetadata = event.usageMetadata;
+    }
+    if (event.longRunningToolIds != null &&
+        event.longRunningToolIds!.isNotEmpty) {
+      _longRunningToolIds.addAll(event.longRunningToolIds!);
+    }
+    if (event.actions.escalate != null) {
+      _escalate = event.actions.escalate;
+    }
+    if (event.actions.skipSummarization != null) {
+      _skipSummarization = event.actions.skipSummarization;
+    }
+  }
+
+  void _appendPart(Part part) {
+    if (part.thought) {
+      return;
+    }
+    final Part copied = part.copyWith();
+    if (_parts.isNotEmpty &&
+        _isPlainTextPart(_parts.last) &&
+        _isPlainTextPart(copied)) {
+      final Part prev = _parts.last;
+      if (prev.thoughtSignature == null ||
+          copied.thoughtSignature == null ||
+          _byteListsEqual(prev.thoughtSignature, copied.thoughtSignature)) {
+        prev.text = '${prev.text ?? ''}${copied.text ?? ''}';
+        if (prev.thoughtSignature == null && copied.thoughtSignature != null) {
+          prev.thoughtSignature = List<int>.from(copied.thoughtSignature!);
+        }
+        return;
+      }
+    }
+    _parts.add(copied);
+  }
+
+  Content _buildContent() {
+    return Content(
+      role: _role,
+      parts: <Part>[for (final Part part in _parts) part.copyWith()],
+    );
+  }
+
+  void applyToEvent(Event event, InvocationContext ctx) {
+    event.content = _buildContent();
+    event.partial = false;
+    final String? eventId =
+        artifactEventId(artifactId, ctx) ?? fallbackEventId;
+    if (eventId != null && eventId.isNotEmpty) {
+      event.id = eventId;
+    }
+    if (_customMetadata.isNotEmpty) {
+      event.customMetadata = <String, dynamic>{
+        ..._customMetadata,
+        ...?event.customMetadata,
+      };
+    }
+    if (event.groundingMetadata == null && _groundingMetadata != null) {
+      event.groundingMetadata = _groundingMetadata;
+    }
+    if (event.citationMetadata == null && _citationMetadata != null) {
+      event.citationMetadata = _citationMetadata;
+    }
+    if (event.usageMetadata == null && _usageMetadata != null) {
+      event.usageMetadata = _usageMetadata;
+    }
+    if (_longRunningToolIds.isNotEmpty) {
+      final Set<String> mergedIds = <String>{
+        ...?event.longRunningToolIds,
+        ..._longRunningToolIds,
+      };
+      event.longRunningToolIds = mergedIds;
+    }
+    if (_escalate != null && event.actions.escalate == null) {
+      event.actions.escalate = _escalate;
+    }
+    if (_skipSummarization != null && event.actions.skipSummarization == null) {
+      event.actions.skipSummarization = _skipSummarization;
+    }
+  }
+
+  Event toEvent({required String author, required InvocationContext ctx}) {
+    final Event event = Event(
+      author: author,
+      invocationId: ctx.invocationId,
+      branch: ctx.branch,
+    );
+    applyToEvent(event, ctx);
+    return event;
+  }
+}
+
+class _StreamingArtifactAggregator {
+  final Map<String, _OpenArtifactBuffer> _buffers =
+      <String, _OpenArtifactBuffer>{};
+
+  bool get hasOpenBuffers =>
+      _buffers.values.any((_OpenArtifactBuffer buf) => buf.hasParts);
+
+  bool hasOpenBuffer(String artifactId) {
+    final _OpenArtifactBuffer? buf = _buffers[artifactId];
+    return buf != null && buf.hasParts;
+  }
+
+  void discardArtifact(String artifactId) {
+    _buffers.remove(artifactId);
+  }
+
+  void discardTaskArtifacts(A2aTask? task) {
+    if (task == null) {
+      return;
+    }
+    for (final A2aArtifact artifact in task.artifacts) {
+      if (artifact.parts.isNotEmpty) {
+        _buffers.remove(artifact.artifactId);
+      }
+    }
+  }
+
+  _OpenArtifactBuffer? popBuffer(String artifactId) {
+    final _OpenArtifactBuffer? buf = _buffers.remove(artifactId);
+    return (buf != null && buf.hasParts) ? buf : null;
+  }
+
+  void recordPartial(
+    String artifactId,
+    Event event, {
+    required bool append,
+  }) {
+    if (!append) {
+      _buffers[artifactId] = _OpenArtifactBuffer(artifactId);
+    }
+    final _OpenArtifactBuffer buf = _buffers.putIfAbsent(
+      artifactId,
+      () => _OpenArtifactBuffer(artifactId),
+    );
+    if (artifactId.isEmpty && buf.fallbackEventId != null) {
+      event.id = buf.fallbackEventId!;
+    }
+    buf.recordEvent(event);
+    if (!buf.hasParts) {
+      _buffers.remove(artifactId);
+    }
+  }
+
+  List<Event> flushAll({
+    required String author,
+    required InvocationContext ctx,
+  }) {
+    final List<_OpenArtifactBuffer> openBuffers = < _OpenArtifactBuffer>[
+      for (final _OpenArtifactBuffer buf in _buffers.values)
+        if (buf.hasParts) buf,
+    ];
+    _buffers.clear();
+    return <Event>[
+      for (final _OpenArtifactBuffer buf in openBuffers)
+        buf.toEvent(author: author, ctx: ctx),
+    ];
+  }
+
+  List<Event> finalizeAtBoundary(
+    Event? boundaryEvent, {
+    required String author,
+    required InvocationContext ctx,
+  }) {
+    final List<_OpenArtifactBuffer> openBuffers = <_OpenArtifactBuffer>[
+      for (final _OpenArtifactBuffer buf in _buffers.values)
+        if (buf.hasParts) buf,
+    ];
+    _buffers.clear();
+    if (openBuffers.isEmpty) {
+      return boundaryEvent != null ? <Event>[boundaryEvent] : <Event>[];
+    }
+    if (boundaryEvent == null) {
+      return <Event>[
+        for (final _OpenArtifactBuffer buf in openBuffers)
+          buf.toEvent(author: author, ctx: ctx),
+      ];
+    }
+    if (!_eventHasOwnPayload(boundaryEvent)) {
+      final List<Event> flushed = <Event>[
+        for (int i = 0; i < openBuffers.length - 1; i += 1)
+          openBuffers[i].toEvent(author: author, ctx: ctx),
+      ];
+      openBuffers.last.applyToEvent(boundaryEvent, ctx);
+      return <Event>[...flushed, boundaryEvent];
+    }
+    final List<Event> flushed = <Event>[
+      for (final _OpenArtifactBuffer buf in openBuffers)
+        buf.toEvent(author: author, ctx: ctx),
+    ];
+    return <Event>[...flushed, boundaryEvent];
+  }
 }
 
 String? _textFromEventContent(Content? content) {

@@ -117,10 +117,46 @@ abstract class BaseSessionService {
     return commitEventToSession(session: session, event: event);
   }
 
+  /// Appends [events] to [session], in order.
+  ///
+  /// The default calls [appendEvent] for each event. A service that overrides
+  /// this method must store all of the events or none of them, in order, with
+  /// the same effect on [session] and the store as calling [appendEvent] for
+  /// each event, so `BufferedSessionService` can send a session's queued events
+  /// in one call.
+  Future<List<Event>> appendEvents({
+    required Session session,
+    required List<Event> events,
+  }) async {
+    final List<Event> appended = <Event>[];
+    for (final Event event in events) {
+      appended.add(await appendEvent(session: session, event: event));
+    }
+    return appended;
+  }
+
+  /// Whether this service provides a custom atomic [appendEvents] override.
+  ///
+  /// Subclasses that override [appendEvents] to batch writes should override
+  /// this getter to return `true` so `BufferedSessionService` enables batching.
+  bool get supportsBatchAppendEvents => false;
+
   /// Flushes buffered events for session services that batch writes.
   ///
   /// Non-buffering implementations can keep this no-op default.
   Future<void> flush() async {}
+
+  /// Flushes any buffered events for one session.
+  ///
+  /// The default calls [flush]. A buffering implementation can override this to
+  /// wait only for the named session's writes.
+  Future<void> flushSession({
+    required String appName,
+    required String userId,
+    required String sessionId,
+  }) async {
+    await flush();
+  }
 
   /// Eagerly prepares and initializes underlying database tables/schemas.
   ///

@@ -34,10 +34,12 @@ class ManagedAgent extends BaseAgent {
     GeminiRestTransport? restClient,
     String? apiKey,
     String? baseUrl,
+    String? apiVersion,
   }) : tools = tools ?? <Object>[],
        _restClient = restClient,
        _apiKey = apiKey,
-       _baseUrl = baseUrl;
+       _baseUrl = baseUrl,
+       _apiVersion = apiVersion;
 
   /// The Managed Agent identifier (e.g. `'antigravity-preview-09-2026'` or `'projects/PROJECT/locations/global/agents/AGENT'`).
   final String agentId;
@@ -57,10 +59,23 @@ class ManagedAgent extends BaseAgent {
   final GeminiRestTransport? _restClient;
   final String? _apiKey;
   final String? _baseUrl;
+  final String? _apiVersion;
 
   /// The REST transport client wrapper used to send request payloads.
   GeminiRestTransport get restClient =>
       _restClient ?? GeminiRestHttpTransport();
+
+  String _resolveApiVersion() {
+    if (_apiVersion != null && _apiVersion.isNotEmpty) {
+      return _apiVersion;
+    }
+    final Map<String, String> env = readSystemEnvironment();
+    final String? envVersion = env['GOOGLE_GENAI_API_VERSION'];
+    if (envVersion != null && envVersion.isNotEmpty) {
+      return envVersion;
+    }
+    return 'v1beta';
+  }
 
   String _resolveApiKey() {
     if (_apiKey != null && _apiKey.isNotEmpty) {
@@ -254,6 +269,7 @@ class ManagedAgent extends BaseAgent {
             apiKey: apiKey,
             payload: payload,
             baseUrl: baseUrl,
+            apiVersion: _resolveApiVersion(),
             headers: headers,
           )) {
         currentInteractionId ??=

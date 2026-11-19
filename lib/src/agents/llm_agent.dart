@@ -421,6 +421,13 @@ class LlmAgent extends BaseAgent {
   List<Object> tools;
 
   /// Additional generation configuration.
+  ///
+  /// When the app configures `contextCacheConfig`, ADK uses
+  /// `cachedContent` as the first-turn cache seed (stripping
+  /// `systemInstruction`, `tools`, and `toolConfig` from requests that
+  /// attach it, so the pre-created cache must already hold them) and rolls over
+  /// to its own session cache after `cacheIntervals`, `ttlSeconds`, or a
+  /// fingerprint change.
   GenerateContentConfig? generateContentConfig;
 
   /// Whether transfers to parent agents are disallowed.

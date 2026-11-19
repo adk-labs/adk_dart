@@ -442,6 +442,9 @@ void main() {
       final McpInstructionProvider provider = McpInstructionProvider(
         connectionParams: connectionParams,
         promptName: 'agent_prompt',
+        arguments: (ReadonlyContext ctx) => <String, String>{
+          'city': '${ctx.state['city']}',
+        },
       );
 
       final InvocationContext invocationContext = _newInvocationContext(
@@ -454,7 +457,7 @@ void main() {
       expect(instruction, 'Hello Seoul!');
       expect(lastPromptGetArguments['city'], 'Seoul');
       expect(lastPromptGetArguments.containsKey('unused'), isFalse);
-      expect(seenMethods, contains('prompts/list'));
+      expect(seenMethods, isNot(contains('prompts/list')));
       expect(seenMethods, contains('prompts/get'));
     });
 

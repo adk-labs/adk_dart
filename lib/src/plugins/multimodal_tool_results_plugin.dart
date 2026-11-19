@@ -118,6 +118,20 @@ List<Part>? _deserializeSavedParts(Object? value) {
   return _extractParts(value);
 }
 
+bool _isCarriedByTheFramework(Part part) {
+  final InlineData? blob = part.inlineData;
+  if (blob != null && blob.mimeType.isNotEmpty) {
+    return true;
+  }
+  final FileData? file = part.fileData;
+  if (file != null &&
+      file.fileUri.isNotEmpty &&
+      (file.mimeType?.isNotEmpty ?? false)) {
+    return true;
+  }
+  return false;
+}
+
 bool _isSamePart(Part a, Part b) {
   if (identical(a, b)) {
     return true;
@@ -176,10 +190,17 @@ class MultimodalToolResultsPlugin extends BasePlugin {
 
     if (_retention == MultimodalToolResultsRetention.session) {
       final List<Part> sessionParts = <Part>[];
+      final List<Part> currentTurnParts = <Part>[];
       for (final Part p in parts) {
-        if (p.inlineData == null) {
-          sessionParts.add(p);
+        if (p.inlineData != null) {
+          // Inline media the function response carries would otherwise go twice.
+          if (!_isCarriedByTheFramework(p)) {
+            currentTurnParts.add(p);
+          }
+          continue;
         }
+        sessionParts.add(p);
+        currentTurnParts.add(p);
       }
 
       if (sessionParts.isNotEmpty) {
@@ -200,22 +221,31 @@ class MultimodalToolResultsPlugin extends BasePlugin {
         }
       }
 
-      if (toolContext.state.containsKey(_currentTurnPartsKey)) {
-        final Object? current = toolContext.state[_currentTurnPartsKey];
-        final List<Part> list = _extractParts(current) ?? <Part>[];
-        list.addAll(parts);
-        toolContext.state[_currentTurnPartsKey] = list;
-      } else {
-        toolContext.state[_currentTurnPartsKey] = parts;
+      // Accumulate the parts of the current turn in order.
+      if (currentTurnParts.isNotEmpty) {
+        if (toolContext.state.containsKey(_currentTurnPartsKey)) {
+          final Object? current = toolContext.state[_currentTurnPartsKey];
+          final List<Part> list = _extractParts(current) ?? <Part>[];
+          list.addAll(currentTurnParts);
+          toolContext.state[_currentTurnPartsKey] = list;
+        } else {
+          toolContext.state[_currentTurnPartsKey] = currentTurnParts;
+        }
       }
     } else {
+      final List<Part> filtered = parts
+          .where((Part part) => !_isCarriedByTheFramework(part))
+          .toList(growable: false);
+      if (filtered.isEmpty) {
+        return null;
+      }
       final Object? saved = toolContext.state[partsReturnedByToolsStateKey];
       final List<Part> merged = <Part>[];
       final List<Part>? existing = _extractParts(saved);
       if (existing != null) {
         merged.addAll(existing);
       }
-      merged.addAll(parts.map((Part part) => part.copyWith()));
+      merged.addAll(filtered.map((Part part) => part.copyWith()));
       toolContext.state[partsReturnedByToolsStateKey] = merged;
     }
 

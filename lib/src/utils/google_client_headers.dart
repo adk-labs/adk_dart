@@ -4,13 +4,54 @@ library;
 import '../models/llm_request.dart';
 import 'client_labels_utils.dart';
 
+const String _googleApisSuffix = '.googleapis.com';
+
+/// Returns whether [url] is an `https://*.googleapis.com` URL.
+///
+/// Rejects userinfo (`@`) or backslashes (`\`) in the authority segment,
+/// non-`https` schemes, and the bare `googleapis.com` host.
+bool isGoogleApisUrl(String? url) {
+  if (url == null || url.isEmpty) {
+    return false;
+  }
+  final String trimmed = url.trim();
+  if (!trimmed.toLowerCase().startsWith('https://')) {
+    return false;
+  }
+  final String afterScheme = trimmed.substring('https://'.length);
+  final int slashIdx = afterScheme.indexOf('/');
+  final int queryIdx = afterScheme.indexOf('?');
+  final int fragIdx = afterScheme.indexOf('#');
+  int authorityEnd = afterScheme.length;
+  for (final int idx in <int>[slashIdx, queryIdx, fragIdx]) {
+    if (idx >= 0 && idx < authorityEnd) {
+      authorityEnd = idx;
+    }
+  }
+  final String authority = afterScheme.substring(0, authorityEnd);
+  if (authority.isEmpty ||
+      authority.contains('@') ||
+      authority.contains(r'\')) {
+    return false;
+  }
+  final Uri? parsed = Uri.tryParse(trimmed);
+  if (parsed == null || parsed.scheme.toLowerCase() != 'https') {
+    return false;
+  }
+  final String host = parsed.host.toLowerCase();
+  return host.endsWith(_googleApisSuffix) &&
+      host.length > _googleApisSuffix.length;
+}
+
 /// The standard tracking headers for the current runtime context.
 Map<String, String> getTrackingHeaders({
   String? frameworkLabel,
+  bool excludeRuntimeTag = false,
   Map<String, String>? environment,
 }) {
   final List<String> labels = getClientLabels(
     frameworkLabel: frameworkLabel,
+    excludeRuntimeTag: excludeRuntimeTag,
     environment: environment,
   );
   final String headerValue = labels.join(' ');
@@ -18,6 +59,19 @@ Map<String, String> getTrackingHeaders({
     'x-goog-api-client': headerValue,
     'user-agent': headerValue,
   };
+}
+
+/// Returns [HttpOptions] carrying ADK tracking headers for outbound requests.
+HttpOptions getTrackingHttpOptions({
+  bool excludeRuntimeTag = false,
+  Map<String, String>? environment,
+}) {
+  return HttpOptions(
+    headers: getTrackingHeaders(
+      excludeRuntimeTag: excludeRuntimeTag,
+      environment: environment,
+    ),
+  );
 }
 
 const Set<String> _trackingHeaderNames = <String>{
@@ -31,6 +85,7 @@ const Set<String> _trackingHeaderNames = <String>{
 Map<String, String> mergeTrackingHeaders(
   Map<String, String>? headers, {
   String? frameworkLabel,
+  bool excludeRuntimeTag = false,
   Map<String, String>? environment,
 }) {
   final Map<String, String> merged = <String, String>{};
@@ -46,6 +101,7 @@ Map<String, String> mergeTrackingHeaders(
   }
   final Map<String, String> tracking = getTrackingHeaders(
     frameworkLabel: frameworkLabel,
+    excludeRuntimeTag: excludeRuntimeTag,
     environment: environment,
   );
 
@@ -79,6 +135,7 @@ Map<String, String> mergeTrackingHeaders(
 Object mergeTrackingHttpOptions({
   Object? httpOptions,
   String? frameworkLabel,
+  bool excludeRuntimeTag = false,
   Map<String, String>? environment,
 }) {
   if (httpOptions == null || (httpOptions is Map && httpOptions.isEmpty)) {
@@ -86,6 +143,7 @@ Object mergeTrackingHttpOptions({
       headers: mergeTrackingHeaders(
         null,
         frameworkLabel: frameworkLabel,
+        excludeRuntimeTag: excludeRuntimeTag,
         environment: environment,
       ),
     );
@@ -102,6 +160,7 @@ Object mergeTrackingHttpOptions({
     httpOptions['headers'] = mergeTrackingHeaders(
       headers,
       frameworkLabel: frameworkLabel,
+      excludeRuntimeTag: excludeRuntimeTag,
       environment: environment,
     );
     return httpOptions;
@@ -110,6 +169,7 @@ Object mergeTrackingHttpOptions({
     httpOptions.headers = mergeTrackingHeaders(
       httpOptions.headers,
       frameworkLabel: frameworkLabel,
+      excludeRuntimeTag: excludeRuntimeTag,
       environment: environment,
     );
     return httpOptions;

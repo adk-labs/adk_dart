@@ -219,6 +219,14 @@ abstract class BaseAgent {
     throw UnsupportedError('clone() is not implemented for `$runtimeType`.');
   }
 
+  @override
+  String toString() {
+    // Exclude parentAgent: following it would print every ancestor's whole
+    // agent tree and cause infinite recursion.
+    return '$runtimeType(name: $name, description: $description, '
+        'subAgents: $subAgents)';
+  }
+
   /// The top-most ancestor in this agent hierarchy.
   BaseAgent get rootAgent {
     BaseAgent current = this;

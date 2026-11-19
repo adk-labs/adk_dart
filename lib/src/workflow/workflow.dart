@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -247,6 +248,15 @@ class Workflow extends BaseAgent {
     return nextPendingNodes.toSet().toList(growable: false);
   }
 
+  bool _flushNodeCheckpoint(WorkflowContext context) {
+    if (!context._checkpointPending) {
+      return false;
+    }
+    context._checkpointPending = false;
+    _emitNodeCheckpoint(context);
+    return true;
+  }
+
   void _emitNodeCheckpoint(WorkflowContext context) {
     final InvocationContext? ic = context.invocationContext;
     if (ic == null || !ic.isResumable) {
@@ -303,13 +313,15 @@ class Workflow extends BaseAgent {
           : _copyNodeStates(previousResult.nodeStates),
       workflowRoot: _workflowRootPath(this, context),
     );
-    workflowContext.onNodeStateChange = () =>
-        _emitNodeCheckpoint(workflowContext);
+    workflowContext.onNodeStateChange = () {
+      workflowContext._checkpointPending = true;
+    };
 
     // Emit initial checkpoint of recovered node states when workflow starts
     _emitNodeCheckpoint(workflowContext);
 
     await _execute(workflowContext);
+    _flushNodeCheckpoint(workflowContext);
 
     final bool hasPendingInterrupts = workflowContext.nodeStates.values.any(
       (NodeState state) => _hasUnresolvedWaitingInterrupts(state),
@@ -573,6 +585,9 @@ class Workflow extends BaseAgent {
                         _TaskOutcome.failure(name, error, stackTrace),
                   ),
           };
+      // Coalesce all node starts (and prior-tick completions) into one
+      // checkpoint per scheduler tick.
+      _flushNodeCheckpoint(context);
 
       _TaskOutcome? firstFailure;
       while (running.isNotEmpty) {
@@ -620,12 +635,14 @@ class Workflow extends BaseAgent {
       }
 
       if (firstFailure != null) {
+        _flushNodeCheckpoint(context);
         Error.throwWithStackTrace(
           firstFailure.error!,
           firstFailure.stackTrace!,
         );
       }
     }
+    _flushNodeCheckpoint(context);
     _validateSingleTerminalOutput(
       context,
       _terminalNodeNames(dependencies),
@@ -735,6 +752,7 @@ class Workflow extends BaseAgent {
               );
         }
       }
+      _flushNodeCheckpoint(context);
       if (running.isEmpty) {
         break;
       }
@@ -754,6 +772,7 @@ class Workflow extends BaseAgent {
           }
           _recordNodeResult(context, sibling.result!);
         }
+        _flushNodeCheckpoint(context);
         context._cancel(firstFailure.error!);
         Error.throwWithStackTrace(
           firstFailure.error!,
