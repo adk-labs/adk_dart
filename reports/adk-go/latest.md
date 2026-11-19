@@ -1,75 +1,193 @@
 # ADK Go Daily Change Report
 
-- Date (UTC): 2026-11-18
+- Date (UTC): 2026-11-19
 - Source: `google/adk-go`
-- Latest SHA: `f01ccf8724d45c25e6d0a0edac01a04945f3d147`
-- Previous SHA: `012af4d94fb0ad67713180a4233d63c5fd520d1c`
+- Latest SHA: `cfc650b00f63c989a2a5f5fb03c28a8cd60ceb2e`
+- Previous SHA: `f01ccf8724d45c25e6d0a0edac01a04945f3d147`
 
 ## Summary
 
-- New commits: 12
+- New commits: 19
 
 ## Commits
 
-- [f01ccf8](https://github.com/google/adk-go/commit/f01ccf8724d45c25e6d0a0edac01a04945f3d147) fix(auth): keep the ID token exchange out of SDK debug logs (#2396) (wolo, 2026-11-18)
-- [dfe94f9](https://github.com/google/adk-go/commit/dfe94f9cb4e8061fd782c611c5a5d8242802324d) chore(deps): bump the go-minor-patch group across 1 directory with 9 updates (#2410) (dependabot[bot], 2026-11-18)
-- [4a56d9f](https://github.com/google/adk-go/commit/4a56d9f2addcf9896a4104538119f561c59eedeb) fix(adka2a): order task history chronologically for input-required tasks (#2407) (wolo, 2026-11-18)
-- [b9a5db9](https://github.com/google/adk-go/commit/b9a5db9c924cdf8220d09059814172f43ce4db01) fix(mcptoolset): keep the Config.Auth credential on the endpoint's origin across redirects (#1986) (wolo, 2026-11-18)
-- [0b6973c](https://github.com/google/adk-go/commit/0b6973ca52816e887f0f4a5e3adc7060996deb2f) feat(tool/skilltoolset/skill): let a file-system listing skip invalid skills (#2390) (Artsiom Shut, 2026-11-18)
-- [8224be1](https://github.com/google/adk-go/commit/8224be177a7bd78e045d08c94b850cb12a4de6ff) chore(agentanalytics): address #2020 post-merge review nits (#2388) (Haiyuan Cao, 2026-11-18)
-- [6e73acc](https://github.com/google/adk-go/commit/6e73accaf9b3b333d050b7a6889a3c7a2bc8431f) fix(agentanalytics): redact compound and state-prefixed sensitive keys (#2250) (Haiyuan Cao, 2026-11-18)
-- [6730502](https://github.com/google/adk-go/commit/673050266d9bf329f8cc46a93720ab27ba14ca46) fix(agentanalytics): scope lookalike parent resolution to active goroutine (#2379) (Haiyuan Cao, 2026-11-18)
-- [f423f02](https://github.com/google/adk-go/commit/f423f0299b5d64be0b3ff171c245cb2a1180839a) fix(agentanalytics): align checkpoint gating, MCP isError tool results, and empty error messages (#2047) (#2178) (Haiyuan Cao, 2026-11-18)
-- [b019ecc](https://github.com/google/adk-go/commit/b019ecc3f628a97c5b64f930a0c5a43f6182a8ce) fix(agentanalytics): isolate BigQuery RowErrors and track RowErrorDrops (#2376) (Haiyuan Cao, 2026-11-18)
-- [0cc3907](https://github.com/google/adk-go/commit/0cc3907bcf3af14264b96645f6f021b033a6752a) refactor(auth): build the ADC paths on cloud.google.com/go/auth (#2378) (wolo, 2026-11-18)
-- [2924008](https://github.com/google/adk-go/commit/2924008fb6269ec37419ce31a182f16e8c043b90) fix(agentanalytics): match an error-ended tool call to its own attempt (#2377) (Haiyuan Cao, 2026-11-18)
+- [cfc650b](https://github.com/google/adk-go/commit/cfc650b00f63c989a2a5f5fb03c28a8cd60ceb2e) fix(session/vertexai): skip nil parts when converting events for storage (#2394) (Harsh Arora, 2026-11-20)
+- [b4383d8](https://github.com/google/adk-go/commit/b4383d8e7670f67816a3badc5d589ee0bf5144cc) fix(agentanalytics): add retired-activation ledger and credit bounds (#2389) (Haiyuan Cao, 2026-11-19)
+- [0fe0615](https://github.com/google/adk-go/commit/0fe061559cb0101d2969da12d327b0424bee40d2) feat(agentanalytics): add event provenance, context walkers, and callback stack helpers (#2380) (Haiyuan Cao, 2026-11-19)
+- [b758093](https://github.com/google/adk-go/commit/b758093d84f3c9097f9e0d3d21d5d1461d764b4e) fix(agentanalytics): suppress recovered tool completions and log retryandreflect errors (#2381) (Haiyuan Cao, 2026-11-19)
+- [98275d2](https://github.com/google/adk-go/commit/98275d2f97cabfc3b71d4ef63050b6ac29c659fd) feat(agentanalytics): add ToolResultClassifier hook and schema lifecycle callbacks (#2180) (Haiyuan Cao, 2026-11-19)
+- [3559cd8](https://github.com/google/adk-go/commit/3559cd80a15608605f9113a89c9826ac899e53dd) feat(tool/skilltoolset/skill): add an in-memory skill source (#2395) (Artsiom Shut, 2026-11-19)
+- [6b4c6d5](https://github.com/google/adk-go/commit/6b4c6d558c3794da5a7ff2a1423a6263405ddd53) feat(skill_registy): Skill registry support (#1732) (Karol Droste, 2026-11-19)
+- [d6b0cf2](https://github.com/google/adk-go/commit/d6b0cf2b81a2f63ab95e01718717bdaf4877dc99) test: cover context cache guards that no test fails without (#2421) (wolo, 2026-11-19)
+- [bd7f179](https://github.com/google/adk-go/commit/bd7f1798e965ec194770e78262afc77bf7111d41) fix(telemetry): export OTLP metrics on explicit shutdown (#2200) (Zerui Ge, 2026-11-19)
+- [dcb7ad9](https://github.com/google/adk-go/commit/dcb7ad905225ff7027fa97b0156073dfd6770d74) fix: drop null parts from REST requests and skip nil parts on read (#1769) (Trainingcqy, 2026-11-19)
+- [10a4650](https://github.com/google/adk-go/commit/10a4650e82b3d8f46685b30eee9c963aca5848af) fix(memory): split mixed-script search queries like stored text (#2400) (Karthik Thota, 2026-11-19)
+- [6d4bc2b](https://github.com/google/adk-go/commit/6d4bc2bd1907ccf6b2845e5c554319d805b75874) refactor: cleanup codebase (#2368) (Oleksandr Redko, 2026-11-19)
+- [75163c6](https://github.com/google/adk-go/commit/75163c68a51cf435ad24070b109d1a80ba08315f) fix(sequentialagent): complete live-session shutdown (#1770) (Ziming Wang, 2026-11-19)
+- [4a734d2](https://github.com/google/adk-go/commit/4a734d2b0167600c5c5ec675611ec0c3269543a5) fix(instructionutil): resolve placeholders from callback and tool contexts (#2401) (Karthik Thota, 2026-11-19)
+- [faab8f1](https://github.com/google/adk-go/commit/faab8f18001c35b8b4728bf0940e24114946ee5a) fix(workflow): do not carry a consumed answer over to a node's next pause (#2330) (Melon, 2026-11-19)
+- [14daf2c](https://github.com/google/adk-go/commit/14daf2ccb7ba66170bc01bdbc3aa3fe8ccf514ca) fix(agentanalytics): harden Close/afterRun lifecycle and defer late-settled retirement (#2375) (Haiyuan Cao, 2026-11-19)
+- [3277eb6](https://github.com/google/adk-go/commit/3277eb6b835c3c466544f34f36edbb0dd0f56712) fix(parallelagent): stop sibling branches when a sub-agent escalates (#1781) (Anzal Husain Abidi, 2026-11-19)
+- [e15287f](https://github.com/google/adk-go/commit/e15287fae12bed0c9a561f78b6a3e62f27138c51) feat(agentanalytics): add pre-built agent evaluation views (v_eval_session, v_eval_turn) (#2175) (Haiyuan Cao, 2026-11-19)
+- [3156d7b](https://github.com/google/adk-go/commit/3156d7b86a40deaba0af3d60c4f084accda936a3) feat(model/gemini): add context cache lifecycle management for agent sessions (#1951) (Karthik Thota, 2026-11-19)
 
 ## Changed Files
 
+- `M	.golangci.yml`
+- `M	agent/common_context_test.go`
+- `M	agent/llmagent/llmagent_delegation_test.go`
+- `M	agent/llmagent/llmagent_test.go`
+- `M	agent/llmagent/state_agent_test.go`
+- `M	agent/remoteagent/v2/a2a_agent.go`
+- `M	agent/remoteagent/v2/a2a_agent_run_processor_test.go`
 - `M	agent/remoteagent/v2/a2a_e2e_test.go`
-- `M	agent/remoteagent/v2/auth.go`
-- `M	agent/remoteagent/v2/auth_test.go`
-- `M	auth/doc.go`
+- `M	agent/remoteagent/v2/utils.go`
+- `M	agent/workflowagents/loopagent/agent.go`
+- `M	agent/workflowagents/parallelagent/agent.go`
+- `M	agent/workflowagents/parallelagent/agent_test.go`
+- `M	agent/workflowagents/sequentialagent/agent.go`
+- `M	agent/workflowagents/sequentialagent/agent_test.go`
+- `M	artifact/gcsartifact/service.go`
+- `M	artifact/inmemory.go`
 - `M	auth/gcp/client.go`
-- `M	auth/gcp/client_test.go`
-- `A	auth/gcp/export_test.go`
-- `M	auth/gcp/provider.go`
-- `M	auth/gcp/provider_internal_test.go`
-- `M	auth/gcp/provider_test.go`
-- `M	auth/providers.go`
-- `A	auth/providers_idtoken_test.go`
-- `M	auth/providers_internal_test.go`
+- `A	examples/contextcache/README.md`
+- `A	examples/contextcache/main.go`
+- `M	examples/multiagent/single_turn/main.go`
+- `A	examples/skillregistry/main.go`
 - `M	go.mod`
-- `M	go.sum`
-- `A	internal/credredirect/credredirect.go`
-- `A	internal/credredirect/credredirect_test.go`
-- `M	plugin/agentanalytics/batch_processor.go`
-- `M	plugin/agentanalytics/batch_processor_test.go`
+- `M	internal/cli/util/text_helpers.go`
+- `M	internal/configurable/conformance/functions.go`
+- `M	internal/configurable/conformance/loader.go`
+- `M	internal/credredirect/credredirect.go`
+- `M	internal/llminternal/base_flow.go`
+- `M	internal/llminternal/basic_processor.go`
+- `M	internal/llminternal/contents_processor.go`
+- `M	internal/llminternal/contents_processor_test.go`
+- `A	internal/llminternal/context_cache_lifecycle.go`
+- `A	internal/llminternal/context_cache_lifecycle_test.go`
+- `A	internal/llminternal/context_cache_processor.go`
+- `A	internal/llminternal/context_cache_processor_test.go`
+- `M	internal/llminternal/instruction_processor.go`
+- `M	internal/llminternal/instruction_processor_test.go`
+- `M	internal/llminternal/stream_aggregator.go`
+- `M	internal/llminternal/streaming_tool_test.go`
+- `M	internal/ranksearch/bm25.go`
+- `M	internal/telemetry/logger.go`
+- `M	internal/testutil/test_agent_runner.go`
+- `A	internal/utils/error_relay.go`
+- `A	internal/utils/error_relay_test.go`
+- `M	internal/utils/fs.go`
+- `M	internal/utils/fs_test.go`
+- `M	internal/utils/schema_canonical.go`
+- `M	internal/utils/schema_utils.go`
+- `M	memory/inmemory.go`
+- `M	memory/inmemory_search_test.go`
+- `M	model/anthropicmodel/request.go`
+- `M	model/anthropicmodel/response.go`
+- `M	model/anthropicmodel/stream.go`
+- `A	model/cache.go`
+- `A	model/cache_test.go`
+- `A	model/gemini/context_cache.go`
+- `A	model/gemini/context_cache_test.go`
+- `M	model/gemini/gemini.go`
+- `M	model/llm.go`
+- `M	model/openaimodel/internal/completions/request.go`
+- `M	model/openaimodel/internal/responses/model.go`
+- `M	model/openaimodel/internal/responses/request.go`
+- `M	model/openaimodel/internal/responses/request_test.go`
+- `M	model/openaimodel/internal/responses/response.go`
+- `M	model/openaimodel/internal/shared/schema.go`
+- `A	plugin/agentanalytics/after_agent_events_test.go`
+- `M	plugin/agentanalytics/arrow_test_helper_test.go`
 - `M	plugin/agentanalytics/bigquery_agent_analytics_plugin.go`
 - `M	plugin/agentanalytics/bigquery_agent_analytics_plugin_test.go`
 - `M	plugin/agentanalytics/config.go`
 - `M	plugin/agentanalytics/doc.go`
+- `M	plugin/agentanalytics/doc_test.go`
 - `M	plugin/agentanalytics/events.go`
 - `M	plugin/agentanalytics/events_test.go`
-- `M	plugin/agentanalytics/json_formatter.go`
-- `M	plugin/agentanalytics/json_formatter_test.go`
+- `M	plugin/agentanalytics/gcs_offloader_test.go`
+- `M	plugin/agentanalytics/go.mod`
+- `M	plugin/agentanalytics/go.sum`
 - `M	plugin/agentanalytics/redaction.go`
-- `A	plugin/agentanalytics/redaction_backstop.go`
-- `A	plugin/agentanalytics/redaction_base_parity_test.go`
-- `A	plugin/agentanalytics/redaction_keys.go`
-- `A	plugin/agentanalytics/redaction_nested.go`
-- `A	plugin/agentanalytics/redaction_regression_test.go`
-- `A	plugin/agentanalytics/redaction_scanners.go`
-- `A	plugin/agentanalytics/redaction_spans.go`
-- `A	plugin/agentanalytics/redaction_test.go`
-- `A	plugin/agentanalytics/redaction_uri.go`
-- `A	plugin/agentanalytics/testdata/redaction_base_corpus.json`
+- `M	plugin/agentanalytics/redaction_backstop.go`
+- `M	plugin/agentanalytics/redaction_keys.go`
+- `M	plugin/agentanalytics/redaction_nested.go`
+- `M	plugin/agentanalytics/redaction_spans.go`
+- `A	plugin/agentanalytics/schema_callbacks_test.go`
+- `M	plugin/agentanalytics/schema_upgrade.go`
+- `M	plugin/agentanalytics/schema_upgrade_test.go`
+- `A	plugin/agentanalytics/tool_result_classifier_test.go`
 - `M	plugin/agentanalytics/trace_manager.go`
 - `M	plugin/agentanalytics/trace_manager_test.go`
+- `M	plugin/agentanalytics/views.go`
 - `M	plugin/agentanalytics/views_test.go`
-- `M	tool/mcptoolset/client.go`
-- `A	tool/mcptoolset/redirect_test.go`
-- `M	tool/mcptoolset/set.go`
+- `M	plugin/loggingplugin/logging_plugin.go`
+- `M	plugin/loggingplugin/logging_plugin_test.go`
+- `M	runner/agent_node.go`
+- `A	runner/context_cache_nested_test.go`
+- `A	runner/context_cache_test.go`
+- `M	runner/live_runner_test.go`
+- `M	runner/run_node.go`
+- `M	runner/run_node_test.go`
+- `M	runner/runner.go`
+- `M	runner/workflow_function_response_test.go`
+- `M	server/adka2a/executor.go`
+- `M	server/adka2a/v2/executor_test.go`
+- `M	server/adka2a/v2/input_required.go`
+- `M	server/adkrest/controllers/debug.go`
+- `M	server/adkrest/controllers/runtime.go`
+- `M	server/adkrest/controllers/runtime_live_test.go`
+- `M	server/adkrest/controllers/runtime_test.go`
+- `M	server/adkrest/controllers/sessions.go`
+- `M	server/adkrest/controllers/sessions_test.go`
+- `M	server/adkrest/internal/services/agentgraphgenerator.go`
+- `M	server/agentengine/internal/helper/encode.go`
+- `M	server/agentengine/internal/helper/encode_test.go`
+- `M	session/database/service.go`
+- `M	session/database/service_test.go`
+- `M	session/database/storage_session.go`
+- `M	session/event_json_test.go`
+- `M	session/vertexai/append_event_temp_state_test.go`
+- `M	session/vertexai/raw_event_crossruntime_test.go`
+- `M	session/vertexai/vertexai_client.go`
+- `M	session/vertexai/vertexai_test.go`
+- `M	telemetry/metric_reader.go`
+- `M	telemetry/setup_otel.go`
+- `M	telemetry/telemetry_test.go`
+- `M	tool/mcptoolset/client_cancellation_test.go`
 - `M	tool/mcptoolset/set_test.go`
-- `M	tool/skilltoolset/skill/filesystem_source.go`
-- `M	tool/skilltoolset/skill/filesystem_source_test.go`
+- `M	tool/skilltoolset/skill/complete_preload.go`
+- `M	tool/skilltoolset/skill/frontmatter_preload.go`
+- `A	tool/skilltoolset/skill/in_memory_source.go`
+- `A	tool/skilltoolset/skill/in_memory_source_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/cache.go`
+- `A	tool/skilltoolset/skill/skillregistry/client.go`
+- `A	tool/skilltoolset/skill/skillregistry/client_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cache.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cache_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_data.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_data_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_resource.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_resource_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_skill.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_skill_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_source.go`
+- `A	tool/skilltoolset/skill/skillregistry/simplecache/cached_source_test.go`
+- `A	tool/skilltoolset/skill/skillregistry/source.go`
+- `A	tool/skilltoolset/skill/skillregistry/source_test.go`
+- `M	tool/toolauth/model_json.go`
+- `M	util/instructionutil/instruction.go`
+- `A	util/instructionutil/instruction_test.go`
+- `M	workflow/branch.go`
+- `M	workflow/branch_isolation_test.go`
+- `M	workflow/edgebuilder.go`
+- `M	workflow/join_node_test.go`
+- `M	workflow/parallel_worker_branch_test.go`
+- `M	workflow/persistence.go`
+- `M	workflow/persistence_test.go`
+- `M	workflow/resume.go`
+- `M	workflow/scheduler.go`
+- `M	workflow/scheduler_test.go`
+- `M	workflow/workflow.go`
+- `M	workflow/workflow_node.go`

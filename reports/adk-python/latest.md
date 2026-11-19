@@ -1,78 +1,306 @@
 # ADK Python Daily Change Report
 
-- Date (UTC): 2026-11-18
+- Date (UTC): 2026-11-19
 - Source: `google/adk-python`
-- Latest SHA: `aa0f434a8b09de181db5812268e00e9e2f27e20f`
-- Previous SHA: `889ddd3134df1dd1a626205ee78811950dec2a5c`
+- Latest SHA: `0c85ab01c91d63e8b688ac281019d72024ec6183`
+- Previous SHA: `aa0f434a8b09de181db5812268e00e9e2f27e20f`
 
 ## Summary
 
-- New commits: 13
+- New commits: 14
 
 ## Commits
 
-- [aa0f434a](https://github.com/google/adk-python/commit/aa0f434a8b09de181db5812268e00e9e2f27e20f) fix: keep the Gemini API on v1beta unless a version is configured (George Weale, 2026-11-18)
-- [43e959ee](https://github.com/google/adk-python/commit/43e959ee4611a3cf9b6d084a7aeaf33f68b489ea) fix: stop retrying context cache creation on models that refuse it (George Weale, 2026-11-18)
-- [36ac021e](https://github.com/google/adk-python/commit/36ac021eb6156a5fccf2af257b83c97eb8b84e1f) fix(eval): send Gemini 4 a thinking level instead of the default budget (George Weale, 2026-11-18)
-- [8fa57e82](https://github.com/google/adk-python/commit/8fa57e82a7fef495fda510718d9912cccc0494b4) fix(tools): report the thinking level ModelConsultTool actually sent (George Weale, 2026-11-18)
-- [fa7b2045](https://github.com/google/adk-python/commit/fa7b2045810a943d43ddfc4351a1b426b1511e69) fix: use a thinking level for SemanticArgMatcher on Gemini 4 (George Weale, 2026-11-18)
-- [30cb66ec](https://github.com/google/adk-python/commit/30cb66ec17702b4ff6f0bbfe043dbcc86fdadd8e) fix: keep ManagedAgent Developer API clients on v1beta (George Weale, 2026-11-18)
-- [fa9ae7e0](https://github.com/google/adk-python/commit/fa9ae7e0139ed7e6bb804e38ff5d8aa8f4873917) fix(vmaas): AgentEngineEnvironment can be pickled after use (Liang Wu, 2026-11-18)
-- [15af24c1](https://github.com/google/adk-python/commit/15af24c15c11baaf9066fb3f8121badab41fce3d) fix: Support google-genai releases that move converters to _converters (Mark Daoust, 2026-11-18)
-- [ec2ac7c5](https://github.com/google/adk-python/commit/ec2ac7c5ea8f007e6cdffd4db999df7dea9f329d) fix: support non-LLM root nodes in app-info and get_agents_dict (Google Team Member, 2026-11-18)
-- [c74df83c](https://github.com/google/adk-python/commit/c74df83c0dae648459c6b485e29d531dda9aab29) fix: accept every SDK thinking level in ModelConsultTool (George Weale, 2026-11-17)
-- [de1d3079](https://github.com/google/adk-python/commit/de1d3079e8968e5e970ec146e5963ecbe68a5b7a) fix: treat Gemini 4 and later as Gemini 3 or newer in LiteLlm (George Weale, 2026-11-17)
-- [b916291f](https://github.com/google/adk-python/commit/b916291fccb1b830affe542240c2520f7a176b10) feat(artifacts): support artifact metadata on S3 in FsspecArtifactService (Google Team Member, 2026-11-17)
-- [277553a0](https://github.com/google/adk-python/commit/277553a02ab8e91a93a380306221c66562651655) fix: skip the genai OTel instrumentor when dependencies conflict (George Weale, 2026-11-17)
+- [0c85ab01](https://github.com/google/adk-python/commit/0c85ab01c91d63e8b688ac281019d72024ec6183) chore: update compiled adk web assets (adk-bot, 2026-11-19)
+- [5523aa73](https://github.com/google/adk-python/commit/5523aa7333d36736262b2e38d7a302f1505b1822) fix(a2a): revert persisting streamed RemoteA2aAgent output without last_chunk (Ayush Pandey, 2026-11-19)
+- [7b07e7df](https://github.com/google/adk-python/commit/7b07e7df7f4a35687f2a2fff079dbecb59532c0e) fix: report Apigee tool calls whose arguments are not a JSON object (George Weale, 2026-11-19)
+- [ecc6b6e0](https://github.com/google/adk-python/commit/ecc6b6e0145cc963aa21aca1745f8994b4bd58c2) fix(telemetry): set gen_ai.response.model on LLM spans (John Cox, 2026-11-19)
+- [fb08c784](https://github.com/google/adk-python/commit/fb08c784242c9afc3d8645508d8c5c08c9836eb9) fix: stop tagging YAML agents as Visual Builder apps in telemetry (Yifan Wang, 2026-11-18)
+- [6dbe5bb6](https://github.com/google/adk-python/commit/6dbe5bb6d48be6a6c1895acade363e89d7b9bd98) perf(workflow): coalesce node status checkpoints per scheduler tick (Thomas Zettl, 2026-11-18)
+- [7d2c7b75](https://github.com/google/adk-python/commit/7d2c7b75d08a038345babd099f42a2ef7dc31114) fix(cli): validate agent import on Agent Engine container startup (Google Team Member, 2026-11-18)
+- [e2a21ac2](https://github.com/google/adk-python/commit/e2a21ac23260d043bf9d217b573af1bef48f0f70) feat: remove the Agent Builder Assistant and built-in `__` agents (Yifan Wang, 2026-11-18)
+- [72578551](https://github.com/google/adk-python/commit/72578551cf0ea92b24e11e33defb6af868ecbaab) refactor: use one googleapis.com check across ADK (Google Team Member, 2026-11-18)
+- [1997a12b](https://github.com/google/adk-python/commit/1997a12b809add98f454d7ca6e4625ae076e867a) feat(telemetry): tag Cloud Run and Kubernetes runtimes in client labels (Google Team Member, 2026-11-18)
+- [9eb6d9d9](https://github.com/google/adk-python/commit/9eb6d9d93aff15278f27337348a3cb8e527624fb) feat(bigquery): add search_scope support to ask_data_insights (Google Team Member, 2026-11-18)
+- [c38ecdae](https://github.com/google/adk-python/commit/c38ecdae6a3128b2dc27292f9a8cc73c77e10b30) fix(telemetry): send the hosting runtime tag only to Google API endpoints (Google Team Member, 2026-11-18)
+- [6ccd07b7](https://github.com/google/adk-python/commit/6ccd07b797c82c9dc19fa9837495cb9c77a45089) feat: add BaseLlmConnection.send_context_update (Jason Zhang, 2026-11-18)
+- [c890aa31](https://github.com/google/adk-python/commit/c890aa317f61988c99ac9cd4df49a1443ed87d15) feat: remove the Agent Builder endpoints from the dev server (Yifan Wang, 2026-11-18)
 
 ## Changed Files
 
-- `M	docs/guides/evaluation/eval_config/index.md`
-- `M	docs/guides/optimization/agent_optimizer/index.md`
-- `M	docs/guides/tools/model_consult/model_consult_tool/index.md`
-- `M	docs/guides/tools/tool_args_matcher/tool_args_matcher/index.md`
-- `M	src/google/adk/agents/_managed_agent.py`
-- `M	src/google/adk/agents/context_cache_config.py`
+- `M	.agents/skills/adk-architecture/references/interface-workflow.md`
+- `M	docs/guides/cli/fast_api/index.md`
+- `M	src/google/adk/a2a/agent/_remote_a2a_agent.py`
+- `M	src/google/adk/cli/_dev_deploy.py`
 - `M	src/google/adk/cli/api_server.py`
-- `M	src/google/adk/evaluation/simulation/_llm_audio_user_simulator.py`
-- `M	src/google/adk/evaluation/simulation/llm_backed_user_simulator.py`
-- `M	src/google/adk/integrations/fsspec/_backends.py`
-- `M	src/google/adk/integrations/fsspec/_fsspec_artifact_service.py`
-- `M	src/google/adk/integrations/vmaas/_agent_engine_environment.py`
-- `M	src/google/adk/integrations/vmaas/_sandbox_manager.py`
-- `M	src/google/adk/models/_generate_content_body.py`
+- `D	src/google/adk/cli/browser/chunk-25OK43GT.js`
+- `A	src/google/adk/cli/browser/chunk-2BYMRQQS.js`
+- `R097	src/google/adk/cli/browser/chunk-C44CASQB.js	src/google/adk/cli/browser/chunk-2CDCQSBG.js`
+- `R096	src/google/adk/cli/browser/chunk-XFUII6LE.js	src/google/adk/cli/browser/chunk-2FHPINWN.js`
+- `D	src/google/adk/cli/browser/chunk-2HZCZC4B.js`
+- `R096	src/google/adk/cli/browser/chunk-5IFLH6ZK.js	src/google/adk/cli/browser/chunk-2RAWMCHZ.js`
+- `A	src/google/adk/cli/browser/chunk-3DCK4TKN.js`
+- `A	src/google/adk/cli/browser/chunk-3DH3RDF5.js`
+- `D	src/google/adk/cli/browser/chunk-3HOUB4YO.js`
+- `R092	src/google/adk/cli/browser/chunk-ZMVJDLZY.js	src/google/adk/cli/browser/chunk-43AU7CBD.js`
+- `A	src/google/adk/cli/browser/chunk-5ENWVHYB.js`
+- `R097	src/google/adk/cli/browser/chunk-VX2ACLVO.js	src/google/adk/cli/browser/chunk-5O2UCM5V.js`
+- `R093	src/google/adk/cli/browser/chunk-RFJV2UO7.js	src/google/adk/cli/browser/chunk-5TWECRO4.js`
+- `D	src/google/adk/cli/browser/chunk-62VN4EUD.js`
+- `A	src/google/adk/cli/browser/chunk-6E5CRY2V.js`
+- `R084	src/google/adk/cli/browser/chunk-7NOUNFDC.js	src/google/adk/cli/browser/chunk-6M5NR6UD.js`
+- `A	src/google/adk/cli/browser/chunk-73LBGOQQ.js`
+- `A	src/google/adk/cli/browser/chunk-74JCN34Y.js`
+- `R099	src/google/adk/cli/browser/chunk-QWDIUFBD.js	src/google/adk/cli/browser/chunk-7KKJLMWF.js`
+- `D	src/google/adk/cli/browser/chunk-ACI37VVW.js`
+- `R099	src/google/adk/cli/browser/chunk-VO24MLKQ.js	src/google/adk/cli/browser/chunk-APN6XHCB.js`
+- `D	src/google/adk/cli/browser/chunk-AXDZ3NBO.js`
+- `A	src/google/adk/cli/browser/chunk-B47CNSKF.js`
+- `D	src/google/adk/cli/browser/chunk-B4MAM5BC.js`
+- `R096	src/google/adk/cli/browser/chunk-GG3CUCE3.js	src/google/adk/cli/browser/chunk-BLFGY5WG.js`
+- `R098	src/google/adk/cli/browser/chunk-4YLKIWWX.js	src/google/adk/cli/browser/chunk-BRPC7GRX.js`
+- `R098	src/google/adk/cli/browser/chunk-SJFSTLS2.js	src/google/adk/cli/browser/chunk-BUTCFZPH.js`
+- `D	src/google/adk/cli/browser/chunk-BZGM3F3K.js`
+- `R099	src/google/adk/cli/browser/chunk-ORABBJZL.js	src/google/adk/cli/browser/chunk-CHJ2AOJF.js`
+- `D	src/google/adk/cli/browser/chunk-CJFTFRG5.js`
+- `A	src/google/adk/cli/browser/chunk-CTIRNVOP.js`
+- `R089	src/google/adk/cli/browser/chunk-3BIA2EGU.js	src/google/adk/cli/browser/chunk-CW3I3NO5.js`
+- `D	src/google/adk/cli/browser/chunk-CYYVNI2P.js`
+- `R087	src/google/adk/cli/browser/chunk-SOUZVR6W.js	src/google/adk/cli/browser/chunk-CZNYKEND.js`
+- `R095	src/google/adk/cli/browser/chunk-ZBUFZ7Z5.js	src/google/adk/cli/browser/chunk-D57K2QQP.js`
+- `R099	src/google/adk/cli/browser/chunk-6GPD6DBC.js	src/google/adk/cli/browser/chunk-DHYIT5UW.js`
+- `R077	src/google/adk/cli/browser/chunk-AXV3XU26.js	src/google/adk/cli/browser/chunk-EELHADYU.js`
+- `A	src/google/adk/cli/browser/chunk-ELUAK5RC.js`
+- `R089	src/google/adk/cli/browser/chunk-IOPFPD6C.js	src/google/adk/cli/browser/chunk-EW62LWTV.js`
+- `R094	src/google/adk/cli/browser/chunk-ND4WB6NS.js	src/google/adk/cli/browser/chunk-F55MDZSN.js`
+- `A	src/google/adk/cli/browser/chunk-FIORZAHH.js`
+- `D	src/google/adk/cli/browser/chunk-GAXG2QOY.js`
+- `R099	src/google/adk/cli/browser/chunk-EZD2JESQ.js	src/google/adk/cli/browser/chunk-GEJKNOD5.js`
+- `D	src/google/adk/cli/browser/chunk-GRXDBTVY.js`
+- `R090	src/google/adk/cli/browser/chunk-SBIPGDQI.js	src/google/adk/cli/browser/chunk-GWQADKKB.js`
+- `R089	src/google/adk/cli/browser/chunk-ARAETZM4.js	src/google/adk/cli/browser/chunk-H7M4KRZ2.js`
+- `A	src/google/adk/cli/browser/chunk-HCPEJTGO.js`
+- `A	src/google/adk/cli/browser/chunk-HEICJ4NN.js`
+- `A	src/google/adk/cli/browser/chunk-HJALKQDI.js`
+- `D	src/google/adk/cli/browser/chunk-HT6632I4.js`
+- `R099	src/google/adk/cli/browser/chunk-VOCMCWAH.js	src/google/adk/cli/browser/chunk-IKMAFIZX.js`
+- `R063	src/google/adk/cli/browser/chunk-IOEQP2KD.js	src/google/adk/cli/browser/chunk-J4TTJ2WN.js`
+- `R069	src/google/adk/cli/browser/chunk-ATVPBGZR.js	src/google/adk/cli/browser/chunk-J7444EDW.js`
+- `A	src/google/adk/cli/browser/chunk-JEW5ZJFN.js`
+- `A	src/google/adk/cli/browser/chunk-JMV4QEHK.js`
+- `D	src/google/adk/cli/browser/chunk-JQRHVPGZ.js`
+- `R098	src/google/adk/cli/browser/chunk-2KGYEASO.js	src/google/adk/cli/browser/chunk-JQSHE6ON.js`
+- `D	src/google/adk/cli/browser/chunk-JSC2N6NR.js`
+- `R074	src/google/adk/cli/browser/chunk-ZSPVMZGT.js	src/google/adk/cli/browser/chunk-JUMJI2A4.js`
+- `R093	src/google/adk/cli/browser/chunk-CUFJZGL2.js	src/google/adk/cli/browser/chunk-KD6NNSEH.js`
+- `R058	src/google/adk/cli/browser/chunk-IDCXNWW3.js	src/google/adk/cli/browser/chunk-KEJFSQGZ.js`
+- `D	src/google/adk/cli/browser/chunk-KXGG2NJA.js`
+- `R093	src/google/adk/cli/browser/chunk-DILFQQVU.js	src/google/adk/cli/browser/chunk-L32LDBVN.js`
+- `R085	src/google/adk/cli/browser/chunk-5SP5BXGR.js	src/google/adk/cli/browser/chunk-L5QAHRJF.js`
+- `R086	src/google/adk/cli/browser/chunk-LRCABWFD.js	src/google/adk/cli/browser/chunk-LCQFZR6Q.js`
+- `R085	src/google/adk/cli/browser/chunk-7YSH3HE7.js	src/google/adk/cli/browser/chunk-LHC2GLSA.js`
+- `R098	src/google/adk/cli/browser/chunk-WIX6XVE4.js	src/google/adk/cli/browser/chunk-LIXLTRZM.js`
+- `D	src/google/adk/cli/browser/chunk-LNV2GSXT.js`
+- `R099	src/google/adk/cli/browser/chunk-YD7AYBKO.js	src/google/adk/cli/browser/chunk-LONIF7I6.js`
+- `R068	src/google/adk/cli/browser/chunk-SURMBDHY.js	src/google/adk/cli/browser/chunk-LQQGGXHJ.js`
+- `A	src/google/adk/cli/browser/chunk-LRYPK3NN.js`
+- `A	src/google/adk/cli/browser/chunk-LZK6WAVR.js`
+- `A	src/google/adk/cli/browser/chunk-NCEQPEJE.js`
+- `A	src/google/adk/cli/browser/chunk-NG3CJRQK.js`
+- `R099	src/google/adk/cli/browser/chunk-62TVWKO3.js	src/google/adk/cli/browser/chunk-NGFE6RBC.js`
+- `R095	src/google/adk/cli/browser/chunk-OQGNECBI.js	src/google/adk/cli/browser/chunk-NTJ6O23J.js`
+- `R066	src/google/adk/cli/browser/chunk-DUIJAVI2.js	src/google/adk/cli/browser/chunk-OA7KAXCR.js`
+- `D	src/google/adk/cli/browser/chunk-OPMCY6HV.js`
+- `R096	src/google/adk/cli/browser/chunk-6YCQADS6.js	src/google/adk/cli/browser/chunk-PELI3TLC.js`
+- `D	src/google/adk/cli/browser/chunk-PZ7BYWZQ.js`
+- `D	src/google/adk/cli/browser/chunk-Q3FRXB4R.js`
+- `R097	src/google/adk/cli/browser/chunk-R4NJHI2G.js	src/google/adk/cli/browser/chunk-Q3V7WRFW.js`
+- `R092	src/google/adk/cli/browser/chunk-LTLDYHLB.js	src/google/adk/cli/browser/chunk-QBCO4P2K.js`
+- `R095	src/google/adk/cli/browser/chunk-RKQR7KXB.js	src/google/adk/cli/browser/chunk-QCIEL2KM.js`
+- `R075	src/google/adk/cli/browser/chunk-KHBFQVNN.js	src/google/adk/cli/browser/chunk-QK5SNPNT.js`
+- `R093	src/google/adk/cli/browser/chunk-3D7C5O5T.js	src/google/adk/cli/browser/chunk-QNYO23UL.js`
+- `R098	src/google/adk/cli/browser/chunk-WPQ6MXI6.js	src/google/adk/cli/browser/chunk-QWBBIO54.js`
+- `R099	src/google/adk/cli/browser/chunk-6XZG3KG5.js	src/google/adk/cli/browser/chunk-R5XN4DWF.js`
+- `R099	src/google/adk/cli/browser/chunk-VNXKD2PM.js	src/google/adk/cli/browser/chunk-RD6MFFXY.js`
+- `R078	src/google/adk/cli/browser/chunk-NLTM4DEO.js	src/google/adk/cli/browser/chunk-RF2OPILU.js`
+- `R096	src/google/adk/cli/browser/chunk-ROUF34MA.js	src/google/adk/cli/browser/chunk-RTKEQAY7.js`
+- `R096	src/google/adk/cli/browser/chunk-HKS4B5E7.js	src/google/adk/cli/browser/chunk-S6ALDCTQ.js`
+- `D	src/google/adk/cli/browser/chunk-S6PRLJJJ.js`
+- `A	src/google/adk/cli/browser/chunk-SDI6NMPN.js`
+- `R099	src/google/adk/cli/browser/chunk-BTIP5KPZ.js	src/google/adk/cli/browser/chunk-SQTYPNHV.js`
+- `R085	src/google/adk/cli/browser/chunk-MM6RFXD4.js	src/google/adk/cli/browser/chunk-SUCP2KH6.js`
+- `R066	src/google/adk/cli/browser/chunk-2DG2RLKI.js	src/google/adk/cli/browser/chunk-T3F5QBPH.js`
+- `A	src/google/adk/cli/browser/chunk-T4NXWMYM.js`
+- `A	src/google/adk/cli/browser/chunk-TI3SBPRW.js`
+- `D	src/google/adk/cli/browser/chunk-TLHHCYOY.js`
+- `R099	src/google/adk/cli/browser/chunk-JBDBESHO.js	src/google/adk/cli/browser/chunk-TYI2UDTL.js`
+- `R099	src/google/adk/cli/browser/chunk-VYRY6ZC5.js	src/google/adk/cli/browser/chunk-TYUA3F5A.js`
+- `R092	src/google/adk/cli/browser/chunk-NKATWVP6.js	src/google/adk/cli/browser/chunk-U2WPO732.js`
+- `R085	src/google/adk/cli/browser/chunk-XNKUIZIT.js	src/google/adk/cli/browser/chunk-UQKFLMSW.js`
+- `A	src/google/adk/cli/browser/chunk-UUPCN65E.js`
+- `R098	src/google/adk/cli/browser/chunk-ZHSVEDZS.js	src/google/adk/cli/browser/chunk-V3WJPKEQ.js`
+- `R082	src/google/adk/cli/browser/chunk-63Y33MON.js	src/google/adk/cli/browser/chunk-V5FB3XGN.js`
+- `R098	src/google/adk/cli/browser/chunk-7SPO5ORD.js	src/google/adk/cli/browser/chunk-VRMXE3GZ.js`
+- `R092	src/google/adk/cli/browser/chunk-B5D7FH62.js	src/google/adk/cli/browser/chunk-VZ4YUAP7.js`
+- `R086	src/google/adk/cli/browser/chunk-WKUOFYJM.js	src/google/adk/cli/browser/chunk-WMENXGN7.js`
+- `R098	src/google/adk/cli/browser/chunk-YUCNXMJX.js	src/google/adk/cli/browser/chunk-WXJRPXJH.js`
+- `R094	src/google/adk/cli/browser/chunk-VWXZP4RG.js	src/google/adk/cli/browser/chunk-WZ6ENJVG.js`
+- `D	src/google/adk/cli/browser/chunk-XEZB6FWA.js`
+- `D	src/google/adk/cli/browser/chunk-XI5UVSN6.js`
+- `R097	src/google/adk/cli/browser/chunk-URZAULWN.js	src/google/adk/cli/browser/chunk-YBKN6AF3.js`
+- `R099	src/google/adk/cli/browser/chunk-GMQCDRYQ.js	src/google/adk/cli/browser/chunk-YJSAHI67.js`
+- `R086	src/google/adk/cli/browser/chunk-Q2HGE4NL.js	src/google/adk/cli/browser/chunk-YSDWRGGV.js`
+- `R089	src/google/adk/cli/browser/chunk-7RD5QMBH.js	src/google/adk/cli/browser/chunk-Z26AK4JD.js`
+- `R069	src/google/adk/cli/browser/chunk-JHJZJ2D5.js	src/google/adk/cli/browser/chunk-Z7SBFKWA.js`
+- `R099	src/google/adk/cli/browser/chunk-H5ICCYUM.js	src/google/adk/cli/browser/chunk-ZTFUJHPO.js`
+- `M	src/google/adk/cli/browser/index.html`
+- `R063	src/google/adk/cli/browser/main-KCUV4MHY.js	src/google/adk/cli/browser/main-PJ4DBNMP.js`
+- `D	src/google/adk/cli/built_in_agents/README.md`
+- `D	src/google/adk/cli/built_in_agents/__init__.py`
+- `D	src/google/adk/cli/built_in_agents/adk_agent_builder_assistant.py`
+- `D	src/google/adk/cli/built_in_agents/agent.py`
+- `D	src/google/adk/cli/built_in_agents/instruction_embedded.template`
+- `D	src/google/adk/cli/built_in_agents/tools/__init__.py`
+- `D	src/google/adk/cli/built_in_agents/tools/cleanup_unused_files.py`
+- `D	src/google/adk/cli/built_in_agents/tools/delete_files.py`
+- `D	src/google/adk/cli/built_in_agents/tools/explore_project.py`
+- `D	src/google/adk/cli/built_in_agents/tools/query_schema.py`
+- `D	src/google/adk/cli/built_in_agents/tools/read_config_files.py`
+- `D	src/google/adk/cli/built_in_agents/tools/read_files.py`
+- `D	src/google/adk/cli/built_in_agents/tools/search_adk_source.py`
+- `D	src/google/adk/cli/built_in_agents/tools/write_config_files.py`
+- `D	src/google/adk/cli/built_in_agents/tools/write_files.py`
+- `D	src/google/adk/cli/built_in_agents/utils/__init__.py`
+- `D	src/google/adk/cli/built_in_agents/utils/_adk_symbols.py`
+- `D	src/google/adk/cli/built_in_agents/utils/adk_source_utils.py`
+- `D	src/google/adk/cli/built_in_agents/utils/path_normalizer.py`
+- `D	src/google/adk/cli/built_in_agents/utils/resolve_root_directory.py`
+- `M	src/google/adk/cli/cli_deploy.py`
+- `M	src/google/adk/cli/cli_tools_click.py`
+- `M	src/google/adk/cli/deployers/_dockerfile_template.py`
+- `M	src/google/adk/cli/dev_server.py`
+- `M	src/google/adk/cli/fast_api.py`
+- `M	src/google/adk/cli/utils/_nested_agent_loader.py`
+- `M	src/google/adk/cli/utils/agent_loader.py`
+- `M	src/google/adk/cli/utils/base_agent_loader.py`
+- `M	src/google/adk/cli/utils/local_storage.py`
+- `M	src/google/adk/integrations/agent_registry/agent_registry.py`
+- `M	src/google/adk/integrations/api_registry/api_registry.py`
+- `M	src/google/adk/integrations/bigquery/data_insights_tool.py`
+- `M	src/google/adk/integrations/openai/_openai_decisions_classifier.py`
+- `M	src/google/adk/integrations/typesafe/_typesafe_classifier.py`
+- `M	src/google/adk/live/_cascade_live_connection.py`
+- `A	src/google/adk/models/_malformed_function_calls.py`
 - `M	src/google/adk/models/apigee_llm.py`
-- `M	src/google/adk/models/gemini_context_cache_manager.py`
+- `M	src/google/adk/models/base_llm_connection.py`
+- `M	src/google/adk/models/gemini_llm_connection.py`
 - `M	src/google/adk/models/google_llm.py`
-- `M	src/google/adk/models/lite_llm.py`
-- `M	src/google/adk/optimization/gepa_root_agent_prompt_optimizer.py`
-- `M	src/google/adk/optimization/simple_prompt_optimizer.py`
-- `M	src/google/adk/tools/computer_use/computer_use_toolset.py`
-- `M	src/google/adk/tools/environment_simulation/environment_simulation_config.py`
-- `M	src/google/adk/tools/environment_simulation/environment_simulation_engine.py`
-- `M	src/google/adk/tools/model_consult/_advisor.py`
-- `M	src/google/adk/tools/model_consult/_model_consult_tool.py`
-- `M	src/google/adk/tools/tool_args_matcher/_semantic_arg_matcher.py`
-- `M	src/google/adk/utils/agent_info.py`
-- `M	src/google/adk/utils/model_name_utils.py`
-- `M	tests/unittests/agents/test_gemini_context_cache_manager.py`
-- `M	tests/unittests/agents/test_managed_agent.py`
-- `M	tests/unittests/artifacts/test_artifact_service.py`
+- `M	src/google/adk/models/interactions_utils.py`
+- `M	src/google/adk/telemetry/tracing.py`
+- `M	src/google/adk/tools/mcp_tool/mcp_session_manager.py`
+- `M	src/google/adk/utils/_client_labels_utils.py`
+- `M	src/google/adk/utils/_google_client_headers.py`
+- `M	src/google/adk/utils/_mtls_utils.py`
+- `M	src/google/adk/workflow/_workflow.py`
+- `M	tests/unittests/a2a/agent/test_remote_a2a_agent.py`
+- `M	tests/unittests/agents/test_agent_config.py`
+- `D	tests/unittests/cli/test_adk_agent_builder_assistant.py`
+- `D	tests/unittests/cli/test_adk_source_utils.py`
+- `D	tests/unittests/cli/test_adk_web_server_import_isolation.py`
+- `D	tests/unittests/cli/test_cleanup_unused_files.py`
 - `M	tests/unittests/cli/test_fast_api.py`
-- `M	tests/unittests/evaluation/simulation/test_llm_backed_user_simulator.py`
-- `M	tests/unittests/evaluation/simulation/test_user_simulator_provider.py`
-- `M	tests/unittests/integrations/fsspec/test_fsspec_artifact_service.py`
-- `M	tests/unittests/integrations/vmaas/test_agent_engine_environment.py`
-- `M	tests/unittests/integrations/vmaas/test_sandbox_manager.py`
+- `D	tests/unittests/cli/test_path_normalizer.py`
+- `D	tests/unittests/cli/test_resolve_root_directory.py`
+- `D	tests/unittests/cli/test_search_adk_source.py`
+- `D	tests/unittests/cli/test_write_time_validation.py`
+- `M	tests/unittests/cli/utils/test_agent_loader.py`
+- `M	tests/unittests/cli/utils/test_cli_deploy.py`
+- `M	tests/unittests/cli/utils/test_local_storage.py`
+- `M	tests/unittests/conftest.py`
+- `M	tests/unittests/integrations/bigquery/test_bigquery_data_insights_tool.py`
+- `M	tests/unittests/integrations/openai/test_openai_decisions_classifier.py`
+- `M	tests/unittests/integrations/typesafe/test_typesafe_classifier.py`
+- `M	tests/unittests/live/test_cascade_live_connection.py`
+- `M	tests/unittests/live/test_cascade_live_workflow.py`
 - `M	tests/unittests/models/test_apigee_llm.py`
-- `M	tests/unittests/models/test_generate_content_body.py`
+- `M	tests/unittests/models/test_completions_http_client.py`
+- `M	tests/unittests/models/test_fallback_model.py`
+- `M	tests/unittests/models/test_gemini_llm_connection.py`
 - `M	tests/unittests/models/test_google_llm.py`
-- `M	tests/unittests/models/test_litellm.py`
-- `M	tests/unittests/optimization/gepa_root_agent_prompt_optimizer_test.py`
-- `M	tests/unittests/optimization/simple_prompt_optimizer_test.py`
-- `M	tests/unittests/tools/environment_simulation/test_environment_simulation_engine.py`
+- `M	tests/unittests/models/test_interactions_utils.py`
+- `A	tests/unittests/models/test_malformed_function_calls.py`
+- `M	tests/unittests/telemetry/functional_divergences.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-event-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-no-content-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-and-event-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/experimental-telemetry-no-capture-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/grounding.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/stable-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/stable-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/tool-error-valueerror-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent/tool-error-valueerror-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/no-experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/agent_tool/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/sliding-window-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/token-threshold-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/conversational_agent_compaction/untriggered-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/mcp/experimental-span-and-event.json`
+- `M	tests/unittests/telemetry/functional_goldens/mcp/http-exchange.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/no-experimental-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/multi_agent/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/nested_agents_in_workflow/experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/nested_agents_in_workflow/no-experimental-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-event-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-no-content-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-and-event-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/experimental-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/stable-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/node/stable-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-resource-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-resource-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/invalid-skill-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-resource-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-resource-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-script-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-script-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-disabled-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-disabled-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/skill/skill-telemetry-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-event-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-event-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-no-content-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-no-content-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-and-event-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-and-event-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-only-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/experimental-span-only-schema-v2.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/stable-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/streaming/stable-no-capture-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v1.json`
+- `M	tests/unittests/telemetry/functional_goldens/workflow_compaction/sliding-window-schema-v2.json`
+- `M	tests/unittests/telemetry/test_semconv_conformance.py`
+- `M	tests/unittests/telemetry/test_spans.py`
+- `M	tests/unittests/testing_utils.py`
+- `M	tests/unittests/tools/mcp_tool/test_mcp_session_manager.py`
 - `M	tests/unittests/tools/model_consult/test_advisor.py`
-- `M	tests/unittests/tools/model_consult/test_model_consult_tool.py`
-- `M	tests/unittests/tools/tool_args_matcher/test_semantic_arg_matcher.py`
-- `M	tests/unittests/utils/test_agent_info.py`
-- `M	tests/unittests/utils/test_model_name_utils.py`
+- `M	tests/unittests/utils/test_client_labels_utils.py`
+- `M	tests/unittests/utils/test_google_client_headers.py`
+- `M	tests/unittests/utils/test_mtls_utils.py`
+- `M	tests/unittests/workflow/test_workflow.py`
+- `M	tests/unittests/workflow/testing_utils.py`
