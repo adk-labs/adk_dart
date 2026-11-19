@@ -16,6 +16,7 @@ import 'package:adk_dart/src/errors/session_persistence_error.dart';
 import 'package:adk_dart/src/errors/stale_session_error.dart';
 import 'package:adk_dart/src/events/event.dart';
 import 'package:adk_dart/src/events/event_actions.dart';
+import 'package:adk_dart/src/features/_feature_registry.dart';
 import 'package:adk_dart/src/flows/llm_flows/functions.dart'
     show requestInputFunctionCallName;
 import 'package:adk_dart/src/models/base_llm.dart';
@@ -1213,5 +1214,72 @@ void main() {
       expect(info.keys, <String>['dup']);
       expect(info['dup']!.description, 'first desc');
     });
+  });
+
+  group('10. Audit regression fixes (Nov 20)', () {
+    test(
+      'MultimodalToolResultsPlugin session mode accumulates multiple tool calls in the same turn without fixed-length list error',
+      () async {
+        final MultimodalToolResultsPlugin plugin = MultimodalToolResultsPlugin(
+          retention: 'session',
+        );
+        final InvocationContext invocationContext = _newCtx(
+          LlmAgent(name: 'root_agent', model: _NoopModel()),
+        );
+        final Context context1 = Context(
+          invocationContext,
+          functionCallId: 'call_1',
+        );
+        final Context context2 = Context(
+          invocationContext,
+          functionCallId: 'call_2',
+        );
+
+        await plugin.afterToolCallback(
+          tool: _FakeTool(),
+          toolArgs: <String, dynamic>{},
+          toolContext: context1,
+          result: <String, dynamic>{
+            'result': <Part>[Part.text('first tool text')],
+          },
+        );
+        await plugin.afterToolCallback(
+          tool: _FakeTool(),
+          toolArgs: <String, dynamic>{},
+          toolContext: context2,
+          result: <String, dynamic>{
+            'result': <Part>[Part.text('second tool text')],
+          },
+        );
+
+        final LlmRequest req = LlmRequest(
+          contents: <Content>[
+            Content(role: 'user', parts: <Part>[Part.text('turn 1')]),
+          ],
+        );
+        await plugin.beforeModelCallback(
+          callbackContext: context2,
+          llmRequest: req,
+        );
+        final List<String?> texts = req.contents.last.parts
+            .map((Part p) => p.text)
+            .toList();
+        expect(texts, containsAll(<String>['first tool text', 'second tool text']));
+      },
+    );
+
+    test(
+      'BufferedSessionService and BufferedSessionServiceConfig enforce FeatureName.bufferedSessionService gate',
+      () {
+        overrideFeatureEnabled(FeatureName.bufferedSessionService, false);
+        addTearDown(resetFeatureRegistryForTest);
+
+        expect(() => BufferedSessionServiceConfig(), throwsStateError);
+        expect(
+          () => BufferedSessionService(InMemorySessionService()),
+          throwsStateError,
+        );
+      },
+    );
   });
 }

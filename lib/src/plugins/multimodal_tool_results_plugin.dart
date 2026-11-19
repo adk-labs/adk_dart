@@ -225,11 +225,15 @@ class MultimodalToolResultsPlugin extends BasePlugin {
       if (currentTurnParts.isNotEmpty) {
         if (toolContext.state.containsKey(_currentTurnPartsKey)) {
           final Object? current = toolContext.state[_currentTurnPartsKey];
-          final List<Part> list = _extractParts(current) ?? <Part>[];
+          final List<Part> list = List<Part>.of(
+            _extractParts(current) ?? const <Part>[],
+          );
           list.addAll(currentTurnParts);
           toolContext.state[_currentTurnPartsKey] = list;
         } else {
-          toolContext.state[_currentTurnPartsKey] = currentTurnParts;
+          toolContext.state[_currentTurnPartsKey] = List<Part>.of(
+            currentTurnParts,
+          );
         }
       }
     } else {

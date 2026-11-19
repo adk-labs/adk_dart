@@ -7,6 +7,8 @@ import 'dart:math' as math;
 import '../errors/session_not_found_error.dart';
 import '../errors/stale_session_error.dart';
 import '../events/event.dart';
+import '../features/_feature_decorator.dart';
+import '../features/_feature_registry.dart';
 import '../workflow/workflow.dart' show RetryConfig;
 import 'base_session_service.dart';
 import 'session.dart';
@@ -20,6 +22,7 @@ class BufferedSessionServiceConfig {
     this.maxWriteDelay = Duration.zero,
     this.maxBatchEvents = 50,
   }) {
+    experimental(FeatureName.bufferedSessionService).checkEnabled();
     if (maxWriteDelay < Duration.zero) {
       throw ArgumentError.value(
         maxWriteDelay,
@@ -73,6 +76,7 @@ class BufferedSessionService extends BaseSessionService {
        _config = config ?? BufferedSessionServiceConfig(),
        _batchWrites = batchWrites ?? delegate.supportsBatchAppendEvents,
        _random = random ?? math.Random() {
+    experimental(FeatureName.bufferedSessionService).checkEnabled();
     final Duration delay = _batchWrites ? _config.maxWriteDelay : Duration.zero;
     _buffer = SessionWriteBuffer(
       _persist,

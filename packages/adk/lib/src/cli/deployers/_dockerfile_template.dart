@@ -82,6 +82,8 @@ COPY --chown=myuser:myuser "agents/{app_name}/" "/app/agents/{app_name}/"
 
 {install_agent_deps}
 {reinstall_extra_packages}
+# Remove dev_server.py to ensure production-safe endpoints only (disabling dev endpoints in production)
+RUN python -c "import os, glob, google.adk.cli as cli; d = os.path.dirname(cli.__file__); [os.remove(f) for f in glob.glob(os.path.join(d, 'dev_server*'))]; [os.remove(f) for f in glob.glob(os.path.join(d, '__pycache__', 'dev_server*'))]" || true
 
 EXPOSE {port}
 

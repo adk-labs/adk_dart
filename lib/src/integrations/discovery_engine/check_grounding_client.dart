@@ -302,6 +302,57 @@ class CheckGroundingClient {
     while (true) {
       try {
         return await call();
+      } on TimeoutException catch (e) {
+        final CheckGroundingApiException wrapped = CheckGroundingApiException(
+          message: 'CheckGrounding request timed out: $e',
+          statusCode: 504,
+          status: 'DEADLINE_EXCEEDED',
+        );
+        if (attempt >= _maxRetries) {
+          throw wrapped;
+        }
+        attempt += 1;
+        if (delay > Duration.zero) {
+          await Future<void>.delayed(delay);
+          final int nextMicros = delay.inMicroseconds * 2;
+          delay = nextMicros > _defaultRetryMaximum.inMicroseconds
+              ? _defaultRetryMaximum
+              : Duration(microseconds: nextMicros);
+        }
+      } on SocketException catch (e) {
+        final CheckGroundingApiException wrapped = CheckGroundingApiException(
+          message: 'CheckGrounding network error: $e',
+          statusCode: 503,
+          status: 'UNAVAILABLE',
+        );
+        if (attempt >= _maxRetries) {
+          throw wrapped;
+        }
+        attempt += 1;
+        if (delay > Duration.zero) {
+          await Future<void>.delayed(delay);
+          final int nextMicros = delay.inMicroseconds * 2;
+          delay = nextMicros > _defaultRetryMaximum.inMicroseconds
+              ? _defaultRetryMaximum
+              : Duration(microseconds: nextMicros);
+        }
+      } on HttpException catch (e) {
+        final CheckGroundingApiException wrapped = CheckGroundingApiException(
+          message: 'CheckGrounding HTTP error: $e',
+          statusCode: 503,
+          status: 'UNAVAILABLE',
+        );
+        if (attempt >= _maxRetries) {
+          throw wrapped;
+        }
+        attempt += 1;
+        if (delay > Duration.zero) {
+          await Future<void>.delayed(delay);
+          final int nextMicros = delay.inMicroseconds * 2;
+          delay = nextMicros > _defaultRetryMaximum.inMicroseconds
+              ? _defaultRetryMaximum
+              : Duration(microseconds: nextMicros);
+        }
       } on CheckGroundingApiException catch (e) {
         if (!e.isTransient || attempt >= _maxRetries) {
           rethrow;
@@ -325,13 +376,35 @@ class CheckGroundingClient {
     required Duration timeout,
   }) async {
     final HttpClient client = _ownedHttpClient ??= HttpClient();
-    final HttpClientRequest request = await client
-        .postUrl(endpoint)
-        .timeout(timeout);
-    headers.forEach(request.headers.set);
-    request.add(utf8.encode(jsonEncode(requestBody)));
-    final HttpClientResponse response = await request.close().timeout(timeout);
-    final String bodyText = await utf8.decodeStream(response).timeout(timeout);
+    final HttpClientResponse response;
+    final String bodyText;
+    try {
+      final HttpClientRequest request = await client
+          .postUrl(endpoint)
+          .timeout(timeout);
+      headers.forEach(request.headers.set);
+      request.add(utf8.encode(jsonEncode(requestBody)));
+      response = await request.close().timeout(timeout);
+      bodyText = await utf8.decodeStream(response).timeout(timeout);
+    } on TimeoutException catch (e) {
+      throw CheckGroundingApiException(
+        message: 'CheckGrounding request timed out: $e',
+        statusCode: 504,
+        status: 'DEADLINE_EXCEEDED',
+      );
+    } on SocketException catch (e) {
+      throw CheckGroundingApiException(
+        message: 'CheckGrounding network error: $e',
+        statusCode: 503,
+        status: 'UNAVAILABLE',
+      );
+    } on HttpException catch (e) {
+      throw CheckGroundingApiException(
+        message: 'CheckGrounding HTTP error: $e',
+        statusCode: 503,
+        status: 'UNAVAILABLE',
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = bodyText;

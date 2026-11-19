@@ -53,6 +53,7 @@ class DeployCommand {
     this.workerPool,
     this.clusterName,
     this.serviceType = 'ClusterIP',
+    this.validateAgentImport = true,
     this.extraArgs = const <String>[],
   });
 
@@ -161,6 +162,9 @@ class DeployCommand {
   /// Kubernetes Service type for GKE deployments (`ClusterIP` or `LoadBalancer`).
   final String serviceType;
 
+  /// Whether container startup validates importing the agent before binding `PORT`.
+  final bool validateAgentImport;
+
   /// Additional raw arguments forwarded to `gcloud`.
   final List<String> extraArgs;
 }
@@ -220,6 +224,7 @@ class DeployCliOptions {
     this.workerPool,
     this.clusterName,
     this.serviceType = 'ClusterIP',
+    this.validateAgentImport = true,
     this.warnings = const <String>[],
     required this.extraArgs,
     required this.dryRun,
@@ -333,6 +338,9 @@ class DeployCliOptions {
   /// Kubernetes Service type for GKE deployments (`ClusterIP` or `LoadBalancer`).
   final String serviceType;
 
+  /// Whether container startup validates importing the agent before binding `PORT`.
+  final bool validateAgentImport;
+
   /// Non-fatal warnings generated while parsing options.
   final List<String> warnings;
 
@@ -400,6 +408,9 @@ Options:
       --service_account                  Service account email for the deployed runtime
       --cluster_name                     GKE cluster name
       --service_type                     Kubernetes Service type: ClusterIP | LoadBalancer (default: ClusterIP)
+      --validate-agent-import / --no-validate-agent-import
+                                         Validate agent import on container startup (default: enabled)
+      --skip-agent-import-validation     Deprecated alias for --no-validate-agent-import
       --dry-run                          Print deploy command only, do not execute
   -h, --help                             Show this help message
 ''';
@@ -948,6 +959,7 @@ Future<int> runDeployCommand(
     workerPool: options.workerPool,
     clusterName: options.clusterName,
     serviceType: options.serviceType,
+    validateAgentImport: options.validateAgentImport,
     extraArgs: options.extraArgs,
   );
   final List<String> gcloudCommand = switch (options.target) {
@@ -1018,7 +1030,7 @@ DeployCliOptions _parseDeployOptions(
   String? workerPool;
   String? clusterName;
   String serviceType = 'ClusterIP';
-  bool validateAgentImport = false;
+  bool? explicitValidateAgentImport;
   bool skipAgentImportValidation = false;
   bool dryRun = false;
   final List<String> warnings = <String>[];
@@ -1477,11 +1489,11 @@ DeployCliOptions _parseDeployOptions(
       continue;
     }
     if (arg == '--validate-agent-import') {
-      validateAgentImport = true;
+      explicitValidateAgentImport = true;
       continue;
     }
     if (arg == '--no-validate-agent-import') {
-      validateAgentImport = false;
+      explicitValidateAgentImport = false;
       continue;
     }
     if (arg == '--skip-agent-import-validation') {
@@ -1555,11 +1567,13 @@ DeployCliOptions _parseDeployOptions(
     extraArgs.add(arg);
   }
 
-  if (validateAgentImport && skipAgentImportValidation) {
+  if (explicitValidateAgentImport == true && skipAgentImportValidation) {
     throw ArgumentError(
       'Do not pass both --validate-agent-import and --skip-agent-import-validation.',
     );
   }
+  final bool resolvedValidateAgentImport =
+      !skipAgentImportValidation && (explicitValidateAgentImport ?? true);
 
   sessionServiceUri ??= deprecatedSessionDbUrl;
   artifactServiceUri ??= deprecatedArtifactStorageUri;
@@ -1651,6 +1665,7 @@ DeployCliOptions _parseDeployOptions(
     workerPool: workerPool,
     clusterName: clusterName,
     serviceType: serviceType,
+    validateAgentImport: resolvedValidateAgentImport,
     warnings: warnings,
     extraArgs: extraArgs,
     dryRun: dryRun,

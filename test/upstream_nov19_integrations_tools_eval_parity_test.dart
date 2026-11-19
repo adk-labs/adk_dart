@@ -1304,5 +1304,34 @@ void main() {
           req.config.tools!.first.computerUse! as Map<String, Object?>;
       expect(computerUse['excludedPredefinedFunctions'], <String>['click']);
     });
+
+    test('CheckGroundingClient retries TimeoutException and returns apiError', () async {
+      int attempts = 0;
+      final CheckGroundingClient client = CheckGroundingClient(
+        projectId: 'p1',
+        authHeadersProvider: () async => <String, String>{},
+        transport: ({
+          required Uri endpoint,
+          required Map<String, Object?> requestBody,
+          required Map<String, String> headers,
+          required Duration timeout,
+        }) async {
+          attempts += 1;
+          throw TimeoutException('deadline exceeded', timeout);
+        },
+        timeout: const Duration(milliseconds: 50),
+        maxRetries: 1,
+        retryInitialDelay: Duration.zero,
+      );
+      addTearDown(client.close);
+
+      final GroundingResult result = await client.checkGroundingAsync(
+        answerCandidate: 'Earth is round.',
+        facts: <FactChunk>[FactChunk(text: 'Earth is a sphere.')],
+      );
+      expect(result.status, GroundingStatus.apiError);
+      expect(result.error, contains('timed out'));
+      expect(attempts, 2);
+    });
   });
 }

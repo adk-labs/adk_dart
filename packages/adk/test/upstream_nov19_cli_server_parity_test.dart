@@ -702,5 +702,52 @@ void main() {
         isFalse,
       );
     });
+
+    test('7d2c7b75d & 5e91ab0a5: parseDeployCliOptions wires validateAgentImport default=true and dockerfile strips dev_server.py after reinstall', () {
+      final DeployCliOptions defaultOpts = parseDeployCliOptions(
+        const <String>['cloud_run', '--project', 'my-proj'],
+      );
+      expect(defaultOpts.validateAgentImport, isTrue);
+
+      final DeployCliOptions disabledOpts = parseDeployCliOptions(
+        const <String>[
+          'cloud_run',
+          '--project',
+          'my-proj',
+          '--no-validate-agent-import',
+        ],
+      );
+      expect(disabledOpts.validateAgentImport, isFalse);
+
+      final DeployCliOptions skippedOpts = parseDeployCliOptions(
+        const <String>[
+          'cloud_run',
+          '--project',
+          'my-proj',
+          '--skip-agent-import-validation',
+        ],
+      );
+      expect(skippedOpts.validateAgentImport, isFalse);
+
+      expect(
+        () => parseDeployCliOptions(
+          const <String>[
+            'cloud_run',
+            '--project',
+            'my-proj',
+            '--validate-agent-import',
+            '--skip-agent-import-validation',
+          ],
+        ),
+        throwsArgumentError,
+      );
+
+      final int reinstallIdx = dockerfileTemplate.indexOf(
+        '{reinstall_extra_packages}',
+      );
+      final int devServerRemoveIdx = dockerfileTemplate.indexOf('dev_server*');
+      expect(reinstallIdx, greaterThanOrEqualTo(0));
+      expect(devServerRemoveIdx, greaterThan(reinstallIdx));
+    });
   });
 }
