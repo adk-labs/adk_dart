@@ -13,11 +13,20 @@ import 'package:adk_dart/src/sessions/sqlite_session_service.dart';
 import 'package:adk_dart/src/types/content.dart';
 import 'dot_adk_folder.dart';
 
-/// Internal app key used for CLI built-in session services.
-const String builtInSessionServiceKey = '__adk_built_in_session_service__';
-
-/// Internal app key used for CLI built-in artifact services.
-const String builtInArtifactServiceKey = '__adk_built_in_artifact_service__';
+/// Rejects app names starting with the reserved `__` prefix.
+///
+/// The agent loaders reserve names starting with `__`, so no agent can have
+/// one. Rejecting them here prevents a request for such a name from creating a
+/// `.adk` folder for it under the agents root.
+void _rejectReservedAppName(String appName) {
+  if (appName.startsWith('__')) {
+    throw ArgumentError.value(
+      appName,
+      'appName',
+      "Invalid app name '$appName': names starting with '__' are reserved.",
+    );
+  }
+}
 
 bool _isAbsolutePath(String path) {
   final String normalized = path.trim();
@@ -104,19 +113,16 @@ class PerAgentDatabaseSessionService extends BaseSessionService {
   }
 
   Future<BaseSessionService> _getService(String appName) async {
+    _rejectReservedAppName(appName);
     return _withLock<BaseSessionService>(() async {
-      final String key = appName.startsWith('__')
-          ? builtInSessionServiceKey
-          : (_appNameToDir[appName] ?? appName);
+      final String key = _appNameToDir[appName] ?? appName;
       final BaseSessionService? existing = _services[key];
       if (existing != null) {
         return existing;
       }
 
       final BaseSessionService created;
-      if (key == builtInSessionServiceKey) {
-        created = createLocalDatabaseSessionService(baseDir: _agentsRoot.path);
-      } else if (_isAbsolutePath(key)) {
+      if (_isAbsolutePath(key)) {
         // appNameToDir entries may already be absolute paths (for example from
         // web server directory discovery); avoid prefixing agentsRoot again.
         created = createLocalDatabaseSessionService(baseDir: key);
@@ -252,23 +258,18 @@ class PerAgentFileArtifactService extends BaseArtifactService {
   }
 
   Future<BaseArtifactService> _getService(String appName) async {
+    _rejectReservedAppName(appName);
     return _withLock<BaseArtifactService>(() async {
-      final String storageKey;
+      final String storageKey = _appNameToDir[appName] ?? appName;
       final String baseDir;
-      if (appName.startsWith('__')) {
-        storageKey = builtInArtifactServiceKey;
-        baseDir = _agentsRoot.path;
+      if (_isAbsolutePath(storageKey)) {
+        baseDir = storageKey;
       } else {
-        storageKey = _appNameToDir[appName] ?? appName;
-        if (_isAbsolutePath(storageKey)) {
-          baseDir = storageKey;
-        } else {
-          final DotAdkFolder folder = dotAdkFolderForAgent(
-            agentsRoot: _agentsRoot.path,
-            appName: storageKey,
-          );
-          baseDir = folder.agentDir.path;
-        }
+        final DotAdkFolder folder = dotAdkFolderForAgent(
+          agentsRoot: _agentsRoot.path,
+          appName: storageKey,
+        );
+        baseDir = folder.agentDir.path;
       }
 
       final BaseArtifactService? existing = _services[storageKey];
@@ -284,10 +285,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
     });
   }
 
-  Future<BaseArtifactService?> _getLegacyService(String appName) async {
-    if (appName.startsWith('__')) {
-      return null;
-    }
+  Future<BaseArtifactService?> _getLegacyService() async {
     if (_legacyService != null) {
       return _legacyService;
     }
@@ -340,7 +338,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
     if (result != null) {
       return result;
     }
-    final BaseArtifactService? legacy = await _getLegacyService(appName);
+    final BaseArtifactService? legacy = await _getLegacyService();
     if (legacy == null) {
       return null;
     }
@@ -365,7 +363,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
       userId: userId,
       sessionId: sessionId,
     );
-    final BaseArtifactService? legacy = await _getLegacyService(appName);
+    final BaseArtifactService? legacy = await _getLegacyService();
     if (legacy == null) {
       return keys;
     }
@@ -393,7 +391,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
       filename: filename,
       sessionId: sessionId,
     );
-    final BaseArtifactService? legacy = await _getLegacyService(appName);
+    final BaseArtifactService? legacy = await _getLegacyService();
     if (legacy != null) {
       await legacy.deleteArtifact(
         appName: appName,
@@ -421,7 +419,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
     if (versions.isNotEmpty) {
       return versions;
     }
-    final BaseArtifactService? legacy = await _getLegacyService(appName);
+    final BaseArtifactService? legacy = await _getLegacyService();
     if (legacy == null) {
       return versions;
     }
@@ -450,7 +448,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
     if (versions.isNotEmpty) {
       return versions;
     }
-    final BaseArtifactService? legacy = await _getLegacyService(appName);
+    final BaseArtifactService? legacy = await _getLegacyService();
     if (legacy == null) {
       return versions;
     }
@@ -481,7 +479,7 @@ class PerAgentFileArtifactService extends BaseArtifactService {
     if (result != null) {
       return result;
     }
-    final BaseArtifactService? legacy = await _getLegacyService(appName);
+    final BaseArtifactService? legacy = await _getLegacyService();
     if (legacy == null) {
       return null;
     }

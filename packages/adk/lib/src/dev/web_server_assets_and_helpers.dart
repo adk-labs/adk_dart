@@ -521,6 +521,144 @@ Map<String, Object?> _sessionToApiJson(
   };
 }
 
+const Set<String> _credentialSecretKeys = <String>{
+  'password',
+  'token',
+  'additionalHeaders',
+  'additional_headers',
+  'clientSecret',
+  'client_secret',
+  'authResponseUri',
+  'auth_response_uri',
+  'authCode',
+  'auth_code',
+  'accessToken',
+  'access_token',
+  'refreshToken',
+  'refresh_token',
+  'idToken',
+  'id_token',
+  'codeVerifier',
+  'code_verifier',
+  'privateKeyId',
+  'private_key_id',
+  'privateKey',
+  'private_key',
+  'apiKey',
+  'api_key',
+};
+
+const Set<String> _authTypeValues = <String>{
+  'apiKey',
+  'api_key',
+  'http',
+  'oauth2',
+  'openIdConnect',
+  'open_id_connect',
+  'serviceAccount',
+  'service_account',
+};
+
+const String _requestEucFunctionCallName = 'adk_request_credential';
+
+Object? _redactAuthConfigSecrets(Object? value) {
+  if (value is Map) {
+    final Map<String, Object?> out = <String, Object?>{};
+    for (final MapEntry<Object?, Object?> entry in value.entries) {
+      final String key = '${entry.key}';
+      if (_credentialSecretKeys.contains(key)) {
+        continue;
+      }
+      out[key] = _redactAuthConfigSecrets(entry.value);
+    }
+    return out;
+  }
+  if (value is List) {
+    return value.map<Object?>(_redactAuthConfigSecrets).toList(growable: false);
+  }
+  return value;
+}
+
+/// Strips credential secrets from serialized auth carriers and credential payloads.
+Object? redactCredentialSecrets(Object? value) {
+  if (value is Map) {
+    for (final String key in const <String>['authType', 'auth_type']) {
+      final Object? authType = value[key];
+      if (authType is String && _authTypeValues.contains(authType)) {
+        return _redactAuthConfigSecrets(value);
+      }
+    }
+
+    if (value['name'] == _requestEucFunctionCallName) {
+      final Map<String, Object?> result = <String, Object?>{};
+      for (final MapEntry<Object?, Object?> entry in value.entries) {
+        final String key = '${entry.key}';
+        final Object? val = entry.value;
+        if (key == 'args' && val is Map) {
+          final Map<String, Object?> newArgs = <String, Object?>{};
+          for (final MapEntry<Object?, Object?> argEntry in val.entries) {
+            final String argKey = '${argEntry.key}';
+            if (argKey == 'authConfig' || argKey == 'auth_config') {
+              newArgs[argKey] = _redactAuthConfigSecrets(argEntry.value);
+            } else {
+              newArgs[argKey] = redactCredentialSecrets(argEntry.value);
+            }
+          }
+          result[key] = newArgs;
+        } else if (key == 'response') {
+          result[key] = _redactAuthConfigSecrets(val);
+        } else {
+          result[key] = redactCredentialSecrets(val);
+        }
+      }
+      return result;
+    }
+
+    if (value.containsKey('requestedAuthConfigs') ||
+        value.containsKey('requested_auth_configs')) {
+      final Map<String, Object?> result = <String, Object?>{};
+      for (final MapEntry<Object?, Object?> entry in value.entries) {
+        final String key = '${entry.key}';
+        if (key == 'requestedAuthConfigs' || key == 'requested_auth_configs') {
+          result[key] = _redactAuthConfigSecrets(entry.value);
+        } else {
+          result[key] = redactCredentialSecrets(entry.value);
+        }
+      }
+      return result;
+    }
+
+    if (value.containsKey('rawAuthCredential') ||
+        value.containsKey('raw_auth_credential') ||
+        value.containsKey('exchangedAuthCredential') ||
+        value.containsKey('exchanged_auth_credential')) {
+      final Map<String, Object?> result = <String, Object?>{};
+      for (final MapEntry<Object?, Object?> entry in value.entries) {
+        final String key = '${entry.key}';
+        if (key == 'rawAuthCredential' ||
+            key == 'raw_auth_credential' ||
+            key == 'exchangedAuthCredential' ||
+            key == 'exchanged_auth_credential') {
+          result[key] = _redactAuthConfigSecrets(entry.value);
+        } else {
+          result[key] = redactCredentialSecrets(entry.value);
+        }
+      }
+      return result;
+    }
+
+    final Map<String, Object?> out = <String, Object?>{};
+    for (final MapEntry<Object?, Object?> entry in value.entries) {
+      out['${entry.key}'] = redactCredentialSecrets(entry.value);
+    }
+    return out;
+  }
+  if (value is List) {
+    return value.map<Object?>(redactCredentialSecrets).toList(growable: false);
+  }
+  return value;
+}
+
 Map<String, Object?> _eventToApiJson(
   Event event, {
   required String appName,
@@ -554,7 +692,7 @@ Map<String, Object?> _eventToApiJson(
         customMeta['cacheCreationTokenCount'];
   }
 
-  return <String, Object?>{
+  final Map<String, Object?> raw = <String, Object?>{
     ...snake,
     'invocationId': snake['invocation_id'],
     'appName': snake['app_name'],
@@ -581,6 +719,7 @@ Map<String, Object?> _eventToApiJson(
     'liveSessionResumptionUpdate': snake['live_session_resumption_update'],
     'goAway': snake['go_away'],
   };
+  return redactCredentialSecrets(raw)! as Map<String, Object?>;
 }
 
 Map<String, Object?> _eventToLegacyJson(Event event) {

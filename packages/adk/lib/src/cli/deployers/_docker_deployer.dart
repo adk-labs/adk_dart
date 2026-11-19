@@ -6,6 +6,7 @@ import 'dart:io';
 import '../../version.dart';
 import '../cli_deploy.dart'
     show
+        buildExtraPackagesReinstall,
         buildExtraPackagesSetup,
         stageExtraPackages,
         validateExtraPackages;
@@ -54,6 +55,7 @@ class DockerDeployer extends Deployer {
     String? memoryServiceUri,
     bool useLocalStorage = true,
     String? origins,
+    List<String>? allowOrigins,
   }) {
     final List<String> args = <String>[
       'adk',
@@ -79,8 +81,19 @@ class DockerDeployer extends Deployer {
     if (!useLocalStorage) {
       args.add('--no-use_local_storage');
     }
-    if (origins != null && origins.isNotEmpty) {
-      args.add('--allow_origins=$origins');
+    final List<String> resolvedOrigins = <String>[
+      if (allowOrigins != null)
+        ...allowOrigins
+            .map((String origin) => origin.trim())
+            .where((String origin) => origin.isNotEmpty)
+      else if (origins != null && origins.isNotEmpty)
+        ...origins
+            .split(',')
+            .map((String origin) => origin.trim())
+            .where((String origin) => origin.isNotEmpty),
+    ];
+    for (final String origin in resolvedOrigins) {
+      args.add('--allow_origins=$origin');
     }
     return args;
   }
@@ -112,9 +125,11 @@ class DockerDeployer extends Deployer {
     String? memoryServiceUri,
     bool useLocalStorage = true,
     String? origins,
+    List<String>? allowOrigins,
     List<String>? extraGcloudArgs,
     List<String>? extraPackages,
     bool buildImage = false,
+    bool validateAgentImport = false,
   }) async {
     final Directory srcDir = Directory(agentFolder);
     if (!srcDir.existsSync()) {
@@ -147,7 +162,12 @@ class DockerDeployer extends Deployer {
     destAgentDir.createSync(recursive: true);
     _copyDirectorySync(srcDir, destAgentDir);
 
+    final bool hasRequirementsTxt = File(
+      '${destAgentDir.path}${sep}requirements.txt',
+    ).existsSync();
+
     String extraPackagesSetup = '';
+    String reinstallExtraPackages = '';
     if (resolvedExtraPackages.isNotEmpty) {
       final ({List<String> plainPackages, List<String> installablePackages})
       staged = stageExtraPackages(
@@ -158,11 +178,15 @@ class DockerDeployer extends Deployer {
         plainPackages: staged.plainPackages,
         installablePackages: staged.installablePackages,
       );
+      reinstallExtraPackages = buildExtraPackagesReinstall(
+        stagedExtraPackages: <String>[
+          ...staged.plainPackages,
+          ...staged.installablePackages,
+        ],
+        buildContext: targetTempDir.path,
+        hasRequirements: hasRequirementsTxt,
+      );
     }
-
-    final bool hasRequirementsTxt = File(
-      '${destAgentDir.path}${sep}requirements.txt',
-    ).existsSync();
 
     final List<String> cmdArgs = <String>[
       ...getCliEnvArgs(
@@ -175,6 +199,7 @@ class DockerDeployer extends Deployer {
         memoryServiceUri: memoryServiceUri,
         useLocalStorage: useLocalStorage,
         origins: origins,
+        allowOrigins: allowOrigins,
       ),
       '/app/agents',
     ];
@@ -194,6 +219,8 @@ class DockerDeployer extends Deployer {
       gcpEnvVars: gcpEnvVars,
       hasRequirementsTxt: hasRequirementsTxt,
       extraPackagesSetup: extraPackagesSetup,
+      reinstallExtraPackages: reinstallExtraPackages,
+      validateAgentImport: validateAgentImport,
     );
 
     File('${targetTempDir.path}${sep}Dockerfile').writeAsStringSync(

@@ -247,11 +247,15 @@ model: gemini-2.5-flash
       );
       expect(
         dockerfile,
-        contains('COPY --chown=myuser:myuser "install_pkg" "/app/install_pkg"'),
+        contains(
+          'COPY --chown=myuser:myuser "install_pkg" "/tmp/extra_packages/install_pkg"',
+        ),
       );
       expect(
         dockerfile,
-        contains('RUN pip install --no-cache-dir "/app/install_pkg"'),
+        contains(
+          'RUN pip install --no-cache-dir "/tmp/extra_packages/install_pkg"',
+        ),
       );
       expect(dockerfile, contains(r'ENV PYTHONPATH="/app:$PYTHONPATH"'));
       expect(dockerfile, contains('# Copy extra packages - End'));

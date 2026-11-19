@@ -444,20 +444,208 @@ String validateExtraPackageName(String name) {
   return name;
 }
 
+/// Minimum `google-adk` version that supports startup `AgentLoader` validation.
+const String agentLoaderMinVersion = '2.0.0';
+
+/// Returns whether startup agent import validation should be enabled for
+/// [adkVersion] given [skipAgentImportValidation].
+bool shouldValidateAgentImportOnStartup({
+  required bool skipAgentImportValidation,
+  required String adkVersion,
+}) {
+  if (skipAgentImportValidation) {
+    return false;
+  }
+  return _compareSemver(adkVersion, agentLoaderMinVersion) >= 0;
+}
+
+int _compareSemver(String a, String b) {
+  List<int> parseParts(String v) {
+    final String core = v.split(RegExp(r'[-+]')).first;
+    return core
+        .split('.')
+        .map((String part) => int.tryParse(part) ?? 0)
+        .toList(growable: false);
+  }
+
+  final List<int> pa = parseParts(a);
+  final List<int> pb = parseParts(b);
+  final int len = pa.length > pb.length ? pa.length : pb.length;
+  for (int i = 0; i < len; i++) {
+    final int va = i < pa.length ? pa[i] : 0;
+    final int vb = i < pb.length ? pb[i] : 0;
+    if (va != vb) {
+      return va.compareTo(vb);
+    }
+  }
+  return 0;
+}
+
+bool _pyprojectDeclaresInstallableProject(String content) {
+  bool declaresProjectOrBuildSystem = false;
+  bool inMultiLineBasic = false;
+  bool inMultiLineLiteral = false;
+  int bracketDepth = 0;
+
+  for (final String rawLine in content.split(RegExp(r'\r?\n'))) {
+    final String trimmed = rawLine.trim();
+    if (inMultiLineBasic) {
+      if (trimmed.contains('"""')) {
+        inMultiLineBasic = false;
+      }
+      continue;
+    }
+    if (inMultiLineLiteral) {
+      if (trimmed.contains("'''")) {
+        inMultiLineLiteral = false;
+      }
+      continue;
+    }
+    if (trimmed.isEmpty || trimmed.startsWith('#')) {
+      continue;
+    }
+
+    // Strip inline comments outside quotes.
+    String line = trimmed;
+    bool inSingle = false;
+    bool inDouble = false;
+    bool escaped = false;
+    for (int i = 0; i < trimmed.length; i++) {
+      final String ch = trimmed[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (inDouble && ch == r'\') {
+        escaped = true;
+        continue;
+      }
+      if (!inSingle && ch == '"') {
+        inDouble = !inDouble;
+      } else if (!inDouble && ch == "'") {
+        inSingle = !inSingle;
+      } else if (!inSingle && !inDouble && ch == '#') {
+        line = trimmed.substring(0, i).trimRight();
+        break;
+      }
+    }
+    if (line.isEmpty) {
+      continue;
+    }
+
+    if (bracketDepth == 0 && line.startsWith('[')) {
+      final bool isArrayTable = line.startsWith('[[');
+      if (isArrayTable ? !line.endsWith(']]') : !line.endsWith(']')) {
+        // Malformed TOML table header.
+        return false;
+      }
+      final String header = line
+          .substring(isArrayTable ? 2 : 1, line.length - (isArrayTable ? 2 : 1))
+          .trim();
+      if (header.isEmpty || header.contains('[') || header.contains(']')) {
+        return false;
+      }
+      final String rootTable = header
+          .split('.')
+          .first
+          .trim()
+          .replaceAll('"', '')
+          .replaceAll("'", '');
+      if (rootTable == 'project' || rootTable == 'build-system') {
+        declaresProjectOrBuildSystem = true;
+      }
+      continue;
+    }
+
+    if (bracketDepth == 0) {
+      final int eqIndex = line.indexOf('=');
+      if (eqIndex <= 0) {
+        // Malformed TOML key-value line.
+        return false;
+      }
+      final String key = line.substring(0, eqIndex).trim();
+      final String rootKey = key
+          .split('.')
+          .first
+          .trim()
+          .replaceAll('"', '')
+          .replaceAll("'", '');
+      if (rootKey == 'project' || rootKey == 'build-system') {
+        declaresProjectOrBuildSystem = true;
+      }
+      final String valuePart = line.substring(eqIndex + 1).trim();
+      if (valuePart.startsWith('"""') &&
+          valuePart.indexOf('"""', 3) == -1) {
+        inMultiLineBasic = true;
+        continue;
+      }
+      if (valuePart.startsWith("'''") &&
+          valuePart.indexOf("'''", 3) == -1) {
+        inMultiLineLiteral = true;
+        continue;
+      }
+    }
+
+    for (int i = 0; i < line.length; i++) {
+      final String ch = line[i];
+      if (ch == '[' || ch == '{') {
+        bracketDepth++;
+      } else if (ch == ']' || ch == '}') {
+        bracketDepth--;
+      }
+    }
+  }
+
+  if (inMultiLineBasic || inMultiLineLiteral || bracketDepth != 0) {
+    return false;
+  }
+  return declaresProjectOrBuildSystem;
+}
+
+/// Returns whether [dirPath] is a Python project directory that pip can install.
+///
+/// A directory is an installable project when it has a `setup.py`, or a
+/// `pyproject.toml` that declares `[build-system]` or `[project]`. A
+/// `pyproject.toml` that only holds tool settings, or cannot be parsed, does
+/// not make it one.
+bool isInstallableProject(String dirPath) {
+  final String sep = Platform.pathSeparator;
+  if (File('$dirPath${sep}setup.py').existsSync()) {
+    return true;
+  }
+  final File pyprojectFile = File('$dirPath${sep}pyproject.toml');
+  if (!pyprojectFile.existsSync()) {
+    return false;
+  }
+  try {
+    return _pyprojectDeclaresInstallableProject(
+      pyprojectFile.readAsStringSync(),
+    );
+  } on Object {
+    return false;
+  }
+}
+
+bool _isInstallableArchive(String nameOrPath) {
+  final String lower = nameOrPath.toLowerCase();
+  return lower.endsWith('.whl') ||
+      lower.endsWith('.tar.gz') ||
+      lower.endsWith('.tgz') ||
+      lower.endsWith('.zip');
+}
+
 /// Returns `true` when [packagePath] is an installable package directory
-/// (containing `pyproject.toml` or `setup.py`) or a wheel/archive file.
+/// (`setup.py`, or `pyproject.toml` declaring `[project]` or `[build-system]`,
+/// without a root `__init__.py`) or a wheel/archive file.
 bool isInstallableExtraPackage(String packagePath) {
   final FileSystemEntityType entityType = FileSystemEntity.typeSync(packagePath);
   if (entityType == FileSystemEntityType.directory) {
     final String sep = Platform.pathSeparator;
-    return File('$packagePath${sep}pyproject.toml').existsSync() ||
-        File('$packagePath${sep}setup.py').existsSync();
+    final bool hasRootInit = File('$packagePath${sep}__init__.py').existsSync();
+    return isInstallableProject(packagePath) && !hasRootInit;
   }
   if (entityType == FileSystemEntityType.file) {
-    final String lower = packagePath.toLowerCase();
-    return lower.endsWith('.whl') ||
-        lower.endsWith('.tar.gz') ||
-        lower.endsWith('.zip');
+    return _isInstallableArchive(packagePath);
   }
   return false;
 }
@@ -513,6 +701,11 @@ stageExtraPackages({
 }
 
 /// Builds the Dockerfile setup instructions for staged extra packages.
+///
+/// Installable distributions (wheels, source archives, and project directories
+/// without a root `__init__.py`) are copied to `/tmp/extra_packages/<name>`
+/// and installed with `pip install`. Plain modules and package directories are
+/// copied to `/app/<name>` and exposed via `PYTHONPATH`.
 String buildExtraPackagesSetup({
   List<String> plainPackages = const <String>[],
   List<String> installablePackages = const <String>[],
@@ -528,11 +721,10 @@ String buildExtraPackagesSetup({
   final List<String> effectiveCopyLines =
       copyLines ??
       <String>[
-        for (final String name in <String>[
-          ...effectivePlain,
-          ...effectiveInstallable,
-        ])
+        for (final String name in effectivePlain)
           'COPY --chown=myuser:myuser "${validateExtraPackageName(name)}" "/app/${validateExtraPackageName(name)}"',
+        for (final String name in effectiveInstallable)
+          'COPY --chown=myuser:myuser "${validateExtraPackageName(name)}" "/tmp/extra_packages/${validateExtraPackageName(name)}"',
       ];
   if (effectiveCopyLines.isEmpty &&
       effectiveInstallable.isEmpty &&
@@ -545,7 +737,7 @@ String buildExtraPackagesSetup({
   ];
   for (final String name in effectiveInstallable) {
     final String safeName = validateExtraPackageName(name);
-    lines.add('RUN pip install --no-cache-dir "/app/$safeName"');
+    lines.add('RUN pip install --no-cache-dir "/tmp/extra_packages/$safeName"');
   }
   if (effectivePlain.isNotEmpty) {
     for (final String name in effectivePlain) {
@@ -555,6 +747,46 @@ String buildExtraPackagesSetup({
   }
   lines.add('# Copy extra packages - End');
   return lines.join('\n');
+}
+
+/// Returns the post-requirements `RUN` instruction that force-reinstalls extra
+/// packages without dependencies so `--extra_packages` overrides packages
+/// installed by `install_adk` or `requirements.txt`.
+String buildExtraPackagesReinstall({
+  required List<String> stagedExtraPackages,
+  required String buildContext,
+  required bool hasRequirements,
+}) {
+  if (stagedExtraPackages.isEmpty) {
+    return '';
+  }
+  final String sep = Platform.pathSeparator;
+  final List<String> reinstallTargets = <String>[];
+  for (final String base in stagedExtraPackages) {
+    final String safeBase = validateExtraPackageName(base);
+    final String stagedPath = '$buildContext$sep$safeBase';
+    final FileSystemEntityType entityType = FileSystemEntity.typeSync(
+      stagedPath,
+    );
+    if (entityType == FileSystemEntityType.directory) {
+      if (!hasRequirements) {
+        continue;
+      }
+      final bool hasRootInit = File(
+        '$stagedPath${sep}__init__.py',
+      ).existsSync();
+      if (isInstallableProject(stagedPath) && !hasRootInit) {
+        reinstallTargets.add('/tmp/extra_packages/$safeBase');
+      }
+    } else if (safeBase.toLowerCase().endsWith('.whl') ||
+        (hasRequirements && _isInstallableArchive(safeBase))) {
+      reinstallTargets.add('/tmp/extra_packages/$safeBase');
+    }
+  }
+  if (reinstallTargets.isEmpty) {
+    return '';
+  }
+  return 'RUN ${jsonEncode(<String>['pip', 'install', '--force-reinstall', '--no-deps', ...reinstallTargets])}';
 }
 
 void _copyExtraPackageDirectorySync(Directory source, Directory destination) {

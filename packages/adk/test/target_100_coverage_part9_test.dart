@@ -384,7 +384,7 @@ void main() {
         agentsDir: tempDir.path,
         enableWebUi: true,
       );
-      expect(ctx.allowSpecialAgents, isTrue);
+      expect(ctx.enableWebUi, isTrue);
 
       // 2. Web context with enableWebUi = false
       final dynamic ctxNoUi = await createAdkDevWebContextForTesting(
@@ -393,7 +393,7 @@ void main() {
         agentsDir: tempDir.path,
         enableWebUi: false,
       );
-      expect(ctxNoUi.allowSpecialAgents, isFalse);
+      expect(ctxNoUi.enableWebUi, isFalse);
 
       // 3. getRunner with null (uses defaultAppName) and caching
       final Runner r1 = await ctx.getRunner(null) as Runner;

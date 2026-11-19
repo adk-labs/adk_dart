@@ -915,9 +915,6 @@ class AdkApiServer extends AdkWebServer {
     'tracing': isServerTracingEnabled(environment: environment),
   };
 
-  /// Whether internal `__*` special agents are allowed on this server.
-  bool get allowSpecialAgents => false;
-
   /// Whether `/debug/trace/*` endpoints are served by this server.
   bool get servesDebugTraceEndpoints => false;
 }

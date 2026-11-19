@@ -223,12 +223,10 @@ void main() {
     test('AdkApiServer and AdkDevServer configure expected defaults', () {
       final ApiServer apiServer = AdkApiServer(agentsDir: '.');
       expect(apiServer.enableWebUi, isFalse);
-      expect(apiServer.allowSpecialAgents, isFalse);
       expect(apiServer.servesDebugTraceEndpoints, isFalse);
 
       final DevServer devServer = AdkDevServer(agentsDir: '.');
       expect(devServer.enableWebUi, isTrue);
-      expect(devServer.allowSpecialAgents, isTrue);
       expect(devServer.servesDebugTraceEndpoints, isTrue);
 
       final CorsOriginsConfig cors = parseCorsOrigins(<String>[

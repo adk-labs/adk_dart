@@ -24,6 +24,7 @@ abstract class Deployer {
     String? memoryServiceUri,
     bool useLocalStorage = true,
     String? origins,
+    List<String>? allowOrigins,
     List<String>? extraGcloudArgs,
     List<String>? extraPackages,
   });

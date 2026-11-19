@@ -205,22 +205,18 @@ recordings:
       expect(getCliEnvironmentValue('CUSTOM_VAR_XYZ'), '123');
     });
 
-    test('local_storage.dart builtin app key coverage', () async {
+    test('local_storage.dart rejects reserved __ app names', () async {
       final Directory tempDir = Directory.systemTemp.createTempSync('adk_local_storage_builtin_');
       addTearDown(() => tempDir.deleteSync(recursive: true));
 
       final PerAgentDatabaseSessionService service = PerAgentDatabaseSessionService(agentsRoot: tempDir);
-      final Session session = await service.createSession(
-        appName: '__builtin_test__',
-        userId: 'u1',
+      await expectLater(
+        service.createSession(
+          appName: '__builtin_test__',
+          userId: 'u1',
+        ),
+        throwsArgumentError,
       );
-      expect(session.appName, '__builtin_test__');
-      final Session? fetched = await service.getSession(
-        appName: '__builtin_test__',
-        userId: 'u1',
-        sessionId: session.id,
-      );
-      expect(fetched, isNotNull);
     });
 
     test('service_registry.dart short-form and GCS auth header token fallbacks', () async {

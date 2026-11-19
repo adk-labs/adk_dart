@@ -370,9 +370,14 @@ Future<int> _runEvalCliCommand(
 
   final Map<String, (int passed, int failed)> summaryByEvalSet =
       <String, (int, int)>{};
+  final Map<String, List<cli_eval.MultiRunCaseResult>> caseResultsByEvalSet =
+      <String, List<cli_eval.MultiRunCaseResult>>{};
   for (final cli_eval.MultiRunCaseResult result in aggregateEvalResults) {
     final (int passed, int failed) current =
         summaryByEvalSet[result.evalSetId] ?? (0, 0);
+    caseResultsByEvalSet
+        .putIfAbsent(result.evalSetId, () => <cli_eval.MultiRunCaseResult>[])
+        .add(result);
     if (result.finalEvalStatus == EvalStatus.passed) {
       summaryByEvalSet[result.evalSetId] = (current.$1 + 1, current.$2);
     } else {
@@ -393,16 +398,21 @@ Future<int> _runEvalCliCommand(
     ..sort();
   for (final String evalSetId in evalSetIds) {
     final (int passed, int failed) counts = summaryByEvalSet[evalSetId]!;
+    final List<cli_eval.MultiRunCaseResult> evalSetCaseResults =
+        caseResultsByEvalSet[evalSetId] ??
+        const <cli_eval.MultiRunCaseResult>[];
     out.writeln(
       '$evalSetId:\n  Tests passed: ${counts.$1}\n  Tests failed: ${counts.$2}',
     );
+    for (final cli_eval.CrossRunCriterionSummary criterionSummary
+        in cli_eval.summarizeCrossRunCriteria(evalSetCaseResults)) {
+      out.writeln(
+        '  ${cli_eval.formatEvalSetCriterionSummary(criterionSummary)}',
+      );
+    }
     if (showMultiRunSummary) {
       final String summaryTable = cli_eval.prettyPrintMultiRunSummaryTable(
-        aggregateEvalResults
-            .where(
-              (cli_eval.MultiRunCaseResult r) => r.evalSetId == evalSetId,
-            )
-            .toList(growable: false),
+        evalSetCaseResults,
       );
       if (summaryTable.isNotEmpty) {
         out.write(summaryTable);

@@ -201,23 +201,18 @@ class NestedAgentLoader extends AgentLoader {
 
   /// Validates [fullAgentName], allowing dot-separated or slash-separated paths.
   void validateAgentName(String fullAgentName) {
-    final String agentRelativePath;
-    final String checkDir;
     if (fullAgentName.startsWith('__')) {
-      if (!allowSpecialAgents) {
-        throw StateError(
-          "Loading special internal agent '$fullAgentName' is disabled in "
-          'this loader configuration.',
-        );
-      }
-      agentRelativePath = fullAgentName.substring(2);
-      checkDir = Directory(specialAgentsDir).absolute.path;
-    } else {
-      agentRelativePath = fullAgentName;
-      checkDir = agentsDir;
+      throw ArgumentError.value(
+        fullAgentName,
+        'fullAgentName',
+        "Invalid agent name: '$fullAgentName'. Names starting with '__' are "
+            'reserved.',
+      );
     }
+    final String agentRelativePath = fullAgentName;
+    final String checkDir = agentsDir;
 
-    if (isSingleAgent && !fullAgentName.startsWith('__')) {
+    if (isSingleAgent) {
       if (fullAgentName != singleAgentName) {
         throw ArgumentError.value(
           fullAgentName,
@@ -291,15 +286,8 @@ class NestedAgentLoader extends AgentLoader {
 
     validateAgentName(agentName);
 
-    final String effectiveAgentsDir;
-    final String actualAgentName;
-    if (agentName.startsWith('__')) {
-      effectiveAgentsDir = Directory(specialAgentsDir).absolute.path;
-      actualAgentName = agentName.substring(2);
-    } else {
-      effectiveAgentsDir = agentsDir;
-      actualAgentName = agentName.replaceAll('.', '/');
-    }
+    final String effectiveAgentsDir = agentsDir;
+    final String actualAgentName = agentName.replaceAll('.', '/');
 
     final String sep = Platform.pathSeparator;
     final String fsRelPath = actualAgentName.replaceAll('/', sep);

@@ -160,6 +160,7 @@ class CloudRunDeployer extends Deployer {
     String? memoryServiceUri,
     bool useLocalStorage = true,
     String? origins,
+    List<String>? allowOrigins,
     List<String>? extraGcloudArgs,
     List<String>? extraPackages,
   }) async {
@@ -193,6 +194,7 @@ class CloudRunDeployer extends Deployer {
         memoryServiceUri: memoryServiceUri,
         useLocalStorage: useLocalStorage,
         origins: origins,
+        allowOrigins: allowOrigins,
         extraPackages: extraPackages,
       );
 

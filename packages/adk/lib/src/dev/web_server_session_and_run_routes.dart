@@ -224,35 +224,36 @@ Future<void> _handleGetAppInfo(
   }
 
   final BaseAgent rootAgent = runner.agent;
-  if (rootAgent is! LlmAgent) {
-    await _writeJson(
-      request,
-      context,
-      payload: graph_serialization.serializeAppInfo(
-        App(
-          name: appName,
-          rootAgent: rootAgent,
-          plugins: runner.pluginManager.plugins.toList(growable: false),
-          contextCacheConfig: runner.contextCacheConfig,
-          resumabilityConfig: runner.resumabilityConfig,
-        ),
-      ),
-    );
-    return;
-  }
-
   final Map<String, Object?> appInfo = await _buildAppInfoPayload(
     context,
     appName: appName,
     rootAgent: rootAgent,
   );
+  if (rootAgent is! LlmAgent) {
+    final Map<String, Object?> graphInfo = graph_serialization.serializeAppInfo(
+      App(
+        name: appName,
+        rootAgent: rootAgent,
+        plugins: runner.pluginManager.plugins.toList(growable: false),
+        contextCacheConfig: runner.contextCacheConfig,
+        resumabilityConfig: runner.resumabilityConfig,
+      ),
+    );
+    await _writeJson(
+      request,
+      context,
+      payload: <String, Object?>{...graphInfo, ...appInfo},
+    );
+    return;
+  }
+
   await _writeJson(request, context, payload: appInfo);
 }
 
 Future<Map<String, Object?>> _buildAppInfoPayload(
   _AdkDevWebContext context, {
   required String appName,
-  required LlmAgent rootAgent,
+  required BaseAgent rootAgent,
 }) async {
   Map<String, Object?>? summary;
   for (final Map<String, Object?> detail in context.listAppDetails()) {
@@ -273,33 +274,72 @@ Future<Map<String, Object?>> _buildAppInfoPayload(
   };
 }
 
-Future<Map<String, Object?>> _collectAgentInfo(LlmAgent rootAgent) async {
-  final Map<String, Object?> agents = <String, Object?>{};
+List<String> _nearestLlmSubAgentNames(BaseAgent agent) {
+  final Set<String> names = <String>{};
+  final Set<Object> visited = Set<Object>.identity()..add(agent);
 
-  Future<void> traverse(LlmAgent agent) async {
-    if (agents.containsKey(agent.name)) {
-      return;
-    }
-
-    final List<String> subAgentNames = <String>[];
-    for (final BaseAgent subAgent in agent.subAgents) {
-      if (subAgent is! LlmAgent) {
+  void collect(BaseAgent current) {
+    for (final BaseAgent subAgent in current.subAgents) {
+      if (!visited.add(subAgent)) {
         continue;
       }
-      subAgentNames.add(subAgent.name);
-      await traverse(subAgent);
+      if (subAgent is LlmAgent) {
+        names.add(subAgent.name);
+      } else {
+        collect(subAgent);
+      }
+    }
+  }
+
+  collect(agent);
+  return names.toList(growable: false);
+}
+
+Iterable<Object> _walkStaticNodes(Object root) sync* {
+  final Set<Object> visited = Set<Object>.identity();
+  final List<Object> stack = <Object>[root];
+  while (stack.isNotEmpty) {
+    final Object current = stack.removeLast();
+    if (!visited.add(current)) {
+      continue;
+    }
+    yield current;
+    final List<Object> children = <Object>[];
+    if (current is Workflow) {
+      children.addAll(current.nodes);
+    }
+    if (current is AgentNode) {
+      children.add(current.agent);
+    }
+    if (current is BaseAgent) {
+      children.addAll(current.subAgents);
+    }
+    for (int i = children.length - 1; i >= 0; i--) {
+      stack.add(children[i]);
+    }
+  }
+}
+
+Future<Map<String, Object?>> _collectAgentInfo(BaseAgent rootAgent) async {
+  final Map<String, Object?> agents = <String, Object?>{};
+
+  for (final Object node in _walkStaticNodes(rootAgent)) {
+    if (node is! LlmAgent) {
+      continue;
+    }
+    if (agents.containsKey(node.name)) {
+      continue;
     }
 
-    agents[agent.name] = <String, Object?>{
-      'name': agent.name,
-      'description': agent.description,
-      'instruction': agent.instruction is String ? agent.instruction : '',
-      'tools': await _serializeAgentTools(agent.tools),
-      'subAgents': subAgentNames,
+    agents[node.name] = <String, Object?>{
+      'name': node.name,
+      'description': node.description,
+      'instruction': node.instruction is String ? node.instruction : '',
+      'tools': await _serializeAgentTools(node.tools),
+      'subAgents': _nearestLlmSubAgentNames(node),
     };
   }
 
-  await traverse(rootAgent);
   return agents;
 }
 
@@ -1335,6 +1375,10 @@ Future<void> _handleRewindSession(
   );
 }
 
+/// Optional testing hook to capture `/run` debug log lines.
+@visibleForTesting
+void Function(String message)? runDebugLogTestingOverride;
+
 Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
   final Map<String, dynamic> payload = await _readJsonBody(request);
   final _RunRequest runRequest = _parseRunRequest(payload, context);
@@ -1422,20 +1466,19 @@ Future<void> _handleRun(HttpRequest request, _AdkDevWebContext context) async {
     );
   }
 
-  await _writeJson(
-    request,
-    context,
-    payload: events
-        .map<Map<String, Object?>>(
-          (Event event) => _eventToApiJson(
-            event,
-            appName: runRequest.appName,
-            userId: runRequest.userId,
-            sessionId: runRequest.sessionId,
-          ),
-        )
-        .toList(growable: false),
-  );
+  final List<Map<String, Object?>> redactedEvents = events
+      .map<Map<String, Object?>>(
+        (Event event) => _eventToApiJson(
+          event,
+          appName: runRequest.appName,
+          userId: runRequest.userId,
+          sessionId: runRequest.sessionId,
+        ),
+      )
+      .toList(growable: false);
+  runDebugLogTestingOverride?.call('Events generated: $redactedEvents');
+
+  await _writeJson(request, context, payload: redactedEvents);
 }
 
 Future<void> _ensureSessionExists(
@@ -1685,9 +1728,17 @@ Future<void> _handleRunLive(
     return;
   }
 
-  // Guard before the websocket upgrade so the 403 can still be written as a
-  // plain HTTP response.
-  context._guardSpecialAgentAccess(appName, request: request);
+  if (appName.startsWith('__')) {
+    await _writeError(
+      request,
+      context,
+      statusCode: HttpStatus.notFound,
+      message:
+          "Invalid agent name: '$appName'. Names starting with '__' are "
+          'reserved.',
+    );
+    return;
+  }
 
   if (context.maxLiveSessions > 0 &&
       context.activeLiveSessions >= context.maxLiveSessions) {

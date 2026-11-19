@@ -17,6 +17,7 @@ import 'package:adk_dart/src/types/content.dart';
 
 export 'package:adk_dart/src/evaluation/eval_case_result_multi_run_aggregator.dart'
     show
+        CrossRunCriterionSummary,
         MethodResult,
         MultiRunCaseResult,
         MultiRunCaseSummary,
@@ -29,6 +30,7 @@ export 'package:adk_dart/src/evaluation/eval_case_result_multi_run_aggregator.da
         getRunStatus,
         hasPassCountRules,
         loadAggregationMethods,
+        summarizeCrossRunCriteria,
         summarizeEvalCaseResults,
         summarizeMultiRunCaseResult;
 export 'package:adk_dart/src/evaluation/eval_config.dart'
@@ -165,6 +167,21 @@ String formatMethodResult(MethodResult result, {required String label}) {
       ? ' [${result.note}]'
       : '';
   return '  $label: $valStr$threshStr (${_evalStatusUpperName(result.status)})$noteStr';
+}
+
+/// Formats a cross-run criterion's mean over an eval set's cases.
+///
+/// The line says how many cases the mean covers when some case had no value,
+/// so `"pass^3: 0.41 (mean over 11 of 12 cases)"` is not read as a mean over
+/// all twelve.
+String formatEvalSetCriterionSummary(CrossRunCriterionSummary summary) {
+  if (summary.mean == null) {
+    return '${summary.name}: n/a (no case had a value)';
+  }
+  final String cases = summary.numCasesWithValue == summary.numCases
+      ? (summary.numCases == 1 ? '1 case' : '${summary.numCases} cases')
+      : '${summary.numCasesWithValue} of ${summary.numCases} cases';
+  return '${summary.name}: ${summary.mean!.toStringAsFixed(2)} (mean over $cases)';
 }
 
 /// Describes crashed runs for [result], or returns `null` when none crashed.

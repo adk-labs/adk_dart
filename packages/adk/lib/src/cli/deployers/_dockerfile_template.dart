@@ -76,19 +76,85 @@ RUN pip install --no-cache-dir google-adk=={adk_version}
 
 # Copy agent - Start
 COPY --chown=myuser:myuser "agents/{app_name}/" "/app/agents/{app_name}/"
-{install_agent_deps}
 # Copy agent - End
 
 {extra_packages_setup}
 
+{install_agent_deps}
+{reinstall_extra_packages}
+
 EXPOSE {port}
 
-CMD {cmd_exec_form}
+{cmd_instruction}
 ''';
 
 /// Alias matching the Python constant name `DOCKERFILE_TEMPLATE`.
 // ignore: constant_identifier_names
 const String DOCKERFILE_TEMPLATE = dockerfileTemplate;
+
+/// Renders the container `CMD` instruction in exec form.
+///
+/// When [validateAgentImport] is `true`, wraps `startCommandArgs` so the `adk`
+/// CLI runs in-process and preloads [appName] on the server's `AgentLoader` at
+/// container startup before binding `PORT`.
+String renderStartCommand(
+  String appName,
+  List<String> startCommandArgs, {
+  bool validateAgentImport = false,
+}) {
+  if (!validateAgentImport) {
+    return 'CMD ${toExecForm(startCommandArgs)}';
+  }
+  final String safeAppName = validateAppName(appName);
+  final String code =
+      'import inspect\n'
+      'import sys\n'
+      'from google.adk.cli import fast_api\n'
+      '_orig_get_fast_api_app = fast_api.get_fast_api_app\n'
+      'def _get_fast_api_app(*args, **kwargs):\n'
+      '  fast_api.get_fast_api_app = _orig_get_fast_api_app\n'
+      '  _params = inspect.signature(_orig_get_fast_api_app).parameters\n'
+      '  _supports_loader = (\n'
+      '      "agent_loader" in _params\n'
+      '      or any(\n'
+      '          p.kind == inspect.Parameter.VAR_KEYWORD\n'
+      '          for p in _params.values()\n'
+      '      )\n'
+      '  )\n'
+      '  loader = None\n'
+      '  if _supports_loader:\n'
+      '    loader = kwargs.get("agent_loader")\n'
+      '    if loader is None and "agents_dir" in kwargs:\n'
+      '      try:\n'
+      '        from google.adk.cli.utils.agent_loader import AgentLoader\n'
+      '      except ImportError:\n'
+      '        AgentLoader = None\n'
+      '      loader_cls = (\n'
+      '          fast_api.NestedAgentLoader\n'
+      '          if kwargs.get("web") and hasattr(fast_api,'
+      ' "NestedAgentLoader")\n'
+      '          else getattr(fast_api, "AgentLoader", AgentLoader)\n'
+      '      )\n'
+      '      if loader_cls is not None:\n'
+      '        loader = loader_cls(kwargs["agents_dir"])\n'
+      '        kwargs["agent_loader"] = loader\n'
+      '  app = _orig_get_fast_api_app(*args, **kwargs)\n'
+      '  if loader is not None:\n'
+      '    loader.load_agent("$safeAppName")\n'
+      '  elif "agents_dir" in kwargs:\n'
+      '    try:\n'
+      '      from google.adk.cli.utils.agent_loader import AgentLoader\n'
+      '    except ImportError:\n'
+      '      pass\n'
+      '    else:\n'
+      '      AgentLoader(kwargs["agents_dir"]).load_agent("$safeAppName")\n'
+      '  return app\n'
+      'fast_api.get_fast_api_app = _get_fast_api_app\n'
+      'from google.adk.cli.cli_tools_click import main\n'
+      'sys.argv = sys.argv[1:]\n'
+      'sys.exit(main())';
+  return 'CMD ${jsonEncode(<String>['python', '-c', code, ...startCommandArgs])}';
+}
 
 /// Renders the Dockerfile snippet for installing agent `requirements.txt` if
 /// [hasRequirementsTxt] is `true`.
@@ -113,6 +179,8 @@ String renderDockerfile({
   String gcpEnvVars = '',
   bool hasRequirementsTxt = false,
   String extraPackagesSetup = '',
+  String reinstallExtraPackages = '',
+  bool validateAgentImport = false,
 }) {
   final String safeAppName = validateAppName(appName);
   final String safePythonVersion = validatePythonVersion(pythonVersion);
@@ -127,7 +195,11 @@ String renderDockerfile({
     safeAppName,
     hasRequirementsTxt: hasRequirementsTxt,
   );
-  final String execForm = toExecForm(cmdArgs);
+  final String cmdInstruction = renderStartCommand(
+    safeAppName,
+    cmdArgs,
+    validateAgentImport: validateAgentImport,
+  );
 
   return dockerfileTemplate
       .replaceAll('{python_version}', safePythonVersion)
@@ -136,6 +208,7 @@ String renderDockerfile({
       .replaceAll('{app_name}', safeAppName)
       .replaceAll('{install_agent_deps}', installDeps)
       .replaceAll('{extra_packages_setup}', extraPackagesSetup.trim())
+      .replaceAll('{reinstall_extra_packages}', reinstallExtraPackages.trim())
       .replaceAll('{port}', '$port')
-      .replaceAll('{cmd_exec_form}', execForm);
+      .replaceAll('{cmd_instruction}', cmdInstruction);
 }

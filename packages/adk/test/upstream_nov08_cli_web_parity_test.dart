@@ -193,8 +193,8 @@ void main() {
       );
     });
 
-    test('bundled browser main-TXG3WSWW.js uses TextDecoder("utf-8") in getTextContent', () {
-      final File bundleFile = File('lib/src/cli/browser/main-TXG3WSWW.js');
+    test('bundled browser main-PJ4DBNMP.js uses TextDecoder("utf-8") in getTextContent', () {
+      final File bundleFile = File('lib/src/cli/browser/main-PJ4DBNMP.js');
       expect(bundleFile.existsSync(), isTrue);
       final String content = bundleFile.readAsStringSync();
       expect(

@@ -611,7 +611,6 @@ void main() {
         perAgent: true,
         appNameToDir: <String, String>{
           'abs_app': tempDir.path,
-          'built_in': builtInSessionServiceKey,
         },
       );
       expect(perAgentSess, isA<PerAgentDatabaseSessionService>());
@@ -621,6 +620,10 @@ void main() {
         userId: 'user1',
       );
       expect(session.appName, 'abs_app');
+      await expectLater(
+        perAgentSess.createSession(appName: '__reserved', userId: 'user1'),
+        throwsArgumentError,
+      );
     });
   });
 

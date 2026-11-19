@@ -52,9 +52,6 @@ void attachAgentOriginMetadata({
   required String expectedAppName,
   required Directory originPath,
 }) {
-  if (expectedAppName.startsWith('__')) {
-    return;
-  }
   _originAppNameExpando[loaded] = expectedAppName;
   _originPathExpando[loaded] = originPath;
   if (loaded is App) {
@@ -65,9 +62,6 @@ void attachAgentOriginMetadata({
 
 /// Loads root agents and app metadata from an agents directory.
 abstract class BaseAgentLoader {
-  /// Whether special internal agents (`__...`) may be loaded.
-  bool allowSpecialAgents = false;
-
   /// Loads a single agent or app identified by [agentName].
   AgentOrApp loadAgent(String agentName);
 

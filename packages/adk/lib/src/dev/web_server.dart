@@ -5,11 +5,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data' show BytesBuilder;
 
 import 'package:adk_dart/src/a2a/executor/a2a_agent_executor.dart';
 import 'package:meta/meta.dart';
-import 'package:yaml/yaml.dart';
 import 'package:adk_dart/src/a2a/protocol.dart';
 import 'package:adk_dart/src/a2a/utils/agent_card_builder.dart';
 import 'package:adk_dart/src/agents/abort_signal.dart';
@@ -26,7 +24,6 @@ import '../cli/agent_test_runner.dart'
 import '../cli/dev_server.dart'
     show
         CreateTestRequest,
-        checkCodeReference,
         devTestRunnerProcessStarterTestingOverride,
         requireLocalAgentBuilderClient,
         streamTestOutput;
@@ -770,16 +767,6 @@ class _AdkDevWebContext {
     return manager;
   }
 
-  // Whether internal special agents (app names starting with `__`, such as
-  // a built-in agent-builder assistant) may be loaded and executed.
-  //
-  // Mirrors Python's `_allow_special_agents`: it is only enabled when the
-  // Dev UI is served ([enableWebUi]) and the server is bound to a loopback
-  // address; API-server-only or non-loopback deployments must not expose
-  // these privileged internal agents.
-  bool get allowSpecialAgents =>
-      enableWebUi && (serverHost == null || _isLoopbackAddress(serverHost!));
-
   void registerActiveSessionRun(
     String appName,
     String userId,
@@ -855,30 +842,18 @@ class _AdkDevWebContext {
     return null;
   }
 
-  // Throws a [SpecialAgentAccessDeniedException] when [appName] is an
-  // internal special agent and [allowSpecialAgents] is false, or when a
-  // browser sends the request from a foreign origin.
-  void _guardSpecialAgentAccess(String appName, {HttpRequest? request}) {
-    if (!appName.startsWith('__')) {
-      return;
-    }
-    if (!allowSpecialAgents) {
-      throw const SpecialAgentAccessDeniedException();
-    }
-    if (request != null && _requestHasForeignBrowserOrigin(request, this)) {
-      throw const SpecialAgentAccessDeniedException(
-        "This endpoint writes agent files or starts runs, so it accepts "
-        "browser requests only from this server's own origin or an origin "
-        "listed literally in allow_origins.",
-      );
-    }
-  }
-
   Future<Runner> getRunner(String? appName, {HttpRequest? request}) async {
     final String resolvedAppName = (appName == null || appName.trim().isEmpty)
         ? defaultAppName
         : appName.trim();
-    _guardSpecialAgentAccess(resolvedAppName, request: request);
+    if (resolvedAppName.startsWith('__')) {
+      throw ArgumentError.value(
+        resolvedAppName,
+        'appName',
+        "Invalid agent name: '$resolvedAppName'. Names starting with '__' are "
+            'reserved.',
+      );
+    }
 
     final bool shouldReload = reload || reloadAgents;
     if (!shouldReload) {
@@ -1702,6 +1677,9 @@ Future<void> _handleRequest(
       return;
     }
     if (request.method == 'POST') {
+      if (!await _ensureLocalAgentBuilderClient(request, context)) {
+        return;
+      }
       final String? headerVal =
           request.headers.value('x-adk-telemetry-request');
       if (headerVal != 'true') {
@@ -1817,10 +1795,6 @@ Future<void> _handleRequest(
   if (routedPath == '/api/stream_reasoning_engine' &&
       request.method == 'POST') {
     await _handleStreamReasoningEngine(request, context);
-    return;
-  }
-
-  if (await _handleBuilderRoutes(request, context, routedPath)) {
     return;
   }
 
@@ -1954,7 +1928,6 @@ Future<bool> _handlePythonStyleRoutes(
   }
 
   final String appName = segments[1];
-  context._guardSpecialAgentAccess(appName, request: request);
   if (segments.length == 4 &&
       segments[2] == 'trigger' &&
       request.method == 'POST') {
@@ -2015,7 +1988,6 @@ Future<bool> _handlePythonStyleRoutes(
       segments[3] == 'trace' &&
       segments[4] != 'session' &&
       request.method == 'GET') {
-    context._guardSpecialAgentAccess(appName, request: request);
     await _handleGetTraceDict(request, context, eventId: segments[4]);
     return true;
   }
@@ -2024,7 +1996,6 @@ Future<bool> _handlePythonStyleRoutes(
       segments[3] == 'trace' &&
       segments[4] == 'session' &&
       request.method == 'GET') {
-    context._guardSpecialAgentAccess(appName, request: request);
     await _handleGetSessionTrace(request, context, sessionId: segments[5]);
     return true;
   }

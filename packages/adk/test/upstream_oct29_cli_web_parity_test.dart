@@ -239,47 +239,25 @@ void main() {
         await runtime.runner.close();
       });
 
-      // 1. Foreign browser origin accessing special agent is blocked with 403.
+      // 1. Reserved `__` agent names return 404 (built-in `__` agents removed).
       final HttpClientRequest badSpecialReq = await client.getUrl(
         Uri.parse('http://127.0.0.1:${server.port}/apps/__special_agent/app-info'),
       );
       badSpecialReq.headers.set('origin', 'https://attacker.evil.example');
       final HttpClientResponse badSpecialRes = await badSpecialReq.close();
-      final String badSpecialBody = await utf8.decoder.bind(badSpecialRes).join();
-      expect(badSpecialRes.statusCode, HttpStatus.forbidden);
-      expect(badSpecialBody, contains('own origin'));
+      await utf8.decoder.bind(badSpecialRes).join();
+      expect(badSpecialRes.statusCode, HttpStatus.notFound);
 
-      // 2. Spoofed X-Forwarded-Host / Forwarded does not bypass origin check.
-      final HttpClientRequest spoofedReq = await client.getUrl(
-        Uri.parse('http://127.0.0.1:${server.port}/apps/__special_agent/app-info'),
-      );
-      spoofedReq.headers.set('origin', 'https://spoofed.example');
-      spoofedReq.headers.set('x-forwarded-host', 'spoofed.example');
-      spoofedReq.headers.set('x-forwarded-proto', 'https');
-      spoofedReq.headers.set('forwarded', 'proto=https;host=spoofed.example');
-      final HttpClientResponse spoofedRes = await spoofedReq.close();
-      await utf8.decoder.bind(spoofedRes).join();
-      expect(spoofedRes.statusCode, HttpStatus.forbidden);
-
-      // 3. Server's own origin is allowed.
+      // 2. Own origin also receives 404 for reserved `__` agent names.
       final HttpClientRequest ownOriginReq = await client.getUrl(
         Uri.parse('http://127.0.0.1:${server.port}/apps/__special_agent/app-info'),
       );
       ownOriginReq.headers.set('origin', 'http://127.0.0.1:${server.port}');
       final HttpClientResponse ownOriginRes = await ownOriginReq.close();
       await utf8.decoder.bind(ownOriginRes).join();
-      expect(ownOriginRes.statusCode, HttpStatus.ok);
+      expect(ownOriginRes.statusCode, HttpStatus.notFound);
 
-      // 4. Explicitly listed literal origin in allowOrigins is allowed.
-      final HttpClientRequest trustedOriginReq = await client.getUrl(
-        Uri.parse('http://127.0.0.1:${server.port}/apps/__special_agent/app-info'),
-      );
-      trustedOriginReq.headers.set('origin', 'https://trusted-ide.example');
-      final HttpClientResponse trustedOriginRes = await trustedOriginReq.close();
-      await utf8.decoder.bind(trustedOriginRes).join();
-      expect(trustedOriginRes.statusCode, HttpStatus.ok);
-
-      // 5. Mutating /dev/ route is blocked for foreign browser origin even under wildcard CORS.
+      // 3. Mutating /dev/ route is blocked for foreign browser origin even under wildcard CORS.
       final HttpClientRequest devPostReq = await client.postUrl(
         Uri.parse('http://127.0.0.1:${server.port}/dev/apps/__special_agent/Reload'),
       );

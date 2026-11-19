@@ -48,7 +48,11 @@ bool isSingleAgentDirectory(Object path) {
   }
 }
 
-/// Directory path used for built-in special agents prefixed with `__`.
+/// Deprecated: built-in `__` agents are no longer supported and nothing reads
+/// this constant. Kept temporarily for backwards compatibility.
+@Deprecated(
+  'Built-in `__` agents have been removed; this constant is no longer used.',
+)
 final String specialAgentsDir = Directory(
   '${Directory.current.path}${Platform.pathSeparator}built_in_agents',
 ).path;
@@ -216,9 +220,6 @@ class AgentLoader extends BaseAgentLoader {
     required String agentsDir,
     Directory? originDirOverride,
   }) {
-    if (expectedAppName.startsWith('__')) {
-      return;
-    }
     final Directory candidate =
         originDirOverride ??
         Directory(
@@ -384,6 +385,13 @@ class AgentLoader extends BaseAgentLoader {
   }
 
   void _validateAgentName(String agentName, String normalized) {
+    if (agentName.startsWith('__')) {
+      throw ArgumentError.value(
+        agentName,
+        'agentName',
+        "Invalid agent name: '$agentName'. Names starting with '__' are reserved.",
+      );
+    }
     if (normalized.contains('\n') ||
         normalized.contains('\r') ||
         !_validAgentNameRegExp.hasMatch(normalized)) {
@@ -431,9 +439,7 @@ class AgentLoader extends BaseAgentLoader {
     );
   }
 
-  String _normalizeAgentName(String agentName) {
-    return agentName.startsWith('__') ? agentName.substring(2) : agentName;
-  }
+  String _normalizeAgentName(String agentName) => agentName;
 
   Directory _agentDirectory(Directory baseDir, String normalized) {
     return Directory(

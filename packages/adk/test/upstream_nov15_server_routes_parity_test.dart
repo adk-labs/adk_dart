@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data' show BytesBuilder;
 
 import 'package:adk/adk.dart';
 import 'package:test/test.dart';
@@ -125,36 +124,13 @@ Future<_HttpTestResponse> _sendHttp({
   }
 }
 
-({List<int> bytes, String contentType}) _buildMultipartFilesPayload(
-  List<({String filename, List<int> bytes, String mimeType})> files, {
-  String boundary = '----AdkDartBuilderBoundary7MA4YWxkTrZu0gW',
-}) {
-  final BytesBuilder out = BytesBuilder();
-  for (final ({String filename, List<int> bytes, String mimeType}) f in files) {
-    out.add(utf8.encode('--$boundary\r\n'));
-    out.add(
-      utf8.encode(
-        'Content-Disposition: form-data; name="files"; filename="${f.filename}"\r\n',
-      ),
-    );
-    out.add(utf8.encode('Content-Type: ${f.mimeType}\r\n\r\n'));
-    out.add(f.bytes);
-    out.add(utf8.encode('\r\n'));
-  }
-  out.add(utf8.encode('--$boundary--\r\n'));
-  return (
-    bytes: out.takeBytes(),
-    contentType: 'multipart/form-data; boundary=$boundary',
-  );
-}
-
 void main() {
   tearDown(() {
     isLocalAgentBuilderClientTestingOverride = null;
     devTestRunnerProcessStarterTestingOverride = null;
   });
 
-  group('1. Visual Agent Builder Routes (/dev/apps/{app}/builder & legacy /builder/app/{app})', () {
+  group('1. Visual Agent Builder Routes removed (c890aa317) - return 404 while YAML loading works', () {
     late Directory tempDir;
 
     setUp(() async {
@@ -167,15 +143,6 @@ void main() {
         'description: Original description\n'
         'instruction: Be helpful.\n',
       );
-      final Directory subDir = Directory('${appDir.path}/sub')
-        ..createSync(recursive: true);
-      File('${subDir.path}/helper.yaml').writeAsStringSync(
-        'name: helper_agent\n'
-        'model: gemini-2.5-flash\n'
-        'instruction: Help root agent.\n',
-      );
-      File('${appDir.path}/.env').writeAsStringSync('SECRET_KEY=super_secret\n');
-      File('${appDir.path}/outside_note.txt').writeAsStringSync('not yaml\n');
     });
 
     tearDown(() async {
@@ -184,7 +151,7 @@ void main() {
       }
     });
 
-    test('GET root_agent.yaml, sub-agent YAML, ?tmp=true draft copy,save(?tmp=true & commit), cache invalidation, and cancel', () async {
+    test('GET/POST builder routes return 404 on DevServer and ApiServer while YAML app-info remains functional', () async {
       final AdkDevServer devServer = AdkDevServer(
         agentsDir: tempDir.path,
         port: 0,
@@ -192,472 +159,38 @@ void main() {
       final HttpServer server = await devServer.start();
       addTearDown(devServer.stop);
 
-      // 1. GET canonical root_agent.yaml
-      final _HttpTestResponse rootRes = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-      );
-      expect(rootRes.statusCode, HttpStatus.ok);
-      expect(rootRes.headers['content-type'], contains('application/x-yaml'));
-      expect(rootRes.headers['cache-control'], 'no-store');
-      expect(rootRes.body, contains('description: Original description'));
-
-      // 2. GET sub-file via query param and via sub-path and via legacy /builder/app/... alias
-      final _HttpTestResponse subQueryRes = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder?file_path=sub/helper.yaml',
-      );
-      expect(subQueryRes.statusCode, HttpStatus.ok);
-      expect(subQueryRes.body, contains('name: helper_agent'));
-
-      final _HttpTestResponse subPathRes = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder/sub/helper.yaml',
-      );
-      expect(subPathRes.statusCode, HttpStatus.ok);
-      expect(subPathRes.body, contains('name: helper_agent'));
-
-      final _HttpTestResponse legacyAliasRes = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/builder/app/my_app/sub/helper.yaml',
-      );
-      expect(legacyAliasRes.statusCode, HttpStatus.ok);
-      expect(legacyAliasRes.body, contains('name: helper_agent'));
-
-      // 3. Non-YAML files & missing app return empty 200 without leaking secrets or creating dirs
-      for (final String blocked in <String>[
-        '.env',
-        'outside_note.txt',
-        '../secret.yaml',
-      ]) {
-        final _HttpTestResponse nonYamlRes = await _sendHttp(
-          port: server.port,
-          method: 'GET',
-          rawPathAndQuery:
-              '/dev/apps/my_app/builder?file_path=${Uri.encodeQueryComponent(blocked)}',
-        );
-        expect(nonYamlRes.statusCode, HttpStatus.ok);
-        expect(nonYamlRes.body, isEmpty);
-      }
-      final _HttpTestResponse missingAppRes = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/no_such_app/builder?tmp=true',
-      );
-      expect(missingAppRes.statusCode, HttpStatus.ok);
-      expect(missingAppRes.body, isEmpty);
-      expect(Directory('${tempDir.path}/no_such_app').existsSync(), isFalse);
-
-      // 4. Prime the runner/app-info cache before editing
-      final _HttpTestResponse initialAppInfo = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/app-info',
-      );
-      expect(initialAppInfo.statusCode, HttpStatus.ok);
-      expect(initialAppInfo.body, contains('Original description'));
-
-      // 5. GET ?tmp=true materializes tmp/my_app draft copy
-      expect(Directory('${tempDir.path}/my_app/tmp').existsSync(), isFalse);
-      final _HttpTestResponse tmpGetRes = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder?tmp=true',
-      );
-      expect(tmpGetRes.statusCode, HttpStatus.ok);
-      expect(tmpGetRes.body, contains('Original description'));
-      expect(
-        File('${tempDir.path}/my_app/tmp/my_app/root_agent.yaml').existsSync(),
-        isTrue,
-      );
-      expect(
-        File(
-          '${tempDir.path}/my_app/tmp/my_app/sub/helper.yaml',
-        ).existsSync(),
-        isTrue,
-      );
-
-      // 6. POST /builder/save?tmp=true updates draft only, leaving canonical untouched
-      final ({List<int> bytes, String contentType}) draftMultipart =
-          _buildMultipartFilesPayload(<({
-            String filename,
-            List<int> bytes,
-            String mimeType,
-          })>[
-            (
-              filename: 'my_app/root_agent.yaml',
-              bytes: utf8.encode(
-                'name: my_app\n'
-                'model: gemini-2.5-flash\n'
-                'description: Draft description\n'
-                'instruction: Draft instruction.\n',
-              ),
-              mimeType: 'application/x-yaml',
-            ),
-            (
-              filename: 'my_app/extra_sub.yml',
-              bytes: utf8.encode(
-                'name: extra_sub\n'
-                'model: gemini-2.5-flash\n'
-                'instruction: Extra sub agent.\n',
-              ),
-              mimeType: 'application/x-yaml',
-            ),
-          ]);
-      final _HttpTestResponse draftSaveRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-        rawBytes: draftMultipart.bytes,
-        contentType: draftMultipart.contentType,
-      );
-      expect(draftSaveRes.statusCode, HttpStatus.ok);
-      expect(jsonDecode(draftSaveRes.body), isTrue);
-
-      // Canonical still has Original description while tmp=true has Draft description
-      final _HttpTestResponse canonicalCheck = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-      );
-      expect(canonicalCheck.body, contains('Original description'));
-
-      final _HttpTestResponse draftCheck = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder?tmp=true',
-      );
-      expect(draftCheck.body, contains('Draft description'));
-
-      // 7. POST /builder/cancel deletes tmp draft and is idempotent
-      final _HttpTestResponse cancelRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/cancel',
-      );
-      expect(cancelRes.statusCode, HttpStatus.ok);
-      expect(jsonDecode(cancelRes.body), isTrue);
-      expect(Directory('${tempDir.path}/my_app/tmp').existsSync(), isFalse);
-
-      final _HttpTestResponse cancelAgainRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/cancel',
-      );
-      expect(cancelAgainRes.statusCode, HttpStatus.ok);
-      expect(jsonDecode(cancelAgainRes.body), isTrue);
-
-      // 8. Stage draft again, then commit with POST /builder/save (no tmp=true)
-      await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-        rawBytes: draftMultipart.bytes,
-        contentType: draftMultipart.contentType,
-      );
-      final ({List<int> bytes, String contentType}) commitMultipart =
-          _buildMultipartFilesPayload(<({
-            String filename,
-            List<int> bytes,
-            String mimeType,
-          })>[
-            (
-              filename: 'my_app/root_agent.yaml',
-              bytes: utf8.encode(
-                'name: my_app\n'
-                'model: gemini-2.5-flash\n'
-                'description: Committed description\n'
-                'instruction: Committed instruction.\n',
-              ),
-              mimeType: 'application/x-yaml',
-            ),
-          ]);
-      final _HttpTestResponse commitRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/save',
-        rawBytes: commitMultipart.bytes,
-        contentType: commitMultipart.contentType,
-      );
-      expect(commitRes.statusCode, HttpStatus.ok);
-      expect(jsonDecode(commitRes.body), isTrue);
-
-      // Verify tmp cleaned up, extra_sub.yml promoted from tmp, and runner cache invalidated!
-      expect(Directory('${tempDir.path}/my_app/tmp').existsSync(), isFalse);
-      expect(
-        File('${tempDir.path}/my_app/extra_sub.yml').existsSync(),
-        isTrue,
-      );
-      final _HttpTestResponse updatedAppInfo = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/app-info',
-      );
-      expect(updatedAppInfo.statusCode, HttpStatus.ok);
-      expect(updatedAppInfo.body, contains('Committed description'));
-
-      // 9. Also verify JSON body save on /builder/save
-      final _HttpTestResponse jsonSaveRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-        jsonBody: <String, Object?>{
-          'files': <Object?>[
-            <String, Object?>{
-              'filename': 'root_agent.yaml',
-              'content': 'name: my_app\nmodel: gemini-2.5-flash\n',
-            },
-          ],
-        },
-      );
-      expect(jsonSaveRes.statusCode, HttpStatus.ok);
-      expect(jsonDecode(jsonSaveRes.body), isTrue);
-    });
-
-    test('POST /builder/save rejects checkCodeReference violations, non-YAML files, and path traversal', () async {
-      final AdkDevServer devServer = AdkDevServer(
-        agentsDir: tempDir.path,
-        port: 0,
-      );
-      final HttpServer server = await devServer.start();
-      addTearDown(devServer.stop);
-
-      // 1. Disallowed code / args / external tool / external callback / deep submodule
-      final List<String> forbiddenYamls = <String>[
-        'name: my_app\ncode: os.system\n',
-        'name: my_app\ntools:\n  - name: my_app.tool\n    args:\n      cmd: id\n',
-        'name: my_app\ntools:\n  - os.system\n',
-        'name: my_app\nbefore_agent_callbacks:\n  - name: evil_pkg.steal\n',
-        'name: my_app\ntools:\n  - google.adk.tools.bash_tool.BashTool\n',
+      final List<(String, String)> removedRoutes = <(String, String)>[
+        ('GET', '/dev/apps/my_app/builder'),
+        ('GET', '/dev/apps/my_app/builder?tmp=true'),
+        ('GET', '/dev/apps/my_app/builder/sub/helper.yaml'),
+        ('POST', '/dev/apps/my_app/builder/save'),
+        ('POST', '/dev/apps/my_app/builder/save?tmp=true'),
+        ('POST', '/dev/apps/my_app/builder/cancel'),
+        ('GET', '/builder/app/my_app'),
+        ('POST', '/builder/app/my_app/save'),
+        ('POST', '/builder/app/my_app/cancel'),
       ];
-      for (final String badYaml in forbiddenYamls) {
-        final ({List<int> bytes, String contentType}) payload =
-            _buildMultipartFilesPayload(<({
-              String filename,
-              List<int> bytes,
-              String mimeType,
-            })>[
-              (
-                filename: 'my_app/root_agent.yaml',
-                bytes: utf8.encode(badYaml),
-                mimeType: 'application/x-yaml',
-              ),
-            ]);
+      for (final (String method, String path) in removedRoutes) {
         final _HttpTestResponse res = await _sendHttp(
           port: server.port,
-          method: 'POST',
-          rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-          rawBytes: payload.bytes,
-          contentType: payload.contentType,
+          method: method,
+          rawPathAndQuery: path,
         );
         expect(
           res.statusCode,
-          HttpStatus.badRequest,
-          reason: 'Expected 400 for YAML:\n$badYaml',
+          HttpStatus.notFound,
+          reason: 'Expected 404 for removed builder route $method $path',
         );
       }
 
-      // Allowed builtin & agent-local references succeed
-      final ({List<int> bytes, String contentType}) allowedPayload =
-          _buildMultipartFilesPayload(<({
-            String filename,
-            List<int> bytes,
-            String mimeType,
-          })>[
-            (
-              filename: 'my_app/root_agent.yaml',
-              bytes: utf8.encode(
-                'name: my_app\n'
-                'agent_class: google.adk.agents.LlmAgent\n'
-                'tools:\n'
-                '  - google.adk.tools.google_search\n'
-                '  - my_app.tools.lookup\n',
-              ),
-              mimeType: 'application/x-yaml',
-            ),
-          ]);
-      final _HttpTestResponse allowedRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-        rawBytes: allowedPayload.bytes,
-        contentType: allowedPayload.contentType,
-      );
-      expect(allowedRes.statusCode, HttpStatus.ok);
-
-      // 2. Non-YAML file extensions rejected with 400
-      for (final String badFilename in <String>[
-        'my_app/agent.py',
-        'my_app/config.json',
-        'my_app/exploit.sh',
-      ]) {
-        final ({List<int> bytes, String contentType}) payload =
-            _buildMultipartFilesPayload(<({
-              String filename,
-              List<int> bytes,
-              String mimeType,
-            })>[
-              (
-                filename: badFilename,
-                bytes: utf8.encode('name: bad\n'),
-                mimeType: 'text/plain',
-              ),
-            ]);
-        final _HttpTestResponse res = await _sendHttp(
-          port: server.port,
-          method: 'POST',
-          rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-          rawBytes: payload.bytes,
-          contentType: payload.contentType,
-        );
-        expect(res.statusCode, HttpStatus.badRequest);
-      }
-
-      // 3. Path traversal in upload filename or app_name rejected with 400
-      for (final String traversalName in <String>[
-        'my_app/../escape.yaml',
-        '../../escape.yaml',
-        '..\\escape.yaml',
-        '/etc/escape.yaml',
-      ]) {
-        final ({List<int> bytes, String contentType}) payload =
-            _buildMultipartFilesPayload(<({
-              String filename,
-              List<int> bytes,
-              String mimeType,
-            })>[
-              (
-                filename: traversalName,
-                bytes: utf8.encode('name: escape\n'),
-                mimeType: 'application/x-yaml',
-              ),
-            ]);
-        final _HttpTestResponse res = await _sendHttp(
-          port: server.port,
-          method: 'POST',
-          rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-          rawBytes: payload.bytes,
-          contentType: payload.contentType,
-        );
-        expect(res.statusCode, HttpStatus.badRequest);
-        expect(File('${tempDir.path}/escape.yaml').existsSync(), isFalse);
-      }
-
-      final ({List<int> bytes, String contentType}) validFile =
-          _buildMultipartFilesPayload(<({
-            String filename,
-            List<int> bytes,
-            String mimeType,
-          })>[
-            (
-              filename: 'root_agent.yaml',
-              bytes: utf8.encode('name: escape\n'),
-              mimeType: 'application/x-yaml',
-            ),
-          ]);
-      final _HttpTestResponse badAppSaveRes = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/..%2Fescape_app/builder/save',
-        rawBytes: validFile.bytes,
-        contentType: validFile.contentType,
-      );
-      expect(badAppSaveRes.statusCode, HttpStatus.badRequest);
-    });
-
-    test('Builder endpoints enforce localhost-only 403 guard, foreign Origin 403 guard, ADK_ALLOW_REMOTE_AGENT_BUILDER opt-in, and 404 when enableWebUi is false', () async {
-      final AdkDevServer devServer = AdkDevServer(
-        agentsDir: tempDir.path,
-        allowOrigins: const <String>['*'],
-        port: 0,
-      );
-      final HttpServer server = await devServer.start();
-      addTearDown(devServer.stop);
-
-      // 1. Proxied remote client (X-Forwarded-For) -> 403
-      final _HttpTestResponse forwardedGet = await _sendHttp(
+      // Loading agents from root_agent.yaml is unchanged.
+      final _HttpTestResponse appInfo = await _sendHttp(
         port: server.port,
         method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-        headers: const <String, String>{'x-forwarded-for': '203.0.113.42'},
+        rawPathAndQuery: '/dev/apps/my_app/app-info',
       );
-      expect(forwardedGet.statusCode, HttpStatus.forbidden);
-
-      // 2. Non-loopback remote client IP -> 403 on GET, save, and cancel
-      isLocalAgentBuilderClientTestingOverride = (_) => false;
-      final _HttpTestResponse remoteGet = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-      );
-      expect(remoteGet.statusCode, HttpStatus.forbidden);
-
-      final _HttpTestResponse remoteSave = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/save?tmp=true',
-        jsonBody: <String, Object?>{
-          'content': 'name: my_app\nmodel: gemini-2.5-flash\n',
-        },
-      );
-      expect(remoteSave.statusCode, HttpStatus.forbidden);
-
-      final _HttpTestResponse remoteCancel = await _sendHttp(
-        port: server.port,
-        method: 'POST',
-        rawPathAndQuery: '/dev/apps/my_app/builder/cancel',
-      );
-      expect(remoteCancel.statusCode, HttpStatus.forbidden);
-      isLocalAgentBuilderClientTestingOverride = null;
-
-      // 3. Foreign browser Origin (even when allowOrigins contains '*') -> 403 on GET and POST
-      final _HttpTestResponse foreignOriginGet = await _sendHttp(
-        port: server.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-        headers: const <String, String>{'origin': 'https://attacker.example'},
-      );
-      expect(foreignOriginGet.statusCode, HttpStatus.forbidden);
-
-      // 4. ADK_ALLOW_REMOTE_AGENT_BUILDER=1 allows non-loopback requests
-      final AdkDevServer remoteAllowedServer = AdkDevServer(
-        agentsDir: tempDir.path,
-        environment: const <String, String>{
-          'ADK_ALLOW_REMOTE_AGENT_BUILDER': '1',
-        },
-        port: 0,
-      );
-      final HttpServer remoteServer = await remoteAllowedServer.start();
-      addTearDown(remoteAllowedServer.stop);
-
-      isLocalAgentBuilderClientTestingOverride = (_) => false;
-      final _HttpTestResponse optInGet = await _sendHttp(
-        port: remoteServer.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-      );
-      expect(optInGet.statusCode, HttpStatus.ok);
-      expect(optInGet.body, contains('name: my_app'));
-      isLocalAgentBuilderClientTestingOverride = null;
-
-      // 5. API-only server (enableWebUi: false) does not expose builder routes (404)
-      final AdkApiServer apiServer = AdkApiServer(
-        agentsDir: tempDir.path,
-        port: 0,
-      );
-      final HttpServer apiHttp = await apiServer.start();
-      addTearDown(apiServer.stop);
-
-      final _HttpTestResponse apiBuilderRes = await _sendHttp(
-        port: apiHttp.port,
-        method: 'GET',
-        rawPathAndQuery: '/dev/apps/my_app/builder',
-      );
-      expect(apiBuilderRes.statusCode, HttpStatus.notFound);
+      expect(appInfo.statusCode, HttpStatus.ok);
+      expect(appInfo.body, contains('Original description'));
     });
   });
 

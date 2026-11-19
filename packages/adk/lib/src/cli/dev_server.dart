@@ -318,8 +318,10 @@ void requireLocalAgentBuilderClient({
   }
   if (!isLocal) {
     throw StateError(
-      'Agent builder and dev deploy endpoints are restricted to local loopback '
-      'clients unless ADK_ALLOW_REMOTE_AGENT_BUILDER=1 is set.',
+      'This endpoint only accepts requests from the machine running the '
+      'server. Set ADK_ALLOW_REMOTE_AGENT_BUILDER=1 to allow remote access, '
+      'and only on a network you trust: these endpoints are unauthenticated '
+      'and write files to disk.',
     );
   }
 }
@@ -488,7 +490,7 @@ Stream<String> streamTestOutput(Process process) async* {
 /// Development ADK web server (`adk web`).
 ///
 /// Extends [AdkApiServer] with the browser-based Dev UI, evaluation routes,
-/// trace inspection endpoints, agent-builder endpoints, and `/dev/apps/.../deploy/*`
+/// trace inspection endpoints, replay test endpoints, and `/dev/apps/.../deploy/*`
 /// routes enabled.
 class AdkDevServer extends AdkApiServer {
   /// Creates an [AdkDevServer].
@@ -532,9 +534,6 @@ class AdkDevServer extends AdkApiServer {
     super.evalSetsManager,
     super.evalSetResultsManager,
   });
-
-  @override
-  bool get allowSpecialAgents => enableWebUi && isLoopbackAddress(host);
 
   @override
   bool get servesDebugTraceEndpoints => true;

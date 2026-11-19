@@ -654,14 +654,14 @@ void main() {
   });
 
   group('6. adk-web Static Browser Bundle Parity (6528d2f & 969cee9)', () {
-    test('bundled index.html and main-TXG3WSWW.js contain app-selector tooltip/wrapping and centered OAuth/Agent-Identity popup features', () {
+    test('bundled index.html and main-PJ4DBNMP.js contain app-selector tooltip/wrapping and centered OAuth/Agent-Identity popup features', () {
       final File indexFile = File('lib/src/cli/browser/index.html');
-      final File mainJsFile = File('lib/src/cli/browser/main-TXG3WSWW.js');
+      final File mainJsFile = File('lib/src/cli/browser/main-PJ4DBNMP.js');
       expect(indexFile.existsSync(), isTrue);
       expect(mainJsFile.existsSync(), isTrue);
 
       final String indexHtml = indexFile.readAsStringSync();
-      expect(indexHtml, contains('./main-TXG3WSWW.js'));
+      expect(indexHtml, contains('./main-PJ4DBNMP.js'));
 
       final String js = mainJsFile.readAsStringSync();
       // 6528d2f: unavailable app tooltip + multi-line wrapping in app selector.
