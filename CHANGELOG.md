@@ -1,3 +1,10 @@
+## 2026.11.20
+
+- **Nov 19 Parity Follow-up Fixes**:
+  - Fixed a fixed-length list `UnsupportedError` in `MultimodalToolResultsPlugin` (`session` mode) when multiple tool calls return multimodal parts in the same turn (`2b7e32098`).
+  - Wired `experimental(FeatureName.bufferedSessionService).checkEnabled()` in `BufferedSessionService` and `BufferedSessionServiceConfig` (`e1deb17f5`).
+  - Wrapped `TimeoutException`, `SocketException`, and `HttpException` into transient `CheckGroundingApiException`s in `CheckGroundingClient` so timeouts/network errors are retried and return `GroundingStatus.apiError` on exhaustion (`abcc0205b`).
+
 ## 2026.11.19
 
 - **Upstream `adk-python` Parity (`c6586f19a..fb08c7842`, 51 commits)**:

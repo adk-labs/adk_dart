@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.20
+
+- Bumped package version to `2026.11.20` and dependency `adk_dart: ^2026.11.20`.
+- Wired `--validate-agent-import` / `--no-validate-agent-import` / `--skip-agent-import-validation` (default enabled) through `DeployCliOptions` and `DeployCommand` (`7d2c7b75d`), and added the post-reinstall `dev_server*` cleanup step to `dockerfileTemplate` (`5e91ab0a5`).
+
 ## 2026.11.19
 
 - Bumped package version to `2026.11.19` and dependency `adk_dart: ^2026.11.19`.
